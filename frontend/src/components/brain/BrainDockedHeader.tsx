@@ -1,15 +1,10 @@
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { Icon, type IconName } from '@/components/ui/Icon';
 import { BrainMark } from './BrainMark';
 import { UnreadBadge } from '@/components/UnreadBadge';
 
 export type BrainDockedTab = 'chat' | 'history';
-
-/** Docked sections. Order is the tab order. */
-const TABS = [
-  { id: 'chat', labelKey: 'tabChat' },
-  { id: 'history', labelKey: 'tabHistory' },
-] as const;
 
 export interface BrainDockedHeaderProps {
   tab: BrainDockedTab;
@@ -23,74 +18,58 @@ export interface BrainDockedHeaderProps {
   onClose?: () => void;
   /** Extra icon actions owned by the panel (e.g. "capture execution"). */
   actions?: React.ReactNode;
-  /** What the agent currently sees, supplied by the host (open file, voice, …). */
+  /** What the agent is working with, as chips under the title (supplied by the host). */
   context?: React.ReactNode;
 }
 
 /**
- * The docked Brain's chrome, in ONE row: the mark, the Chat | History switch, and the
- * icon actions. It used to be three stacked bands — a title bar with text buttons, a
- * full-width tab strip, and (in the Studio) a context strip above both — which in a
- * ~340px column spent ~130px before the first word of the conversation. The host's
- * context line now sits inside the chrome as a subtitle instead of floating over it.
+ * The docked Brain's chrome: the name, then icon actions — History, New chat,
+ * Expand (and Close in the drawer). History is a toggle, not a tab: the panel IS
+ * the conversation, and the chat list is somewhere you go and come back from.
+ * The host's context (what the agent sees, who else is in the chat) sits under it
+ * as a row of chips.
  *
- * Responsive: the row wraps rather than overflowing, so at 360px the actions drop
- * under the tabs instead of clipping. Theme tokens throughout.
+ * Responsive: both rows wrap rather than overflow, so at 360px nothing clips.
+ * Theme tokens throughout.
  */
 export function BrainDockedHeader({ tab, onTabChange, historyUnread, onNewChat, expandHref, onClose, actions, context }: BrainDockedHeaderProps) {
   const t = useTranslations('brain');
+  const showingHistory = tab === 'history';
+  const historyLabel = t(showingHistory ? 'historyHide' : 'historyShow');
 
   return (
-    <header style={{ flexShrink: 0, padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)' }}>
-          <BrainMark /> {t('brainTitle')}
+    <header style={{ flexShrink: 0, padding: '6px 8px 8px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, minHeight: 36 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)', marginRight: 'auto' }}>
+          <span style={{ color: 'var(--accent)', display: 'inline-flex' }}><BrainMark /></span> {t('brainTitle')}
         </span>
-        <div
-          role="tablist"
-          aria-label={t('sectionsAria')}
-          style={{ display: 'inline-flex', gap: 2, padding: 2, borderRadius: 'var(--radius-full)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)' }}
-        >
-          {TABS.map(({ id, labelKey }) => {
-            const selected = tab === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                id={`brain-tab-${id}`}
-                aria-selected={selected}
-                aria-controls={`brain-tabpanel-${id}`}
-                onClick={() => onTabChange(id)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  height: 26, padding: '0 12px', borderRadius: 'var(--radius-full)', border: 'none', cursor: 'pointer',
-                  fontSize: 'var(--font-size-small)', fontWeight: 600,
-                  background: selected ? 'var(--accent)' : 'transparent',
-                  color: selected ? 'var(--text-on-accent)' : 'var(--text-muted)',
-                }}
-              >
-                {t(labelKey)}
-                {/* History carries the "something is waiting in another chat" signal,
-                    so switching tabs is worth doing rather than guessing. */}
-                {id === 'history' && <UnreadBadge count={historyUnread} size={16} />}
-              </button>
-            );
-          })}
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          {actions}
-          <IconButton label={t('newChat')} onClick={onNewChat} glyph="+" />
-          {/* Expand → the full Brain page, on the SAME conversation (the href carries
-              the open chat), so expanding never reads as the chat being lost. */}
-          <Link href={expandHref} title={t('openFullBrainStorm')} aria-label={t('openFullBrainStorm')} style={iconButtonStyle}>
-            <span aria-hidden>↗</span>
-          </Link>
-          {onClose && <IconButton label={t('closeBrain')} onClick={onClose} glyph="×" />}
-        </div>
+        {actions}
+        {/* History carries the "something is waiting in another chat" signal, so it is
+            worth opening rather than guessing. */}
+        <span style={{ position: 'relative', display: 'inline-flex' }}>
+          <HeaderIconButton
+            icon="clock"
+            label={historyLabel}
+            pressed={showingHistory}
+            controls="brain-history"
+            onClick={() => onTabChange(showingHistory ? 'chat' : 'history')}
+          />
+          {historyUnread > 0 && (
+            <span style={{ position: 'absolute', top: -2, right: -2, pointerEvents: 'none' }}>
+              <UnreadBadge count={historyUnread} size={16} />
+            </span>
+          )}
+        </span>
+        <HeaderIconButton icon="plus" label={t('newChatAria')} onClick={onNewChat} />
+        {/* Expand → the full Brain page, on the SAME conversation (the href carries
+            the open chat), so expanding never reads as the chat being lost. */}
+        <Link href={expandHref} title={t('openFullBrainStorm')} aria-label={t('openFullBrainStorm')} style={iconButtonStyle(false)}>
+          <Icon name="maximize" size={16} />
+        </Link>
+        {onClose && <HeaderIconButton icon="close" label={t('closeBrain')} onClick={onClose} />}
       </div>
       {context && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, minWidth: 0 }}>
           {context}
         </div>
       )}
@@ -98,18 +77,33 @@ export function BrainDockedHeader({ tab, onTabChange, historyUnread, onNewChat, 
   );
 }
 
-const iconButtonStyle: React.CSSProperties = {
+const iconButtonStyle = (pressed: boolean): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  width: 28, height: 28, padding: 0, borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--border-subtle)', background: 'var(--bg-base)',
-  color: 'var(--text-secondary)', fontSize: 'var(--font-size-body)', lineHeight: 1,
-  cursor: 'pointer', textDecoration: 'none',
-};
+  width: 32, height: 32, padding: 0, borderRadius: 'var(--radius-md)',
+  border: `1px solid ${pressed ? 'var(--border-subtle)' : 'transparent'}`,
+  background: pressed ? 'var(--bg-elevated)' : 'transparent',
+  color: pressed ? 'var(--accent)' : 'var(--text-secondary)',
+  cursor: 'pointer', textDecoration: 'none', flexShrink: 0,
+});
 
-function IconButton({ label, onClick, glyph }: { label: string; onClick: () => void; glyph: string }) {
+function HeaderIconButton({ icon, label, onClick, pressed, controls }: {
+  icon: IconName;
+  label: string;
+  onClick: () => void;
+  pressed?: boolean;
+  controls?: string;
+}) {
   return (
-    <button type="button" onClick={onClick} title={label} aria-label={label} style={iconButtonStyle}>
-      <span aria-hidden>{glyph}</span>
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      aria-pressed={pressed}
+      aria-controls={controls}
+      style={iconButtonStyle(!!pressed)}
+    >
+      <Icon name={icon} size={16} />
     </button>
   );
 }

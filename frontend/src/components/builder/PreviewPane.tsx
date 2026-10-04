@@ -4,9 +4,12 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { PreviewFrame } from '@/components/PreviewFrame';
+import { useFormat } from '@/i18n/useFormat';
+import { navigatePreview } from '@/lib/visualEditor';
 import { DevicePreview } from './DevicePreview';
 import { PreviewStatus, type PreviewStatusState } from './PreviewStatus';
 import { PointAndEditPanel } from './PointAndEditPanel';
+import { usePreviewFreshness } from './usePreviewFreshness';
 import type { PointAndEdit } from './usePointAndEdit';
 import type { RunPhase, RunStep } from './useWorkspaceRun';
 import styles from './workspaceChrome.module.css';
@@ -29,11 +32,12 @@ const SIZES: ReadonlyArray<{ id: PreviewSize; icon: IconName; width: string }> =
 ];
 
 /**
- * The preview: a toolbar (restart, the live address, point & edit, size, open in
- * a tab) over the running app — or, before there is one, a status that says
- * what is happening. The app gets every pixel the toolbar does not use.
+ * The preview: a browser-like toolbar (back, forward, restart, the live address
+ * and when it last changed, Select to edit, size, open in a tab) over the running
+ * app, framed as a page on the workspace's ground — or, before there is one, a
+ * status that says what is happening.
  */
-export function PreviewPane({ projectId, url, phase, step, runnable, onRestart, edit, framing, onOpenDevicePanel }: {
+export function PreviewPane({ projectId, url, phase, step, runnable, onRestart, onOpenVersions, edit, framing, onOpenDevicePanel }: {
   projectId: WorkspaceId;
   url: string | undefined;
   phase: RunPhase;
@@ -41,6 +45,8 @@ export function PreviewPane({ projectId, url, phase, step, runnable, onRestart, 
   /** Whether the project has anything a preview could start from. */
   runnable: boolean;
   onRestart: () => void;
+  /** Opens the project's versions, when it has them (a durable project). */
+  onOpenVersions?: () => void;
   edit: PointAndEdit;
   framing: PreviewFraming;
   onOpenDevicePanel?: () => void;
@@ -50,39 +56,32 @@ export function PreviewPane({ projectId, url, phase, step, runnable, onRestart, 
   const bezel = framing === 'bezel' || (framing === 'both' && size === 'phone');
   const starting = phase === 'starting';
   const width = SIZES.find((s) => s.id === size)?.width ?? '100%';
+  const desktop = size === 'desktop';
 
   const status = previewStatusFor({ url, phase, runnable });
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div
-        style={{
-          display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', flexWrap: 'wrap',
-          background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0,
-        }}
-      >
-        <button
-          type="button"
-          className={styles.iconButton}
-          onClick={onRestart}
-          disabled={starting || !runnable}
-          aria-label={t('workspace.restart')}
-          title={t('workspace.restart')}
-        >
-          <Icon name="refresh" size={17} />
-        </button>
-        <AddressPill url={url} phase={phase} />
+      <div className={styles.previewToolbar}>
+        {!bezel && (
+          <>
+            <ToolbarIcon icon="chevron-left" label={t('workspace.back')} disabled={!url} onClick={() => navigatePreview(edit.frameRef.current, 'back')} />
+            <ToolbarIcon icon="chevron-right" label={t('workspace.forward')} disabled={!url} onClick={() => navigatePreview(edit.frameRef.current, 'forward')} />
+          </>
+        )}
+        <ToolbarIcon icon="refresh" label={t('workspace.restart')} disabled={starting || !runnable} onClick={onRestart} />
+        <AddressPill projectId={projectId} url={url} phase={phase} />
         {!bezel && (
           <button
             type="button"
-            className={styles.iconButton}
+            className={styles.toolbarButton}
             onClick={() => edit.arm(!edit.armed)}
             aria-pressed={edit.armed}
             disabled={!url}
-            aria-label={edit.armed ? t('visualEditOn') : t('visualEdit')}
             title={t('visualEditHint')}
           >
-            <Icon name="cursor" size={17} />
+            <Icon name="cursor" size={15} />
+            <span className={styles.toolbarButtonLabel}>{edit.armed ? t('visualEditOn') : t('visualEdit')}</span>
           </button>
         )}
         {framing !== 'bezel' && (
@@ -103,41 +102,37 @@ export function PreviewPane({ projectId, url, phase, step, runnable, onRestart, 
           </div>
         )}
         {!bezel && (
-          <button
-            type="button"
-            className={styles.iconButton}
-            onClick={() => { if (url) window.open(url, '_blank'); }}
-            disabled={!url}
-            aria-label={t('workspace.openInTab')}
-            title={t('workspace.openInTab')}
-          >
-            <Icon name="external-link" size={17} />
-          </button>
+          <ToolbarIcon icon="external-link" label={t('workspace.openInTab')} disabled={!url} onClick={() => { if (url) window.open(url, '_blank'); }} />
         )}
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', background: 'var(--bg-deep)' }}>
+      <div className={styles.previewStage}>
         {bezel ? (
           <DevicePreview url={url} onOpenDevicePanel={onOpenDevicePanel ?? (() => {})} />
         ) : (
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center', padding: size === 'desktop' ? 0 : 16 }}>
+          <div className={styles.previewStageInner} data-size={size}>
             <div
-              style={{
-                width, maxWidth: '100%', height: '100%', overflow: 'hidden',
-                borderRadius: size === 'desktop' ? 0 : 'var(--radius-lg)',
-                border: size === 'desktop' ? 'none' : '1px solid var(--border-subtle)',
-                background: 'var(--bg-surface)',
-              }}
+              className={styles.previewPage}
+              style={{ width, borderRadius: size === 'phone' ? 28 : undefined }}
+              data-desktop={desktop || undefined}
             >
               <PreviewFrame url={url} frameRef={edit.frameRef} />
             </div>
           </div>
         )}
-        {status && <PreviewStatus state={status} step={step} projectId={projectId} onRetry={onRestart} />}
+        {status && <PreviewStatus state={status} step={step} projectId={projectId} onRetry={onRestart} onOpenVersions={onOpenVersions} />}
       </div>
 
       <PointAndEditPanel edit={edit} />
     </div>
+  );
+}
+
+function ToolbarIcon({ icon, label, disabled, onClick }: { icon: IconName; label: string; disabled?: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className={styles.iconButton} onClick={onClick} disabled={disabled} aria-label={label} title={label}>
+      <Icon name={icon} size={17} />
+    </button>
   );
 }
 
@@ -150,28 +145,21 @@ function previewStatusFor({ url, phase, runnable }: { url: string | undefined; p
   return runnable ? 'starting' : 'empty';
 }
 
-function AddressPill({ url, phase }: { url: string | undefined; phase: RunPhase }) {
+function AddressPill({ projectId, url, phase }: { projectId: WorkspaceId; url: string | undefined; phase: RunPhase }) {
   const t = useTranslations('ide.workspace');
+  const fmt = useFormat();
+  const { updatedAt, now } = usePreviewFreshness(projectId, url);
   const live = !!url && phase === 'live';
   const label = phase === 'starting' ? t('statusStarting') : live ? t('statusLive') : phase === 'failed' || phase === 'blocked' ? t('statusStopped') : t('statusIdle');
   return (
-    <div
-      style={{
-        flex: '1 1 200px', minWidth: 0, height: 32, margin: '0 4px', display: 'flex', alignItems: 'center', gap: 8,
-        padding: '0 12px', borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)',
-      }}
-    >
-      <span
-        role="status"
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', fontWeight: 600, flexShrink: 0, color: live ? 'var(--success-text)' : 'var(--text-muted)' }}
-      >
-        <span className={styles.dot} style={live ? undefined : { background: 'var(--text-muted)' }} />
+    <div className={styles.addressPill}>
+      <span role="status" className={styles.addressState} data-live={live || undefined}>
+        <span className={styles.dot} data-muted={!live || undefined} />
         {label}
       </span>
-      {url && (
-        <span title={url} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono, monospace)', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
-          {url}
-        </span>
+      {url && <span title={url} className={styles.addressUrl}>{url}</span>}
+      {live && updatedAt != null && (
+        <span className={styles.addressFresh}>{t('updatedAgo', { when: fmt.relative(updatedAt, new Date(now)) })}</span>
       )}
     </div>
   );

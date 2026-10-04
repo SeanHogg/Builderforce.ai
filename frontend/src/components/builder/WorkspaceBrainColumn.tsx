@@ -1,6 +1,8 @@
 import { useTranslations } from 'next-intl';
 import { BrainPanel } from '@/components/brain/BrainPanel';
 import { Icon } from '@/components/ui/Icon';
+import { TeamChatButton } from '@/components/brain/TeamChatButton';
+import styles from './workspaceChrome.module.css';
 import type { BrainModality } from '@/lib/brain';
 
 export interface WorkspaceBrainColumnProps {
@@ -21,8 +23,8 @@ export interface WorkspaceBrainColumnProps {
 
 /**
  * The IDE / Studio chat column: the shared `<BrainPanel>` docked beside the editor,
- * with what the agent currently sees (the open file, or the voice director's clone)
- * named in the panel's own header instead of a separate strip stacked above it.
+ * with chips under its title for what the agent currently sees (the open file, or
+ * the voice director's clone) and the project's team chat.
  *
  * Mounting it registers an inline Brain, so the app-wide floating launcher stands
  * down on this page — it only ever opened a second copy of this same chat.
@@ -40,7 +42,7 @@ export function WorkspaceBrainColumn({ projectId, modality, extraSystem, activeF
       width: fill ? 'auto' : 'clamp(300px, 28vw, 420px)', flex: fill ? 1 : '0 0 auto', minWidth: 0,
       borderRight: fill ? 'none' : '1px solid var(--border-subtle)',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      background: 'var(--bg-base)',
+      background: 'var(--bg-surface)',
     }}>
       <BrainPanel
         variant="docked"
@@ -55,13 +57,16 @@ export function WorkspaceBrainColumn({ projectId, modality, extraSystem, activeF
         composerDensity="compact"
         headerContext={(
           <>
-            <span aria-hidden title={t(voice ? 'voiceDirector' : 'codingAgent')} style={{ display: 'inline-flex' }}>
-              <Icon source={voice ? '🎙' : '🤖'} size="1em" />
+            {/* What the agent is working with: the open file, or the whole project
+                (the voice director's clone for Voice). */}
+            <span className={styles.chip} title={`${t(voice ? 'voice' : 'context')}: ${subject}`} style={{ minWidth: 0, maxWidth: '100%' }}>
+              <Icon name={voice ? 'mic' : activeFile ? 'document' : 'target'} size={13} />
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: activeFile && !voice ? 'var(--font-mono, monospace)' : undefined }}>
+                {subject}
+              </span>
             </span>
-            <span style={{ fontWeight: 600, color: 'var(--text-secondary)', flexShrink: 0 }}>{t(voice ? 'voice' : 'context')}</span>
-            <span title={subject} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: activeFile && !voice ? 'var(--font-mono, monospace)' : undefined }}>
-              {subject}
-            </span>
+            {/* The project's shared thread, with people and agents in it. */}
+            <TeamChatButton projectId={projectId} variant="labeled" className={styles.chip} style={{ height: 26, borderRadius: 'var(--radius-full)' }} />
           </>
         )}
       />

@@ -58,27 +58,59 @@
   }
 }
 
-.titleInput {
+/* "Projects / <name>": where you are, read as a breadcrumb rather than a form. */
+.crumb {
+  border: 0;
+  background: transparent;
+  padding: 0 2px 0 6px;
+  color: var(--text-muted);
+  font-size: var(--font-size-body);
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.crumb:hover {
+  color: var(--text-primary);
+}
+
+.crumbSep {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .crumb,
+  .crumbSep {
+    display: none;
+  }
+}
+
+/* The project's name: a title until it is hovered or focused. The selector is
+   doubled so a global `input[type=text]` rule cannot paint it as a form field. */
+.titleInput.titleInput {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: var(--font-size-body);
   color: var(--text-primary);
   background: transparent;
   border: 1px solid transparent;
+  box-shadow: none;
   border-radius: var(--radius-sm);
   padding: 5px 8px;
-  min-width: 80px;
-  width: 100%;
-  max-width: 320px;
+  min-width: 6ch;
+  width: auto;
+  max-width: min(320px, 40vw);
   outline: none;
   text-overflow: ellipsis;
+  appearance: none;
 }
 
-.titleInput:hover {
+.titleInput.titleInput:hover {
   border-color: var(--border-subtle);
 }
 
-.titleInput:focus {
+.titleInput.titleInput:focus {
   border-color: var(--accent);
   background: var(--bg-elevated);
 }
@@ -171,12 +203,331 @@
   flex-shrink: 0;
 }
 
+/* Two buttons read as one: the action, and its ▾ of alternatives. */
+.splitButton {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.splitButton > :first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.splitButton > :nth-child(2) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid color-mix(in srgb, var(--text-on-accent) 30%, transparent);
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+/* The account: the plan and the person in one pill. */
+.accountPill {
+  height: 34px;
+  padding: 2px 2px 2px 10px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  cursor: pointer;
+}
+
+.accountPill:hover,
+.accountPill[aria-expanded='true'] {
+  background: var(--bg-elevated);
+}
+
+.accountPlan {
+  font-size: var(--font-size-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--text-primary);
+  color: var(--bg-surface);
+  font-weight: 700;
+  font-size: var(--font-size-small);
+}
+
+@media (pointer: coarse) {
+  .accountPill {
+    height: 44px;
+  }
+}
+
+/* A quiet header control: text and icon, a frame only on hover. */
+.ghostChip {
+  height: 30px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ghostChip:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+@media (max-width: 1100px) {
+  .ghostChipLabel {
+    display: none;
+  }
+}
+
 .dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--emerald-bright);
+}
+
+.dot[data-muted] {
+  background: var(--text-muted);
+}
+
+.dot[data-tone='error'] {
+  background: var(--error-text);
+}
+
+.dot[data-tone='busy'] {
+  background: var(--accent);
+}
+
+/* ── Preview: a browser-like toolbar over the app, framed as a page ── */
+
+.previewToolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  flex-wrap: wrap;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.toolbarButton {
+  height: 32px;
+  padding: 0 10px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.toolbarButton:hover:not(:disabled) {
+  background: var(--bg-elevated);
+}
+
+.toolbarButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toolbarButton[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* A narrow toolbar keeps the icon and drops the words. */
+@media (max-width: 700px) {
+  .toolbarButtonLabel {
+    display: none;
+  }
+}
+
+.addressPill {
+  flex: 1 1 200px;
+  min-width: 0;
+  height: 32px;
+  margin: 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+}
+
+.addressState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.addressState[data-live] {
+  color: var(--success-text);
+}
+
+.addressUrl {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+.addressFresh {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: var(--font-size-eyebrow);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .addressFresh {
+    display: none;
+  }
+}
+
+.previewStage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  background: var(--bg-deep);
+}
+
+.previewStageInner {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+}
+
+.previewStageInner:not([data-size='desktop']) {
+  padding: 20px;
+}
+
+/* The running app, as a page on the workspace's ground — not a hole in it. */
+.previewPage {
+  max-width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+}
+
+@media (max-width: 520px) {
+  .previewStageInner,
+  .previewStageInner:not([data-size='desktop']) {
+    padding: 6px;
+  }
+}
+
+/* The error a stopped preview shows, as the build reported it. */
+.failureBox {
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-deep);
+  color: var(--error-text);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+  text-align: left;
+  overflow-wrap: anywhere;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.suggestion {
+  min-height: 30px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.suggestion:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+@media (pointer: coarse) {
+  .suggestion {
+    min-height: 44px;
+  }
+}
+
+/* ── Status bar under the centre ── */
+
+.statusItem {
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+button.statusItem {
+  cursor: pointer;
+}
+
+button.statusItem:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.statusItem[data-tone='ok'] {
+  color: var(--success-text);
+}
+
+.statusItem[data-tone='error'] {
+  color: var(--error-text);
 }
 
 .menu {

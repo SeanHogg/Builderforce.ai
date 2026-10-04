@@ -12,32 +12,46 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, typ
  * already had one on the left. Entry points (e.g. `TeamChatButton`) read this
  * and reveal the docked panel instead; with no provider they open the drawer.
  *
- * It is also how a surface beside the chat hands the person a ready-made message
- * ("use this image in the app — where?"): `seedComposer` puts text in the docked
- * composer for them to finish and send. It never sends on their behalf.
+ * It is also how a surface beside the chat hands the person a message:
+ * - `seedComposer` puts text in the docked composer for them to finish and send
+ *   ("use this image in the app — where?"). It does not send.
+ * - `ask` sends it. Only for a control whose whole meaning is "ask Brain this"
+ *   (the preview's "Fix it for me"): the click IS the person sending it.
  */
 export interface DockedBrain {
   /** Bring the docked panel into view (e.g. the chat pane on a narrow screen). */
   reveal: () => void;
   /** Put `text` in the docked composer and bring the chat into view. */
   seedComposer: (text: string) => void;
-  /** The docked composer registers how to receive seeded text; returns the unregister. */
-  registerComposer: (seed: (text: string) => void) => () => void;
+  /** Send `text` as the person's next message and bring the chat into view. */
+  ask: (text: string) => void;
+  /** The docked composer registers how to receive text; returns the unregister. */
+  registerComposer: (composer: DockedComposer) => () => void;
+}
+
+/** What the docked composer does with text a neighbouring surface hands it. */
+export interface DockedComposer {
+  seed: (text: string) => void;
+  send: (text: string) => void;
 }
 
 const DockedBrainContext = createContext<DockedBrain | null>(null);
 
 export function DockedBrainProvider({ reveal, children }: { reveal: () => void; children: ReactNode }) {
-  const composer = useRef<((text: string) => void) | null>(null);
-  const registerComposer = useCallback((seed: (text: string) => void) => {
-    composer.current = seed;
-    return () => { if (composer.current === seed) composer.current = null; };
+  const composer = useRef<DockedComposer | null>(null);
+  const registerComposer = useCallback((next: DockedComposer) => {
+    composer.current = next;
+    return () => { if (composer.current === next) composer.current = null; };
   }, []);
   const seedComposer = useCallback((text: string) => {
-    composer.current?.(text);
+    composer.current?.seed(text);
     reveal();
   }, [reveal]);
-  const value = useMemo<DockedBrain>(() => ({ reveal, seedComposer, registerComposer }), [reveal, seedComposer, registerComposer]);
+  const ask = useCallback((text: string) => {
+    composer.current?.send(text);
+    reveal();
+  }, [reveal]);
+  const value = useMemo<DockedBrain>(() => ({ reveal, seedComposer, ask, registerComposer }), [reveal, seedComposer, ask, registerComposer]);
   return <DockedBrainContext.Provider value={value}>{children}</DockedBrainContext.Provider>;
 }
 
@@ -46,8 +60,8 @@ export function useDockedBrain(): DockedBrain | null {
   return useContext(DockedBrainContext);
 }
 
-/** Called by the docked composer: receive text a neighbouring surface seeds. */
-export function useDockedComposerSeed(enabled: boolean, seed: (text: string) => void): void {
+/** Called by the docked composer: receive text a neighbouring surface hands it. */
+export function useDockedComposer(enabled: boolean, composer: DockedComposer): void {
   const docked = useDockedBrain();
-  useEffect(() => (enabled && docked ? docked.registerComposer(seed) : undefined), [enabled, docked, seed]);
+  useEffect(() => (enabled && docked ? docked.registerComposer(composer) : undefined), [enabled, docked, composer]);
 }

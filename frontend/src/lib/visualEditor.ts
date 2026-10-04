@@ -41,6 +41,20 @@ export const VISUAL_SELECT_MESSAGE = 'builderforce:visual-select';
 /** postMessage type telling the preview to arm or disarm selection. */
 export const VISUAL_ARM_MESSAGE = 'builderforce:visual-arm';
 
+/**
+ * postMessage type moving the preview through its own history. The frame is
+ * cross-origin, so the toolbar's back / forward cannot call `history` directly;
+ * the overlay already listening for {@link VISUAL_ARM_MESSAGE} does it.
+ */
+export const PREVIEW_NAV_MESSAGE = 'builderforce:preview-nav';
+
+export type PreviewNavDirection = 'back' | 'forward';
+
+/** Ask the preview in `frame` to go back or forward in its own history. */
+export function navigatePreview(frame: HTMLIFrameElement | null, direction: PreviewNavDirection): void {
+  frame?.contentWindow?.postMessage({ type: PREVIEW_NAV_MESSAGE, direction }, '*');
+}
+
 export interface VisualSelection {
   /** Source file as React reported it, normalised to workspace-relative. */
   file: string;
@@ -65,6 +79,7 @@ export const VISUAL_EDITOR_OVERLAY = `<script>
 (function () {
   var SELECT = ${JSON.stringify(VISUAL_SELECT_MESSAGE)};
   var ARM = ${JSON.stringify(VISUAL_ARM_MESSAGE)};
+  var NAV = ${JSON.stringify(PREVIEW_NAV_MESSAGE)};
   var armed = false;
   var box = null;
 
@@ -129,7 +144,12 @@ export const VISUAL_EDITOR_OVERLAY = `<script>
   }
 
   addEventListener('message', function (event) {
-    if (!event.data || event.data.type !== ARM) return;
+    if (!event.data) return;
+    if (event.data.type === NAV) {
+      try { if (event.data.direction === 'back') history.back(); else history.forward(); } catch (e) {}
+      return;
+    }
+    if (event.data.type !== ARM) return;
     armed = !!event.data.armed;
     if (!armed && box) box.style.display = 'none';
     document.body.style.cursor = armed ? 'crosshair' : '';

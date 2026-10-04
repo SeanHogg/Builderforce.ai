@@ -7,7 +7,8 @@ import { LazyBuilderWorkspace } from '@/components/builder/LazyBuilderWorkspace'
 import { useBuildProject } from '@/hooks/useBuildProject';
 import { useSignInDialog } from '@/components/auth/signIn/SignInDialogProvider';
 import { takeHandedOffPrompt } from '@/lib/studio/promptHandoff';
-import { StudioTopBar, StudioBrand, StudioAccountControl } from './StudioTopBar';
+import { StudioTopBar, StudioBrand } from './StudioTopBar';
+import { StudioAccountControl } from './StudioAccountControl';
 import { StudioProjectActions } from './StudioProjectActions';
 import { OpenOnCanvasLink } from './OpenOnCanvasLink';
 import { StudioWorkspacePicker } from './StudioWorkspacePicker';
@@ -41,7 +42,9 @@ export function StudioProject({ projectId, initialChatId = null, initialTicket =
   }, [projectId]);
 
   return (
-    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
+    // Its own stacking layer: the app's fixed starfield (z-index 0) otherwise paints
+    // over every non-positioned surface here — it showed through the chat column.
+    <div style={{ height: '100dvh', position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
       {/* An open project has ONE header row: the workspace's. Studio hands it the
           mark and its actions (Share, Publish, the account) instead of stacking its
           own bar above — two rows of actions was what people found confusing. The

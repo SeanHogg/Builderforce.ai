@@ -7,7 +7,7 @@ import { InlineConfirmButton } from '@/components/InlineConfirmButton';
 import { faultMessage } from '@/lib/apiClient';
 import type { ProjectCheckpoint } from '@/lib/api';
 import { useFormat } from '@/i18n/useFormat';
-import { useProjectVersions } from './useProjectVersions';
+import type { ProjectVersions } from './useProjectVersions';
 
 const NAMED_FILES = 3;
 
@@ -16,11 +16,12 @@ const NAMED_FILES = 3;
  * saves, the starting point. Restore puts the whole project back (and saves the
  * current state first, so the restore can be undone the same way).
  *
- * Keep it mounted while the workspace is open: it is also what records versions.
+ * The versions come from the workspace (`ws.versions`), which records them for
+ * as long as it is open, so this panel can mount and unmount freely.
  */
-export function VersionsPanel({ projectId }: { projectId: number }) {
+export function VersionsPanel({ versions: projectVersions }: { versions: ProjectVersions }) {
   const t = useTranslations('builderVersions');
-  const { versions, error, save, restore } = useProjectVersions(projectId);
+  const { versions, error, save, restore } = projectVersions;
   const [notice, setNotice] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 

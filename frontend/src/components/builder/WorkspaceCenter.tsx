@@ -8,6 +8,7 @@ import { ChecksControl } from './ChecksControl';
 import { DatabasePanel } from './database/DatabasePanel';
 import { PaneLayer } from './PaneLayer';
 import { PreviewPane, type PreviewFraming } from './PreviewPane';
+import { RunStatusItem } from './RunStatusItem';
 import { VoiceOutput } from './VoiceOutput';
 import { WorkspaceBottomPanel } from './WorkspaceBottomPanel';
 import { hasRunnableEntry } from './useAutoRun';
@@ -70,6 +71,7 @@ export function WorkspaceCenter({ ws, hidden = false, overlay }: {
                 step={runner.step}
                 runnable={hasRunnableEntry(ws.files)}
                 onRestart={() => { void runner.run(); }}
+                onOpenVersions={ws.rightTabs.includes('versions') ? () => ws.openRail('versions') : undefined}
                 edit={ws.edit}
                 framing={framing}
                 onOpenDevicePanel={canOpenDevicePanel ? () => ws.setDevicePanelOpen(true) : undefined}
@@ -91,7 +93,8 @@ export function WorkspaceCenter({ ws, hidden = false, overlay }: {
             onTerminalReady={ws.logs.onTerminalReady}
             onTerminalInput={ws.handleTerminalInput}
             onOutputReady={ws.logs.onOutputReady}
-            status={modalityDef.showChecks ? (
+            summary={<RunStatusItem phase={runner.phase} />}
+            tools={modalityDef.showChecks ? (
               <ChecksControl
                 results={runner.checkResults}
                 checking={runner.isChecking}

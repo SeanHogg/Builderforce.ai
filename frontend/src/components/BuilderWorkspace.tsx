@@ -1,14 +1,13 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
-import { PlanBadge } from '@/components/PlanBadge';
 import { BuilderProjectsSlideOutPanel } from './builder/BuilderProjectsSlideOutPanel';
 import { WorkspaceBrainColumn } from './builder/WorkspaceBrainColumn';
-import { TeamChatButton } from './brain/TeamChatButton';
 import { DockedBrainProvider } from '@/lib/brain/dockedBrain';
 import { WorkspaceHeader } from '@/components/builder/WorkspaceHeader';
 import { ProjectTitleField } from '@/components/builder/ProjectTitleField';
 import { WorkspaceMoreMenu } from '@/components/builder/WorkspaceMoreMenu';
+import { WorkspaceVersionChip } from '@/components/builder/WorkspaceVersionChip';
 import { CenterViewSwitch } from '@/components/builder/CenterViewSwitch';
 import { VoiceGenerateButton } from '@/components/builder/VoiceGenerateButton';
 import { WorkspaceCenter } from '@/components/builder/WorkspaceCenter';
@@ -106,10 +105,8 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                 <span className={styles.dot} />
               </span>
             )}
-            {/* The plan funding this workspace's chat. It used to sit in the composer's
-                last row, where "FREE · UPGRADE" read as part of the message being typed. */}
-            <PlanBadge />
-            <TeamChatButton projectId={project.id} />
+            {/* The plan is the host's account control; team chat is a chip over the docked Brain. */}
+            {ws.rightTabs.includes('versions') && <WorkspaceVersionChip versions={ws.versions} onOpen={() => ws.openRail('versions')} />}
             {/* A type with no live preview (Voice) keeps an explicit button for its one action. */}
             {modalityDef.showRunButton && !livePreview && <VoiceGenerateButton voice={voice} label={modalityCopy.runLabel} />}
             <WorkspaceMoreMenu

@@ -39,6 +39,8 @@ export function WorkspaceHeader({ leading, title, typeIcon, typeLabel, center, a
           <Icon name="apps" size={18} />
         </button>
         {leading}
+        <button type="button" className={styles.crumb} onClick={onOpenProjects}>{t('workspace.projects')}</button>
+        <span className={styles.crumbSep} aria-hidden>/</span>
         {title}
         <span className={styles.chip} title={t('modalityProject', { label: typeLabel })}>
           <Icon source={typeIcon} size={14} />

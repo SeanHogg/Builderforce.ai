@@ -43,7 +43,7 @@ import { useBrainChatRowActions } from './useBrainChatRowActions';
 import { useBrainNewProject } from './useBrainNewProject';
 import { useBrainCaptureExecution } from './useBrainCaptureExecution';
 import { useBrainPanelBanners } from './useBrainPanelBanners';
-import { useDockedComposerSeed } from '@/lib/brain/dockedBrain';
+import { useDockedComposer } from '@/lib/brain/dockedBrain';
 
 /**
  * The ONE Brain panel's state machine: composes the focused hooks (preferences,
@@ -148,11 +148,6 @@ export function useBrainPanelController({
     pickWorkOption,
     onboard,
   } = useBrainChatStart({ chats, isPage, setDockedTab });
-
-  // The panel that IS the page's chat (docked, no close) takes text a neighbouring
-  // surface hands it — Studio's Media panel "use in app" — to finish and send.
-  const seedComposer = useCallback((text: string) => { setInput(text); showChatTab(); }, [setInput, showChatTab]);
-  useDockedComposerSeed(!isPage && !onClose, seedComposer);
 
   // Tell the model which project is in context, so "create a task" / "list
   // specs" without a named project default to it. Chat-FIRST: a chat that belongs
@@ -294,6 +289,23 @@ export function useBrainPanelController({
   // The exam gate — the composer already refuses, and so must every other path into a
   // send (a suggestion, a replayed prompt): a refusal, never a silent allow.
   const assistantGate = useAssistantGate();
+
+  // The panel that IS the page's chat (docked, no close) takes text a neighbouring
+  // surface hands it: to finish and send (Studio's Media panel "use in app"), or to
+  // send now (the preview's "Fix it for me" — the click is the person sending it).
+  // A send goes through the same gate and queue as a typed one.
+  const { submit: submitQueued } = queuedTurns;
+  const dockedComposer = useMemo(() => ({
+    seed: (text: string) => { setInput(text); showChatTab(); },
+    send: (text: string) => {
+      if (!assistantGate.assistantAllowed) return;
+      showChatTab();
+      if (submitQueued(text)) return;
+      void conv.send(text);
+    },
+  }), [setInput, showChatTab, assistantGate.assistantAllowed, submitQueued, conv]);
+  useDockedComposer(!isPage && !onClose, dockedComposer);
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || !assistantGate.assistantAllowed) return;

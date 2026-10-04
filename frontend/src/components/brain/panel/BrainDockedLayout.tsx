@@ -51,15 +51,15 @@ export function BrainDockedLayout() {
         context={headerContext}
       />
       {dockedTab === 'history' ? (
-        <div id="brain-tabpanel-history" role="tabpanel" aria-labelledby="brain-tab-history" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        <section id="brain-history" aria-label={tBrain('historyShow')} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           <div style={{ padding: '8px 12px' }}>
             <input type="search" placeholder={tBrain('searchChats')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
               style={{ width: '100%', padding: '6px 8px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
           </div>
           <BrainChatList />
-        </div>
+        </section>
       ) : (
-        <div id="brain-tabpanel-chat" role="tabpanel" aria-labelledby="brain-tab-chat" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <BrainConversation />
         </div>
       )}

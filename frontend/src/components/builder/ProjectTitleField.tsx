@@ -50,6 +50,8 @@ export function ProjectTitleField({ project, onProjectUpdate }: {
     <input
       type="text"
       value={value}
+      // Sized to the name, so it reads as a title and not as an empty form field.
+      size={Math.max(6, Math.min(value.length + 1, 40))}
       onChange={(e) => setValue(e.target.value)}
       onBlur={() => { void save(); }}
       onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}

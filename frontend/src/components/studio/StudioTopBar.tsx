@@ -3,10 +3,8 @@
 import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { BrandLockup } from '@/components/BrandLockup';
-import { Button } from '@/components/ui';
-import { useAuth } from '@/lib/AuthContext';
-import { useSignInDialog } from '@/components/auth/signIn/SignInDialogProvider';
 import { STUDIO_ROUTE } from '@/lib/studio/studioHost';
+import { StudioAccountControl } from './StudioAccountControl';
 
 /**
  * Studio's bar for pages that are not a project: the mark (home), whatever the
@@ -55,36 +53,5 @@ export function StudioBrand({ compact = false }: { compact?: boolean }) {
         </span>
       )}
     </BrandLockup>
-  );
-}
-
-/** Signed out: sign in / get started. Signed in: the avatar and sign out. */
-export function StudioAccountControl() {
-  const t = useTranslations('studio.topBar');
-  const { authReady, isAuthenticated, user, logout } = useAuth();
-  const { requestSignIn } = useSignInDialog();
-  if (!authReady) return null;
-
-  if (!isAuthenticated) {
-    return (
-      <>
-        <Button type="button" variant="ghost" size="sm" onClick={requestSignIn}>{t('signIn')}</Button>
-        <Button type="button" variant="primary" size="sm" onClick={requestSignIn}>{t('getStarted')}</Button>
-      </>
-    );
-  }
-
-  const initial = (user?.name || user?.email || '?').trim().charAt(0).toUpperCase();
-  return (
-    <>
-      <span
-        aria-hidden
-        title={user?.email ?? undefined}
-        style={{ width: 32, height: 32, flexShrink: 0, borderRadius: '50%', display: 'grid', placeItems: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', fontWeight: 700 }}
-      >
-        {initial}
-      </span>
-      <Button type="button" variant="ghost" size="sm" onClick={logout}>{t('signOut')}</Button>
-    </>
   );
 }

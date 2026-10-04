@@ -17,6 +17,7 @@ import { useWorkspaceFiles } from './useWorkspaceFiles';
 import { useAutoRun } from './useAutoRun';
 import { usePointAndEdit } from './usePointAndEdit';
 import { useMediaStudio } from './media/useMediaStudio';
+import { useProjectVersions } from './useProjectVersions';
 
 /** Below this width panes take turns instead of sitting side by side. */
 export const NARROW_LAYOUT_PX = 760;
@@ -106,6 +107,10 @@ export function useBuilderWorkspace({ store, name, modality: requestedModality, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modality]);
 
+  // One version per agent turn, recorded for as long as the workspace is open (the
+  // Versions panel and the header's "Saved · v3" both read this one instance).
+  const versions = useProjectVersions(rightTabs.includes('versions') ? storageProjectId : null);
+
   // Generated images and clips: the rail's Media tab, and where the agent's wait for a decision.
   const media = useMediaStudio(storageProjectId, useCallback(() => openRail('media'), [openRail]));
 
@@ -162,6 +167,7 @@ export function useBuilderWorkspace({ store, name, modality: requestedModality, 
     setRailOpen,
     openRail,
     media,
+    versions,
     completedJobs,
     recordCompletedJob,
     settingsOpen,

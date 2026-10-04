@@ -24,14 +24,19 @@ export interface ProjectVersions {
  * a project with no versions records its starting point, so the first agent turn
  * can always be undone. Restoring announces the files it put back, so the open
  * editor and preview pick them up.
+ *
+ * Call it ONCE per open workspace (`useBuilderWorkspace` does): it is also what
+ * records versions, so a second caller would record every turn twice. A null
+ * project (a workspace held in this browser, or a type without versions) is inert.
  */
-export function useProjectVersions(projectId: number): ProjectVersions {
+export function useProjectVersions(projectId: number | null): ProjectVersions {
   const [versions, setVersions] = useState<ProjectCheckpoint[] | null>(null);
   const [error, setError] = useState(false);
   const pendingPaths = useRef(new Set<string>());
   const quietUntil = useRef(0);
 
   const reload = useCallback(async () => {
+    if (projectId === null) return;
     try {
       setVersions(await projectCheckpointsApi.list(projectId));
       setError(false);
@@ -41,6 +46,7 @@ export function useProjectVersions(projectId: number): ProjectVersions {
   }, [projectId]);
 
   useEffect(() => {
+    if (projectId === null) return undefined;
     let cancelled = false;
     projectCheckpointsApi.list(projectId)
       .then(async (list) => {
@@ -54,6 +60,7 @@ export function useProjectVersions(projectId: number): ProjectVersions {
   }, [projectId, reload]);
 
   useEffect(() => {
+    if (projectId === null) return undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const unsubscribe = subscribeWorkspaceFiles((changedProject, paths) => {
       if (changedProject !== projectId || Date.now() < quietUntil.current) return;
@@ -71,11 +78,13 @@ export function useProjectVersions(projectId: number): ProjectVersions {
   }, [projectId, reload]);
 
   const save = useCallback(async (name: string) => {
+    if (projectId === null) return;
     await projectCheckpointsApi.create(projectId, { kind: 'manual', name });
     await reload();
   }, [projectId, reload]);
 
   const restore = useCallback(async (id: number) => {
+    if (projectId === null) throw new Error('This workspace has no versions.');
     const outcome = await projectCheckpointsApi.restore(projectId, id);
     quietUntil.current = Date.now() + RESTORE_QUIET_MS;
     notifyWorkspaceFilesChanged(projectId, [...outcome.restored, ...outcome.removed]);

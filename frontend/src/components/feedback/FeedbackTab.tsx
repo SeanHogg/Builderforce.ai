@@ -13,7 +13,7 @@
  * may execute until a human approves it in triage.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
@@ -22,8 +22,14 @@ import { useAuth } from '@/lib/AuthContext';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { feedbackApi, FEEDBACK_KINDS, type FeedbackKind } from '@/lib/feedbackApi';
 import { faultMessage } from '@/lib/apiClient';
+import { onOpenFeedback } from '@/lib/feedbackEvents';
 /** Routes that own the full viewport — the tab would collide with their chrome. */
 const HIDDEN_PREFIXES = ['/embed', '/login', '/register', '/onboarding'];
+/** Routes that keep the form but not the edge tab: their own menu opens it (`openFeedback`). */
+const MENU_ONLY_PREFIXES = ['/studio'];
+
+const matches = (pathname: string, prefixes: readonly string[]) =>
+  prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
 const input: React.CSSProperties = {
   padding: '9px 12px', fontSize: 13, borderRadius: 'var(--radius-md)', width: '100%', boxSizing: 'border-box',
@@ -54,8 +60,11 @@ export function FeedbackTab() {
   const projectId = scope?.currentProjectId ?? scope?.projects[0]?.id ?? null;
   const projectName = scope?.projects.find((p) => p.id === projectId)?.name ?? null;
 
+  useEffect(() => onOpenFeedback(() => setOpen(true)), []);
+
   if (!isAuthenticated || !hasTenant || projectId == null) return null;
-  if (HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return null;
+  if (matches(pathname, HIDDEN_PREFIXES)) return null;
+  const showEdgeTab = !matches(pathname, MENU_ONLY_PREFIXES);
 
   const reset = () => { setKind('feature'); setTitle(''); setBody(''); setError(null); setDone(false); };
   const close = () => { setOpen(false); reset(); };
@@ -80,16 +89,18 @@ export function FeedbackTab() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        className="feedback-edge-tab"
-        title={t('tab.tooltip')}
-      >
-        {t('tab.label')}
-      </button>
+      {showEdgeTab && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          className="feedback-edge-tab"
+          title={t('tab.tooltip')}
+        >
+          {t('tab.label')}
+        </button>
+      )}
       <style>{`
         /* A slim vertical tab on the right edge. Vertically centred, which keeps
            it clear of the bottom-right Brain launcher (56px + 20px inset) and,

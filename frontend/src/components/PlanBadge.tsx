@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useConsumption, invalidateConsumption } from '@/lib/useConsumption';
+import { invalidateConsumption } from '@/lib/useConsumption';
+import { usePlanSummary } from '@/lib/usePlanSummary';
 import { useFormat } from "@/i18n/useFormat";
 
 /**
@@ -25,35 +26,13 @@ import { useFormat } from "@/i18n/useFormat";
 export function PlanBadge() {
   const fmt = useFormat();
   const t = useTranslations('planBadge');
-  const snapshot = useConsumption();
-  if (!snapshot) return null;
-
-  const tier = snapshot.plan.effective;
-  const isFree = tier === 'free';
-  const meter = snapshot.meters.find((m) => m.key === 'ai_tokens');
-  // "Tokens left" only means something on a metered plan; an unlimited or absent
-  // meter shows the tier alone rather than inventing a number.
-  const remaining = meter && !meter.unlimited && meter.remaining >= 0 ? meter.remaining : null;
-  const exhausted = remaining !== null && remaining <= 0;
-
-  // A tier the catalog doesn't know (a plan added server-side ahead of the copy)
-  // must not throw in a header — fall back to the raw key, title-cased.
-  const tierKey = `tier.${tier}` as 'tier.free';
-  const label = t.has(tierKey) ? t(tierKey) : tier.replace(/^./, (ch) => ch.toUpperCase());
-  const title = isFree ? t('freeHint') : t('paidHint', { plan: label });
-
-  // Free + out of allowance is the one state that must read as a problem; free
-  // with headroom is a call to action; a paid plan is neutral reassurance. All
-  // three are theme tokens, so the chip is legible in light AND dark themes.
-  const tone = exhausted
-    ? 'var(--error-text)'
-    : isFree
-      ? 'var(--accent)'
-      : 'var(--text-muted)';
+  const plan = usePlanSummary();
+  if (!plan) return null;
+  const { label, isFree, remaining, exhausted, title, href, tone } = plan;
 
   return (
     <Link
-      href={isFree ? '/pricing?upgrade=pro' : '/pricing'}
+      href={href}
       title={title}
       aria-label={title}
       onClick={invalidateConsumption}

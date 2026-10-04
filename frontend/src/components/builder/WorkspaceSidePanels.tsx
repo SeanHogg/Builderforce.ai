@@ -72,10 +72,9 @@ export function WorkspaceSidePanels({ ws, visible }: {
       </PaneLayer>
       {storageProjectId !== null && (
         <>
-          {/* Always mounted where the modality has versions: the panel is also what records one per agent turn. */}
           {ws.rightTabs.includes('versions') && (
             <PaneLayer active={rightTab === 'versions'}>
-              <VersionsPanel projectId={storageProjectId} />
+              <VersionsPanel versions={ws.versions} />
             </PaneLayer>
           )}
           <PaneLayer active={rightTab === 'agent'}>
