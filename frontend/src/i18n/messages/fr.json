@@ -32254,6 +32254,8 @@
     "project": {
       "share": "Partager",
       "linkCopied": "Lien copié",
+      "openOnCanvas": "Ouvrir sur le canevas",
+      "openOnCanvasTitle": "Revenir à cette app sur son tableau du canevas",
       "publish": "Publier",
       "loadFailed": "Impossible d’ouvrir ce projet.",
       "loading": "Ouverture de votre projet…",

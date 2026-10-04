@@ -32254,6 +32254,8 @@
     "project": {
       "share": "Compartir",
       "linkCopied": "Enlace copiado",
+      "openOnCanvas": "Abrir en el lienzo",
+      "openOnCanvasTitle": "Volver a esta app en su tablero del lienzo",
       "publish": "Publicar",
       "loadFailed": "No se pudo abrir este proyecto.",
       "loading": "Abriendo tu proyecto…",

@@ -301,6 +301,7 @@
     "lib/specVerdict.ts",
     "lib/statusTone.ts",
     "lib/storage.ts",
+    "lib/studio/studioHost.ts",
     "lib/subscriptionCart.ts",
     "lib/team/teammate.ts",
     "lib/team/useTeamRoster.ts",

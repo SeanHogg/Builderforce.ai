@@ -1,3 +1,18 @@
+## ✅ RESOLVED 2026-10-04 — Go back and forth between a canvas app and Studio (frontend 2026.10.9)
+
+Request: "from the canvas you should be able to launch the app directly into the studio as well => go back and forth as needed."
+
+- **Canvas to Studio.** The App surface's "Open in Studio" was an unlabelled icon among the panel toggles that opened a new tab. It is now a labelled link (`.appStudioLink`, canvas palette in both themes) that opens the same app in Studio in the same tab.
+  - The address bar's external-link button still opens the raw live preview, as it does in Studio.
+- **Studio to canvas.** This direction was new. `OpenOnCanvasLink` sits in the Studio project header and links to `canvasAppPath(publicId ?? id)`, and `BuildCanvasRedirect` lands on the App surface of the board that holds the app.
+  - It shows only when the project has a canvas build. A Studio-born project has none, which is logged in the Gap Register with its blocker.
+  - Localized in all five catalogs (`studio.project.openOnCanvas`, `openOnCanvasTitle`).
+- **ONE spelling of the canvas-app path.** `lib/studio/studioHost.ts` `canvasAppPath()` sits beside `studioProjectPath()`. Every hand-built `/create/build/…` string now uses it:
+  - the Brain conversation header, the project Workspace tab, Project 360's actions, `ProjectCard` and `ProjectTable`;
+  - the Brain's `open_project` and `ide_project` routes;
+  - the `/ide/<ref>` middleware redirect.
+  - Root closure 331 → 332, argued in the guard header. The module is import-free and already ships in the middleware.
+
 ## ✅ RESOLVED 2026-10-04 — Studio previews crashed on the first hook; Studio still asked for a workspace (frontend 2026.10.8 · webcontainers 2026.10.4)
 
 Report: "This was deployed but it's not working on the studio — this shouldn't be shown." Studio showed "Choose a workspace", and the generated He-Man app's preview failed with `Cannot read properties of null (reading 'useState')`. The Brain could not fix that error, because it was not in the app's code.

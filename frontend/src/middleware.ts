@@ -4,7 +4,7 @@ import { VSCODE_WEBVIEW_SCHEME } from '@/lib/embed/embedTrust';
 import { LOCALES, DEFAULT_LOCALE, LOCALE_COOKIE, type Locale } from '@/i18n/config';
 import { isUnknownRootSlug, NOT_FOUND_REWRITE_PATH } from '@/lib/rootRoutes';
 import { isCanvasInvitationRoute } from '@/lib/shellRouting';
-import { isStudioHost, studioHostRedirect, STUDIO_ROUTE } from '@/lib/studio/studioHost';
+import { canvasAppPath, isStudioHost, studioHostRedirect, STUDIO_ROUTE } from '@/lib/studio/studioHost';
 
 /**
  * Route protection rules:
@@ -147,7 +147,7 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith('/ide/')) {
     const projectRef = pathname.slice('/ide/'.length).split('/')[0];
     const url = request.nextUrl.clone();
-    url.pathname = `/create/build/${projectRef}`;
+    url.pathname = canvasAppPath(projectRef);
     return NextResponse.redirect(url);
   }
 

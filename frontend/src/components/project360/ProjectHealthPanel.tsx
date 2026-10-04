@@ -12,6 +12,7 @@ import {
 } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import { getProject360 } from '@/lib/project360Api';
+import { canvasAppPath } from '@/lib/studio/studioHost';
 
 /**
  * Web Project 360 — the SAME shared <Project360View> the VS Code panel renders,
@@ -64,12 +65,12 @@ export function ProjectHealthPanel({ projectId }: { projectId: number }) {
     // (parity with the VS Code "open task" flow) — epics/gaps link to their own kind.
     let qs = '';
     if (action.kind === 'brain' && action.text) {
-      qs = `?prompt=${encodeURIComponent(action.text)}`;
+      qs = `prompt=${encodeURIComponent(action.text)}`;
     } else if (action.kind === 'open-task' && action.task) {
       const kind = action.task.taskType ?? 'task';
-      qs = `?ticket=${encodeURIComponent(`${kind}:${action.task.id}`)}`;
+      qs = `ticket=${encodeURIComponent(`${kind}:${action.task.id}`)}`;
     }
-    router.push(`/create/build/${projectId}${qs}`);
+    router.push(canvasAppPath(projectId, qs));
   }, [router, projectId]);
 
   return (

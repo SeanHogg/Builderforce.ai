@@ -9,6 +9,7 @@ import { useSignInDialog } from '@/components/auth/signIn/SignInDialogProvider';
 import { takeHandedOffPrompt } from '@/lib/studio/promptHandoff';
 import { StudioTopBar, StudioBrand, StudioAccountControl } from './StudioTopBar';
 import { StudioProjectActions } from './StudioProjectActions';
+import { OpenOnCanvasLink } from './OpenOnCanvasLink';
 import { StudioWorkspacePicker } from './StudioWorkspacePicker';
 import { useStudioWorkspace } from './useStudioWorkspace';
 
@@ -67,6 +68,7 @@ export function StudioProject({ projectId, initialChatId = null, initialTicket =
               headerLeading={<StudioBrand compact />}
               headerTrailing={(
                 <>
+                  <OpenOnCanvasLink projectId={project.id} publicId={project.publicId} />
                   <StudioProjectActions projectId={project.id} />
                   <StudioAccountControl />
                 </>

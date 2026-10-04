@@ -10,6 +10,7 @@ import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
 import { cardStyle, tabGridStyle } from './panelStyles';
 import type { ProjectPanelTab } from './projectPanelTabs';
+import { canvasAppPath } from '@/lib/studio/studioHost';
 
 const actionStyle: React.CSSProperties = {
   padding: '8px 14px',
@@ -59,7 +60,7 @@ export function ProjectWorkspaceTab({
         <div style={{ fontWeight: 600, marginBottom: 10 }}>{t('workspaceTitle')}</div>
         <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('workspaceDesc')}</p>
         <Link
-          href={`/create/build/${project.publicId ?? project.id}`}
+          href={canvasAppPath(project.publicId ?? project.id)}
           style={{ fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}
         >
           {t('openInBuilder')} →

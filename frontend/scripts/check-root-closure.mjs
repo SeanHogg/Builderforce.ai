@@ -45,6 +45,11 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   331 → 332 files (2026-10-04, canvas ↔ Studio links) — `lib/studio/studioHost.ts`,
+ *     import-free and ~40 lines (it already ships in the middleware bundle). The
+ *     Brain's `open_project` action (`lib/brain/platformActions.ts`, root-reachable)
+ *     builds the canvas-app path through `canvasAppPath` instead of its own copy of
+ *     `/create/build/<id>`, so the canvas and Studio links share ONE spelling.
  *   331 → 332 files (2026-10-03, one brand lockup) — `components/BrandLockup.tsx`
  *   (~70 lines). It is the mark plus the wordmark, and `MarketingHeader` — already in
  *   the closure, and the thing that renders on every marketing first paint — is one of

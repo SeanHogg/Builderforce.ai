@@ -15,6 +15,7 @@ import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
 import { ProjectConnectionsStrip } from './ProjectConnectionsStrip';
 import type { ProjectConnection } from '@/lib/projectConnections';
 import { tableWrapStyle, tableStyle } from './dataTableStyles';
+import { canvasAppPath } from '@/lib/studio/studioHost';
 
 export interface ProjectTableProps {
   projects: Project[];
@@ -76,7 +77,7 @@ export function ProjectTable({
   const router = useRouter();
   const openProjectChat = useOpenProjectChat();
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
-  const openBuilder = onOpenBuilder ?? ((p: Project) => { window.location.href = `/create/build/${p.publicId ?? p.id}`; });
+  const openBuilder = onOpenBuilder ?? ((p: Project) => { window.location.href = canvasAppPath(p.publicId ?? p.id); });
 
   return (
     <div style={tableWrapStyle}>

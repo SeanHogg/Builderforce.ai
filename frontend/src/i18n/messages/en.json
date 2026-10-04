@@ -32254,6 +32254,8 @@
     "project": {
       "share": "Share",
       "linkCopied": "Link copied",
+      "openOnCanvas": "Open on canvas",
+      "openOnCanvasTitle": "Back to this app on its canvas board",
       "publish": "Publish",
       "loadFailed": "Couldn't open this project.",
       "loading": "Opening your project…",

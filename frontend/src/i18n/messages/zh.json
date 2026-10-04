@@ -32254,6 +32254,8 @@
     "project": {
       "share": "分享",
       "linkCopied": "链接已复制",
+      "openOnCanvas": "在画布上打开",
+      "openOnCanvasTitle": "返回画布看板上的此应用",
       "publish": "发布",
       "loadFailed": "无法打开此项目。",
       "loading": "正在打开你的项目……",

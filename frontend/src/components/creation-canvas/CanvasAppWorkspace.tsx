@@ -2,6 +2,7 @@
  * No `'use client'` here, for the reason `CanvasAppSurface.tsx` gives: it is imported only
  * from inside the `CreationCanvas` client boundary.
  */
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { CodeReadingIcon, ConsoleReadingIcon, PreviewReadingIcon } from '@/components/canvas/CanvasCommands';
 import { Icon } from '@/components/ui/Icon';
@@ -120,12 +121,15 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
                 <ConsoleReadingIcon />
               </button>
             )}
-            {storageProjectId !== null && (
-              <a className={styles.appBarLink} href={studioProjectPath(storageProjectId)} target="_blank" rel="noreferrer" aria-label={t('openInStudio')} title={t('openInStudio')}>
-                <Icon name="external-link" size={15} />
-              </a>
-            )}
           </div>
+
+          {/* The same app in Studio, in this tab; Studio's "Open on canvas" comes back. */}
+          {storageProjectId !== null && (
+            <Link className={styles.appStudioLink} href={studioProjectPath(storageProjectId)} title={t('openInStudio')}>
+              <Icon name="external-link" size={14} />
+              <span>{t('openInStudio')}</span>
+            </Link>
+          )}
 
           {apps.length > 1 && (
             <label className={styles.appSwitcher}>

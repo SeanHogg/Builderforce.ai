@@ -17,6 +17,7 @@ import { ProjectConnectionsStrip } from './ProjectConnectionsStrip';
 import type { ProjectConnection } from '@/lib/projectConnections';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { canvasAppPath } from '@/lib/studio/studioHost';
 
 export interface ProjectCardProps {
   project: Project;
@@ -78,7 +79,7 @@ export function ProjectCard({
   const fmt = useFormat();
   const t = useTranslations('projectCard');
   const openProjectChat = useOpenProjectChat();
-  const openBuilder = onOpenBuilder ?? ((p: Project) => { window.location.href = `/create/build/${p.publicId ?? p.id}`; });
+  const openBuilder = onOpenBuilder ?? ((p: Project) => { window.location.href = canvasAppPath(p.publicId ?? p.id); });
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (onCardClick && e.key === 'Enter') {
       e.preventDefault();

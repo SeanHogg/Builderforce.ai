@@ -16,6 +16,7 @@
  */
 
 import type { BrainAction } from '@/lib/brain';
+import { canvasAppPath } from '@/lib/studio/studioHost';
 
 type Json = Record<string, unknown>;
 
@@ -83,7 +84,7 @@ const DYNAMIC_ROUTES: Record<string, (id: string | number) => string> = {
   // The Tasks board scoped to one project — where a freshly-created task is
   // visible. NOT `/projects/{id}` (that redirects into the IDE).
   project_tasks: (id) => `/projects?tab=tasks&project=${id}`,
-  ide_project: (id) => `/create/build/${id}`,
+  ide_project: (id) => canvasAppPath(id),
   content_item: (id) => `/content-manager/${id}`,
   persona: (id) => `/personas/${id}`,
   skill: (id) => `/skills/${id}`,
@@ -138,12 +139,12 @@ export function buildPlatformActions(ctx: PlatformActionContext): BrainAction[] 
     mutates: false,
     run: (args) => {
       const a = args as Json;
-      const id = f(a, 'id');
+      const id = f<string | number | undefined>(a, 'id');
       if (id == null) return { error: 'A project id is required.' };
       const chatId = f<number | undefined>(a, 'chatId');
-      const path = `/create/build/${id}${chatId != null ? `?chat=${chatId}` : ''}`;
+      const path = canvasAppPath(id, chatId != null ? `chat=${chatId}` : undefined);
       ctx.navigate(path);
-      return { opened: `/create/build/${id}` };
+      return { opened: canvasAppPath(id) };
     },
   };
 

@@ -28,3 +28,12 @@ export function studioHostRedirect(pathname: string): string | null {
 export function studioProjectPath(projectId: number | string): string {
   return `${STUDIO_ROUTE}/project/${projectId}`;
 }
+
+/**
+ * The same project as an app on its canvas: the App surface on the board that holds
+ * it (`BuildCanvasRedirect` resolves the board). The other half of
+ * {@link studioProjectPath}, so a person can go back and forth between the two.
+ */
+export function canvasAppPath(projectRef: number | string, query?: string): string {
+  return `/create/build/${projectRef}${query ? `?${query}` : ''}`;
+}
