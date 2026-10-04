@@ -1,18 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const generateImage = vi.fn();
-vi.mock('@/lib/imageGenerationApi', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/imageGenerationApi')>()),
-  generateImage: (...args: unknown[]) => generateImage(...args),
-}));
-
+import type { generateImage as GenerateImage } from '@/lib/imageGenerationApi';
 import { generateImageAssetAction } from './generateImageAssetAction';
+
+const generateImage = vi.fn<typeof GenerateImage>();
+const action = generateImageAssetAction(generateImage);
 
 beforeEach(() => generateImage.mockReset());
 
 describe('generate_image_asset', () => {
-  const action = generateImageAssetAction();
-
   it('returns the durable URL the gateway produced', async () => {
     generateImage.mockResolvedValue({ url: 'https://api/api/assets/1/u/x.jpg', model: 'cloudflare/flux' });
     const result = await action.run({ prompt: 'a warm bakery storefront at dawn', size: '1792x1024' });
@@ -32,9 +27,7 @@ describe('generate_image_asset', () => {
   });
 
   it('relays the gateway refusal as a tool error', async () => {
-    // Throw lazily, at call time: a pre-built rejected promise is reported by the
-    // runner as an unhandled rejection even though the action catches it.
     generateImage.mockImplementation(async () => { throw new Error('Daily image credits exhausted'); });
-    expect(await action.run({ prompt: 'p' })).toEqual({ error: expect.stringContaining('Daily image credits exhausted') });
+    expect(await action.run({ prompt: 'p' })).toEqual({ error: 'Daily image credits exhausted' });
   });
 });

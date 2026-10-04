@@ -13,7 +13,9 @@ import { toolErrorMessage } from '@/lib/toolErrorMessage';
  * URL the model drops into `src`, a CSS `background-image`, or an OG tag. That
  * URL works in the live preview AND after the app is deployed.
  */
-export function generateImageAssetAction(): BrainAction {
+/** `generate` is injectable so the action is testable without module mocks;
+ *  every real caller uses the default gateway client. */
+export function generateImageAssetAction(generate: typeof generateImage = generateImage): BrainAction {
   return {
     name: 'generate_image_asset',
     description:
@@ -31,7 +33,7 @@ export function generateImageAssetAction(): BrainAction {
       const text = typeof prompt === 'string' ? prompt.trim() : '';
       if (!text) return { error: 'A prompt describing the image is required.' };
       try {
-        const image = await generateImage({ prompt: text, size: isImageSize(size) ? size : undefined, useCase: 'studio_image_asset' });
+        const image = await generate({ prompt: text, size: isImageSize(size) ? size : undefined, useCase: 'studio_image_asset' });
         return { url: image.url, model: image.model, note: 'Reference this URL directly in the project code.' };
       } catch (e) {
         return { error: toolErrorMessage(e, 'Image generation failed') };

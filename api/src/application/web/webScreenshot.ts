@@ -199,9 +199,6 @@ function renderCredentials(env: Env | undefined): { accountId: string; token: st
   return { accountId, token };
 }
 
-  return btoa(binary);
-}
-
 /**
  * Read the renderer's refusal as a sentence.
  *
