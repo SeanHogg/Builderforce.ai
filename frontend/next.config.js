@@ -65,6 +65,12 @@ const nextConfig = {
   // optimizer endpoint (/_next/image), so optimized <Image> requests 404 and
   // render broken. Serve images unoptimized — they emit plain <img src> tags.
   images: { unoptimized: true },
+  // The release workflow lints and type-checks on runners of their own (verify-frontend
+  // in .github/workflows/release.yml), alongside this build instead of inside it, where
+  // they were ~2 minutes of the critical path. It sets this flag for the build only, so
+  // a `next build` anywhere else still gates on both.
+  eslint: { ignoreDuringBuilds: process.env.NEXT_SKIP_BUILD_CHECKS === '1' },
+  typescript: { ignoreBuildErrors: process.env.NEXT_SKIP_BUILD_CHECKS === '1' },
   transpilePackages: ['@monaco-editor/react', 'monaco-editor', '@seanhogg/builderforce-studio', '@seanhogg/builderforce-studio-embedded', '@seanhogg/builderforce-sdk', '@seanhogg/builderforce-brain-ui'],
   // Turbopack powers local development. Keep its behavior aligned with the
   // webpack production build below: resolve linked workspace packages from the

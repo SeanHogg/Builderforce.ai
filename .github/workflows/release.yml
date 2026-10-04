@@ -707,12 +707,42 @@ jobs:
               || echo "::warning::Demo account reseed failed."
           fi
 
-  deploy-frontend:
-    name: Deploy frontend
+  # The frontend ships in three jobs so its gates are off the critical path: the build
+  # (~7 minutes, the long pole) and the gates (lint, type-check, guards, brain-ui) run
+  # side by side, and only the deploy waits for both. Lint and type-check used to run
+  # INSIDE `next build`, serially, for ~2 minutes of every release.
+  verify-frontend:
+    name: Verify frontend (${{ matrix.name }})
     runs-on: ubuntu-latest
-    # Same production gate as deploy-api — see the note there. Gating only the API would
-    # let a reviewed backend ship behind an unreviewed frontend.
-    environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # `next typegen` writes the route types `next build` would have generated into
+          # .next/types, which tsconfig includes, so this checks what the build checked.
+          - name: type-check
+            run: pnpm exec next typegen && npm run type-check
+          # The same lint `next build` ran (its directories, its errors-only failure).
+          - name: lint
+            run: pnpm exec next lint
+          # Two light gates, run concurrently by run-parallel.sh:
+          #
+          # brain-ui's own suite. The package is BUILT (exports → dist, its own
+          # lockfile and vitest config), so it is not one of the source-only packages
+          # the API suite runs, and it ran there only by a glob accident that failed
+          # on a missing `react`. Its devDependencies are installed by
+          # ensure-linked-deps from the frontend install, so it runs here.
+          #
+          # THE WHOLE GUARD CHAIN, not a hand-picked three. `pnpm run check` is the
+          # SAME manifest `npm test` runs (scripts/checks.manifest.mjs), so there is one
+          # list and adding a guard reaches CI for free. A hand-named subset is how
+          # `check:architecture`, `check:design-tokens` and the `'use client'` ratchet
+          # once sat red with nothing but a local run ever reading them.
+          - name: guards + brain-ui
+            run: >-
+              bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh"
+              "pnpm --dir ../packages/brain-ui run test"
+              "pnpm run check"
     steps:
       - uses: actions/checkout@v7
 
@@ -728,8 +758,31 @@ jobs:
         with:
           scope: deploy-frontend
 
-      - name: Install Wrangler
-        run: npm install --global wrangler
+      - name: ${{ matrix.name }}
+        working-directory: frontend
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: |
+          pnpm install --frozen-lockfile || pnpm install
+          ${{ matrix.run }}
+
+  build-frontend:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: deploy-frontend
 
       # Next's persistent build cache (webpack module cache + SWC output). The build is
       # the longest step in the release; with the previous run's cache restored, only
@@ -750,7 +803,7 @@ jobs:
       # the VS Code job did not, so brain-ui's shipped `.d.ts` type-checked
       # against an unresolved brain-embedded and the publish failed on members
       # that plainly exist.
-      - name: Build and deploy frontend
+      - name: Build frontend
         working-directory: frontend
         env:
           # Vercel's artifact collection exceeded Node's default ~4 GiB heap
@@ -758,39 +811,51 @@ jobs:
           # memory for a 6 GiB old-space ceiling.
           NODE_OPTIONS: --max-old-space-size=6144
           NEXT_BUILDERFORCE_ERROR_API_KEY: ${{ secrets.BUILDERFORCE_ERROR_API_KEY }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          # verify-frontend lints and type-checks; see next.config.js.
+          NEXT_SKIP_BUILD_CHECKS: '1'
         run: |
           pnpm install --frozen-lockfile || pnpm install
-          # Two independent gates, run concurrently by run-parallel.sh (both are
-          # light, so a runner of their own would cost more in install than it saves):
-          #
-          # brain-ui's own suite. The package is BUILT (exports → dist, its own
-          # lockfile and vitest config), so it is not one of the source-only packages
-          # the API suite runs, and it ran there only by a glob accident that failed
-          # on a missing `react`. Its devDependencies were just installed by
-          # ensure-linked-deps above, so this is the one job where it can run.
-          #
-          # THE WHOLE GUARD CHAIN, not a hand-picked three.
-          #
-          # This job used to name `check:edge-runtime`, `check:declared-deps` and
-          # `check:route-exports` individually — the three that had each taken a
-          # deploy down — and ran none of the other thirteen. So `check:architecture`,
-          # `check:design-scale`, `check:design-tokens` and `check:root-layout-providers`
-          # could sit red indefinitely, which is exactly how the `'use client'` ratchet
-          # went unnoticed for a session: nothing except a local run ever read them.
-          #
-          # `pnpm run check` is the SAME manifest `npm test` runs (scripts/checks.manifest.mjs),
-          # so there is one list and adding a guard reaches CI for free — the three
-          # names above were a second, staler copy of that list. It runs the sixteen
-          # concurrently in ~10s, which is nothing against a ~6-minute Next build, and
-          # every one of them answers in milliseconds what `cf-build` answers at the
-          # very end.
-          bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh" \
-            "pnpm --dir ../packages/brain-ui run test" \
-            "pnpm run check"
           pnpm run cf-build
-          wrangler deploy --no-bundle
+
+      # Exactly what wrangler.toml deploys: the worker (`_worker.js/`) and the static
+      # assets beside it. Hidden files included — `.assetsignore` is what keeps the
+      # worker bundle from being uploaded as public assets.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-output
+          path: frontend/.vercel/output/static
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy-frontend:
+    name: Deploy frontend
+    runs-on: ubuntu-latest
+    needs: [build-frontend, verify-frontend]
+    # Same production gate as deploy-api — see the note there. Gating only the API would
+    # let a reviewed backend ship behind an unreviewed frontend.
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install Wrangler
+        run: npm install --global wrangler
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-output
+          path: frontend/.vercel/output/static
+
+      - name: Deploy frontend
+        working-directory: frontend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: wrangler deploy --no-bundle
 
   deploy-help:
     name: Deploy help
