@@ -1,3 +1,37 @@
+## ✅ RESOLVED 2026-10-05 — Spawn has a 7-day free trial with the free plan's tokens, and the grown-up is emailed a way to keep it going (api 2026.10.16 · frontend 2026.10.23)
+
+**Was:** a new Spawn player could do nothing without a $1.99 membership, which most 13-year-olds cannot pay. The account page went straight from the age gate to "Join".
+
+**Now:**
+- **The trial** (`application/spawn/spawnTrial.ts`) lasts `SPAWN_TRIAL_DAYS = 7`. That length is chosen from the 2025 paywall benchmarks (Superwall/RevenueCat/Adapty): 7-day trials converted at 5.2% vs 3.1% for 3-day, and 84% of 3-day cancellations happen on day 0–1. A week also always contains a weekend, when a parent can act.
+- **Tokens:** the trial grants `SPAWN_TRIAL_TOKENS`, which is `PLAN_LIMITS[FREE].tokenMonthlyLimit` (50,000) read from the plan table so the two can't drift. The credit uses a per-workspace ledger reference, so it can't be paid twice.
+- **No card.** The player must give a grown-up's email.
+- **One trial per person, workspace and grown-up:**
+  - per person: `users.spawn_trial_at` (migration 1202), claimed with an atomic `UPDATE … WHERE NULL`;
+  - per workspace: the membership row keeps a `trial` record that survives joining;
+  - per grown-up: a declared `global_uniqueness` check on the trial's `parentEmail`.
+- **Membership states:**
+  - `trial` and `trial_ended` are added. `getSpawnMembership` derives `trial_ended` by the clock.
+  - `writeMembership` merges, so a payment never erases the trial record.
+  - `membershipCanBuild` is the one rule for which statuses may build. It is exposed as `membershipOpen` on the account view, and the desktop app now gates on that flag instead of `=== 'active'`; a trial-eligible player sees a "try it free" gate in 5 locales.
+  - Token packs require a PAID membership (`assertSpawnPaidMember`), so a trial that ends can't strand bought tokens.
+- **Grown-up emails** (`infrastructure/email/spawnParentEmail.ts`, its own copy table in 5 locales, built on `deliver`/`p`/`cta` now exported from `EmailService`):
+  - Four emails: when the trial starts, halfway, on the last day, and when it ends.
+  - They go through `sendLifecycleEmail('onboarding_tips')`, so the address's consent and the unsubscribe link apply.
+  - The daily `spawn-trial-reminders` sweep sends only the latest notice due, and persists `trial_ended` once its email has been sent or the address has opted out.
+- **Grown-up's page** `/spawn/parent?t=…` (`SpawnParentPage`, `useSpawnParent`, `application/spawn/spawnParent.ts`):
+  - The signed link (`spawnParentLink.ts`, the shared `signState`, valid 60 days) names one workspace and one player, and grants no session.
+  - It shows the trial's state and three tiles, and offers Join or, once joined, token packs.
+  - Its checkouts return to the parent page through `spawnReturn.ts`. That return handling is now one hook, `useSpawnCheckoutReturn`, shared by the account page and the parent page.
+- **Account page:** `SpawnTrialPanel` offers the free week (grown-up's email field) or shows the days left.
+- **Copy:** the landing hero says "Start your free week", the pricing strip says "first 7 days free", and the FAQ leads with the trial, all in 5 locales. The Spawn blog post's pricing section and steps mention the free week in all 5 languages.
+- **Release note:** migration 1203 (`new`).
+
+**Verified (Sonnet):**
+- API: type-check passes, guards 37/37, and vitest for `application/spawn` + `infrastructure/email` + the cron sweep tests passes (158).
+- Frontend: type-check passes; i18n tests pass (118); guards 24/25, the one failure being `design-scale` on the concurrent session's `creation-canvas/room/room.module.css`.
+- Desktop: the Spawn JS files pass `node --check`, and all 5 locales have the same 74 keys.
+
 ## ✅ RESOLVED 2026-10-04 — The canvas knows which phase it is in, and what the next one needs (PRD 32 · frontend 2026.10.21 · api 2026.10.14+ · migration 1201)
 
 **Was:** canvas phases were a tab filter stored once per browser (`builderforce:create:phase`). Measure and Reach opened on boards with nothing live and said nothing. Board, Room, command bar and starting points all ignored the phase, and Idea already offered App. Operate could not show who had signed up: the apps DB held `site_users`, `site_traffic_daily` and `site_collections.record_count`, but there was no count read.
