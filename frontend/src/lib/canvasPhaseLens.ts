@@ -55,7 +55,10 @@ export interface LensNode {
   height?: number;
 }
 
-/** The part of the board on screen, in FLOW coordinates. */
+/**
+ * The part of the board a card can be SEEN in, in FLOW coordinates: the pane minus the
+ * floating chrome over it (the top chrome, the prompt and command bar, a docked Brain).
+ */
 export interface LensViewport {
   x: number;
   y: number;
@@ -65,26 +68,42 @@ export interface LensViewport {
 
 /** Same width a card is drawn at, for a node React Flow has not measured yet. */
 export const GHOST_CARD_WIDTH = 260;
+/** The ghost's own height, near enough to keep it clear of the chrome. */
+export const GHOST_CARD_HEIGHT = 150;
 /** A card's height before React Flow has measured it. */
 const UNMEASURED_CARD_HEIGHT = 120;
 /** Clear space between the board's edge and the ghost card. */
 export const GHOST_CARD_GAP = 80;
 
+type Point = { x: number; y: number };
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(value, max));
+}
+
 /**
  * Where the ghost card stands, in FLOW coordinates — the place the phase's first object
- * would go next, and somewhere the reader can SEE it:
- * - an empty board: the centre of what is on screen;
- * - just right of everything on the board, top-aligned with it, when that slot is on
- *   screen;
- * - otherwise just LEFT of it, when that slot is on screen;
- * - otherwise under the board, left-aligned with it and pulled into view sideways.
- * A docked Brain covers the pane's right edge (the caller narrows the viewport by it), so
- * "right of the board" is often off screen — a ghost there was drawn clipped.
- * A viewport with no measured size (no layout yet) never forces the fallback.
+ * would go next, and somewhere the reader can SEE it. Tried in order, each pulled into
+ * the clear area along the axis that does not touch the board:
+ * - an empty board: the centre of the clear area;
+ * - just right of everything on the board, top-aligned with it;
+ * - just left of it;
+ * - under it, left-aligned;
+ * - above it.
+ * Null when none fits: the ghost then stands down, and the path card above says the same
+ * thing. A ghost half under the prompt or the Brain panel reads as a rendering bug.
+ * A viewport with no measured size (no layout yet) places beside the board unchecked.
  */
-export function ghostPosition(nodes: readonly LensNode[], viewport: LensViewport): { x: number; y: number } {
+export function ghostPosition(nodes: readonly LensNode[], clear: LensViewport): Point | null {
+  const unmeasured = clear.width <= 0 || clear.height <= 0;
+  const fits = (point: Point) => point.x >= clear.x && point.y >= clear.y
+    && point.x + GHOST_CARD_WIDTH <= clear.x + clear.width && point.y + GHOST_CARD_HEIGHT <= clear.y + clear.height;
+  const clampX = (x: number) => clamp(x, clear.x, clear.x + clear.width - GHOST_CARD_WIDTH);
+  const clampY = (y: number) => clamp(y, clear.y, clear.y + clear.height - GHOST_CARD_HEIGHT);
+
   if (!nodes.length) {
-    return { x: viewport.x + viewport.width / 2 - GHOST_CARD_WIDTH / 2, y: viewport.y + viewport.height / 2 - 60 };
+    const centre = { x: clear.x + clear.width / 2 - GHOST_CARD_WIDTH / 2, y: clear.y + clear.height / 2 - GHOST_CARD_HEIGHT / 2 };
+    return unmeasured || fits(centre) ? centre : null;
   }
   let left = Infinity;
   let right = -Infinity;
@@ -98,12 +117,12 @@ export function ghostPosition(nodes: readonly LensNode[], viewport: LensViewport
     top = Math.min(top, node.position.y);
     bottom = Math.max(bottom, node.position.y + height);
   }
-  const besideX = right + GHOST_CARD_GAP;
-  const visibleRight = viewport.x + viewport.width;
-  if (viewport.width <= 0 || besideX + GHOST_CARD_WIDTH <= visibleRight) return { x: besideX, y: top };
-  // Left before below: under the board is where the prompt and the command bar float.
-  const leftX = left - GHOST_CARD_GAP - GHOST_CARD_WIDTH;
-  if (leftX >= viewport.x) return { x: leftX, y: top };
-  const x = Math.max(viewport.x, Math.min(left, visibleRight - GHOST_CARD_WIDTH));
-  return { x, y: bottom + GHOST_CARD_GAP };
+  if (unmeasured) return { x: right + GHOST_CARD_GAP, y: top };
+  const candidates: Point[] = [
+    { x: right + GHOST_CARD_GAP, y: clampY(top) },
+    { x: left - GHOST_CARD_GAP - GHOST_CARD_WIDTH, y: clampY(top) },
+    { x: clampX(left), y: bottom + GHOST_CARD_GAP },
+    { x: clampX(left), y: top - GHOST_CARD_GAP - GHOST_CARD_HEIGHT },
+  ];
+  return candidates.find(fits) ?? null;
 }

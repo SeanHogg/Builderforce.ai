@@ -3,7 +3,7 @@ import { fireEvent, render, renderHook, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { ReactFlowProvider, type Edge } from '@xyflow/react';
 import { CANVAS_PHASES, type CanvasPhase } from '@/lib/canvasPhases';
-import { GHOST_CARD_GAP, GHOST_CARD_WIDTH, PHASE_FOCUS_KINDS, ghostPosition, phaseFirstKind, phaseFocusOf } from '@/lib/canvasPhaseLens';
+import { GHOST_CARD_GAP, GHOST_CARD_HEIGHT, GHOST_CARD_WIDTH, PHASE_FOCUS_KINDS, ghostPosition, phaseFirstKind, phaseFocusOf } from '@/lib/canvasPhaseLens';
 import type { CreationNodeData } from './types';
 import { CREATION_OBJECT_REGISTRY } from './creationObjectRegistry';
 import { PhaseFocusToggle } from './phase/PhaseFocusToggle';
@@ -153,7 +153,7 @@ describe('ghostPosition — where the phase’s first object would go', () => {
   const WIDE = { x: 0, y: 0, width: 2000, height: 1000 };
 
   it('centres the ghost in what is on screen on an empty board', () => {
-    expect(ghostPosition([], { x: 300, y: 200, width: 400, height: 200 })).toEqual({ x: 500 - GHOST_CARD_WIDTH / 2, y: 240 });
+    expect(ghostPosition([], { x: 300, y: 200, width: 400, height: 200 })).toEqual({ x: 500 - GHOST_CARD_WIDTH / 2, y: 300 - GHOST_CARD_HEIGHT / 2 });
   });
 
   it('stands just right of everything on the board, top-aligned with it', () => {
@@ -181,7 +181,19 @@ describe('ghostPosition — where the phase’s first object would go', () => {
 
   it('pulls the dropped ghost into view sideways', () => {
     const nodes = [{ position: { x: -400, y: 0 }, measured: { width: 900, height: 100 } }];
-    expect(ghostPosition(nodes, { x: 0, y: 0, width: 600, height: 800 }).x).toBe(0);
+    expect(ghostPosition(nodes, { x: 0, y: 0, width: 600, height: 800 })?.x).toBe(0);
+  });
+
+  it('tries above the board last', () => {
+    // Wide as the view and flush with its bottom: no room right, left or under.
+    const nodes = [{ position: { x: 0, y: 500 }, measured: { width: 1000, height: 300 } }];
+    expect(ghostPosition(nodes, { x: 0, y: 0, width: 1000, height: 800 })).toEqual({ x: 0, y: 500 - GHOST_CARD_GAP - GHOST_CARD_HEIGHT });
+  });
+
+  it('has no place for the ghost when nothing clears the chrome', () => {
+    const nodes = [{ position: { x: 0, y: 0 }, measured: { width: 1000, height: 100 } }];
+    expect(ghostPosition(nodes, { x: 0, y: 0, width: 1000, height: 120 })).toBeNull();
+    expect(ghostPosition([], { x: 0, y: 0, width: 200, height: 100 })).toBeNull();
   });
 
   it('never forces the fallback before the pane has a size', () => {

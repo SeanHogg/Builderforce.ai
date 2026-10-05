@@ -62,7 +62,7 @@
   - The Room's Look/Walk/Design bar sat under the floating top chrome. It now clears `--canvas-top-chrome-space`.
   - Its active pill was accent-on-accent. It now uses `--text-on-accent`.
   - The station list's auto grid track pushed Open buttons under the docked Brain. It is now `minmax(0, 1fr)`.
-  - The ghost card's placement now knows the dock's width (`stage/canvasDockInsets.ts`, published by `CanvasShell` beside `--brain-dock-*`). It tries right of the board, then left, then below.
+  - The ghost card is placed in the board's clear area: the pane minus the chrome bands the shell already publishes (`--canvas-top-chrome-space`, `--composer-space`, `--canvas-command-bar-space`, `--brain-dock-*`). It tries right, left, below and above the board, and stands down when none fits, because the path card says the same thing.
 
 **Verified (Sonnet):** api type-check passes, and `siteAudienceSummary` and `siteData` pass (40/40). The VS Code client type-check passes. Frontend guards pass 25/25. The targeted PRD 32 suites pass, including `CreationCanvas.test.tsx` (147/147 across the four re-run files), along with i18n parity. §9 review was done by Opus. Four rounds of screenshots of Measure before anything is live, on Board, Room and phone in both themes, drove the fixes above, along with the path card standing down on the Room and folding away while the phone stage sheet is open. No console errors remain.
 

@@ -1,7 +1,6 @@
-import { useMemo, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import type { CSSProperties, ReactNode, RefObject } from 'react';
 import type { BrainDockSide } from '../brainDockPreferences';
 import { CanvasPhaseProvider, type CanvasPhaseProviderProps } from '../phase/CanvasPhaseContext';
-import { CanvasDockInsetsContext } from './canvasDockInsets';
 import styles from '../CreationCanvas.module.css';
 
 export interface CanvasShellProps {
@@ -25,8 +24,7 @@ export function CanvasShell({ shellRef, fullscreen, hosted, brainDockSide, brain
   // chrome and surface inside it as `CanvasPhaseContext` — so nothing threads it as a prop.
   const left = brainDockSide === 'left' ? brainDockReserved : 0;
   const right = brainDockSide === 'right' ? brainDockReserved : 0;
-  const insets = useMemo(() => ({ left, right }), [left, right]);
-  return <CanvasPhaseProvider {...phase}><CanvasDockInsetsContext.Provider value={insets}><div
+  return <CanvasPhaseProvider {...phase}><div
       ref={shellRef}
       className={`${styles.canvasShell} app-full-height`}
       data-fullscreen={fullscreen ? 'true' : 'false'}
@@ -40,9 +38,9 @@ export function CanvasShell({ shellRef, fullscreen, hosted, brainDockSide, brain
         // the chrome now floats as a sibling of the board rather than inside it, so a
         // reservation that only the board could see would have let the session pill and
         // the command bar be the two things that DO sit underneath the dock.
-        // The same two numbers reach flow-placed pieces as `CanvasDockInsetsContext`.
+        // Also read back by the phase ghost card, which is placed in flow coordinates.
         '--brain-dock-left': `${left}px`,
         '--brain-dock-right': `${right}px`,
       } as CSSProperties}
-    >{children}</div></CanvasDockInsetsContext.Provider></CanvasPhaseProvider>;
+    >{children}</div></CanvasPhaseProvider>;
 }

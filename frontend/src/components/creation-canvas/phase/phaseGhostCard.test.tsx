@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { GHOST_CARD_GAP, GHOST_CARD_WIDTH } from '@/lib/canvasPhaseLens';
-import { CanvasDockInsetsContext } from '../stage/canvasDockInsets';
+import { GHOST_CARD_GAP, GHOST_CARD_HEIGHT, GHOST_CARD_WIDTH } from '@/lib/canvasPhaseLens';
 import { CanvasSurfaceProvider } from '../canvasSurfaceContext';
 import { ALL_SIGNALS, renderWithPhase } from './testPhaseProvider';
 import { PhaseGhostCard } from './PhaseGhostCard';
@@ -18,7 +17,7 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
  */
 type FlowNode = { position: { x: number; y: number }; measured?: { width?: number; height?: number }; data?: { kind?: unknown } };
 const flow = vi.hoisted(() => ({
-  state: { nodeLookup: new Map<string, FlowNode>(), width: 1000, height: 600, transform: [0, 0, 1] as [number, number, number] },
+  state: { nodeLookup: new Map<string, FlowNode>(), width: 1000, height: 600, transform: [0, 0, 1] as [number, number, number], domNode: null as HTMLElement | null },
 }));
 vi.mock('@xyflow/react', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@xyflow/react')>()),
@@ -34,6 +33,12 @@ vi.mock('@/lib/usePhoneViewport', async (importOriginal) => ({
 }));
 
 const ghost = () => screen.queryByTestId('canvas-phase-ghost');
+/** The element React Flow hands the store, carrying the shell's chrome bands. */
+const chromeHost = (bands: Record<string, string>) => {
+  const element = document.createElement('div');
+  for (const [property, value] of Object.entries(bands)) element.style.setProperty(property, value);
+  return element;
+};
 const setBoard = (nodes: Record<string, FlowNode>) => { flow.state.nodeLookup = new Map(Object.entries(nodes)); };
 
 describe('PhaseGhostCard — where the phase\'s first object would go', () => {
@@ -43,6 +48,7 @@ describe('PhaseGhostCard — where the phase\'s first object would go', () => {
     setBoard({});
     flow.state.transform = [0, 0, 1];
     flow.state.width = 1000;
+    flow.state.domNode = null;
   });
 
   describe('visibility', () => {
@@ -92,7 +98,7 @@ describe('PhaseGhostCard — where the phase\'s first object would go', () => {
       flow.state.transform = [100, 50, 2];
       renderWithPhase(<PhaseGhostCard />, { phase: 'idea' });
       // Centre in flow space: ((1000/2 - 100) / 2, (600/2 - 50) / 2) = (200, 125).
-      expect(ghost()!.style.transform).toBe(`translate(${200 - GHOST_CARD_WIDTH / 2}px, ${125 - 60}px)`);
+      expect(ghost()!.style.transform).toBe(`translate(${200 - GHOST_CARD_WIDTH / 2}px, ${125 - GHOST_CARD_HEIGHT / 2}px)`);
     });
 
     it('stands just right of the board, top-aligned with it', () => {
@@ -118,11 +124,17 @@ describe('PhaseGhostCard — where the phase\'s first object would go', () => {
     it('treats the pane under a docked Brain as off screen', () => {
       // Beside the board is 340..600 — inside a 1000px pane, but under a 500px right dock.
       setBoard({ a: { position: { x: 0, y: 0 }, measured: { width: 260, height: 100 }, data: { kind: 'note' } } });
-      renderWithPhase(
-        <CanvasDockInsetsContext.Provider value={{ left: 0, right: 500 }}><PhaseGhostCard /></CanvasDockInsetsContext.Provider>,
-        { phase: 'idea' },
-      );
+      flow.state.domNode = chromeHost({ '--brain-dock-right': '500px' });
+      renderWithPhase(<PhaseGhostCard />, { phase: 'idea' });
       expect(ghost()!.style.transform).toBe(`translate(0px, ${100 + GHOST_CARD_GAP}px)`);
+    });
+
+    it('stands down when no slot clears the chrome', () => {
+      // A 600px pane with 200px of top chrome and 300px of prompt leaves 100px — less than the card.
+      setBoard({ a: { position: { x: 0, y: 0 }, measured: { width: 260, height: 100 }, data: { kind: 'note' } } });
+      flow.state.domNode = chromeHost({ '--canvas-top-chrome-space': '200px', '--composer-space': '300px' });
+      renderWithPhase(<PhaseGhostCard />, { phase: 'idea' });
+      expect(ghost()).toBeNull();
     });
   });
 
