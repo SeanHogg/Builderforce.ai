@@ -49,7 +49,7 @@
 
 .modeButton[aria-pressed='true'] {
   background: var(--canvas-accent);
-  color: var(--text-on-accent, #fff);
+  color: var(--text-on-accent);
 }
 
 /* ── Designer rail ────────────────────────────────────────────────────────── */
