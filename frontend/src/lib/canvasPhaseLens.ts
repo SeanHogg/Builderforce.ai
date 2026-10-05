@@ -52,26 +52,54 @@ export interface LensNode {
   position: { x: number; y: number };
   measured?: { width?: number; height?: number };
   width?: number;
+  height?: number;
+}
+
+/** The part of the board on screen, in FLOW coordinates. */
+export interface LensViewport {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 /** Same width a card is drawn at, for a node React Flow has not measured yet. */
 export const GHOST_CARD_WIDTH = 260;
-/** Clear space between the board's right edge and the ghost card. */
+/** A card's height before React Flow has measured it. */
+const UNMEASURED_CARD_HEIGHT = 120;
+/** Clear space between the board's edge and the ghost card. */
 export const GHOST_CARD_GAP = 80;
 
 /**
- * Where the ghost card stands, in FLOW coordinates: just right of everything already on
- * the board, top-aligned with it — the place the phase's first object would go next. An
- * empty board centres it in the current viewport instead.
+ * Where the ghost card stands, in FLOW coordinates — the place the phase's first object
+ * would go next, and somewhere the reader can SEE it:
+ * - an empty board: the centre of what is on screen;
+ * - just right of everything on the board, top-aligned with it, when that slot is on
+ *   screen;
+ * - otherwise under the board, left-aligned with it and pulled into view sideways. The
+ *   board pane ends where the Brain panel begins, so "right of the board" is often past
+ *   its edge — a ghost there was drawn clipped and unreadable.
+ * A viewport with no measured size (no layout yet) never forces the fallback.
  */
-export function ghostPosition(nodes: readonly LensNode[], viewportCenter: { x: number; y: number }): { x: number; y: number } {
-  if (!nodes.length) return { x: viewportCenter.x - GHOST_CARD_WIDTH / 2, y: viewportCenter.y - 60 };
+export function ghostPosition(nodes: readonly LensNode[], viewport: LensViewport): { x: number; y: number } {
+  if (!nodes.length) {
+    return { x: viewport.x + viewport.width / 2 - GHOST_CARD_WIDTH / 2, y: viewport.y + viewport.height / 2 - 60 };
+  }
+  let left = Infinity;
   let right = -Infinity;
   let top = Infinity;
+  let bottom = -Infinity;
   for (const node of nodes) {
     const width = node.measured?.width ?? node.width ?? GHOST_CARD_WIDTH;
+    const height = node.measured?.height ?? node.height ?? UNMEASURED_CARD_HEIGHT;
+    left = Math.min(left, node.position.x);
     right = Math.max(right, node.position.x + width);
     top = Math.min(top, node.position.y);
+    bottom = Math.max(bottom, node.position.y + height);
   }
-  return { x: right + GHOST_CARD_GAP, y: top };
+  const besideX = right + GHOST_CARD_GAP;
+  const visibleRight = viewport.x + viewport.width;
+  if (viewport.width <= 0 || besideX + GHOST_CARD_WIDTH <= visibleRight) return { x: besideX, y: top };
+  const x = Math.max(viewport.x, Math.min(left, visibleRight - GHOST_CARD_WIDTH));
+  return { x, y: bottom + GHOST_CARD_GAP };
 }

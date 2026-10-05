@@ -14,9 +14,9 @@ import styles from '../CreationCanvas.module.css';
  * THE GHOST CARD — where the phase's first object would go, drawn before it exists.
  *
  * A phase with nothing of its own on the board used to look exactly like a phase that
- * had not been chosen. The ghost stands just right of everything on the board (or at the
- * centre of an empty one) and offers the two ways to fill it: have Brain do it, or add
- * the phase's first kind by hand. In an UNREADY phase it names what is missing instead.
+ * had not been chosen. The ghost stands just right of everything on the board (under it
+ * when that slot is off screen; at the centre of an empty board) and offers the two ways
+ * to fill it: have Brain do it, or add the phase's first kind by hand. In an UNREADY phase it names what is missing instead.
  *
  * ── WHY IT IS NOT A NODE ─────────────────────────────────────────────────────────
  * A fake node would reach autosave, presence, undo and the mini map. This is drawn in
@@ -44,9 +44,10 @@ function placementKey(state: FlowState, phase: CanvasPhase): string {
     nodes.push({ position: node.position ?? { x: 0, y: 0 }, ...(node.measured ? { measured: node.measured } : {}) });
   }
   if (hasIn) return 'in';
-  const [tx, ty, zoom] = state.transform ?? [0, 0, 1];
-  const center = { x: ((state.width ?? 0) / 2 - tx) / (zoom || 1), y: ((state.height ?? 0) / 2 - ty) / (zoom || 1) };
-  const { x, y } = ghostPosition(nodes, center);
+  const [tx, ty, rawZoom] = state.transform ?? [0, 0, 1];
+  const zoom = rawZoom || 1;
+  const viewport = { x: -tx / zoom, y: -ty / zoom, width: (state.width ?? 0) / zoom, height: (state.height ?? 0) / zoom };
+  const { x, y } = ghostPosition(nodes, viewport);
   return `${Math.round(x)}|${Math.round(y)}`;
 }
 

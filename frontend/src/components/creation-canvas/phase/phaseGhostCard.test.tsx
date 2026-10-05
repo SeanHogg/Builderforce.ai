@@ -41,6 +41,7 @@ describe('PhaseGhostCard — where the phase\'s first object would go', () => {
     viewport.phone = false;
     setBoard({});
     flow.state.transform = [0, 0, 1];
+    flow.state.width = 1000;
   });
 
   describe('visibility', () => {
@@ -98,8 +99,19 @@ describe('PhaseGhostCard — where the phase\'s first object would go', () => {
         a: { position: { x: 0, y: 80 }, measured: { width: 300 }, data: { kind: 'note' } },
         b: { position: { x: 500, y: 20 }, data: { kind: 'note' } },
       });
+      flow.state.width = 2000;
       renderWithPhase(<PhaseGhostCard />, { phase: 'idea' });
       expect(ghost()!.style.transform).toBe(`translate(${500 + GHOST_CARD_WIDTH + GHOST_CARD_GAP}px, 20px)`);
+    });
+
+    it('drops under the board when the slot beside it is past the pane edge', () => {
+      setBoard({
+        a: { position: { x: 0, y: 80 }, measured: { width: 300, height: 100 }, data: { kind: 'note' } },
+        b: { position: { x: 500, y: 20 }, measured: { width: 260, height: 140 }, data: { kind: 'note' } },
+      });
+      renderWithPhase(<PhaseGhostCard />, { phase: 'idea' });
+      // Pane is 1000 wide; beside would be 840..1100. Under: left 0, bottom max(180, 160) + gap.
+      expect(ghost()!.style.transform).toBe(`translate(0px, ${180 + GHOST_CARD_GAP}px)`);
     });
   });
 

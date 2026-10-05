@@ -149,9 +149,11 @@ describe('CreationNode under the lens', () => {
   });
 });
 
-describe('ghostPosition — where the phase\'s first object would go', () => {
-  it('centres the ghost in the viewport on an empty board', () => {
-    expect(ghostPosition([], { x: 500, y: 300 })).toEqual({ x: 500 - GHOST_CARD_WIDTH / 2, y: 240 });
+describe('ghostPosition — where the phase's first object would go', () => {
+  const WIDE = { x: 0, y: 0, width: 2000, height: 1000 };
+
+  it('centres the ghost in what is on screen on an empty board', () => {
+    expect(ghostPosition([], { x: 300, y: 200, width: 400, height: 200 })).toEqual({ x: 500 - GHOST_CARD_WIDTH / 2, y: 240 });
   });
 
   it('stands just right of everything on the board, top-aligned with it', () => {
@@ -162,12 +164,23 @@ describe('ghostPosition — where the phase\'s first object would go', () => {
       { position: { x: 100, y: 500 } },
     ];
     // Rightmost edge: max(0+300, 400+200, 100+260) = 600; top: 40.
-    expect(ghostPosition(nodes, { x: 0, y: 0 })).toEqual({ x: 600 + GHOST_CARD_GAP, y: 40 });
+    expect(ghostPosition(nodes, WIDE)).toEqual({ x: 600 + GHOST_CARD_GAP, y: 40 });
   });
 
-  it('ignores the viewport once anything is on the board', () => {
+  it('drops under the board when the slot beside it is off screen (the Brain panel ends the pane)', () => {
+    const nodes = [{ position: { x: 100, y: 50 }, measured: { width: 300, height: 200 } }];
+    // Beside would be 480..740, past a pane that ends at 600.
+    expect(ghostPosition(nodes, { x: 0, y: 0, width: 600, height: 800 })).toEqual({ x: 100, y: 250 + GHOST_CARD_GAP });
+  });
+
+  it('pulls the dropped ghost into view sideways', () => {
+    const nodes = [{ position: { x: -400, y: 0 }, measured: { width: 900, height: 100 } }];
+    expect(ghostPosition(nodes, { x: 0, y: 0, width: 600, height: 800 }).x).toBe(0);
+  });
+
+  it('never forces the fallback before the pane has a size', () => {
     const nodes = [{ position: { x: 10, y: 20 }, measured: { width: 100 } }];
-    expect(ghostPosition(nodes, { x: 9999, y: 9999 })).toEqual(ghostPosition(nodes, { x: 0, y: 0 }));
+    expect(ghostPosition(nodes, { x: 0, y: 0, width: 0, height: 0 })).toEqual({ x: 110 + GHOST_CARD_GAP, y: 20 });
   });
 });
 
