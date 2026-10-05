@@ -5,6 +5,7 @@ import { CanvasPhoneAppBar } from '../CanvasPhoneAppBar';
 import { CanvasSurfaceStrip } from '../CanvasSurfaceStrip';
 import { CanvasSessionPill } from '../CanvasSessionPill';
 import { PhaseModalitySelector } from '../PhaseModalitySelector';
+import { useCanvasSurfaceDefinition } from '../canvasSurfaceContext';
 import { useCanvasPhase } from '../phase/CanvasPhaseContext';
 import { CanvasPhasePath } from '../phase/CanvasPhasePath';
 import type { CanvasSessionActionHandler } from '../CanvasSessionActions';
@@ -46,6 +47,8 @@ export interface CanvasTopChromeProps {
  */
 export function CanvasTopChrome({ phoneViewport, topChromeRef, title, surface, setSurface, collapsed, roster, share, inviteMenu, boardMenu, onExitToLibrary, notice }: CanvasTopChromeProps) {
   const phaseValue = useCanvasPhase();
+  // The Room says it in its scene (its sign station); everywhere else the chrome does.
+  const pathInChrome = !useCanvasSurfaceDefinition().phasePathInScene;
   if (!phaseValue) return null;
   const { phase, setPhase } = phaseValue;
   return <>
@@ -77,7 +80,7 @@ export function CanvasTopChrome({ phoneViewport, topChromeRef, title, surface, s
           {...(onExitToLibrary ? { onBack: onExitToLibrary } : {})}
         />
         <CanvasSurfaceStrip surface={surface} onChange={setSurface} />
-        {phoneViewport && <CanvasPhasePath />}
+        {phoneViewport && pathInChrome && <CanvasPhasePath />}
       </div>
       <CanvasSessionPill notice={notice} />
       {/* Which PHASE this session is in and which surface reads it — ON the canvas
@@ -93,7 +96,7 @@ export function CanvasTopChrome({ phoneViewport, topChromeRef, title, surface, s
           hidden box measures zero. */}
       {canvasChromeShows('surfaces', collapsed) && <div ref={phoneViewport ? undefined : topChromeRef} className={`${styles.floatCard} ${styles.surfaceChips}`}>
         <PhaseModalitySelector phase={phase} onPhaseChange={setPhase} surface={surface} onSurfaceChange={setSurface} />
-        {!phoneViewport && <CanvasPhasePath />}
+        {!phoneViewport && pathInChrome && <CanvasPhasePath />}
       </div>}
   </>;
 }

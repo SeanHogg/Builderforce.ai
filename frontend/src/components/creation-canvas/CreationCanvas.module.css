@@ -5555,6 +5555,10 @@
   .phasePath { max-width:none; margin:6px 8px 0; }
   .phasePathButton, .phasePathToggle { min-height:44px; }
   .phasePathToggle { width:44px; }
+  /* The stage sheet shows every stage's readiness, so the path card folds away while it
+     is open: the sheet opens under the measured band, and the card was inside that band —
+     pushing the sheet's first row halfway down the screen, under the prompt. */
+  .canvasPhoneChrome:has(.canvasAppBarTitle[aria-expanded='true']) .phasePath { display:none; }
 }
 
 /* THE STEPPER'S READINESS — the lock and ✓ inherit the step's own colour. */

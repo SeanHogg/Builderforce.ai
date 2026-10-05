@@ -92,6 +92,13 @@ export interface CanvasSurfaceDef {
    */
   persist: boolean;
   /**
+   * Whether the surface carries the phase's path itself, so the chrome's path card
+   * stands down there. The Room shows an unready phase as a SIGN STATION in its scene —
+   * the room's version of the path card — and a second copy floating over the scene
+   * only covered its toolbar and its list. Absent means the chrome card is shown.
+   */
+  phasePathInScene?: true;
+  /**
    * What a plain line typed into the ONE composer MEANS on this surface, in offer
    * order — the FIRST is this surface's default verb.
    *
@@ -160,7 +167,7 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // A reload should put you back on the board where the work is: landing tomorrow
   // inside a room whose standup ended last night is the same wrong answer
   // `facilitate` gives for a poll that closed.
-  { id: 'room', scope: 'board', order: 3, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
+  { id: 'room', scope: 'board', order: 3, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, phasePathInScene: true, composerIntents: ['ask'] },
   // The first surface that reads MANY objects as ONE artifact.
   //
   // Everything below this line is `scope: 'object'` — a medium whose own axis will not
