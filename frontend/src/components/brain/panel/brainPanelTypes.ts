@@ -39,7 +39,7 @@ export interface BrainPanelProps {
   onClose?: () => void;
   /**
    * Docked only: what the agent currently sees, as the host words it (the IDE's open
-   * file, the voice director's clone). Rendered as the header's subtitle.
+   * file, the voice director's clone). Rendered beside the header's title, on one row.
    */
   headerContext?: ReactNode;
   /** Docked only: the host's own icon actions in the header (the workspace's "collapse panel"). */

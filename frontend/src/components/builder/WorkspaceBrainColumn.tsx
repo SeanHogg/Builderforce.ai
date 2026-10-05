@@ -1,7 +1,6 @@
 import { useTranslations } from 'next-intl';
 import { BrainPanel } from '@/components/brain/BrainPanel';
 import { Icon } from '@/components/ui/Icon';
-import { TeamChatButton } from '@/components/brain/TeamChatButton';
 import styles from './workspaceChrome.module.css';
 import type { BrainModality } from '@/lib/brain';
 
@@ -25,8 +24,8 @@ export interface WorkspaceBrainColumnProps {
 
 /**
  * The IDE / Studio chat column: the shared `<BrainPanel>` docked beside the editor,
- * with chips under its title for what the agent currently sees (the open file, or
- * the voice director's clone) and the project's team chat.
+ * with a chip beside its title for what the agent currently sees (the open file, or
+ * the voice director's clone).
  *
  * Mounting it registers an inline Brain, so the app-wide floating launcher stands
  * down on this page — it only ever opened a second copy of this same chat.
@@ -63,19 +62,15 @@ export function WorkspaceBrainColumn({ projectId, modality, extraSystem, activeF
             <Icon name="collapse-horizontal" size={16} />
           </button>
         )}
+        // What the agent is working with: the open file, or the whole project
+        // (the voice director's clone for Voice).
         headerContext={(
-          <>
-            {/* What the agent is working with: the open file, or the whole project
-                (the voice director's clone for Voice). */}
-            <span className={styles.chip} title={`${t(voice ? 'voice' : 'context')}: ${subject}`} style={{ minWidth: 0, maxWidth: '100%' }}>
-              <Icon name={voice ? 'mic' : activeFile ? 'document' : 'target'} size={13} />
-              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: activeFile && !voice ? 'var(--font-mono, monospace)' : undefined }}>
-                {subject}
-              </span>
+          <span className={styles.chip} title={`${t(voice ? 'voice' : 'context')}: ${subject}`} style={{ minWidth: 0, maxWidth: '100%' }}>
+            <Icon name={voice ? 'mic' : activeFile ? 'document' : 'target'} size={13} />
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: activeFile && !voice ? 'var(--font-mono, monospace)' : undefined }}>
+              {subject}
             </span>
-            {/* The project's shared thread, with people and agents in it. */}
-            <TeamChatButton projectId={projectId} variant="labeled" className={styles.chip} style={{ height: 26, borderRadius: 'var(--radius-full)' }} />
-          </>
+          </span>
         )}
       />
     </div>
