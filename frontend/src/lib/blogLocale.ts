@@ -1,4 +1,5 @@
 import { DEFAULT_LOCALE, isLocale } from '@/i18n/config';
+import { fetchPublishedAsset } from '@/infrastructure/http/publishedAsset';
 import { postBody, type BlogPost } from './blogData';
 import { reportProductError } from './reportError';
 
@@ -81,7 +82,7 @@ export function blogBodyUrl(slug: string, locale: string): string {
 /** One published body, cleaned; `undefined` when it is not published (a 404 is the
  *  normal answer for a post nobody has translated yet). Network faults throw. */
 async function fetchPublishedBody(slug: string, locale: string, origin: string): Promise<string | undefined> {
-  const response = await fetch(`${origin}${blogBodyUrl(slug, locale)}`, { cache: 'force-cache' });
+  const response = await fetchPublishedAsset(blogBodyUrl(slug, locale), origin);
   if (!response.ok) return undefined;
   return postBody(await response.text()) || undefined;
 }

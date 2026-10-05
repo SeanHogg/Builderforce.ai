@@ -1,3 +1,4 @@
+import { fetchPublishedAsset } from '@/infrastructure/http/publishedAsset';
 import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 import { DEFAULT_LOCALE, type Locale } from './config';
 import enMessages from './messages/en.json';
@@ -65,7 +66,7 @@ export async function loadCatalog(locale: Locale, origin = ''): Promise<Messages
   if (locale === DEFAULT_LOCALE) return defaultMessages;
   try {
     return await getOrSetClientCached<Messages>(`i18n:catalog:${locale}`, async (signal) => {
-      const response = await fetch(`${origin}${catalogUrl(locale)}`, { cache: 'force-cache', signal });
+      const response = await fetchPublishedAsset(catalogUrl(locale), origin, signal);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return (await response.json()) as Messages;
     });

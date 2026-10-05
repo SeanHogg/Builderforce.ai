@@ -185,6 +185,7 @@
     "i18n/onError.ts",
     "i18n/useErrorMessage.ts",
     "i18n/useFormat.ts",
+    "infrastructure/http/publishedAsset.ts",
     "infrastructure/http/readThrough.ts",
     "lib/AuthContext.tsx",
     "lib/CartContext.tsx",

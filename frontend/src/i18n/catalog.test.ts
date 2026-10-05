@@ -43,7 +43,7 @@ describe('i18n catalog loader', () => {
     await expect(loadCatalog('fr', 'https://example.test')).resolves.toEqual(messages);
     expect(fetchMock).toHaveBeenCalledWith(
       `https://example.test${catalogUrl('fr')}`,
-      expect.objectContaining({ cache: 'force-cache' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
 
     // Second read is served from the in-memory cache — one request per isolate.
