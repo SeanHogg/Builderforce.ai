@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { CanvasPhoneAppBar } from './CanvasPhoneAppBar';
+import { CanvasSurfaceStrip } from './CanvasSurfaceStrip';
 import { renderWithPhase } from './phase/testPhaseProvider';
 
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations'))
@@ -118,5 +119,26 @@ describe('CanvasPhoneAppBar', () => {
     fireEvent.click(screen.getByTestId('canvas-app-bar-stage'));
     const idea = within(screen.getByTestId('canvas-stage-sheet')).getByRole('tab', { name: 'Idea, Done' });
     expect(idea).toHaveAttribute('data-state', 'done');
+  });
+});
+
+/** The phone's tab strip offers what the desktop card offers: the phase's surfaces (W13). */
+describe('CanvasSurfaceStrip under a phase', () => {
+  const offered = () => within(screen.getByTestId('canvas-surface-strip')).getAllByRole('button').map((button) => button.textContent?.trim());
+
+  it('narrows to the phase: Idea has no App, Run adds Operate, Reach adds Launch', () => {
+    const { rerenderWithPhase } = renderWithPhase(<CanvasSurfaceStrip surface="graph" onChange={vi.fn()} />, { phase: 'idea' });
+    expect(offered()).toEqual(['Chat', 'Board', 'Ideas', 'Room']);
+    rerenderWithPhase(<CanvasSurfaceStrip surface="graph" onChange={vi.fn()} />, { phase: 'run' });
+    expect(offered()).toEqual(['Chat', 'Board', 'Ideas', 'Room', 'App', 'Operate']);
+    rerenderWithPhase(<CanvasSurfaceStrip surface="graph" onChange={vi.fn()} />, { phase: 'reach' });
+    expect(offered()).toEqual(['Chat', 'Board', 'Ideas', 'Room', 'App', 'Operate', 'Insights', 'Launch']);
+  });
+
+  it('draws an icon for every surface it offers, Operate and Launch included', () => {
+    renderWithPhase(<CanvasSurfaceStrip surface="graph" onChange={vi.fn()} />, { phase: 'reach' });
+    for (const button of within(screen.getByTestId('canvas-surface-strip')).getAllByRole('button')) {
+      expect(button.querySelector('svg'), button.textContent ?? '').not.toBeNull();
+    }
   });
 });
