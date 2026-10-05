@@ -21244,9 +21244,11 @@
     "dockBrainRight": "将 Brain 停靠到右侧",
     "expandBrain": "展开 Brain 聊天",
     "slimBrain": "收窄 Brain 聊天",
-    "showExecutionSteps": "显示执行步骤",
-    "hideExecutionSteps": "隐藏执行步骤",
-    "chat": "聊天",
+    "brainMenu": {
+      "label": "更多 Brain 选项",
+      "executionSteps": "显示执行步骤"
+    },
+    "startingPoints": "起点",
     "context": "上下文",
     "brainChatHistory": "Brain 聊天记录",
     "brainEmpty": "尚无对话。在下方输入框向 Brain 提问即可开始。",

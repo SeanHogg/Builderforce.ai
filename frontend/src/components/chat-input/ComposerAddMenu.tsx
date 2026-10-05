@@ -2,15 +2,18 @@ import { memo, useCallback, useRef, type ChangeEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { ComposerMenu, MenuRow } from './ComposerMenu';
+import type { ComposerAddMenuItem } from './types';
 
 /**
  * The composer's `+`: a hidden file picker plus a Claude-style menu (Upload, Add
  * context, Browse the web). Renders nothing for a host that cannot take a file —
  * Upload lives in this menu, so without `onAttach` there is no menu to open.
  */
-export const ComposerAddMenu = memo(function ComposerAddMenu({ onAttach, onAddContext, webBrowsing, onWebBrowsingChange, disabled }: {
+export const ComposerAddMenu = memo(function ComposerAddMenu({ onAttach, onAddContext, items, webBrowsing, onWebBrowsingChange, disabled }: {
   onAttach?: (file: File) => void | Promise<void>;
   onAddContext?: () => void;
+  /** Host rows, after the built-in ones. */
+  items?: readonly ComposerAddMenuItem[];
   webBrowsing?: boolean;
   onWebBrowsingChange?: (on: boolean) => void;
   disabled: boolean;
@@ -51,6 +54,9 @@ export const ComposerAddMenu = memo(function ComposerAddMenu({ onAttach, onAddCo
           <>
             <MenuRow icon="💻" label={t('upload')} onClick={() => { close(); handleAttachClick(); }} />
             {onAddContext && <MenuRow icon="◧" label={t('addContext')} onClick={() => { close(); onAddContext(); }} />}
+            {items?.map((item) => (
+              <MenuRow key={item.id} icon={item.icon} label={item.label} onClick={() => { close(); item.onSelect(); }} />
+            ))}
             {onWebBrowsingChange && (
               <MenuRow
                 icon="🌐"

@@ -2145,11 +2145,53 @@
 .sourceList > div { display:flex; gap:7px; align-items:flex-start; }.sourceList > div > span { display:grid; place-items:center; width:18px; height:18px; flex:none; border-radius:50%; background:#e7f9f6; color:#087d71; font-size:8px; font-weight:700; }
 .sourceList p { display:grid; gap:2px; margin:0; min-width:0; }.sourceList b { font-size:9px; }.sourceList code { overflow:hidden; color:var(--canvas-muted); font-size:7px; text-overflow:ellipsis; }
 
-/* The utility row keeps live execution feedback at the far left and creation
-   starting points at the far right. The catalog opens upward as an overlay, so
-   neither control displaces the composer or changes the canvas geometry. */
+/* The run receipt, above the floating card. Starting points used to share this row as
+   a tab hanging off the card's top edge; they live inside the card now. */
 .composerUtilities { display:flex; width:100%; min-width:0; align-items:flex-end; gap:12px; margin-bottom:8px; }
-.promptStarter { z-index:1; min-width:0; flex:1; display:flex; justify-content:flex-end; transform:translate(-5px,8px); --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); }
+
+/* THE ONE COMPOSER CARD. One border, one surface, and every control that changes what
+   Enter does inside it, placed by area:
+     starters  — the starting-point catalogue, in flow, so opening it grows the card
+                 upward (the card is bottom-anchored both floating and docked);
+     intent / starter — the top row: what Enter means, and the way into the catalogue;
+     input     — the field and its tool row (+, scope, mode/model, mic, send).
+   A row with nothing in it collapses to zero, so a one-verb surface mid-conversation is
+   just the field. The inner PromptPanel stands its own surface down (below): two
+   borders one inside the other is the "box in a box" this replaced. */
+.composerCard {
+  position:relative; box-sizing:border-box; width:100%; min-width:0;
+  display:grid; grid-template-columns:minmax(0,1fr) auto;
+  grid-template-areas:"starters starters" "intent starter" "input input";
+  border:1px solid var(--canvas-brain-border); border-radius:14px;
+  background:var(--composer-card-bg, var(--canvas-brain-surface));
+  box-shadow:0 10px 30px var(--canvas-shadow);
+  transition:border-color 120ms ease, box-shadow 120ms ease;
+}
+.composerCard:focus-within { border-color:var(--canvas-brain-accent); box-shadow:0 0 0 1px var(--canvas-brain-accent), 0 10px 30px var(--canvas-shadow); }
+:global(html:not([data-theme='light'])) .composerCard { --composer-card-bg:var(--canvas-widget-surface); backdrop-filter:blur(14px); }
+.composerCard :global(.bf-prompt-panel) {
+  --prompt-panel-bg:transparent; --prompt-panel-border:transparent; --prompt-panel-active-border:transparent;
+  --prompt-panel-active-ring:0 0 0 0 transparent; --prompt-panel-shadow:none; --prompt-panel-radius:0 0 14px 14px;
+}
+.composerCard > .composerIntent { grid-area:intent; justify-self:start; margin:8px 0 0 8px; }
+.composerCard > .composerInputRow { grid-area:input; }
+/* The starter's wrapper is `display:contents`, so its catalogue and its trigger are
+   items of this grid while the component still owns both. */
+.promptStarter { display:contents; --prompt-panel-bg:transparent; --prompt-panel-border:var(--canvas-brain-border); }
+.promptStarterCatalog { grid-area:starters; min-width:0; color:var(--canvas-ink); }
+.promptStarterTrigger {
+  grid-area:starter; justify-self:end; align-self:center; margin:8px 8px 0 8px;
+  display:inline-flex; align-items:center; gap:6px; min-height:30px; padding:0 10px;
+  border:1px solid var(--canvas-brain-border); border-radius:var(--radius-md);
+  background:transparent; color:var(--canvas-ink); font:600 12px var(--font-sans); white-space:nowrap; cursor:pointer;
+}
+.promptStarterTrigger:hover,.promptStarterTrigger:focus-visible { border-color:var(--canvas-brain-accent); color:var(--canvas-brain-accent); outline:none; }
+.promptStarterTrigger[aria-expanded='true'] { border-color:var(--canvas-brain-accent); background:color-mix(in srgb,var(--canvas-brain-accent) 14%,transparent); color:var(--canvas-brain-accent); }
+/* Scope is a chip in the card's tool row (`contextPlacement="tools"`). The palette's
+   generic surface rules paint `.scopeChip` as a panel tile; inside the card it is a pill
+   on the card's own ground, in both themes. */
+.composerCard .scopeChip { border-color:var(--canvas-brain-border); background:transparent; color:var(--canvas-ink); }
+:global(html:not([data-theme='light'])) .composerCard .scopeChip { background:transparent; }
 
 /* The prompt is a page fixture, not part of the Brain surface:centred on the board
    and bottom-aligned, which is where every chat product people already use puts it.
@@ -2163,15 +2205,19 @@
    now), but "we calculated that they cannot touch" is not a reason to leave the more
    important of the two underneath. */
 .composerDock { position:absolute; z-index:21; right:calc(300px + var(--brain-dock-right, 0px)); bottom:var(--canvas-command-bar-space, 66px); left:calc(300px + var(--brain-dock-left, 0px)); box-sizing:border-box; width:auto; max-width:700px; margin-inline:auto; display:flex; flex-direction:column; align-items:center; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); }
-.promptComposerShell { position:relative; width:100%; }
-.promptResizeHandle { position:absolute; z-index:2; top:-7px; left:50%; width:42px; height:17px; display:grid; place-items:center; padding:0; transform:translateX(-50%); touch-action:none; user-select:none; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); background:var(--canvas-brain-surface); color:var(--canvas-muted); box-shadow:0 2px 6px var(--canvas-shadow); font:700 13px/1 var(--font-sans); cursor:ns-resize; }
-.promptResizeHandle:hover,.promptResizeHandle:focus-visible { border-color:var(--canvas-brain-accent); color:var(--canvas-brain-accent); outline:none; }
+/* The height grip: a full-width strip straddling the card's top edge, with a short
+   bar that shows only on hover or focus. It used to be a knob sitting ON the border,
+   over the first line of whatever was being typed. */
+.promptResizeHandle { position:absolute; z-index:2; top:-5px; right:16px; left:16px; height:10px; padding:0; touch-action:none; user-select:none; cursor:ns-resize; }
+.promptResizeHandle::after { content:''; position:absolute; top:3px; left:50%; width:36px; height:4px; border-radius:var(--radius-full); background:var(--canvas-brain-accent); opacity:0; transform:translateX(-50%); transition:opacity 120ms ease; }
+.promptResizeHandle:hover::after,.promptResizeHandle:focus-visible::after { opacity:1; }
+.promptResizeHandle:focus-visible { outline:none; }
 .composer { width:100%; --chat-ctl-size:32px; --prompt-panel-gap:4px; --prompt-panel-action-gap:6px; --prompt-panel-pad-y:8px; --prompt-panel-pad-x:10px; --prompt-panel-radius:14px; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); --prompt-panel-shadow:none; --chat-input-text:var(--canvas-ink); --chat-input-icon:var(--canvas-muted); --chat-input-bg:var(--canvas-brain-header); --chat-input-border:var(--canvas-brain-border); }
 .composer textarea { box-sizing:border-box; height:var(--canvas-prompt-height, 34px); min-height:34px; max-height:240px; padding:4px 2px; overflow-y:auto; font-size:14px; line-height:1.35; }
 .composer:global(.bf-prompt-panel__actions) { flex-wrap:nowrap!important; width:100%; overflow:visible; }
 .composer:global(.bf-chat-auto-mode) { width:32px; min-width:32px; padding:0!important; justify-content:center; }
 .composer:global(.bf-chat-auto-mode) > span { display:none; }
-.iconButton { width:29px; height:29px; display:grid; flex:none; place-items:center; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fff; color:var(--canvas-muted); cursor:pointer; }.scopeChip { display:inline-flex; min-width:76px; max-width:240px; flex:1 1 140px; align-items:center; gap:3px; overflow:hidden; padding:4px 7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); color:var(--canvas-muted); background:#fafcff; font-size:9px; white-space:nowrap; }.scopeChip select { width:100%; min-width:0; max-width:none; border:0; outline:0; background:transparent; color:inherit; font:inherit; text-overflow:ellipsis; }
+.iconButton { width:29px; height:29px; display:grid; flex:none; place-items:center; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fff; color:var(--canvas-muted); cursor:pointer; }.scopeChip { display:inline-flex; min-width:0; max-width:180px; flex:0 1 auto; align-items:center; gap:4px; overflow:hidden; height:30px; box-sizing:border-box; padding:0 10px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); color:var(--canvas-muted); background:transparent; font-size:12px; font-weight:600; white-space:nowrap; }.scopeChip select { width:100%; min-width:0; max-width:none; border:0; outline:0; background:transparent; color:inherit; font:inherit; text-overflow:ellipsis; }
 /* The accessible outline is opened from the command rail and closes like any other
    panel, instead of living permanently on the board with no way to dismiss it. */
 .canvasOutline { position:absolute; z-index:16; left:calc(62px + var(--brain-dock-left, 0px)); bottom:calc(var(--composer-space) + 8px); box-sizing:border-box; width:270px; max-height:46%; overflow:auto; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); color:var(--canvas-muted); box-shadow:0 12px 34px var(--canvas-shadow); font-size:12px; }
@@ -3067,11 +3113,19 @@
 .brainDockHeader strong { flex:1; min-width:0; overflow:hidden; color:var(--canvas-ink); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
 .brainDockMark { display:grid; place-items:center; width:22px; height:22px; flex:none; border-radius:var(--radius-sm); background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); font-size:12px; }
 .brainDockActions { display:flex; flex:none; align-items:center; gap:2px; }
-.brainDockActions button,.brainDockContextToggle { width:26px; height:26px; display:grid; place-items:center; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font:600 13px var(--font-sans); line-height:1; cursor:pointer; }
-.brainDockActions button:hover,.brainDockActions button:focus-visible,.brainDockContextToggle:hover,.brainDockContextToggle:focus-visible { background:color-mix(in srgb,var(--canvas-brain-accent) 14%,transparent); color:var(--canvas-brain-accent); outline:none; }
-.brainDockActions button[aria-pressed='true'],.brainDockContextToggle[aria-pressed='true'] { background:color-mix(in srgb,var(--canvas-brain-accent) 20%,transparent); color:var(--canvas-brain-accent); }
-.brainDockTabs { display:flex; flex:none; align-items:center; gap:2px; padding:6px 8px; border-bottom:1px solid var(--canvas-brain-border); }
-.brainDockTitle { flex:1; min-width:0; color:var(--canvas-ink); font:650 10px var(--font-sans); text-transform:uppercase; letter-spacing:.04em; }
+@media (pointer:coarse) { .brainDockActions button { width:40px; height:40px; } }
+.brainDockActions button { width:30px; height:30px; display:grid; place-items:center; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font:600 13px var(--font-sans); line-height:1; cursor:pointer; }
+.brainDockActions button:hover,.brainDockActions button:focus-visible { background:color-mix(in srgb,var(--canvas-brain-accent) 14%,transparent); color:var(--canvas-brain-accent); outline:none; }
+.brainDockActions button[aria-pressed='true'],.brainDockActions button[aria-expanded='true'] { background:color-mix(in srgb,var(--canvas-brain-accent) 20%,transparent); color:var(--canvas-brain-accent); }
+/* The header's "More" menu. Portalled to <body> by `AnchoredPopover`, so it sits
+   outside the canvas root and reads the app's global theme tokens (both themes),
+   not the `--canvas-*` palette, which is scoped to the canvas. */
+.brainMenu { min-width:230px; padding:5px; display:flex; flex-direction:column; gap:2px; border:1px solid var(--border-subtle); border-radius:var(--radius-lg); background:var(--bg-elevated); color:var(--text-primary); box-shadow:0 12px 32px var(--shadow-coral-soft, rgba(0,0,0,.28)); }
+.brainMenuItem { display:flex; align-items:center; gap:10px; width:100%; min-height:36px; padding:0 10px; border:0; border-radius:var(--radius-md); background:transparent; color:inherit; font:500 13px var(--font-sans); text-align:left; cursor:pointer; }
+.brainMenuItem > span { flex:1; min-width:0; }
+.brainMenuItem:hover,.brainMenuItem:focus-visible { background:var(--surface-interactive, var(--bg-base)); outline:none; }
+.brainMenuSep { height:1px; margin:4px 0; background:var(--border-subtle); }
+@media (pointer:coarse) { .brainMenuItem { min-height:44px; } }
 .humanChatActivity { display:grid; flex:none; gap:5px; padding:7px 9px; border-bottom:1px solid var(--canvas-brain-border); background:color-mix(in srgb,var(--canvas-brain-accent) 6%,var(--canvas-panel)); }
 .humanChatActivity > span { display:grid; grid-template-columns:22px minmax(0,1fr) auto; align-items:center; gap:7px; min-width:0; }
 .humanChatActivity b { overflow:hidden; color:var(--canvas-ink); font-size:9px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }.humanChatActivity i { color:var(--canvas-brain-accent); font-size:10px; font-style:normal; letter-spacing:2px; animation:collaboratorTyping 1.2s ease-in-out infinite; }
@@ -3442,7 +3496,7 @@
   .composerIntent { min-height:44px; }
   .composerIntentSegment { height:40px; padding:0 12px 0 10px; font-size:13px; }
   .composer { --prompt-panel-action-gap:4px; }
-  .scopeChip { min-width:48px; max-width:110px; flex:1 1 84px; padding:4px 5px; overflow:hidden; }
+  .scopeChip { max-width:120px; padding:0 8px; }
   .scopeChip select { width:100%; max-width:none; }
   /* `.composer:global(.bf-model-picker) [role='dialog']` used to sit here, nudging the
      model picker back onto a narrow screen. `bf-model-picker` is not a class any
@@ -3475,7 +3529,6 @@
     border-left:0; border-right:0; border-bottom:0;
     box-shadow:0 -10px 34px var(--canvas-shadow);
   }
-  .brainDockActions button[data-dock-side] { display:none; }
   .brainDockResizer { display:none; }
   .brainDockGrabber { display:grid; }
   /* The veil stops at the app bar, deliberately: the bar and the strip stay LIVE, so a
@@ -5394,12 +5447,8 @@
 }
 /* The panel is already a raised surface. A second drop shadow inside it draws a card
    edge where the column should just continue. */
-.composerDock[data-placement='docked'] .composer { box-shadow: none; }
-/* The starting-point picker tucks 8px INTO the floating prompt, where the utilities row
-   overlaps the card it belongs to. In the panel there is no card to tuck into — the nudge
-   just drops it onto the input's top border and the height handle that sits there. */
-.composerDock[data-placement='docked'] .promptStarter { transform: none; }
-.composerDock[data-placement='docked'] .composerUtilities { margin-bottom: 6px; }
+.composerDock[data-placement='docked'] .composerCard { box-shadow: none; }
+.composerDock[data-placement='docked'] .composerCard:focus-within { box-shadow: 0 0 0 1px var(--canvas-brain-accent); }
 
 /* --- The clocks ----------------------------------------------------------
    `timer` counts a timebox down and `stopwatch` counts up; ONE body draws both

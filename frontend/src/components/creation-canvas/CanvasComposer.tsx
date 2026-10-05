@@ -80,6 +80,7 @@ export type CanvasComposerInputProps = Pick<ChatInputProps,
   | 'memoryEnabled'
   | 'onMemoryChange'
   | 'memoryUnavailableReason'
+  | 'addMenuItems'
 >;
 
 /** How the reader has placed the prompt. `closed` is the host's business: it draws nothing. */
@@ -113,7 +114,10 @@ export interface CanvasComposerProps {
    * field. CSS stands it down above the phone breakpoint.
    */
   leading?: ReactNode;
-  /** The "choose a starting point" picker. Host-built: it dispatches template entries. */
+  /**
+   * The starting points — trigger and catalogue — laid into the card's top row and the
+   * band above it. Host-built: it dispatches template entries, and the `+` menu opens it.
+   */
   starter?: ReactNode;
   /** The run receipt. Host-built, and absent while docked — the panel narrates its own. */
   activity?: ReactNode;
@@ -270,20 +274,20 @@ export function CanvasComposer({
           ><Icon name="close" size={15} /></button>
         </>}
       </div>}
-      <div className={styles.composerUtilities}>
-        {/* Keep the settled receipt mounted after the run. Token consumption used to
-            disappear at the exact moment the answer arrived. Absent while docked: that
-            panel's own footer is the same reading of the same run, and two copies of
-            "Executing… read object · 36s" eight pixels apart is one live turn reported
-            twice. */}
-        {!docked && activity}
-        {starter}
-      </div>
-      {/* WHAT ENTER MEANS, then the box it means it in. The segment leads because it
-          qualifies what follows — reading "Idea | Ask Brain" and then the field is the
-          order the sentence is in. It draws nothing on a surface with one verb. */}
-      <CanvasComposerIntent intents={offered} value={active} onChange={(id) => setChosen({ offer: offerKey, id })} />
-      <div className={styles.promptComposerShell} style={{ '--canvas-prompt-height': `${height}px` } as CSSProperties}>
+      {/* The run receipt. Kept mounted after the run so token consumption does not
+          disappear at the moment the answer arrives. Absent while docked: that panel's
+          own footer is the same reading of the same run, and two copies of "Executing…
+          read object · 36s" eight pixels apart is one live turn reported twice. */}
+      {!docked && activity && <div className={styles.composerUtilities}>{activity}</div>}
+      {/* THE ONE CARD. Everything that changes what Enter does lives inside it: the
+          intent segment and the starting points in its top row, the starting-point
+          catalogue opening above that row, the field, and the field's own tool row
+          (scope, mode, model, send). Nothing floats above it any more — the starter
+          used to hang off its top edge as a half-bordered tab, and the segment sat
+          outside as a second pill. `.composerCard` places each by grid area. */}
+      <div className={styles.composerCard} style={{ '--canvas-prompt-height': `${height}px` } as CSSProperties}>
+        {/* The grip is a strip along the card's top edge rather than a knob sitting
+            ON the border, where it covered the first line of text. */}
         <div
           role="separator"
           tabIndex={0}
@@ -299,9 +303,11 @@ export function CanvasComposer({
           onPointerCancel={onResizeEnd}
           onLostPointerCapture={() => { resizeRef.current = null; }}
           onKeyDown={onResizeKeyDown}
-        >
-          <span aria-hidden="true">↕</span>
-        </div>
+        />
+        {starter}
+        {/* WHAT ENTER MEANS, leading the card's top row. It draws nothing on a
+            surface with one verb. */}
+        <CanvasComposerIntent intents={offered} value={active} onChange={(id) => setChosen({ offer: offerKey, id })} />
         {/* The row the finger actually uses: the phone's "+" (the whole command bar, in
             one button), then the field. `leading` is absent on a desktop and CSS-hidden
             above the phone breakpoint, so the box keeps its full width where there is
@@ -317,6 +323,9 @@ export function CanvasComposer({
             // to Brain.
             placeholder={t(activeDef.placeholderKey as 'share')}
             submitLabel={t(activeDef.submitLabelKey as 'share')}
+            // Scope is one chip, so it joins the tool row instead of taking a row of
+            // its own under the text.
+            contextPlacement="tools"
             rows={1}
             submitOnEnter
             showVoice

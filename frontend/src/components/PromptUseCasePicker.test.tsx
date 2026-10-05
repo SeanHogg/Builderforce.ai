@@ -69,13 +69,13 @@ describe('PromptUseCasePicker', () => {
     }
   });
 
-  it('renders the tab above a constrained prompt and returns the selected prescription', () => {
+  it('renders the tab ahead of its catalogue and returns the selected prescription', () => {
     const onSelect = vi.fn();
-    const { container } = render(<PromptUseCasePicker placement="top" onSelect={onSelect} />);
+    const { container } = render(<PromptUseCasePicker onSelect={onSelect} />);
     const root = container.firstElementChild!;
     const tab = screen.getByRole('button', { name: 'Choose a starting point' });
 
-    expect(root.lastElementChild).toBe(tab);
+    expect(root.firstElementChild).toBe(tab);
     expect(root).toHaveAttribute('data-open', 'false');
     expect(screen.getByText('Wireframe').closest('button')).toHaveAttribute('tabindex', '-1');
 
@@ -94,7 +94,7 @@ describe('PromptUseCasePicker', () => {
   });
 
   it('closes an expanded list with Escape', () => {
-    render(<PromptUseCasePicker placement="bottom" onSelect={vi.fn()} />);
+    render(<PromptUseCasePicker onSelect={vi.fn()} />);
     const tab = screen.getByRole('button', { name: 'Choose a starting point' });
     fireEvent.click(tab);
     fireEvent.keyDown(document, { key: 'Escape' });
@@ -102,7 +102,7 @@ describe('PromptUseCasePicker', () => {
   });
 
   it('searches across the larger supported catalog', () => {
-    render(<PromptUseCasePicker placement="bottom" onSelect={vi.fn()} />);
+    render(<PromptUseCasePicker onSelect={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Choose a starting point' }));
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'animation' } });
     expect(screen.getByRole('button', { name: 'Animation' })).toBeInTheDocument();
@@ -111,7 +111,7 @@ describe('PromptUseCasePicker', () => {
 
   it('finds a migrated feature by its legacy dotted contract and returns its Canvas prescription', () => {
     const onSelect = vi.fn();
-    render(<PromptUseCasePicker placement="bottom" onSelect={onSelect} />);
+    render(<PromptUseCasePicker onSelect={onSelect} />);
     fireEvent.click(screen.getByRole('button', { name: 'Choose a starting point' }));
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'finance.runway.snapshot' } });
     fireEvent.click(screen.getByRole('button', { name: 'Runway snapshot' }));

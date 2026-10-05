@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePointerResize } from '@/lib/usePointerResize';
 import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
@@ -18,6 +18,7 @@ import type { CreationFlowNode } from './CreationNode';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
 import type { BrainSurfaceCollaborator } from './brainSurfaceContext';
 import { BrainSurfaceActions } from './BrainSurfaceActions';
+import { BrainSurfaceViewProvider, useBrainSurfaceView } from './brainSurfaceView';
 import {
   BRAIN_DOCK_MAX_WIDTH,
   BRAIN_DOCK_MIN_WIDTH,
@@ -124,7 +125,7 @@ export interface BrainDockProps extends BrainSurfaceBodyProps {
 }
 
 /**
- * Tabs, presence, transcript, and the activity bar — everything below the title.
+ * Presence, transcript (or its Context view), and the activity bar — everything below the title.
  * Shared verbatim by the edge dock and the Brain Object so the two placements can
  * never drift into two subtly different chats.
  */
@@ -136,7 +137,8 @@ export function BrainSurfaceBody({
   revealMessage = null,
 }: BrainSurfaceBodyProps) {
   const t = useTranslations('creationCanvas');
-  const [tab, setTab] = useState<'chat' | 'context'>('chat');
+  // Shared with the header's Context toggle — see `brainSurfaceView`.
+  const { view: tab, setView: setTab } = useBrainSurfaceView();
   // Read straight from the shared source rather than accepting it as a prop: the canvas
   // surface renders in two placements and inside a guest session, and each of those
   // would otherwise have to remember to thread the same fact through.
@@ -183,28 +185,13 @@ export function BrainSurfaceBody({
   // Context if that is where the reader was.
   useEffect(() => {
     if (revealMessage != null) setTab('chat');
-  }, [revealMessage]);
+  }, [revealMessage, setTab]);
   const typingCollaborators = collaborators.filter((member) => member.typing);
   // Who the running animation below is for, when it is not this viewer's own turn.
   const askingCollaborators = collaborators.filter((member) => member.askingBrain);
   const showPresence = joinedCollaborator != null || typingCollaborators.length > 0 || askingCollaborators.length > 0;
 
   return <>
-    {/* Chat is the panel's own content, not a tab beside another tab — the reader
-        already knows they are in chat because the surface switcher says so. Context
-        is a CONFIGURATION of this same panel, not a second destination, so it is one
-        icon toggle rather than a second tab fighting the first for the same label. */}
-    <div className={styles.brainDockTabs}>
-      <span className={styles.brainDockTitle}>{t('chat')}</span>
-      <button
-        type="button"
-        className={styles.brainDockContextToggle}
-        aria-pressed={tab === 'context'}
-        aria-label={t('context')}
-        title={t('context')}
-        onClick={() => setTab((current) => (current === 'context' ? 'chat' : 'context'))}
-      ><Icon source="ⓘ" size="1em" /></button>
-    </div>
     {showPresence && <div className={styles.humanChatActivity} aria-live="polite">
       {joinedCollaborator && <span data-state="joined">
         <Avatar name={joinedCollaborator.displayName || t('collaborator')} kind="human" size={22} />
@@ -275,7 +262,7 @@ export function BrainDock({
   });
 
   return (
-    <>
+    <BrainSurfaceViewProvider>
       {/* THE VEIL, and its limits. On a phone this panel is a SHEET over the surface, so
           something has to say the surface behind it is not the live thing — and tapping
           away has to dismiss, which is the gesture a bottom sheet already teaches.
@@ -365,7 +352,7 @@ export function BrainDock({
           to whatever is left and the panel can never paint over the box you type in. */}
       {composer}
       </aside>
-    </>
+    </BrainSurfaceViewProvider>
   );
 }
 

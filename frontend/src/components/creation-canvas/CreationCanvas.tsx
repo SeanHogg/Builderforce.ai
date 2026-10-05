@@ -1001,7 +1001,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     onAttach={attachCanvasArtifact} onAddContext={openObjectPicker} autoMode={autoApply} onAutoModeChange={setAutoApplyMode}
     modelSelection={modelSelection} modelOptions={canvasModelOptions} onModelSelectionChange={setModelSelection} modelIdentity={modelIdentity}
     chatMode={sessionMode} onChatModeChange={setSessionMode} memoryEnabled={memoryEnabled} onMemoryChange={setMemoryMode}
-    hasMemoryProject={evermindProjectId != null} onTwilioJourney={setTwilioPromptSelected} applyTemplate={applyTemplate}
+    hasMemoryProject={evermindProjectId != null} onTwilioJourney={setTwilioPromptSelected} applyTemplate={applyTemplate} conversationStarted={brainMessages.length > 0}
   />;
 
   const sessionActionHandlers = useCanvasSessionActionHandlers({

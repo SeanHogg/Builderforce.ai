@@ -10,6 +10,14 @@ export interface ChatInputAttachment {
   type: string;
 }
 
+/** A host-supplied row in the composer's `+` menu, drawn after Upload and Add context. */
+export interface ComposerAddMenuItem {
+  id: string;
+  icon: ReactNode;
+  label: string;
+  onSelect: () => void;
+}
+
 export interface ChatInputProps {
   value: string;
   onChange: (value: string) => void;
@@ -127,6 +135,15 @@ export interface ChatInputProps {
   onTicketTag?: (ticket: TicketTag) => void;
   /** Who answers / what is addressed ("Acting as", capability, "To", scope) — the composer's context row. */
   contextControls?: ReactNode;
+  /**
+   * Where `contextControls` sit: their own row under the text (`row`, the default), or
+   * in the tool row beside `+` and the options menu (`tools`) — for a host whose context
+   * is one compact chip, such as the canvas's Brain scope. `compact` density implies
+   * `tools`.
+   */
+  contextPlacement?: 'row' | 'tools';
+  /** Extra rows for the `+` menu — host actions that belong with "add to this turn". */
+  addMenuItems?: readonly ComposerAddMenuItem[];
   /** Host-specific standing facts (e.g. the memory status) shown beside the plan chip in the last row. */
   meta?: ReactNode;
   /**

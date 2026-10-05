@@ -3,6 +3,7 @@ import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';
 import { BrainMark } from '@/components/brain/BrainMark';
 import { BrainSurfaceBody, type BrainSurfaceBodyProps } from './BrainDock';
+import { BrainSurfaceViewProvider } from './brainSurfaceView';
 import { BrainSurfaceActions } from './BrainSurfaceActions';
 import { memberAvatarClass, memberInitials } from './rosterAvatar';
 import type { CanvasRosterMember } from './types';
@@ -67,6 +68,7 @@ export function CanvasChatSurface({
   const t = useTranslations('creationCanvas');
 
   return (
+    <BrainSurfaceViewProvider>
     <section className={styles.chatSurface} aria-label={t('surface.chat.label')} data-testid="canvas-chat-surface">
       <header className={styles.chatSurfaceHeader}>
         <span className={styles.brainDockMark} aria-hidden><BrainMark running={body.running} /></span>
@@ -105,5 +107,6 @@ export function CanvasChatSurface({
         </button>
       </footer>
     </section>
+    </BrainSurfaceViewProvider>
   );
 }

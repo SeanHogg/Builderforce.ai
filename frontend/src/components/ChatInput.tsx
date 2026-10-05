@@ -15,7 +15,7 @@ import { useAttachmentDropAndPaste } from './chat-input/useAttachmentDropAndPast
 import type { ChatInputAttachment, ChatInputProps } from './chat-input/types';
 import compactStyles from './chat-input/composerCompact.module.css';
 export type { ChatModelOptions, ChatModelSelection } from '@seanhogg/builderforce-brain-ui';
-export type { ChatInputAttachment, ChatInputProps } from './chat-input/types';
+export type { ChatInputAttachment, ChatInputProps, ComposerAddMenuItem } from './chat-input/types';
 
 /** One stable empty list, so an omitted `pendingAttachments` never looks like a change. */
 const NO_ATTACHMENTS: ChatInputAttachment[] = [];
@@ -74,6 +74,8 @@ export function ChatInput({
   ticketables,
   onTicketTag,
   contextControls,
+  contextPlacement = 'row',
+  addMenuItems,
   meta,
   density = 'comfortable',
   modeVocabulary,
@@ -81,6 +83,7 @@ export function ChatInput({
   focusToken,
 }: ChatInputProps) {
   const compact = density === 'compact';
+  const contextInTools = compact || contextPlacement === 'tools';
   const t = useTranslations('chatInput');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const valueRef = useRef(value);
@@ -191,7 +194,7 @@ export function ChatInput({
         )}
         // A fragment, not the bare node: the shell's ReactNode comes from a second copy
         // of React's types, and only an element is assignable across the two.
-        context={contextControls && !compact ? <>{contextControls}</> : undefined}
+        context={contextControls && !contextInTools ? <>{contextControls}</> : undefined}
         // Which plan is funding this chat (and, when metered, what allowance is
         // left), then the host's own standing facts. Self-gating: the chip renders
         // nothing without a tenant session. Compact hosts show the plan themselves.
@@ -206,6 +209,7 @@ export function ChatInput({
             <ComposerAddMenu
               onAttach={onAttach}
               onAddContext={onAddContext}
+              items={addMenuItems}
               webBrowsing={webBrowsing}
               onWebBrowsingChange={onWebBrowsingChange}
               disabled={disabled}
@@ -245,7 +249,7 @@ export function ChatInput({
                 <Icon name="message" size={20} />
               </Link>
             )}
-            {compact && contextControls}
+            {contextInTools && contextControls}
             {showVoice && <VoiceDictationButton getValue={getValue} onChange={onChange} disabled={disabled} />}
           </>
         )}

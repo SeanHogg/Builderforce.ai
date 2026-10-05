@@ -21244,9 +21244,11 @@
     "dockBrainRight": "Brain rechts andocken",
     "expandBrain": "Brain-Chat vergrößern",
     "slimBrain": "Brain-Chat verschmälern",
-    "showExecutionSteps": "Ausführungsschritte anzeigen",
-    "hideExecutionSteps": "Ausführungsschritte ausblenden",
-    "chat": "Chat",
+    "brainMenu": {
+      "label": "Weitere Brain-Optionen",
+      "executionSteps": "Ausführungsschritte anzeigen"
+    },
+    "startingPoints": "Ausgangspunkte",
     "context": "Kontext",
     "brainChatHistory": "Brain-Chatverlauf",
     "brainEmpty": "Noch kein Gespräch. Fragen Sie Brain unten, um zu beginnen.",

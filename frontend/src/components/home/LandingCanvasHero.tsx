@@ -361,7 +361,7 @@ function Composer({ value, onChange, onSubmit, chatMode, onChatModeChange, onEng
           `applyTemplateEntry` reports the entries it cannot run rather than
           leaving a press with no effect, and the hero sends those to the
           templates gallery, where they can be set up properly. */}
-      <PromptUseCasePicker placement="bottom" onSelect={(entry) => {
+      <PromptUseCasePicker onSelect={(entry) => {
         applyTemplateEntry(entry, {
           onPrompt: (prompt) => onChange(prompt),
           onInstall: (key) => router.push(`/templates?open=${encodeURIComponent(key)}`),

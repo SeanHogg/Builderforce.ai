@@ -21244,9 +21244,11 @@
     "dockBrainRight": "Dock Brain to the right",
     "expandBrain": "Expand Brain chat",
     "slimBrain": "Slim Brain chat",
-    "showExecutionSteps": "Show execution steps",
-    "hideExecutionSteps": "Hide execution steps",
-    "chat": "Chat",
+    "brainMenu": {
+      "label": "More Brain options",
+      "executionSteps": "Show execution steps"
+    },
+    "startingPoints": "Starting points",
     "context": "Context",
     "brainChatHistory": "Brain chat history",
     "brainEmpty": "No conversation yet. Ask Brain from the prompt below to begin.",

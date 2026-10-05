@@ -1,15 +1,10 @@
 .root { position:relative; width:100%; display:flex; flex-direction:column; align-items:center; color:var(--text-primary, var(--canvas-ink)); }
 .root[data-open='true'] { z-index:20; }
-.root[data-align='end'] { align-items:flex-end; }
-.tab { display:inline-flex; align-items:center; gap:7px; min-height:27px; padding:4px 12px; border:1px solid var(--prompt-panel-border, var(--border-subtle)); background:var(--prompt-panel-bg, var(--bg-elevated)); color:inherit; font:600 11px/1.2 inherit; cursor:pointer; }
-.root[data-placement='top'] .tab { margin-bottom:-1px; border-radius:var(--radius-md) var(--radius-md) 0 0; border-bottom-color:transparent; }
-.root[data-placement='bottom'] .tab { margin-top:-1px; border-radius:0 0 var(--radius-md) var(--radius-md); border-top-color:transparent; }
-.arrow { display:inline-block; font-size:var(--font-size-small); transition:transform 160ms ease; }
-.root[data-placement='bottom'] .arrow,.tab[aria-expanded='true'] .arrow { transform:rotate(180deg); }
-.root[data-placement='bottom'] .tab[aria-expanded='true'] .arrow { transform:none; }
+.tab { display:inline-flex; align-items:center; gap:7px; min-height:27px; padding:4px 12px; border:1px solid var(--prompt-panel-border, var(--border-subtle)); background:var(--prompt-panel-bg, var(--bg-elevated)); color:inherit; font:600 11px/1.2 inherit; cursor:pointer; margin-top:-1px; border-radius:0 0 var(--radius-md) var(--radius-md); border-top-color:transparent; }
+.arrow { display:inline-block; font-size:var(--font-size-small); transform:rotate(180deg); transition:transform 160ms ease; }
+.tab[aria-expanded='true'] .arrow { transform:none; }
 .reveal { position:absolute; z-index:1; display:grid; width:100%; grid-template-rows:0fr; opacity:0; pointer-events:none; transition:grid-template-rows 180ms ease, opacity 140ms ease; }
-.root[data-placement='top'] .reveal { bottom:100%; }
-.root[data-placement='bottom'] .reveal { top:100%; }
+.reveal[data-variant='popover'] { top:100%; }
 .reveal[data-open='true'] { grid-template-rows:1fr; opacity:1; pointer-events:auto; }
 .panel { min-height:0; overflow:hidden; box-sizing:border-box; border:0 solid var(--prompt-panel-border, var(--border-subtle)); background:var(--prompt-panel-bg, var(--bg-elevated)); text-align:left; }
 .reveal[data-open='true'] .panel { padding:10px; border-width:1px; border-radius:var(--radius-lg); box-shadow:0 16px 40px var(--shadow-coral-soft, rgba(0,0,0,.22)); }
@@ -26,6 +21,18 @@
 .icon { display:grid; place-items:center; flex:none; width:25px; height:25px; border:1px solid var(--prompt-panel-border, var(--border-subtle)); border-radius:var(--radius-sm); color:var(--coral-bright, var(--canvas-accent)); font:600 13px/1 ui-sans-serif,system-ui,sans-serif; }
 .empty { padding:20px; color:var(--text-muted,var(--canvas-muted)); font-size:var(--font-size-eyebrow); text-align:center; }
 @media (max-width:700px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+/* INLINE: the catalogue in normal flow inside the box that hosts it — the canvas
+   composer card, where it opens above the card's top row and shares the card's border
+   instead of floating off a tab. The higher specificity also outranks the phone
+   media query below, which would otherwise turn it into a viewport sheet. */
+.reveal[data-variant='inline'] { position:static; width:auto; }
+.reveal[data-variant='inline'] .panel { border-radius:0; background:transparent; }
+.reveal[data-variant='inline'][data-open='true'] .panel { padding:10px 10px 8px; border-width:0 0 1px; border-radius:0; box-shadow:none; }
+.reveal[data-variant='inline'] .panelHeader { flex-wrap:wrap; }
+.reveal[data-variant='inline'] .search { flex:1 1 160px; width:auto; min-height:36px; font-size:13px; }
+.reveal[data-variant='inline'] .catalog { max-height:min(40vh,320px); }
+.reveal[data-variant='inline'] .grid { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+.reveal[data-variant='inline'] .item { min-height:40px; font-size:13px; }
 /* On a phone the picker's host is often a height-capped, overflow-clipped
    surface — the landing hero's board, where the prompt is a fixed band and the
    options scroll. An absolutely-positioned sheet would be clipped by it, so

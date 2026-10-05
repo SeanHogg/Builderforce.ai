@@ -21244,9 +21244,11 @@
     "dockBrainRight": "Ancrer Brain à droite",
     "expandBrain": "Agrandir le chat Brain",
     "slimBrain": "Réduire le chat Brain",
-    "showExecutionSteps": "Afficher les étapes d’exécution",
-    "hideExecutionSteps": "Masquer les étapes d’exécution",
-    "chat": "Chat",
+    "brainMenu": {
+      "label": "Plus d’options Brain",
+      "executionSteps": "Afficher les étapes d’exécution"
+    },
+    "startingPoints": "Points de départ",
     "context": "Contexte",
     "brainChatHistory": "Historique du chat Brain",
     "brainEmpty": "Pas encore de conversation. Posez une question à Brain ci-dessous pour commencer.",

@@ -176,6 +176,18 @@ const openBoardMenu = () => {
   if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(trigger);
 };
 
+
+/**
+ * The Brain header keeps Context, Copy diagnostics and Close; every display and placement
+ * setting is a named row in its "More Brain options" menu. Opens that menu and returns the
+ * row. The FIRST menu trigger is the docked panel's — the Brain Object's own header, when
+ * one is on the board, comes later in document order.
+ */
+function brainMenuItem(name: string): HTMLElement {
+  fireEvent.click(screen.getAllByRole('button', { name: 'More Brain options' })[0]!);
+  return screen.queryByRole('menuitem', { name }) ?? screen.getByRole('menuitemcheckbox', { name });
+}
+
 describe('CreationCanvas', { timeout: 120_000 }, () => {
   it('scores explicit agent-test criteria and preserves unscored review runs', () => {
     expect(scoreAgentTestResponse('I understand the duplicate charge. Please share your order number; I will investigate before discussing a refund.', 'duplicate charge, order number, investigate')).toMatchObject({ passed: true, missing: [] });
@@ -249,7 +261,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(shell().style.getPropertyValue('--brain-dock-right')).toBe('330px');
     expect(shell().style.getPropertyValue('--brain-dock-left')).toBe('0px');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dock Brain to the left' }));
+    fireEvent.click(brainMenuItem('Dock Brain to the left'));
     expect(board()).toHaveAttribute('data-brain-side', 'left');
     expect(shell().style.getPropertyValue('--brain-dock-left')).toBe('330px');
     expect(shell().style.getPropertyValue('--brain-dock-right')).toBe('0px');
@@ -1017,8 +1029,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(dock).toHaveAttribute('data-size', 'slim');
     expect(dock).toHaveAttribute('data-mode', 'docked');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dock Brain to the left' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Expand Brain chat' }));
+    fireEvent.click(brainMenuItem('Dock Brain to the left'));
+    fireEvent.click(brainMenuItem('Expand Brain chat'));
 
     expect(screen.getByRole('complementary', { name: 'Brain chat' })).toHaveAttribute('data-side', 'left');
     expect(screen.getByRole('complementary', { name: 'Brain chat' })).toHaveAttribute('data-size', 'expanded');
@@ -1043,13 +1055,17 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     // chat product works. Nesting the prompt in the side panel is what broke that.
     const prompt = screen.getByLabelText('Ask Brain about this canvas');
     expect(screen.getByRole('complementary', { name: 'Brain chat' })).not.toContainElement(prompt);
-    // The composer utility row owns both status and starting points, keeping the
-    // former at the left edge and the latter at the right without moving the input.
-    const starter = screen.getByRole('button', { name: 'Choose a starting point' });
+    // Starting points live INSIDE the composer card, in its top row — not as a tab
+    // floating above it — and the catalogue opens inside the same card.
+    const starter = screen.getByRole('button', { name: 'Starting points' });
     expect(prompt.closest('[data-tour="creation-brain-dock"]')).toContainElement(starter);
     expect(starter.closest('[data-tour="creation-prompt-starter"]')).not.toBeNull();
-    expect(starter.closest('[data-align="end"]')).not.toBeNull();
-    expect(starter.closest('[data-placement="top"]')).not.toBeNull();
+    expect(starter).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(starter);
+    expect(starter).toHaveAttribute('aria-expanded', 'true');
+    const catalog = document.getElementById(starter.getAttribute('aria-controls')!)!;
+    expect(prompt.closest('[data-tour="creation-brain-dock"]')).toContainElement(catalog);
+    expect(within(catalog).getByRole('searchbox')).toBeInTheDocument();
   });
 
   /**
@@ -1192,7 +1208,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     const shell = container.querySelector<HTMLElement>('[data-fullscreen]');
     expect(screen.getByRole('button', { name: 'Open Brain chat' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Show the chat in the Brain object' }));
+    fireEvent.click(brainMenuItem('Show the chat in the Brain object'));
 
     // THE invariant: one conversation, one transcript. The small placement used to be
     // a card floating over a board that already carried the Brain Object, so the same
@@ -1206,7 +1222,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(shell?.style.getPropertyValue('--brain-dock-right')).toBe('0px');
     expect(JSON.parse(localStorage.getItem('builderforce:create:brain-dock')!)).toMatchObject({ mode: 'inline' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dock Brain to the edge' }));
+    fireEvent.click(brainMenuItem('Dock Brain to the edge'));
     expect(screen.getByRole('complementary', { name: 'Brain chat' })).toHaveAttribute('data-mode', 'docked');
     expect(screen.getAllByRole('log', { name: 'Brain chat history' })).toHaveLength(1);
     expect(shell?.style.getPropertyValue('--brain-dock-right')).toBe('330px');
@@ -1240,7 +1256,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
   it('lets the Brain Object reopen an inline Brain without a second launcher', () => {
     render(<CreationCanvas sessionId="brain-inline-reopen-test" persistence="local" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Show the chat in the Brain object' }));
+    fireEvent.click(brainMenuItem('Show the chat in the Brain object'));
     fireEvent.click(screen.getByRole('button', { name: 'Close Brain chat' }));
 
     // The Object is back to its anchor and offers the only way back — the floating
@@ -1265,18 +1281,18 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(JSON.parse(localStorage.getItem('builderforce:create:brain-dock')!)).toMatchObject({ width: 354 });
 
     // Presets clear a stale drag width, so "expand" always actually expands.
-    fireEvent.click(screen.getByRole('button', { name: 'Expand Brain chat' }));
+    fireEvent.click(brainMenuItem('Expand Brain chat'));
     expect(screen.getByRole('separator', { name: 'Resize Brain chat' })).toHaveAttribute('aria-valuenow', '520');
   });
 
   it('hides Brain execution steps until the user turns that feedback on', () => {
     render(<CreationCanvas sessionId="brain-execution-detail-test" persistence="local" />);
 
-    const toggle = screen.getByRole('button', { name: 'Show execution steps' });
-    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    const toggle = brainMenuItem('Show execution steps');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
     fireEvent.click(toggle);
 
-    expect(screen.getByRole('button', { name: 'Hide execution steps' })).toHaveAttribute('aria-pressed', 'true');
+    expect(brainMenuItem('Show execution steps')).toHaveAttribute('aria-checked', 'true');
     expect(JSON.parse(localStorage.getItem('builderforce:create:brain-dock')!)).toMatchObject({ showExecutionDetail: true });
   });
 

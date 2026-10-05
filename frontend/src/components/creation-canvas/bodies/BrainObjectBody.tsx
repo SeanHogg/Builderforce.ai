@@ -7,6 +7,7 @@ import { BrainMark } from '@/components/brain/BrainMark';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from '../BrainActivityView';
 import { BrainSurfaceBody } from '../BrainDock';
 import { BrainSurfaceActions } from '../BrainSurfaceActions';
+import { BrainSurfaceViewProvider } from '../brainSurfaceView';
 import { useBrainSurface } from '../brainSurfaceContext';
 import type { CreationBodyProps } from './types';
 
@@ -79,6 +80,7 @@ export function BrainObjectBody({ id: nodeId, data }: CreationBodyProps) {
     // conversation, so without this every control inside the conversation would also
     // re-reveal it — closing Brain would reopen it on the way back up. The Object's
     // header is outside this section and still selects the node normally.
+    <BrainSurfaceViewProvider>
     <section
       className={`${styles.brainObjectChat} nodrag nowheel`}
       aria-label={t('brainDock')}
@@ -110,6 +112,7 @@ export function BrainObjectBody({ id: nodeId, data }: CreationBodyProps) {
         guestSignup={surface.guestSignup}
       />
     </section>
+    </BrainSurfaceViewProvider>
   );
 }
 

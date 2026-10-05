@@ -5,8 +5,9 @@
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';
+import { BrainSurfaceMenu } from './BrainSurfaceMenu';
 import { CopyCanvasDiagnosticsButton } from './canvasDiagnosticsContext';
-import { useCanvasSurfaceDefinition } from './canvasSurfaceContext';
+import { useBrainSurfaceView } from './brainSurfaceView';
 import type { BrainDockMode, BrainDockSide, BrainDockSize } from './brainDockPreferences';
 
 /*
@@ -41,80 +42,31 @@ export interface BrainSurfaceActionsProps {
 }
 
 /**
- * The surface's controls. It decides for itself which of them apply: which edge and
- * how wide are meaningless for a surface that lives in an Object on the graph, where
- * the Object's own resize handles already do that job — and both placement and dismiss
- * are meaningless for a surface that IS the whole canvas.
+ * The header's controls, in ONE row: Context, Copy diagnostics, the "More" menu that
+ * holds every display and placement setting by name (`BrainSurfaceMenu`), and Close.
+ *
+ * The Context toggle used to sit in a second row under the header with a "CHAT" caption;
+ * it shares the body's view through `brainSurfaceView`, so it can live up here and that
+ * row is gone.
  */
-export function BrainSurfaceActions({
-  mode, showExecutionDetail, onModeChange, onExecutionDetailChange, onClose,
-  side, size, onSideChange, onSizeChange, onUndockPrompt,
-}: BrainSurfaceActionsProps) {
+export function BrainSurfaceActions({ onClose, ...menu }: BrainSurfaceActionsProps) {
   const t = useTranslations('creationCanvas');
-  const inline = mode === 'inline';
-  const expanded = size === 'expanded';
-  const docked = !inline && !!side && !!onSideChange && !!onSizeChange;
-  // Read, not passed in: the canvas publishes which surface it is drawing, so this
-  // control can tell for itself that the board it would move INTO is not on screen.
-  // Offering "show this in the Brain Object" while a 3D scene — or the conversation
-  // surface itself — has taken the centre is a control that hides the chat and gives
-  // back nothing, so it is simply not offered until the board is there again.
-  const boardAvailable = useCanvasSurfaceDefinition().showsBoard;
+  const { view, setView } = useBrainSurfaceView();
 
   return (
     <div className={styles.brainDockActions}>
+      <button
+        type="button"
+        aria-pressed={view === 'context'}
+        aria-label={t('context')}
+        title={t('context')}
+        onClick={() => setView(view === 'context' ? 'chat' : 'context')}
+      ><Icon name="info" size={15} /></button>
       {/* The canvas's diagnostics report — in every placement of this header, on every
           surface, including the ones that hide the board. */}
       <CopyCanvasDiagnosticsButton />
-      <button
-        type="button"
-        aria-pressed={showExecutionDetail}
-        aria-label={showExecutionDetail ? t('hideExecutionSteps') : t('showExecutionSteps')}
-        title={showExecutionDetail ? t('hideExecutionSteps') : t('showExecutionSteps')}
-        onClick={() => onExecutionDetailChange(!showExecutionDetail)}
-      >⋮⋮</button>
-      {/* The prompt is in this panel's column, so the panel carries the way out of it.
-          Pressed, the prompt floats over the board again — the placement it came from. */}
-      {onUndockPrompt && <button
-        type="button"
-        aria-pressed
-        aria-label={t('floatPrompt')}
-        title={t('floatPrompt')}
-        onClick={onUndockPrompt}
-      ><Icon name="external-link" size={14} /></button>}
-      {boardAvailable && <button
-        type="button"
-        aria-pressed={inline}
-        aria-label={inline ? t('dockBrainToEdge') : t('showBrainInObject')}
-        title={inline ? t('dockBrainToEdge') : t('showBrainInObject')}
-        onClick={() => onModeChange(inline ? 'docked' : 'inline')}
-      >{inline ? '▤' : '▣'}</button>}
-      {/* data-dock-side, not the label, is what the stylesheet hides on a phone:
-          a selector keyed on English copy would stop matching in every other locale. */}
-      {docked && <button
-        type="button"
-        data-dock-side="left"
-        aria-pressed={side === 'left'}
-        aria-label={t('dockBrainLeft')}
-        title={t('dockBrainLeft')}
-        onClick={() => onSideChange!('left')}
-      >⇤</button>}
-      {docked && <button
-        type="button"
-        data-dock-side="right"
-        aria-pressed={side === 'right'}
-        aria-label={t('dockBrainRight')}
-        title={t('dockBrainRight')}
-        onClick={() => onSideChange!('right')}
-      >⇥</button>}
-      {docked && <button
-        type="button"
-        aria-pressed={expanded}
-        aria-label={expanded ? t('slimBrain') : t('expandBrain')}
-        title={expanded ? t('slimBrain') : t('expandBrain')}
-        onClick={() => onSizeChange!(expanded ? 'slim' : 'expanded')}
-      >{expanded ? '⤡' : '⤢'}</button>}
-      {onClose && <button type="button" aria-label={t('closeBrain')} title={t('closeBrain')} onClick={onClose}>×</button>}
+      <BrainSurfaceMenu {...menu} />
+      {onClose && <button type="button" aria-label={t('closeBrain')} title={t('closeBrain')} onClick={onClose}><Icon name="close" size={15} /></button>}
     </div>
   );
 }

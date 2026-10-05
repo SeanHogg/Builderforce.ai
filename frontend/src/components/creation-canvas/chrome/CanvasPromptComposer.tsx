@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { CanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
 import type { CanvasComposerIntentId } from '@/lib/canvasComposerIntents';
 import type { CreationTemplate } from '@/lib/templates/creationTemplates';
+import { Icon } from '@/components/ui/Icon';
 import { CanvasComposer, type CanvasComposerInputProps } from '../CanvasComposer';
 import { CanvasActionsTrigger } from '../CanvasActionsTrigger';
 import { BrainActivityIndicator } from '../BrainActivityView';
@@ -50,6 +52,8 @@ export interface CanvasPromptComposerProps extends Pick<CanvasComposerInputProps
   hasMemoryProject: boolean;
   onTwilioJourney: (selected: boolean) => void;
   applyTemplate: (template: CreationTemplate) => void;
+  /** The Brain conversation has turns, so starting points move into the `+` menu. */
+  conversationStarted: boolean;
 }
 
 /**
@@ -88,11 +92,14 @@ export function CanvasPromptComposer({
   docked, intents, editable, preferAsk, startTurn, onCaptureIdea, hostRef, actionsOpen, onToggleActions,
   running, trace, runStartedAt, brainIsSurface, promptPlacement, setPromptPlacement, brainDockDrawn, updateBrainDock,
   prompt, setPrompt, onStop, queuedCount, scopeMode, setScopeMode, scopeLabel, selectionCount, frameSelected,
-  hasMemoryProject, onTwilioJourney, applyTemplate, onAttach, onAddContext, autoMode, onAutoModeChange,
+  hasMemoryProject, onTwilioJourney, applyTemplate, conversationStarted, onAttach, onAddContext, autoMode, onAutoModeChange,
   modelSelection, modelOptions, onModelSelectionChange, modelIdentity, chatMode, onChatModeChange, memoryEnabled, onMemoryChange,
 }: CanvasPromptComposerProps) {
   const t = useTranslations('creationCanvas');
   const { persistence } = useCanvasSessionFacts();
+  // Owned here, not by the starter: the `+` menu opens the same catalogue once the
+  // conversation has started and the starter's own trigger has stood down.
+  const [startersOpen, setStartersOpen] = useState(false);
   return <CanvasComposer
     placement={docked ? 'docked' : 'float'}
     intents={intents}
@@ -107,7 +114,14 @@ export function CanvasPromptComposer({
     // row rather than the board's chrome, and the band reserved for it is zero.
     {...(docked ? {} : { hostRef })}
     leading={<CanvasActionsTrigger open={actionsOpen} onToggle={onToggleActions} />}
-    starter={<CanvasPromptStarter onPrompt={setPrompt} onTwilioJourney={onTwilioJourney} onPack={applyTemplate} />}
+    starter={<CanvasPromptStarter
+      open={startersOpen}
+      onOpenChange={setStartersOpen}
+      conversationStarted={conversationStarted}
+      onPrompt={setPrompt}
+      onTwilioJourney={onTwilioJourney}
+      onPack={applyTemplate}
+    />}
     activity={<BrainActivityIndicator
       running={running}
       trace={trace}
@@ -140,6 +154,14 @@ export function CanvasPromptComposer({
       contextControls: <CanvasScopeChip scopeMode={scopeMode} onScopeModeChange={setScopeMode} autoLabel={scopeLabel} selectionCount={selectionCount} frameSelected={frameSelected} />,
       onAttach,
       onAddContext,
+      ...(conversationStarted ? {
+        addMenuItems: [{
+          id: 'starting-points',
+          icon: <Icon name="template" size={15} />,
+          label: t('startingPoints'),
+          onSelect: () => setStartersOpen(true),
+        }],
+      } : {}),
       autoMode,
       onAutoModeChange,
       modelSelection,
