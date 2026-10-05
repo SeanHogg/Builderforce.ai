@@ -62,7 +62,7 @@ Bevor eine Operation dein Spiel erreicht, passiert sie eine Sicherheitsprüfung,
 }
 ```
 
-Die Spawn-Mitgliedschaft kostet **1,99 $ im Monat**. Gebaut wird mit Tokens, die es in Paketen zu **10, 20, 50 oder 100 $** gibt, und größere Pakete enthalten Bonus-Tokens. Ein typischer Build braucht etwa zwölftausend Tokens, ein 10-$-Paket reicht also für rund achtzig Builds. Das Guthaben ist in der App immer sichtbar. Wenn ein Build fehlschlägt, nicht lesbar ist oder alle seine Änderungen abgelehnt wurden, bleibt das Guthaben unangetastet.
+Jeder neue Spieler bekommt **eine Gratis-Woche**: sieben Tage und 50.000 Tokens, etwa vier Builds, ohne Karte. Der Spieler gibt die E-Mail eines Erwachsenen an, der einen Link bekommt, um Spawn ohne das Passwort des Spielers weiterzuführen. Nach der Woche kostet die Spawn-Mitgliedschaft **1,99 $ im Monat**. Gebaut wird mit Tokens, die es in Paketen zu **10, 20, 50 oder 100 $** gibt, und größere Pakete enthalten Bonus-Tokens. Ein typischer Build braucht etwa zwölftausend Tokens, ein 10-$-Paket reicht also für rund achtzig Builds. Das Guthaben ist in der App immer sichtbar. Wenn ein Build fehlschlägt, nicht lesbar ist oder alle seine Änderungen abgelehnt wurden, bleibt das Guthaben unangetastet.
 
 Gekauft wird auf der Website über den Stripe-Checkout, nie in der App. Das ist Absicht: Wer bezahlt, oft ein Elternteil, entscheidet über jede Aufladung.
 
@@ -75,7 +75,7 @@ Jedes Builderforce-Produkt folgt demselben Bogen: **Idee → Machen → Ausführ
 ## Loslegen
 
 1. Geh auf [spawn.builderforce.ai](/spawn) und lege dein Konto an (frag deine Eltern).
-2. Tritt für 1,99 $ im Monat bei und hol dir ein Token-Paket.
+2. Starte deine Gratis-Woche (frag einen Erwachsenen nach seiner E-Mail). Danach trittst du für 1,99 $ im Monat bei und holst dir ein Token-Paket.
 3. Lade die Spawn-App herunter, melde dich an, öffne Roblox Studio und schreib, was du bauen willst.
 
 *Spawn wird von Builderforce.ai entwickelt und ist weder mit der Roblox Corporation verbunden noch von ihr unterstützt.*

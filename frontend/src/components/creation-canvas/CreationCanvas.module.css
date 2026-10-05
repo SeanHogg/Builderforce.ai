@@ -5535,6 +5535,7 @@
   background:color-mix(in srgb, var(--canvas-phase-hue) 8%, var(--canvas-panel)); color:var(--canvas-ink); text-align:left;
 }
 .phasePath[data-tone='warning'] { border-color:var(--canvas-phase-warn-mark); background:var(--canvas-phase-warn-bg); }
+.phasePath[data-tone='next'] { border-color:var(--canvas-phase-ring); }
 .phasePathHead { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .phasePathKicker { color:var(--canvas-muted); font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
 .phasePathToggle { display:inline-grid; place-items:center; width:24px; height:24px; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); cursor:pointer; }

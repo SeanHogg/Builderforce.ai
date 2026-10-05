@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { GHOST_CARD_GAP, GHOST_CARD_WIDTH } from '@/lib/canvasPhaseLens';
+import { CanvasDockInsetsContext } from '../stage/canvasDockInsets';
 import { CanvasSurfaceProvider } from '../canvasSurfaceContext';
 import { ALL_SIGNALS, renderWithPhase } from './testPhaseProvider';
 import { PhaseGhostCard } from './PhaseGhostCard';
@@ -112,6 +113,16 @@ describe('PhaseGhostCard — where the phase\'s first object would go', () => {
       renderWithPhase(<PhaseGhostCard />, { phase: 'idea' });
       // Pane is 1000 wide; beside would be 840..1100. Under: left 0, bottom max(180, 160) + gap.
       expect(ghost()!.style.transform).toBe(`translate(0px, ${180 + GHOST_CARD_GAP}px)`);
+    });
+
+    it('treats the pane under a docked Brain as off screen', () => {
+      // Beside the board is 340..600 — inside a 1000px pane, but under a 500px right dock.
+      setBoard({ a: { position: { x: 0, y: 0 }, measured: { width: 260, height: 100 }, data: { kind: 'note' } } });
+      renderWithPhase(
+        <CanvasDockInsetsContext.Provider value={{ left: 0, right: 500 }}><PhaseGhostCard /></CanvasDockInsetsContext.Provider>,
+        { phase: 'idea' },
+      );
+      expect(ghost()!.style.transform).toBe(`translate(0px, ${100 + GHOST_CARD_GAP}px)`);
     });
   });
 

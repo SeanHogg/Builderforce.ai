@@ -7,7 +7,9 @@
  *
  * Purchases are Manager+ (the player's own workspace makes them its owner), the
  * same commitment level as any other purchase against a workspace. Building is
- * any member who has cleared the age line, on a workspace with a membership.
+ * any member who has cleared the age line, on a workspace with a membership or a live
+ * free trial. The `/parent/*` routes are the grown-up's, authorised by the signed
+ * link the trial emails carry instead of a session.
  */
 import { Hono } from 'hono';
 import type { Env, HonoEnv } from '../../env';
@@ -21,10 +23,19 @@ import { completeSpawnMembership, startSpawnMembership } from '../../application
 import { completeSpawnTopUp, startSpawnTopUp } from '../../application/spawn/spawnTopUp';
 import { runSpawnBuild } from '../../application/spawn/spawnBuild';
 import { spawnInstallers } from '../../application/spawn/spawnDownloads';
+import { startSpawnTrial } from '../../application/spawn/spawnTrial';
+import {
+  completeParentMembership, completeParentTopUp, spawnParentView, startParentMembership, startParentTopUp,
+} from '../../application/spawn/spawnParent';
 
 const AgeBody = z.object({ year: z.number().int(), month: z.number().int() });
 const PackBody = z.object({ packId: zNonEmptyString });
 const SessionBody = z.object({ sessionId: zNonEmptyString });
+const TrialBody = z.object({ parentEmail: zNonEmptyString });
+/** The parent routes' only credential is the signed link from the trial emails. */
+const ParentBody = z.object({ t: zNonEmptyString });
+const ParentSessionBody = ParentBody.extend({ sessionId: zNonEmptyString });
+const ParentPackBody = ParentBody.extend({ packId: zNonEmptyString });
 /** The plugin's place snapshot is shape-checked here and BOUNDED by `readBuildRequest`. */
 const BuildBody = z.object({
   prompt: z.string(),
@@ -44,20 +55,47 @@ export function createSpawnRoutes(db: Db): Hono<HonoEnv> {
   // Public: every download button links straight to the installer. Cached (spawnDownloads).
   router.get('/downloads', async (c) => c.json(await spawnInstallers(c.env as Env)));
 
+  const appUrl = (c: { env: unknown; req: { url: string } }) => (c.env as Env).APP_URL ?? new URL(c.req.url).origin;
+
+  // Public, for the grown-up: the signed link from the trial emails is the whole
+  // credential, and it can only open this workspace's checkouts (spawnParent.ts).
+  router.get('/parent', async (c) => c.json(await spawnParentView(db, c.env as Env, c.req.query('t') ?? '')));
+  router.post('/parent/membership', async (c) => {
+    const body = await parseBody(c, ParentBody);
+    return c.json(await startParentMembership(db, c.env as Env, { token: body.t, appUrl: appUrl(c) }));
+  });
+  router.post('/parent/membership/complete', async (c) => {
+    const body = await parseBody(c, ParentSessionBody);
+    const membership = await completeParentMembership(db, c.env as Env, { token: body.t, sessionId: body.sessionId });
+    return c.json({ membership: membership.status });
+  });
+  router.post('/parent/tokens', async (c) => {
+    const body = await parseBody(c, ParentPackBody);
+    return c.json(await startParentTopUp(db, c.env as Env, { token: body.t, packId: body.packId, appUrl: appUrl(c) }));
+  });
+  router.post('/parent/tokens/complete', async (c) => {
+    const body = await parseBody(c, ParentSessionBody);
+    return c.json(await completeParentTopUp(db, c.env as Env, { token: body.t, sessionId: body.sessionId }));
+  });
+
   router.use('*', authMiddleware);
 
   const who = (c: { get: (key: 'tenantId' | 'userId') => unknown }) => ({
     tenantId: c.get('tenantId') as number,
     userId: c.get('userId') as string,
   });
-  const appUrl = (c: { env: unknown; req: { url: string } }) => (c.env as Env).APP_URL ?? new URL(c.req.url).origin;
-
   router.get('/account', async (c) => c.json(await spawnAccount(db, c.env as Env, who(c))));
 
   router.post('/age', async (c) => {
     const body = await parseBody(c, AgeBody);
     const age = await recordBirthMonth(db, c.env as Env, { userId: who(c).userId, year: body.year, month: body.month });
     return c.json({ age });
+  });
+
+  // The free week: any member past the age line, once per person and per workspace.
+  router.post('/trial', async (c) => {
+    const body = await parseBody(c, TrialBody);
+    return c.json({ trial: await startSpawnTrial(db, c.env as Env, { ...who(c), parentEmail: body.parentEmail }) });
   });
 
   router.post('/membership', requireRole(TenantRole.MANAGER), async (c) =>

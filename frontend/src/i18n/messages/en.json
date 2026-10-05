@@ -26073,7 +26073,9 @@
       "goTo": "Go to {phase}",
       "letBrain": "Let Brain {verb}",
       "expand": "Show what is missing",
-      "collapse": "Fold this away"
+      "collapse": "Fold this away",
+      "advance": "{phase} has what it needs — {next} is ready when you are.",
+      "stay": "Stay in {phase}"
     },
     "requirement": {
       "idea": {
@@ -32728,8 +32730,8 @@
       "titleLead": "Say it.",
       "titleAccent": "Spawn it.",
       "lede": "Type the game you want. Spawn builds it in Roblox Studio.",
-      "start": "Start building",
-      "fine": "$1.99/month · tokens from $10 · failed builds are free"
+      "start": "Start your free week",
+      "fine": "7 days free · then $1.99/month · no card to start"
     },
     "download": {
       "windows": "Download for Windows",
@@ -32830,7 +32832,7 @@
     "pricing": {
       "title": "Pick your pack",
       "loadFailed": "Prices didn't load. Refresh to try again.",
-      "planName": "Membership",
+      "planName": "Membership · first 7 days free",
       "perMonth": "/ month",
       "join": "Join Spawn",
       "tokens": "{count} tokens",
@@ -32841,6 +32843,10 @@
     "faq": {
       "title": "Questions?",
       "items": [
+        {
+          "q": "Is there a free trial?",
+          "a": "Yes. 7 days and 50,000 tokens, no card. A grown-up gets an email so they can keep Spawn going after it. One free trial per person."
+        },
         {
           "q": "Do I need to know how to code?",
           "a": "No. You describe what you want and Spawn writes the Luau. The scripts are tidy and named clearly, so if you want to learn, you can open them and see how they work."
@@ -32873,7 +32879,8 @@
       "notice": {
         "joined": "Welcome to Spawn! Your membership is active.",
         "tokensAdded": "Tokens added. Happy building!",
-        "cancelled": "Checkout was cancelled. Nothing was charged."
+        "cancelled": "Checkout was cancelled. Nothing was charged.",
+        "trialStarted": "Your free week has started! Get the app and start building."
       },
       "errors": {
         "generic": "Something went wrong. Please try again.",
@@ -32887,7 +32894,10 @@
         "payment_not_paid": "That payment hasn't gone through yet.",
         "payment_wrong_kind": "That payment wasn't for Spawn.",
         "payment_not_yours": "That payment belongs to a different account.",
-        "payment_short": "That payment didn't cover the full price."
+        "payment_short": "That payment didn't cover the full price.",
+        "trial_used": "The free trial has already been used (one per player and one per grown-up). Join to keep building.",
+        "parent_email_invalid": "Enter a grown-up’s email address (not your own).",
+        "parent_link_invalid": "This link isn’t valid any more. Open the newest Spawn email, or ask your player to start again."
       },
       "age": {
         "title": "When were you born?",
@@ -32904,13 +32914,17 @@
           "none": "Not a member",
           "active": "Active",
           "past_due": "Payment due",
-          "cancelled": "Cancelled"
+          "cancelled": "Cancelled",
+          "trial": "Free trial",
+          "trial_ended": "Trial ended"
         },
         "activeBody": "You're a member ({price} a month). The builder and the desktop app are open.",
         "body": {
           "none": "Join for {price} a month to open the builder.",
           "past_due": "Your last payment didn't go through. Rejoin for {price} a month to keep building.",
-          "cancelled": "Your membership ended. Rejoin for {price} a month any time."
+          "cancelled": "Your membership ended. Rejoin for {price} a month any time.",
+          "trial": "You’re on a free trial. Join any time for {price} a month to keep building after it.",
+          "trial_ended": "Your free trial is over. Join for {price} a month to keep building."
         },
         "join": "Join for {price}/month",
         "opening": "Opening checkout…",
@@ -32936,6 +32950,55 @@
           "Open Roblox Studio and any place. Spawn connects by itself.",
           "Type what you want to build, then press Play."
         ]
+      },
+      "trial": {
+        "badge": "🎁 Free trial",
+        "title": "Try Spawn free for {days} days",
+        "body": "{tokens} free tokens, about {builds} builds. No card needed.",
+        "emailLabel": "A grown-up’s email",
+        "emailPlaceholder": "grownup@example.com",
+        "start": "Start my free week",
+        "starting": "Starting…",
+        "why": "We’ll email them what Spawn is and how to keep it going after your free week. One free trial per person.",
+        "liveTitle": "{count, plural, one {# day} other {# days}} left in your free trial",
+        "liveBody": "We emailed {email} so they can keep Spawn going when your trial ends."
+      }
+    },
+    "parent": {
+      "title": "Spawn for grown-ups",
+      "loading": "Loading…",
+      "badge": "For grown-ups",
+      "heading": "{player}’s Spawn",
+      "status": {
+        "trial": "Free trial: {count, plural, one {# day} other {# days}} left.",
+        "active": "Membership active. Thank you!",
+        "trialEnded": "The free trial has ended.",
+        "other": "Not a member yet."
+      },
+      "points": [
+        {
+          "icon": "🎮",
+          "label": "Builds real Roblox games"
+        },
+        {
+          "icon": "🛡️",
+          "label": "Safe for 13+, no backdoors"
+        },
+        {
+          "icon": "💳",
+          "label": "You choose every top-up"
+        }
+      ],
+      "joinTitle": "Keep Spawn going for {player}",
+      "join": "Join for {price}/month",
+      "opening": "Opening checkout…",
+      "joinFine": "Secure Stripe checkout. Cancel any time.",
+      "tokensTitle": "Tokens",
+      "tokensBody": "Each build uses tokens. Builds that fail are free.",
+      "notice": {
+        "joined": "Thank you! Spawn is unlocked.",
+        "tokensAdded": "Tokens added. Thank you!",
+        "cancelled": "Checkout was cancelled. Nothing was charged."
       }
     }
   }

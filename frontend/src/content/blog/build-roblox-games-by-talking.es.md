@@ -62,7 +62,7 @@ Antes de que una operación llegue a tu juego pasa por un filtro de seguridad, y
 }
 ```
 
-La membresía de Spawn cuesta **1,99 $ al mes**. Construir funciona con tokens, que se compran en paquetes de **10, 20, 50 o 100 $**, y los paquetes grandes traen tokens extra. Una creación típica usa unos doce mil tokens, así que un paquete de 10 $ da para unas ochenta creaciones. El saldo siempre se ve en la app. Si una creación falla, no se puede leer o se rechazaron todos sus cambios, el saldo no se toca.
+Cada jugador nuevo tiene **una semana gratis**: siete días y 50.000 tokens, unas cuatro creaciones, sin tarjeta. El jugador añade el correo de un adulto, que recibe un enlace para mantener Spawn sin necesitar la contraseña del jugador. Después de la semana, la membresía de Spawn cuesta **1,99 $ al mes**. Construir funciona con tokens, que se compran en paquetes de **10, 20, 50 o 100 $**, y los paquetes grandes traen tokens extra. Una creación típica usa unos doce mil tokens, así que un paquete de 10 $ da para unas ochenta creaciones. El saldo siempre se ve en la app. Si una creación falla, no se puede leer o se rechazaron todos sus cambios, el saldo no se toca.
 
 Las compras se hacen en la web mediante el pago de Stripe, nunca dentro de la app. Es a propósito: quien paga, a menudo una madre o un padre, decide cada recarga.
 
@@ -75,7 +75,7 @@ Todos los productos de Builderforce siguen el mismo arco: **Idea → Hacer → E
 ## Empieza
 
 1. Ve a [spawn.builderforce.ai](/spawn) y crea tu cuenta (pregunta a tu madre o padre).
-2. Únete por 1,99 $ al mes y consigue un paquete de tokens.
+2. Empieza tu semana gratis (pide a un adulto su correo). Después, únete por 1,99 $ al mes y consigue un paquete de tokens.
 3. Descarga la app Spawn, inicia sesión, abre Roblox Studio y escribe lo que quieres construir.
 
 *Spawn está hecho por Builderforce.ai y no está afiliado ni respaldado por Roblox Corporation.*

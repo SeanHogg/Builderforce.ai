@@ -28,6 +28,9 @@ export interface UseCanvasSessionDeps {
   lastSavedGraphRef: RefObject<string>;
   nodes: CanvasObject[];
   noteSaveState: () => void;
+  /** Told ONCE, with the board as it loaded (local snapshot or server copy) — never on later edits.
+   *  The loader is the one place that knows when "the board" stops meaning the starter. */
+  onBoardLoaded: (nodes: readonly CanvasObject[]) => void;
   pendingViewportRef: RefObject<{ x: number; y: number; zoom: number; } | null>;
   persistence: 'local' | 'server';
   revisionRef: RefObject<number>;
@@ -56,7 +59,7 @@ export interface UseCanvasSessionDeps {
   viewportRef: RefObject<{ x: number; y: number; zoom: number; }>;
 }
 
-export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef }: UseCanvasSessionDeps) {
+export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, onBoardLoaded, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef }: UseCanvasSessionDeps) {
   useEffect(() => {
     try {
       if (persistence === 'local') {
@@ -71,6 +74,7 @@ export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowR
           setSessionMode_(normalizeChatMode(saved.mode));
           if (saved.viewport) { viewportRef.current = saved.viewport; pendingViewportRef.current = saved.viewport; void flowRef.current?.setViewport(saved.viewport); }
         }
+        onBoardLoaded(saved?.nodes ?? []);
         hydratedRef.current = true;
         trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: canvasSurface(), persistence: 'local' } });
         return;
@@ -90,6 +94,7 @@ export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowR
         setSessionMode_(normalizeChatMode(detail.session.mode));
         setBranchParentId(detail.session.branchParentSessionId ?? null);
         setNodes(loadedNodes);
+        onBoardLoaded(loadedNodes);
         setEdges(loadedEdges);
         setPersistedObjectIds(new Set(loadedNodes.map((node) => node.id)));
         setMembers(detail.members);
@@ -120,7 +125,7 @@ export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowR
         setNotice(faultText(error, t('noticeLoadSessionFailed')));
       }).finally(() => setLoadingSession(false));
     } catch { hydratedRef.current = true; }
-  }, [commitRevision, currentGraphRef, flowRef, hydratedRef, lastSavedGraphRef, noteSaveState, pendingViewportRef, persistence, revisionRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, viewportRef]);
+  }, [commitRevision, currentGraphRef, flowRef, hydratedRef, lastSavedGraphRef, noteSaveState, onBoardLoaded, pendingViewportRef, persistence, revisionRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, viewportRef]);
 
   /**
    * Adopt the room's board. Used for the first load in a shared session and for

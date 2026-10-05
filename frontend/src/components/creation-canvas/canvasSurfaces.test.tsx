@@ -588,11 +588,43 @@ describe('useCanvasSurfaceState — which phase a canvas opens in', () => {
     expect(mount('empty', BOARDS.idea).result.current.phase).toBe('idea');
   });
 
-  it('follows the frontier as the board changes, until someone chooses', () => {
+  it('follows the frontier only while the board is still loading', () => {
     const { result, rerender } = mount('moving', BOARDS.idea);
     expect(result.current.phase).toBe('idea');
     rerender({ sessionId: 'moving', nodes: BOARDS.make });
     expect(result.current.phase).toBe('make');
+  });
+
+  it('settles at the frontier the board LOADED with, and never moves the reader after that', () => {
+    const { result, rerender } = mount('settled', BOARDS.make);
+    act(() => { result.current.settleLoadedPhase(BOARDS.make); });
+    expect(result.current.phase).toBe('make');
+    // Work in Make finishes: an app and a live deployment land. The phase stays put —
+    // the path card offers the next one instead.
+    rerender({ sessionId: 'settled', nodes: BOARDS.measure });
+    expect(result.current.phase).toBe('make');
+    expect(result.current.phaseReadiness.frontier).toBe('measure');
+  });
+
+  it('settles once per canvas — a later load report does not move it', () => {
+    const { result } = mount('once', BOARDS.idea);
+    act(() => { result.current.settleLoadedPhase(BOARDS.make); });
+    act(() => { result.current.settleLoadedPhase(BOARDS.measure); });
+    expect(result.current.phase).toBe('make');
+  });
+
+  it('a settled frontier never carries into another canvas', () => {
+    const { result, rerender } = mount('settle-a', BOARDS.make);
+    act(() => { result.current.settleLoadedPhase(BOARDS.make); });
+    rerender({ sessionId: 'settle-b', nodes: BOARDS.measure });
+    expect(result.current.phase).toBe('measure');
+  });
+
+  it('a remembered choice still beats the settled frontier', () => {
+    window.localStorage.setItem(canvasPhaseStorageKey('both'), 'reach');
+    const { result } = mount('both', BOARDS.make);
+    act(() => { result.current.settleLoadedPhase(BOARDS.make); });
+    expect(result.current.phase).toBe('reach');
   });
 
   it('hands back the same readiness object when a change leaves the signals alone', () => {

@@ -113,6 +113,16 @@ export function readinessByPhase(signals: ReadinessSignals): Readonly<Record<Can
   return Object.fromEntries(CANVAS_PHASES.map((phase) => [phase, phaseReadiness(phase, signals)])) as Record<CanvasPhase, CanvasPhaseReadiness>;
 }
 
+/**
+ * The phase to OFFER next, or null: the one after `phase`, when the board already holds
+ * this phase's output and the next is ready. The canvas never moves a reader on its own
+ * (see `useCanvasSurfaceState`); this is what the path card offers instead.
+ */
+export function nextPhaseOffer(phase: CanvasPhase, byPhase: Readonly<Record<CanvasPhase, CanvasPhaseReadiness>>): CanvasPhase | null {
+  const next = CANVAS_PHASES[CANVAS_PHASES.indexOf(phase) + 1];
+  return next && byPhase[phase].done && byPhase[next].ready ? next : null;
+}
+
 /** The first phase whose own output does not exist yet — where a canvas with no stored
  *  phase opens. A board with everything through Measure opens in Reach. */
 export function frontierPhase(signals: ReadinessSignals): CanvasPhase {

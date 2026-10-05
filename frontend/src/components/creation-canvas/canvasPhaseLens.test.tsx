@@ -149,7 +149,7 @@ describe('CreationNode under the lens', () => {
   });
 });
 
-describe('ghostPosition — where the phase's first object would go', () => {
+describe('ghostPosition — where the phase’s first object would go', () => {
   const WIDE = { x: 0, y: 0, width: 2000, height: 1000 };
 
   it('centres the ghost in what is on screen on an empty board', () => {

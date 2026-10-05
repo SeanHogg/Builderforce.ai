@@ -6,6 +6,7 @@ import { WorkspacePicker } from '@/components/auth/WorkspacePicker';
 import { useWorkspaceSession } from '@/lib/auth/useWorkspaceSession';
 import { useSpawnAccount } from './useSpawnAccount';
 import { SpawnAgeGate } from './SpawnAgeGate';
+import { SpawnTrialPanel } from './SpawnTrialPanel';
 import { SpawnMembershipPanel } from './SpawnMembershipPanel';
 import { SpawnTokensPanel } from './SpawnTokensPanel';
 import { SpawnDesktopPanel } from './SpawnDesktopPanel';
@@ -13,15 +14,16 @@ import styles from './spawn.module.css';
 
 /**
  * The Spawn account, as the steps a new player walks in order: sign in → (pick a
- * workspace) → say your age → join → get tokens → get the app. Each panel shows
- * only once the step before it is done, so the page is always "the next thing".
+ * workspace) → say your age → start the free week (or join) → get tokens → get the
+ * app. Each panel shows only once the step before it is done, so the page is always
+ * "the next thing".
  */
 export function SpawnAccountPage() {
   const t = useTranslations('spawn.account');
   const { requestSignIn } = useSignInDialog();
   const workspace = useWorkspaceSession();
   const ready = workspace.status === 'ready';
-  const { account, errorKey, notice, busy, confirmAge, join, buy } = useSpawnAccount(ready);
+  const { account, errorKey, notice, busy, confirmAge, startTrial, join, buy } = useSpawnAccount(ready);
 
   return (
     <main className={styles.account}>
@@ -56,6 +58,7 @@ export function SpawnAccountPage() {
       )}
       {account && account.age === 'ok' && (
         <>
+          <SpawnTrialPanel trial={account.trial} busy={busy === 'trial'} onStart={startTrial} />
           <SpawnMembershipPanel status={account.membership} monthlyCents={account.monthlyCents} busy={busy === 'join'} onJoin={join} />
           <SpawnTokensPanel account={account} busyPackId={busy} onBuy={buy} />
           <SpawnDesktopPanel ready={account.canBuild} />

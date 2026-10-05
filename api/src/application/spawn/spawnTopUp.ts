@@ -16,7 +16,8 @@ import { spawnTokenPack } from './spawnCatalog';
 import { verifySpawnCheckout } from './spawnCheckout';
 import { SpawnError } from './spawnErrors';
 import { spawnWallet } from './spawnWallet';
-import { assertSpawnMember } from './spawnMembership';
+import { assertSpawnPaidMember } from './spawnMembership';
+import { spawnReturnUrl, type SpawnReturn } from './spawnReturn';
 
 /** The `purchaseKind` stamped on a token-pack session. */
 export const SPAWN_TOKENS_KIND = 'spawn_tokens';
@@ -24,22 +25,23 @@ export const SPAWN_TOKENS_KIND = 'spawn_tokens';
 export async function startSpawnTopUp(
   db: Db,
   env: Env,
-  input: { tenantId: number; userId: string; packId: string; billingEmail?: string | null; appUrl: string },
+  input: { tenantId: number; userId: string; packId: string; billingEmail?: string | null; appUrl: string; returnTo?: SpawnReturn },
 ): Promise<{ checkoutUrl: string; sessionId: string }> {
   const pack = spawnTokenPack(input.packId);
   if (!pack) throw new SpawnError('That token pack does not exist', 404, 'pack_not_found');
   if (!env.STRIPE_SECRET_KEY) throw new SpawnError('Payments are not configured', 400, 'payments_unavailable');
-  // Tokens only spend inside a membership, so selling them outside one would take
-  // money for something the buyer cannot use yet.
-  await assertSpawnMember(db, env, { tenantId: input.tenantId, userId: input.userId });
+  // Tokens only spend inside a membership, so selling them outside a PAID one would
+  // take money for something a trial could stop the buyer using next week.
+  await assertSpawnPaidMember(db, env, { tenantId: input.tenantId, userId: input.userId });
+  const back = spawnReturnUrl(input.appUrl, input.returnTo);
 
   return buildPaymentProvider(env).createOneTimeCheckoutSession({
     amountCents: pack.cents,
     currency: 'USD',
     productName: `Spawn tokens — ${pack.tokens.toLocaleString('en-US')}`,
     billingEmail: input.billingEmail ?? null,
-    successUrl: `${input.appUrl}/spawn/account?tokens={CHECKOUT_SESSION_ID}`,
-    cancelUrl: `${input.appUrl}/spawn/account?tokens=cancelled`,
+    successUrl: `${back}tokens={CHECKOUT_SESSION_ID}`,
+    cancelUrl: `${back}tokens=cancelled`,
     metadata: {
       purchaseKind: SPAWN_TOKENS_KIND,
       tenantId: String(input.tenantId),

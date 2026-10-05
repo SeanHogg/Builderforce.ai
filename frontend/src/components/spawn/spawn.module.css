@@ -382,6 +382,35 @@
 }
 .ctaBand .download { justify-items: center; }
 
+/* ── Free trial ──────────────────────────────────────────────────────── */
+.trialOffer {
+  composes: card;
+  gap: 14px;
+  justify-items: start;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--spawn-tile), var(--spawn-tile)) padding-box,
+    linear-gradient(135deg, var(--spawn-a), var(--spawn-b), var(--spawn-c)) border-box;
+}
+.trialLive {
+  composes: card;
+  background: color-mix(in srgb, var(--success) 14%, var(--spawn-tile));
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+}
+.trialForm { display: grid; gap: 10px; width: min(100%, 440px); }
+.fieldLabel { font-weight: 800; font-size: var(--font-size-field-label); }
+.input {
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--border-subtle);
+  background: var(--bg-elevated, var(--surface-card));
+  color: var(--text-primary);
+  font: inherit;
+}
+.input:focus { outline: none; border-color: var(--spawn-a); }
+.trialForm .ctaBig { width: 100%; }
+
 /* ── Account ─────────────────────────────────────────────────────────── */
 .account { width: min(760px, 100%); margin: 0 auto; padding: clamp(24px, 6vh, 56px) 16px 64px; display: grid; gap: 20px; }
 .panel { composes: card; gap: 14px; }

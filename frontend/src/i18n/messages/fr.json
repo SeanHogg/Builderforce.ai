@@ -26073,7 +26073,9 @@
       "goTo": "Aller à {phase}",
       "letBrain": "Laisser Brain {verb}",
       "expand": "Afficher ce qui manque",
-      "collapse": "Replier"
+      "collapse": "Replier",
+      "advance": "{phase} a ce qu’il lui faut — {next} est prêt quand vous l’êtes.",
+      "stay": "Rester dans {phase}"
     },
     "requirement": {
       "idea": {
@@ -32728,8 +32730,8 @@
       "titleLead": "Dis-le.",
       "titleAccent": "Spawn-le.",
       "lede": "Écris le jeu que tu veux. Spawn le construit dans Roblox Studio.",
-      "start": "Commencer à créer",
-      "fine": "1,99 $/mois · tokens dès 10 $ · les créations ratées sont gratuites"
+      "start": "Commence ta semaine gratuite",
+      "fine": "7 jours gratuits · puis 1,99 $/mois · sans carte pour commencer"
     },
     "download": {
       "windows": "Télécharger pour Windows",
@@ -32830,7 +32832,7 @@
     "pricing": {
       "title": "Choisis ton pack",
       "loadFailed": "Les tarifs n'ont pas pu se charger. Actualise pour réessayer.",
-      "planName": "Abonnement",
+      "planName": "Abonnement · 7 premiers jours gratuits",
       "perMonth": "/ mois",
       "join": "Rejoindre Spawn",
       "tokens": "{count} jetons",
@@ -32841,6 +32843,10 @@
     "faq": {
       "title": "Des questions ?",
       "items": [
+        {
+          "q": "Y a-t-il un essai gratuit ?",
+          "a": "Oui. 7 jours et 50 000 tokens, sans carte. Un adulte reçoit un e-mail pour pouvoir continuer Spawn ensuite. Un seul essai gratuit par personne."
+        },
         {
           "q": "Faut-il savoir coder ?",
           "a": "Non. Tu décris ce que tu veux et Spawn écrit le Luau. Les scripts sont propres et bien nommés : si tu veux apprendre, ouvre-les pour voir comment ils marchent."
@@ -32873,7 +32879,8 @@
       "notice": {
         "joined": "Bienvenue dans Spawn ! Ton abonnement est actif.",
         "tokensAdded": "Jetons ajoutés. Bonne création !",
-        "cancelled": "Paiement annulé. Rien n'a été facturé."
+        "cancelled": "Paiement annulé. Rien n'a été facturé.",
+        "trialStarted": "Ta semaine gratuite a commencé ! Télécharge l’appli et crée."
       },
       "errors": {
         "generic": "Une erreur est survenue. Réessaie.",
@@ -32887,7 +32894,10 @@
         "payment_not_paid": "Ce paiement n'est pas encore passé.",
         "payment_wrong_kind": "Ce paiement n'était pas pour Spawn.",
         "payment_not_yours": "Ce paiement appartient à un autre compte.",
-        "payment_short": "Ce paiement ne couvrait pas le prix complet."
+        "payment_short": "Ce paiement ne couvrait pas le prix complet.",
+        "trial_used": "L’essai gratuit a déjà été utilisé (un par joueur et un par adulte). Rejoins pour continuer à créer.",
+        "parent_email_invalid": "Saisis l’e-mail d’un adulte (pas le tien).",
+        "parent_link_invalid": "Ce lien n’est plus valide. Ouvre le dernier e-mail de Spawn ou demande à ton joueur de recommencer."
       },
       "age": {
         "title": "Quand es-tu né(e) ?",
@@ -32904,13 +32914,17 @@
           "none": "Non abonné",
           "active": "Actif",
           "past_due": "Paiement en attente",
-          "cancelled": "Résilié"
+          "cancelled": "Résilié",
+          "trial": "Essai gratuit",
+          "trial_ended": "Essai terminé"
         },
         "activeBody": "Tu es abonné(e) ({price} par mois). Le créateur et l'app de bureau sont ouverts.",
         "body": {
           "none": "Abonne-toi pour {price} par mois pour ouvrir le créateur.",
           "past_due": "Ton dernier paiement n'est pas passé. Réabonne-toi pour {price} par mois pour continuer.",
-          "cancelled": "Ton abonnement est terminé. Réabonne-toi pour {price} par mois quand tu veux."
+          "cancelled": "Ton abonnement est terminé. Réabonne-toi pour {price} par mois quand tu veux.",
+          "trial": "Tu es en essai gratuit. Rejoins quand tu veux pour {price} par mois et continue à créer ensuite.",
+          "trial_ended": "Ton essai gratuit est terminé. Rejoins pour {price} par mois pour continuer à créer."
         },
         "join": "S'abonner pour {price}/mois",
         "opening": "Ouverture du paiement…",
@@ -32936,6 +32950,55 @@
           "Ouvre Roblox Studio et n'importe quel emplacement. Spawn se connecte tout seul.",
           "Écris ce que tu veux construire, puis appuie sur Play."
         ]
+      },
+      "trial": {
+        "badge": "🎁 Essai gratuit",
+        "title": "Essaie Spawn gratuitement {days} jours",
+        "body": "{tokens} tokens gratuits, environ {builds} créations. Sans carte.",
+        "emailLabel": "E-mail d’un adulte",
+        "emailPlaceholder": "adulte@exemple.com",
+        "start": "Commencer ma semaine gratuite",
+        "starting": "C’est parti…",
+        "why": "Nous lui enverrons un e-mail expliquant Spawn et comment continuer après ta semaine gratuite. Un seul essai gratuit par personne.",
+        "liveTitle": "{count, plural, one {# jour restant} other {# jours restants}} dans ton essai gratuit",
+        "liveBody": "Nous avons écrit à {email} pour que Spawn puisse continuer à la fin de ton essai."
+      }
+    },
+    "parent": {
+      "title": "Spawn pour les adultes",
+      "loading": "Chargement…",
+      "badge": "Pour les adultes",
+      "heading": "Le Spawn de {player}",
+      "status": {
+        "trial": "Essai gratuit : {count, plural, one {# jour restant} other {# jours restants}}.",
+        "active": "Abonnement actif. Merci !",
+        "trialEnded": "L’essai gratuit est terminé.",
+        "other": "Pas encore abonné."
+      },
+      "points": [
+        {
+          "icon": "🎮",
+          "label": "Crée de vrais jeux Roblox"
+        },
+        {
+          "icon": "🛡️",
+          "label": "Sûr dès 13 ans, sans porte dérobée"
+        },
+        {
+          "icon": "💳",
+          "label": "Vous choisissez chaque recharge"
+        }
+      ],
+      "joinTitle": "Continuer Spawn pour {player}",
+      "join": "S’abonner pour {price}/mois",
+      "opening": "Ouverture du paiement…",
+      "joinFine": "Paiement sécurisé par Stripe. Résiliable à tout moment.",
+      "tokensTitle": "Tokens",
+      "tokensBody": "Chaque création utilise des tokens. Les créations ratées sont gratuites.",
+      "notice": {
+        "joined": "Merci ! Spawn est débloqué.",
+        "tokensAdded": "Tokens ajoutés. Merci !",
+        "cancelled": "Le paiement a été annulé. Rien n’a été facturé."
       }
     }
   }

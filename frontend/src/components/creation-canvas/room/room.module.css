@@ -8,9 +8,11 @@
 
 /* ── Mode bar ─────────────────────────────────────────────────────────────── */
 
+/* Below the canvas's floating top chrome (the phase card, or the phone's app bar), the
+   measured band every surface clears: at a flat 10px the card covered the bar's end. */
 .modeBar {
   position: absolute;
-  top: 10px;
+  top: calc(var(--canvas-top-chrome-space, 0px) + 10px);
   left: 12px;
   right: 12px;
   z-index: 2;

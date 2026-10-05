@@ -17,12 +17,15 @@ export type SpawnErrorCode =
   | 'payment_short'
   | 'prompt_empty'
   | 'generator_unavailable'
-  | 'generator_unreadable';
+  | 'generator_unreadable'
+  | 'trial_used'
+  | 'parent_email_invalid'
+  | 'parent_link_invalid';
 
 export class SpawnError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 402 | 403 | 404 | 502,
+    readonly status: 400 | 402 | 403 | 404 | 409 | 502,
     readonly code: SpawnErrorCode,
   ) {
     super(message);

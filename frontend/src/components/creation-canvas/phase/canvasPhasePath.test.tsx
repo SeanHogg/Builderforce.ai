@@ -29,6 +29,27 @@ describe('CanvasPhasePath', () => {
     expect(path()).toBeNull();
   });
 
+  it('offers the next phase once this one has what it needs — it never moves the reader itself', () => {
+    const setPhase = vi.fn();
+    renderWithPhase(<CanvasPhasePath />, { phase: 'run', signals: { hasIdea: true, hasApp: true, isLive: true }, setPhase });
+    expect(path()).toHaveAttribute('data-tone', 'next');
+    expect(path()).toHaveTextContent('Run has what it needs — Measure is ready when you are.');
+    expect(setPhase).not.toHaveBeenCalled();
+    fireEvent.click(within(path()!).getByRole('button', { name: 'Go to Measure' }));
+    expect(setPhase).toHaveBeenCalledWith('measure');
+  });
+
+  it('lets the reader stay, and stays quiet about it in that phase', () => {
+    renderWithPhase(<CanvasPhasePath />, { phase: 'run', signals: { hasIdea: true, hasApp: true, isLive: true } });
+    fireEvent.click(within(path()!).getByRole('button', { name: 'Stay in Run' }));
+    expect(path()).toBeNull();
+  });
+
+  it('offers nothing past the last phase', () => {
+    renderWithPhase(<CanvasPhasePath />, { phase: 'reach', signals: ALL_SIGNALS });
+    expect(path()).toBeNull();
+  });
+
   it('says nothing outside a canvas', () => {
     render(<CanvasPhasePath />);
     expect(path()).toBeNull();

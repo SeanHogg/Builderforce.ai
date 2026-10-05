@@ -1,6 +1,7 @@
 // No 'use client' directive: rendered only inside `CreationCanvas`, which declares it.
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { nextPhaseOffer } from '@/lib/canvasPhaseReadiness';
 import { useCanvasPhase, useLetBrain } from './CanvasPhaseContext';
 import styles from '../CreationCanvas.module.css';
 
@@ -17,6 +18,10 @@ import styles from '../CreationCanvas.module.css';
  * is still missing. Reach's metric ADVISORY renders as a single warning-tone line: going
  * out without a metric is allowed, but the canvas says it is spending blind.
  *
+ * A ready phase whose own output is already on the board gets the OFFER instead: the canvas
+ * never moves a reader on its own (`useCanvasSurfaceState` settles the phase at load), so
+ * this is where "Measure is ready" is said — once, dismissible in memory per phase.
+ *
  * Self-contained: it reads the phase from `CanvasPhaseContext` and returns null when
  * there is nothing to say.
  */
@@ -26,11 +31,30 @@ export function CanvasPhasePath() {
   const phaseValue = useCanvasPhase();
   const letBrain = useLetBrain();
   const [collapsed, setCollapsed] = useState(false);
+  const [dismissedIn, setDismissedIn] = useState<string | null>(null);
   if (!phaseValue || !letBrain) return null;
-  const { phase, current, setPhase } = phaseValue;
-  if (current.ready && current.advisories.length === 0) return null;
+  const { phase, current, setPhase, readiness } = phaseValue;
   const stage = (id: string) => tn(`stage.${id}` as 'stage.idea');
   const toggleLabel = collapsed ? t('phasePath.expand') : t('phasePath.collapse');
+  const offer = current.ready && current.advisories.length === 0 ? nextPhaseOffer(phase, readiness.byPhase) : null;
+
+  if (offer) {
+    if (dismissedIn === phase) return null;
+    return (
+      <div className={styles.phasePath} role="status" data-tone="next" data-testid="canvas-phase-path">
+        <p className={styles.phasePathBody}>{t('phasePath.advance', { phase: stage(phase), next: stage(offer) })}</p>
+        <div className={styles.phasePathActions}>
+          <button type="button" className={styles.phasePathButton} data-primary="true" onClick={() => setPhase(offer)}>
+            {t('phasePath.goTo', { phase: stage(offer) })}
+          </button>
+          <button type="button" className={styles.phasePathButton} onClick={() => setDismissedIn(phase)}>
+            {t('phasePath.stay', { phase: stage(phase) })}
+          </button>
+        </div>
+      </div>
+    );
+  }
+  if (current.ready && current.advisories.length === 0) return null;
 
   if (current.ready) {
     const advisory = current.advisories[0]!;

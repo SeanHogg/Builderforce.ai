@@ -26073,7 +26073,9 @@
       "goTo": "前往{phase}",
       "letBrain": "让 Brain {verb}",
       "expand": "显示缺少的内容",
-      "collapse": "收起"
+      "collapse": "收起",
+      "advance": "{phase}已具备所需条件——准备好后即可进入{next}。",
+      "stay": "留在{phase}"
     },
     "requirement": {
       "idea": {
@@ -32728,8 +32730,8 @@
       "titleLead": "说出来，",
       "titleAccent": "就生成。",
       "lede": "输入你想要的游戏，Spawn 就在 Roblox Studio 里把它做出来。",
-      "start": "开始创作",
-      "fine": "每月 1.99 美元 · 代币 10 美元起 · 失败的生成免费"
+      "start": "开始免费一周",
+      "fine": "7 天免费 · 之后每月 1.99 美元 · 开始时无需银行卡"
     },
     "download": {
       "windows": "下载 Windows 版",
@@ -32830,7 +32832,7 @@
     "pricing": {
       "title": "选择你的代币包",
       "loadFailed": "价格加载失败，请刷新重试。",
-      "planName": "会员",
+      "planName": "会员 · 前 7 天免费",
       "perMonth": "/ 月",
       "join": "加入 Spawn",
       "tokens": "{count} 个代币",
@@ -32841,6 +32843,10 @@
     "faq": {
       "title": "有问题？",
       "items": [
+        {
+          "q": "有免费试用吗？",
+          "a": "有。7 天、50,000 个代币，无需银行卡。家长会收到一封邮件，方便他们在试用后继续为你开通 Spawn。每人仅限一次免费试用。"
+        },
         {
           "q": "我需要会编程吗？",
           "a": "不需要。你描述想要什么，Spawn 来写 Luau。脚本整洁、命名清楚，想学的话可以打开看看它们是怎么运作的。"
@@ -32873,7 +32879,8 @@
       "notice": {
         "joined": "欢迎加入 Spawn！你的会员已生效。",
         "tokensAdded": "代币已到账，尽情创作吧！",
-        "cancelled": "结账已取消，没有产生任何费用。"
+        "cancelled": "结账已取消，没有产生任何费用。",
+        "trialStarted": "你的免费一周开始了！下载应用，开始制作吧。"
       },
       "errors": {
         "generic": "出了点问题，请重试。",
@@ -32887,7 +32894,10 @@
         "payment_not_paid": "这笔付款尚未完成。",
         "payment_wrong_kind": "这笔付款不是用于 Spawn 的。",
         "payment_not_yours": "这笔付款属于另一个账户。",
-        "payment_short": "这笔付款不足以支付全价。"
+        "payment_short": "这笔付款不足以支付全价。",
+        "trial_used": "免费试用已经用过了（每位玩家、每位家长各限一次）。加入即可继续生成。",
+        "parent_email_invalid": "请输入家长的邮箱地址（不能是你自己的）。",
+        "parent_link_invalid": "这个链接已失效。请打开最新的 Spawn 邮件，或让孩子重新开始。"
       },
       "age": {
         "title": "你是什么时候出生的？",
@@ -32904,13 +32914,17 @@
           "none": "非会员",
           "active": "有效",
           "past_due": "待付款",
-          "cancelled": "已取消"
+          "cancelled": "已取消",
+          "trial": "免费试用",
+          "trial_ended": "试用已结束"
         },
         "activeBody": "你是会员（每月 {price}）。制作器和桌面应用已开启。",
         "body": {
           "none": "每月 {price} 加入，即可开启制作器。",
           "past_due": "你上一次付款没有成功。以每月 {price} 重新加入即可继续创作。",
-          "cancelled": "你的会员已结束。随时可以每月 {price} 重新加入。"
+          "cancelled": "你的会员已结束。随时可以每月 {price} 重新加入。",
+          "trial": "你正在免费试用。随时以每月 {price} 加入，试用结束后也能继续生成。",
+          "trial_ended": "你的免费试用已结束。以每月 {price} 加入即可继续生成。"
         },
         "join": "以 {price}/月 加入",
         "opening": "正在打开结账页…",
@@ -32936,6 +32950,55 @@
           "打开 Roblox Studio 和任意场景，Spawn 会自动连接。",
           "写下你想做的东西，然后按 Play。"
         ]
+      },
+      "trial": {
+        "badge": "🎁 免费试用",
+        "title": "免费试用 Spawn {days} 天",
+        "body": "{tokens} 个免费代币，约 {builds} 次生成。无需银行卡。",
+        "emailLabel": "家长的邮箱",
+        "emailPlaceholder": "grownup@example.com",
+        "start": "开始我的免费一周",
+        "starting": "正在开始…",
+        "why": "我们会给他们发邮件，介绍 Spawn 以及免费一周后如何继续使用。每人仅限一次免费试用。",
+        "liveTitle": "免费试用还剩 {count} 天",
+        "liveBody": "我们已给 {email} 发了邮件，方便他们在试用结束后为你继续开通 Spawn。"
+      }
+    },
+    "parent": {
+      "title": "给家长的 Spawn",
+      "loading": "加载中…",
+      "badge": "给家长",
+      "heading": "{player} 的 Spawn",
+      "status": {
+        "trial": "免费试用：还剩 {count} 天。",
+        "active": "会员已开通，谢谢您！",
+        "trialEnded": "免费试用已结束。",
+        "other": "尚未开通会员。"
+      },
+      "points": [
+        {
+          "icon": "🎮",
+          "label": "制作真正的 Roblox 游戏"
+        },
+        {
+          "icon": "🛡️",
+          "label": "适合 13 岁以上，没有后门"
+        },
+        {
+          "icon": "💳",
+          "label": "每次充值由您决定"
+        }
+      ],
+      "joinTitle": "为 {player} 继续开通 Spawn",
+      "join": "以每月 {price} 加入",
+      "opening": "正在打开结账页…",
+      "joinFine": "Stripe 安全结账，可随时取消。",
+      "tokensTitle": "代币",
+      "tokensBody": "每次生成都会消耗代币。失败的生成免费。",
+      "notice": {
+        "joined": "谢谢您！Spawn 已开通。",
+        "tokensAdded": "代币已到账，谢谢您！",
+        "cancelled": "已取消结账，未产生任何费用。"
       }
     }
   }

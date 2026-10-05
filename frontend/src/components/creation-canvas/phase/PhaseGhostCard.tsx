@@ -7,6 +7,7 @@ import type { CanvasPhase } from '@/lib/canvasPhases';
 import { usePhoneViewport } from '@/lib/usePhoneViewport';
 import type { CreationObjectKind } from '../types';
 import { useCanvasSurfaceDefinition } from '../canvasSurfaceContext';
+import { useCanvasDockInsets, type CanvasDockInsets } from '../stage/canvasDockInsets';
 import { useCanvasPhase, useLetBrain } from './CanvasPhaseContext';
 import styles from '../CreationCanvas.module.css';
 
@@ -36,7 +37,7 @@ type FlowState = {
 
 /** "in-phase card exists" and the ghost's flow position, as one string so the store
  *  re-renders this only when one of them changes — not on every pointer move. */
-function placementKey(state: FlowState, phase: CanvasPhase): string {
+function placementKey(state: FlowState, phase: CanvasPhase, insets: CanvasDockInsets): string {
   const nodes: LensNode[] = [];
   let hasIn = false;
   for (const node of state.nodeLookup?.values() ?? []) {
@@ -46,7 +47,10 @@ function placementKey(state: FlowState, phase: CanvasPhase): string {
   if (hasIn) return 'in';
   const [tx, ty, rawZoom] = state.transform ?? [0, 0, 1];
   const zoom = rawZoom || 1;
-  const viewport = { x: -tx / zoom, y: -ty / zoom, width: (state.width ?? 0) / zoom, height: (state.height ?? 0) / zoom };
+  // The pane runs under the Brain dock: what is on screen is the pane minus the dock.
+  const paneWidth = state.width ?? 0;
+  const visibleWidth = paneWidth > 0 ? Math.max(0, paneWidth - insets.left - insets.right) : 0;
+  const viewport = { x: (insets.left - tx) / zoom, y: -ty / zoom, width: visibleWidth / zoom, height: (state.height ?? 0) / zoom };
   const { x, y } = ghostPosition(nodes, viewport);
   return `${Math.round(x)}|${Math.round(y)}`;
 }
@@ -59,7 +63,8 @@ export function PhaseGhostCard() {
   const surfaceDef = useCanvasSurfaceDefinition();
   const phone = usePhoneViewport();
   const phase = phaseValue?.phase ?? 'idea';
-  const key = useStore(useCallback((state: FlowState) => placementKey(state, phase), [phase]));
+  const insets = useCanvasDockInsets();
+  const key = useStore(useCallback((state: FlowState) => placementKey(state, phase, insets), [phase, insets]));
   if (!phaseValue || !letBrain || !phaseValue.focusEnabled || phone || !surfaceDef.showsBoard || key === 'in') return null;
   const [x, y] = key.split('|').map(Number) as [number, number];
   const { current, appendAtCenter } = phaseValue;

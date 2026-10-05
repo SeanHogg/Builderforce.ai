@@ -239,15 +239,15 @@ function render(template: string, vars: Record<string, string>): string {
 const fill = fillCopy;
 
 /** Wraps every paragraph of body copy identically so templates stay declarative. */
-function p(copy: string, style?: string): string {
+export function p(copy: string, style?: string): string {
   return `\n      <p${style ? ` style="${style}"` : ''}>${copy}</p>`;
 }
 
 /** The muted small print used for "you can ignore this" notes across templates. */
-const MUTED = 'font-size:13px; color:#64748b;';
+export const MUTED = 'font-size:13px; color:#64748b;';
 
 /** A centred call-to-action button. */
-function cta(href: string, label: string): string {
+export function cta(href: string, label: string): string {
   return `
       <p style="text-align:center; margin: 28px 0;">
         <a href="${href}" class="button">${label}</a>
@@ -312,9 +312,10 @@ function greeting(copy: EmailCopy, named: boolean): string {
 /**
  * Assemble + send one message. Every sender funnels through here so the chrome,
  * the `{{Subject}}` / `{{Year}}` / `{{Lang}}` substitution and the provider no-op
- * are written exactly once.
+ * are written exactly once — including senders that live in their own modules
+ * (`spawnParentEmail.ts`) rather than growing this file.
  */
-async function deliver(
+export async function deliver(
   env: EmailEnv,
   args: {
     to: string;

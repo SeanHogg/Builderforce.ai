@@ -62,7 +62,7 @@ Avant d'atteindre ton jeu, chaque opération passe un filtre de sécurité, stri
 }
 ```
 
-L'abonnement Spawn coûte **1,99 $ par mois**. La construction fonctionne avec des jetons, achetés en packs de **10, 20, 50 ou 100 $**, et les gros packs offrent des jetons bonus. Une création typique utilise environ douze mille jetons : un pack de 10 $ représente donc environ quatre-vingts créations. Le solde est toujours visible dans l'app. Quand une création échoue, est illisible ou voit toutes ses modifications refusées, le solde n'est pas touché.
+Chaque nouveau joueur a droit à **une semaine gratuite** : sept jours et 50 000 jetons, environ quatre créations, sans carte. Le joueur ajoute l'e-mail d'un adulte, qui reçoit un lien pour continuer Spawn sans le mot de passe du joueur. Après cette semaine, l'abonnement Spawn coûte **1,99 $ par mois**. La construction fonctionne avec des jetons, achetés en packs de **10, 20, 50 ou 100 $**, et les gros packs offrent des jetons bonus. Une création typique utilise environ douze mille jetons : un pack de 10 $ représente donc environ quatre-vingts créations. Le solde est toujours visible dans l'app. Quand une création échoue, est illisible ou voit toutes ses modifications refusées, le solde n'est pas touché.
 
 Les achats se font sur le site via le paiement Stripe, jamais dans l'app. C'est voulu : la personne qui paie, souvent un parent, choisit chaque recharge.
 
@@ -75,7 +75,7 @@ Chaque produit Builderforce suit le même arc : **Idée → Faire → Exécuter 
 ## Commencer
 
 1. Va sur [spawn.builderforce.ai](/spawn) et crée ton compte (demande à un parent).
-2. Abonne-toi pour 1,99 $ par mois et prends un pack de jetons.
+2. Commence ta semaine gratuite (demande l'e-mail d'un adulte). Ensuite, abonne-toi pour 1,99 $ par mois et prends un pack de jetons.
 3. Télécharge l'app Spawn, connecte-toi, ouvre Roblox Studio et écris ce que tu veux construire.
 
 *Spawn est créé par Builderforce.ai et n'est pas affilié à Roblox Corporation ni approuvé par elle.*

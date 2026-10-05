@@ -69,7 +69,7 @@ async function refresh() {
     const account = await invoke("spawn_account");
     updateTokens(account.balance);
     if (account.age !== "ok") return renderGate(account.age === "too_young" ? "tooYoung" : "age");
-    if (account.membership !== "active") return renderGate("join");
+    if (!account.membershipOpen) return renderGate(account.trial?.available ? "trial" : "join");
     renderBuild();
   } catch (err) {
     if (err?.code === "signed_out") return refresh();

@@ -5,7 +5,7 @@ import { canvasSurfaceDefinition, type CanvasSurfaceId, writeCanvasSurface } fro
 import { readCanvasBarCollapsed, writeCanvasBarCollapsed } from '@/lib/canvasChrome';
 import { type CanvasPromptPlacement, DEFAULT_CANVAS_PROMPT_PLACEMENT, readCanvasPromptPlacement, writeCanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
 import { type CanvasPhase, readChosenCanvasPhase, surfacesForPhase, writeCanvasPhase } from '@/lib/canvasPhases';
-import type { ReadinessNode } from '@/lib/canvasPhaseReadiness';
+import { frontierPhase, readinessSignals, type ReadinessNode } from '@/lib/canvasPhaseReadiness';
 import { useCanvasPhaseReadiness } from './useCanvasPhaseReadiness';
 
 /**
@@ -105,19 +105,32 @@ export function useCanvasSurfaceState({ initialModelComparisonIds, initialSurfac
   /**
    * Which stage of ITS OWN methodology this canvas is in — see `lib/canvasPhases.ts`
    * for why this is not `useFounderJourney()`. Remembered PER CANVAS: a choice made on
-   * one canvas says nothing about another. With nothing remembered the canvas opens at
-   * its frontier, which is also what the server renders (the board is empty there, so
-   * the frontier is Idea) — so SSR and hydration agree, and the client then shows the
-   * stored choice the same two-frame way the other preferences do.
+   * one canvas says nothing about another.
+   *
+   * With nothing remembered the canvas opens at its frontier AS LOADED, and stays there.
+   * The live frontier is only the answer while the board is still loading (the server
+   * renders it too — an empty board's frontier is Idea — so SSR and hydration agree).
+   * Following it after that would move the reader mid-task: add a deployment while working
+   * in Run and the lens, the tabs and the bar tint would jump to Measure under them. The
+   * canvas does not decide where someone is; it OFFERS the next phase instead (the path
+   * card's "Go to Measure", `CanvasPhasePath`).
    */
   const phaseReadiness = useCanvasPhaseReadiness(nodes);
   const frontier = phaseReadiness.frontier;
   const readStoredPhase = useCallback(() => readChosenCanvasPhase(sessionId), [sessionId]);
   const storedPhase = useSyncExternalStore(subscribeNever, readStoredPhase, phaseServerSnapshot);
   // Keyed by the canvas, so an embedding host that swaps canvases in place never carries
-  // one canvas's choice into the next.
+  // one canvas's choice (or its loaded frontier) into the next.
   const [phaseChoice, setPhaseState] = useState<{ sessionId: string; phase: CanvasPhase } | null>(null);
-  const phase = (phaseChoice?.sessionId === sessionId ? phaseChoice.phase : undefined) ?? storedPhase ?? frontier;
+  const [loadedFrontier, setLoadedFrontier] = useState<{ sessionId: string; phase: CanvasPhase } | null>(null);
+  /** Called once by the session loader with the board it loaded — the first call per canvas wins. */
+  const settleLoadedPhase = useCallback((loaded: readonly ReadinessNode[]) => {
+    setLoadedFrontier((previous) => (previous?.sessionId === sessionId ? previous : { sessionId, phase: frontierPhase(readinessSignals(loaded)) }));
+  }, [sessionId]);
+  const phase = (phaseChoice?.sessionId === sessionId ? phaseChoice.phase : undefined)
+    ?? storedPhase
+    ?? (loadedFrontier?.sessionId === sessionId ? loadedFrontier.phase : undefined)
+    ?? frontier;
   const setPhase = useCallback((next: CanvasPhase) => {
     setPhaseState({ sessionId, phase: next });
     writeCanvasPhase(next, sessionId);
@@ -127,5 +140,5 @@ export function useCanvasSurfaceState({ initialModelComparisonIds, initialSurfac
     // board over a surface the new phase would still have shown them.
     if (!surfacesForPhase(next).includes(surface)) setSurface('graph');
   }, [sessionId, surface, setSurface]);
-  return { comparisonModelIds, setSurfaceState, surfaceTarget, surface, exitSurface, surfaceDef, setSurface, promptPlacement, setPromptPlacement, barCollapsed, phase, setPhase, phaseReadiness, setBarCollapsed };
+  return { comparisonModelIds, setSurfaceState, surfaceTarget, surface, exitSurface, surfaceDef, setSurface, promptPlacement, setPromptPlacement, barCollapsed, phase, setPhase, phaseReadiness, settleLoadedPhase, setBarCollapsed };
 }

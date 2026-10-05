@@ -26073,7 +26073,9 @@
       "goTo": "Zu {phase}",
       "letBrain": "Brain soll {verb}",
       "expand": "Zeigen, was fehlt",
-      "collapse": "Einklappen"
+      "collapse": "Einklappen",
+      "advance": "{phase} hat, was es braucht – {next} ist bereit, wenn du es bist.",
+      "stay": "In {phase} bleiben"
     },
     "requirement": {
       "idea": {
@@ -32728,8 +32730,8 @@
       "titleLead": "Sag es.",
       "titleAccent": "Spawn es.",
       "lede": "Schreib das Spiel, das du willst. Spawn baut es in Roblox Studio.",
-      "start": "Jetzt bauen",
-      "fine": "1,99 $/Monat · Tokens ab 10 $ · fehlgeschlagene Builds sind gratis"
+      "start": "Starte deine Gratis-Woche",
+      "fine": "7 Tage gratis · dann 1,99 $/Monat · ohne Karte starten"
     },
     "download": {
       "windows": "Für Windows laden",
@@ -32830,7 +32832,7 @@
     "pricing": {
       "title": "Wähl dein Paket",
       "loadFailed": "Die Preise konnten nicht geladen werden. Lade die Seite neu, um es erneut zu versuchen.",
-      "planName": "Mitgliedschaft",
+      "planName": "Mitgliedschaft · erste 7 Tage gratis",
       "perMonth": "/ Monat",
       "join": "Spawn beitreten",
       "tokens": "{count} Tokens",
@@ -32841,6 +32843,10 @@
     "faq": {
       "title": "Fragen?",
       "items": [
+        {
+          "q": "Gibt es eine Gratis-Testphase?",
+          "a": "Ja. 7 Tage und 50.000 Tokens, ohne Karte. Ein Erwachsener bekommt eine E-Mail, damit Spawn danach weiterlaufen kann. Eine Testphase pro Person."
+        },
         {
           "q": "Muss ich programmieren können?",
           "a": "Nein. Du beschreibst, was du willst, und Spawn schreibt das Luau. Die Skripte sind ordentlich und klar benannt. Wenn du lernen willst, kannst du sie öffnen und nachsehen, wie sie funktionieren."
@@ -32873,7 +32879,8 @@
       "notice": {
         "joined": "Willkommen bei Spawn! Deine Mitgliedschaft ist aktiv.",
         "tokensAdded": "Tokens hinzugefügt. Viel Spaß beim Bauen!",
-        "cancelled": "Der Checkout wurde abgebrochen. Es wurde nichts berechnet."
+        "cancelled": "Der Checkout wurde abgebrochen. Es wurde nichts berechnet.",
+        "trialStarted": "Deine Gratis-Woche hat begonnen! Hol dir die App und leg los."
       },
       "errors": {
         "generic": "Etwas ist schiefgelaufen. Bitte versuch es erneut.",
@@ -32887,7 +32894,10 @@
         "payment_not_paid": "Diese Zahlung ist noch nicht durchgegangen.",
         "payment_wrong_kind": "Diese Zahlung war nicht für Spawn.",
         "payment_not_yours": "Diese Zahlung gehört zu einem anderen Konto.",
-        "payment_short": "Diese Zahlung hat nicht den vollen Preis gedeckt."
+        "payment_short": "Diese Zahlung hat nicht den vollen Preis gedeckt.",
+        "trial_used": "Die Gratis-Testphase wurde schon genutzt (eine pro Spieler und eine pro Erwachsenem). Tritt bei, um weiterzubauen.",
+        "parent_email_invalid": "Gib die E-Mail eines Erwachsenen ein (nicht deine eigene).",
+        "parent_link_invalid": "Dieser Link gilt nicht mehr. Öffne die neueste Spawn-E-Mail oder bitte dein Kind, neu zu starten."
       },
       "age": {
         "title": "Wann bist du geboren?",
@@ -32904,13 +32914,17 @@
           "none": "Kein Mitglied",
           "active": "Aktiv",
           "past_due": "Zahlung offen",
-          "cancelled": "Gekündigt"
+          "cancelled": "Gekündigt",
+          "trial": "Gratis-Test",
+          "trial_ended": "Test beendet"
         },
         "activeBody": "Du bist Mitglied ({price} im Monat). Baukasten und Desktop-App sind freigeschaltet.",
         "body": {
           "none": "Tritt für {price} im Monat bei, um den Baukasten freizuschalten.",
           "past_due": "Deine letzte Zahlung ist nicht durchgegangen. Tritt für {price} im Monat erneut bei, um weiterzubauen.",
-          "cancelled": "Deine Mitgliedschaft ist beendet. Du kannst jederzeit für {price} im Monat wieder beitreten."
+          "cancelled": "Deine Mitgliedschaft ist beendet. Du kannst jederzeit für {price} im Monat wieder beitreten.",
+          "trial": "Du testest gratis. Tritt jederzeit für {price} im Monat bei, um danach weiterzubauen.",
+          "trial_ended": "Deine Gratis-Testphase ist vorbei. Tritt für {price} im Monat bei, um weiterzubauen."
         },
         "join": "Für {price}/Monat beitreten",
         "opening": "Checkout wird geöffnet…",
@@ -32936,6 +32950,55 @@
           "Öffne Roblox Studio und einen beliebigen Ort. Spawn verbindet sich selbst.",
           "Schreib, was du bauen willst, und drück dann auf Play."
         ]
+      },
+      "trial": {
+        "badge": "🎁 Gratis testen",
+        "title": "Spawn {days} Tage gratis testen",
+        "body": "{tokens} Gratis-Tokens, etwa {builds} Builds. Keine Karte nötig.",
+        "emailLabel": "E-Mail eines Erwachsenen",
+        "emailPlaceholder": "erwachsene@beispiel.de",
+        "start": "Meine Gratis-Woche starten",
+        "starting": "Startet…",
+        "why": "Wir schicken eine E-Mail, was Spawn ist und wie es nach deiner Gratis-Woche weitergeht. Eine Testphase pro Person.",
+        "liveTitle": "{count, plural, one {Noch # Tag} other {Noch # Tage}} in deiner Gratis-Testphase",
+        "liveBody": "Wir haben {email} geschrieben, damit Spawn nach deiner Testphase weiterlaufen kann."
+      }
+    },
+    "parent": {
+      "title": "Spawn für Erwachsene",
+      "loading": "Lädt…",
+      "badge": "Für Erwachsene",
+      "heading": "Spawn von {player}",
+      "status": {
+        "trial": "Gratis-Test: {count, plural, one {noch # Tag} other {noch # Tage}}.",
+        "active": "Mitgliedschaft aktiv. Danke!",
+        "trialEnded": "Die Gratis-Testphase ist vorbei.",
+        "other": "Noch kein Mitglied."
+      },
+      "points": [
+        {
+          "icon": "🎮",
+          "label": "Baut echte Roblox-Spiele"
+        },
+        {
+          "icon": "🛡️",
+          "label": "Sicher ab 13, keine Hintertüren"
+        },
+        {
+          "icon": "💳",
+          "label": "Sie entscheiden jede Aufladung"
+        }
+      ],
+      "joinTitle": "Spawn für {player} weiterführen",
+      "join": "Für {price}/Monat beitreten",
+      "opening": "Bezahlung wird geöffnet…",
+      "joinFine": "Sichere Bezahlung über Stripe. Jederzeit kündbar.",
+      "tokensTitle": "Tokens",
+      "tokensBody": "Jeder Build verbraucht Tokens. Fehlgeschlagene Builds sind gratis.",
+      "notice": {
+        "joined": "Danke! Spawn ist freigeschaltet.",
+        "tokensAdded": "Tokens hinzugefügt. Danke!",
+        "cancelled": "Die Bezahlung wurde abgebrochen. Es wurde nichts berechnet."
       }
     }
   }

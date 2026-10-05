@@ -11,6 +11,8 @@
  * wrote 3,000 spends 12,000. Larger packs carry more tokens per dollar, and the
  * per-pack number is the one the buyer is shown, so there is no hidden rate.
  */
+import { PLAN_LIMITS } from '../../domain/tenant/PlanLimits';
+import { TenantPlan } from '../../domain/shared/types';
 
 export const SPAWN_PLAN = {
   /** US cents charged each month. */
@@ -50,3 +52,15 @@ export const TYPICAL_BUILD_TOKENS = 12_000;
  * overdraw rather than a price.
  */
 export const MIN_BUILD_TOKENS = 4_000;
+
+/**
+ * The free trial: one per person, no card. SEVEN days — the 2025 paywall benchmarks
+ * (Superwall/RevenueCat/Adapty) put 7-day trials at the top (5.2% vs 3.1% for 3-day),
+ * 84% of 3-day cancellations land on day 0–1, and Spawn's buyer is a parent the
+ * player has to reach: a week always contains a weekend.
+ */
+export const SPAWN_TRIAL_DAYS = 7;
+
+/** The trial's tokens are exactly Builderforce's free-plan monthly allowance, read from
+ *  the plan table so the two can never disagree. */
+export const SPAWN_TRIAL_TOKENS = PLAN_LIMITS[TenantPlan.FREE].tokenMonthlyLimit;

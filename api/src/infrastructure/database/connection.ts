@@ -126,9 +126,13 @@ function buildSibling(env: Env, which: SiblingDatabase): Db {
   return connect(env[SIBLING_URL[which]]?.trim() || env.NEON_DATABASE_URL, SIBLING_URL[which]);
 }
 
-/** The operational-data client (falls back to the core database when unbound). */
+/**
+ * The operational-data client (the core handle itself when unbound). Memoised like
+ * every other handle: building one runs `drizzle({ schema })`, which walks every
+ * table and relation, and this is resolved per request on the trace/usage paths.
+ */
 export function buildTransactionalDatabase(env: Env): Db {
-  return buildSibling(env, 'operational');
+  return siblingDatabase(env, buildDatabase(env), 'operational');
 }
 
 /**

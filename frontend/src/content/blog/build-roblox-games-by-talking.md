@@ -72,7 +72,7 @@ Before any operation reaches your game it passes a safety gate, and the gate is 
 }
 ```
 
-A Spawn membership is **$1.99 a month**. Building runs on tokens, bought in packs of **$10, $20, $50 or $100**, and bigger packs come with bonus tokens. A typical build uses about twelve thousand tokens, so a $10 pack is about eighty builds. The balance is always visible in the app. When a build fails, can't be read, or every change in it was refused, the wallet isn't touched.
+Every new player gets **a free week**: seven days and 50,000 tokens, about four builds, with no card. The player adds a grown-up's email, and that grown-up gets a link to keep Spawn going without needing the player's password. After the week, a Spawn membership is **$1.99 a month**. Building runs on tokens, bought in packs of **$10, $20, $50 or $100**, and bigger packs come with bonus tokens. A typical build uses about twelve thousand tokens, so a $10 pack is about eighty builds. The balance is always visible in the app. When a build fails, can't be read, or every change in it was refused, the wallet isn't touched.
 
 Purchases happen on the website through Stripe's checkout, never inside the app. That's deliberate: the person paying, often a parent, chooses every top-up.
 
@@ -85,7 +85,7 @@ Every Builderforce product runs the same arc: **Idea → Make → Run → Measur
 ## Get started
 
 1. Go to [spawn.builderforce.ai](/spawn) and create your account (ask a parent).
-2. Join for $1.99 a month and grab a token pack.
+2. Start your free week (ask a grown-up for their email). After it, join for $1.99 a month and grab a token pack.
 3. Download the Spawn app, sign in, open Roblox Studio, and type what you want to build.
 
 *Spawn is made by Builderforce.ai and is not affiliated with or endorsed by Roblox Corporation.*

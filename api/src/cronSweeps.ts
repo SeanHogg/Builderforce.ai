@@ -93,6 +93,7 @@ import { runSequenceSweep } from './application/sales/sequenceRunner';
 import { describeCreditReconcile, runAiCreditReconcileSweep } from './application/points/reconcileAiCredits';
 import { describeNumberRent, runPhoneNumberRentSweep } from './application/phone/chargeNumberRent';
 import { describeAllowanceGrant, runPhoneAllowanceSweep } from './application/phone/grantPhoneAllowance';
+import { describeTrialReminders, runSpawnTrialReminderSweep } from './application/spawn/spawnTrial';
 import { describeSourcingSweep, runSourcingSweep } from './application/sourcing/runSourcingSweep';
 
 /**
@@ -604,6 +605,14 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       const r = await runSourcingSweep(db, env);
       return describeSourcingSweep(r);
     },
+  },
+  {
+    key: 'spawn-trial-reminders',
+    cadence: 'daily',
+    description: 'Email each Spawn free trial’s grown-up when it is halfway, on its last day and when it ends; mark ended trials',
+    // Daily is the resolution the schedule needs: the notices are day-granular, and
+    // `dueTrialNotice` sends only the latest one due, so a missed day never doubles up.
+    run: async ({ env, db }) => describeTrialReminders(await runSpawnTrialReminderSweep(db, env)),
   },
   {
     key: 'phone-allowance-grant',

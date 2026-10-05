@@ -20,10 +20,25 @@ export interface SpawnPrices {
   minAge: number;
   monthlyCents: number;
   packs: SpawnPack[];
+  /** The free trial: its length and its tokens (Builderforce's free-plan allowance). */
+  trialDays: number;
+  trialTokens: number;
 }
 
 export type SpawnAgeStatus = 'unknown' | 'ok' | 'too_young';
-export type SpawnMembershipStatus = 'none' | 'active' | 'past_due' | 'cancelled';
+export type SpawnMembershipStatus = 'none' | 'trial' | 'trial_ended' | 'active' | 'past_due' | 'cancelled';
+
+export interface SpawnTrialView {
+  /** May this player start their free trial now? */
+  available: boolean;
+  live: boolean;
+  endsAt: string | null;
+  daysLeft: number | null;
+  parentEmail: string | null;
+  days: number;
+  tokens: number;
+  builds: number;
+}
 
 export interface SpawnActivityRow {
   id: number;
@@ -38,11 +53,22 @@ export interface SpawnAccount extends SpawnPrices {
   membership: SpawnMembershipStatus;
   balance: number;
   canBuild: boolean;
+  /** Does the membership open the builder (paid, or a live trial)? Decided server-side. */
+  membershipOpen: boolean;
+  trial: SpawnTrialView;
   activity: SpawnActivityRow[];
 }
 
+/** What the grown-up's page shows: one player's Spawn, reached by the emailed link. */
+export interface SpawnParentView extends SpawnPrices {
+  player: string;
+  membership: SpawnMembershipStatus;
+  trialDaysLeft: number | null;
+  balance: number;
+}
+
 /** The refusals a Spawn call may answer with — every one is a sentence in `spawn.errors`. */
-const EXPECTED = [400, 402, 403, 404];
+const EXPECTED = [400, 402, 403, 404, 409];
 
 /** Where the newest installers are; a null platform has no installer yet. */
 export interface SpawnInstallers {
@@ -74,6 +100,46 @@ export async function confirmSpawnAge(year: number, month: number): Promise<Spaw
     method: 'POST', auth: 'tenant', body: JSON.stringify({ year, month }), expectedErrors: EXPECTED,
   });
   return res.age;
+}
+
+/** Starts the player's one free week; a grown-up's email is required. */
+export async function startSpawnTrial(parentEmail: string): Promise<SpawnTrialView> {
+  const res = await apiRequest<{ trial: SpawnTrialView }>('/api/spawn/trial', {
+    method: 'POST', auth: 'tenant', body: JSON.stringify({ parentEmail }), expectedErrors: EXPECTED,
+  });
+  return res.trial;
+}
+
+// ── The grown-up's page: the signed link `t` is the whole credential ──────────────
+
+export function fetchSpawnParent(t: string): Promise<SpawnParentView> {
+  return apiRequest<SpawnParentView>(`/api/spawn/parent?t=${encodeURIComponent(t)}`, { auth: 'none', expectedErrors: EXPECTED });
+}
+
+export async function startSpawnParentMembership(t: string): Promise<string> {
+  const res = await apiRequest<{ checkoutUrl: string }>('/api/spawn/parent/membership', {
+    method: 'POST', auth: 'none', body: JSON.stringify({ t }), expectedErrors: EXPECTED,
+  });
+  return res.checkoutUrl;
+}
+
+export function completeSpawnParentMembership(t: string, sessionId: string): Promise<{ membership: SpawnMembershipStatus }> {
+  return apiRequest('/api/spawn/parent/membership/complete', {
+    method: 'POST', auth: 'none', body: JSON.stringify({ t, sessionId }), expectedErrors: EXPECTED,
+  });
+}
+
+export async function startSpawnParentTokens(t: string, packId: string): Promise<string> {
+  const res = await apiRequest<{ checkoutUrl: string }>('/api/spawn/parent/tokens', {
+    method: 'POST', auth: 'none', body: JSON.stringify({ t, packId }), expectedErrors: EXPECTED,
+  });
+  return res.checkoutUrl;
+}
+
+export function completeSpawnParentTokens(t: string, sessionId: string): Promise<{ applied: boolean; creditedTokens: number; balance: number }> {
+  return apiRequest('/api/spawn/parent/tokens/complete', {
+    method: 'POST', auth: 'none', body: JSON.stringify({ t, sessionId }), expectedErrors: EXPECTED,
+  });
 }
 
 /** Opens hosted checkout and returns its URL; the caller navigates. */

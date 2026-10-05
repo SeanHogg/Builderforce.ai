@@ -119,6 +119,10 @@ export const users = pgTable('users', {
    *  Asked once by Spawn's 13+ gate (`application/spawn/spawnAge.ts`); NULL = never
    *  asked. (1198) */
   birthMonth:             date('birth_month', { mode: 'string' }),
+  /** When this person started their one Spawn free trial (`application/spawn/spawnTrial.ts`);
+   *  NULL = never. The person-level guard — the trial window itself is on the
+   *  workspace's membership row. (1202) */
+  spawnTrialAt:           timestamp('spawn_trial_at', { withTimezone: true }),
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 });
