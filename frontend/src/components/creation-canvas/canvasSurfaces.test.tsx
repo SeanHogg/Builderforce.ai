@@ -319,11 +319,15 @@ describe('the chat surface on the canvas', () => {
    */
   it('stops offering to move the conversation into an Object that is not on screen', () => {
     render(<CreationCanvas sessionId="surface-chat-placement-test" persistence="local" />);
-    // By its LABEL, not by role+name. The control carries an explicit `aria-label`, so
-    // this resolves through an attribute selector; the role query it replaces built an
-    // accessible name for every button on a mounted canvas, twice, and cost 9.8s of the
-    // file's runtime on its own. Same element, same accessible name, same assertion.
-    const moveIntoObject = () => screen.queryByLabelText('Show the chat in the Brain object');
+    // The control is a row in the Brain surface's "more" menu, so the menu is opened
+    // before each look. Trigger by its LABEL and the row by its text — not by role+name:
+    // a role query builds an accessible name for every button on a mounted canvas and
+    // once cost 9.8s of the file's runtime on its own.
+    const moveIntoObject = () => {
+      const trigger = screen.getByLabelText('More Brain options');
+      if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(trigger);
+      return screen.queryByText('Show the chat in the Brain object');
+    };
     expect(moveIntoObject()).toBeInTheDocument();
 
     fireEvent.click(surfaceButton('Chat'));
