@@ -40,6 +40,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop
+      # bf-cloud keeps the session in the OS keychain (keyring → libdbus-sys on Linux).
+      - run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
       # The bridge and the account carry Spawn's logic; the app crate is exercised by the build below.
       - run: cargo test -p bf-roblox -p bf-cloud
 
