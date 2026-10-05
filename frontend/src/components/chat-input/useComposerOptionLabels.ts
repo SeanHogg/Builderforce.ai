@@ -53,7 +53,10 @@ export function useComposerOptionLabels(): Partial<PromptOptionsLabels> {
     // editor. Keeping the strings here means the two hosts describe it identically if
     // the web app ever gains a route to one.
     categoryLocal: t('categoryLocal'),
-    localDetail: t('localDetail'),
+    // A TEMPLATE, not a sentence: `modelChoice` fills `{runtime}` per model, so the
+    // placeholder is handed through as its own value. Formatting it with none threw
+    // FORMATTING_ERROR on every composer mount.
+    localDetail: t('localDetail', { runtime: '{runtime}' }),
     autoDetail: t('autoDetail'),
     poolLabel: t('poolLabel'),
     poolDetail: t('poolDetail'),
