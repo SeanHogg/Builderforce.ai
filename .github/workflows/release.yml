@@ -626,7 +626,7 @@ jobs:
       # .github/scripts/docker-with-layer-cache.sh. setup-buildx gives a builder that can
       # read and write the `gha` cache; ghaction-github-runtime exposes the Actions cache
       # credentials to the `run` step below, which a run step does not get on its own.
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - uses: crazy-max/ghaction-github-runtime@v3
 
       # No global Wrangler here: `deploy:worker` runs through `npm run`, which resolves
