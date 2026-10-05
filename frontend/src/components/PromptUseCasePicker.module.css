@@ -29,10 +29,10 @@
 .reveal[data-variant='inline'] .panel { border-radius:0; background:transparent; }
 .reveal[data-variant='inline'][data-open='true'] .panel { padding:10px 10px 8px; border-width:0 0 1px; border-radius:0; box-shadow:none; }
 .reveal[data-variant='inline'] .panelHeader { flex-wrap:wrap; }
-.reveal[data-variant='inline'] .search { flex:1 1 160px; width:auto; min-height:36px; font-size:13px; }
+.reveal[data-variant='inline'] .search { flex:1 1 160px; width:auto; min-height:36px; font-size:var(--font-size-small); }
 .reveal[data-variant='inline'] .catalog { max-height:min(40vh,320px); }
 .reveal[data-variant='inline'] .grid { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
-.reveal[data-variant='inline'] .item { min-height:40px; font-size:13px; }
+.reveal[data-variant='inline'] .item { min-height:40px; font-size:var(--font-size-small); }
 /* On a phone the picker's host is often a height-capped, overflow-clipped
    surface — the landing hero's board, where the prompt is a fixed band and the
    options scroll. An absolutely-positioned sheet would be clipped by it, so

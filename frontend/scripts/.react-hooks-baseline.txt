@@ -139,7 +139,6 @@ src/components/creation-canvas/ads/AdInsightsTab.tsx 1
 src/components/creation-canvas/ads/AdSetTier.tsx 1
 src/components/creation-canvas/ads/AdTier.tsx 1
 src/components/creation-canvas/BrainActivityView.tsx 1
-src/components/creation-canvas/BrainDock.tsx 1
 src/components/creation-canvas/CanvasAttributedOutcomes.tsx 1
 src/components/creation-canvas/CanvasDeviceFrame.tsx 1
 src/components/creation-canvas/CanvasDriveBrowser.tsx 2
