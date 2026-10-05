@@ -5,10 +5,14 @@ import { orderForRole } from './modelPool';
 import { rankConnectedForRole, resolveRoleObjective, roleUsesLearnedRanking } from './modelRoles';
 import { parseModelShorthand } from './vendors/openaiCompatibleVendors';
 import { tierForModel } from './vendors';
+import { vendorFlagship } from './vendors';
+/** The CURRENT Anthropic flagships, read from the catalog — never a version literal, so a
+ *  model release is a catalog edit and these tests follow it. */
+const OPUS_FLAGSHIP = vendorFlagship('anthropic', true)!;
 
 const QWEN_MAX = 'direct/qwen/qwen3.8-max';
 const QWEN_FLASH = 'direct/qwen/qwen3.8-flash';
-const OPUS = 'claude-opus-5';
+const OPUS = OPUS_FLAGSHIP;
 const MINIMAX = 'direct/minimax/MiniMax-M1';
 
 describe('resolveRoleObjective', () => {

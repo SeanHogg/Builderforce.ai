@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { byoAwareModel } from './tenantProxy';
+import { vendorFlagship } from './vendors';
+/** The CURRENT Anthropic flagships, read from the catalog — never a version literal, so a
+ *  model release is a catalog edit and these tests follow it. */
+const OPUS_FLAGSHIP = vendorFlagship('anthropic', true)!;
 
 // byoAwareModel is the gate EVERY tenant-facing site relies on to decide whether an
 // explicit model (an agent base model, a workflow node config, a compile-run pin) is
@@ -21,8 +25,8 @@ describe('byoAwareModel', () => {
   });
 
   it('explicit model ON the connected account → honored (a deliberate BYO pick)', () => {
-    expect(byoAwareModel('claude-opus-5', new Set(['anthropic']))).toBe('claude-opus-5');
-    expect(byoAwareModel('  claude-opus-5  ', new Set(['anthropic']))).toBe('claude-opus-5');
+    expect(byoAwareModel('claude-opus-5', new Set(['anthropic']))).toBe(OPUS_FLAGSHIP);
+    expect(byoAwareModel('  claude-opus-5  ', new Set(['anthropic']))).toBe(OPUS_FLAGSHIP);
     expect(byoAwareModel('direct/openai/gpt-4.1', new Set(['openai']))).toBe('direct/openai/gpt-4.1');
   });
 
@@ -30,8 +34,8 @@ describe('byoAwareModel', () => {
     // Stored pins outlive the model they name. Rewriting inside byoAwareModel keeps the
     // BYO gate and the dispatched id on ONE model — otherwise a months-old agent
     // base_model rides a retired id into the chain and is silently filtered out of it.
-    expect(byoAwareModel('claude-opus-4-8', new Set(['anthropic']))).toBe('claude-opus-5');
-    expect(byoAwareModel('  claude-opus-4-8  ', new Set(['anthropic']))).toBe('claude-opus-5');
+    expect(byoAwareModel('claude-opus-4-8', new Set(['anthropic']))).toBe(OPUS_FLAGSHIP);
+    expect(byoAwareModel('  claude-opus-4-8  ', new Set(['anthropic']))).toBe(OPUS_FLAGSHIP);
   });
 
   it('nothing connected → any explicit model is honored (normal plan routing)', () => {

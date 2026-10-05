@@ -2,6 +2,10 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Context } from 'hono';
 import type { HonoEnv } from '../../env';
 import type { LlmProvider, TenantLlmCredentials } from '../../application/llm/tenantProviderKeyService';
+import { vendorFlagship } from '../../application/llm/vendors';
+/** The CURRENT Anthropic flagships, read from the catalog — never a version literal, so a
+ *  model release is a catalog edit and these tests follow it. */
+const SONNET_FLAGSHIP = vendorFlagship('anthropic', false)!;
 
 // Hoisted mocks — vi.mock must declare the spies via vi.hoisted so the
 // factory closures see them.
@@ -584,7 +588,7 @@ describe('POST /provider-keys/:provider/test', () => {
       status: 'needs_attention',
       code: 'provider_test_failed',
       error: 'anthropic connection test failed: invalid x-api-key',
-      details: { provider: 'anthropic', model: 'claude-sonnet-5', upstreamStatus: 401 },
+      details: { provider: 'anthropic', model: SONNET_FLAGSHIP, upstreamStatus: 401 },
     });
   });
 

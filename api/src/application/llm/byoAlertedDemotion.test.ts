@@ -17,6 +17,7 @@ import { byoAutoSeedModels } from './modelPool';
 import { providerForVendor, byoVendorIdFor, PROVIDER_VENDOR_MAP } from './llmProviderCatalog';
 import { pickCloudModel } from './LlmProxyService';
 import { vendorForModel } from './vendors';
+import { vendorFlagship } from './vendors';
 
 describe('provider catalog leaf (cycle break)', () => {
   it('maps every vendor id back to the provider that owns it', () => {
@@ -97,7 +98,7 @@ describe('pickCloudModel — the cloud pin honours the same health signal', () =
 
 describe('pickCloudModel — superadmin', () => {
   it('lets a free-plan superadmin pin a model instead of silently auto-routing', () => {
-    const pinned = 'anthropic/claude-sonnet-5';
+    const pinned = vendorFlagship('openrouter', true)!;
     // Without the flag: a free plan with no override and no BYO cannot choose, so the
     // pin is dropped and the run auto-routes — with no paywall shown anywhere, because
     // a cloud run never passes the gateway's premium gate.
@@ -107,7 +108,7 @@ describe('pickCloudModel — superadmin', () => {
   });
 
   it('does not change routing for an ordinary free-plan run', () => {
-    const pinned = 'anthropic/claude-sonnet-5';
+    const pinned = vendorFlagship('openrouter', true)!;
     expect(pickCloudModel(pinned, 'free', false, { isSuperadmin: false }))
       .not.toEqual({ model: pinned, strict: true });
   });

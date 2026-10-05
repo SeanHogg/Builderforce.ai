@@ -1,3 +1,22 @@
+## ✅ RESOLVED 2026-10-05 — A model release is one catalog edit; Claude 5.5 is routed and the gateway publishes current flagships (api 2026.10.15 · sdk 2026.10.1)
+
+**Was:** model versions were hand-copied into every routing list: `SUPERSEDED_MODEL_IDS`, `BYO_FRONTIER_FLAGSHIPS`, `CODING_MODEL_POOL`, `CODING_PREMIUM_FALLBACK_MODELS`, `PAID_OVERFLOW_MODELS`, and `VISION_MODELS`. Adding Claude Opus 5.5 / Sonnet 5.5 meant editing six lists in two files, and missing one meant a silently stale route. The catalog also stopped at Opus 5 / Sonnet 5. The adapter sent `thinking:{type:'disabled'}` and forced `tool_choice`, which are hard 400s on Opus 5.5, Sonnet 5.5 and Fable 5.1. Consumers had no way to ask for "the current Claude", so hired.video hand-copied `anthropic/claude-opus-5-5`. That slug does not exist on OpenRouter (it spells versions with a dot), so every Claude fallback 400'd and silently cascaded to Nemotron.
+
+**Now:**
+- **The vendor catalogs are the ONE place a model version lives.** `VendorModelEntry.supersedes` lists the ids an entry replaces. `catalogSupersessions()` folds them, including every route-prefixed spelling such as `direct/amazon-bedrock/…`, into `SUPERSEDED_MODEL_IDS`. `VendorModule.flagships` declares each vendor's agentic/chat flagship. The BYO seeds, coder recognition, the coding fallback tail and the OpenRouter paid coder all derive from those via `vendorFlagship`. `BYO_FLAGSHIP_VENDORS` names vendors, never models. Vision comes from catalog `capabilities`; the hand list (and its never-routable phi-4 id) is gone.
+- **Claude line:**
+  - Anthropic direct: `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-fable-5-1` and `claude-haiku-4-5-20251001`, each superseding its predecessors.
+  - OpenRouter: `anthropic/claude-sonnet-5.5`, plus a pin-only `anthropic/claude-opus-5.5` (`autoRoute:false` on the entry keeps an Opus-priced model out of the cascade). The dashed `anthropic/claude-*-5-5` spellings are aliased.
+  - Bedrock: Sonnet and Opus 5.5. Their entries omit `temperature`/`topP`, which Claude 5.x rejects.
+- **Per-model Anthropic request rules are catalog data (`AnthropicRequestProfile`):**
+  - Turning thinking off is spelled per model: `disabled` (5 / 4.8 / Haiku), `between_tools` (Sonnet 5.5), or omitted entirely with effort `low` (Opus 5.5 / Fable 5.1).
+  - Forced `tool_choice` becomes `auto` where the model rejects it.
+  - Haiku never thinks and is capped at 64K output.
+- **`GET /v1/models` returns `flagships`.** The SDK adds the `ModelFlagships` type and `models.flagship(vendor, shape)`, so a consumer can ask for "Anthropic's agentic flagship" instead of hard-coding a version.
+- **Guard:** `modelCatalogCentralization.test.ts` fails the build if `modelPool.ts` or `poolRouting.ts` names a Claude version in code. It also fails if a flagship doesn't route to its vendor's catalog, an old id is claimed by two entries, or a supersession targets a non-catalog id. The touched tests read expected ids from the catalog flagships instead of literals.
+
+**Verified (Sonnet):** api, sdk and frontend typecheck pass, and api guards pass (37/37). The 11 targeted api test files pass (241/241); sdk `index.test.ts` passes (26/26). Not yet published: the SDK `2026.10.1` npm release, and the api deploy that serves `flagships`.
+
 ## ✅ RESOLVED 2026-10-05 — A Mobile app canvas previews in the browser again (webcontainers 2026.10.5 · api 2026.10.13 · frontend 2026.10.20)
 
 **Was:** choosing **Mobile app** on the canvas showed a blank phone frame and the Problems tab reported `Runtime  Failed to load script: https://preview.builderforce.ai/__bfwc/<id>/index.js`. The mobile scaffold (`MOBILE_TEMPLATE` in `packages/ide-templates`) imports `react-native` and relies on its `vite.config.js` alias `react-native → react-native-web`. The in-browser dev server never executes `vite.config.js`, so it sent `react-native` to esm.sh as the real React Native package. That module graph cannot load in a browser, and a module script reports any failure in its graph against the entry script, so the error named `index.js`.

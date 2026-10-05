@@ -11,6 +11,10 @@ import { BYO_FRONTIER_CODERS, byoAutoSeedModels, isDispatchableSeed, pickCloudMo
 import { byoModelsFor, byoSelectedModelRefs } from './byoModelRouting';
 import { MAX_SELECTED_PROVIDER_MODELS, normalizeModelSelection } from './providerModelSelection';
 import { listProviderModelChoices, mergeProviderModelChoices } from './providerModelCatalog';
+import { vendorFlagship } from './vendors';
+/** The CURRENT Anthropic flagships, read from the catalog — never a version literal, so a
+ *  model release is a catalog edit and these tests follow it. */
+const OPUS_FLAGSHIP = vendorFlagship('anthropic', true)!;
 
 const QWEN_SELECTION = ['direct/qwen/deepseek-v4-flash', 'direct/qwen/kimi-k3'];
 
@@ -36,7 +40,7 @@ describe('byoAutoSeedModels — with a provider model selection', () => {
       vendorPriority: ['qwen', 'anthropic'],
       selectedModels: { qwen: QWEN_SELECTION },
     });
-    expect(seeds).toEqual([...QWEN_SELECTION, 'claude-opus-5']);
+    expect(seeds).toEqual([...QWEN_SELECTION, OPUS_FLAGSHIP]);
   });
 
   it('a vendor with no selection keeps its flagship', () => {

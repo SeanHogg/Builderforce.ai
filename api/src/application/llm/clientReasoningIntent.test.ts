@@ -3,6 +3,10 @@ import { llmProxyForPlan, type ProxyEnv } from './LlmProxyService';
 import { parseClientReasoningIntent, reasoningParamsForModel } from './reasoningCapability';
 import { dispatchVendor } from './vendors/registry';
 import type { VendorEnv } from './vendors/types';
+import { vendorFlagship } from './vendors';
+/** The CURRENT Anthropic flagships, read from the catalog — never a version literal, so a
+ *  model release is a catalog edit and these tests follow it. */
+const OPUS_FLAGSHIP = vendorFlagship('anthropic', true)!;
 
 // ---------------------------------------------------------------------------
 // Client-supplied, VENDOR-NEUTRAL reasoning intent (the VS Code chat "Thinking"
@@ -252,7 +256,11 @@ describe('gateway chat/completions honours the client reasoning intent', () => {
   it('leaves the request UNCHANGED when the field is absent', async () => {
     const without = await completePinned('claude-opus-4-8');
     const withOff = await completePinned('claude-opus-4-8', undefined);
-    expect(without.body?.thinking).toEqual({ type: 'disabled' });
+    // A superseded Opus pin dispatches the current Opus, which cannot turn thinking off:
+    // no `thinking` field, and the lowest effort stands in for "not requested".
+    expect(without.body?.model).toBe(OPUS_FLAGSHIP);
+    expect(without.body?.thinking).toBeUndefined();
+    expect(without.body?.output_config).toEqual({ effort: 'low' });
     expect(without.body).toHaveProperty('max_tokens');
     expect(without.body?.reasoning).toBeUndefined();
     expect(withOff.body).toEqual(without.body);
@@ -298,7 +306,8 @@ describe('gateway chat/completions honours the client reasoning intent', () => {
   it('garbage level is ignored — no throw, no param, no passthrough', async () => {
     const { body, status } = await completePinned('claude-opus-4-8', { level: 'ludicrous', budget_tokens: 1 });
     expect(status).toBeLessThan(400);
-    expect(body?.thinking).toEqual({ type: 'disabled' });
+    expect(body?.thinking).toBeUndefined();
+    expect(body?.output_config).toEqual({ effort: 'low' });
     expect(body?.reasoning).toBeUndefined();
     expect(body?.budget_tokens).toBeUndefined();
   });

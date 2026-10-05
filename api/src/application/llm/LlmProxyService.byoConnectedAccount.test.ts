@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { llmProxyForPlan, CODING_BACKSTOP_MODELS, type ProxyEnv } from './LlmProxyService';
 import { _resetMemoryCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
+import { vendorFlagship } from './vendors';
+/** The CURRENT Anthropic flagships, read from the catalog — never a version literal, so a
+ *  model release is a catalog edit and these tests follow it. */
+const OPUS_FLAGSHIP = vendorFlagship('anthropic', true)!;
 
 // ---------------------------------------------------------------------------
 // Connected-account (BYO subscription) dispatch — the REAL proxy path.
@@ -79,10 +83,10 @@ describe('connected account — happy path serves the turn (real dispatch)', () 
 
     expect(result.response.status).toBe(200);
     expect(result.resolvedVendor).toBe('anthropic');
-    expect(result.resolvedModel).toBe('claude-opus-5');
+    expect(result.resolvedModel).toBe(OPUS_FLAGSHIP);
     // The connected account was the FIRST (and only) thing tried — no shadowing by a
     // free @cf/* coder, no cascade to the shared pool.
-    expect(seen[0]).toBe('anthropic:claude-opus-5');
+    expect(seen[0]).toBe(`anthropic:${OPUS_FLAGSHIP}`);
     // The auth header proves the subscription (OAuth) token was used, not an api key.
     const h = fetchSpy.mock.calls[0]![1]?.headers as Record<string, string>;
     expect(h['authorization']).toBe('Bearer sk-ant-oat-test-token');
@@ -113,9 +117,9 @@ describe('connected account — a non-BYO caller model does NOT shadow the conne
 
     expect(result.response.status).toBe(200);
     expect(result.resolvedVendor).toBe('anthropic');
-    expect(result.resolvedModel).toBe('claude-opus-5');
+    expect(result.resolvedModel).toBe(OPUS_FLAGSHIP);
     // Opus led the cascade despite the non-BYO caller model.
-    expect(seen[0]).toBe('anthropic:claude-opus-5');
+    expect(seen[0]).toBe(`anthropic:${OPUS_FLAGSHIP}`);
   });
 });
 
@@ -241,7 +245,7 @@ describe('MULTIPLE connected accounts fail over to each other', () => {
     // Every connected candidate is benched, so the chain composes empty. Failing closed
     // here is what converted a ≤90s cooldown into a permanently stalled ticket (autonomy
     // halts after 3 consecutive failures), so the owner's own account gets one probe.
-    await recordFailure(env, 'anthropic', 'claude-opus-5', 500);
+    await recordFailure(env, 'anthropic', OPUS_FLAGSHIP, 500);
 
     const fetchSpy = vi.fn(async (input: string | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
@@ -253,7 +257,7 @@ describe('MULTIPLE connected accounts fail over to each other', () => {
     const result = await connectedProxy().complete(request);
 
     expect(result.response.status).toBe(200);
-    expect(result.resolvedModel).toBe('claude-opus-5');
+    expect(result.resolvedModel).toBe(OPUS_FLAGSHIP);
     expect(fetchSpy).toHaveBeenCalled();
   });
 });
