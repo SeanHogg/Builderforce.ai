@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslations } from 'next-intl';
 import { fetchSpawnInstallers, type SpawnInstallers } from '@/lib/spawn/spawnApi';
 import { SPAWN_DOWNLOAD_URL } from '@/lib/spawn/spawnLinks';
@@ -16,6 +16,9 @@ function detectPlatform(): Platform {
   return 'other';
 }
 
+/** The platform never changes while the page is open; there is nothing to subscribe to. */
+const noSubscription = () => () => {};
+
 /**
  * THE Spawn download: one click to the installer for the computer the visitor is
  * on, read from the newest release (`/api/spawn/downloads`). Every download on
@@ -27,11 +30,11 @@ function detectPlatform(): Platform {
  */
 export function SpawnDownloadButton({ compact = false }: { compact?: boolean }) {
   const t = useTranslations('spawn.download');
-  const [platform, setPlatform] = useState<Platform>('other');
+  // The server renders the any-computer button; the browser swaps in its own platform.
+  const platform = useSyncExternalStore<Platform>(noSubscription, detectPlatform, () => 'other');
   const [installers, setInstallers] = useState<SpawnInstallers | null>(null);
 
   useEffect(() => {
-    setPlatform(detectPlatform());
     // No installers yet → the button keeps its release-list fallback; nothing to report.
     fetchSpawnInstallers().then(setInstallers, () => setInstallers(null));
   }, []);
