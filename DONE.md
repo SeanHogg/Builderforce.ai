@@ -15,6 +15,22 @@
 
 **Verified (Sonnet):** api type-check passes, and `siteAudienceSummary` and `siteData` pass (40/40). The VS Code client type-check passes. Frontend guards pass 25/25. The targeted PRD 32 suites pass, including `CreationCanvas.test.tsx` (147/147 across the four re-run files), along with i18n parity. §9 review was done by Opus. Screenshots of Measure before anything is live, on Board, Room and phone in both themes, led to three layout fixes: the ghost card clipped by the Brain panel, the path card covering the Room scene, and the stage sheet pushed under the prompt.
 
+**Planning-session review (2026-10-05, against PRD 32 §9).** Checked:
+- the ghost card is never a node;
+- one live predicate;
+- no branches on phase names;
+- the legacy phase key has no readers;
+- `CreationCanvas.tsx` net 0;
+- real translations;
+- the cached audience route.
+
+Fixed:
+- `usePhaseLensEdges` re-mapped every edge on every drag frame (its memo was keyed on `nodes`). It is now keyed on the set of receding ids.
+- `useStageHue` kept a lit station in the previous theme's hue after a theme toggle. It now re-reads on `useTheme`.
+- `canvasTopChromePath.test.tsx` passed `'board'` (not a `CanvasSurfaceId`), which failed the frontend type-check. It now passes `'graph'`.
+
+Re-verified (Sonnet): type-check, 25/25 guards (including `check:react-hooks`), and 312/312 tests across the 19 PRD 32 test files, plus a 50/50 re-run of the touched four.
+
 ## ✅ RESOLVED 2026-10-05 — A model release is one catalog edit; Claude 5.5 is routed and the gateway publishes current flagships (api 2026.10.15 · sdk 2026.10.1)
 
 **Was:** model versions were hand-copied into every routing list: `SUPERSEDED_MODEL_IDS`, `BYO_FRONTIER_FLAGSHIPS`, `CODING_MODEL_POOL`, `CODING_PREMIUM_FALLBACK_MODELS`, `PAID_OVERFLOW_MODELS`, and `VISION_MODELS`. Adding Claude Opus 5.5 / Sonnet 5.5 meant editing six lists in two files, and missing one meant a silently stale route. The catalog also stopped at Opus 5 / Sonnet 5. The adapter sent `thinking:{type:'disabled'}` and forced `tool_choice`, which are hard 400s on Opus 5.5, Sonnet 5.5 and Fable 5.1. Consumers had no way to ask for "the current Claude", so hired.video hand-copied `anthropic/claude-opus-5-5`. That slug does not exist on OpenRouter (it spells versions with a dot), so every Claude fallback 400'd and silently cascaded to Nemotron.

@@ -16,12 +16,17 @@ import styles from '../CreationCanvas.module.css';
 export function usePhaseLensEdges(nodes: ReadonlyArray<{ id: string; data: { kind: string } }>, edges: Edge[]): Edge[] {
   const phaseValue = useCanvasPhase();
   const phase = phaseValue?.focusEnabled ? phaseValue.phase : null;
+  // Keyed on WHICH ids are out, not on `nodes`: a drag hands React Flow a new node array
+  // every frame, and re-mapping every edge then would re-render every edge per frame.
+  const outKey = useMemo(
+    () => (phase ? nodes.filter((node) => phaseFocusOf(node.data.kind, phase) === 'out').map((node) => node.id).join('\u0000') : ''),
+    [nodes, phase],
+  );
   return useMemo(() => {
-    if (!phase) return edges;
-    const outIds = new Set(nodes.filter((node) => phaseFocusOf(node.data.kind, phase) === 'out').map((node) => node.id));
-    if (!outIds.size) return edges;
+    if (!outKey) return edges;
+    const outIds = new Set(outKey.split('\u0000'));
     return edges.map((edge) => (outIds.has(edge.source) && outIds.has(edge.target)
       ? { ...edge, className: edge.className ? `${edge.className} ${styles.edgeOut}` : styles.edgeOut }
       : edge));
-  }, [edges, nodes, phase]);
+  }, [edges, outKey]);
 }

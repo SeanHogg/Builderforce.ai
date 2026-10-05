@@ -37,7 +37,7 @@ const paths = () => screen.queryAllByTestId('canvas-phase-path');
 
 describe('CanvasTopChrome — the path card', () => {
   it('stands under the phase card on the board in an unready phase', () => {
-    renderWithPhase(chrome('board'), { phase: 'measure', signals: {} });
+    renderWithPhase(chrome('graph'), { phase: 'measure', signals: {} });
     expect(paths()).toHaveLength(1);
   });
 
