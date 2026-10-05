@@ -311,7 +311,7 @@ jobs:
           node-version: 24
 
       # The exact VSIX that passed the activation gate, not a rebuild of it.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: builderforce-vsix
           path: clients/vscode
@@ -845,7 +845,7 @@ jobs:
       - name: Install Wrangler
         run: npm install --global wrangler
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: frontend-output
           path: frontend/.vercel/output/static
