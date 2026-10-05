@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-10-04 — Renaming a chat with a long title no longer fails with a 500 (api 2026.10.11)
+
+**Was:** `PATCH /api/brain/chats/129` from Studio returned 500 (ref `4a72dc90e93d`). `api_error_log` showed `value too long for type character varying(500)` thrown in `BrainService.updateChat`. `brain_chats.title` is `varchar(500)`, but no writer bounded the title: `createChat`, `updateChat` and the `brain.create` / `brain.update` MCP tools passed it straight through, and clients that derive a title from the first prompt can send any length.
+
+**Now:** `application/brain/chatTitle.ts` `normalizeChatTitle` is the one rule for a chat title. It trims, falls back to `New chat`, and clamps to 500 code points (what Postgres counts) with a trailing `…`, so an emoji is never split. All four free-text writers use it. The incident war-room and team/manager chat titles were already bounded.
+
+**Verified:** `npm run type-check` (tsc + tsgo) passes. `chatTitle.test.ts`, `chatMode.test.ts` and `builtinToolAuthority.test.ts` pass (14 tests).
+
 ## ✅ RESOLVED 2026-10-04 — Synapse's Brain acts with the workspace's tools and streams its answer (desktop 2026.10.2)
 
 **Was:** in Synapse the Brain's reply was one non-streamed gateway completion with Evermind recall (`app/src-tauri/src/cloud/brain.rs`). It could answer but not act. The web and VS Code Brains run the agent loop with platform tools. The reply also appeared all at once after a 2-second poll.

@@ -92,6 +92,7 @@ import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketService';
 import { readChatRunHistoryForCaller } from '../brain/chatRunHistory';
 import { BrainService } from '../brain/BrainService';
+import { normalizeChatTitle } from '../brain/chatTitle';
 import { WorkDeltaService, type DeltaKind } from '../delta/WorkDeltaService';
 import { ValidationService, type ReviewVerdict, type ReviewGapInput } from '../validation/ValidationService';
 import { publishReviewToPr } from '../validation/publishReviewToPr';
@@ -1952,7 +1953,7 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ title: S, projectId: N }),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [row] = await ctx.db.insert(brainChats).values({ tenantId: ctx.tenantId, segmentId: seg, userId: ctx.userId ?? 'system', origin: 'brainstorm', ...(a.title != null ? { title: str(a.title) } : {}), projectId: a.projectId != null ? num(a.projectId) : null }).returning();
+      const [row] = await ctx.db.insert(brainChats).values({ tenantId: ctx.tenantId, segmentId: seg, userId: ctx.userId ?? 'system', origin: 'brainstorm', ...(a.title != null ? { title: normalizeChatTitle(str(a.title)) } : {}), projectId: a.projectId != null ? num(a.projectId) : null }).returning();
       return row;
     },
   },
@@ -1962,7 +1963,7 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ id: N, title: S, projectId: N }, ['id']),
     run: async (ctx, a) => {
       const patch: Json = { updatedAt: new Date() };
-      if (a.title != null) patch.title = str(a.title);
+      if (a.title != null) patch.title = normalizeChatTitle(str(a.title));
       if (a.projectId !== undefined) patch.projectId = a.projectId === null ? null : num(a.projectId);
       const conds = [eq(brainChats.id, num(a.id)), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm')];
       if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId));

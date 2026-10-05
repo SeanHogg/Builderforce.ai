@@ -44,6 +44,7 @@ import {
 } from './chatAccess';
 import { markChatRead } from './chatReadState';
 import { normalizeChatMode, resolveChatMode, NEW_CHAT_MODE } from './chatMode';
+import { normalizeChatTitle } from './chatTitle';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { loadProjectInTenant } from '../project/projectOwnership';
@@ -666,7 +667,7 @@ export class BrainService {
   }
 
   async createChat(dto: CreateChatDto) {
-    const title = dto.title?.trim() || 'New chat';
+    const title = normalizeChatTitle(dto.title);
 
     if (dto.projectId != null) {
       const proj = await this.verifyProjectInTenant(dto.projectId, dto.tenantId);
@@ -895,7 +896,7 @@ export class BrainService {
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
-    if (dto.title !== undefined) updates.title = dto.title.trim() || 'New chat';
+    if (dto.title !== undefined) updates.title = normalizeChatTitle(dto.title);
     if (dto.projectId !== undefined) updates.projectId = dto.projectId;
     if (dto.visibility === 'shared' || dto.visibility === 'locked') updates.visibility = dto.visibility;
     if (dto.capability !== undefined) updates.capability = normalizeCapability(dto.capability);
