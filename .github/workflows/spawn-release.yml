@@ -78,9 +78,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # NSIS only: WiX (.msi) refuses a major version above 255, and ours is the year.
+          # The per-user setup .exe needs no admin rights, which suits a kid's account.
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            args: ''
+            args: '--bundles nsis'
           - os: macos-latest
             target: aarch64-apple-darwin
             args: '--target aarch64-apple-darwin'
@@ -113,15 +115,37 @@ jobs:
           $json = Get-Content $conf -Raw | ConvertFrom-Json
           $json.bundle | Add-Member -NotePropertyName windows -NotePropertyValue @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } -Force
           $json | ConvertTo-Json -Depth 20 | Set-Content $conf
+      # A certificate secret that exists but will not import (wrong password, not a .p12)
+      # must not sink the release: prove it imports first, and ship unsigned with a
+      # warning when it does not — the same outcome as having no secret at all.
+      - name: Check the macOS signing certificate
+        id: mac_sign
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          ok=false
+          if [[ -n "${APPLE_CERTIFICATE}" ]]; then
+            p12="${RUNNER_TEMP}/probe.p12"
+            echo "${APPLE_CERTIFICATE}" | base64 --decode > "${p12}" || true
+            security create-keychain -p probe "${RUNNER_TEMP}/probe.keychain-db"
+            if security import "${p12}" -k "${RUNNER_TEMP}/probe.keychain-db" -P "${APPLE_CERTIFICATE_PASSWORD}"; then ok=true; fi
+            security delete-keychain "${RUNNER_TEMP}/probe.keychain-db" || true
+            rm -f "${p12}"
+            [[ "${ok}" == true ]] || echo "::warning::APPLE_CERTIFICATE does not import (check the base64 .p12 and APPLE_CERTIFICATE_PASSWORD); building unsigned."
+          fi
+          echo "ok=${ok}" >> "$GITHUB_OUTPUT"
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_CERTIFICATE: ${{ steps.mac_sign.outputs.ok == 'true' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ steps.mac_sign.outputs.ok == 'true' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ steps.mac_sign.outputs.ok == 'true' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ steps.mac_sign.outputs.ok == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ steps.mac_sign.outputs.ok == 'true' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ steps.mac_sign.outputs.ok == 'true' && secrets.APPLE_TEAM_ID || '' }}
         with:
           projectPath: desktop/spawn
           tagName: ${{ needs.tag.outputs.tag }}
