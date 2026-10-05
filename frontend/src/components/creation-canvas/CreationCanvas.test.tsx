@@ -18,6 +18,7 @@ import type { ProjectEvermindContributions, ProjectEvermindHead } from '@/lib/pr
 import { createLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { buildBrowserCreativeArtifact } from '@/lib/creationDeliverables';
 import { AUTHORED_EVALUATION, answerCanvasTurns, canvasTurnRunner, holdCanvasTurns } from '@/test/canvasTurnRunnerMock';
+import { canvasPhaseStorageKey } from '@/lib/canvasPhases';
 
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')).realCatalogIntlMock(
   (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
@@ -1057,7 +1058,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(screen.getByRole('complementary', { name: 'Brain chat' })).not.toContainElement(prompt);
     // Starting points live INSIDE the composer card, in its top row — not as a tab
     // floating above it — and the catalogue opens inside the same card.
-    const starter = screen.getByRole('button', { name: 'Starting points' });
+    // The trigger names the phase it is offering for (an empty board stands at Idea).
+    const starter = screen.getByRole('button', { name: 'Starting points · Idea' });
     expect(prompt.closest('[data-tour="creation-brain-dock"]')).toContainElement(starter);
     expect(starter.closest('[data-tour="creation-prompt-starter"]')).not.toBeNull();
     expect(starter).toHaveAttribute('aria-expanded', 'false');
@@ -1152,6 +1154,8 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
   });
 
   it('keeps Brain one full-height column when a full-screen surface takes the board', () => {
+    // App is offered from Make on (PRD 32); an empty board's frontier is Idea.
+    window.localStorage.setItem(canvasPhaseStorageKey('brain-surface-column-test'), 'make');
     render(<CreationCanvas sessionId="brain-surface-column-test" persistence="local" />);
 
     const surfaceTab = (name: string) => namedButtons(name)
