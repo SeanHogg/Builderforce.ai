@@ -30,7 +30,17 @@
 import { signAwsRequest, canonicalUri } from './awsSigV4';
 import { VendorFatalError, VendorRetryableError, throwWithUpstreamDiagnostic, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModelEntry, type VendorModule } from './types';
 
-const CATALOG: ReadonlyArray<VendorModelEntry> = [
+/** `samplingParams: false` — the model 400s on `temperature` / `topP` (Claude 5.x removed
+ *  sampling parameters), so the Converse body omits them rather than forwarding a caller's
+ *  default. Data on the entry, never an id check in the translator. */
+interface BedrockCatalogEntry extends VendorModelEntry {
+  samplingParams?: false;
+}
+
+const CATALOG: ReadonlyArray<BedrockCatalogEntry> = [
+  { id: 'anthropic.claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (Bedrock)', brand: 'Anthropic', tier: 'PREMIUM', samplingParams: false,
+    supersedes: ['anthropic.claude-3-5-sonnet-20241022-v2:0'] },
+  { id: 'anthropic.claude-opus-5-5', label: 'Claude Opus 5.5 (Bedrock)', brand: 'Anthropic', tier: 'ULTRA', samplingParams: false },
   { id: 'anthropic.claude-3-5-sonnet-20241022-v2:0', label: 'Claude 3.5 Sonnet v2 (Bedrock)', brand: 'Anthropic', tier: 'PREMIUM' },
   { id: 'anthropic.claude-3-5-haiku-20241022-v1:0', label: 'Claude 3.5 Haiku (Bedrock)', brand: 'Anthropic', tier: 'STANDARD' },
   { id: 'meta.llama3-3-70b-instruct-v1:0', label: 'Llama 3.3 70B (Bedrock)', brand: 'Meta', tier: 'STANDARD' },
@@ -63,8 +73,9 @@ function toConverseRequest(params: VendorCallParams): { system?: ConverseContent
   }
   const inferenceConfig: Record<string, number> = {};
   if (params.maxTokens != null) inferenceConfig.maxTokens = params.maxTokens;
-  if (params.temperature != null) inferenceConfig.temperature = params.temperature;
-  if (params.topP != null) inferenceConfig.topP = params.topP;
+  const sampling = CATALOG_BY_ID.get(params.model)?.samplingParams !== false;
+  if (sampling && params.temperature != null) inferenceConfig.temperature = params.temperature;
+  if (sampling && params.topP != null) inferenceConfig.topP = params.topP;
   return { ...(system.length ? { system } : {}), messages, inferenceConfig };
 }
 

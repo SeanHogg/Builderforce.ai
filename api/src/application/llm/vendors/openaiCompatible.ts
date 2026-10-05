@@ -31,6 +31,7 @@ import {
   type VendorCallParams,
   type VendorCallResult,
   type VendorEnv,
+  type VendorFlagships,
   type VendorId,
   type VendorModelEntry,
   type VendorModule,
@@ -97,6 +98,8 @@ export interface OpenAICompatibleVendorOptions {
   schemaDialect?: { stripKeywords: readonly string[] };
   /** This upstream refuses the Worker's own egress — see `VendorModule.requiresLocalEgress`. */
   requiresLocalEgress?: boolean;
+  /** The vendor's flagships as ROUTED ids — see `VendorModule.flagships`. */
+  flagships?: VendorFlagships;
   /** The provider serves an OpenAI-style `GET /models` beside its chat endpoint, so the
    *  module can list what a tenant key can call — see `VendorModule.listModels`. */
   listsModels?: boolean;
@@ -216,6 +219,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     pseudoStream = false,
     schemaDialect,
     requiresLocalEgress = false,
+    flagships,
   } = opts;
 
   const catalogById = new Map(catalog.map((m) => [m.id, m]));
@@ -234,6 +238,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     autoRoute,
     ...(schemaDialect ? { schemaDialect } : {}),
     ...(requiresLocalEgress ? { requiresLocalEgress } : {}),
+    ...(flagships ? { flagships } : {}),
     tierFor(modelId: string): AiModelTier {
       return catalogById.get(modelId)?.tier ?? defaultTier;
     },

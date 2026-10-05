@@ -17,7 +17,10 @@
  */
 
 import {
+  anthropicModule,
   catalogEntry,
+  catalogSupersessions,
+  vendorFlagship,
   dispatchVendor,
   autoRoutableModelsByTier,
   parseVendorPrefix,
@@ -88,6 +91,19 @@ export const PRO_PAID_MODEL_POOL: readonly string[] =
 /** Pro tries free first (cost-optimized), falls over to paid. */
 export const PRO_MODEL_POOL: readonly string[] = [...FREE_MODEL_POOL, ...PRO_PAID_MODEL_POOL];
 
+/** Every direct-Anthropic model the `anthropic` vendor catalogs (bare `claude-*` ids on
+ *  CLAUDE_API_KEY). Read from the catalog so a model bump is one catalog edit, not a
+ *  hunt for every hand-copied list. */
+const ANTHROPIC_DIRECT_MODEL_IDS: readonly string[] = anthropicModule.catalog.map((entry) => entry.id);
+
+/** A vendor's declared flagship for each requested turn shape, de-duplicated, in the
+ *  order asked — `[]` when the vendor declares none. The routing lists below name a
+ *  vendor's ROLE through this, never a model version, so a release is a catalog edit. */
+function flagshipsOf(vendor: string, ...shapes: Array<'agentic' | 'chat'>): string[] {
+  const ids = shapes.map((shape) => vendorFlagship(vendor, shape === 'agentic'));
+  return [...new Set(ids.filter((id): id is string => id !== null))];
+}
+
 /**
  * Curated agentic-coding pool — models that reliably (a) honour multi-turn
  * `tools` / `tool_choice` round-trips AND (b) write competent code. This is the
@@ -128,7 +144,7 @@ export const CODING_MODEL_POOL: readonly string[] = [
   '@cf/qwen/qwen3-30b-a3b-fp8',                // 32K ctx, STANDARD — small/fast; great first pass for SMALL tasks
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // 24K ctx, STANDARD — small/fast; great first pass for SMALL tasks
   // PAID, METERED — strong agentic coders reachable by Pro tenants on the credited key.
-  'anthropic/claude-sonnet-5',
+  ...flagshipsOf('openrouter', 'agentic'),     // the OpenRouter catalog's flagship coder (Claude)
   'openai/gpt-4.1',
   'xiaomi/mimo-v2.5',                          // Programming #1 on OpenRouter, $0.14/$0.28
   'qwen/qwen3.7-plus',                         // agentic coder + vision, $0.40/$1.60
@@ -163,9 +179,7 @@ export const CODING_MODEL_POOL: readonly string[] = [
   // "degraded onto a non-coder" backstop) and so the capability-reorder sets treat
   // them as tool/structured-output capable. Routing onto them happens via
   // CODING_PREMIUM_FALLBACK_MODELS, never auto-selection.
-  'claude-sonnet-5',
-  'claude-opus-5',
-  'claude-opus-4-8',
+  ...ANTHROPIC_DIRECT_MODEL_IDS,
 ];
 
 /**
@@ -178,39 +192,14 @@ export const CODING_MODEL_POOL: readonly string[] = [
  * failure surfaces far from its cause (an empty BYO flagship seed reading as "no
  * configured provider is currently usable", never "that model id is retired").
  *
- * This map is that layer, and it is the ONLY place a version bump has to be made:
- * add `old -> new` here and every stored pin, seed constant, and strict dispatch
- * follows on the next request. Entries are chained through {@link canonicalModelId}
- * (a -> b -> c resolves to c), so a bump never requires rewriting earlier rows.
- *
- * Rules for entries:
- *   • Only map WITHIN a vendor and ACROSS a version — never across vendors or tiers
- *     (Opus → Opus, never Opus → Sonnet). A silent tier downgrade is worse than a 404.
- *   • Keep the old id in the vendor CATALOG while the vendor still serves it; this map
- *     changes what we DISPATCH, the catalog changes what we RECOGNISE.
+ * DERIVED, never hand-edited: each vendor catalog entry lists the ids it replaces in
+ * `supersedes` (see `VendorModelEntry.supersedes`), and this is their fold. A model
+ * release is one catalog edit; every stored pin, seed constant, and strict dispatch
+ * follows on the next request. Rules live on the field: within a vendor, across a
+ * version, never across tiers. The old id stays in its vendor catalog while the vendor
+ * still serves it — this map changes what we DISPATCH, the catalog what we RECOGNISE.
  */
-export const SUPERSEDED_MODEL_IDS: Readonly<Record<string, string>> = {
-  // Anthropic direct (bare `claude-*` ids on the Messages API).
-  'claude-opus-4-8': 'claude-opus-5',
-  'claude-opus-4-7': 'claude-opus-5',
-  'claude-opus-4-6': 'claude-opus-5',
-  'claude-opus-4-5': 'claude-opus-5',
-  'claude-opus-4-1': 'claude-opus-5',
-  'claude-opus-4-0': 'claude-opus-5',
-  'claude-sonnet-4-6': 'claude-sonnet-5',
-  'claude-sonnet-4-5': 'claude-sonnet-5',
-  'claude-sonnet-4-0': 'claude-sonnet-5',
-  // OpenRouter-routed Anthropic slugs share the same supersession. Sonnet only: the
-  // OpenRouter catalog carries no Opus slug, and `anthropic/claude-opus-* -> …-sonnet-5`
-  // would be a silent TIER DOWNGRADE — worse than a 404, because the run would quietly
-  // produce weaker output with nothing in the trace saying the model changed.
-  'anthropic/claude-sonnet-4-6': 'anthropic/claude-sonnet-5',
-  'anthropic/claude-sonnet-4-5': 'anthropic/claude-sonnet-5',
-  // NIM (FREE) and OpenRouter (STANDARD) bumps from the 2026-10-04 snapshot refresh.
-  'z-ai/glm-5.2': 'z-ai/glm-5.3',
-  'deepseek-ai/deepseek-v4-flash-0731': 'deepseek-ai/deepseek-v4.1-flash',
-  'ibm-granite/granite-4.1-8b': 'ibm-granite/granite-4.2-8b',
-};
+export const SUPERSEDED_MODEL_IDS: Readonly<Record<string, string>> = catalogSupersessions();
 
 /** Hard ceiling on {@link SUPERSEDED_MODEL_IDS} chain-following — a mis-edit that
  *  introduces a cycle (`a -> b -> a`) must degrade to "return what we have", never
@@ -264,41 +253,33 @@ export const CODING_DEFAULT_MODEL: string =
  * a bespoke prefix already bound to the tenant Google key.
  */
 /**
- * The BYO frontier flagship each connected provider leads auto-select with — ONE per
- * vendor (Anthropic splits by turn shape: Opus drives agentic tool-loops, Sonnet plain
- * chat; every other vendor uses one model for both shapes). EVERY id here is a real,
- * tool- and structured-output-capable CODER served on the tenant's OWN key (the
+ * The connected-account vendors whose frontier flagship leads auto-select — ONE model
+ * per vendor and turn shape, declared on the vendor module itself (`flagships`; Anthropic
+ * splits by shape: Opus drives agentic tool-loops, Sonnet plain chat). Every flagship is
+ * a real, tool- and structured-output-capable CODER served on the tenant's OWN key (the
  * `direct/<vendor>/` and bespoke `googleai/` prefixes route to that key, NOT the operator
- * OpenRouter pool — a bare `openai/…` id is OpenRouter's namespace).
+ * OpenRouter pool — a bare `openai/…` id is OpenRouter's namespace). OpenRouter is
+ * deliberately absent: its flagship is the OPERATOR pool's coder, not a tenant's.
  *
- * This map is the SINGLE SOURCE for both {@link providerFrontierFlagship} and the coder-
- * recognition superset {@link RECOGNIZED_CODER_MODELS}: adding a BYO vendor here makes its
- * flagship recognised as a coder automatically. That closes the drift that mislabelled
+ * This list names VENDORS, never models — a model release moves the vendor's `flagships`
+ * and nothing here. It is the SINGLE SOURCE for both {@link providerFrontierFlagship} and
+ * the coder-recognition superset {@link RECOGNIZED_CODER_MODELS}: adding a BYO vendor here
+ * makes its flagship recognised as a coder automatically. That closes the drift that mislabelled
  * `direct/meta/muse-spark-1.1` (Meta MUSE, a coder) as a "degraded onto a non-coder
  * backstop" — only Anthropic's direct floor had been hand-added to CODING_MODEL_POOL.
  */
-const BYO_FRONTIER_FLAGSHIPS: Readonly<Record<string, { agentic: string; chat: string }>> = {
-  anthropic: { agentic: 'claude-opus-5', chat: 'claude-sonnet-5' },
-  openai:    { agentic: 'direct/openai/gpt-4.1', chat: 'direct/openai/gpt-4.1' },
-  'openai-codex': { agentic: 'openai-codex/gpt-5.6-sol', chat: 'openai-codex/gpt-5.6-sol' },
-  'xai-oauth': { agentic: 'xai-oauth/grok-4.6', chat: 'xai-oauth/grok-4.6' },
-  googleai:  { agentic: 'googleai/gemini-2.5-pro', chat: 'googleai/gemini-2.5-pro' },
-  meta:      { agentic: 'direct/meta/muse-spark-1.1', chat: 'direct/meta/muse-spark-1.1' },
-  moonshot:  { agentic: 'direct/moonshot/kimi-k2.5', chat: 'direct/moonshot/kimi-k2.5' },
+const BYO_FLAGSHIP_VENDORS: readonly string[] = [
+  'anthropic', 'openai', 'openai-codex', 'xai-oauth', 'googleai', 'meta', 'moonshot',
   // A Kimi Code subscription funds a real coder, so a run on it must not report as
   // "degraded onto a non-coder backstop" — which is what its absence here meant, since
-  // this map is also the source for RECOGNIZED_CODER_MODELS. It leads auto-select only
+  // this list is also the source for RECOGNIZED_CODER_MODELS. It leads auto-select only
   // for a tenant who connected Kimi; when their runtime is offline the edge 403 is a
   // `not_entitled` failover like any other and the cascade moves on.
-  'kimi-code': { agentic: 'direct/kimi-code/kimi-for-coding', chat: 'direct/kimi-code/kimi-for-coding' },
-  qwen:      { agentic: 'direct/qwen/qwen3.8-max', chat: 'direct/qwen/qwen3.7-plus' },
-  minimax:   { agentic: 'direct/minimax/MiniMax-M1', chat: 'direct/minimax/MiniMax-Text-01' },
-  xai:       { agentic: 'direct/xai/grok-4.6', chat: 'direct/xai/grok-4.6' },
-};
+  'kimi-code', 'qwen', 'minimax', 'xai',
+];
 
 function providerFrontierFlagship(vendor: string, agentic: boolean): string | null {
-  const f = BYO_FRONTIER_FLAGSHIPS[vendor];
-  return f ? (agentic ? f.agentic : f.chat) : null;
+  return BYO_FLAGSHIP_VENDORS.includes(vendor) ? vendorFlagship(vendor, agentic) : null;
 }
 
 /**
@@ -307,7 +288,7 @@ function providerFrontierFlagship(vendor: string, agentic: boolean): string | nu
  * auto-routable {@link CODING_MODEL_POOL}. Folded into {@link RECOGNIZED_CODER_MODELS}.
  */
 export const BYO_FRONTIER_CODERS: readonly string[] = [
-  ...new Set(Object.values(BYO_FRONTIER_FLAGSHIPS).flatMap((f) => [f.agentic, f.chat])),
+  ...new Set(BYO_FLAGSHIP_VENDORS.flatMap((vendor) => flagshipsOf(vendor, 'agentic', 'chat'))),
 ];
 
 /**
@@ -685,7 +666,7 @@ export const CHEAPEST_PAID_CODER = 'deepseek/deepseek-v4-flash'; // $0.10/$0.20
  * reliable-first (DeepSeek → Xiaomi → OpenRouter-routed Claude), then the
  * DIRECT-ANTHROPIC last-resort floor: the OpenRouter-routed coders all share
  * OpenRouter's availability, so an OpenRouter-wide outage sinks them together —
- * `claude-sonnet-5` / `claude-opus-5` call Claude DIRECTLY on CLAUDE_API_KEY
+ * the Anthropic flagships (Sonnet, then Opus) call Claude DIRECTLY on CLAUDE_API_KEY
  * (independent availability), Sonnet first (cheaper). Any vendor whose key is
  * unbound no-key-skips at dispatch, so the chain degrades cleanly to whatever is
  * reachable and surfaces an honest exhaustion only if nothing is.
@@ -706,9 +687,10 @@ export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = leadPoolWithVen
   '@cf/qwen/qwen3-30b-a3b-fp8',                // 32K ctx — small/fast failover
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // 24K ctx — small/fast failover
   '@cf/moonshotai/kimi-k2.7-code',             // 256K ctx — slowest; huge-context last resort
-  'anthropic/claude-sonnet-5',   // strongest agentic coder (via OpenRouter)
-  'claude-sonnet-5',             // direct-Anthropic last-resort floor (CLAUDE_API_KEY)
-  'claude-opus-5',
+  ...flagshipsOf('openrouter', 'agentic'),       // strongest agentic coder (via OpenRouter)
+  // Direct-Anthropic last-resort floor (CLAUDE_API_KEY): the chat flagship (Sonnet,
+  // cheaper) before the agentic one (Opus).
+  ...flagshipsOf('anthropic', 'chat', 'agentic'),
 ], PAID_LEAD_VENDOR);
 
 /**
@@ -769,11 +751,9 @@ export const PAID_OVERFLOW_MODELS: ReadonlySet<string> = new Set<string>([
   // models live in NO plan pool: any resolution onto them is Builderforce funding a
   // call on its own CLAUDE_API_KEY, so they are overflow spend by id on every path
   // (primary appended-fallback OR credited backstop) and count against the cap.
-  'claude-sonnet-5',
-  'claude-opus-5',
-  // Superseded but still catalogued (see the Anthropic CATALOG note): a run that
-  // resolves onto one is still Builderforce funding its own key, so it stays overflow.
-  'claude-opus-4-8',
+  // Superseded-but-catalogued ids included: a run that resolves onto one is still
+  // Builderforce funding its own key.
+  ...ANTHROPIC_DIRECT_MODEL_IDS,
 ]);
 
 /** True when `model` resolved via the funded overflow path (premium fallback or

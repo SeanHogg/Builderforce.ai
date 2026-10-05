@@ -395,7 +395,21 @@ export interface ModelsListResponse {
   data?: ModelInfo[];
   /** Bare model-id pool (present on the `configured: false` branch). */
   models?: string[];
+  /**
+   * Each vendor's CURRENT flagship model ids, read from the gateway's vendor catalogs
+   * (`{ anthropic: { agentic: 'claude-opus-…', chat: 'claude-sonnet-…' }, … }`). Pin a
+   * ROLE through {@link ModelsApi.flagship} instead of hard-coding a version string —
+   * the gateway moves these on every model release, so a consumer never goes stale.
+   */
+  flagships?: Record<string, ModelFlagships>;
   [key: string]: unknown;
+}
+
+/** A vendor's flagship ids by turn shape — `agentic` leads tool-driven work, `chat`
+ *  plain turns. Ids are routed exactly as returned (send them as `model`). */
+export interface ModelFlagships {
+  agentic: string;
+  chat: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

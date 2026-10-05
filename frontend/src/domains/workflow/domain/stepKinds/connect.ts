@@ -90,7 +90,7 @@ export const CONNECT_STEP_KINDS: NodeKindMeta[] = [
     fields: [
       { key: 'role', label: 'Agent role', type: 'text', placeholder: 'e.g. code-creator, code-reviewer' },
       { key: 'runtime', label: 'Runtime', type: 'select', options: ['cloud', 'browser', 'local', 'remote'] },
-      { key: 'model', label: 'Model (blank = default)', type: 'text', placeholder: 'e.g. claude-opus-5' },
+      { key: 'model', label: 'Model (blank = default)', type: 'text', placeholder: 'e.g. claude-opus-5-5' },
       { key: 'task', label: 'Task / prompt', type: 'textarea', placeholder: 'What should this agent do?' },
     ],
   },
@@ -136,7 +136,7 @@ export const CONNECT_STEP_KINDS: NodeKindMeta[] = [
     defaultConfig: { provider: 'openai', model: '', system: '', prompt: '', temperature: 0.7 },
     fields: [
       { key: 'provider', label: 'Provider', type: 'text', placeholder: 'openai, anthropic, gemini, mistral…' },
-      { key: 'model', label: 'Model (blank = provider default)', type: 'text', placeholder: 'e.g. claude-opus-5, claude-sonnet-5' },
+      { key: 'model', label: 'Model (blank = provider default)', type: 'text', placeholder: 'e.g. claude-opus-5-5, claude-sonnet-5-5' },
       { key: 'system', label: 'System prompt', type: 'textarea', placeholder: 'Optional system instructions' },
       { key: 'prompt', label: 'Prompt', type: 'textarea', placeholder: 'User prompt — supports {{input}}' },
       { key: 'temperature', label: 'Temperature', type: 'number' },

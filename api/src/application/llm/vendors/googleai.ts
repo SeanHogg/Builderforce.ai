@@ -44,4 +44,5 @@ export const googleAiModule: VendorModule = createOpenAICompatibleVendor({
   catalog: CATALOG,
   defaultTier: 'PREMIUM',
   autoRoute: true,
+  flagships: { agentic: 'googleai/gemini-2.5-pro', chat: 'googleai/gemini-2.5-pro' },
 });

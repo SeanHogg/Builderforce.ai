@@ -41,6 +41,9 @@ interface VendorSpec {
   altBaseUrl?: string;
   /** Default catalog model ids (real, current). */
   models: string[];
+  /** The vendor's flagship catalog ids (BARE — the `direct/<vendor>/` route prefix is
+   *  added when the module is built). One declaration feeds every flagship list. */
+  flagships?: { agentic: string; chat: string };
   /** Override the OpenAI `max_tokens` field name (rare). */
   maxTokensField?: 'max_tokens' | 'max_completion_tokens';
   /** Extra static headers (rare). */
@@ -61,6 +64,7 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     id: 'openai', brand: 'OpenAI', apiKeyEnv: 'OPENAI_API_KEY',
     baseUrl: 'https://api.openai.com/v1/chat/completions',
     models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini'],
+    flagships: { agentic: 'gpt-4.1', chat: 'gpt-4.1' },
   },
   {
     id: 'groq', brand: 'Groq', apiKeyEnv: 'GROQ_API_KEY',
@@ -98,6 +102,7 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     // The same ids the SuperGrok subscription route (xaiOAuth) catalogues ULTRA: grok-4.6
     // (xAI's current flagship) leads, grok-4.5 stays routable for a pinned choice.
     models: ['ULTRA:grok-4.6', 'ULTRA:grok-4.5', 'grok-4.3', 'grok-3', 'grok-3-mini'],
+    flagships: { agentic: 'grok-4.6', chat: 'grok-4.6' },
   },
   {
     id: 'perplexity', brand: 'Perplexity', apiKeyEnv: 'PERPLEXITY_API_KEY',
@@ -119,6 +124,7 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     // credential health probe uses the FIRST entry, so the flagship leads: the
     // retired `moonshot-v1-*` models it used to probe fail on a perfectly good key.
     models: ['kimi-k2.5', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview', 'kimi-k2-thinking', 'kimi-k2-thinking-turbo'],
+    flagships: { agentic: 'kimi-k2.5', chat: 'kimi-k2.5' },
   },
   {
     id: 'kimi-code', brand: 'Kimi Code', apiKeyEnv: 'KIMI_CODE_API_KEY',
@@ -141,6 +147,7 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     // Keep the all-members model first: credential health probes use the first
     // catalog entry, while K3/high-speed access depends on the subscription tier.
     models: ['kimi-for-coding', 'k3-256k', 'k3', 'kimi-for-coding-highspeed'],
+    flagships: { agentic: 'kimi-for-coding', chat: 'kimi-for-coding' },
   },
   {
     // Alibaba issues Qwen keys from two platforms that do NOT accept each other's
@@ -160,6 +167,7 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     // Max/Plus are Qwen's premium line (OpenRouter catalogues qwen3.7-plus PREMIUM too);
     // the flash models are its fast, cheap line.
     models: ['PREMIUM:qwen3.8-max', 'PREMIUM:qwen3.7-plus', 'qwen3.8-flash', 'PREMIUM:qwen3.7-max', 'qwen3.6-flash'],
+    flagships: { agentic: 'qwen3.8-max', chat: 'qwen3.7-plus' },
   },
   {
     id: 'hyperbolic', brand: 'Hyperbolic', apiKeyEnv: 'HYPERBOLIC_API_KEY',
@@ -260,6 +268,7 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     id: 'minimax', brand: 'MiniMax', apiKeyEnv: 'MINIMAX_API_KEY',
     baseUrl: 'https://api.minimax.io/v1/chat/completions',
     models: ['MiniMax-M1', 'MiniMax-Text-01'],
+    flagships: { agentic: 'MiniMax-M1', chat: 'MiniMax-Text-01' },
   },
   {
     // Cohere ships an OpenAI-compatible endpoint (`/compatibility/v1`) alongside
@@ -279,6 +288,7 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     id: 'meta', brand: 'Meta AI', apiKeyEnv: 'META_API_KEY',
     baseUrl: 'https://api.meta.ai/v1/chat/completions',
     models: ['muse-spark-1.1'],
+    flagships: { agentic: 'muse-spark-1.1', chat: 'muse-spark-1.1' },
   },
 ];
 
@@ -307,6 +317,9 @@ export const openAICompatibleModules: ReadonlyArray<VendorModule> = SPECS.map((s
     ...(spec.pseudoStream ? { pseudoStream: spec.pseudoStream } : {}),
     ...(spec.requiresLocalEgress ? { requiresLocalEgress: spec.requiresLocalEgress } : {}),
     ...(spec.listsModels ? { listsModels: true } : {}),
+    ...(spec.flagships
+      ? { flagships: { agentic: `direct/${spec.id}/${spec.flagships.agentic}`, chat: `direct/${spec.id}/${spec.flagships.chat}` } }
+      : {}),
   }),
 );
 

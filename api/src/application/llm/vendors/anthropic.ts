@@ -68,7 +68,7 @@ const ANTHROPIC_VERSION = '2023-06-01';
 const OVERLOADED_STATUS = 529;
 /** Default per-turn output budget when the caller didn't set `max_tokens`, capped
  *  so one non-streaming Anthropic call stays inside the vendor timeout budget
- *  (both catalog models support far more, but the floor is a single coding turn). */
+ *  (every catalog model supports far more, but the floor is a single coding turn). */
 const DEFAULT_MAX_TOKENS = 16_000;
 /**
  * Output ceiling for the NON-STREAMING `call()` path. Deliberately conservative:
@@ -80,7 +80,8 @@ const DEFAULT_MAX_TOKENS = 16_000;
 const MAX_OUTPUT_TOKENS = 32_000;
 /**
  * Output ceiling for the STREAMING `callStream()` path — the model's own 128K
- * per-response maximum (every catalog entry — Sonnet 5, Opus 5, Opus 4.8 — caps there).
+ * per-response maximum (the 1M-context catalog entries cap there; a smaller model's own
+ * ceiling — Haiku 4.5's 64K — is applied on top via its request profile).
  *
  * The vendor timeout that forces the conservative non-streaming floor above does
  * NOT apply here: `fetchWithVendorTimeout` bounds the time to RESPONSE HEADERS,
@@ -94,18 +95,22 @@ const MAX_OUTPUT_TOKENS_STREAM = 128_000;
 
 /**
  * Resolve the `max_tokens` this request sends: the caller's value (or the default
- * when absent), floored at 1 and clamped to the SURFACE-appropriate ceiling. Split
- * out so the streaming-vs-non-streaming boundary is directly unit-testable —
+ * when absent), floored at 1 and clamped to the SURFACE-appropriate ceiling and, when
+ * the model is named, to that model's own per-response maximum. Split out so the
+ * streaming-vs-non-streaming boundary is directly unit-testable —
  * `prepareAnthropicRequest` needs live params, this needs a number and a boolean.
  */
-export function anthropicOutputCap(requested: number | undefined, stream: boolean): number {
-  const ceiling = stream ? MAX_OUTPUT_TOKENS_STREAM : MAX_OUTPUT_TOKENS;
+export function anthropicOutputCap(requested: number | undefined, stream: boolean, modelId?: string): number {
+  const surfaceCeiling = stream ? MAX_OUTPUT_TOKENS_STREAM : MAX_OUTPUT_TOKENS;
+  const ceiling = modelId ? Math.min(surfaceCeiling, anthropicRequestProfile(modelId).maxOutputTokens) : surfaceCeiling;
   return Math.min(Math.max(1, requested ?? DEFAULT_MAX_TOKENS), ceiling);
 }
 
-// Model ids are the exact Anthropic API strings (no date suffix). These are the
-// reliability floor, ordered cheapest-first in the fallback chain: Sonnet first,
-// Opus only if Sonnet is also down.
+// Model ids are the exact Anthropic API strings. THIS CATALOG IS THE ONE PLACE A
+// CLAUDE RELEASE IS RECORDED: add the new entry, list the ids it replaces in its
+// `supersedes`, and move `flagships` on the module below. Every routing list (the
+// coding fallback tail, connected-account seeds, coder recognition, `/v1/models`)
+// derives from that — none of them names a Claude version.
 //
 // SUPERSEDED ids stay in the catalog on purpose. Anthropic keeps a superseded model
 // dispatchable for a deprecation window, and dropping the entry the day a successor
@@ -113,18 +118,74 @@ export function anthropicOutputCap(requested: number | undefined, stream: boolea
 // silently filters an unknown id out of the BYO flagship seed, which empties the
 // connected-account chain and surfaces as "no configured provider is currently
 // usable" — a message that names neither the model nor the provider. Keep the old
-// entry, lead with the successor, and let {@link SUPERSEDED_MODEL_IDS} rewrite any
-// stored pin. Retire an entry only once Anthropic actually 404s it.
-const CATALOG: ReadonlyArray<VendorModelEntry> = [
-  { id: 'claude-sonnet-5',   tier: 'PREMIUM', label: 'Claude Sonnet 5 (Anthropic direct)',   brand: 'Anthropic', capabilities: ['tools', 'structured_output', 'vision'] },
-  { id: 'claude-opus-5',     tier: 'ULTRA',   label: 'Claude Opus 5 (Anthropic direct)',     brand: 'Anthropic', capabilities: ['tools', 'structured_output', 'vision'] },
-  { id: 'claude-opus-4-8',   tier: 'ULTRA',   label: 'Claude Opus 4.8 (Anthropic direct)',   brand: 'Anthropic', capabilities: ['tools', 'structured_output', 'vision'] },
+// entry, lead with the successor, and let its `supersedes` rewrite any stored pin.
+// Retire an entry only once Anthropic actually 404s it.
+/**
+ * How a model's Messages request must be shaped. The request surface DIFFERS across
+ * the Claude line, and every difference is a hard 400 rather than a soft ignore, so
+ * it is catalog DATA the translator reads — never an id check inside it.
+ *
+ *   • `thinkingOff` — what "no extended thinking this turn" is spelled as:
+ *       `disabled`      → `{type:'disabled'}` (Sonnet 5, Opus 5, Opus 4.8, Haiku 4.5).
+ *       `between_tools` → `{type:'between_tools'}`; `disabled` 400s (Sonnet 5.5).
+ *       `omit`          → no `thinking` field at all: thinking cannot be turned off and
+ *                         `disabled` 400s (Opus 5.5, Fable 5.1). The OFF branch sends
+ *                         effort `low` instead (see `prepareAnthropicRequest`).
+ *   • `adaptiveThinking` — the model accepts `{type:'adaptive'}` + `output_config.effort`.
+ *       Haiku 4.5 does not (budget-only thinking, and `effort` 400s), so it never thinks
+ *       through this translator.
+ *   • `forcedToolChoice` — `tool_choice` `any`/`tool` is accepted. Opus 5.5, Sonnet 5.5
+ *       and Fable 5.1 400 on both; the translator sends `auto` instead.
+ *   • `maxOutputTokens` — the model's per-response ceiling (Haiku 4.5 stops at 64K).
+ *
+ * Thinking blocks never round-trip through the gateway's OpenAI-shaped history, so a
+ * continuation turn on an always-thinking model carries NO thinking blocks — which the
+ * preserved-thinking check accepts (nothing is replayed, so nothing can mismatch).
+ */
+interface AnthropicRequestProfile {
+  thinkingOff: 'disabled' | 'between_tools' | 'omit';
+  adaptiveThinking: boolean;
+  forcedToolChoice: boolean;
+  maxOutputTokens: number;
+}
+
+interface AnthropicCatalogEntry extends VendorModelEntry {
+  request: AnthropicRequestProfile;
+}
+
+const CLAUDE_5_PROFILE: AnthropicRequestProfile = { thinkingOff: 'disabled', adaptiveThinking: true, forcedToolChoice: true, maxOutputTokens: 128_000 };
+const CLAUDE_5_5_ALWAYS_THINKING_PROFILE: AnthropicRequestProfile = { thinkingOff: 'omit', adaptiveThinking: true, forcedToolChoice: false, maxOutputTokens: 128_000 };
+const CODER_CAPABILITIES: VendorModelEntry['capabilities'] = ['tools', 'structured_output', 'vision'];
+
+const CATALOG: ReadonlyArray<AnthropicCatalogEntry> = [
+  { id: 'claude-sonnet-5-5', tier: 'PREMIUM', label: 'Claude Sonnet 5.5 (Anthropic direct)', brand: 'Anthropic', capabilities: CODER_CAPABILITIES,
+    supersedes: ['claude-sonnet-5', 'claude-sonnet-4-6', 'claude-sonnet-4-5', 'claude-sonnet-4-0'],
+    request: { thinkingOff: 'between_tools', adaptiveThinking: true, forcedToolChoice: false, maxOutputTokens: 128_000 } },
+  { id: 'claude-opus-5-5',   tier: 'ULTRA',   label: 'Claude Opus 5.5 (Anthropic direct)',   brand: 'Anthropic', capabilities: CODER_CAPABILITIES,
+    supersedes: ['claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-opus-4-5', 'claude-opus-4-1', 'claude-opus-4-0'],
+    request: CLAUDE_5_5_ALWAYS_THINKING_PROFILE },
+  { id: 'claude-fable-5-1',  tier: 'ULTRA',   label: 'Claude Fable 5.1 (Anthropic direct)',  brand: 'Anthropic', capabilities: CODER_CAPABILITIES,
+    supersedes: ['claude-fable-5'],
+    request: CLAUDE_5_5_ALWAYS_THINKING_PROFILE },
+  { id: 'claude-haiku-4-5-20251001', tier: 'STANDARD', label: 'Claude Haiku 4.5 (Anthropic direct)', brand: 'Anthropic', capabilities: CODER_CAPABILITIES,
+    supersedes: ['claude-haiku-4-5'],
+    request: { thinkingOff: 'disabled', adaptiveThinking: false, forcedToolChoice: true, maxOutputTokens: 64_000 } },
+  { id: 'claude-sonnet-5',   tier: 'PREMIUM', label: 'Claude Sonnet 5 (Anthropic direct)',   brand: 'Anthropic', capabilities: CODER_CAPABILITIES, request: CLAUDE_5_PROFILE },
+  { id: 'claude-opus-5',     tier: 'ULTRA',   label: 'Claude Opus 5 (Anthropic direct)',     brand: 'Anthropic', capabilities: CODER_CAPABILITIES, request: CLAUDE_5_PROFILE },
+  { id: 'claude-opus-4-8',   tier: 'ULTRA',   label: 'Claude Opus 4.8 (Anthropic direct)',   brand: 'Anthropic', capabilities: CODER_CAPABILITIES, request: CLAUDE_5_PROFILE },
 ];
 
 const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));
 
 function tierForAnthropicModel(modelId: string): AiModelTier {
   return CATALOG_BY_ID.get(modelId)?.tier ?? 'PREMIUM';
+}
+
+/** The request profile for `modelId`. An id off the catalog (a newer model a connected
+ *  account exposes before we list it) gets the strictest shape — `omit` thinking-off and
+ *  no forced tool choice — because that spelling is valid on every current model. */
+function anthropicRequestProfile(modelId: string): AnthropicRequestProfile {
+  return CATALOG_BY_ID.get(modelId)?.request ?? CLAUDE_5_5_ALWAYS_THINKING_PROFILE;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,11 +252,14 @@ function toAnthropicTool(t: unknown): Record<string, unknown> | null {
   return null;
 }
 
-/** Map OpenAI `tool_choice` to Anthropic's. */
-function toAnthropicToolChoice(tc: unknown): Record<string, unknown> | undefined {
+/** Map OpenAI `tool_choice` to Anthropic's. A model that rejects forced tool use
+ *  (`forcedToolChoice: false`) gets `auto` for `required` / a named function — the
+ *  tools stay available and the prompt still steers, where `any`/`tool` would 400. */
+function toAnthropicToolChoice(tc: unknown, forcedToolChoice: boolean): Record<string, unknown> | undefined {
   if (tc === 'auto' || tc == null) return { type: 'auto' };
-  if (tc === 'required' || tc === 'any') return { type: 'any' };
   if (tc === 'none') return { type: 'auto' }; // keep tools usable; the model self-selects
+  if (!forcedToolChoice) return { type: 'auto' };
+  if (tc === 'required' || tc === 'any') return { type: 'any' };
   const obj = tc as { type?: string; function?: { name?: string } };
   if (obj?.type === 'function' && obj.function?.name) return { type: 'tool', name: obj.function.name };
   return { type: 'auto' };
@@ -284,7 +348,9 @@ function toAnthropicRequest(params: VendorCallParams): AnthropicRequest {
     ...(systemParts.filter(Boolean).length ? { system: systemParts.filter(Boolean).join('\n\n') } : {}),
     messages,
     ...(tools && tools.length ? { tools } : {}),
-    ...(tools && tools.length && 'tool_choice' in extra ? { tool_choice: toAnthropicToolChoice(extra.tool_choice) } : {}),
+    ...(tools && tools.length && 'tool_choice' in extra
+      ? { tool_choice: toAnthropicToolChoice(extra.tool_choice, anthropicRequestProfile(params.model).forcedToolChoice) }
+      : {}),
   };
 }
 
@@ -378,7 +444,8 @@ function prepareAnthropicRequest(
         : 'CLAUDE_API_KEY is empty',
     );
   }
-  const maxTokens = anthropicOutputCap(params.maxTokens, stream);
+  const profile = anthropicRequestProfile(params.model);
+  const maxTokens = anthropicOutputCap(params.maxTokens, stream, params.model);
   // Cache the large STABLE prefix (tools + system instructions/repo context) so a
   // multi-turn run pays ~0.1x for it after the first turn. `{type:'ephemeral'}` is the
   // GA 5-minute cache. A SUBSCRIPTION (OAuth) token REQUIRES the Claude Code identity as
@@ -422,19 +489,29 @@ function prepareAnthropicRequest(
   const noPriorAssistantTurn = !req.messages.some((m) => m.role === 'assistant');
   const firstTurnHint = (params.extraBody ?? {}).firstTurn;
   const firstTurnWithTools = noPriorAssistantTurn && firstTurnHint !== false;
-  const enableThinking = requestedThinking?.type === 'adaptive' && (!hasTools || firstTurnWithTools);
-  // ADAPTIVE thinking is the only on-mode on every model in CATALOG. The legacy
-  // manual form (`{type:'enabled', budget_tokens}`) is REMOVED on Sonnet 5 / Opus 4.8
-  // and 400s, so depth rides on `output_config.effort` instead of a token budget.
-  // `{type:'disabled'}` remains valid on both and stays the continuation-turn default.
-  const thinking: Record<string, unknown> = enableThinking ? { type: 'adaptive' } : { type: 'disabled' };
-  // INVARIANT — effort rides ONLY the enabled branch. On Opus 5 `{type:'disabled'}` is
-  // accepted at effort `high` or below and 400s at `xhigh`/`max`; leaving effort unset on
-  // the disabled branch takes the server default (`high`), which is always valid. Do not
-  // "simplify" this by hoisting thinkingEffort out of the conditional.
+  const enableThinking = profile.adaptiveThinking
+    && requestedThinking?.type === 'adaptive'
+    && (!hasTools || firstTurnWithTools);
+  // ADAPTIVE thinking is the only on-mode on every adaptive model in CATALOG. The legacy
+  // manual form (`{type:'enabled', budget_tokens}`) is REMOVED on every one of them and
+  // 400s, so depth rides on `output_config.effort` instead of a token budget. The OFF
+  // spelling is per model (see {@link AnthropicRequestProfile.thinkingOff}): `disabled`
+  // 400s on Sonnet 5.5 (`between_tools`) and on Opus 5.5 / Fable 5.1 (no field at all).
+  const thinking: Record<string, unknown> | undefined = enableThinking
+    ? { type: 'adaptive' }
+    : profile.thinkingOff === 'omit' ? undefined : { type: profile.thinkingOff };
+  // INVARIANT — effort rides ONLY the enabled branch. On Opus 5 `{type:'disabled'}` and on
+  // Sonnet 5.5 `{type:'between_tools'}` are accepted at effort `high` or below and 400 at
+  // `xhigh`/`max`; leaving effort unset off the enabled branch takes the server default,
+  // which is always valid. Do not "simplify" this by hoisting thinkingEffort out of the
+  // conditional.
+  // A model that cannot turn thinking off (`omit`) gets `low` effort on the OFF branch —
+  // the closest spelling of "the caller did not ask for thinking". Without it Opus 5.5
+  // thinks at its `medium` default, and a small `max_tokens` budget is spent on
+  // thinking before any visible text, which the empty-200 guard then fails over.
   const thinkingEffort = enableThinking
     ? ((params.extraBody ?? {}).thinkingEffort as string | undefined)
-    : undefined;
+    : profile.thinkingOff === 'omit' ? 'low' : undefined;
   const body: Record<string, unknown> = {
     model: params.model,
     max_tokens: maxTokens,
@@ -445,7 +522,7 @@ function prepareAnthropicRequest(
     ...(system ? { system } : {}),
     ...(tools ? { tools } : {}),
     ...(req.tool_choice ? { tool_choice: req.tool_choice } : {}),
-    thinking,
+    ...(thinking ? { thinking } : {}),
     ...(stream ? { stream: true } : {}),
   };
   // `output_config` carries BOTH structured-output format and thinking effort, so it
@@ -630,6 +707,9 @@ function streamAnthropicToOpenAi(body: ReadableStream<Uint8Array>, model: string
 export const anthropicModule: VendorModule = {
   id: 'anthropic',
   catalog: CATALOG,
+  // Sonnet leads plain turns and is the cheaper first rung of the coding floor; Opus
+  // leads tool-driven agentic turns. Bare ids: the direct vendor has no route prefix.
+  flagships: { agentic: 'claude-opus-5-5', chat: 'claude-sonnet-5-5' },
   tierFor: tierForAnthropicModel,
   autoRoute: false, // floor-only: never auto-selected; reached via the coding fallback chain, an explicit pin, or a tenant's connected-BYO seed.
   // Prefer a connected tenant SUBSCRIPTION (OAuth) over the operator's metered API

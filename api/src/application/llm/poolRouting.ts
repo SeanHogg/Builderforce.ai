@@ -40,17 +40,8 @@ const TOOL_CAPABLE_MODELS: ReadonlySet<string> = new Set([
  *  BYO frontier flagships that route on a tenant's own key). */
 const STRUCTURED_OUTPUT_MODELS: ReadonlySet<string> = RECOGNIZED_CODER_MODELS;
 
-/** Models with image-input (vision) capability. */
-const VISION_MODELS: ReadonlySet<string> = new Set([
-  'anthropic/claude-sonnet-5',
-  'openai/gpt-4.1',
-  'google/gemini-2.5-pro',
-  'google/gemma-4-26b-a4b-it:free',
-  'microsoft/phi-4-multimodal-instruct',
-]);
-
 /**
- * OCR-specialized models. Deliberately disjoint from VISION_MODELS — these
+ * OCR-specialized models. Deliberately disjoint from the vision-capable catalog entries — these
  * are tuned for text extraction, not general visual reasoning, so they should
  * only float up when the request explicitly signals OCR (via a `useCase`
  * slug containing "ocr"). On a generic vision request they stay in the pool
@@ -65,16 +56,14 @@ const OCR_MODELS: ReadonlySet<string> = new Set([
  * the shape-router (`reorderPoolByShape`) and the public `/v1/models` surface
  * (so SDK consumers like hired.video can discover which models read images /
  * PDFs without hard-coding ids). Merges the model's catalog-declared
- * `capabilities` with the legacy literal id sets above, which still carry the
- * capability facts for OpenRouter-routed models whose catalog entries predate
- * the `capabilities` field. Output order is stable: tools, structured_output,
- * vision, ocr.
+ * `capabilities` (the ONE source for `vision` — declared on the vendor catalog entry)
+ * with the derived tool / structured-output sets above and the OCR set. Output order is
+ * stable: tools, structured_output, vision, ocr.
  */
 export function capabilitiesForModel(model: string): AiCapability[] {
   const set = new Set<AiCapability>(catalogEntry(model)?.capabilities ?? []);
   if (TOOL_CAPABLE_MODELS.has(model)) set.add('tools');
   if (STRUCTURED_OUTPUT_MODELS.has(model)) set.add('structured_output');
-  if (VISION_MODELS.has(model)) set.add('vision');
   if (OCR_MODELS.has(model)) set.add('ocr');
   return (['tools', 'structured_output', 'vision', 'ocr'] as const).filter((c) => set.has(c));
 }

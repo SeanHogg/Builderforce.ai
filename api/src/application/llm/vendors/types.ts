@@ -356,12 +356,40 @@ export interface VendorModelEntry {
    *  pool — a coding context routinely exceeds that and the model 413s; ordering by
    *  this keeps big-window coders first, and a 413 cascades (see CASCADE_STATUSES). */
   contextWindow?: number;
+  /**
+   * Ids (in this vendor's own namespace) that THIS entry replaces. The registry folds
+   * every catalog's `supersedes` into the ONE rewrite map ({@link catalogSupersessions}),
+   * so a stored pin, a caller hint, or a seed constant naming an old id dispatches the
+   * successor. A model release is therefore one catalog edit: add the new entry and
+   * list what it replaces here — nothing outside the vendor file names the version.
+   * Same vendor, same tier family only (Opus → Opus): a silent tier change is worse
+   * than a 404.
+   */
+  supersedes?: readonly string[];
+  /** `false` keeps this one entry out of the auto-selected pools while its vendor
+   *  auto-routes — a model a caller may pin (and the catalog must recognise) but the
+   *  cascade must never fall onto on its own (e.g. an ULTRA-priced Opus on OpenRouter). */
+  autoRoute?: false;
+}
+
+/** A vendor's current flagship models, as ROUTED ids (prefix included, exactly what a
+ *  caller sends). `agentic` leads tool-driven coding turns; `chat` leads plain turns. */
+export interface VendorFlagships {
+  agentic: string;
+  chat: string;
 }
 
 export interface VendorModule {
   id: VendorId;
   apiKeyFrom(env: VendorEnv): string | null;
   catalog: ReadonlyArray<VendorModelEntry>;
+  /**
+   * This vendor's flagships — the ONE declaration every "the current best model of
+   * vendor X" list derives from (connected-account seeds, coder recognition, the
+   * coding fallback tail, `/v1/models`). Absent = the vendor has no flagship role.
+   * Each id must route to this vendor and name a catalog entry (guarded by test).
+   */
+  flagships?: VendorFlagships;
   tierFor(modelId: string): AiModelTier;
   call(params: VendorCallParams): Promise<VendorCallResult>;
   /** Optional streaming variant. Vendors that omit this are skipped during streaming dispatch. */

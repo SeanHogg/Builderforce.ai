@@ -1,4 +1,4 @@
-import type { AiCapability, ModelInfo, ModelsListResponse } from '../domain/types';
+import type { AiCapability, ModelFlagships, ModelInfo, ModelsListResponse } from '../domain/types';
 import { HttpClient } from '../infrastructure/httpClient';
 
 export class ModelsApi {
@@ -11,6 +11,17 @@ export class ModelsApi {
   /** Raw `/llm/v1/models` response — pool status, capabilities, plan, cooldowns. */
   list(): Promise<ModelsListResponse> {
     return this.http.getJson<ModelsListResponse>('/llm/v1/models');
+  }
+
+  /**
+   * The gateway's CURRENT flagship model id for `vendor` and turn shape — e.g.
+   * `flagship('anthropic', 'agentic')` → today's Claude Opus. Use this instead of a
+   * hard-coded version string: the gateway updates it on every model release. Returns
+   * `null` when the vendor declares no flagship.
+   */
+  async flagship(vendor: string, shape: keyof ModelFlagships = 'agentic'): Promise<string | null> {
+    const res = await this.list();
+    return res.flagships?.[vendor]?.[shape] ?? null;
   }
 
   /**

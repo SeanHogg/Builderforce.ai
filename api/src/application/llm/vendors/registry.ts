@@ -40,6 +40,7 @@ import {
   type VendorEnv,
   type VendorId,
   type VendorModelEntry,
+  type VendorFlagships,
   type VendorModule,
   type VendorStreamResult,
   type UpstreamDiagnostic,
@@ -324,8 +325,42 @@ export function getAllVendorIds(): VendorId[] {
 export function autoRoutableModelsByTier(...tiers: AiModelTier[]): string[] {
   const set = new Set(tiers);
   return MODULES.filter((mod) => mod.autoRoute !== false).flatMap((mod) =>
-    mod.catalog.filter((m) => set.has(m.tier)).map((m) => m.id),
+    mod.catalog.filter((m) => set.has(m.tier) && m.autoRoute !== false).map((m) => m.id),
   );
+}
+
+/**
+ * Superseded id → successor id, folded from every catalog entry's `supersedes`. This is
+ * the ONE source of model-version bumps: the vendor file that declares a model also
+ * declares what it replaces, so no routing list ever has to be edited for a release.
+ */
+export function catalogSupersessions(): Readonly<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const mod of MODULES) {
+    // A pin may carry the vendor's route prefix (`direct/amazon-bedrock/<id>`,
+    // `openrouter/<id>`), so every prefixed spelling of an old id is rewritten too —
+    // keeping the prefix, so the successor still routes to the same vendor.
+    const prefixes = VENDOR_PREFIXES.filter((p) => p.vendor === mod.id).map((p) => p.prefix);
+    for (const entry of mod.catalog) {
+      for (const old of entry.supersedes ?? []) {
+        out[old] = entry.id;
+        for (const prefix of prefixes) out[`${prefix}${old}`] = `${prefix}${entry.id}`;
+      }
+    }
+  }
+  return out;
+}
+
+/** The vendor's declared flagship for the turn shape, or null when it declares none. */
+export function vendorFlagship(vendor: string, agentic: boolean): string | null {
+  const mod = (MODULES_BY_ID as Record<string, VendorModule | undefined>)[vendor];
+  const flagships = mod?.flagships;
+  return flagships ? (agentic ? flagships.agentic : flagships.chat) : null;
+}
+
+/** Every vendor that declares flagships → its flagships, in registry order. */
+export function allVendorFlagships(): ReadonlyArray<{ vendor: VendorId } & VendorFlagships> {
+  return MODULES.flatMap((mod) => (mod.flagships ? [{ vendor: mod.id, ...mod.flagships }] : []));
 }
 
 // ---------------------------------------------------------------------------

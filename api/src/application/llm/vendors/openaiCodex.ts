@@ -255,6 +255,7 @@ async function callResponsesStream(params: VendorCallParams): Promise<VendorStre
 
 export const openAiCodexModule: VendorModule = {
   id: 'openai-codex', autoRoute: false,
+  flagships: { agentic: 'openai-codex/gpt-5.6-sol', chat: 'openai-codex/gpt-5.6-sol' },
   catalog: [{ id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', brand: 'OpenAI Codex', tier: 'ULTRA', capabilities: ['tools', 'structured_output', 'vision'], contextWindow: 400000 }],
   tierFor(): AiModelTier { return 'ULTRA'; },
   apiKeyFrom(env: VendorEnv): string | null { return env.OPENAI_CODEX_AUTH ?? null; },

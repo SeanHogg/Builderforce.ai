@@ -51,7 +51,7 @@ import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage, backfillTraceResponseBody, imageTraceResult } from '../../application/llm/traceLogger';
 import { wrapStreamForTrace } from '../../application/llm/streamTrace';
 import { recordUsageRow, resolveUsageDatabase, usageRequestCountSql, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
-import { pickUsage, vendorForModel, type VendorEgress } from '../../application/llm/vendors';
+import { allVendorFlagships, pickUsage, vendorForModel, type VendorEgress } from '../../application/llm/vendors';
 import {
   dispatchEmbeddingVendor,
   EmbeddingCascadeExhaustedError,
@@ -2743,6 +2743,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         ]))
       : [];
 
+    // Each vendor's CURRENT flagship ids (`{ anthropic: { agentic, chat }, … }`), read from
+    // the vendor catalogs. A consumer pins a ROLE through this ("Anthropic's agentic
+    // flagship") instead of copying a version string that goes stale on the next release.
+    const flagships = Object.fromEntries(
+      allVendorFlagships().map(({ vendor, agentic, chat }) => [vendor, { agentic, chat }]),
+    );
+
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
     if (!requiredKey && !openRouterConnections.some((connection) => connection.hasKey)) {
       return c.json({
@@ -2758,6 +2765,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         canUseFrontierModels,
         ...premiumInfo,
         byo: { providers: byoProviders, models: byoModels },
+        flagships,
       });
     }
 
@@ -2776,6 +2784,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       canUseFrontierModels,
       ...premiumInfo,
       byo: { providers: byoProviders, models: byoModels },
+      flagships,
     });
   });
 

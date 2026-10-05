@@ -204,6 +204,7 @@ async function callStream(params: VendorCallParams): Promise<VendorStreamResult>
 
 export const xaiOAuthModule: VendorModule = {
   id: 'xai-oauth', autoRoute: false,
+  flagships: { agentic: 'xai-oauth/grok-4.6', chat: 'xai-oauth/grok-4.6' },
   // Keep the subscription route on xAI's current stable model. Pinning the stale
   // grok-4.3 id made model availability indistinguishable from a real plan rejection:
   // both surfaced as the same 403 and told the owner to upgrade. grok-4.6 (Aug 2026)

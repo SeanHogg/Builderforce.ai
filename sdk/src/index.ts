@@ -28,6 +28,7 @@ export type {
   // Models / usage
   AiCapability,
   ModelInfo,
+  ModelFlagships,
   ModelsListResponse,
   UsageByModel,
   UsageByDay,

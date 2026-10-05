@@ -31,7 +31,7 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   // Verified against GET /api/v1/models on 2026-08-11. Free availability is
   // volatile, so keep this list current rather than retaining retired slugs.
   { id: 'nvidia/nemotron-3-ultra-550b-a55b:free',    tier: 'FREE', label: 'Nemotron 3 Ultra 550B (Free)',       brand: 'NVIDIA'     },
-  { id: 'google/gemma-4-26b-a4b-it:free',            tier: 'FREE', label: 'Gemma 4 26B A4B (Free)',             brand: 'Google'     },
+  { id: 'google/gemma-4-26b-a4b-it:free',            tier: 'FREE', label: 'Gemma 4 26B A4B (Free)',             brand: 'Google',    capabilities: ['vision'] },
   { id: 'nvidia/nemotron-3-super-120b-a12b:free',    tier: 'FREE', label: 'Nemotron 3 Super 120B (Free)',       brand: 'NVIDIA'     },
   { id: 'poolside/laguna-s-2.1:free',                tier: 'FREE', label: 'Laguna S 2.1 (Free)',                 brand: 'Poolside'   },
   { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', tier: 'FREE', label: 'Nemotron 3 Nano Omni 30B Reasoning (Free)', brand: 'NVIDIA' },
@@ -49,7 +49,7 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   //    Pro/Teams tenants land on cheap models before reaching PREMIUM/ULTRA.
   { id: 'meta-llama/llama-3.1-8b-instruct',          tier: 'STANDARD', label: 'Llama 3.1 8B Instruct',    brand: 'Meta'      },
   { id: 'google/gemma-3-12b-it',                     tier: 'STANDARD', label: 'Gemma 3 12B Instruct',     brand: 'Google'    },
-  { id: 'ibm-granite/granite-4.2-8b',                tier: 'STANDARD', label: 'Granite 4.2 8B',           brand: 'IBM'       },
+  { id: 'ibm-granite/granite-4.2-8b',                tier: 'STANDARD', label: 'Granite 4.2 8B',           brand: 'IBM',       supersedes: ['ibm-granite/granite-4.1-8b'] },
   { id: 'qwen/qwen3.5-9b',                           tier: 'STANDARD', label: 'Qwen 3.5 9B',              brand: 'Qwen'      },
   { id: 'z-ai/glm-4.7',                              tier: 'STANDARD', label: 'GLM 4.7',                  brand: 'Z.AI'      },
   { id: 'openai/gpt-5-nano',                         tier: 'STANDARD', label: 'GPT-5 Nano',               brand: 'OpenAI'    },
@@ -61,14 +61,22 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'anthropic/claude-haiku-4.5',                tier: 'STANDARD', label: 'Claude Haiku 4.5',     brand: 'Anthropic' },
 
   // ── PREMIUM tier — paid coding-grade models
-  // Claude Sonnet 5 replaces Sonnet 4.6. Keep the exact live OpenRouter id.
-  { id: 'anthropic/claude-sonnet-5',                 tier: 'PREMIUM', label: 'Claude Sonnet 5',       brand: 'Anthropic' },
-  { id: 'openai/gpt-4.1',                            tier: 'PREMIUM', label: 'GPT-4.1',               brand: 'OpenAI'    },
+  // Keep the exact live OpenRouter ids — OpenRouter spells versions with a DOT
+  // (`claude-sonnet-5.5`) where Anthropic uses a dash, so the dashed spelling a caller
+  // copies from Anthropic's docs is listed in `supersedes` as an alias of the same model.
+  { id: 'anthropic/claude-sonnet-5.5',               tier: 'PREMIUM', label: 'Claude Sonnet 5.5',     brand: 'Anthropic', capabilities: ['vision'],
+    supersedes: ['anthropic/claude-sonnet-5', 'anthropic/claude-sonnet-4-6', 'anthropic/claude-sonnet-4-5', 'anthropic/claude-sonnet-5-5'] },
+  { id: 'openai/gpt-4.1',                            tier: 'PREMIUM', label: 'GPT-4.1',               brand: 'OpenAI',    capabilities: ['vision'] },
   { id: 'openai/o4-mini',                            tier: 'PREMIUM', label: 'o4-mini (reasoning)',   brand: 'OpenAI'    },
-  { id: 'google/gemini-2.5-pro',                     tier: 'PREMIUM', label: 'Gemini 2.5 Pro',        brand: 'Google'    },
+  { id: 'google/gemini-2.5-pro',                     tier: 'PREMIUM', label: 'Gemini 2.5 Pro',        brand: 'Google',    capabilities: ['vision'] },
   { id: 'qwen/qwen3.7-plus',                         tier: 'PREMIUM', label: 'Qwen3.7 Plus (agentic + vision)', brand: 'Qwen' },
   { id: 'x-ai/grok-4.20',                            tier: 'PREMIUM', label: 'Grok 4.20',             brand: 'xAI'       },
   { id: 'qwen/qwen3.5-397b-a17b',                    tier: 'PREMIUM', label: 'Qwen 3.5 397B (MoE)',   brand: 'Alibaba'   },
+
+  // ── ULTRA, pin-only — recognised (tier, supersession) but never auto-selected: an
+  //    Opus-priced model must be asked for, never cascaded onto.
+  { id: 'anthropic/claude-opus-5.5',                 tier: 'ULTRA', label: 'Claude Opus 5.5',         brand: 'Anthropic', autoRoute: false, capabilities: ['vision'],
+    supersedes: ['anthropic/claude-opus-5', 'anthropic/claude-opus-5-5'] },
 
   // NOTE: `google/gemini-2.5-flash-lite` is part of the vendor-diverse premium
   // fallback chain (see `PREMIUM_FALLBACK_MODELS` in LlmProxyService) and is
@@ -108,6 +116,9 @@ const HEADERS = { 'HTTP-Referer': 'https://builderforce.ai' };
 export const openRouterModule: VendorModule = {
   id: 'openrouter',
   catalog: CATALOG,
+  // The strongest agentic coder on the operator's OpenRouter key — the paid coding
+  // pool's Claude rung and the first rung of the coding fallback tail.
+  flagships: { agentic: 'anthropic/claude-sonnet-5.5', chat: 'anthropic/claude-sonnet-5.5' },
   // OpenRouter routes many `:free` ids to Cerebras as upstream, so it inherits
   // Cerebras's strict-mode strip set (metadata-driven — see jsonSchemaSanitize.ts).
   schemaDialect: { stripKeywords: CEREBRAS_STRICT_KEYWORDS },
