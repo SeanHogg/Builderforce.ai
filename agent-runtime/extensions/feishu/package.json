@@ -5,7 +5,7 @@
   "type": "module",
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.59.0",
-    "@sinclair/typebox": "0.34.48",
+    "@sinclair/typebox": "0.34.52",
     "zod": "^4.3.6"
   },
   "devDependencies": {
