@@ -134,7 +134,7 @@ describe('CanvasRoomSurface — stations', () => {
     // Measure on a board with no idea, app or deployment: unready, so the sign stands.
     renderRoom({}, 'measure');
     const titles = screen.getAllByTestId('room-station').map((row) => row.querySelector('strong')?.textContent);
-    expect(titles).toContain('Needs An idea on the board');
+    expect(titles).toContain('Needs: An idea on the board');
   });
 
   it('keeps room order with no phase — nothing lit, no path sign', () => {

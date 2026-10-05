@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CANVAS_PHASES, type CanvasPhase } from './canvasPhases';
 import {
   frontierPhase,
+  nextPhaseOffer,
   phaseReadiness,
   readinessByPhase,
   readinessSignals,
@@ -186,5 +187,20 @@ describe('frontierPhase — where a canvas with no remembered phase opens', () =
     // A deployment with no url is not live, so the board is still in Run.
     expect(frontierPhase(readinessSignals([idea(), app, deployment()]))).toBe('run');
     expect(frontierPhase(readinessSignals([idea(), app, deployment('https://dogs.example')]))).toBe('measure');
+  });
+});
+
+describe('nextPhaseOffer — what the path card offers instead of moving the reader', () => {
+  const ALL: ReadinessSignals = { hasIdea: true, hasApp: true, isLive: true, hasMetric: true };
+  it.each([
+    ['idea', { hasIdea: false, hasApp: false, isLive: false, hasMetric: false }, null],
+    ['idea', { hasIdea: true, hasApp: false, isLive: false, hasMetric: false }, 'make'],
+    ['make', { hasIdea: true, hasApp: false, isLive: false, hasMetric: false }, null],
+    ['run', { hasIdea: true, hasApp: true, isLive: true, hasMetric: false }, 'measure'],
+    ['measure', { hasIdea: true, hasApp: true, isLive: true, hasMetric: false }, null],
+    ['measure', ALL, 'reach'],
+    ['reach', ALL, null],
+  ] as const)('in %s with %o offers %s', (phase, signals, expected) => {
+    expect(nextPhaseOffer(phase, readinessByPhase(signals))).toBe(expected);
   });
 });

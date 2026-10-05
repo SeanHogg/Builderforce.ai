@@ -11,9 +11,14 @@
 - **Room.** Stations are data with an optional `phase`. The current phase's station is lit and listed first. Evidence, Build, Ops and Launch stations are new. While a phase is unready, a sign station names what it needs, and the chrome's path card stands down on the Room (`phasePathInScene`).
 - **Starting points** lead with the phase's three starters ("Starting points · Measure"), and the bar group for the current phase is tinted.
 - Release note in migration 1201, plus the blog post `the-canvas-knows-where-you-are` in five languages. All five catalogs carry real translations.
-- Found and fixed along the way: `chatInput.localDetail` was formatted without its `{runtime}` value, which raised FORMATTING_ERROR on every composer mount.
+- **Found and fixed along the way** (all from the review screenshots):
+  - `chatInput.localDetail` was formatted without its `{runtime}` value, which raised FORMATTING_ERROR on every composer mount.
+  - The Room's Look/Walk/Design bar sat under the floating top chrome. It now clears `--canvas-top-chrome-space`.
+  - Its active pill was accent-on-accent. It now uses `--text-on-accent`.
+  - The station list's auto grid track pushed Open buttons under the docked Brain. It is now `minmax(0, 1fr)`.
+  - The ghost card's placement now knows the dock's width (`stage/canvasDockInsets.ts`, published by `CanvasShell` beside `--brain-dock-*`). It tries right of the board, then left, then below.
 
-**Verified (Sonnet):** api type-check passes, and `siteAudienceSummary` and `siteData` pass (40/40). The VS Code client type-check passes. Frontend guards pass 25/25. The targeted PRD 32 suites pass, including `CreationCanvas.test.tsx` (147/147 across the four re-run files), along with i18n parity. §9 review was done by Opus. Screenshots of Measure before anything is live, on Board, Room and phone in both themes, led to three layout fixes: the ghost card clipped by the Brain panel, the path card covering the Room scene, and the stage sheet pushed under the prompt.
+**Verified (Sonnet):** api type-check passes, and `siteAudienceSummary` and `siteData` pass (40/40). The VS Code client type-check passes. Frontend guards pass 25/25. The targeted PRD 32 suites pass, including `CreationCanvas.test.tsx` (147/147 across the four re-run files), along with i18n parity. §9 review was done by Opus. Four rounds of screenshots of Measure before anything is live, on Board, Room and phone in both themes, drove the fixes above, along with the path card standing down on the Room and folding away while the phone stage sheet is open. No console errors remain.
 
 **Planning-session review (2026-10-05, against PRD 32 §9).** Checked:
 - the ghost card is never a node;

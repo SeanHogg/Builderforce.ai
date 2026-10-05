@@ -76,9 +76,10 @@ export const GHOST_CARD_GAP = 80;
  * - an empty board: the centre of what is on screen;
  * - just right of everything on the board, top-aligned with it, when that slot is on
  *   screen;
- * - otherwise under the board, left-aligned with it and pulled into view sideways. The
- *   board pane ends where the Brain panel begins, so "right of the board" is often past
- *   its edge — a ghost there was drawn clipped and unreadable.
+ * - otherwise just LEFT of it, when that slot is on screen;
+ * - otherwise under the board, left-aligned with it and pulled into view sideways.
+ * A docked Brain covers the pane's right edge (the caller narrows the viewport by it), so
+ * "right of the board" is often off screen — a ghost there was drawn clipped.
  * A viewport with no measured size (no layout yet) never forces the fallback.
  */
 export function ghostPosition(nodes: readonly LensNode[], viewport: LensViewport): { x: number; y: number } {
@@ -100,6 +101,9 @@ export function ghostPosition(nodes: readonly LensNode[], viewport: LensViewport
   const besideX = right + GHOST_CARD_GAP;
   const visibleRight = viewport.x + viewport.width;
   if (viewport.width <= 0 || besideX + GHOST_CARD_WIDTH <= visibleRight) return { x: besideX, y: top };
+  // Left before below: under the board is where the prompt and the command bar float.
+  const leftX = left - GHOST_CARD_GAP - GHOST_CARD_WIDTH;
+  if (leftX >= viewport.x) return { x: leftX, y: top };
   const x = Math.max(viewport.x, Math.min(left, visibleRight - GHOST_CARD_WIDTH));
   return { x, y: bottom + GHOST_CARD_GAP };
 }

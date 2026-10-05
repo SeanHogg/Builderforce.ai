@@ -19575,7 +19575,7 @@
       "open": "Open Launch"
     },
     "phasePath": {
-      "title": "Needs {needs}",
+      "title": "Needs: {needs}",
       "summary": "{count, plural, one {# step to go} other {# steps to go}}"
     }
   },

@@ -173,6 +173,12 @@ describe('ghostPosition — where the phase’s first object would go', () => {
     expect(ghostPosition(nodes, { x: 0, y: 0, width: 600, height: 800 })).toEqual({ x: 100, y: 250 + GHOST_CARD_GAP });
   });
 
+  it('stands left of the board when the right is off screen and the left is not', () => {
+    const nodes = [{ position: { x: 500, y: 60 }, measured: { width: 300, height: 200 } }];
+    // Beside: 880..1140, past a 1000px view. Left: 500 - gap - card = 160, on screen.
+    expect(ghostPosition(nodes, { x: 0, y: 0, width: 1000, height: 800 })).toEqual({ x: 500 - GHOST_CARD_GAP - GHOST_CARD_WIDTH, y: 60 });
+  });
+
   it('pulls the dropped ghost into view sideways', () => {
     const nodes = [{ position: { x: -400, y: 0 }, measured: { width: 900, height: 100 } }];
     expect(ghostPosition(nodes, { x: 0, y: 0, width: 600, height: 800 }).x).toBe(0);
