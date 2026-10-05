@@ -40,6 +40,7 @@ import { CreationNodeActionsContext } from './bodies/nodeActions';
 import type { CreationNodeActions } from './bodies/types';
 import { AuthoredContent } from './bodies/shared';
 import { useAuthoredNodeSize, useSpecDeriveBoard } from './bodies/boardSubscriptions';
+import { useCanvasPhaseFocus } from './phase/CanvasPhaseContext';
 
 /** The historical name for `CanvasObject`, which the canvas domain now owns.
  *  Aliased rather than re-declared: two structurally identical declarations of
@@ -160,6 +161,8 @@ const CLOCK_BADGE_STROKE = 2.2;
 export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onOpenPanel, onInsertFrom, onOpenSurface, onRevealObject, onMoveDeal, onOpenFrame, onDeleteNode }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const specBoard = useSpecDeriveBoard(data.kind);
+  // The phase lens (`lib/canvasPhaseLens.ts`): `in` rings the card, `out` dims it; the stylesheet keeps a selected card at full strength.
+  const phaseFocus = useCanvasPhaseFocus(data.kind) ?? undefined;
   const isWide = WIDE_KINDS.has(data.kind)
     || WEB_PAGE_KINDS.has(data.kind)
     // Every founder object that declares a `rows` field renders a table, and a table in
@@ -291,6 +294,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
       data-node-id={id}
       data-node-kind={data.kind}
       data-density="minimized"
+      data-phase-focus={phaseFocus}
       className={`${styles.nodeOrb} ${selected ? styles.selected : ''}`}
     >
       <CanvasNodeHandle type="target" position={Position.Left} className={styles.handle} />
@@ -313,7 +317,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   );
 
   return (
-    <article style={cardStyle} data-testid={`canvas-node-${data.kind}`} data-node-id={id} data-node-kind={data.kind} data-viewport={data.viewport} data-density={density} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
+    <article style={cardStyle} data-testid={`canvas-node-${data.kind}`} data-node-id={id} data-node-kind={data.kind} data-viewport={data.viewport} data-density={density} data-phase-focus={phaseFocus} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <NodeResizer isVisible={selected} minWidth={240} minHeight={130} lineClassName={styles.resizeLine} handleClassName={styles.resizeHandle} />
       <CanvasNodeHandle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>

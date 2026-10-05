@@ -1,7 +1,7 @@
 /**
  * /api/spawn — Spawn, the Roblox game builder (spawn.builderforce.ai).
  *
- * The website reads the price list and the account and runs the two purchases;
+ * The website reads the price list, the installers and the account and runs the two purchases;
  * the Spawn desktop app reads the account and sends builds. Every refusal is a
  * `SpawnError` carrying its own status and a `code` both clients translate.
  *
@@ -20,6 +20,7 @@ import { recordBirthMonth } from '../../application/spawn/spawnAge';
 import { completeSpawnMembership, startSpawnMembership } from '../../application/spawn/spawnMembership';
 import { completeSpawnTopUp, startSpawnTopUp } from '../../application/spawn/spawnTopUp';
 import { runSpawnBuild } from '../../application/spawn/spawnBuild';
+import { spawnInstallers } from '../../application/spawn/spawnDownloads';
 
 const AgeBody = z.object({ year: z.number().int(), month: z.number().int() });
 const PackBody = z.object({ packId: zNonEmptyString });
@@ -40,6 +41,8 @@ export function createSpawnRoutes(db: Db): Hono<HonoEnv> {
 
   // Public: the landing page shows the prices before anyone signs in. Static data.
   router.get('/prices', (c) => c.json(spawnPriceList()));
+  // Public: every download button links straight to the installer. Cached (spawnDownloads).
+  router.get('/downloads', async (c) => c.json(await spawnInstallers(c.env as Env)));
 
   router.use('*', authMiddleware);
 

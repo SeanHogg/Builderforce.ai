@@ -21,6 +21,8 @@ export interface RoomItemCaptionProps {
   hint: string;
   testId: string;
   open?: RoomItemOpen | undefined;
+  /** A colour the caption is outlined in — the lit station of the canvas's phase. */
+  accent?: string | undefined;
 }
 
 /**
@@ -31,11 +33,12 @@ export interface RoomItemCaptionProps {
  * reader can reach. Shared by the session's diorama and every creation, so "what is
  * this, and how do I open it" reads the same wherever it is asked.
  */
-export function RoomItemCaption({ position, title, hint, testId, open }: RoomItemCaptionProps) {
+export function RoomItemCaption({ position, title, hint, testId, open, accent }: RoomItemCaptionProps) {
   return (
     <Html position={position} center distanceFactor={9} zIndexRange={[10, 0]}>
       <span
         data-testid={testId}
+        data-lit={accent ? 'true' : undefined}
         // A pointer that lands on the caption must not start a drag of the body
         // under it — and R3F never sees it, because the caption is DOM.
         onPointerDown={(event) => event.stopPropagation()}
@@ -50,7 +53,7 @@ export function RoomItemCaption({ position, title, hint, testId, open }: RoomIte
           lineHeight: 1.4,
           background: 'var(--surface, #1a1a1a)',
           color: 'var(--text-primary, #f5f5f5)',
-          border: '1px solid var(--border, #333)',
+          border: accent ? `2px solid ${accent}` : '1px solid var(--border, #333)',
           whiteSpace: 'nowrap',
         }}
       >

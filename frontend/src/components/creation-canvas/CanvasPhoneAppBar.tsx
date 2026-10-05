@@ -161,6 +161,7 @@ export function CanvasPhoneAppBar({
         onClose={() => setPhaseOpen(false)}
       >
         <PhaseModalitySelector
+          variant="sheet"
           phase={phase}
           onPhaseChange={(next) => { onPhaseChange(next); setPhaseOpen(false); }}
           surface={surface}

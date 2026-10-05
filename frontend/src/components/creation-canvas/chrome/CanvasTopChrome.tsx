@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { canvasChromeShows } from '@/lib/canvasChrome';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
-import type { CanvasPhase } from '@/lib/canvasPhases';
 import { CanvasPhoneAppBar } from '../CanvasPhoneAppBar';
 import { CanvasSurfaceStrip } from '../CanvasSurfaceStrip';
 import { CanvasSessionPill } from '../CanvasSessionPill';
 import { PhaseModalitySelector } from '../PhaseModalitySelector';
+import { useCanvasPhase } from '../phase/CanvasPhaseContext';
+import { CanvasPhasePath } from '../phase/CanvasPhasePath';
 import type { CanvasSessionActionHandler } from '../CanvasSessionActions';
 import type { useCanvasBrainSurface } from '../hooks/useCanvasBrainSurface';
 import styles from '../CreationCanvas.module.css';
@@ -15,8 +16,6 @@ export interface CanvasTopChromeProps {
   /** Publishes `--canvas-top-chrome-space` — handed to whichever of the two chromes is drawn. */
   topChromeRef: (node: HTMLElement | null) => void;
   title: string;
-  phase: CanvasPhase;
-  setPhase: (phase: CanvasPhase) => void;
   surface: CanvasSurfaceId;
   setSurface: (surface: CanvasSurfaceId) => void;
   collapsed: boolean;
@@ -38,8 +37,17 @@ export interface CanvasTopChromeProps {
  * it is READ and which phase it is in (top centre), and what you DO to it,
  * including how work LEAVES it (the one bar, bottom centre). A phone replaces the
  * top two with its own app bar; see below.
+ *
+ * The phase comes from `CanvasPhaseContext`, not from the host: the host publishes it
+ * once and every reader asks there. The PATH card (what an unready phase is missing)
+ * rides under the phase card on a desktop — inside the same measured box, so
+ * `--canvas-top-chrome-space` grows with it and nothing lands underneath — and under the
+ * surface strip on a phone, inside the measured phone band for the same reason.
  */
-export function CanvasTopChrome({ phoneViewport, topChromeRef, title, phase, setPhase, surface, setSurface, collapsed, roster, share, inviteMenu, boardMenu, onExitToLibrary, notice }: CanvasTopChromeProps) {
+export function CanvasTopChrome({ phoneViewport, topChromeRef, title, surface, setSurface, collapsed, roster, share, inviteMenu, boardMenu, onExitToLibrary, notice }: CanvasTopChromeProps) {
+  const phaseValue = useCanvasPhase();
+  if (!phaseValue) return null;
+  const { phase, setPhase } = phaseValue;
   return <>
       {/* THE PHONE'S APP CHROME — a 52px canvas app bar over a worded surface strip,
           drawn in place of the shell's header on a stage route (`AppShell`,
@@ -69,6 +77,7 @@ export function CanvasTopChrome({ phoneViewport, topChromeRef, title, phase, set
           {...(onExitToLibrary ? { onBack: onExitToLibrary } : {})}
         />
         <CanvasSurfaceStrip surface={surface} onChange={setSurface} />
+        {phoneViewport && <CanvasPhasePath />}
       </div>
       <CanvasSessionPill notice={notice} />
       {/* Which PHASE this session is in and which surface reads it — ON the canvas
@@ -84,6 +93,7 @@ export function CanvasTopChrome({ phoneViewport, topChromeRef, title, phase, set
           hidden box measures zero. */}
       {canvasChromeShows('surfaces', collapsed) && <div ref={phoneViewport ? undefined : topChromeRef} className={`${styles.floatCard} ${styles.surfaceChips}`}>
         <PhaseModalitySelector phase={phase} onPhaseChange={setPhase} surface={surface} onSurfaceChange={setSurface} />
+        {!phoneViewport && <CanvasPhasePath />}
       </div>}
   </>;
 }

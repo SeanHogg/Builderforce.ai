@@ -1,22 +1,20 @@
 import { SpawnHero } from '@/components/spawn/SpawnHero';
-import { SpawnCompare, SpawnDownload, SpawnFaq, SpawnFeatures, SpawnHowItWorks, SpawnSafety } from '@/components/spawn/SpawnSections';
+import { SpawnFaq, SpawnGetStarted, SpawnSafety, SpawnSteps } from '@/components/spawn/SpawnSections';
 import { SpawnPricing } from '@/components/spawn/SpawnPricing';
 import styles from '@/components/spawn/spawn.module.css';
 
 export const runtime = 'edge';
 
-/** Spawn's landing page — what it is, how it works, why it is safe, what it costs, where to get it. */
+/** Spawn's landing page — tap-first: the toy, three steps, the safety badges, the prices, the button. */
 export default function SpawnPage() {
   return (
     <main className={styles.main}>
       <SpawnHero />
-      <SpawnHowItWorks />
-      <SpawnFeatures />
-      <SpawnCompare />
+      <SpawnSteps />
       <SpawnSafety />
       <SpawnPricing />
-      <SpawnDownload />
       <SpawnFaq />
+      <SpawnGetStarted />
     </main>
   );
 }

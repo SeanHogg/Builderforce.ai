@@ -11304,6 +11304,10 @@
       "the-run-that-teaches-the-next-one": {
         "title": "Der Lauf, der den nächsten lehrt",
         "description": "Ein Agent, der verifizierte Arbeit abschließt, hat gerade ein Vorgehen ausgeführt, das funktioniert – und früher verschwand es in einem Transkript. Agenten schlagen jetzt als Skill vor, was sie gelernt haben, Ihr Team gibt ihn frei, und jeder spätere Lauf folgt ihm."
+      },
+      "the-canvas-knows-where-you-are": {
+        "title": "Der Canvas weiß, wo Sie stehen – und zeigt Ihnen den Weg zur nächsten Phase",
+        "description": "Messen öffnete sich früher auf einem Board, auf dem nichts live war. Jetzt liest jeder Canvas sein eigenes Board, öffnet auf der nächsten Phase, die Sie noch nicht erledigt haben, und macht aus einer Phase, für die Sie noch nicht bereit sind, den kürzesten Weg dorthin. Dazu kommen zwei neue Orte: Betrieb für das, was läuft, und Launch, um es Menschen zu zeigen."
       }
     }
   },
@@ -19542,6 +19546,37 @@
       "summaryLive": "{count, plural, =0 {Noch nichts gelernt} one {# Lerneintrag} other {# Lerneinträge}} · v{version}",
       "summaryBlueprint": "Entwurf · lernt noch nicht",
       "blueprintHint": "Dieses Evermind ist noch ein Entwurf, daher ruhen seine Lernzentren. Verknüpfen Sie es mit einem Projekt, um zu sehen, wie jedes Zentrum beim Lernen aufleuchtet."
+    },
+    "evidence": {
+      "title": "Belege",
+      "summary": "{count, plural, one {# Idee} other {# Ideen}} · {untested} ungetestet",
+      "open": "Ideen öffnen"
+    },
+    "build": {
+      "title": "Build",
+      "summary": "{title} · {files, plural, one {# Datei} other {# Dateien}}",
+      "fromCode": "Der Code des Boards",
+      "files": "{count, plural, one {# Datei} other {# Dateien}}",
+      "open": "App öffnen"
+    },
+    "ops": {
+      "title": "Betrieb",
+      "summary": "{env} · {version}",
+      "notLive": "Geplant, nicht live",
+      "open": "Betrieb öffnen"
+    },
+    "launch": {
+      "title": "Launch",
+      "count": {
+        "socialPost": "{count, plural, one {# Beitrag} other {# Beiträge}}",
+        "emailCampaign": "{count, plural, one {# E-Mail-Kampagne} other {# E-Mail-Kampagnen}}",
+        "release": "{count, plural, one {# Release} other {# Releases}}"
+      },
+      "open": "Launch öffnen"
+    },
+    "phasePath": {
+      "title": "Braucht: {needs}",
+      "summary": "{count, plural, one {noch # Schritt} other {noch # Schritte}}"
     }
   },
   "creationCanvas": {
@@ -24403,7 +24438,9 @@
         "enter": "Sehen, was das wert ist",
         "active": "Du bist in Einblicke",
         "regionLabel": "Einblicke dieser Sitzung",
-        "openFull": "Vollständiges Dashboard öffnen"
+        "openFull": "Vollständiges Dashboard öffnen",
+        "thisCanvas": "Dieses Canvas",
+        "noBoardMetric": "Noch keine Kennzahl auf diesem Board"
       },
       "room": {
         "label": "Raum",
@@ -24721,6 +24758,16 @@
           "untested": "{count, plural, =0 {Jede offene Idee hat ein Interview oder Experiment.} one {# offene Idee wurde noch nicht mit einem Kunden getestet.} other {# offene Ideen wurden noch nicht mit einem Kunden getestet.}}",
           "segment": "{stage}: {count}"
         }
+      },
+      "operate": {
+        "label": "Betrieb",
+        "enter": "Sehen, was läuft",
+        "active": "Du bist im Betrieb"
+      },
+      "launch": {
+        "label": "Launch",
+        "enter": "Vor Menschen bringen",
+        "active": "Du bist im Launch"
       }
     },
     "scene": {
@@ -25980,6 +26027,207 @@
       "movieProposal": "Film „{title}“ hinzufügen",
       "sceneProposal": "Szene „{title}“ hinzufügen",
       "sceneStatus": "{done} von {total} Einstellungen gerendert"
+    },
+    "startingPointsFor": "Startpunkte · {phase}",
+    "phase": {
+      "now": "Jetzt",
+      "done": "Erledigt",
+      "ready": "Bereit",
+      "needs": "Braucht {phase}",
+      "adds": "fügt {surfaces} hinzu"
+    },
+    "phaseGate": {
+      "make": {
+        "title": "Halte die Idee fest, bevor du sie baust",
+        "body": "Bauen setzt auf einer Idee auf diesem Board auf – es gibt noch keine."
+      },
+      "run": {
+        "title": "Baue die App, bevor du sie betreibst",
+        "body": "Betreiben arbeitet mit dem, was dieses Canvas gebaut hat – bisher ist nichts gebaut."
+      },
+      "measure": {
+        "title": "Bring die App live, bevor du sie misst",
+        "body": "Messen liest aus, was eine Live-App tut – auf diesem Board ist noch nichts live."
+      },
+      "reach": {
+        "title": "Bring die App live, bevor du sie Menschen zeigst",
+        "body": "Erreichen schickt Menschen irgendwohin – und es gibt noch kein Live-Ziel."
+      }
+    },
+    "phaseGhost": {
+      "label": "Platz für das erste {phase}-Objekt",
+      "needs": "Noch nicht · braucht {phase}",
+      "empty": "Hier ist noch nichts",
+      "title": "Füge das erste {phase}-Objekt hinzu",
+      "add": "{kind} hinzufügen",
+      "verb": {
+        "idea": "eine Idee festhalten",
+        "make": "die App bauen",
+        "run": "sie bereitstellen",
+        "measure": "eine Kennzahl definieren",
+        "reach": "einen Launch-Beitrag entwerfen"
+      }
+    },
+    "phasePath": {
+      "kicker": "{phase} · {count, plural, one {noch # Schritt} other {noch # Schritte}}",
+      "goTo": "Zu {phase}",
+      "letBrain": "Brain soll {verb}",
+      "expand": "Zeigen, was fehlt",
+      "collapse": "Einklappen"
+    },
+    "requirement": {
+      "idea": {
+        "label": "Eine Idee auf dem Board",
+        "verb": "sie festhalten",
+        "prompt": "Halte die Idee dieses Canvas als Ideenkarte fest: das Problem, wer es hat und was es belegen würde."
+      },
+      "app": {
+        "label": "Eine daraus gebaute App",
+        "verb": "sie bauen",
+        "prompt": "Baue die erste funktionierende Version der App für die Idee auf diesem Board."
+      },
+      "live": {
+        "label": "Eine Live-App – ein Deployment mit Adresse",
+        "verb": "sie bereitstellen",
+        "prompt": "Stelle die App dieses Canvas bereit und halte das Deployment mit seiner Adresse auf dem Board fest."
+      },
+      "metric": {
+        "label": "Eine Kennzahl zum Ablesen",
+        "verb": "sie definieren",
+        "prompt": "Definiere die eine Kennzahl, die zeigt, ob diese App funktioniert, mit Zielwert, und lege sie aufs Board.",
+        "advisory": "Hier wird noch nichts gemessen – Menschen ohne Kennzahl zu erreichen heißt, blind Geld auszugeben."
+      }
+    },
+    "phaseStarters": {
+      "idea": {
+        "capture": {
+          "label": "Idee festhalten",
+          "prompt": "Halte meine Idee als Ideenkarte fest: das Problem, wer es hat und die riskanteste Annahme."
+        },
+        "interview": {
+          "label": "Kundeninterview planen",
+          "prompt": "Plane ein Kundeninterview, das die riskanteste Annahme hinter der Idee auf diesem Board prüft."
+        },
+        "experiment": {
+          "label": "Experiment entwerfen",
+          "prompt": "Entwirf ein kleines Experiment, das zeigt, ob Menschen das wollen – mit klarer Bestanden/Nicht-bestanden-Grenze."
+        }
+      },
+      "make": {
+        "spec": {
+          "label": "Spezifikation schreiben",
+          "prompt": "Schreibe ein kurzes PRD für die Idee auf diesem Board: für wen, der Kernablauf und was nicht dazugehört."
+        },
+        "app": {
+          "label": "App bauen",
+          "prompt": "Baue die erste funktionierende Version der App für die Idee auf diesem Board."
+        },
+        "landing": {
+          "label": "Landingpage erstellen",
+          "prompt": "Erstelle eine Landingpage, die die Idee auf diesem Board erklärt und Anmeldungen sammelt."
+        }
+      },
+      "run": {
+        "deploy": {
+          "label": "App bereitstellen",
+          "prompt": "Stelle die App dieses Canvas bereit und halte das Deployment mit seiner Adresse auf dem Board fest."
+        },
+        "release": {
+          "label": "Release planen",
+          "prompt": "Plane das nächste Release dieser App: was ausgeliefert wird, was zuerst geprüft wird und wie wir zurückrollen."
+        },
+        "incident": {
+          "label": "Runbook schreiben",
+          "prompt": "Schreibe ein kurzes Runbook für diese App: woran man einen Ausfall erkennt, wer informiert wird und die ersten drei Prüfungen."
+        }
+      },
+      "measure": {
+        "metric": {
+          "label": "Kernkennzahl definieren",
+          "prompt": "Definiere die eine Kennzahl, die zeigt, ob diese App funktioniert, mit Zielwert, und lege sie aufs Board."
+        },
+        "dashboard": {
+          "label": "Dashboard erstellen",
+          "prompt": "Erstelle aus den Kennzahlen dieses Boards ein Dashboard, die hinter dem Ziel liegenden zuerst."
+        },
+        "experiment": {
+          "label": "Experiment auswerten",
+          "prompt": "Werte die Experimente auf diesem Board gegen ihre Bestanden-Grenzen aus und sag, was wir gelernt haben."
+        }
+      },
+      "reach": {
+        "post": {
+          "label": "Launch-Beitrag entwerfen",
+          "prompt": "Entwirf einen Launch-Beitrag für diese App mit Link zu ihrer Live-Adresse."
+        },
+        "email": {
+          "label": "Launch-E-Mail schreiben",
+          "prompt": "Schreibe eine Launch-E-Mail-Kampagne für diese App an die Menschen, die sie am ehesten wollen."
+        },
+        "listing": {
+          "label": "Im Marktplatz anbieten",
+          "prompt": "Entwirf ein Marktplatz-Angebot für diese App: Name, Einzeiler, Zielgruppe und Preis."
+        }
+      }
+    },
+    "boardMenu": {
+      "phaseFocus": "Phasenfokus",
+      "phaseFocusOn": "Phasenfokus ist an – Karten der Phase treten hervor",
+      "phaseFocusOff": "Phasenfokus ist aus – alle Karten in voller Stärke"
+    },
+    "operate": {
+      "regionLabel": "Was dieses Canvas am Laufen hat",
+      "deployments": "Deployments",
+      "notLive": "Es gibt eine App, aber nichts ist bereitgestellt.",
+      "noApp": "Noch ist nichts gebaut, also gibt es nichts zu betreiben.",
+      "releases": "Releases",
+      "openReleases": "Releases öffnen",
+      "untitledRelease": "Release ohne Titel",
+      "noReleases": "Noch kein Release auf diesem Board – bereite eins vor, wenn die App rausgehen kann.",
+      "app": "App",
+      "openApp": "App öffnen",
+      "appStatus": "{title} · {state}",
+      "stateLive": "live",
+      "stateNotLive": "nicht bereitgestellt",
+      "appFromCode": "Die Code-Karten auf diesem Board laufen als App.",
+      "noAppShort": "Noch keine App auf diesem Board.",
+      "unnamedEnvironment": "Unbenannte Umgebung",
+      "noAddress": "Noch keine Adresse – geplant, nicht live",
+      "deployedAt": "Bereitgestellt am {when}",
+      "people": {
+        "title": "Personen",
+        "loading": "Anmeldungen werden gezählt…",
+        "error": "Anmeldungen konnten nicht geladen werden. Versuche es gleich noch einmal.",
+        "notPublished": "Veröffentliche die App, um zu sehen, wer sich anmeldet.",
+        "users": "Nutzer",
+        "newUsers": "Neue Anmeldungen, letzte {days} Tage",
+        "visitors": "Besucher",
+        "pageViews": "Seitenaufrufe",
+        "leads": "Leads aus Formularen",
+        "approximate": "~{value}",
+        "trafficNote": "Besucher und Seitenaufrufe umfassen die letzten {days} Tage und sind Näherungswerte."
+      }
+    },
+    "launch": {
+      "regionLabel": "Dieses Canvas launchen",
+      "prove": "Beweise es",
+      "proveAction": "Nachweis öffnen",
+      "proveHint": "Übergib die Idee dieses Boards an die Nachweisauswahl und halte das Urteil für diese Sitzung fest.",
+      "proveNeedsAccount": "Sichere deine Arbeit in einem Konto, um diese Idee zu beweisen.",
+      "publish": "Veröffentlichen",
+      "publishAction": "Release öffnen",
+      "listAction": "Im Marktplatz anbieten",
+      "publishHint": "Bauen → Staging → Live für das ganze Board oder ein Marktplatz-Angebot dafür.",
+      "sell": "Verkaufen",
+      "nothingToSell": "Auf diesem Board lässt sich noch nichts verkaufen.",
+      "tell": "Erzähl es",
+      "tellAction": "Social öffnen",
+      "nothingTold": "Noch kein Beitrag und keine Kampagne auf diesem Board.",
+      "told": {
+        "socialPost": "Social-Beiträge",
+        "socialCampaign": "Social-Kampagnen",
+        "emailCampaign": "E-Mail-Kampagnen"
+      }
     }
   },
   "canvasCommands": {
@@ -32466,11 +32714,8 @@
     },
     "shell": {
       "home": "Spawn-Startseite",
-      "navLabel": "Spawn",
-      "how": "So funktioniert's",
-      "safety": "Sicherheit",
-      "pricing": "Preise",
-      "download": "Download",
+      "by": "von Builderforce",
+      "builderforce": "Builderforce.ai Startseite",
       "account": "Mein Konto",
       "signIn": "Anmelden",
       "madeBy": "Spawn wird von Builderforce.ai entwickelt",
@@ -32479,182 +32724,120 @@
       "notAffiliated": "Nicht mit der Roblox Corporation verbunden oder von ihr unterstützt."
     },
     "hero": {
-      "eyebrow": "Für Roblox-Creator ab 13",
+      "badge": "🎮 Für Roblox-Creator ab 13",
       "titleLead": "Sag es.",
       "titleAccent": "Spawn es.",
-      "lede": "Sag Spawn, welches Spiel du willst: ein Obby, ein Tycoon, ein Haustier-Simulator, eine Rennstrecke. Spawn baut die Welt, schreibt die Skripte und erstellt die Oberfläche, direkt in Roblox Studio. Drück auf Play und probier's aus.",
+      "lede": "Schreib das Spiel, das du willst. Spawn baut es in Roblox Studio.",
       "start": "Jetzt bauen",
-      "download": "App herunterladen",
-      "fine": "1,99 $ im Monat. Tokens gibt es in Paketen ab 10 $. Fehlgeschlagene Builds kosten nichts.",
-      "pictureLabel": "Die Spawn-App im Chat neben einem Roblox-Obby, das sie gerade gebaut hat",
-      "chatAsk": "Bau ein Obby mit 5 Stufen, die immer schwerer werden, und einem Checkpoint auf jeder",
-      "chatReply": "Fertig! 5 Stufen, aufsteigende Plattformen, ein drehender Balken auf Stufe 4 und Checkpoints, die deine Stufe speichern. Drück auf Play zum Testen.",
-      "chatAsk2": "Füg einen Timer und eine Bestenliste hinzu"
+      "fine": "1,99 $/Monat · Tokens ab 10 $ · fehlgeschlagene Builds sind gratis"
     },
-    "how": {
-      "eyebrow": "So funktioniert's",
-      "title": "Von der Idee zum spielbaren Spiel in Minuten",
-      "lede": "Kein Einrichtungsassistent und keine Server zum Starten. Spawn verbindet sich für dich mit Roblox Studio.",
-      "steps": [
+    "download": {
+      "windows": "Für Windows laden",
+      "mac": "Für Mac laden",
+      "any": "Spawn laden",
+      "windowsShort": "Windows",
+      "macArm": "Mac (Apple-Chip)",
+      "macIntel": "Mac (Intel)",
+      "alsoFor": "Auch für:",
+      "needsComputer": "Spawn läuft auf einem Windows-PC oder Mac mit Roblox Studio.",
+      "all": "Alle Downloads"
+    },
+    "play": {
+      "pick": "Probier’s: tipp ein Spiel an 👇",
+      "connected": "Studio verbunden",
+      "thinking": "Baut…",
+      "sceneLabel": "Ein {game}-Spiel, gebaut in Roblox Studio",
+      "games": [
+        {
+          "id": "obby",
+          "icon": "🧗",
+          "label": "Obby",
+          "ask": "Bau ein Obby mit 5 Stufen, die immer schwerer werden",
+          "reply": "Fertig! 5 Stufen, steigende Plattformen und ein Checkpoint auf jeder. Drück auf Play!"
+        },
+        {
+          "id": "tycoon",
+          "icon": "💰",
+          "label": "Tycoon",
+          "ask": "Bau ein Tycoon mit Droppern und einem Förderband",
+          "reply": "Gebaut! Dropper machen Münzen, das Band verkauft sie, und du kannst Upgrades kaufen."
+        },
+        {
+          "id": "racing",
+          "icon": "🏎️",
+          "label": "Rennen",
+          "ask": "Bau eine Rennstrecke mit Autos und Ziellinie",
+          "reply": "Bereit! Eine Strecke, zwei Autos, Bäume und ein Zieltor mit Rundenzeit."
+        },
+        {
+          "id": "simulator",
+          "icon": "🥚",
+          "label": "Simulator",
+          "ask": "Bau einen Haustier-Simulator mit einem Riesen-Ei",
+          "reply": "Geschlüpft! Ein Riesen-Ei, vier Haustiere, die dir folgen, und ein Shop-Schild."
+        },
+        {
+          "id": "tower",
+          "icon": "🏰",
+          "label": "Tower Defense",
+          "ask": "Bau eine Tower-Defense-Karte mit 3 Türmen",
+          "reply": "Fertig! Ein Weg, 3 Türme, die schießen, Gegnerwellen und eine Basis zum Verteidigen."
+        }
+      ]
+    },
+    "steps": {
+      "title": "3 Schritte. Fertig.",
+      "items": [
         {
           "icon": "⬇️",
-          "title": "Spawn installieren",
-          "body": "Lade die App herunter und melde dich an. Spawn installiert sein Roblox-Studio-Plugin selbst. Nichts zu kopieren, kein Server zu starten."
+          "label": "App holen"
         },
         {
           "icon": "💬",
-          "title": "Sag, was gebaut werden soll",
-          "body": "Öffne einen beliebigen Ort in Studio und schreib, was du willst, so wie du es einem Freund sagen würdest. Spawn liest zuerst dein Spiel, damit Neues zum Vorhandenen passt."
+          "label": "Spiel beschreiben"
         },
         {
           "icon": "▶️",
-          "title": "Spielen, dann reparieren",
-          "body": "Drück auf Play. Wenn etwas einen Fehler wirft, liest Spawn die Ausgabe und bietet eine Reparatur an. Jeder Build ist ein einziger Rückgängig-Schritt, du kannst also immer zurück."
-        }
-      ]
-    },
-    "features": {
-      "eyebrow": "Was es baut",
-      "title": "Alles, was ein Roblox-Spiel braucht",
-      "cards": [
-        {
-          "icon": "🧱",
-          "title": "Welten und Karten",
-          "body": "Obby-Stufen, Tycoon-Grundstücke, Arenen, Rennstrecken und Lobbys aus echten Teilen, die du verschieben und umfärben kannst."
-        },
-        {
-          "icon": "📜",
-          "title": "Echte Luau-Skripte",
-          "body": "Server-Regeln, Client-Steuerung und gemeinsame Module in modernem Luau, so geordnet, dass du sie lesen und daraus lernen kannst."
-        },
-        {
-          "icon": "🏆",
-          "title": "Bestenlisten und Speichern",
-          "body": "Münzen, Punkte und Stufen auf der Bestenliste, zwischen Besuchen gespeichert mit sicher genutzten DataStores."
-        },
-        {
-          "icon": "🖥️",
-          "title": "Oberflächen und Menüs",
-          "body": "Shops, Timer, Lebensbalken und Buttons als echte ScreenGuis, die auf Handy, Tablet und PC funktionieren."
-        },
-        {
-          "icon": "✨",
-          "title": "Effekte und Licht",
-          "body": "Partikel, Spuren, Leuchten, Himmel und Atmosphäre, damit dein Spiel fertig aussieht und nicht wie eine graue Grundplatte."
-        },
-        {
-          "icon": "🛠️",
-          "title": "Reparaturen nach dem Testen",
-          "body": "Spawn liest die Fehler aus deinem letzten Test und repariert das Skript, das sie verursacht hat."
-        }
-      ]
-    },
-    "compare": {
-      "eyebrow": "Warum Spawn",
-      "title": "Gebaut, um das Einfachste zu sein",
-      "lede": "Die meisten Roblox-KI-Tools brauchen eine lange Einrichtung und berechnen dir auch fehlgeschlagene Builds. Spawn wurde gebaut, um beides zu lösen.",
-      "colWhat": "Funktion",
-      "colTypical": "Typisches Roblox-KI-Tool",
-      "yes": "Ja",
-      "no": "Nein",
-      "rows": [
-        {
-          "label": "Richtet das Studio-Plugin selbst ein",
-          "spawn": true,
-          "typical": false
-        },
-        {
-          "label": "Kein lokaler Server oder Sync-Tool nötig",
-          "spawn": true,
-          "typical": false
-        },
-        {
-          "label": "Fehlgeschlagene Builds sind kostenlos",
-          "spawn": true,
-          "typical": false
-        },
-        {
-          "label": "Jeder Build ist ein Rückgängig-Schritt",
-          "spawn": true,
-          "typical": false
-        },
-        {
-          "label": "Eingebaute Sicherheitsregeln für Spieler ab 13",
-          "spawn": true,
-          "typical": false
-        },
-        {
-          "label": "Blockiert Hintertüren und versteckten Code",
-          "spawn": true,
-          "typical": false
-        },
-        {
-          "label": "Liest dein Spiel, bevor es etwas ändert",
-          "spawn": true,
-          "typical": true
+          "label": "Play drücken"
         }
       ]
     },
     "safety": {
-      "eyebrow": "Sicherheit",
-      "title": "Für junge Creator gemacht",
-      "lede": "Spawn ist für Spieler ab 13 und hält sich bei allem, was es baut, an die Roblox-Community-Standards.",
-      "cards": [
+      "title": "Sicher ab 13",
+      "badges": [
         {
           "icon": "🛡️",
-          "title": "Altersgerecht von Anfang an",
-          "body": "Spawn baut keine brutalen Szenen, keine Romantik, kein Glücksspiel, keine gruseligen Inhalte und nichts, was persönliche Daten sammelt. Stattdessen schlägt es eine lustige Version vor, die okay ist."
+          "label": "Kindgerecht"
         },
         {
           "icon": "🔒",
-          "title": "Keine Hintertüren",
-          "body": "Spawn lehnt Skripte ab, die ins Internet gehen, versteckten Code ausführen oder Code über eine Asset-ID laden: die Tricks, mit denen Gratis-Modelle Spiele übernehmen."
+          "label": "Keine Hintertüren"
         },
         {
-          "icon": "🖼️",
-          "title": "Nichts, was du nicht siehst",
-          "body": "Spawn baut aus Teilen, Farben, Lichtern und Effekten, die du in Studio siehst. Es lädt nie unsichtbare Bilder, Sounds oder Meshes per ID."
+          "icon": "↩️",
+          "label": "Rückgängig mit einem Tipp"
         },
         {
-          "icon": "🎂",
-          "title": "Ab 13",
-          "body": "Wir fragen einmal nach Geburtsmonat und -jahr, nie nach dem vollen Geburtsdatum. Unter 13 kann man kein Konto anlegen."
+          "icon": "💸",
+          "label": "Fehlschläge sind gratis"
         }
       ],
+      "parentsTitle": "Für Eltern",
       "parents": "Für Eltern: Mitgliedschaft und Token-Pakete werden auf dieser Website über den sicheren Stripe-Checkout gekauft, und Sie entscheiden über jede Aufladung. In der App wird nichts abgebucht, und außer der monatlichen Mitgliedschaft für 1,99 $, die jederzeit kündbar ist, gibt es keine überraschenden Verlängerungen."
     },
     "pricing": {
-      "eyebrow": "Preise",
-      "title": "Einfach, und du behältst die Kontrolle",
-      "lede": "Eine kleine Mitgliedschaft öffnet den Baukasten. Tokens bezahlen das Bauen, und du kaufst nur nach, wenn du willst.",
+      "title": "Wähl dein Paket",
       "loadFailed": "Die Preise konnten nicht geladen werden. Lade die Seite neu, um es erneut zu versuchen.",
-      "planName": "Spawn-Mitgliedschaft",
+      "planName": "Mitgliedschaft",
       "perMonth": "/ Monat",
-      "planBody": "Öffnet den Spawn-Baukasten und die Desktop-App für Spieler ab {age}. Jederzeit kündbar.",
       "join": "Spawn beitreten",
-      "packsTitle": "Token-Pakete",
-      "packsLede": "Jeder Build verbraucht Tokens für das, was die KI liest und schreibt. Größere Pakete enthalten Bonus-Tokens, und fehlgeschlagene Builds werden nie berechnet.",
       "tokens": "{count} Tokens",
       "builds": "Etwa {count} Builds",
       "buy": "Tokens holen",
       "opening": "Checkout wird geöffnet…"
     },
-    "download": {
-      "eyebrow": "Download",
-      "title": "Hol dir die Spawn-App",
-      "lede": "Spawn läuft auf deinem Computer neben Roblox Studio und übernimmt das Verbinden für dich.",
-      "points": [
-        "Installiert und aktualisiert sein Roblox-Studio-Plugin selbst",
-        "Verbindet sich nur auf deinem Computer mit Studio, ohne offene Ports und ohne dass etwas nach außen sichtbar ist",
-        "Meldet sich einmal im Browser mit deinem Spawn-Konto an"
-      ],
-      "button": "Für Windows oder Mac herunterladen",
-      "readMore": "Die Geschichte lesen",
-      "requirements": "Benötigt Windows 10/11 oder macOS 12+ mit installiertem Roblox Studio."
-    },
     "faq": {
-      "eyebrow": "Fragen",
-      "title": "Gut zu wissen",
+      "title": "Fragen?",
       "items": [
         {
           "q": "Muss ich programmieren können?",
@@ -32665,22 +32848,17 @@
           "a": "Ja. Spawn liest den geöffneten Ort (den Explorer und die Skripte), bevor es baut, damit neue Teile und Skripte zum Vorhandenen passen."
         },
         {
-          "q": "Was ist ein Token?",
-          "a": "Ein Token ist ein kleines Stück Text, das die KI liest oder schreibt. Ein typischer Build braucht etwa 12.000. Dein Guthaben siehst du immer in der App und auf deiner Kontoseite."
-        },
-        {
           "q": "Was, wenn ein Build schiefgeht?",
           "a": "Wenn Spawn einen Build nicht fertigstellen kann, kostet er nichts. Wenn er dir nicht gefällt, drück in Studio auf Rückgängig, und der ganze Build verschwindet in einem Schritt."
-        },
-        {
-          "q": "Darf ich veröffentlichen, was ich baue?",
-          "a": "Ja. Es ist dein Spiel. Veröffentliche es wie gewohnt aus Roblox Studio."
         },
         {
           "q": "Ist Spawn von Roblox?",
           "a": "Nein. Spawn wird von Builderforce.ai entwickelt und ist weder mit der Roblox Corporation verbunden noch von ihr unterstützt. Es arbeitet über ein normales Studio-Plugin mit Roblox Studio."
         }
       ]
+    },
+    "cta": {
+      "title": "Bereit zum Bauen?"
     },
     "account": {
       "eyebrow": "Spawn",
@@ -32755,8 +32933,7 @@
           "Klick auf Anmelden. Dein Browser öffnet sich; bestätige den angezeigten Code.",
           "Öffne Roblox Studio und einen beliebigen Ort. Spawn verbindet sich selbst.",
           "Schreib, was du bauen willst, und drück dann auf Play."
-        ],
-        "download": "Spawn herunterladen"
+        ]
       }
     }
   }

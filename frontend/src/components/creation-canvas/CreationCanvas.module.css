@@ -2557,7 +2557,7 @@
    separate piece of chrome, always floating at its own `bottom:14px`. Without this
    `max()` this surface's content ran the full height of the shell in that placement,
    with the command bar painted straight across whatever sat at the bottom of it. */
-.objectSurface,.appSurface,.insightsSurface,.ideasSurface { position:absolute; z-index:7; top:0; right:var(--brain-dock-right,0px); bottom:0; left:var(--brain-dock-left,0px); box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-block:var(--canvas-top-chrome-space) max(var(--composer-space, 0px), calc(var(--canvas-command-bar-space, 66px) + 14px)); background:var(--canvas-board-background); color:var(--canvas-ink); }
+.objectSurface,.appSurface,.insightsSurface,.ideasSurface,.placeSurface { position:absolute; z-index:7; top:0; right:var(--brain-dock-right,0px); bottom:0; left:var(--brain-dock-left,0px); box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-block:var(--canvas-top-chrome-space) max(var(--composer-space, 0px), calc(var(--canvas-command-bar-space, 66px) + 14px)); background:var(--canvas-board-background); color:var(--canvas-ink); }
 .objectSurfaceHeader { display:flex; flex:none; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 16px 10px 62px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
 .objectSurfaceMark { display:grid; place-items:center; width:26px; height:26px; flex:none; border-radius:var(--radius-sm); background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); }
 .objectSurfaceTitle { min-width:0; flex:1; display:flex; flex-direction:column; }
@@ -2579,12 +2579,12 @@
    must be the same control everywhere it appears. Every value is a canvas token, the
    header wraps rather than fixing a width, and the toolbar collapses to two rows before
    360px instead of overflowing. */
-.appSurfaceBody,.insightsSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; min-width:0; }
+.appSurfaceBody,.insightsSurfaceBody,.placeSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; min-width:0; }
 /* The insights body scrolls where the app surface's does not: a running app fills its
    own frame, but a widget grid is exactly as tall as however many cards are pinned —
    sometimes one, sometimes a screenful — so the surface has to be able to grow past
    the fold rather than clip it. */
-.insightsSurfaceBody { overflow-y:auto; gap:16px; padding:20px; }
+.insightsSurfaceBody,.placeSurfaceBody { overflow-y:auto; gap:16px; padding:20px; }
 .insightsFullLink { align-self:flex-start; color:var(--canvas-accent); font-size:12px; font-weight:650; text-decoration:none; }
 .insightsFullLink:hover { text-decoration:underline; }
 /* The surface's own controls, INSIDE the session bar — ONE row of it.
@@ -5483,3 +5483,122 @@
 .transclusionBody > strong { color:var(--canvas-ink); font-size:12px; }
 .transclusionNotice { margin:0; color:var(--canvas-muted); font-size:11px; line-height:1.5; }
 .transclusionLink { color:var(--canvas-accent); font-size:11px; text-decoration:underline; }
+
+/* ── THE PHASE LENS (PRD 32) ────────────────────────────────────────────────────────
+   The phase a canvas is in, read through the same surfaces: the board rings the kinds
+   the phase is about and dims the rest, a ghost card stands where the phase's first
+   object would go, the path card says what an unready phase is missing, the bar tints
+   the current group and the stepper marks each phase ready/done/locked.
+
+   ONE hue, `--canvas-phase-hue`, published off `data-phase` on the shell from the same
+   `--stage-*` tokens every stage indicator in the product reads. `--canvas-phase-ring`
+   mixes it toward the canvas INK — darker on paper, lighter on the dark board — so the
+   ring keeps a 3:1 edge in both themes where a bright stage hue alone would not on
+   white. Declared on BOTH theme blocks' shell through the attribute rules below, which
+   carry no theme of their own: the tokens they read are themed already. */
+.canvasShell {
+  --canvas-phase-hue:var(--canvas-accent); --canvas-phase-ring:color-mix(in srgb, var(--canvas-phase-hue) 78%, var(--canvas-ink));
+  --canvas-phase-warn-mark:var(--tone-warning-mark); --canvas-phase-warn-ink:var(--tone-warning-ink); --canvas-phase-warn-bg:var(--tone-warning-bg);
+}
+/* The warning tone's light values are dark amber INK for paper; on the dark board they
+   would sink, so the advisory carries its own bright rung here. */
+:global(html:not([data-theme='light'])) .canvasShell { --canvas-phase-warn-mark:#f59e0b; --canvas-phase-warn-ink:#fcd34d; --canvas-phase-warn-bg:rgba(245,158,11,.14); }
+.canvasShell[data-phase='idea'] { --canvas-phase-hue:var(--stage-idea); }
+.canvasShell[data-phase='make'] { --canvas-phase-hue:var(--stage-make); }
+.canvasShell[data-phase='run'] { --canvas-phase-hue:var(--stage-run); }
+.canvasShell[data-phase='measure'] { --canvas-phase-hue:var(--stage-measure); }
+.canvasShell[data-phase='reach'] { --canvas-phase-hue:var(--stage-reach); }
+
+/* Dimmed, never hidden. .5 rather than .42: a card title at .42 over the paper board
+   falls under 3:1; at .5 it holds in both themes. A SELECTED card is always full strength. */
+.node[data-phase-focus='out']:not(.selected), .nodeOrb[data-phase-focus='out']:not(.selected) { opacity:.5; transition:opacity .2s; }
+.node[data-phase-focus='in'] { box-shadow:0 0 0 2px var(--canvas-phase-ring), 0 7px 24px var(--canvas-shadow, rgba(60,48,36,.1)); }
+.nodeOrb[data-phase-focus='in'] { outline:2px solid var(--canvas-phase-ring); outline-offset:2px; }
+.edgeOut path { opacity:.35; }
+
+/* THE GHOST CARD — dashed, tinted, card-width; drawn in flow space, never a node. */
+.phaseGhost {
+  position:absolute; top:0; left:0; box-sizing:border-box; width:260px; display:grid; gap:6px; padding:14px;
+  border:2px dashed var(--canvas-phase-ring); border-radius:var(--radius-lg);
+  background:color-mix(in srgb, var(--canvas-phase-hue) 7%, var(--canvas-panel)); color:var(--canvas-ink);
+  pointer-events:all;
+}
+.phaseGhostKicker { color:var(--canvas-muted); font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+.phaseGhostTitle { font-size:13px; line-height:1.3; }
+.phaseGhostActions { display:flex; flex-wrap:wrap; gap:6px; }
+
+/* THE PATH CARD — under the phase card on a desktop, under the strip on a phone; both
+   inside the measured box, so the chrome-space token grows with it. */
+.phasePath {
+  display:grid; gap:6px; margin-top:6px; padding:8px 10px; max-width:420px; box-sizing:border-box;
+  border:1px solid color-mix(in srgb, var(--canvas-phase-hue) 45%, var(--canvas-line)); border-radius:var(--radius-md);
+  background:color-mix(in srgb, var(--canvas-phase-hue) 8%, var(--canvas-panel)); color:var(--canvas-ink); text-align:left;
+}
+.phasePath[data-tone='warning'] { border-color:var(--canvas-phase-warn-mark); background:var(--canvas-phase-warn-bg); }
+.phasePathHead { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.phasePathKicker { color:var(--canvas-muted); font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+.phasePathToggle { display:inline-grid; place-items:center; width:24px; height:24px; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); cursor:pointer; }
+.phasePathToggle:hover { background:var(--canvas-hover); color:var(--canvas-ink); }
+.phasePathTitle { font-size:13px; line-height:1.3; }
+.phasePathBody, .phasePathAdvisory { margin:0; color:var(--canvas-muted); font-size:12px; line-height:1.45; }
+.phasePathAdvisory { color:var(--canvas-phase-warn-ink); }
+.phasePathSteps { display:grid; gap:6px; margin:0; padding-left:18px; font-size:12px; }
+.phasePathActions { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.phasePathButton {
+  min-height:var(--canvas-bar-control,28px); padding:0 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel); color:var(--canvas-ink); font:inherit; font-size:12px; font-weight:650; cursor:pointer;
+}
+.phasePathButton:hover { background:var(--canvas-hover); }
+.phasePathButton[data-primary='true'] { border-color:var(--canvas-phase-ring); background:color-mix(in srgb, var(--canvas-phase-hue) 18%, var(--canvas-panel)); }
+.phasePathButton:focus-visible, .phasePathToggle:focus-visible { outline:2px solid var(--canvas-accent); outline-offset:2px; }
+@media (max-width:767px) {
+  .phasePath { max-width:none; margin:6px 8px 0; }
+  .phasePathButton, .phasePathToggle { min-height:44px; }
+  .phasePathToggle { width:44px; }
+}
+
+/* THE STEPPER'S READINESS — the lock and ✓ inherit the step's own colour. */
+.phaseStep[data-ready='false'] { color:var(--canvas-muted); }
+.phaseStepGlyph { display:inline-grid; place-items:center; font-style:normal; }
+.phaseStep[data-state='done'] .phaseStepGlyph { color:var(--canvas-ink); }
+.phaseStepStatus { display:block; color:var(--canvas-muted); font-size:11px; font-weight:500; white-space:normal; }
+/* The phone sheet: each phase is a ROW with its status line and the surfaces it adds. */
+.phaseModalityGroup[data-variant='sheet'] .phaseStepper { flex-direction:column; align-items:stretch; gap:4px; }
+.phaseModalityGroup[data-variant='sheet'] .phaseStep { display:grid; grid-template-columns:auto 1fr auto; align-items:center; min-height:44px; padding:6px 12px; border-radius:var(--radius-md); white-space:normal; text-align:left; }
+.phaseModalityGroup[data-variant='sheet'] .phaseStepStatus { grid-column:2 / -1; }
+/* The sheet has the width for words the compact desktop card gives up at 1180px. */
+.phaseModalityGroup[data-variant='sheet'] .phaseStep span.phaseStepName { display:inline; }
+
+/* THE BAR'S CURRENT GROUP — the phase this canvas is in, tinted in its own hue. */
+.barGroup[data-current='true'] .barGroupRow { background:color-mix(in srgb, var(--bar-stage-hue) 14%, var(--canvas-panel)); border-color:var(--bar-stage-hue); }
+.barGroup[data-current='true'] .barGroupCaption { font-weight:700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .node[data-phase-focus='out'], .nodeOrb[data-phase-focus='out'] { transition:none; }
+}
+
+/* OPERATE and LAUNCH — board-scoped PLACES (`.placeSurface` shares the insights
+   surface's frame above). Each is a column of section cards; each card composes a panel
+   or a door that already exists, never a second editor for it. Fluid: the cards fill the
+   column and wrap their actions, so nothing overflows at 360px. */
+.placeSurfaceBody { max-width:880px; width:100%; margin:0 auto; box-sizing:border-box; }
+.placeSection { display:grid; gap:10px; padding:14px 16px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); color:var(--canvas-ink); }
+.placeSectionHead { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:6px 12px; }
+.placeSectionTitle { margin:0; font-size:14px; font-weight:700; }
+.placeSectionHint { margin:0; color:var(--canvas-muted); font-size:12px; line-height:1.5; }
+.placeList { display:grid; gap:6px; margin:0; padding:0; list-style:none; font-size:12.5px; }
+.placeList li { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 12px; padding:8px 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
+.placeList small { color:var(--canvas-muted); }
+/* Operate → People: the published app's audience as a fluid stat row. Auto-fit tiles
+   with a 120px floor, so it is two-up at 360px and one row on a wide column. */
+.placeStats { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 120px), 1fr)); gap:8px; margin:0; padding:0; list-style:none; }
+.placeStats li { display:grid; gap:2px; align-content:start; min-width:0; padding:8px 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
+.placeStats strong { font-size:18px; font-weight:700; line-height:1.2; font-variant-numeric:tabular-nums; color:var(--canvas-ink); overflow-wrap:anywhere; }
+.placeStats span { font-size:12px; line-height:1.4; color:var(--canvas-muted); }
+.insightsThisCanvas { display:grid; gap:10px; }
+.insightsSectionHeading { margin:0; font-size:13px; font-weight:700; color:var(--canvas-ink); }
+.insightsThisCanvas .insightsEmpty { flex:none; padding:16px; border:1px dashed var(--canvas-line); border-radius:var(--radius-md); }
+@media (max-width:767px) {
+  .placeSurfaceBody { padding:12px; }
+  .placeSection .phasePathButton { min-height:44px; }
+}

@@ -3,6 +3,7 @@ import { assessmentDeskView } from './academic/AssessmentDesk';
 import { citationsDeskView } from './academic/CitationsDesk';
 import { gradebookBoardView } from './academic/GradebookBoard';
 import { approvalDeskView } from './ApprovalDesk';
+import { buildStationView, evidenceStationView, launchStationView, opsStationView, phasePathStationView } from './ArcStations';
 import { evermindStationView } from './evermind/EvermindStation';
 import { metricsBoardView } from './MetricsBoard';
 import type { RoomStationView } from './types';
@@ -25,4 +26,9 @@ export const ROOM_STATION_VIEWS: Readonly<Record<string, RoomStationView>> = {
   gradebook: gradebookBoardView,
   accessibility: accessibilityAuditView,
   citations: citationsDeskView,
+  evidence: evidenceStationView,
+  build: buildStationView,
+  ops: opsStationView,
+  launch: launchStationView,
+  phasePath: phasePathStationView,
 };

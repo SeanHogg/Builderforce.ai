@@ -41,6 +41,20 @@
     "author": "Sean Hogg"
   },
   {
+    "slug": "the-canvas-knows-where-you-are",
+    "title": "The canvas knows where you are — and shows you the way to the next phase",
+    "date": "2026-10-04",
+    "description": "Measure used to open on a board with nothing live. Now every canvas reads its own board, opens on the next phase you have not done, and turns a phase you are not ready for into the shortest path there. Two new places come with it, Operate for what is running and Launch for putting it in front of people.",
+    "tags": [
+      "creation-canvas",
+      "methodology",
+      "idea-to-real",
+      "deployment",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "your-canvas-app-is-a-real-project",
     "title": "The App on your canvas is now a real project",
     "date": "2026-10-04",

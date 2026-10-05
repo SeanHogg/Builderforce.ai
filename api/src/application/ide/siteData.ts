@@ -35,6 +35,7 @@ import { isSendableEmail, normalizeEmail } from '../shared/dnsVerification';
 import { addAudienceMembers } from '../marketing/campaignEngine';
 import { raiseTicketForSiteRecord } from './siteTicketBridge';
 import { appsDatabaseOf } from './appsDatabase';
+import { invalidateSiteAudience } from './siteAudienceSummary';
 
 /** The collection every published site gets for free. */
 export const DEFAULT_COLLECTION = 'signups';
@@ -230,6 +231,8 @@ export async function submitSiteRecord(input: SubmitInput): Promise<SubmitResult
     .update(siteCollections)
     .set({ recordCount: sql`${siteCollections.recordCount} + 1`, updatedAt: sql`NOW()` })
     .where(and(eq(siteCollections.id, collection.id), eq(siteCollections.tenantId, tenantId)));
+  // A new lead changes the People summary's `leads` count.
+  await invalidateSiteAudience(input.env, tenantId, collection.projectId);
 
   // Close the loop: a signup on the site becomes a marketable contact with no
   // export step. Best-effort — the submission itself has already succeeded and

@@ -1,0 +1,46 @@
+# Hands the Apple signing variables to a later Tauri build — but only a certificate that
+# actually imports. Tauri tries to sign whenever APPLE_CERTIFICATE is SET, even to the
+# empty string an unset secret becomes, and then fails the whole build. So no workflow
+# passes these to tauri-action directly: this step proves the .p12 imports and exports
+# them through $GITHUB_ENV, or leaves them unset so the build ships unsigned.
+# Used by desktop-release.yml (Synapse) and spawn-release.yml (Spawn).
+name: macOS signing
+description: Export the Apple signing variables only when the certificate imports.
+inputs:
+  certificate: { description: 'APPLE_CERTIFICATE (base64 .p12)', required: false, default: '' }
+  certificate-password: { description: 'APPLE_CERTIFICATE_PASSWORD', required: false, default: '' }
+  signing-identity: { description: 'APPLE_SIGNING_IDENTITY', required: false, default: '' }
+  apple-id: { description: 'APPLE_ID (notarization)', required: false, default: '' }
+  apple-password: { description: 'APPLE_PASSWORD (app-specific password)', required: false, default: '' }
+  team-id: { description: 'APPLE_TEAM_ID', required: false, default: '' }
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        APPLE_CERTIFICATE: ${{ inputs.certificate }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ inputs.certificate-password }}
+        APPLE_SIGNING_IDENTITY: ${{ inputs.signing-identity }}
+        APPLE_ID: ${{ inputs.apple-id }}
+        APPLE_PASSWORD: ${{ inputs.apple-password }}
+        APPLE_TEAM_ID: ${{ inputs.team-id }}
+      run: |
+        ok=false
+        if [[ -n "${APPLE_CERTIFICATE}" ]]; then
+          p12="${RUNNER_TEMP}/probe.p12"
+          echo "${APPLE_CERTIFICATE}" | base64 --decode > "${p12}" || true
+          security create-keychain -p probe "${RUNNER_TEMP}/probe.keychain-db"
+          if security import "${p12}" -k "${RUNNER_TEMP}/probe.keychain-db" -P "${APPLE_CERTIFICATE_PASSWORD}"; then ok=true; fi
+          security delete-keychain "${RUNNER_TEMP}/probe.keychain-db" || true
+          rm -f "${p12}"
+          if [[ "${ok}" != true ]]; then
+            echo "::warning::APPLE_CERTIFICATE does not import (check the base64 .p12 and APPLE_CERTIFICATE_PASSWORD); building unsigned."
+          fi
+        fi
+        if [[ "${ok}" == true ]]; then
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [[ -n "${!name}" ]]; then echo "${name}=${!name}" >> "$GITHUB_ENV"; fi
+          done
+        else
+          echo "::notice::No usable macOS signing certificate; building unsigned."
+        fi

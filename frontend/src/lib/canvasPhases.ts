@@ -11,10 +11,12 @@
  * ── WHY THIS IS NOT `useFounderJourney()` ────────────────────────────────────────
  * That hook (`lib/useFounderJourney.ts`) answers "where is this TENANT" from data that
  * already exists — no field anywhere stores it, and only `idea`/`run` are even
- * computed today. A canvas's own phase is a narrower, per-session choice: which stage
- * of ITS OWN arc the person working on it says they are in, remembered the same way
- * `canvasSurfaces.ts` remembers the surface — a place someone chose, not a fact
- * derived from company records. The two concepts share a vocabulary (`nav.stage.*`,
+ * computed today. A canvas's own phase is a narrower, per-CANVAS choice: which stage
+ * of ITS OWN arc the person working on it says they are in, remembered under a key
+ * carrying the session id — a place someone chose, not a fact derived from company
+ * records. With no choice remembered, the canvas opens at its FRONTIER — the first
+ * phase whose own output is not on the board yet (`lib/canvasPhaseReadiness.ts`) —
+ * because defaulting a live canvas to Idea is wrong. The two concepts share a vocabulary (`nav.stage.*`,
  * the `--stage-*` tokens) because they name the same five words, not because one is
  * computed from the other.
  *
@@ -35,24 +37,32 @@
 
 import type { Stage } from './navGroups';
 import type { CanvasSurfaceId } from './canvasSurfaces';
+import { readLocal, removeLocal, writeLocal } from './storage';
 
 export type CanvasPhase = Extract<Stage, 'idea' | 'make' | 'run' | 'measure' | 'reach'>;
 
 /** Declaration order is display order, same convention as `CANVAS_SURFACES`. */
 export const CANVAS_PHASES: readonly CanvasPhase[] = ['idea', 'make', 'run', 'measure', 'reach'];
 
-export const DEFAULT_CANVAS_PHASE: CanvasPhase = 'idea';
-
 /**
  * Which board surfaces a phase offers.
  *
- * Additive, not exclusive: `chat`, `graph`, `room` and `app` are in EVERY phase —
- * they predate this registry (the room absorbed the "3D space" entry that did), a
- * visitor has always been able to reach all four regardless of what the session is
- * "for", and taking one away the moment a phase changes would be a real capability
- * lost, not a tidier tab row. A session that built
- * an app in Make and moved on to Measure still has that app — hiding `app` the moment
- * metrics appear would take away the very thing being measured.
+ * Additive, not exclusive: `chat`, `graph` and `room` are in EVERY phase — they predate
+ * this registry (the room absorbed the "3D space" entry that did), a visitor has always
+ * been able to reach all three regardless of what the session is "for", and taking one
+ * away the moment a phase changes would be a real capability lost, not a tidier tab row.
+ *
+ * `app` starts at MAKE, not Idea. The additive rule is an argument for KEEPING App once
+ * it has appeared — a session that built an app in Make and moved on to Measure still has
+ * that app, and hiding it the moment metrics appear would take away the very thing being
+ * measured — but it is no argument for offering it BEFORE there is anything to build. In
+ * Idea, App can only open "Start this session's app", which invites building before the
+ * idea is tested. A prototype used to test demand is an `experiment` card on the board,
+ * linked through `testedBy`, not the App surface.
+ *
+ * `operate` arrives at Run (what is deployed, released and running) and `launch` at Reach
+ * (the Make-it-real doors laid out as a place). Both are compositions of panels that
+ * already exist — see `CanvasOperateSurface` and `CanvasLaunchSurface`.
  *
  * `insights` is the one surface this registry actually gates: it is new, it has
  * nothing to show before a session has something worth measuring, and offering it
@@ -79,15 +89,23 @@ export const DEFAULT_CANVAS_PHASE: CanvasPhase = 'idea';
  * appeared in the header: the switcher offers only what this map allows.
  */
 const PHASE_SURFACES: Readonly<Record<CanvasPhase, readonly CanvasSurfaceId[]>> = {
-  idea: ['chat', 'graph', 'ideas', 'room', 'app'],
+  idea: ['chat', 'graph', 'ideas', 'room'],
   make: ['chat', 'graph', 'ideas', 'room', 'app'],
-  run: ['chat', 'graph', 'ideas', 'room', 'app'],
-  measure: ['chat', 'graph', 'ideas', 'room', 'app', 'insights'],
-  reach: ['chat', 'graph', 'ideas', 'room', 'app', 'insights'],
+  run: ['chat', 'graph', 'ideas', 'room', 'app', 'operate'],
+  measure: ['chat', 'graph', 'ideas', 'room', 'app', 'operate', 'insights'],
+  reach: ['chat', 'graph', 'ideas', 'room', 'app', 'operate', 'insights', 'launch'],
 };
 
 export function surfacesForPhase(phase: CanvasPhase): readonly CanvasSurfaceId[] {
   return PHASE_SURFACES[phase];
+}
+
+/** What a phase OFFERS that the phase before it did not — the "adds App" line on the
+ *  phone's phase sheet. The first phase adds everything it offers. */
+export function surfacesAddedByPhase(phase: CanvasPhase): readonly CanvasSurfaceId[] {
+  const index = CANVAS_PHASES.indexOf(phase);
+  const before = index > 0 ? new Set(PHASE_SURFACES[CANVAS_PHASES[index - 1]!]) : new Set<CanvasSurfaceId>();
+  return PHASE_SURFACES[phase].filter((id) => !before.has(id));
 }
 
 const PHASE_SET = new Set<string>(CANVAS_PHASES);
@@ -96,37 +114,26 @@ export function isCanvasPhase(value: unknown): value is CanvasPhase {
   return typeof value === 'string' && PHASE_SET.has(value);
 }
 
-export function sanitizeCanvasPhase(value: unknown): CanvasPhase {
-  return isCanvasPhase(value) ? value : DEFAULT_CANVAS_PHASE;
+/** The legacy GLOBAL key — one phase per browser, so Measure on one canvas put every
+ *  other canvas in Measure too. Never read; deleted on the first per-canvas write. */
+const LEGACY_CANVAS_PHASE_STORAGE_KEY = 'builderforce:create:phase';
+
+/** Where a canvas's chosen phase is remembered: per CANVAS, never per browser. */
+export function canvasPhaseStorageKey(sessionId: string): string {
+  return `${LEGACY_CANVAS_PHASE_STORAGE_KEY}:${sessionId}`;
 }
 
-export const CANVAS_PHASE_STORAGE_KEY = 'builderforce:create:phase';
-
-/** The phase someone actually CHOSE in this browser, or undefined when none ever was.
- *  A run launched from a browser that never picked a phase must not report "idea" as
- *  if someone had said so — which is what reading through the default would do. */
-export function readChosenCanvasPhase(): CanvasPhase | undefined {
-  if (typeof window === 'undefined') return undefined;
-  try {
-    const stored = window.localStorage.getItem(CANVAS_PHASE_STORAGE_KEY);
-    return isCanvasPhase(stored) ? stored : undefined;
-  } catch {
-    return undefined;
-  }
+/** The phase someone actually CHOSE for this canvas, or undefined when none ever was.
+ *  Undefined is an answer, not a gap: the canvas then defaults to its frontier
+ *  (`frontierPhase`), and a run launched from it must not report "idea" as if someone
+ *  had said so — which is what reading through a default would do. */
+export function readChosenCanvasPhase(sessionId: string): CanvasPhase | undefined {
+  const stored = readLocal(canvasPhaseStorageKey(sessionId));
+  return isCanvasPhase(stored) ? stored : undefined;
 }
 
-/** Same persistence shape as `readCanvasSurface`: a place someone chose, remembered
- *  per browser, degrading to the default rather than throwing on a stale value. */
-export function readCanvasPhase(): CanvasPhase {
-  return readChosenCanvasPhase() ?? DEFAULT_CANVAS_PHASE;
-}
-
-export function writeCanvasPhase(phase: CanvasPhase): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(CANVAS_PHASE_STORAGE_KEY, phase);
-  } catch {
-    // Storage can be unavailable in hardened contexts — nothing to recover to.
-    return;
-  }
+export function writeCanvasPhase(phase: CanvasPhase, sessionId: string): void {
+  writeLocal(canvasPhaseStorageKey(sessionId), phase);
+  // The global key was never per-canvas truth, so it is dropped rather than migrated.
+  removeLocal(LEGACY_CANVAS_PHASE_STORAGE_KEY);
 }

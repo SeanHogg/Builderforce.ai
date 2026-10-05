@@ -45,7 +45,9 @@ const SURFACE_ICON: Partial<Record<CanvasSurfaceId, () => React.JSX.Element>> = 
   ideas: IdeasSurfaceIcon,
   scene3d: ThreeDIcon,
   app: AppSurfaceIcon,
+  operate: OperateSurfaceIcon,
   insights: InsightsSurfaceIcon,
+  launch: LaunchSurfaceIcon,
   room: RoomSurfaceIcon,
   calendar: CalendarSurfaceIcon,
   form: FormSurfaceIcon,
@@ -65,6 +67,23 @@ export function IdeasSurfaceIcon() {
     <path d="M9.6 2.1v3h3" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
     <path d="M5.4 8.2h5.2M5.4 10.8h2.8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
     <circle cx="11.2" cy="10.8" r="1" fill="currentColor" />
+  </svg>;
+}
+
+/** What is running — a pulse line across a status light: the app, live, being watched. */
+export function OperateSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="1.8" y="2.6" width="12.4" height="10.8" rx="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M3.6 9h2.2l1.2-2.6 1.8 4.4 1.2-1.8h2.4" fill="none" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
+/** Putting it in front of people — a paper plane leaving a short trail. */
+export function LaunchSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M14.2 1.9L1.9 7.1l4.6 1.6 1.6 4.6z" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    <path d="M6.5 8.7l3.4-3.4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    <path d="M2.2 12.6l1.6-1.6M4.4 14.1l.9-.9" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
   </svg>;
 }
 

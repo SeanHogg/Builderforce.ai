@@ -115,38 +115,18 @@ jobs:
           $json = Get-Content $conf -Raw | ConvertFrom-Json
           $json.bundle | Add-Member -NotePropertyName windows -NotePropertyValue @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } -Force
           $json | ConvertTo-Json -Depth 20 | Set-Content $conf
-      # Tauri tries to sign whenever APPLE_CERTIFICATE is SET — even to an empty string, which
-      # is what an unset secret becomes. So the signing variables reach the build only through
-      # this step, and only once the certificate has been proven to import; otherwise the
-      # build ships unsigned (with a warning when a certificate was given but is broken).
-      - name: Check the macOS signing certificate
+      # Signing variables reach tauri-action only via this action, and only for a certificate
+      # that imports (see .github/actions/macos-signing).
+      - name: macOS signing
         if: runner.os == 'macOS'
-        shell: bash
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          ok=false
-          if [[ -n "${APPLE_CERTIFICATE}" ]]; then
-            p12="${RUNNER_TEMP}/probe.p12"
-            echo "${APPLE_CERTIFICATE}" | base64 --decode > "${p12}" || true
-            security create-keychain -p probe "${RUNNER_TEMP}/probe.keychain-db"
-            if security import "${p12}" -k "${RUNNER_TEMP}/probe.keychain-db" -P "${APPLE_CERTIFICATE_PASSWORD}"; then ok=true; fi
-            security delete-keychain "${RUNNER_TEMP}/probe.keychain-db" || true
-            rm -f "${p12}"
-            [[ "${ok}" == true ]] || echo "::warning::APPLE_CERTIFICATE does not import (check the base64 .p12 and APPLE_CERTIFICATE_PASSWORD); building unsigned."
-          fi
-          if [[ "${ok}" == true ]]; then
-            for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
-              if [[ -n "${!name}" ]]; then echo "${name}=${!name}" >> "$GITHUB_ENV"; fi
-            done
-          else
-            echo "::notice::No usable macOS signing certificate; building unsigned."
-          fi
+        uses: ./.github/actions/macos-signing
+        with:
+          certificate: ${{ secrets.APPLE_CERTIFICATE }}
+          certificate-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          signing-identity: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          apple-id: ${{ secrets.APPLE_ID }}
+          apple-password: ${{ secrets.APPLE_PASSWORD }}
+          team-id: ${{ secrets.APPLE_TEAM_ID }}
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

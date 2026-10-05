@@ -29,6 +29,7 @@ import {
 } from '@/lib/canvasConnectionStyle';
 import { CREATION_CONNECTION_KINDS, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 import styles from './CreationCanvas.module.css';
+import { PhaseFocusToggle } from './phase/PhaseFocusToggle';
 
 /**
  * THE BOARD MENU'S BODY — the board's own errands, in ONE place and TWO hosts.
@@ -154,6 +155,7 @@ export function CanvasBoardMenuBody({
       {showsBoard && <>
         <button type="button" className={styles.sessionActionButton} onClick={view.onToggleMinimap} aria-pressed={view.minimapOpen} aria-label={view.minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')} title={view.minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')}><MinimapIcon /></button>
         <button type="button" className={styles.sessionActionButton} onClick={view.onToggleGesture} aria-pressed={view.marquee} aria-label={t('canvasGestureToggle')} title={view.marquee ? t('canvasGestureSelectActive') : t('canvasGesturePanActive')}><MarqueeSelectIcon /></button>
+        <PhaseFocusToggle />
       </>}
       {/* WHAT THE SCENE ADDS while it is up. These were the last commands living on the
           bottom-left rail; with the rail gone they are contributed here, beside the zoom

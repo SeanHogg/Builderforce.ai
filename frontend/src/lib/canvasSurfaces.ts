@@ -38,7 +38,7 @@
 
 import type { CanvasComposerIntentId } from './canvasComposerIntents';
 
-export type CanvasSurfaceId = 'chat' | 'graph' | 'ideas' | 'scene3d' | 'app' | 'insights' | 'room' | 'calendar' | 'form' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
+export type CanvasSurfaceId = 'chat' | 'graph' | 'ideas' | 'scene3d' | 'app' | 'operate' | 'insights' | 'launch' | 'room' | 'calendar' | 'form' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
 
 /**
  * What a surface is ABOUT.
@@ -179,25 +179,34 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // of its own — it reads the pinned/registry widgets the rest of the product already
   // shares (`WidgetCard`, `ReorderableWidgetGrid`) rather than inventing a second
   // metrics surface — so `showsObjects` stays false the way `chat`'s does.
-  { id: 'insights', scope: 'board', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true, composerIntents: ['ask'] },
+  // WHAT IS RUNNING — the deployments, releases and app status the board already holds,
+  // read as one place. Offered from Run (`canvasPhases.ts`), because before something is
+  // deployed there is nothing to operate. It composes existing panels (the releases
+  // lifecycle, the App surface's own status) rather than a second editor for either.
+  { id: 'operate', scope: 'board', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true, composerIntents: ['ask'] },
+  { id: 'insights', scope: 'board', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true, composerIntents: ['ask'] },
   // The three medium runtimes. Each is a PROMOTION: the editor already existed, squeezed
   // into a node body where the medium's own axis had nowhere to go — a paged document in a
   // card, a playable build behind a bespoke `gameFocus` boolean, and a multi-track edit
   // with no room for a second track. None of them persists, because a surface bound to one
   // object cannot be restored without it.
-  { id: 'page', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
-  { id: 'play', scope: 'object', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
+  // REACH, laid out as a place: the Make-it-real door's rows — prove it, publish, sell,
+  // tell people — as sections, each opening the panel that door already opens. The door
+  // stays; this is where a session in Reach WORKS rather than a menu it passes through.
+  { id: 'launch', scope: 'board', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true, composerIntents: ['ask'] },
+  { id: 'page', scope: 'object', order: 8, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
+  { id: 'play', scope: 'object', order: 9, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
   // A site is pages AND a width. It is not the `page` surface with more room: that one
   // draws ONE sheet at a reading measure, and a website is a set of pages you move
   // between at a width you choose. Two axes the sheet does not have, so two surfaces.
-  { id: 'site', scope: 'object', order: 8, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
-  { id: 'timeline', scope: 'object', order: 9, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
+  { id: 'site', scope: 'object', order: 10, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
+  { id: 'timeline', scope: 'object', order: 11, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
   // A `world` object is a place with its own camera and props, not a page — it does
   // not fit the sheet/build/track shapes above any more than they fit each other. It
   // does not persist as the active surface for the same reason they don't: a surface
   // bound to one object snaps back to the board on reload, not into an editor whose
   // target it has to re-find.
-  { id: 'world', scope: 'object', order: 10, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
+  { id: 'world', scope: 'object', order: 12, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
   // THE AI SCENE — a `scene` object's generation panel (prompt, model, Generate).
   //
   // This id used to be the rail's "3D space", which forked on whether a `scene`
@@ -206,7 +215,7 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // was underneath — the surface of ONE object, entered from its card, meaningless
   // without it — and it is declared as exactly that. The id stays: the object registry
   // and the generation panel both name it, and nothing about an id says "rail".
-  { id: 'scene3d', scope: 'object', order: 11, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
+  { id: 'scene3d', scope: 'object', order: 13, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
   // THE ROOM. A live poll's own axis is the people answering it — a join address on the
   // wall, a count that moves, and two controls (open/close voting, show/hide the count)
   // that are pressed while a room watches. A ~340px card can preview a question; it
@@ -215,7 +224,7 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   //
   // It does not persist, for the reason every object-scoped surface does not: coming
   // back tomorrow should land on the board, not inside a poll that closed last night.
-  { id: 'facilitate', scope: 'object', order: 12, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
+  { id: 'facilitate', scope: 'object', order: 14, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
   // THE MONTH — and the one entry on this list that used to be somewhere else.
   //
   // ── WHY IT STOPPED BEING A BOARD SURFACE ─────────────────────────────────────
@@ -236,8 +245,8 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // It does not persist, like every object-scoped surface: it cannot be restored without
   // knowing WHICH calendar, and a reload should land on the board rather than inside a
   // month whose card the reader may since have deleted.
-  { id: 'calendar', scope: 'object', order: 13, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
-  { id: 'form', scope: 'object', order: 14, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
+  { id: 'calendar', scope: 'object', order: 15, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
+  { id: 'form', scope: 'object', order: 16, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false, composerIntents: ['ask'] },
 ];
 
 /**

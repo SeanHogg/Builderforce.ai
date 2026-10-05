@@ -2,7 +2,9 @@
 // the boundary — the same reason `PhaseModalitySelector` states at its top.
 import { useTranslations } from 'next-intl';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
+import { surfacesForPhase } from '@/lib/canvasPhases';
 import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
+import { useCanvasPhase } from './phase/CanvasPhaseContext';
 import styles from './CreationCanvas.module.css';
 
 /**
@@ -33,6 +35,9 @@ export interface CanvasSurfaceStripProps {
 
 export function CanvasSurfaceStrip({ surface, onChange }: CanvasSurfaceStripProps) {
   const t = useTranslations('creationCanvas');
+  // The phone offers what the desktop card offers: the phase's surfaces, not every one.
+  // Outside a canvas (no phase) it offers the whole rail, as it always did.
+  const phase = useCanvasPhase()?.phase;
 
   return (
     <div
@@ -41,7 +46,7 @@ export function CanvasSurfaceStrip({ surface, onChange }: CanvasSurfaceStripProp
       aria-label={t('surfaceStrip')}
       data-testid="canvas-surface-strip"
     >
-      <CanvasSurfaceSwitcher surface={surface} onChange={onChange} variant="mobile" />
+      <CanvasSurfaceSwitcher surface={surface} onChange={onChange} variant="mobile" {...(phase ? { allowedIds: surfacesForPhase(phase) } : {})} />
     </div>
   );
 }

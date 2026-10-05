@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { CanvasPhoneAppBar } from './CanvasPhoneAppBar';
+import { renderWithPhase } from './phase/testPhaseProvider';
 
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations'))
   .realCatalogIntlMock((await import('@/i18n/messages/en.json')).default as Record<string, unknown>));
@@ -58,5 +59,64 @@ describe('CanvasPhoneAppBar', () => {
     renderBar();
     fireEvent.click(screen.getByTestId('canvas-app-bar-stage'));
     expect(screen.getByTestId('canvas-stage-sheet')).toBeInTheDocument();
+  });
+
+  /** Without a canvas around it the sheet still draws — every step simply reads Ready. */
+  it('opens the sheet without a phase provider', () => {
+    renderBar({ phase: 'make' });
+    fireEvent.click(screen.getByTestId('canvas-app-bar-stage'));
+    const sheet = screen.getByTestId('canvas-stage-sheet');
+    expect(within(sheet).getByRole('tab', { name: 'Make, Now' })).toHaveAttribute('aria-selected', 'true');
+    expect(within(sheet).getByRole('tab', { name: 'Run, Ready' })).not.toHaveAttribute('data-ready');
+  });
+
+  /**
+   * THE PHONE'S READING OF READINESS (PRD 32 · W3/W13): each row of the sheet says its
+   * state in words and what the phase adds, because a phone sheet has the width for words
+   * a floating card does not.
+   */
+  it('gives each phase row its status line and what it adds, inside a canvas', () => {
+    const onPhaseChange = vi.fn();
+    renderWithPhase(
+      <CanvasPhoneAppBar
+        title="Dog walking for towers"
+        phase="idea"
+        onPhaseChange={onPhaseChange}
+        surface="graph"
+        onSurfaceChange={vi.fn()}
+        roster={faces}
+        boardMenu={<button type="button">More session actions</button>}
+      />,
+      { phase: 'idea', signals: { hasIdea: true } },
+    );
+    fireEvent.click(screen.getByTestId('canvas-app-bar-stage'));
+    const sheet = screen.getByTestId('canvas-stage-sheet');
+
+    const idea = within(sheet).getByRole('tab', { name: 'Idea, Now' });
+    expect(idea).toHaveTextContent('Now · adds Chat, Board, Ideas, Room');
+    const make = within(sheet).getByRole('tab', { name: 'Make, Ready' });
+    expect(make).toHaveAttribute('data-ready', 'true');
+    expect(make).toHaveTextContent('Ready · adds App');
+    // Run needs an app, which Make builds.
+    const run = within(sheet).getByRole('tab', { name: 'Run, Needs Make' });
+    expect(run).toHaveAttribute('data-ready', 'false');
+    expect(run).toHaveAttribute('data-state', 'needs');
+    expect(run).toHaveTextContent('Needs Make · adds Operate');
+    expect(within(sheet).getByRole('tab', { name: 'Measure, Needs Make' })).toHaveTextContent('adds Insights');
+    expect(within(sheet).getByRole('tab', { name: 'Reach, Needs Make' })).toHaveTextContent('adds Launch');
+
+    // The lock is a sign, not a gate: an unready phase still switches.
+    fireEvent.click(run);
+    expect(onPhaseChange).toHaveBeenCalledWith('run');
+  });
+
+  it('marks a phase whose own output exists as done', () => {
+    renderWithPhase(
+      <CanvasPhoneAppBar title="T" phase="make" onPhaseChange={vi.fn()} surface="graph" onSurfaceChange={vi.fn()} roster={[]} boardMenu={null} />,
+      { phase: 'make', signals: { hasIdea: true } },
+    );
+    fireEvent.click(screen.getByTestId('canvas-app-bar-stage'));
+    const idea = within(screen.getByTestId('canvas-stage-sheet')).getByRole('tab', { name: 'Idea, Done' });
+    expect(idea).toHaveAttribute('data-state', 'done');
   });
 });

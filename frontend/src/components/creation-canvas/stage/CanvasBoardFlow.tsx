@@ -9,6 +9,8 @@ import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
 import type { useCanvasInteraction } from '../hooks/useCanvasInteraction';
 import type { useCanvasBrainSurface } from '../hooks/useCanvasBrainSurface';
 import type { useCanvasPresence } from '../hooks/useCanvasPresence';
+import { PhaseGhostCard } from '../phase/PhaseGhostCard';
+import { usePhaseLensEdges } from '../phase/usePhaseLensEdges';
 
 type Interaction = ReturnType<typeof useCanvasInteraction>;
 type Presence = ReturnType<typeof useCanvasPresence>;
@@ -85,6 +87,7 @@ export const CanvasBoardFlow = memo(function CanvasBoardFlow({
   setMinimapOpen, onCleanLayout, threeDActive,
 }: CanvasBoardFlowProps) {
   const { canEdit } = useCanvasSessionFacts();
+  const lensEdges = usePhaseLensEdges(nodes, edges);
   const onInit = useCallback((instance: ReactFlowInstance<CreationFlowNode, Edge>) => {
     flowRef.current = instance;
     if (pendingViewportRef.current) void instance.setViewport(pendingViewportRef.current);
@@ -92,7 +95,7 @@ export const CanvasBoardFlow = memo(function CanvasBoardFlow({
   return <BrainSurfaceProvider value={brainSurface}>
         <ReactFlow<CreationFlowNode, Edge>
           nodes={nodes}
-          edges={edges}
+          edges={lensEdges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
@@ -124,6 +127,8 @@ export const CanvasBoardFlow = memo(function CanvasBoardFlow({
               layer that lives outside the viewport is only ever correct until the
               first pan. */}
           <RemoteCursors members={liveMembers} currentUserId={presenceSelfId} />
+          {/* Where the phase's first object would go — drawn in flow space, never a node. */}
+          <PhaseGhostCard />
           <CanvasCommands
             minimapOpen={minimapOpen}
             setMinimapOpen={setMinimapOpen}

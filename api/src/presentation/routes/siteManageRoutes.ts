@@ -12,6 +12,7 @@
  *   POST   /api/projects/:id/site/domain/verify     check the TXT proof  (MANAGER+)
  *   DELETE /api/projects/:id/site/domain            disconnect           (MANAGER+)
  *   GET    /api/projects/:id/site/traffic           daily rollup
+ *   GET    /api/projects/:id/site/audience-summary  People: users, sign-ups, visitors, leads
  *   GET    /api/projects/:id/site/collections       form endpoints
  *   POST   /api/projects/:id/site/collections       create one           (MANAGER+)
  *   PATCH  /api/projects/:id/site/collections/:cid  toggle / link        (MANAGER+)
@@ -38,6 +39,7 @@ import {
   verifyCustomDomain,
 } from '../../application/ide/customDomain';
 import { getSiteTraffic, siteForProject } from '../../application/ide/siteTraffic';
+import { getSiteAudienceSummary, invalidateSiteAudience } from '../../application/ide/siteAudienceSummary';
 import {
   createCollection,
   listCollections,
@@ -136,6 +138,16 @@ export function createSiteManageRoutes(db: Db): Hono<HonoEnv> {
     return c.json(summary);
   });
 
+  router.get('/:projectId/site/audience-summary', async (c) => {
+    const projectId = positiveId(c.req.param('projectId'));
+    if (!projectId) return c.json({ error: 'Invalid project id.' }, 400);
+    // The use case clamps `days` to the windows the UI offers (bounded cache keyspace).
+    const summary = await getSiteAudienceSummary(c.env, db, c.get('tenantId') as number, projectId, {
+      days: Number(c.req.query('days') ?? '30'),
+    });
+    return c.json(summary);
+  });
+
   // ---- collections + records -------------------------------------------
 
   const NO_SITE = 'This project has no published site yet.';
@@ -190,8 +202,10 @@ export function createSiteManageRoutes(db: Db): Hono<HonoEnv> {
     const projectId = positiveId(c.req.param('projectId'));
     const collectionId = positiveId(c.req.param('collectionId'));
     if (!projectId || !collectionId) return c.json({ error: 'Invalid id.' }, 400);
-    const removed = await deleteCollection(db, c.get('tenantId') as number, projectId, collectionId);
+    const tenantId = c.get('tenantId') as number;
+    const removed = await deleteCollection(db, tenantId, projectId, collectionId);
     if (!removed) return c.json({ error: NOT_FOUND }, 404);
+    await invalidateSiteAudience(c.env, tenantId, projectId);
     return c.json({ ok: true });
   });
 
@@ -212,8 +226,10 @@ export function createSiteManageRoutes(db: Db): Hono<HonoEnv> {
     const collectionId = positiveId(c.req.param('collectionId'));
     const recordId = positiveId(c.req.param('recordId'));
     if (!projectId || !collectionId || !recordId) return c.json({ error: 'Invalid id.' }, 400);
-    const removed = await deleteRecord(db, c.get('tenantId') as number, projectId, collectionId, recordId);
+    const tenantId = c.get('tenantId') as number;
+    const removed = await deleteRecord(db, tenantId, projectId, collectionId, recordId);
     if (!removed) return c.json({ error: 'Record not found.' }, 404);
+    await invalidateSiteAudience(c.env, tenantId, projectId);
     return c.json({ ok: true });
   });
 
@@ -253,6 +269,7 @@ export function createSiteManageRoutes(db: Db): Hono<HonoEnv> {
     if (!site) return c.json({ error: NO_SITE }, 404);
     const removed = await deleteSiteUser(db, tenantId, site.siteId, userId);
     if (!removed) return c.json({ error: 'User not found.' }, 404);
+    await invalidateSiteAudience(c.env, tenantId, projectId);
     return c.json({ ok: true });
   });
 

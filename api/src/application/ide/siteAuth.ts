@@ -33,6 +33,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { siteUsers, siteUserSessions } from '../../infrastructure/database/schema';
 import { fireEventTriggers } from '../workflow/eventTriggers';
 import { appsDatabaseOf } from './appsDatabase';
+import { invalidateSiteAudience } from './siteAudienceSummary';
 import type { Env } from '../../env';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isSendableEmail, normalizeEmail } from '../shared/dnsVerification';
@@ -94,6 +95,10 @@ export async function requestSiteSignIn(
   /** Worker env, when the caller has one — lets a genuinely NEW site user fire the
    *  workspace's `signup` workflow triggers. Omitting it skips that fan-out. */
   env?: Env,
+  /** The site's project, when the caller knows it — lets a NEW sign-up drop the
+   *  cached People summary (`siteAudienceSummary.ts`). Omitted, the summary
+   *  catches up within its TTL. */
+  projectId?: number,
 ): Promise<RequestSignInResult> {
   const email = normalizeEmail(String(rawEmail ?? ''));
   if (!email || !isSendableEmail(email)) {
@@ -122,6 +127,7 @@ export async function requestSiteSignIn(
   }
 
   if (user.isNew) {
+    if (projectId) await invalidateSiteAudience(env, tenantId, projectId);
     await fireEventTriggers(db, {
       tenantId, env,
       eventType: 'signup',

@@ -1,35 +1,37 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
+import { BrandLockup } from '@/components/BrandLockup';
 import { SPAWN_ROUTE } from '@/lib/spawn/spawnLinks';
 import { SpawnAccountLink } from './SpawnAccountLink';
+import { SpawnDownloadButton } from './SpawnDownloadButton';
 import styles from './spawn.module.css';
 
 /**
- * Spawn's own chrome (`/spawn` is a no-chrome prefix in `shellRouting.ts`): the
- * Spawn mark, the page's sections, the account link, and a footer that says who
- * runs it and where the rules are. Every Spawn page renders inside it.
+ * Spawn's own chrome (`/spawn` is a no-chrome prefix in `shellRouting.ts`). Spawn
+ * is a Builderforce product and wears it: the bar is the Builderforce mark with
+ * the Spawn wordmark and "by Builderforce", then the two things a visitor does —
+ * sign in, download. The footer carries the Builderforce lockup home.
  */
 export async function SpawnShell({ children }: { children: ReactNode }) {
   const t = await getTranslations('spawn.shell');
   return (
     <div className={styles.root}>
       <header className={styles.bar}>
-        <Link href={SPAWN_ROUTE} className={styles.brand} aria-label={t('home')}>
-          <span className={styles.brandMark} aria-hidden>⚡</span>
-          Spawn
-        </Link>
-        <nav className={styles.nav} aria-label={t('navLabel')}>
-          <Link href={`${SPAWN_ROUTE}#how`} className={styles.navLink}>{t('how')}</Link>
-          <Link href={`${SPAWN_ROUTE}#safety`} className={styles.navLink}>{t('safety')}</Link>
-          <Link href={`${SPAWN_ROUTE}#pricing`} className={styles.navLink}>{t('pricing')}</Link>
-          <Link href={`${SPAWN_ROUTE}#download`} className={styles.navLink}>{t('download')}</Link>
+        <BrandLockup href={SPAWN_ROUTE} label={t('home')} size={36} className={styles.brand}>
+          <span className={styles.brandName}>Spawn</span>
+          <span className={styles.brandBy}>{t('by')}</span>
+        </BrandLockup>
+        <div className={styles.barActions}>
           <SpawnAccountLink />
-        </nav>
+          <span className={styles.barDownload}><SpawnDownloadButton compact /></span>
+        </div>
       </header>
       {children}
       <footer className={styles.footer}>
-        <span>{t('madeBy')}</span>
+        <BrandLockup href="/" label={t('builderforce')} size={28} className={styles.footerBrand}>
+          <span>{t('madeBy')}</span>
+        </BrandLockup>
         <span>
           <Link href="/legal">{t('terms')}</Link>
           {' · '}

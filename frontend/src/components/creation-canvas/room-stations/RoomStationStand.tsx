@@ -45,9 +45,12 @@ export interface RoomStationStandProps {
   look: RoomStationLook;
   open: RoomItemOpen;
   onDragChange: (dragging: boolean) => void;
+  /** The phase hue when this is the canvas's CURRENT phase's station — a lit rim and a
+   *  tinted caption. Null draws it as every other station. It never moves the stand. */
+  litHue?: string | null;
 }
 
-export function RoomStationStand({ sessionId, stationKey, index, palette, title, hint, look, open, onDragChange }: RoomStationStandProps) {
+export function RoomStationStand({ sessionId, stationKey, index, palette, title, hint, look, open, onDragChange, litHue = null }: RoomStationStandProps) {
   const [spot, place] = useRoomSpot(roomSpotKey(sessionId, `station:${stationKey}`), defaultRoomStationSpot(index));
   const geometry = useRoomGeometry();
   const placement = useMemo(() => placeStationInRoom(spot, geometry), [spot, geometry]);
@@ -64,7 +67,7 @@ export function RoomStationStand({ sessionId, stationKey, index, palette, title,
           <>
             <mesh position={[0, 0.02, 0]} receiveShadow>
               <cylinderGeometry args={[0.3, 0.34, 0.04, 24]} />
-              <meshStandardMaterial color={palette.table} />
+              <meshStandardMaterial color={litHue ?? palette.table} {...(litHue ? { emissive: litHue, emissiveIntensity: 0.35 } : {})} />
             </mesh>
             <mesh position={[0, lift / 2, -0.04]} castShadow>
               <boxGeometry args={[0.08, lift, 0.08]} />
@@ -77,7 +80,7 @@ export function RoomStationStand({ sessionId, stationKey, index, palette, title,
             <>
               <mesh position={[0, 0, -0.03]} castShadow receiveShadow>
                 <boxGeometry args={[BOARD_WIDTH + FRAME_PAD, BOARD_HEIGHT + FRAME_PAD, 0.04]} />
-                <meshStandardMaterial color={palette.panel} />
+                <meshStandardMaterial color={litHue ?? palette.panel} {...(litHue ? { emissive: litHue, emissiveIntensity: 0.45 } : {})} />
               </mesh>
               <SurfacePanel
                 width={BOARD_WIDTH}
@@ -95,6 +98,7 @@ export function RoomStationStand({ sessionId, stationKey, index, palette, title,
         hint={hint}
         testId="room-station-caption"
         open={open}
+        {...(litHue ? { accent: litHue } : {})}
       />
     </>
   );

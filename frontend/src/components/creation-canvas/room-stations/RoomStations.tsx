@@ -6,8 +6,10 @@ import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import type { RoomPalette } from '@/lib/canvas/roomSeating';
-import { roomStationInstances, type RoomStationInstance } from '@/lib/canvas/roomStations';
+import { litStationsFirst, roomStationInstances, type RoomStationInstance } from '@/lib/canvas/roomStations';
 import { useCanvasBoardBridge } from '../canvasBoardBridge';
+import { useCanvasPhase } from '../phase/CanvasPhaseContext';
+import { useStageHue } from './useStageHue';
 import { ROOM_STATION_VIEWS } from './registry';
 import { RoomStationStand } from './RoomStationStand';
 import styles from './roomStations.module.css';
@@ -28,9 +30,14 @@ import styles from './roomStations.module.css';
 export function useRoomStationInstances(): RoomStationInstance[] {
   const board = useCanvasBoardBridge();
   const objects = board?.objects;
+  // The phase LIGHTS its station and decides whether the path sign stands; it never
+  // reorders the room — the list below sorts, the stands keep their spots.
+  const phaseValue = useCanvasPhase();
+  const phase = phaseValue?.phase;
+  const readiness = phaseValue?.readiness.byPhase;
   return useMemo(
-    () => (objects ? roomStationInstances(objects).filter((instance) => ROOM_STATION_VIEWS[instance.station]) : []),
-    [objects],
+    () => (objects ? roomStationInstances(objects, undefined, phase && readiness ? { phase, readiness } : undefined).filter((instance) => ROOM_STATION_VIEWS[instance.station]) : []),
+    [objects, phase, readiness],
   );
 }
 
@@ -46,6 +53,8 @@ interface StandsProps {
 function StationStand({ instance, index, sessionId, palette, openKey, onOpen, onDragChange }: Omit<StandsProps, 'instances'> & { instance: RoomStationInstance; index: number }) {
   const t = useTranslations('roomStations');
   const model = ROOM_STATION_VIEWS[instance.station]!.useModel(instance, openKey === instance.key);
+  const phase = useCanvasPhase()?.phase;
+  const hue = useStageHue(instance.lit ? phase : undefined);
   if (!model) return null;
   return (
     <RoomStationStand
@@ -56,6 +65,7 @@ function StationStand({ instance, index, sessionId, palette, openKey, onOpen, on
       title={model.title}
       hint={t('dragHint', { summary: model.summary })}
       look={model.body ? { body: model.body } : { face: model.face }}
+      litHue={hue}
       open={{
         label: t('open'),
         name: t('openNamed', { title: model.title }),
@@ -77,7 +87,7 @@ function StationRow({ instance, onOpen }: { instance: RoomStationInstance; onOpe
   const model = ROOM_STATION_VIEWS[instance.station]!.useModel(instance, false);
   if (!model) return null;
   return (
-    <li className={styles.row} data-testid="room-station">
+    <li className={styles.row} data-testid="room-station" data-lit={instance.lit ? 'true' : undefined}>
       <span className={styles.rowName}>
         <strong>{model.title}</strong>
         <small>{model.summary}</small>
@@ -102,7 +112,7 @@ export function RoomStationList({ instances, onOpen }: { instances: readonly Roo
     <section className={styles.list} aria-label={t('listHead')}>
       <p className={styles.listHead}>{t('listHead')}</p>
       <ul className={styles.rows}>
-        {instances.map((instance) => <StationRow key={instance.key} instance={instance} onOpen={onOpen} />)}
+        {litStationsFirst(instances).map((instance) => <StationRow key={instance.key} instance={instance} onOpen={onOpen} />)}
       </ul>
     </section>
   );

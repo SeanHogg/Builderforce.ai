@@ -9,7 +9,7 @@ import { SPAWN_ACCOUNT_ROUTE } from '@/lib/spawn/spawnLinks';
 import { SpawnPackGrid } from './SpawnPackGrid';
 import styles from './spawn.module.css';
 
-/** The landing page's prices — read from the API, so the page and the checkout charge the same numbers. */
+/** The landing page's prices — the membership, then the packs, read from the API so the page and the checkout charge the same numbers. */
 export function SpawnPricing() {
   const t = useTranslations('spawn.pricing');
   const fmt = useFormat();
@@ -22,26 +22,17 @@ export function SpawnPricing() {
 
   return (
     <section id="pricing" className={styles.section} aria-labelledby="pricing-title">
-      <div className={styles.sectionHead}>
-        <p className={styles.eyebrow}>{t('eyebrow')}</p>
-        <h2 id="pricing-title" className={styles.h2}>{t('title')}</h2>
-        <p className={styles.lede}>{t('lede')}</p>
-      </div>
+      <h2 id="pricing-title" className={styles.h2}>{t('title')}</h2>
       {failed && <p className={styles.error} role="alert">{t('loadFailed')}</p>}
       {prices && (
         <>
-          <article className={styles.plan}>
-            <p className={styles.eyebrow}>{t('planName')}</p>
-            <p className={styles.price}>
+          <div className={styles.plan}>
+            <span className={styles.price}>
               {fmt.money(prices.monthlyCents / 100, 'USD')} <span className={styles.priceUnit}>{t('perMonth')}</span>
-            </p>
-            <p className={styles.cardBody}>{t('planBody', { age: prices.minAge })}</p>
-            <div className={styles.ctaRow}>
-              <Link href={SPAWN_ACCOUNT_ROUTE} className={styles.cta}>{t('join')}</Link>
-            </div>
-          </article>
-          <h3 className={styles.cardTitle}>{t('packsTitle')}</h3>
-          <p className={styles.fine}>{t('packsLede')}</p>
+            </span>
+            <span className={styles.planName}>{t('planName')}</span>
+            <Link href={SPAWN_ACCOUNT_ROUTE} className={styles.cta}>{t('join')}</Link>
+          </div>
           <SpawnPackGrid packs={prices.packs} />
         </>
       )}

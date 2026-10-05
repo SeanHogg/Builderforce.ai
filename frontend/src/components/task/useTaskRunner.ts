@@ -7,7 +7,7 @@ import {
 import { llmApi } from '@/lib/builderforceApi';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 import { computeModelRecallBias, seedModelRecallMemory } from '@/lib/modelRecallBias';
-import { readChosenCanvasPhase } from '@/lib/canvasPhases';
+import { useCanvasPhase } from '@/components/creation-canvas/phase/CanvasPhaseContext';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
@@ -49,6 +49,10 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const errorMessage = useErrorMessage();
+  // The arc stage of the canvas this run is launched FROM, when it is launched from one.
+  // The phase is per canvas now, so a run started anywhere else (the task drawer, the
+  // board view) has no canvas to speak for and sends nothing — never another canvas's.
+  const arcStage = useCanvasPhase()?.phase;
 
   useEffect(() => {
     loadAgentPool()
@@ -82,10 +86,9 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
         if (effectiveModel) payloadObj.model = effectiveModel;
         if (cloudRef) payloadObj.cloudAgentRef = cloudRef;
         if (opts?.repoId !== undefined) payloadObj.repoId = opts.repoId;
-        // The arc stage this person put their canvas in, when they chose one — a nudge
-        // on the model-role objective server-side (idea/reach lean cheaper, make leans
-        // stronger). Omitted rather than defaulted, so an unset phase changes nothing.
-        const arcStage = readChosenCanvasPhase();
+        // The arc stage of the canvas this run comes from — a nudge on the model-role
+        // objective server-side (idea/reach lean cheaper, make leans stronger). Omitted
+        // outside a canvas, so a run with no canvas changes nothing.
         if (arcStage) payloadObj.arcStage = arcStage;
         // Learned Model Routing (PRD 13 §6.6): this is an INTERACTIVE launch, so
         // compute the client-side SSM recall bias on the user's GPU and attach it as
@@ -114,7 +117,7 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
         setRunning(false);
       }
     },
-    [task, cloudAgents, onRan, onAwaitingApproval, errorMessage],
+    [task, cloudAgents, onRan, onAwaitingApproval, errorMessage, arcStage],
   );
 
   return { run, running, error, cloudAgents };

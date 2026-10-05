@@ -202,7 +202,7 @@ async function handleSiteAuth(
 
   if (action === 'request' && request.method === 'POST') {
     const body = await readSubmission(request);
-    const started = await requestSiteSignIn(db, site.siteId, site.tenantId, (body as { email?: unknown } | null)?.email, env);
+    const started = await requestSiteSignIn(db, site.siteId, site.tenantId, (body as { email?: unknown } | null)?.email, env, site.projectId);
     if (started.ok) {
       // Delivery is best-effort and its failure must not tell the caller whether
       // the address exists. A code that could not be sent simply expires.

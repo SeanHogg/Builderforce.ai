@@ -15,7 +15,10 @@ import en from '@/i18n/messages/en.json';
 import es from '@/i18n/messages/es.json';
 import fr from '@/i18n/messages/fr.json';
 import zh from '@/i18n/messages/zh.json';
+import { CANVAS_PHASES } from '@/lib/canvasPhases';
+import { CanvasBarGroup } from './CanvasBarGroup';
 import { CreationCanvas } from './CreationCanvas';
+import { renderWithPhase } from './phase/testPhaseProvider';
 
 /**
  * THE BAR IS THE ARC.
@@ -172,5 +175,43 @@ describe('the captioned groups on the bar', () => {
     const bar = screen.getByTestId('canvas-command-bar');
     expect(within(bar).queryByRole('button', { name: 'Zoom in' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Canvas view controls' })).toBeNull();
+  });
+});
+
+/**
+ * THE CURRENT STAGE (PRD 32 · W8). The group whose stage is the phase this canvas is IN
+ * reads as the current one — an attribute the stylesheet tints, never a layout change —
+ * and it is exactly one group, read from the phase context rather than a prop.
+ */
+describe('the group for the canvas's phase', () => {
+  const allGroups = () => <>{CANVAS_BAR_GROUP_ORDER.map((id) => (
+    <CanvasBarGroup key={id} group={id}><button type="button">{id}</button></CanvasBarGroup>
+  ))}</>;
+  const current = () => [...document.querySelectorAll('[data-current="true"]')].map((element) => element.getAttribute('data-group'));
+
+  it.each(CANVAS_PHASES)('marks only the %s group current', (phase) => {
+    renderWithPhase(allGroups(), { phase });
+    expect(current()).toEqual([phase]);
+  });
+
+  it('marks nothing outside a canvas, and never the board group', () => {
+    render(allGroups());
+    expect(current()).toEqual([]);
+    expect(document.querySelector('[data-group="board"]')).not.toHaveAttribute('data-current');
+  });
+
+  it('marks nothing on a group a surface named itself', () => {
+    renderWithPhase(<CanvasBarGroup label="App runtime" caption="App"><button type="button">Run</button></CanvasBarGroup>, { phase: 'make' });
+    expect(current()).toEqual([]);
+  });
+
+  /** The host wiring: a fresh canvas opens at its frontier (Idea), and the bar says so. */
+  it('marks Idea on a fresh canvas', () => {
+    window.localStorage.clear();
+    render(<CreationCanvas sessionId="bar-group-current-test" persistence="local" />);
+    const bar = screen.getByTestId('canvas-command-bar');
+    const lit = [...bar.querySelectorAll('[data-current="true"]')];
+    expect(lit).toHaveLength(1);
+    expect(lit[0]).toBe(within(bar).getByRole('group', { name: 'Idea — put something on the board' }));
   });
 });

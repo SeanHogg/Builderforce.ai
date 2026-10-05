@@ -130,6 +130,7 @@ export function integrationCopy(t: CopyReader, slug: string): IntegrationCopy {
  */
 export const RELATED_ARTICLES: Record<string, string[]> = {
   'creation-canvas': [
+    'the-canvas-knows-where-you-are',
     'make-video-scenes-and-movies-on-the-canvas',
     'ideas-scratchpad-on-the-canvas',
     'walk-me-through-what-you-made',

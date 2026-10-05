@@ -26,6 +26,8 @@
  * rather than treating a whole contribution as one or the other.
  */
 
+import { readLocal, writeLocal } from './storage';
+
 /**
  * The addressable parts of the session bar.
  *
@@ -123,4 +125,20 @@ export function writeCanvasBarCollapsed(collapsed: boolean): void {
   try {
     window.localStorage.setItem(CANVAS_BAR_COLLAPSED_KEY, String(collapsed));
   } catch { /* storage can be unavailable in hardened contexts */ }
+}
+
+const CANVAS_PHASE_FOCUS_KEY = 'builderforce:create:phaseFocus';
+
+/**
+ * Whether the board brings the phase's object kinds forward and dims the rest. On by
+ * default — the lens is how a phase reads on the board — and persisted per browser like
+ * the folded bar, because somebody arranging the whole board wants every card at full
+ * strength every time they come back, not only until the next reload.
+ */
+export function readCanvasPhaseFocus(): boolean {
+  return readLocal(CANVAS_PHASE_FOCUS_KEY) !== 'false';
+}
+
+export function writeCanvasPhaseFocus(enabled: boolean): void {
+  writeLocal(CANVAS_PHASE_FOCUS_KEY, String(enabled));
 }

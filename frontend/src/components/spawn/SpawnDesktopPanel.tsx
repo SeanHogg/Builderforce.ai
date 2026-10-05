@@ -1,7 +1,7 @@
 // No `'use client'`: imported only by client components, so it is already on the client side of the boundary.
 
 import { useTranslations } from 'next-intl';
-import { SPAWN_DOWNLOAD_URL } from '@/lib/spawn/spawnLinks';
+import { SpawnDownloadButton } from './SpawnDownloadButton';
 import styles from './spawn.module.css';
 
 /** The last step: get the desktop app, which signs in to this same account. */
@@ -17,9 +17,7 @@ export function SpawnDesktopPanel({ ready }: { ready: boolean }) {
       <ol className={styles.cardBody} style={{ margin: 0, paddingLeft: 20, display: 'grid', gap: 6 }}>
         {steps.map((step) => <li key={step}>{step}</li>)}
       </ol>
-      <div className={styles.ctaRow}>
-        <a href={SPAWN_DOWNLOAD_URL} className={styles.cta} target="_blank" rel="noopener noreferrer">{t('download')}</a>
-      </div>
+      <SpawnDownloadButton />
     </section>
   );
 }

@@ -2,6 +2,11 @@ import { resourceIdOfType, type RoomGeometry } from '@builderforce/creation-canv
 import { CANVAS_WIDGET_RESOURCE_TYPE } from '@builderforce/canvas-widget-protocol';
 import { auditsKind } from '@/lib/academic/accessibility';
 import { boardMetricDefinitions } from './boardMetrics';
+import { boardDeployments } from './boardDeployments';
+import { ideaLogEntries } from '../ideaLog';
+import { sessionHasApp } from '../canvasSessionApp';
+import type { CanvasPhase } from '../canvasPhases';
+import type { CanvasPhaseReadiness } from '../canvasPhaseReadiness';
 import { placeCreationInRoom } from './roomCreations';
 import { DEFAULT_ROOM_GEOMETRY, type RoomSessionPlacement } from './roomSession';
 import type { RoomSpot } from './roomSpots';
@@ -45,17 +50,32 @@ export interface RoomStationInstance {
   resourceId?: string;
   /** The object's own title, when the station stands for one. */
   title?: string;
+  /** This station belongs to the phase the canvas is in — lit, and listed first. */
+  lit?: boolean;
+}
+
+/** What a station may consult beyond the board: the phase and its readiness. Optional —
+ *  a spec that ignores it behaves exactly as it did before phases existed. */
+export interface RoomStationContext {
+  phase?: CanvasPhase;
+  readiness?: Readonly<Record<CanvasPhase, CanvasPhaseReadiness>>;
 }
 
 export interface RoomStationSpec {
   id: string;
+  /** The phase this station belongs to. Data: the room LIGHTS it in that phase and lists
+   *  it first. It never moves — a remembered spot is the viewer's, not the phase's. */
+  phase?: CanvasPhase;
   /** Which instances of this station stand in the room for this board. */
-  instances: (objects: readonly RoomStationObject[]) => RoomStationInstance[];
+  instances: (objects: readonly RoomStationObject[], context?: RoomStationContext) => RoomStationInstance[];
 }
 
 function titleOf(data: Record<string, unknown>): string {
   return typeof data.title === 'string' ? data.title.trim() : '';
 }
+
+/** What the Launch station counts — the things a session puts in front of people. */
+export const LAUNCH_STATION_KINDS = ['socialPost', 'emailCampaign', 'release'] as const;
 
 export const ROOM_STATION_SPECS: readonly RoomStationSpec[] = [
   // Always in the room: an empty desk is how somebody learns that changes to money-
@@ -64,6 +84,7 @@ export const ROOM_STATION_SPECS: readonly RoomStationSpec[] = [
   // Only once the session defines a metric — an empty metrics board is furniture.
   {
     id: 'metrics',
+    phase: 'measure',
     instances: (objects) => (boardMetricDefinitions(objects).length ? [{ key: 'metrics', station: 'metrics' }] : []),
   },
   // One stand per placement. A placement is any board object whose resource is a
@@ -101,6 +122,23 @@ export const ROOM_STATION_SPECS: readonly RoomStationSpec[] = [
   // cannot disagree about what is audited.
   { id: 'accessibility', instances: (objects) => (objects.some((object) => auditsKind(String(object.data.kind ?? ''))) ? [{ key: 'accessibility', station: 'accessibility' }] : []) },
   whenAnyKind('citations', ['citation', 'bibliography']),
+  // ── THE ARC'S STATIONS ──────────────────────────────────────────────────────────
+  // One per phase, standing only when the board holds that phase's evidence. Appended
+  // AFTER the stations above, so a station's default spot (its index) is unchanged for
+  // every board that had stations before these existed.
+  { id: 'evidence', phase: 'idea', instances: (objects) => (ideaLogEntries(objects).length ? [{ key: 'evidence', station: 'evidence' }] : []) },
+  { id: 'build', phase: 'make', instances: (objects) => (sessionHasApp(objects as ReadonlyArray<{ id: string; data: { [key: string]: unknown; kind: string } }>) ? [{ key: 'build', station: 'build' }] : []) },
+  { id: 'ops', phase: 'run', instances: (objects) => (boardDeployments(objects).length ? [{ key: 'ops', station: 'ops' }] : []) },
+  { ...whenAnyKind('launch', LAUNCH_STATION_KINDS), phase: 'reach' },
+  // The room's version of the path card: a sign that stands ONLY while the canvas's
+  // phase is not ready, saying what is missing. LAST, so its coming and going never
+  // shifts another station's default spot.
+  {
+    id: 'phasePath',
+    instances: (_objects, context) => (context?.phase && context.readiness && !context.readiness[context.phase].ready
+      ? [{ key: 'phasePath', station: 'phasePath' }]
+      : []),
+  },
 ];
 
 /** The project an Evermind object is attached to (`evermind:<projectId>`), or null. */
@@ -118,8 +156,18 @@ function whenAnyKind(id: string, kinds: readonly string[]): RoomStationSpec {
 export function roomStationInstances(
   objects: readonly RoomStationObject[],
   specs: readonly RoomStationSpec[] = ROOM_STATION_SPECS,
+  context?: RoomStationContext,
 ): RoomStationInstance[] {
-  return specs.flatMap((spec) => spec.instances(objects));
+  return specs.flatMap((spec) => {
+    const instances = spec.instances(objects, context);
+    return spec.phase && context?.phase === spec.phase ? instances.map((instance) => ({ ...instance, lit: true })) : instances;
+  });
+}
+
+/** The room's LIST order: the lit station first, the rest in room order. The 3D spots are
+ *  laid out from the unsorted list, so sorting here never moves a stand. */
+export function litStationsFirst(instances: readonly RoomStationInstance[]): RoomStationInstance[] {
+  return [...instances.filter((instance) => instance.lit), ...instances.filter((instance) => !instance.lit)];
 }
 
 /** Stations line the two side walls, clear of the ring and of the creation rows. */

@@ -13,6 +13,7 @@ import { ReorderableWidgetGrid } from '@/components/widgets/ReorderableWidgetGri
 import { usePins } from '@/lib/widgets/PinsProvider';
 import { CanvasBarGroup } from './CanvasBarGroup';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
+import { CanvasInsightsThisCanvas } from './CanvasInsightsThisCanvas';
 import styles from './CreationCanvas.module.css';
 
 /** The Ask-a-question card is a registered widget, same as `/insights` shows it —
@@ -74,6 +75,8 @@ export function CanvasInsightsSurface({ onExit }: CanvasInsightsSurfaceProps) {
       onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); onExit(); } }}
     >
       <div className={styles.insightsSurfaceBody}>
+        {/* This canvas's own metrics first; the Ask card and the workspace's pins below. */}
+        <CanvasInsightsThisCanvas />
         <WidgetGrid ids={ASK_IDS} days={days} />
         {pinned.length === 0 ? (
           <div className={styles.insightsEmpty} role="status">

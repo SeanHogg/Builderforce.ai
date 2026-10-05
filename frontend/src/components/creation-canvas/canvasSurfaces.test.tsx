@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 
 // The copy IS the assertion here — a surface switcher whose entries are named
 // "creationCanvas.surface.chat.label" tells nobody which surface they are on. One shared
@@ -16,6 +16,7 @@ import {
   readCanvasSurface,
   sanitizeCanvasSurface,
   writeCanvasSurface,
+  type CanvasSurfaceId,
 } from '@/lib/canvasSurfaces';
 import {
   canvasComposerIntent,
@@ -23,7 +24,10 @@ import {
   DEFAULT_CANVAS_COMPOSER_INTENT,
   offeredCanvasComposerIntents,
 } from '@/lib/canvasComposerIntents';
+import { CANVAS_PHASES, canvasPhaseStorageKey, surfacesForPhase } from '@/lib/canvasPhases';
+import type { ReadinessNode } from '@/lib/canvasPhaseReadiness';
 import { creationObjectSurface } from './creationObjectSurfaces';
+import { useCanvasSurfaceState } from './hooks/useCanvasSurfaceState';
 import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
 import { CreationCanvas } from './CreationCanvas';
 
@@ -87,7 +91,37 @@ describe('canvas surface registry', () => {
     // one spatial surface rather than two readings of the same board.
     // `ideas` sits straight after the board: it is the Idea stage of the arc, the list a
     // founder writes into before there is anything to meet about, run or measure.
-    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'ideas', 'room', 'app', 'insights']);
+    // `operate` (Run) and `launch` (Reach) are PRD 32's two compositions: each stands in
+    // its phase's slot of the arc, so the switcher reads left to right as the method does.
+    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'ideas', 'room', 'app', 'operate', 'insights', 'launch']);
+  });
+
+  /**
+   * Operate and Launch are about the SESSION — what it runs, and the doors out of it —
+   * so they are board surfaces like App: no card to enter them from, and a place a
+   * builder chose to be, so coming back lands them in it.
+   */
+  it('registers Operate and Launch as board-scoped places that persist', () => {
+    for (const id of ['operate', 'launch'] as const) {
+      const def = canvasSurfaceDefinition(id);
+      expect(def.id, id).toBe(id);
+      expect(def.scope, id).toBe('board');
+      expect(def.persist, id).toBe(true);
+      expect(def.showsBoard, id).toBe(false);
+      expect(def.showsObjects, id).toBe(false);
+      expect(sanitizeCanvasSurface(id), id).toBe(id);
+    }
+    const orders = boardCanvasSurfaces().map((def) => def.order);
+    expect(new Set(orders).size).toBe(orders.length);
+  });
+
+  /** Offered where they have something to show, and kept once offered (additive rule). */
+  it('offers Operate from Run onward and Launch only at Reach', () => {
+    const offering = (id: CanvasSurfaceId) => CANVAS_PHASES.filter((phase) => surfacesForPhase(phase).includes(id));
+    expect(offering('operate')).toEqual(['run', 'measure', 'reach']);
+    expect(offering('launch')).toEqual(['reach']);
+    // And App, since PRD 32, from Make: in Idea it could only invite building untested.
+    expect(offering('app')).toEqual(['make', 'run', 'measure', 'reach']);
   });
 
   /**
@@ -320,11 +354,12 @@ describe('the chat surface on the canvas', () => {
     // of the entire canvas. Stronger as well as cheaper: an object surface leaking in
     // fails here whatever it is called. Not pinned to `boardCanvasSurfaces().length`
     // any more — a session's own phase (`lib/canvasPhases.ts`) narrows the offer, and a
-    // fresh canvas opens in the default Idea phase, which does not yet offer Insights.
+    // fresh canvas opens at its frontier, Idea (nothing is on the board yet), which offers
+    // neither Insights nor — since PRD 32 — App: there is nothing to build before an idea.
     // Room IS offered from Idea — unlike Insights it is legible with one person in it,
     // and gating a meeting by which stage a board says it is in would be the wrong rule.
     const offered = within(switcher()).getAllByRole('button').map((button) => button.textContent);
-    expect(offered).toEqual(['Chat', 'Board', 'Ideas', 'Room', 'App']);
+    expect(offered).toEqual(['Chat', 'Board', 'Ideas', 'Room']);
   });
 
   /**
@@ -512,5 +547,89 @@ describe('the chat surface on the canvas', () => {
     expect(lit()).toEqual(['Chat']);
     fireEvent.click(surfaceButton('Chat'));
     expect(lit()).toEqual(['Board']);
+  });
+});
+
+/**
+ * The phase half of `useCanvasSurfaceState` (PRD 32 · W2): a choice made THIS session wins,
+ * then the choice remembered for THIS canvas, then the board's frontier — never a global
+ * default, and never another canvas's choice.
+ */
+describe('useCanvasSurfaceState — which phase a canvas opens in', () => {
+  beforeEach(() => { window.localStorage.clear(); });
+
+  // Boards whose frontier is each phase used below — readiness is derived from the nodes.
+  const ideaCard = { id: 'i', data: { kind: 'idea', title: 'Dog walking for towers' } };
+  const appCard = { id: 'b', data: { kind: 'build', title: 'App', localAppKey: 'key-b', modality: 'designer' } };
+  const liveCard = { id: 'd', data: { kind: 'deployment', title: 'Production', url: 'https://dogs.example' } };
+  const BOARDS: Record<'idea' | 'make' | 'measure', ReadinessNode[]> = {
+    idea: [],
+    make: [ideaCard],
+    measure: [ideaCard, appCard, liveCard],
+  };
+
+  const mount = (sessionId: string, nodes: readonly ReadinessNode[]) => renderHook(
+    (props: { sessionId: string; nodes: readonly ReadinessNode[] }) => useCanvasSurfaceState({ initialModelComparisonIds: [], initialSurface: undefined, ...props }),
+    { initialProps: { sessionId, nodes } },
+  );
+
+  it('opens at the frontier when nothing is remembered for this canvas', () => {
+    const { result } = mount('fresh', BOARDS.measure);
+    expect(result.current.phase).toBe('measure');
+    expect(result.current.phaseReadiness.frontier).toBe('measure');
+    expect(result.current.phaseReadiness.byPhase.measure.ready).toBe(true);
+  });
+
+  it('opens an empty board in Idea', () => {
+    expect(mount('empty', BOARDS.idea).result.current.phase).toBe('idea');
+  });
+
+  it('follows the frontier as the board changes, until someone chooses', () => {
+    const { result, rerender } = mount('moving', BOARDS.idea);
+    expect(result.current.phase).toBe('idea');
+    rerender({ sessionId: 'moving', nodes: BOARDS.make });
+    expect(result.current.phase).toBe('make');
+  });
+
+  it('hands back the same readiness object when a change leaves the signals alone', () => {
+    const { result, rerender } = mount('drag', BOARDS.make);
+    const before = result.current.phaseReadiness;
+    // A drag: new node objects, same facts.
+    rerender({ sessionId: 'drag', nodes: [{ ...ideaCard }] });
+    expect(result.current.phaseReadiness).toBe(before);
+  });
+
+  it('prefers the phase remembered for this canvas over the frontier', () => {
+    window.localStorage.setItem(canvasPhaseStorageKey('remembered'), 'reach');
+    expect(mount('remembered', BOARDS.idea).result.current.phase).toBe('reach');
+  });
+
+  it('ignores the legacy global key', () => {
+    window.localStorage.setItem('builderforce:create:phase', 'reach');
+    expect(mount('legacy', BOARDS.make).result.current.phase).toBe('make');
+  });
+
+  it('remembers a choice per canvas, and never carries it into another canvas', () => {
+    const { result, rerender } = mount('canvas-a', BOARDS.idea);
+    act(() => { result.current.setPhase('run'); });
+    expect(result.current.phase).toBe('run');
+    expect(window.localStorage.getItem(canvasPhaseStorageKey('canvas-a'))).toBe('run');
+
+    // An embedding host swapping canvases in place.
+    rerender({ sessionId: 'canvas-b', nodes: BOARDS.make });
+    expect(result.current.phase).toBe('make');
+  });
+
+  it('returns to the board when the open surface leaves the new phase's offer, and only then', () => {
+    window.localStorage.setItem(canvasPhaseStorageKey('narrow'), 'make');
+    const { result } = mount('narrow', BOARDS.idea);
+    act(() => { result.current.setSurface('app'); });
+    expect(result.current.surface).toBe('app');
+    // Make → Run still offers App: the reader stays on it.
+    act(() => { result.current.setPhase('run'); });
+    expect(result.current.surface).toBe('app');
+    // Idea no longer offers App: the board.
+    act(() => { result.current.setPhase('idea'); });
+    expect(result.current.surface).toBe('graph');
   });
 });

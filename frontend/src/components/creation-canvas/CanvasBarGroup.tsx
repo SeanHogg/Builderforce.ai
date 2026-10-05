@@ -4,6 +4,7 @@
 // that has not already begun.
 import { useTranslations } from 'next-intl';
 import { canvasBarGroup, type CanvasBarGroupId } from '@/lib/canvasBarGroups';
+import { useCanvasPhase } from './phase/CanvasPhaseContext';
 import styles from './CreationCanvas.module.css';
 
 /**
@@ -69,6 +70,9 @@ export function CanvasBarGroup({ group, caption, label, shell = 'bare', children
   const t = useTranslations('creationCanvas');
   const tn = useTranslations('nav');
   const def = group ? canvasBarGroup(group) : null;
+  // The group for the phase this canvas is IN reads as the current one — an attribute
+  // for the stylesheet to tint, never a branch or a layout change.
+  const phase = useCanvasPhase()?.phase;
   // The registry's keys are catalog keys; the cast is the same one every other consumer
   // of a registry-declared key makes, because next-intl types the key as a literal union
   // and a registry deals in strings.
@@ -84,6 +88,7 @@ export function CanvasBarGroup({ group, caption, label, shell = 'bare', children
       aria-label={name}
       data-group={group}
       data-stage={def?.stage}
+      data-current={def?.stage && def.stage === phase ? 'true' : undefined}
       {...rest}
     >
       {/* Hidden from assistive tech, not from the reader: the group is already NAMED by

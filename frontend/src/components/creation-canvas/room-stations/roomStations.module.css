@@ -439,3 +439,24 @@
   height: min(70vh, 640px);
   min-height: 240px;
 }
+
+/* THE CANVAS'S TOKENS, for a panel that renders outside the canvas.
+   A station's panel opens in a slide-out that portals to the document body, outside the
+   `.canvasShell` that declares `--canvas-*`. A panel that reuses a canvas component (the
+   idea rows, the phase path) wraps it in this, which maps each canvas token onto the
+   shell's own themed one — so it reads in both themes instead of losing its colours. */
+.canvasTokens {
+  --canvas-accent: var(--accent);
+  --canvas-hover: var(--surface-raised, var(--surface));
+  --canvas-ink: var(--text-primary);
+  --canvas-line: var(--border);
+  --canvas-muted: var(--text-muted);
+  --canvas-panel: var(--surface);
+  --canvas-phase-hue: var(--accent);
+  --canvas-phase-ring: var(--accent);
+  --canvas-phase-warn-mark: var(--warning);
+  --canvas-phase-warn-ink: var(--text-primary);
+  --canvas-phase-warn-bg: color-mix(in srgb, var(--warning) 14%, transparent);
+  display: grid;
+  gap: 12px;
+}

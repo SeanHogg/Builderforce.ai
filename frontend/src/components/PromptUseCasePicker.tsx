@@ -43,10 +43,18 @@ export interface PromptUseCaseCatalogProps {
   className?: string;
   /** Called with the entry the person picked. The caller closes the list. */
   onSelect: (entry: TemplateEntry) => void;
+  /**
+   * A section the HOST leads the list with — the canvas's starters for the phase it is
+   * in. Drawn in the catalogue's own grid so it reads as the first group, not a second
+   * widget; hidden while a search is typed, since a query is asking for something else.
+   */
+  lead?: { heading: string; items: ReadonlyArray<{ id: string; label: string; onSelect: () => void }> };
+  /** Groups the host wants FIRST (a phase's own use cases). Order is otherwise kept. */
+  preferCategory?: (category: string) => boolean;
 }
 
 /** The searchable catalogue of starting points. Holds its query, never its open state. */
-export function PromptUseCaseCatalog({ open, id, variant, className, onSelect }: PromptUseCaseCatalogProps) {
+export function PromptUseCaseCatalog({ open, id, variant, className, onSelect, lead, preferCategory }: PromptUseCaseCatalogProps) {
   const t = useTranslations('promptUseCases');
   const [query, setQuery] = useState('');
 
@@ -55,10 +63,13 @@ export function PromptUseCaseCatalog({ open, id, variant, className, onSelect }:
   // must not pay for a workspace call that would 401.
   const entries = useTemplateCatalog({ includeWorkspace: open });
 
-  const groups = useMemo(
-    () => groupTemplates(entries.filter((entry) => matchesTemplateQuery(entry, query))),
-    [entries, query],
-  );
+  const groups = useMemo(() => {
+    const grouped = groupTemplates(entries.filter((entry) => matchesTemplateQuery(entry, query)));
+    if (!preferCategory) return grouped;
+    // Stable partition: preferred groups lead, each half keeps the catalogue's order.
+    return [...grouped.filter(([category]) => preferCategory(category)), ...grouped.filter(([category]) => !preferCategory(category))];
+  }, [entries, query, preferCategory]);
+  const showLead = !!lead && lead.items.length > 0 && !query.trim();
 
   return (
     <div className={className ? `${styles.reveal} ${className}` : styles.reveal} data-open={open ? 'true' : 'false'} data-variant={variant}>
@@ -76,6 +87,17 @@ export function PromptUseCaseCatalog({ open, id, variant, className, onSelect }:
           />
         </div>
         <div className={styles.catalog}>
+          {showLead && <section className={styles.group} data-testid="prompt-use-case-lead">
+            <div className={styles.category}>{lead.heading}</div>
+            <div className={styles.grid}>
+              {lead.items.map((item) => (
+                <button key={item.id} type="button" className={styles.item} tabIndex={open ? 0 : -1} onClick={item.onSelect}>
+                  <span className={styles.icon} aria-hidden="true"><Icon source="sparkles" size={18} /></span>
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </section>}
           {groups.map(([category, items]) => (
             <section key={category} className={styles.group}>
               <div className={styles.category}>{items[0]?.categoryLabel ?? category}</div>
@@ -102,7 +124,7 @@ export function PromptUseCaseCatalog({ open, id, variant, className, onSelect }:
               </div>
             </section>
           ))}
-          {groups.length === 0 && <div className={styles.empty}>{t('noResults')}</div>}
+          {groups.length === 0 && !showLead && <div className={styles.empty}>{t('noResults')}</div>}
         </div>
       </div>
     </div>

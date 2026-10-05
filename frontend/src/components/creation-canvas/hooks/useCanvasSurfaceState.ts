@@ -4,7 +4,9 @@ import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
 import { canvasSurfaceDefinition, type CanvasSurfaceId, writeCanvasSurface } from '@/lib/canvasSurfaces';
 import { readCanvasBarCollapsed, writeCanvasBarCollapsed } from '@/lib/canvasChrome';
 import { type CanvasPromptPlacement, DEFAULT_CANVAS_PROMPT_PLACEMENT, readCanvasPromptPlacement, writeCanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
-import { type CanvasPhase, DEFAULT_CANVAS_PHASE, readCanvasPhase, surfacesForPhase, writeCanvasPhase } from '@/lib/canvasPhases';
+import { type CanvasPhase, readChosenCanvasPhase, surfacesForPhase, writeCanvasPhase } from '@/lib/canvasPhases';
+import type { ReadinessNode } from '@/lib/canvasPhaseReadiness';
+import { useCanvasPhaseReadiness } from './useCanvasPhaseReadiness';
 
 /**
  * The stored chrome preferences are READ, not mirrored into state by a mount effect: an
@@ -18,14 +20,19 @@ function subscribeNever() {
 }
 const barCollapsedServerSnapshot = () => false;
 const promptPlacementServerSnapshot = () => DEFAULT_CANVAS_PROMPT_PLACEMENT;
-const phaseServerSnapshot = () => DEFAULT_CANVAS_PHASE;
+const phaseServerSnapshot = () => undefined;
 
 export interface UseCanvasSurfaceStateDeps {
   initialModelComparisonIds: readonly string[];
   initialSurface: CanvasSurfaceId | undefined;
+  /** The canvas whose phase this is — the phase is remembered per canvas, not per browser. */
+  sessionId: string;
+  /** The board — phase READINESS is derived from it (`lib/canvasPhaseReadiness.ts`), and its
+   *  frontier is where a canvas with no remembered phase opens. */
+  nodes: readonly ReadinessNode[];
 }
 
-export function useCanvasSurfaceState({ initialModelComparisonIds, initialSurface }: UseCanvasSurfaceStateDeps) {
+export function useCanvasSurfaceState({ initialModelComparisonIds, initialSurface, sessionId, nodes }: UseCanvasSurfaceStateDeps) {
   /**
    * WHICH SURFACE this canvas is being read through — the board, the 3D space, or the
    * conversation. Every surface but the board replaces the flat view rather than
@@ -96,23 +103,29 @@ export function useCanvasSurfaceState({ initialModelComparisonIds, initialSurfac
   /** Leave an object surface: back to wherever it was opened from, else the board. */
   const exitSurface = useCallback(() => setSurface(surfaceOrigin ?? 'graph'), [setSurface, surfaceOrigin]);
   /**
-   * Which stage of ITS OWN methodology this session is in — see `lib/canvasPhases.ts`
-   * for why this is not `useFounderJourney()`. Same SSR-safe pattern as `surface`:
-   * a safe default as the server snapshot, the real preference read as an external store
-   * (see `subscribeNever`), because reading `localStorage` into the first render is a
-   * hydration mismatch.
+   * Which stage of ITS OWN methodology this canvas is in — see `lib/canvasPhases.ts`
+   * for why this is not `useFounderJourney()`. Remembered PER CANVAS: a choice made on
+   * one canvas says nothing about another. With nothing remembered the canvas opens at
+   * its frontier, which is also what the server renders (the board is empty there, so
+   * the frontier is Idea) — so SSR and hydration agree, and the client then shows the
+   * stored choice the same two-frame way the other preferences do.
    */
-  const storedPhase = useSyncExternalStore(subscribeNever, readCanvasPhase, phaseServerSnapshot);
-  const [phaseChoice, setPhaseState] = useState<CanvasPhase | null>(null);
-  const phase = phaseChoice ?? storedPhase;
+  const phaseReadiness = useCanvasPhaseReadiness(nodes);
+  const frontier = phaseReadiness.frontier;
+  const readStoredPhase = useCallback(() => readChosenCanvasPhase(sessionId), [sessionId]);
+  const storedPhase = useSyncExternalStore(subscribeNever, readStoredPhase, phaseServerSnapshot);
+  // Keyed by the canvas, so an embedding host that swaps canvases in place never carries
+  // one canvas's choice into the next.
+  const [phaseChoice, setPhaseState] = useState<{ sessionId: string; phase: CanvasPhase } | null>(null);
+  const phase = (phaseChoice?.sessionId === sessionId ? phaseChoice.phase : undefined) ?? storedPhase ?? frontier;
   const setPhase = useCallback((next: CanvasPhase) => {
-    setPhaseState(next);
-    writeCanvasPhase(next);
+    setPhaseState({ sessionId, phase: next });
+    writeCanvasPhase(next, sessionId);
     // Additive narrowing (see `surfacesForPhase`), so this only ever RESETS the surface
-    // when the one already open falls outside the new phase's offer — pressing Idea
+    // when the one already open falls outside the new phase's offer — pressing Make
     // while reading the app it built must not silently pull the reader back to the
     // board over a surface the new phase would still have shown them.
     if (!surfacesForPhase(next).includes(surface)) setSurface('graph');
-  }, [surface, setSurface]);
-  return { comparisonModelIds, setSurfaceState, surfaceTarget, surface, exitSurface, surfaceDef, setSurface, promptPlacement, setPromptPlacement, barCollapsed, phase, setPhase, setBarCollapsed };
+  }, [sessionId, surface, setSurface]);
+  return { comparisonModelIds, setSurfaceState, surfaceTarget, surface, exitSurface, surfaceDef, setSurface, promptPlacement, setPromptPlacement, barCollapsed, phase, setPhase, phaseReadiness, setBarCollapsed };
 }

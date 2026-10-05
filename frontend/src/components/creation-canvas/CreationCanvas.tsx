@@ -274,7 +274,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [connectionStyle, setConnectionStyleState] = useState<ConnectionStyle>(DEFAULT_CONNECTION_STYLE);
   const [title, setTitle] = useState('Untitled session');
   const [minimapOpen, setMinimapOpen] = useState(true);
-  const { comparisonModelIds, setSurfaceState, surfaceTarget, surface, exitSurface, surfaceDef, setSurface, promptPlacement, setPromptPlacement, barCollapsed, phase, setPhase, setBarCollapsed } = useCanvasSurfaceState({ initialModelComparisonIds, initialSurface });
+  const { comparisonModelIds, setSurfaceState, surfaceTarget, surface, exitSurface, surfaceDef, setSurface, promptPlacement, setPromptPlacement, barCollapsed, phase, setPhase, phaseReadiness, setBarCollapsed } = useCanvasSurfaceState({ initialModelComparisonIds, initialSurface, sessionId, nodes });
   const { shareOpen, setShareOpen, closeShareSheet, moreOpen, setMoreOpen, closeMoreMenu, toggleMoreMenu, realOpen, closeRealMenu, toggleRealMenu, actionsOpen, closeActionsSheet, toggleActionsSheet, closeActionMenus } = useCanvasChromeMenus(initialShareOpen);
   const [accountGate, setAccountGate] = useState<AccountGate | null>(null);
   /** The two phone decisions CSS cannot make: which host renders the board menu and the
@@ -1040,9 +1040,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         the inspector, and handing it a callback would have meant one more entry in a
         prop list that already carries fifty. Published once, read where it is needed. */}
     <CardActProvider runner={runCardActOnObject}><CanvasBoardBridgeProvider value={boardBridge}><CanvasSpacePresenceProvider value={spacePresence}><CanvasDiagnosticsProvider value={buildDiagnostics}><CanvasSessionProvider value={sessionFacts}>
-    <CanvasShell shellRef={shellRef} fullscreen={fullscreen} hosted={!!hostSurfaces} brainDockSide={brainDock.side} brainDockReserved={brainDockReserved}>
+    <CanvasShell shellRef={shellRef} fullscreen={fullscreen} hosted={!!hostSurfaces} brainDockSide={brainDock.side} brainDockReserved={brainDockReserved} phase={{ phase, setPhase, readiness: phaseReadiness, askBrain: startCanvasTurn, appendAtCenter: cardsEditable ? appendAtCenter : null, openSurface: setSurface }}>
       <CanvasTopChrome
-        phoneViewport={phoneViewport} topChromeRef={topChromeSpaceRef} title={title} phase={phase} setPhase={setPhase} surface={surface} setSurface={setSurface}
+        phoneViewport={phoneViewport} topChromeRef={topChromeSpaceRef} title={title} surface={surface} setSurface={setSurface}
         collapsed={barCollapsed} roster={rosterMembers} share={sessionActionHandlers.share} inviteMenu={inviteMenu} boardMenu={boardMenuChrome} onExitToLibrary={onExitToLibrary} notice={notice}
       />
       <CanvasNodePanelHost nodePanel={nodePanel} setNodePanel={setNodePanel} anchorFrom={anchorFrom} presentMode={presentMode} nodes={nodes} editable={canEdit && !lockBlocked} updateNodeData={updateNodeData} setInspectorFocus={setInspectorFocus} setSurface={setSurface} inspectorValue={inspectorValue} />
@@ -1093,7 +1093,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         <CanvasSurfaceStage
           surface={surface} hostSurfaces={hostSurfaces} surfaceNode={surfaceNode} exitSurface={exitSurface} setSurface={setSurface} sessionApp={sessionApp} sessionTitle={title}
           nodes={nodes} editable={cardsEditable} updateNodeData={updateNodeData} appendAtCenter={appendAtCenter} revealObject={revealObject}
-          conversation={brainConversation} roster={rosterMembers} openGamePanel={openGamePanel} setShareOpen={setShareOpen}
+          conversation={brainConversation} roster={rosterMembers} openGamePanel={openGamePanel} setShareOpen={setShareOpen} doors={{ prove: sessionActionHandlers.prove, publish: sessionActionHandlers.publish, openListing: openPublishPanel, openReleases: openReleasesPanel, openSocial: () => { if (connectedAccountGate(tSocial('title'))) setDockPanel('social'); } }}
           resume={{ tailorResumeFromNode, detachResumeFromNode, createResumeShare, listResumeShares, revokeResumeShare }}
           room={<CanvasRoomStage
             title={title} members={roomOccupants} speech={roomSpeechBySeat} onSelectSpeech={revealSpeechInChat} currentUserId={rosterSelfId} live={livePresence}

@@ -77,9 +77,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # NSIS only: WiX (.msi) refuses a major version above 255, and ours is the year.
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            args: ''
+            args: '--bundles nsis'
           - os: macos-latest
             target: aarch64-apple-darwin
             args: '--target aarch64-apple-darwin'
@@ -133,15 +134,21 @@ jobs:
           $json = Get-Content $conf -Raw | ConvertFrom-Json
           $json.bundle | Add-Member -NotePropertyName windows -NotePropertyValue @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } -Force
           $json | ConvertTo-Json -Depth 20 | Set-Content $conf
+      # Signing variables reach tauri-action only via this action, and only for a certificate
+      # that imports (see .github/actions/macos-signing).
+      - name: macOS signing
+        if: runner.os == 'macOS'
+        uses: ./.github/actions/macos-signing
+        with:
+          certificate: ${{ secrets.APPLE_CERTIFICATE }}
+          certificate-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          signing-identity: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          apple-id: ${{ secrets.APPLE_ID }}
+          apple-password: ${{ secrets.APPLE_PASSWORD }}
+          team-id: ${{ secrets.APPLE_TEAM_ID }}
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           projectPath: desktop/app
           tagName: ${{ needs.tag.outputs.tag }}

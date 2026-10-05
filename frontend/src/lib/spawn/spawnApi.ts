@@ -44,16 +44,26 @@ export interface SpawnAccount extends SpawnPrices {
 /** The refusals a Spawn call may answer with — every one is a sentence in `spawn.errors`. */
 const EXPECTED = [400, 402, 403, 404];
 
-let prices: Promise<SpawnPrices> | null = null;
-
-/** Public; one request per page load, retried after a failure. */
-export function fetchSpawnPrices(): Promise<SpawnPrices> {
-  if (!prices) {
-    prices = apiRequest<SpawnPrices>('/api/spawn/prices', { auth: 'none' })
-      .catch((error) => { prices = null; throw error; });
-  }
-  return prices;
+/** Where the newest installers are; a null platform has no installer yet. */
+export interface SpawnInstallers {
+  version: string | null;
+  releaseUrl: string | null;
+  windows: string | null;
+  macArm: string | null;
+  macIntel: string | null;
 }
+
+/** A public read made once per page load (every button shares it) and retried after a failure. */
+function oncePerPage<T>(path: string): () => Promise<T> {
+  let pending: Promise<T> | null = null;
+  return () => {
+    pending ??= apiRequest<T>(path, { auth: 'none' }).catch((error) => { pending = null; throw error; });
+    return pending;
+  };
+}
+
+export const fetchSpawnPrices = oncePerPage<SpawnPrices>('/api/spawn/prices');
+export const fetchSpawnInstallers = oncePerPage<SpawnInstallers>('/api/spawn/downloads');
 
 export function fetchSpawnAccount(): Promise<SpawnAccount> {
   return apiRequest<SpawnAccount>('/api/spawn/account', { auth: 'tenant', expectedErrors: EXPECTED });

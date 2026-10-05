@@ -6,8 +6,6 @@
 export const SPAWN_ROUTE = '/spawn';
 export const SPAWN_ACCOUNT_ROUTE = '/spawn/account';
 
-/** Releases of the Spawn desktop app carry `spawn-v*` tags; this lists exactly those. */
+/** Releases of the Spawn desktop app carry `spawn-v*` tags; this lists exactly those. The download
+ *  button's fallback — it links the installer itself once `/api/spawn/downloads` names one. */
 export const SPAWN_DOWNLOAD_URL = 'https://github.com/SeanHogg/Builderforce.ai/releases?q=spawn-v&expanded=true';
-
-/** The story behind Spawn on the blog. */
-export const SPAWN_POST_PATH = '/blog/build-roblox-games-by-talking';

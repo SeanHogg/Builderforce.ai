@@ -4,6 +4,8 @@ import { CanvasSurfaceRouter, type CanvasSurfaceNodes } from '../CanvasSurfaceRo
 import { CanvasChatSurface, type CanvasChatSurfaceMember } from '../CanvasChatSurface';
 import { CanvasAppSurface } from '../CanvasAppSurface';
 import { CanvasInsightsSurface } from '../CanvasInsightsSurface';
+import { CanvasOperateSurface } from '../CanvasOperateSurface';
+import { CanvasLaunchSurface, type CanvasPlaceDoors } from '../CanvasLaunchSurface';
 import { CanvasIdeasSurface } from '../CanvasIdeasSurface';
 import { CanvasPageSurface } from '../CanvasPageSurface';
 import { CanvasPlaySurface } from '../CanvasPlaySurface';
@@ -44,6 +46,8 @@ export interface CanvasSurfaceStageProps {
   resume: Pick<ReturnType<typeof useCanvasResumeShares>, 'tailorResumeFromNode' | 'detachResumeFromNode' | 'createResumeShare' | 'listResumeShares' | 'revokeResumeShare'>;
   openGamePanel: (gameId: string) => void;
   setShareOpen: Dispatch<SetStateAction<boolean>>;
+  /** The doors Operate and Launch open — panels and rows the canvas already has. */
+  doors: CanvasPlaceDoors;
 }
 
 /**
@@ -54,7 +58,7 @@ export interface CanvasSurfaceStageProps {
  */
 export function CanvasSurfaceStage({
   surface, hostSurfaces, surfaceNode, exitSurface, setSurface, sessionApp, sessionTitle, nodes, editable, updateNodeData, appendAtCenter,
-  revealObject, conversation, roster, room, resume, openGamePanel, setShareOpen,
+  revealObject, conversation, roster, room, resume, openGamePanel, setShareOpen, doors,
 }: CanvasSurfaceStageProps) {
   const { persistence } = useCanvasSessionFacts();
   const exitToBoard = () => setSurface('graph');
@@ -94,7 +98,11 @@ export function CanvasSurfaceStage({
             app: <CanvasAppSurface nodes={nodes} session={sessionApp} persistence={persistence} sessionTitle={sessionTitle} onExit={exitToBoard} />,
             // What the session is worth, read back. Board-scoped for the same reason
             // `app` is — the metrics are about the whole session, not one card.
+            // What is RUNNING (from Run): deployments, releases, the app — see the component.
+            operate: <CanvasOperateSurface nodes={nodes} onExit={exitToBoard} onOpenApp={() => setSurface('app')} onOpenReleases={() => doors.openReleases()} />,
             insights: <CanvasInsightsSurface onExit={exitToBoard} />,
+            // Reach as a PLACE: the Make-it-real doors laid out as sections.
+            launch: <CanvasLaunchSurface nodes={nodes} doors={doors} onExit={exitToBoard} />,
             // The idea scratchpad — board-scoped like `insights`. It reads the `idea` cards
             // straight off `nodes` and writes back through the SAME two board mutations every
             // other surface uses, so a captured line is a card on this board and nowhere else.

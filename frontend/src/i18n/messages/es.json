@@ -11304,6 +11304,10 @@
       "the-run-that-teaches-the-next-one": {
         "title": "La ejecución que enseña a la siguiente",
         "description": "Un agente que termina un trabajo verificado acaba de ejecutar un procedimiento que funciona, y antes eso se perdía en una transcripción. Ahora los agentes proponen lo que aprendieron como una habilidad, tu equipo la aprueba y cada ejecución posterior la sigue."
+      },
+      "the-canvas-knows-where-you-are": {
+        "title": "El lienzo sabe dónde estás y te muestra el camino a la siguiente fase",
+        "description": "Medir se abría sobre un tablero en el que nada estaba en producción. Ahora cada lienzo lee su propio tablero, se abre en la siguiente fase que aún no has completado y convierte una fase para la que no estás listo en el camino más corto hasta ella. Llegan además dos lugares nuevos: Operar, para lo que está en marcha, y Lanzar, para ponerlo delante de la gente."
       }
     }
   },
@@ -19542,6 +19546,37 @@
       "summaryLive": "{count, plural, =0 {Aún no ha aprendido nada} one {# aprendizaje} other {# aprendizajes}} · v{version}",
       "summaryBlueprint": "Borrador · aún no aprende",
       "blueprintHint": "Este Evermind sigue siendo un borrador, así que sus centros de aprendizaje están inactivos. Vincúlalo a un proyecto para ver cómo cada centro se ilumina a medida que aprende."
+    },
+    "evidence": {
+      "title": "Evidencias",
+      "summary": "{count, plural, one {# idea} other {# ideas}} · {untested} sin probar",
+      "open": "Abrir Ideas"
+    },
+    "build": {
+      "title": "Construcción",
+      "summary": "{title} · {files, plural, one {# archivo} other {# archivos}}",
+      "fromCode": "El código del tablero",
+      "files": "{count, plural, one {# archivo} other {# archivos}}",
+      "open": "Abrir la app"
+    },
+    "ops": {
+      "title": "Operaciones",
+      "summary": "{env} · {version}",
+      "notLive": "Planificado, no en producción",
+      "open": "Abrir Operar"
+    },
+    "launch": {
+      "title": "Lanzamiento",
+      "count": {
+        "socialPost": "{count, plural, one {# publicación} other {# publicaciones}}",
+        "emailCampaign": "{count, plural, one {# campaña de correo} other {# campañas de correo}}",
+        "release": "{count, plural, one {# versión} other {# versiones}}"
+      },
+      "open": "Abrir Lanzar"
+    },
+    "phasePath": {
+      "title": "Necesita: {needs}",
+      "summary": "{count, plural, one {falta # paso} other {faltan # pasos}}"
     }
   },
   "creationCanvas": {
@@ -24403,7 +24438,9 @@
         "enter": "Ver lo que esto vale",
         "active": "Estás en Estadísticas",
         "regionLabel": "Las estadísticas de esta sesión",
-        "openFull": "Abrir panel completo"
+        "openFull": "Abrir panel completo",
+        "thisCanvas": "Este lienzo",
+        "noBoardMetric": "Todavía no hay métricas en este tablero"
       },
       "room": {
         "label": "Sala",
@@ -24721,6 +24758,16 @@
           "untested": "{count, plural, =0 {Todas las ideas abiertas tienen una entrevista o un experimento.} one {# idea abierta aún no se ha probado con un cliente.} other {# ideas abiertas aún no se han probado con un cliente.}}",
           "segment": "{stage}: {count}"
         }
+      },
+      "operate": {
+        "label": "Operar",
+        "enter": "Ver lo que está en marcha",
+        "active": "Estás en Operar"
+      },
+      "launch": {
+        "label": "Lanzar",
+        "enter": "Llevarlo ante la gente",
+        "active": "Estás en Lanzar"
       }
     },
     "scene": {
@@ -25980,6 +26027,207 @@
       "movieProposal": "Añadir la película «{title}»",
       "sceneProposal": "Añadir la escena «{title}»",
       "sceneStatus": "{done} de {total} tomas renderizadas"
+    },
+    "startingPointsFor": "Puntos de partida · {phase}",
+    "phase": {
+      "now": "Ahora",
+      "done": "Hecho",
+      "ready": "Listo",
+      "needs": "Necesita {phase}",
+      "adds": "añade {surfaces}"
+    },
+    "phaseGate": {
+      "make": {
+        "title": "Escribe la idea antes de construirla",
+        "body": "Hacer parte de una idea de este tablero y aún no hay ninguna."
+      },
+      "run": {
+        "title": "Construye la app antes de ejecutarla",
+        "body": "Ejecutar opera lo que este lienzo construyó y aún no se ha construido nada."
+      },
+      "measure": {
+        "title": "Publica la app antes de medirla",
+        "body": "Medir lee lo que hace una app en producción y nada de este tablero está en producción todavía."
+      },
+      "reach": {
+        "title": "Publica la app antes de llevarla a la gente",
+        "body": "Alcanzar lleva a la gente a algún sitio y todavía no hay ningún sitio en producción."
+      }
+    },
+    "phaseGhost": {
+      "label": "Dónde va el primer objeto de {phase}",
+      "needs": "Todavía no · necesita {phase}",
+      "empty": "Aún no hay nada aquí",
+      "title": "Añade el primer objeto de {phase}",
+      "add": "Añadir {kind}",
+      "verb": {
+        "idea": "capturar una idea",
+        "make": "construir la app",
+        "run": "desplegarla",
+        "measure": "definir una métrica",
+        "reach": "redactar una publicación de lanzamiento"
+      }
+    },
+    "phasePath": {
+      "kicker": "{phase} · {count, plural, one {a # paso} other {a # pasos}}",
+      "goTo": "Ir a {phase}",
+      "letBrain": "Que Brain se encargue: {verb}",
+      "expand": "Mostrar lo que falta",
+      "collapse": "Plegar"
+    },
+    "requirement": {
+      "idea": {
+        "label": "Una idea en el tablero",
+        "verb": "capturarla",
+        "prompt": "Captura la idea de este lienzo como tarjeta de idea: el problema, quién lo tiene y qué lo demostraría."
+      },
+      "app": {
+        "label": "Una app construida a partir de ella",
+        "verb": "construirla",
+        "prompt": "Construye la primera versión funcional de la app para la idea de este tablero."
+      },
+      "live": {
+        "label": "Una app en producción: un despliegue con dirección",
+        "verb": "desplegarla",
+        "prompt": "Despliega la app de este lienzo y registra el despliegue en el tablero con su dirección."
+      },
+      "metric": {
+        "label": "Una métrica que leer",
+        "verb": "definirla",
+        "prompt": "Define la métrica que indica si esta app funciona, con un objetivo, y ponla en el tablero.",
+        "advisory": "Aquí aún no se mide nada: llegar a la gente sin una métrica es gastar a ciegas."
+      }
+    },
+    "phaseStarters": {
+      "idea": {
+        "capture": {
+          "label": "Capturar la idea",
+          "prompt": "Captura mi idea como tarjeta de idea: el problema, quién lo tiene y la suposición más arriesgada."
+        },
+        "interview": {
+          "label": "Planificar una entrevista con clientes",
+          "prompt": "Planifica una entrevista con clientes que ponga a prueba la suposición más arriesgada de la idea de este tablero."
+        },
+        "experiment": {
+          "label": "Diseñar un experimento",
+          "prompt": "Diseña un pequeño experimento que muestre si la gente quiere esto, con un criterio de éxito o fracaso."
+        }
+      },
+      "make": {
+        "spec": {
+          "label": "Escribir la especificación",
+          "prompt": "Escribe un PRD breve para la idea de este tablero: para quién es, el flujo principal y qué queda fuera."
+        },
+        "app": {
+          "label": "Construir la app",
+          "prompt": "Construye la primera versión funcional de la app para la idea de este tablero."
+        },
+        "landing": {
+          "label": "Crear una página de aterrizaje",
+          "prompt": "Crea una página de aterrizaje que explique la idea de este tablero y recoja registros."
+        }
+      },
+      "run": {
+        "deploy": {
+          "label": "Desplegar la app",
+          "prompt": "Despliega la app de este lienzo y registra el despliegue en el tablero con su dirección."
+        },
+        "release": {
+          "label": "Planificar una versión",
+          "prompt": "Planifica la próxima versión de esta app: qué se publica, qué se comprueba primero y cómo revertir."
+        },
+        "incident": {
+          "label": "Escribir un runbook",
+          "prompt": "Escribe un runbook breve para esta app: cómo saber que está caída, a quién avisar y las tres primeras cosas que revisar."
+        }
+      },
+      "measure": {
+        "metric": {
+          "label": "Definir la métrica clave",
+          "prompt": "Define la métrica que indica si esta app funciona, con un objetivo, y ponla en el tablero."
+        },
+        "dashboard": {
+          "label": "Crear un panel",
+          "prompt": "Crea un panel en este tablero con las métricas que ya define, primero las que van por detrás del objetivo."
+        },
+        "experiment": {
+          "label": "Analizar un experimento",
+          "prompt": "Analiza los experimentos de este tablero frente a sus criterios de éxito y di qué hemos aprendido."
+        }
+      },
+      "reach": {
+        "post": {
+          "label": "Redactar una publicación de lanzamiento",
+          "prompt": "Redacta una publicación de lanzamiento para esta app con un enlace a su dirección en producción."
+        },
+        "email": {
+          "label": "Escribir un correo de lanzamiento",
+          "prompt": "Escribe una campaña de correo de lanzamiento para esta app dirigida a quienes más la querrían."
+        },
+        "listing": {
+          "label": "Publicarla en el marketplace",
+          "prompt": "Redacta un anuncio de marketplace para esta app: nombre, resumen de una línea, para quién es y un precio."
+        }
+      }
+    },
+    "boardMenu": {
+      "phaseFocus": "Enfoque de fase",
+      "phaseFocusOn": "El enfoque de fase está activado: las tarjetas de la fase pasan al frente",
+      "phaseFocusOff": "El enfoque de fase está desactivado: todas las tarjetas a plena intensidad"
+    },
+    "operate": {
+      "regionLabel": "Lo que este lienzo tiene en marcha",
+      "deployments": "Despliegues",
+      "notLive": "Hay una app, pero nada desplegado.",
+      "noApp": "Aún no hay nada construido, así que no hay nada que ejecutar.",
+      "releases": "Versiones",
+      "openReleases": "Abrir versiones",
+      "untitledRelease": "Versión sin título",
+      "noReleases": "Aún no hay versiones en este tablero: prepara una cuando la app esté lista para salir.",
+      "app": "App",
+      "openApp": "Abrir la app",
+      "appStatus": "{title} · {state}",
+      "stateLive": "en producción",
+      "stateNotLive": "sin desplegar",
+      "appFromCode": "Las tarjetas de código de este tablero se ejecutan como una app.",
+      "noAppShort": "Aún no hay app en este tablero.",
+      "unnamedEnvironment": "Entorno sin nombre",
+      "noAddress": "Sin dirección todavía: planificado, no en producción",
+      "deployedAt": "Desplegado el {when}",
+      "people": {
+        "title": "Personas",
+        "loading": "Contando quién se registró…",
+        "error": "No se pudo cargar quién se registró. Inténtalo de nuevo en un momento.",
+        "notPublished": "Publica la app para ver quién se registra.",
+        "users": "Usuarios",
+        "newUsers": "Nuevos registros, últimos {days} días",
+        "visitors": "Visitantes",
+        "pageViews": "Páginas vistas",
+        "leads": "Contactos de formularios",
+        "approximate": "~{value}",
+        "trafficNote": "Los visitantes y las páginas vistas cubren los últimos {days} días y son aproximados."
+      }
+    },
+    "launch": {
+      "regionLabel": "Lanzar este lienzo",
+      "prove": "Demuéstralo",
+      "proveAction": "Abrir la prueba",
+      "proveHint": "Pasa la idea de este tablero al selector de pruebas y registra el veredicto en esta sesión.",
+      "proveNeedsAccount": "Guarda tu trabajo en una cuenta para demostrar esta idea.",
+      "publish": "Publicar",
+      "publishAction": "Abrir la publicación",
+      "listAction": "Publicar en el marketplace",
+      "publishHint": "Construir → Preparar → Producción para todo el tablero, o un anuncio de marketplace.",
+      "sell": "Vender",
+      "nothingToSell": "Todavía no hay nada en este tablero que se pueda vender.",
+      "tell": "Cuéntalo",
+      "tellAction": "Abrir redes sociales",
+      "nothingTold": "Aún no hay publicaciones ni campañas en este tablero.",
+      "told": {
+        "socialPost": "Publicaciones sociales",
+        "socialCampaign": "Campañas sociales",
+        "emailCampaign": "Campañas de correo"
+      }
     }
   },
   "canvasCommands": {
@@ -32466,11 +32714,8 @@
     },
     "shell": {
       "home": "Inicio de Spawn",
-      "navLabel": "Spawn",
-      "how": "Cómo funciona",
-      "safety": "Seguridad",
-      "pricing": "Precios",
-      "download": "Descargar",
+      "by": "de Builderforce",
+      "builderforce": "Inicio de Builderforce.ai",
       "account": "Mi cuenta",
       "signIn": "Iniciar sesión",
       "madeBy": "Spawn está hecho por Builderforce.ai",
@@ -32479,182 +32724,120 @@
       "notAffiliated": "No está afiliado ni respaldado por Roblox Corporation."
     },
     "hero": {
-      "eyebrow": "Para creadores de Roblox de 13+",
+      "badge": "🎮 Para creadores de Roblox de 13+",
       "titleLead": "Dilo.",
       "titleAccent": "Spawnéalo.",
-      "lede": "Dile a Spawn el juego que quieres: un obby, un tycoon, un simulador de mascotas, un circuito de carreras. Construye el mundo, escribe los scripts y crea la interfaz dentro de Roblox Studio. Pulsa Play y pruébalo.",
+      "lede": "Escribe el juego que quieres. Spawn lo construye en Roblox Studio.",
       "start": "Empieza a crear",
-      "download": "Descarga la app",
-      "fine": "1,99 $ al mes. Los tokens vienen en paquetes desde 10 $. Las creaciones fallidas no cuestan nada.",
-      "pictureLabel": "La app Spawn chateando junto a un obby de Roblox que acaba de construir",
-      "chatAsk": "Haz un obby con 5 etapas cada vez más difíciles y un punto de control en cada una",
-      "chatReply": "¡Hecho! 5 etapas, plataformas que suben, una barra giratoria en la etapa 4 y puntos de control que guardan tu etapa. Pulsa Play para probarlo.",
-      "chatAsk2": "Añade un temporizador y una tabla de clasificación"
+      "fine": "1,99 $/mes · tokens desde 10 $ · las creaciones fallidas son gratis"
     },
-    "how": {
-      "eyebrow": "Cómo funciona",
-      "title": "De la idea al juego en minutos",
-      "lede": "Sin asistentes de configuración ni servidores que arrancar. Spawn se conecta a Roblox Studio por ti.",
-      "steps": [
+    "download": {
+      "windows": "Descargar para Windows",
+      "mac": "Descargar para Mac",
+      "any": "Descargar Spawn",
+      "windowsShort": "Windows",
+      "macArm": "Mac (chip Apple)",
+      "macIntel": "Mac (Intel)",
+      "alsoFor": "También para:",
+      "needsComputer": "Spawn funciona en un PC con Windows o un Mac con Roblox Studio.",
+      "all": "Todas las descargas"
+    },
+    "play": {
+      "pick": "Pruébalo: toca un juego 👇",
+      "connected": "Studio conectado",
+      "thinking": "Construyendo…",
+      "sceneLabel": "Un juego de {game} construido en Roblox Studio",
+      "games": [
+        {
+          "id": "obby",
+          "icon": "🧗",
+          "label": "Obby",
+          "ask": "Haz un obby con 5 niveles cada vez más difíciles",
+          "reply": "¡Listo! 5 niveles, plataformas que suben y un punto de control en cada uno. ¡Dale a Play!"
+        },
+        {
+          "id": "tycoon",
+          "icon": "💰",
+          "label": "Tycoon",
+          "ask": "Haz un tycoon con droppers y una cinta",
+          "reply": "¡Hecho! Los droppers crean monedas, la cinta las vende y puedes comprar mejoras."
+        },
+        {
+          "id": "racing",
+          "icon": "🏎️",
+          "label": "Carreras",
+          "ask": "Haz una pista con coches y una meta",
+          "reply": "¡Lista! Una pista, dos coches, árboles y una meta con cronómetro."
+        },
+        {
+          "id": "simulator",
+          "icon": "🥚",
+          "label": "Simulador",
+          "ask": "Haz un simulador de mascotas con un huevo gigante",
+          "reply": "¡Eclosionó! Un huevo gigante, cuatro mascotas que te siguen y una tienda."
+        },
+        {
+          "id": "tower",
+          "icon": "🏰",
+          "label": "Tower defense",
+          "ask": "Haz un mapa de tower defense con 3 torres",
+          "reply": "¡Listo! Un camino, 3 torres que disparan, oleadas de enemigos y una base que defender."
+        }
+      ]
+    },
+    "steps": {
+      "title": "3 pasos. Nada más.",
+      "items": [
         {
           "icon": "⬇️",
-          "title": "Instala Spawn",
-          "body": "Descarga la app e inicia sesión. Spawn instala su plugin de Roblox Studio solo. No hay nada que copiar ni servidores que ejecutar."
+          "label": "Descarga la app"
         },
         {
           "icon": "💬",
-          "title": "Di qué construir",
-          "body": "Abre cualquier lugar en Studio y escribe lo que quieres, como se lo contarías a un amigo. Spawn lee primero tu juego, así lo nuevo encaja con lo que ya existe."
+          "label": "Di tu juego"
         },
         {
           "icon": "▶️",
-          "title": "Juega y corrige",
-          "body": "Pulsa Play. Si algo falla, Spawn lee la salida y se ofrece a arreglarlo. Cada creación es un solo paso de deshacer, así que siempre puedes volver atrás."
-        }
-      ]
-    },
-    "features": {
-      "eyebrow": "Lo que construye",
-      "title": "Todo lo que necesita un juego de Roblox",
-      "cards": [
-        {
-          "icon": "🧱",
-          "title": "Mundos y mapas",
-          "body": "Etapas de obby, parcelas de tycoon, arenas, pistas de carreras y lobbies, hechos con piezas reales que puedes mover y recolorear."
-        },
-        {
-          "icon": "📜",
-          "title": "Scripts Luau de verdad",
-          "body": "Reglas del servidor, controles del cliente y módulos compartidos en Luau moderno, organizados para que puedas leerlos y aprender."
-        },
-        {
-          "icon": "🏆",
-          "title": "Clasificaciones y guardado",
-          "body": "Monedas, puntos y etapas en la clasificación, guardados entre visitas con DataStores usados de forma segura."
-        },
-        {
-          "icon": "🖥️",
-          "title": "Interfaz y menús",
-          "body": "Tiendas, temporizadores, barras de vida y botones como ScreenGuis reales que funcionan en móviles, tabletas y PC."
-        },
-        {
-          "icon": "✨",
-          "title": "Efectos e iluminación",
-          "body": "Partículas, estelas, brillo, cielo y atmósfera, para que tu juego parezca terminado y no una base gris."
-        },
-        {
-          "icon": "🛠️",
-          "title": "Arreglos tras probar",
-          "body": "Spawn lee los errores de tu última prueba y corrige el script que los provocó."
-        }
-      ]
-    },
-    "compare": {
-      "eyebrow": "Por qué Spawn",
-      "title": "Hecho para ser el fácil",
-      "lede": "La mayoría de las herramientas de IA para Roblox necesitan una configuración larga y te cobran aunque la creación falle. Spawn se creó para resolver ambas cosas.",
-      "colWhat": "Función",
-      "colTypical": "Herramienta de IA típica para Roblox",
-      "yes": "Sí",
-      "no": "No",
-      "rows": [
-        {
-          "label": "Instala el plugin de Studio solo",
-          "spawn": true,
-          "typical": false
-        },
-        {
-          "label": "Sin servidor local ni herramienta de sincronización",
-          "spawn": true,
-          "typical": false
-        },
-        {
-          "label": "Las creaciones fallidas son gratis",
-          "spawn": true,
-          "typical": false
-        },
-        {
-          "label": "Cada creación es un solo paso de deshacer",
-          "spawn": true,
-          "typical": false
-        },
-        {
-          "label": "Reglas de seguridad para jugadores de 13+",
-          "spawn": true,
-          "typical": false
-        },
-        {
-          "label": "Bloquea puertas traseras y código oculto",
-          "spawn": true,
-          "typical": false
-        },
-        {
-          "label": "Lee tu juego antes de cambiarlo",
-          "spawn": true,
-          "typical": true
+          "label": "Dale a Play"
         }
       ]
     },
     "safety": {
-      "eyebrow": "Seguridad",
-      "title": "Hecho para jóvenes creadores",
-      "lede": "Spawn es para jugadores de 13 años en adelante y sigue las Normas de la Comunidad de Roblox en todo lo que construye.",
-      "cards": [
+      "title": "Seguro para 13+",
+      "badges": [
         {
           "icon": "🛡️",
-          "title": "Apropiado por diseño",
-          "body": "Spawn no crea violencia explícita, romance, apuestas, contenido aterrador ni nada que recopile datos personales. En su lugar propone una versión divertida que sí está bien."
+          "label": "Apto para chicos"
         },
         {
           "icon": "🔒",
-          "title": "Sin puertas traseras",
-          "body": "Spawn rechaza scripts que llaman a internet, ejecutan código oculto o cargan código desde un id de recurso: los trucos que usan los modelos gratuitos para tomar el control de los juegos."
+          "label": "Sin puertas traseras"
         },
         {
-          "icon": "🖼️",
-          "title": "Nada que no puedas ver",
-          "body": "Spawn construye con piezas, colores, luces y efectos que ves en Studio. Nunca incorpora imágenes, sonidos ni mallas ocultos por id."
+          "icon": "↩️",
+          "label": "Deshacer en un toque"
         },
         {
-          "icon": "🎂",
-          "title": "Desde los 13",
-          "body": "Preguntamos una sola vez tu mes y año de nacimiento, nunca la fecha completa. Los menores de 13 no pueden crear una cuenta."
+          "icon": "💸",
+          "label": "Lo fallido es gratis"
         }
       ],
+      "parentsTitle": "Para padres",
       "parents": "Para madres y padres: la membresía y los paquetes de tokens se compran en este sitio mediante el pago seguro de Stripe, y tú eliges cada recarga. No se cobra nada desde la app y no hay renovaciones sorpresa aparte de la membresía mensual de 1,99 $, que puedes cancelar cuando quieras."
     },
     "pricing": {
-      "eyebrow": "Precios",
-      "title": "Sencillo, y tú tienes el control",
-      "lede": "Una pequeña membresía abre el creador. Los tokens pagan la construcción y solo compras más cuando quieres.",
+      "title": "Elige tu paquete",
       "loadFailed": "No se pudieron cargar los precios. Actualiza para volver a intentarlo.",
-      "planName": "Membresía de Spawn",
+      "planName": "Membresía",
       "perMonth": "/ mes",
-      "planBody": "Abre el creador de Spawn y la app de escritorio para jugadores de {age} años en adelante. Cancela cuando quieras.",
       "join": "Únete a Spawn",
-      "packsTitle": "Paquetes de tokens",
-      "packsLede": "Cada creación usa tokens por lo que la IA lee y escribe. Los paquetes grandes traen tokens extra, y las creaciones fallidas nunca se cobran.",
       "tokens": "{count} tokens",
       "builds": "Unas {count} creaciones",
       "buy": "Conseguir tokens",
       "opening": "Abriendo el pago…"
     },
-    "download": {
-      "eyebrow": "Descargar",
-      "title": "Consigue la app Spawn",
-      "lede": "Spawn funciona en tu ordenador junto a Roblox Studio y hace la conexión por ti.",
-      "points": [
-        "Instala y actualiza su plugin de Roblox Studio solo",
-        "Se conecta a Studio solo en tu ordenador, sin abrir puertos ni exponer nada",
-        "Inicia sesión con tu cuenta de Spawn en el navegador, una sola vez"
-      ],
-      "button": "Descargar para Windows o Mac",
-      "readMore": "Lee la historia",
-      "requirements": "Requiere Windows 10/11 o macOS 12+ con Roblox Studio instalado."
-    },
     "faq": {
-      "eyebrow": "Preguntas",
-      "title": "Conviene saber",
+      "title": "¿Preguntas?",
       "items": [
         {
           "q": "¿Necesito saber programar?",
@@ -32665,22 +32848,17 @@
           "a": "Sí. Spawn lee el lugar que tienes abierto (el Explorador y los scripts) antes de construir, así las piezas y scripts nuevos encajan con lo que ya hay."
         },
         {
-          "q": "¿Qué es un token?",
-          "a": "Un token es un trocito de texto que la IA lee o escribe. Una creación típica usa unos 12.000. Tu saldo siempre aparece en la app y en la página de tu cuenta."
-        },
-        {
           "q": "¿Y si una creación sale mal?",
           "a": "Si Spawn no puede terminar una creación, no cuesta nada. Si no te gusta, pulsa Deshacer en Studio y toda la creación se retira de una vez."
-        },
-        {
-          "q": "¿Puedo publicar lo que hago?",
-          "a": "Sí. Es tu juego. Publícalo desde Roblox Studio como siempre."
         },
         {
           "q": "¿Spawn es de Roblox?",
           "a": "No. Spawn está hecho por Builderforce.ai y no está afiliado ni respaldado por Roblox Corporation. Funciona con Roblox Studio mediante un plugin normal de Studio."
         }
       ]
+    },
+    "cta": {
+      "title": "¿Listo para construir?"
     },
     "account": {
       "eyebrow": "Spawn",
@@ -32755,8 +32933,7 @@
           "Haz clic en Iniciar sesión. Se abre tu navegador; aprueba el código que muestra.",
           "Abre Roblox Studio y cualquier lugar. Spawn se conecta solo.",
           "Escribe lo que quieres construir y pulsa Play."
-        ],
-        "download": "Descargar Spawn"
+        ]
       }
     }
   }

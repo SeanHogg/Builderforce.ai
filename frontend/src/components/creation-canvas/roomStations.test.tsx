@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import { readProvenance } from '@/lib/canvasApprovalGate';
+import type { CanvasPhase } from '@/lib/canvasPhases';
 import type { CanvasBoardBridge } from './canvasBoardBridge';
 
 /**
@@ -20,6 +21,7 @@ vi.mock('@/lib/canvas/canvas3d', () => ({
 
 const { CanvasRoomSurface } = await import('./CanvasRoomSurface');
 const { CanvasBoardBridgeProvider } = await import('./canvasBoardBridge');
+const { PhaseHarness } = await import('./phase/testPhaseProvider');
 
 function object(id: string, data: Record<string, unknown>): CanvasObject {
   return { id, type: 'creation', position: { x: 0, y: 0 }, data: data as CanvasObject['data'] };
@@ -35,7 +37,7 @@ const budget = object('b1', {
 const metric = object('m1', { kind: 'metric', title: 'Seats', definition: { id: 'seats', name: 'Seats', sourceObjectId: 'ds', aggregate: { op: 'count' } } });
 const dataset = object('ds', { kind: 'dataset', title: 'Seats', columns: ['id'], rows: [{ id: 1 }, { id: 2 }] });
 
-function renderRoom(overrides: Partial<CanvasBoardBridge> = {}) {
+function renderRoom(overrides: Partial<CanvasBoardBridge> = {}, phase?: CanvasPhase) {
   const patch = vi.fn();
   const bridge: CanvasBoardBridge = {
     sessionId: 'room-stations-test',
@@ -47,7 +49,7 @@ function renderRoom(overrides: Partial<CanvasBoardBridge> = {}) {
     notice: vi.fn(),
     ...overrides,
   };
-  render(
+  const room = (
     <CanvasBoardBridgeProvider value={bridge}>
       <CanvasRoomSurface
         sessionId="room-stations-test"
@@ -62,8 +64,13 @@ function renderRoom(overrides: Partial<CanvasBoardBridge> = {}) {
         onOpenCreation={vi.fn()}
         onExit={vi.fn()}
       />
-    </CanvasBoardBridgeProvider>,
+    </CanvasBoardBridgeProvider>
   );
+  if (!phase) {
+    render(room);
+    return { patch, bridge };
+  }
+  render(<PhaseHarness phase={phase} nodes={bridge.objects}>{room}</PhaseHarness>);
   return { patch, bridge };
 }
 
@@ -112,5 +119,28 @@ describe('CanvasRoomSurface — stations', () => {
     expect(within(tile).getByText('Seats')).toBeInTheDocument();
     expect(within(tile).getByText('2')).toBeInTheDocument();
     expect(within(tile).getByText('From 2 of 2 rows')).toBeInTheDocument();
+  });
+
+  it('lists the station of the phase the canvas is in first, marked lit', () => {
+    renderRoom({}, 'measure');
+    const rows = screen.getAllByTestId('room-station');
+    expect(within(rows[0]!).getByText('Metrics board')).toBeInTheDocument();
+    expect(rows[0]).toHaveAttribute('data-lit', 'true');
+    expect(within(rows[1]!).getByText('Approval desk')).toBeInTheDocument();
+    expect(rows.slice(1).every((row) => !row.hasAttribute('data-lit'))).toBe(true);
+  });
+
+  it('stands the path sign while the phase is not ready, and lights nothing it does not own', () => {
+    // Measure on a board with no idea, app or deployment: unready, so the sign stands.
+    renderRoom({}, 'measure');
+    const titles = screen.getAllByTestId('room-station').map((row) => row.querySelector('strong')?.textContent);
+    expect(titles).toContain('Needs An idea on the board');
+  });
+
+  it('keeps room order with no phase — nothing lit, no path sign', () => {
+    renderRoom();
+    const rows = screen.getAllByTestId('room-station');
+    expect(rows.map((row) => row.querySelector('strong')?.textContent)).toEqual(['Approval desk', 'Metrics board']);
+    expect(rows.every((row) => !row.hasAttribute('data-lit'))).toBe(true);
   });
 });
