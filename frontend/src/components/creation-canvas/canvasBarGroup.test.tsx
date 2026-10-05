@@ -183,7 +183,7 @@ describe('the captioned groups on the bar', () => {
  * reads as the current one — an attribute the stylesheet tints, never a layout change —
  * and it is exactly one group, read from the phase context rather than a prop.
  */
-describe('the group for the canvas's phase', () => {
+describe('the group for the canvas’s phase', () => {
   const allGroups = () => <>{CANVAS_BAR_GROUP_ORDER.map((id) => (
     <CanvasBarGroup key={id} group={id}><button type="button">{id}</button></CanvasBarGroup>
   ))}</>;

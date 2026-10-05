@@ -64,7 +64,7 @@ describe('App starts at Make (PRD 32 · W0)', () => {
   });
 });
 
-describe('surfacesAddedByPhase — the phone sheet's "adds …" line', () => {
+describe('surfacesAddedByPhase — the phone sheet’s "adds …" line', () => {
   it('names exactly what each phase offers that the one before did not', () => {
     expect(surfacesAddedByPhase('idea')).toEqual(['chat', 'graph', 'ideas', 'room']);
     expect(surfacesAddedByPhase('make')).toEqual(['app']);
@@ -90,7 +90,7 @@ describe('the phase is remembered per canvas (PRD 32 · W2)', () => {
     expect(window.localStorage.getItem('builderforce:create:phase:abc')).toBe('measure');
   });
 
-  it('keeps two canvases' phases apart', () => {
+  it('keeps two canvases’ phases apart', () => {
     writeCanvasPhase('measure', 'canvas-a');
     writeCanvasPhase('make', 'canvas-b');
     expect(readChosenCanvasPhase('canvas-a')).toBe('measure');

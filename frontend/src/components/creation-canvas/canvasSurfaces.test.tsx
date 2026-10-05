@@ -620,7 +620,7 @@ describe('useCanvasSurfaceState — which phase a canvas opens in', () => {
     expect(result.current.phase).toBe('make');
   });
 
-  it('returns to the board when the open surface leaves the new phase's offer, and only then', () => {
+  it('returns to the board when the open surface leaves the new phase’s offer, and only then', () => {
     window.localStorage.setItem(canvasPhaseStorageKey('narrow'), 'make');
     const { result } = mount('narrow', BOARDS.idea);
     act(() => { result.current.setSurface('app'); });
