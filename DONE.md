@@ -1,3 +1,15 @@
+## ✅ RESOLVED 2026-10-05 — The canvas never moves a reader between phases on its own; it offers the next one
+
+**Was:** a canvas whose phase had never been chosen resolved as `chosen ?? stored ?? frontier`, and the frontier was re-derived from the board every render. Someone working in Run who added a deployment with a URL was moved to Measure mid-task: the lens changed, Insights appeared and the bar tint moved. `useTaskRunner` also sent that live frontier as `arcStage`. Found in the PRD 32 review. The operator chose option (b).
+
+**Now:**
+- **The phase settles once, at load.** `useCanvasSession` reports the board it actually loaded, once, through a new `onBoardLoaded` callback on both the local-snapshot and server-load paths. `useCanvasSurfaceState.settleLoadedPhase` stores that frontier per canvas, and the first report wins.
+- **Resolution order** is a choice made this session, then the choice remembered for this canvas, then the frontier as loaded. The live frontier applies only while the board is still loading, so SSR and hydration still agree.
+- **The path card offers the next phase instead of moving the reader.** `nextPhaseOffer` in `lib/canvasPhaseReadiness.ts` returns the next phase when this phase's own output is on the board and the next phase is ready. The card then reads "Run has what it needs — Measure is ready when you are." with "Go to Measure" and "Stay in Run". "Stay" is remembered in memory, per phase. The new `phasePath.advance` and `phasePath.stay` keys are in all five catalogs.
+- **Also fixed:** `room.module.css` carried a `var(--text-on-accent, #fff)` fallback, which failed `check:design-scale` on main. The token is declared in both themes, so the literal was dropped.
+
+**Verified (Sonnet):** type-check passes, `npm run check` passes 25/25, and 258/258 tests pass across `canvasPhaseReadiness`, `canvasSurfaces` (including settle once, settle per canvas, and a remembered choice beating the settled frontier), `canvasPhasePath` (offer, go, stay, nothing past Reach), `canvasTopChromePath`, `CreationCanvas` and `canvasPhases`.
+
 ## ✅ RESOLVED 2026-10-05 — Spawn has a 7-day free trial with the free plan's tokens, and the grown-up is emailed a way to keep it going (api 2026.10.16 · frontend 2026.10.23)
 
 **Was:** a new Spawn player could do nothing without a $1.99 membership, which most 13-year-olds cannot pay. The account page went straight from the age gate to "Join".
