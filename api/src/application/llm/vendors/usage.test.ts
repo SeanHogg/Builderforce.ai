@@ -81,11 +81,15 @@ describe('openRouter catalog — Anthropic models', () => {
     expect(ids).not.toContain('anthropic/claude-3.7-sonnet');
   });
 
-  it('lists current-gen Claude Sonnet 5 as PREMIUM', () => {
-    const sonnet = openRouterModule.catalog.find((m) => m.id === 'anthropic/claude-sonnet-5');
+  // The current Sonnet is the catalog's chat flagship — read from there, never a version
+  // literal, so a model release is one catalog edit (see modelCatalogCentralization.test.ts).
+  it('lists the current Claude Sonnet (the chat flagship) as PREMIUM', () => {
+    const flagship = openRouterModule.flagships!.chat;
+    expect(flagship).toMatch(/^anthropic\/claude-sonnet-/);
+    const sonnet = openRouterModule.catalog.find((m) => m.id === flagship);
     expect(sonnet).toBeDefined();
     expect(sonnet!.tier).toBe('PREMIUM');
-    expect(openRouterModule.tierFor('anthropic/claude-sonnet-5')).toBe('PREMIUM');
+    expect(openRouterModule.tierFor(flagship)).toBe('PREMIUM');
   });
 
   it('lists Claude Haiku 4.5 as a cheap STANDARD option', () => {

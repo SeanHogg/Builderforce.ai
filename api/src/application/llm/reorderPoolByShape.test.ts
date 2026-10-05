@@ -11,12 +11,12 @@ const plainBody = { messages: [{ role: 'user', content: 'hi' }] } as unknown as 
 
 describe('reorderPoolByShape capability-aware routing [1429]', () => {
   it('promotes a NON-OpenRouter vision model (catalog capabilities) for a vision request', () => {
-    // microsoft/phi-4-multimodal-instruct is an NVIDIA NIM model whose catalog
-    // entry declares capabilities:['vision'] — it must outrank a plain model
-    // even though it isn't in the OpenRouter-centric VISION_MODELS id-set.
-    const pool = ['plain/text-only-model', 'microsoft/phi-4-multimodal-instruct'];
+    // meta/llama-3.2-11b-vision-instruct is an NVIDIA NIM model whose catalog entry
+    // declares capabilities:['vision'] — vision comes from the catalog, never a hand
+    // list, so it must outrank a plain model. (The old phi-4 id was never routable.)
+    const pool = ['plain/text-only-model', 'meta/llama-3.2-11b-vision-instruct'];
     const out = reorderPoolByShape(visionBody, pool);
-    expect(out[0]).toBe('microsoft/phi-4-multimodal-instruct');
+    expect(out[0]).toBe('meta/llama-3.2-11b-vision-instruct');
   });
 
   it('promotes a direct Gemini model (googleai catalog vision capability) for a vision request', () => {
