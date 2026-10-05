@@ -104,6 +104,16 @@
 .ctaRow { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; }
 .download { display: grid; gap: 8px; justify-items: start; }
 .inlineLink { color: var(--text-secondary); font-weight: 700; }
+.firstRun {
+  margin: 0;
+  max-width: 46ch;
+  padding: 8px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--info-bg);
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  line-height: 1.45;
+}
 .inlineLink:hover { color: var(--text-primary); }
 .fine { margin: 0; color: var(--text-muted); font-size: var(--font-size-small); }
 

@@ -32740,7 +32740,9 @@
       "macIntel": "Mac (Intel)",
       "alsoFor": "Aussi pour :",
       "needsComputer": "Spawn fonctionne sur un PC Windows ou un Mac avec Roblox Studio.",
-      "all": "Tous les téléchargements"
+      "all": "Tous les téléchargements",
+      "firstRunWindows": "Windows peut afficher « Windows a protégé votre ordinateur ». Touche Informations complémentaires, puis Exécuter quand même.",
+      "firstRunMac": "Première fois sur Mac : si l’app ne s’ouvre pas, va dans Réglages Système → Confidentialité et sécurité et clique sur Ouvrir quand même."
     },
     "play": {
       "pick": "Essaie : touche un jeu 👇",

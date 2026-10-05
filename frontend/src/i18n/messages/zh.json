@@ -32740,7 +32740,9 @@
       "macIntel": "Mac（Intel）",
       "alsoFor": "也适用于：",
       "needsComputer": "Spawn 需要装有 Roblox Studio 的 Windows 电脑或 Mac。",
-      "all": "全部下载"
+      "all": "全部下载",
+      "firstRunWindows": "Windows 可能会提示“Windows 已保护你的电脑”。点“更多信息”，再点“仍要运行”。",
+      "firstRunMac": "Mac 首次打开：如果打不开，请前往“系统设置 → 隐私与安全性”，点“仍要打开”。"
     },
     "play": {
       "pick": "试一试：点一个游戏 👇",

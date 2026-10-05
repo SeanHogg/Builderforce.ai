@@ -7,7 +7,9 @@
 # release never fails for a missing certificate.
 #   macOS  — APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
 #            APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID (Developer ID + notarization)
-#   Windows — WINDOWS_CERTIFICATE (base64 .pfx), WINDOWS_CERTIFICATE_PASSWORD
+#   Windows — Azure Trusted Signing: AZURE_SIGNING_ENDPOINT, AZURE_SIGNING_ACCOUNT,
+#            AZURE_SIGNING_PROFILE, AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET;
+#            or a .pfx: WINDOWS_CERTIFICATE (base64), WINDOWS_CERTIFICATE_PASSWORD
 # Unsigned builds work but SmartScreen / Gatekeeper warn on first launch.
 name: Desktop Release
 
@@ -91,9 +93,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
             args: ''
     runs-on: ${{ matrix.os }}
-    env:
-      # A step's `if` cannot read secrets directly; this job-level flag carries the answer.
-      HAS_WINDOWS_CERT: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -119,21 +118,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libdbus-1-dev patchelf
-      - name: Import Windows signing certificate
-        if: runner.os == 'Windows' && env.HAS_WINDOWS_CERT == 'true'
-        shell: pwsh
-        env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: |
-          $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
-          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force)
-          # Tauri signs with the certificate whose thumbprint is in the bundle config.
-          $conf = 'desktop/app/src-tauri/tauri.conf.json'
-          $json = Get-Content $conf -Raw | ConvertFrom-Json
-          $json.bundle | Add-Member -NotePropertyName windows -NotePropertyValue @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } -Force
-          $json | ConvertTo-Json -Depth 20 | Set-Content $conf
+      # Signs when Azure Trusted Signing or .pfx secrets exist (see .github/actions/windows-signing).
+      - name: Windows signing
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/windows-signing
+        with:
+          config: desktop/app/src-tauri/tauri.conf.json
+          azure-endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          azure-account: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          azure-profile: ${{ secrets.AZURE_SIGNING_PROFILE }}
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          certificate: ${{ secrets.WINDOWS_CERTIFICATE }}
+          certificate-password: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
       # Signing variables reach tauri-action only via this action, and only for a certificate
       # that imports (see .github/actions/macos-signing).
       - name: macOS signing

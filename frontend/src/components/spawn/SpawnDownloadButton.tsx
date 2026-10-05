@@ -65,6 +65,11 @@ export function SpawnDownloadButton({ compact = false }: { compact?: boolean }) 
         ))}
         {others.length === 0 && <a href={fallback} className={styles.inlineLink} target="_blank" rel="noopener noreferrer">{t('all')}</a>}
       </p>
+      {/* Until the installers are publisher-signed (ROADMAP: "Installers ship unsigned"), the
+          first launch meets an OS warning; one line saying which button to press beats a
+          kid deciding the download is broken. Delete these with that entry. */}
+      {platform === 'windows' && <p className={styles.firstRun}>{t('firstRunWindows')}</p>}
+      {platform === 'mac' && <p className={styles.firstRun}>{t('firstRunMac')}</p>}
     </div>
   );
 }

@@ -32740,7 +32740,9 @@
       "macIntel": "Mac (Intel)",
       "alsoFor": "Also for:",
       "needsComputer": "Spawn runs on a Windows PC or Mac with Roblox Studio.",
-      "all": "All downloads"
+      "all": "All downloads",
+      "firstRunWindows": "Windows may say “Windows protected your PC”. Tap More info, then Run anyway.",
+      "firstRunMac": "First time on a Mac: if it won’t open, go to System Settings → Privacy & Security and click Open Anyway."
     },
     "play": {
       "pick": "Try it: tap a game 👇",

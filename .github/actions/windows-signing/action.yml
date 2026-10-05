@@ -1,0 +1,63 @@
+# Prepares a Tauri Windows build to be Authenticode-signed, so SmartScreen names the
+# publisher instead of "Unknown publisher". Two ways, whichever secrets exist:
+#
+#   Azure Trusted Signing (preferred — public CAs no longer issue exportable .pfx keys,
+#   and this is the cloud HSM route that runs in CI): an Azure "Trusted Signing" account
+#   + certificate profile, and an Entra app registration with the "Trusted Signing
+#   Certificate Profile Signer" role. Tauri calls `trusted-signing-cli` for every binary.
+#
+#   A .pfx certificate (base64) and its password, imported into the runner's store and
+#   referenced by thumbprint.
+#
+# With neither, it does nothing and the build ships unsigned (SmartScreen warns).
+# Used by desktop-release.yml (Synapse) and spawn-release.yml (Spawn).
+name: Windows signing
+description: Configure Tauri's Windows code signing from whichever signing secrets exist.
+inputs:
+  config: { description: 'Path to the tauri.conf.json to sign with', required: true }
+  azure-endpoint: { description: 'Trusted Signing endpoint, e.g. https://eus.codesigning.azure.net', required: false, default: '' }
+  azure-account: { description: 'Trusted Signing account name', required: false, default: '' }
+  azure-profile: { description: 'Trusted Signing certificate profile name', required: false, default: '' }
+  azure-tenant-id: { description: 'Entra tenant id of the signing app registration', required: false, default: '' }
+  azure-client-id: { description: 'Client id of the signing app registration', required: false, default: '' }
+  azure-client-secret: { description: 'Client secret of the signing app registration', required: false, default: '' }
+  certificate: { description: 'WINDOWS_CERTIFICATE (base64 .pfx)', required: false, default: '' }
+  certificate-password: { description: 'WINDOWS_CERTIFICATE_PASSWORD', required: false, default: '' }
+runs:
+  using: composite
+  steps:
+    - shell: pwsh
+      env:
+        CONF: ${{ inputs.config }}
+        AZ_ENDPOINT: ${{ inputs.azure-endpoint }}
+        AZ_ACCOUNT: ${{ inputs.azure-account }}
+        AZ_PROFILE: ${{ inputs.azure-profile }}
+        AZ_TENANT: ${{ inputs.azure-tenant-id }}
+        AZ_CLIENT: ${{ inputs.azure-client-id }}
+        AZ_SECRET: ${{ inputs.azure-client-secret }}
+        PFX_B64: ${{ inputs.certificate }}
+        PFX_PASSWORD: ${{ inputs.certificate-password }}
+      run: |
+        $json = Get-Content $env:CONF -Raw | ConvertFrom-Json
+        $azure = @($env:AZ_ENDPOINT, $env:AZ_ACCOUNT, $env:AZ_PROFILE, $env:AZ_TENANT, $env:AZ_CLIENT, $env:AZ_SECRET) -notcontains ''
+        if ($azure) {
+          cargo install trusted-signing-cli --locked
+          $name = $json.productName
+          $sign = "trusted-signing-cli -e $($env:AZ_ENDPOINT) -a $($env:AZ_ACCOUNT) -c $($env:AZ_PROFILE) -d `"$name`" %1"
+          $json.bundle | Add-Member -NotePropertyName windows -NotePropertyValue @{ signCommand = $sign } -Force
+          "AZURE_TENANT_ID=$($env:AZ_TENANT)" >> $env:GITHUB_ENV
+          "AZURE_CLIENT_ID=$($env:AZ_CLIENT)" >> $env:GITHUB_ENV
+          "AZURE_CLIENT_SECRET=$($env:AZ_SECRET)" >> $env:GITHUB_ENV
+          Write-Output "::notice::Signing with Azure Trusted Signing ($($env:AZ_ACCOUNT)/$($env:AZ_PROFILE))."
+        } elseif ($env:PFX_B64 -ne '') {
+          $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX_B64))
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString $env:PFX_PASSWORD -AsPlainText -Force)
+          Remove-Item $pfx
+          $json.bundle | Add-Member -NotePropertyName windows -NotePropertyValue @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } -Force
+          Write-Output "::notice::Signing with the WINDOWS_CERTIFICATE .pfx."
+        } else {
+          Write-Output "::notice::No Windows signing secrets; building unsigned (SmartScreen will say 'Unknown publisher')."
+          exit 0
+        }
+        $json | ConvertTo-Json -Depth 20 | Set-Content $env:CONF
