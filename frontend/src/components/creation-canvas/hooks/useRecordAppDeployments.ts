@@ -12,7 +12,8 @@
  * Either way the card is the one `isLiveDeployment` reads, so Run's ✓, Measure's
  * readiness, the Operate surface and the room's ops station all see the app as live.
  */
-import { type Dispatch, type RefObject, type SetStateAction, useEffect, useEffectEvent, useMemo, useRef } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useEffect, useMemo, useRef } from 'react';
+import { useEffectEvent } from '@/hooks/useEffectEvent';
 import type { Edge } from '@xyflow/react';
 import type { useTranslations } from 'next-intl';
 import { fetchSite } from '@/lib/api';
