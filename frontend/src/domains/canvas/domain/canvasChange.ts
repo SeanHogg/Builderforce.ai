@@ -57,7 +57,7 @@ export function canvasChangesCanAutoApply(changes: readonly ProposedCanvasChange
  * click apart.
  */
 export const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
-  website: ['publish'], video: ['generate'], build: ['open'],
+  website: ['publish'], video: ['generate'], build: ['open', 'publish'],
   // `build` compiles the authored steps into a real workflow definition; `run`
   // executes one. Run builds first when needed, so Brain can call either.
   workflow: ['build', 'run'], dataset: ['visualize', 'plot', 'profile'], project: ['expand', 'compare'],
@@ -127,6 +127,18 @@ export const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readon
   // onboarding `employeeLifecycle`, which is the transition both vocabularies described
   // in prose and neither performed.
   offer: ['hire'],
+};
+
+/**
+ * Connected actions that HAND OFF to a person instead of completing, and what the model
+ * is told when it invokes one — so it says what is now open and never reports the act as
+ * done. A build's `publish` opens the app's own Publish panel: the person chooses the
+ * address and presses Publish, and the deployment card is recorded when the site is live.
+ */
+export const HANDOFF_ACTION_NOTES: Partial<Record<CreationObjectKind, Readonly<Record<string, string>>>> = {
+  build: {
+    publish: 'The app\'s Publish panel is now open on the App surface (or, on a board without an account, the account prompt). The person chooses the address and presses Publish there; once the site is live a Deployment card with its address is recorded on the board automatically. Say that in one sentence. Do not say the app is deployed, do not create a deployment card yourself, and do not invent an address.',
+  },
 };
 
 /** True only when an advertised capability has a real Canvas-side adapter.

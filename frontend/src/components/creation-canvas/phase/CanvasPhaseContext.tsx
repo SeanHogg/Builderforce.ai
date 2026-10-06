@@ -4,9 +4,9 @@ import { createContext, useCallback, useContext, useMemo, useState, useSyncExter
 import { useTranslations } from 'next-intl';
 import type { CanvasPhase } from '@/lib/canvasPhases';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
-import type { CanvasPhaseReadiness, PhaseRequirementId } from '@/lib/canvasPhaseReadiness';
+import { phaseOutput, type CanvasPhaseReadiness, type PhaseRequirementId } from '@/lib/canvasPhaseReadiness';
 import { phaseFocusOf, type PhaseFocus } from '@/lib/canvasPhaseLens';
-import { PHASE_PRIMARY_STARTER, REQUIREMENT_ACTIONS, phaseStarterKeys } from '@/lib/canvasPhaseStarters';
+import { PHASE_PRIMARY_STARTER, REQUIREMENT_ACTIONS, phaseStarterKeys, type RequirementAct } from '@/lib/canvasPhaseStarters';
 import { readCanvasPhaseFocus, writeCanvasPhaseFocus } from '@/lib/canvasChrome';
 import type { CanvasPhaseReadinessState } from '../hooks/useCanvasPhaseReadiness';
 import type { CreationObjectKind } from '../types';
@@ -38,6 +38,8 @@ export interface CanvasPhaseValue {
   setFocusEnabled: (enabled: boolean) => void;
   /** Start a Brain turn — the canvas's ONE turn door (queue, gate and all). */
   askBrain: (prompt: string) => void;
+  /** Open the app's own Publish panel (or the account prompt on a board with no account). */
+  publishApp: () => void;
   /** Put one object of `kind` at the viewport centre. Null when this viewer cannot edit. */
   appendAtCenter: ((kind: CreationObjectKind) => unknown) | null;
   /** Switch the board to a surface — "Open Ideas", "Open Operate" from a room station. */
@@ -56,12 +58,13 @@ export interface CanvasPhaseProviderProps {
   setPhase: (phase: CanvasPhase) => void;
   readiness: CanvasPhaseReadinessState;
   askBrain: (prompt: string) => void;
+  publishApp: () => void;
   appendAtCenter: ((kind: CreationObjectKind) => unknown) | null;
   openSurface: (surface: CanvasSurfaceId) => void;
   children: ReactNode;
 }
 
-export function CanvasPhaseProvider({ phase, setPhase, readiness, askBrain, appendAtCenter, openSurface, children }: CanvasPhaseProviderProps) {
+export function CanvasPhaseProvider({ phase, setPhase, readiness, askBrain, publishApp, appendAtCenter, openSurface, children }: CanvasPhaseProviderProps) {
   const storedFocus = useSyncExternalStore(subscribeNever, readCanvasPhaseFocus, focusServerSnapshot);
   const [focusChoice, setFocusChoice] = useState<boolean | null>(null);
   const focusEnabled = focusChoice ?? storedFocus;
@@ -70,8 +73,8 @@ export function CanvasPhaseProvider({ phase, setPhase, readiness, askBrain, appe
     writeCanvasPhaseFocus(enabled);
   }, []);
   const value = useMemo<CanvasPhaseValue>(() => ({
-    phase, setPhase, readiness, current: readiness.byPhase[phase], focusEnabled, setFocusEnabled, askBrain, appendAtCenter, openSurface,
-  }), [appendAtCenter, askBrain, focusEnabled, openSurface, phase, readiness, setFocusEnabled, setPhase]);
+    phase, setPhase, readiness, current: readiness.byPhase[phase], focusEnabled, setFocusEnabled, askBrain, publishApp, appendAtCenter, openSurface,
+  }), [appendAtCenter, askBrain, focusEnabled, openSurface, phase, publishApp, readiness, setFocusEnabled, setPhase]);
   return <CanvasPhaseContext.Provider value={value}>{children}</CanvasPhaseContext.Provider>;
 }
 
@@ -89,20 +92,37 @@ export function useCanvasPhaseFocus(kind: string): PhaseFocus | null {
 }
 
 /**
- * "Let Brain …" — the ONE wording and the ONE send for the next step, shared by the ghost
- * card, the path card and the room's sign station. Requirement prompts come from
- * `REQUIREMENT_ACTIONS`; a ready phase's own first step from `PHASE_PRIMARY_STARTER`.
+ * The next step — the ONE wording and the ONE send, shared by the ghost card, the path
+ * card, the Operate and Insights surfaces and the room's sign station. Requirement steps
+ * come from `REQUIREMENT_ACTIONS`: most are "Let Brain …" through the turn door, and one
+ * the canvas performs itself (`act`) carries its own label. A ready phase's own first step
+ * comes from `PHASE_PRIMARY_STARTER` — unless the phase's output is one of those acts (Run's
+ * output is a live app), in which case it IS that act, so the two never disagree.
  */
 export function useLetBrain() {
   const value = useContext(CanvasPhaseContext);
   const t = useTranslations('creationCanvas');
   return useMemo(() => {
     if (!value) return null;
-    const requirementVerb = (id: PhaseRequirementId) => t(REQUIREMENT_ACTIONS[id].verbKey as 'requirement.idea.verb');
-    const askRequirement = (id: PhaseRequirementId) => value.askBrain(t(REQUIREMENT_ACTIONS[id].promptKey as 'requirement.idea.prompt'));
+    const acts: Readonly<Record<RequirementAct, () => void>> = { publishApp: value.publishApp };
+    const requirementLabel = (id: PhaseRequirementId) => {
+      const action = REQUIREMENT_ACTIONS[id];
+      return 'act' in action
+        ? t(action.labelKey as 'requirement.live.act')
+        : t('phasePath.letBrain', { verb: t(action.verbKey as 'requirement.idea.verb') });
+    };
+    const runRequirement = (id: PhaseRequirementId) => {
+      const action = REQUIREMENT_ACTIONS[id];
+      if ('act' in action) acts[action.act]();
+      else value.askBrain(t(action.promptKey as 'requirement.idea.prompt'));
+    };
+    const output = phaseOutput(value.phase);
+    if (output && 'act' in REQUIREMENT_ACTIONS[output]) {
+      return { requirementLabel, runRequirement, phaseLabel: requirementLabel(output), runPhase: () => runRequirement(output) };
+    }
     const primary = phaseStarterKeys(value.phase, PHASE_PRIMARY_STARTER[value.phase]);
-    const phaseVerb = t(`phaseGhost.verb.${value.phase}` as 'phaseGhost.verb.idea');
-    const askPhase = () => value.askBrain(t(primary.promptKey as 'phaseStarters.idea.capture.prompt'));
-    return { requirementVerb, askRequirement, phaseVerb, askPhase };
+    const phaseLabel = t('phasePath.letBrain', { verb: t(`phaseGhost.verb.${value.phase}` as 'phaseGhost.verb.idea') });
+    const runPhase = () => value.askBrain(t(primary.promptKey as 'phaseStarters.idea.capture.prompt'));
+    return { requirementLabel, runRequirement, phaseLabel, runPhase };
   }, [t, value]);
 }

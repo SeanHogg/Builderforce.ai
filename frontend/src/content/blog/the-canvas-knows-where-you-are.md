@@ -51,12 +51,12 @@ The lock is a label, not a gate. Press Measure on that board and Measure opens, 
   "ratio": 1.62,
   "regions": [
     { "label": "Phase stepper", "note": "Idea ✓ · Make ✓ · Run · Measure (lock) · Reach (lock)", "x": 4, "y": 4, "w": 56, "h": 9, "hue": "accent" },
-    { "label": "Measure · 1 step away", "note": "Put the app live before you measure it. Go to Run · Let Brain deploy it", "x": 4, "y": 16, "w": 56, "h": 15, "hue": "measure" },
+    { "label": "Measure · 1 step away", "note": "Put the app live before you measure it. Go to Run · Publish the app", "x": 4, "y": 16, "w": 56, "h": 15, "hue": "measure" },
     { "label": "The board", "note": "KPI and experiment cards ringed, everything else faded", "x": 4, "y": 35, "w": 62, "h": 50, "hue": "measure" },
     { "label": "Where the first metric goes", "note": "Not yet · needs Run", "x": 70, "y": 35, "w": 26, "h": 26, "hue": "measure", "style": "ghost" },
     { "label": "Command bar · MEASURE tinted", "x": 4, "y": 89, "w": 92, "h": 8, "hue": "accent" }
   ],
-  "caption": "The path card takes the place of an empty screen. 'Go to Run' switches the phase, and 'Let Brain deploy it' sends Brain the deploy request through the same path as the starting points. Fold it into a chip if you want the room, and it comes back the next time you open the canvas."
+  "caption": "The path card takes the place of an empty screen. 'Go to Run' switches the phase, and 'Publish the app' opens the app's own Publish panel: you choose the address, press Publish, and the deployment lands on the board by itself. Fold it into a chip if you want the room, and it comes back the next time you open the canvas."
 }
 ```
 
@@ -84,7 +84,7 @@ The rest of the canvas follows the same phase. The command bar highlights the gr
 
 Two phases had nowhere of their own.
 
-**Operate** appears from Run. It shows what this canvas has running: every deployment with its environment, version, address and when it went out; the board's releases; and whether the app is live. If you have built an app but not deployed it, Operate says so plainly and offers to have Brain deploy it.
+**Operate** appears from Run. It shows what this canvas has running: every deployment with its environment, version, address and when it went out; the board's releases; and whether the app is live. If you have built an app but not deployed it, Operate says so plainly and opens the app's Publish panel for you. Once the site is live, its deployment, with the address, is recorded on the board, and Run is done.
 
 **Launch** appears at Reach. Proving the idea, publishing the board, listing it for sale and telling people about it used to be four separate doors. Launch lays them out on one page, in that order, because that is the order they should happen in.
 

@@ -30,8 +30,31 @@ interface Envelope {
   command: WorkspaceCommand;
 }
 
-export function sendWorkspaceCommand(projectId: WorkspaceId, command: WorkspaceCommand): void {
+/** How many handlers each workspace has mounted, and what is waiting for the first. */
+const listening = new Map<WorkspaceId, number>();
+const waiting = new Map<WorkspaceId, WorkspaceCommand[]>();
+
+/**
+ * Send `command` to the workspace of `projectId`.
+ *
+ * `whenReady` is for a surface that opens the workspace and addresses it in the same
+ * breath — the canvas opening its App surface on the Publish panel. The workspace has not
+ * mounted yet, so a plain send would reach nobody; a waiting command is delivered once the
+ * workspace's handlers are subscribed (after the commit that mounted them).
+ */
+export function sendWorkspaceCommand(projectId: WorkspaceId, command: WorkspaceCommand, options: { whenReady?: boolean } = {}): void {
+  if (options.whenReady && !listening.get(projectId)) {
+    waiting.set(projectId, [...(waiting.get(projectId) ?? []), command]);
+    return;
+  }
   bus?.dispatchEvent(new CustomEvent<Envelope>(EVENT, { detail: { projectId, command } }));
+}
+
+function deliverWaiting(projectId: WorkspaceId): void {
+  const commands = waiting.get(projectId);
+  if (!commands) return;
+  waiting.delete(projectId);
+  for (const command of commands) sendWorkspaceCommand(projectId, command);
 }
 
 /** Handle commands addressed to the workspace of `projectId`. */
@@ -48,6 +71,14 @@ export function useWorkspaceCommands(projectId: WorkspaceId, handle: (command: W
       if (detail.projectId === projectId) handleRef.current(detail.command);
     };
     bus.addEventListener(EVENT, listener);
-    return () => bus.removeEventListener(EVENT, listener);
+    listening.set(projectId, (listening.get(projectId) ?? 0) + 1);
+    // A microtask, so every handler the same commit mounts is subscribed before delivery.
+    if (waiting.has(projectId)) queueMicrotask(() => deliverWaiting(projectId));
+    return () => {
+      bus.removeEventListener(EVENT, listener);
+      const left = (listening.get(projectId) ?? 1) - 1;
+      if (left > 0) listening.set(projectId, left);
+      else listening.delete(projectId);
+    };
   }, [projectId]);
 }

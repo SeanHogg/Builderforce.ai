@@ -26063,7 +26063,6 @@
       "verb": {
         "idea": "eine Idee festhalten",
         "make": "die App bauen",
-        "run": "sie bereitstellen",
         "measure": "eine Kennzahl definieren",
         "reach": "einen Launch-Beitrag entwerfen"
       }
@@ -26090,8 +26089,7 @@
       },
       "live": {
         "label": "Eine Live-App – ein Deployment mit Adresse",
-        "verb": "sie bereitstellen",
-        "prompt": "Stelle die App dieses Canvas bereit und halte das Deployment mit seiner Adresse auf dem Board fest."
+        "act": "App veröffentlichen"
       },
       "metric": {
         "label": "Eine Kennzahl zum Ablesen",
@@ -26132,7 +26130,7 @@
       "run": {
         "deploy": {
           "label": "App bereitstellen",
-          "prompt": "Stelle die App dieses Canvas bereit und halte das Deployment mit seiner Adresse auf dem Board fest."
+          "prompt": "Veröffentliche die App dieses Canvas im Web, damit sie eine Live-Adresse hat."
         },
         "release": {
           "label": "Release planen",
@@ -26230,6 +26228,13 @@
         "socialCampaign": "Social-Kampagnen",
         "emailCampaign": "E-Mail-Kampagnen"
       }
+    },
+    "appPublish": {
+      "accountTitle": "Erstelle ein Konto, um deine App zu veröffentlichen",
+      "accountBody": "Deine App ist auf diesem Gerät gespeichert. Ein kostenloses Konto gibt ihr ein Projekt und eine öffentliche Adresse – dann veröffentlichst du sie von hier.",
+      "deploymentTitle": "{app} – live",
+      "edgeLabel": "bereitgestellt auf",
+      "recorded": "Live unter {url} – auf dem Board festgehalten."
     }
   },
   "canvasCommands": {

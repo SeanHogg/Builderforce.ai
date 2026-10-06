@@ -406,7 +406,7 @@ export async function publishSite(
   // Loaded on demand: `api.ts` sits in the root layout's static closure, and the
   // publish signal is only needed by the few surfaces that publish. The listeners
   // import the same module, so the import resolves to the instance they subscribed on.
-  void import('./sitePublishEvents').then(({ notifySitePublished }) => notifySitePublished(Number(projectId)));
+  void import('./sitePublishEvents').then(({ notifySitePublished }) => notifySitePublished(Number(projectId), result));
   return result;
 }
 

@@ -98,8 +98,8 @@ export function CanvasPhasePath() {
                 <button type="button" className={styles.phasePathButton} onClick={() => setPhase(requirement.satisfiedIn)}>
                   {t('phasePath.goTo', { phase: stage(requirement.satisfiedIn) })}
                 </button>
-                <button type="button" className={styles.phasePathButton} data-primary="true" onClick={() => letBrain.askRequirement(requirement.id)}>
-                  {t('phasePath.letBrain', { verb: letBrain.requirementVerb(requirement.id) })}
+                <button type="button" className={styles.phasePathButton} data-primary="true" onClick={() => letBrain.runRequirement(requirement.id)}>
+                  {letBrain.requirementLabel(requirement.id)}
                 </button>
               </div>}
             </li>

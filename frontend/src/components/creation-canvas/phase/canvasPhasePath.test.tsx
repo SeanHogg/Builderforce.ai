@@ -89,10 +89,18 @@ describe('CanvasPhasePath', () => {
   });
 
   it('"Let Brain" asks Brain for the first missing requirement, through the one turn door', () => {
-    const { askBrain } = renderWithPhase(<CanvasPhasePath />, { phase: 'measure', signals: { hasIdea: true, hasApp: true } });
-    fireEvent.click(screen.getByRole('button', { name: 'Let Brain deploy it' }));
+    const { askBrain } = renderWithPhase(<CanvasPhasePath />, { phase: 'run', signals: { hasIdea: true } });
+    fireEvent.click(screen.getByRole('button', { name: 'Let Brain build it' }));
     expect(askBrain).toHaveBeenCalledTimes(1);
-    expect(askBrain).toHaveBeenCalledWith('Deploy this canvas’s app and record the deployment on the board with its address.');
+    expect(askBrain).toHaveBeenCalledWith('Build the first working version of the app for the idea on this board.');
+  });
+
+  it('a missing LIVE app is published by the canvas itself — Brain has no deploy to promise', () => {
+    const { askBrain, publishApp } = renderWithPhase(<CanvasPhasePath />, { phase: 'measure', signals: { hasIdea: true, hasApp: true } });
+    expect(screen.queryByRole('button', { name: /Let Brain deploy/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Publish the app' }));
+    expect(publishApp).toHaveBeenCalledTimes(1);
+    expect(askBrain).not.toHaveBeenCalled();
   });
 
   it('folds to its kicker and opens again — in memory only', () => {

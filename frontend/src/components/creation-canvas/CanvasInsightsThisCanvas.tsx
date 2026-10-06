@@ -20,7 +20,6 @@ import styles from './CreationCanvas.module.css';
  */
 export function CanvasInsightsThisCanvas() {
   const t = useTranslations('creationCanvas.surface.insights');
-  const tc = useTranslations('creationCanvas');
   const board = useCanvasBoardBridge();
   const letBrain = useLetBrain();
   const objects = board?.objects;
@@ -34,8 +33,8 @@ export function CanvasInsightsThisCanvas() {
         ? <BoardMetricReadingList readings={readings} summary={summary} />
         : <div className={styles.insightsEmpty} role="status">
           <strong>{t('noBoardMetric')}</strong>
-          {letBrain && <button type="button" className={styles.phasePathButton} data-primary="true" onClick={() => letBrain.askRequirement('metric')}>
-            {tc('phasePath.letBrain', { verb: letBrain.requirementVerb('metric') })}
+          {letBrain && <button type="button" className={styles.phasePathButton} data-primary="true" onClick={() => letBrain.runRequirement('metric')}>
+            {letBrain.requirementLabel('metric')}
           </button>}
         </div>}
     </section>

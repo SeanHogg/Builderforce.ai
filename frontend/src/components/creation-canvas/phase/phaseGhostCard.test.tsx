@@ -152,17 +152,19 @@ describe('PhaseGhostCard — where the phase\'s first object would go', () => {
       expect(appendAtCenter).toHaveBeenCalledWith('idea');
     });
 
-    it('names what is missing in an UNREADY phase, and asks Brain for that instead', () => {
+    it('names what is missing in an UNREADY phase, and offers that step instead', () => {
       // Measure on a board with an idea and an app but nothing live.
-      const { askBrain } = renderWithPhase(<PhaseGhostCard />, { phase: 'measure', signals: { hasIdea: true, hasApp: true } });
+      const { askBrain, publishApp } = renderWithPhase(<PhaseGhostCard />, { phase: 'measure', signals: { hasIdea: true, hasApp: true } });
       expect(ghost()).toHaveAttribute('data-ready', 'false');
       expect(screen.getByText('Not yet · needs Run')).toBeInTheDocument();
       expect(screen.getByText('Put the app live before you measure it')).toBeInTheDocument();
       // No hand-add: the phase's own first object is not the next step yet.
       expect(screen.queryByRole('button', { name: /^Add / })).toBeNull();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Let Brain deploy it' }));
-      expect(askBrain).toHaveBeenCalledWith('Deploy this canvas’s app and record the deployment on the board with its address.');
+      // Going live is the app's own Publish panel, opened by the canvas — not a Brain turn.
+      fireEvent.click(screen.getByRole('button', { name: 'Publish the app' }));
+      expect(publishApp).toHaveBeenCalledTimes(1);
+      expect(askBrain).not.toHaveBeenCalled();
     });
 
     it('names the FIRST missing requirement when several are', () => {

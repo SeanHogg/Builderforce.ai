@@ -31,6 +31,7 @@ export interface PhaseHarnessOptions {
   signals?: Partial<ReadinessSignals>;
   setPhase?: (phase: CanvasPhase) => void;
   askBrain?: (prompt: string) => void;
+  publishApp?: () => void;
   /** Pass `null` for a viewer who cannot edit. Defaults to a spy. */
   appendAtCenter?: ((kind: CreationObjectKind) => unknown) | null;
   openSurface?: (surface: CanvasSurfaceId) => void;
@@ -56,6 +57,7 @@ export function PhaseHarness({ children, ...options }: PhaseHarnessOptions & { c
       setPhase={options.setPhase ?? (() => {})}
       readiness={readiness}
       askBrain={options.askBrain ?? (() => {})}
+      publishApp={options.publishApp ?? (() => {})}
       appendAtCenter={options.appendAtCenter === undefined ? () => undefined : options.appendAtCenter}
       openSurface={options.openSurface ?? (() => {})}
     >
@@ -71,15 +73,17 @@ export function PhaseHarness({ children, ...options }: PhaseHarnessOptions & { c
 export function renderWithPhase(ui: ReactElement, options: PhaseHarnessOptions = {}) {
   const setPhase = options.setPhase ?? vi.fn();
   const askBrain = options.askBrain ?? vi.fn();
+  const publishApp = options.publishApp ?? vi.fn();
   const appendAtCenter = options.appendAtCenter === undefined ? vi.fn() : options.appendAtCenter;
   const openSurface = options.openSurface ?? vi.fn();
   const readiness = buildPhaseReadiness(options);
-  const harness = { ...options, setPhase, askBrain, appendAtCenter, openSurface };
+  const harness = { ...options, setPhase, askBrain, publishApp, appendAtCenter, openSurface };
   const result = render(<PhaseHarness {...harness}>{ui}</PhaseHarness>, options.renderOptions);
   return {
     ...result,
     setPhase,
     askBrain,
+    publishApp,
     appendAtCenter,
     openSurface,
     readiness,

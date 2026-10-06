@@ -41,12 +41,12 @@ El candado es una indicación, no una barrera. Pulsa Medir en ese tablero y Medi
   "ratio": 1.62,
   "regions": [
     { "label": "Barra de fases", "note": "Idea ✓ · Crear ✓ · Operar · Medir (candado) · Alcance (candado)", "x": 4, "y": 4, "w": 56, "h": 9, "hue": "accent" },
-    { "label": "Medir · a 1 paso", "note": "Publica la app antes de medirla. Ir a Operar · Que Brain se encargue: desplegarla", "x": 4, "y": 16, "w": 56, "h": 15, "hue": "measure" },
+    { "label": "Medir · a 1 paso", "note": "Publica la app antes de medirla. Ir a Operar · Publicar la app", "x": 4, "y": 16, "w": 56, "h": 15, "hue": "measure" },
     { "label": "El tablero", "note": "Tarjetas de KPI y de experimento resaltadas, todo lo demás atenuado", "x": 4, "y": 35, "w": 62, "h": 50, "hue": "measure" },
     { "label": "Dónde va la primera métrica", "note": "Todavía no · necesita Operar", "x": 70, "y": 35, "w": 26, "h": 26, "hue": "measure", "style": "ghost" },
     { "label": "Barra de comandos · MEDIR resaltado", "x": 4, "y": 89, "w": 92, "h": 8, "hue": "accent" }
   ],
-  "caption": "La tarjeta de ruta ocupa el lugar de una pantalla vacía. «Ir a Operar» cambia de fase, y «Que Brain se encargue» le envía a Brain la petición de despliegue por el mismo camino que los puntos de partida. Pliégala en una etiqueta si necesitas espacio: vuelve la próxima vez que abras el lienzo."
+  "caption": "La tarjeta de ruta ocupa el lugar de una pantalla vacía. «Ir a Operar» cambia de fase, y «Publicar la app» abre el panel de publicación de la propia app: eliges la dirección, pulsas Publicar y el despliegue aparece en el tablero por sí solo. Pliégala en una etiqueta si necesitas espacio: vuelve la próxima vez que abras el lienzo."
 }
 ```
 
@@ -74,7 +74,7 @@ El resto del lienzo sigue la misma fase. La barra de comandos resalta el grupo d
 
 Dos fases no tenían un lugar propio.
 
-**Operar** aparece a partir de la fase Operar. Muestra lo que este lienzo tiene en marcha: cada despliegue con su entorno, versión, dirección y fecha; las versiones del tablero; y si la app está en producción. Si has construido una app pero no la has desplegado, Operar lo dice claramente y ofrece que Brain la despliegue.
+**Operar** aparece a partir de la fase Operar. Muestra lo que este lienzo tiene en marcha: cada despliegue con su entorno, versión, dirección y fecha; las versiones del tablero; y si la app está en producción. Si has construido una app pero no la has desplegado, Operar lo dice claramente y te abre el panel de publicación de la app. En cuanto el sitio está en producción, su despliegue, con la dirección, queda registrado en el tablero y Operar está completo.
 
 **Lanzar** aparece en Alcance. Demostrar la idea, publicar el tablero, ponerlo a la venta y contárselo a la gente eran hasta ahora cuatro puertas distintas. Lanzar las reúne en una sola página, en ese orden, porque es el orden en el que deberían ocurrir.
 

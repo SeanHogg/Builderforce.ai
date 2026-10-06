@@ -88,6 +88,11 @@ const PHASE_OUTPUT: Readonly<Record<CanvasPhase, PhaseRequirementId | null>> = {
 
 const SIGNAL_OF: Readonly<Record<PhaseRequirementId, keyof ReadinessSignals>> = { idea: 'hasIdea', app: 'hasApp', live: 'isLive', metric: 'hasMetric' };
 
+/** The requirement a phase's own output satisfies, or null (Reach). */
+export function phaseOutput(phase: CanvasPhase): PhaseRequirementId | null {
+  return PHASE_OUTPUT[phase];
+}
+
 export function readinessSignals(nodes: readonly ReadinessNode[]): ReadinessSignals {
   return {
     hasIdea: ideaLogEntries(nodes).length > 0,

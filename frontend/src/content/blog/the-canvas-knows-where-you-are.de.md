@@ -41,12 +41,12 @@ Das Schloss ist ein Hinweis, keine Schranke. Drücken Sie auf diesem Board Messe
   "ratio": 1.62,
   "regions": [
     { "label": "Phasen-Stepper", "note": "Idee ✓ · Bauen ✓ · Betreiben · Messen (Schloss) · Reichweite (Schloss)", "x": 4, "y": 4, "w": 56, "h": 9, "hue": "accent" },
-    { "label": "Messen · noch 1 Schritt", "note": "Bring die App live, bevor du sie misst. Zu Betreiben · Brain soll sie bereitstellen", "x": 4, "y": 16, "w": 56, "h": 15, "hue": "measure" },
+    { "label": "Messen · noch 1 Schritt", "note": "Bring die App live, bevor du sie misst. Zu Betreiben · App veröffentlichen", "x": 4, "y": 16, "w": 56, "h": 15, "hue": "measure" },
     { "label": "Das Board", "note": "KPI- und Experiment-Karten umrandet, alles andere abgeblendet", "x": 4, "y": 35, "w": 62, "h": 50, "hue": "measure" },
     { "label": "Platz für die erste Kennzahl", "note": "Noch nicht · braucht Betreiben", "x": 70, "y": 35, "w": 26, "h": 26, "hue": "measure", "style": "ghost" },
     { "label": "Befehlsleiste · MESSEN eingefärbt", "x": 4, "y": 89, "w": 92, "h": 8, "hue": "accent" }
   ],
-  "caption": "Die Wegkarte ersetzt einen leeren Bildschirm. „Zu Betreiben“ wechselt die Phase, und „Brain soll sie bereitstellen“ schickt Brain die Bitte über denselben Weg wie die Startpunkte. Klappen Sie sie zu einem Chip ein, wenn Sie Platz brauchen. Beim nächsten Öffnen des Canvas ist sie wieder da."
+  "caption": "Die Wegkarte ersetzt einen leeren Bildschirm. „Zu Betreiben“ wechselt die Phase, und „App veröffentlichen“ öffnet das Veröffentlichen-Panel der App: Sie wählen die Adresse, drücken auf Veröffentlichen, und das Deployment landet von selbst auf dem Board. Klappen Sie sie zu einem Chip ein, wenn Sie Platz brauchen. Beim nächsten Öffnen des Canvas ist sie wieder da."
 }
 ```
 
@@ -74,7 +74,7 @@ Der Rest des Canvas folgt derselben Phase. Die Befehlsleiste hebt die Gruppe der
 
 Zwei Phasen hatten keinen eigenen Ort.
 
-**Betrieb** erscheint ab Betreiben. Dort sehen Sie, was dieser Canvas am Laufen hat: jede Bereitstellung mit Umgebung, Version, Adresse und Zeitpunkt; die Releases des Boards; und ob die App live ist. Haben Sie eine App gebaut, aber nicht bereitgestellt, sagt Betrieb das klar und bietet an, Brain die Bereitstellung übernehmen zu lassen.
+**Betrieb** erscheint ab Betreiben. Dort sehen Sie, was dieser Canvas am Laufen hat: jede Bereitstellung mit Umgebung, Version, Adresse und Zeitpunkt; die Releases des Boards; und ob die App live ist. Haben Sie eine App gebaut, aber nicht bereitgestellt, sagt Betrieb das klar und öffnet Ihnen das Veröffentlichen-Panel der App. Sobald die Seite live ist, wird ihr Deployment mit Adresse auf dem Board festgehalten, und Betreiben ist erledigt.
 
 **Launch** erscheint bei Reichweite. Die Idee beweisen, das Board veröffentlichen, es zum Verkauf anbieten und davon erzählen waren bisher vier getrennte Türen. Launch legt sie auf einer Seite aus, in genau dieser Reihenfolge, weil das die Reihenfolge ist, in der sie passieren sollten.
 

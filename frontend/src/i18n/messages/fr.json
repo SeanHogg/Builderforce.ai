@@ -26063,7 +26063,6 @@
       "verb": {
         "idea": "noter une idée",
         "make": "construire l’app",
-        "run": "la déployer",
         "measure": "définir une métrique",
         "reach": "rédiger un post de lancement"
       }
@@ -26090,8 +26089,7 @@
       },
       "live": {
         "label": "Une app en ligne — un déploiement avec une adresse",
-        "verb": "la déployer",
-        "prompt": "Déployez l’app de ce canevas et consignez le déploiement sur le tableau avec son adresse."
+        "act": "Publier l’app"
       },
       "metric": {
         "label": "Une métrique à lire",
@@ -26132,7 +26130,7 @@
       "run": {
         "deploy": {
           "label": "Déployer l’app",
-          "prompt": "Déployez l’app de ce canevas et consignez le déploiement sur le tableau avec son adresse."
+          "prompt": "Publiez l’app de ce canevas sur le web pour qu’elle ait une adresse en ligne."
         },
         "release": {
           "label": "Planifier une version",
@@ -26230,6 +26228,13 @@
         "socialCampaign": "Campagnes sociales",
         "emailCampaign": "Campagnes e-mail"
       }
+    },
+    "appPublish": {
+      "accountTitle": "Créez un compte pour publier votre app",
+      "accountBody": "Votre app est enregistrée sur cet appareil. Un compte gratuit lui donne un projet et une adresse publique — publiez-la ensuite d’ici.",
+      "deploymentTitle": "{app} — en ligne",
+      "edgeLabel": "déployée sur",
+      "recorded": "En ligne sur {url} — consigné sur le tableau."
     }
   },
   "canvasCommands": {

@@ -21,7 +21,7 @@ import { DIAGRAM_TARGETS } from '@/lib/diagramNotations';
 import { specBoardOf } from '../canvasNodeHelpers';
 import { BRAND_BINDING_HINT } from '@/lib/marketingObjects';
 import { ACCOUNT_REQUIRED_OBJECT_ACTIONS, accountGateResult, DEDICATED_ACTION_TOOLS } from './accountGate';
-import { canInvokeCreationObjectAction } from '@/domains/canvas/domain/canvasChange';
+import { canInvokeCreationObjectAction, HANDOFF_ACTION_NOTES } from '@/domains/canvas/domain/canvasChange';
 import { erasureRefusal } from '@/lib/canvasConfidentiality';
 import type { Edge } from '@xyflow/react';
 import type { CanvasActionContext } from './context';
@@ -305,7 +305,8 @@ export function canvasObjectActions(ctx: CanvasActionContext): BrainAction[] {
       });
       if (!gate.allowed) return { error: gate.message, objectId: target.id, action: args.action, awaitingApproval: true };
       stage.invokeAction(`${args.action} ${target.data.title}`, target.id, args.action);
-      return { ok: true, proposed: true, objectId: target.id, action: args.action, approval: gate.reason };
+      const handoff = HANDOFF_ACTION_NOTES[target.data.kind]?.[args.action];
+      return { ok: true, proposed: true, objectId: target.id, action: args.action, approval: gate.reason, ...(handoff ? { handoff } : {}) };
     },
   },   {
     name: 'canvas_connect_objects',

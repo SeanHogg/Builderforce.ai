@@ -41,12 +41,12 @@ Le cadenas est une indication, pas une barrière. Cliquez sur Mesurer sur ce tab
   "ratio": 1.62,
   "regions": [
     { "label": "Barre des phases", "note": "Idée ✓ · Créer ✓ · Piloter · Mesurer (cadenas) · Portée (cadenas)", "x": 4, "y": 4, "w": 56, "h": 9, "hue": "accent" },
-    { "label": "Mesurer · à 1 étape", "note": "Mettez l’app en ligne avant de la mesurer. Aller à Piloter · Laisser Brain la déployer", "x": 4, "y": 16, "w": 56, "h": 15, "hue": "measure" },
+    { "label": "Mesurer · à 1 étape", "note": "Mettez l’app en ligne avant de la mesurer. Aller à Piloter · Publier l’app", "x": 4, "y": 16, "w": 56, "h": 15, "hue": "measure" },
     { "label": "Le tableau", "note": "Cartes KPI et expérience entourées, tout le reste estompé", "x": 4, "y": 35, "w": 62, "h": 50, "hue": "measure" },
     { "label": "L’emplacement de la première métrique", "note": "Pas encore · nécessite Piloter", "x": 70, "y": 35, "w": 26, "h": 26, "hue": "measure", "style": "ghost" },
     { "label": "Barre de commandes · MESURER teintée", "x": 4, "y": 89, "w": 92, "h": 8, "hue": "accent" }
   ],
-  "caption": "La carte de parcours remplace un écran vide. « Aller à Piloter » change de phase, et « Laisser Brain la déployer » envoie la demande à Brain par le même chemin que les points de départ. Repliez-la en pastille si vous avez besoin de place : elle revient à la prochaine ouverture du canevas."
+  "caption": "La carte de parcours remplace un écran vide. « Aller à Piloter » change de phase, et « Publier l’app » ouvre le panneau de publication de l’app : vous choisissez l’adresse, vous appuyez sur Publier, et le déploiement arrive tout seul sur le tableau. Repliez-la en pastille si vous avez besoin de place : elle revient à la prochaine ouverture du canevas."
 }
 ```
 
@@ -74,7 +74,7 @@ Le reste du canevas suit la même phase. La barre de commandes met en avant le g
 
 Deux phases n’avaient pas de lieu à elles.
 
-**Exploiter** apparaît à partir de Piloter. Vous y voyez ce que ce canevas fait tourner : chaque déploiement avec son environnement, sa version, son adresse et sa date ; les versions du tableau ; et si l’app est en ligne. Si vous avez construit une app sans la déployer, Exploiter le dit clairement et propose de laisser Brain la déployer.
+**Exploiter** apparaît à partir de Piloter. Vous y voyez ce que ce canevas fait tourner : chaque déploiement avec son environnement, sa version, son adresse et sa date ; les versions du tableau ; et si l’app est en ligne. Si vous avez construit une app sans la déployer, Exploiter le dit clairement et vous ouvre le panneau de publication de l’app. Dès que le site est en ligne, son déploiement, avec l’adresse, est consigné sur le tableau, et Piloter est terminé.
 
 **Lancer** apparaît à Portée. Prouver l’idée, publier le tableau, le mettre en vente et le faire savoir étaient jusqu’ici quatre portes séparées. Lancer les réunit sur une seule page, dans cet ordre, parce que c’est l’ordre dans lequel elles doivent se faire.
 

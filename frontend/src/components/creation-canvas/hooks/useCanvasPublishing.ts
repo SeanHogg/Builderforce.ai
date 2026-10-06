@@ -21,8 +21,13 @@ import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { useTranslations } from 'next-intl';
 import type { ConfirmFn } from '@/components/ConfirmProvider';
 import type { CanvasLayoutViewport } from '@/lib/canvasGridFit';
+import { sendWorkspaceCommand } from '@/lib/workspace/workspaceCommands';
+import { useRecordAppDeployments } from './useRecordAppDeployments';
+import { useLatestRef } from './useLatestRef';
 
 export interface UseCanvasPublishingDeps {
+  /** This viewer may change the board — a publish recorded as a deployment card writes it. */
+  canEdit: boolean;
   confirm: ConfirmFn;
   connectionKind: 'presentation' | 'data' | 'delivery' | 'control' | 'reference' | 'membership' | 'blocks' | 'verifies';
   creatingBuild: boolean;
@@ -51,7 +56,7 @@ export interface UseCanvasPublishingDeps {
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
 }
 
-export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, edges, errorText, gameShipFocus, layoutViewportRef, nodes, persistence, placeAppendedRef, requireAccount, selectedNode, sessionId, openApp, provisionApp, setCreatingBuild, setEdges, setGameShipFocus, setNodes, setNotice, setPublishFocus, setReleaseFocus, setSelectedId, setSelectedIds, t }: UseCanvasPublishingDeps) {
+export function useCanvasPublishing({ canEdit, confirm, connectionKind, creatingBuild, edges, errorText, gameShipFocus, layoutViewportRef, nodes, persistence, placeAppendedRef, requireAccount, selectedNode, sessionId, openApp, provisionApp, setCreatingBuild, setEdges, setGameShipFocus, setNodes, setNotice, setPublishFocus, setReleaseFocus, setSelectedId, setSelectedIds, t }: UseCanvasPublishingDeps) {
   /**
    * Open the ship-to-device panel for a game object.
    *
@@ -224,6 +229,32 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
       .finally(() => setCreatingBuild(false));
   }, [creatingBuild, edges, nodes, openApp, persistence, provisionApp, selectedNode, setCreatingBuild, setNotice, t]);
 
+  /**
+   * Put the app on the web: the App surface, on that app, with ITS Publish panel open —
+   * the one place a site is built and published (`SitePublishPanel`), so there is no second
+   * publish path to drift from it. The person chooses the address and presses Publish; the
+   * deployment card follows on its own (`useRecordAppDeployments`). A board held only in
+   * this browser has no project to publish from, so it asks for an account first, in the
+   * canvas's own voice. With no app yet, the Builder object is given one.
+   */
+  const publishAppNow = useCallback((buildId?: string) => {
+    const apps = sessionApps(nodes);
+    const app = apps.find((candidate) => candidate.nodeId === buildId) ?? apps.find((candidate) => candidate.primary) ?? apps[0];
+    if (!app) { openBuild(buildId); return; }
+    if (persistence !== 'server' || !app.binding) {
+      requireAccount('publish', t('appPublish.accountTitle'), t('appPublish.accountBody'));
+      return;
+    }
+    openApp(app.nodeId);
+    sendWorkspaceCommand(app.store.id, { type: 'openTab', tab: 'publish' }, { whenReady: true });
+  }, [nodes, openApp, openBuild, persistence, requireAccount, t]);
+  // STABLE: the phase context publishes it to every card's lens, and a function that
+  // changed with the board would re-render all of them on every drag frame.
+  const publishAppRef = useLatestRef(publishAppNow);
+  const publishApp = useCallback((buildId?: string) => publishAppRef.current(buildId), [publishAppRef]);
+
+  useRecordAppDeployments({ editable: canEdit, edges, nodes, placeAppendedRef, setEdges, setNodes, setNotice, t });
+
   /** Bind a Builder object to a legacy build record that already exists, instead of
    *  provisioning a second workspace for work that is already under way. */
   const attachBuild = useCallback((nodeId: string, ide: IdeProject) => {
@@ -276,5 +307,5 @@ export function useCanvasPublishing({ confirm, connectionKind, creatingBuild, ed
     setSelectedIds([build.id]);
     setNotice(t('build.addedFromWebsite'));
   }, [edges, layoutViewportRef, nodes, openBuild, placeAppendedRef, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t]);
-  return { publishWebsite, openBuild, openReleasesPanel, attachBuild, deleteBuildWorkspace, buildWebsiteWithCode, openGamePanel, openPublishPanel, gamePanelTarget };
+  return { publishWebsite, publishApp, openBuild, openReleasesPanel, attachBuild, deleteBuildWorkspace, buildWebsiteWithCode, openGamePanel, openPublishPanel, gamePanelTarget };
 }

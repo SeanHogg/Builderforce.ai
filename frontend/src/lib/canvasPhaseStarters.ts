@@ -7,9 +7,13 @@
  *
  * - `PHASE_STARTERS` leads the composer's starting-points list when a canvas is in that
  *   phase — three per phase, the next useful thing to ask for.
- * - `REQUIREMENT_ACTIONS` is the one prompt per missing requirement that the ghost card,
- *   the path card and the room's sign station all send through the canvas's ONE turn
- *   door. One table, so the three never phrase the same next step three ways.
+ * - `REQUIREMENT_ACTIONS` is the one next step per missing requirement that the ghost card,
+ *   the path card and the room's sign station all offer. One table, so the three never
+ *   phrase the same next step three ways. Most are a prompt sent through the canvas's ONE
+ *   turn door. A requirement the canvas performs ITSELF names an `act` instead, with its
+ *   own `labelKey`: putting an app on the web is a person's press in the app's Publish
+ *   panel, Brain has no deploy to run, and "Let Brain deploy it" was a promise Brain could
+ *   only answer with an apology.
  *
  * Pure data.
  */
@@ -38,10 +42,17 @@ export const PHASE_PRIMARY_STARTER: Readonly<Record<CanvasPhase, string>> = {
   reach: 'post',
 };
 
-export const REQUIREMENT_ACTIONS: Readonly<Record<PhaseRequirementId, { verbKey: string; promptKey: string }>> = {
+/** Something the canvas does itself for a requirement, rather than asking Brain. */
+export type RequirementAct = 'publishApp';
+
+export type RequirementAction =
+  | { verbKey: string; promptKey: string }
+  | { act: RequirementAct; labelKey: string };
+
+export const REQUIREMENT_ACTIONS: Readonly<Record<PhaseRequirementId, RequirementAction>> = {
   idea: { verbKey: 'requirement.idea.verb', promptKey: 'requirement.idea.prompt' },
   app: { verbKey: 'requirement.app.verb', promptKey: 'requirement.app.prompt' },
-  live: { verbKey: 'requirement.live.verb', promptKey: 'requirement.live.prompt' },
+  live: { act: 'publishApp', labelKey: 'requirement.live.act' },
   metric: { verbKey: 'requirement.metric.verb', promptKey: 'requirement.metric.prompt' },
 };
 

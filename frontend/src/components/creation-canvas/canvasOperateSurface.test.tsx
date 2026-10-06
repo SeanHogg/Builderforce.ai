@@ -6,7 +6,7 @@ import type { CanvasSessionFacts } from './chrome/canvasSessionContext';
 
 /**
  * PRD 32 W11 — Operate: what this session has RUNNING. Deployments (live → the list with
- * its address; an app but nothing deployed → Let Brain deploy; no app → Go to Make / Let
+ * its address; an app but nothing deployed → Publish the app; no app → Go to Make / Let
  * Brain build), releases and the app, each through a door the canvas already has.
  */
 
@@ -41,13 +41,13 @@ const release = object('r1', { kind: 'release', title: 'October release', status
 function renderOperate(nodes: CanvasObject[]) {
   const onOpenApp = vi.fn();
   const onOpenReleases = vi.fn();
-  const { askBrain, setPhase } = renderWithPhase(
+  const { askBrain, publishApp, setPhase } = renderWithPhase(
     <CanvasSessionProvider value={facts}>
       <CanvasOperateSurface nodes={nodes} onExit={vi.fn()} onOpenApp={onOpenApp} onOpenReleases={onOpenReleases} />
     </CanvasSessionProvider>,
     { phase: 'run', nodes },
   );
-  return { askBrain, setPhase, onOpenApp, onOpenReleases };
+  return { askBrain, publishApp, setPhase, onOpenApp, onOpenReleases };
 }
 
 describe('CanvasOperateSurface — deployments', () => {
@@ -65,16 +65,17 @@ describe('CanvasOperateSurface — deployments', () => {
     expect(within(screen.getByTestId('operate-app')).getByText('Yard app · live')).toBeInTheDocument();
   });
 
-  it("says there's an app but nothing deployed, and lets Brain deploy it", () => {
-    const { askBrain } = renderOperate([app, plannedDeploy]);
+  it("says there's an app but nothing deployed, and opens its Publish panel", () => {
+    const { askBrain, publishApp } = renderOperate([app, plannedDeploy]);
     const section = screen.getByTestId('operate-deployments');
     // The planned card is still listed, as planned.
     expect(within(section).getByText('No address yet — planned, not live')).toBeInTheDocument();
     expect(within(section).queryByRole('link')).not.toBeInTheDocument();
     expect(within(section).getByRole('status')).toHaveTextContent('There’s an app but nothing deployed.');
     expect(within(section).queryByRole('button', { name: 'Go to Make' })).not.toBeInTheDocument();
-    fireEvent.click(within(section).getByRole('button', { name: 'Let Brain deploy it' }));
-    expect(askBrain).toHaveBeenCalledWith('Deploy this canvas’s app and record the deployment on the board with its address.');
+    fireEvent.click(within(section).getByRole('button', { name: 'Publish the app' }));
+    expect(publishApp).toHaveBeenCalledTimes(1);
+    expect(askBrain).not.toHaveBeenCalled();
     expect(within(screen.getByTestId('operate-app')).getByText('Yard app · not deployed')).toBeInTheDocument();
   });
 
@@ -83,7 +84,7 @@ describe('CanvasOperateSurface — deployments', () => {
     const section = screen.getByTestId('operate-deployments');
     expect(within(section).queryByTestId('deployment-list')).not.toBeInTheDocument();
     expect(within(section).getByRole('status')).toHaveTextContent('There’s an app but nothing deployed.');
-    expect(within(section).getByRole('button', { name: 'Let Brain deploy it' })).toBeInTheDocument();
+    expect(within(section).getByRole('button', { name: 'Publish the app' })).toBeInTheDocument();
   });
 
   it('with no app, sends the reader to Make or lets Brain build it', () => {

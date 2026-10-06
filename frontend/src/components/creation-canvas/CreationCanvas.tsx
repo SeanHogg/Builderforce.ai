@@ -832,7 +832,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const { rejectProposedChanges, applyAndEnableAutoApply, applyProposedChanges } = useCanvasProposalReview({ acceptedProposalIds, autoApplyPending, comparisonModelIds, describeTurnError, evaluateCanvas, flowRef, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, layoutViewportRef, modelComparisonStartedRef, nodes, persistence, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setAutoApplyMode, setAutoApplyPending, setEdges, setNodes, setNotice, setPendingBrainActions, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setSurface, stage, t, thinking, timeline });
   const { resolveWorkflowNode, buildFlowFromFrame, buildFlow, openEvermindBuild, loadEvermindTemplate, evermindBuild, setEvermindBuild } = useCanvasFlowBuild({ connectionKind, edgesRef, errorText, framedBoardRef, nodes, nodesRef, persistence, requireAccount, selectedNode, sessionId, setEdges, setNodes, setNotice, t, updateNodeData });
   const { compileWorkflow, runWorkflow, unpackWorkflow, saveAgent } = useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKind, errorText, persistence, requireAccount, resolveWorkflowNode, selectedNode, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t });
-  const { publishWebsite, openBuild, openReleasesPanel, attachBuild, deleteBuildWorkspace, buildWebsiteWithCode, openGamePanel, openPublishPanel, gamePanelTarget } = useCanvasPublishing({ confirm, connectionKind, creatingBuild, edges, errorText, gameShipFocus, layoutViewportRef, nodes, persistence, placeAppendedRef, requireAccount, selectedNode, sessionId, openApp, provisionApp: sessionApp.provisionApp, setCreatingBuild, setEdges, setGameShipFocus, setNodes, setNotice, setPublishFocus, setReleaseFocus, setSelectedId, setSelectedIds, t });
+  const { publishWebsite, publishApp, openBuild, openReleasesPanel, attachBuild, deleteBuildWorkspace, buildWebsiteWithCode, openGamePanel, openPublishPanel, gamePanelTarget } = useCanvasPublishing({ canEdit: cardsEditable, confirm, connectionKind, creatingBuild, edges, errorText, gameShipFocus, layoutViewportRef, nodes, persistence, placeAppendedRef, requireAccount, selectedNode, sessionId, openApp, provisionApp: sessionApp.provisionApp, setCreatingBuild, setEdges, setGameShipFocus, setNodes, setNotice, setPublishFocus, setReleaseFocus, setSelectedId, setSelectedIds, t });
   const { generateVideo, runCreativeAction } = useCanvasCreativeGeneration({ errorText, nodes, persistence, requireAccount, selectedNode, sessionId, setNodes, setNotice, t });
   const { exportArtifact } = useCanvasArtifactExport({ edges, nodes, setNodes, setNotice, t });
   const { revealObject, walkthroughRef, walkthroughStops, sessionFiles, downloadCanvasFile } = useCanvasFiles({ edges, exportArtifact, flowRef, nodes, revealObjectRef, setInspectorFocus, setNotice, setSelectedId, setSelectedIds, setSurface, t });
@@ -865,7 +865,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (target.data.kind === 'workflow' && pending.action === 'build') void compileWorkflow(target.id);
     else if (target.data.kind === 'workflow' && pending.action === 'run') runWorkflow(target.id);
     else if (target.data.kind === 'website' && pending.action === 'publish') publishWebsite(target.id);
-    else if (target.data.kind === 'build' && pending.action === 'open') openBuild(target.id);
+    else if (target.data.kind === 'build') (pending.action === 'publish' ? publishApp : openBuild)(target.id);
     else if (target.data.kind === 'video' && pending.action === 'generate') generateVideo(target.id);
     // BEFORE the creative-generator branch, which would otherwise swallow it:
     // `image` and `cad` are both generator kinds, and routing a conversion into
@@ -1040,7 +1040,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         the inspector, and handing it a callback would have meant one more entry in a
         prop list that already carries fifty. Published once, read where it is needed. */}
     <CardActProvider runner={runCardActOnObject}><CanvasBoardBridgeProvider value={boardBridge}><CanvasSpacePresenceProvider value={spacePresence}><CanvasDiagnosticsProvider value={buildDiagnostics}><CanvasSessionProvider value={sessionFacts}>
-    <CanvasShell shellRef={shellRef} fullscreen={fullscreen} hosted={!!hostSurfaces} brainDockSide={brainDock.side} brainDockReserved={brainDockReserved} phase={{ phase, setPhase, readiness: phaseReadiness, askBrain: startCanvasTurn, appendAtCenter: cardsEditable ? appendAtCenter : null, openSurface: setSurface }}>
+    <CanvasShell shellRef={shellRef} fullscreen={fullscreen} hosted={!!hostSurfaces} brainDockSide={brainDock.side} brainDockReserved={brainDockReserved} phase={{ phase, setPhase, readiness: phaseReadiness, askBrain: startCanvasTurn, publishApp, appendAtCenter: cardsEditable ? appendAtCenter : null, openSurface: setSurface }}>
       <CanvasTopChrome
         phoneViewport={phoneViewport} topChromeRef={topChromeSpaceRef} title={title} surface={surface} setSurface={setSurface}
         collapsed={barCollapsed} roster={rosterMembers} share={sessionActionHandlers.share} inviteMenu={inviteMenu} boardMenu={boardMenuChrome} onExitToLibrary={onExitToLibrary} notice={notice}

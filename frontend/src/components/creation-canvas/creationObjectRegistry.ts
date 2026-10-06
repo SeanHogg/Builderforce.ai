@@ -348,10 +348,9 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   // becomes; building the card itself lowered its authored list through a second,
   // server-side compiler, which is the thing this kind's deprecation removes.
   workflow: ['edit', 'run'], flowStep: ['edit', 'run'], website: ['edit', 'preview', 'publish'], prototype: ['edit', 'preview'],
-  // Opening the Builder IS the adapter: run, checks, terminal and publish all
-  // happen inside the Builder surface it mounts, so they are not advertised here as
-  // separate canvas-side actions that nothing implements.
-  build: ['open'],
+  // Opening the Builder IS the adapter for run, checks and the terminal (they happen in
+  // the surface it mounts); `publish` opens that surface on its Publish panel (`publishApp`).
+  build: ['open', 'publish'],
   // `classify` tags PII, `contract` declares the shape, `model` infers an ERD
   // from what was uploaded, and `refresh` re-runs the import against its origin.
   dataset: ['import', 'profile', 'visualize', 'plot', 'classify', 'contract', 'model', 'refresh'],

@@ -104,16 +104,16 @@ export function PhaseGhostCard() {
           <span className={styles.phaseGhostKicker}>{t('phaseGhost.needs', { phase: stage(missing.satisfiedIn) })}</span>
           <strong className={styles.phaseGhostTitle}>{t(`phaseGate.${phase}.title` as 'phaseGate.make.title')}</strong>
           <div className={styles.phaseGhostActions}>
-            <button type="button" className={styles.phasePathButton} data-primary="true" onClick={() => letBrain.askRequirement(missing.id)}>
-              {t('phasePath.letBrain', { verb: letBrain.requirementVerb(missing.id) })}
+            <button type="button" className={styles.phasePathButton} data-primary="true" onClick={() => letBrain.runRequirement(missing.id)}>
+              {letBrain.requirementLabel(missing.id)}
             </button>
           </div>
         </> : <>
           <span className={styles.phaseGhostKicker}>{t('phaseGhost.empty')}</span>
           <strong className={styles.phaseGhostTitle}>{t('phaseGhost.title', { phase: stage(phase) })}</strong>
           <div className={styles.phaseGhostActions}>
-            <button type="button" className={styles.phasePathButton} data-primary="true" onClick={letBrain.askPhase}>
-              {t('phasePath.letBrain', { verb: letBrain.phaseVerb })}
+            <button type="button" className={styles.phasePathButton} data-primary="true" onClick={letBrain.runPhase}>
+              {letBrain.phaseLabel}
             </button>
             {appendAtCenter && <button type="button" className={styles.phasePathButton} onClick={() => appendAtCenter(kind as CreationObjectKind)}>
               {t('phaseGhost.add', { kind: t(`object.${kind}` as 'object.idea') })}

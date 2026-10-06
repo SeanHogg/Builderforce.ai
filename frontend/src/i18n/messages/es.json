@@ -26063,7 +26063,6 @@
       "verb": {
         "idea": "capturar una idea",
         "make": "construir la app",
-        "run": "desplegarla",
         "measure": "definir una métrica",
         "reach": "redactar una publicación de lanzamiento"
       }
@@ -26090,8 +26089,7 @@
       },
       "live": {
         "label": "Una app en producción: un despliegue con dirección",
-        "verb": "desplegarla",
-        "prompt": "Despliega la app de este lienzo y registra el despliegue en el tablero con su dirección."
+        "act": "Publicar la app"
       },
       "metric": {
         "label": "Una métrica que leer",
@@ -26132,7 +26130,7 @@
       "run": {
         "deploy": {
           "label": "Desplegar la app",
-          "prompt": "Despliega la app de este lienzo y registra el despliegue en el tablero con su dirección."
+          "prompt": "Publica la app de este lienzo en la web para que tenga una dirección en producción."
         },
         "release": {
           "label": "Planificar una versión",
@@ -26230,6 +26228,13 @@
         "socialCampaign": "Campañas sociales",
         "emailCampaign": "Campañas de correo"
       }
+    },
+    "appPublish": {
+      "accountTitle": "Crea una cuenta para publicar tu app",
+      "accountBody": "Tu app está guardada en este dispositivo. Una cuenta gratuita le da un proyecto y una dirección pública; después publícala desde aquí.",
+      "deploymentTitle": "{app}: en producción",
+      "edgeLabel": "desplegada en",
+      "recorded": "En producción en {url}: registrado en el tablero."
     }
   },
   "canvasCommands": {

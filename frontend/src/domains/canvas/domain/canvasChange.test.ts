@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
-import { canInvokeCreationObjectAction, canvasChangesCanAutoApply, CONNECTED_CANVAS_ACTIONS } from './canvasChange';
+import { canInvokeCreationObjectAction, canvasChangesCanAutoApply, CONNECTED_CANVAS_ACTIONS, HANDOFF_ACTION_NOTES } from './canvasChange';
 import type { ProposedCanvasChange } from './canvasChange';
 import type { CanvasObject, CreationObjectKind } from './canvasObject';
 
@@ -94,6 +94,21 @@ describe('CONNECTED_CANVAS_ACTIONS', () => {
     for (const [kind, actions] of Object.entries(CONNECTED_CANVAS_ACTIONS)) {
       expect(actions!.includes('inspect'), kind).toBe(false);
       expect(actions!.includes('edit'), kind).toBe(false);
+    }
+  });
+});
+
+describe('HANDOFF_ACTION_NOTES', () => {
+  it('a build can be published from the canvas — the act Brain used to apologise for', () => {
+    expect(canInvokeCreationObjectAction('build' as CreationObjectKind, 'publish')).toBe(true);
+    expect(HANDOFF_ACTION_NOTES.build?.publish).toMatch(/Do not say the app is deployed/);
+  });
+
+  it('only annotates acts that are connected — a note on an unconnected act would never be read', () => {
+    for (const [kind, notes] of Object.entries(HANDOFF_ACTION_NOTES)) {
+      for (const action of Object.keys(notes!)) {
+        expect(canInvokeCreationObjectAction(kind as CreationObjectKind, action), `${kind}.${action}`).toBe(true);
+      }
     }
   });
 });

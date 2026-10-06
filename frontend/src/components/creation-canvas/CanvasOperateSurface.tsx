@@ -54,8 +54,8 @@ export function CanvasOperateSurface({ nodes, onExit, onOpenApp, onOpenReleases 
             ? <>
               <p className={styles.placeSectionHint} role="status">{t('notLive')}</p>
               {letBrain && <div className={styles.phasePathActions}>
-                <button type="button" className={styles.phasePathButton} data-primary="true" onClick={() => letBrain.askRequirement('live')}>
-                  {tc('phasePath.letBrain', { verb: letBrain.requirementVerb('live') })}
+                <button type="button" className={styles.phasePathButton} data-primary="true" onClick={() => letBrain.runRequirement('live')}>
+                  {letBrain.requirementLabel('live')}
                 </button>
               </div>}
             </>
@@ -65,8 +65,8 @@ export function CanvasOperateSurface({ nodes, onExit, onOpenApp, onOpenReleases 
                 {setPhase && <button type="button" className={styles.phasePathButton} onClick={() => setPhase('make')}>
                   {tc('phasePath.goTo', { phase: tn('stage.make') })}
                 </button>}
-                {letBrain && <button type="button" className={styles.phasePathButton} data-primary="true" onClick={() => letBrain.askRequirement('app')}>
-                  {tc('phasePath.letBrain', { verb: letBrain.requirementVerb('app') })}
+                {letBrain && <button type="button" className={styles.phasePathButton} data-primary="true" onClick={() => letBrain.runRequirement('app')}>
+                  {letBrain.requirementLabel('app')}
                 </button>}
               </div>
             </>)}

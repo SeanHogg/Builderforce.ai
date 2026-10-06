@@ -26063,7 +26063,6 @@
       "verb": {
         "idea": "capture an idea",
         "make": "build the app",
-        "run": "deploy it",
         "measure": "define a metric",
         "reach": "draft a launch post"
       }
@@ -26090,8 +26089,7 @@
       },
       "live": {
         "label": "A live app — a deployment with an address",
-        "verb": "deploy it",
-        "prompt": "Deploy this canvas’s app and record the deployment on the board with its address."
+        "act": "Publish the app"
       },
       "metric": {
         "label": "A metric to read",
@@ -26132,7 +26130,7 @@
       "run": {
         "deploy": {
           "label": "Deploy the app",
-          "prompt": "Deploy this canvas’s app and record the deployment on the board with its address."
+          "prompt": "Publish this canvas’s app to the web so it has a live address."
         },
         "release": {
           "label": "Plan a release",
@@ -26230,6 +26228,13 @@
         "socialCampaign": "Social campaigns",
         "emailCampaign": "Email campaigns"
       }
+    },
+    "appPublish": {
+      "accountTitle": "Create an account to publish your app",
+      "accountBody": "Your app is saved on this device. A free account gives it a project and a public address — then publish it from here.",
+      "deploymentTitle": "{app} — live",
+      "edgeLabel": "deployed to",
+      "recorded": "Live at {url} — recorded on the board."
     }
   },
   "canvasCommands": {
