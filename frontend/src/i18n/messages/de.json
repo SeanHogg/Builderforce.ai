@@ -9278,9 +9278,9 @@
     "setupSteps": "{count, plural, one {# Schritt} other {# Schritte}}"
   },
   "home": {
-    "heroBadge": "Builderforce.ai · Menschen + KI-Agenten",
+    "heroBadge": "Für alle, die liefern – nicht nur planen",
     "heroTitle": "Jede Idee wird <em>real.</em>",
-    "heroSub": "Eine Leinwand, auf der Ihr Team und KI-Agenten entwerfen, bauen, prüfen und ausliefern – ohne Tool-Wildwuchs.",
+    "heroSub": "Während Ihre Idee in einem Dokument wartet, liefert jemand anderes schon seine aus. Bringen Sie Ihr Team und KI-Agenten auf eine Leinwand und gehen Sie zuerst live.",
     "heroPromptPlaceholder": "Was möchten Sie erstellen?",
     "heroPromptAria": "Beschreiben Sie, was Sie erstellen möchten",
     "heroGetStarted": "Jetzt erstellen",
@@ -9606,8 +9606,8 @@
     "newsletterSubscribedConfirm": "Abonniert ✓",
     "newsletterError": "Abonnement nicht möglich. Bitte erneut versuchen.",
     "faqHeading": "Häufig gestellte Fragen",
-    "ctaTitle": "Was werden Sie erschaffen?",
-    "ctaDesc": "Beginnen Sie mit einem Prompt und verwandeln Sie ihn gemeinsam mit Ihrem Team und KI-Agenten in verbundene, prüfbare und lieferbare Arbeit. Keine Kreditkarte erforderlich.",
+    "ctaTitle": "Machen Sie Ihre Idee real – noch heute.",
+    "ctaDesc": "Jede Woche, die sie zwischen Tools wartet, ist eine Woche, in der jemand anderes sie zuerst ausliefern kann. Kostenlos starten – Ihre Leinwand öffnet sich in Sekunden.",
     "ctaSeeLiveAgents": "Canvas entdecken",
     "homepageFaq": [
       {
@@ -9755,7 +9755,7 @@
     "featuresLead": "Websites, Workflows, Datensätze, Modelle, Dokumente, Menschen und Agents – alles echte, verbundene Objekte auf einem Board statt Anhänge in einem Chat.",
     "tension": {
       "eyebrow": "Das Problem",
-      "heading": "Ideen werden real",
+      "heading": "Ideen sterben in den Übergaben",
       "body": "Jeder Wechsel zwischen Dokumenten, Chat, Boards, Editoren und Tabellen kostet Zeit und zwingt Menschen, den Kontext zu wiederholen. Builderforce hält den gesamten Weg verbunden – von der ersten Idee bis zu etwas, das live und sofort nutzbar ist.",
       "fragments": [
         "Dokument",
@@ -10661,12 +10661,12 @@
     "success": "Danke — du bist dabei."
   },
   "exitIntent": {
-    "badge": "In Verbindung bleiben",
-    "title": "Bevor du gehst…",
-    "description": "Erhalte praktische Ideen zum Entwickeln mit KI-Agenten sowie Neuigkeiten zu Builderforce.ai-Funktionen.",
+    "badge": "Praxisnotizen",
+    "title": "Lässt du deine Idee zurück?",
+    "description": "Die meisten Ideen werden nie ausgeliefert – sie bleiben zwischen Tools stecken. Hol dir die Praxisnotizen, mit denen deine in Bewegung bleibt, plus Neues von Builderforce.ai.",
     "emailAria": "E-Mail-Adresse",
     "emailPlaceholder": "du@email.de",
-    "submit": "Auf dem Laufenden halten",
+    "submit": "Meine Idee in Bewegung halten",
     "submitting": "Wird abonniert…",
     "privacy": "Kein Spam. Jederzeit abbestellbar.",
     "successTitle": "Du bist auf der Liste!",
@@ -33006,5 +33006,68 @@
         "cancelled": "Die Bezahlung wurde abgebrochen. Es wurde nichts berechnet."
       }
     }
+  },
+  "marketingTrust": {
+    "itemsAria": "Was der Einstieg kostet",
+    "items": [
+      "Kostenloser Plan, keine Kreditkarte",
+      "In Sekunden startklar – ohne Konto",
+      "Nichts verlässt Ihr Gerät, bevor Sie sich anmelden",
+      "Read und Prove sind kostenlos; nur Build verbraucht Budget"
+    ],
+    "socialProof": {
+      "builders": "{count, plural, one {Schließen Sie sich # Macher an} other {Schließen Sie sich # Machern an}}",
+      "buildersThisWeek": "{count, plural, other {# diese Woche dazugekommen}}",
+      "projects": "{count, plural, one {# Projekt gestartet} other {# Projekte gestartet}}",
+      "agentRunsCompleted": "{count, plural, one {# Agentenlauf abgeschlossen} other {# Agentenläufe abgeschlossen}}"
+    },
+    "proofLabel": "Prüfen Sie unsere Arbeit",
+    "proof": {
+      "method": "Die Methode, vollständig",
+      "architecture": "Die Evermind-Architektur, erklärt",
+      "compare": "Direkte Vergleiche",
+      "diagnostics": "Kostenlose Diagnose starten"
+    },
+    "pledge": "Keine Countdowns, keine erfundene Knappheit, keine Testimonials oder Zahlen, die wir nicht belegen können.",
+    "pledgeLink": "Wie wir Marketing machen"
+  },
+  "honestMarketing": {
+    "eyebrow": "Wie wir Marketing machen",
+    "title": "Überzeugung, ganz offen",
+    "lead": "Jede Marketingseite will überzeugen. Diese nutzt dieselben Hebel wie die größten Marken – hier sind alle, und die eine Grenze, die wir nicht überschreiten: Wir behaupten nie etwas Falsches.",
+    "usesTitle": "Die Hebel, die wir nutzen",
+    "uses": [
+      {
+        "title": "Ein Versprechen, wiederholt",
+        "description": "„Jede Idee, real gemacht“ steht auf jeder Seite. Wiederholung lässt eine Botschaft haften – also wiederholen wir die, die wir halten können."
+      },
+      {
+        "title": "Verlust-Framing",
+        "description": "Wir sagen Ihnen, was Warten kostet: Die Idee, die zwischen Tools stecken bleibt, liefert jemand anderes zuerst aus."
+      },
+      {
+        "title": "Echte Dringlichkeit",
+        "description": "Ihre Leinwand öffnet sich in Sekunden und kostet nichts – der beste Zeitpunkt zum Starten ist wirklich jetzt."
+      },
+      {
+        "title": "Social Proof aus Live-Zahlen",
+        "description": "Die Zahlen, die Sie sehen, werden stündlich aus unserer Datenbank gezählt. Unter einer Schwelle zeigen wir nichts, statt aufzurunden."
+      },
+      {
+        "title": "Autorität zum Öffnen",
+        "description": "Die veröffentlichte Methode, die erklärte Architektur, benannte Vergleiche und eine kostenlose Diagnose – urteilen Sie selbst."
+      },
+      {
+        "title": "Zugehörigkeit",
+        "description": "Wir schreiben für Macher, die liefern. Wenn das Sie sind, wurde das für Sie gebaut."
+      }
+    ],
+    "refusesTitle": "Die Grenze, die wir nicht überschreiten",
+    "refuses": [
+      "Countdowns und „nur noch N übrig“-Knappheit, die es nicht gibt",
+      "Testimonials, Logos oder Zahlen, die wir nicht belegen können",
+      "Hypothesen, die als gemessene Ergebnisse auftreten",
+      "Abmeldungen im Kleingedruckten"
+    ]
   }
 }

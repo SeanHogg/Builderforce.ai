@@ -1,3 +1,23 @@
+## ✅ RESOLVED 2026-10-07 — Marketing persuasion layer: live social proof, loss framing, risk reversal, and a published line we will not cross
+
+**Was:** the marketing site described the product carefully but used almost none of the levers that move a reader. There was no social proof, the problem section's heading ("Ideas become real") framed no loss, the exit prompt was a generic "Before you go…", and no page said what the site would and would not do to persuade.
+
+**Now:**
+- **Live social proof, real counts only.** `GET /api/public/proof` (`application/marketing/platformProof.ts`, one-hour `getOrSetCached`) counts verified builders, builders this week, non-archived projects and completed agent runs. Cross-tenant reads are declared `acrossTenants(..., 'platform_aggregate', ...)`. `SocialProofBar` renders it in the homepage hero and the shared `CreationCtaSection`. `PROOF_FLOORS` in `lib/platformProof.ts` hides any metric below its floor, so a weak number is never shown and none is ever inflated.
+- **One shared persuasion layer** in `components/marketing/TrustSignals.tsx`:
+  - `TrustLine` (risk reversal plus real immediacy) sits under every primary ask.
+  - `ProofLinks` (authority you can open: /method, the Evermind architecture post, /compare, /diagnostics) also sits under every primary ask.
+  - `HonestyPledge` is in the marketing footer on every marketing page, loaded via `next/dynamic`.
+- **Copy:**
+  - The hero uses in-group identity and loss/FOMO framing.
+  - The CTA repeats the core promise and adds urgency.
+  - The problem heading is now "Ideas die in the hand-offs".
+  - The exit prompt uses loss framing ("Leaving your idea behind?").
+  - All five catalogs are updated.
+- **`/about#how-we-market`** (`HonestMarketingSection`) lists every lever the site pulls and the one line it does not cross: no fake timers or scarcity, no testimonials or numbers we cannot back, no hypotheses presented as results, no buried opt-outs.
+
+**Verified (Sonnet):** api and frontend type-checks pass (tsc + tsgo). `npm run check` passes 37/37 on the api and 25/25 on the frontend. All targeted tests pass: `platformProof`, `SocialProofBar`, `LandingCanvasHero`, `ExitIntentPrompt`, `MethodologySection`, `MarketingShell`, `TensionBeat` and `AboutAppSection`.
+
 ## ✅ RESOLVED 2026-10-05 — "Deploy the app" opens the app's Publish panel, and a live app is recorded on the board (frontend 2026.10.24)
 
 **Was:** found on a live session: a canvas with an idea and an app, in Run. The Operate surface offered "Let Brain deploy it". Brain read the build card, tried `canvas_invoke_object_action` with `deploy`, `publish` and `build` (all three refused; a build card only declared `open`), and answered "I cannot directly deploy the app from the canvas … use an external deployment process", which is false. There were three faults:

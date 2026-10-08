@@ -9278,9 +9278,9 @@
     "setupSteps": "{count} 个步骤"
   },
   "home": {
-    "heroBadge": "Builderforce.ai · 人类 + AI 智能体",
+    "heroBadge": "为真正交付的构建者——而不只是做计划",
     "heroTitle": "每个想法都变成<em>现实。</em>",
-    "heroSub": "一块画布，让你的团队与 AI 智能体共同设计、构建、评审并交付——无需在多个工具之间来回切换。",
+    "heroSub": "当你的想法还停在文档里时，别人已经在交付他们的了。让团队与 AI 智能体共用一块画布，抢先上线。",
     "heroPromptPlaceholder": "你想创造什么？",
     "heroPromptAria": "描述你想创造的内容",
     "heroGetStarted": "开始创作",
@@ -9606,8 +9606,8 @@
     "newsletterSubscribedConfirm": "已订阅 ✓",
     "newsletterError": "无法订阅。请重试。",
     "faqHeading": "常见问题",
-    "ctaTitle": "你想创造什么？",
-    "ctaDesc": "从一句提示开始，与团队和 AI 智能体一起，把它变成相互连接、可审核、可交付的成果。无需信用卡。",
+    "ctaTitle": "今天就把你的想法变成现实。",
+    "ctaDesc": "想法在工具之间每多等一周，别人就多一周抢先交付。免费开始——画布几秒内即可打开。",
     "ctaSeeLiveAgents": "探索画布",
     "homepageFaq": [
       {
@@ -9755,7 +9755,7 @@
     "featuresLead": "网站、工作流、数据集、模型、文档、人员与智能体——全部作为真实且互联的对象置于同一画布，而不是聊天中的附件。",
     "tension": {
       "eyebrow": "问题所在",
-      "heading": "让想法成为现实",
+      "heading": "想法往往消失在交接之中",
       "body": "每次在文档、聊天、看板、编辑器和表格之间切换，都会浪费时间，并迫使人们重复上下文。Builderforce 让整个过程保持连接——从最初的想法，到已上线且立即可用的成果。",
       "fragments": [
         "文档",
@@ -10661,12 +10661,12 @@
     "success": "感谢 — 您已成功加入列表。"
   },
   "exitIntent": {
-    "badge": "保持联系",
-    "title": "离开之前…",
-    "description": "获取使用 AI 智能体进行构建的实用思路，以及 Builderforce.ai 新功能动态。",
+    "badge": "实践笔记",
+    "title": "要把你的想法留在这里吗？",
+    "description": "大多数想法从未交付——它们卡在了工具之间。获取让你的想法持续推进的实践笔记，以及 Builderforce.ai 的新动态。",
     "emailAria": "电子邮箱地址",
     "emailPlaceholder": "your@email.com",
-    "submit": "订阅最新动态",
+    "submit": "让我的想法继续推进",
     "submitting": "订阅中…",
     "privacy": "无垃圾邮件，可随时退订。",
     "successTitle": "您已加入名单！",
@@ -33006,5 +33006,68 @@
         "cancelled": "已取消结账，未产生任何费用。"
       }
     }
+  },
+  "marketingTrust": {
+    "itemsAria": "开始使用的成本",
+    "items": [
+      "免费方案，无需信用卡",
+      "几秒即可上手——无需账号",
+      "登录之前，任何内容都不会离开你的设备",
+      "Read 与 Prove 免费；只有 Build 才产生费用"
+    ],
+    "socialProof": {
+      "builders": "{count, plural, one {加入 # 位构建者} other {加入 # 位构建者}}",
+      "buildersThisWeek": "{count, plural, other {本周新加入 # 位}}",
+      "projects": "{count, plural, one {已启动 # 个项目} other {已启动 # 个项目}}",
+      "agentRunsCompleted": "{count, plural, one {已完成 # 次智能体运行} other {已完成 # 次智能体运行}}"
+    },
+    "proofLabel": "检验我们的成果",
+    "proof": {
+      "method": "完整的方法论",
+      "architecture": "Evermind 架构详解",
+      "compare": "逐项对比",
+      "diagnostics": "运行一次免费诊断"
+    },
+    "pledge": "没有倒计时，没有虚构的稀缺，也没有我们无法证实的评价或数字。",
+    "pledgeLink": "我们如何做营销"
+  },
+  "honestMarketing": {
+    "eyebrow": "我们如何做营销",
+    "title": "公开透明的说服",
+    "lead": "每个营销页面都在说服。本网站使用的正是大品牌所用的那些手法——这里逐一列出，以及我们绝不跨越的底线：我们从不陈述不实之事。",
+    "usesTitle": "我们使用的手法",
+    "uses": [
+      {
+        "title": "一个承诺，反复强调",
+        "description": "“把任何想法变成现实”出现在每个页面。重复让信息被记住，所以我们只重复能兑现的那一句。"
+      },
+      {
+        "title": "损失框架",
+        "description": "我们告诉你等待的代价：卡在工具之间的想法，往往会被别人抢先交付。"
+      },
+      {
+        "title": "真实的紧迫感",
+        "description": "画布几秒即可打开且不收费，所以开始的最佳时机确实就是现在。"
+      },
+      {
+        "title": "来自实时数据的社会认同",
+        "description": "你看到的数字每小时从我们的数据库统计一次。低于下限时我们宁可不显示，也不凑整。"
+      },
+      {
+        "title": "可以亲自打开的权威",
+        "description": "公开的方法论、架构详解、具名对比和免费诊断——由你自己评判。"
+      },
+      {
+        "title": "归属感",
+        "description": "我们为真正交付的构建者而写。如果你是其中之一，这正是为你打造的。"
+      }
+    ],
+    "refusesTitle": "我们不跨越的底线",
+    "refuses": [
+      "倒计时以及并不存在的“仅剩 N 个”式稀缺",
+      "无法证实的评价、徽标或数字",
+      "把假设当作已测量的结果来呈现",
+      "藏在小字里的退出选项"
+    ]
   }
 }

@@ -9278,9 +9278,9 @@
     "setupSteps": "{count, plural, one {# step} other {# steps}}"
   },
   "home": {
-    "heroBadge": "Builderforce.ai · Humans + AI agents",
+    "heroBadge": "For builders who ship — not just plan",
     "heroTitle": "Any idea into <em>real.</em>",
-    "heroSub": "One canvas where your team and AI agents design, build, review, and deliver — without the tool sprawl.",
+    "heroSub": "While your idea waits in a doc, someone else is shipping theirs. Put your team and AI agents on one canvas and get it live first.",
     "heroPromptPlaceholder": "What do you want to create?",
     "heroPromptAria": "Describe what you want to create",
     "heroGetStarted": "Start creating",
@@ -9606,8 +9606,8 @@
     "newsletterSubscribedConfirm": "Subscribed ✓",
     "newsletterError": "Unable to subscribe. Try again.",
     "faqHeading": "Frequently asked questions",
-    "ctaTitle": "What will you create?",
-    "ctaDesc": "Start with a prompt and turn it into connected, reviewable, deliverable work with your team and AI agents. No credit card required.",
+    "ctaTitle": "Turn your idea into something real — today.",
+    "ctaDesc": "Every week it waits between tools is a week someone else can ship it first. Start free — your canvas opens in seconds.",
     "ctaSeeLiveAgents": "Explore the Canvas",
     "homepageFaq": [
       {
@@ -9755,7 +9755,7 @@
     "featuresLead": "Websites, workflows, datasets, models, documents, people and agents — all real, connected objects on one board, not attachments in a chat.",
     "tension": {
       "eyebrow": "The problem",
-      "heading": "Ideas become real",
+      "heading": "Ideas die in the hand-offs",
       "body": "Every switch between docs, chat, boards, editors, and spreadsheets costs time and forces people to repeat the context. Builderforce keeps the whole journey connected—from the first idea to something live in production and ready to use.",
       "fragments": [
         "Doc",
@@ -10661,12 +10661,12 @@
     "success": "Thanks — you're on the list."
   },
   "exitIntent": {
-    "badge": "Stay connected",
-    "title": "Before you go…",
-    "description": "Get practical ideas for building with AI agents, plus updates on new Builderforce.ai capabilities.",
+    "badge": "Field notes",
+    "title": "Leaving your idea behind?",
+    "description": "Most ideas never ship — they stall between tools. Get the field notes on keeping yours moving, plus what's new in Builderforce.ai.",
     "emailAria": "Email address",
     "emailPlaceholder": "your@email.com",
-    "submit": "Keep me in the loop",
+    "submit": "Keep my idea moving",
     "submitting": "Subscribing…",
     "privacy": "No spam. Unsubscribe anytime.",
     "successTitle": "You're on the list!",
@@ -33006,5 +33006,68 @@
         "cancelled": "Checkout was cancelled. Nothing was charged."
       }
     }
+  },
+  "marketingTrust": {
+    "itemsAria": "What starting costs you",
+    "items": [
+      "Free plan, no credit card",
+      "Live in seconds — no account needed",
+      "Nothing leaves your device until you sign in",
+      "Read and Prove are free; only Build spends"
+    ],
+    "socialProof": {
+      "builders": "{count, plural, one {Join # builder} other {Join # builders}}",
+      "buildersThisWeek": "{count, plural, other {# joined this week}}",
+      "projects": "{count, plural, one {# project started} other {# projects started}}",
+      "agentRunsCompleted": "{count, plural, one {# agent run completed} other {# agent runs completed}}"
+    },
+    "proofLabel": "Check our work",
+    "proof": {
+      "method": "The method, in full",
+      "architecture": "Evermind architecture write-up",
+      "compare": "Head-to-head comparisons",
+      "diagnostics": "Run a free diagnostic"
+    },
+    "pledge": "No countdown timers, no invented scarcity, no testimonials or numbers we can't back.",
+    "pledgeLink": "How we market"
+  },
+  "honestMarketing": {
+    "eyebrow": "How we market",
+    "title": "Persuasion, out in the open",
+    "lead": "Every marketing page persuades. This one pulls the same levers the biggest brands do — here is every one of them, and the single line we will not cross: we never state something false.",
+    "usesTitle": "The levers we pull",
+    "uses": [
+      {
+        "title": "One promise, repeated",
+        "description": "\"Any idea into real\" is on every page. Repetition makes a message stick, so we repeat the one we can keep."
+      },
+      {
+        "title": "Loss framing",
+        "description": "We tell you what waiting costs: the idea that stalls between tools is the one someone else ships first."
+      },
+      {
+        "title": "Urgency that is real",
+        "description": "Your canvas opens in seconds and costs nothing, so the best time to start genuinely is now."
+      },
+      {
+        "title": "Social proof from live counts",
+        "description": "The numbers you see are counted from our database every hour. Below a floor we show nothing rather than round up."
+      },
+      {
+        "title": "Authority you can open",
+        "description": "The published method, the architecture write-up, named comparisons and a free diagnostic — judge them yourself."
+      },
+      {
+        "title": "Belonging",
+        "description": "We write for builders who ship. If that is you, this was built for you."
+      }
+    ],
+    "refusesTitle": "The line we do not cross",
+    "refuses": [
+      "Countdown timers and \"only N left\" scarcity we do not have",
+      "Testimonials, logos or numbers we cannot back",
+      "Hypotheses presented as measured results",
+      "Opt-outs buried in fine print"
+    ]
   }
 }

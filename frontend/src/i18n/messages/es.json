@@ -9278,9 +9278,9 @@
     "setupSteps": "{count, plural, one {# paso} other {# pasos}}"
   },
   "home": {
-    "heroBadge": "Builderforce.ai · Personas + agentes de IA",
+    "heroBadge": "Para quienes entregan, no solo planifican",
     "heroTitle": "Cualquier idea se hace <em>real.</em>",
-    "heroSub": "Un lienzo donde tu equipo y los agentes de IA diseñan, construyen, revisan y entregan, sin dispersión de herramientas.",
+    "heroSub": "Mientras tu idea espera en un documento, otra persona ya está lanzando la suya. Reúne a tu equipo y a los agentes de IA en un lienzo y llega primero a producción.",
     "heroPromptPlaceholder": "¿Qué quieres crear?",
     "heroPromptAria": "Describe lo que quieres crear",
     "heroGetStarted": "Empezar a crear",
@@ -9606,8 +9606,8 @@
     "newsletterSubscribedConfirm": "Suscrito ✓",
     "newsletterError": "No se pudo completar la suscripción. Inténtalo de nuevo.",
     "faqHeading": "Preguntas frecuentes",
-    "ctaTitle": "¿Qué vas a crear?",
-    "ctaDesc": "Empieza con una instrucción y conviértela en trabajo conectado, revisable y listo para entregar junto a tu equipo y agentes de IA. Sin tarjeta de crédito.",
+    "ctaTitle": "Convierte tu idea en algo real, hoy.",
+    "ctaDesc": "Cada semana que espera entre herramientas es una semana en la que otro puede lanzarla antes. Empieza gratis: tu lienzo se abre en segundos.",
     "ctaSeeLiveAgents": "Explorar el lienzo",
     "homepageFaq": [
       {
@@ -9755,7 +9755,7 @@
     "featuresLead": "Sitios web, flujos de trabajo, conjuntos de datos, modelos, documentos, personas y agentes: objetos reales y conectados en un mismo lienzo, no archivos adjuntos en un chat.",
     "tension": {
       "eyebrow": "El problema",
-      "heading": "Las ideas se hacen reales",
+      "heading": "Las ideas mueren en los traspasos",
       "body": "Cada cambio entre documentos, chats, tableros, editores y hojas de cálculo cuesta tiempo y obliga a repetir el contexto. Builderforce mantiene conectado todo el recorrido: desde la primera idea hasta algo activo en producción y listo para usar.",
       "fragments": [
         "Documento",
@@ -10661,12 +10661,12 @@
     "success": "Gracias: ya estás en la lista."
   },
   "exitIntent": {
-    "badge": "Sigamos en contacto",
-    "title": "Antes de irte…",
-    "description": "Recibe ideas prácticas para crear con agentes de IA y novedades sobre las funciones de Builderforce.ai.",
+    "badge": "Notas de campo",
+    "title": "¿Vas a dejar tu idea atrás?",
+    "description": "La mayoría de las ideas nunca se lanzan: se atascan entre herramientas. Recibe las notas de campo para mantener la tuya en marcha, y las novedades de Builderforce.ai.",
     "emailAria": "Dirección de correo electrónico",
     "emailPlaceholder": "tu@email.com",
-    "submit": "Quiero estar al día",
+    "submit": "Mantener mi idea en marcha",
     "submitting": "Suscribiendo…",
     "privacy": "Sin spam. Cancela cuando quieras.",
     "successTitle": "¡Ya estás en la lista!",
@@ -33006,5 +33006,68 @@
         "cancelled": "Se canceló el pago. No se cobró nada."
       }
     }
+  },
+  "marketingTrust": {
+    "itemsAria": "Lo que te cuesta empezar",
+    "items": [
+      "Plan gratuito, sin tarjeta de crédito",
+      "En marcha en segundos, sin cuenta",
+      "Nada sale de tu dispositivo hasta que inicias sesión",
+      "Read y Prove son gratis; solo Build consume"
+    ],
+    "socialProof": {
+      "builders": "{count, plural, one {Únete a # persona que construye} other {Únete a # personas que construyen}}",
+      "buildersThisWeek": "{count, plural, other {# se unieron esta semana}}",
+      "projects": "{count, plural, one {# proyecto iniciado} other {# proyectos iniciados}}",
+      "agentRunsCompleted": "{count, plural, one {# ejecución de agente completada} other {# ejecuciones de agentes completadas}}"
+    },
+    "proofLabel": "Comprueba nuestro trabajo",
+    "proof": {
+      "method": "El método, completo",
+      "architecture": "La arquitectura de Evermind, explicada",
+      "compare": "Comparativas cara a cara",
+      "diagnostics": "Haz un diagnóstico gratuito"
+    },
+    "pledge": "Sin cuentas atrás, sin escasez inventada, sin testimonios ni cifras que no podamos respaldar.",
+    "pledgeLink": "Cómo hacemos marketing"
+  },
+  "honestMarketing": {
+    "eyebrow": "Cómo hacemos marketing",
+    "title": "Persuasión a la vista",
+    "lead": "Toda página de marketing persuade. Esta usa las mismas palancas que las grandes marcas: aquí están todas, y la única línea que no cruzamos: nunca afirmamos nada falso.",
+    "usesTitle": "Las palancas que usamos",
+    "uses": [
+      {
+        "title": "Una promesa, repetida",
+        "description": "«Cualquier idea, hecha realidad» aparece en cada página. La repetición fija un mensaje, así que repetimos el que podemos cumplir."
+      },
+      {
+        "title": "Encuadre de pérdida",
+        "description": "Te decimos lo que cuesta esperar: la idea que se atasca entre herramientas es la que otro lanza primero."
+      },
+      {
+        "title": "Urgencia real",
+        "description": "Tu lienzo se abre en segundos y no cuesta nada, así que el mejor momento para empezar es, de verdad, ahora."
+      },
+      {
+        "title": "Prueba social con datos en vivo",
+        "description": "Las cifras que ves se cuentan cada hora en nuestra base de datos. Por debajo de un mínimo no mostramos nada en lugar de redondear al alza."
+      },
+      {
+        "title": "Autoridad que puedes abrir",
+        "description": "El método publicado, la arquitectura explicada, comparativas con nombre y un diagnóstico gratuito: júzgalos tú."
+      },
+      {
+        "title": "Pertenencia",
+        "description": "Escribimos para quienes construyen y entregan. Si eres tú, esto se hizo para ti."
+      }
+    ],
+    "refusesTitle": "La línea que no cruzamos",
+    "refuses": [
+      "Cuentas atrás y escasez del tipo «solo quedan N» que no tenemos",
+      "Testimonios, logotipos o cifras que no podamos respaldar",
+      "Hipótesis presentadas como resultados medidos",
+      "Bajas escondidas en la letra pequeña"
+    ]
   }
 }

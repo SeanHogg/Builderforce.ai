@@ -166,6 +166,7 @@ import { resolvePublicResume } from './application/creation/publicResumeProjecti
 // own network. See the mounts below for why two of these carry no auth.
 import { createFormRoutes, createPublicFormRoutes } from './presentation/routes/formRoutes';
 import { createPollRoutes, createPublicPollRoutes } from './presentation/routes/pollRoutes';
+import { createPublicProofRoutes } from './presentation/routes/publicProofRoutes';
 import { createSignatureRoutes, createPublicSignatureRoutes } from './presentation/routes/signatureRoutes';
 import { createConsentRoutes, createLegalDocumentRoutes, createPublicLegalDocumentRoutes } from './presentation/routes/legalDocumentRoutes';
 import { createDataRoomRoutes, createPublicDataRoomRoutes } from './presentation/routes/dataRoomRoutes';
@@ -1028,6 +1029,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // an account would not be a poll, it would be a survey sent to people who already
   // work here.
   app.route('/api/public/polls',      createPublicPollRoutes(db));
+  // Live platform counts — the marketing site's social proof. Real counts only.
+  app.route('/api/public/proof',      createPublicProofRoutes(db));
   // The CUSTOMER's invoice, and the checkout they just completed (FO-C2/FO-C4).
   // Same shape again: a person with no account holds a token, and the row it
   // resolves to reports its own tenant. This is what makes an invoice payable.

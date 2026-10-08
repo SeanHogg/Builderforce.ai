@@ -4,6 +4,8 @@ import { LandingCanvasHero } from './LandingCanvasHero';
 
 const push = vi.fn();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
+// The hero's live social-proof bar fetches public counts; keep the test offline.
+vi.mock('@/components/marketing/SocialProofBar', () => ({ SocialProofBar: () => null }));
 
 /** The hero starts a session through the SHARED starter, which both creates the
  *  local draft and records the visitor's intent — mocked here so the assertions

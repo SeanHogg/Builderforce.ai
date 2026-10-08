@@ -9,6 +9,11 @@ import ProductUpdatesTrigger from './releaseNotes/ProductUpdatesTrigger';
 import { BRAND } from '@/lib/content/brand';
 import { destTitleKey, footerColumns } from '@/lib/publicDestinations';
 import { seatHueVar } from '@/lib/seats';
+import dynamic from 'next/dynamic';
+
+// Marketing-only (`variant="full"`); loaded on demand so the footer every route
+// mounts does not pull the marketing trust module into first paint.
+const HonestyPledge = dynamic(() => import('./marketing/TrustSignals').then((m) => m.HonestyPledge));
 
 /**
  * The single canonical site footer.
@@ -80,6 +85,9 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
                 <span>{BRAND.name}</span>
               </BrandLockup>
               <p className="global-footer-summary">{tRoot('marketing.content.quotable.creativeCanvas')}</p>
+              {/* On every marketing page: the techniques we refuse, stated where
+                  a reader can hold the rest of the site to them. */}
+              <HonestyPledge />
               <p className="global-footer-credit">
                 {t('builtBy')}{' '}
                 {/* An in-app route now, so it navigates in place rather than opening a tab

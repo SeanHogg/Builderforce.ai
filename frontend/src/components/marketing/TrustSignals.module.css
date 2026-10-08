@@ -1,0 +1,91 @@
+.trustLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+}
+
+.trustLine li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.trustLine svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--success-text);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.proof {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-top: 14px;
+  font-size: var(--font-size-small);
+}
+
+.proofLabel {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-eyebrow);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.proof a,
+.pledge a {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--border-accent);
+  text-underline-offset: 3px;
+  /* Comfortable tap target without changing the inline rhythm. */
+  padding-block: 4px;
+}
+
+.proof a:hover,
+.pledge a:hover {
+  text-decoration-color: var(--coral-bright);
+}
+
+.center {
+  justify-content: center;
+}
+
+.pledge {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  line-height: 1.6;
+}
+
+.socialProof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin: 16px 0 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+}
+
+.socialProof span + span::before {
+  content: '·';
+  margin-right: 10px;
+  color: var(--text-muted);
+}
+
+.socialProofHot {
+  color: var(--coral-bright);
+}

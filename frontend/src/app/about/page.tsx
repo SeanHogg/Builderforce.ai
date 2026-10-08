@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import MethodologySection from '@/components/marketing/MethodologySection';
+import { HonestMarketingSection } from '@/components/marketing/HonestMarketingSection';
+import { TrustLine } from '@/components/marketing/TrustSignals';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import { Icon } from '@/components/ui/Icon';
 import { REFERENCE_DOMAINS, REFERENCE_FOUNDATIONS } from '@/lib/publicDestinations';
@@ -180,6 +182,8 @@ export default async function AboutPage() {
         <Link href="/soc2">{t('trust.cta')} <span aria-hidden="true">→</span></Link>
       </section>
 
+      <div className={styles.howWeMarket}><HonestMarketingSection /></div>
+
       <section className={styles.cta}>
         <p className={styles.eyebrow}>{t('cta.eyebrow')}</p>
         <h2>{t('cta.title')}</h2>
@@ -188,6 +192,7 @@ export default async function AboutPage() {
           <Link className={styles.primaryButton} href="/register">{t('cta.primary')} <span aria-hidden="true">→</span></Link>
           <Link className={styles.secondaryButton} href="/features">{t('cta.secondary')}</Link>
         </div>
+        <TrustLine align="center" />
       </section>
     </main>
   );

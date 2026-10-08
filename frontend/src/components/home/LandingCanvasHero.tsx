@@ -8,6 +8,7 @@ import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
 import { applyTemplateEntry } from '@/lib/templates/apply';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { NEW_CHAT_MODE, type ChatMode } from '@/lib/brain';
+import { SocialProofBar } from '@/components/marketing/SocialProofBar';
 import styles from './LandingCanvasHero.module.css';
 
 /**
@@ -188,6 +189,7 @@ export function LandingCanvasHero() {
           {t.rich('heroTitle', { em: (chunks) => <em>{chunks}</em> })}
         </h1>
         <p className={styles.lede}>{t('heroSub')}</p>
+        <SocialProofBar align="center" />
 
         <div className={`${styles.stage}${showBoard ? '' : ` ${styles.stagePending}`}`}>
           {showBoard && (

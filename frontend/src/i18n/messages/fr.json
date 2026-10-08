@@ -9278,9 +9278,9 @@
     "setupSteps": "{count, plural, one {# étape} other {# étapes}}"
   },
   "home": {
-    "heroBadge": "Builderforce.ai · Humains + agents IA",
+    "heroBadge": "Pour celles et ceux qui livrent — pas seulement qui planifient",
     "heroTitle": "Toute idée devient <em>réelle.</em>",
-    "heroSub": "Un canevas où votre équipe et vos agents IA conçoivent, construisent, révisent et livrent — sans dispersion des outils.",
+    "heroSub": "Pendant que votre idée attend dans un document, quelqu’un d’autre livre la sienne. Réunissez votre équipe et vos agents IA sur un canevas et soyez en production les premiers.",
     "heroPromptPlaceholder": "Que voulez-vous créer ?",
     "heroPromptAria": "Décrivez ce que vous voulez créer",
     "heroGetStarted": "Commencer à créer",
@@ -9606,8 +9606,8 @@
     "newsletterSubscribedConfirm": "Abonné ✓",
     "newsletterError": "Impossible de s'abonner. Réessayez.",
     "faqHeading": "Foire aux questions",
-    "ctaTitle": "Qu’allez-vous créer ?",
-    "ctaDesc": "Commencez par une demande et transformez-la avec votre équipe et des agents IA en un travail connecté, révisable et prêt à livrer. Sans carte bancaire.",
+    "ctaTitle": "Transformez votre idée en réalité — dès aujourd’hui.",
+    "ctaDesc": "Chaque semaine passée entre deux outils est une semaine où quelqu’un d’autre peut la livrer avant vous. Commencez gratuitement : votre canevas s’ouvre en quelques secondes.",
     "ctaSeeLiveAgents": "Explorer le canevas",
     "homepageFaq": [
       {
@@ -9755,7 +9755,7 @@
     "featuresLead": "Sites web, workflows, jeux de données, modèles, documents, personnes et agents : autant d’objets réels et connectés sur un même canevas, et non des pièces jointes dans une conversation.",
     "tension": {
       "eyebrow": "Le problème",
-      "heading": "Les idées deviennent réelles",
+      "heading": "Les idées meurent dans les passations",
       "body": "Chaque passage entre documents, conversations, tableaux, éditeurs et tableurs fait perdre du temps et oblige à répéter le contexte. Builderforce garde tout le parcours connecté, de la première idée à un résultat en production et prêt à l’emploi.",
       "fragments": [
         "Document",
@@ -10661,12 +10661,12 @@
     "success": "Merci — vous êtes inscrit."
   },
   "exitIntent": {
-    "badge": "Restons en contact",
-    "title": "Avant de partir…",
-    "description": "Recevez des idées pratiques pour créer avec des agents IA et les nouveautés des fonctionnalités Builderforce.ai.",
+    "badge": "Notes de terrain",
+    "title": "Vous laissez votre idée derrière vous ?",
+    "description": "La plupart des idées ne sont jamais livrées : elles s’enlisent entre les outils. Recevez nos notes de terrain pour garder la vôtre en mouvement, et les nouveautés de Builderforce.ai.",
     "emailAria": "Adresse e-mail",
     "emailPlaceholder": "vous@email.com",
-    "submit": "Me tenir au courant",
+    "submit": "Garder mon idée en mouvement",
     "submitting": "Abonnement en cours…",
     "privacy": "Pas de spam. Désinscription à tout moment.",
     "successTitle": "Vous êtes sur la liste !",
@@ -33006,5 +33006,68 @@
         "cancelled": "Le paiement a été annulé. Rien n’a été facturé."
       }
     }
+  },
+  "marketingTrust": {
+    "itemsAria": "Ce que commencer vous coûte",
+    "items": [
+      "Offre gratuite, sans carte bancaire",
+      "Opérationnel en quelques secondes, sans compte",
+      "Rien ne quitte votre appareil avant votre connexion",
+      "Read et Prove sont gratuits ; seul Build consomme"
+    ],
+    "socialProof": {
+      "builders": "{count, plural, one {Rejoignez # bâtisseur} other {Rejoignez # bâtisseurs}}",
+      "buildersThisWeek": "{count, plural, other {# arrivés cette semaine}}",
+      "projects": "{count, plural, one {# projet lancé} other {# projets lancés}}",
+      "agentRunsCompleted": "{count, plural, one {# exécution d’agent terminée} other {# exécutions d’agents terminées}}"
+    },
+    "proofLabel": "Vérifiez notre travail",
+    "proof": {
+      "method": "La méthode, en entier",
+      "architecture": "L’architecture d’Evermind, expliquée",
+      "compare": "Comparatifs face à face",
+      "diagnostics": "Lancer un diagnostic gratuit"
+    },
+    "pledge": "Pas de compte à rebours, pas de rareté inventée, pas de témoignages ni de chiffres que nous ne pouvons pas étayer.",
+    "pledgeLink": "Notre façon de faire du marketing"
+  },
+  "honestMarketing": {
+    "eyebrow": "Notre façon de faire du marketing",
+    "title": "La persuasion, à découvert",
+    "lead": "Toute page marketing cherche à convaincre. Celle-ci actionne les mêmes leviers que les plus grandes marques — les voici tous, ainsi que la seule ligne que nous ne franchissons pas : nous n’affirmons jamais rien de faux.",
+    "usesTitle": "Les leviers que nous actionnons",
+    "uses": [
+      {
+        "title": "Une promesse, répétée",
+        "description": "« Toute idée, rendue réelle » figure sur chaque page. La répétition ancre un message, alors nous répétons celui que nous pouvons tenir."
+      },
+      {
+        "title": "Le cadrage par la perte",
+        "description": "Nous vous disons ce que coûte l’attente : l’idée qui s’enlise entre les outils est celle qu’un autre livre en premier."
+      },
+      {
+        "title": "Une urgence réelle",
+        "description": "Votre canevas s’ouvre en quelques secondes et ne coûte rien : le meilleur moment pour commencer, c’est vraiment maintenant."
+      },
+      {
+        "title": "Une preuve sociale en direct",
+        "description": "Les chiffres affichés sont comptés chaque heure dans notre base de données. Sous un seuil, nous n’affichons rien plutôt que d’arrondir."
+      },
+      {
+        "title": "Une autorité que vous pouvez ouvrir",
+        "description": "La méthode publiée, l’architecture expliquée, des comparatifs nommés et un diagnostic gratuit — jugez par vous-même."
+      },
+      {
+        "title": "L’appartenance",
+        "description": "Nous écrivons pour celles et ceux qui livrent. Si c’est vous, ceci a été conçu pour vous."
+      }
+    ],
+    "refusesTitle": "La ligne que nous ne franchissons pas",
+    "refuses": [
+      "Les comptes à rebours et la rareté du type « plus que N » que nous n’avons pas",
+      "Les témoignages, logos ou chiffres que nous ne pouvons pas étayer",
+      "Des hypothèses présentées comme des résultats mesurés",
+      "Les désinscriptions cachées en petits caractères"
+    ]
   }
 }
