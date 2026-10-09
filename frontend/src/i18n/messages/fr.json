@@ -24303,6 +24303,7 @@
       "providerStalled": "Le fournisseur du modèle a accepté cette demande puis a cessé de répondre ; j’ai donc arrêté d’attendre. Votre demande n’a rien d’incorrect : renvoyez-la, ou choisissez un autre modèle dans le menu /.",
       "toolError": "Je n’ai pas pu préparer les modifications demandées du canevas : {detail}",
       "stepsExhausted": "J’ai utilisé toutes les étapes que ce tour autorise et je m’arrête ici ; tout ce que j’ai construit jusqu’à présent est sur le canevas. Dites « continuer » et je reprendrai là où je me suis arrêté.",
+      "buildNotAuthored": "J’ai préparé l’espace de travail de départ de l’application, mais je n’ai pas encore écrit l’application elle-même : l’aperçu affiche donc toujours la page modèle. Dites « continuer » et je construirai ce que vous avez demandé.",
       "answeredWithoutChange": "J’ai répondu ici, mais je n’ai rien placé sur le canevas. Demandez-moi de l’ajouter au canevas et je créerai l’objet correspondant.",
       "unverifiedCreationPlain": "J’ai décrit une modification du canevas sans la faire réellement : rien n’a donc été créé. Dites-moi quel objet créer et je le construirai sur le canevas.",
       "unverifiedCreationTabular": "J’ai décrit une modification du canevas sans la faire réellement : rien n’a donc été créé. Redemandez-le-moi et j’interrogerai le jeu de données de ce canevas pour construire l’artefact à partir de ses vraies valeurs.",

@@ -7,6 +7,7 @@ import {
   LOCAL_APP_KEY_FIELD,
   boundCanvasBuilds,
   canvasAppLocalKey,
+  claimableStarter,
   newAppTakesPrimary,
   newLocalAppKey,
   pendingCardImport,
@@ -109,6 +110,15 @@ export function useCanvasSessionApp({ nodes, nodesRef, setNodes, stage, placeApp
   }, [persistence]);
 
   const createApp = useCallback(async (input: CreateAppInput): Promise<BoundCanvasBuild> => {
+    // A requested app of the starter's platform IS the starter (`claimableStarter`): claim
+    // it, so the App surface runs the app the Brain then writes, not a second one beside it.
+    const starter = input.starter ? null : claimableStarter(sessionApps(nodesRef.current ?? []), input.modality);
+    if (starter) {
+      setNodes((current) => withPrimaryApp(current.map((node) => (node.id === starter.nodeId
+        ? { ...node, data: { ...node.data, title: input.title, [APP_STARTER_FIELD]: undefined } }
+        : node)), starter.nodeId));
+      return boundCanvasBuilds([{ ...starter, title: input.title, starter: false }])[0]!;
+    }
     const node = stage.createObject('build');
     const patch = await workspaceFor(input);
     // A STARTER lands only while it is still wanted: its caller has not stopped waiting

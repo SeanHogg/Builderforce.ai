@@ -4,6 +4,7 @@ import {
   appCardSignature,
   boundCanvasBuilds,
   canvasAppLocalKey,
+  claimableStarter,
   entryRedirectPage,
   newAppTakesPrimary,
   pendingCardImport,
@@ -69,8 +70,21 @@ describe('the primary app', () => {
     expect(newAppTakesPrimary(sessionApps([serverBuild('a')]), 'mobile')).toBe(false);
     // Studio's web starter gives way to the mobile app the request was for…
     expect(newAppTakesPrimary(sessionApps([localBuild('bb', { appStarter: true })]), 'mobile')).toBe(true);
-    // …but not to a second web app (the Brain is told to reuse the starter instead).
+    // …but not to a second web app (that request claims the starter — `claimableStarter`).
     expect(newAppTakesPrimary(sessionApps([localBuild('bb', { appStarter: true })]), 'designer')).toBe(false);
+  });
+});
+
+describe('claimableStarter', () => {
+  it('hands a requested app the lens starter of its own platform, and nothing else', () => {
+    const starter = localBuild('bb', { appStarter: true });
+    // Same platform: the request IS the starter, so it is claimed rather than duplicated.
+    expect(claimableStarter(sessionApps([starter]), 'designer')?.nodeId).toBe('bb');
+    // Another platform takes primary from it instead (`newAppTakesPrimary`); not claimed.
+    expect(claimableStarter(sessionApps([starter]), 'mobile')).toBeNull();
+    // An app someone asked for is never taken over.
+    expect(claimableStarter(sessionApps([serverBuild('a')]), 'designer')).toBeNull();
+    expect(claimableStarter([], 'designer')).toBeNull();
   });
 });
 

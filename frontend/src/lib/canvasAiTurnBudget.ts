@@ -111,6 +111,12 @@ export const MAX_INTERRUPTED_TURN_RECOVERIES = 2;
  *  in a row will swallow the third too. */
 export const MAX_STALLED_STREAMS = 2;
 
+/** A turn that provisioned a workspace (`canvas_create_build`) and then tried to end
+ * without writing a file. The model reads the seeded template as the deliverable, so the
+ * directive says what the template IS — a placeholder the user can see in the preview —
+ * and names the calls that turn it into the app. */
+export const BUILD_NOT_AUTHORED_DIRECTIVE = 'You provisioned the workspace but have not written any of the app yet: it still holds only the starter template, and the live preview shows its placeholder page, not what the user asked for. Building the app IS the request. Call canvas_list_build_files, then canvas_read_build_file and canvas_edit_build_file on the starter files (canvas_write_build_file only for genuinely new files) until the app the user described is implemented. Do not reply in prose until those files are written, and do not call canvas_create_build again.';
+
 /** Truncation is an OUTPUT-SIZE failure, so the recovery is to author smaller —
  * the opposite of "answer again", which would truncate identically. The canvas
  * itself is the durable place for length, so splitting across calls costs nothing. */

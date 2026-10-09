@@ -35,12 +35,13 @@ import {
   toolOutcomeChangedCanvas,
   unverifiedCreationClaim,
 } from '@/lib/canvasTurnOutcome';
-import { CANVAS_BUILD_WORKSPACE_WRITE_TOOLS } from '@/lib/canvasBuildTools';
+import { CANVAS_BUILD_FILE_WRITE_TOOLS, CANVAS_BUILD_WORKSPACE_WRITE_TOOLS } from '@/lib/canvasBuildTools';
 import { CANVAS_STREAM_STALL_MS, CanvasStreamStalledError, streamBoundedByActivity } from '@/lib/canvasStreamWatchdog';
 import type { CanvasNotices } from '@/lib/canvasNotices';
 import { canvasSystemMessages, promptNamedTools } from '@/lib/canvasAiSystemPrompt';
 import { CanvasRunAbortedError, GuestAiUnavailableError } from '@/lib/canvasAiErrors';
 import {
+  BUILD_NOT_AUTHORED_DIRECTIVE,
   CANVAS_BUILD_RESPONSE_TOKENS,
   CANVAS_RESPONSE_TOKENS,
   CANVAS_TOOL_LIMIT,
@@ -266,6 +267,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
    *  canvas tool. Two: the first re-states the command, the second runs with research
    *  and board re-reads already withdrawn and tells it why prose is not an artifact. */
   let mutationRecoveries = 0;
+  /** The same ladder for a build turn that provisioned a workspace and tried to end
+   *  without writing a file of the app (`BUILD_NOT_AUTHORED_DIRECTIVE`). */
+  let buildAuthoringRecoveries = 0;
   let degenerateAnswerRecoveryUsed = false;
   let interruptedTurnRecoveries = 0;
   /** Round-trips this turn abandoned because the provider went silent. */
@@ -317,6 +321,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     activeModel = fallback;
     activeModelStrict = true;
     mutationRecoveries = 0;
+    buildAuthoringRecoveries = 0;
     degenerateAnswerRecoveryUsed = false;
     interruptedTurnRecoveries = 0;
     options.onModelFallback?.(fallback);
@@ -362,6 +367,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   /** Set once a workspace write commits: the turn is BUILDING, so it gets the code
    *  output ceiling and the code step budget from then on. */
   let buildTurn = false;
+  /** Set once a file of the app itself is written (`CANVAS_BUILD_FILE_WRITE_TOOLS`) — the
+   *  difference between a build turn that delivered an app and one that only seeded the
+   *  starter template. */
+  let buildAuthored = false;
   /** Set once a response is cut off at the output ceiling. Re-sending the same
    *  artifact under the same ceiling truncates identically (measured: one consolidated
    *  document, five identical cut-offs in a row), so the rest of the turn gets the
@@ -549,6 +558,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             buildTurn = true;
             budget.stepCap = Math.max(budget.stepCap, MAX_CANVAS_BUILD_TURNS);
           }
+          if (CANVAS_BUILD_FILE_WRITE_TOOLS.has(call.name)) buildAuthored = true;
         }
         if (outcome && typeof outcome === 'object') {
           const result = outcome as { error?: unknown };
@@ -639,6 +649,28 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           return { action: 'stop', ok: false };
         }
         lastSpokenAnswer = spoken;
+        // A build turn that PROVISIONED a workspace and is ending without writing a file of
+        // the app. `canvasChanged` is true, so the act-now ladder below never fires, and the
+        // model's "I've created the project — you can now start adding files" reached the
+        // user above a "Hello World!" preview (session `local-148925cf`). Same rungs as that
+        // ladder — re-state, hand to a proven model, re-state once more — and when every
+        // rung is spent, say what the board actually holds instead of the model's claim.
+        if (!options.participant && buildTurn && !buildAuthored) {
+          if (buildAuthoringRecoveries === 0 || (
+            !switchToProvenModel(result.resolvedModel, `The prior model provisioned the workspace and stopped without writing the app. ${BUILD_NOT_AUTHORED_DIRECTIVE}`)
+            && buildAuthoringRecoveries < MAX_MUTATION_RECOVERIES
+          )) {
+            buildAuthoringRecoveries += 1;
+            messages.push({ role: 'assistant', content: result.text || finalText });
+            messages.push({ role: 'system', content: BUILD_NOT_AUTHORED_DIRECTIVE });
+            finalText = '';
+            return { action: 'continue' };
+          }
+          finalText = '';
+          if (buildAuthoringRecoveries === 0) return { action: 'continue' };
+          settled = await finish(notices.buildNotAuthored);
+          return { action: 'stop', ok: true };
+        }
         // ESCALATION LADDER for a model that discussed an imperative canvas request
         // instead of executing it. Each rung is tried only when the one before it is
         // spent, hardest-available remedy first:
@@ -725,7 +757,12 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // own docstring (see MAX_CANVAS_BUILD_TURNS): a workspace is written one file per
   // step, so hitting the cap there really does mean a part-written app. Everywhere
   // else, a changed board at the cap is a delivered board.
-  if (canvasChanged) return finish(loop.exhausted && buildTurn ? notices.stepsExhausted : notices.addedToCanvas);
+  // A build turn that only provisioned the workspace is neither: the board holds the
+  // starter template, so "added to the canvas" would misreport it.
+  if (canvasChanged) {
+    if (loop.exhausted && buildTurn) return finish(notices.stepsExhausted);
+    return finish(buildTurn && !buildAuthored ? notices.buildNotAuthored : notices.addedToCanvas);
+  }
   // From here down the string is a RUNTIME NOTICE, not something the model said. The
   // caller is told so it can record it as a failed turn instead of writing it into the
   // transcript as an assistant reply for the next turn to copy.

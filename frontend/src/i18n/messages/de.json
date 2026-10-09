@@ -24303,6 +24303,7 @@
       "providerStalled": "Der Modellanbieter hat diese Anfrage angenommen und dann nicht mehr geantwortet, deshalb warte ich nicht länger. An deiner Anfrage ist nichts falsch – schicke sie erneut oder wähle im Menü / ein anderes Modell.",
       "toolError": "Die gewünschten Änderungen an der Arbeitsfläche konnte ich nicht vorbereiten: {detail}",
       "stepsExhausted": "Ich habe alle Schritte aufgebraucht, die dieser Durchgang erlaubt, und höre hier auf; alles bisher Gebaute liegt auf der Arbeitsfläche. Sag „weiter“, dann mache ich genau dort weiter.",
+      "buildNotAuthored": "Ich habe den Start-Arbeitsbereich der App angelegt, die App selbst aber noch nicht geschrieben – die Vorschau zeigt daher weiterhin die Vorlagenseite. Sag „weiter“, dann baue ich, worum du gebeten hast.",
       "answeredWithoutChange": "Ich habe hier geantwortet, aber nichts auf der Arbeitsfläche abgelegt. Bitte mich, es der Arbeitsfläche hinzuzufügen, dann lege ich das Objekt dafür an.",
       "unverifiedCreationPlain": "Ich habe eine Änderung an der Arbeitsfläche beschrieben, sie aber nicht tatsächlich vorgenommen — es wurde also nichts erstellt. Sag mir, welches Objekt entstehen soll, dann baue ich es auf der Arbeitsfläche.",
       "unverifiedCreationTabular": "Ich habe eine Änderung an der Arbeitsfläche beschrieben, sie aber nicht tatsächlich vorgenommen — es wurde also nichts erstellt. Frag mich erneut, dann werte ich den Datensatz auf dieser Arbeitsfläche aus und baue das Artefakt aus seinen echten Werten.",

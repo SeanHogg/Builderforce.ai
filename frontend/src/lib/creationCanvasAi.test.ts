@@ -23,7 +23,7 @@ const { runCreationCanvasAi } = await import('./creationCanvasAi');
 // limits and the two ways it can end without failing change for reasons the loop
 // does not. Imported statically because neither reaches a transport.
 const {
-  MAX_CANVAS_TOOL_TURNS, MAX_CANVAS_BUILD_TURNS, CANVAS_BUILD_RESPONSE_TOKENS, CANVAS_TOOL_LIMIT,
+  MAX_CANVAS_TOOL_TURNS, MAX_CANVAS_BUILD_TURNS, CANVAS_BUILD_RESPONSE_TOKENS, BUILD_NOT_AUTHORED_DIRECTIVE, CANVAS_TOOL_LIMIT,
 } = await import('./canvasAiTurnBudget');
 const { CanvasRunAbortedError, isCanvasRunAborted } = await import('./canvasAiErrors');
 
@@ -928,9 +928,55 @@ describe('runCreationCanvasAi', () => {
 
       expect(mocks.streamChatCompletion.mock.calls[0][0].maxTokens).toBe(3_200);
       expect(mocks.streamChatCompletion.mock.calls[1][0].maxTokens).toBe(CANVAS_BUILD_RESPONSE_TOKENS);
-      // A build IS a canvas change: never "I couldn't prepare any canvas changes".
-      expect(answer).toBe(NOTICES.addedToCanvas);
+      // A build IS a canvas change: never "I couldn't prepare any canvas changes" — but a
+      // provisioned template is not the app either, so not "added to the canvas".
+      expect(answer).toBe(NOTICES.buildNotAuthored);
       expect(onUnanswered).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Session `local-148925cf` (ui 2026.10.27): the model called canvas_create_build, then
+     * ended with "I've created a new web project… you can now start adding files" above a
+     * "Hello World!" preview. Provisioning made `canvasChanged` true, so no ladder fired.
+     */
+    it('does not let a build turn end after only provisioning the workspace — it is sent back to write the app', async () => {
+      const create = vi.fn(() => ({ ok: true, applied: true }));
+      const write = vi.fn(() => ({ ok: true, applied: true, path: 'src/main.jsx' }));
+      mocks.streamChatCompletion
+        .mockResolvedValueOnce({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 'c1', name: 'canvas_create_build', args: JSON.stringify({ title: 'Plans', modality: 'designer' }) }] })
+        .mockResolvedValueOnce({ text: "I've created a new web project. You can now start adding files.", toolCalls: [], finishReason: 'stop' })
+        .mockResolvedValueOnce({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 'c2', name: 'canvas_write_build_file', args: JSON.stringify({ path: 'src/main.jsx', content: 'app' }) }] })
+        .mockResolvedValueOnce({ text: 'Your phone-plan site is live in the preview.', toolCalls: [], finishReason: 'stop' });
+
+      const answer = await runTurn({
+        prompt: 'Build a social media website that offers phone plans', canvasSnapshot: '{"objects":[]}', persistence: 'local',
+        canvasActions: [
+          { name: 'canvas_create_build', description: 'Create a build', parameters: { type: 'object' }, mutates: true, run: create },
+          { name: 'canvas_write_build_file', description: 'Write a file', parameters: { type: 'object' }, mutates: true, run: write },
+        ],
+      });
+
+      const third = mocks.streamChatCompletion.mock.calls[2][0].messages as Array<{ role: string; content: string }>;
+      expect(third.some((row) => row.role === 'system' && row.content === BUILD_NOT_AUTHORED_DIRECTIVE)).toBe(true);
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(answer).toBe('Your phone-plan site is live in the preview.');
+    });
+
+    it('reports a build that was provisioned but never written once every rung is spent, instead of the model claim', async () => {
+      const create = vi.fn(() => ({ ok: true, applied: true }));
+      mocks.streamChatCompletion
+        .mockResolvedValueOnce({ text: '', finishReason: 'tool_calls', toolCalls: [{ id: 'c1', name: 'canvas_create_build', args: JSON.stringify({ title: 'Plans', modality: 'designer' }) }] })
+        .mockResolvedValueOnce({ text: 'Project created — start adding files.', toolCalls: [], finishReason: 'stop' })
+        .mockResolvedValueOnce({ text: 'The project is ready for you to edit.', toolCalls: [], finishReason: 'stop' })
+        .mockResolvedValueOnce({ text: 'It is set up; go ahead and add your files.', toolCalls: [], finishReason: 'stop' });
+
+      const answer = await runTurn({
+        prompt: 'Build a social media website that offers phone plans', canvasSnapshot: '{"objects":[]}', persistence: 'local',
+        canvasActions: [{ name: 'canvas_create_build', description: 'Create a build', parameters: { type: 'object' }, mutates: true, run: create }],
+      });
+
+      expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(4);
+      expect(answer).toBe(NOTICES.buildNotAuthored);
     });
 
     it('gives a build turn the code step budget, and says so when it runs out mid-work', async () => {

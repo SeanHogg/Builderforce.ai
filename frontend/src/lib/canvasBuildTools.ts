@@ -591,6 +591,21 @@ export const CANVAS_BUILD_WORKSPACE_WRITE_TOOLS: ReadonlySet<string> = new Set([
   'canvas_restore_build_file',
 ]);
 
+/**
+ * The subset of {@link CANVAS_BUILD_WORKSPACE_WRITE_TOOLS} that writes the APP — every one
+ * but `canvas_create_build`, which only seeds the starter template.
+ *
+ * Measured why the distinction matters (session `local-148925cf`, ui 2026.10.27, "Build a
+ * social media website that offers phone plans"): the turn called `canvas_create_build`,
+ * read the provisioning as the deliverable, and stopped — the user got "I've created a new
+ * web project… you can now start adding files" above a preview reading "Hello World!".
+ * Counting provisioning as canvas work is right (it IS a board change); counting it as the
+ * app being built is not, and the runner needs to tell the two apart.
+ */
+export const CANVAS_BUILD_FILE_WRITE_TOOLS: ReadonlySet<string> = new Set(
+  [...CANVAS_BUILD_WORKSPACE_WRITE_TOOLS].filter((name) => name !== 'canvas_create_build'),
+);
+
 /** Every tool name this module contributes. Used by the guest-boundary contract. */
 export const CANVAS_BUILD_TOOL_NAMES = [
   'canvas_create_build',

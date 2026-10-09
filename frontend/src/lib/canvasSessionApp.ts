@@ -119,6 +119,22 @@ export function newAppTakesPrimary(apps: readonly SessionApp[], modality: Projec
   return !primary || (primary.starter && primary.modality !== modality);
 }
 
+/**
+ * The lens's STARTER that a requested app of `modality` takes over instead of landing beside.
+ *
+ * The starter is the lens's guess at the app, made before the request was read; a build of
+ * the SAME platform is that app, so it is claimed (renamed, starter flag dropped) rather
+ * than duplicated. Duplicating it is the failure this prevents (session `local-148925cf`):
+ * the Brain's `canvas_create_build` added a second website beside the starter, and since a
+ * same-platform app never takes primary (`newAppTakesPrimary`), the App surface kept
+ * running the untouched starter — any code the Brain wrote would have gone to an app
+ * nobody was looking at. A starter of ANOTHER platform is not claimed; that case is
+ * `newAppTakesPrimary`'s.
+ */
+export function claimableStarter(apps: readonly SessionApp[], modality: ProjectModality): SessionApp | null {
+  return apps.find((app) => app.starter && app.modality === modality) ?? null;
+}
+
 /** The ONE writer of the primary flag: `nodeId` gets it, every other build loses it. */
 export function withPrimaryApp<T extends BoardNode>(nodes: readonly T[], nodeId: string): T[] {
   return nodes.map((node) => {

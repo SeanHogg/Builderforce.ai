@@ -24303,6 +24303,7 @@
       "providerStalled": "The model provider accepted this request and then stopped responding, so I stopped waiting. Nothing is wrong with what you asked — send it again, or pick a different model from the / menu.",
       "toolError": "I couldn't prepare the requested canvas changes: {detail}",
       "stepsExhausted": "I used every step this turn allows and stopped here; everything I built so far is on the board. Say \"continue\" and I will pick up where I left off.",
+      "buildNotAuthored": "I set up the app's starter workspace but did not write the app itself, so the preview still shows the template page. Say \"continue\" and I will build what you asked for.",
       "answeredWithoutChange": "I answered here but did not put anything on the canvas. Ask me to add this to the canvas and I will create the object for it.",
       "unverifiedCreationPlain": "I described a canvas change but did not actually make one, so nothing was created. Tell me which object to create and I will build it on the canvas.",
       "unverifiedCreationTabular": "I described a canvas change but did not actually make one, so nothing was created. Ask me again and I will query the dataset on this canvas and build the artifact from its real values.",
