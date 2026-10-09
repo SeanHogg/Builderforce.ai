@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { listLocalCreationSessions, readLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { sessionHasApp } from '@/lib/canvasSessionApp';
+import { reportBackgroundFailure } from '@/lib/reportError';
 import { studioSessionPath } from '@/lib/studio/studioHost';
 import type { StudioCard } from './StudioCardList';
 
@@ -60,7 +61,12 @@ export function useStudioApps(): StudioCard[] {
         }));
         setCards(newestStudioCards([...local, ...server]));
       })
-      .catch(() => { /* the browser's own apps still stand */ });
+      // The browser's own apps still stand; the miss is reported, not swallowed.
+      .catch((error: unknown) => void reportBackgroundFailure({
+        title: 'StudioAppsListFailed',
+        message: error instanceof Error ? error.message : String(error),
+        level: 'warning',
+      }));
     return () => { cancelled = true; };
   }, [authReady, hasTenant]);
 
