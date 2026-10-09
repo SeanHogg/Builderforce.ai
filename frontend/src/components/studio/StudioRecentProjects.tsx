@@ -7,8 +7,6 @@ import { useAuth } from '@/lib/AuthContext';
 import { studioProjectPath } from '@/lib/studio/studioHost';
 import { StudioCardList, type StudioCard } from './StudioCardList';
 
-const SHOWN = 12;
-
 /**
  * The visitor's DURABLE Studio projects — the ones the Studio IDE (`/studio/project/<id>`)
  * opens. "Build it" no longer makes these (it starts a canvas session; see `StudioApps`),
@@ -29,9 +27,7 @@ export function StudioRecentProjects() {
         if (cancelled) return;
         setCards(all
           .filter((project) => project.origin === 'studio')
-          .map((project) => ({ key: String(project.id), href: studioProjectPath(project.id), title: project.name, updatedAt: project.updated_at ?? project.updatedAt ?? null }))
-          .sort((a, b) => Date.parse(b.updatedAt ?? '') - Date.parse(a.updatedAt ?? ''))
-          .slice(0, SHOWN));
+          .map((project) => ({ key: String(project.id), href: studioProjectPath(project.id), title: project.name, updatedAt: project.updated_at ?? project.updatedAt ?? null })));
       })
       .catch(() => { if (!cancelled) setCards([]); });
     return () => { cancelled = true; };

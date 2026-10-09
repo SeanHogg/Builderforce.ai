@@ -1,3 +1,16 @@
+## ✅ RESOLVED 2026-10-09 — Studio lens second review: the right app in front, no stray starter, one exit, one origin (frontend 2026.10.27)
+
+**Was (second review of 42c0674a8 + fixes):** Studio's web starter stayed the app the surface ran when the request was for a mobile app (logged in the roadmap the same day). A starter that answered after its 30s wait still landed, beside the build the released first turn made. The room's exit dropped a Studio reader on the bare board. "Open on canvas" left Studio's left-docked Brain on the canvas until a reload. The two Studio home lists each sorted and capped their cards. `studio.<apex>` sent only `/`, `/studio` and `/create` to the apex, so `/login` or `/dashboard` there still signed someone in on a second origin. `/brainstorm?prompt=` swallowed a plan limit.
+
+**Now:**
+- **Starter apps** (`APP_STARTER_FIELD`, `newAppTakesPrimary` in `lib/canvasSessionApp.ts`): the lens's app is created as a starter, and a build of another platform takes over as primary; one of the same platform does not (the BUILD prompt reuses it).
+- **A starter lands only while wanted**: `createApp` takes `starter` and an `AbortSignal`; `useCanvasEntryApp` aborts on timeout or failure, and a starter answering late, or after the board got an app another way, is dropped (its browser workspace discarded) with `StarterAppNotNeededError`, which is not reported as a failure.
+- **One exit** (`canvasLensExit`): the App surface, the chat and the room all leave through it; the room via `useCanvasLens().leaveSurface`.
+- **Leaving a lens restores the dock** the person keeps (stored mode, side, open; never open on a phone).
+- **`StudioCardList` owns order and cap** (`newestStudioCards`); `useStudioApps` and `StudioRecentProjects` hand it cards unsorted.
+- **Apex-homed product host**: `PRODUCT_HOSTS[]` is `home: 'apex' | 'host'` + `hostPaths`; Studio's host keeps only `/auth/*` and sends every other path the middleware sees to the apex (prerendered pages the assets binding answers are out of the middleware's reach).
+- **`/brainstorm` shows `UpgradeModal`** on a plan limit; the `guest_prompts.surface` schema comment points at `GUEST_PROMPT_SURFACES`.
+
 ## ✅ RESOLVED 2026-10-09 — Studio lens review: the lens holds its surface, sign-up keeps it, and the shell steps aside (frontend 2026.10.26)
 
 **Was (review of 42c0674a8):** Escape in the App surface, a card revealed from the conversation, or a Brain-made room dropped a Studio visitor onto a bare board with no way back. The lens lifted the phase before the board loaded and SAVED it, pinning mature boards to Make. Guest sign-up (the turn limit, the account gate) and the Files panel's OAuth return went to `/create/<id>`, losing the lens. A create that never settled held the first turn forever, and leaving Studio mid-create released it early. The canvas tour was offered over Studio's app. Signed-in visitors without a workspace were filed as guest leads. The new "never a second build" rule forbade a mobile app beside a website on every board. The operator top-bar menu button, bottom nav and team footer still framed Studio. `studio.builderforce.ai` kept guest boards (and a host-only sign-in) apart from the apex. The Studio home listed only durable projects nothing creates any more.

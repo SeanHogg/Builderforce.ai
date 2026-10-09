@@ -18,10 +18,14 @@
  *   - a failure RELEASES the first turn rather than holding it forever — the turn runs and
  *     the Brain can make the build itself. A create that never answers (a request that
  *     hangs, an IndexedDB open that never settles) is a failure too: it is given
- *     `ENTRY_APP_TIMEOUT_MS`, then the turn goes ahead;
+ *     `ENTRY_APP_TIMEOUT_MS`, then the turn goes ahead — and the create is ABORTED, so if it
+ *     answers late it does not land a second, empty app beside the one the turn made;
  *   - a create this mount STARTED holds the turn until it settles, whatever the lens says
  *     meanwhile — leaving Studio mid-create must not release a turn that would then make a
  *     second build beside the one about to land.
+ *
+ * The app is created as a STARTER (`APP_STARTER_FIELD`): a guess at the platform made
+ * before the request was read, which a build of another platform then takes over from.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { withTimeout } from '@/lib/withTimeout';
@@ -29,7 +33,7 @@ import { canvasAppFiles } from '@/lib/canvasApp';
 import { sessionHasApp } from '@/lib/canvasSessionApp';
 import type { ProjectModality } from '@/lib/modality';
 import { reportBackgroundFailure } from '@/lib/reportError';
-import type { CanvasSessionAppActions } from './useCanvasSessionApp';
+import { StarterAppNotNeededError, type CanvasSessionAppActions } from './useCanvasSessionApp';
 import type { CreationFlowNode } from '../CreationNode';
 
 export interface EntryAppFacts {
@@ -92,9 +96,15 @@ export function useCanvasEntryApp({ boardLoaded, nodes, modality, canEdit, appTi
     // decision, and it must still read "creating".
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCreating(true);
-    void withTimeout(createApp({ title: appTitle, modality }), ENTRY_APP_TIMEOUT_MS)
+    // Aborted on ANY failure, the timeout included: a starter that answers after the turn
+    // was released is dropped rather than landed (`createApp`).
+    const stopWaiting = new AbortController();
+    void withTimeout(createApp({ title: appTitle, modality, starter: true, signal: stopWaiting.signal }), ENTRY_APP_TIMEOUT_MS)
       .catch((error: unknown) => {
+        stopWaiting.abort();
         setFailed(true);
+        // The board got its app another way (the Brain built one) — nothing went wrong.
+        if (error instanceof StarterAppNotNeededError) return;
         void reportBackgroundFailure({
           title: 'CanvasEntryAppCreateFailed',
           message: error instanceof Error ? error.message : String(error),

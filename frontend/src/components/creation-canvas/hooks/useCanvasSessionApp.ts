@@ -3,9 +3,11 @@ import { scaffoldForModality } from '@builderforce/ide-templates';
 import { canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
 import { appModalityFor, type BoundCanvasBuild } from '@/lib/canvasBuildTools';
 import {
-  APP_PRIMARY_FIELD,
+  APP_STARTER_FIELD,
   LOCAL_APP_KEY_FIELD,
   boundCanvasBuilds,
+  canvasAppLocalKey,
+  newAppTakesPrimary,
   newLocalAppKey,
   pendingCardImport,
   primarySessionApp,
@@ -40,6 +42,23 @@ export function useOpenCanvasApp({ setNodes, showApp }: {
   }, [setNodes, showApp]);
 }
 
+export interface CreateAppInput {
+  title: string;
+  modality: ProjectModality;
+  /** A lens's starter, made before anyone named a platform (`APP_STARTER_FIELD`). */
+  starter?: boolean;
+  /** Aborted when the caller stops waiting — a starter that answers after that is dropped. */
+  signal?: AbortSignal;
+}
+
+/** A starter that answered when it was no longer wanted (see `createApp`). Not a failure. */
+export class StarterAppNotNeededError extends Error {
+  constructor() {
+    super('The starter app was not needed any more.');
+    this.name = 'StarterAppNotNeededError';
+  }
+}
+
 export interface CanvasSessionAppActions {
   apps: SessionApp[];
   /** The app the App surface runs. */
@@ -47,7 +66,7 @@ export interface CanvasSessionAppActions {
   /** The apps as the Brain's build tools address them. Read through a ref by the tools. */
   buildsRef: RefObject<BoundCanvasBuild[]>;
   /** A new Builder object with a workspace behind it — durable, or in this browser. */
-  createApp: (input: { title: string; modality: ProjectModality }) => Promise<BoundCanvasBuild>;
+  createApp: (input: CreateAppInput) => Promise<BoundCanvasBuild>;
   /** Give an existing, unbound Builder object a workspace. */
   provisionApp: (nodeId: string, input: { title: string; modality: ProjectModality; containerProjectId?: number | null }) => Promise<void>;
   /** Make `nodeId` the app the surface runs. */
@@ -89,16 +108,29 @@ export function useCanvasSessionApp({ nodes, nodesRef, setNodes, stage, placeApp
     return { title: input.title, modality, [LOCAL_APP_KEY_FIELD]: key, status: 'Workspace ready' };
   }, [persistence]);
 
-  const createApp = useCallback(async (input: { title: string; modality: ProjectModality }): Promise<BoundCanvasBuild> => {
+  const createApp = useCallback(async (input: CreateAppInput): Promise<BoundCanvasBuild> => {
     const node = stage.createObject('build');
     const patch = await workspaceFor(input);
-    // The first app on a board is the one the surface runs; a second does not take over.
-    const first = sessionApps(nodesRef.current ?? []).length === 0;
-    node.data = { ...node.data, ...patch, ...(first ? { [APP_PRIMARY_FIELD]: true } : {}) };
-    setNodes((current) => [...current, ...placeAppendedRef.current(current, [node as CreationFlowNode])]);
-    const created = boundCanvasBuilds(sessionApps([node as CreationFlowNode]))[0];
+    // A STARTER lands only while it is still wanted: its caller has not stopped waiting
+    // (`signal` — the lens's first turn ran without it), and nothing else has given the
+    // board an app meanwhile (the Brain's own `canvas_create_build`). Otherwise it would be
+    // a second, empty app beside the real one. A browser-held workspace is discarded; a
+    // durable project already created on the server stays, unbound, like any other.
+    if (input.starter && (input.signal?.aborted || sessionApps(nodesRef.current ?? []).length > 0)) {
+      const localKey = canvasAppLocalKey(patch as Record<string, unknown>);
+      if (localKey) void discardLocalWorkspace(localKey);
+      throw new StarterAppNotNeededError();
+    }
+    node.data = { ...node.data, ...patch, ...(input.starter ? { [APP_STARTER_FIELD]: true } : {}) };
+    const created = sessionApps([node as CreationFlowNode])[0];
     if (!created) throw new Error('The workspace was created but could not be bound to the board.');
-    return created;
+    // The board's first app is the one the surface runs; a second takes over only from a
+    // lens's starter of another platform (`newAppTakesPrimary`).
+    setNodes((current) => {
+      const next = [...current, ...placeAppendedRef.current(current, [node as CreationFlowNode])];
+      return newAppTakesPrimary(sessionApps(current), created.modality) ? withPrimaryApp(next, node.id) : next;
+    });
+    return boundCanvasBuilds([created])[0]!;
   }, [nodesRef, placeAppendedRef, setNodes, stage, workspaceFor]);
 
   const provisionApp = useCallback(async (nodeId: string, input: { title: string; modality: ProjectModality; containerProjectId?: number | null }) => {

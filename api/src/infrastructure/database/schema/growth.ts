@@ -1494,7 +1494,7 @@ export const marketingSessionPrompts = pgTable('marketing_session_prompts', {
    *  around it in the visitor journey (`activity_log`, `target_id`). Null for
    *  prompts recorded before 1109 and for clients that could not mint one. */
   visitId:    varchar('visit_id', { length: 64 }),
-  /** 'landing' | 'canvas' | 'brain' | 'room' — the vocabulary lives in the domain layer. */
+  /** Where the prompt was typed — `GUEST_PROMPT_SURFACES` (domain/marketing/GuestPrompt.ts) is the vocabulary. */
   surface:    varchar('surface', { length: 24 }).notNull().default('landing'),
   /** The chat/work mode armed on the composer when it was submitted (0409). */
   mode:       varchar('mode', { length: 16 }),

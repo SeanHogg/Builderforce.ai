@@ -9,7 +9,6 @@ import { reportBackgroundFailure } from '@/lib/reportError';
 import { studioSessionPath } from '@/lib/studio/studioHost';
 import type { StudioCard } from './StudioCardList';
 
-const SHOWN = 12;
 /** One page of the visitor's boards is plenty to find a dozen apps in. */
 const SERVER_PAGE = 50;
 
@@ -17,11 +16,6 @@ const SERVER_PAGE = 50;
 export function summaryHasApp(session: Pick<CreationSessionSummary, 'preview'>): boolean {
   const preview = session.preview;
   return !!preview && (!!preview.kinds?.includes('build') || !!preview.objects?.some((object) => object.kind === 'build'));
-}
-
-/** Newest first, the first `SHOWN`. */
-export function newestStudioCards(cards: readonly StudioCard[]): StudioCard[] {
-  return [...cards].sort((a, b) => Date.parse(b.updatedAt ?? '') - Date.parse(a.updatedAt ?? '')).slice(0, SHOWN);
 }
 
 /** The boards this browser holds that have an app — a guest's included. */
@@ -51,7 +45,7 @@ export function useStudioApps(): StudioCard[] {
     let cancelled = false;
     const local = localStudioCards();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage exists only after mount.
-    setCards(newestStudioCards(local));
+    setCards(local);
     if (!hasTenant) return () => { cancelled = true; };
     creationSessionsApi.list('active', null, { offset: 0, limit: SERVER_PAGE })
       .then(({ sessions }) => {
@@ -59,7 +53,7 @@ export function useStudioApps(): StudioCard[] {
         const server = sessions.filter(summaryHasApp).map((session) => ({
           key: session.id, href: studioSessionPath(session.id), title: session.title, updatedAt: session.lastActivityAt,
         }));
-        setCards(newestStudioCards([...local, ...server]));
+        setCards([...local, ...server]);
       })
       // The browser's own apps still stand; the miss is reported, not swallowed.
       .catch((error: unknown) => void reportBackgroundFailure({

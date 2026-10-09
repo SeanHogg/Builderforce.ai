@@ -26,8 +26,12 @@ describe('product hosts', () => {
     expect(productHostRedirect('studio.builderforce.ai', '/studio/local-abc')).toEqual({ pathname: '/studio/local-abc', hostname: 'builderforce.ai' });
     expect(productHostRedirect('studio.builderforce.ai', '/create/local-abc')).toEqual({ pathname: '/create/local-abc', hostname: 'builderforce.ai' });
     expect(productHostRedirect('studio.localhost', '/')).toEqual({ pathname: '/studio', hostname: 'localhost' });
-    // Whole segments only: a path that merely starts with the letters stays.
-    expect(productHostRedirect('studio.builderforce.ai', '/creators')).toBeNull();
+    // Every page, not a list of them: one nobody named still lands on the apex.
+    expect(productHostRedirect('studio.builderforce.ai', '/login')).toEqual({ pathname: '/login', hostname: 'builderforce.ai' });
+    expect(productHostRedirect('studio.builderforce.ai', '/dashboard/x')).toEqual({ pathname: '/dashboard/x', hostname: 'builderforce.ai' });
+    // The auth callbacks stay — whole segments only: `/authors` is not `/auth`.
+    expect(productHostRedirect('studio.builderforce.ai', '/auth/magic-link')).toBeNull();
+    expect(productHostRedirect('studio.builderforce.ai', '/authors')).toEqual({ pathname: '/authors', hostname: 'builderforce.ai' });
   });
 });
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { newestStudioCards, summaryHasApp } from './useStudioApps';
+import { summaryHasApp } from './useStudioApps';
+import { newestStudioCards } from './StudioCardList';
 
 describe('Studio apps — which boards the Studio home lists', () => {
   it('lists a server board whose preview holds a build, by kind or by object', () => {

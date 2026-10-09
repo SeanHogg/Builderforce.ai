@@ -690,7 +690,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const { setAutoApplyMode, setSessionMode, setMemoryMode } = useCanvasSessionModes({ autoApplyRef, nodes, persistence, sessionId, sessionRole, setAutoApply, setDatasetRowLimit, setFramePresets, setMemoryEnabled, setNotice, setPendingInvitations, setServerTemplates, setSessionMode_, shareOpen, t, templateOpen });
   const { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard, boardLoaded } = useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, onBoardLoaded: settleLoadedPhase, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef });
   // HOW THIS BOARD IS PRESENTED (`lib/canvasLens.ts`) — every lens decision reads this def, never the id.
-  const lensState = useCanvasLens({ lens, sessionId, surface, showSurface: setSurfaceState, phase, setPhase, boardLoaded, updateBrainDock, phoneViewport }), lensDef = lensState.def;
+  const lensState = useCanvasLens({ lens, sessionId, surface, showSurface: setSurfaceState, chooseSurface: setSurface, phase, setPhase, boardLoaded, updateBrainDock, phoneViewport }), lensDef = lensState.def;
   const showApp = useCallback(() => setSurface('app'), [setSurface]);
   const openApp = useOpenCanvasApp({ setNodes, showApp });
   useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialSurface, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRelay, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef });
@@ -1093,7 +1093,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
             title={title} members={roomOccupants} speech={roomSpeechBySeat} onSelectSpeech={revealSpeechInChat} currentUserId={rosterSelfId} live={livePresence}
             onPresence={sendPresence} sceneInput={roomSceneInput} brainSurface={brainSurface} threeDNodes={threeDNodes} edges={edges} describe={describeThreeD}
             renderCard={renderThreeDCard} selectedIds={effectiveSelectedIds} onSelect={selectThreeDObject} onMove={moveThreeDObjects} creations={roomCreations}
-            onOpenCreation={openRoomCreation} onPublishRoom={openPublishPanel} sessionInitiallyOpen={comparisonModelIds.length >= 2} onExit={() => setSurface('graph')}
+            onOpenCreation={openRoomCreation} onPublishRoom={openPublishPanel} sessionInitiallyOpen={comparisonModelIds.length >= 2} onExit={lensState.leaveSurface}
           />}
         />
 

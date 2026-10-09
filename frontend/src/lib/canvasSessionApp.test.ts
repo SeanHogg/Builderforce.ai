@@ -5,6 +5,7 @@ import {
   boundCanvasBuilds,
   canvasAppLocalKey,
   entryRedirectPage,
+  newAppTakesPrimary,
   pendingCardImport,
   primarySessionApp,
   sessionApps,
@@ -60,6 +61,16 @@ describe('the primary app', () => {
     expect(next.filter((node) => node.data.appPrimary === true).map((node) => node.id)).toEqual(['bb']);
     // A code card is never touched.
     expect(next[2]).toBe(board[2]);
+  });
+
+  it('goes to a new app only on an empty board, or over a lens starter of another platform', () => {
+    expect(newAppTakesPrimary([], 'designer')).toBe(true);
+    // An app someone asked for keeps its place.
+    expect(newAppTakesPrimary(sessionApps([serverBuild('a')]), 'mobile')).toBe(false);
+    // Studio's web starter gives way to the mobile app the request was for…
+    expect(newAppTakesPrimary(sessionApps([localBuild('bb', { appStarter: true })]), 'mobile')).toBe(true);
+    // …but not to a second web app (the Brain is told to reuse the starter instead).
+    expect(newAppTakesPrimary(sessionApps([localBuild('bb', { appStarter: true })]), 'designer')).toBe(false);
   });
 });
 

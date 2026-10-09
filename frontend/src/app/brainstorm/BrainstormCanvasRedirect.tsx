@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { openedBoardHref } from '@/lib/openedBoardHref';
 import { startCreationSession } from '@/lib/canvas/startCreationSession';
+import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
+import { UpgradeModal } from '@/components/UpgradeModal';
 
 /**
  * Compatibility adapter for `/brainstorm`: Brain conversations now live on
@@ -17,6 +19,7 @@ export function BrainstormCanvasRedirect() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { authReady, isAuthenticated, hasTenant } = useAuth();
+  const [planError, setPlanError] = useState<PlanLimitError | null>(null);
 
   useEffect(() => {
     // Wait for the stored session, as `/create/new` does: before it is read, everyone looks
@@ -41,11 +44,15 @@ export function BrainstormCanvasRedirect() {
       if (!cancelled) router.replace('/create/new');
     };
 
-    void open().catch(() => {
-      if (!cancelled) router.replace('/create');
+    void open().catch((error: unknown) => {
+      if (cancelled) return;
+      // A plan limit is the one failure worth a stop: say why, with the way up, as
+      // `/create/new` and the dashboard do. Anything else lands in the library.
+      if (isPlanLimitError(error)) setPlanError(error);
+      else router.replace('/create');
     });
     return () => { cancelled = true; };
   }, [authReady, hasTenant, isAuthenticated, router, searchParams]);
 
-  return null;
+  return <UpgradeModal error={planError} onClose={() => { setPlanError(null); router.replace('/create'); }} />;
 }

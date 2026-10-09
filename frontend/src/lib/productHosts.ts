@@ -19,10 +19,15 @@
  * the sign-in cookie is host-only — both are per ORIGIN. Studio started without an
  * account on `studio.builderforce.ai` would keep its boards where `builderforce.ai`
  * never sees them (never listed, never claimed by "Keep your work"), and someone signed
- * in on the apex would arrive on the studio host as a guest. So a host may name
- * `apexPaths`: requests for those go to the SAME path on the apex, and the subdomain is
- * an address for the product rather than a second home for its data. Everything else on
- * the host (an auth callback, say) is served as is.
+ * in on the apex would arrive on the studio host as a guest. So a host whose product keeps
+ * its work in the browser is homed on the APEX (`home: 'apex'`): every request to it goes
+ * to the SAME path on the apex, and the subdomain is an address for the product rather
+ * than a second home for its data. Its `hostPaths` are the exceptions served where they
+ * land — the auth callbacks, whose redirect URIs name the host. Listing the exceptions
+ * rather than the paths that move is the point: a page nobody thought to list (`/login`,
+ * `/dashboard`) would otherwise sign someone in on an origin the rest of the product
+ * never reads. (A path the Worker never sees — a prerendered page the assets binding
+ * answers — is out of the middleware's reach either way.)
  *
  * Import-free on purpose: the middleware ships in the Worker bundle.
  */
@@ -32,9 +37,10 @@ export interface ProductHost {
   label: string;
   /** The route the product lives under. */
   route: string;
-  /** Path prefixes whose requests belong on the APEX origin (see the file note). `/` sends
-   *  the host root to `route` there. Empty = everything is served on this host. */
-  apexPaths: readonly string[];
+  /** Where the product's pages are served: on the apex origin (see the file note), or on this host. */
+  home: 'apex' | 'host';
+  /** For an apex-homed host, the path prefixes still served on the host itself. */
+  hostPaths: readonly string[];
 }
 
 /** Where a product-host request goes instead: a path, and whether on the apex origin. */
@@ -46,8 +52,8 @@ export interface ProductHostTarget {
 
 export const PRODUCT_HOSTS: readonly ProductHost[] = [
   // Studio starts guest canvases (`/studio/<sessionId>` is a canvas board) — they live on the apex.
-  { label: 'studio', route: '/studio', apexPaths: ['/', '/studio', '/create'] },
-  { label: 'spawn', route: '/spawn', apexPaths: [] },
+  { label: 'studio', route: '/studio', home: 'apex', hostPaths: ['/auth'] },
+  { label: 'spawn', route: '/spawn', home: 'host', hostPaths: [] },
 ];
 
 /** The product a hostname belongs to, or null for the apex and everything else. */
@@ -56,14 +62,14 @@ export function productHostOf(hostname: string): ProductHost | null {
 }
 
 const underPath = (pathname: string, prefix: string): boolean =>
-  prefix === '/' ? pathname === '/' : pathname === prefix || pathname.startsWith(`${prefix}/`);
+  pathname === prefix || pathname.startsWith(`${prefix}/`);
 
 /** Where a request for `pathname` on `hostname` should go instead, or null to serve it as is. */
 export function productHostRedirect(hostname: string, pathname: string): ProductHostTarget | null {
   const host = productHostOf(hostname);
   if (!host) return null;
   const target = pathname === '/' ? host.route : pathname;
-  if (host.apexPaths.some((prefix) => underPath(pathname, prefix))) {
+  if (host.home === 'apex' && !host.hostPaths.some((prefix) => underPath(pathname, prefix))) {
     return { pathname: target, hostname: hostname.slice(host.label.length + 1) };
   }
   return pathname === '/' ? { pathname: target, hostname: null } : null;

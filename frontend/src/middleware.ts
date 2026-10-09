@@ -102,9 +102,9 @@ function ensureLocaleCookie(request: NextRequest, res: NextResponse): NextRespon
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // A product host (`studio.`, `spawn.`) sends its root to the product's route, and the
-  // paths whose work lives in the browser to the apex origin (see `lib/productHosts.ts`
-  // for why a redirect, not a rewrite, and why one origin).
+  // A product host (`studio.`, `spawn.`) sends its root to the product's route, and an
+  // apex-homed host sends everything but its auth callbacks to the apex origin (see
+  // `lib/productHosts.ts` for why a redirect, not a rewrite, and why one origin).
   const productTarget = productHostRedirect(request.nextUrl.hostname, pathname);
   if (productTarget) {
     const url = request.nextUrl.clone();

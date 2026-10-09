@@ -110,6 +110,18 @@ export function canvasLensHome(def: CanvasLensDef): CanvasSurfaceId | null {
   return def.holdsSurface ? def.surface : null;
 }
 
+/**
+ * Where "leave this surface" goes under a lens: the lens's HOME surface when it keeps one,
+ * otherwise the board — or null when the reader is already home, where leaving is not a
+ * thing. ONE answer for every surface's exit (the App surface's Escape, the chat's "open
+ * the board", the room's exit), so none of them can strand a Studio reader on a bare board.
+ */
+export function canvasLensExit(def: CanvasLensDef, surface: CanvasSurfaceId): CanvasSurfaceId | null {
+  const home = canvasLensHome(def);
+  if (home === surface) return null;
+  return home ?? 'graph';
+}
+
 /** Where each lens addresses a session — one row per lens, beside the registry. */
 const LENS_SESSION_PATHS: Readonly<Record<CanvasLens, (sessionId: string) => string>> = {
   canvas: (sessionId) => `/create/${encodeURIComponent(sessionId)}`,

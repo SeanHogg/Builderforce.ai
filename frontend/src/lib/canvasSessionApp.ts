@@ -35,6 +35,9 @@ import { serverFileStore, type WorkspaceFileStore } from './workspace/workspaceF
 export const APP_PRIMARY_FIELD = 'appPrimary';
 export const LOCAL_APP_KEY_FIELD = 'localAppKey';
 export const APP_IMPORT_HASH_FIELD = 'appImportHash';
+/** The app a LENS made before the first turn (`useCanvasEntryApp`) — a guess at the
+ *  platform, made before anyone said which. See {@link newAppTakesPrimary}. */
+export const APP_STARTER_FIELD = 'appStarter';
 
 type BoardNode = { id: string; data: { [key: string]: unknown; kind: string } };
 
@@ -48,6 +51,8 @@ export interface SessionApp {
   localKey: string | null;
   store: WorkspaceFileStore;
   primary: boolean;
+  /** Made by a lens on entry, not asked for ({@link APP_STARTER_FIELD}). */
+  starter: boolean;
 }
 
 /**
@@ -89,6 +94,7 @@ export function sessionApps(nodes: ReadonlyArray<BoardNode>): SessionApp[] {
       localKey,
       store,
       primary: node.data[APP_PRIMARY_FIELD] === true,
+      starter: node.data[APP_STARTER_FIELD] === true,
     });
   }
   return apps;
@@ -97,6 +103,20 @@ export function sessionApps(nodes: ReadonlyArray<BoardNode>): SessionApp[] {
 /** The app the App surface runs: the flagged one, otherwise the first. */
 export function primarySessionApp(apps: readonly SessionApp[]): SessionApp | null {
   return apps.find((app) => app.primary) ?? apps[0] ?? null;
+}
+
+/**
+ * Whether a NEW app of `modality` becomes the one the App surface runs.
+ *
+ * The board's first app always does; a second normally does not take over. The exception
+ * is a lens's STARTER: Studio makes a web app before the first turn so the turn has a build
+ * to write into, but "build me an iPhone app" then makes a React Native build — and the
+ * person must see that one, not the empty web starter in front of it. A build of the
+ * starter's own platform does not take over (the Brain is told to reuse it instead).
+ */
+export function newAppTakesPrimary(apps: readonly SessionApp[], modality: ProjectModality): boolean {
+  const primary = primarySessionApp(apps);
+  return !primary || (primary.starter && primary.modality !== modality);
 }
 
 /** The ONE writer of the primary flag: `nodeId` gets it, every other build loses it. */
