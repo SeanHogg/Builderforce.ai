@@ -1,3 +1,9 @@
+## ✅ RESOLVED 2026-10-09 — No "Built with" badge in the Studio/canvas preview (frontend 2026.10.29)
+
+**Was:** the in-browser preview runtime injects its "Built with Builderforce.ai" badge by default, and `bootSharedPreviewRuntime` never turned it off, so every Studio and canvas preview showed it over the builder's own app.
+
+**Now:** `lib/browserRuntime/previewRuntime.ts` boots with `attribution: false`. The badge stays on published sites, where the API adds its own "Made with Builderforce.ai" (free tier, `api/src/application/ide/siteAttribution.ts`).
+
 ## ✅ RESOLVED 2026-10-09 — Studio build turns: provisioning is not the app, and a same-platform build claims the starter (frontend 2026.10.28)
 
 **Was (session `local-148925cf`, "Build a social media website that offers phone plans", gemini-2.5-flash):** the Brain called `canvas_create_build`, then ended with "I've created a new web project… you can now start adding files" above a "Hello World!" preview. Two faults. (1) Provisioning answers `applied: true`, so `canvasChanged` was true and no act-now ladder fired; the runner accepted the scaffold as the deliverable. (2) The board already held Studio's web starter, and the Brain made a SECOND website beside it instead of reusing it (the BUILD prompt only asked it to). A same-platform app never takes primary, so the App surface kept running the untouched starter; code written to the new build would have gone to an app nobody was looking at.

@@ -11,6 +11,10 @@
  * (`api/src/presentation/middleware/browserPreviewOrigin.ts`).
  *
  * The package is imported lazily, so the editor's bundle pays nothing until Run.
+ *
+ * No "Built with" badge here: this preview is the builder's own workspace, inside
+ * Builderforce already. The badge belongs on the PUBLISHED site, where the platform
+ * adds its own ("Made with Builderforce.ai", free tier) — `api/src/application/ide/siteAttribution.ts`.
  */
 import type { PreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 
@@ -20,7 +24,7 @@ let booting: Promise<PreviewRuntime> | null = null;
 
 export function bootSharedPreviewRuntime(): Promise<PreviewRuntime> {
   booting ??= import('@seanhogg/builderforce-webcontainers')
-    .then(({ bootPreviewRuntime }) => bootPreviewRuntime({ relayUrl: RELAY_URL }))
+    .then(({ bootPreviewRuntime }) => bootPreviewRuntime({ relayUrl: RELAY_URL, attribution: false }))
     .catch((error: unknown) => {
       booting = null; // a later Run may retry (the relay was unreachable, say)
       throw error;
