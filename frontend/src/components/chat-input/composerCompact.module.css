@@ -1,18 +1,28 @@
 /*
- * The compact composer (a workspace's docked Brain): the shared `/` options
- * trigger reads as ONE chip, "⚡ Work · Builderforce Free ▾", instead of a slash,
- * a mode pill and a monospace model name side by side. Same control and same
- * menu as every other composer; only its face changes where space is tight.
+ * The compact composer (a docked Brain — a workspace's, or the canvas's Brain
+ * panel): the shared `/` options trigger reads as quiet text, "Work ▾", instead of
+ * a slash, a mode icon, a mode pill and a monospace model name side by side. The
+ * mode stays on its face because it decides whether the turn may dispatch real
+ * work; the model in use is still named in the trigger's tooltip and accessible
+ * name, and in the menu it opens. Same control and same menu as every other
+ * composer; only its face changes where space is tight.
  */
 
 .compact :global(.bf-pmenu__trigger) {
-  height: 30px;
+  height: var(--chat-ctl-size, 32px);
   gap: 6px;
   padding: 0 10px;
-  border: 1px solid var(--border-subtle);
+  border: 0;
   border-radius: var(--radius-full);
-  background: var(--bg-surface);
-  max-width: 230px;
+  background: transparent;
+  color: var(--text-secondary);
+  max-width: 200px;
+}
+
+.compact :global(.bf-pmenu__trigger):hover,
+.compact :global(.bf-pmenu__trigger.is-open) {
+  background: var(--surface-interactive);
+  color: var(--text-primary);
 }
 
 .compact :global(.bf-pmenu__trigger)::after {
@@ -39,16 +49,19 @@
 .compact :global(.bf-pmenu__mode) {
   padding: 0;
   background: transparent;
-  color: var(--text-primary);
+  color: inherit;
   font-size: var(--font-size-small);
+  font-weight: 600;
+}
+
+/* The mode's icon, and the model name beside a mode: named in the tooltip and the
+   menu instead. A host that wires no mode keeps the model as the trigger's face. */
+.compact :global(.bf-pmenu__mode) > [aria-hidden='true'],
+.compact :global(.bf-pmenu__mode) + :global(.bf-pmenu__model) {
+  display: none;
 }
 
 .compact :global(.bf-pmenu__model) {
   font-family: inherit;
   font-size: var(--font-size-small);
-  color: var(--text-secondary);
-}
-
-.compact :global(.bf-pmenu__mode) + :global(.bf-pmenu__model)::before {
-  content: '· ';
 }

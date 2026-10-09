@@ -2187,7 +2187,7 @@
 }
 .promptStarterTrigger:hover,.promptStarterTrigger:focus-visible { border-color:var(--canvas-brain-accent); color:var(--canvas-brain-accent); outline:none; }
 .promptStarterTrigger[aria-expanded='true'] { border-color:var(--canvas-brain-accent); background:color-mix(in srgb,var(--canvas-brain-accent) 14%,transparent); color:var(--canvas-brain-accent); }
-/* Scope is a chip in the card's tool row (`contextPlacement="tools"`). The palette's
+/* Scope is a chip in the card's tool row (`density="compact"`). The palette's
    generic surface rules paint `.scopeChip` as a panel tile; inside the card it is a pill
    on the card's own ground, in both themes. */
 .composerCard .scopeChip { border-color:var(--canvas-brain-border); background:transparent; color:var(--canvas-ink); }
@@ -5491,13 +5491,20 @@
   max-width: none;
   margin-inline: 0;
   padding: 8px 10px 10px;
-  border-top: 1px solid var(--canvas-brain-border);
   align-items: stretch;
 }
-/* The panel is already a raised surface. A second drop shadow inside it draws a card
-   edge where the column should just continue. */
-.composerDock[data-placement='docked'] .composerCard { box-shadow: none; }
-.composerDock[data-placement='docked'] .composerCard:focus-within { box-shadow: 0 0 0 1px var(--canvas-brain-accent); }
+/* The panel is already a raised surface. Inside it the card is a FILLED box with no
+   outline and no shadow — panel edge, rule, card border and pill borders stacked up
+   made a chat box read as a form. The fill alone separates it from the transcript;
+   focus still draws the accent ring. */
+.composerDock[data-placement='docked'] .composerCard {
+  border-color: transparent;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--canvas-ink) 7%, var(--canvas-brain-surface));
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.composerDock[data-placement='docked'] .composerCard:focus-within { border-color: var(--canvas-brain-accent); box-shadow: 0 0 0 1px var(--canvas-brain-accent); }
 
 /* --- The clocks ----------------------------------------------------------
    `timer` counts a timebox down and `stopwatch` counts up; ONE body draws both

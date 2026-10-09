@@ -1,3 +1,22 @@
+## ✅ RESOLVED 2026-10-09 — The Studio/canvas prompt is a chat box again, not a form (frontend)
+
+**Was (Studio, session `local-148925cf`):** the docked prompt under the Brain transcript had seven controls on two rows, inside three nested borders:
+- a "Thought for 7s · 1 actions" strip repeating the transcript's own "Thought for…" line;
+- the sent prompt still standing in the box;
+- a "/ ⚡ Work · Builderforce Free" chip;
+- an "Entire canvas" scope chip with nothing selectable;
+- a mic on a different row from Send.
+
+The stale text was a real bug. The auto-submitted entry prompt was copied into the composer (`setPrompt(request)`) and then sent as an override, and `evaluateCanvas` clears the composer only for a typed turn.
+
+**Now:**
+- **`hooks/useCanvasProposalReview.ts`** sends the seeded or entry prompt without copying it into the composer (`setPrompt` dropped from the hook's deps).
+- **`chat-input/ComposerSendOrVoice.tsx`** (new): one trailing button shows the mic while there's nothing to send or stop, Send once there's text, and Stop while a run streams. A live recording keeps the mic in place. `VoiceDictationButton` is now presentational. This applies to every `showVoice` composer: Studio and canvas, workspace Brain, dashboard, landing hero.
+- **`CanvasComposer`** uses `density="compact"`: two rows, scope in the tool row, no plan-chip row. The `contextPlacement` prop is retired (no other caller). The compact `/` trigger is quiet text naming only the armed mode, with no border, no mode icon and no model name. The model is still named in its tooltip and accessible name, and in the menu.
+- **`CanvasScopeChip`** renders nothing when there's nothing to narrow to.
+- **`BrainSurfaceBody`** shows the activity strip only while a turn is live.
+- The docked composer card is a filled box with no rule, border or shadow, from canvas palette tokens in both themes.
+
 ## ✅ RESOLVED 2026-10-09 — No "Built with" badge in the Studio/canvas preview (frontend 2026.10.29)
 
 **Was:** the in-browser preview runtime injects its "Built with Builderforce.ai" badge by default, and `bootSharedPreviewRuntime` never turned it off, so every Studio and canvas preview showed it over the builder's own app.

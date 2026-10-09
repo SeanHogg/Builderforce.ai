@@ -235,7 +235,10 @@ export function BrainSurfaceBody({
       : <div className={styles.brainDockContext}>
         <BrainContextPanel node={node} nodes={nodes} edges={edges} transcript={messages} />
       </div>}
-    <BrainActivityBar state={activity} />
+    {/* LIVE only. Once the turn settles the transcript carries its own "Thought for…"
+        line and the tool steps, so a settled receipt strip under it — directly above
+        the composer — reported the same finished turn twice. */}
+    {activity.live && <BrainActivityBar state={activity} />}
   </>;
 }
 

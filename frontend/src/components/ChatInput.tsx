@@ -10,7 +10,7 @@ import { ComposerAddMenu } from './chat-input/ComposerAddMenu';
 import { ComposerOptionsMenu } from './chat-input/ComposerOptionsMenu';
 import { ComposerPrimaryAction } from './chat-input/ComposerPrimaryAction';
 import { AssessmentGateNotice, PendingAttachmentChips, QueuedTurnsReceipt } from './chat-input/ComposerNotices';
-import { VoiceDictationButton } from './chat-input/VoiceDictationButton';
+import { ComposerSendOrVoice } from './chat-input/ComposerSendOrVoice';
 import { useAttachmentDropAndPaste } from './chat-input/useAttachmentDropAndPaste';
 import type { ChatInputAttachment, ChatInputProps } from './chat-input/types';
 import compactStyles from './chat-input/composerCompact.module.css';
@@ -74,7 +74,6 @@ export function ChatInput({
   ticketables,
   onTicketTag,
   contextControls,
-  contextPlacement = 'row',
   addMenuItems,
   meta,
   density = 'comfortable',
@@ -83,7 +82,6 @@ export function ChatInput({
   focusToken,
 }: ChatInputProps) {
   const compact = density === 'compact';
-  const contextInTools = compact || contextPlacement === 'tools';
   const t = useTranslations('chatInput');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const valueRef = useRef(value);
@@ -194,7 +192,7 @@ export function ChatInput({
         )}
         // A fragment, not the bare node: the shell's ReactNode comes from a second copy
         // of React's types, and only an element is assignable across the two.
-        context={contextControls && !contextInTools ? <>{contextControls}</> : undefined}
+        context={contextControls && !compact ? <>{contextControls}</> : undefined}
         // Which plan is funding this chat (and, when metered, what allowance is
         // left), then the host's own standing facts. Self-gating: the chip renders
         // nothing without a tenant session. Compact hosts show the plan themselves.
@@ -249,14 +247,16 @@ export function ChatInput({
                 <Icon name="message" size={20} />
               </Link>
             )}
-            {contextInTools && contextControls}
-            {showVoice && <VoiceDictationButton getValue={getValue} onChange={onChange} disabled={disabled} />}
+            {compact && contextControls}
           </>
         )}
         // Send/Stop is handed to the shell's trailing slot, which pins it to the far
         // right edge — the same placement the editor composer now gets from the same
-        // prop, instead of each surface anchoring it by hand.
-        primaryAction={<ComposerPrimaryAction running={running} onStop={onStop} canSubmit={canSubmit} submitLabel={submitLabel} />}
+        // prop, instead of each surface anchoring it by hand. With voice on, the mic
+        // shares that slot: it shows while there is nothing to send or stop.
+        primaryAction={showVoice
+          ? <ComposerSendOrVoice running={running} onStop={onStop} canSubmit={canSubmit} submitLabel={submitLabel} getValue={getValue} onChange={onChange} disabled={disabled} />
+          : <ComposerPrimaryAction running={running} onStop={onStop} canSubmit={canSubmit} submitLabel={submitLabel} />}
       />
       <QueuedTurnsReceipt count={queuedCount} />
       {secondaryContent && (

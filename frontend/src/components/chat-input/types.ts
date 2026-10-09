@@ -135,22 +135,16 @@ export interface ChatInputProps {
   onTicketTag?: (ticket: TicketTag) => void;
   /** Who answers / what is addressed ("Acting as", capability, "To", scope) — the composer's context row. */
   contextControls?: ReactNode;
-  /**
-   * Where `contextControls` sit: their own row under the text (`row`, the default), or
-   * in the tool row beside `+` and the options menu (`tools`) — for a host whose context
-   * is one compact chip, such as the canvas's Brain scope. `compact` density implies
-   * `tools`.
-   */
-  contextPlacement?: 'row' | 'tools';
   /** Extra rows for the `+` menu — host actions that belong with "add to this turn". */
   addMenuItems?: readonly ComposerAddMenuItem[];
   /** Host-specific standing facts (e.g. the memory status) shown beside the plan chip in the last row. */
   meta?: ReactNode;
   /**
    * `compact` folds the composer to two rows — the text, then one tool row — for a
-   * host whose own chrome already shows the plan (a workspace header): the context
-   * controls join the tool row and the standing-facts row (plan chip, `meta`) is
-   * not rendered. Defaults to `comfortable`, the four-row layout.
+   * docked Brain (a workspace's, or the canvas's Brain panel): the context controls
+   * join the tool row, the `/` trigger shows only the armed mode, and the
+   * standing-facts row (plan chip, `meta`) is not rendered. Defaults to
+   * `comfortable`, the four-row layout.
    */
   density?: 'comfortable' | 'compact';
   className?: string;

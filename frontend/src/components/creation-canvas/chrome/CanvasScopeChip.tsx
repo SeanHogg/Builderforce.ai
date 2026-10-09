@@ -17,8 +17,17 @@ export interface CanvasScopeChipProps {
   frameSelected: boolean;
 }
 
-/** The composer's scope control — a chip in the one `ChatInput`'s tool row. */
+/**
+ * The composer's scope control — a chip in the one `ChatInput`'s tool row.
+ *
+ * Drawn only when there is something to narrow TO: a selection, a frame, or a scope
+ * the reader already narrowed (so they can widen it again). With nothing selected
+ * every option but "Entire canvas" is disabled, so a chip reading "Entire canvas"
+ * was a control with one possible value taking a slot in every composer.
+ */
 export const CanvasScopeChip = memo(function CanvasScopeChip({ scopeMode, onScopeModeChange, autoLabel, selectionCount, frameSelected }: CanvasScopeChipProps) {
   const t = useTranslations('creationCanvas');
+  const nothingToNarrow = selectionCount === 0 && !frameSelected && (scopeMode === 'auto' || scopeMode === 'canvas');
+  if (nothingToNarrow) return null;
   return <label className={styles.scopeChip}><Icon name="target" size={12} /><span className="sr-only">{t('brainScope')}</span><select aria-label={t('brainScope')} value={scopeMode} onChange={(event) => onScopeModeChange(event.target.value as CanvasScopeMode)}><option value="auto">{autoLabel}</option><option value="canvas">{t('entireCanvas')}</option><option value="selection" disabled={!selectionCount}>{selectionCount > 1 ? t('selectedObjects', { count: selectionCount }) : t('selectedObject')}</option><option value="connected" disabled={!selectionCount}>{t('connectedScope')}</option><option value="frame" disabled={!frameSelected}>{t('currentFrame')}</option></select></label>;
 });

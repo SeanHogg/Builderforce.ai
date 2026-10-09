@@ -46,7 +46,6 @@ export interface UseCanvasProposalReviewDeps {
   setNodes: Dispatch<SetStateAction<CanvasObject[]>>;
   setNotice: (text: string) => void;
   setPendingBrainActions: Dispatch<SetStateAction<{ objectId: string; action: string; }[]>>;
-  setPrompt: Dispatch<SetStateAction<string>>;
   setProposedChanges: Dispatch<SetStateAction<ProposedCanvasChange[]>>;
   setSelectedId: Dispatch<SetStateAction<string | null>>;
   setSelectedIds: Dispatch<SetStateAction<string[]>>;
@@ -57,7 +56,7 @@ export interface UseCanvasProposalReviewDeps {
   timeline: CanvasTimelineMessage[];
 }
 
-export function useCanvasProposalReview({ acceptedProposalIds, autoApplyPending, comparisonModelIds, describeTurnError, entryAppPending, evaluateCanvas, flowRef, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, layoutViewportRef, modelComparisonStartedRef, nodes, persistence, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setAutoApplyMode, setAutoApplyPending, setEdges, setNodes, setNotice, setPendingBrainActions, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setSurface, stage, t, thinking, timeline }: UseCanvasProposalReviewDeps) {
+export function useCanvasProposalReview({ acceptedProposalIds, autoApplyPending, comparisonModelIds, describeTurnError, entryAppPending, evaluateCanvas, flowRef, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, layoutViewportRef, modelComparisonStartedRef, nodes, persistence, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setAutoApplyMode, setAutoApplyPending, setEdges, setNodes, setNotice, setPendingBrainActions, setProposedChanges, setSelectedId, setSelectedIds, setSurface, stage, t, thinking, timeline }: UseCanvasProposalReviewDeps) {
   useEffect(() => {
     if (!hydratedRef.current || modelComparisonStartedRef.current || comparisonModelIds.length < 2) return;
     const initial = timeline.find((message) => message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:'));
@@ -145,18 +144,20 @@ export function useCanvasProposalReview({ acceptedProposalIds, autoApplyPending,
     const initial = timeline.find((message) => message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:'));
     if (!initial || timeline.some((message) => message.messageRole === 'assistant')) return;
     initialPromptSubmittedRef.current = true;
-    setPrompt(initial.body);
+    // Sent as an override and NOT copied into the composer: the turn lands in the
+    // transcript as the first message, and a box still holding the same sentence read
+    // as a prompt nobody had sent (the override path never clears the composer).
     evaluateCanvas(initial.body);
-  }, [comparisonModelIds.length, entryAppPending, thinking, timeline, evaluateCanvas, hydratedRef, initialPromptSubmittedRef, setPrompt]);
+  }, [comparisonModelIds.length, entryAppPending, thinking, timeline, evaluateCanvas, hydratedRef, initialPromptSubmittedRef]);
 
   useEffect(() => {
     const request = initialPrompt?.trim();
     if (!request || !hydratedRef.current || initialPromptSubmittedRef.current || thinking || entryAppPending) return;
     if (initialFocusId && selectedId !== initialFocusId) return;
     initialPromptSubmittedRef.current = true;
-    setPrompt(request);
+    // Same as above: the entry prompt is sent, not left standing in the composer.
     evaluateCanvas(request);
-  }, [entryAppPending, evaluateCanvas, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, selectedId, setPrompt, thinking]);
+  }, [entryAppPending, evaluateCanvas, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, selectedId, thinking]);
 
   const applyProposedChanges = useCallback(async () => {
     const selected = proposedChanges.filter((change) => acceptedProposalIds.has(change.id));

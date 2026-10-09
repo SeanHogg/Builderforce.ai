@@ -7,12 +7,14 @@ import { sendButtonStyle } from './composerStyles';
  * Send, or Stop while a run is in flight. Handed to the shell's trailing slot,
  * which pins it to the far right edge.
  */
-export const ComposerPrimaryAction = memo(function ComposerPrimaryAction({ running, onStop, canSubmit, submitLabel }: {
+export interface ComposerPrimaryActionProps {
   running: boolean;
   onStop?: () => void;
   canSubmit: boolean;
   submitLabel: string;
-}) {
+}
+
+export const ComposerPrimaryAction = memo(function ComposerPrimaryAction({ running, onStop, canSubmit, submitLabel }: ComposerPrimaryActionProps) {
   const t = useTranslations('chatInput');
   if (running && onStop && !canSubmit) {
     // Streaming with an empty composer → the button interrupts the run.

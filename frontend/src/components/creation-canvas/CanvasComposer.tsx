@@ -323,9 +323,10 @@ export function CanvasComposer({
             // to Brain.
             placeholder={t(activeDef.placeholderKey as 'share')}
             submitLabel={t(activeDef.submitLabelKey as 'share')}
-            // Scope is one chip, so it joins the tool row instead of taking a row of
-            // its own under the text.
-            contextPlacement="tools"
+            // Two rows — the text, then one tool row. Scope joins that row (and only
+            // shows when something is selected), the `/` trigger names just the mode,
+            // and the plan chip row is not drawn: a chat box, not a form.
+            density="compact"
             rows={1}
             submitOnEnter
             showVoice
