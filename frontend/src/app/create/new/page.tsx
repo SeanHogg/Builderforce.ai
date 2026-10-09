@@ -68,7 +68,7 @@ export default function NewCreationSessionPage() {
     setMessage(t('creatingCanvas'));
     // THE one start-a-session use case (`lib/canvas/startCreationSession.ts`): a server
     // session for a workspace, a local board if that fails, a guest board otherwise.
-    void startCreationSession({ prompt: initialPrompt, hasTenant: isAuthenticated && hasTenant, surface: 'landing' })
+    void startCreationSession({ prompt: initialPrompt, isAuthenticated, hasTenant, surface: 'landing' })
       .then(({ sessionId, persistence }) => {
         // A signed-in person who landed on a device board is told so before the redirect.
         if (persistence === 'local' && isAuthenticated && hasTenant) setMessage(t('startingOnDevice'));
@@ -95,6 +95,6 @@ export default function NewCreationSessionPage() {
 
   return <main style={{ minHeight: '70vh', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)' }}>
     {message}
-    <UpgradeModal error={planError} onClose={() => { setPlanError(null); router.replace('/create'); }} upgradeTarget={planError?.currentPlan === 'pro' ? 'teams' : 'pro'} />
+    <UpgradeModal error={planError} onClose={() => { setPlanError(null); router.replace('/create'); }} />
   </main>;
 }

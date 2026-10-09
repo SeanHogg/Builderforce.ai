@@ -138,7 +138,7 @@ import { useCanvasChromeMenus } from './chrome/useCanvasChromeMenus';
 import { useCanvasSessionActionHandlers } from './chrome/useCanvasSessionActionHandlers';
 import { CanvasPromptComposer } from './chrome/CanvasPromptComposer';
 import { effectiveCanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
-import type { CanvasLens } from '@/lib/canvasLens';
+import { canvasLensDefinition, type CanvasLens } from '@/lib/canvasLens';
 import { CanvasLensBar } from './chrome/CanvasLensBar';
 import { useCanvasLens } from './hooks/useCanvasLens';
 import { useCanvasEntryApp } from './hooks/useCanvasEntryApp';
@@ -470,6 +470,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
     ...CREATION_CANVAS_TOUR,
     audienceId: currentUserId || (persistence === 'local' ? 'guest' : null),
     activity: { sessionId, clientSurface: canvasSurface() },
+    enabled: canvasLensDefinition(lens).tours, // no tour of chrome the lens does not draw
   });
   const prepareTourStep = useCallback((step: number) => {
     setMoreOpen(false);
@@ -686,11 +687,11 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const autoApplyRef = useRef(true);
   const mobileViewportFittedRef = useRef(false);
   const { updateBrainDock, toggleFullscreen } = useCanvasDockAndFullscreen({ autoApplyRef, comparisonModelIds, fullscreen, initialSurface, nativeFullscreenRef, phoneViewport, sessionId, setAutoApply, setBrainDock, setFullscreen, setSurfaceState, shellRef });
-  // HOW THIS BOARD IS PRESENTED — `/create` or `/studio`, the same instance either way
-  // (`lib/canvasLens.ts`). Every lens decision below reads this def, never the id.
-  const lensDef = useCanvasLens({ lens, surface, showSurface: setSurfaceState, phase, setPhase, updateBrainDock, phoneViewport });
   const { setAutoApplyMode, setSessionMode, setMemoryMode } = useCanvasSessionModes({ autoApplyRef, nodes, persistence, sessionId, sessionRole, setAutoApply, setDatasetRowLimit, setFramePresets, setMemoryEnabled, setNotice, setPendingInvitations, setServerTemplates, setSessionMode_, shareOpen, t, templateOpen });
   const { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard, boardLoaded } = useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, onBoardLoaded: settleLoadedPhase, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef });
+  // HOW THIS BOARD IS PRESENTED (`lib/canvasLens.ts`) — every lens decision reads this def, never the id.
+  const lensState = useCanvasLens({ lens, sessionId, surface, showSurface: setSurfaceState, phase, setPhase, boardLoaded, updateBrainDock, phoneViewport });
+  const lensDef = lensState.def;
   const showApp = useCallback(() => setSurface('app'), [setSurface]);
   const openApp = useOpenCanvasApp({ setNodes, showApp });
   useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialSurface, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRelay, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef });
@@ -971,7 +972,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
     [canvasNodeTypes],
   );
   const { openOutcomeMetrics, openDiagnostics, buildDiagnostics, buildProofJourneyDiagnostics } = useCanvasDiagnostics({ allMembers, autoApplyRef, brainRunStartedAt, brainRuntimeRef, brainTrace, canvasActions, currentGraphRef, edges, effectiveSelectedIds, journalRef, lastSavedGraphRef, memoryEnabled, modelSelection, nodes, pendingInvitations, persistence, proposedChanges, realtimeState, resolvedScopeMode, revisionRef, saveInFlightRef, scopedNodeIds, scopedNodes, sessionId, sessionMode, sessionRole, setDiagnosticsOpen, setHistoryOpen, setOutcomeMetrics, setOutcomeMetricsError, setOutcomeMetricsLoading, setOutcomeMetricsOpen, t, thinking, timeline, title, toast, undoStackRef });
-  const { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies } = useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStartedAt, brainTrace, cardActBoard, cardsEditable, currentUserId, deleteObjects, edges, evermindProjectId, guestLimit, inRoom, joinedCollaborator, liveMembers, livePresence, members, nodes, openBrainDock, persistence, presenceSelfId, presentMode, sendPresence, sessionId, setSelectedId, setSelectedIds, sharedRoom, startCanvasTurnRef, surfaceDef, t, thinking, timeline, title, updateBrainDock, updateNodeData });
+  const { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies } = useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStartedAt, brainTrace, cardActBoard, cardsEditable, currentUserId, deleteObjects, edges, evermindProjectId, guestLimit, inRoom, joinedCollaborator, liveMembers, livePresence, members, nodes, openBrainDock, persistence, presenceSelfId, presentMode, sendPresence, sessionId, boardPath: lensState.boardPath, setSelectedId, setSelectedIds, sharedRoom, startCanvasTurnRef, surfaceDef, t, thinking, timeline, title, updateBrainDock, updateNodeData });
 
   /* The prompt sits bottom-centre, where every chat product people already use puts it,
      and is deliberately NOT part of the Brain surface: it stays reachable whether Brain
@@ -1001,7 +1002,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
     shareOpen, setShareOpen, openReleasesPanel, releaseOpen: releaseFocus !== null, timeline, title, sessionId, persistence, requireAccount,
     standup: { members: rosterMembers, agents: seatedAgents, boardProjectId, ceremonyEnabled: hasAccount, onError: setNotice, onAgentRound: startCanvasTurn },
   });
-  const sessionFacts = useMemo<CanvasSessionFacts>(() => ({ sessionId, persistence, role: sessionRole, canEdit, notify: setNotice, requireAccount, lens }), [canEdit, lens, persistence, requireAccount, sessionId, sessionRole, setNotice]);
+  const sessionFacts = useMemo<CanvasSessionFacts>(() => ({ sessionId, persistence, role: sessionRole, canEdit, notify: setNotice, requireAccount, lens, boardPath: lensState.boardPath }), [canEdit, lens, lensState.boardPath, persistence, requireAccount, sessionId, sessionRole, setNotice]);
   const brainConversation = useBrainConversation({
     brain: { brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, brainSurface, guestSignupPrompt },
     showExecutionDetail: brainDock.showExecutionDetail, updateBrainDock, trace: brainTrace, nodes, edges, joinedCollaborator,
@@ -1038,7 +1039,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
       />}
       {/* A lens with no command bar draws its own one-row bar instead, and it owns the top
           band: ONE host for `--canvas-top-chrome-space` at a time. */}
-      {!lensDef.chrome.commandBar && <CanvasLensBar hostRef={topChromeSpaceRef} title={title} notice={notice} />}
+      {!lensDef.chrome.commandBar && <CanvasLensBar hostRef={topChromeSpaceRef} title={title} notice={notice} home={lensState.home} returnHome={lensState.returnHome} busy={thinking} />}
       <CanvasNodePanelHost nodePanel={nodePanel} setNodePanel={setNodePanel} anchorFrom={anchorFrom} presentMode={presentMode} nodes={nodes} editable={canEdit && !lockBlocked} updateNodeData={updateNodeData} setInspectorFocus={setInspectorFocus} setSurface={setSurface} inspectorValue={inspectorValue} />
 
       <CanvasObjectPickerHost objectPicker={objectPicker} setObjectPicker={setObjectPicker} onPick={pickObject} />
@@ -1124,7 +1125,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
         <CanvasMergePanel review={mergeReview} setReview={setMergeReview} onApply={applyMerge} />
 
         <CanvasBrainDockHost
-          drawn={brainDockDrawn} conversation={brainConversation} composer={composer} promptInPanel={promptInBrainPanel} onUndockPrompt={() => setPromptPlacement('float')}
+          drawn={brainDockDrawn} conversation={brainConversation} composer={composer} promptInPanel={promptInBrainPanel} onUndockPrompt={lensDef.promptPlacement ? null : () => setPromptPlacement('float')}
           mode={brainPlacement} preferences={brainDock} updateBrainDock={updateBrainDock}
         />
         {/* Floating over the board. A docked prompt is not drawn here at all — it is a row
@@ -1137,10 +1138,10 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
         />
         <CanvasPhoneActions open={actionsOpen} surface={surface} handlers={sessionActionHandlers} onClose={closeActionsSheet} setObjectPicker={setObjectPicker} setNodePanel={setNodePanel} />
       </CanvasBoardStage>
-      <CanvasTours
+      {lensDef.tours && <CanvasTours
         tour={sectionTour} onStepChange={prepareTourStep} walkthroughRef={walkthroughRef} boardId={sessionId}
         audienceId={currentUserId || (persistence === 'local' ? 'guest' : null)} stops={walkthroughStops} busy={thinking} onReveal={revealObject}
-      />
+      />}
     </CanvasShell>
     </CanvasSessionProvider></CanvasDiagnosticsProvider></CanvasSpacePresenceProvider></CanvasBoardBridgeProvider></CardActProvider>
     </CanvasSurfaceProvider>

@@ -172,12 +172,14 @@ describe('runCreationCanvasAi', () => {
   });
 
   /** The Studio lens starts every guest on "build me an app"; the build vocabulary is guest-safe. */
-  it('tells BOTH surfaces how to build software, and never to make a second build', async () => {
+  it('tells BOTH surfaces how to build software, and never to remake an app already on the board', async () => {
     for (const persistence of ['local', 'server'] as const) {
       const prompt = await promptOf(persistence);
       expect(prompt).toContain('BUILDING A REAL WEBSITE, WEB APP OR MOBILE APP');
       expect(prompt).toContain('call canvas_create_build');
-      expect(prompt).toContain('never call canvas_create_build to make a second one');
+      expect(prompt).toContain('never call canvas_create_build to remake an app that is already there');
+      // A board holds several apps: a different platform is a second build, not a refusal.
+      expect(prompt).toContain('Create another build only for a genuinely different app or platform');
     }
   });
 

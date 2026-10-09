@@ -29,6 +29,9 @@ export interface CanvasSessionFacts {
   requireAccount: ReturnType<typeof useCanvasAccountGate>['requireAccount'];
   /** How the board is presented right now (`lib/canvasLens.ts`). */
   lens: CanvasLens;
+  /** The URL this board is being read at, through that lens — where a sign-up, an OAuth
+   *  round trip or a claimed draft comes back to (`canvasLensSessionPath`). */
+  boardPath: string;
 }
 
 const CanvasSessionContext = createContext<CanvasSessionFacts | null>(null);

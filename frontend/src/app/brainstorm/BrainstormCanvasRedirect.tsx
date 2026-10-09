@@ -16,9 +16,12 @@ import { startCreationSession } from '@/lib/canvas/startCreationSession';
 export function BrainstormCanvasRedirect() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { hasTenant } = useAuth();
+  const { authReady, isAuthenticated, hasTenant } = useAuth();
 
   useEffect(() => {
+    // Wait for the stored session, as `/create/new` does: before it is read, everyone looks
+    // signed out, and a signed-in builder would be handed a guest board.
+    if (!authReady) return undefined;
     let cancelled = false;
     const chatId = Number(searchParams.get('chat')) || null;
     const prompt = searchParams.get('prompt')?.trim() || '';
@@ -31,7 +34,7 @@ export function BrainstormCanvasRedirect() {
       }
       if (prompt) {
         // THE one start-a-session use case (`lib/canvas/startCreationSession.ts`).
-        const { sessionId } = await startCreationSession({ prompt, hasTenant, surface: 'brain' });
+        const { sessionId } = await startCreationSession({ prompt, isAuthenticated, hasTenant, surface: 'brain' });
         if (!cancelled) router.replace(openedBoardHref({ sessionId }));
         return;
       }
@@ -42,7 +45,7 @@ export function BrainstormCanvasRedirect() {
       if (!cancelled) router.replace('/create');
     });
     return () => { cancelled = true; };
-  }, [hasTenant, router, searchParams]);
+  }, [authReady, hasTenant, isAuthenticated, router, searchParams]);
 
   return null;
 }

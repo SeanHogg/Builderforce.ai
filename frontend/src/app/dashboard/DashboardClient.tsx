@@ -167,7 +167,7 @@ export default function DashboardPage() {
       // THE one start-a-session use case (`lib/canvas/startCreationSession.ts`): a server
       // session, or — if the server is briefly unavailable — the intent kept on a local
       // board that is claimed into the workspace on the next load.
-      const { sessionId } = await startCreationSession({ prompt: p, hasTenant: isAuthenticated && hasTenant, surface: 'canvas' });
+      const { sessionId } = await startCreationSession({ prompt: p, isAuthenticated, hasTenant, surface: 'canvas' });
       setPrompt('');
       router.push(openedBoardHref({ sessionId }));
     } catch (error) {
@@ -274,7 +274,7 @@ export default function DashboardPage() {
         })}</p>
         <div data-tour="demo-build"><ChatInput value={prompt} onChange={setPrompt} onSubmit={handlePromptSubmit} disabled={building || (creationQuota?.limit !== -1 && creationQuota != null && creationQuota.usage >= creationQuota.limit)} placeholder={t('promptPlaceholder')} submitLabel={building ? t('building') : t('build')} rows={1} submitOnEnter={false} showBrainIcon showVoice secondaryContent={connectedAgentHosts.length > 0 ? <span>{t('agentsConnected', { count: connectedAgentHosts.length })} · {connectedAgentHosts.map((c) => c.name).join(', ')}</span> : <span>{t('noAgents')} <Link href="/workforce">{t('setUpInWorkforce')}</Link></span>} /></div>
         {creationQuota?.limit !== -1 && creationQuota != null && creationQuota.usage >= creationQuota.limit && <p role="alert" className={styles.warning}>{t('sessionLimitReached')}</p>}
-        <UpgradeModal error={planError} onClose={() => setPlanError(null)} upgradeTarget={planError?.currentPlan === 'pro' ? 'teams' : 'pro'} />
+        <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
         {pendingApprovalsCount > 0 && <p className={styles.warning}>{t('pendingRequests', { count: pendingApprovalsCount })} · <Link href="/workforce?tab=approvals">{t('reviewNow')}</Link></p>}
       </div>,
     },

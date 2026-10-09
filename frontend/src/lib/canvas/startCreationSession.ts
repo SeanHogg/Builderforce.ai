@@ -19,6 +19,8 @@
  *   - A plan limit is RETHROWN. It is the one failure a local board would hide: the
  *     person would build on a board their plan then refuses to keep. The caller shows the
  *     upgrade path (`UpgradeModal`).
+ *   - Someone SIGNED IN without a workspace (yet — they have not picked one) gets a local
+ *     board too, claimed once they have one. Never a guest lead: same reason as above.
  *   - Everyone else gets a guest board, and their prompt is recorded under the door they
  *     used (`startGuestCreationSession`).
  *
@@ -32,7 +34,9 @@ import { isPlanLimitError } from '@/lib/planLimitError';
 
 export interface StartCreationSessionInput {
   prompt: string;
-  /** Signed in AND in a workspace — the only case a server session can be created for. */
+  /** Signed in at all. Without a workspace that still means NOT a guest lead. */
+  isAuthenticated: boolean;
+  /** In a workspace — with `isAuthenticated`, the only case a server session can be created for. */
   hasTenant: boolean;
   /** Which door a guest used, for the funnel. Ignored for a signed-in person. */
   surface: GuestPromptSurface;
@@ -40,7 +44,8 @@ export interface StartCreationSessionInput {
 
 export interface StartedCreationSession {
   sessionId: string;
-  /** `local` for a guest, and for a signed-in person whose server create failed. */
+  /** `local` for a guest, for someone signed in with no workspace, and for a signed-in
+   *  person whose server create failed. */
   persistence: 'local' | 'server';
 }
 
@@ -49,9 +54,10 @@ function sessionTitle(prompt: string): string | undefined {
   return prompt.trim().slice(0, 80) || undefined;
 }
 
-export async function startCreationSession({ prompt, hasTenant, surface }: StartCreationSessionInput): Promise<StartedCreationSession> {
+export async function startCreationSession({ prompt, isAuthenticated, hasTenant, surface }: StartCreationSessionInput): Promise<StartedCreationSession> {
   const initialPrompt = prompt.trim();
-  if (!hasTenant) return { sessionId: startGuestCreationSession(initialPrompt, { surface }), persistence: 'local' };
+  if (!isAuthenticated) return { sessionId: startGuestCreationSession(initialPrompt, { surface }), persistence: 'local' };
+  if (!hasTenant) return { sessionId: createLocalCreationSession(initialPrompt), persistence: 'local' };
   const title = sessionTitle(initialPrompt);
   try {
     const { session } = await creationSessionsApi.create({

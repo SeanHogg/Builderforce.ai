@@ -13,12 +13,21 @@ describe('product hosts', () => {
     expect(productHostOf('respawn.builderforce.ai')).toBeNull();
   });
 
-  it('sends a product host root to its route and leaves every other path alone', () => {
-    expect(productHostRedirect('spawn.builderforce.ai', '/')).toBe('/spawn');
-    expect(productHostRedirect('studio.builderforce.ai', '/')).toBe('/studio');
+  it('sends a product host root to its route and leaves its own paths alone', () => {
+    expect(productHostRedirect('spawn.builderforce.ai', '/')).toEqual({ pathname: '/spawn', hostname: null });
     expect(productHostRedirect('spawn.builderforce.ai', '/spawn/account')).toBeNull();
     expect(productHostRedirect('studio.builderforce.ai', '/auth/callback')).toBeNull();
     expect(productHostRedirect('builderforce.ai', '/')).toBeNull();
+  });
+
+  it('sends Studio, and the canvases it starts, to the apex — one origin for browser-held work', () => {
+    expect(productHostRedirect('studio.builderforce.ai', '/')).toEqual({ pathname: '/studio', hostname: 'builderforce.ai' });
+    expect(productHostRedirect('studio.builderforce.ai', '/studio')).toEqual({ pathname: '/studio', hostname: 'builderforce.ai' });
+    expect(productHostRedirect('studio.builderforce.ai', '/studio/local-abc')).toEqual({ pathname: '/studio/local-abc', hostname: 'builderforce.ai' });
+    expect(productHostRedirect('studio.builderforce.ai', '/create/local-abc')).toEqual({ pathname: '/create/local-abc', hostname: 'builderforce.ai' });
+    expect(productHostRedirect('studio.localhost', '/')).toEqual({ pathname: '/studio', hostname: 'localhost' });
+    // Whole segments only: a path that merely starts with the letters stays.
+    expect(productHostRedirect('studio.builderforce.ai', '/creators')).toBeNull();
   });
 });
 

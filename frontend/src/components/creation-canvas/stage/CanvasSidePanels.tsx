@@ -55,7 +55,7 @@ export function CanvasSidePanels({
   talktrackOpen, setTalktrackOpen, title, selectedNode, captureDisabled, onCapture, publishFocus, setPublishFocus, releaseFocus,
   setReleaseFocus, nodes, edges, setSelectedId, setSelectedIds, openNodePanel, setOutlineHighlightIds,
 }: CanvasSidePanelsProps) {
-  const { sessionId, notify } = useCanvasSessionFacts();
+  const { sessionId, notify, boardPath } = useCanvasSessionFacts();
   return <>
         {dockPanel === 'files' && <CanvasFilesPanel
           files={files.sessionFiles}
@@ -63,7 +63,7 @@ export function CanvasSidePanels({
           onDownload={files.downloadCanvasFile}
           onClose={closeDockPanel}
           onImportFile={(file) => addFilesToCanvas([file], undefined, 'drive_import')}
-          returnTo={`/create/${sessionId}`}
+          returnTo={boardPath}
           onRequireAccount={connectedAccountGate}
         />}
         {gameShipFocus && gamePanelTarget && <CanvasGamePanel

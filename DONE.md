@@ -1,3 +1,22 @@
+## ✅ RESOLVED 2026-10-09 — Studio lens review: the lens holds its surface, sign-up keeps it, and the shell steps aside (frontend 2026.10.26)
+
+**Was (review of 42c0674a8):** Escape in the App surface, a card revealed from the conversation, or a Brain-made room dropped a Studio visitor onto a bare board with no way back. The lens lifted the phase before the board loaded and SAVED it, pinning mature boards to Make. Guest sign-up (the turn limit, the account gate) and the Files panel's OAuth return went to `/create/<id>`, losing the lens. A create that never settled held the first turn forever, and leaving Studio mid-create released it early. The canvas tour was offered over Studio's app. Signed-in visitors without a workspace were filed as guest leads. The new "never a second build" rule forbade a mobile app beside a website on every board. The operator top-bar menu button, bottom nav and team footer still framed Studio. `studio.builderforce.ai` kept guest boards (and a host-only sign-in) apart from the apex. The Studio home listed only durable projects nothing creates any more.
+
+**Now:**
+- **The lens keeps a home surface** (`holdsSurface`, `canvasLensHome`): Escape from it is a no-op, leaving any other surface returns to it, and `CanvasLensBar` shows "Back to App" while the reader is elsewhere.
+- **Phase floor after load**: `useCanvasLens` lifts the phase only once `boardLoaded`, against the board's own loaded phase.
+- **One board path**: `useCanvasLens` returns `boardPath` (`canvasLensSessionPath`), published in the session facts and used by the guest sign-up CTA, the account gate and the Files panel `returnTo`.
+- **Entry app** is raced against `ENTRY_APP_TIMEOUT_MS` (new `lib/withTimeout.ts`) and holds the first turn while its own create is in flight, whatever the lens.
+- **Registry fields** `tours`, `appSurfaceLink`, `shellMobileNav`, `shellTeamBar`: no tour in Studio; "Open in Studio" comes from data, not a URL comparison; `AppShell` drops the bottom nav (zeroing `--mobile-nav-height` at the frame), the team footer and the top bar's dead menu button for the Studio lens. The dock's "float the prompt" control is hidden while a lens forces the placement. `lib/canvasLens.ts` no longer imports from `components/`; the Studio route no longer matches deeper paths.
+- **`startCreationSession` takes `isAuthenticated`**: signed in without a workspace means a local board, never a guest lead. The brainstorm redirect now waits for `authReady`.
+- **BUILD prompt**: reuse the build a request is about; a second build only for a different app or platform.
+- **One origin**: `PRODUCT_HOSTS[].apexPaths` sends `studio.<apex>` `/`, `/studio/*` and `/create/*` to the apex; auth callbacks stay on the host.
+- **Studio home** lists "Your apps" (`useStudioApps`: this browser's boards and the workspace's with an app, each opening at `/studio/<id>`), plus durable Studio projects only when there are some; both through the new `StudioCardList`.
+- **Leaving mid-turn** via the Studio mark asks first (`useConfirm`); `BrandLockup.onClick` now receives the event.
+- **Phone lens bar**: at most two rows; "Open on canvas" becomes icon-only, surface controls scroll sideways.
+- **`UpgradeModal` works out its own target** (`planAfter`); the four copies of the expression are gone.
+- **Board sessions are `noindex`** (`/create/<id>`, `/studio/<id>`); the middleware COI comment now says what the isolation is for (in-page WASM, not Run).
+
 ## ✅ RESOLVED 2026-10-08 — Studio needs no sign-in: it is a lens over the one canvas (frontend 2026.10.25, api 2026.10.17)
 
 **Was:** Studio's "Build it" waited for a signed-in workspace, popped the sign-in dialog and created a durable project, while the canvas gave the same visitor a `local-<uuid>` board and a running app with no account. The Studio home drew its own bar instead of the site header. The API still keyword-seeded empty website/workflow/dataset cards from the prompt wording, which the client had removed because it failed the first turn. A guest board was given the build tools but never the BUILD instructions, so "build me an app" produced a website card.

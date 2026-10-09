@@ -26237,7 +26237,11 @@
       "recorded": "Live at {url} — recorded on the board."
     },
     "lens": {
-      "barLabel": "Studio controls"
+      "barLabel": "Studio controls",
+      "returnTo": "Back to {surface}",
+      "leaveTitle": "Leave while Studio is building?",
+      "leaveMessage": "Studio is still working on your request. Going to the Studio home stops it; your app and everything built so far stay on this board.",
+      "leaveConfirm": "Leave anyway"
     }
   },
   "canvasCommands": {
@@ -32589,8 +32593,8 @@
       "submit": "Build it",
       "startFailed": "Couldn't start your session. Try again.",
       "recentTitle": "Your Studio projects",
-      "recentEmpty": "Your Studio projects will appear here.",
-      "yourApps": "Your apps"
+      "yourApps": "Your apps",
+      "allOnCanvas": "All on the canvas"
     },
     "topBar": {
       "home": "Studio home",

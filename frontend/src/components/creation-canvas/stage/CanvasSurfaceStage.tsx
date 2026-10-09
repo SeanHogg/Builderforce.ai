@@ -19,6 +19,7 @@ import type { CreationFlowNode } from '../CreationNode';
 import type { CreationNodeData, CreationObjectKind } from '../types';
 import type { useCanvasResumeShares } from '../hooks/useCanvasResumeShares';
 import type { CanvasSessionAppActions } from '../hooks/useCanvasSessionApp';
+import { canvasLensDefinition, canvasLensHome } from '@/lib/canvasLens';
 import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
 import type { BrainConversationProps } from './useBrainConversation';
 import type { SceneMovieDraft } from '@/hooks/useCloudScene';
@@ -62,8 +63,16 @@ export function CanvasSurfaceStage({
   surface, hostSurfaces, surfaceNode, exitSurface, setSurface, sessionApp, sessionTitle, entryAppPending, nodes, editable, updateNodeData, appendAtCenter,
   revealObject, conversation, roster, room, resume, openGamePanel, setShareOpen, doors,
 }: CanvasSurfaceStageProps) {
-  const { persistence } = useCanvasSessionFacts();
-  const exitToBoard = () => setSurface('graph');
+  const { persistence, lens } = useCanvasSessionFacts();
+  // "Leave this surface" goes to the board — unless the lens keeps a HOME surface
+  // (`lib/canvasLens.ts`, `holdsSurface`): then leaving goes home, and leaving home is not
+  // a thing. A lens that draws no switcher would otherwise strand the reader on a bare
+  // board one Escape away from the app it opened on.
+  const home = canvasLensHome(canvasLensDefinition(lens));
+  const exitToBoard = () => {
+    if (home === surface) return;
+    setSurface(home ?? 'graph');
+  };
   /** The object-scoped runtimes' one write, offered only where the edit can land. */
   const editSurfaceNode: { onEdit?: (patch: Partial<CreationNodeData>) => void } = surfaceNode && editable
     ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) }

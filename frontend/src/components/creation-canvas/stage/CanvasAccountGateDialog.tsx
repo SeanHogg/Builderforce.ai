@@ -31,7 +31,7 @@ export interface CanvasAccountGateDialogProps {
  */
 export function CanvasAccountGateDialog({ gate, onClose, hasAccount, claimingDraft, setClaimingDraft }: CanvasAccountGateDialogProps) {
   const t = useTranslations('creationCanvas');
-  const { sessionId, notify, lens } = useCanvasSessionFacts();
+  const { sessionId, notify, lens, boardPath } = useCanvasSessionFacts();
   if (!gate) return null;
   return <div className={styles.accountGateBackdrop} role="presentation">
         <section className={styles.accountGate} role="dialog" aria-modal="true" aria-labelledby="canvas-account-gate-title">
@@ -60,7 +60,7 @@ export function CanvasAccountGateDialog({ gate, onClose, hasAccount, claimingDra
             <GuestSignupCta
               layout="actions"
               prompt={{
-                next: `/create/${sessionId}`,
+                next: boardPath,
                 onAccept: () => trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: canvasSurface(), action: gate.action } }),
               }}
             />

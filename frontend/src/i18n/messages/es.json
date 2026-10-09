@@ -26237,7 +26237,11 @@
       "recorded": "En producción en {url}: registrado en el tablero."
     },
     "lens": {
-      "barLabel": "Controles de Studio"
+      "barLabel": "Controles de Studio",
+      "returnTo": "Volver a {surface}",
+      "leaveTitle": "¿Salir mientras Studio está construyendo?",
+      "leaveMessage": "Studio sigue trabajando en tu solicitud. Ir al inicio de Studio la detiene; tu app y todo lo construido hasta ahora se quedan en este lienzo.",
+      "leaveConfirm": "Salir de todos modos"
     }
   },
   "canvasCommands": {
@@ -32589,8 +32593,8 @@
       "submit": "Crear",
       "startFailed": "No se pudo iniciar tu sesión. Inténtalo de nuevo.",
       "recentTitle": "Tus proyectos de Studio",
-      "recentEmpty": "Tus proyectos de Studio aparecerán aquí.",
-      "yourApps": "Tus apps"
+      "yourApps": "Tus apps",
+      "allOnCanvas": "Todo en el lienzo"
     },
     "topBar": {
       "home": "Inicio de Studio",

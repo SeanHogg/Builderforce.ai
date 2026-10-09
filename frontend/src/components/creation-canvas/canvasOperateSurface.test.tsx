@@ -25,6 +25,7 @@ const facts: CanvasSessionFacts = {
   persistence: 'server',
   role: 'owner' as CanvasSessionFacts['role'],
   lens: 'canvas',
+  boardPath: '/create/test-board',
   canEdit: true,
   notify: vi.fn(),
   requireAccount: vi.fn() as unknown as CanvasSessionFacts['requireAccount'],

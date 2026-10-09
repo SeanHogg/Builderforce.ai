@@ -14,8 +14,7 @@ import { useBuilderWorkspace } from '@/components/builder/useBuilderWorkspace';
 import type { CenterView } from '@/components/builder/CenterViewSwitch';
 import type { RunPhase } from '@/components/builder/useWorkspaceRun';
 import { sendWorkspaceCommand } from '@/lib/workspace/workspaceCommands';
-import { studioSessionPath } from '@/lib/studio/studioHost';
-import { canvasLensSessionPath } from '@/lib/canvasLens';
+import { canvasLensDefinition, canvasLensSessionPath } from '@/lib/canvasLens';
 import type { SessionApp } from '@/lib/canvasSessionApp';
 import type { FileEntry } from '@/lib/types';
 import { CanvasBarGroup } from './CanvasBarGroup';
@@ -63,11 +62,11 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
   const ws = useBuilderWorkspace({ store: app.store, name: app.title, modality: app.modality, initialFiles });
   const { runner, store, modalityDef, modalityCopy, livePreview } = ws;
   // "Open in Studio" is the SAME board seen through the Studio lens — every app has it,
-  // a guest's included, because the lens needs no durable project. Not drawn while the
-  // board is already seen through Studio: the lens bar's "Open on canvas" is the way back.
+  // a guest's included, because the lens needs no durable project. The lens decides
+  // (`appSurfaceLink`): Studio's own bar already carries "Open on canvas", so it has none.
   const { sessionId, lens } = useCanvasSessionFacts();
-  const inStudio = studioSessionPath(sessionId);
-  const studioHref = canvasLensSessionPath(lens, sessionId) === inStudio ? null : inStudio;
+  const linkLens = canvasLensDefinition(lens).appSurfaceLink;
+  const studioHref = linkLens ? canvasLensSessionPath(linkLens, sessionId) : null;
   const runLabel = RUN_LABEL[runner.phase];
   const filesOpen = ws.railOpen && ws.rightTab === 'files';
   const publishes = ws.rightTabs.includes('publish');

@@ -1,6 +1,6 @@
 // No `'use client'`: imported only by client components, so it is already on the client side of the boundary.
 
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { BrandLockup } from '@/components/BrandLockup';
 import { STUDIO_ROUTE } from '@/lib/studio/studioHost';
@@ -41,12 +41,12 @@ export function StudioTopBar({ children }: { children?: ReactNode }) {
  * workspace header the project's name is the title, and the mark alone says
  * where you are.
  */
-export function StudioBrand({ compact = false }: { compact?: boolean }) {
+export function StudioBrand({ compact = false, onClick }: { compact?: boolean; /** See `BrandLockup`'s `onClick`. */ onClick?: (event: MouseEvent<HTMLAnchorElement>) => void }) {
   const t = useTranslations('studio.topBar');
   // Both halves of the wordmark are `--text-primary`, so it reads on a dark
   // bar and a light one; `Studio` is never the accent colour.
   return (
-    <BrandLockup href={STUDIO_ROUTE} label={t('home')} size={compact ? 24 : 26}>
+    <BrandLockup href={STUDIO_ROUTE} label={t('home')} size={compact ? 24 : 26} onClick={onClick}>
       {!compact && (
         <span style={{ color: 'var(--text-primary)', fontWeight: 800, fontFamily: 'var(--font-display)', letterSpacing: '-0.01em' }}>
           Builderforce Studio

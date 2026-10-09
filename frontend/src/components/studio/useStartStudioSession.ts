@@ -35,7 +35,7 @@ export function useStartStudioSession(failedMessage: string) {
 
   const run = useCallback(async (prompt: string) => {
     try {
-      const { sessionId } = await startCreationSession({ prompt, hasTenant: isAuthenticated && hasTenant, surface: 'studio' });
+      const { sessionId } = await startCreationSession({ prompt, isAuthenticated, hasTenant, surface: 'studio' });
       router.push(studioSessionPath(sessionId));
     } catch (cause) {
       if (isPlanLimitError(cause)) setPlanError(cause);

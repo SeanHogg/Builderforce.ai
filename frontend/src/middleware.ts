@@ -102,12 +102,14 @@ function ensureLocaleCookie(request: NextRequest, res: NextResponse): NextRespon
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // A product host (`studio.`, `spawn.`) sends its root to the product's route
-  // (see `lib/productHosts.ts` for why a redirect, not a rewrite).
+  // A product host (`studio.`, `spawn.`) sends its root to the product's route, and the
+  // paths whose work lives in the browser to the apex origin (see `lib/productHosts.ts`
+  // for why a redirect, not a rewrite, and why one origin).
   const productTarget = productHostRedirect(request.nextUrl.hostname, pathname);
   if (productTarget) {
     const url = request.nextUrl.clone();
-    url.pathname = productTarget;
+    url.pathname = productTarget.pathname;
+    if (productTarget.hostname) url.hostname = productTarget.hostname;
     return NextResponse.redirect(url);
   }
 
@@ -151,9 +153,13 @@ export function middleware(request: NextRequest) {
   }
 
   const needsCoi = (pathname.startsWith('/create/') && !isCanvasInvitationRoute(pathname))
-    // Everything under Studio runs the in-browser app runtime: the durable-project IDE
-    // (`/studio/project/<id>`) and a session presented through the Studio lens
-    // (`/studio/<sessionId>`, the canvas App surface). The bare `/studio` home does not.
+    // Everything under Studio is a page that runs in-browser WASM: the durable-project IDE
+    // (`/studio/project/<id>`) and a canvas board seen through the Studio lens
+    // (`/studio/<sessionId>`) — the same reason `/create/<id>` is isolated. The app
+    // runtime itself does NOT need it (it runs on the preview relay's origin, without
+    // SharedArrayBuffer), so Run still works after a soft navigation in from a page that
+    // was not isolated; only the in-page WASM threads would fall back. The bare `/studio`
+    // home is a public page and is not isolated.
     || pathname.startsWith(`${STUDIO_ROUTE}/`);
 
   // Embedded surfaces (/embed/*) are framed cross-origin by host apps (e.g.

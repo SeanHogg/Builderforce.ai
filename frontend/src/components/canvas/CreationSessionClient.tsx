@@ -99,7 +99,6 @@ export default function CreationSessionClient({ sessionId, lens = 'canvas' }: { 
     <UpgradeModal
       error={planError}
       onClose={() => setPlanError(null)}
-      upgradeTarget={planError?.currentPlan === 'pro' ? 'teams' : 'pro'}
     />
     {/* Theme tokens, not literals: this rides on the guest→sign-in path, which
         renders in whichever theme the visitor arrived from. */}

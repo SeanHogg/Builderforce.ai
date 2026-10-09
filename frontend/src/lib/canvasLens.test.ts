@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CANVAS_LENSES, canvasLensDefinition, canvasLensSessionPath, isCanvasLens, lensForRoute } from './canvasLens';
+import { CANVAS_LENSES, canvasLensDefinition, canvasLensHome, canvasLensSessionPath, isCanvasLens, lensChromeForRoute, lensForRoute } from './canvasLens';
 import { isStageRoute } from './workbenchPolicy';
 
 describe('canvas lenses — the registry', () => {
@@ -11,17 +11,22 @@ describe('canvas lenses — the registry', () => {
 
   it('keeps the canvas lens a no-op: full chrome, nothing applied on entry', () => {
     expect(canvasLensDefinition('canvas')).toMatchObject({
-      chrome: { topChrome: true, commandBar: true, shellSidebar: true },
-      surface: null, appModality: null, phaseFloor: null, brainDock: null, promptPlacement: null,
+      chrome: { topChrome: true, commandBar: true, shellSidebar: true, shellMobileNav: true, shellTeamBar: true },
+      surface: null, holdsSurface: false, appModality: null, phaseFloor: null, brainDock: null, promptPlacement: null,
+      tours: true, appSurfaceLink: 'studio',
     });
+    expect(canvasLensHome(canvasLensDefinition('canvas'))).toBeNull();
   });
 
   it('presents Studio as prompt + preview: no canvas chrome, the App surface, a docked conversation', () => {
     expect(canvasLensDefinition('studio')).toMatchObject({
-      chrome: { topChrome: false, commandBar: false, shellSidebar: false },
-      surface: 'app', appModality: 'designer', phaseFloor: 'make',
+      chrome: { topChrome: false, commandBar: false, shellSidebar: false, shellMobileNav: false, shellTeamBar: false },
+      surface: 'app', holdsSurface: true, appModality: 'designer', phaseFloor: 'make',
       brainDock: { side: 'left', open: true }, promptPlacement: 'docked',
+      tours: false, appSurfaceLink: null,
     });
+    // The App surface is HOME: Escape and a revealed card come back to it, never strand.
+    expect(canvasLensHome(canvasLensDefinition('studio'))).toBe('app');
   });
 
   it('degrades an unknown id to the canvas lens rather than throwing', () => {
@@ -40,6 +45,7 @@ describe('lensForRoute — one answer for "is this a board" and "how is it prese
 
   it('never reads the Studio home or the durable-project IDE as a board', () => {
     expect(lensForRoute('/studio')).toBeNull();
+    expect(lensForRoute('/studio/local-abc/extra')).toBeNull();
     expect(lensForRoute('/studio/project/42')).toBeNull();
     expect(lensForRoute('/studio/project')).toBeNull();
   });
@@ -69,5 +75,13 @@ describe('canvasLensSessionPath — the redirect that keeps the lens', () => {
   it('carries the query it is given and drops the empty entries', () => {
     expect(canvasLensSessionPath('studio', 'srv-1', { surface: 'app', prompt: null })).toBe('/studio/srv-1?surface=app');
     expect(canvasLensSessionPath('canvas', 'srv-1', { surface: null })).toBe('/create/srv-1');
+  });
+});
+
+describe('lensChromeForRoute — what the app shell draws around a board', () => {
+  it('drops the rail, the bottom nav and the team footer for a Studio session only', () => {
+    expect(lensChromeForRoute('/studio/local-abc')).toMatchObject({ shellSidebar: false, shellMobileNav: false, shellTeamBar: false });
+    expect(lensChromeForRoute('/create/local-abc')).toMatchObject({ shellSidebar: true, shellMobileNav: true, shellTeamBar: true });
+    expect(lensChromeForRoute('/pricing')).toBeNull();
   });
 });

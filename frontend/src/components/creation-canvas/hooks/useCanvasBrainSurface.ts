@@ -48,6 +48,8 @@ export interface UseCanvasBrainSurfaceDeps {
   presentMode: boolean;
   sendPresence: (state: CanvasPresenceState) => void;
   sessionId: string;
+  /** The URL this board is read at, through its lens — where the guest sign-up returns. */
+  boardPath: string;
   setSelectedId: Dispatch<SetStateAction<string | null>>;
   setSelectedIds: Dispatch<SetStateAction<string[]>>;
   sharedRoom: SharedCanvasRoom;
@@ -61,7 +63,7 @@ export interface UseCanvasBrainSurfaceDeps {
   updateNodeData: (nodeId: string, patch: Partial<CreationNodeData>) => void;
 }
 
-export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStartedAt, brainTrace, cardActBoard, cardsEditable, currentUserId, deleteObjects, edges, evermindProjectId, guestLimit, inRoom, joinedCollaborator, liveMembers, livePresence, members, nodes, openBrainDock, persistence, presenceSelfId, presentMode, sendPresence, sessionId, setSelectedId, setSelectedIds, sharedRoom, startCanvasTurnRef, surfaceDef, t, thinking, timeline, title, updateBrainDock, updateNodeData }: UseCanvasBrainSurfaceDeps) {
+export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStartedAt, brainTrace, cardActBoard, cardsEditable, currentUserId, deleteObjects, edges, evermindProjectId, guestLimit, inRoom, joinedCollaborator, liveMembers, livePresence, members, nodes, openBrainDock, persistence, presenceSelfId, presentMode, sendPresence, sessionId, boardPath, setSelectedId, setSelectedIds, sharedRoom, startCanvasTurnRef, surfaceDef, t, thinking, timeline, title, updateBrainDock, updateNodeData }: UseCanvasBrainSurfaceDeps) {
   const brainNode = nodes.find((node) => node.data.kind === 'chat') ?? null;
   /**
    * Where the ONE Brain surface actually renders.
@@ -230,9 +232,9 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
    * refusal — and returns them to THIS canvas, which is the promise the copy makes.
    */
   const guestSignupPrompt = useMemo<GuestSignupPrompt | null>(() => (guestLimit === null ? null : {
-    next: `/create/${sessionId}`,
+    next: boardPath,
     onAccept: () => trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: canvasSurface(), action: 'guest_limit' } }),
-  }), [guestLimit, sessionId]);
+  }), [boardPath, guestLimit, sessionId]);
   /**
    * HOW MANY REPLIES LANDED BEHIND A CLOSED BRAIN — the number the launcher pill wears
    * and the Brain Object reads off the context below. See `useBrainUnreadReplies` for

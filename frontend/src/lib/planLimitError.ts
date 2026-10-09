@@ -17,6 +17,11 @@
 
 export type UpgradeTargetPlan = 'pro' | 'teams';
 
+/** The plan to offer someone on `currentPlan`: Teams once they are on Pro, Pro otherwise. */
+export function planAfter(currentPlan: string | undefined): UpgradeTargetPlan {
+  return currentPlan === 'pro' ? 'teams' : 'pro';
+}
+
 /** The server's one upgrade-required envelope (`domain/tenant/paymentRequired`). */
 export interface PlanLimitPayload {
   error: string;

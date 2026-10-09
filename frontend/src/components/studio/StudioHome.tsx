@@ -2,10 +2,9 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { ButtonLink } from '@/components/ui';
-import { Icon } from '@/components/ui/Icon';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { StudioPromptBox } from './StudioPromptBox';
+import { StudioApps } from './StudioApps';
 import { StudioRecentProjects } from './StudioRecentProjects';
 import { useStartStudioSession } from './useStartStudioSession';
 
@@ -18,8 +17,9 @@ import { useStartStudioSession } from './useStartStudioSession';
  *
  * No sign-in to start: "Build it" opens a creation session — a guest's `local-<uuid>` or a
  * server session — on the Studio lens (`/studio/<id>`), the canvas's App surface drawn as
- * prompt + preview. "Your apps" is every app on every board; the list below is the
- * durable Studio projects, which open in the Studio IDE.
+ * prompt + preview. "Your apps" is every board with an app — this browser's and the
+ * workspace's — reopened in Studio; below it, any durable Studio projects from before,
+ * which open in the Studio IDE.
  */
 export function StudioHome() {
   const t = useTranslations('studio.home');
@@ -34,13 +34,9 @@ export function StudioHome() {
       </div>
       <StudioPromptBox value={prompt} onChange={setPrompt} onSubmit={() => start(prompt)} busy={busy} />
       {error && <p role="alert" style={{ margin: 0, color: 'var(--error-text)' }}>{error}</p>}
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <ButtonLink href="/create?filter=build" variant="secondary" size="sm">
-          <Icon name="canvas" size={14} /> {t('yourApps')}
-        </ButtonLink>
-      </div>
+      <StudioApps />
       <StudioRecentProjects />
-      <UpgradeModal error={planError} onClose={clearPlanError} upgradeTarget={planError?.currentPlan === 'pro' ? 'teams' : 'pro'} />
+      <UpgradeModal error={planError} onClose={clearPlanError} />
     </section>
   );
 }

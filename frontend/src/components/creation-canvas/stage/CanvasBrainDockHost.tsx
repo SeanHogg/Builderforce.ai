@@ -10,8 +10,9 @@ export interface CanvasBrainDockHostProps {
   /** The prompt, when the reader has docked it into this panel. */
   composer: ReactNode;
   promptInPanel: boolean;
-  /** Move the prompt back out onto the board. */
-  onUndockPrompt: () => void;
+  /** Move the prompt back out onto the board — null while a lens forces where it sits
+   *  (`lib/canvasLens.ts`), when the control could not move it anywhere. */
+  onUndockPrompt: (() => void) | null;
   mode: BrainDockMode;
   preferences: BrainDockPreferences;
   updateBrainDock: (patch: Partial<BrainDockPreferences>, persist?: boolean) => void;
@@ -28,7 +29,7 @@ export function CanvasBrainDockHost({ drawn, conversation, composer, promptInPan
   return <BrainDock
           // The prompt, when the reader has docked it — rendered as the panel's last row
           // rather than as a card parked under it. See `BrainDock`'s header.
-          {...(promptInPanel ? { composer, onUndockPrompt } : {})}
+          {...(promptInPanel ? { composer, ...(onUndockPrompt ? { onUndockPrompt } : {}) } : {})}
           mode={mode}
           side={preferences.side}
           size={preferences.size}

@@ -26237,7 +26237,11 @@
       "recorded": "Live unter {url} – auf dem Board festgehalten."
     },
     "lens": {
-      "barLabel": "Studio-Steuerung"
+      "barLabel": "Studio-Steuerung",
+      "returnTo": "Zurück zu {surface}",
+      "leaveTitle": "Verlassen, während Studio baut?",
+      "leaveMessage": "Studio arbeitet noch an deiner Anfrage. Der Wechsel zur Studio-Startseite bricht sie ab; deine App und alles bisher Gebaute bleiben auf diesem Canvas.",
+      "leaveConfirm": "Trotzdem verlassen"
     }
   },
   "canvasCommands": {
@@ -32589,8 +32593,8 @@
       "submit": "Bauen",
       "startFailed": "Deine Sitzung konnte nicht gestartet werden. Versuche es erneut.",
       "recentTitle": "Deine Studio-Projekte",
-      "recentEmpty": "Deine Studio-Projekte erscheinen hier.",
-      "yourApps": "Deine Apps"
+      "yourApps": "Deine Apps",
+      "allOnCanvas": "Alle auf dem Canvas"
     },
     "topBar": {
       "home": "Studio-Startseite",

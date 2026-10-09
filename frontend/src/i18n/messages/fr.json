@@ -26237,7 +26237,11 @@
       "recorded": "En ligne sur {url} — consigné sur le tableau."
     },
     "lens": {
-      "barLabel": "Commandes de Studio"
+      "barLabel": "Commandes de Studio",
+      "returnTo": "Retour à {surface}",
+      "leaveTitle": "Quitter pendant que Studio construit ?",
+      "leaveMessage": "Studio travaille encore sur votre demande. Aller à l’accueil de Studio l’interrompt ; votre app et tout ce qui a été construit restent sur ce canevas.",
+      "leaveConfirm": "Quitter quand même"
     }
   },
   "canvasCommands": {
@@ -32589,8 +32593,8 @@
       "submit": "Créer",
       "startFailed": "Impossible de démarrer votre session. Réessayez.",
       "recentTitle": "Vos projets Studio",
-      "recentEmpty": "Vos projets Studio apparaîtront ici.",
-      "yourApps": "Vos applications"
+      "yourApps": "Vos applications",
+      "allOnCanvas": "Tout sur le canevas"
     },
     "topBar": {
       "home": "Accueil de Studio",

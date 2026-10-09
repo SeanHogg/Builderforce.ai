@@ -3954,6 +3954,9 @@ select.input option {
      team on every phone-width board. Reserving it here rather than on `.content`
      is why it works for the footer too. */
   .app-frame { padding-bottom: var(--mobile-nav-height); }
+  /* A canvas lens that draws no bottom nav (`lib/canvasLens.ts`, `shellMobileNav`): no bar,
+     so nothing to clear — and the docked panels' bottom follows it to the edge. */
+  .app-frame[data-shell-mobile-nav='off'] { --mobile-nav-height: 0px; --footer-height: 0px; }
 
   /* ── A STAGE ROUTE ON A PHONE IS AN APP SCREEN ─────────────────────────────
      `/create/<id>` used to get the MARKETING HEADER over the board — a brand

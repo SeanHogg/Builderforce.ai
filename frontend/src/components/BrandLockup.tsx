@@ -2,7 +2,7 @@
 // the boundary imports it — the marketing header is a client component, the
 // Studio bar is reached from one, and a directive here would be redundant.
 
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import Link from 'next/link';
 import MascotIcon from '@/components/MascotIcon';
 
@@ -48,8 +48,9 @@ export function BrandLockup({
    *  footer's mark floats and pauses on hover, which is real and not drift. */
   markClassName?: string;
   /** Navigating away from an open mobile drawer has to close it. On the LINK,
-   *  not on the wordmark: a tap on the mark is a tap on the lockup. */
-  onClick?: () => void;
+   *  not on the wordmark: a tap on the mark is a tap on the lockup. Gets the event,
+   *  so a surface that must ask before leaving can hold the navigation. */
+  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
   children: ReactNode;
 }) {
   return (

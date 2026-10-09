@@ -37,7 +37,8 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   return (
     <header className={`topbar${previewRole ? ' topbar--role-preview' : ''}`}>
       <div className="topbar-left">
-        <button
+        {/* No menu to open, no button: a canvas lens that draws no rail passes none. */}
+        {onMenuClick && <button
           type="button"
           className="topbar-hamburger"
           onClick={onMenuClick}
@@ -48,7 +49,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
             <line x1="3" y1="12" x2="21" y2="12" />
             <line x1="3" y1="18" x2="21" y2="18" />
           </svg>
-        </button>
+        </button>}
         <BrandLockup href={isAuthenticated ? '/dashboard' : '/'} label={t('brandAlt')} size={28} className="brand">
           <span className="brand-name">{t('brandName')}</span>
           <span className="brand-badge">{t('betaBadge')}</span>

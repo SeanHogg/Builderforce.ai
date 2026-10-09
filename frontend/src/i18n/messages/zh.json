@@ -26237,7 +26237,11 @@
       "recorded": "已在 {url} 上线——已记录到看板。"
     },
     "lens": {
-      "barLabel": "Studio 控件"
+      "barLabel": "Studio 控件",
+      "returnTo": "返回{surface}",
+      "leaveTitle": "在 Studio 构建时离开？",
+      "leaveMessage": "Studio 仍在处理你的请求。前往 Studio 首页会停止它；你的应用和已构建的内容都会保留在这个画布上。",
+      "leaveConfirm": "仍然离开"
     }
   },
   "canvasCommands": {
@@ -32589,8 +32593,8 @@
       "submit": "开始构建",
       "startFailed": "无法开始你的会话，请重试。",
       "recentTitle": "你的 Studio 项目",
-      "recentEmpty": "你的 Studio 项目会显示在这里。",
-      "yourApps": "你的应用"
+      "yourApps": "你的应用",
+      "allOnCanvas": "在画布上查看全部"
     },
     "topBar": {
       "home": "Studio 首页",

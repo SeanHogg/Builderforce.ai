@@ -3,7 +3,7 @@ import { entryAppDecision, type EntryAppFacts } from './useCanvasEntryApp';
 import { phaseBefore } from './useCanvasLens';
 
 const studioEntry: EntryAppFacts = {
-  modality: 'designer', boardLoaded: true, canEdit: true, hasApp: false, hasCodeCards: false, failed: false,
+  modality: 'designer', boardLoaded: true, canEdit: true, hasApp: false, hasCodeCards: false, failed: false, creating: false,
 };
 
 describe('entryAppDecision — the app a lens expects', () => {
@@ -26,6 +26,12 @@ describe('entryAppDecision — the app a lens expects', () => {
 
   it('releases the first turn when the create fails, so the Brain can build it instead', () => {
     expect(entryAppDecision({ ...studioEntry, failed: true })).toEqual({ create: false, pending: false });
+  });
+
+  it('holds the first turn while its create is in flight, even after the lens stops expecting an app', () => {
+    // Leaving Studio mid-create: releasing the turn now would let it make a second build.
+    expect(entryAppDecision({ ...studioEntry, creating: true })).toEqual({ create: false, pending: true });
+    expect(entryAppDecision({ ...studioEntry, modality: null, creating: true })).toEqual({ create: false, pending: true });
   });
 
   it('expects nothing from a lens with no app modality, or from a viewer who cannot edit', () => {

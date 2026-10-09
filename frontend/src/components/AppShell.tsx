@@ -23,7 +23,7 @@ import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 // to sit above BOTH the panel and the page it frames.
 import { ReferenceChromeProvider } from '@/lib/referenceChrome';
 import { isStageRoute, panelOpen } from '@/lib/workbenchPolicy';
-import { canvasLensDefinition, lensForRoute } from '@/lib/canvasLens';
+import { lensChromeForRoute, lensForRoute } from '@/lib/canvasLens';
 
 const CanvasStage = dynamic(
   () => import('./canvas/CanvasStage').then((module) => module.CanvasStage),
@@ -88,8 +88,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // The lens this route presents its board through decides whether the operator rail is
   // drawn at all — read off the registry, never a `=== '/studio'` here. The Studio lens
   // is prompt + preview with the site header kept and no sidebar.
-  const routeLens = lensForRoute(pathname ?? '');
-  const lensHidesSidebar = routeLens != null && !canvasLensDefinition(routeLens).chrome.shellSidebar;
+  // Read once: the rail (and the top bar's button that opens it), the phone's bottom nav
+  // and the team footer each follow their own flag.
+  const lensChrome = lensChromeForRoute(pathname ?? '');
+  const lensHidesSidebar = lensChrome != null && !lensChrome.shellSidebar;
   // A workbench destination is a PANEL, whether or not a board happens to be on
   // the stage yet. Gating this on `stageActive` is what made the same route
   // render as two different products: a drawer when you had a canvas open and a
@@ -116,7 +118,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ReferenceChromeProvider>
-    <div className="app-frame">
+    <div
+      className="app-frame"
+      // The bottom nav's clearance is reserved at the frame (`--mobile-nav-height`), so a
+      // lens that does not draw the bar zeroes the token here rather than leaving a gap.
+      {...(lensChrome && !lensChrome.shellMobileNav ? { 'data-shell-mobile-nav': 'off' } : {})}
+    >
       <EmulationBar />
       {/* The open beta on offer, if this person has not answered it yet. In flow
           at the top of the frame so it pushes the shell down rather than covering
@@ -159,7 +166,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             workspace in. Both render in the same grid area — see `.shell > .mh`.
             The marketing header owns its own mobile drawer, so the Sidebar's is
             handed over with it rather than left racing a second one open. */}
-        {isAuthenticated ? <TopBar onMenuClick={openNav} /> : <MarketingHeader />}
+        {isAuthenticated ? <TopBar onMenuClick={lensHidesSidebar ? undefined : openNav} /> : <MarketingHeader />}
         <Sidebar
           collapsed={navCollapsed}
           onToggleCollapsed={toggleNav}
@@ -215,11 +222,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </NavCountsProvider>
       </div>
       {/* The team, always on the footer — §3.3. It decides its own visibility. */}
-      <TeamBar />
+      {(lensChrome?.shellTeamBar ?? true) && <TeamBar />}
       {/* Usage meters and version + Terms/Privacy live in the sidebar
           (`Sidebar`'s own footer row) rather than floating over the board
           here — see its own doc. */}
-      <MobileBottomNav />
+      {(lensChrome?.shellMobileNav ?? true) && <MobileBottomNav />}
     </div>
     </ReferenceChromeProvider>
   );
