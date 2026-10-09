@@ -1125,6 +1125,20 @@ html[data-theme='light'] .nebula {
   grid-template-columns: var(--shell-nav-width-collapsed) minmax(0, 1fr);
 }
 
+/* A canvas LENS that draws no operator rail (the Studio lens, `lib/canvasLens.ts`):
+   the nav column collapses to nothing and the sidebar (and its phone drawer
+   backdrop) is not drawn. The header row stays — the Studio lens keeps the site
+   header — and the phone rules for stage routes (`data-phone-chrome`) still apply.
+   Set by `AppShell` from the lens registry, so both themes and every width follow it. */
+.shell[data-shell-chrome='lens'],
+.shell[data-shell-chrome='lens'].nav-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+.shell[data-shell-chrome='lens'] > .nav,
+.shell[data-shell-chrome='lens'] > .nav-backdrop {
+  display: none;
+}
+
 /* The marketing header, seated in the shell's topbar row.
    A logged-out visitor keeps the header they arrived with (see AppShell), and
    `.mh` is written for a marketing PAGE — a 1320px centred column at 66px. In

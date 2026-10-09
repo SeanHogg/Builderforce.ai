@@ -151,7 +151,10 @@ export function middleware(request: NextRequest) {
   }
 
   const needsCoi = (pathname.startsWith('/create/') && !isCanvasInvitationRoute(pathname))
-    || pathname.startsWith(`${STUDIO_ROUTE}/project/`);
+    // Everything under Studio runs the in-browser app runtime: the durable-project IDE
+    // (`/studio/project/<id>`) and a session presented through the Studio lens
+    // (`/studio/<sessionId>`, the canvas App surface). The bare `/studio` home does not.
+    || pathname.startsWith(`${STUDIO_ROUTE}/`);
 
   // Embedded surfaces (/embed/*) are framed cross-origin by host apps (e.g.
   // BurnRateOS). They authenticate via postMessage (not cookies), so we must NOT

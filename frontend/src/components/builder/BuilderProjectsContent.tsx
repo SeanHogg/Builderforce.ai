@@ -66,7 +66,7 @@ export function BuilderProjectsContent({
     persistLastProjectId(String(p.storageProjectId));
     try {
       const opened = await creationSessionsApi.openIdeProject(p.id);
-      router.push(openedBoardHref(opened, { build: '1' }));
+      router.push(openedBoardHref(opened, { surface: 'app' }));
       onNavigate?.();
     } catch {
       router.push('/create?filter=build');

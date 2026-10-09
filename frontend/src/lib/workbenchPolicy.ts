@@ -21,6 +21,7 @@
  */
 
 import { classifyShell, isReferenceSurface, rendersAppShell } from './shellRouting';
+import { lensForRoute } from './canvasLens';
 
 export type RouteBucket = 'stage' | 'workbench' | 'standalone';
 
@@ -28,9 +29,12 @@ export type RouteBucket = 'stage' | 'workbench' | 'standalone';
  * Canvas surfaces. Each is a MODE of one stage rather than its own component
  * tree — which is the reason this list can grow (PRD 18 brings more runtimes)
  * without the stage being rebuilt per runtime.
+ *
+ * The creation board's own routes — `/create/<id>` and the Studio lens's
+ * `/studio/<id>` — are not listed here: {@link lensForRoute} owns them, so "is this a
+ * board" and "which lens presents it" are one answer (`lib/canvasLens.ts`).
  */
 const STAGE_PATTERNS: RegExp[] = [
-  /^\/create\/[^/]+/,
   /^\/brainstorm(?:\/|$)/,
   /^\/workflows\/builder(?:\/|$)/,
 ];
@@ -59,7 +63,7 @@ const FULL_WIDTH_PATTERNS: RegExp[] = [
 
 /** True when this route puts a board on the stage rather than rendering a page. */
 export function isStageRoute(pathname: string): boolean {
-  return STAGE_PATTERNS.some((pattern) => pattern.test(pathname));
+  return lensForRoute(pathname) !== null || STAGE_PATTERNS.some((pattern) => pattern.test(pathname));
 }
 
 export function classifyRoute(pathname: string): RouteBucket {

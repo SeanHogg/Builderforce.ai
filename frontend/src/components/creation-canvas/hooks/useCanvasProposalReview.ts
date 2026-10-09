@@ -22,6 +22,10 @@ export interface UseCanvasProposalReviewDeps {
   autoApplyPending: boolean;
   comparisonModelIds: string[];
   describeTurnError: (error: unknown, fallbackKey: 'noticeBrainFailed' | 'noticeAgentTestFailed' | 'noticeAgentGroupFailed') => string;
+  /** A lens is creating the board's app (`useCanvasEntryApp`, pending and not failed). The
+   *  FIRST turn waits for it, so it starts on a board that has a build to write into
+   *  rather than authoring cards about the request. A failed create releases it. */
+  entryAppPending: boolean;
   evaluateCanvas: (promptOverride?: string) => void;
   flowRef: RefObject<ReactFlowInstance<CanvasObject, Edge> | null>;
   hydratedRef: RefObject<boolean>;
@@ -53,7 +57,7 @@ export interface UseCanvasProposalReviewDeps {
   timeline: CanvasTimelineMessage[];
 }
 
-export function useCanvasProposalReview({ acceptedProposalIds, autoApplyPending, comparisonModelIds, describeTurnError, evaluateCanvas, flowRef, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, layoutViewportRef, modelComparisonStartedRef, nodes, persistence, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setAutoApplyMode, setAutoApplyPending, setEdges, setNodes, setNotice, setPendingBrainActions, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setSurface, stage, t, thinking, timeline }: UseCanvasProposalReviewDeps) {
+export function useCanvasProposalReview({ acceptedProposalIds, autoApplyPending, comparisonModelIds, describeTurnError, entryAppPending, evaluateCanvas, flowRef, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, layoutViewportRef, modelComparisonStartedRef, nodes, persistence, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setAutoApplyMode, setAutoApplyPending, setEdges, setNodes, setNotice, setPendingBrainActions, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setSurface, stage, t, thinking, timeline }: UseCanvasProposalReviewDeps) {
   useEffect(() => {
     if (!hydratedRef.current || modelComparisonStartedRef.current || comparisonModelIds.length < 2) return;
     const initial = timeline.find((message) => message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:'));
@@ -137,22 +141,22 @@ export function useCanvasProposalReview({ acceptedProposalIds, autoApplyPending,
 
   useEffect(() => {
     if (comparisonModelIds.length >= 2) return;
-    if (!hydratedRef.current || initialPromptSubmittedRef.current || thinking) return;
+    if (!hydratedRef.current || initialPromptSubmittedRef.current || thinking || entryAppPending) return;
     const initial = timeline.find((message) => message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:'));
     if (!initial || timeline.some((message) => message.messageRole === 'assistant')) return;
     initialPromptSubmittedRef.current = true;
     setPrompt(initial.body);
     evaluateCanvas(initial.body);
-  }, [comparisonModelIds.length, thinking, timeline, evaluateCanvas, hydratedRef, initialPromptSubmittedRef, setPrompt]);
+  }, [comparisonModelIds.length, entryAppPending, thinking, timeline, evaluateCanvas, hydratedRef, initialPromptSubmittedRef, setPrompt]);
 
   useEffect(() => {
     const request = initialPrompt?.trim();
-    if (!request || !hydratedRef.current || initialPromptSubmittedRef.current || thinking) return;
+    if (!request || !hydratedRef.current || initialPromptSubmittedRef.current || thinking || entryAppPending) return;
     if (initialFocusId && selectedId !== initialFocusId) return;
     initialPromptSubmittedRef.current = true;
     setPrompt(request);
     evaluateCanvas(request);
-  }, [evaluateCanvas, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, selectedId, setPrompt, thinking]);
+  }, [entryAppPending, evaluateCanvas, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, selectedId, setPrompt, thinking]);
 
   const applyProposedChanges = useCallback(async () => {
     const selected = proposedChanges.filter((change) => acceptedProposalIds.has(change.id));

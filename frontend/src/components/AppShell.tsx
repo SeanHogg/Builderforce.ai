@@ -23,6 +23,7 @@ import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 // to sit above BOTH the panel and the page it frames.
 import { ReferenceChromeProvider } from '@/lib/referenceChrome';
 import { isStageRoute, panelOpen } from '@/lib/workbenchPolicy';
+import { canvasLensDefinition, lensForRoute } from '@/lib/canvasLens';
 
 const CanvasStage = dynamic(
   () => import('./canvas/CanvasStage').then((module) => module.CanvasStage),
@@ -43,10 +44,11 @@ function isProjectIdPage(pathname: string | null): boolean {
   return pathname != null && /^\/projects\/[^/]+$/.test(pathname);
 }
 
-/** A canvas ITSELF is full-screen. `/create` alone is now the canvas library — an
- *  ordinary scrolling page — so it must not be swept into the edge-to-edge case. */
+/** A canvas ITSELF is full-screen — through either lens, `/create/<id>` or the Studio
+ *  lens's `/studio/<id>` (`lib/canvasLens.ts`). `/create` alone is the canvas library —
+ *  an ordinary scrolling page — so it must not be swept into the edge-to-edge case. */
 function isCreationPage(pathname: string | null): boolean {
-  return pathname != null && pathname.startsWith('/create/');
+  return pathname != null && lensForRoute(pathname) !== null;
 }
 
 /** Deep full-screen routes render edge-to-edge with no index. */
@@ -83,6 +85,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const canvas = useOptionalActiveCanvas();
   const stageActive = canvas?.active != null && canvas.stageHosted;
   const onStage = isStageRoute(pathname ?? '');
+  // The lens this route presents its board through decides whether the operator rail is
+  // drawn at all — read off the registry, never a `=== '/studio'` here. The Studio lens
+  // is prompt + preview with the site header kept and no sidebar.
+  const routeLens = lensForRoute(pathname ?? '');
+  const lensHidesSidebar = routeLens != null && !canvasLensDefinition(routeLens).chrome.shellSidebar;
   // A workbench destination is a PANEL, whether or not a board happens to be on
   // the stage yet. Gating this on `stageActive` is what made the same route
   // render as two different products: a drawer when you had a canvas open and a
@@ -134,6 +141,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         // it at. Desktop is untouched. The sidebar drawer is not needed either: on a phone
         // stage route the bottom nav IS the navigation, and it stays.
         {...(onStage ? { 'data-phone-chrome': 'stage' } : {})}
+        // A LENS THAT DRAWS NO RAIL. `globals.css` collapses the nav column and hides the
+        // sidebar under this attribute, keeping the header row; the sidebar stays MOUNTED
+        // so switching back to the canvas lens does not rebuild it.
+        {...(lensHidesSidebar ? { 'data-shell-chrome': 'lens' } : {})}
         style={{ position: 'relative' }}
       >
         {/* One header per visitor, not one per shell.

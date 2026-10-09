@@ -51,7 +51,7 @@ interface Ports {
 async function openResource(resource: CreationLibraryResource) {
   switch (resource.type) {
     case 'ideProject':
-      return { opened: await creationSessionsApi.openIdeProject(Number(resource.id)), extra: { build: '1' } };
+      return { opened: await creationSessionsApi.openIdeProject(Number(resource.id)), extra: { surface: 'app' } };
     case 'project':
       return { opened: await creationSessionsApi.openProject(Number(resource.id)), extra: undefined };
     case 'workflow':

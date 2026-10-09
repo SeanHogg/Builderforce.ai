@@ -166,9 +166,11 @@ export const PUBLIC_DESTINATIONS: PublicDestination[] = [
   // it is not visible from this array: the Product menu is a projection of
   // `NAV_GROUPS` (`productFacesFor` → `groupsForStage`), so a product-column
   // `placement` does nothing on its own — a row only reaches that menu by
-  // declaring the `groupId` of a RAIL row. Studio has none and should not: it
-  // is `classifyShell` → `none`, a standalone IDE that replaces the shell
-  // rather than a destination inside it. Placed in a product column it would
+  // declaring the `groupId` of a RAIL row. Studio has none and should not: its
+  // home is `classifyShell` → `public` (the site header over "What will you
+  // build?", matched exactly — see `PUBLIC_SHELL_PATHS`), and what it starts is a
+  // canvas board presented through the Studio lens (`/studio/<sessionId>`,
+  // `lib/canvasLens.ts`), not a destination inside the rail. Placed in a product column it would
   // have rendered in no menu at all, and as `kind: 'link'` it is filtered out
   // of `/features` too, so the footer would have been its only entry.
   // `check-destinations` now fails that combination outright.

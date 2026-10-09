@@ -86,8 +86,13 @@ function underPrefix(pathname: string, prefix: string): boolean {
  * FOUNDER's destination and stays an app route, while a fund opening a company
  * grant has no session by construction — the token IS the credential — so the
  * page it lands on must not carry the operator shell of a workspace it is not in.
+ *
+ * `/studio/project/` (trailing slash) is the durable-project Studio IDE, which draws
+ * its own Studio bar. Only that sub-tree: the `/studio` HOME is a public page with the
+ * site header (see `PUBLIC_SHELL_PATHS`), and `/studio/<sessionId>` is a canvas board
+ * presented through the Studio lens — an app route on the stage (`lib/canvasLens.ts`).
  */
-const NO_CHROME_PREFIXES = ['/embed', '/studio', '/spawn', '/auth/', '/book', '/deal', '/f/', '/p/', '/sign/', '/invoice/', '/resume/', '/data-rooms/shared/', '/investor/shared/', '/legal-documents/shared/', '/references/shared/', '/lti/'];
+const NO_CHROME_PREFIXES = ['/embed', '/studio/project/', '/spawn', '/auth/', '/book', '/deal', '/f/', '/p/', '/sign/', '/invoice/', '/resume/', '/data-rooms/shared/', '/investor/shared/', '/legal-documents/shared/', '/references/shared/', '/lti/'];
 
 /**
  * The framed cross-origin surface — the VS Code webview and third-party hosts.
@@ -142,6 +147,17 @@ export function isFramedEmbed(pathname: string): boolean {
 const PUBLIC_SHELL_PREFIXES = ['/about', '/legal', '/product', '/blog', '/tutorials', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/diagnostics', '/tools', '/evermind', '/media', '/sell-builderforce', '/book-demo', '/demo', '/creation-canvas', '/crm/phone', '/salary', '/skills/', '/personas/'];
 
 /**
+ * Public pages matched EXACTLY, never as a prefix.
+ *
+ * `/studio` is the Studio home — "What will you build?" — and gets the site's own
+ * header like `/pricing` does. It cannot be a prefix entry: everything UNDER it is not
+ * public. `/studio/<sessionId>` is a creation board (an app route, local-first for a
+ * guest) and `/studio/project/<id>` is the chrome-less Studio IDE, and `underPrefix`
+ * would have classified both as marketing pages.
+ */
+const PUBLIC_SHELL_PATHS = ['/studio'];
+
+/**
  * Routes an ANONYMOUS visitor gets the OPERATOR shell for, not marketing chrome.
  *
  * PRD 21 §0 — "the canvas is the product. Everything else is a panel over it."
@@ -174,6 +190,9 @@ const LOCAL_FIRST_APP_PATTERNS: RegExp[] = [
   /^\/create\/local-/,
   /^\/create\/invitations(?:\/|$)/,
   /^\/create\/join(?:\/|$)/,
+  // A Studio session is the same local-first board, presented through the Studio lens
+  // (`lib/canvasLens.ts`) — a guest's `local-<uuid>` must mount without an account.
+  /^\/studio\/local-/,
 ];
 
 /**
@@ -302,6 +321,7 @@ export function classifyShell(pathname: string): ShellKind {
   // that makes the other half cheap. Reading it off the registry rather than
   // off a second prefix list is what stops the two from disagreeing.
   if (isReferenceSurface(pathname)) return 'public';
+  if (PUBLIC_SHELL_PATHS.includes(pathname)) return 'public';
   if (PUBLIC_SHELL_PREFIXES.some((p) => underPrefix(pathname, p))) return 'public';
   return 'app';
 }

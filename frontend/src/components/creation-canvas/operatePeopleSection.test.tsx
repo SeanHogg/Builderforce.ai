@@ -24,6 +24,7 @@ function renderPeople(projectId: number | null, persistence: CanvasSessionFacts[
     sessionId: 'people-test',
     persistence,
     role: 'owner' as CanvasSessionFacts['role'],
+    lens: 'canvas',
     canEdit: true,
     notify: vi.fn(),
     requireAccount: vi.fn() as unknown as CanvasSessionFacts['requireAccount'],

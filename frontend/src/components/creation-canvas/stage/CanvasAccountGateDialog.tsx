@@ -8,6 +8,7 @@ import { faultText } from '@/lib/apiClient';
 import type { AccountGate } from '../canvasBoardTypes';
 import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
 import styles from '../CreationCanvas.module.css';
+import { canvasLensSessionPath } from '@/lib/canvasLens';
 
 export interface CanvasAccountGateDialogProps {
   gate: AccountGate | null;
@@ -30,7 +31,7 @@ export interface CanvasAccountGateDialogProps {
  */
 export function CanvasAccountGateDialog({ gate, onClose, hasAccount, claimingDraft, setClaimingDraft }: CanvasAccountGateDialogProps) {
   const t = useTranslations('creationCanvas');
-  const { sessionId, notify } = useCanvasSessionFacts();
+  const { sessionId, notify, lens } = useCanvasSessionFacts();
   if (!gate) return null;
   return <div className={styles.accountGateBackdrop} role="presentation">
         <section className={styles.accountGate} role="dialog" aria-modal="true" aria-labelledby="canvas-account-gate-title">
@@ -46,7 +47,8 @@ export function CanvasAccountGateDialog({ gate, onClose, hasAccount, claimingDra
                 trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: canvasSurface(), action: gate.action } });
                 setClaimingDraft(true);
                 void claimLocalDraft(sessionId)
-                  .then((claimed) => { if (claimed) canvasNavigate(`/create/${claimed.sessionId}`); else notify(t('noticeSaveToAccountFailed')); })
+                  // The saved board opens through the lens it was being seen through (Studio stays Studio).
+                  .then((claimed) => { if (claimed) canvasNavigate(canvasLensSessionPath(lens, claimed.sessionId)); else notify(t('noticeSaveToAccountFailed')); })
                   .catch((error) => notify(faultText(error, t('noticeSaveToAccountFailed'))))
                   .finally(() => { setClaimingDraft(false); onClose(); });
               }}>{claimingDraft ? t('noticeSavingToAccount') : t('gateSaveToAccount')}</button>

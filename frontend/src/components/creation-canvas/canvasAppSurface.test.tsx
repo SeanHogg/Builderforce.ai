@@ -174,6 +174,15 @@ describe('the app surface', () => {
     expect(actions.importCards).toHaveBeenCalledWith(expect.objectContaining({ nodeId: 'b1' }));
   });
 
+  /** The Studio lens creates the board's app itself (`useCanvasEntryApp`); the chooser would be moot. */
+  it('says the app is being prepared, not what to make, while a lens is creating it', () => {
+    const actions = session([]);
+    render(<CanvasAppSurface nodes={[]} session={actions} persistence="local" sessionTitle="" entryAppPending onExit={vi.fn()} />);
+    expect(screen.queryByText('Start this session’s app')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('Bringing your code into the app');
+    expect(actions.createApp).not.toHaveBeenCalled();
+  });
+
   it('hands the board back on Escape, the way every other surface does', () => {
     const onExit = vi.fn();
     render(<CanvasAppSurface nodes={[]} session={session([])} persistence="server" sessionTitle="" onExit={onExit} />);

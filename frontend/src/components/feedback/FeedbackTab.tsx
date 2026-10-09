@@ -25,8 +25,11 @@ import { faultMessage } from '@/lib/apiClient';
 import { onOpenFeedback } from '@/lib/feedbackEvents';
 /** Routes that own the full viewport — the tab would collide with their chrome. */
 const HIDDEN_PREFIXES = ['/embed', '/login', '/register', '/onboarding'];
-/** Routes that keep the form but not the edge tab: their own menu opens it (`openFeedback`). */
-const MENU_ONLY_PREFIXES = ['/studio'];
+/** Routes that keep the form but not the edge tab: their own menu opens it (`openFeedback`).
+ *  Only the durable-project Studio IDE, whose Studio bar carries the account menu — the
+ *  Studio home has the site chrome and a Studio-lens session has no Studio account menu.
+ *  No trailing slash: `matches` compares whole segments (`/studio/project/<id>`). */
+const MENU_ONLY_PREFIXES = ['/studio/project'];
 
 const matches = (pathname: string, prefixes: readonly string[]) =>
   prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));

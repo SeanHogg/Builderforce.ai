@@ -21,6 +21,7 @@ import { pendingPromptsApi } from '@/lib/builderforceApi';
 import { useAttention } from '@/lib/useAttention';
 import { useAuth } from '@/lib/AuthContext';
 import { useModalDismiss } from '@/hooks/useModalDismiss';
+import { lensForRoute } from '@/lib/canvasLens';
 
 export function FloatingBrain() {
   const pathname = usePathname();
@@ -100,7 +101,8 @@ export function FloatingBrain() {
   // mounting a second launcher there splits context and creates two competing chats.
   // pages a "sign in to use Brain" CTA would be redundant with the form itself.
   if (pathname?.startsWith('/brainstorm')) return null;
-  if (pathname === '/create' || pathname?.startsWith('/create/')) return null;
+  // A board through EITHER lens — `/create/<id>` or Studio's `/studio/<id>` (`lib/canvasLens.ts`).
+  if (pathname === '/create' || (pathname && lensForRoute(pathname))) return null;
   if (pathname === '/login' || pathname === '/register') return null;
   // Embedded surfaces render bare inside a host iframe — no floating chrome.
   if (pathname?.startsWith('/embed')) return null;

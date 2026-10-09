@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { claimPendingDrafts, type ClaimedDraft } from '@/lib/pendingWork';
 import { AppToast, AppToastDismissButton, AppToastPrimaryButton, AppToastText } from '@/components/AppToast';
 import { useAppToastSlot } from '@/components/appToastStack';
+import { CANVAS_LENSES, canvasLensSessionPath } from '@/lib/canvasLens';
 
 /**
  * Signing in resumes the work instead of resetting it.
@@ -42,8 +43,9 @@ export function ResumeWorkBridge() {
 
   const newest = claimed[0];
   // The route already redirects a visitor who is standing on the board being
-  // claimed — telling them about it as well would be noise.
-  const alreadyThere = !!newest && pathname.startsWith(`/create/${newest.sessionId}`);
+  // claimed — through either lens, `/create/<id>` or Studio's `/studio/<id>` —
+  // telling them about it as well would be noise.
+  const alreadyThere = !!newest && CANVAS_LENSES.some((lens) => pathname.startsWith(canvasLensSessionPath(lens.id, newest.sessionId)));
   const visible = !!newest && !dismissed && !alreadyThere;
   const slot = useAppToastSlot('resume', visible);
 

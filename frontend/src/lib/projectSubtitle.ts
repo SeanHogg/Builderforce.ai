@@ -1,8 +1,8 @@
 /**
  * The line shown beside a project's name — or null when it would only repeat it.
  *
- * A project started from a prompt is named after the prompt's first words
- * (`projectNameFromPrompt`) and keeps the whole prompt as its description. Both
+ * A project started from a prompt is named after the prompt's first words and
+ * keeps the whole prompt as its description. Both
  * are worth storing; showing both side by side is not. The workspace bar used to
  * render "Build me a marketing websi" in the name field and "— Build me a
  * marketing website f…" right next to it: one sentence, twice, truncated two

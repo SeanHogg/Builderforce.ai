@@ -9,18 +9,18 @@ import type { ProjectModality } from '@/lib/modality';
  * file open in the editor. One `extraSystem` feeds both the global Brain (via
  * the context) and the docked panel, so they speak with identical awareness.
  *
- * Also handles a deep link: docked, the panel takes the chat/prompt/ticket as
- * props (only the chat id is published); not docked, the floating drawer is
- * seeded and opened. Returns `openDrawer` for the non-docked "Ask AI" button.
+ * Also handles a deep link: docked, the panel takes the chat/ticket as props
+ * (only the chat id is published); not docked, the floating drawer is seeded and
+ * opened. (A one-shot PROMPT used to ride here from the Studio home; a Studio
+ * prompt now opens a canvas session on the Studio lens, whose first turn runs it.) Returns `openDrawer` for the non-docked "Ask AI" button.
  */
-export function useWorkspaceBrainContext({ projectId, modality, activeFile, activeFileContent, docked, initialChatId, initialPrompt, initialTicket }: {
+export function useWorkspaceBrainContext({ projectId, modality, activeFile, activeFileContent, docked, initialChatId, initialTicket }: {
   projectId: number;
   modality: ProjectModality;
   activeFile: string | undefined;
   activeFileContent: string | undefined;
   docked: boolean;
   initialChatId?: number | null;
-  initialPrompt?: string;
   initialTicket?: { kind: string; ref: string };
 }) {
   const { setContext, setOpen } = useBrainContext();
@@ -38,18 +38,17 @@ export function useWorkspaceBrainContext({ projectId, modality, activeFile, acti
   }, [setContext, projectId, modality, extraSystem]);
 
   useEffect(() => {
-    if (initialChatId == null && !initialPrompt && !initialTicket) return;
+    if (initialChatId == null && !initialTicket) return;
     if (docked) {
       if (initialChatId != null) setContext({ initialChatId });
       return;
     }
     setContext({
       ...(initialChatId != null ? { initialChatId } : {}),
-      ...(initialPrompt ? { initialPrompt } : {}),
       ...(initialTicket ? { initialTicket } : {}),
     });
     setOpen(true);
-  }, [initialChatId, initialPrompt, initialTicket, docked, setContext, setOpen]);
+  }, [initialChatId, initialTicket, docked, setContext, setOpen]);
 
   const openDrawer = useCallback(() => {
     setContext({ projectId, modality });

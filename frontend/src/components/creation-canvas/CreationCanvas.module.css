@@ -2663,6 +2663,44 @@
 }
 @media (max-width:720px) { .appWorkspace { margin:0; border-radius:0; border-inline:0; } }
 
+/* ── A LENS (`lib/canvasLens.ts`) ──────────────────────────────────────────────────
+   The Studio lens is the same board read as prompt + preview: no floating phase/surface
+   card, no session command bar, the Brain conversation docked beside the app, and one
+   slim bar across the top (`CanvasLensBar`). The bar's height is MEASURED into
+   `--canvas-top-chrome-space` (inline, which wins); the value here is only the band before
+   the first measurement lands. The command bar is not drawn, so its band is nothing. */
+.canvasShell[data-lens='studio'] { --canvas-top-chrome-space:56px; --canvas-command-bar-space:0px; }
+/* The dock starts UNDER the bar rather than running beneath it. */
+.canvasShell[data-lens='studio'] .brainDock { top:var(--canvas-top-chrome-space); }
+/* The app fills the stage: no inset card, no bottom band for a bar that is not there. */
+.canvasShell[data-lens='studio'] .appSurface { padding-bottom:0; }
+.canvasShell[data-lens='studio'] .appWorkspace { margin:0; border-radius:0; border-inline:0; border-bottom:0; box-shadow:none; }
+
+.lensBar {
+  position:absolute; z-index:20; top:0; left:0; right:0; box-sizing:border-box;
+  display:flex; align-items:center; gap:8px 12px; flex-wrap:wrap; min-width:0;
+  padding:8px 12px; border-bottom:1px solid var(--canvas-line);
+  background:var(--canvas-panel); color:var(--canvas-ink);
+}
+.lensBarLead { display:flex; align-items:center; gap:10px; min-width:0; flex:1 1 200px; }
+.lensBarTitle { min-width:0; overflow:hidden; color:var(--canvas-ink); font-size:13px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+.lensBarNotice { min-width:0; overflow:hidden; color:var(--canvas-muted); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.lensBarSurface { display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
+.lensBarActions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; }
+.lensBarPublish {
+  flex:none; display:inline-flex; align-items:center; min-height:28px; padding:2px 12px;
+  border:1px solid var(--canvas-accent); border-radius:var(--radius-md);
+  background:var(--canvas-accent); color:var(--text-on-accent); font:650 11px var(--font-sans); cursor:pointer;
+}
+.lensBarPublish[aria-pressed='true'] { background:color-mix(in srgb, var(--canvas-accent) 12%, var(--canvas-panel)); color:var(--canvas-accent); }
+.lensBarPublish:hover,.lensBarPublish:focus-visible { filter:brightness(1.06); outline:none; }
+/* A phone: the bar wraps to two rows and the board's name gives way first. */
+@media (max-width:767px) {
+  .lensBar { padding:6px 8px; gap:6px 8px; }
+  .lensBarNotice { display:none; }
+  .lensBarActions { margin-left:0; }
+}
+
 /* Before the session has an app: what to make. A grid that wraps to one column on a
    phone; every kind is a full tap target. */
 .appStart { display:grid; align-content:center; justify-items:center; gap:12px; flex:1; padding:32px 16px; text-align:center; overflow:auto; }

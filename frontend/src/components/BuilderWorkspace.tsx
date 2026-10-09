@@ -29,8 +29,6 @@ interface IDEProps {
   onOpenProjectDetails?: () => void;
   /** When opening Builder with a chat, select this project chat on load. */
   initialChatId?: number | null;
-  /** One-shot prompt auto-sent into the Brain panel on load (Project 360 seed). */
-  initialPrompt?: string;
   /** One-shot work item to auto-link the opened chat to (`?ticket=<kind>:<ref>`). */
   initialTicket?: { kind: string; ref: string };
   /** A host's mark, at the start of the workspace's header (Studio's brand). */
@@ -48,7 +46,7 @@ interface IDEProps {
  * the canvas App surface (`CanvasAppWorkspace`). This file owns only Studio's chrome: the
  * header, the docked Brain and the Brain's workspace tools.
  */
-export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket, headerLeading, headerTrailing }: IDEProps) {
+export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialTicket, headerLeading, headerTrailing }: IDEProps) {
   const t = useTranslations('ide');
   const store = useMemo(() => serverFileStore(project.id), [project.id]);
   const ws = useBuilderWorkspace({ store, name: project.name, modality: project.modality, initialFiles });
@@ -75,7 +73,6 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     activeFileContent: editor.activeFile ? (ws.fileContents[editor.activeFile] ?? '') : undefined,
     docked: hasDockedBrain,
     initialChatId,
-    initialPrompt,
     initialTicket,
   });
 
@@ -149,7 +146,6 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
               activeFile={editor.activeFile}
               voiceName={voice.clones.find((c) => c.id === voice.selectedCloneId)?.name}
               initialChatId={initialChatId}
-              initialPrompt={initialPrompt}
               initialTicket={initialTicket}
               fill={narrow}
               onCollapse={narrow ? undefined : () => setChatHidden(true)}

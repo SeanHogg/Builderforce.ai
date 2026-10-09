@@ -86,7 +86,11 @@ export function CanvasStage() {
               persistence={board.persistence}
               initialFocusId={board.focusId}
               initialShareOpen={board.shareOpen}
-              initialBuildOpen={board.buildOpen}
+              // How this board is presented (`/create` vs `/studio`) and the surface the
+              // entry asked for. The lens is LIVE — the same instance switches lens when
+              // the route does, which is the Studio ↔ canvas back-and-forth.
+              lens={board.lens}
+              initialSurface={board.surface ?? undefined}
               initialPrompt={board.prompt}
               initialPresent={board.present}
               initialModelComparisonIds={board.modelComparisonIds}

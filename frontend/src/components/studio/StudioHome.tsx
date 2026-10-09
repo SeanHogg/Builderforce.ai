@@ -1,61 +1,46 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { StudioTopBar } from './StudioTopBar';
+import { ButtonLink } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
+import { UpgradeModal } from '@/components/UpgradeModal';
 import { StudioPromptBox } from './StudioPromptBox';
 import { StudioRecentProjects } from './StudioRecentProjects';
-import { WorkspacePicker } from '@/components/auth/WorkspacePicker';
-import { useWorkspaceSession } from '@/lib/auth/useWorkspaceSession';
-import { useStartStudioProject } from './useStartStudioProject';
-import { useSignInDialog } from '@/components/auth/signIn/SignInDialogProvider';
-import { studioDraft } from '@/lib/studio/promptHandoff';
+import { useStartStudioSession } from './useStartStudioSession';
 
 /**
- * The Studio home: "what will you build?". A visitor can type before signing in;
- * sending then opens the sign-in pop-up, and the build starts by itself the
- * moment there is a session and a workspace. The draft survives a sign-in that
- * had to reload the page.
+ * The Studio home: "What will you build?".
+ *
+ * Inside the site's own chrome — `/studio` is a public page (`lib/shellRouting.ts`,
+ * `PUBLIC_SHELL_PATHS`), so the header is the one every other page has and this renders a
+ * `<section>`, never a second `<main>` (the shell provides `<main id="main-content">`).
+ *
+ * No sign-in to start: "Build it" opens a creation session — a guest's `local-<uuid>` or a
+ * server session — on the Studio lens (`/studio/<id>`), the canvas's App surface drawn as
+ * prompt + preview. "Your apps" is every app on every board; the list below is the
+ * durable Studio projects, which open in the Studio IDE.
  */
 export function StudioHome() {
   const t = useTranslations('studio.home');
-  const { requestSignIn } = useSignInDialog();
-  const workspace = useWorkspaceSession();
-  const { start, busy, error } = useStartStudioProject(t('untitled'), t('startFailed'));
+  const { start, busy, error, planError, clearPlanError } = useStartStudioSession(t('startFailed'));
   const [prompt, setPrompt] = useState('');
-  const [wantsToStart, setWantsToStart] = useState(false);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPrompt(studioDraft.load());
-  }, []);
-
-  useEffect(() => {
-    if (!wantsToStart || workspace.status !== 'ready') return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setWantsToStart(false);
-    void start(prompt);
-  }, [wantsToStart, workspace.status, start, prompt]);
-
-  const send = () => {
-    studioDraft.save(prompt);
-    setWantsToStart(true);
-    if (workspace.status === 'signedOut') requestSignIn();
-  };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
-      <StudioTopBar />
-      <main style={{ flex: 1, width: 'min(760px, 100%)', margin: '0 auto', padding: 'clamp(32px, 10vh, 120px) 16px 48px', display: 'grid', alignContent: 'start', gap: 28 }}>
-        <div style={{ textAlign: 'center', display: 'grid', gap: 10 }}>
-          <h1 className="ui-text-hero" style={{ margin: 0 }}>{t('title')}</h1>
-          <p className="ui-text-lede" style={{ margin: 0, color: 'var(--text-secondary)' }}>{t('subtitle')}</p>
-        </div>
-        <StudioPromptBox value={prompt} onChange={setPrompt} onSubmit={send} busy={busy} />
-        {error && <p role="alert" style={{ margin: 0, color: 'var(--error-text)' }}>{error}</p>}
-        <WorkspacePicker state={workspace} onChoose={(tenant) => { void workspace.choose(tenant); }} />
-        <StudioRecentProjects />
-      </main>
-    </div>
+    <section style={{ width: 'min(760px, 100%)', margin: '0 auto', padding: 'clamp(32px, 10vh, 120px) 16px 48px', boxSizing: 'border-box', display: 'grid', alignContent: 'start', gap: 28, color: 'var(--text-primary)' }}>
+      <div style={{ textAlign: 'center', display: 'grid', gap: 10 }}>
+        <h1 className="ui-text-hero" style={{ margin: 0 }}>{t('title')}</h1>
+        <p className="ui-text-lede" style={{ margin: 0, color: 'var(--text-secondary)' }}>{t('subtitle')}</p>
+      </div>
+      <StudioPromptBox value={prompt} onChange={setPrompt} onSubmit={() => start(prompt)} busy={busy} />
+      {error && <p role="alert" style={{ margin: 0, color: 'var(--error-text)' }}>{error}</p>}
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <ButtonLink href="/create?filter=build" variant="secondary" size="sm">
+          <Icon name="canvas" size={14} /> {t('yourApps')}
+        </ButtonLink>
+      </div>
+      <StudioRecentProjects />
+      <UpgradeModal error={planError} onClose={clearPlanError} upgradeTarget={planError?.currentPlan === 'pro' ? 'teams' : 'pro'} />
+    </section>
   );
 }

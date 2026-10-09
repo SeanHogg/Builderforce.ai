@@ -33,6 +33,8 @@ export interface CanvasSurfaceStageProps {
   /** The SITE the reader arrived by opening, so the App modality shows that object. */
   sessionApp: CanvasSessionAppActions;
   sessionTitle: string;
+  /** The lens is creating the board's app (`useCanvasEntryApp`) — the App surface says so instead of offering a choice. */
+  entryAppPending: boolean;
   nodes: CreationFlowNode[];
   /** Direct edits made on a surface can land — role and lock both allow it. */
   editable: boolean;
@@ -57,7 +59,7 @@ export interface CanvasSurfaceStageProps {
  * back. Adding a runtime is a key here plus an entry in `canvasSurfaces.ts`.
  */
 export function CanvasSurfaceStage({
-  surface, hostSurfaces, surfaceNode, exitSurface, setSurface, sessionApp, sessionTitle, nodes, editable, updateNodeData, appendAtCenter,
+  surface, hostSurfaces, surfaceNode, exitSurface, setSurface, sessionApp, sessionTitle, entryAppPending, nodes, editable, updateNodeData, appendAtCenter,
   revealObject, conversation, roster, room, resume, openGamePanel, setShareOpen, doors,
 }: CanvasSurfaceStageProps) {
   const { persistence } = useCanvasSessionFacts();
@@ -95,7 +97,7 @@ export function CanvasSurfaceStage({
             // below it takes the nodes rather than a single object: `backend/server.js`,
             // `frontend/index.html` and the page they render are three cards and one
             // artifact, and there is no card to enter it from.
-            app: <CanvasAppSurface nodes={nodes} session={sessionApp} persistence={persistence} sessionTitle={sessionTitle} onExit={exitToBoard} />,
+            app: <CanvasAppSurface nodes={nodes} session={sessionApp} persistence={persistence} sessionTitle={sessionTitle} entryAppPending={entryAppPending} onExit={exitToBoard} />,
             // What the session is worth, read back. Board-scoped for the same reason
             // `app` is — the metrics are about the whole session, not one card.
             // What is RUNNING (from Run): deployments, releases, the app — see the component.

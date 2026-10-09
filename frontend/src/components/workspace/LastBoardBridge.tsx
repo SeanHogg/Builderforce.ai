@@ -99,7 +99,7 @@ function mayStartFreshBoard(pathname: string, isAuthenticated: boolean): boolean
  *
  * The ten-field literal was written out at each call site, which is three
  * chances for one of them to open a board with `present: true` or a stale
- * `buildOpen` — the fields exist for a DEEP LINK (`?present=1`, `?focus=`,
+ * entry `surface` — the fields exist for a DEEP LINK (`?present=1`, `?focus=`,
  * a build ticket) and a restore is the case where every one of them is off.
  */
 function boardOnStage(sessionId: string, persistence: 'local' | 'server'): ActiveCanvas {
@@ -108,7 +108,8 @@ function boardOnStage(sessionId: string, persistence: 'local' | 'server'): Activ
     persistence,
     focusId: null,
     shareOpen: false,
-    buildOpen: false,
+    lens: 'canvas',
+    surface: null,
     prompt: null,
     present: false,
     modelComparisonIds: [],

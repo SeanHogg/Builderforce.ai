@@ -16,6 +16,21 @@
  * that actually shrinks a god component: a hook that OWNS state rather than a
  * function the component calls while keeping it.
  *
+ * ── WHY A SHARED FREE SESSION, AND WHY ONE SNAPSHOT ─────────────────────────
+ * An account-less canvas used to be strictly single-player: "Share" opened a
+ * sign-up gate, which answers a question nobody asked — they wanted to show
+ * someone the board, not to file paperwork. So a local canvas can open the same
+ * guest ROOM the free Brain chat uses: an invite link, a roster, a combined turn
+ * allowance, and (on the chat surface) a camera meeting.
+ *
+ * The board syncs through the room as ONE serialized snapshot, last-writer-wins
+ * on the existing save debounce. That is deliberately not a CRDT: this is a
+ * short-lived ≤8-person free session, and an operational-transform stack has
+ * failure modes far worse than "whoever moved a card most recently won".
+ * localStorage stays the local cache, so a dropped connection still leaves the
+ * board on the device that was editing it. (Moved here from `CanvasInner`, where
+ * it sat above the call to this hook after the state it described had left.)
+ *
  * ── WHY THE DEVICE WRITE RIDES WITH THE ROOM ─────────────────────────────────
  * `writeLocalCreationSession` is here rather than at the call sites because the
  * two writes must never diverge: a shared board updated on this device and

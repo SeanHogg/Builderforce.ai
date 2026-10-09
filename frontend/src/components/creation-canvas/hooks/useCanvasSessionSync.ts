@@ -1,5 +1,5 @@
 /** Keeping the session in sync — saving, realtime, polled members and invitations. */
-import { type Dispatch, type RefObject, type SetStateAction, useEffect } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useEffect, useRef } from 'react';
 import { useEffectEvent } from '@/hooks/useEffectEvent';
 import { boardSignature, persistBoard, saveAttemptKey } from '@/domains/canvas/application/PersistCanvas';
 import { canvasSessionGateway } from '@/domains/canvas/infrastructure/canvasSessionGateway';
@@ -15,6 +15,7 @@ import type { useTranslations } from 'next-intl';
 import type { CanvasTimelineMessage } from '../canvasBoardTypes';
 import type { PresenceRelay } from '@/domains/canvas/application/PresenceRelay';
 import type { CanvasPresenceState } from '@builderforce/creation-canvas-contract';
+import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 
 export interface UseCanvasSessionSyncDeps {
   commitRevision: (revision: number) => void;
@@ -32,8 +33,8 @@ export interface UseCanvasSessionSyncDeps {
   flowRef: RefObject<ReactFlowInstance<CanvasObject, Edge> | null>;
   followingUserId: string | null;
   hydratedRef: RefObject<boolean>;
-  initialBuildOpen: boolean;
-  initialBuildOpenedRef: RefObject<boolean>;
+  /** The surface the entry asked for — with `app` and a focused Builder object, that build opens in the App surface. */
+  initialSurface: CanvasSurfaceId | undefined;
   initialFocusId: string | null | undefined;
   isComposingPrompt: boolean;
   joinedCollaborator: { userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; } | null;
@@ -74,7 +75,7 @@ export interface UseCanvasSessionSyncDeps {
   viewportRef: RefObject<{ x: number; y: number; zoom: number; }>;
 }
 
-export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialBuildOpen, initialBuildOpenedRef, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRelay, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef }: UseCanvasSessionSyncDeps) {
+export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialSurface, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRelay, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef }: UseCanvasSessionSyncDeps) {
   useEffect(() => { currentGraphRef.current = JSON.stringify({ nodes, edges }); }, [currentGraphRef, edges, nodes]);
 
   // A persisted viewport is expressed in screen pixels, so restoring a camera
@@ -99,13 +100,17 @@ export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activ
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: [{ id: initialFocusId }], padding: 0.45, duration: 350 }), 0);
   }, [flowRef, initialFocusId, nodes, setSelectedId]);
 
+  // An entry that asked for the App surface AND focused a Builder object opens THAT build
+  // there, once (`?surface=app&focus=<id>`, and the legacy `?build=1`).
+  const focusedAppOpenedRef = useRef(false);
+  const openFocusedApp = initialSurface === 'app' ? initialFocusId : null;
   useEffect(() => {
-    if (!initialBuildOpen || initialBuildOpenedRef.current || !initialFocusId) return;
-    const target = nodes.find((node) => node.id === initialFocusId && node.data.kind === 'build');
+    if (!openFocusedApp || focusedAppOpenedRef.current) return;
+    const target = nodes.find((node) => node.id === openFocusedApp && node.data.kind === 'build');
     if (!target) return;
-    initialBuildOpenedRef.current = true;
+    focusedAppOpenedRef.current = true;
     openApp(target.id);
-  }, [initialBuildOpen, initialBuildOpenedRef, initialFocusId, nodes, openApp]);
+  }, [nodes, openApp, openFocusedApp]);
 
   /**
    * AUTOSAVE. Debounced 300ms behind the edit that triggered it.

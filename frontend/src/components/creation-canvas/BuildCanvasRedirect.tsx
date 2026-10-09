@@ -34,7 +34,7 @@ export function BuildCanvasRedirect({ projectRef }: { projectRef: string }) {
       const opened = await creationSessionsApi.openIdeProject(build.id);
       if (cancelled) return;
       router.replace(openedBoardHref(opened, {
-        build: '1',
+        surface: 'app',
         prompt: searchParams.get('prompt'),
       }));
     })().catch(toBuildList);

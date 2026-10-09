@@ -1,5 +1,5 @@
 /** Loading the session and adopting remote/room board state into this one. */
-import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo, useState } from 'react';
 import { useLatestRef } from './useLatestRef';
 import { localCreationSnapshot, type LocalCreationSnapshot, readLocalCreationSession, writeLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { normalizeChatMode } from '@/lib/brain';
@@ -60,6 +60,13 @@ export interface UseCanvasSessionDeps {
 }
 
 export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, onBoardLoaded, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef }: UseCanvasSessionDeps) {
+  /**
+   * The board AS LOADED is on screen — STATE, not `hydratedRef`, because something has to
+   * re-render on it: the entry app (`useCanvasEntryApp`) may only decide "this board has no
+   * app" about the loaded board, never about the starter seed that precedes it. Set in the
+   * same commit as the loaded nodes, so the first render that sees `true` sees them too.
+   */
+  const [boardLoaded, setBoardLoaded] = useState(false);
   useEffect(() => {
     try {
       if (persistence === 'local') {
@@ -75,6 +82,10 @@ export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowR
           if (saved.viewport) { viewportRef.current = saved.viewport; pendingViewportRef.current = saved.viewport; void flowRef.current?.setViewport(saved.viewport); }
         }
         onBoardLoaded(saved?.nodes ?? []);
+        // The local board is read synchronously, so its load signal lands in the effect;
+        // `useCanvasEntryApp` needs it as STATE (a ref cannot re-render the decision).
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setBoardLoaded(true);
         hydratedRef.current = true;
         trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: canvasSurface(), persistence: 'local' } });
         return;
@@ -95,6 +106,7 @@ export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowR
         setBranchParentId(detail.session.branchParentSessionId ?? null);
         setNodes(loadedNodes);
         onBoardLoaded(loadedNodes);
+        setBoardLoaded(true);
         setEdges(loadedEdges);
         setPersistedObjectIds(new Set(loadedNodes.map((node) => node.id)));
         setMembers(detail.members);
@@ -262,5 +274,5 @@ export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowR
         return JSON.stringify(current) === JSON.stringify(next) ? current : next;
       });
   }, { intervalMs: 20_000, enabled: evermindLiveEnabled, restartKey: evermindBindingKey });
-  return { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard };
+  return { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard, boardLoaded };
 }

@@ -136,7 +136,12 @@ import { useCanvasResumeShares } from './hooks/useCanvasResumeShares';
 import { CanvasSessionProvider, type CanvasSessionFacts } from './chrome/canvasSessionContext';
 import { useCanvasChromeMenus } from './chrome/useCanvasChromeMenus';
 import { useCanvasSessionActionHandlers } from './chrome/useCanvasSessionActionHandlers';
-import { CanvasPromptComposer, effectiveCanvasPromptPlacement } from './chrome/CanvasPromptComposer';
+import { CanvasPromptComposer } from './chrome/CanvasPromptComposer';
+import { effectiveCanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
+import type { CanvasLens } from '@/lib/canvasLens';
+import { CanvasLensBar } from './chrome/CanvasLensBar';
+import { useCanvasLens } from './hooks/useCanvasLens';
+import { useCanvasEntryApp } from './hooks/useCanvasEntryApp';
 import type { CanvasScopeMode } from './chrome/CanvasScopeChip';
 import { CanvasInviteSheet, useInviteDraft } from './chrome/CanvasInviteSheet';
 import { CanvasMakeItReal } from './chrome/CanvasMakeItReal';
@@ -185,7 +190,7 @@ const COMMAND_BAR_CLEARANCE = 10;
  *  gap is a number this file is entitled to state. */
 const TOP_CHROME_CLEARANCE = 8;
 
-function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true, hostSurfaces, initialSurface, onExitToLibrary }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean; hostSurfaces?: CanvasSurfaceNodes; initialSurface?: CanvasSurfaceId; onExitToLibrary?: () => void }) {
+function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, initialShareOpen = false, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true, hostSurfaces, initialSurface, onExitToLibrary }: { sessionId: string; persistence: 'local' | 'server'; lens?: CanvasLens; initialFocusId?: string | null; initialShareOpen?: boolean; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean; hostSurfaces?: CanvasSurfaceNodes; initialSurface?: CanvasSurfaceId; onExitToLibrary?: () => void }) {
   const fmt = useFormat();
   /** The board's language — recorded on content minted INTO the board (the worked
    *  course's `language`), alongside the copy `canvasText` mints in it. */
@@ -347,8 +352,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const [frameFocus, setFrameFocus] = useState<string | null>(null);
   const [trainingFocus, setTrainingFocus] = useState<{ nodeId: string; projectId: number | string; localOnly: boolean } | null>(null);
-  // The Builder object whose workspace is open on top of the board.
-  /** The game object whose ship-to-device panel is open, by node id. */
   /**
    * The game whose SHIP panel is open — distribution, not play.
    *
@@ -410,22 +413,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const setNotice = useCallback((text: string) => notices.outcome(text), [notices]);
   const noteSaveState = useCallback(() => notices.saveState(''), [notices]);
 
-  /**
-   * SHARED FREE SESSION (no account).
-   *
-   * An account-less canvas used to be strictly single-player: "Share" opened a
-   * sign-up gate, which answers a question nobody asked — they wanted to show
-   * someone the board, not to file paperwork. So a local canvas can now open the
-   * same guest ROOM the free Brain chat uses: an invite link, a roster, a combined
-   * turn allowance, and (on the chat surface) a camera meeting.
-   *
-   * The board syncs through the room as ONE serialized snapshot, last-writer-wins
-   * on the existing save debounce. That is deliberately not a CRDT: this is a
-   * short-lived ≤8-person free session, and an operational-transform stack has
-   * failure modes far worse than "whoever moved a card most recently won".
-   * localStorage stays the local cache, so a dropped connection still leaves the
-   * board on the device that was editing it.
-   */
   /**
    * SHARED FREE SESSION, and the account-less board's ONE write.
    *
@@ -695,16 +682,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const drawingPointsRef = useRef<Array<{ x: number; y: number }>>([]);
   const canvasClipboardRef = useRef<{ nodes: CreationFlowNode[]; edges: Edge[] } | null>(null);
   const initialPromptSubmittedRef = useRef(false);
-  const initialBuildOpenedRef = useRef(false);
   const modelComparisonStartedRef = useRef(false);
   const autoApplyRef = useRef(true);
   const mobileViewportFittedRef = useRef(false);
   const { updateBrainDock, toggleFullscreen } = useCanvasDockAndFullscreen({ autoApplyRef, comparisonModelIds, fullscreen, initialSurface, nativeFullscreenRef, phoneViewport, sessionId, setAutoApply, setBrainDock, setFullscreen, setSurfaceState, shellRef });
+  // HOW THIS BOARD IS PRESENTED — `/create` or `/studio`, the same instance either way
+  // (`lib/canvasLens.ts`). Every lens decision below reads this def, never the id.
+  const lensDef = useCanvasLens({ lens, surface, showSurface: setSurfaceState, phase, setPhase, updateBrainDock, phoneViewport });
   const { setAutoApplyMode, setSessionMode, setMemoryMode } = useCanvasSessionModes({ autoApplyRef, nodes, persistence, sessionId, sessionRole, setAutoApply, setDatasetRowLimit, setFramePresets, setMemoryEnabled, setNotice, setPendingInvitations, setServerTemplates, setSessionMode_, shareOpen, t, templateOpen });
-  const { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard } = useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, onBoardLoaded: settleLoadedPhase, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef });
+  const { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard, boardLoaded } = useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, onBoardLoaded: settleLoadedPhase, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef });
   const showApp = useCallback(() => setSurface('app'), [setSurface]);
   const openApp = useOpenCanvasApp({ setNodes, showApp });
-  useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialBuildOpen, initialBuildOpenedRef, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRelay, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef });
+  useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialSurface, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRelay, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef });
   const { liveMembers, presenceSelfId } = useCanvasPresence({ currentUserId, flowRef, followingUserId, inRoom, livePresence, members, sharedRoom });
 
   const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
@@ -761,6 +750,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const syncSocialCampaign = useCanvasSocialCampaignSync({ setNodes, setNotice, tSocial });
   const { nodesRef, framedBoardRef, stage, appendTimeline, edgesRef, updateNodeData, moveDealFromNode, updateWebsiteViewport } = useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edges, layoutViewportRef, lockBlocked, nodes, noteSaveState, persistence, sessionId, setNodes, setNotice, setTimeline, syncSocialCampaign, t });
   const sessionApp = useCanvasSessionApp({ nodes, nodesRef, setNodes, stage, placeAppendedRef, persistence });
+  // The app the lens expects, made once the loaded board is on screen — before the first turn.
+  const entryApp = useCanvasEntryApp({ boardLoaded, nodes, modality: lensDef.appModality, canEdit, appTitle: title.trim() || t('surface.app.defaultAppTitle'), createApp: sessionApp.createApp });
 
   // The Brain Object mirrors the live turn — messages, trace, and the run state that
   // drives its activity bar — so a working Brain reads as working on the board too,
@@ -829,7 +820,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const { canvasActions } = useCanvasBrainVocabulary({ buildsRef: sessionApp.buildsRef, createApp: sessionApp.createApp, buildSocialFeedNode, canEdit, canvasText, convertObjectToDiagram, effectiveSelectedIds, fmt, inFlightUseCaseIdRef, layoutViewportRef, localizedTourDefaults, nodes, nodesRef, openAccountGate, persistence, promptRef, recentJournalEvidence, requireAccount, resolvedScopeMode, scopedNodeIds, sessionId, setDockPanel, socialAccountGate, stage, t, tSocial, turnToolCallsRef });
   const { addAgentKnowledge, runAgentTest } = useCanvasAgentTesting({ brainRuntimeRef, canEdit, canvasNotices, describeTurnError, disableBrainModel, edges, modelSelection, nodes, persistence, placeAppendedRef, recordBrainCompletion, setEdges, setNodes, setNotice, t });
   const { evaluateCanvas } = useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, canvasRunRef, confirm, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setBrainRunStartedAt, setBrainTrace, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setThinking, stage, t, thinking, timeline, title, turnToolCallsRef, turnUnansweredRef });
-  const { rejectProposedChanges, applyAndEnableAutoApply, applyProposedChanges } = useCanvasProposalReview({ acceptedProposalIds, autoApplyPending, comparisonModelIds, describeTurnError, evaluateCanvas, flowRef, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, layoutViewportRef, modelComparisonStartedRef, nodes, persistence, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setAutoApplyMode, setAutoApplyPending, setEdges, setNodes, setNotice, setPendingBrainActions, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setSurface, stage, t, thinking, timeline });
+  const { rejectProposedChanges, applyAndEnableAutoApply, applyProposedChanges } = useCanvasProposalReview({ acceptedProposalIds, autoApplyPending, comparisonModelIds, describeTurnError, entryAppPending: entryApp.pending, evaluateCanvas, flowRef, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, layoutViewportRef, modelComparisonStartedRef, nodes, persistence, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setAutoApplyMode, setAutoApplyPending, setEdges, setNodes, setNotice, setPendingBrainActions, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setSurface, stage, t, thinking, timeline });
   const { resolveWorkflowNode, buildFlowFromFrame, buildFlow, openEvermindBuild, loadEvermindTemplate, evermindBuild, setEvermindBuild } = useCanvasFlowBuild({ connectionKind, edgesRef, errorText, framedBoardRef, nodes, nodesRef, persistence, requireAccount, selectedNode, sessionId, setEdges, setNodes, setNotice, t, updateNodeData });
   const { compileWorkflow, runWorkflow, unpackWorkflow, saveAgent } = useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKind, errorText, persistence, requireAccount, resolveWorkflowNode, selectedNode, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t });
   const { publishWebsite, publishApp, openBuild, openReleasesPanel, attachBuild, deleteBuildWorkspace, buildWebsiteWithCode, openGamePanel, openPublishPanel, gamePanelTarget } = useCanvasPublishing({ canEdit: cardsEditable, confirm, connectionKind, creatingBuild, edges, errorText, gameShipFocus, layoutViewportRef, nodes, persistence, placeAppendedRef, requireAccount, selectedNode, sessionId, openApp, provisionApp: sessionApp.provisionApp, setCreatingBuild, setEdges, setGameShipFocus, setNodes, setNotice, setPublishFocus, setReleaseFocus, setSelectedId, setSelectedIds, t });
@@ -987,7 +978,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
      is inline in its Object, docked to either edge, or closed entirely. */
   // WHERE THE ONE COMPOSER GOES — see `effectiveCanvasPromptPlacement`.
   const brainDockDrawn = brainSurfaceOpen && brainPlacement === 'docked' && !surfaceDef.brainIsSurface;
-  const effectivePromptPlacement = effectiveCanvasPromptPlacement({ hostOwnsSurface: !!hostSurfaces?.[surface], brainIsSurface: surfaceDef.brainIsSurface, preference: promptPlacement, brainDockDrawn });
+  const effectivePromptPlacement = effectiveCanvasPromptPlacement({ hostOwnsSurface: !!hostSurfaces?.[surface], brainIsSurface: surfaceDef.brainIsSurface, preference: promptPlacement, brainDockDrawn, lensPlacement: lensDef.promptPlacement });
   const promptInBrainPanel = effectivePromptPlacement === 'docked';
   /** THE ONE COMPOSER — see `CanvasPromptComposer`. One element, drawn in exactly one of
    *  its two homes below: the Brain panel's last row, or floating over the board. */
@@ -1010,7 +1001,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     shareOpen, setShareOpen, openReleasesPanel, releaseOpen: releaseFocus !== null, timeline, title, sessionId, persistence, requireAccount,
     standup: { members: rosterMembers, agents: seatedAgents, boardProjectId, ceremonyEnabled: hasAccount, onError: setNotice, onAgentRound: startCanvasTurn },
   });
-  const sessionFacts = useMemo<CanvasSessionFacts>(() => ({ sessionId, persistence, role: sessionRole, canEdit, notify: setNotice, requireAccount }), [canEdit, persistence, requireAccount, sessionId, sessionRole, setNotice]);
+  const sessionFacts = useMemo<CanvasSessionFacts>(() => ({ sessionId, persistence, role: sessionRole, canEdit, notify: setNotice, requireAccount, lens }), [canEdit, lens, persistence, requireAccount, sessionId, sessionRole, setNotice]);
   const brainConversation = useBrainConversation({
     brain: { brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, brainSurface, guestSignupPrompt },
     showExecutionDetail: brainDock.showExecutionDetail, updateBrainDock, trace: brainTrace, nodes, edges, joinedCollaborator,
@@ -1040,23 +1031,26 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         the inspector, and handing it a callback would have meant one more entry in a
         prop list that already carries fifty. Published once, read where it is needed. */}
     <CardActProvider runner={runCardActOnObject}><CanvasBoardBridgeProvider value={boardBridge}><CanvasSpacePresenceProvider value={spacePresence}><CanvasDiagnosticsProvider value={buildDiagnostics}><CanvasSessionProvider value={sessionFacts}>
-    <CanvasShell shellRef={shellRef} fullscreen={fullscreen} hosted={!!hostSurfaces} brainDockSide={brainDock.side} brainDockReserved={brainDockReserved} phase={{ phase, setPhase, readiness: phaseReadiness, askBrain: startCanvasTurn, publishApp, appendAtCenter: cardsEditable ? appendAtCenter : null, openSurface: setSurface }}>
-      <CanvasTopChrome
+    <CanvasShell shellRef={shellRef} fullscreen={fullscreen} hosted={!!hostSurfaces} lens={lens} brainDockSide={brainDock.side} brainDockReserved={brainDockReserved} phase={{ phase, setPhase, readiness: phaseReadiness, askBrain: startCanvasTurn, publishApp, appendAtCenter: cardsEditable ? appendAtCenter : null, openSurface: setSurface }}>
+      {lensDef.chrome.topChrome && <CanvasTopChrome
         phoneViewport={phoneViewport} topChromeRef={topChromeSpaceRef} title={title} surface={surface} setSurface={setSurface}
         collapsed={barCollapsed} roster={rosterMembers} share={sessionActionHandlers.share} inviteMenu={inviteMenu} boardMenu={boardMenuChrome} onExitToLibrary={onExitToLibrary} notice={notice}
-      />
+      />}
+      {/* A lens with no command bar draws its own one-row bar instead, and it owns the top
+          band: ONE host for `--canvas-top-chrome-space` at a time. */}
+      {!lensDef.chrome.commandBar && <CanvasLensBar hostRef={topChromeSpaceRef} title={title} notice={notice} />}
       <CanvasNodePanelHost nodePanel={nodePanel} setNodePanel={setNodePanel} anchorFrom={anchorFrom} presentMode={presentMode} nodes={nodes} editable={canEdit && !lockBlocked} updateNodeData={updateNodeData} setInspectorFocus={setInspectorFocus} setSurface={setSurface} inspectorValue={inspectorValue} />
 
       <CanvasObjectPickerHost objectPicker={objectPicker} setObjectPicker={setObjectPicker} onPick={pickObject} />
 
-      <CanvasDesktopCommandBar
+      {lensDef.chrome.commandBar && <CanvasDesktopCommandBar
         phoneViewport={phoneViewport} hostRef={commandBarSpaceRef} surface={surface} setSurface={setSurface} collapsed={barCollapsed} setCollapsed={setBarCollapsed}
         handlers={sessionActionHandlers} makeItReal={makeItRealChrome} boardMenu={boardMenuChrome} inviteMenu={inviteMenu} runnableApp={runnableApp}
         objectPickerOpen={objectPickerOpen} setObjectPicker={setObjectPicker} setNodePanel={setNodePanel}
         roster={rosterMembers} followingUserId={followingUserId} currentUserId={currentUserId} setFollowingUserId={setFollowingUserId} seatedAgents={seatedAgents}
         promptToggleable={!presentMode && !surfaceDef.brainIsSurface} promptPlacement={promptPlacement} setPromptPlacement={setPromptPlacement} promptOpen={effectivePromptPlacement !== 'closed'}
         canvasUsesTwilio={twilioPromptSelected || boardUsesTwilio(nodes)} selectedNode={selectedNode} captureDisabled={!canEdit || lockBlocked} onCapture={addHostCapture}
-      />
+      />}
 
       <CanvasAccountGateDialog gate={accountGate} onClose={closeAccountGate} hasAccount={hasAccount} claimingDraft={claimingDraft} setClaimingDraft={setClaimingDraft} />
 
@@ -1091,7 +1085,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             earlier and for the same reason: one door onto the picker, on the bar. */}
 
         <CanvasSurfaceStage
-          surface={surface} hostSurfaces={hostSurfaces} surfaceNode={surfaceNode} exitSurface={exitSurface} setSurface={setSurface} sessionApp={sessionApp} sessionTitle={title}
+          surface={surface} hostSurfaces={hostSurfaces} surfaceNode={surfaceNode} exitSurface={exitSurface} setSurface={setSurface} sessionApp={sessionApp} sessionTitle={title} entryAppPending={entryApp.pending}
           nodes={nodes} editable={cardsEditable} updateNodeData={updateNodeData} appendAtCenter={appendAtCenter} revealObject={revealObject}
           conversation={brainConversation} roster={rosterMembers} openGamePanel={openGamePanel} setShareOpen={setShareOpen} doors={{ prove: sessionActionHandlers.prove, publish: sessionActionHandlers.publish, openListing: openPublishPanel, openReleases: openReleasesPanel, openSocial: () => { if (connectedAccountGate(tSocial('title'))) setDockPanel('social'); } }}
           resume={{ tailorResumeFromNode, detachResumeFromNode, createResumeShare, listResumeShares, revokeResumeShare }}
@@ -1153,7 +1147,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   );
 }
 
-export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialBuildOpen, initialPrompt, initialPresent, initialModelComparisonIds, stageActive = true, hostSurfaces, initialSurface, onExitToLibrary }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean; /** Surfaces the embedding host implements itself — see `CanvasSurfaceRouter`. VS Code supplies `chat`, whose runs execute in the extension host. */ hostSurfaces?: CanvasSurfaceNodes; /** The surface this ENTRY asked for, above the stored preference — what "open my chat" means. */ initialSurface?: CanvasSurfaceId;
+export function CreationCanvas({ sessionId, persistence = 'server', lens = 'canvas', initialFocusId, initialShareOpen, initialPrompt, initialPresent, initialModelComparisonIds, stageActive = true, hostSurfaces, initialSurface, onExitToLibrary }: { sessionId: string; persistence?: 'local' | 'server'; /** How the board is presented — `/create` (canvas) or `/studio` (studio). LIVE: the same instance switches lens with the route. See `lib/canvasLens.ts`. */ lens?: CanvasLens; initialFocusId?: string | null; initialShareOpen?: boolean; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean; /** Surfaces the embedding host implements itself — see `CanvasSurfaceRouter`. VS Code supplies `chat`, whose runs execute in the extension host. */ hostSurfaces?: CanvasSurfaceNodes; /** The surface this ENTRY asked for, above the stored preference — what "open my chat" means. */ initialSurface?: CanvasSurfaceId;
   /**
    * The way OUT of this board, on a phone — the back button in the canvas app bar.
    *
@@ -1167,5 +1161,5 @@ export function CreationCanvas({ sessionId, persistence = 'server', initialFocus
   // carrying a toolbar of its own, so both live under one provider — and the app
   // surface publishes ITS controls into the session bar for the same reason, which
   // is what leaves this canvas with one bar instead of one per runtime.
-  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasSurfaceActionsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialBuildOpen={initialBuildOpen} initialPrompt={initialPrompt} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} hostSurfaces={hostSurfaces} initialSurface={initialSurface} onExitToLibrary={onExitToLibrary} /></CanvasSurfaceActionsProvider></Canvas3DControlsProvider></ReactFlowProvider>;
+  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasSurfaceActionsProvider><CanvasInner sessionId={sessionId} persistence={persistence} lens={lens} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialPrompt={initialPrompt} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} hostSurfaces={hostSurfaces} initialSurface={initialSurface} onExitToLibrary={onExitToLibrary} /></CanvasSurfaceActionsProvider></Canvas3DControlsProvider></ReactFlowProvider>;
 }

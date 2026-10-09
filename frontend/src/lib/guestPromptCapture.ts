@@ -31,7 +31,7 @@ import { NEW_CHAT_MODE, type ChatMode } from './brain';
 
 /** Where the prompt was typed. Mirrors `GUEST_PROMPT_SURFACES` on the server;
  *  an unknown value is filed under the front door rather than dropped. */
-export type GuestPromptSurface = 'landing' | 'canvas' | 'brain' | 'room';
+export type GuestPromptSurface = 'landing' | 'canvas' | 'brain' | 'room' | 'studio';
 
 export interface RecordGuestPromptInput {
   prompt: string;

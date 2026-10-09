@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode, RefObject } from 'react';
 import type { BrainDockSide } from '../brainDockPreferences';
+import type { CanvasLens } from '@/lib/canvasLens';
 import { CanvasPhaseProvider, type CanvasPhaseProviderProps } from '../phase/CanvasPhaseContext';
 import styles from '../CreationCanvas.module.css';
 
@@ -8,6 +9,9 @@ export interface CanvasShellProps {
   fullscreen: boolean;
   /** An embedding host (VS Code) supplies surfaces — keep the desktop chrome at any width. */
   hosted: boolean;
+  /** How the board is presented (`lib/canvasLens.ts`), published to the stylesheet as
+   *  `data-lens` — the bands and insets a lens changes are CSS, not branches here. */
+  lens: CanvasLens;
   brainDockSide: BrainDockSide;
   /** Width the Brain dock takes from its edge, in px; zero while it takes none. */
   brainDockReserved: number;
@@ -18,7 +22,7 @@ export interface CanvasShellProps {
 }
 
 /** The canvas's outermost box — every floating piece of chrome and the board are its children. */
-export function CanvasShell({ shellRef, fullscreen, hosted, brainDockSide, brainDockReserved, phase, children }: CanvasShellProps) {
+export function CanvasShell({ shellRef, fullscreen, hosted, lens, brainDockSide, brainDockReserved, phase, children }: CanvasShellProps) {
   // THE SHELL PUBLISHES THE PHASE, twice: to the stylesheet as `data-phase` (the lens ring,
   // the ghost card and the path card read `--canvas-phase-hue` off it) and to every piece of
   // chrome and surface inside it as `CanvasPhaseContext` — so nothing threads it as a prop.
@@ -29,6 +33,7 @@ export function CanvasShell({ shellRef, fullscreen, hosted, brainDockSide, brain
       className={`${styles.canvasShell} app-full-height`}
       data-fullscreen={fullscreen ? 'true' : 'false'}
       data-host={hosted ? 'editor' : undefined}
+      data-lens={lens}
       data-phase={phase.phase}
       style={{
         // The dock owns one edge of the board; every other floating panel is pushed in

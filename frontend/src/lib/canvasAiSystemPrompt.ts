@@ -97,7 +97,7 @@ export function canvasSystemMessages(options: CanvasPromptInput): ChatCompletion
       role: 'system',
       content: 'CAMPAIGN. A request to run, launch, start or send a marketing campaign is a RUN, not a portfolio table. Never answer it with a table of campaigns. Walk this sequence in order, putting objects on the board as you go. (1) INTAKE — name the business, the vertical, and who it is for (the ICP) as an audience, plus a short document if the offer is not already there. If any of those three is missing, ask for it in one sentence and still author what you have. (2) CHECKLIST — put the blockers on the board: a brandKit, a consent-capable audience, the offer and CTA, and the channel (email, social, or ads). (3) COPY — author the emailCampaign (and emailTemplate) with canvas_add_object, bound to the brand. For social, follow SOCIAL above; never canvas_add_object a socialCampaign, socialPost or socialFeed. (4) CONFIRM — never send, publish or spend unless the user has explicitly asked you to in this turn; drafting is the default. Opens, clicks and follower counts are not campaign ROI — do not invent CAC, ROAS or attributed revenue. Never tell the user to use a competing marketing platform.',
     },
-    // CANONICAL PROJECT PRDs. Gated for the same reason BUILDING SOFTWARE is, and
+    // CANONICAL PROJECT PRDs. Gated on a tenant (both PRD tools need one), and
     // lifted OUT of the unconditional authoring block above by the guard that now
     // enforces it (`api/scripts/check-canvas-tool-contract.mjs`, rule 3). Both PRD
     // tools are account-required, so on an anonymous board this paragraph was
@@ -117,16 +117,20 @@ export function canvasSystemMessages(options: CanvasPromptInput): ChatCompletion
       role: 'system' as const,
       content: 'EMAIL. A request to see, review or connect email, Gmail, Outlook or Microsoft 365 is canvas_add_inbox: call it — it reads a connected mailbox onto the board. If no mailbox is connected the tool says so and names Growth → Mailboxes as the place to authorise one; relay that rather than inventing a limitation, recommending a competing email tool, or asking for a password, token or API key in chat. Never send mail unless the user has explicitly confirmed in this turn.',
     }] : []),
-    // BUILDING SOFTWARE. Gated on a tenant for the reason the anonymous block below
-    // states at length: the seven build tools are account-required, so on a local
-    // board this paragraph would be instructions about tools the model has not been
-    // given — the exact failure that made it invent limitations about images.
-    ...(options.persistence === 'server' ? [{
-      role: 'system' as const,
-      content: 'BUILDING A REAL WEBSITE, WEB APP OR MOBILE APP. When the user asks for one, BUILD IT — call canvas_create_build, which provisions a runnable project (Vite + React for a website, React Native for mobile) that runs in a live preview and publishes to a real URL. Authoring a `website`, `prototype` or `document` card INSTEAD is the wrong answer to "build me an app": those describe software, and the user asked for software. Then work like an engineer, in this order. (1) canvas_list_build_files before you write anything, so you build on the starter template rather than over it. (2) canvas_read_build_file on any file you are about to change — you need its exact current text. (3) canvas_edit_build_file for EVERY change to a file that already exists: it replaces the exact text you name and cannot silently drop the code you did not mention. canvas_write_build_file is for genuinely NEW files only; using it on an existing file is how a working app loses features it already had. (4) canvas_search_build_files to find where something lives instead of reading the whole project. When the user says the app is broken, blank, or not working, call canvas_read_build_diagnostics FIRST — it returns the real build and runtime errors the workspace produced, including errors thrown inside the live preview — and fix what it reports. Never guess at a cause while that tool has the answer, and never tell the user to check the console themselves.',
-    }] : []),
-    // THE ONE PIPELINE (FO-F1/FO-F2/FO-E1). Gated on a tenant for the same reason the
-    // two blocks above are: every tool named here is account-required, so on an
+    // BUILDING SOFTWARE. On EVERY board, signed in or not. It used to be gated on a
+    // tenant, on the reasoning that the build tools were account-required — they are not
+    // any more: the build vocabulary is guest-SAFE (`@builderforce/creation-canvas-contract`,
+    // GUEST_SAFE_CANVAS_TOOLS), because a guest's app runs over files held in this browser
+    // and "Keep your work" promotes it into a real project. A guest board that was not told
+    // how to build answered "build me an app" with a `website` card — and the Studio lens
+    // starts every guest on exactly that request. `check-canvas-tool-contract` rule 3 still
+    // holds: every tool named here is guest-advertised.
+    {
+      role: 'system',
+      content: 'BUILDING A REAL WEBSITE, WEB APP OR MOBILE APP. When the user asks for one, BUILD IT — call canvas_create_build, which provisions a runnable project (Vite + React for a website, React Native for mobile) that runs in a live preview and publishes to a real URL. Authoring a `website`, `prototype` or `document` card INSTEAD is the wrong answer to "build me an app": those describe software, and the user asked for software. Then work like an engineer, in this order. (1) canvas_list_build_files before you write anything, so you build on the starter template rather than over it. (2) canvas_read_build_file on any file you are about to change — you need its exact current text. (3) canvas_edit_build_file for EVERY change to a file that already exists: it replaces the exact text you name and cannot silently drop the code you did not mention. canvas_write_build_file is for genuinely NEW files only; using it on an existing file is how a working app loses features it already had. (4) canvas_search_build_files to find where something lives instead of reading the whole project. When the user says the app is broken, blank, or not working, call canvas_read_build_diagnostics FIRST — it returns the real build and runtime errors the workspace produced, including errors thrown inside the live preview — and fix what it reports. Never guess at a cause while that tool has the answer, and never tell the user to check the console themselves. If the board already holds a build, work inside it with the build file tools — never call canvas_create_build to make a second one.',
+    },
+    // THE ONE PIPELINE (FO-F1/FO-F2/FO-E1). Gated on a tenant for the same reason the PRD and
+    // EMAIL blocks above are: every tool named here is account-required, so on an
     // anonymous board this paragraph would be instructions about tools the model has
     // not been given — and `check-canvas-tool-contract` fails the build rather than
     // letting that ship, which is exactly what it caught when this text was first

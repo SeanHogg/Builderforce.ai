@@ -1,3 +1,17 @@
+## ✅ RESOLVED 2026-10-08 — Studio needs no sign-in: it is a lens over the one canvas (frontend 2026.10.25, api 2026.10.17)
+
+**Was:** Studio's "Build it" waited for a signed-in workspace, popped the sign-in dialog and created a durable project, while the canvas gave the same visitor a `local-<uuid>` board and a running app with no account. The Studio home drew its own bar instead of the site header. The API still keyword-seeded empty website/workflow/dataset cards from the prompt wording, which the client had removed because it failed the first turn. A guest board was given the build tools but never the BUILD instructions, so "build me an app" produced a website card.
+
+**Now:**
+- **Studio is a lens, not a second runtime.** `lib/canvasLens.ts` is a registry: `canvas` (`/create/<id>`) and `studio` (`/studio/<id>`) present the SAME mounted board. The Studio lens opens the App surface with the Brain docked left, hides the operator sidebar, the phase/surface chrome and the session command bar, and draws one slim bar (`CanvasLensBar`) carrying the App surface's own Run, Preview/Code, Files, Publish and "Open on canvas". Going back and forth is a route change with the board kept.
+- **No login.** "Build it" calls the ONE session use case `lib/canvas/startCreationSession.ts` (also migrated: `/create/new`, the brainstorm redirect, the dashboard box). Guests get a local board; signed-in people a server session; a plan limit is rethrown to `UpgradeModal`; a signed-in fallback is no longer filed as a guest lead. `GuestPromptSurface` gains `studio` (frontend and API).
+- **Entry app, safely.** `useCanvasEntryApp` creates the lens's app once, only after the board has loaded, and releases the first Brain turn on failure. `useCanvasLens` applies surface, phase floor and dock as a presentation without overwriting stored preferences.
+- **`buildOpen` folded into `surface`** on `ActiveCanvas`; `?build=1` is kept as a legacy alias for `?surface=app`.
+- **Header and slogan.** `/studio` is a public page under the site header; `/studio/project/*` stays the chrome-less durable IDE. Slogan "What will you build?" in all five catalogs.
+- **Server seeding removed** from `POST /api/creation-sessions`; the chat object and `initial:` timeline row are the whole starter.
+- **Guest BUILD instructions** now ship for local boards too, plus "write into an existing build, never create a second".
+- **Dead code removed:** `useStartStudioProject`, `lib/studio/promptHandoff.ts`, and the orphaned `initialPrompt` prop chain through `BuilderWorkspace` → `WorkspaceBrainColumn` → `useWorkspaceBrainContext`.
+
 ## ✅ RESOLVED 2026-10-07 — Marketing persuasion layer: live social proof, loss framing, risk reversal, and a published line we will not cross
 
 **Was:** the marketing site described the product carefully but used almost none of the levers that move a reader. There was no social proof, the problem section's heading ("Ideas become real") framed no loss, the exit prompt was a generic "Before you go…", and no page said what the site would and would not do to persuade.

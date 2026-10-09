@@ -37,6 +37,7 @@ function renderLaunch(nodes: CanvasObject[], { doors = doorsWith(), canEdit = tr
     sessionId: 'launch-test',
     persistence: 'server',
     role: 'owner' as CanvasSessionFacts['role'],
+    lens: 'canvas',
     canEdit,
     notify: vi.fn(),
     requireAccount: vi.fn() as unknown as CanvasSessionFacts['requireAccount'],

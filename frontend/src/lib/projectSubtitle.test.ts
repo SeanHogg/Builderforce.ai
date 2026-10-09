@@ -1,17 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { projectSubtitle } from './projectSubtitle';
-import { projectNameFromPrompt } from '@/components/studio/useStartStudioProject';
 
 describe('projectSubtitle', () => {
   it('hides a description that only continues the name it was derived from', () => {
     const prompt = 'Build me a marketing website for my bakery with a menu page';
-    expect(projectSubtitle(projectNameFromPrompt(prompt, 'Untitled'), prompt)).toBeNull();
+    // A name derived from the prompt's first words, the way prompt-started projects are named.
+    expect(projectSubtitle('Build me a marketing website for', prompt)).toBeNull();
   });
 
   it('hides it when the derived name was cut with an ellipsis', () => {
     const prompt = 'Supercalifragilisticexpialidocious '.repeat(4);
-    const name = projectNameFromPrompt(prompt, 'Untitled');
-    expect(name.endsWith('…')).toBe(true);
+    const name = `${prompt.trim().slice(0, 59)}…`;
     expect(projectSubtitle(name, prompt)).toBeNull();
   });
 

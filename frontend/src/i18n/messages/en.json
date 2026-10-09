@@ -26235,6 +26235,9 @@
       "deploymentTitle": "{app} — live",
       "edgeLabel": "deployed to",
       "recorded": "Live at {url} — recorded on the board."
+    },
+    "lens": {
+      "barLabel": "Studio controls"
     }
   },
   "canvasCommands": {
@@ -32578,16 +32581,16 @@
       "description": "Describe an app and Studio builds it, runs it in your browser and publishes it."
     },
     "home": {
-      "title": "What will you build today?",
+      "title": "What will you build?",
       "subtitle": "Describe an app. Studio writes it, runs it in your browser and publishes it.",
       "promptLabel": "Describe what to build",
       "placeholder": "Let's build a…",
       "hint": "Enter to send · Shift+Enter for a new line",
       "submit": "Build it",
-      "untitled": "Untitled app",
-      "startFailed": "Couldn't create the project. Try again.",
+      "startFailed": "Couldn't start your session. Try again.",
       "recentTitle": "Your Studio projects",
-      "recentEmpty": "Projects you start here will appear here."
+      "recentEmpty": "Your Studio projects will appear here.",
+      "yourApps": "Your apps"
     },
     "topBar": {
       "home": "Studio home",

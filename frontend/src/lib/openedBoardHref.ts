@@ -12,7 +12,7 @@
  * on the one navigation a person makes right after converting their canvas.
  *
  * So the rule "omit focus when there is nothing to focus" is written once, and
- * the same builder carries the extra flags (`build=1`, a forwarded prompt) the
+ * the same builder carries the extra flags (`surface=app`, a forwarded prompt) the
  * redirect surfaces already needed, instead of each one assembling a query
  * string its neighbour assembles slightly differently.
  */

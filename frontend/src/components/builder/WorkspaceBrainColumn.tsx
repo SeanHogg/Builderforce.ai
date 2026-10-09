@@ -14,7 +14,6 @@ export interface WorkspaceBrainColumnProps {
   /** Voice modality: the clone the director speaks with. */
   voiceName?: string | null;
   initialChatId?: number | null;
-  initialPrompt?: string;
   initialTicket?: { kind: string; ref: string };
   /** Take the whole row (a narrow screen, where chat and workspace take turns). */
   fill?: boolean;
@@ -33,7 +32,7 @@ export interface WorkspaceBrainColumnProps {
  * Width is fluid (`clamp`) rather than a fixed 340px, so a wide screen gives the
  * conversation room and a narrow one keeps the editor usable.
  */
-export function WorkspaceBrainColumn({ projectId, modality, extraSystem, activeFile, voiceName, initialChatId, initialPrompt, initialTicket, fill = false, onCollapse }: WorkspaceBrainColumnProps) {
+export function WorkspaceBrainColumn({ projectId, modality, extraSystem, activeFile, voiceName, initialChatId, initialTicket, fill = false, onCollapse }: WorkspaceBrainColumnProps) {
   const t = useTranslations('ide.brainContext');
   const tw = useTranslations('ide.workspace');
   const voice = modality === 'voice';
@@ -52,7 +51,6 @@ export function WorkspaceBrainColumn({ projectId, modality, extraSystem, activeF
         modality={modality}
         extraSystem={extraSystem}
         initialChatId={initialChatId}
-        initialPrompt={initialPrompt}
         initialTicket={initialTicket}
         capabilitySurface="build"
         // The workspace header already names the project, its type and the plan.

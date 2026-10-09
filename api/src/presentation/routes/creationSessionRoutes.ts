@@ -1014,7 +1014,6 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
 
     const initialPrompt = typeof body.initialPrompt === 'string' ? body.initialPrompt.trim().slice(0, 20_000) : '';
     const objectRows: Array<typeof creationSessionObjects.$inferInsert> = [];
-    const connectionRows: Array<typeof creationSessionConnections.$inferInsert> = [];
     validProjects.forEach((project, index) => objectRows.push({
       id: crypto.randomUUID(), sessionId, kind: 'project', resourceType: 'project', resourceId: String(project.id),
       canvasData: { x: 120 + index * 360, y: 100, w: 300, h: 220 }, content: { title: project.name }, createdBy: userId, updatedBy: userId,
@@ -1027,27 +1026,21 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       content: { kind: 'chat', title: 'Brain', subtitle: initialPrompt, messages: [{ role: 'user', content: initialPrompt, createdAt: new Date().toISOString() }] },
       createdBy: userId, updatedBy: userId,
       });
-      const lower = initialPrompt.toLowerCase();
-      const addIntent = (kind: string, title: string, x: number, y: number) => {
-        const id = crypto.randomUUID();
-        objectRows.push({ id, sessionId, kind, canvasData: { x, y, w: 360, h: 260 }, content: { kind, title, status: 'AI draft', subtitle: `Created from: ${initialPrompt}` }, createdBy: userId, updatedBy: userId });
-        connectionRows.push({ id: crypto.randomUUID(), sessionId, sourceObjectId: chatObjectId, targetObjectId: id, kind: 'reference', label: 'creates', createdBy: userId });
-        return id;
-      };
-      const title = cleanTitle(body.title, initialPrompt.slice(0, 80));
-      if (/website|landing page|web app|prototype/.test(lower)) addIntent('website', title, 570, 80);
-      if (/workflow|campaign|automation|process/.test(lower)) addIntent('workflow', `${title} workflow`, 570, 390);
-      if (/data|dataset|csv|spreadsheet|report|dashboard|chart/.test(lower)) {
-        const datasetId = addIntent('dataset', 'Imported data', 570, 120);
-        const dashboardId = crypto.randomUUID();
-        objectRows.push({ id: dashboardId, sessionId, kind: 'dashboard', canvasData: { x: 1050, y: 120, w: 360, h: 260 }, content: { kind: 'dashboard', title: `${title} dashboard`, status: 'AI draft' }, createdBy: userId, updatedBy: userId });
-        connectionRows.push({ id: crypto.randomUUID(), sessionId, sourceObjectId: datasetId, targetObjectId: dashboardId, kind: 'data', label: 'visualizes', createdBy: userId });
-      }
+      // NOTHING is pre-seeded from the WORDING of the prompt — no empty `website` "AI
+      // draft" for "a todo web app", no workflow for "campaign", no dataset + dashboard for
+      // "chart". The browser removed exactly this from the local starter
+      // (`localCanvasStore.createLocalCreationSession`) because an empty shell beside the
+      // chat FAILED THE TURN: the Brain read it as work already done and edited a card
+      // nobody wanted instead of answering. The server kept it, so the same prompt landed
+      // on two different boards depending on whether the person was signed in. The chat
+      // and the `initial:` timeline row below are the whole starter; the first turn does
+      // the rest.
     }
 
     const graph = {
       objects: objectRows.map((object) => ({ id: object.id, kind: object.kind, resourceType: object.resourceType, resourceId: object.resourceId, canvasData: object.canvasData, content: object.content })),
-      connections: connectionRows.map((edge) => ({ id: edge.id, sourceObjectId: edge.sourceObjectId, targetObjectId: edge.targetObjectId, kind: edge.kind, label: edge.label, metadata: edge.metadata })),
+      // Nothing connects at creation: project cards and the chat stand alone until the first turn.
+      connections: [] as GraphConnectionInput[],
     };
     const statements: unknown[] = newCreationSessionStatements(db, {
       sessionId, tenantId, segmentId,

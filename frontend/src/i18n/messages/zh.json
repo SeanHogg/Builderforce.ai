@@ -26235,6 +26235,9 @@
       "deploymentTitle": "{app}——已上线",
       "edgeLabel": "部署到",
       "recorded": "已在 {url} 上线——已记录到看板。"
+    },
+    "lens": {
+      "barLabel": "Studio 控件"
     }
   },
   "canvasCommands": {
@@ -32578,16 +32581,16 @@
       "description": "描述一个应用，Studio 会构建它、在你的浏览器中运行并发布。"
     },
     "home": {
-      "title": "今天想构建什么？",
+      "title": "你想构建什么？",
       "subtitle": "描述一个应用。Studio 会编写代码、在你的浏览器中运行并发布。",
       "promptLabel": "描述要构建的内容",
       "placeholder": "我们来构建一个……",
       "hint": "按 Enter 发送 · Shift+Enter 换行",
       "submit": "开始构建",
-      "untitled": "未命名应用",
-      "startFailed": "无法创建项目，请重试。",
+      "startFailed": "无法开始你的会话，请重试。",
       "recentTitle": "你的 Studio 项目",
-      "recentEmpty": "你在这里创建的项目会显示在这里。"
+      "recentEmpty": "你的 Studio 项目会显示在这里。",
+      "yourApps": "你的应用"
     },
     "topBar": {
       "home": "Studio 首页",

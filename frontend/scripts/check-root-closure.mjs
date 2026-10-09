@@ -45,6 +45,12 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   332 → 333 files (2026-10-08, the Studio lens) — `lib/canvasLens.ts` (~80 lines,
+ *     type-only imports, so it brings nothing behind it). The shell's stage policy
+ *     (`workbenchPolicy.isStageRoute`, already here) and `AppShell` ask it which lens a
+ *     route presents its board through — `/create/<id>` or `/studio/<id>` — so "is this a
+ *     board" and "draw the sidebar" are one answer. It decides the first paint's chrome
+ *     (the Studio lens hides the rail), so an `import()` would flash the sidebar in.
  *   331 → 332 files (2026-10-04, canvas ↔ Studio links) — `lib/studio/studioHost.ts`,
  *     import-free and ~40 lines (it already ships in the middleware bundle). The
  *     Brain's `open_project` action (`lib/brain/platformActions.ts`, root-reachable)

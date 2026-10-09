@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import { LazyBuilderWorkspace } from '@/components/builder/LazyBuilderWorkspace';
 import { useBuildProject } from '@/hooks/useBuildProject';
 import { useSignInDialog } from '@/components/auth/signIn/SignInDialogProvider';
-import { takeHandedOffPrompt } from '@/lib/studio/promptHandoff';
 import { StudioTopBar, StudioBrand } from './StudioTopBar';
 import { StudioAccountControl } from './StudioAccountControl';
 import { StudioProjectActions } from './StudioProjectActions';
@@ -17,8 +16,9 @@ import { useWorkspaceSession } from '@/lib/auth/useWorkspaceSession';
 /**
  * A Studio project: the full Builder workspace under Studio's bar. Signed out, it
  * asks for a sign-in in place (the pop-up), and opens the project the moment the
- * session and workspace are there. A prompt sent from the Studio home starts the
- * agent on first open. A link naming a project chat (`?chat=`, `?ticket=`) opens that chat.
+ * session and workspace are there. A link naming a project chat (`?chat=`, `?ticket=`)
+ * opens that chat. A prompt sent from the Studio home does NOT come here any more: it
+ * opens a creation session on the Studio lens (`/studio/<sessionId>`, `lib/canvasLens.ts`).
  */
 export function StudioProject({ projectId, initialChatId = null, initialTicket = null }: {
   projectId: number;
@@ -30,16 +30,10 @@ export function StudioProject({ projectId, initialChatId = null, initialTicket =
   const workspace = useWorkspaceSession();
   const ready = workspace.status === 'ready';
   const { project, files, error, setProject } = useBuildProject(ready ? projectId : null, t('loadFailed'));
-  const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (workspace.status === 'signedOut') requestSignIn();
   }, [workspace.status, requestSignIn]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setInitialPrompt(takeHandedOffPrompt(projectId));
-  }, [projectId]);
 
   return (
     // Its own stacking layer: the app's fixed starfield (z-index 0) otherwise paints
@@ -64,7 +58,6 @@ export function StudioProject({ projectId, initialChatId = null, initialTicket =
             <LazyBuilderWorkspace
               project={project}
               initialFiles={files}
-              initialPrompt={initialPrompt}
               initialChatId={initialChatId}
               initialTicket={initialTicket ?? undefined}
               onProjectUpdate={setProject}

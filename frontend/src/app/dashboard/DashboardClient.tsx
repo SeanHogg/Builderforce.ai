@@ -39,6 +39,10 @@ import { agentHosts, tasksApi, approvalsApi, creationSessionsApi, type AgentHost
 import type { WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
 import { WorkspacePanelList } from '@/components/workspace-canvas/WorkspacePanelList';
 import { usePublishReferenceChrome, usePublishReferenceSelect, usePublishStageSelect, useReferenceRailActive } from '@/lib/referenceChrome';
+import { startCreationSession } from '@/lib/canvas/startCreationSession';
+import { openedBoardHref } from '@/lib/openedBoardHref';
+import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
+import { UpgradeModal } from '@/components/UpgradeModal';
 import styles from './Dashboard.module.css';
 
 // The founder's journey (PRD: "Idea to Real"), not the generic Create/Projects
@@ -75,6 +79,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(isAuthenticated && hasTenant);
   const [prompt, setPrompt] = useState('');
   const [building, setBuilding] = useState(false);
+  const [planError, setPlanError] = useState<PlanLimitError | null>(null);
   const [creationQuota, setCreationQuota] = useState<{ usage: number; limit: number } | null>(null);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [approvalDates, setApprovalDates] = useState<string[]>([]);
@@ -159,17 +164,19 @@ export default function DashboardPage() {
     if (!p || building || (creationQuota?.limit !== -1 && creationQuota != null && creationQuota.usage >= creationQuota.limit)) return;
     setBuilding(true);
     try {
-      const created = await creationSessionsApi.create({ title: p.slice(0, 80), initialPrompt: p });
+      // THE one start-a-session use case (`lib/canvas/startCreationSession.ts`): a server
+      // session, or — if the server is briefly unavailable — the intent kept on a local
+      // board that is claimed into the workspace on the next load.
+      const { sessionId } = await startCreationSession({ prompt: p, hasTenant: isAuthenticated && hasTenant, surface: 'canvas' });
       setPrompt('');
-      router.push(`/create/${created.session.id}`);
-    } catch {
-      // Preserve intent locally if server persistence is briefly unavailable.
-      const { createLocalCreationSession } = await import('@/domains/canvas/infrastructure/localCanvasStore');
-      router.push(`/create/${createLocalCreationSession(p)}`);
+      router.push(openedBoardHref({ sessionId }));
+    } catch (error) {
+      // Only a plan limit reaches here; the quota line below the box already says why.
+      if (isPlanLimitError(error)) setPlanError(error);
     } finally {
       setBuilding(false);
     }
-  }, [prompt, building, creationQuota, router]);
+  }, [prompt, building, creationQuota, router, isAuthenticated, hasTenant]);
 
   const connectedAgentHosts = agentHostList.filter((c) => c.online);
   // Live "who's online / what's working" across humans AND agents — powers the
@@ -267,6 +274,7 @@ export default function DashboardPage() {
         })}</p>
         <div data-tour="demo-build"><ChatInput value={prompt} onChange={setPrompt} onSubmit={handlePromptSubmit} disabled={building || (creationQuota?.limit !== -1 && creationQuota != null && creationQuota.usage >= creationQuota.limit)} placeholder={t('promptPlaceholder')} submitLabel={building ? t('building') : t('build')} rows={1} submitOnEnter={false} showBrainIcon showVoice secondaryContent={connectedAgentHosts.length > 0 ? <span>{t('agentsConnected', { count: connectedAgentHosts.length })} · {connectedAgentHosts.map((c) => c.name).join(', ')}</span> : <span>{t('noAgents')} <Link href="/workforce">{t('setUpInWorkforce')}</Link></span>} /></div>
         {creationQuota?.limit !== -1 && creationQuota != null && creationQuota.usage >= creationQuota.limit && <p role="alert" className={styles.warning}>{t('sessionLimitReached')}</p>}
+        <UpgradeModal error={planError} onClose={() => setPlanError(null)} upgradeTarget={planError?.currentPlan === 'pro' ? 'teams' : 'pro'} />
         {pendingApprovalsCount > 0 && <p className={styles.warning}>{t('pendingRequests', { count: pendingApprovalsCount })} · <Link href="/workforce?tab=approvals">{t('reviewNow')}</Link></p>}
       </div>,
     },

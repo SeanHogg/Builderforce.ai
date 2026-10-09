@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { openedBoardHref } from '@/lib/openedBoardHref';
-import { startGuestCreationSession } from '@/lib/guestPromptCapture';
+import { startCreationSession } from '@/lib/canvas/startCreationSession';
 
 /**
  * Compatibility adapter for `/brainstorm`: Brain conversations now live on
@@ -30,13 +30,9 @@ export function BrainstormCanvasRedirect() {
         return;
       }
       if (prompt) {
-        if (hasTenant) {
-          const result = await creationSessionsApi.create({ title: prompt.slice(0, 80), initialPrompt: prompt });
-          if (!cancelled) router.replace(`/create/${result.session.id}`);
-        } else {
-          const sessionId = startGuestCreationSession(prompt, { surface: 'brain' });
-          if (!cancelled) router.replace(`/create/${sessionId}`);
-        }
+        // THE one start-a-session use case (`lib/canvas/startCreationSession.ts`).
+        const { sessionId } = await startCreationSession({ prompt, hasTenant, surface: 'brain' });
+        if (!cancelled) router.replace(openedBoardHref({ sessionId }));
         return;
       }
       if (!cancelled) router.replace('/create/new');

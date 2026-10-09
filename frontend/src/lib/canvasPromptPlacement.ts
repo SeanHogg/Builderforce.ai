@@ -67,3 +67,40 @@ export function writeCanvasPromptPlacement(placement: CanvasPromptPlacement): vo
 export function toggledCanvasPromptPlacement(current: CanvasPromptPlacement): CanvasPromptPlacement {
   return current === 'closed' ? DEFAULT_CANVAS_PROMPT_PLACEMENT : 'closed';
 }
+
+/**
+ * WHERE THE ONE COMPOSER GOES, after the host, the surface and the lens have had their say.
+ *
+ * When Brain IS the surface (chat) there is no dock to join and no board to hand the
+ * space back to, so it stays floating and open whatever the stored preference says.
+ * `docked` renders it INSIDE the Brain panel's column, so it only holds while that panel
+ * is on screen — otherwise the preference is untouched and the prompt floats until the
+ * panel comes back.
+ *
+ * A LENS may force a placement (`lib/canvasLens.ts` — Studio docks the prompt under its
+ * conversation, the Lovable/Replit reading). It wins over the stored preference only
+ * while the Brain dock is drawn, for the same reason `docked` does: with no panel there
+ * is nowhere to dock into, and the person's own preference is what applies. It never
+ * writes that preference.
+ *
+ * A surface the EMBEDDING HOST supplies owns its whole centre, input included: its
+ * runtime is somewhere this component cannot reach (in VS Code, the extension host),
+ * so a composer wired to the in-page `evaluateCanvas` would be a second, quieter way
+ * to start a turn that behaves differently from the one the reader can see.
+ *
+ * Moved here from `CanvasPromptComposer.tsx`: it is a pure rule over this module's type,
+ * and a rule worth a unit test should not need a component tree to import.
+ */
+export function effectiveCanvasPromptPlacement({ hostOwnsSurface, brainIsSurface, preference, brainDockDrawn, lensPlacement = null }: {
+  hostOwnsSurface: boolean;
+  brainIsSurface: boolean;
+  preference: CanvasPromptPlacement;
+  brainDockDrawn: boolean;
+  /** The placement the active lens forces, or null. */
+  lensPlacement?: CanvasPromptPlacement | null;
+}): CanvasPromptPlacement {
+  if (hostOwnsSurface) return 'closed';
+  if (brainIsSurface) return 'float';
+  if (lensPlacement && brainDockDrawn) return lensPlacement;
+  return preference === 'docked' && !brainDockDrawn ? 'float' : preference;
+}

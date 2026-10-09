@@ -46,7 +46,7 @@ describe('parseGuestPrompt', () => {
 
 describe('toGuestPromptSurface', () => {
   it('passes the known surfaces through', () => {
-    for (const s of ['landing', 'canvas', 'brain', 'room']) expect(toGuestPromptSurface(s)).toBe(s);
+    for (const s of ['landing', 'canvas', 'brain', 'room', 'studio']) expect(toGuestPromptSurface(s)).toBe(s);
   });
 
   it('files an unknown surface under the front door rather than losing the prompt', () => {

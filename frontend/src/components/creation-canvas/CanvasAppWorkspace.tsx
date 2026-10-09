@@ -14,11 +14,13 @@ import { useBuilderWorkspace } from '@/components/builder/useBuilderWorkspace';
 import type { CenterView } from '@/components/builder/CenterViewSwitch';
 import type { RunPhase } from '@/components/builder/useWorkspaceRun';
 import { sendWorkspaceCommand } from '@/lib/workspace/workspaceCommands';
-import { studioProjectPath } from '@/lib/studio/studioHost';
+import { studioSessionPath } from '@/lib/studio/studioHost';
+import { canvasLensSessionPath } from '@/lib/canvasLens';
 import type { SessionApp } from '@/lib/canvasSessionApp';
 import type { FileEntry } from '@/lib/types';
 import { CanvasBarGroup } from './CanvasBarGroup';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
+import { useCanvasSessionFacts } from './chrome/canvasSessionContext';
 import styles from './CreationCanvas.module.css';
 
 const VIEW_ICON: Record<CenterView, () => React.ReactElement> = {
@@ -59,7 +61,13 @@ export interface CanvasAppWorkspaceProps {
 export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: CanvasAppWorkspaceProps) {
   const t = useTranslations('creationCanvas.surface.app');
   const ws = useBuilderWorkspace({ store: app.store, name: app.title, modality: app.modality, initialFiles });
-  const { runner, store, storageProjectId, modalityDef, modalityCopy, livePreview } = ws;
+  const { runner, store, modalityDef, modalityCopy, livePreview } = ws;
+  // "Open in Studio" is the SAME board seen through the Studio lens — every app has it,
+  // a guest's included, because the lens needs no durable project. Not drawn while the
+  // board is already seen through Studio: the lens bar's "Open on canvas" is the way back.
+  const { sessionId, lens } = useCanvasSessionFacts();
+  const inStudio = studioSessionPath(sessionId);
+  const studioHref = canvasLensSessionPath(lens, sessionId) === inStudio ? null : inStudio;
   const runLabel = RUN_LABEL[runner.phase];
   const filesOpen = ws.railOpen && ws.rightTab === 'files';
   const publishes = ws.rightTabs.includes('publish');
@@ -123,9 +131,9 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
             )}
           </div>
 
-          {/* The same app in Studio, in this tab; Studio's "Open on canvas" comes back. */}
-          {storageProjectId !== null && (
-            <Link className={styles.appStudioLink} href={studioProjectPath(storageProjectId)} title={t('openInStudio')}>
+          {/* The same board in Studio, in this tab; Studio's "Open on canvas" comes back. */}
+          {studioHref && (
+            <Link className={styles.appStudioLink} href={studioHref} title={t('openInStudio')}>
               <Icon name="external-link" size={14} />
               <span>{t('openInStudio')}</span>
             </Link>
@@ -143,7 +151,7 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
         </div>
       </CanvasBarGroup>
     ),
-  }), [runner.phase, runLabel, ws.centerView, ws.centerViews, filesOpen, publishes, publishOpen, appChoices, app.nodeId, storageProjectId, store.id, ws.durable, livePreview, modalityDef.showRunButton, voiceState, runner.run, ws.selectView, ws.openRail, ws.setRailOpen, onSelectApp, t]);
+  }), [runner.phase, runLabel, ws.centerView, ws.centerViews, filesOpen, publishes, publishOpen, appChoices, app.nodeId, studioHref, store.id, ws.durable, livePreview, modalityDef.showRunButton, voiceState, runner.run, ws.selectView, ws.openRail, ws.setRailOpen, onSelectApp, t]);
 
   return (
     <div className={styles.appWorkspace} data-testid="canvas-app-workspace">

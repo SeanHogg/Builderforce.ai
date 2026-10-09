@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { creationSessionsApi } from '@/lib/builderforceApi';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
+import { startCreationSession } from '@/lib/canvas/startCreationSession';
+import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
+import { UpgradeModal } from '@/components/UpgradeModal';
 import { getActiveGuestRoom } from '@/lib/guestRoomApi';
 import { GuestRoomJoinCard } from '@/components/guest/GuestRoomJoinCard';
 import { modelComparisonCanvasHref, readModelComparison } from '@/lib/modelComparisonRequest';
@@ -32,6 +34,7 @@ export default function NewCreationSessionPage() {
   const [initialPrompt, setInitialPrompt] = useState('');
   const [modelComparisonIds, setModelComparisonIds] = useState<string[]>([]);
   const [checkedInvite, setCheckedInvite] = useState(false);
+  const [planError, setPlanError] = useState<PlanLimitError | null>(null);
 
   // Read the invite BEFORE deciding what this page is: a room link must not be
   // consumed by the ordinary "create a canvas and redirect" path below.
@@ -63,19 +66,18 @@ export default function NewCreationSessionPage() {
     if (!authReady || !checkedInvite || inviteCode || started.current) return;
     started.current = true;
     setMessage(t('creatingCanvas'));
-    if (!isAuthenticated || !hasTenant) {
-      const id = startGuestCreationSession(initialPrompt);
-      router.replace(modelComparisonCanvasHref(id, modelComparisonIds));
-      return;
-    }
-    void creationSessionsApi.create({ title: initialPrompt.trim().slice(0, 80) || 'Untitled session', ...(initialPrompt ? { initialPrompt } : {}) })
-      .then(({ session }) => {
-        router.replace(modelComparisonCanvasHref(session.id, modelComparisonIds));
+    // THE one start-a-session use case (`lib/canvas/startCreationSession.ts`): a server
+    // session for a workspace, a local board if that fails, a guest board otherwise.
+    void startCreationSession({ prompt: initialPrompt, hasTenant: isAuthenticated && hasTenant, surface: 'landing' })
+      .then(({ sessionId, persistence }) => {
+        // A signed-in person who landed on a device board is told so before the redirect.
+        if (persistence === 'local' && isAuthenticated && hasTenant) setMessage(t('startingOnDevice'));
+        router.replace(modelComparisonCanvasHref(sessionId, modelComparisonIds));
       })
-      .catch(() => {
-        setMessage(t('startingOnDevice'));
-        const id = startGuestCreationSession(initialPrompt);
-        router.replace(modelComparisonCanvasHref(id, modelComparisonIds));
+      .catch((error: unknown) => {
+        // Only a plan limit reaches here — every other failure already fell back to a local board.
+        if (isPlanLimitError(error)) setPlanError(error);
+        setMessage('');
       });
   }, [authReady, checkedInvite, hasTenant, initialPrompt, inviteCode, isAuthenticated, modelComparisonIds, router, t]);
 
@@ -91,5 +93,8 @@ export default function NewCreationSessionPage() {
     );
   }
 
-  return <main style={{ minHeight: '70vh', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)' }}>{message}</main>;
+  return <main style={{ minHeight: '70vh', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)' }}>
+    {message}
+    <UpgradeModal error={planError} onClose={() => { setPlanError(null); router.replace('/create'); }} upgradeTarget={planError?.currentPlan === 'pro' ? 'teams' : 'pro'} />
+  </main>;
 }

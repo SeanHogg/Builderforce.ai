@@ -50,11 +50,14 @@ export interface CanvasAppSurfaceProps {
   persistence: 'local' | 'server';
   /** What the board is called — the name an app created from here starts with. */
   sessionTitle: string;
+  /** The lens that opened this surface is creating the board's app (`useCanvasEntryApp`):
+   *  say so rather than offering the chooser it is about to make moot. */
+  entryAppPending?: boolean;
   /** Escape hands the board back. Pressing "App" again in the switcher is the other way out. */
   onExit: () => void;
 }
 
-export function CanvasAppSurface({ nodes, session, persistence, sessionTitle, onExit }: CanvasAppSurfaceProps) {
+export function CanvasAppSurface({ nodes, session, persistence, sessionTitle, entryAppPending = false, onExit }: CanvasAppSurfaceProps) {
   const t = useTranslations('creationCanvas.surface.app');
   const { app, apps, createApp, importCards, selectApp } = session;
   // Recomputed only when a card's content changes, never on a drag (see `appCardSignature`).
@@ -93,7 +96,7 @@ export function CanvasAppSurface({ nodes, session, persistence, sessionTitle, on
       <div className={styles.appSurfaceBody}>
         {app ? (
           <SessionAppWorkspace app={app} apps={apps} onSelectApp={selectApp} />
-        ) : hasCodeCards ? (
+        ) : hasCodeCards || entryAppPending ? (
           <div className={styles.appEmpty} role="status"><strong>{t('preparing')}</strong></div>
         ) : (
           <CanvasAppStart durable={persistence === 'server'} onCreate={create} />

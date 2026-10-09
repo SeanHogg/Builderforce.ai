@@ -23,8 +23,12 @@ import { isVisitId } from './VisitorJourney';
  * started. Keeping them apart is what lets the console answer "do people who
  * start from the homepage ask for different things than people already on a
  * canvas" — which is the question that decides what the homepage should say.
+ *
+ * `studio` is the Studio home's composer (`/studio`, "What will you build?"): like
+ * `landing`, it fires before any model call, and filing it under the front door would
+ * hide whether Studio's visitors ask for different things than the homepage's.
  */
-export const GUEST_PROMPT_SURFACES = ['landing', 'canvas', 'brain', 'room'] as const;
+export const GUEST_PROMPT_SURFACES = ['landing', 'canvas', 'brain', 'room', 'studio'] as const;
 
 export type GuestPromptSurface = (typeof GUEST_PROMPT_SURFACES)[number];
 

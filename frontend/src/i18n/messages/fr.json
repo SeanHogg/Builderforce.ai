@@ -26235,6 +26235,9 @@
       "deploymentTitle": "{app} — en ligne",
       "edgeLabel": "déployée sur",
       "recorded": "En ligne sur {url} — consigné sur le tableau."
+    },
+    "lens": {
+      "barLabel": "Commandes de Studio"
     }
   },
   "canvasCommands": {
@@ -32578,16 +32581,16 @@
       "description": "Décrivez une application et Studio la crée, l’exécute dans votre navigateur et la publie."
     },
     "home": {
-      "title": "Qu’allez-vous créer aujourd’hui ?",
+      "title": "Que allez-vous construire ?",
       "subtitle": "Décrivez une application. Studio l’écrit, l’exécute dans votre navigateur et la publie.",
       "promptLabel": "Décrivez ce qu’il faut créer",
       "placeholder": "Créons un…",
       "hint": "Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne",
       "submit": "Créer",
-      "untitled": "Application sans titre",
-      "startFailed": "Impossible de créer le projet. Réessayez.",
+      "startFailed": "Impossible de démarrer votre session. Réessayez.",
       "recentTitle": "Vos projets Studio",
-      "recentEmpty": "Les projets que vous lancez ici apparaîtront ici."
+      "recentEmpty": "Vos projets Studio apparaîtront ici.",
+      "yourApps": "Vos applications"
     },
     "topBar": {
       "home": "Accueil de Studio",

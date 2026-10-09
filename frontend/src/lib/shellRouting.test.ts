@@ -12,7 +12,8 @@ describe('classifyGuestBrainstormEntry', () => {
 describe('classifyShell — app-shell deny-list model [1557]', () => {
   it('renders full-screen routes with no chrome', () => {
     expect(classifyShell('/embed/kanban')).toBe('none');
-    expect(classifyShell('/studio')).toBe('none');
+    // The durable-project Studio IDE draws its own bar; the Studio HOME does not.
+    expect(classifyShell('/studio/project/1')).toBe('none');
     expect(classifyShell('/auth/callback')).toBe('none');
   });
 
@@ -231,5 +232,20 @@ describe('rendersAppShell — one shell, signed in or not', () => {
     expect(rendersAppShell('/pricing', true)).toBe(false);
     expect(rendersAppShell('/login', true)).toBe(false);
     expect(rendersAppShell('/embed/kanban', true)).toBe(false);
+  });
+});
+
+describe('classifyShell — Studio home, Studio lens sessions, Studio IDE', () => {
+  it('gives the Studio home the site header, exactly — not everything under it', () => {
+    expect(classifyShell('/studio')).toBe('public');
+    expect(classifyShell('/studio/project/1')).toBe('none');
+    expect(classifyShell('/studio/local-x')).toBe('app');
+    expect(classifyShell('/studio/2f1c0b7e-0000-4000-8000-000000000000')).toBe('app');
+  });
+
+  it('mounts a guest Studio session like a guest canvas — local-first, no account', () => {
+    expect(isLocalFirstAppRoute('/studio/local-x')).toBe(true);
+    expect(rendersAppShell('/studio/local-x', false)).toBe(true);
+    expect(isLocalFirstAppRoute('/studio')).toBe(false);
   });
 });

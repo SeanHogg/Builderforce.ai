@@ -26235,6 +26235,9 @@
       "deploymentTitle": "{app} – live",
       "edgeLabel": "bereitgestellt auf",
       "recorded": "Live unter {url} – auf dem Board festgehalten."
+    },
+    "lens": {
+      "barLabel": "Studio-Steuerung"
     }
   },
   "canvasCommands": {
@@ -32578,16 +32581,16 @@
       "description": "Beschreibe eine App, und Studio baut sie, führt sie in deinem Browser aus und veröffentlicht sie."
     },
     "home": {
-      "title": "Was baust du heute?",
+      "title": "Was wirst du bauen?",
       "subtitle": "Beschreibe eine App. Studio schreibt sie, führt sie in deinem Browser aus und veröffentlicht sie.",
       "promptLabel": "Beschreibe, was gebaut werden soll",
       "placeholder": "Lass uns … bauen",
       "hint": "Enter zum Senden · Umschalt+Enter für eine neue Zeile",
       "submit": "Bauen",
-      "untitled": "Unbenannte App",
-      "startFailed": "Das Projekt konnte nicht erstellt werden. Versuche es erneut.",
+      "startFailed": "Deine Sitzung konnte nicht gestartet werden. Versuche es erneut.",
       "recentTitle": "Deine Studio-Projekte",
-      "recentEmpty": "Projekte, die du hier startest, erscheinen hier."
+      "recentEmpty": "Deine Studio-Projekte erscheinen hier.",
+      "yourApps": "Deine Apps"
     },
     "topBar": {
       "home": "Studio-Startseite",

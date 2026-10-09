@@ -1,6 +1,8 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { rendersAppShell } from '@/lib/shellRouting';
 import type { AssessmentMode } from '@/lib/academic/assessment';
+import type { CanvasLens } from '@/lib/canvasLens';
+import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 
 /**
  * WHICH board is on the stage — shell state, so the board is no longer owned by
@@ -23,9 +25,14 @@ export interface ActiveCanvas {
   focusId: string | null;
   /** Open the share panel on arrival (`?share=1`). */
   shareOpen: boolean;
-  /** Open a focused Builder object in the App surface on arrival (`?build=1`). A link
-   *  naming a project chat goes to Studio instead (`lib/studio/studioDeepLink.ts`). */
-  buildOpen: boolean;
+  /** How the board is presented — the route's lens (`/create/<id>` = canvas,
+   *  `/studio/<id>` = studio). Same board, same mounted instance; see `lib/canvasLens.ts`. */
+  lens: CanvasLens;
+  /** The board surface this ENTRY asked for (`?surface=`; the legacy `?build=1` is `app`),
+   *  or null. With `?focus=` naming a Builder object and `app` here, that build opens in
+   *  the App surface. A link naming a project chat goes to Studio instead
+   *  (`lib/studio/studioDeepLink.ts`). */
+  surface: CanvasSurfaceId | null;
   /** One-shot Brain prompt carried by a legacy creation deep link. */
   prompt: string | null;
   /** Arrive in presentation mode (`?present=1`). */
@@ -100,7 +107,8 @@ export function ActiveCanvasProvider({
         && current.persistence === canvas.persistence
         && current.focusId === canvas.focusId
         && current.shareOpen === canvas.shareOpen
-        && current.buildOpen === canvas.buildOpen
+        && current.lens === canvas.lens
+        && current.surface === canvas.surface
         && current.prompt === canvas.prompt
         && current.present === canvas.present
         && current.modelComparisonIds.length === canvas.modelComparisonIds.length

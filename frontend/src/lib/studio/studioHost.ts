@@ -9,7 +9,16 @@
 /** The route the Studio app lives under. */
 export const STUDIO_ROUTE = '/studio';
 
-/** The Studio IDE page for a project. */
+/**
+ * A creation session presented through the Studio lens — the SAME board as
+ * `/create/<sessionId>` (same id, same mounted canvas), drawn as prompt + preview.
+ * See `lib/canvasLens.ts`. Works for a guest's `local-<uuid>` and a server id alike.
+ */
+export function studioSessionPath(sessionId: string): string {
+  return `${STUDIO_ROUTE}/${encodeURIComponent(sessionId)}`;
+}
+
+/** The Studio IDE page for a durable project (legacy links and project-chat deep links). */
 export function studioProjectPath(projectId: number | string): string {
   return `${STUDIO_ROUTE}/project/${projectId}`;
 }
