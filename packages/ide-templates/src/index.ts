@@ -84,6 +84,10 @@ export function isScaffoldPath(path: string): boolean {
   return SCAFFOLD_PATHS.has(path);
 }
 
+/** Extensions an extensionless import (`./App`) can resolve to. Only these can stand in for
+ *  one another — `index.html` does not stand in for `index.js`, nor `App.css` for `App.jsx`. */
+const MODULE_FILE = /\.(?:[cm]?[jt]sx?)$/;
+
 /** `src/App.jsx` → `src/App`: the path a module import names, before its extension. */
 function moduleStem(path: string): string {
   const slash = path.lastIndexOf('/');
@@ -104,9 +108,10 @@ function moduleStem(path: string): string {
  * extension never gets it.
  */
 export function scaffoldPathStoodInFor(path: string, existingPaths: Iterable<string>): boolean {
+  if (!MODULE_FILE.test(path)) return false;
   const stem = moduleStem(path);
   for (const existing of existingPaths) {
-    if (existing !== path && moduleStem(existing) === stem) return true;
+    if (existing !== path && MODULE_FILE.test(existing) && moduleStem(existing) === stem) return true;
   }
   return false;
 }

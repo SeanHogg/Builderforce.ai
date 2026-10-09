@@ -161,8 +161,7 @@ describe('a workspace held in this browser', () => {
       builds: () => [{ objectId: 'b1', title: 'Local', modality: 'designer', store: localFileStore('tools-deps') }],
       createBuild: async () => { throw new Error('unused'); },
     });
-    const result = await run(actions, 'canvas_write_build_file', { path: 'src/App.jsx', content: "import React from 'react';
-import { BrowserRouter } from 'react-router-dom';" });
+    const result = await run(actions, 'canvas_write_build_file', { path: 'src/App.jsx', content: "import React from 'react';\nimport { BrowserRouter } from 'react-router-dom';" });
     expect(result).toMatchObject({ ok: true, undeclaredDependencies: ['react-router-dom'] });
     expect(String(result.next)).toContain('package.json');
     const clean = await run(actions, 'canvas_write_build_file', { path: 'src/Ok.jsx', content: "import React from 'react';" });

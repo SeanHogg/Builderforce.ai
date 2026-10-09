@@ -32,7 +32,8 @@ describe('repairScaffold', () => {
 
   it('restores a missing App.jsx when nothing stands in for it', () => {
     const { 'src/App.jsx': _template, ...rest } = clean('designer');
-    const { repaired, restored } = repairScaffold(rest, 'designer');
+    // A stylesheet of the same name is not a module the entry could import instead.
+    const { repaired, restored } = repairScaffold({ ...rest, 'src/App.css': 'body {}' }, 'designer');
     expect(restored).toEqual([{ path: 'src/App.jsx', reason: 'empty' }]);
     expect(repaired['src/main.jsx']).toContain("import App from './App'");
   });
