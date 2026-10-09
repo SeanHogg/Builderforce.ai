@@ -13,6 +13,7 @@ import type { ProposedCanvasChange } from '@/domains/canvas/domain/canvasChange'
 import type { useTranslations } from 'next-intl';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { CanvasTimelineMessage } from '../canvasBoardTypes';
+import { adoptableInitialMessage } from '../brainTurn/adoptableInitialMessage';
 import type { CanvasProposalStage } from '@/domains/canvas/application/CanvasProposalStage';
 import type { Edge } from '@xyflow/react';
 import type { ConfirmFn } from '@/components/ConfirmProvider';
@@ -115,7 +116,7 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeR
     setThinking(true);
     setBrainRunStartedAt(Date.now());
     setNotice(t('noticeBrainEvaluating'));
-    const initialMessage = initialPromptSubmittedRef.current ? timeline.find((message) => (message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:')) && message.body === requestText) : undefined;
+    const initialMessage = initialPromptSubmittedRef.current ? adoptableInitialMessage(timeline, requestText) : undefined;
     const promptAuthor = persistence === 'server' ? members.find((member) => member.userId === currentUserId) : null;
     const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'human', ref: currentUserId || 'local', name: promptAuthor?.displayName || 'You' } }, initialMessage?.clientMessageId);
     const promptStartedAt = performance.now();

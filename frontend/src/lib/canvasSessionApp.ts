@@ -135,6 +135,20 @@ export function claimableStarter(apps: readonly SessionApp[], modality: ProjectM
   return apps.find((app) => app.starter && app.modality === modality) ?? null;
 }
 
+/**
+ * Whether the app the Brain just WROTE into becomes the one the App surface runs.
+ *
+ * Only over a lens STARTER: that is a guess nobody asked for, and a board that also holds
+ * an app being written has answered the guess (session `local-148925cf` wrote thirteen
+ * files into a second build while the surface kept showing the untouched starter). An app
+ * someone chose stays chosen — a board building a website AND a mobile app must not flip
+ * its surface every time the Brain touches the other one.
+ */
+export function writtenAppTakesPrimary(apps: readonly SessionApp[], nodeId: string): boolean {
+  const primary = primarySessionApp(apps);
+  return !!primary && primary.nodeId !== nodeId && primary.starter && apps.some((app) => app.nodeId === nodeId);
+}
+
 /** The ONE writer of the primary flag: `nodeId` gets it, every other build loses it. */
 export function withPrimaryApp<T extends BoardNode>(nodes: readonly T[], nodeId: string): T[] {
   return nodes.map((node) => {

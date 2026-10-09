@@ -23,6 +23,21 @@ The stale text was a real bug. The auto-submitted entry prompt was copied into t
 
 **Now:** `lib/browserRuntime/previewRuntime.ts` boots with `attribution: false`. The badge stays on published sites, where the API adds its own "Made with Builderforce.ai" (free tier, `api/src/application/ide/siteAttribution.ts`).
 
+## ✅ RESOLVED 2026-10-09 — Studio build turns, second pass: written files reach the preview, imports get declared, and a replayed prompt gets its answer (frontend 2026.10.30, api 2026.10.18)
+
+**Was (session `local-148925cf`, second turn, 16 steps):** the Brain wrote thirteen files (`src/App.jsx`, pages, components, CSS), every one `applied: true`, and the preview still read "Hello World!", with no reply in the conversation. Four faults:
+1. The vanilla scaffold's `src/main.jsx` declared its own inline `App` and never imported `src/App.jsx`, the file every model writes the app into.
+2. The writes went to the second build, while the surface kept running the starter.
+3. `react-router-dom` was imported across seven files and never added to `package.json`. The preview runs a real `npm install`, so it could not resolve.
+4. The prompt was re-sent with the same text as the board's seeded first message, so the turn adopted that message's id. Its reply (`<id>:assistant`) collided with the first turn's reply and `appendTimeline` dropped it.
+
+**Now:**
+- **Scaffold** (`packages/ide-templates/src/scaffolds.ts`): `src/main.jsx` mounts `./App`, and `src/App.jsx` holds the starter page.
+- **`scaffoldPathStoodInFor`** (`packages/ide-templates`): a missing scaffold file counts as present when the project has a file with the same module stem (`src/App.tsx`). This applies in `templateNeedsBackfill`, the API backfill and `repairScaffold`, so a restored `App.jsx` never shadows a real `App.tsx` (Vite resolves `.jsx` first). Older projects get the unused `App.jsx` once.
+- **`writtenAppTakesPrimary`** + `appWritten` (`lib/canvasSessionApp.ts`, `useCanvasSessionApp`): the build tools report every committed write through one `committed()` seam (`onBuildWritten`). A write to an app while the surface shows a lens starter makes that app primary. An app someone chose keeps the surface.
+- **`lib/undeclaredDependencies.ts`**: `canvas_write_build_file` and `canvas_edit_build_file` answer `undeclaredDependencies` plus a `next` naming the packages to add to `package.json`.
+- **`adoptableInitialMessage`** (`brainTurn/`): the seeded first message is adopted only while it has no reply, so a re-sent prompt gets its own id and its own answer.
+
 ## ✅ RESOLVED 2026-10-09 — Studio build turns: provisioning is not the app, and a same-platform build claims the starter (frontend 2026.10.28)
 
 **Was (session `local-148925cf`, "Build a social media website that offers phone plans", gemini-2.5-flash):** the Brain called `canvas_create_build`, then ended with "I've created a new web project… you can now start adding files" above a "Hello World!" preview. Two faults. (1) Provisioning answers `applied: true`, so `canvasChanged` was true and no act-now ladder fired; the runner accepted the scaffold as the deliverable. (2) The board already held Studio's web starter, and the Brain made a SECOND website beside it instead of reusing it (the BUILD prompt only asked it to). A same-platform app never takes primary, so the App surface kept running the untouched starter; code written to the new build would have gone to an app nobody was looking at.

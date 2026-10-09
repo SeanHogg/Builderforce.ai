@@ -51,6 +51,7 @@ import { MODALITIES, type ProjectModality } from '@/lib/modality';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
+import { undeclaredDependencies } from '@/lib/undeclaredDependencies';
 
 /** A Builder object on the board that has a workspace behind it. */
 export interface BoundCanvasBuild {
@@ -88,6 +89,11 @@ export interface CanvasBuildToolsContext {
    * re-reads it instead of showing a stale editor buffer over new content.
    */
   onFilesChanged?: (workspaceId: WorkspaceId, paths: string[]) => void;
+  /**
+   * Tell the host the Brain wrote into this Builder object, so the surface can show the
+   * app being built (`writtenAppTakesPrimary`) rather than one beside it.
+   */
+  onBuildWritten?: (objectId: string) => void;
 }
 
 /**
@@ -270,6 +276,20 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
     const entries = await store.list();
     return entries.filter((entry) => entry.type !== 'directory' && !isSkipped(entry.path));
   };
+  /** Every committed file change reports through here: the open editor re-reads, the
+   *  host learns which app is being built, and a source file that imports a package the
+   *  manifest does not declare says so (`undeclaredDependencies`) — the preview's
+   *  `npm install` would otherwise leave that import unresolvable. */
+  const committed = async (build: BoundCanvasBuild, path: string, content?: string) => {
+    ctx.onFilesChanged?.(build.store.id, [path]);
+    ctx.onBuildWritten?.(build.objectId);
+    if (content === undefined) return {};
+    const manifest = await build.store.read('package.json').catch(() => null);
+    const missing = undeclaredDependencies(path, content, manifest);
+    return missing.length
+      ? { undeclaredDependencies: missing, next: `Add ${missing.join(', ')} to package.json "dependencies" with canvas_edit_build_file — the preview installs only what package.json declares, so these imports cannot resolve until you do.` }
+      : {};
+  };
 
   return [
     {
@@ -422,8 +442,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         if (!valid.ok) return { error: valid.reason };
         try {
           await resolved.build.store.write(path, content);
-          ctx.onFilesChanged?.(resolved.build.store.id, [path]);
-          return { ok: true, applied: true, path, bytes: content.length };
+          return { ok: true, applied: true, path, bytes: content.length, ...await committed(resolved.build, path, content) };
         } catch (error) {
           return { error: toolErrorMessage(error, `"${path}" could not be written.`) };
         }
@@ -467,8 +486,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         if (!valid.ok) return { error: valid.reason };
         try {
           await resolved.build.store.write(path, edit.next);
-          ctx.onFilesChanged?.(resolved.build.store.id, [path]);
-          return { ok: true, applied: true, path, replacements: edit.replacements };
+          return { ok: true, applied: true, path, replacements: edit.replacements, ...await committed(resolved.build, path, edit.next) };
         } catch (error) {
           return { error: toolErrorMessage(error, `"${path}" could not be written.`) };
         }
@@ -562,7 +580,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         if (!restore) return { error: NO_HISTORY };
         try {
           await restore(path, at);
-          ctx.onFilesChanged?.(resolved.build.store.id, [path]);
+          await committed(resolved.build, path);
           return { ok: true, applied: true, path, restoredFrom: new Date(at).toISOString() };
         } catch (error) {
           return { error: toolErrorMessage(error, `"${path}" could not be restored.`) };

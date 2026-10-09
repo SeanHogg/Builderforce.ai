@@ -131,6 +131,7 @@ function session(nodes: ReadonlyArray<{ id: string; data: CreationNodeData }>, o
     createApp: vi.fn().mockResolvedValue({ objectId: 'new', title: 'x', modality: 'designer', store: {} }),
     provisionApp: vi.fn().mockResolvedValue(undefined),
     selectApp: vi.fn(),
+    appWritten: vi.fn(),
     importCards: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };

@@ -15,6 +15,7 @@ import {
   sessionApps,
   withImportStamps,
   withPrimaryApp,
+  writtenAppTakesPrimary,
   type SessionApp,
 } from '@/lib/canvasSessionApp';
 import { DEFAULT_MODALITY, type ProjectModality } from '@/lib/modality';
@@ -72,6 +73,8 @@ export interface CanvasSessionAppActions {
   provisionApp: (nodeId: string, input: { title: string; modality: ProjectModality; containerProjectId?: number | null }) => Promise<void>;
   /** Make `nodeId` the app the surface runs. */
   selectApp: (nodeId: string) => void;
+  /** The Brain wrote into `nodeId`: it takes the surface over from a starter. */
+  appWritten: (nodeId: string) => void;
   /** Bring new or changed code cards into the app. Silent; resolves once written. */
   importCards: (app: SessionApp) => Promise<void>;
 }
@@ -152,6 +155,10 @@ export function useCanvasSessionApp({ nodes, nodesRef, setNodes, stage, placeApp
     setNodes((current) => withPrimaryApp(current, nodeId));
   }, [setNodes]);
 
+  const appWritten = useCallback((nodeId: string) => {
+    setNodes((current) => (writtenAppTakesPrimary(sessionApps(current), nodeId) ? withPrimaryApp(current, nodeId) : current));
+  }, [setNodes]);
+
   const importingRef = useRef(false);
   const importCards = useCallback(async (target: SessionApp) => {
     if (importingRef.current) return;
@@ -201,5 +208,5 @@ export function useCanvasSessionApp({ nodes, nodesRef, setNodes, stage, placeApp
     }
   }, [apps, persistence, setNodes]);
 
-  return { apps, app, buildsRef, createApp, provisionApp, selectApp, importCards };
+  return { apps, app, buildsRef, createApp, provisionApp, selectApp, appWritten, importCards };
 }

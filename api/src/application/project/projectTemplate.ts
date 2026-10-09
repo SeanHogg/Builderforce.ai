@@ -22,6 +22,7 @@
 import {
   TEMPLATES,
   isScaffoldPath,
+  scaffoldPathStoodInFor,
   scaffoldForModality,
   templateByName,
 } from '@builderforce/ide-templates';
@@ -109,7 +110,8 @@ export function templateLooksUnseeded(objects: TemplateObject[]): boolean {
 export function templateNeedsBackfill(objects: TemplateObject[]): boolean {
   const sizeByPath = new Map(objects.map((o) => [o.path, o.size]));
   const isComplete = (template: Record<string, string>) =>
-    Object.keys(template).every((path) => (sizeByPath.get(path) ?? 0) > 0);
+    Object.keys(template).every((path) => (sizeByPath.get(path) ?? 0) > 0
+      || (!sizeByPath.has(path) && scaffoldPathStoodInFor(path, sizeByPath.keys())));
   return !Object.values(TEMPLATES).some(isComplete);
 }
 
@@ -124,7 +126,8 @@ async function writeMissingTemplateFiles(
   const sizeByPath = new Map(existing.map((o) => [o.path, o.size]));
   const toWrite = Object.entries(template).filter(([path]) => {
     const size = sizeByPath.get(path);
-    return size === undefined || size === 0;
+    if (size === undefined) return !scaffoldPathStoodInFor(path, sizeByPath.keys());
+    return size === 0;
   });
   if (toWrite.length === 0) return 0;
   await Promise.all(toWrite.map(([path, content]) => storage.put(prefix + path, content)));

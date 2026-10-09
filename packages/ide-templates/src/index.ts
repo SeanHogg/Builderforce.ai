@@ -83,3 +83,30 @@ export const SCAFFOLD_PATHS: ReadonlySet<string> = new Set(
 export function isScaffoldPath(path: string): boolean {
   return SCAFFOLD_PATHS.has(path);
 }
+
+/** `src/App.jsx` → `src/App`: the path a module import names, before its extension. */
+function moduleStem(path: string): string {
+  const slash = path.lastIndexOf('/');
+  const dot = path.lastIndexOf('.');
+  return dot > slash ? path.slice(0, dot) : path;
+}
+
+/**
+ * Is a MISSING scaffold file already stood in for by the workspace's own file of the same
+ * module stem — `src/App.tsx` where the scaffold has `src/App.jsx`?
+ *
+ * Every healer (the API backfill, `templateNeedsBackfill`, the client's `repairScaffold`)
+ * restores a missing scaffold file, and that is wrong exactly here: the entry imports
+ * `./App` without an extension, and Vite resolves `.jsx` BEFORE `.tsx`, so a restored
+ * template `App.jsx` would shadow the project's real `App.tsx` and put "Hello World!" back
+ * in its preview. Projects seeded before `src/App.jsx` joined the vanilla scaffold get it
+ * once (unused by their inline entry, harmless); a project whose App lives under another
+ * extension never gets it.
+ */
+export function scaffoldPathStoodInFor(path: string, existingPaths: Iterable<string>): boolean {
+  const stem = moduleStem(path);
+  for (const existing of existingPaths) {
+    if (existing !== path && moduleStem(existing) === stem) return true;
+  }
+  return false;
+}

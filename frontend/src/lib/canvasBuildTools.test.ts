@@ -137,10 +137,12 @@ describe('a workspace held in this browser', () => {
     await seedLocalWorkspace('tools-local', { 'index.html': '<h1>Hi</h1>' });
     const store = localFileStore('tools-local');
     const changed: Array<[unknown, string[]]> = [];
+    const written: string[] = [];
     const actions = canvasBuildActions({
       builds: () => [{ objectId: 'b1', title: 'Local', modality: 'designer', store }],
       createBuild: async () => { throw new Error('unused'); },
       onFilesChanged: (id, paths) => changed.push([id, paths]),
+      onBuildWritten: (objectId) => written.push(objectId),
     });
 
     expect(await run(actions, 'canvas_write_build_file', { path: '/src/App.jsx', content: 'export const a = 1;' })).toMatchObject({ ok: true, path: 'src/App.jsx' });
@@ -149,6 +151,22 @@ describe('a workspace held in this browser', () => {
     expect(await store.read('src/App.jsx')).toBe('export const a = 2;');
     expect(await run(actions, 'canvas_search_build_files', { query: 'const a' })).toMatchObject({ matchCount: 1 });
     expect(changed).toEqual([['local:tools-local', ['src/App.jsx']], ['local:tools-local', ['src/App.jsx']]]);
+    // Each committed change names the build it went into, so the surface can show it.
+    expect(written).toEqual(['b1', 'b1']);
+  });
+
+  it('tells the model when a write imports a package package.json does not declare', async () => {
+    await seedLocalWorkspace('tools-deps', { 'package.json': JSON.stringify({ dependencies: { react: '^18.2.0' } }) });
+    const actions = canvasBuildActions({
+      builds: () => [{ objectId: 'b1', title: 'Local', modality: 'designer', store: localFileStore('tools-deps') }],
+      createBuild: async () => { throw new Error('unused'); },
+    });
+    const result = await run(actions, 'canvas_write_build_file', { path: 'src/App.jsx', content: "import React from 'react';
+import { BrowserRouter } from 'react-router-dom';" });
+    expect(result).toMatchObject({ ok: true, undeclaredDependencies: ['react-router-dom'] });
+    expect(String(result.next)).toContain('package.json');
+    const clean = await run(actions, 'canvas_write_build_file', { path: 'src/Ok.jsx', content: "import React from 'react';" });
+    expect(clean).not.toHaveProperty('undeclaredDependencies');
   });
 
   it('answers the history tools with a reason instead of failing', async () => {

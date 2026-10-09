@@ -93,6 +93,21 @@ describe('templateLooksUnseeded', () => {
   });
 });
 
+describe('templateNeedsBackfill with a stood-in App', () => {
+  it('treats a project whose App is src/App.tsx as complete, and never writes App.jsx over it', async () => {
+    const prefix = 'ide/projects/1/';
+    const objects: TemplateObject[] = [
+      ...Object.keys(VANILLA_TEMPLATE).filter((path) => path !== 'src/App.jsx').map((path) => ({ path, size: 100 })),
+      { path: 'src/App.tsx', size: 100 },
+    ];
+    expect(templateNeedsBackfill(objects)).toBe(false);
+    const seeded = Object.fromEntries(objects.map((o) => [prefix + o.path, 'x']));
+    const r2 = fakeStorage(seeded);
+    expect(await ensureProjectTemplate(r2 as unknown as R2Bucket, base)).toBe(0);
+    expect(r2.store.has(prefix + 'src/App.jsx')).toBe(false);
+  });
+});
+
 describe('templateNeedsBackfill', () => {
   it('is true when there are no objects at all', () => {
     expect(templateNeedsBackfill([])).toBe(true);
@@ -189,7 +204,7 @@ describe('ensureProjectTemplate', () => {
     const written = await ensureProjectTemplate(r2 as unknown as R2Bucket, base);
     expect(written).toBe(Object.keys(VANILLA_TEMPLATE).length - 1); // all but package.json
     expect(r2.store.get(prefix + 'package.json')).toBe('{ "name": "user-edited" }'); // untouched
-    expect(r2.store.get(prefix + 'src/main.jsx')).toContain('Hello World');
+    expect(r2.store.get(prefix + 'src/App.jsx')).toContain('Hello World');
     expect(r2.store.get(prefix + 'vite.config.js')).toContain('defineConfig');
   });
 

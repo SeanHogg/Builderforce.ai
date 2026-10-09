@@ -34,6 +34,7 @@ import { useLatestRef } from './useLatestRef';
 export interface UseCanvasBrainVocabularyDeps {
   buildsRef: CanvasSessionAppActions['buildsRef'];
   createApp: CanvasSessionAppActions['createApp'];
+  appWritten: CanvasSessionAppActions['appWritten'];
   buildSocialFeedNode: (filter: SocialFeedFilter, opts?: { title?: string; x?: number; y?: number; }) => Promise<{ ok: true; node: CreationFlowNode; read: Awaited<ReturnType<typeof socialApi.feed>>; } | { ok: false; error: string; }>;
   canEdit: boolean;
   canvasText: CanvasTextTranslator;
@@ -68,11 +69,13 @@ export interface UseCanvasBrainVocabularyDeps {
 function buildActionsFor(
   buildsRef: RefObject<BoundCanvasBuild[]>,
   createApp: CanvasSessionAppActions['createApp'],
+  appWritten: CanvasSessionAppActions['appWritten'],
 ): BrainAction[] {
   return canvasBuildActions({
     builds: () => buildsRef.current ?? [],
     createBuild: createApp,
     onFilesChanged: notifyWorkspaceFilesChanged,
+    onBuildWritten: appWritten,
   });
 }
 
@@ -109,7 +112,7 @@ function createCanvasOpsContext({ sessionId, persistence, canEdit, canvasText, s
   };
 }
 
-export function useCanvasBrainVocabulary({ buildsRef, createApp, buildSocialFeedNode, canEdit, canvasText, convertObjectToDiagram, effectiveSelectedIds, fmt, inFlightUseCaseIdRef, layoutViewportRef, localizedTourDefaults, nodes, nodesRef, openAccountGate, persistence, promptRef, recentJournalEvidence, requireAccount, resolvedScopeMode, scopedNodeIds, sessionId, setDockPanel, socialAccountGate, stage, t, tSocial, turnToolCallsRef }: UseCanvasBrainVocabularyDeps) {
+export function useCanvasBrainVocabulary({ buildsRef, createApp, appWritten, buildSocialFeedNode, canEdit, canvasText, convertObjectToDiagram, effectiveSelectedIds, fmt, inFlightUseCaseIdRef, layoutViewportRef, localizedTourDefaults, nodes, nodesRef, openAccountGate, persistence, promptRef, recentJournalEvidence, requireAccount, resolvedScopeMode, scopedNodeIds, sessionId, setDockPanel, socialAccountGate, stage, t, tSocial, turnToolCallsRef }: UseCanvasBrainVocabularyDeps) {
   /**
    * The BUILD vocabulary — creating and editing the code behind a Builder object.
    *
@@ -117,7 +120,7 @@ export function useCanvasBrainVocabulary({ buildsRef, createApp, buildSocialFeed
    * call time, so adding an object to the board never re-registers them, and `createApp`
    * gives a guest board a browser-held workspace instead of refusing.
    */
-  const canvasBuildActionList = useMemo<BrainAction[]>(() => buildActionsFor(buildsRef, createApp), [buildsRef, createApp]);
+  const canvasBuildActionList = useMemo<BrainAction[]>(() => buildActionsFor(buildsRef, createApp, appWritten), [appWritten, buildsRef, createApp]);
 
   /**
    * The context every board-mutation AI tool GROUP shares — founder-ops, legal

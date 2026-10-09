@@ -13,6 +13,7 @@ import {
   sessionHasApp,
   withImportStamps,
   withPrimaryApp,
+  writtenAppTakesPrimary,
 } from './canvasSessionApp';
 
 type Node = { id: string; data: { [key: string]: unknown; kind: string } };
@@ -85,6 +86,21 @@ describe('claimableStarter', () => {
     // An app someone asked for is never taken over.
     expect(claimableStarter(sessionApps([serverBuild('a')]), 'designer')).toBeNull();
     expect(claimableStarter([], 'designer')).toBeNull();
+  });
+});
+
+describe('writtenAppTakesPrimary', () => {
+  it('moves the surface to the app being written only when it is showing a starter', () => {
+    // Session local-148925cf: thirteen files went into "cc" while the surface ran the starter.
+    const starterBoard = withPrimaryApp([localBuild('bb', { appStarter: true }), localBuild('cc')], 'bb');
+    expect(writtenAppTakesPrimary(sessionApps(starterBoard), 'cc')).toBe(true);
+    // Writing into the app already shown changes nothing.
+    expect(writtenAppTakesPrimary(sessionApps(starterBoard), 'bb')).toBe(false);
+    // An app someone chose keeps the surface while the Brain works on the other one.
+    const chosen = withPrimaryApp([localBuild('bb'), localBuild('cc', { modality: 'mobile' })], 'bb');
+    expect(writtenAppTakesPrimary(sessionApps(chosen), 'cc')).toBe(false);
+    // An id that is not an app on the board never takes it.
+    expect(writtenAppTakesPrimary(sessionApps(starterBoard), 'nope')).toBe(false);
   });
 });
 

@@ -20,6 +20,23 @@ describe('repairScaffold', () => {
     expect(repaired).toEqual(files);
   });
 
+  it('does not restore the template App.jsx over a project whose App lives under another extension', () => {
+    // The entry imports './App' with no extension and Vite resolves .jsx before .tsx, so a
+    // restored template App.jsx would shadow the real App.tsx with "Hello World!".
+    const { 'src/App.jsx': _template, ...rest } = clean('designer');
+    const files = { ...rest, 'src/App.tsx': 'export default function App() { return null; }' };
+    const { repaired, restored } = repairScaffold(files, 'designer');
+    expect(restored).toEqual([]);
+    expect(repaired['src/App.jsx']).toBeUndefined();
+  });
+
+  it('restores a missing App.jsx when nothing stands in for it', () => {
+    const { 'src/App.jsx': _template, ...rest } = clean('designer');
+    const { repaired, restored } = repairScaffold(rest, 'designer');
+    expect(restored).toEqual([{ path: 'src/App.jsx', reason: 'empty' }]);
+    expect(repaired['src/main.jsx']).toContain("import App from './App'");
+  });
+
   it('leaves a clean vanilla scaffold untouched', () => {
     const files = clean('designer');
     const { restored } = repairScaffold(files, 'designer');

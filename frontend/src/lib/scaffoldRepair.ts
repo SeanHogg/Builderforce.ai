@@ -18,7 +18,7 @@
  * structural contract ({@link validateFileContentForPath}). A file that has valid
  * content for its own path is never touched, so real user work is preserved.
  */
-import { scaffoldForModality } from '@builderforce/ide-templates';
+import { scaffoldForModality, scaffoldPathStoodInFor } from '@builderforce/ide-templates';
 import { validateFileContentForPath } from '@builderforce/ide-file-contract';
 
 export interface ScaffoldRepairResult {
@@ -45,6 +45,8 @@ export function repairScaffold(
 
   for (const [path, template] of Object.entries(defaults)) {
     const current = repaired[path];
+    // A MISSING file the project already supplies under another extension stays missing.
+    if (current === undefined && scaffoldPathStoodInFor(path, Object.keys(repaired))) continue;
     const isEmpty = !current || current.trim() === '';
     // A non-empty scaffold file that fails ITS OWN structural contract is
     // cross-wired content (another file written here). Restore it.

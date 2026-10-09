@@ -42,20 +42,26 @@ export const VANILLA_TEMPLATE: Record<string, string> = {
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>`,
+  // The entry MOUNTS `src/App.jsx` rather than declaring its own component: `App.jsx` is
+  // where every model (and every person) expects a Vite + React app to live, and an
+  // inline `App` here meant a Brain that wrote a whole app into `src/App.jsx` left the
+  // preview on "Hello World!" (session `local-148925cf`).
   'src/main.jsx': `import React from 'react';
 import ReactDOM from 'react-dom/client';
+import App from './App';
 import './index.css';
 
-function App() {
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);`,
+  'src/App.jsx': `import React from 'react';
+
+export default function App() {
   return (
     <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
       <h1>Hello World! 🚀</h1>
-      <p>Edit src/main.jsx to get started.</p>
+      <p>Edit src/App.jsx to get started.</p>
     </div>
   );
-}
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);`,
+}`,
   'src/index.css': `body {
   margin: 0;
   padding: 0;
