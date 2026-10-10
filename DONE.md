@@ -1,3 +1,22 @@
+## ✅ RESOLVED 2026-10-10 — Live container preview: a run starts the dev server, the QR encodes the live URL, and the spend is budgeted (api 2026.10.19)
+
+**Was (ROADMAP, Replit-parity phase 2):** (1) nothing started a dev server on `PREVIEW_PORT`, `MobileDevicePanel` encoded only the published site, and there was no Vite/Metro host tuning. (2) `AgentContainerDO` was capped at 5 instances with one 20m `sleepAfter`; previews had no budget, no idle eviction and no plan gate.
+
+**Already in the tree (verified this pass):** `previewDevServer.ts` (the step, health probe, mint), `previewSessions.ts` with migration 0948 (lease, 15-instance preview budget out of `max_instances = 25`, 2 per tenant, 3-minute idle eviction on the frequent cron that only reclaims an instance whose run has finished), `container/server.mjs` `startPreviewDevServer`, the `livePreview` plan flag (402 at both mint routes), and `MobileDevicePanel` minting by project with a Live/Published badge.
+
+**Defects fixed in that slice:**
+- **Secrets never reached the dev server.** The container prefers the `start` op's step, which was built without project secrets. `start` now builds through `previewStepForRun`, the one path the launcher also uses.
+- **The plan gate applied only at the mint.** A free tenant's container run could still start a dev server and take budget. `previewStepForRun` now checks `livePreview` (`tenantHasFeature`), so neither the launcher nor `start` acquires an instance without it.
+- **Dependencies were never installed.** `installCommand` was on the wire but never run, so a fresh clone's `npx vite` failed. The container now installs when `node_modules` is absent and reports a failed install as the preview's reason.
+- **The wrong framework was started.** The Vite candidate's marker was the override we generate into every workspace, so a Next app with a `dev` script started Vite. Markers are now the project's own config filenames, any-of (`vite.config.*`, `next.config.{js,mjs,ts}`, `wrangler.{toml,jsonc,json}`).
+- **The Metro override was dead.** It is now used by a bare React Native candidate (`react-native start --config …`).
+- **A `.ts` Vite config never loaded.** The override imported the project config with a bare `import()`. It now uses Vite's own `loadConfigFromFile`.
+- **Generated overrides could ride into the run's PR.** They are now added to the clone's `.git/info/exclude`.
+
+**Verified (Sonnet):** API type-check (tsc + tsgo) clean. `node --check container/server.mjs` passes. `previewDevServer`, `cloudSurfaceCaps` and `containerPauseContract` tests pass, 44 of 44, including new cases: no generated-file markers, the Metro override wired, plan-gated null, and a project-less step.
+
+**Still open:** live deploy and validation (ROADMAP, blocked on Containers-Paid credentials).
+
 ## ✅ RESOLVED 2026-10-10 — Every prompt in the app is the same composer: homepage, Studio home, the canvas/Studio session, media (frontend)
 
 **Was:**

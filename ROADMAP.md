@@ -212,9 +212,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 
 > The preview ingress is flag-gated behind `PREVIEW_INGRESS_ENABLED` and answers 404/503 until an operator turns it on.
 
-- **Deploy + live-validation (INFRA).** Needs a Containers-enabled Workers **Paid** account, a `wrangler deploy` that builds the image, a proxied `preview` DNS record, and `wrangler secret put PREVIEW_INGRESS_ENABLED true`. None of the proxy chain is verifiable locally; confirm on deploy that a WS upgrade survives `AGENT_CONTAINER` → `server.mjs` → dev server.
-- **A run must actually START a dev server on `PREVIEW_PORT`, and the QR must encode the minted URL.** The passthrough targets `127.0.0.1:$PREVIEW_PORT`, but nothing makes an agent run `npm run dev` bound to it, and `MobileDevicePanel` still encodes the published-site URL rather than calling `preview-url`. Also needs dev-server host tuning (Vite `server.allowedHosts`/`hmr.clientPort`, Metro host) so HMR connects back through the public origin.
-- **Concurrency and cost are unbudgeted.** `AgentContainerDO` is capped at `max_instances = 5` with `sleepAfter = '20m'`; a per-project live preview is a long-lived instance per active editor. Decide the instance budget, a tighter idle-eviction policy, and whether live preview is a paid-plan feature.
+- **Deploy + live-validation (INFRA). Blocked on operator credentials.** The code is complete: the dev-server step, plan gate, install, budget and idle eviction all ship. What remains needs a Containers-enabled Workers **Paid** account: `wrangler deploy` (builds the image), apply migration `0948_preview_sessions.sql`, a proxied `preview` DNS record, and `wrangler secret put PREVIEW_INGRESS_ENABLED true`. None of the proxy chain is verifiable locally. On deploy, confirm that a WS upgrade survives `AGENT_CONTAINER` → `server.mjs` → dev server, and that a Vite project's HMR reconnects from a phone.
 
 ### On-prem runtime, engine & tooling
 

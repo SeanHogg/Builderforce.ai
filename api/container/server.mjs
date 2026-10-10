@@ -354,6 +354,7 @@ async function startPreviewDevServer(spec, workdir) {
 
   // 1. Write the generated config files (Vite/Metro host tuning the project cannot know
   //    about — it has no idea it is being served through a public proxy).
+  const written = [];
   for (const file of Array.isArray(step.files) ? step.files : []) {
     if (!file || typeof file.path !== 'string' || typeof file.contents !== 'string') continue;
     const abs = join(workdir, file.path);
@@ -361,13 +362,46 @@ async function startPreviewDevServer(spec, workdir) {
     try {
       await mkdir(dirname(abs), { recursive: true });
       await writeFile(abs, file.contents, 'utf8');
+      written.push(file.path);
     } catch (e) {
       await fail(`could not write ${file.path}: ${e.message}`);
       return;
     }
   }
+  // The overrides are preview plumbing, not the user's code: keep them out of anything
+  // the agent stages (`git add -A`) so they can never ride into the run's PR.
+  // `.git/info/exclude` is local to this clone, so the repo's own .gitignore is untouched.
+  if (written.length) {
+    try {
+      const exclude = join(workdir, '.git', 'info', 'exclude');
+      const current = await readFile(exclude, 'utf8').catch(() => '');
+      const missing = written.filter((p) => !current.split('\n').includes(p));
+      if (missing.length) {
+        await mkdir(dirname(exclude), { recursive: true });
+        await writeFile(exclude, `${current}${current && !current.endsWith('\n') ? '\n' : ''}${missing.join('\n')}\n`, 'utf8');
+      }
+    } catch { /* not a git clone — nothing to keep clean */ }
+  }
 
-  // 2. Pick the first candidate whose marker file exists AND whose required
+  // 2. Install dependencies when the clone has none. A fresh clone never carries
+  //    node_modules, so without this every `npx vite` / `next dev` below fails on a
+  //    missing module and the preview reports "exited immediately". Skipped when the
+  //    agent (or a previous start) already installed.
+  if (typeof step.installCommand === 'string' && step.installCommand) {
+    let hasPackageJson = true;
+    try { await readFile(join(workdir, 'package.json')); } catch { hasPackageJson = false; }
+    let installed = true;
+    try { await readdir(join(workdir, 'node_modules')); } catch { installed = false; }
+    if (hasPackageJson && !installed) {
+      const install = await runShell(step.installCommand, workdir);
+      if (install.exitCode !== 0) {
+        await fail(`dependency install failed (${step.installCommand}, exit ${install.exitCode}): ${install.output.slice(-400)}`);
+        return;
+      }
+    }
+  }
+
+  // 3. Pick the first candidate whose marker file exists AND whose required
   //    package.json script is present. Expo projects also carry a `dev` script, so the
   //    marker alone would start the wrong server — both pieces of evidence are needed.
   let scripts = {};
@@ -379,7 +413,14 @@ async function startPreviewDevServer(spec, workdir) {
   for (const candidate of step.candidates) {
     if (!candidate || typeof candidate.command !== 'string') continue;
     if (candidate.when) {
-      try { await readFile(join(workdir, candidate.when)); } catch { continue; }
+      // ANY one of the listed markers selects it (a framework accepts several config names).
+      const markers = Array.isArray(candidate.when) ? candidate.when : [candidate.when];
+      let found = false;
+      for (const marker of markers) {
+        if (typeof marker !== 'string') continue;
+        try { await readFile(join(workdir, marker)); found = true; break; } catch { /* try the next name */ }
+      }
+      if (!found) continue;
     }
     if (candidate.requiresScript && !scripts[candidate.requiresScript]) continue;
     chosen = candidate;
@@ -390,7 +431,7 @@ async function startPreviewDevServer(spec, workdir) {
     return;
   }
 
-  // 3. Spawn DETACHED and unref'd: the dev server outlives this call and must not hold
+  // 4. Spawn DETACHED and unref'd: the dev server outlives this call and must not hold
   //    the agent loop, the command timeout, or the cancel-kill handle — those belong to
   //    the agent's own shell commands. `proc.current` is deliberately NOT set.
   let child;
@@ -413,7 +454,7 @@ async function startPreviewDevServer(spec, workdir) {
   child.on('exit', (code) => { exitedEarly = code; });
   child.on('error', (e) => { exitedEarly = e.message; });
 
-  // 4. Hand the health check back to the Worker, which probes through the REAL public
+  // 5. Hand the health check back to the Worker, which probes through the REAL public
   //    path (ingress → container DO → dev server) rather than trusting localhost here —
   //    a server bound to the wrong interface answers locally and 503s publicly.
   const health = step.health && typeof step.health === 'object' ? step.health : { attempts: 20, intervalMs: 1500 };
