@@ -177,7 +177,7 @@ const distribution = (over: Partial<PostingDistribution> = {}): PostingDistribut
 });
 
 describe('the distribution projection (FO-B4)', () => {
-  it('draws the card's rows from the record, with applicants attributed per board', () => {
+  it('draws the card rows from the record, with applicants attributed per board', () => {
     const rows = distributionRowsFrom([
       distribution(),
       distribution({ connectorKey: 'indeed-jobs', board: 'Indeed', status: 'failed', externalId: null, url: 'https://example.test/x', postedAt: null, lastError: 'Unauthorized', applicantCount: 0 }),
