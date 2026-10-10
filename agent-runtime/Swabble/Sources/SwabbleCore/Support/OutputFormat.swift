@@ -12,6 +12,7 @@ public enum OutputFormat: String {
         }
     }
 
+    @available(macOS 26.0, iOS 26.0, *)
     public func text(for transcript: AttributedString, maxLength: Int) -> String {
         switch self {
         case .txt:

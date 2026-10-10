@@ -4,6 +4,7 @@ import Foundation
 import Speech
 import Swabble
 
+@available(macOS 26.0, *)
 @MainActor
 struct TranscribeCommand: ParsableCommand {
     @Argument(help: "Path to audio/video file") var inputFile: String = ""

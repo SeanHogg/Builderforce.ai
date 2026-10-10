@@ -2,6 +2,8 @@ import CoreMedia
 import Foundation
 import NaturalLanguage
 
+// Sentence timing reads the Speech framework's time-range attribute (macOS/iOS 26).
+@available(macOS 26.0, iOS 26.0, *)
 extension AttributedString {
     public func sentences(maxLength: Int? = nil) -> [AttributedString] {
         let tokenizer = NLTokenizer(unit: .sentence)
