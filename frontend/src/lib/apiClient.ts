@@ -36,7 +36,7 @@ import { dispatchApiError } from './errors/apiErrorEvent';
 import { fetchWithTransportReport, TRANSPORT_FAILURE_STATUS } from './errors/transportFailure';
 import { signalTermsGate } from './errors/termsGateEvent';
 import { LOCALE_HEADER, readLocaleCookie } from '@/i18n/config';
-import { guestReadResponse, resolveGuestRead } from '@/domains/guest/application/guestRead';
+import { guestReadResponse, resolveGuestReadLoaded } from '@/domains/guest/application/guestRead';
 import { noteSignedOutRead } from '@/domains/guest/application/guestWall';
 
 export function getApiBaseUrl(): string {
@@ -432,8 +432,9 @@ async function sendRequest(
   // (no credential sent, GET only, browser only, fixture must exist) lives in
   // `resolveGuestRead`, which is the only thing that decides it; a `null` here
   // means "go to the wire" and is the ordinary case for a signed-in person on
-  // every request they ever make.
-  const sample = resolveGuestRead({ path, method, hadToken });
+  // every request they ever make. The `Loaded` variant pulls in the registry's
+  // lazy fixture modules first — only for a read that already qualifies.
+  const sample = await resolveGuestReadLoaded({ path, method, hadToken });
   if (sample) return { res: guestReadResponse(sample), url, method, hadToken };
 
   const res = await fetchWithTransportReport(

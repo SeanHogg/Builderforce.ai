@@ -39,12 +39,34 @@ const JobsSection = dynamic(
   { loading },
 );
 
-const KnowledgeSection = dynamic(() => import('./KnowledgeMarketSection').then((m) => m.KnowledgeMarketSection), { loading });
+// Knowledge and the template gallery take `search` as OPTIONAL (each also stands
+// alone elsewhere). Each is adapted to this table's contract — `search` always
+// handed down — so every row is a `ComponentType<SearchSectionProps>` by
+// construction rather than by a cast.
+const KnowledgeSection = dynamic(
+  () => import('./KnowledgeMarketSection').then((m) => {
+    const Market = m.KnowledgeMarketSection;
+    function KnowledgeSearchSection({ search }: SearchSectionProps) {
+      return <Market search={search} />;
+    }
+    return KnowledgeSearchSection;
+  }),
+  { loading },
+);
 
 // The SAME gallery `/templates` renders, reading the SAME catalogue the
 // starting-point picker reads. A template listed here and a template offered in
 // the prompt bar are one row, not two lists that agree by accident.
-const TemplatesSection = dynamic(() => import('@/components/templates/TemplateGallery').then((m) => m.TemplateGallery), { loading });
+const TemplatesSection = dynamic(
+  () => import('@/components/templates/TemplateGallery').then((m) => {
+    const Gallery = m.TemplateGallery;
+    function TemplatesSearchSection({ search }: SearchSectionProps) {
+      return <Gallery search={search} />;
+    }
+    return TemplatesSearchSection;
+  }),
+  { loading },
+);
 
 /**
  * Section id → the component that renders it. The page looks its active

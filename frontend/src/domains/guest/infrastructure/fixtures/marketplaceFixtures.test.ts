@@ -6,14 +6,17 @@
  * token-less GET, so a fixture there would swap the live storefront for invented
  * rows — for guests and for signed-in `auth: 'none'` reads alike.
  */
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import { resolveGuestRead } from '../../application/guestRead';
-import { resolveGuestFixture } from '../guestFixtureRegistry';
+import { loadLazyGuestFixtures, resolveGuestFixture } from '../guestFixtureRegistry';
 import { PUBLIC_MARKETPLACE_READS } from './marketplaceFixtures';
 import { SAMPLE_MEMBERS } from '../../domain/sampleWorkspace';
 import type { PublishedAgent } from '@/lib/types';
 
 const read = <T,>(path: string) => resolveGuestRead({ path, method: 'GET', hadToken: false })?.body as T | undefined;
+
+// This module loads on the first guest read, not with the page.
+beforeAll(() => loadLazyGuestFixtures());
 
 describe('marketplace fixtures', () => {
   it('never covers a public catalogue read', () => {

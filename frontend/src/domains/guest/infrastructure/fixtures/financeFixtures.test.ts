@@ -10,12 +10,15 @@
  * with itself. A hand-typed total is how a fixture starts lying the day somebody
  * adds a row, so each assertion below re-computes rather than restates.
  */
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import { resolveGuestRead } from '../../application/guestRead';
-import { allGuestFixtures } from '../guestFixtureRegistry';
+import { allGuestFixtures, loadLazyGuestFixtures } from '../guestFixtureRegistry';
 import { SAMPLE_MEMBERS, SAMPLE_PROJECTS, sampleDailySeries, sampleTasks } from '../../domain/sampleWorkspace';
 
 const read = (path: string) => resolveGuestRead({ path, method: 'GET', hadToken: false });
+
+// `/api/pmo/tree` lives in a lazily-loaded module (it stays out of the root closure).
+beforeAll(() => loadLazyGuestFixtures());
 
 describe('finance, allocation and planning fixtures', () => {
   it('answers every read the money and planning lenses fire', () => {

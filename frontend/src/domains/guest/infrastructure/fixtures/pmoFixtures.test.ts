@@ -7,13 +7,17 @@
  * stream, the spine and the trackers describe ONE hierarchy, and the progress
  * they report is the board's own count.
  */
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import { resolveGuestRead } from '../../application/guestRead';
+import { loadLazyGuestFixtures } from '../guestFixtureRegistry';
 import type { FunnelMetrics, Initiative, InnovationIdea, KeyResult, Objective, PmoTree, Portfolio, SpineResult, ValueStream } from '@/lib/builderforceApi';
 import { SAMPLE_PROJECTS, isSampleTaskCompleted, sampleTaskId } from '../../domain/sampleWorkspace';
 import { SAMPLE_IDEAS, SAMPLE_INITIATIVES } from '../../domain/samplePlanning';
 
 const read = <T,>(path: string) => resolveGuestRead({ path, method: 'GET', hadToken: false })?.body as T | undefined;
+
+// These modules load on the first guest read, not with the page.
+beforeAll(() => loadLazyGuestFixtures());
 
 describe('planning (PMO) fixtures', () => {
   it('answers every /api/pmo read a guest can fire', () => {

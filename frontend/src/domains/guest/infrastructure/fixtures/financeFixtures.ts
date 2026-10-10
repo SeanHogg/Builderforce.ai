@@ -21,7 +21,6 @@
  */
 
 import { isSampleTaskCompleted, SAMPLE_MEMBERS, SAMPLE_PROJECTS, SAMPLE_WORKSPACE_NAME, sampleDailySeries, sampleTasks, type SampleDailyPoint, type SampleTaskStatus } from '../../domain/sampleWorkspace';
-import { SAMPLE_INITIATIVES } from '../../domain/samplePlanning';
 import { dayOffsetToIso, exact, type GuestFixture, type GuestFixtureContext } from '../../domain/guestFixture';
 
 /** The requested window, clamped to what the series can honestly answer. */
@@ -379,7 +378,10 @@ export const financeFixtures: GuestFixture[] = [
       return {
         scope: { kind: 'workspace', id: 'sample', name: SAMPLE_WORKSPACE_NAME },
         projectCount: SAMPLE_PROJECTS.length,
-        initiativeCount: SAMPLE_INITIATIVES.length,
+        // One initiative per sample project (`domain/samplePlanning`). Counted
+        // from the projects rather than imported, so this eagerly-loaded module
+        // does not pull the lazily-loaded planning tier into the root closure.
+        initiativeCount: SAMPLE_PROJECTS.length,
         delivery: {
           totalTasks: tasks.length,
           completedCount: completed.length,
