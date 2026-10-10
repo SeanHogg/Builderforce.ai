@@ -15,14 +15,21 @@ vi.mock('@/lib/guestPromptCapture', () => ({
   startGuestCreationSession: (...args: unknown[]) => startGuestCreationSession(...(args as [])),
 }));
 
-/** The real composer pulls in the shared prompt package; this stands in for it. */
+/** The real composer pulls in the shared prompt package; this stands in for it. Its
+ *  starting points are the composer's own (covered by `ChatInput.offers.test.tsx`), so
+ *  the stand-in exposes only what the hero hands it: what picking an entry does. */
+const PROMPT_ENTRY = { id: 'mobile', name: 'Mobile app design', action: { kind: 'prompt', prompt: 'Design a mobile app with its key screens and user flow.' } };
+const INSTALL_ENTRY = { id: 'crm', name: 'CRM', action: { kind: 'install', templateKey: 'crm', stepCount: 3 } };
 vi.mock('@/components/ChatInput', () => ({
-  ChatInput: ({ value, onChange, onSubmit, placeholder }: {
+  ChatInput: ({ value, onChange, onSubmit, placeholder, starters }: {
     value: string; onChange: (next: string) => void; onSubmit: () => void; placeholder: string;
+    starters?: { onSelect: (entry: unknown) => void };
   }) => (
     <div>
       <textarea aria-label={placeholder} value={value} onChange={(event) => onChange(event.target.value)} />
       <button type="button" onClick={onSubmit}>send</button>
+      {starters && <button type="button" onClick={() => starters.onSelect(PROMPT_ENTRY)}>pick prompt</button>}
+      {starters && <button type="button" onClick={() => starters.onSelect(INSTALL_ENTRY)}>pick install</button>}
     </div>
   ),
 }));
@@ -156,20 +163,17 @@ describe('LandingCanvasHero', () => {
     expect(screen.getByText('canvas.sessionTitle')).toBeInTheDocument();
   });
 
-  it('opens starting points from the prompt’s own `+`, inside the box, and seeds the selected prompt', async () => {
+  it('gives its prompt the shared starting points: an entry seeds the box, an installable one opens its setup', async () => {
     render(<LandingCanvasHero />);
     await screen.findByText('Q3 pipeline.csv');
 
-    // The same way every prompt opens them — no tab hanging under the box.
-    expect(screen.queryByTestId('composer-starters')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'add' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /startingPoints/ }));
-    const catalog = screen.getByTestId('composer-starters');
-    expect(screen.getByLabelText('heroPromptPlaceholder').closest('form')).toContainElement(catalog);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Mobile app design' }));
+    // No tab hanging under the box: starting points are the composer's own `+`.
+    expect(screen.queryByRole('button', { name: /tabLabel/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'pick prompt' }));
     expect(screen.getByLabelText('heroPromptPlaceholder')).toHaveValue('Design a mobile app with its key screens and user flow.');
-    expect(screen.queryByTestId('composer-starters')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'pick install' }));
+    expect(push).toHaveBeenCalledWith('/templates?open=crm');
   });
 
   it('reveals the board from the prompt and resets interactions on an outside click', async () => {

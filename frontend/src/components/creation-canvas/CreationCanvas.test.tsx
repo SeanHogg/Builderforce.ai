@@ -994,6 +994,9 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
   });
 
   it('keeps exactly ONE Brain transcript — the dock — with its connected work behind a toggle', () => {
+    // The mic shows only where the runtime can listen; jsdom cannot, so give it a
+    // recognizer for this test (removed again below).
+    Object.defineProperty(window, 'webkitSpeechRecognition', { configurable: true, value: class {} });
     render(<CreationCanvas sessionId="brain-object-details-test" persistence="local" />);
 
     // One transcript, not three: the Brain Object and the details panel no longer
@@ -1002,6 +1005,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(screen.getByRole('log', { name: 'Brain chat history' })).toHaveAttribute('tabindex', '0');
     const microphone = screen.getByRole('button', { name: 'Dictate' });
     expect(microphone.querySelector('svg')).toBeInTheDocument();
+    delete (window as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
     const options = screen.getByRole('button', { name: /^Options/ });
     fireEvent.click(options);
     // The Options popover is the shared brain-ui tabbed menu: its rows are

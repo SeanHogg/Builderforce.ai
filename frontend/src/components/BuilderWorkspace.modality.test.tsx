@@ -40,7 +40,10 @@ vi.mock('@/hooks/useCollaboration', () => ({
   useCollaboration: () => ({ doc: null, provider: null, connected: false }),
 }));
 
-vi.mock('@/lib/brain', () => ({
+// Partial: the workspace's composers (the media generator's prompt among them) read the
+// mode list from the real module; only the context hooks are stubbed.
+vi.mock('@/lib/brain', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/brain')>()),
   useRegisterBrainActions: () => {},
   useBrainContext: () => ({ setContext: vi.fn(), setOpen: vi.fn() }),
   useOptionalBrainContext: () => null,

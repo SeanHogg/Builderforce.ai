@@ -1,3 +1,26 @@
+## ✅ RESOLVED 2026-10-10 — Every prompt in the app is the same composer: homepage, Studio home, the canvas/Studio session, media (frontend)
+
+**Was:**
+- **Homepage hero:** `ChatInput` plus a separate "Choose a starting point" tab hanging under the box (`PromptUseCasePicker`).
+- **Studio home:** its own textarea, hint line and "Build it" button (`StudioPromptBox`).
+- **Canvas composer:** its own Starting points trigger in the card's top row and its own next-step chips component.
+- **Media generator:** a labelled textarea, labelled selects and a Generate button.
+- **Studio session:** "Executing…" appeared twice (in the transcript and in a strip above the box), and "Entire canvas" showed on the App surface, because every turn selects the Brain card.
+
+**Now:**
+- **Starting points are `ChatInput`'s own** (`starters`, in `chat-input/useComposerStarters.tsx`): a `+` row opens `PromptUseCaseCatalog` inside the box. The `+` menu now renders whenever it has a row, not only when the host takes files.
+- **Next-step chips are `ChatInput`'s own** (`suggestions`, in `ComposerSuggestions`): fixed chips above an empty box that seed it and never send it.
+- **Retired:** `PromptUseCasePicker`'s tab and its popover variant; `CanvasPromptStarter`, `CanvasNextSteps` and `StudioPromptBox`; the `starter` slot of `CanvasComposer`; the dock's activity strip and the `strip` variant.
+- **The canvas** feeds both options from `chrome/useCanvasComposerOffers.ts`: phase-led starters, and the surface's next steps or the phase's starters.
+- **Every surface:** the hero, the Studio home and `MediaGenerateForm` (shape and length as compact selects in the tool row) all use `ChatInput`.
+- **Scope chip:** shown only on surfaces that show the board.
+- **Select to edit:**
+  - A pick focuses the prompt.
+  - It also reveals the prompt: it reopens a closed canvas prompt (`useCanvasPromptPlacement`) and unhides the workspace Brain, or switches to its pane on a phone.
+  - A click on an element with no source anchor (a production build, or React 19 without `_debugSource`) shows "That element can't be traced to its source…" instead of doing nothing (`VISUAL_UNRESOLVED_MESSAGE`).
+- **i18n:** `chatInput.startingPoints`, `chatInput.suggestionsLabel` and `ide.previewPick.unresolved` added in all five catalogs. `promptUseCases.tabLabel`, `studio.home.hint` and `creationCanvas.nextStepsLabel` retired.
+- **Tests:** `ChatInput.offers.test.tsx`, `useCanvasComposerOffers.test.tsx` (the phase-led order and lead behaviour of the deleted starter test) and `previewPick.test.ts` added. Hero, canvas, picker, activity and workspace tests were updated.
+
 ## ✅ RESOLVED 2026-10-10 — The Android, iPhone and Mac apps are Builderforce apps: renamed, signed in to the cloud, chatting in the one-box composer, built by CI (android 2026.10.2 · ios · macos 2026.10.1)
 
 **Was:** `apps/` was raw source from a half-finished OpenClaw→CoderClaw rename that had never compiled here. `Package.swift` paths did not match the folders, xcconfig variables were undefined, the icns, entitlements and Swabble paths were missing, and the gateway rejected the apps' `coderclaw-*` client ids. Chat went over the local gateway's session protocol, not the workspace's Brain chats, and nothing built the apps in CI. (Gap Register "Brand residuals", the native-app part.)
