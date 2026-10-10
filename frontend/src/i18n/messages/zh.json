@@ -775,7 +775,8 @@
       "inquiries": "意向",
       "runway": "现金跑道",
       "cashflow": "现金流",
-      "dashboard": "仪表板"
+      "dashboard": "仪表板",
+      "reports": "报告"
     },
     "primaryAria": "主导航",
     "destination": {
@@ -32589,6 +32590,96 @@
       "loading": "正在加载仪表板…",
       "installPrompt": "尚未安装 KPI 仪表板。安装适合你所在行业的仪表板，查看同行关注的指标。",
       "installCta": "从应用市场安装"
+    },
+    "reports": {
+      "title": "定时报告",
+      "blurb": "此工作区按计划通过邮件发送的报告——站会、高管摘要、汇总报告，以及由画布框架生成的董事会材料。",
+      "new": "新建计划",
+      "loading": "加载中…",
+      "empty": "尚未安排任何报告。创建一个，即可按天、按周或按月通过邮件发送。",
+      "crumb": "财务 · 报告",
+      "createTitle": "新建报告计划",
+      "editTitle": "编辑报告计划",
+      "cancel": "取消",
+      "save": "保存更改",
+      "create": "创建计划",
+      "edit": "编辑",
+      "pause": "暂停",
+      "resume": "恢复",
+      "delete": "删除",
+      "deleteTitle": "删除此计划？",
+      "deleteMessage": "将停止发送{type}报告。已发送的报告不受影响。",
+      "statusOn": "启用中",
+      "statusPaused": "已暂停",
+      "cadenceSummary": "{cadence}，UTC {hour}:00",
+      "recipientsCount": "{count, plural, other {# 位收件人}}",
+      "subjectFrame": "画布框架",
+      "nextRun": "下次：{when}",
+      "nextRunPending": "下次运行时间将在调度器下次运行时确定",
+      "fixedOnEdit": "计划创建后，报告类型、频率和框架即固定。如需更改，请新建一个计划。",
+      "needRecipients": "请至少添加一位收件人。",
+      "fixRecipients": "请修正不是电子邮件地址的条目。",
+      "needFrame": "请选择此董事会材料要发送的框架。",
+      "recipientsInvalid": "不是电子邮件地址：{entries}",
+      "recipientsHint": "每行一个地址，或用逗号分隔。",
+      "recipientsPlaceholder": "cfo@example.com\nboard@example.com",
+      "hourOption": "UTC {hour}:00",
+      "boardPlaceholder": "选择画板",
+      "framePlaceholder": "选择框架",
+      "frameOption": "{title}（{count, plural, other {# 个卡片}}）",
+      "noBoards": "你还没有活跃的画板。董事会材料会发送画板中的一个框架。",
+      "noFrames": "此画板没有框架。请在要发送的卡片周围添加一个框架，然后在这里选择它。",
+      "field": {
+        "type": "报告",
+        "cadence": "频率",
+        "hour": "发送时间",
+        "recipients": "收件人",
+        "enabled": "发送此报告",
+        "board": "画板",
+        "frame": "框架"
+      },
+      "type": {
+        "standup": "每日站会",
+        "code_review": "代码评审",
+        "project_status": "项目状态",
+        "executive_summary": "高管摘要",
+        "portfolio_rollup": "项目组合汇总",
+        "board_pack": "董事会材料"
+      },
+      "cadence": {
+        "daily": "每天",
+        "weekly": "每周",
+        "monthly": "每月"
+      }
+    },
+    "validation": {
+      "title": "验证活动",
+      "blurb": "此工作区中正在进行的实验、验证仪表板和反馈收集器。",
+      "loading": "正在加载验证活动…",
+      "empty": "尚未进行任何验证。开始实验、验证仪表板或反馈收集器后，它们会显示在这里。",
+      "untitled": "未命名",
+      "more": "{count, plural, other {还有 # 项}}",
+      "responses": "{count, plural, other {# 条回复}}",
+      "count": {
+        "validation": "{count, plural, other {# 个实验}}",
+        "dashboard": "{count, plural, other {# 个仪表板}}",
+        "feedback_collector": "{count, plural, other {# 个收集器}}"
+      },
+      "kind": {
+        "validation": "实验",
+        "dashboard": "仪表板",
+        "feedback_collector": "反馈收集器"
+      },
+      "status": {
+        "in_progress": "进行中",
+        "validated": "已验证",
+        "invalidated": "已否定",
+        "inconclusive": "无定论",
+        "running": "运行中",
+        "active": "启用中",
+        "completed": "已完成",
+        "disabled": "已关闭"
+      }
     }
   },
   "proBonoBadge": {

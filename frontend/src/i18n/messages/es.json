@@ -775,7 +775,8 @@
       "inquiries": "Interés",
       "runway": "Runway",
       "cashflow": "Flujo de caja",
-      "dashboard": "Panel"
+      "dashboard": "Panel",
+      "reports": "Informes"
     },
     "primaryAria": "Principal",
     "destination": {
@@ -32589,6 +32590,96 @@
       "loading": "Cargando tu panel…",
       "installPrompt": "Aún no hay ningún panel de KPI instalado. Instala el panel de tu sector para ver las métricas que siguen tus pares.",
       "installCta": "Instalar desde el Marketplace"
+    },
+    "reports": {
+      "title": "Informes programados",
+      "blurb": "Informes que este espacio de trabajo envía por correo de forma periódica: reuniones diarias, resúmenes ejecutivos, consolidados y dosieres para el consejo creados a partir de un marco del lienzo.",
+      "new": "Nueva programación",
+      "loading": "Cargando…",
+      "empty": "Todavía no hay informes programados. Crea uno para recibirlo por correo a diario, cada semana o cada mes.",
+      "crumb": "Finanzas · Informes",
+      "createTitle": "Nueva programación de informe",
+      "editTitle": "Editar programación de informe",
+      "cancel": "Cancelar",
+      "save": "Guardar cambios",
+      "create": "Crear programación",
+      "edit": "Editar",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "delete": "Eliminar",
+      "deleteTitle": "¿Eliminar esta programación?",
+      "deleteMessage": "El informe {type} dejará de enviarse. Los informes ya entregados no se ven afectados.",
+      "statusOn": "Activo",
+      "statusPaused": "En pausa",
+      "cadenceSummary": "{cadence} a las {hour}:00 UTC",
+      "recipientsCount": "{count, plural, one {# destinatario} other {# destinatarios}}",
+      "subjectFrame": "Marco del lienzo",
+      "nextRun": "Próximo: {when}",
+      "nextRunPending": "El próximo envío se fija cuando se ejecute el programador",
+      "fixedOnEdit": "El tipo de informe, la frecuencia y el marco quedan fijos una vez creada la programación. Para cambiarlos, crea una nueva.",
+      "needRecipients": "Añade al menos un destinatario.",
+      "fixRecipients": "Corrige las entradas que no son direcciones de correo.",
+      "needFrame": "Elige el marco que debe enviar este dosier.",
+      "recipientsInvalid": "No es una dirección de correo: {entries}",
+      "recipientsHint": "Una dirección por línea o separadas por comas.",
+      "recipientsPlaceholder": "cfo@example.com\nconsejo@example.com",
+      "hourOption": "{hour}:00 UTC",
+      "boardPlaceholder": "Elige un tablero",
+      "framePlaceholder": "Elige un marco",
+      "frameOption": "{title} ({count, plural, one {# tarjeta} other {# tarjetas}})",
+      "noBoards": "Aún no tienes tableros activos. Un dosier para el consejo envía un marco de uno de ellos.",
+      "noFrames": "Este tablero no tiene marcos. Añade un marco alrededor de las tarjetas que quieres enviar y elígelo aquí.",
+      "field": {
+        "type": "Informe",
+        "cadence": "Frecuencia",
+        "hour": "Hora de envío",
+        "recipients": "Destinatarios",
+        "enabled": "Enviar este informe",
+        "board": "Tablero",
+        "frame": "Marco"
+      },
+      "type": {
+        "standup": "Reunión diaria",
+        "code_review": "Revisión de código",
+        "project_status": "Estado del proyecto",
+        "executive_summary": "Resumen ejecutivo",
+        "portfolio_rollup": "Consolidado de cartera",
+        "board_pack": "Dosier para el consejo"
+      },
+      "cadence": {
+        "daily": "Diario",
+        "weekly": "Semanal",
+        "monthly": "Mensual"
+      }
+    },
+    "validation": {
+      "title": "Validaciones en curso",
+      "blurb": "Los experimentos, paneles de validación y recopiladores de opiniones activos en este espacio de trabajo.",
+      "loading": "Cargando validaciones…",
+      "empty": "Todavía no se está validando nada. Los experimentos, paneles de validación y recopiladores de opiniones aparecen aquí en cuanto inicias uno.",
+      "untitled": "Sin título",
+      "more": "{count, plural, one {y # más} other {y # más}}",
+      "responses": "{count, plural, one {# respuesta} other {# respuestas}}",
+      "count": {
+        "validation": "{count, plural, one {# experimento} other {# experimentos}}",
+        "dashboard": "{count, plural, one {# panel} other {# paneles}}",
+        "feedback_collector": "{count, plural, one {# recopilador} other {# recopiladores}}"
+      },
+      "kind": {
+        "validation": "Experimento",
+        "dashboard": "Panel",
+        "feedback_collector": "Recopilador de opiniones"
+      },
+      "status": {
+        "in_progress": "En curso",
+        "validated": "Validado",
+        "invalidated": "Refutado",
+        "inconclusive": "No concluyente",
+        "running": "En ejecución",
+        "active": "Activo",
+        "completed": "Completado",
+        "disabled": "Desactivado"
+      }
     }
   },
   "proBonoBadge": {
