@@ -244,6 +244,8 @@
     <string name="chat_starter_3">规划我这一周</string>
     <string name="chat_mic_denied">听写需要麦克风权限。</string>
     <string name="chat_image_unreadable">无法读取该图片。</string>
+    <string name="chat_attached_image">附加的图片：%1$s</string>
+    <string name="chat_attachment_unavailable">图片不可用</string>
     <string name="chat_image">图片</string>
     <string name="chat_image_unavailable">图片不可用</string>
 

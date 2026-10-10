@@ -108,6 +108,7 @@ private fun ColumnScope.SignedInChat(viewModel: MainViewModel) {
     awaitingAgent = awaitingAgent,
     onDecideTool = chat::decideTool,
     onUnqueue = chat::unqueue,
+    loadImage = chat::attachmentImage,
     modifier = Modifier.weight(1f, fill = true),
   )
 

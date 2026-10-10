@@ -246,6 +246,8 @@
     <string name="chat_starter_3">Plane meine Woche</string>
     <string name="chat_mic_denied">Zum Diktieren wird die Mikrofonberechtigung benötigt.</string>
     <string name="chat_image_unreadable">Dieses Bild konnte nicht gelesen werden.</string>
+    <string name="chat_attached_image">Angehängtes Bild: %1$s</string>
+    <string name="chat_attachment_unavailable">Bild nicht verfügbar</string>
     <string name="chat_image">Bild</string>
     <string name="chat_image_unavailable">Bild nicht verfügbar</string>
 

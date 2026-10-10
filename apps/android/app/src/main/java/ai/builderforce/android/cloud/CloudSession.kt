@@ -97,15 +97,36 @@ class CloudSession(private val prefs: SecurePrefs, private val config: CloudConf
     }
   }
 
+  /** The gateway base URL in use (where uploads are read back from). */
+  fun baseUrl(): String = config.baseUrl()
+
   /** Call the platform API as the signed-in person. A 401 re-mints the token once. */
   suspend fun api(method: String, path: String, body: JsonElement? = null): JsonElement =
+    authed { bearer -> CloudHttp.call(CloudHttp.client, CloudHttp.request("${config.baseUrl()}$path", method, body, bearer)) }
+
+  /**
+   * Upload one file to the chat uploads store (`POST /api/brain/upload`, multipart field
+   * `file`); the answer is the stored `{key, name, type}`. Same bearer and 401 re-mint as [api].
+   */
+  suspend fun upload(fileName: String, mimeType: String, bytes: ByteArray): JsonElement =
+    authed { bearer ->
+      val request = CloudHttp.multipartRequest("${config.baseUrl()}/api/brain/upload", fileName, mimeType, bytes, bearer)
+      CloudHttp.call(CloudHttp.uploadClient, request)
+    }
+
+  /** Read a stored file back as the signed-in person (the uploads route is tenant-checked). */
+  suspend fun download(path: String): ByteArray =
+    authed { bearer -> CloudHttp.bytes(CloudHttp.uploadClient, CloudHttp.getRequest("${config.baseUrl()}$path", bearer)) }
+
+  /** Run [call] with the workspace token; a 401 drops the token and tries once more. */
+  private suspend fun <T> authed(call: suspend (bearer: String) -> T): T =
     guard {
       try {
-        send(method, path, body)
+        call(bearer())
       } catch (e: CloudException.Status) {
         if (e.code != 401) throw e
         token = null
-        send(method, path, body)
+        call(bearer())
       }
     }
 
@@ -124,11 +145,6 @@ class CloudSession(private val prefs: SecurePrefs, private val config: CloudConf
         throw e
       }
     }
-
-  private suspend fun send(method: String, path: String, body: JsonElement?): JsonElement {
-    val bearer = bearer()
-    return CloudHttp.call(CloudHttp.client, CloudHttp.request("${config.baseUrl()}$path", method, body, bearer))
-  }
 
   /** A refused key anywhere signs out here (it is already dead there). */
   private inline fun <T> guard(block: () -> T): T =

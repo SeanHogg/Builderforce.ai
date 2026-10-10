@@ -248,6 +248,8 @@
     <string name="chat_starter_3">Planifica mi semana</string>
     <string name="chat_mic_denied">Se necesita el permiso de micrófono para dictar.</string>
     <string name="chat_image_unreadable">No se pudo leer esa imagen.</string>
+    <string name="chat_attached_image">Imagen adjunta: %1$s</string>
+    <string name="chat_attachment_unavailable">Imagen no disponible</string>
     <string name="chat_image">Imagen</string>
     <string name="chat_image_unavailable">Imagen no disponible</string>
 

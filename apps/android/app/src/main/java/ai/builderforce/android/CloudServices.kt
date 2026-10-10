@@ -1,5 +1,6 @@
 package ai.builderforce.android
 
+import ai.builderforce.android.chat.ChatAttachments
 import ai.builderforce.android.chat.ChatController
 import ai.builderforce.android.cloud.BrainChatApi
 import ai.builderforce.android.cloud.BrainReplyRunner
@@ -30,5 +31,6 @@ class CloudServices(prefs: SecurePrefs) {
       account = account,
       api = chatApi,
       runner = BrainReplyRunner(session, chatApi, PlatformTools(session)),
+      attachments = ChatAttachments(chatApi),
     )
 }

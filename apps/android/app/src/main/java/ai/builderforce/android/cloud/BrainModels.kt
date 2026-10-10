@@ -9,7 +9,8 @@ data class BrainChat(val id: Long, val title: String?, val updatedAt: String?)
 
 /**
  * One turn of a chat. [authorName] is the agent (or person) that wrote an assistant turn
- * on someone else's behalf; [addressedTo] names who a user turn was for.
+ * on someone else's behalf; [addressedTo] names who a user turn was for; [attachments] are
+ * the files stored with it (`metadata.attachments`).
  */
 data class BrainMessage(
   val id: String,
@@ -18,6 +19,7 @@ data class BrainMessage(
   val authorName: String?,
   val addressedTo: List<String>,
   val createdAtMs: Long?,
+  val attachments: List<BrainAttachment> = emptyList(),
 )
 
 /** An agent a message can be addressed to (one assigned to the open chat). */
@@ -51,6 +53,7 @@ internal fun parseMessage(el: JsonElement, index: Int): BrainMessage? {
     authorName = metadata?.get("authoredBy").objOrNull()?.get("name").textOrNull(),
     addressedTo = recipients.filter { it.isNotBlank() },
     createdAtMs = o["createdAt"].textOrNull()?.let(::parseInstantMs),
+    attachments = parseAttachments(metadata),
   )
 }
 
@@ -67,7 +70,7 @@ private fun parseInstantMs(raw: String): Long? =
 
 /** The turns a person reads: user and assistant turns with something in them. */
 fun visibleMessages(messages: List<BrainMessage>): List<BrainMessage> =
-  messages.filter { (it.role == "user" || it.role == "assistant") && it.content.isNotBlank() }
+  messages.filter { (it.role == "user" || it.role == "assistant") && (it.content.isNotBlank() || it.attachments.isNotEmpty()) }
 
 /**
  * Who an agent-addressed message is still waiting on: the last turn is the person's, to an

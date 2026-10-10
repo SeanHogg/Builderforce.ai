@@ -41,6 +41,7 @@ class ChatController(
   private val account: CloudAccount,
   private val api: BrainChatApi,
   private val runner: BrainReplyRunner,
+  private val attachments: ChatAttachments,
 ) {
   val signedIn: StateFlow<Boolean> = account.signedIn
 
@@ -147,15 +148,16 @@ class ChatController(
   }
 
   /**
-   * Send [text] to the Brain, or to an assigned agent ([to]). [images] ride on a Brain
-   * turn. While a reply runs, the message queues and goes once it is done.
+   * Send [text] to the Brain, or to an assigned agent ([to]). [images] are stored with the
+   * turn, and the Brain sees them. While a reply runs, the message queues and goes once it
+   * is done.
    */
   fun send(text: String, to: Recipient?, images: List<ImageAttachment>) {
     val content = text.trim()
-    if (content.isEmpty()) return
+    if (content.isEmpty() && images.isEmpty()) return
     _error.value = null
     nextId += 1
-    val item = QueuedMessage(id = nextId, chatId = _activeChatId.value, text = content, to = to, images = if (to == null) images else emptyList())
+    val item = QueuedMessage(id = nextId, chatId = _activeChatId.value, text = content, to = to, images = images)
     if (_running.value) {
       _queued.update { it + item }
       return
@@ -172,6 +174,9 @@ class ChatController(
   fun stop() {
     replyJob?.cancel()
   }
+
+  /** A stored image's bytes, for a turn's thumbnail; null when it cannot be read. */
+  suspend fun attachmentImage(key: String): ByteArray? = attachments.imageBytes(key)
 
   /** The person's answer to the tool the Brain is waiting on. */
   fun decideTool(approve: Boolean) {
@@ -203,7 +208,8 @@ class ChatController(
     var replyChat: Long? = null
     try {
       val chatId = item.chatId ?: _activeChatId.value ?: createAndOpen().id
-      api.send(chatId, item.text, item.to)
+      val stored = attachments.upload(item.images)
+      api.send(chatId, attachments.content(item.text, stored), item.to, stored)
       loadMessages()
       if (item.to == null) {
         replyChat = chatId

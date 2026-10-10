@@ -55,7 +55,7 @@ import androidx.compose.ui.unit.dp
  * The one-box composer every Builderforce surface draws (web, editor, Synapse, Spawn): one
  * filled box with the text on top and one row under it — `+` to attach images, "To" only
  * when the chat has agents to address, and ONE round trailing button: the mic on an empty
- * box (where the phone can listen), Send once there is text, Stop while a reply runs and
+ * box (where the phone can listen), Send once there is text or an image, Stop while a reply runs and
  * the box is empty. Text typed during a reply stays sendable and queues behind it.
  */
 @Composable
@@ -141,7 +141,7 @@ fun ChatComposer(
                 content = MaterialTheme.colorScheme.onPrimary,
                 onClick = { dictation.stop() },
               )
-            hasText ->
+            hasText || attachments.isNotEmpty() ->
               RoundAction(
                 icon = Icons.Filled.ArrowUpward,
                 label = stringResource(R.string.chat_send),

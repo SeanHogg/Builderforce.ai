@@ -21,8 +21,8 @@ android {
     applicationId = "ai.builderforce.android"
     minSdk = 31
     targetSdk = 36
-    versionCode = 202610100
-    versionName = "2026.10.1"
+    versionCode = 202610200
+    versionName = "2026.10.2"
     ndk {
       // Support all major ABIs — native libs are tiny (~47 KB per ABI)
       abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")

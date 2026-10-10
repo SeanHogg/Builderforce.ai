@@ -33,6 +33,7 @@ fun ChatMessageListCard(
   awaitingAgent: String?,
   onDecideTool: (approve: Boolean) -> Unit,
   onUnqueue: (id: Long) -> Unit,
+  loadImage: AttachmentImageLoader,
   modifier: Modifier = Modifier,
 ) {
   val shown = remember(messages) { visibleMessages(messages) }
@@ -61,7 +62,7 @@ fun ChatMessageListCard(
         item(key = "awaiting") { AwaitingAgentBubble(names = awaitingAgent) }
       }
       items(count = shown.size, key = { idx -> "m-" + shown[shown.size - 1 - idx].id }) { idx ->
-        ChatMessageBubble(message = shown[shown.size - 1 - idx])
+        ChatMessageBubble(message = shown[shown.size - 1 - idx], loadImage = loadImage)
       }
     }
 

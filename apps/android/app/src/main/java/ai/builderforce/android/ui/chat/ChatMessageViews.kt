@@ -4,6 +4,7 @@ import ai.builderforce.android.R
 import ai.builderforce.android.chat.LiveReply
 import ai.builderforce.android.chat.QueuedMessage
 import ai.builderforce.android.chat.ToolApproval
+import ai.builderforce.android.chat.withoutAttachmentLinks
 import ai.builderforce.android.cloud.BrainMessage
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -28,9 +30,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 
-/** One turn: who said it (you, the Brain, or the agent that replied) and who it was for. */
+/**
+ * One turn: who said it (you, the Brain, or the agent that replied), who it was for, and
+ * the images stored with it — shown as thumbnails in place of their links in the text.
+ */
 @Composable
-fun ChatMessageBubble(message: BrainMessage) {
+fun ChatMessageBubble(message: BrainMessage, loadImage: AttachmentImageLoader) {
   val isUser = message.role == "user"
   val author =
     when {
@@ -39,6 +44,8 @@ fun ChatMessageBubble(message: BrainMessage) {
     }
   val container = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh
   val content = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+  val images = remember(message.attachments) { message.attachments.filter { it.isImage } }
+  val text = remember(message.content, images) { withoutAttachmentLinks(message.content, images) }
   Row(
     modifier = Modifier.fillMaxWidth(),
     horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -50,7 +57,8 @@ fun ChatMessageBubble(message: BrainMessage) {
           to = message.addressedTo.takeIf { it.isNotEmpty() }?.joinToString(", "),
           color = content,
         )
-        ChatMarkdown(text = message.content, textColor = content)
+        if (images.isNotEmpty()) ChatAttachmentThumbnails(images = images, load = loadImage)
+        if (text.isNotEmpty()) ChatMarkdown(text = text, textColor = content)
       }
     }
   }

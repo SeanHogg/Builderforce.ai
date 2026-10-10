@@ -29,30 +29,29 @@ class BrainChatApi(private val session: CloudSession) {
   /**
    * Post the person's message. To an agent ([to]): `addressedTo` metadata, and the
    * platform dispatches that agent's reply. To the Brain: the app answers it
-   * ([BrainReplyRunner]).
+   * ([BrainReplyRunner]). [attachments] (already uploaded) go in the same metadata.
    */
-  suspend fun send(chatId: Long, content: String, to: Recipient?) {
+  suspend fun send(chatId: Long, content: String, to: Recipient?, attachments: List<BrainAttachment> = emptyList()) {
+    val metadata = turnMetadata(to, attachments)
     val message =
       buildJsonObject {
         put("role", JsonPrimitive("user"))
         put("content", JsonPrimitive(content))
-        if (to != null) {
-          val addressed =
-            buildJsonObject {
-              put(
-                "addressedTo",
-                buildJsonObject {
-                  put("kind", JsonPrimitive("agent"))
-                  put("ref", JsonPrimitive(to.ref))
-                  put("name", JsonPrimitive(to.name))
-                },
-              )
-            }
-          put("metadata", JsonPrimitive(addressed.toString()))
-        }
+        if (metadata != null) put("metadata", JsonPrimitive(metadata))
       }
     append(chatId, message)
   }
+
+  /** Store one file for a message (`POST /api/brain/upload`). */
+  suspend fun upload(fileName: String, mimeType: String, bytes: ByteArray): BrainAttachment =
+    parseAttachment(session.upload(fileName, mimeType, bytes))
+      ?: throw CloudException.Unreachable("the upload has no key")
+
+  /** Where a stored file is read back (the link a message carries). */
+  fun uploadUrl(key: String): String = uploadUrl(session.baseUrl(), key)
+
+  /** A stored file's bytes, read as the signed-in person. */
+  suspend fun uploadBytes(key: String): ByteArray = session.download(uploadPath(key))
 
   /** Persist the Brain's finished answer. */
   suspend fun postAssistant(chatId: Long, content: String) {
@@ -105,9 +104,14 @@ class BrainChatApi(private val session: CloudSession) {
     return pool.values.sortedBy { it.name.lowercase() }
   }
 
-  private companion object {
-    const val CHAT_LIMIT = 50
-    const val MESSAGE_LIMIT = 100
-    val POOL_PATHS = listOf("/api/workforce/agents/mine", "/api/workforce/agents/purchased", "/api/agents")
+  companion object {
+    private const val CHAT_LIMIT = 50
+    private const val MESSAGE_LIMIT = 100
+    private val POOL_PATHS = listOf("/api/workforce/agents/mine", "/api/workforce/agents/purchased", "/api/agents")
+
+    /** The tenant-checked read path of a stored upload. */
+    fun uploadPath(key: String): String = "/api/brain/uploads/$key"
+
+    fun uploadUrl(base: String, key: String): String = "$base${uploadPath(key)}"
   }
 }
