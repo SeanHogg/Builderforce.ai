@@ -994,6 +994,28 @@ describe('runCreationCanvasAi', () => {
       expect(answer).toBe(NOTICES.stepsExhausted);
     });
 
+    it('gives a turn that only READS an app the code step budget, and says it stopped before changing anything', async () => {
+      // Session local-148925cf: "continue" re-read the app for eight research-sized steps,
+      // never reached an edit, and answered "I couldn't prepare any canvas changes".
+      const read = vi.fn(() => ({ ok: true, path: 'src/App.jsx', content: 'export default 1;' }));
+      let step = 0;
+      mocks.streamChatCompletion.mockImplementation(async () => {
+        step += 1;
+        return {
+          text: '', finishReason: 'tool_calls',
+          toolCalls: [{ id: `r${step}`, name: 'canvas_read_build_file', args: JSON.stringify({ path: `src/page${step}.jsx` }) }],
+        };
+      });
+
+      const answer = await runTurn({
+        prompt: 'continue', canvasSnapshot: '{"objects":[]}', persistence: 'local',
+        canvasActions: [{ name: 'canvas_read_build_file', description: 'Read a file', parameters: { type: 'object' }, mutates: false, run: read }],
+      });
+
+      expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(MAX_CANVAS_BUILD_TURNS);
+      expect(answer).toBe(NOTICES.stepsExhaustedUnchanged);
+    });
+
     /**
      * The same session advertised 541 tools on every completion (~120K tokens of
      * schema), which no free coder's window holds — so a FREE-plan turn skipped its

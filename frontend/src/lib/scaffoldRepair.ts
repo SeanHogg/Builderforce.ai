@@ -18,14 +18,17 @@
  * structural contract ({@link validateFileContentForPath}). A file that has valid
  * content for its own path is never touched, so real user work is preserved.
  */
-import { scaffoldForModality, scaffoldPathStoodInFor } from '@builderforce/ide-templates';
+import { isRetiredScaffold, scaffoldForModality, scaffoldPathStoodInFor } from '@builderforce/ide-templates';
 import { validateFileContentForPath } from '@builderforce/ide-file-contract';
 
+/** Why a scaffold file was restored. `retired` = untouched starter from an older scaffold. */
+export type ScaffoldRestoreReason = 'empty' | 'corrupt' | 'retired';
+
 export interface ScaffoldRepairResult {
-  /** The file map with empty/corrupt scaffold files replaced by the template. */
+  /** The file map with empty/corrupt/retired scaffold files replaced by the template. */
   repaired: Record<string, string>;
   /** Scaffold paths that were restored, and why — for logging + persistence. */
-  restored: { path: string; reason: 'empty' | 'corrupt' }[];
+  restored: { path: string; reason: ScaffoldRestoreReason }[];
 }
 
 /**
@@ -41,21 +44,29 @@ export function repairScaffold(
   const defaults = scaffoldForModality(modality);
   if (!defaults) return { repaired: { ...files }, restored: [] };
   const repaired: Record<string, string> = { ...files };
-  const restored: { path: string; reason: 'empty' | 'corrupt' }[] = [];
+  const restored: { path: string; reason: ScaffoldRestoreReason }[] = [];
 
   for (const [path, template] of Object.entries(defaults)) {
     const current = repaired[path];
     // A MISSING file the project already supplies under another extension stays missing.
     if (current === undefined && scaffoldPathStoodInFor(path, Object.keys(repaired))) continue;
-    const isEmpty = !current || current.trim() === '';
-    // A non-empty scaffold file that fails ITS OWN structural contract is
-    // cross-wired content (another file written here). Restore it.
-    const isCorrupt = !isEmpty && !validateFileContentForPath(path, current).ok;
-    if (isEmpty || isCorrupt) {
+    const reason = restoreReason(path, current);
+    if (reason) {
       repaired[path] = template;
-      restored.push({ path, reason: isEmpty ? 'empty' : 'corrupt' });
+      restored.push({ path, reason });
     }
   }
 
   return { repaired, restored };
+}
+
+function restoreReason(path: string, current: string | undefined): ScaffoldRestoreReason | null {
+  if (!current || current.trim() === '') return 'empty';
+  // A non-empty scaffold file that fails ITS OWN structural contract is
+  // cross-wired content (another file written here).
+  if (!validateFileContentForPath(path, current).ok) return 'corrupt';
+  // Untouched starter from an older scaffold — e.g. the entry that rendered its own
+  // inline App and so never showed the app written into src/App.jsx.
+  if (isRetiredScaffold(path, current)) return 'retired';
+  return null;
 }

@@ -35,6 +35,9 @@ export interface CanvasNotices {
    *  Distinct from `addedToCanvas`: the work is real but not finished, and the user
    *  is told how to resume it rather than left to guess whether it is complete. */
   stepsExhausted: string;
+  /** The turn was working inside an app and its step budget ran out before it changed
+   *  anything. Distinct from `noAnswer`: the request was fine, and "continue" resumes it. */
+  stepsExhaustedUnchanged: string;
   /** The turn provisioned an app workspace and then stopped without writing a line of the
    *  app, after every recovery was spent. Distinct from `addedToCanvas`: the board holds a
    *  template, not what was asked for, and the preview proves it. */
@@ -74,6 +77,7 @@ export function canvasNoticesFrom(t: CanvasNoticeTranslator): CanvasNotices {
     addedToCanvas: t('addedToCanvas'),
     noAnswer: t('noAnswer'),
     stepsExhausted: t('stepsExhausted'),
+    stepsExhaustedUnchanged: t('stepsExhaustedUnchanged'),
     buildNotAuthored: t('buildNotAuthored'),
     providerStalled: t('providerStalled'),
     stoppedPartway: t('stoppedPartway'),

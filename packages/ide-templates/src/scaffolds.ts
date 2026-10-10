@@ -76,6 +76,35 @@ export default defineConfig({
 };
 
 /**
+ * Starter content a scaffold path USED to ship and no longer does, keyed by path.
+ *
+ * A project seeded before the change still holds these bytes, and no healer touches
+ * them: they are neither empty nor corrupt. The retired vanilla entry declared its own
+ * inline `App`, so a project created under it keeps showing "Hello World!" however
+ * much app a Brain writes into `src/App.jsx` (session `local-148925cf`, after the
+ * 2026-10-09 scaffold fix). Content still byte-identical to a retired starter is not
+ * anyone's work, so it is safe to bring up to the current scaffold.
+ */
+export const RETIRED_SCAFFOLD_CONTENT: Readonly<Record<string, readonly string[]>> = {
+  'src/main.jsx': [
+    `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+
+function App() {
+  return (
+    <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
+      <h1>Hello World! 🚀</h1>
+      <p>Edit src/main.jsx to get started.</p>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);`,
+  ],
+};
+
+/**
  * The mobile scaffold's Vite config.
  *
  * Two things make a React Native app run in the browser preview:

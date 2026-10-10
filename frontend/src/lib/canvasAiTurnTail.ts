@@ -45,6 +45,8 @@ export interface CanvasTurnTailFacts {
   stalledStreams: number;
   /** The step cap stopped the model. */
   stepsExhausted: boolean;
+  /** The turn called a build tool — it was working inside an app, written to or not. */
+  workspaceTurn: boolean;
   buildTurn: boolean;
   buildAuthored: boolean;
   mutationRequested: boolean;
@@ -106,6 +108,12 @@ export function composeTurnTail(facts: CanvasTurnTailFacts): CanvasTurnTail {
   // From here down the string is a RUNTIME NOTICE, not something the model said. The
   // caller is told so it can record it as a failed turn instead of writing it into the
   // transcript as an assistant reply for the next turn to copy.
+  // The cap stopped a turn that was working in an app before it changed anything. The cap
+  // is WHY it stopped, so it outranks an earlier tool error the model already retried past,
+  // and "no answer" would blame a request that was fine (session `local-148925cf`).
+  if (facts.stepsExhausted && facts.workspaceTurn) {
+    return { answer: notices.stepsExhaustedUnchanged, learn: false, unanswered: { reason: 'no-answer', detail: 'steps-exhausted' } };
+  }
   // A tool that FAILED still outranks prose: the error names what blocked the turn and
   // what would clear it, which the model's own narration routinely gets wrong.
   if (facts.lastToolError) {

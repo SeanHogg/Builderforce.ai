@@ -23,9 +23,25 @@
  * vitest), exactly as `@builderforce/creation-canvas-contract` already does
  * across the same Worker/Next split.
  */
-export { VANILLA_TEMPLATE, MOBILE_TEMPLATE } from './scaffolds';
+export { VANILLA_TEMPLATE, MOBILE_TEMPLATE, RETIRED_SCAFFOLD_CONTENT } from './scaffolds';
 
-import { VANILLA_TEMPLATE, MOBILE_TEMPLATE } from './scaffolds';
+import { VANILLA_TEMPLATE, MOBILE_TEMPLATE, RETIRED_SCAFFOLD_CONTENT } from './scaffolds';
+
+/** Line endings and surrounding whitespace never make a file someone's own work. */
+function normalizeScaffoldText(content: string): string {
+  return content.replace(/\r\n/g, '\n').trim();
+}
+
+/**
+ * Is this file still exactly the starter a scaffold path USED to ship? Such content is
+ * untouched starter, so a healer may replace it with the current scaffold.
+ */
+export function isRetiredScaffold(path: string, content: string): boolean {
+  const retired = RETIRED_SCAFFOLD_CONTENT[path];
+  if (!retired) return false;
+  const current = normalizeScaffoldText(content);
+  return retired.some((old) => normalizeScaffoldText(old) === current);
+}
 
 /** Every starter template, keyed by the `template` value that selects it. */
 export const TEMPLATES: Record<string, Record<string, string>> = {

@@ -29,7 +29,7 @@ import {
   toolOutcomeChangedCanvas,
   unverifiedCreationClaim,
 } from '@/lib/canvasTurnOutcome';
-import { CANVAS_BUILD_FILE_WRITE_TOOLS, CANVAS_BUILD_WORKSPACE_WRITE_TOOLS } from '@/lib/canvasBuildTools';
+import { CANVAS_BUILD_FILE_WRITE_TOOLS, CANVAS_BUILD_TOOLS, CANVAS_BUILD_WORKSPACE_WRITE_TOOLS } from '@/lib/canvasBuildTools';
 import { CANVAS_STREAM_STALL_MS, CanvasStreamStalledError, streamBoundedByActivity } from '@/lib/canvasStreamWatchdog';
 import type { CanvasNotices } from '@/lib/canvasNotices';
 import { canvasSystemMessages, promptNamedTools } from '@/lib/canvasAiSystemPrompt';
@@ -303,8 +303,11 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
    *  multi-step task never loses a tool mid-flight. */
   const toolsUsedThisTurn = new Set<string>();
   const requiredTools = promptNamedTools(messages);
-  /** Set once a workspace write commits: the turn is BUILDING, so it gets the code
-   *  output ceiling and the code step budget from then on. */
+  /** Set once the turn calls any build tool (`CANVAS_BUILD_TOOLS`): it is working inside
+   *  an app, so it gets the code output ceiling and the code step budget from then on. */
+  let workspaceTurn = false;
+  /** Set once a workspace write commits: the turn has BUILT something, which is what the
+   *  tail and the build-not-authored recovery read. */
   let buildTurn = false;
   /** Set once a file of the app itself is written (`CANVAS_BUILD_FILE_WRITE_TOOLS`) — the
    *  difference between a build turn that delivered an app and one that only seeded the
@@ -361,7 +364,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             messages,
             tools: selection.tools,
             tool_choice: 'auto',
-            maxTokens: buildTurn || truncatedOnce ? CANVAS_BUILD_RESPONSE_TOKENS : CANVAS_RESPONSE_TOKENS,
+            maxTokens: workspaceTurn || truncatedOnce ? CANVAS_BUILD_RESPONSE_TOKENS : CANVAS_RESPONSE_TOKENS,
             reasoning: { level: 'low' },
             model: router.model,
             modelStrict: router.modelStrict,
@@ -461,6 +464,12 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           return { data: outcome, isError: true };
         }
         toolsUsedThisTurn.add(call.name);
+        if (!workspaceTurn && CANVAS_BUILD_TOOLS.has(call.name)) {
+          // The turn is working in an app from here on (see CANVAS_BUILD_RESPONSE_TOKENS
+          // and MAX_CANVAS_BUILD_TURNS). Widened once; never narrowed back.
+          workspaceTurn = true;
+          budget.stepCap = Math.max(budget.stepCap, MAX_CANVAS_BUILD_TURNS);
+        }
         const words = call.name === 'canvas_add_object' ? authoredDocumentWords(args) : null;
         if (words != null) {
           documentWords = Math.max(documentWords ?? 0, words);
@@ -475,12 +484,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         if (call.name === 'builtin_web_search' && isNarrowSearchResult(outcome)) narrowSearches += 1;
         if (toolOutcomeChangedCanvas(outcome)) {
           canvasChanged = true;
-          if (!buildTurn && CANVAS_BUILD_WORKSPACE_WRITE_TOOLS.has(call.name)) {
-            // The turn is writing code from here on (see CANVAS_BUILD_RESPONSE_TOKENS
-            // and MAX_CANVAS_BUILD_TURNS). Widened once; never narrowed back.
-            buildTurn = true;
-            budget.stepCap = Math.max(budget.stepCap, MAX_CANVAS_BUILD_TURNS);
-          }
+          if (CANVAS_BUILD_WORKSPACE_WRITE_TOOLS.has(call.name)) buildTurn = true;
           if (CANVAS_BUILD_FILE_WRITE_TOOLS.has(call.name)) buildAuthored = true;
         }
         if (outcome && typeof outcome === 'object') {
@@ -674,6 +678,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     abandonedMidTurn,
     stalledStreams: router.stalledStreams,
     stepsExhausted: loop.exhausted,
+    workspaceTurn,
     buildTurn,
     buildAuthored,
     mutationRequested,

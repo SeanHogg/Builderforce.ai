@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslations } from 'next-intl';
-import { repairScaffold } from '@/lib/scaffoldRepair';
+import { repairScaffold, type ScaffoldRestoreReason } from '@/lib/scaffoldRepair';
 import { hashString } from '@/lib/hashString';
 import { RUN_LOG_RULE, type RunLog } from '@/lib/runLog';
 import { useProjectRuntime } from '@/hooks/useProjectRuntime';
@@ -17,6 +17,12 @@ import { withPreviewProbe } from '@/lib/previewProbe/probeScript';
 import type { FileEntry } from '@/lib/types';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 import type { ProjectModality } from '@/lib/modality';
+
+const SCAFFOLD_RESTORE_LOG_KEY: Record<ScaffoldRestoreReason, string> = {
+  empty: 'scaffoldRestoredEmpty',
+  corrupt: 'scaffoldRestoredCorrupt',
+  retired: 'scaffoldRestoredRetired',
+};
 
 /**
  * Where the preview is in its life:
@@ -129,7 +135,7 @@ export function useWorkspaceRun({ store, modality, files, setFiles, fileContents
     const { repaired: mount, restored } = repairScaffold(allContents, modality);
     if (restored.length > 0) {
       for (const { path, reason } of restored) {
-        onLog?.warn(reason === 'corrupt' ? 'scaffoldRestoredCorrupt' : 'scaffoldRestoredEmpty', { path });
+        onLog?.warn(SCAFFOLD_RESTORE_LOG_KEY[reason], { path });
       }
       const restoredMap = Object.fromEntries(restored.map(({ path }) => [path, mount[path]!]));
       setFileContents(prev => ({ ...prev, ...restoredMap }));

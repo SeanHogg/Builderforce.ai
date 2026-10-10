@@ -636,3 +636,14 @@ export const CANVAS_BUILD_TOOL_NAMES = [
   'canvas_list_build_file_history',
   'canvas_restore_build_file',
 ] as const;
+
+/**
+ * Every build tool as a set: a turn that calls ANY of them is working inside an app, so it
+ * gets the code step budget from that call on — not only from its first write.
+ *
+ * Measured why (session `local-148925cf`, ui 2026.10.35): "continue" after a build turn ran
+ * out of steps spent all eight research-sized steps re-reading the app's files, never
+ * reached an edit, and answered "I couldn't prepare any canvas changes". Reading the files
+ * is the first half of editing them.
+ */
+export const CANVAS_BUILD_TOOLS: ReadonlySet<string> = new Set(CANVAS_BUILD_TOOL_NAMES);

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { repairScaffold } from './scaffoldRepair';
-import { MOBILE_TEMPLATE, VANILLA_TEMPLATE } from '@builderforce/ide-templates';
+import { MOBILE_TEMPLATE, RETIRED_SCAFFOLD_CONTENT, VANILLA_TEMPLATE } from '@builderforce/ide-templates';
 
 /**
  * These tests pin the exact failures seen in the live Mobile project:
@@ -36,6 +36,24 @@ describe('repairScaffold', () => {
     const { repaired, restored } = repairScaffold({ ...rest, 'src/App.css': 'body {}' }, 'designer');
     expect(restored).toEqual([{ path: 'src/App.jsx', reason: 'empty' }]);
     expect(repaired['src/main.jsx']).toContain("import App from './App'");
+  });
+
+  it('brings a retired inline-App entry up to the current one so the written app shows', () => {
+    // Session local-148925cf: a project seeded before the scaffold fix kept the entry that
+    // rendered its own "Hello World!", so the app the Brain wrote into App.jsx never showed.
+    const retiredEntry = RETIRED_SCAFFOLD_CONTENT['src/main.jsx']![0]!.replace(/\n/g, '\r\n');
+    const app = 'export default function App() { return <h1>SocialConnect</h1>; }';
+    const files = { ...clean('designer'), 'src/main.jsx': retiredEntry, 'src/App.jsx': app };
+    const { repaired, restored } = repairScaffold(files, 'designer');
+    expect(restored).toEqual([{ path: 'src/main.jsx', reason: 'retired' }]);
+    expect(repaired['src/main.jsx']).toContain("import App from './App'");
+    expect(repaired['src/App.jsx']).toBe(app);
+  });
+
+  it('never replaces an entry someone edited, even one that started as the retired starter', () => {
+    const edited = `${RETIRED_SCAFFOLD_CONTENT['src/main.jsx']![0]}\nconsole.log('mine');`;
+    const { restored } = repairScaffold({ ...clean('designer'), 'src/main.jsx': edited }, 'designer');
+    expect(restored).toEqual([]);
   });
 
   it('leaves a clean vanilla scaffold untouched', () => {
