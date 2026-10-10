@@ -64,7 +64,7 @@ describe('applyCeremonyMinutesToBoard', () => {
       canvasData: { x: 520, y: 200 },
       content: { subtitle: 'Ana', sourceCeremonyId: CEREMONY, status: 'Ready' },
     });
-    expect(tasks[1].content).not.toHaveProperty('subtitle');
+    expect(tasks[1]?.content).not.toHaveProperty('subtitle');
     expect(result.graph.connections.filter((e) => e.label === 'action item').map((e) => [e.sourceObjectId, e.targetObjectId]))
       .toEqual(tasks.map((task) => ['card', task.id]));
     expect(result).toMatchObject({ cards: 1, placed: 2, updated: 0, removed: 0, actionItems: 2, changed: true });

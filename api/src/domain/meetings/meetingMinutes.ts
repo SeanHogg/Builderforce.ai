@@ -61,7 +61,7 @@ const OWNED = /^([^—–:.!?]{1,40}?)\s*(?:—|–|:|\s-\s)\s*(.+)$/;
 function sectionOf(line: string): 'summary' | 'decisions' | 'actions' | null {
   const match = SECTION.exec(line);
   if (!match) return null;
-  const name = match[1].toLowerCase();
+  const name = (match[1] ?? '').toLowerCase();
   if (name.startsWith('summary')) return 'summary';
   if (name.startsWith('decision')) return 'decisions';
   return 'actions';
@@ -103,15 +103,15 @@ export function parseMeetingMinutes(markdown: string | null | undefined): Meetin
     if (!bullet) continue;
 
     const [, checkbox, rest] = bullet;
-    const text = plain(rest);
+    const text = plain(rest ?? '');
     if (!text) continue;
 
     if (current === 'decisions') { decisions.push(text); continue; }
 
     const owned = OWNED.exec(text);
     actionItems.push({
-      owner: owned ? plain(owned[1]) || null : null,
-      task: owned ? plain(owned[2]) : text,
+      owner: owned ? plain(owned[1] ?? '') || null : null,
+      task: owned ? plain(owned[2] ?? '') || text : text,
       done: checkbox?.toLowerCase() === 'x',
     });
   }

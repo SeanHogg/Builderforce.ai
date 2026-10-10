@@ -116,7 +116,7 @@ export async function placeCanvasObject(
 ): Promise<PlacedCanvasObject | null> {
   // The read / write / lost-race / broadcast is `rewriteBoardGraph`'s; what is decided
   // HERE is only whether the card is already on the board and, if not, where it goes.
-  const outcome = await rewriteBoardGraph(db, env, {
+  const outcome = await rewriteBoardGraph<string>(db, env, {
     sessionId: input.sessionId,
     tenantId: input.tenantId,
     actor: { type: 'user', ref: input.userId, userId: input.userId },
