@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 import Observation
-import CoderClawDiscovery
+import BuilderforceDiscovery
 import os
 
 /// Manages Tailscale integration and status checking.
@@ -16,7 +16,7 @@ final class TailscaleService {
     /// API request timeout in seconds.
     private static let apiTimeoutInterval: TimeInterval = 5.0
 
-    private let logger = Logger(subsystem: "ai.coderclaw", category: "tailscale")
+    private let logger = Logger(subsystem: "ai.builderforce", category: "tailscale")
 
     /// Indicates if the Tailscale app is installed on the system.
     private(set) var isInstalled = false

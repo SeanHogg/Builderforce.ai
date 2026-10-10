@@ -1,6 +1,6 @@
 import CoreLocation
 import Foundation
-import CoderClawKit
+import BuilderforceKit
 
 @MainActor
 final class MacNodeLocationService: NSObject, CLLocationManagerDelegate {
@@ -30,7 +30,7 @@ final class MacNodeLocationService: NSObject, CLLocationManagerDelegate {
     }
 
     func currentLocation(
-        desiredAccuracy: CoderClawLocationAccuracy,
+        desiredAccuracy: BuilderforceLocationAccuracy,
         maxAgeMs: Int?,
         timeoutMs: Int?) async throws -> CLLocation
     {
@@ -103,7 +103,7 @@ final class MacNodeLocationService: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    private static func accuracyValue(_ accuracy: CoderClawLocationAccuracy) -> CLLocationAccuracy {
+    private static func accuracyValue(_ accuracy: BuilderforceLocationAccuracy) -> CLLocationAccuracy {
         switch accuracy {
         case .coarse:
             kCLLocationAccuracyKilometer

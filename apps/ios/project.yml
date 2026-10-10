@@ -1,6 +1,6 @@
-name: CoderClaw
+name: Builderforce
 options:
-  bundleIdPrefix: ai.coderclaw
+  bundleIdPrefix: ai.builderforce
   deploymentTarget:
     iOS: "18.0"
   xcodeVersion: "16.0"
@@ -10,23 +10,23 @@ settings:
     SWIFT_VERSION: "6.0"
 
 packages:
-  CoderClawKit:
-    path: ../shared/CoderClawKit
+  BuilderforceKit:
+    path: ../shared/BuilderforceKit
   Swabble:
-    path: ../../Swabble
+    path: ../../agent-runtime/Swabble
 
 schemes:
-  CoderClaw:
+  Builderforce:
     shared: true
     build:
       targets:
-        CoderClaw: all
+        Builderforce: all
     test:
       targets:
-        - CoderClawTests
+        - BuilderforceTests
 
 targets:
-  CoderClaw:
+  Builderforce:
     type: application
     platform: iOS
     configFiles:
@@ -35,22 +35,20 @@ targets:
     sources:
       - path: Sources
     dependencies:
-      - target: CoderClawShareExtension
+      - target: BuilderforceShareExtension
         embed: true
-      - target: CoderClawWatchApp
-      - package: CoderClawKit
-      - package: CoderClawKit
-        product: CoderClawChatUI
-      - package: CoderClawKit
-        product: CoderClawProtocol
+      - target: BuilderforceWatchApp
+      - package: BuilderforceKit
+      - package: BuilderforceKit
+        product: BuilderforceChatUI
+      - package: BuilderforceKit
+        product: BuilderforceProtocol
       - package: Swabble
         product: SwabbleKit
       - sdk: AppIntents.framework
     preBuildScripts:
       - name: SwiftFormat (lint)
         basedOnDependencyAnalysis: false
-        inputFileLists:
-          - $(SRCROOT)/SwiftSources.input.xcfilelist
         script: |
           set -euo pipefail
           export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
@@ -58,12 +56,10 @@ targets:
             echo "error: swiftformat not found (brew install swiftformat)" >&2
             exit 1
           fi
-          swiftformat --lint --config "$SRCROOT/../../.swiftformat" \
-            --filelist "$SRCROOT/SwiftSources.input.xcfilelist"
+          swiftformat --lint --config "$SRCROOT/../../agent-runtime/.swiftformat" \
+            "$SRCROOT/Sources" "$SRCROOT/ShareExtension" "$SRCROOT/WatchExtension/Sources"
       - name: SwiftLint
         basedOnDependencyAnalysis: false
-        inputFileLists:
-          - $(SRCROOT)/SwiftSources.input.xcfilelist
         script: |
           set -euo pipefail
           export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
@@ -71,46 +67,46 @@ targets:
             echo "error: swiftlint not found (brew install swiftlint)" >&2
             exit 1
           fi
-          swiftlint lint --config "$SRCROOT/.swiftlint.yml" --use-script-input-file-lists
+          cd "$SRCROOT"
+          swiftlint lint --config "$SRCROOT/.swiftlint.yml"
     settings:
       base:
         CODE_SIGN_IDENTITY: "Apple Development"
-        CODE_SIGN_ENTITLEMENTS: Sources/CoderClaw.entitlements
-        CODE_SIGN_STYLE: "$(CODERCLAW_CODE_SIGN_STYLE)"
-        DEVELOPMENT_TEAM: "$(CODERCLAW_DEVELOPMENT_TEAM)"
-        PRODUCT_BUNDLE_IDENTIFIER: "$(CODERCLAW_APP_BUNDLE_ID)"
-        PROVISIONING_PROFILE_SPECIFIER: "$(CODERCLAW_APP_PROFILE)"
+        CODE_SIGN_ENTITLEMENTS: Sources/Builderforce.entitlements
+        CODE_SIGN_STYLE: "$(BUILDERFORCE_CODE_SIGN_STYLE)"
+        DEVELOPMENT_TEAM: "$(BUILDERFORCE_DEVELOPMENT_TEAM)"
+        PRODUCT_BUNDLE_IDENTIFIER: "$(BUILDERFORCE_APP_BUNDLE_ID)"
+        PROVISIONING_PROFILE_SPECIFIER: "$(BUILDERFORCE_APP_PROFILE)"
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         ENABLE_APPINTENTS_METADATA: NO
     info:
       path: Sources/Info.plist
       properties:
-        CFBundleDisplayName: CoderClaw
+        CFBundleDisplayName: Builderforce
         CFBundleIconName: AppIcon
         CFBundleURLTypes:
-          - CFBundleURLName: ai.coderclaw.ios
+          - CFBundleURLName: ai.builderforce.ios
             CFBundleURLSchemes:
-              - coderclaw
-        CFBundleShortVersionString: "2026.2.20"
-        CFBundleVersion: "20260305"
+              - builderforce
+        CFBundleShortVersionString: "2026.10.1"
+        CFBundleVersion: "202610100"
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UIBackgroundModes:
           - audio
           - remote-notification
-        NSLocalNetworkUsageDescription: CoderClaw discovers and connects to your CoderClaw gateway on the local network.
+        NSLocalNetworkUsageDescription: Builderforce discovers and connects to your Builderforce gateway on the local network.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsInWebContent: true
         NSBonjourServices:
           - _builderforce-gw._tcp
-          - _coderclaw-gw._tcp
-        NSCameraUsageDescription: CoderClaw can capture photos or short video clips when requested via the gateway.
-        NSLocationWhenInUseUsageDescription: CoderClaw uses your location when you allow location sharing.
-        NSLocationAlwaysAndWhenInUseUsageDescription: CoderClaw can share your location in the background when you enable Always.
-        NSMicrophoneUsageDescription: CoderClaw needs microphone access for voice wake.
-        NSSpeechRecognitionUsageDescription: CoderClaw uses on-device speech recognition for voice wake.
+        NSCameraUsageDescription: Builderforce can capture photos or short video clips when requested via the gateway.
+        NSLocationWhenInUseUsageDescription: Builderforce uses your location when you allow location sharing.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Builderforce can share your location in the background when you enable Always.
+        NSMicrophoneUsageDescription: Builderforce needs microphone access for voice wake.
+        NSSpeechRecognitionUsageDescription: Builderforce uses on-device speech recognition for voice wake.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown
@@ -122,7 +118,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
 
-  CoderClawShareExtension:
+  BuilderforceShareExtension:
     type: app-extension
     platform: iOS
     configFiles:
@@ -131,22 +127,22 @@ targets:
     sources:
       - path: ShareExtension
     dependencies:
-      - package: CoderClawKit
+      - package: BuilderforceKit
     settings:
       base:
         CODE_SIGN_IDENTITY: "Apple Development"
-        CODE_SIGN_STYLE: "$(CODERCLAW_CODE_SIGN_STYLE)"
-        DEVELOPMENT_TEAM: "$(CODERCLAW_DEVELOPMENT_TEAM)"
-        PRODUCT_BUNDLE_IDENTIFIER: "$(CODERCLAW_SHARE_BUNDLE_ID)"
-        PROVISIONING_PROFILE_SPECIFIER: "$(CODERCLAW_SHARE_PROFILE)"
+        CODE_SIGN_STYLE: "$(BUILDERFORCE_CODE_SIGN_STYLE)"
+        DEVELOPMENT_TEAM: "$(BUILDERFORCE_DEVELOPMENT_TEAM)"
+        PRODUCT_BUNDLE_IDENTIFIER: "$(BUILDERFORCE_SHARE_BUNDLE_ID)"
+        PROVISIONING_PROFILE_SPECIFIER: "$(BUILDERFORCE_SHARE_PROFILE)"
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
     info:
       path: ShareExtension/Info.plist
       properties:
-        CFBundleDisplayName: CoderClaw Share
-        CFBundleShortVersionString: "2026.2.20"
-        CFBundleVersion: "20260305"
+        CFBundleDisplayName: Builderforce Share
+        CFBundleShortVersionString: "2026.10.1"
+        CFBundleVersion: "202610100"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ShareViewController"
@@ -157,30 +153,30 @@ targets:
               NSExtensionActivationSupportsImageWithMaxCount: 10
               NSExtensionActivationSupportsMovieWithMaxCount: 1
 
-  CoderClawWatchApp:
+  BuilderforceWatchApp:
     type: application.watchapp2
     platform: watchOS
     deploymentTarget: "11.0"
     sources:
       - path: WatchApp
     dependencies:
-      - target: CoderClawWatchExtension
+      - target: BuilderforceWatchExtension
     configFiles:
       Debug: Config/Signing.xcconfig
       Release: Config/Signing.xcconfig
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: "$(CODERCLAW_WATCH_APP_BUNDLE_ID)"
+        PRODUCT_BUNDLE_IDENTIFIER: "$(BUILDERFORCE_WATCH_APP_BUNDLE_ID)"
     info:
       path: WatchApp/Info.plist
       properties:
-        CFBundleDisplayName: CoderClaw
-        CFBundleShortVersionString: "2026.2.20"
-        CFBundleVersion: "20260305"
-        WKCompanionAppBundleIdentifier: "$(CODERCLAW_APP_BUNDLE_ID)"
+        CFBundleDisplayName: Builderforce
+        CFBundleShortVersionString: "2026.10.1"
+        CFBundleVersion: "202610100"
+        WKCompanionAppBundleIdentifier: "$(BUILDERFORCE_APP_BUNDLE_ID)"
         WKWatchKitApp: true
 
-  CoderClawWatchExtension:
+  BuilderforceWatchExtension:
     type: watchkit2-extension
     platform: watchOS
     deploymentTarget: "11.0"
@@ -194,38 +190,38 @@ targets:
       Release: Config/Signing.xcconfig
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: "$(CODERCLAW_WATCH_EXTENSION_BUNDLE_ID)"
+        PRODUCT_BUNDLE_IDENTIFIER: "$(BUILDERFORCE_WATCH_EXTENSION_BUNDLE_ID)"
     info:
       path: WatchExtension/Info.plist
       properties:
-        CFBundleDisplayName: CoderClaw
-        CFBundleShortVersionString: "2026.2.20"
-        CFBundleVersion: "20260305"
+        CFBundleDisplayName: Builderforce
+        CFBundleShortVersionString: "2026.10.1"
+        CFBundleVersion: "202610100"
         NSExtension:
           NSExtensionAttributes:
-            WKAppBundleIdentifier: "$(CODERCLAW_WATCH_APP_BUNDLE_ID)"
+            WKAppBundleIdentifier: "$(BUILDERFORCE_WATCH_APP_BUNDLE_ID)"
           NSExtensionPointIdentifier: com.apple.watchkit
 
-  CoderClawTests:
+  BuilderforceTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: Tests
     dependencies:
-      - target: CoderClaw
+      - target: Builderforce
       - package: Swabble
         product: SwabbleKit
       - sdk: AppIntents.framework
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: ai.coderclaw.ios.tests
+        PRODUCT_BUNDLE_IDENTIFIER: ai.builderforce.ios.tests
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/CoderClaw.app/CoderClaw"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Builderforce.app/Builderforce"
         BUNDLE_LOADER: "$(TEST_HOST)"
     info:
       path: Tests/Info.plist
       properties:
-        CFBundleDisplayName: CoderClawTests
-        CFBundleShortVersionString: "2026.2.20"
-        CFBundleVersion: "20260305"
+        CFBundleDisplayName: BuilderforceTests
+        CFBundleShortVersionString: "2026.10.1"
+        CFBundleVersion: "202610100"

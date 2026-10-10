@@ -2,9 +2,9 @@ import Foundation
 import os
 
 enum GatewaySettingsStore {
-    private static let gatewayService = "ai.coderclaw.gateway"
-    private static let nodeService = "ai.coderclaw.node"
-    private static let talkService = "ai.coderclaw.talk"
+    private static let gatewayService = "ai.builderforce.gateway"
+    private static let nodeService = "ai.builderforce.node"
+    private static let talkService = "ai.builderforce.talk"
 
     private static let instanceIdDefaultsKey = "node.instanceId"
     private static let preferredGatewayStableIDDefaultsKey = "gateway.preferredStableID"
@@ -340,15 +340,15 @@ enum GatewaySettingsStore {
 }
 
 enum GatewayDiagnostics {
-    private static let logger = Logger(subsystem: "ai.coderclaw.ios", category: "GatewayDiag")
-    private static let queue = DispatchQueue(label: "ai.coderclaw.gateway.diagnostics")
+    private static let logger = Logger(subsystem: "ai.builderforce.ios", category: "GatewayDiag")
+    private static let queue = DispatchQueue(label: "ai.builderforce.gateway.diagnostics")
     private static let maxLogBytes: Int64 = 512 * 1024
     private static let keepLogBytes: Int64 = 256 * 1024
     private static let logSizeCheckEveryWrites = 50
     nonisolated(unsafe) private static var logWritesSinceCheck = 0
     private static var fileURL: URL? {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("coderclaw-gateway.log")
+            .appendingPathComponent("builderforce-gateway.log")
     }
 
     private static func truncateLogIfNeeded(url: URL) {

@@ -1,10 +1,9 @@
 import Foundation
 
-public enum CoderClawBonjour {
-    /// DNS-SD service types a gateway can advertise, current first. The runtime advertises
-    /// `_builderforce-gw._tcp`; older runtimes advertise the pre-rebrand type, so discovery
-    /// browses both. This is the one list for iOS and macOS.
-    public static let gatewayServiceTypes = ["_builderforce-gw._tcp", "_coderclaw-gw._tcp"]
+public enum BuilderforceBonjour {
+    /// DNS-SD service types a gateway advertises. The runtime advertises
+    /// `_builderforce-gw._tcp`. This is the one list for iOS and macOS.
+    public static let gatewayServiceTypes = ["_builderforce-gw._tcp"]
     public static let gatewayServiceDomain = "local."
 
     /// One Bonjour browse: a gateway service type in a domain.
@@ -27,7 +26,7 @@ public enum CoderClawBonjour {
 
     public static var wideAreaGatewayServiceDomain: String? {
         let env = ProcessInfo.processInfo.environment
-        return resolveWideAreaDomain(env["CODERCLAW_WIDE_AREA_DOMAIN"])
+        return resolveWideAreaDomain(env["BUILDERFORCE_AGENTS_WIDE_AREA_DOMAIN"])
     }
 
     public static var gatewayServiceDomains: [String] {

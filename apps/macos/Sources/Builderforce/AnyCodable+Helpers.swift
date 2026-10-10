@@ -1,9 +1,9 @@
 import Foundation
-import CoderClawKit
+import BuilderforceKit
 
-// Prefer the CoderClawKit wrapper to keep gateway request payloads consistent.
-typealias AnyCodable = CoderClawKit.AnyCodable
-typealias InstanceIdentity = CoderClawKit.InstanceIdentity
+// Prefer the BuilderforceKit wrapper to keep gateway request payloads consistent.
+typealias AnyCodable = BuilderforceKit.AnyCodable
+typealias InstanceIdentity = BuilderforceKit.InstanceIdentity
 
 extension AnyCodable {
     var stringValue: String? {

@@ -1,4 +1,4 @@
-package ai.coderclaw.android.voice
+package ai.builderforce.android.voice
 
 object VoiceWakeCommandExtractor {
   fun extractCommand(text: String, triggerWords: List<String>): String? {

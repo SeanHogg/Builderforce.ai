@@ -1,5 +1,5 @@
 import Foundation
-import CoderClawKit
+import BuilderforceKit
 import UIKit
 
 final class DeviceStatusService: DeviceStatusServicing {
@@ -9,14 +9,14 @@ final class DeviceStatusService: DeviceStatusServicing {
         self.networkStatus = networkStatus
     }
 
-    func status() async throws -> CoderClawDeviceStatusPayload {
+    func status() async throws -> BuilderforceDeviceStatusPayload {
         let battery = self.batteryStatus()
         let thermal = self.thermalStatus()
         let storage = self.storageStatus()
         let network = await self.networkStatus.currentStatus()
         let uptime = ProcessInfo.processInfo.systemUptime
 
-        return CoderClawDeviceStatusPayload(
+        return BuilderforceDeviceStatusPayload(
             battery: battery,
             thermal: thermal,
             storage: storage,
@@ -24,12 +24,12 @@ final class DeviceStatusService: DeviceStatusServicing {
             uptimeSeconds: uptime)
     }
 
-    func info() -> CoderClawDeviceInfoPayload {
+    func info() -> BuilderforceDeviceInfoPayload {
         let device = UIDevice.current
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
         let appBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
         let locale = Locale.preferredLanguages.first ?? Locale.current.identifier
-        return CoderClawDeviceInfoPayload(
+        return BuilderforceDeviceInfoPayload(
             deviceName: device.name,
             modelIdentifier: Self.modelIdentifier(),
             systemName: device.systemName,
@@ -39,40 +39,40 @@ final class DeviceStatusService: DeviceStatusServicing {
             locale: locale)
     }
 
-    private func batteryStatus() -> CoderClawBatteryStatusPayload {
+    private func batteryStatus() -> BuilderforceBatteryStatusPayload {
         let device = UIDevice.current
         device.isBatteryMonitoringEnabled = true
         let level = device.batteryLevel >= 0 ? Double(device.batteryLevel) : nil
-        let state: CoderClawBatteryState = switch device.batteryState {
+        let state: BuilderforceBatteryState = switch device.batteryState {
         case .charging: .charging
         case .full: .full
         case .unplugged: .unplugged
         case .unknown: .unknown
         @unknown default: .unknown
         }
-        return CoderClawBatteryStatusPayload(
+        return BuilderforceBatteryStatusPayload(
             level: level,
             state: state,
             lowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled)
     }
 
-    private func thermalStatus() -> CoderClawThermalStatusPayload {
-        let state: CoderClawThermalState = switch ProcessInfo.processInfo.thermalState {
+    private func thermalStatus() -> BuilderforceThermalStatusPayload {
+        let state: BuilderforceThermalState = switch ProcessInfo.processInfo.thermalState {
         case .nominal: .nominal
         case .fair: .fair
         case .serious: .serious
         case .critical: .critical
         @unknown default: .nominal
         }
-        return CoderClawThermalStatusPayload(state: state)
+        return BuilderforceThermalStatusPayload(state: state)
     }
 
-    private func storageStatus() -> CoderClawStorageStatusPayload {
+    private func storageStatus() -> BuilderforceStorageStatusPayload {
         let attrs = (try? FileManager.default.attributesOfFileSystem(forPath: NSHomeDirectory())) ?? [:]
         let total = (attrs[.systemSize] as? NSNumber)?.int64Value ?? 0
         let free = (attrs[.systemFreeSize] as? NSNumber)?.int64Value ?? 0
         let used = max(0, total - free)
-        return CoderClawStorageStatusPayload(totalBytes: total, freeBytes: free, usedBytes: used)
+        return BuilderforceStorageStatusPayload(totalBytes: total, freeBytes: free, usedBytes: used)
     }
 
     private static func modelIdentifier() -> String {

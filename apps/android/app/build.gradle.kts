@@ -8,21 +8,21 @@ plugins {
 }
 
 android {
-  namespace = "ai.coderclaw.android"
+  namespace = "ai.builderforce.android"
   compileSdk = 36
 
   sourceSets {
     getByName("main") {
-      assets.srcDir(file("../../shared/OpenClawKit/Sources/OpenClawKit/Resources"))
+      assets.srcDir(file("../../shared/BuilderforceKit/Sources/BuilderforceKit/Resources"))
     }
   }
 
   defaultConfig {
-    applicationId = "ai.coderclaw.android"
+    applicationId = "ai.builderforce.android"
     minSdk = 31
     targetSdk = 36
-    versionCode = 202603050
-    versionName = "2026.2.20"
+    versionCode = 202610100
+    versionName = "2026.10.1"
     ndk {
       // Support all major ABIs — native libs are tiny (~47 KB per ABI)
       abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
@@ -84,7 +84,7 @@ androidComponents {
         val versionName = output.versionName.orNull ?: "0"
         val buildType = variant.buildType
 
-        val outputFileName = "openclaw-${versionName}-${buildType}.apk"
+        val outputFileName = "builderforce-${versionName}-${buildType}.apk"
         output.outputFileName = outputFileName
       }
   }

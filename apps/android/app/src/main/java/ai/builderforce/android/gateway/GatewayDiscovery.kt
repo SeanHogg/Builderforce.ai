@@ -1,4 +1,4 @@
-package ai.coderclaw.android.gateway
+package ai.builderforce.android.gateway
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -51,8 +51,8 @@ class GatewayDiscovery(
   private val nsd = context.getSystemService(NsdManager::class.java)
   private val connectivity = context.getSystemService(ConnectivityManager::class.java)
   private val dns = DnsResolver.getInstance()
-  private val wideAreaDomain = System.getenv("CODERCLAW_WIDE_AREA_DOMAIN")
-  private val logTag = "CoderClaw/GatewayDiscovery"
+  private val wideAreaDomain = System.getenv("BUILDERFORCE_AGENTS_WIDE_AREA_DOMAIN")
+  private val logTag = "Builderforce/GatewayDiscovery"
 
   private val localById = ConcurrentHashMap<String, GatewayEndpoint>()
   private val unicastById = ConcurrentHashMap<String, GatewayEndpoint>()

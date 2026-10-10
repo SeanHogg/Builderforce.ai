@@ -1,13 +1,13 @@
-import CoderClawChatUI
-import CoderClawProtocol
+import BuilderforceChatUI
+import BuilderforceProtocol
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite struct MacGatewayChatTransportMappingTests {
     @Test func snapshotMapsToHealth() {
         let snapshot = Snapshot(
             presence: [],
-            health: CoderClawProtocol.AnyCodable(["ok": CoderClawProtocol.AnyCodable(false)]),
+            health: BuilderforceProtocol.AnyCodable(["ok": BuilderforceProtocol.AnyCodable(false)]),
             stateversion: StateVersion(presence: 1, health: 1),
             uptimems: 123,
             configpath: nil,
@@ -38,7 +38,7 @@ import Testing
         let frame = EventFrame(
             type: "event",
             event: "health",
-            payload: CoderClawProtocol.AnyCodable(["ok": CoderClawProtocol.AnyCodable(true)]),
+            payload: BuilderforceProtocol.AnyCodable(["ok": BuilderforceProtocol.AnyCodable(true)]),
             seq: 1,
             stateversion: nil)
 
@@ -61,10 +61,10 @@ import Testing
     }
 
     @Test func chatEventMapsToChat() {
-        let payload = CoderClawProtocol.AnyCodable([
-            "runId": CoderClawProtocol.AnyCodable("run-1"),
-            "sessionKey": CoderClawProtocol.AnyCodable("main"),
-            "state": CoderClawProtocol.AnyCodable("final"),
+        let payload = BuilderforceProtocol.AnyCodable([
+            "runId": BuilderforceProtocol.AnyCodable("run-1"),
+            "sessionKey": BuilderforceProtocol.AnyCodable("main"),
+            "state": BuilderforceProtocol.AnyCodable("final"),
         ])
         let frame = EventFrame(type: "event", event: "chat", payload: payload, seq: 1, stateversion: nil)
         let mapped = MacGatewayChatTransport.mapPushToTransportEvent(.event(frame))
@@ -83,7 +83,7 @@ import Testing
         let frame = EventFrame(
             type: "event",
             event: "unknown",
-            payload: CoderClawProtocol.AnyCodable(["a": CoderClawProtocol.AnyCodable(1)]),
+            payload: BuilderforceProtocol.AnyCodable(["a": BuilderforceProtocol.AnyCodable(1)]),
             seq: 1,
             stateversion: nil)
         let mapped = MacGatewayChatTransport.mapPushToTransportEvent(.event(frame))

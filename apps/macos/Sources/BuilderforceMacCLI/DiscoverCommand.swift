@@ -1,5 +1,5 @@
 import Foundation
-import CoderClawDiscovery
+import BuilderforceDiscovery
 
 struct DiscoveryOptions {
     var timeoutMs: Int = 2000
@@ -58,10 +58,10 @@ func runDiscover(_ args: [String]) async {
     let opts = DiscoveryOptions.parse(args)
     if opts.help {
         print("""
-        coderclaw-mac discover
+        builderforce-mac discover
 
         Usage:
-          coderclaw-mac discover [--timeout <ms>] [--json] [--include-local]
+          builderforce-mac discover [--timeout <ms>] [--json] [--include-local]
 
         Options:
           --timeout <ms>     Discovery window in milliseconds (default: 2000)

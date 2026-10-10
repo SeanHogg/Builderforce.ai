@@ -1,7 +1,7 @@
 import Foundation
 
 public enum ShareToAgentSettings {
-    private static let suiteName = "group.ai.coderclaw.shared"
+    private static let suiteName = "group.ai.builderforce.shared"
     private static let defaultInstructionKey = "share.defaultInstruction"
     private static let fallbackInstruction = "Please help me with this."
 

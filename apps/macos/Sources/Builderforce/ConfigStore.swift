@@ -1,5 +1,5 @@
 import Foundation
-import CoderClawProtocol
+import BuilderforceProtocol
 
 enum ConfigStore {
     struct Overrides: Sendable {
@@ -44,7 +44,7 @@ enum ConfigStore {
         if let gateway = await self.loadFromGateway() {
             return gateway
         }
-        return CoderClawConfigFile.loadDict()
+        return BuilderforceConfigFile.loadDict()
     }
 
     @MainActor
@@ -63,7 +63,7 @@ enum ConfigStore {
                 do {
                     try await self.saveToGateway(root)
                 } catch {
-                    CoderClawConfigFile.saveDict(root)
+                    BuilderforceConfigFile.saveDict(root)
                 }
             }
         }

@@ -1,4 +1,4 @@
-import CoderClawKit
+import BuilderforceKit
 import Foundation
 import Observation
 import OSLog
@@ -10,28 +10,28 @@ import AppKit
 import UIKit
 #endif
 
-private let chatUILogger = Logger(subsystem: "ai.coderclaw", category: "CoderClawChatUI")
+private let chatUILogger = Logger(subsystem: "ai.builderforce", category: "BuilderforceChatUI")
 
 @MainActor
 @Observable
-public final class CoderClawChatViewModel {
-    public private(set) var messages: [CoderClawChatMessage] = []
+public final class BuilderforceChatViewModel {
+    public private(set) var messages: [BuilderforceChatMessage] = []
     public var input: String = ""
     public var thinkingLevel: String = "off"
     public private(set) var isLoading = false
     public private(set) var isSending = false
     public private(set) var isAborting = false
     public var errorText: String?
-    public var attachments: [CoderClawPendingAttachment] = []
+    public var attachments: [BuilderforcePendingAttachment] = []
     public private(set) var healthOK: Bool = false
     public private(set) var pendingRunCount: Int = 0
 
     public private(set) var sessionKey: String
     public private(set) var sessionId: String?
     public private(set) var streamingAssistantText: String?
-    public private(set) var pendingToolCalls: [CoderClawChatPendingToolCall] = []
-    public private(set) var sessions: [CoderClawChatSessionEntry] = []
-    private let transport: any CoderClawChatTransport
+    public private(set) var pendingToolCalls: [BuilderforceChatPendingToolCall] = []
+    public private(set) var sessions: [BuilderforceChatSessionEntry] = []
+    private let transport: any BuilderforceChatTransport
 
     @ObservationIgnored
     private nonisolated(unsafe) var eventTask: Task<Void, Never>?
@@ -43,7 +43,7 @@ public final class CoderClawChatViewModel {
     private nonisolated(unsafe) var pendingRunTimeoutTasks: [String: Task<Void, Never>] = [:]
     private let pendingRunTimeoutMs: UInt64 = 120_000
 
-    private var pendingToolCallsById: [String: CoderClawChatPendingToolCall] = [:] {
+    private var pendingToolCallsById: [String: BuilderforceChatPendingToolCall] = [:] {
         didSet {
             self.pendingToolCalls = self.pendingToolCallsById.values
                 .sorted { ($0.startedAt ?? 0) < ($1.startedAt ?? 0) }
@@ -52,7 +52,7 @@ public final class CoderClawChatViewModel {
 
     private var lastHealthPollAt: Date?
 
-    public init(sessionKey: String, transport: any CoderClawChatTransport) {
+    public init(sessionKey: String, transport: any BuilderforceChatTransport) {
         self.sessionKey = sessionKey
         self.transport = transport
 
@@ -99,12 +99,12 @@ public final class CoderClawChatViewModel {
         Task { await self.performSwitchSession(to: sessionKey) }
     }
 
-    public var sessionChoices: [CoderClawChatSessionEntry] {
+    public var sessionChoices: [BuilderforceChatSessionEntry] {
         let now = Date().timeIntervalSince1970 * 1000
         let cutoff = now - (24 * 60 * 60 * 1000)
         let sorted = self.sessions.sorted { ($0.updatedAt ?? 0) > ($1.updatedAt ?? 0) }
 
-        var result: [CoderClawChatSessionEntry] = []
+        var result: [BuilderforceChatSessionEntry] = []
         var included = Set<String>()
 
         // Always show the main session first, even if it hasn't been updated recently.
@@ -142,7 +142,7 @@ public final class CoderClawChatViewModel {
         Task { await self.addImageAttachment(url: nil, data: data, fileName: fileName, mimeType: mimeType) }
     }
 
-    public func removeAttachment(_ id: CoderClawPendingAttachment.ID) {
+    public func removeAttachment(_ id: BuilderforcePendingAttachment.ID) {
         self.attachments.removeAll { $0.id == id }
     }
 
@@ -186,14 +186,14 @@ public final class CoderClawChatViewModel {
         }
     }
 
-    private static func decodeMessages(_ raw: [AnyCodable]) -> [CoderClawChatMessage] {
+    private static func decodeMessages(_ raw: [AnyCodable]) -> [BuilderforceChatMessage] {
         let decoded = raw.compactMap { item in
-            (try? ChatPayloadDecoding.decode(item, as: CoderClawChatMessage.self))
+            (try? ChatPayloadDecoding.decode(item, as: BuilderforceChatMessage.self))
         }
         return Self.dedupeMessages(decoded)
     }
 
-    private static func messageIdentityKey(for message: CoderClawChatMessage) -> String? {
+    private static func messageIdentityKey(for message: BuilderforceChatMessage) -> String? {
         let role = message.role.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !role.isEmpty else { return nil }
 
@@ -220,8 +220,8 @@ public final class CoderClawChatViewModel {
     }
 
     private static func reconcileMessageIDs(
-        previous: [CoderClawChatMessage],
-        incoming: [CoderClawChatMessage]) -> [CoderClawChatMessage]
+        previous: [BuilderforceChatMessage],
+        incoming: [BuilderforceChatMessage]) -> [BuilderforceChatMessage]
     {
         guard !previous.isEmpty, !incoming.isEmpty else { return incoming }
 
@@ -245,7 +245,7 @@ public final class CoderClawChatViewModel {
                 idsByKey[key] = ids
             }
             guard reusedId != message.id else { return message }
-            return CoderClawChatMessage(
+            return BuilderforceChatMessage(
                 id: reusedId,
                 role: message.role,
                 content: message.content,
@@ -257,8 +257,8 @@ public final class CoderClawChatViewModel {
         }
     }
 
-    private static func dedupeMessages(_ messages: [CoderClawChatMessage]) -> [CoderClawChatMessage] {
-        var result: [CoderClawChatMessage] = []
+    private static func dedupeMessages(_ messages: [BuilderforceChatMessage]) -> [BuilderforceChatMessage] {
+        var result: [BuilderforceChatMessage] = []
         result.reserveCapacity(messages.count)
         var seen = Set<String>()
 
@@ -275,7 +275,7 @@ public final class CoderClawChatViewModel {
         return result
     }
 
-    private static func dedupeKey(for message: CoderClawChatMessage) -> String? {
+    private static func dedupeKey(for message: BuilderforceChatMessage) -> String? {
         guard let timestamp = message.timestamp else { return nil }
         let text = message.content.compactMap(\.text).joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -303,8 +303,8 @@ public final class CoderClawChatViewModel {
         self.streamingAssistantText = nil
 
         // Optimistically append user message to UI.
-        var userContent: [CoderClawChatMessageContent] = [
-            CoderClawChatMessageContent(
+        var userContent: [BuilderforceChatMessageContent] = [
+            BuilderforceChatMessageContent(
                 type: "text",
                 text: messageText,
                 thinking: nil,
@@ -316,8 +316,8 @@ public final class CoderClawChatViewModel {
                 name: nil,
                 arguments: nil),
         ]
-        let encodedAttachments = self.attachments.map { att -> CoderClawChatAttachmentPayload in
-            CoderClawChatAttachmentPayload(
+        let encodedAttachments = self.attachments.map { att -> BuilderforceChatAttachmentPayload in
+            BuilderforceChatAttachmentPayload(
                 type: att.type,
                 mimeType: att.mimeType,
                 fileName: att.fileName,
@@ -325,7 +325,7 @@ public final class CoderClawChatViewModel {
         }
         for att in encodedAttachments {
             userContent.append(
-                CoderClawChatMessageContent(
+                BuilderforceChatMessageContent(
                     type: att.type,
                     text: nil,
                     thinking: nil,
@@ -338,7 +338,7 @@ public final class CoderClawChatViewModel {
                     arguments: nil))
         }
         self.messages.append(
-            CoderClawChatMessage(
+            BuilderforceChatMessage(
                 id: UUID(),
                 role: "user",
                 content: userContent,
@@ -402,8 +402,8 @@ public final class CoderClawChatViewModel {
         await self.bootstrap()
     }
 
-    private func placeholderSession(key: String) -> CoderClawChatSessionEntry {
-        CoderClawChatSessionEntry(
+    private func placeholderSession(key: String) -> BuilderforceChatSessionEntry {
+        BuilderforceChatSessionEntry(
             key: key,
             kind: nil,
             displayName: nil,
@@ -424,7 +424,7 @@ public final class CoderClawChatViewModel {
             contextTokens: nil)
     }
 
-    private func handleTransportEvent(_ evt: CoderClawChatTransportEvent) {
+    private func handleTransportEvent(_ evt: BuilderforceChatTransportEvent) {
         switch evt {
         case let .health(ok):
             self.healthOK = ok
@@ -440,7 +440,7 @@ public final class CoderClawChatViewModel {
         }
     }
 
-    private func handleChatEvent(_ chat: CoderClawChatEventPayload) {
+    private func handleChatEvent(_ chat: BuilderforceChatEventPayload) {
         let isOurRun = chat.runId.flatMap { self.pendingRuns.contains($0) } ?? false
 
         // Gateway may publish canonical session keys (for example "agent:main:main")
@@ -499,7 +499,7 @@ public final class CoderClawChatViewModel {
         return false
     }
 
-    private func handleAgentEvent(_ evt: CoderClawAgentEventPayload) {
+    private func handleAgentEvent(_ evt: BuilderforceAgentEventPayload) {
         if let sessionId, evt.runId != sessionId {
             return
         }
@@ -515,7 +515,7 @@ public final class CoderClawChatViewModel {
             guard let toolCallId = evt.data["toolCallId"]?.value as? String else { return }
             if phase == "start" {
                 let args = evt.data["args"]
-                self.pendingToolCallsById[toolCallId] = CoderClawChatPendingToolCall(
+                self.pendingToolCallsById[toolCallId] = BuilderforceChatPendingToolCall(
                     toolCallId: toolCallId,
                     name: name,
                     args: args,
@@ -628,7 +628,7 @@ public final class CoderClawChatViewModel {
 
         let preview = Self.previewImage(data: data)
         self.attachments.append(
-            CoderClawPendingAttachment(
+            BuilderforcePendingAttachment(
                 url: url,
                 data: data,
                 fileName: fileName,
@@ -636,7 +636,7 @@ public final class CoderClawChatViewModel {
                 preview: preview))
     }
 
-    private static func previewImage(data: Data) -> CoderClawPlatformImage? {
+    private static func previewImage(data: Data) -> BuilderforcePlatformImage? {
         #if canImport(AppKit)
         NSImage(data: data)
         #elseif canImport(UIKit)

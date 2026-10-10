@@ -1,13 +1,13 @@
 import AppKit
 import Foundation
-import CoderClawChatUI
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceChatUI
+import BuilderforceKit
+import BuilderforceProtocol
 import OSLog
 import QuartzCore
 import SwiftUI
 
-private let webChatSwiftLogger = Logger(subsystem: "ai.coderclaw", category: "WebChatSwiftUI")
+private let webChatSwiftLogger = Logger(subsystem: "ai.builderforce", category: "WebChatSwiftUI")
 
 private enum WebChatSwiftUILayout {
     static let windowSize = NSSize(width: 500, height: 840)
@@ -16,8 +16,8 @@ private enum WebChatSwiftUILayout {
     static let anchorPadding: CGFloat = 8
 }
 
-struct MacGatewayChatTransport: CoderClawChatTransport, Sendable {
-    func requestHistory(sessionKey: String) async throws -> CoderClawChatHistoryPayload {
+struct MacGatewayChatTransport: BuilderforceChatTransport, Sendable {
+    func requestHistory(sessionKey: String) async throws -> BuilderforceChatHistoryPayload {
         try await GatewayConnection.shared.chatHistory(sessionKey: sessionKey)
     }
 
@@ -31,7 +31,7 @@ struct MacGatewayChatTransport: CoderClawChatTransport, Sendable {
             timeoutMs: 10000)
     }
 
-    func listSessions(limit: Int?) async throws -> CoderClawChatSessionsListResponse {
+    func listSessions(limit: Int?) async throws -> BuilderforceChatSessionsListResponse {
         var params: [String: AnyCodable] = [
             "includeGlobal": AnyCodable(true),
             "includeUnknown": AnyCodable(false),
@@ -43,7 +43,7 @@ struct MacGatewayChatTransport: CoderClawChatTransport, Sendable {
             method: "sessions.list",
             params: params,
             timeoutMs: 15000)
-        return try JSONDecoder().decode(CoderClawChatSessionsListResponse.self, from: data)
+        return try JSONDecoder().decode(BuilderforceChatSessionsListResponse.self, from: data)
     }
 
     func sendMessage(
@@ -51,7 +51,7 @@ struct MacGatewayChatTransport: CoderClawChatTransport, Sendable {
         message: String,
         thinking: String,
         idempotencyKey: String,
-        attachments: [CoderClawChatAttachmentPayload]) async throws -> CoderClawChatSendResponse
+        attachments: [BuilderforceChatAttachmentPayload]) async throws -> BuilderforceChatSendResponse
     {
         try await GatewayConnection.shared.chatSend(
             sessionKey: sessionKey,
@@ -65,7 +65,7 @@ struct MacGatewayChatTransport: CoderClawChatTransport, Sendable {
         try await GatewayConnection.shared.healthOK(timeoutMs: timeoutMs)
     }
 
-    func events() -> AsyncStream<CoderClawChatTransportEvent> {
+    func events() -> AsyncStream<BuilderforceChatTransportEvent> {
         AsyncStream { continuation in
             let task = Task {
                 do {
@@ -89,11 +89,11 @@ struct MacGatewayChatTransport: CoderClawChatTransport, Sendable {
         }
     }
 
-    static func mapPushToTransportEvent(_ push: GatewayPush) -> CoderClawChatTransportEvent? {
+    static func mapPushToTransportEvent(_ push: GatewayPush) -> BuilderforceChatTransportEvent? {
         switch push {
         case let .snapshot(hello):
             let ok = (try? JSONDecoder().decode(
-                CoderClawGatewayHealthOK.self,
+                BuilderforceGatewayHealthOK.self,
                 from: JSONEncoder().encode(hello.snapshot.health)))?.ok ?? true
             return .health(ok: ok)
 
@@ -102,7 +102,7 @@ struct MacGatewayChatTransport: CoderClawChatTransport, Sendable {
             case "health":
                 guard let payload = evt.payload else { return nil }
                 let ok = (try? JSONDecoder().decode(
-                    CoderClawGatewayHealthOK.self,
+                    BuilderforceGatewayHealthOK.self,
                     from: JSONEncoder().encode(payload)))?.ok ?? true
                 return .health(ok: ok)
             case "tick":
@@ -110,7 +110,7 @@ struct MacGatewayChatTransport: CoderClawChatTransport, Sendable {
             case "chat":
                 guard let payload = evt.payload else { return nil }
                 guard let chat = try? JSONDecoder().decode(
-                    CoderClawChatEventPayload.self,
+                    BuilderforceChatEventPayload.self,
                     from: JSONEncoder().encode(payload))
                 else {
                     return nil
@@ -119,7 +119,7 @@ struct MacGatewayChatTransport: CoderClawChatTransport, Sendable {
             case "agent":
                 guard let payload = evt.payload else { return nil }
                 guard let agent = try? JSONDecoder().decode(
-                    CoderClawAgentEventPayload.self,
+                    BuilderforceAgentEventPayload.self,
                     from: JSONEncoder().encode(payload))
                 else {
                     return nil
@@ -141,7 +141,7 @@ struct MacGatewayChatTransport: CoderClawChatTransport, Sendable {
 final class WebChatSwiftUIWindowController {
     private let presentation: WebChatPresentation
     private let sessionKey: String
-    private let hosting: NSHostingController<CoderClawChatView>
+    private let hosting: NSHostingController<BuilderforceChatView>
     private let contentController: NSViewController
     private var window: NSWindow?
     private var dismissMonitor: Any?
@@ -152,12 +152,12 @@ final class WebChatSwiftUIWindowController {
         self.init(sessionKey: sessionKey, presentation: presentation, transport: MacGatewayChatTransport())
     }
 
-    init(sessionKey: String, presentation: WebChatPresentation, transport: any CoderClawChatTransport) {
+    init(sessionKey: String, presentation: WebChatPresentation, transport: any BuilderforceChatTransport) {
         self.sessionKey = sessionKey
         self.presentation = presentation
-        let vm = CoderClawChatViewModel(sessionKey: sessionKey, transport: transport)
+        let vm = BuilderforceChatViewModel(sessionKey: sessionKey, transport: transport)
         let accent = Self.color(fromHex: AppStateStore.shared.seamColorHex)
-        self.hosting = NSHostingController(rootView: CoderClawChatView(
+        self.hosting = NSHostingController(rootView: BuilderforceChatView(
             viewModel: vm,
             showsSessionSwitcher: true,
             userAccent: accent))
@@ -268,7 +268,7 @@ final class WebChatSwiftUIWindowController {
                 styleMask: [.titled, .closable, .resizable, .miniaturizable],
                 backing: .buffered,
                 defer: false)
-            window.title = "CoderClaw Chat"
+            window.title = "Builderforce Chat"
             window.contentViewController = contentViewController
             window.isReleasedWhenClosed = false
             window.titleVisibility = .visible
@@ -311,7 +311,7 @@ final class WebChatSwiftUIWindowController {
 
     private static func makeContentController(
         for presentation: WebChatPresentation,
-        hosting: NSHostingController<CoderClawChatView>) -> NSViewController
+        hosting: NSHostingController<BuilderforceChatView>) -> NSViewController
     {
         let controller = NSViewController()
         let effectView = NSVisualEffectView()

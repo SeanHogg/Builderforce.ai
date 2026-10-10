@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite(.serialized) struct CommandResolverTests {
     private func makeDefaults() -> UserDefaults {
@@ -24,18 +24,18 @@ import Testing
         try FileManager().setAttributes([.posixPermissions: 0o755], ofItemAtPath: path.path)
     }
 
-    @Test func prefersCoderClawBinary() async throws {
+    @Test func prefersBuilderforceBinary() async throws {
         let defaults = self.makeDefaults()
         defaults.set(AppState.ConnectionMode.local.rawValue, forKey: connectionModeKey)
 
         let tmp = try makeTempDir()
         CommandResolver.setProjectRoot(tmp.path)
 
-        let coderclawPath = tmp.appendingPathComponent("node_modules/.bin/coderclaw")
-        try self.makeExec(at: coderclawPath)
+        let builderforcePath = tmp.appendingPathComponent("node_modules/.bin/builderforce")
+        try self.makeExec(at: builderforcePath)
 
-        let cmd = CommandResolver.coderclawCommand(subcommand: "gateway", defaults: defaults, configRoot: [:])
-        #expect(cmd.prefix(2).elementsEqual([coderclawPath.path, "gateway"]))
+        let cmd = CommandResolver.builderforceCommand(subcommand: "gateway", defaults: defaults, configRoot: [:])
+        #expect(cmd.prefix(2).elementsEqual([builderforcePath.path, "gateway"]))
     }
 
     @Test func fallsBackToNodeAndScript() async throws {
@@ -46,13 +46,13 @@ import Testing
         CommandResolver.setProjectRoot(tmp.path)
 
         let nodePath = tmp.appendingPathComponent("node_modules/.bin/node")
-        let scriptPath = tmp.appendingPathComponent("bin/coderclaw.js")
+        let scriptPath = tmp.appendingPathComponent("bin/builderforce.js")
         try self.makeExec(at: nodePath)
         try "#!/bin/sh\necho v22.0.0\n".write(to: nodePath, atomically: true, encoding: .utf8)
         try FileManager().setAttributes([.posixPermissions: 0o755], ofItemAtPath: nodePath.path)
         try self.makeExec(at: scriptPath)
 
-        let cmd = CommandResolver.coderclawCommand(
+        let cmd = CommandResolver.builderforceCommand(
             subcommand: "rpc",
             defaults: defaults,
             configRoot: [:],
@@ -76,7 +76,7 @@ import Testing
         let pnpmPath = tmp.appendingPathComponent("node_modules/.bin/pnpm")
         try self.makeExec(at: pnpmPath)
 
-        let cmd = CommandResolver.coderclawCommand(subcommand: "rpc", defaults: defaults, configRoot: [:])
+        let cmd = CommandResolver.builderforceCommand(subcommand: "rpc", defaults: defaults, configRoot: [:])
 
         #expect(cmd.prefix(4).elementsEqual([pnpmPath.path, "--silent", "builderforce", "rpc"]))
     }
@@ -91,7 +91,7 @@ import Testing
         let pnpmPath = tmp.appendingPathComponent("node_modules/.bin/pnpm")
         try self.makeExec(at: pnpmPath)
 
-        let cmd = CommandResolver.coderclawCommand(
+        let cmd = CommandResolver.builderforceCommand(
             subcommand: "health",
             extraArgs: ["--json", "--timeout", "5"],
             defaults: defaults,
@@ -112,11 +112,11 @@ import Testing
     @Test func buildsSSHCommandForRemoteMode() async throws {
         let defaults = self.makeDefaults()
         defaults.set(AppState.ConnectionMode.remote.rawValue, forKey: connectionModeKey)
-        defaults.set("coderclaw@example.com:2222", forKey: remoteTargetKey)
+        defaults.set("builderforce@example.com:2222", forKey: remoteTargetKey)
         defaults.set("/tmp/id_ed25519", forKey: remoteIdentityKey)
-        defaults.set("/srv/coderclaw", forKey: remoteProjectRootKey)
+        defaults.set("/srv/builderforce", forKey: remoteProjectRootKey)
 
-        let cmd = CommandResolver.coderclawCommand(
+        let cmd = CommandResolver.builderforceCommand(
             subcommand: "status",
             extraArgs: ["--json"],
             defaults: defaults,
@@ -124,14 +124,14 @@ import Testing
 
         #expect(cmd.first == "/usr/bin/ssh")
         if let marker = cmd.firstIndex(of: "--") {
-            #expect(cmd[marker + 1] == "coderclaw@example.com")
+            #expect(cmd[marker + 1] == "builderforce@example.com")
         } else {
             #expect(Bool(false))
         }
         #expect(cmd.contains("-i"))
         #expect(cmd.contains("/tmp/id_ed25519"))
         if let script = cmd.last {
-            #expect(script.contains("PRJ='/srv/coderclaw'"))
+            #expect(script.contains("PRJ='/srv/builderforce'"))
             #expect(script.contains("cd \"$PRJ\""))
             #expect(script.contains("command -v builderforce"))
             #expect(script.contains("status"))
@@ -149,20 +149,20 @@ import Testing
     @Test func configRootLocalOverridesRemoteDefaults() async throws {
         let defaults = self.makeDefaults()
         defaults.set(AppState.ConnectionMode.remote.rawValue, forKey: connectionModeKey)
-        defaults.set("coderclaw@example.com:2222", forKey: remoteTargetKey)
+        defaults.set("builderforce@example.com:2222", forKey: remoteTargetKey)
 
         let tmp = try makeTempDir()
         CommandResolver.setProjectRoot(tmp.path)
 
-        let coderclawPath = tmp.appendingPathComponent("node_modules/.bin/coderclaw")
-        try self.makeExec(at: coderclawPath)
+        let builderforcePath = tmp.appendingPathComponent("node_modules/.bin/builderforce")
+        try self.makeExec(at: builderforcePath)
 
-        let cmd = CommandResolver.coderclawCommand(
+        let cmd = CommandResolver.builderforceCommand(
             subcommand: "daemon",
             defaults: defaults,
             configRoot: ["gateway": ["mode": "local"]])
 
-        #expect(cmd.first == coderclawPath.path)
+        #expect(cmd.first == builderforcePath.path)
         #expect(cmd.count >= 2)
         if cmd.count >= 2 {
             #expect(cmd[1] == "daemon")

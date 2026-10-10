@@ -1,9 +1,9 @@
-package ai.coderclaw.android.node
+package ai.builderforce.android.node
 
 import android.content.Context
-import ai.coderclaw.android.BuildConfig
-import ai.coderclaw.android.gateway.DeviceIdentityStore
-import ai.coderclaw.android.gateway.GatewaySession
+import ai.builderforce.android.BuildConfig
+import ai.builderforce.android.gateway.DeviceIdentityStore
+import ai.builderforce.android.gateway.GatewaySession
 import kotlinx.serialization.json.JsonPrimitive
 
 class DebugHandler(

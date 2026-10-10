@@ -1,11 +1,11 @@
-import CoderClawKit
+import BuilderforceKit
 import Foundation
 import Testing
 
 @Suite struct CanvasSnapshotFormatTests {
     @Test func acceptsJpgAlias() throws {
         struct Wrapper: Codable {
-            var format: CoderClawCanvasSnapshotFormat
+            var format: BuilderforceCanvasSnapshotFormat
         }
 
         let data = try #require("{\"format\":\"jpg\"}".data(using: .utf8))

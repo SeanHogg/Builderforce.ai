@@ -3,7 +3,7 @@ import Foundation
 enum LaunchAgentManager {
     private static var plistURL: URL {
         FileManager().homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/LaunchAgents/ai.coderclaw.mac.plist")
+            .appendingPathComponent("Library/LaunchAgents/ai.builderforce.mac.plist")
     }
 
     static func status() async -> Bool {
@@ -32,10 +32,10 @@ enum LaunchAgentManager {
         <plist version="1.0">
         <dict>
           <key>Label</key>
-          <string>ai.coderclaw.mac</string>
+          <string>ai.builderforce.mac</string>
           <key>ProgramArguments</key>
           <array>
-            <string>\(bundlePath)/Contents/MacOS/CoderClaw</string>
+            <string>\(bundlePath)/Contents/MacOS/Builderforce</string>
           </array>
           <key>WorkingDirectory</key>
           <string>\(FileManager().homeDirectoryForCurrentUser.path)</string>

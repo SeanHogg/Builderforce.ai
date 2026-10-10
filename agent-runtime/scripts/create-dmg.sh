@@ -7,7 +7,7 @@ set -euo pipefail
 #   scripts/create-dmg.sh <app_path> [output_dmg]
 #
 # Env:
-#   DMG_VOLUME_NAME        default: CFBundleName (or "BuilderForceAgents")
+#   DMG_VOLUME_NAME        default: CFBundleName (or "Builderforce")
 #   DMG_BACKGROUND_PATH    default: assets/dmg-background.png
 #   DMG_BACKGROUND_SMALL   default: assets/dmg-background-small.png (recommended)
 #   DMG_WINDOW_BOUNDS      default: "400 100 900 420" (500x320)
@@ -30,10 +30,11 @@ if [[ ! -d "$APP_PATH" ]]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "${ROOT_DIR}/.." && pwd)"  # monorepo root: apps/macos lives here, not under agent-runtime/
 BUILD_DIR="$ROOT_DIR/dist"
 mkdir -p "$BUILD_DIR"
 
-APP_NAME=$(/usr/libexec/PlistBuddy -c "Print CFBundleName" "$APP_PATH/Contents/Info.plist" 2>/dev/null || echo "BuilderForceAgents")
+APP_NAME=$(/usr/libexec/PlistBuddy -c "Print CFBundleName" "$APP_PATH/Contents/Info.plist" 2>/dev/null || echo "Builderforce")
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP_PATH/Contents/Info.plist" 2>/dev/null || echo "0.0.0")
 
 DMG_NAME="${APP_NAME}-${VERSION}.dmg"
@@ -109,7 +110,7 @@ if [[ "${SKIP_DMG_STYLE:-0}" != "1" ]]; then
   fi
 
   # Volume icon: reuse the app icon if available.
-  ICON_SRC="$ROOT_DIR/apps/macos/Sources/BuilderForceAgents/Resources/BuilderForceAgents.icns"
+  ICON_SRC="$REPO_ROOT/apps/macos/Sources/Builderforce/Resources/Builderforce.icns"
   if [[ -f "$ICON_SRC" ]]; then
     cp "$ICON_SRC" "$MOUNT_POINT/.VolumeIcon.icns"
     if command -v SetFile >/dev/null 2>&1; then

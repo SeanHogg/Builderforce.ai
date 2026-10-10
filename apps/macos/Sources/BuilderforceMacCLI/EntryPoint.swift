@@ -6,7 +6,7 @@ private struct RootCommand {
 }
 
 @main
-struct CoderClawMacCLI {
+struct BuilderforceMacCLI {
     static func main() async {
         let args = Array(CommandLine.arguments.dropFirst())
         let command = parseRootCommand(args)
@@ -22,7 +22,7 @@ struct CoderClawMacCLI {
         case "wizard":
             await runWizardCommand(command?.args ?? [])
         default:
-            fputs("coderclaw-mac: unknown command\n", stderr)
+            fputs("builderforce-mac: unknown command\n", stderr)
             printUsage()
             exit(1)
         }
@@ -36,21 +36,21 @@ private func parseRootCommand(_ args: [String]) -> RootCommand? {
 
 private func printUsage() {
     print("""
-    coderclaw-mac
+    builderforce-mac
 
     Usage:
-      coderclaw-mac connect [--url <ws://host:port>] [--token <token>] [--password <password>]
+      builderforce-mac connect [--url <ws://host:port>] [--token <token>] [--password <password>]
                            [--mode <local|remote>] [--timeout <ms>] [--probe] [--json]
                            [--client-id <id>] [--client-mode <mode>] [--display-name <name>]
                            [--role <role>] [--scopes <a,b,c>]
-      coderclaw-mac discover [--timeout <ms>] [--json] [--include-local]
-      coderclaw-mac wizard [--url <ws://host:port>] [--token <token>] [--password <password>]
+      builderforce-mac discover [--timeout <ms>] [--json] [--include-local]
+      builderforce-mac wizard [--url <ws://host:port>] [--token <token>] [--password <password>]
                           [--mode <local|remote>] [--workspace <path>] [--json]
 
     Examples:
-      coderclaw-mac connect
-      coderclaw-mac connect --url ws://127.0.0.1:18789 --json
-      coderclaw-mac discover --timeout 3000 --json
-      coderclaw-mac wizard --mode local
+      builderforce-mac connect
+      builderforce-mac connect --url ws://127.0.0.1:18789 --json
+      builderforce-mac discover --timeout 3000 --json
+      builderforce-mac wizard --mode local
     """)
 }

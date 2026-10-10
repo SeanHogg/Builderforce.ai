@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Reset BuilderForceAgents like Trimmy: kill running instances, rebuild, repackage, relaunch, verify.
+# Reset Builderforce like Trimmy: kill running instances, rebuild, repackage, relaunch, verify.
 
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "${ROOT_DIR}/.." && pwd)"  # monorepo root: apps/macos lives here, not under agent-runtime/
 APP_BUNDLE="${BUILDERFORCE_AGENTS_APP_BUNDLE:-}"
-APP_PROCESS_PATTERN="BuilderForceAgents.app/Contents/MacOS/BuilderForceAgents"
-DEBUG_PROCESS_PATTERN="${ROOT_DIR}/apps/macos/.build/debug/BuilderForceAgents"
-LOCAL_PROCESS_PATTERN="${ROOT_DIR}/apps/macos/.build-local/debug/BuilderForceAgents"
-RELEASE_PROCESS_PATTERN="${ROOT_DIR}/apps/macos/.build/release/BuilderForceAgents"
+APP_PROCESS_PATTERN="Builderforce.app/Contents/MacOS/Builderforce"
+DEBUG_PROCESS_PATTERN="${REPO_ROOT}/apps/macos/.build/debug/Builderforce"
+LOCAL_PROCESS_PATTERN="${REPO_ROOT}/apps/macos/.build-local/debug/Builderforce"
+RELEASE_PROCESS_PATTERN="${REPO_ROOT}/apps/macos/.build/release/Builderforce"
 LAUNCH_AGENT="${HOME}/Library/LaunchAgents/ai.builderforce.mac.plist"
 LOCK_KEY="$(printf '%s' "${ROOT_DIR}" | shasum -a 256 | cut -c1-8)"
 LOCK_DIR="${TMPDIR:-/tmp}/builderforce-restart-${LOCK_KEY}"
@@ -132,12 +133,12 @@ kill_all_builderforce() {
     pkill -f "${DEBUG_PROCESS_PATTERN}" 2>/dev/null || true
     pkill -f "${LOCAL_PROCESS_PATTERN}" 2>/dev/null || true
     pkill -f "${RELEASE_PROCESS_PATTERN}" 2>/dev/null || true
-    pkill -x "BuilderForceAgents" 2>/dev/null || true
+    pkill -x "Builderforce" 2>/dev/null || true
     if ! pgrep -f "${APP_PROCESS_PATTERN}" >/dev/null 2>&1 \
        && ! pgrep -f "${DEBUG_PROCESS_PATTERN}" >/dev/null 2>&1 \
        && ! pgrep -f "${LOCAL_PROCESS_PATTERN}" >/dev/null 2>&1 \
        && ! pgrep -f "${RELEASE_PROCESS_PATTERN}" >/dev/null 2>&1 \
-       && ! pgrep -x "BuilderForceAgents" >/dev/null 2>&1; then
+       && ! pgrep -x "Builderforce" >/dev/null 2>&1; then
       return 0
     fi
     sleep 0.3
@@ -149,7 +150,7 @@ stop_launch_agent() {
 }
 
 # 1) Kill all running instances first.
-log "==> Killing existing BuilderForceAgents instances"
+log "==> Killing existing Builderforce instances"
 kill_all_builderforce
 stop_launch_agent
 
@@ -157,8 +158,8 @@ stop_launch_agent
 run_step "bundle canvas a2ui" bash -lc "cd '${ROOT_DIR}' && pnpm canvas:a2ui:bundle"
 
 # 2) Rebuild into the same path the packager consumes (.build).
-run_step "clean build cache" bash -lc "cd '${ROOT_DIR}/apps/macos' && rm -rf .build .build-swift .swiftpm 2>/dev/null || true"
-run_step "swift build" bash -lc "cd '${ROOT_DIR}/apps/macos' && swift build -q --product BuilderForceAgents"
+run_step "clean build cache" bash -lc "cd '${REPO_ROOT}/apps/macos' && rm -rf .build .build-swift .swiftpm 2>/dev/null || true"
+run_step "swift build" bash -lc "cd '${REPO_ROOT}/apps/macos' && swift build -q --product Builderforce"
 
 if [ "$AUTO_DETECT_SIGNING" -eq 1 ]; then
   if check_signing_keys; then
@@ -191,20 +192,20 @@ choose_app_bundle() {
     return 0
   fi
 
-  if [[ -d "/Applications/BuilderForceAgents.app" ]]; then
-    APP_BUNDLE="/Applications/BuilderForceAgents.app"
+  if [[ -d "/Applications/Builderforce.app" ]]; then
+    APP_BUNDLE="/Applications/Builderforce.app"
     return 0
   fi
 
-  if [[ -d "${ROOT_DIR}/dist/BuilderForceAgents.app" ]]; then
-    APP_BUNDLE="${ROOT_DIR}/dist/BuilderForceAgents.app"
+  if [[ -d "${ROOT_DIR}/dist/Builderforce.app" ]]; then
+    APP_BUNDLE="${ROOT_DIR}/dist/Builderforce.app"
     if [[ ! -d "${APP_BUNDLE}/Contents/Frameworks/Sparkle.framework" ]]; then
-      fail "dist/BuilderForceAgents.app missing Sparkle after packaging"
+      fail "dist/Builderforce.app missing Sparkle after packaging"
     fi
     return 0
   fi
 
-  fail "App bundle not found. Set BUILDERFORCE_AGENTS_APP_BUNDLE to your installed BuilderForceAgents.app"
+  fail "App bundle not found. Set BUILDERFORCE_AGENTS_APP_BUNDLE to your installed Builderforce.app"
 }
 
 choose_app_bundle
@@ -259,7 +260,7 @@ run_step "launch app" env -i \
 # 5) Verify the app is alive.
 sleep 1.5
 if pgrep -f "${APP_PROCESS_PATTERN}" >/dev/null 2>&1; then
-  log "OK: BuilderForceAgents is running."
+  log "OK: Builderforce is running."
 else
   fail "App exited immediately. Check ${LOG_PATH} or Console.app (User Reports)."
 fi

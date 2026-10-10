@@ -1,7 +1,7 @@
-import CoderClawProtocol
+import BuilderforceProtocol
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite
 @MainActor
@@ -68,7 +68,7 @@ struct WorkActivityStoreTests {
             meta: nil,
             args: [
                 "command": AnyCodable("echo hi\necho bye"),
-                "path": AnyCodable("\(home)/Projects/coderclaw"),
+                "path": AnyCodable("\(home)/Projects/builderforce"),
             ])
 
         #expect(store.current?.label == "bash: echo hi")

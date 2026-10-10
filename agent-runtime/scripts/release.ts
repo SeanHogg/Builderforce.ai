@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node --import tsx
 /**
- * Interactive release helper for BuilderForceAgents.
+ * Interactive release helper for the Builderforce agent runtime.
  *
  * Steps:
  *   1. Suggest next version(s) based on today's date + current semver
@@ -26,6 +26,8 @@ import { cancel, confirm, intro, note, outro, select, spinner, text } from "@cla
 // ---------------------------------------------------------------------------
 
 const ROOT = resolve(import.meta.dirname, "..");
+// Monorepo root: the native apps (apps/ios, apps/android, apps/macos) live here, not under agent-runtime/.
+const REPO_ROOT = resolve(ROOT, "..");
 const PKG_PATH = resolve(ROOT, "package.json");
 const CHANGELOG_PATH = resolve(ROOT, "CHANGELOG.md");
 
@@ -226,7 +228,7 @@ function bumpNativeApps(oldVer: string, newVer: string) {
 
   // iOS project.yml — all five targets share the same fields
   bumpFileVersions(
-    resolve(ROOT, "apps/ios/project.yml"),
+    resolve(REPO_ROOT, "apps/ios/project.yml"),
     [
       {
         pattern: new RegExp(`(CFBundleShortVersionString: )"${escapeRegex(oldAppVer)}"`, "g"),
@@ -242,7 +244,7 @@ function bumpNativeApps(oldVer: string, newVer: string) {
 
   // Android build.gradle.kts
   bumpFileVersions(
-    resolve(ROOT, "apps/android/app/build.gradle.kts"),
+    resolve(REPO_ROOT, "apps/android/app/build.gradle.kts"),
     [
       {
         pattern: new RegExp(`(versionName = )"${escapeRegex(oldAppVer)}"`, "g"),
@@ -265,7 +267,7 @@ function bumpNativeApps(oldVer: string, newVer: string) {
     "apps/ios/WatchExtension/Info.plist",
   ]) {
     bumpFileVersions(
-      resolve(ROOT, rel),
+      resolve(REPO_ROOT, rel),
       [
         {
           pattern: new RegExp(
@@ -285,7 +287,7 @@ function bumpNativeApps(oldVer: string, newVer: string) {
 
   // macOS Info.plist (XML, 9-digit bundle version)
   bumpFileVersions(
-    resolve(ROOT, "apps/macos/Sources/BuilderForceAgents/Resources/Info.plist"),
+    resolve(REPO_ROOT, "apps/macos/Sources/Builderforce/Resources/Info.plist"),
     [
       {
         pattern: new RegExp(
@@ -299,7 +301,7 @@ function bumpNativeApps(oldVer: string, newVer: string) {
         replacement: `$1${bundleLong}$2`,
       },
     ],
-    "apps/macos/Sources/BuilderForceAgents/Resources/Info.plist",
+    "apps/macos/Sources/Builderforce/Resources/Info.plist",
   );
 }
 
@@ -327,7 +329,7 @@ function uncommittedFiles(): string[] {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  intro("🦞 BuilderForceAgents release helper" + (DRY ? " [DRY RUN]" : ""));
+  intro("🦞 Builderforce release helper" + (DRY ? " [DRY RUN]" : ""));
 
   const pkg = readPkg();
   const prevVersion = pkg.version;

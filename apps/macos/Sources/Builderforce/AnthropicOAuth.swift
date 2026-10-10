@@ -18,7 +18,7 @@ enum AnthropicAuthMode: Equatable {
 
     var shortLabel: String {
         switch self {
-        case .oauthFile: "OAuth (CoderClaw token file)"
+        case .oauthFile: "OAuth (Builderforce token file)"
         case .oauthEnv: "OAuth (env var)"
         case .apiKeyEnv: "API key (env var)"
         case .missing: "Missing credentials"
@@ -36,7 +36,7 @@ enum AnthropicAuthMode: Equatable {
 enum AnthropicAuthResolver {
     static func resolve(
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        oauthStatus: CoderClawOAuthStore.AnthropicOAuthStatus = CoderClawOAuthStore
+        oauthStatus: BuilderforceOAuthStore.AnthropicOAuthStatus = BuilderforceOAuthStore
             .anthropicOAuthStatus()) -> AnthropicAuthMode
     {
         if oauthStatus.isConnected { return .oauthFile }
@@ -58,7 +58,7 @@ enum AnthropicAuthResolver {
 }
 
 enum AnthropicOAuth {
-    private static let logger = Logger(subsystem: "ai.coderclaw", category: "anthropic-oauth")
+    private static let logger = Logger(subsystem: "ai.builderforce", category: "anthropic-oauth")
 
     private static let clientId = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
     private static let authorizeURL = URL(string: "https://claude.ai/oauth/authorize")!
@@ -194,10 +194,10 @@ enum AnthropicOAuth {
     }
 }
 
-enum CoderClawOAuthStore {
+enum BuilderforceOAuthStore {
     static let oauthFilename = "oauth.json"
     private static let providerKey = "anthropic"
-    private static let coderclawOAuthDirEnv = "CODERCLAW_OAUTH_DIR"
+    private static let builderforceOAuthDirEnv = "BUILDERFORCE_AGENTS_OAUTH_DIR"
     private static let legacyPiDirEnv = "PI_CODING_AGENT_DIR"
 
     enum AnthropicOAuthStatus: Equatable {
@@ -215,18 +215,18 @@ enum CoderClawOAuthStore {
 
         var shortDescription: String {
             switch self {
-            case .missingFile: "CoderClaw OAuth token file not found"
-            case .unreadableFile: "CoderClaw OAuth token file not readable"
-            case .invalidJSON: "CoderClaw OAuth token file invalid"
-            case .missingProviderEntry: "No Anthropic entry in CoderClaw OAuth token file"
+            case .missingFile: "Builderforce OAuth token file not found"
+            case .unreadableFile: "Builderforce OAuth token file not readable"
+            case .invalidJSON: "Builderforce OAuth token file invalid"
+            case .missingProviderEntry: "No Anthropic entry in Builderforce OAuth token file"
             case .missingTokens: "Anthropic entry missing tokens"
-            case .connected: "CoderClaw OAuth credentials found"
+            case .connected: "Builderforce OAuth credentials found"
             }
         }
     }
 
     static func oauthDir() -> URL {
-        if let override = ProcessInfo.processInfo.environment[self.coderclawOAuthDirEnv]?
+        if let override = ProcessInfo.processInfo.environment[self.builderforceOAuthDirEnv]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !override.isEmpty
         {
@@ -234,7 +234,7 @@ enum CoderClawOAuthStore {
             return URL(fileURLWithPath: expanded, isDirectory: true)
         }
         let home = FileManager().homeDirectoryForCurrentUser
-        return home.appendingPathComponent(".coderclaw", isDirectory: true)
+        return home.appendingPathComponent(".builderforce", isDirectory: true)
             .appendingPathComponent("credentials", isDirectory: true)
     }
 

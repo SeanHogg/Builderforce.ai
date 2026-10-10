@@ -1,21 +1,15 @@
 import Foundation
 
 enum CommandResolver {
-    private static let projectRootDefaultsKey = "coderclaw.gatewayProjectRootPath"
+    private static let projectRootDefaultsKey = "builderforce.gatewayProjectRootPath"
     /// The CLI binary installed by the `@seanhogg/builderforce-agents` npm package.
     private static let helperName = "builderforce"
-    /// Pre-rebrand binary name, still resolved so existing installs keep working.
-    private static let legacyHelperName = "coderclaw"
 
     static func gatewayEntrypoint(in root: URL) -> String? {
         let distEntry = root.appendingPathComponent("dist/index.js").path
         if FileManager().isReadableFile(atPath: distEntry) { return distEntry }
         let builderforceEntry = root.appendingPathComponent("builderforce.mjs").path
         if FileManager().isReadableFile(atPath: builderforceEntry) { return builderforceEntry }
-        let coderclawEntry = root.appendingPathComponent("coderclaw.mjs").path
-        if FileManager().isReadableFile(atPath: coderclawEntry) { return coderclawEntry }
-        let binEntry = root.appendingPathComponent("bin/coderclaw.js").path
-        if FileManager().isReadableFile(atPath: binEntry) { return binEntry }
         return nil
     }
 
@@ -43,9 +37,9 @@ enum CommandResolver {
 
     static func errorCommand(with message: String) -> [String] {
         let script = """
-        cat <<'__CODERCLAW_ERR__' >&2
+        cat <<'__BUILDERFORCE_ERR__' >&2
         \(message)
-        __CODERCLAW_ERR__
+        __BUILDERFORCE_ERR__
         exit 1
         """
         return ["/bin/sh", "-c", script]
@@ -59,7 +53,7 @@ enum CommandResolver {
             return url
         }
         let fallback = FileManager().homeDirectoryForCurrentUser
-            .appendingPathComponent("Projects/coderclaw")
+            .appendingPathComponent("Projects/builderforce")
         if FileManager().fileExists(atPath: fallback.path) {
             return fallback
         }
@@ -94,20 +88,19 @@ enum CommandResolver {
         // Dev-only convenience. Avoid project-local PATH hijacking in release builds.
         extras.insert(projectRoot.appendingPathComponent("node_modules/.bin").path, at: 0)
         #endif
-        let coderclawPaths = self.coderclawManagedPaths(home: home)
-        if !coderclawPaths.isEmpty {
-            extras.insert(contentsOf: coderclawPaths, at: 1)
+        let builderforcePaths = self.builderforceManagedPaths(home: home)
+        if !builderforcePaths.isEmpty {
+            extras.insert(contentsOf: builderforcePaths, at: 1)
         }
-        extras.insert(contentsOf: self.nodeManagerBinPaths(home: home), at: 1 + coderclawPaths.count)
+        extras.insert(contentsOf: self.nodeManagerBinPaths(home: home), at: 1 + builderforcePaths.count)
         var seen = Set<String>()
         // Preserve order while stripping duplicates so PATH lookups remain deterministic.
         return (extras + current).filter { seen.insert($0).inserted }
     }
 
-    private static func coderclawManagedPaths(home: URL) -> [String] {
+    private static func builderforceManagedPaths(home: URL) -> [String] {
         let bases = [
             home.appendingPathComponent(".builderforce"),
-            home.appendingPathComponent(".coderclaw"),
         ]
         var paths: [String] = []
         for base in bases {
@@ -199,20 +192,16 @@ enum CommandResolver {
         return nil
     }
 
-    static func coderclawExecutable(searchPaths: [String]? = nil) -> String? {
+    static func builderforceExecutable(searchPaths: [String]? = nil) -> String? {
         self.findExecutable(named: self.helperName, searchPaths: searchPaths)
-            ?? self.findExecutable(named: self.legacyHelperName, searchPaths: searchPaths)
     }
 
-    static func projectCoderClawExecutable(projectRoot: URL? = nil) -> String? {
+    static func projectBuilderforceExecutable(projectRoot: URL? = nil) -> String? {
         #if DEBUG
         let root = projectRoot ?? self.projectRoot()
         let bin = root.appendingPathComponent("node_modules/.bin")
-        for name in [self.helperName, self.legacyHelperName] {
-            let candidate = bin.appendingPathComponent(name).path
-            if FileManager().isExecutableFile(atPath: candidate) { return candidate }
-        }
-        return nil
+        let candidate = bin.appendingPathComponent(self.helperName).path
+        return FileManager().isExecutableFile(atPath: candidate) ? candidate : nil
         #else
         return nil
         #endif
@@ -222,8 +211,6 @@ enum CommandResolver {
         let root = self.projectRoot()
         let candidates = [
             root.appendingPathComponent("builderforce.mjs").path,
-            root.appendingPathComponent("coderclaw.mjs").path,
-            root.appendingPathComponent("bin/coderclaw.js").path,
         ]
         for candidate in candidates where FileManager().isReadableFile(atPath: candidate) {
             return candidate
@@ -231,8 +218,8 @@ enum CommandResolver {
         return nil
     }
 
-    static func hasAnyCoderClawInvoker(searchPaths: [String]? = nil) -> Bool {
-        if self.coderclawExecutable(searchPaths: searchPaths) != nil { return true }
+    static func hasAnyBuilderforceInvoker(searchPaths: [String]? = nil) -> Bool {
+        if self.builderforceExecutable(searchPaths: searchPaths) != nil { return true }
         if self.findExecutable(named: "pnpm", searchPaths: searchPaths) != nil { return true }
         if self.findExecutable(named: "node", searchPaths: searchPaths) != nil,
            self.nodeCliPath() != nil
@@ -242,7 +229,7 @@ enum CommandResolver {
         return false
     }
 
-    static func coderclawNodeCommand(
+    static func builderforceNodeCommand(
         subcommand: String,
         extraArgs: [String] = [],
         defaults: UserDefaults = .standard,
@@ -263,8 +250,8 @@ enum CommandResolver {
         switch runtimeResult {
         case let .success(runtime):
             let root = self.projectRoot()
-            if let coderclawPath = self.projectCoderClawExecutable(projectRoot: root) {
-                return [coderclawPath, subcommand] + extraArgs
+            if let builderforcePath = self.projectBuilderforceExecutable(projectRoot: root) {
+                return [builderforcePath, subcommand] + extraArgs
             }
 
             if let entry = self.gatewayEntrypoint(in: root) {
@@ -278,8 +265,8 @@ enum CommandResolver {
                 // Use --silent to avoid pnpm lifecycle banners that would corrupt JSON outputs.
                 return [pnpm, "--silent", self.helperName, subcommand] + extraArgs
             }
-            if let coderclawPath = self.coderclawExecutable(searchPaths: searchPaths) {
-                return [coderclawPath, subcommand] + extraArgs
+            if let builderforcePath = self.builderforceExecutable(searchPaths: searchPaths) {
+                return [builderforcePath, subcommand] + extraArgs
             }
 
             let missingEntry = """
@@ -292,14 +279,14 @@ enum CommandResolver {
         }
     }
 
-    static func coderclawCommand(
+    static func builderforceCommand(
         subcommand: String,
         extraArgs: [String] = [],
         defaults: UserDefaults = .standard,
         configRoot: [String: Any]? = nil,
         searchPaths: [String]? = nil) -> [String]
     {
-        self.coderclawNodeCommand(
+        self.builderforceNodeCommand(
             subcommand: subcommand,
             extraArgs: extraArgs,
             defaults: defaults,
@@ -313,7 +300,7 @@ enum CommandResolver {
         guard !settings.target.isEmpty else { return nil }
         guard let parsed = self.parseSSHTarget(settings.target) else { return nil }
 
-        // Run the real builderforce CLI on the remote host (falling back to the pre-rebrand binary).
+        // Run the real builderforce CLI on the remote host.
         let exportedPath = [
             "/opt/homebrew/bin",
             "/usr/local/bin",
@@ -330,7 +317,7 @@ enum CommandResolver {
 
         let projectSection = if userPRJ.isEmpty {
             """
-            DEFAULT_PRJ="$HOME/Projects/coderclaw"
+            DEFAULT_PRJ="$HOME/Projects/builderforce"
             if [ -d "$DEFAULT_PRJ" ]; then
               PRJ="$DEFAULT_PRJ"
               cd "$PRJ" || { echo "Project root not found: $PRJ"; exit 127; }
@@ -372,9 +359,6 @@ enum CommandResolver {
         if command -v builderforce >/dev/null 2>&1; then
           CLI="$(command -v builderforce)"
           builderforce \(quotedArgs);
-        elif command -v coderclaw >/dev/null 2>&1; then
-          CLI="$(command -v coderclaw)"
-          coderclaw \(quotedArgs);
         elif [ -n "${PRJ:-}" ] && [ -f "$PRJ/dist/index.js" ]; then
           if command -v node >/dev/null 2>&1; then
             CLI="node $PRJ/dist/index.js"
@@ -386,20 +370,6 @@ enum CommandResolver {
           if command -v node >/dev/null 2>&1; then
             CLI="node $PRJ/builderforce.mjs"
             node "$PRJ/builderforce.mjs" \(quotedArgs);
-          else
-            echo "Node >=22 required on remote host"; exit 127;
-          fi
-        elif [ -n "${PRJ:-}" ] && [ -f "$PRJ/coderclaw.mjs" ]; then
-          if command -v node >/dev/null 2>&1; then
-            CLI="node $PRJ/coderclaw.mjs"
-            node "$PRJ/coderclaw.mjs" \(quotedArgs);
-          else
-            echo "Node >=22 required on remote host"; exit 127;
-          fi
-        elif [ -n "${PRJ:-}" ] && [ -f "$PRJ/bin/coderclaw.js" ]; then
-          if command -v node >/dev/null 2>&1; then
-            CLI="node $PRJ/bin/coderclaw.js"
-            node "$PRJ/bin/coderclaw.js" \(quotedArgs);
           else
             echo "Node >=22 required on remote host"; exit 127;
           fi
@@ -435,7 +405,7 @@ enum CommandResolver {
         defaults: UserDefaults = .standard,
         configRoot: [String: Any]? = nil) -> RemoteSettings
     {
-        let root = configRoot ?? CoderClawConfigFile.loadDict()
+        let root = configRoot ?? BuilderforceConfigFile.loadDict()
         let mode = ConnectionModeResolver.resolve(root: root, defaults: defaults).mode
         let target = defaults.string(forKey: remoteTargetKey) ?? ""
         let identity = defaults.string(forKey: remoteIdentityKey) ?? ""

@@ -1,6 +1,6 @@
-package ai.coderclaw.android.protocol
+package ai.builderforce.android.protocol
 
-enum class CoderClawCapability(val rawValue: String) {
+enum class BuilderforceCapability(val rawValue: String) {
   Canvas("canvas"),
   Camera("camera"),
   Screen("screen"),
@@ -9,7 +9,7 @@ enum class CoderClawCapability(val rawValue: String) {
   Location("location"),
 }
 
-enum class CoderClawCanvasCommand(val rawValue: String) {
+enum class BuilderforceCanvasCommand(val rawValue: String) {
   Present("canvas.present"),
   Hide("canvas.hide"),
   Navigate("canvas.navigate"),
@@ -22,7 +22,7 @@ enum class CoderClawCanvasCommand(val rawValue: String) {
   }
 }
 
-enum class CoderClawCanvasA2UICommand(val rawValue: String) {
+enum class BuilderforceCanvasA2UICommand(val rawValue: String) {
   Push("canvas.a2ui.push"),
   PushJSONL("canvas.a2ui.pushJSONL"),
   Reset("canvas.a2ui.reset"),
@@ -33,7 +33,7 @@ enum class CoderClawCanvasA2UICommand(val rawValue: String) {
   }
 }
 
-enum class CoderClawCameraCommand(val rawValue: String) {
+enum class BuilderforceCameraCommand(val rawValue: String) {
   Snap("camera.snap"),
   Clip("camera.clip"),
   ;
@@ -43,7 +43,7 @@ enum class CoderClawCameraCommand(val rawValue: String) {
   }
 }
 
-enum class CoderClawScreenCommand(val rawValue: String) {
+enum class BuilderforceScreenCommand(val rawValue: String) {
   Record("screen.record"),
   ;
 
@@ -52,7 +52,7 @@ enum class CoderClawScreenCommand(val rawValue: String) {
   }
 }
 
-enum class CoderClawSmsCommand(val rawValue: String) {
+enum class BuilderforceSmsCommand(val rawValue: String) {
   Send("sms.send"),
   ;
 
@@ -61,7 +61,7 @@ enum class CoderClawSmsCommand(val rawValue: String) {
   }
 }
 
-enum class CoderClawLocationCommand(val rawValue: String) {
+enum class BuilderforceLocationCommand(val rawValue: String) {
   Get("location.get"),
   ;
 

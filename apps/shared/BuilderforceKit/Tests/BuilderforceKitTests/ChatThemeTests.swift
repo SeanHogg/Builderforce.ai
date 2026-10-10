@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import CoderClawChatUI
+@testable import BuilderforceChatUI
 
 #if os(macOS)
 import AppKit
@@ -19,8 +19,8 @@ private func luminance(_ color: NSColor) throws -> CGFloat {
         let lightAppearance = try #require(NSAppearance(named: .aqua))
         let darkAppearance = try #require(NSAppearance(named: .darkAqua))
 
-        let lightResolved = CoderClawChatTheme.resolvedAssistantBubbleColor(for: lightAppearance)
-        let darkResolved = CoderClawChatTheme.resolvedAssistantBubbleColor(for: darkAppearance)
+        let lightResolved = BuilderforceChatTheme.resolvedAssistantBubbleColor(for: lightAppearance)
+        let darkResolved = BuilderforceChatTheme.resolvedAssistantBubbleColor(for: darkAppearance)
         #expect(try luminance(lightResolved) > luminance(darkResolved))
         #else
         #expect(Bool(true))

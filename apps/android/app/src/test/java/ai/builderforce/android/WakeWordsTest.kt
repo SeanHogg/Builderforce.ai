@@ -1,4 +1,4 @@
-package ai.coderclaw.android
+package ai.builderforce.android
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -7,12 +7,12 @@ import org.junit.Test
 class WakeWordsTest {
   @Test
   fun parseCommaSeparatedTrimsAndDropsEmpty() {
-    assertEquals(listOf("coderclaw", "claude"), WakeWords.parseCommaSeparated("  coderclaw , claude, ,  "))
+    assertEquals(listOf("builderforce", "claude"), WakeWords.parseCommaSeparated("  builderforce , claude, ,  "))
   }
 
   @Test
   fun sanitizeTrimsCapsAndFallsBack() {
-    val defaults = listOf("coderclaw", "claude")
+    val defaults = listOf("builderforce", "claude")
     val long = "x".repeat(WakeWords.maxWordLength + 10)
     val words = listOf(" ", "  hello  ", long)
 
@@ -26,7 +26,7 @@ class WakeWordsTest {
 
   @Test
   fun sanitizeLimitsWordCount() {
-    val defaults = listOf("coderclaw")
+    val defaults = listOf("builderforce")
     val words = (1..(WakeWords.maxWords + 5)).map { "w$it" }
     val sanitized = WakeWords.sanitize(words, defaults)
     assertEquals(WakeWords.maxWords, sanitized.size)
@@ -36,15 +36,15 @@ class WakeWordsTest {
 
   @Test
   fun parseIfChangedSkipsWhenUnchanged() {
-    val current = listOf("coderclaw", "claude")
-    val parsed = WakeWords.parseIfChanged(" coderclaw , claude ", current)
+    val current = listOf("builderforce", "claude")
+    val parsed = WakeWords.parseIfChanged(" builderforce , claude ", current)
     assertNull(parsed)
   }
 
   @Test
   fun parseIfChangedReturnsUpdatedList() {
-    val current = listOf("coderclaw")
-    val parsed = WakeWords.parseIfChanged(" coderclaw , jarvis ", current)
-    assertEquals(listOf("coderclaw", "jarvis"), parsed)
+    val current = listOf("builderforce")
+    val parsed = WakeWords.parseIfChanged(" builderforce , jarvis ", current)
+    assertEquals(listOf("builderforce", "jarvis"), parsed)
   }
 }

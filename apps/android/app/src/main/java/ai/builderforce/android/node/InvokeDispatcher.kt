@@ -1,12 +1,12 @@
-package ai.coderclaw.android.node
+package ai.builderforce.android.node
 
-import ai.coderclaw.android.gateway.GatewaySession
-import ai.coderclaw.android.protocol.CoderClawCanvasA2UICommand
-import ai.coderclaw.android.protocol.CoderClawCanvasCommand
-import ai.coderclaw.android.protocol.CoderClawCameraCommand
-import ai.coderclaw.android.protocol.CoderClawLocationCommand
-import ai.coderclaw.android.protocol.CoderClawScreenCommand
-import ai.coderclaw.android.protocol.CoderClawSmsCommand
+import ai.builderforce.android.gateway.GatewaySession
+import ai.builderforce.android.protocol.BuilderforceCanvasA2UICommand
+import ai.builderforce.android.protocol.BuilderforceCanvasCommand
+import ai.builderforce.android.protocol.BuilderforceCameraCommand
+import ai.builderforce.android.protocol.BuilderforceLocationCommand
+import ai.builderforce.android.protocol.BuilderforceScreenCommand
+import ai.builderforce.android.protocol.BuilderforceSmsCommand
 
 class InvokeDispatcher(
   private val canvas: CanvasController,
@@ -24,10 +24,10 @@ class InvokeDispatcher(
   suspend fun handleInvoke(command: String, paramsJson: String?): GatewaySession.InvokeResult {
     // Check foreground requirement for canvas/camera/screen commands
     if (
-      command.startsWith(CoderClawCanvasCommand.NamespacePrefix) ||
-        command.startsWith(CoderClawCanvasA2UICommand.NamespacePrefix) ||
-        command.startsWith(CoderClawCameraCommand.NamespacePrefix) ||
-        command.startsWith(CoderClawScreenCommand.NamespacePrefix)
+      command.startsWith(BuilderforceCanvasCommand.NamespacePrefix) ||
+        command.startsWith(BuilderforceCanvasA2UICommand.NamespacePrefix) ||
+        command.startsWith(BuilderforceCameraCommand.NamespacePrefix) ||
+        command.startsWith(BuilderforceScreenCommand.NamespacePrefix)
     ) {
       if (!isForeground()) {
         return GatewaySession.InvokeResult.error(
@@ -38,7 +38,7 @@ class InvokeDispatcher(
     }
 
     // Check camera enabled
-    if (command.startsWith(CoderClawCameraCommand.NamespacePrefix) && !cameraEnabled()) {
+    if (command.startsWith(BuilderforceCameraCommand.NamespacePrefix) && !cameraEnabled()) {
       return GatewaySession.InvokeResult.error(
         code = "CAMERA_DISABLED",
         message = "CAMERA_DISABLED: enable Camera in Settings",
@@ -46,7 +46,7 @@ class InvokeDispatcher(
     }
 
     // Check location enabled
-    if (command.startsWith(CoderClawLocationCommand.NamespacePrefix) && !locationEnabled()) {
+    if (command.startsWith(BuilderforceLocationCommand.NamespacePrefix) && !locationEnabled()) {
       return GatewaySession.InvokeResult.error(
         code = "LOCATION_DISABLED",
         message = "LOCATION_DISABLED: enable Location in Settings",
@@ -55,18 +55,18 @@ class InvokeDispatcher(
 
     return when (command) {
       // Canvas commands
-      CoderClawCanvasCommand.Present.rawValue -> {
+      BuilderforceCanvasCommand.Present.rawValue -> {
         val url = CanvasController.parseNavigateUrl(paramsJson)
         canvas.navigate(url)
         GatewaySession.InvokeResult.ok(null)
       }
-      CoderClawCanvasCommand.Hide.rawValue -> GatewaySession.InvokeResult.ok(null)
-      CoderClawCanvasCommand.Navigate.rawValue -> {
+      BuilderforceCanvasCommand.Hide.rawValue -> GatewaySession.InvokeResult.ok(null)
+      BuilderforceCanvasCommand.Navigate.rawValue -> {
         val url = CanvasController.parseNavigateUrl(paramsJson)
         canvas.navigate(url)
         GatewaySession.InvokeResult.ok(null)
       }
-      CoderClawCanvasCommand.Eval.rawValue -> {
+      BuilderforceCanvasCommand.Eval.rawValue -> {
         val js =
           CanvasController.parseEvalJs(paramsJson)
             ?: return GatewaySession.InvokeResult.error(
@@ -84,7 +84,7 @@ class InvokeDispatcher(
           }
         GatewaySession.InvokeResult.ok("""{"result":${result.toJsonString()}}""")
       }
-      CoderClawCanvasCommand.Snapshot.rawValue -> {
+      BuilderforceCanvasCommand.Snapshot.rawValue -> {
         val snapshotParams = CanvasController.parseSnapshotParams(paramsJson)
         val base64 =
           try {
@@ -103,7 +103,7 @@ class InvokeDispatcher(
       }
 
       // A2UI commands
-      CoderClawCanvasA2UICommand.Reset.rawValue -> {
+      BuilderforceCanvasA2UICommand.Reset.rawValue -> {
         val a2uiUrl = a2uiHandler.resolveA2uiHostUrl()
           ?: return GatewaySession.InvokeResult.error(
             code = "A2UI_HOST_NOT_CONFIGURED",
@@ -119,7 +119,7 @@ class InvokeDispatcher(
         val res = canvas.eval(A2UIHandler.a2uiResetJS)
         GatewaySession.InvokeResult.ok(res)
       }
-      CoderClawCanvasA2UICommand.Push.rawValue, CoderClawCanvasA2UICommand.PushJSONL.rawValue -> {
+      BuilderforceCanvasA2UICommand.Push.rawValue, BuilderforceCanvasA2UICommand.PushJSONL.rawValue -> {
         val messages =
           try {
             a2uiHandler.decodeA2uiMessages(command, paramsJson)
@@ -147,17 +147,17 @@ class InvokeDispatcher(
       }
 
       // Camera commands
-      CoderClawCameraCommand.Snap.rawValue -> cameraHandler.handleSnap(paramsJson)
-      CoderClawCameraCommand.Clip.rawValue -> cameraHandler.handleClip(paramsJson)
+      BuilderforceCameraCommand.Snap.rawValue -> cameraHandler.handleSnap(paramsJson)
+      BuilderforceCameraCommand.Clip.rawValue -> cameraHandler.handleClip(paramsJson)
 
       // Location command
-      CoderClawLocationCommand.Get.rawValue -> locationHandler.handleLocationGet(paramsJson)
+      BuilderforceLocationCommand.Get.rawValue -> locationHandler.handleLocationGet(paramsJson)
 
       // Screen command
-      CoderClawScreenCommand.Record.rawValue -> screenHandler.handleScreenRecord(paramsJson)
+      BuilderforceScreenCommand.Record.rawValue -> screenHandler.handleScreenRecord(paramsJson)
 
       // SMS command
-      CoderClawSmsCommand.Send.rawValue -> smsHandler.handleSmsSend(paramsJson)
+      BuilderforceSmsCommand.Send.rawValue -> smsHandler.handleSmsSend(paramsJson)
 
       // Debug commands
       "debug.ed25519" -> debugHandler.handleEd25519()

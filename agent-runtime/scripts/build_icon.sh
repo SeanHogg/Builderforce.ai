@@ -2,16 +2,17 @@
 set -euo pipefail
 
 # Render the macOS .icon bundle to a padded .icns like Trimmy's pipeline.
-# Defaults target the BuilderForceAgents assets so you can just run the script from repo root.
+# Defaults target the Builderforce macOS app assets (apps/macos at the monorepo root).
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "${ROOT_DIR}/.." && pwd)"  # monorepo root: apps/macos lives here, not under agent-runtime/
 
-ICON_FILE=${1:-"$ROOT_DIR/apps/macos/Icon.icon"}
-BASENAME=${2:-BuilderForceAgents}
-OUT_ROOT=${3:-"$ROOT_DIR/apps/macos/build/icon"}
+ICON_FILE=${1:-"$REPO_ROOT/apps/macos/Icon.icon"}
+BASENAME=${2:-Builderforce}
+OUT_ROOT=${3:-"$REPO_ROOT/apps/macos/build/icon"}
 XCODE_APP=${XCODE_APP:-/Applications/Xcode.app}
 # Where the final .icns should live; override DEST_ICNS to change.
-DEST_ICNS=${DEST_ICNS:-"$ROOT_DIR/apps/macos/Sources/BuilderForceAgents/Resources/BuilderForceAgents.icns"}
+DEST_ICNS=${DEST_ICNS:-"$REPO_ROOT/apps/macos/Sources/Builderforce/Resources/Builderforce.icns"}
 
 ICTOOL="$XCODE_APP/Contents/Applications/Icon Composer.app/Contents/Executables/ictool"
 if [[ ! -x "$ICTOOL" ]]; then

@@ -1,7 +1,7 @@
 import AppKit
-import CoderClawChatUI
-import CoderClawDiscovery
-import CoderClawIPC
+import BuilderforceChatUI
+import BuilderforceDiscovery
+import BuilderforceIPC
 import SwiftUI
 
 extension OnboardingView {
@@ -32,9 +32,9 @@ extension OnboardingView {
     func welcomePage() -> some View {
         self.onboardingPage {
             VStack(spacing: 22) {
-                Text("Welcome to CoderClaw")
+                Text("Welcome to Builderforce")
                     .font(.largeTitle.weight(.semibold))
-                Text("CoderClaw is a powerful personal AI assistant that can connect to WhatsApp or Telegram.")
+                Text("Builderforce is a powerful personal AI assistant that can connect to WhatsApp or Telegram.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -57,7 +57,7 @@ extension OnboardingView {
                                 "The connected AI agent (e.g. Claude) can trigger powerful actions on your Mac, " +
                                     "including running commands, reading/writing files, and capturing screenshots — " +
                                     "depending on the permissions you grant.\n\n" +
-                                    "Only enable CoderClaw if you understand the risks and trust the prompts and " +
+                                    "Only enable Builderforce if you understand the risks and trust the prompts and " +
                                     "integrations you use.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
@@ -76,7 +76,7 @@ extension OnboardingView {
             Text("Choose your Gateway")
                 .font(.largeTitle.weight(.semibold))
             Text(
-                "CoderClaw uses a single Gateway that stays running. Pick this Mac, " +
+                "Builderforce uses a single Gateway that stays running. Pick this Mac, " +
                     "connect to a discovered gateway nearby, or configure later.")
                 .font(.body)
                 .foregroundStyle(.secondary)
@@ -230,7 +230,7 @@ extension OnboardingView {
                                         Text("Project root")
                                             .font(.callout.weight(.semibold))
                                             .frame(width: labelWidth, alignment: .leading)
-                                        TextField("/home/you/Projects/coderclaw", text: self.$state.remoteProjectRoot)
+                                        TextField("/home/you/Projects/builderforce", text: self.$state.remoteProjectRoot)
                                             .textFieldStyle(.roundedBorder)
                                             .frame(width: fieldWidth)
                                     }
@@ -337,7 +337,7 @@ extension OnboardingView {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 540)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("CoderClaw supports any model — we strongly recommend Opus 4.6 for the best experience.")
+            Text("Builderforce supports any model — we strongly recommend Opus 4.6 for the best experience.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -377,14 +377,14 @@ extension OnboardingView {
                 }
 
                 Text(
-                    "This lets CoderClaw use Claude immediately. Credentials are stored at " +
-                        "`~/.coderclaw/credentials/oauth.json` (owner-only).")
+                    "This lets Builderforce use Claude immediately. Credentials are stored at " +
+                        "`~/.builderforce/credentials/oauth.json` (owner-only).")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 12) {
-                    Text(CoderClawOAuthStore.oauthURL().path)
+                    Text(BuilderforceOAuthStore.oauthURL().path)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -393,7 +393,7 @@ extension OnboardingView {
                     Spacer()
 
                     Button("Reveal") {
-                        NSWorkspace.shared.activateFileViewerSelecting([CoderClawOAuthStore.oauthURL()])
+                        NSWorkspace.shared.activateFileViewerSelecting([BuilderforceOAuthStore.oauthURL()])
                     }
                     .buttonStyle(.bordered)
 
@@ -495,7 +495,7 @@ extension OnboardingView {
         self.onboardingPage {
             Text("Grant permissions")
                 .font(.largeTitle.weight(.semibold))
-            Text("These macOS permissions let CoderClaw automate apps and capture context on this Mac.")
+            Text("These macOS permissions let Builderforce automate apps and capture context on this Mac.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -536,7 +536,7 @@ extension OnboardingView {
         self.onboardingPage {
             Text("Install the CLI")
                 .font(.largeTitle.weight(.semibold))
-            Text("Required for local mode: installs `coderclaw` so launchd can run the gateway.")
+            Text("Required for local mode: installs `builderforce` so launchd can run the gateway.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -596,7 +596,7 @@ extension OnboardingView {
             Text("Agent workspace")
                 .font(.largeTitle.weight(.semibold))
             Text(
-                "CoderClaw runs the agent from a dedicated workspace so it can load `AGENTS.md` " +
+                "Builderforce runs the agent from a dedicated workspace so it can load `AGENTS.md` " +
                     "and write files there without mixing into your other projects.")
                 .font(.body)
                 .foregroundStyle(.secondary)
@@ -623,7 +623,7 @@ extension OnboardingView {
                         Text("Workspace folder")
                             .font(.headline)
                         TextField(
-                            AgentWorkspace.displayPath(for: CoderClawConfigFile.defaultWorkspaceURL()),
+                            AgentWorkspace.displayPath(for: BuilderforceConfigFile.defaultWorkspaceURL()),
                             text: self.$workspacePath)
                             .textFieldStyle(.roundedBorder)
 
@@ -653,7 +653,7 @@ extension OnboardingView {
                                     let saved = await self.saveAgentWorkspace(AgentWorkspace.displayPath(for: url))
                                     if saved {
                                         self.workspaceStatus =
-                                            "Saved to ~/.coderclaw/coderclaw.json (agents.defaults.workspace)"
+                                            "Saved to ~/.builderforce/builderforce.json (agents.defaults.workspace)"
                                     }
                                 }
                             }
@@ -695,7 +695,7 @@ extension OnboardingView {
                 .fixedSize(horizontal: false, vertical: true)
 
             self.onboardingGlassCard(padding: 8) {
-                CoderClawChatView(viewModel: self.onboardingChatModel, style: .onboarding)
+                BuilderforceChatView(viewModel: self.onboardingChatModel, style: .onboarding)
                     .frame(maxHeight: .infinity)
             }
             .frame(maxHeight: .infinity)
@@ -721,8 +721,8 @@ extension OnboardingView {
                     self.featureRow(
                         title: "Remote gateway checklist",
                         subtitle: """
-                        On your gateway host: install/update the `coderclaw` package and make sure credentials exist
-                        (typically `~/.coderclaw/credentials/oauth.json`). Then connect again if needed.
+                        On your gateway host: install/update the `builderforce` package and make sure credentials exist
+                        (typically `~/.builderforce/credentials/oauth.json`). Then connect again if needed.
                         """,
                         systemImage: "network")
                     Divider()
@@ -730,7 +730,7 @@ extension OnboardingView {
                 }
                 self.featureRow(
                     title: "Open the menu bar panel",
-                    subtitle: "Click the CoderClaw menu bar icon for quick chat and status.",
+                    subtitle: "Click the Builderforce menu bar icon for quick chat and status.",
                     systemImage: "bubble.left.and.bubble.right")
                 self.featureActionRow(
                     title: "Connect WhatsApp or Telegram",

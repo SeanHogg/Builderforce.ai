@@ -1,21 +1,21 @@
-package ai.coderclaw.android.node
+package ai.builderforce.android.node
 
 import android.os.Build
-import ai.coderclaw.android.BuildConfig
-import ai.coderclaw.android.SecurePrefs
-import ai.coderclaw.android.gateway.GatewayClientInfo
-import ai.coderclaw.android.gateway.GatewayConnectOptions
-import ai.coderclaw.android.gateway.GatewayEndpoint
-import ai.coderclaw.android.gateway.GatewayTlsParams
-import ai.coderclaw.android.protocol.CoderClawCanvasA2UICommand
-import ai.coderclaw.android.protocol.CoderClawCanvasCommand
-import ai.coderclaw.android.protocol.CoderClawCameraCommand
-import ai.coderclaw.android.protocol.CoderClawLocationCommand
-import ai.coderclaw.android.protocol.CoderClawScreenCommand
-import ai.coderclaw.android.protocol.CoderClawSmsCommand
-import ai.coderclaw.android.protocol.CoderClawCapability
-import ai.coderclaw.android.LocationMode
-import ai.coderclaw.android.VoiceWakeMode
+import ai.builderforce.android.BuildConfig
+import ai.builderforce.android.SecurePrefs
+import ai.builderforce.android.gateway.GatewayClientInfo
+import ai.builderforce.android.gateway.GatewayConnectOptions
+import ai.builderforce.android.gateway.GatewayEndpoint
+import ai.builderforce.android.gateway.GatewayTlsParams
+import ai.builderforce.android.protocol.BuilderforceCanvasA2UICommand
+import ai.builderforce.android.protocol.BuilderforceCanvasCommand
+import ai.builderforce.android.protocol.BuilderforceCameraCommand
+import ai.builderforce.android.protocol.BuilderforceLocationCommand
+import ai.builderforce.android.protocol.BuilderforceScreenCommand
+import ai.builderforce.android.protocol.BuilderforceSmsCommand
+import ai.builderforce.android.protocol.BuilderforceCapability
+import ai.builderforce.android.LocationMode
+import ai.builderforce.android.VoiceWakeMode
 
 class ConnectionManager(
   private val prefs: SecurePrefs,
@@ -81,24 +81,24 @@ class ConnectionManager(
 
   fun buildInvokeCommands(): List<String> =
     buildList {
-      add(CoderClawCanvasCommand.Present.rawValue)
-      add(CoderClawCanvasCommand.Hide.rawValue)
-      add(CoderClawCanvasCommand.Navigate.rawValue)
-      add(CoderClawCanvasCommand.Eval.rawValue)
-      add(CoderClawCanvasCommand.Snapshot.rawValue)
-      add(CoderClawCanvasA2UICommand.Push.rawValue)
-      add(CoderClawCanvasA2UICommand.PushJSONL.rawValue)
-      add(CoderClawCanvasA2UICommand.Reset.rawValue)
-      add(CoderClawScreenCommand.Record.rawValue)
+      add(BuilderforceCanvasCommand.Present.rawValue)
+      add(BuilderforceCanvasCommand.Hide.rawValue)
+      add(BuilderforceCanvasCommand.Navigate.rawValue)
+      add(BuilderforceCanvasCommand.Eval.rawValue)
+      add(BuilderforceCanvasCommand.Snapshot.rawValue)
+      add(BuilderforceCanvasA2UICommand.Push.rawValue)
+      add(BuilderforceCanvasA2UICommand.PushJSONL.rawValue)
+      add(BuilderforceCanvasA2UICommand.Reset.rawValue)
+      add(BuilderforceScreenCommand.Record.rawValue)
       if (cameraEnabled()) {
-        add(CoderClawCameraCommand.Snap.rawValue)
-        add(CoderClawCameraCommand.Clip.rawValue)
+        add(BuilderforceCameraCommand.Snap.rawValue)
+        add(BuilderforceCameraCommand.Clip.rawValue)
       }
       if (locationMode() != LocationMode.Off) {
-        add(CoderClawLocationCommand.Get.rawValue)
+        add(BuilderforceLocationCommand.Get.rawValue)
       }
       if (smsAvailable()) {
-        add(CoderClawSmsCommand.Send.rawValue)
+        add(BuilderforceSmsCommand.Send.rawValue)
       }
       if (BuildConfig.DEBUG) {
         add("debug.logs")
@@ -109,15 +109,15 @@ class ConnectionManager(
 
   fun buildCapabilities(): List<String> =
     buildList {
-      add(CoderClawCapability.Canvas.rawValue)
-      add(CoderClawCapability.Screen.rawValue)
-      if (cameraEnabled()) add(CoderClawCapability.Camera.rawValue)
-      if (smsAvailable()) add(CoderClawCapability.Sms.rawValue)
+      add(BuilderforceCapability.Canvas.rawValue)
+      add(BuilderforceCapability.Screen.rawValue)
+      if (cameraEnabled()) add(BuilderforceCapability.Camera.rawValue)
+      if (smsAvailable()) add(BuilderforceCapability.Sms.rawValue)
       if (voiceWakeMode() != VoiceWakeMode.Off && hasRecordAudioPermission()) {
-        add(CoderClawCapability.VoiceWake.rawValue)
+        add(BuilderforceCapability.VoiceWake.rawValue)
       }
       if (locationMode() != LocationMode.Off) {
-        add(CoderClawCapability.Location.rawValue)
+        add(BuilderforceCapability.Location.rawValue)
       }
     }
 
@@ -141,7 +141,7 @@ class ConnectionManager(
     val version = resolvedVersionName()
     val release = Build.VERSION.RELEASE?.trim().orEmpty()
     val releaseLabel = if (release.isEmpty()) "unknown" else release
-    return "CoderClawAndroid/$version (Android $releaseLabel; SDK ${Build.VERSION.SDK_INT})"
+    return "BuilderforceAndroid/$version (Android $releaseLabel; SDK ${Build.VERSION.SDK_INT})"
   }
 
   fun buildClientInfo(clientId: String, clientMode: String): GatewayClientInfo {
@@ -164,7 +164,7 @@ class ConnectionManager(
       caps = buildCapabilities(),
       commands = buildInvokeCommands(),
       permissions = emptyMap(),
-      client = buildClientInfo(clientId = "coderclaw-android", clientMode = "node"),
+      client = buildClientInfo(clientId = "builderforce-android", clientMode = "node"),
       userAgent = buildUserAgent(),
     )
   }
@@ -176,7 +176,7 @@ class ConnectionManager(
       caps = emptyList(),
       commands = emptyList(),
       permissions = emptyMap(),
-      client = buildClientInfo(clientId = "coderclaw-control-ui", clientMode = "ui"),
+      client = buildClientInfo(clientId = "builderforce-control-ui", clientMode = "ui"),
       userAgent = buildUserAgent(),
     )
   }

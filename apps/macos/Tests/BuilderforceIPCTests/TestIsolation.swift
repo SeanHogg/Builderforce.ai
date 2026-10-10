@@ -110,7 +110,7 @@ enum TestIsolation {
 
     nonisolated static func tempConfigPath() -> String {
         FileManager().temporaryDirectory
-            .appendingPathComponent("coderclaw-test-config-\(UUID().uuidString).json")
+            .appendingPathComponent("builderforce-test-config-\(UUID().uuidString).json")
             .path
     }
 }

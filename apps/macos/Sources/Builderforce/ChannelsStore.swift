@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import CoderClawProtocol
+import BuilderforceProtocol
 
 struct ChannelsStatusSnapshot: Codable {
     struct WhatsAppSelf: Codable {

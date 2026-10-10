@@ -1,6 +1,6 @@
 import Foundation
 
-public enum CoderClawCapability: String, Codable, Sendable {
+public enum BuilderforceCapability: String, Codable, Sendable {
     case canvas
     case camera
     case screen

@@ -1,6 +1,6 @@
 import Foundation
 
-public enum CoderClawNodeErrorCode: String, Codable, Sendable {
+public enum BuilderforceNodeErrorCode: String, Codable, Sendable {
     case notPaired = "NOT_PAIRED"
     case unauthorized = "UNAUTHORIZED"
     case backgroundUnavailable = "NODE_BACKGROUND_UNAVAILABLE"
@@ -8,14 +8,14 @@ public enum CoderClawNodeErrorCode: String, Codable, Sendable {
     case unavailable = "UNAVAILABLE"
 }
 
-public struct CoderClawNodeError: Error, Codable, Sendable, Equatable {
-    public var code: CoderClawNodeErrorCode
+public struct BuilderforceNodeError: Error, Codable, Sendable, Equatable {
+    public var code: BuilderforceNodeErrorCode
     public var message: String
     public var retryable: Bool?
     public var retryAfterMs: Int?
 
     public init(
-        code: CoderClawNodeErrorCode,
+        code: BuilderforceNodeErrorCode,
         message: String,
         retryable: Bool? = nil,
         retryAfterMs: Int? = nil)

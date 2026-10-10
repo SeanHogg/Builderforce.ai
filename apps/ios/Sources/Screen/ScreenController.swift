@@ -1,4 +1,4 @@
-import CoderClawKit
+import BuilderforceKit
 import Observation
 import UIKit
 import WebKit
@@ -11,7 +11,7 @@ final class ScreenController {
     var urlString: String = ""
     var errorText: String?
 
-    /// Callback invoked when an coderclaw:// deep link is tapped in the canvas
+    /// Callback invoked when a builderforce:// deep link is tapped in the canvas
     var onDeepLink: ((URL) -> Void)?
 
     /// Callback invoked when the user clicks an A2UI action (e.g. button) inside the canvas web UI.
@@ -93,7 +93,7 @@ final class ScreenController {
         let js = """
         (() => {
           try {
-            const api = globalThis.__coderclaw;
+            const api = globalThis.__builderforce;
             if (!api) return;
             if (typeof api.setDebugStatusEnabled === 'function') {
               api.setDebugStatusEnabled(\(enabled ? "true" : "false"));
@@ -116,7 +116,7 @@ final class ScreenController {
                 let res = try await self.eval(javaScript: """
                 (() => {
                   try {
-                    const host = globalThis.coderclawA2UI;
+                    const host = globalThis.builderforceA2UI;
                     return !!host && typeof host.applyMessages === 'function';
                   } catch (_) { return false; }
                 })()
@@ -187,7 +187,7 @@ final class ScreenController {
 
     func snapshotBase64(
         maxWidth: CGFloat? = nil,
-        format: CoderClawCanvasSnapshotFormat,
+        format: BuilderforceCanvasSnapshotFormat,
         quality: Double? = nil) async throws -> String
     {
         let config = WKSnapshotConfiguration()
@@ -248,7 +248,7 @@ final class ScreenController {
         subdirectory: String)
         -> URL?
     {
-        let bundle = CoderClawKitResources.bundle
+        let bundle = BuilderforceKitResources.bundle
         return bundle.url(forResource: name, withExtension: ext, subdirectory: subdirectory)
             ?? bundle.url(forResource: name, withExtension: ext)
     }

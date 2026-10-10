@@ -1,27 +1,27 @@
 import Foundation
 
-public enum CoderClawRemindersCommand: String, Codable, Sendable {
+public enum BuilderforceRemindersCommand: String, Codable, Sendable {
     case list = "reminders.list"
     case add = "reminders.add"
 }
 
-public enum CoderClawReminderStatusFilter: String, Codable, Sendable {
+public enum BuilderforceReminderStatusFilter: String, Codable, Sendable {
     case incomplete
     case completed
     case all
 }
 
-public struct CoderClawRemindersListParams: Codable, Sendable, Equatable {
-    public var status: CoderClawReminderStatusFilter?
+public struct BuilderforceRemindersListParams: Codable, Sendable, Equatable {
+    public var status: BuilderforceReminderStatusFilter?
     public var limit: Int?
 
-    public init(status: CoderClawReminderStatusFilter? = nil, limit: Int? = nil) {
+    public init(status: BuilderforceReminderStatusFilter? = nil, limit: Int? = nil) {
         self.status = status
         self.limit = limit
     }
 }
 
-public struct CoderClawRemindersAddParams: Codable, Sendable, Equatable {
+public struct BuilderforceRemindersAddParams: Codable, Sendable, Equatable {
     public var title: String
     public var dueISO: String?
     public var notes: String?
@@ -43,7 +43,7 @@ public struct CoderClawRemindersAddParams: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawReminderPayload: Codable, Sendable, Equatable {
+public struct BuilderforceReminderPayload: Codable, Sendable, Equatable {
     public var identifier: String
     public var title: String
     public var dueISO: String?
@@ -65,18 +65,18 @@ public struct CoderClawReminderPayload: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawRemindersListPayload: Codable, Sendable, Equatable {
-    public var reminders: [CoderClawReminderPayload]
+public struct BuilderforceRemindersListPayload: Codable, Sendable, Equatable {
+    public var reminders: [BuilderforceReminderPayload]
 
-    public init(reminders: [CoderClawReminderPayload]) {
+    public init(reminders: [BuilderforceReminderPayload]) {
         self.reminders = reminders
     }
 }
 
-public struct CoderClawRemindersAddPayload: Codable, Sendable, Equatable {
-    public var reminder: CoderClawReminderPayload
+public struct BuilderforceRemindersAddPayload: Codable, Sendable, Equatable {
+    public var reminder: BuilderforceReminderPayload
 
-    public init(reminder: CoderClawReminderPayload) {
+    public init(reminder: BuilderforceReminderPayload) {
         self.reminder = reminder
     }
 }

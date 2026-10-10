@@ -1,4 +1,4 @@
-import CoderClawKit
+import BuilderforceKit
 import Foundation
 import Testing
 
@@ -28,7 +28,7 @@ import Testing
         let url = ShareToAgentDeepLink.buildURL(from: payload)
         let parsed = url.flatMap { DeepLinkParser.parse($0) }
         guard case let .agent(agent)? = parsed else {
-            Issue.record("Expected coderclaw://agent deep link")
+            Issue.record("Expected builderforce://agent deep link")
             return
         }
 

@@ -1,18 +1,18 @@
 // swift-tools-version: 6.2
-// Package manifest for the CoderClaw macOS companion (menu bar app + IPC library).
+// Package manifest for the Builderforce macOS companion (menu bar app + IPC library).
 
 import PackageDescription
 
 let package = Package(
-    name: "CoderClaw",
+    name: "Builderforce",
     platforms: [
         .macOS(.v15),
     ],
     products: [
-        .library(name: "CoderClawIPC", targets: ["CoderClawIPC"]),
-        .library(name: "CoderClawDiscovery", targets: ["CoderClawDiscovery"]),
-        .executable(name: "CoderClaw", targets: ["CoderClaw"]),
-        .executable(name: "coderclaw-mac", targets: ["CoderClawMacCLI"]),
+        .library(name: "BuilderforceIPC", targets: ["BuilderforceIPC"]),
+        .library(name: "BuilderforceDiscovery", targets: ["BuilderforceDiscovery"]),
+        .executable(name: "Builderforce", targets: ["Builderforce"]),
+        .executable(name: "builderforce-mac", targets: ["BuilderforceMacCLI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/orchetect/MenuBarExtraAccess", exact: "1.2.2"),
@@ -20,33 +20,33 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.8.0"),
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.8.1"),
         .package(url: "https://github.com/steipete/Peekaboo.git", branch: "main"),
-        .package(path: "../shared/CoderClawKit"),
-        .package(path: "../../Swabble"),
+        .package(path: "../shared/BuilderforceKit"),
+        .package(path: "../../agent-runtime/Swabble"),
     ],
     targets: [
         .target(
-            name: "CoderClawIPC",
+            name: "BuilderforceIPC",
             dependencies: [],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
             ]),
         .target(
-            name: "CoderClawDiscovery",
+            name: "BuilderforceDiscovery",
             dependencies: [
-                .product(name: "CoderClawKit", package: "CoderClawKit"),
+                .product(name: "BuilderforceKit", package: "BuilderforceKit"),
             ],
-            path: "Sources/CoderClawDiscovery",
+            path: "Sources/BuilderforceDiscovery",
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
             ]),
         .executableTarget(
-            name: "CoderClaw",
+            name: "Builderforce",
             dependencies: [
-                "CoderClawIPC",
-                "CoderClawDiscovery",
-                .product(name: "CoderClawKit", package: "CoderClawKit"),
-                .product(name: "CoderClawChatUI", package: "CoderClawKit"),
-                .product(name: "CoderClawProtocol", package: "CoderClawKit"),
+                "BuilderforceIPC",
+                "BuilderforceDiscovery",
+                .product(name: "BuilderforceKit", package: "BuilderforceKit"),
+                .product(name: "BuilderforceChatUI", package: "BuilderforceKit"),
+                .product(name: "BuilderforceProtocol", package: "BuilderforceKit"),
                 .product(name: "SwabbleKit", package: "swabble"),
                 .product(name: "MenuBarExtraAccess", package: "MenuBarExtraAccess"),
                 .product(name: "Subprocess", package: "swift-subprocess"),
@@ -59,30 +59,30 @@ let package = Package(
                 "Resources/Info.plist",
             ],
             resources: [
-                .copy("Resources/CoderClaw.icns"),
+                .copy("Resources/Builderforce.icns"),
                 .copy("Resources/DeviceModels"),
             ],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
             ]),
         .executableTarget(
-            name: "CoderClawMacCLI",
+            name: "BuilderforceMacCLI",
             dependencies: [
-                "CoderClawDiscovery",
-                .product(name: "CoderClawKit", package: "CoderClawKit"),
-                .product(name: "CoderClawProtocol", package: "CoderClawKit"),
+                "BuilderforceDiscovery",
+                .product(name: "BuilderforceKit", package: "BuilderforceKit"),
+                .product(name: "BuilderforceProtocol", package: "BuilderforceKit"),
             ],
-            path: "Sources/CoderClawMacCLI",
+            path: "Sources/BuilderforceMacCLI",
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
             ]),
         .testTarget(
-            name: "CoderClawIPCTests",
+            name: "BuilderforceIPCTests",
             dependencies: [
-                "CoderClawIPC",
-                "CoderClaw",
-                "CoderClawDiscovery",
-                .product(name: "CoderClawProtocol", package: "CoderClawKit"),
+                "BuilderforceIPC",
+                "Builderforce",
+                "BuilderforceDiscovery",
+                .product(name: "BuilderforceProtocol", package: "BuilderforceKit"),
                 .product(name: "SwabbleKit", package: "swabble"),
             ],
             swiftSettings: [

@@ -1,6 +1,6 @@
-package ai.coderclaw.android.gateway
+package ai.builderforce.android.gateway
 
-import ai.coderclaw.android.SecurePrefs
+import ai.builderforce.android.SecurePrefs
 
 class DeviceAuthStore(private val prefs: SecurePrefs) {
   fun loadToken(deviceId: String, role: String): String? {

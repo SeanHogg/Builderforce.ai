@@ -1,12 +1,12 @@
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite(.serialized)
 struct NixModeStableSuiteTests {
     @Test func resolvesFromStableSuiteForAppBundles() {
         let suite = UserDefaults(suiteName: launchdLabel)!
-        let key = "coderclaw.nixMode"
+        let key = "builderforce.nixMode"
         let prev = suite.object(forKey: key)
         defer {
             if let prev { suite.set(prev, forKey: key) } else { suite.removeObject(forKey: key) }
@@ -27,7 +27,7 @@ struct NixModeStableSuiteTests {
 
     @Test func ignoresStableSuiteOutsideAppBundles() {
         let suite = UserDefaults(suiteName: launchdLabel)!
-        let key = "coderclaw.nixMode"
+        let key = "builderforce.nixMode"
         let prev = suite.object(forKey: key)
         defer {
             if let prev { suite.set(prev, forKey: key) } else { suite.removeObject(forKey: key) }

@@ -1,14 +1,14 @@
 import CoreGraphics
 import Foundation
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceKit
+import BuilderforceProtocol
 import OSLog
 
 @MainActor
 final class ExecApprovalsGatewayPrompter {
     static let shared = ExecApprovalsGatewayPrompter()
 
-    private let logger = Logger(subsystem: "ai.coderclaw", category: "exec-approvals.gateway")
+    private let logger = Logger(subsystem: "ai.builderforce", category: "exec-approvals.gateway")
     private var task: Task<Void, Never>?
 
     struct GatewayApprovalRequest: Codable, Sendable {

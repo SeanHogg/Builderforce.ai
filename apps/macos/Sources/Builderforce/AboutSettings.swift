@@ -10,7 +10,7 @@ struct AboutSettings: View {
         VStack(spacing: 8) {
             let appIcon = NSApplication.shared.applicationIconImage ?? CritterIconRenderer.makeIcon(blink: 0)
             Button {
-                if let url = URL(string: "https://github.com/seanhogg/coderclaw") {
+                if let url = URL(string: "https://github.com/SeanHogg/Builderforce.ai") {
                     NSWorkspace.shared.open(url)
                 }
             } label: {
@@ -29,7 +29,7 @@ struct AboutSettings: View {
             }
 
             VStack(spacing: 3) {
-                Text("CoderClaw")
+                Text("Builderforce")
                     .font(.title3.bold())
                 Text("Version \(self.versionString)")
                     .foregroundStyle(.secondary)
@@ -110,8 +110,7 @@ struct AboutSettings: View {
     private var buildTimestamp: String? {
         guard
             let raw =
-            (Bundle.main.object(forInfoDictionaryKey: "CoderClawBuildTimestamp") as? String) ??
-            (Bundle.main.object(forInfoDictionaryKey: "CoderClawBuildTimestamp") as? String)
+            Bundle.main.object(forInfoDictionaryKey: "BuilderforceBuildTimestamp") as? String
         else { return nil }
         let parser = ISO8601DateFormatter()
         parser.formatOptions = [.withInternetDateTime]
@@ -125,8 +124,7 @@ struct AboutSettings: View {
     }
 
     private var gitCommit: String {
-        (Bundle.main.object(forInfoDictionaryKey: "CoderClawGitCommit") as? String) ??
-            (Bundle.main.object(forInfoDictionaryKey: "CoderClawGitCommit") as? String) ??
+        (Bundle.main.object(forInfoDictionaryKey: "BuilderforceGitCommit") as? String) ??
             "unknown"
     }
 

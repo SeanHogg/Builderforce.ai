@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct CoderClawWatchApp: App {
+struct BuilderforceWatchApp: App {
     @State private var inboxStore = WatchInboxStore()
     @State private var receiver: WatchConnectivityReceiver?
 

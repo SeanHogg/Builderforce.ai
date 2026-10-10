@@ -1,6 +1,6 @@
 import AppKit
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite(.serialized) struct VoicePushToTalkHotkeyTests {
     actor Counter {

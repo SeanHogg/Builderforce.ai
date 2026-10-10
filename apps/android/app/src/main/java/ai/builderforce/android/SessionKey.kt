@@ -1,4 +1,4 @@
-package ai.coderclaw.android
+package ai.builderforce.android
 
 internal fun normalizeMainKey(raw: String?): String {
   val trimmed = raw?.trim()

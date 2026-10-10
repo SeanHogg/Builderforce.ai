@@ -1,6 +1,6 @@
 import Testing
 
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite struct CameraCaptureServiceTests {
     @Test func normalizeSnapDefaults() {

@@ -1,6 +1,6 @@
 @file:Suppress("DEPRECATION")
 
-package ai.coderclaw.android
+package ai.builderforce.android
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -17,7 +17,7 @@ import java.util.UUID
 
 class SecurePrefs(context: Context) {
   companion object {
-    val defaultWakeWords: List<String> = listOf("coderclaw", "claude")
+    val defaultWakeWords: List<String> = listOf("builderforce", "claude")
     private const val displayNameKey = "node.displayName"
     private const val voiceWakeModeKey = "voiceWake.mode"
   }
@@ -31,7 +31,7 @@ class SecurePrefs(context: Context) {
       .build()
 
   private val prefs: SharedPreferences by lazy {
-    createPrefs(appContext, "coderclaw.node.secure")
+    createPrefs(appContext, "builderforce.node.secure")
   }
 
   private val _instanceId = MutableStateFlow(loadOrCreateInstanceId())

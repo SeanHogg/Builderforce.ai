@@ -1,4 +1,4 @@
-package ai.coderclaw.android
+package ai.builderforce.android
 
 import android.content.pm.PackageManager
 import android.content.Intent
@@ -115,7 +115,7 @@ class PermissionRequester(private val activity: ComponentActivity) {
 
   private fun buildRationaleMessage(permissions: List<String>): String {
     val labels = permissions.map { permissionLabel(it) }
-    return "CoderClaw needs ${labels.joinToString(", ")} permissions to continue."
+    return activity.getString(R.string.permission_rationale, labels.joinToString(", "))
   }
 
   private fun buildSettingsMessage(permissions: List<String>): String {

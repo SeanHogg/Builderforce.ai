@@ -1,10 +1,10 @@
 import Foundation
 
-public enum CoderClawChatCommand: String, Codable, Sendable {
+public enum BuilderforceChatCommand: String, Codable, Sendable {
     case push = "chat.push"
 }
 
-public struct CoderClawChatPushParams: Codable, Sendable, Equatable {
+public struct BuilderforceChatPushParams: Codable, Sendable, Equatable {
     public var text: String
     public var speak: Bool?
 
@@ -14,7 +14,7 @@ public struct CoderClawChatPushParams: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawChatPushPayload: Codable, Sendable, Equatable {
+public struct BuilderforceChatPushPayload: Codable, Sendable, Equatable {
     public var messageId: String?
 
     public init(messageId: String? = nil) {

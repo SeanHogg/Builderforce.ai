@@ -1,18 +1,18 @@
 import AppKit
-import CoderClawChatUI
+import BuilderforceChatUI
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite(.serialized)
 @MainActor
 struct WebChatSwiftUISmokeTests {
-    private struct TestTransport: CoderClawChatTransport, Sendable {
-        func requestHistory(sessionKey: String) async throws -> CoderClawChatHistoryPayload {
+    private struct TestTransport: BuilderforceChatTransport, Sendable {
+        func requestHistory(sessionKey: String) async throws -> BuilderforceChatHistoryPayload {
             let json = """
             {"sessionKey":"\(sessionKey)","sessionId":null,"messages":[],"thinkingLevel":"off"}
             """
-            return try JSONDecoder().decode(CoderClawChatHistoryPayload.self, from: Data(json.utf8))
+            return try JSONDecoder().decode(BuilderforceChatHistoryPayload.self, from: Data(json.utf8))
         }
 
         func sendMessage(
@@ -20,17 +20,17 @@ struct WebChatSwiftUISmokeTests {
             message _: String,
             thinking _: String,
             idempotencyKey _: String,
-            attachments _: [CoderClawChatAttachmentPayload]) async throws -> CoderClawChatSendResponse
+            attachments _: [BuilderforceChatAttachmentPayload]) async throws -> BuilderforceChatSendResponse
         {
             let json = """
             {"runId":"\(UUID().uuidString)","status":"ok"}
             """
-            return try JSONDecoder().decode(CoderClawChatSendResponse.self, from: Data(json.utf8))
+            return try JSONDecoder().decode(BuilderforceChatSendResponse.self, from: Data(json.utf8))
         }
 
         func requestHealth(timeoutMs _: Int) async throws -> Bool { true }
 
-        func events() -> AsyncStream<CoderClawChatTransportEvent> {
+        func events() -> AsyncStream<BuilderforceChatTransportEvent> {
             AsyncStream { continuation in
                 continuation.finish()
             }

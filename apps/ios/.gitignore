@@ -1,0 +1,13 @@
+# XcodeGen output (regenerate with `xcodegen generate`)
+*.xcodeproj/
+# Local signing overrides (see Signing.xcconfig)
+.local-signing.xcconfig
+LocalSigning.xcconfig
+# fastlane local state
+fastlane/.env
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+build/
+DerivedData/

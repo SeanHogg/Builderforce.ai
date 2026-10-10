@@ -1,6 +1,6 @@
-package ai.coderclaw.android.node
+package ai.builderforce.android.node
 
-import ai.coderclaw.android.gateway.GatewaySession
+import ai.builderforce.android.gateway.GatewaySession
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -19,7 +19,7 @@ class A2UIHandler(
     val raw = if (nodeRaw.isNotBlank()) nodeRaw else operatorRaw
     if (raw.isBlank()) return null
     val base = raw.trimEnd('/')
-    return "${base}/__coderclaw__/a2ui/?platform=android"
+    return "${base}/__builderforce__/a2ui/?platform=android"
   }
 
   suspend fun ensureA2uiReady(a2uiUrl: String): Boolean {
@@ -107,7 +107,7 @@ class A2UIHandler(
       """
       (() => {
         try {
-          const host = globalThis.coderclawA2UI;
+          const host = globalThis.builderforceA2UI;
           return !!host && typeof host.applyMessages === 'function';
         } catch (_) {
           return false;
@@ -119,8 +119,8 @@ class A2UIHandler(
       """
       (() => {
         try {
-          const host = globalThis.coderclawA2UI;
-          if (!host) return { ok: false, error: "missing coderclawA2UI" };
+          const host = globalThis.builderforceA2UI;
+          if (!host) return { ok: false, error: "missing builderforceA2UI" };
           return host.reset();
         } catch (e) {
           return { ok: false, error: String(e?.message ?? e) };
@@ -132,8 +132,8 @@ class A2UIHandler(
       return """
         (() => {
           try {
-            const host = globalThis.coderclawA2UI;
-            if (!host) return { ok: false, error: "missing coderclawA2UI" };
+            const host = globalThis.builderforceA2UI;
+            if (!host) return { ok: false, error: "missing builderforceA2UI" };
             const messages = $messagesJson;
             return host.applyMessages(messages);
           } catch (e) {

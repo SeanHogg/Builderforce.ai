@@ -12,10 +12,9 @@ enum CLIInstaller {
         searchPaths: [String],
         fileManager: FileManager) -> String?
     {
-        // `builderforce` is the current binary; the second name is the pre-rebrand
-        // binary of existing installs, still recognised.
+        // `builderforce` is the CLI binary installed by `@seanhogg/builderforce-agents`.
         for basePath in searchPaths {
-            for name in ["builderforce", "coderclaw"] {
+            for name in ["builderforce"] {
                 let candidate = URL(fileURLWithPath: basePath).appendingPathComponent(name).path
                 var isDirectory: ObjCBool = false
 

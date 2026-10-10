@@ -1,7 +1,7 @@
 import Foundation
 
-private let legacyDefaultsPrefix = "coderclaw."
-private let defaultsPrefix = "coderclaw."
+private let legacyDefaultsPrefix = "builderforce."
+private let defaultsPrefix = "builderforce."
 
 func migrateLegacyDefaults() {
     let defaults = UserDefaults.standard

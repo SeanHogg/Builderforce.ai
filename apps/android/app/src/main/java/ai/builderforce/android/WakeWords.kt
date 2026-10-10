@@ -1,4 +1,4 @@
-package ai.coderclaw.android
+package ai.builderforce.android
 
 object WakeWords {
   const val maxWords: Int = 32

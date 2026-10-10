@@ -1,4 +1,4 @@
-import CoderClawDiscovery
+import BuilderforceDiscovery
 import SwiftUI
 
 struct GatewayDiscoveryInlineList: View {
@@ -134,6 +134,6 @@ struct GatewayDiscoveryMenu: View {
         } label: {
             Image(systemName: "dot.radiowaves.left.and.right")
         }
-        .help("Discover CoderClaw gateways on your LAN")
+        .help("Discover Builderforce gateways on your LAN")
     }
 }

@@ -1,10 +1,10 @@
 import Foundation
 
-public enum CoderClawScreenCommand: String, Codable, Sendable {
+public enum BuilderforceScreenCommand: String, Codable, Sendable {
     case record = "screen.record"
 }
 
-public struct CoderClawScreenRecordParams: Codable, Sendable, Equatable {
+public struct BuilderforceScreenRecordParams: Codable, Sendable, Equatable {
     public var screenIndex: Int?
     public var durationMs: Int?
     public var fps: Double?

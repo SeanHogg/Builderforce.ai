@@ -1,4 +1,4 @@
-package ai.coderclaw.android.node
+package ai.builderforce.android.node
 
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -11,11 +11,11 @@ class AppUpdateHandlerTest {
     val req =
       parseAppUpdateRequest(
         paramsJson =
-          """{"url":"https://gw.example.com/releases/coderclaw.apk","sha256":"${"a".repeat(64)}"}""",
+          """{"url":"https://gw.example.com/releases/builderforce.apk","sha256":"${"a".repeat(64)}"}""",
         connectedHost = "gw.example.com",
       )
 
-    assertEquals("https://gw.example.com/releases/coderclaw.apk", req.url)
+    assertEquals("https://gw.example.com/releases/builderforce.apk", req.url)
     assertEquals("a".repeat(64), req.expectedSha256)
   }
 
@@ -23,7 +23,7 @@ class AppUpdateHandlerTest {
   fun parseAppUpdateRequest_rejectsNonHttps() {
     assertThrows(IllegalArgumentException::class.java) {
       parseAppUpdateRequest(
-        paramsJson = """{"url":"http://gw.example.com/releases/coderclaw.apk","sha256":"${"a".repeat(64)}"}""",
+        paramsJson = """{"url":"http://gw.example.com/releases/builderforce.apk","sha256":"${"a".repeat(64)}"}""",
         connectedHost = "gw.example.com",
       )
     }
@@ -33,7 +33,7 @@ class AppUpdateHandlerTest {
   fun parseAppUpdateRequest_rejectsHostMismatch() {
     assertThrows(IllegalArgumentException::class.java) {
       parseAppUpdateRequest(
-        paramsJson = """{"url":"https://evil.example.com/releases/coderclaw.apk","sha256":"${"a".repeat(64)}"}""",
+        paramsJson = """{"url":"https://evil.example.com/releases/builderforce.apk","sha256":"${"a".repeat(64)}"}""",
         connectedHost = "gw.example.com",
       )
     }
@@ -43,7 +43,7 @@ class AppUpdateHandlerTest {
   fun parseAppUpdateRequest_rejectsInvalidSha256() {
     assertThrows(IllegalArgumentException::class.java) {
       parseAppUpdateRequest(
-        paramsJson = """{"url":"https://gw.example.com/releases/coderclaw.apk","sha256":"bad"}""",
+        paramsJson = """{"url":"https://gw.example.com/releases/builderforce.apk","sha256":"bad"}""",
         connectedHost = "gw.example.com",
       )
     }
@@ -51,7 +51,7 @@ class AppUpdateHandlerTest {
 
   @Test
   fun sha256Hex_computesExpectedDigest() {
-    val tmp = File.createTempFile("coderclaw-update-hash", ".bin")
+    val tmp = File.createTempFile("builderforce-update-hash", ".bin")
     try {
       tmp.writeText("hello", Charsets.UTF_8)
       assertEquals(

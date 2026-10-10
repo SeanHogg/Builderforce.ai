@@ -1,17 +1,23 @@
-package ai.coderclaw.android
+package ai.builderforce.android
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import ai.coderclaw.android.gateway.GatewayEndpoint
-import ai.coderclaw.android.chat.OutgoingAttachment
-import ai.coderclaw.android.node.CameraCaptureManager
-import ai.coderclaw.android.node.CanvasController
-import ai.coderclaw.android.node.ScreenRecordManager
-import ai.coderclaw.android.node.SmsManager
+import ai.builderforce.android.gateway.GatewayEndpoint
+import ai.builderforce.android.chat.ChatController
+import ai.builderforce.android.cloud.CloudAccount
+import ai.builderforce.android.node.CameraCaptureManager
+import ai.builderforce.android.node.CanvasController
+import ai.builderforce.android.node.ScreenRecordManager
+import ai.builderforce.android.node.SmsManager
 import kotlinx.coroutines.flow.StateFlow
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
-  private val runtime: NodeRuntime = (app as NodeApp).runtime
+  private val nodeApp: NodeApp = app as NodeApp
+  private val runtime: NodeRuntime = nodeApp.runtime
+
+  /** Chat with the Builderforce Brain (cloud), and the account it signs in with. */
+  val chat: ChatController = nodeApp.cloud.chat
+  val account: CloudAccount = nodeApp.cloud.account
 
   val canvas: CanvasController = runtime.canvas
   val camera: CameraCaptureManager = runtime.camera
@@ -28,7 +34,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
   val pendingGatewayTrust: StateFlow<NodeRuntime.GatewayTrustPrompt?> = runtime.pendingGatewayTrust
   val isForeground: StateFlow<Boolean> = runtime.isForeground
   val seamColorArgb: StateFlow<Long> = runtime.seamColorArgb
-  val mainSessionKey: StateFlow<String> = runtime.mainSessionKey
 
   val cameraHud: StateFlow<CameraHudState?> = runtime.cameraHud
   val cameraFlashToken: StateFlow<Long> = runtime.cameraFlashToken
@@ -54,17 +59,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
   val manualTls: StateFlow<Boolean> = runtime.manualTls
   val gatewayToken: StateFlow<String> = runtime.gatewayToken
   val canvasDebugStatusEnabled: StateFlow<Boolean> = runtime.canvasDebugStatusEnabled
-
-  val chatSessionKey: StateFlow<String> = runtime.chatSessionKey
-  val chatSessionId: StateFlow<String?> = runtime.chatSessionId
-  val chatMessages = runtime.chatMessages
-  val chatError: StateFlow<String?> = runtime.chatError
-  val chatHealthOk: StateFlow<Boolean> = runtime.chatHealthOk
-  val chatThinkingLevel: StateFlow<String> = runtime.chatThinkingLevel
-  val chatStreamingAssistantText: StateFlow<String?> = runtime.chatStreamingAssistantText
-  val chatPendingToolCalls = runtime.chatPendingToolCalls
-  val chatSessions = runtime.chatSessions
-  val pendingRunCount: StateFlow<Int> = runtime.pendingRunCount
 
   fun setForeground(value: Boolean) {
     runtime.setForeground(value)
@@ -156,33 +150,5 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
   fun handleCanvasA2UIActionFromWebView(payloadJson: String) {
     runtime.handleCanvasA2UIActionFromWebView(payloadJson)
-  }
-
-  fun loadChat(sessionKey: String) {
-    runtime.loadChat(sessionKey)
-  }
-
-  fun refreshChat() {
-    runtime.refreshChat()
-  }
-
-  fun refreshChatSessions(limit: Int? = null) {
-    runtime.refreshChatSessions(limit = limit)
-  }
-
-  fun setChatThinkingLevel(level: String) {
-    runtime.setChatThinkingLevel(level)
-  }
-
-  fun switchChatSession(sessionKey: String) {
-    runtime.switchChatSession(sessionKey)
-  }
-
-  fun abortChat() {
-    runtime.abortChat()
-  }
-
-  fun sendChat(message: String, thinking: String, attachments: List<OutgoingAttachment>) {
-    runtime.sendChat(message = message, thinking = thinking, attachments = attachments)
   }
 }

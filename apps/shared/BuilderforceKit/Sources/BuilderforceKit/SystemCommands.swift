@@ -1,6 +1,6 @@
 import Foundation
 
-public enum CoderClawSystemCommand: String, Codable, Sendable {
+public enum BuilderforceSystemCommand: String, Codable, Sendable {
     case run = "system.run"
     case which = "system.which"
     case notify = "system.notify"
@@ -8,19 +8,19 @@ public enum CoderClawSystemCommand: String, Codable, Sendable {
     case execApprovalsSet = "system.execApprovals.set"
 }
 
-public enum CoderClawNotificationPriority: String, Codable, Sendable {
+public enum BuilderforceNotificationPriority: String, Codable, Sendable {
     case passive
     case active
     case timeSensitive
 }
 
-public enum CoderClawNotificationDelivery: String, Codable, Sendable {
+public enum BuilderforceNotificationDelivery: String, Codable, Sendable {
     case system
     case overlay
     case auto
 }
 
-public struct CoderClawSystemRunParams: Codable, Sendable, Equatable {
+public struct BuilderforceSystemRunParams: Codable, Sendable, Equatable {
     public var command: [String]
     public var rawCommand: String?
     public var cwd: String?
@@ -57,7 +57,7 @@ public struct CoderClawSystemRunParams: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawSystemWhichParams: Codable, Sendable, Equatable {
+public struct BuilderforceSystemWhichParams: Codable, Sendable, Equatable {
     public var bins: [String]
 
     public init(bins: [String]) {
@@ -65,19 +65,19 @@ public struct CoderClawSystemWhichParams: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawSystemNotifyParams: Codable, Sendable, Equatable {
+public struct BuilderforceSystemNotifyParams: Codable, Sendable, Equatable {
     public var title: String
     public var body: String
     public var sound: String?
-    public var priority: CoderClawNotificationPriority?
-    public var delivery: CoderClawNotificationDelivery?
+    public var priority: BuilderforceNotificationPriority?
+    public var delivery: BuilderforceNotificationDelivery?
 
     public init(
         title: String,
         body: String,
         sound: String? = nil,
-        priority: CoderClawNotificationPriority? = nil,
-        delivery: CoderClawNotificationDelivery? = nil)
+        priority: BuilderforceNotificationPriority? = nil,
+        delivery: BuilderforceNotificationDelivery? = nil)
     {
         self.title = title
         self.body = body

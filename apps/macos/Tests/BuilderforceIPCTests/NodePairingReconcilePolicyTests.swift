@@ -1,5 +1,5 @@
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite struct NodePairingReconcilePolicyTests {
     @Test func policyPollsOnlyWhenActive() {

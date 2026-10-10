@@ -1,4 +1,4 @@
-import CoderClawKit
+import BuilderforceKit
 import CoreLocation
 import Foundation
 
@@ -34,7 +34,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         return .fullAccuracy
     }
 
-    func ensureAuthorization(mode: CoderClawLocationMode) async -> CLAuthorizationStatus {
+    func ensureAuthorization(mode: BuilderforceLocationMode) async -> CLAuthorizationStatus {
         guard CLLocationManager.locationServicesEnabled() else { return .denied }
 
         let status = self.manager.authorizationStatus
@@ -57,8 +57,8 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     func currentLocation(
-        params: CoderClawLocationGetParams,
-        desiredAccuracy: CoderClawLocationAccuracy,
+        params: BuilderforceLocationGetParams,
+        desiredAccuracy: BuilderforceLocationAccuracy,
         maxAgeMs: Int?,
         timeoutMs: Int?) async throws -> CLLocation
     {
@@ -97,7 +97,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         try await AsyncTimeout.withTimeoutMs(timeoutMs: timeoutMs, onTimeout: { Error.timeout }, operation: operation)
     }
 
-    private static func accuracyValue(_ accuracy: CoderClawLocationAccuracy) -> CLLocationAccuracy {
+    private static func accuracyValue(_ accuracy: BuilderforceLocationAccuracy) -> CLLocationAccuracy {
         switch accuracy {
         case .coarse:
             kCLLocationAccuracyKilometer
@@ -109,7 +109,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     func startLocationUpdates(
-        desiredAccuracy: CoderClawLocationAccuracy,
+        desiredAccuracy: BuilderforceLocationAccuracy,
         significantChangesOnly: Bool) -> AsyncStream<CLLocation>
     {
         self.stopLocationUpdates()

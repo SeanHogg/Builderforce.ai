@@ -1,12 +1,12 @@
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite struct VoiceWakeGatewaySyncTests {
     @Test func decodeGatewayTriggersFromJSONSanitizes() {
-        let payload = #"{"triggers":[" coderclaw  ","", "computer"]}"#
+        let payload = #"{"triggers":[" builderforce  ","", "computer"]}"#
         let triggers = VoiceWakePreferences.decodeGatewayTriggers(from: payload)
-        #expect(triggers == ["coderclaw", "computer"])
+        #expect(triggers == ["builderforce", "computer"])
     }
 
     @Test func decodeGatewayTriggersFromJSONFallsBackWhenEmpty() {

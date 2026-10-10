@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite(.serialized)
 @MainActor
@@ -8,12 +8,12 @@ struct CLIInstallerTests {
     @Test func installedLocationFindsExecutable() throws {
         let fm = FileManager()
         let root = fm.temporaryDirectory.appendingPathComponent(
-            "coderclaw-cli-installer-\(UUID().uuidString)")
+            "builderforce-cli-installer-\(UUID().uuidString)")
         defer { try? fm.removeItem(at: root) }
 
         let binDir = root.appendingPathComponent("bin")
         try fm.createDirectory(at: binDir, withIntermediateDirectories: true)
-        let cli = binDir.appendingPathComponent("coderclaw")
+        let cli = binDir.appendingPathComponent("builderforce")
         fm.createFile(atPath: cli.path, contents: Data())
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
 

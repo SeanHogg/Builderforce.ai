@@ -1,11 +1,11 @@
 import Foundation
-import CoderClawIPC
+import BuilderforceIPC
 import Security
 import UserNotifications
 
 @MainActor
 struct NotificationManager {
-    private let logger = Logger(subsystem: "ai.coderclaw", category: "notifications")
+    private let logger = Logger(subsystem: "ai.builderforce", category: "notifications")
 
     private static let hasTimeSensitiveEntitlement: Bool = {
         guard let task = SecTaskCreateFromSelf(nil) else { return false }

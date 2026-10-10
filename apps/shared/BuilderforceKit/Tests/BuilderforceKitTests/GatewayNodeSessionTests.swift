@@ -1,7 +1,7 @@
 import Foundation
 import Testing
-@testable import CoderClawKit
-import CoderClawProtocol
+@testable import BuilderforceKit
+import BuilderforceProtocol
 
 struct GatewayNodeSessionTests {
     @Test

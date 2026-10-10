@@ -5,7 +5,7 @@ import CoreGraphics
 import CoreLocation
 import Foundation
 import Observation
-import CoderClawIPC
+import BuilderforceIPC
 import Speech
 import UserNotifications
 
@@ -373,14 +373,14 @@ final class LocationPermissionRequester: NSObject, CLLocationManagerDelegate {
 }
 
 enum AppleScriptPermission {
-    private static let logger = Logger(subsystem: "ai.coderclaw", category: "AppleScriptPermission")
+    private static let logger = Logger(subsystem: "ai.builderforce", category: "AppleScriptPermission")
 
     /// Sends a benign AppleScript to Terminal to verify Automation permission.
     @MainActor
     static func isAuthorized() -> Bool {
         let script = """
         tell application "Terminal"
-            return "coderclaw-ok"
+            return "builderforce-ok"
         end tell
         """
 

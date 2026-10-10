@@ -1,8 +1,8 @@
-import CoderClawKit
+import BuilderforceKit
 import Foundation
 import os
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite struct GatewayChannelRequestTests {
     private final class FakeWebSocketTask: WebSocketTasking, @unchecked Sendable {

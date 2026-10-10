@@ -1,8 +1,8 @@
-import CoderClawKit
+import BuilderforceKit
 import Foundation
 import Testing
-@testable import CoderClaw
-@testable import CoderClawIPC
+@testable import Builderforce
+@testable import BuilderforceIPC
 
 private final class FakeWebSocketTask: WebSocketTasking, @unchecked Sendable {
     var state: URLSessionTask.State = .running

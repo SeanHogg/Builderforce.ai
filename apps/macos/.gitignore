@@ -1,0 +1,5 @@
+.build/
+.build-local/
+.build-swift/
+.swiftpm/
+build/

@@ -1,4 +1,4 @@
-package ai.coderclaw.android.ui
+package ai.builderforce.android.ui
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode

@@ -1,13 +1,13 @@
 import Foundation
 
-public enum CoderClawTalkCommand: String, Codable, Sendable {
+public enum BuilderforceTalkCommand: String, Codable, Sendable {
     case pttStart = "talk.ptt.start"
     case pttStop = "talk.ptt.stop"
     case pttCancel = "talk.ptt.cancel"
     case pttOnce = "talk.ptt.once"
 }
 
-public struct CoderClawTalkPTTStartPayload: Codable, Sendable, Equatable {
+public struct BuilderforceTalkPTTStartPayload: Codable, Sendable, Equatable {
     public var captureId: String
 
     public init(captureId: String) {
@@ -15,7 +15,7 @@ public struct CoderClawTalkPTTStartPayload: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawTalkPTTStopPayload: Codable, Sendable, Equatable {
+public struct BuilderforceTalkPTTStopPayload: Codable, Sendable, Equatable {
     public var captureId: String
     public var transcript: String?
     public var status: String

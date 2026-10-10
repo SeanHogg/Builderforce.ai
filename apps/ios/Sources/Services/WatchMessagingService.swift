@@ -1,5 +1,5 @@
 import Foundation
-import CoderClawKit
+import BuilderforceKit
 import OSLog
 @preconcurrency import WatchConnectivity
 
@@ -15,13 +15,13 @@ enum WatchMessagingError: LocalizedError {
         case .notPaired:
             "WATCH_UNAVAILABLE: no paired Apple Watch"
         case .watchAppNotInstalled:
-            "WATCH_UNAVAILABLE: CoderClaw watch companion app is not installed"
+            "WATCH_UNAVAILABLE: Builderforce watch companion app is not installed"
         }
     }
 }
 
 final class WatchMessagingService: NSObject, WatchMessagingServicing, @unchecked Sendable {
-    private static let logger = Logger(subsystem: "ai.coderclaw", category: "watch.messaging")
+    private static let logger = Logger(subsystem: "ai.builderforce", category: "watch.messaging")
     private let session: WCSession?
 
     override init() {
@@ -71,7 +71,7 @@ final class WatchMessagingService: NSObject, WatchMessagingServicing, @unchecked
         id: String,
         title: String,
         body: String,
-        priority: CoderClawNotificationPriority?) async throws -> WatchNotificationSendResult
+        priority: BuilderforceNotificationPriority?) async throws -> WatchNotificationSendResult
     {
         await self.ensureActivated()
         guard let session = self.session else {
@@ -87,7 +87,7 @@ final class WatchMessagingService: NSObject, WatchMessagingServicing, @unchecked
             "id": id,
             "title": title,
             "body": body,
-            "priority": priority?.rawValue ?? CoderClawNotificationPriority.active.rawValue,
+            "priority": priority?.rawValue ?? BuilderforceNotificationPriority.active.rawValue,
             "sentAtMs": Int(Date().timeIntervalSince1970 * 1000),
         ]
 

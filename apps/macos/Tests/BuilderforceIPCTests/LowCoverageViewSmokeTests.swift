@@ -1,9 +1,9 @@
 import AppKit
-import CoderClawProtocol
+import BuilderforceProtocol
 import SwiftUI
 import Testing
 
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite(.serialized)
 @MainActor

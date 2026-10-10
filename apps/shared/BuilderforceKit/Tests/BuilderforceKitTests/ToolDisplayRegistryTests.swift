@@ -1,10 +1,10 @@
-import CoderClawKit
+import BuilderforceKit
 import Foundation
 import Testing
 
 @Suite struct ToolDisplayRegistryTests {
     @Test func loadsToolDisplayConfigFromBundle() {
-        let url = CoderClawKitResources.bundle.url(forResource: "tool-display", withExtension: "json")
+        let url = BuilderforceKitResources.bundle.url(forResource: "tool-display", withExtension: "json")
         #expect(url != nil)
     }
 

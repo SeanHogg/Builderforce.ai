@@ -3,7 +3,7 @@ import Foundation
 import OSLog
 
 final class AudioInputDeviceObserver {
-    private let logger = Logger(subsystem: "ai.coderclaw", category: "audio.devices")
+    private let logger = Logger(subsystem: "ai.builderforce", category: "audio.devices")
     private var isActive = false
     private var devicesListener: AudioObjectPropertyListenerBlock?
     private var defaultInputListener: AudioObjectPropertyListenerBlock?

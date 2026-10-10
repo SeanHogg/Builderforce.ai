@@ -284,7 +284,7 @@ const BASELINE = {
    * the same mapping as above (12/13 = small, 0.9375rem = body, the 20/26 glyphs =
    * section); the stylesheet's shorthand `font:` sizes went onto roles with them.
    */
-  offScaleFontSizes: 3389,
+  offScaleFontSizes: 3383,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

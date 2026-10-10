@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "$0")/../apps/macos"
+cd "$(dirname "$0")/../../apps/macos"
 
 BUILD_PATH=".build-local"
-PRODUCT="BuilderForceAgents"
+PRODUCT="Builderforce"
 BIN="$BUILD_PATH/debug/$PRODUCT"
 
 printf "\n▶️  Building $PRODUCT (debug, build path: $BUILD_PATH)\n"

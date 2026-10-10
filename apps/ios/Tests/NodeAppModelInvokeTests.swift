@@ -1,8 +1,8 @@
-import CoderClawKit
+import BuilderforceKit
 import Foundation
 import Testing
 import UIKit
-@testable import CoderClaw
+@testable import Builderforce
 
 private func withUserDefaults<T>(_ updates: [String: Any?], _ body: () throws -> T) rethrows -> T {
     let defaults = UserDefaults.standard
@@ -42,7 +42,7 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
         queuedForDelivery: false,
         transport: "sendMessage")
     var sendError: Error?
-    var lastSent: (id: String, title: String, body: String, priority: CoderClawNotificationPriority?)?
+    var lastSent: (id: String, title: String, body: String, priority: BuilderforceNotificationPriority?)?
 
     func status() async -> WatchMessagingStatus {
         self.currentStatus
@@ -52,7 +52,7 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
         id: String,
         title: String,
         body: String,
-        priority: CoderClawNotificationPriority?) async throws -> WatchNotificationSendResult
+        priority: BuilderforceNotificationPriority?) async throws -> WatchNotificationSendResult
     {
         self.lastSent = (id: id, title: title, body: body, priority: priority)
         if let sendError = self.sendError {
@@ -65,7 +65,7 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
 @Suite(.serialized) struct NodeAppModelInvokeTests {
     @Test @MainActor func decodeParamsFailsWithoutJSON() {
         #expect(throws: Error.self) {
-            _ = try NodeAppModel._test_decodeParams(CoderClawCanvasNavigateParams.self, from: nil)
+            _ = try NodeAppModel._test_decodeParams(BuilderforceCanvasNavigateParams.self, from: nil)
         }
     }
 
@@ -81,7 +81,7 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
         let appModel = NodeAppModel()
         appModel.setScenePhase(.background)
 
-        let req = BridgeInvokeRequest(id: "bg", command: CoderClawCanvasCommand.present.rawValue)
+        let req = BridgeInvokeRequest(id: "bg", command: BuilderforceCanvasCommand.present.rawValue)
         let res = await appModel._test_handleInvoke(req)
         #expect(res.ok == false)
         #expect(res.error?.code == .backgroundUnavailable)
@@ -89,7 +89,7 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
 
     @Test @MainActor func handleInvokeRejectsCameraWhenDisabled() async {
         let appModel = NodeAppModel()
-        let req = BridgeInvokeRequest(id: "cam", command: CoderClawCameraCommand.snap.rawValue)
+        let req = BridgeInvokeRequest(id: "cam", command: BuilderforceCameraCommand.snap.rawValue)
 
         let defaults = UserDefaults.standard
         let key = "camera.enabled"
@@ -111,13 +111,13 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
 
     @Test @MainActor func handleInvokeRejectsInvalidScreenFormat() async {
         let appModel = NodeAppModel()
-        let params = CoderClawScreenRecordParams(format: "gif")
+        let params = BuilderforceScreenRecordParams(format: "gif")
         let data = try? JSONEncoder().encode(params)
         let json = data.flatMap { String(data: $0, encoding: .utf8) }
 
         let req = BridgeInvokeRequest(
             id: "screen",
-            command: CoderClawScreenCommand.record.rawValue,
+            command: BuilderforceScreenCommand.record.rawValue,
             paramsJSON: json)
 
         let res = await appModel._test_handleInvoke(req)
@@ -129,29 +129,29 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
         let appModel = NodeAppModel()
         appModel.screen.navigate(to: "http://example.com")
 
-        let present = BridgeInvokeRequest(id: "present", command: CoderClawCanvasCommand.present.rawValue)
+        let present = BridgeInvokeRequest(id: "present", command: BuilderforceCanvasCommand.present.rawValue)
         let presentRes = await appModel._test_handleInvoke(present)
         #expect(presentRes.ok == true)
         #expect(appModel.screen.urlString.isEmpty)
 
         // Loopback URLs are rejected (they are not meaningful for a remote gateway).
-        let navigateParams = CoderClawCanvasNavigateParams(url: "http://example.com/")
+        let navigateParams = BuilderforceCanvasNavigateParams(url: "http://example.com/")
         let navData = try JSONEncoder().encode(navigateParams)
         let navJSON = String(decoding: navData, as: UTF8.self)
         let navigate = BridgeInvokeRequest(
             id: "nav",
-            command: CoderClawCanvasCommand.navigate.rawValue,
+            command: BuilderforceCanvasCommand.navigate.rawValue,
             paramsJSON: navJSON)
         let navRes = await appModel._test_handleInvoke(navigate)
         #expect(navRes.ok == true)
         #expect(appModel.screen.urlString == "http://example.com/")
 
-        let evalParams = CoderClawCanvasEvalParams(javaScript: "1+1")
+        let evalParams = BuilderforceCanvasEvalParams(javaScript: "1+1")
         let evalData = try JSONEncoder().encode(evalParams)
         let evalJSON = String(decoding: evalData, as: UTF8.self)
         let eval = BridgeInvokeRequest(
             id: "eval",
-            command: CoderClawCanvasCommand.evalJS.rawValue,
+            command: BuilderforceCanvasCommand.evalJS.rawValue,
             paramsJSON: evalJSON)
         let evalRes = await appModel._test_handleInvoke(eval)
         #expect(evalRes.ok == true)
@@ -163,18 +163,18 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
     @Test @MainActor func handleInvokeA2UICommandsFailWhenHostMissing() async throws {
         let appModel = NodeAppModel()
 
-        let reset = BridgeInvokeRequest(id: "reset", command: CoderClawCanvasA2UICommand.reset.rawValue)
+        let reset = BridgeInvokeRequest(id: "reset", command: BuilderforceCanvasA2UICommand.reset.rawValue)
         let resetRes = await appModel._test_handleInvoke(reset)
         #expect(resetRes.ok == false)
         #expect(resetRes.error?.message.contains("A2UI_HOST_NOT_CONFIGURED") == true)
 
         let jsonl = "{\"beginRendering\":{}}"
-        let pushParams = CoderClawCanvasA2UIPushJSONLParams(jsonl: jsonl)
+        let pushParams = BuilderforceCanvasA2UIPushJSONLParams(jsonl: jsonl)
         let pushData = try JSONEncoder().encode(pushParams)
         let pushJSON = String(decoding: pushData, as: UTF8.self)
         let push = BridgeInvokeRequest(
             id: "push",
-            command: CoderClawCanvasA2UICommand.pushJSONL.rawValue,
+            command: BuilderforceCanvasA2UICommand.pushJSONL.rawValue,
             paramsJSON: pushJSON)
         let pushRes = await appModel._test_handleInvoke(push)
         #expect(pushRes.ok == false)
@@ -198,13 +198,13 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
             reachable: false,
             activationState: "inactive")
         let appModel = NodeAppModel(watchMessagingService: watchService)
-        let req = BridgeInvokeRequest(id: "watch-status", command: CoderClawWatchCommand.status.rawValue)
+        let req = BridgeInvokeRequest(id: "watch-status", command: BuilderforceWatchCommand.status.rawValue)
 
         let res = await appModel._test_handleInvoke(req)
         #expect(res.ok == true)
 
         let payloadData = try #require(res.payloadJSON?.data(using: .utf8))
-        let payload = try JSONDecoder().decode(CoderClawWatchStatusPayload.self, from: payloadData)
+        let payload = try JSONDecoder().decode(BuilderforceWatchStatusPayload.self, from: payloadData)
         #expect(payload.supported == true)
         #expect(payload.reachable == false)
         #expect(payload.activationState == "inactive")
@@ -217,25 +217,25 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
             queuedForDelivery: true,
             transport: "transferUserInfo")
         let appModel = NodeAppModel(watchMessagingService: watchService)
-        let params = CoderClawWatchNotifyParams(
-            title: "CoderClaw",
+        let params = BuilderforceWatchNotifyParams(
+            title: "Builderforce",
             body: "Meeting with Peter is at 4pm",
             priority: .timeSensitive)
         let paramsData = try JSONEncoder().encode(params)
         let paramsJSON = String(decoding: paramsData, as: UTF8.self)
         let req = BridgeInvokeRequest(
             id: "watch-notify",
-            command: CoderClawWatchCommand.notify.rawValue,
+            command: BuilderforceWatchCommand.notify.rawValue,
             paramsJSON: paramsJSON)
 
         let res = await appModel._test_handleInvoke(req)
         #expect(res.ok == true)
-        #expect(watchService.lastSent?.title == "CoderClaw")
+        #expect(watchService.lastSent?.title == "Builderforce")
         #expect(watchService.lastSent?.body == "Meeting with Peter is at 4pm")
         #expect(watchService.lastSent?.priority == .timeSensitive)
 
         let payloadData = try #require(res.payloadJSON?.data(using: .utf8))
-        let payload = try JSONDecoder().decode(CoderClawWatchNotifyPayload.self, from: payloadData)
+        let payload = try JSONDecoder().decode(BuilderforceWatchNotifyPayload.self, from: payloadData)
         #expect(payload.deliveredImmediately == false)
         #expect(payload.queuedForDelivery == true)
         #expect(payload.transport == "transferUserInfo")
@@ -244,12 +244,12 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
     @Test @MainActor func handleInvokeWatchNotifyRejectsEmptyMessage() async throws {
         let watchService = MockWatchMessagingService()
         let appModel = NodeAppModel(watchMessagingService: watchService)
-        let params = CoderClawWatchNotifyParams(title: "   ", body: "\n")
+        let params = BuilderforceWatchNotifyParams(title: "   ", body: "\n")
         let paramsData = try JSONEncoder().encode(params)
         let paramsJSON = String(decoding: paramsData, as: UTF8.self)
         let req = BridgeInvokeRequest(
             id: "watch-notify-empty",
-            command: CoderClawWatchCommand.notify.rawValue,
+            command: BuilderforceWatchCommand.notify.rawValue,
             paramsJSON: paramsJSON)
 
         let res = await appModel._test_handleInvoke(req)
@@ -265,12 +265,12 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
             code: 1,
             userInfo: [NSLocalizedDescriptionKey: "WATCH_UNAVAILABLE: no paired Apple Watch"])
         let appModel = NodeAppModel(watchMessagingService: watchService)
-        let params = CoderClawWatchNotifyParams(title: "CoderClaw", body: "Delivery check")
+        let params = BuilderforceWatchNotifyParams(title: "Builderforce", body: "Delivery check")
         let paramsData = try JSONEncoder().encode(params)
         let paramsJSON = String(decoding: paramsData, as: UTF8.self)
         let req = BridgeInvokeRequest(
             id: "watch-notify-fail",
-            command: CoderClawWatchCommand.notify.rawValue,
+            command: BuilderforceWatchCommand.notify.rawValue,
             paramsJSON: paramsJSON)
 
         let res = await appModel._test_handleInvoke(req)
@@ -281,7 +281,7 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
 
     @Test @MainActor func handleDeepLinkSetsErrorWhenNotConnected() async {
         let appModel = NodeAppModel()
-        let url = URL(string: "coderclaw://agent?message=hello")!
+        let url = URL(string: "builderforce://agent?message=hello")!
         await appModel.handleDeepLink(url: url)
         #expect(appModel.screen.errorText?.contains("Gateway not connected") == true)
     }
@@ -289,7 +289,7 @@ private final class MockWatchMessagingService: WatchMessagingServicing, @uncheck
     @Test @MainActor func handleDeepLinkRejectsOversizedMessage() async {
         let appModel = NodeAppModel()
         let msg = String(repeating: "a", count: 20001)
-        let url = URL(string: "coderclaw://agent?message=\(msg)")!
+        let url = URL(string: "builderforce://agent?message=\(msg)")!
         await appModel.handleDeepLink(url: url)
         #expect(appModel.screen.errorText?.contains("Deep link too large") == true)
     }

@@ -1,4 +1,4 @@
-package ai.coderclaw.android.gateway
+package ai.builderforce.android.gateway
 
 import android.util.Log
 import java.util.Locale
@@ -148,7 +148,7 @@ class GatewaySession(
     try {
       conn.request("node.event", params, timeoutMs = 8_000)
     } catch (err: Throwable) {
-      Log.w("CoderClawGateway", "node.event failed: ${err.message ?: err::class.java.simpleName}")
+      Log.w("BuilderforceGateway", "node.event failed: ${err.message ?: err::class.java.simpleName}")
     }
   }
 
@@ -181,7 +181,7 @@ class GatewaySession(
     private val connectNonceDeferred = CompletableDeferred<String?>()
     private val client: OkHttpClient = buildClient()
     private var socket: WebSocket? = null
-    private val loggerTag = "CoderClawGateway"
+    private val loggerTag = "BuilderforceGateway"
 
     val remoteAddress: String =
       if (endpoint.host.contains(":")) {

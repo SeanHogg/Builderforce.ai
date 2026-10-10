@@ -1,5 +1,5 @@
 import Observation
-import CoderClawProtocol
+import BuilderforceProtocol
 import SwiftUI
 
 struct SkillsSettings: View {
@@ -225,15 +225,15 @@ private struct SkillRow: View {
 
     private var sourceLabel: String {
         switch self.skill.source {
-        case "coderclaw-bundled":
+        case "builderforce-bundled":
             "Bundled"
-        case "coderclaw-managed":
+        case "builderforce-managed":
             "Managed"
-        case "coderclaw-workspace":
+        case "builderforce-workspace":
             "Workspace"
-        case "coderclaw-extra":
+        case "builderforce-extra":
             "Extra"
-        case "coderclaw-plugin":
+        case "builderforce-plugin":
             "Plugin"
         default:
             self.skill.source
@@ -573,7 +573,7 @@ extension SkillsSettings {
         let skill = SkillStatus(
             name: "Test Skill",
             description: "Test description",
-            source: "coderclaw-bundled",
+            source: "builderforce-bundled",
             filePath: "/tmp/skills/test",
             baseDir: "/tmp/skills",
             skillKey: "test",

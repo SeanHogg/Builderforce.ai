@@ -1,8 +1,8 @@
-import CoderClawKit
+import BuilderforceKit
 import Foundation
 import Testing
 import UIKit
-@testable import CoderClaw
+@testable import Builderforce
 
 private func withUserDefaults<T>(_ updates: [String: Any?], _ body: () throws -> T) rethrows -> T {
     let defaults = UserDefaults.standard
@@ -49,49 +49,49 @@ private func withUserDefaults<T>(_ updates: [String: Any?], _ body: () throws ->
             "node.instanceId": "ios-test",
             "node.displayName": "Test Node",
             "camera.enabled": true,
-            "location.enabledMode": CoderClawLocationMode.always.rawValue,
+            "location.enabledMode": BuilderforceLocationMode.always.rawValue,
             VoiceWakePreferences.enabledKey: true,
         ]) {
             let appModel = NodeAppModel()
             let controller = GatewayConnectionController(appModel: appModel, startDiscovery: false)
             let caps = Set(controller._test_currentCaps())
 
-            #expect(caps.contains(CoderClawCapability.canvas.rawValue))
-            #expect(caps.contains(CoderClawCapability.screen.rawValue))
-            #expect(caps.contains(CoderClawCapability.camera.rawValue))
-            #expect(caps.contains(CoderClawCapability.location.rawValue))
-            #expect(caps.contains(CoderClawCapability.voiceWake.rawValue))
+            #expect(caps.contains(BuilderforceCapability.canvas.rawValue))
+            #expect(caps.contains(BuilderforceCapability.screen.rawValue))
+            #expect(caps.contains(BuilderforceCapability.camera.rawValue))
+            #expect(caps.contains(BuilderforceCapability.location.rawValue))
+            #expect(caps.contains(BuilderforceCapability.voiceWake.rawValue))
         }
     }
 
     @Test @MainActor func currentCommandsIncludeLocationWhenEnabled() {
         withUserDefaults([
             "node.instanceId": "ios-test",
-            "location.enabledMode": CoderClawLocationMode.whileUsing.rawValue,
+            "location.enabledMode": BuilderforceLocationMode.whileUsing.rawValue,
         ]) {
             let appModel = NodeAppModel()
             let controller = GatewayConnectionController(appModel: appModel, startDiscovery: false)
             let commands = Set(controller._test_currentCommands())
 
-            #expect(commands.contains(CoderClawLocationCommand.get.rawValue))
+            #expect(commands.contains(BuilderforceLocationCommand.get.rawValue))
         }
     }
     @Test @MainActor func currentCommandsExcludeDangerousSystemExecCommands() {
         withUserDefaults([
             "node.instanceId": "ios-test",
             "camera.enabled": true,
-            "location.enabledMode": CoderClawLocationMode.whileUsing.rawValue,
+            "location.enabledMode": BuilderforceLocationMode.whileUsing.rawValue,
         ]) {
             let appModel = NodeAppModel()
             let controller = GatewayConnectionController(appModel: appModel, startDiscovery: false)
             let commands = Set(controller._test_currentCommands())
 
             // iOS should expose notify, but not host shell/exec-approval commands.
-            #expect(commands.contains(CoderClawSystemCommand.notify.rawValue))
-            #expect(!commands.contains(CoderClawSystemCommand.run.rawValue))
-            #expect(!commands.contains(CoderClawSystemCommand.which.rawValue))
-            #expect(!commands.contains(CoderClawSystemCommand.execApprovalsGet.rawValue))
-            #expect(!commands.contains(CoderClawSystemCommand.execApprovalsSet.rawValue))
+            #expect(commands.contains(BuilderforceSystemCommand.notify.rawValue))
+            #expect(!commands.contains(BuilderforceSystemCommand.run.rawValue))
+            #expect(!commands.contains(BuilderforceSystemCommand.which.rawValue))
+            #expect(!commands.contains(BuilderforceSystemCommand.execApprovalsGet.rawValue))
+            #expect(!commands.contains(BuilderforceSystemCommand.execApprovalsSet.rawValue))
         }
     }
 

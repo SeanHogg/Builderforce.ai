@@ -1,6 +1,6 @@
 import Foundation
 
-public enum CoderClawCanvasA2UIAction: Sendable {
+public enum BuilderforceCanvasA2UIAction: Sendable {
     public struct AgentMessageContext: Sendable {
         public struct Session: Sendable {
             public var key: String
@@ -97,7 +97,7 @@ public enum CoderClawCanvasA2UIAction: Sendable {
         return """
         (() => {
           const detail = \(json);
-          window.dispatchEvent(new CustomEvent('coderclaw:a2ui-action-status', { detail }));
+          window.dispatchEvent(new CustomEvent('builderforce:a2ui-action-status', { detail }));
         })();
         """
     }

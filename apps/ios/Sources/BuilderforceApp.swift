@@ -3,8 +3,8 @@ import Foundation
 import os
 import UIKit
 
-final class CoderClawAppDelegate: NSObject, UIApplicationDelegate {
-    private let logger = Logger(subsystem: "ai.coderclaw.ios", category: "Push")
+final class BuilderforceAppDelegate: NSObject, UIApplicationDelegate {
+    private let logger = Logger(subsystem: "ai.builderforce.ios", category: "Push")
     private var pendingAPNsDeviceToken: Data?
     weak var appModel: NodeAppModel? {
         didSet {
@@ -60,10 +60,10 @@ final class CoderClawAppDelegate: NSObject, UIApplicationDelegate {
 }
 
 @main
-struct CoderClawApp: App {
+struct BuilderforceApp: App {
     @State private var appModel: NodeAppModel
     @State private var gatewayController: GatewayConnectionController
-    @UIApplicationDelegateAdaptor(CoderClawAppDelegate.self) private var appDelegate
+    @UIApplicationDelegateAdaptor(BuilderforceAppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -94,9 +94,9 @@ struct CoderClawApp: App {
     }
 }
 
-extension CoderClawApp {
+extension BuilderforceApp {
     private static func installUncaughtExceptionLogger() {
-        NSLog("CoderClaw: installing uncaught exception handler")
+        NSLog("Builderforce: installing uncaught exception handler")
         NSSetUncaughtExceptionHandler { exception in
             // Useful when the app hits NSExceptions from SwiftUI/WebKit internals; these do not
             // produce a normal Swift error backtrace.

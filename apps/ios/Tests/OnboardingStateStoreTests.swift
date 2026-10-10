@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite(.serialized) struct OnboardingStateStoreTests {
     @Test @MainActor func shouldPresentWhenFreshAndDisconnected() {

@@ -1,4 +1,4 @@
-package ai.coderclaw.android.node
+package ai.builderforce.android.node
 
 import android.Manifest
 import android.content.Context

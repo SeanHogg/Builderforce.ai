@@ -1,8 +1,8 @@
 import AppKit
 import Foundation
 import Observation
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceKit
+import BuilderforceProtocol
 import OSLog
 
 @MainActor
@@ -10,7 +10,7 @@ import OSLog
 final class DevicePairingApprovalPrompter {
     static let shared = DevicePairingApprovalPrompter()
 
-    private let logger = Logger(subsystem: "ai.coderclaw", category: "device-pairing")
+    private let logger = Logger(subsystem: "ai.builderforce", category: "device-pairing")
     private var task: Task<Void, Never>?
     private var isStopping = false
     private var isPresenting = false

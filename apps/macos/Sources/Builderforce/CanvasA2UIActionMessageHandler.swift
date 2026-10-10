@@ -1,11 +1,11 @@
 import AppKit
 import Foundation
-import CoderClawIPC
-import CoderClawKit
+import BuilderforceIPC
+import BuilderforceKit
 import WebKit
 
 final class CanvasA2UIActionMessageHandler: NSObject, WKScriptMessageHandler {
-    static let messageName = "coderclawCanvasA2UIAction"
+    static let messageName = "builderforceCanvasA2UIAction"
     static let allMessageNames = [messageName]
 
     private let sessionKey: String
@@ -53,7 +53,7 @@ final class CanvasA2UIActionMessageHandler: NSObject, WKScriptMessageHandler {
         }()
         guard !userAction.isEmpty else { return }
 
-        guard let name = CoderClawCanvasA2UIAction.extractActionName(userAction) else { return }
+        guard let name = BuilderforceCanvasA2UIAction.extractActionName(userAction) else { return }
         let actionId =
             (userAction["id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
                 ?? UUID().uuidString
@@ -65,15 +65,15 @@ final class CanvasA2UIActionMessageHandler: NSObject, WKScriptMessageHandler {
         let sourceComponentId = (userAction["sourceComponentId"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "-"
         let instanceId = InstanceIdentity.instanceId.lowercased()
-        let contextJSON = CoderClawCanvasA2UIAction.compactJSON(userAction["context"])
+        let contextJSON = BuilderforceCanvasA2UIAction.compactJSON(userAction["context"])
 
         // Token-efficient and unambiguous. The agent should treat this as a UI event and (by default) update Canvas.
-        let messageContext = CoderClawCanvasA2UIAction.AgentMessageContext(
+        let messageContext = BuilderforceCanvasA2UIAction.AgentMessageContext(
             actionName: name,
             session: .init(key: self.sessionKey, surfaceId: surfaceId),
             component: .init(id: sourceComponentId, host: InstanceIdentity.displayName, instanceId: instanceId),
             contextJSON: contextJSON)
-        let text = CoderClawCanvasA2UIAction.formatAgentMessage(messageContext)
+        let text = BuilderforceCanvasA2UIAction.formatAgentMessage(messageContext)
 
         Task { [weak webView] in
             if AppStateStore.shared.connectionMode == .local {
@@ -92,7 +92,7 @@ final class CanvasA2UIActionMessageHandler: NSObject, WKScriptMessageHandler {
 
             await MainActor.run {
                 guard let webView else { return }
-                let js = CoderClawCanvasA2UIAction.jsDispatchA2UIActionStatus(
+                let js = BuilderforceCanvasA2UIAction.jsDispatchA2UIActionStatus(
                     actionId: actionId,
                     ok: result.ok,
                     error: result.error)
@@ -145,5 +145,5 @@ final class CanvasA2UIActionMessageHandler: NSObject, WKScriptMessageHandler {
         return false
     }
 
-    // Formatting helpers live in CoderClawKit (`CoderClawCanvasA2UIAction`).
+    // Formatting helpers live in BuilderforceKit (`BuilderforceCanvasA2UIAction`).
 }

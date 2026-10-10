@@ -1,12 +1,11 @@
-package ai.coderclaw.android.gateway
+package ai.builderforce.android.gateway
 
 /**
- * DNS-SD service types a gateway can advertise, current first. The runtime advertises
- * `_builderforce-gw._tcp`; older runtimes advertise the pre-rebrand type, so discovery
- * browses both. This is the one list for Android.
+ * DNS-SD service types a gateway advertises. The agent runtime advertises
+ * `_builderforce-gw._tcp`. This is the one list for Android.
  */
 object GatewayServiceTypes {
-  val all: List<String> = listOf("_builderforce-gw._tcp.", "_coderclaw-gw._tcp.")
+  val all: List<String> = listOf("_builderforce-gw._tcp.")
 
   /** NSD reports types with or without the surrounding dots; compare on one canonical form. */
   fun canonical(serviceType: String): String {

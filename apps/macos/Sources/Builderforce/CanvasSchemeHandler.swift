@@ -1,9 +1,9 @@
 import Foundation
-import CoderClawKit
+import BuilderforceKit
 import OSLog
 import WebKit
 
-private let canvasLogger = Logger(subsystem: "ai.coderclaw", category: "Canvas")
+private let canvasLogger = Logger(subsystem: "ai.builderforce", category: "Canvas")
 
 final class CanvasSchemeHandler: NSObject, WKURLSchemeHandler {
     private let root: URL
@@ -222,7 +222,7 @@ final class CanvasSchemeHandler: NSObject, WKURLSchemeHandler {
         let name = fileURL.deletingPathExtension().lastPathComponent
         guard !name.isEmpty, !ext.isEmpty else { return nil }
 
-        let bundle = CoderClawKitResources.bundle
+        let bundle = BuilderforceKitResources.bundle
         let resourceURL =
             bundle.url(forResource: name, withExtension: ext, subdirectory: subdirectory)
             ?? bundle.url(forResource: name, withExtension: ext)

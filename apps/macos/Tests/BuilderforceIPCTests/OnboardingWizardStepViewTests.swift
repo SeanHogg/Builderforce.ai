@@ -1,9 +1,9 @@
-import CoderClawProtocol
+import BuilderforceProtocol
 import SwiftUI
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
-private typealias ProtoAnyCodable = CoderClawProtocol.AnyCodable
+private typealias ProtoAnyCodable = BuilderforceProtocol.AnyCodable
 
 @Suite(.serialized)
 @MainActor

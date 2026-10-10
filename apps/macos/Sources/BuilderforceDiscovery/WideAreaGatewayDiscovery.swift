@@ -1,5 +1,5 @@
 import Foundation
-import CoderClawKit
+import BuilderforceKit
 
 struct WideAreaGatewayBeacon: Sendable, Equatable {
     var instanceName: String
@@ -50,7 +50,7 @@ enum WideAreaGatewayDiscovery {
             return []
         }
 
-        guard let domain = CoderClawBonjour.wideAreaGatewayServiceDomain else { return [] }
+        guard let domain = BuilderforceBonjour.wideAreaGatewayServiceDomain else { return [] }
         let domainTrimmed = domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
         // Query PTR for every gateway service type (current and legacy); keep each instance once.
         var ptrNames: [String] = []
@@ -103,12 +103,12 @@ enum WideAreaGatewayDiscovery {
 
     /// `<type>.<domain>` PTR names for every browsed gateway service type.
     static func probeNames(domainTrimmed: String) -> [String] {
-        CoderClawBonjour.gatewayServiceTypes.map { "\($0).\(domainTrimmed)" }
+        BuilderforceBonjour.gatewayServiceTypes.map { "\($0).\(domainTrimmed)" }
     }
 
     /// Strips the `.<type>.<domain>` suffix of whichever gateway service type the PTR names.
     static func instanceName(fromPTR ptrName: String, domainTrimmed: String) -> String {
-        for serviceType in CoderClawBonjour.gatewayServiceTypes {
+        for serviceType in BuilderforceBonjour.gatewayServiceTypes {
             let suffix = ".\(serviceType).\(domainTrimmed)"
             if ptrName.hasSuffix(suffix) {
                 return String(ptrName.dropLast(suffix.count))
@@ -169,7 +169,7 @@ enum WideAreaGatewayDiscovery {
         remaining: () -> TimeInterval,
         dig: @escaping @Sendable (_ args: [String], _ timeout: TimeInterval) -> String?) -> String?
     {
-        guard let domain = CoderClawBonjour.wideAreaGatewayServiceDomain else { return nil }
+        guard let domain = BuilderforceBonjour.wideAreaGatewayServiceDomain else { return nil }
         let domainTrimmed = domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
         let probeNames = self.probeNames(domainTrimmed: domainTrimmed)
 

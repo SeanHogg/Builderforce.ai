@@ -18,7 +18,7 @@ public enum ShareToAgentDeepLink {
         guard !message.isEmpty else { return nil }
 
         var components = URLComponents()
-        components.scheme = "coderclaw"
+        components.scheme = "builderforce"
         components.host = "agent"
         components.queryItems = [
             URLQueryItem(name: "message", value: message),

@@ -8,10 +8,10 @@ import Security
 import SwiftUI
 
 @main
-struct CoderClawApp: App {
+struct BuilderforceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var state: AppState
-    private static let logger = Logger(subsystem: "ai.coderclaw", category: "app")
+    private static let logger = Logger(subsystem: "ai.builderforce", category: "app")
     private let gatewayManager = GatewayProcessManager.shared
     private let controlChannel = ControlChannel.shared
     private let activityStore = WorkActivityStore.shared
@@ -32,7 +32,7 @@ struct CoderClawApp: App {
     }
 
     init() {
-        CoderClawLogging.bootstrapIfNeeded()
+        BuilderforceLogging.bootstrapIfNeeded()
 
         Self.applyAttachOnlyOverrideIfNeeded()
         _state = State(initialValue: AppStateStore.shared)
@@ -253,7 +253,7 @@ private final class StatusItemMouseHandlerView: NSView {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var state: AppState?
-    private let webChatAutoLogger = Logger(subsystem: "ai.coderclaw", category: "Chat")
+    private let webChatAutoLogger = Logger(subsystem: "ai.builderforce", category: "Chat")
     let updaterController: UpdaterProviding = makeUpdaterController()
 
     func application(_: NSApplication, open urls: [URL]) {

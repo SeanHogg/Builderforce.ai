@@ -251,7 +251,7 @@ enum SessionLoader {
     static let fallbackContextTokens = 200_000
 
     static let defaultStorePath = standardize(
-        CoderClawPaths.stateDirURL
+        BuilderforcePaths.stateDirURL
             .appendingPathComponent("sessions/sessions.json").path)
 
     static func loadSnapshot(

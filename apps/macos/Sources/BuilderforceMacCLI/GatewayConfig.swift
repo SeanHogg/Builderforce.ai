@@ -21,7 +21,7 @@ struct GatewayEndpoint {
 func loadGatewayConfig() -> GatewayConfig {
     let home = FileManager().homeDirectoryForCurrentUser
     let candidates = [
-        home.appendingPathComponent(".coderclaw/coderclaw.json"),
+        home.appendingPathComponent(".builderforce/builderforce.json"),
     ]
     let url = candidates.first { FileManager().isReadableFile(atPath: $0.path) } ?? candidates[0]
     guard let data = try? Data(contentsOf: url) else { return GatewayConfig() }

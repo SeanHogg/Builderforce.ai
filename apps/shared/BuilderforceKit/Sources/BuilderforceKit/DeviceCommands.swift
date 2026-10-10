@@ -1,58 +1,58 @@
 import Foundation
 
-public enum CoderClawDeviceCommand: String, Codable, Sendable {
+public enum BuilderforceDeviceCommand: String, Codable, Sendable {
     case status = "device.status"
     case info = "device.info"
 }
 
-public enum CoderClawBatteryState: String, Codable, Sendable {
+public enum BuilderforceBatteryState: String, Codable, Sendable {
     case unknown
     case unplugged
     case charging
     case full
 }
 
-public enum CoderClawThermalState: String, Codable, Sendable {
+public enum BuilderforceThermalState: String, Codable, Sendable {
     case nominal
     case fair
     case serious
     case critical
 }
 
-public enum CoderClawNetworkPathStatus: String, Codable, Sendable {
+public enum BuilderforceNetworkPathStatus: String, Codable, Sendable {
     case satisfied
     case unsatisfied
     case requiresConnection
 }
 
-public enum CoderClawNetworkInterfaceType: String, Codable, Sendable {
+public enum BuilderforceNetworkInterfaceType: String, Codable, Sendable {
     case wifi
     case cellular
     case wired
     case other
 }
 
-public struct CoderClawBatteryStatusPayload: Codable, Sendable, Equatable {
+public struct BuilderforceBatteryStatusPayload: Codable, Sendable, Equatable {
     public var level: Double?
-    public var state: CoderClawBatteryState
+    public var state: BuilderforceBatteryState
     public var lowPowerModeEnabled: Bool
 
-    public init(level: Double?, state: CoderClawBatteryState, lowPowerModeEnabled: Bool) {
+    public init(level: Double?, state: BuilderforceBatteryState, lowPowerModeEnabled: Bool) {
         self.level = level
         self.state = state
         self.lowPowerModeEnabled = lowPowerModeEnabled
     }
 }
 
-public struct CoderClawThermalStatusPayload: Codable, Sendable, Equatable {
-    public var state: CoderClawThermalState
+public struct BuilderforceThermalStatusPayload: Codable, Sendable, Equatable {
+    public var state: BuilderforceThermalState
 
-    public init(state: CoderClawThermalState) {
+    public init(state: BuilderforceThermalState) {
         self.state = state
     }
 }
 
-public struct CoderClawStorageStatusPayload: Codable, Sendable, Equatable {
+public struct BuilderforceStorageStatusPayload: Codable, Sendable, Equatable {
     public var totalBytes: Int64
     public var freeBytes: Int64
     public var usedBytes: Int64
@@ -64,17 +64,17 @@ public struct CoderClawStorageStatusPayload: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawNetworkStatusPayload: Codable, Sendable, Equatable {
-    public var status: CoderClawNetworkPathStatus
+public struct BuilderforceNetworkStatusPayload: Codable, Sendable, Equatable {
+    public var status: BuilderforceNetworkPathStatus
     public var isExpensive: Bool
     public var isConstrained: Bool
-    public var interfaces: [CoderClawNetworkInterfaceType]
+    public var interfaces: [BuilderforceNetworkInterfaceType]
 
     public init(
-        status: CoderClawNetworkPathStatus,
+        status: BuilderforceNetworkPathStatus,
         isExpensive: Bool,
         isConstrained: Bool,
-        interfaces: [CoderClawNetworkInterfaceType])
+        interfaces: [BuilderforceNetworkInterfaceType])
     {
         self.status = status
         self.isExpensive = isExpensive
@@ -83,18 +83,18 @@ public struct CoderClawNetworkStatusPayload: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawDeviceStatusPayload: Codable, Sendable, Equatable {
-    public var battery: CoderClawBatteryStatusPayload
-    public var thermal: CoderClawThermalStatusPayload
-    public var storage: CoderClawStorageStatusPayload
-    public var network: CoderClawNetworkStatusPayload
+public struct BuilderforceDeviceStatusPayload: Codable, Sendable, Equatable {
+    public var battery: BuilderforceBatteryStatusPayload
+    public var thermal: BuilderforceThermalStatusPayload
+    public var storage: BuilderforceStorageStatusPayload
+    public var network: BuilderforceNetworkStatusPayload
     public var uptimeSeconds: Double
 
     public init(
-        battery: CoderClawBatteryStatusPayload,
-        thermal: CoderClawThermalStatusPayload,
-        storage: CoderClawStorageStatusPayload,
-        network: CoderClawNetworkStatusPayload,
+        battery: BuilderforceBatteryStatusPayload,
+        thermal: BuilderforceThermalStatusPayload,
+        storage: BuilderforceStorageStatusPayload,
+        network: BuilderforceNetworkStatusPayload,
         uptimeSeconds: Double)
     {
         self.battery = battery
@@ -105,7 +105,7 @@ public struct CoderClawDeviceStatusPayload: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawDeviceInfoPayload: Codable, Sendable, Equatable {
+public struct BuilderforceDeviceInfoPayload: Codable, Sendable, Equatable {
     public var deviceName: String
     public var modelIdentifier: String
     public var systemName: String

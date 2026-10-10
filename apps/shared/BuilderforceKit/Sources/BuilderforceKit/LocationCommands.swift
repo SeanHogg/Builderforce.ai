@@ -1,28 +1,28 @@
 import Foundation
 
-public enum CoderClawLocationCommand: String, Codable, Sendable {
+public enum BuilderforceLocationCommand: String, Codable, Sendable {
     case get = "location.get"
 }
 
-public enum CoderClawLocationAccuracy: String, Codable, Sendable {
+public enum BuilderforceLocationAccuracy: String, Codable, Sendable {
     case coarse
     case balanced
     case precise
 }
 
-public struct CoderClawLocationGetParams: Codable, Sendable, Equatable {
+public struct BuilderforceLocationGetParams: Codable, Sendable, Equatable {
     public var timeoutMs: Int?
     public var maxAgeMs: Int?
-    public var desiredAccuracy: CoderClawLocationAccuracy?
+    public var desiredAccuracy: BuilderforceLocationAccuracy?
 
-    public init(timeoutMs: Int? = nil, maxAgeMs: Int? = nil, desiredAccuracy: CoderClawLocationAccuracy? = nil) {
+    public init(timeoutMs: Int? = nil, maxAgeMs: Int? = nil, desiredAccuracy: BuilderforceLocationAccuracy? = nil) {
         self.timeoutMs = timeoutMs
         self.maxAgeMs = maxAgeMs
         self.desiredAccuracy = desiredAccuracy
     }
 }
 
-public struct CoderClawLocationPayload: Codable, Sendable, Equatable {
+public struct BuilderforceLocationPayload: Codable, Sendable, Equatable {
     public var lat: Double
     public var lon: Double
     public var accuracyMeters: Double

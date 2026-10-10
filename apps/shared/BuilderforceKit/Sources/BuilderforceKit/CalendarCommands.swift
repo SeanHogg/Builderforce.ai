@@ -1,11 +1,11 @@
 import Foundation
 
-public enum CoderClawCalendarCommand: String, Codable, Sendable {
+public enum BuilderforceCalendarCommand: String, Codable, Sendable {
     case events = "calendar.events"
     case add = "calendar.add"
 }
 
-public struct CoderClawCalendarEventsParams: Codable, Sendable, Equatable {
+public struct BuilderforceCalendarEventsParams: Codable, Sendable, Equatable {
     public var startISO: String?
     public var endISO: String?
     public var limit: Int?
@@ -17,7 +17,7 @@ public struct CoderClawCalendarEventsParams: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawCalendarAddParams: Codable, Sendable, Equatable {
+public struct BuilderforceCalendarAddParams: Codable, Sendable, Equatable {
     public var title: String
     public var startISO: String
     public var endISO: String
@@ -48,7 +48,7 @@ public struct CoderClawCalendarAddParams: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawCalendarEventPayload: Codable, Sendable, Equatable {
+public struct BuilderforceCalendarEventPayload: Codable, Sendable, Equatable {
     public var identifier: String
     public var title: String
     public var startISO: String
@@ -76,18 +76,18 @@ public struct CoderClawCalendarEventPayload: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawCalendarEventsPayload: Codable, Sendable, Equatable {
-    public var events: [CoderClawCalendarEventPayload]
+public struct BuilderforceCalendarEventsPayload: Codable, Sendable, Equatable {
+    public var events: [BuilderforceCalendarEventPayload]
 
-    public init(events: [CoderClawCalendarEventPayload]) {
+    public init(events: [BuilderforceCalendarEventPayload]) {
         self.events = events
     }
 }
 
-public struct CoderClawCalendarAddPayload: Codable, Sendable, Equatable {
-    public var event: CoderClawCalendarEventPayload
+public struct BuilderforceCalendarAddPayload: Codable, Sendable, Equatable {
+    public var event: BuilderforceCalendarEventPayload
 
-    public init(event: CoderClawCalendarEventPayload) {
+    public init(event: BuilderforceCalendarEventPayload) {
         self.event = event
     }
 }

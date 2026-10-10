@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceKit
+import BuilderforceProtocol
 
 struct WizardCliOptions {
     var url: String?
@@ -71,10 +71,10 @@ func runWizardCommand(_ args: [String]) async {
     let opts = WizardCliOptions.parse(args)
     if opts.help {
         print("""
-        coderclaw-mac wizard
+        builderforce-mac wizard
 
         Usage:
-          coderclaw-mac wizard [--url <ws://host:port>] [--token <token>] [--password <password>]
+          builderforce-mac wizard [--url <ws://host:port>] [--token <token>] [--password <password>]
                               [--mode <local|remote>] [--workspace <path>] [--json]
 
         Options:
@@ -247,14 +247,14 @@ actor GatewayWizardClient {
         }
         let osVersion = ProcessInfo.processInfo.operatingSystemVersion
         let platform = "macos \(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)"
-        let clientId = "coderclaw-macos"
+        let clientId = "builderforce-macos"
         let clientMode = "ui"
         let role = "operator"
         // Explicit scopes; gateway no longer defaults empty scopes to admin.
         let scopes: [String] = ["operator.admin", "operator.approvals", "operator.pairing"]
         let client: [String: ProtoAnyCodable] = [
             "id": ProtoAnyCodable(clientId),
-            "displayName": ProtoAnyCodable(Host.current().localizedName ?? "CoderClaw macOS Wizard CLI"),
+            "displayName": ProtoAnyCodable(Host.current().localizedName ?? "Builderforce macOS Wizard CLI"),
             "version": ProtoAnyCodable("dev"),
             "platform": ProtoAnyCodable(platform),
             "deviceFamily": ProtoAnyCodable("Mac"),

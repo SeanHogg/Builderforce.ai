@@ -1,7 +1,7 @@
 import Foundation
 import Observation
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceKit
+import BuilderforceProtocol
 import OSLog
 
 @MainActor
@@ -22,7 +22,7 @@ final class CronJobsStore {
     var lastError: String?
     var statusMessage: String?
 
-    private let logger = Logger(subsystem: "ai.coderclaw", category: "cron.ui")
+    private let logger = Logger(subsystem: "ai.builderforce", category: "cron.ui")
     private var refreshTask: Task<Void, Never>?
     private var runsTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?

@@ -1,35 +1,35 @@
-package ai.coderclaw.android.protocol
+package ai.builderforce.android.protocol
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-class CoderClawProtocolConstantsTest {
+class BuilderforceProtocolConstantsTest {
   @Test
   fun canvasCommandsUseStableStrings() {
-    assertEquals("canvas.present", CoderClawCanvasCommand.Present.rawValue)
-    assertEquals("canvas.hide", CoderClawCanvasCommand.Hide.rawValue)
-    assertEquals("canvas.navigate", CoderClawCanvasCommand.Navigate.rawValue)
-    assertEquals("canvas.eval", CoderClawCanvasCommand.Eval.rawValue)
-    assertEquals("canvas.snapshot", CoderClawCanvasCommand.Snapshot.rawValue)
+    assertEquals("canvas.present", BuilderforceCanvasCommand.Present.rawValue)
+    assertEquals("canvas.hide", BuilderforceCanvasCommand.Hide.rawValue)
+    assertEquals("canvas.navigate", BuilderforceCanvasCommand.Navigate.rawValue)
+    assertEquals("canvas.eval", BuilderforceCanvasCommand.Eval.rawValue)
+    assertEquals("canvas.snapshot", BuilderforceCanvasCommand.Snapshot.rawValue)
   }
 
   @Test
   fun a2uiCommandsUseStableStrings() {
-    assertEquals("canvas.a2ui.push", CoderClawCanvasA2UICommand.Push.rawValue)
-    assertEquals("canvas.a2ui.pushJSONL", CoderClawCanvasA2UICommand.PushJSONL.rawValue)
-    assertEquals("canvas.a2ui.reset", CoderClawCanvasA2UICommand.Reset.rawValue)
+    assertEquals("canvas.a2ui.push", BuilderforceCanvasA2UICommand.Push.rawValue)
+    assertEquals("canvas.a2ui.pushJSONL", BuilderforceCanvasA2UICommand.PushJSONL.rawValue)
+    assertEquals("canvas.a2ui.reset", BuilderforceCanvasA2UICommand.Reset.rawValue)
   }
 
   @Test
   fun capabilitiesUseStableStrings() {
-    assertEquals("canvas", CoderClawCapability.Canvas.rawValue)
-    assertEquals("camera", CoderClawCapability.Camera.rawValue)
-    assertEquals("screen", CoderClawCapability.Screen.rawValue)
-    assertEquals("voiceWake", CoderClawCapability.VoiceWake.rawValue)
+    assertEquals("canvas", BuilderforceCapability.Canvas.rawValue)
+    assertEquals("camera", BuilderforceCapability.Camera.rawValue)
+    assertEquals("screen", BuilderforceCapability.Screen.rawValue)
+    assertEquals("voiceWake", BuilderforceCapability.VoiceWake.rawValue)
   }
 
   @Test
   fun screenCommandsUseStableStrings() {
-    assertEquals("screen.record", CoderClawScreenCommand.Record.rawValue)
+    assertEquals("screen.record", BuilderforceScreenCommand.Record.rawValue)
   }
 }

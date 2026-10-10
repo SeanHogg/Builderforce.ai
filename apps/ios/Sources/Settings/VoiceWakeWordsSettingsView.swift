@@ -36,7 +36,7 @@ struct VoiceWakeWordsSettingsView: View {
                 Text("Wake Words")
             } footer: {
                 Text(
-                    "CoderClaw reacts when any trigger appears in a transcription. "
+                    "Builderforce reacts when any trigger appears in a transcription. "
                         + "Keep them short to avoid false positives.")
             }
         }

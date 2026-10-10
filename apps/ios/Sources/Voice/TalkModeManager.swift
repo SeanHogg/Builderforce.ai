@@ -1,7 +1,7 @@
 import AVFAudio
-import CoderClawChatUI
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceChatUI
+import BuilderforceKit
+import BuilderforceProtocol
 import Foundation
 import Observation
 import OSLog
@@ -16,7 +16,7 @@ import Speech
 final class TalkModeManager: NSObject {
     private typealias SpeechRequest = SFSpeechAudioBufferRecognitionRequest
     private static let defaultModelIdFallback = "eleven_v3"
-    private static let redactedConfigSentinel = "__CODERCLAW_REDACTED__"
+    private static let redactedConfigSentinel = "__BUILDERFORCE_AGENTS_REDACTED__"
     var isEnabled: Bool = false
     var isListening: Bool = false
     var isSpeaking: Bool = false
@@ -35,7 +35,7 @@ final class TalkModeManager: NSObject {
     private var resumeContinuousAfterPTT: Bool = false
     private var activePTTCaptureId: String?
     private var pttAutoStopEnabled: Bool = false
-    private var pttCompletion: CheckedContinuation<CoderClawTalkPTTStopPayload, Never>?
+    private var pttCompletion: CheckedContinuation<BuilderforceTalkPTTStopPayload, Never>?
     private var pttTimeoutTask: Task<Void, Never>?
 
     private let allowSimulatorCapture: Bool
@@ -88,7 +88,7 @@ final class TalkModeManager: NSObject {
     private var incrementalSpeechContext: IncrementalSpeechContext?
     private var incrementalSpeechDirective: TalkDirective?
 
-    private let logger = Logger(subsystem: "bot.molt", category: "TalkMode")
+    private let logger = Logger(subsystem: "ai.builderforce", category: "TalkMode")
 
     init(allowSimulatorCapture: Bool = false) {
         self.allowSimulatorCapture = allowSimulatorCapture
@@ -200,7 +200,7 @@ final class TalkModeManager: NSObject {
         self.pttTimeoutTask = nil
         self.pttAutoStopEnabled = false
         if pendingPTT {
-            let payload = CoderClawTalkPTTStopPayload(
+            let payload = BuilderforceTalkPTTStopPayload(
                 captureId: pendingCaptureId,
                 transcript: nil,
                 status: "cancelled")
@@ -262,7 +262,7 @@ final class TalkModeManager: NSObject {
         self.stopSpeaking()
     }
 
-    func beginPushToTalk() async throws -> CoderClawTalkPTTStartPayload {
+    func beginPushToTalk() async throws -> BuilderforceTalkPTTStartPayload {
         guard self.gatewayConnected else {
             self.statusText = "Offline"
             throw NSError(domain: "TalkMode", code: 7, userInfo: [
@@ -270,7 +270,7 @@ final class TalkModeManager: NSObject {
             ])
         }
         if self.isPushToTalkActive, let captureId = self.activePTTCaptureId {
-            return CoderClawTalkPTTStartPayload(captureId: captureId)
+            return BuilderforceTalkPTTStartPayload(captureId: captureId)
         }
 
         self.stopSpeaking(storeInterruption: false)
@@ -326,13 +326,13 @@ final class TalkModeManager: NSObject {
             throw error
         }
 
-        return CoderClawTalkPTTStartPayload(captureId: captureId)
+        return BuilderforceTalkPTTStartPayload(captureId: captureId)
     }
 
-    func endPushToTalk() async -> CoderClawTalkPTTStopPayload {
+    func endPushToTalk() async -> BuilderforceTalkPTTStopPayload {
         let captureId = self.activePTTCaptureId ?? UUID().uuidString
         guard self.isPushToTalkActive else {
-            let payload = CoderClawTalkPTTStopPayload(
+            let payload = BuilderforceTalkPTTStopPayload(
                 captureId: captureId,
                 transcript: nil,
                 status: "idle")
@@ -359,7 +359,7 @@ final class TalkModeManager: NSObject {
             }
             self.resumeContinuousAfterPTT = false
             self.activePTTCaptureId = nil
-            let payload = CoderClawTalkPTTStopPayload(
+            let payload = BuilderforceTalkPTTStopPayload(
                 captureId: captureId,
                 transcript: nil,
                 status: "empty")
@@ -374,7 +374,7 @@ final class TalkModeManager: NSObject {
             }
             self.resumeContinuousAfterPTT = false
             self.activePTTCaptureId = nil
-            let payload = CoderClawTalkPTTStopPayload(
+            let payload = BuilderforceTalkPTTStopPayload(
                 captureId: captureId,
                 transcript: transcript,
                 status: "offline")
@@ -388,7 +388,7 @@ final class TalkModeManager: NSObject {
         }
         self.resumeContinuousAfterPTT = false
         self.activePTTCaptureId = nil
-        let payload = CoderClawTalkPTTStopPayload(
+        let payload = BuilderforceTalkPTTStopPayload(
             captureId: captureId,
             transcript: transcript,
             status: "queued")
@@ -396,14 +396,14 @@ final class TalkModeManager: NSObject {
         return payload
     }
 
-    func runPushToTalkOnce(maxDurationSeconds: TimeInterval = 12) async throws -> CoderClawTalkPTTStopPayload {
+    func runPushToTalkOnce(maxDurationSeconds: TimeInterval = 12) async throws -> BuilderforceTalkPTTStopPayload {
         if self.pttCompletion != nil {
             _ = await self.cancelPushToTalk()
         }
 
         if self.isPushToTalkActive {
             let captureId = self.activePTTCaptureId ?? UUID().uuidString
-            return CoderClawTalkPTTStopPayload(
+            return BuilderforceTalkPTTStopPayload(
                 captureId: captureId,
                 transcript: nil,
                 status: "busy")
@@ -419,10 +419,10 @@ final class TalkModeManager: NSObject {
         }
     }
 
-    func cancelPushToTalk() async -> CoderClawTalkPTTStopPayload {
+    func cancelPushToTalk() async -> BuilderforceTalkPTTStopPayload {
         let captureId = self.activePTTCaptureId ?? UUID().uuidString
         guard self.isPushToTalkActive else {
-            let payload = CoderClawTalkPTTStopPayload(
+            let payload = BuilderforceTalkPTTStopPayload(
                 captureId: captureId,
                 transcript: nil,
                 status: "idle")
@@ -449,7 +449,7 @@ final class TalkModeManager: NSObject {
         self.activePTTCaptureId = nil
         self.statusText = "Ready"
 
-        let payload = CoderClawTalkPTTStopPayload(
+        let payload = BuilderforceTalkPTTStopPayload(
             captureId: captureId,
             transcript: nil,
             status: "cancelled")
@@ -710,7 +710,7 @@ final class TalkModeManager: NSObject {
         _ = await self.endPushToTalk()
     }
 
-    private func finishPTTOnce(_ payload: CoderClawTalkPTTStopPayload) {
+    private func finishPTTOnce(_ payload: BuilderforceTalkPTTStopPayload) {
         guard let continuation = self.pttCompletion else { return }
         self.pttCompletion = nil
         continuation.resume(returning: payload)
@@ -1260,7 +1260,7 @@ final class TalkModeManager: NSObject {
         for await evt in stream {
             if Task.isCancelled { return }
             guard evt.event == "agent", let payload = evt.payload else { continue }
-            guard let agentEvent = try? GatewayPayloadDecoding.decode(payload, as: CoderClawAgentEventPayload.self) else {
+            guard let agentEvent = try? GatewayPayloadDecoding.decode(payload, as: BuilderforceAgentEventPayload.self) else {
                 continue
             }
             guard agentEvent.runId == runId, agentEvent.stream == "assistant" else { continue }

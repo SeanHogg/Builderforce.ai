@@ -1,6 +1,6 @@
-import CoderClawChatUI
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceChatUI
+import BuilderforceKit
+import BuilderforceProtocol
 import Observation
 import os
 import SwiftUI
@@ -40,8 +40,8 @@ private final class NotificationInvokeLatch<T: Sendable>: @unchecked Sendable {
 @MainActor
 @Observable
 final class NodeAppModel {
-    private let deepLinkLogger = Logger(subsystem: "ai.coderclaw.ios", category: "DeepLink")
-    private let pushWakeLogger = Logger(subsystem: "ai.coderclaw.ios", category: "PushWake")
+    private let deepLinkLogger = Logger(subsystem: "ai.builderforce.ios", category: "DeepLink")
+    private let pushWakeLogger = Logger(subsystem: "ai.builderforce.ios", category: "PushWake")
     enum CameraHUDKind {
         case photo
         case recording
@@ -199,7 +199,7 @@ final class NodeAppModel {
         }()
         guard !userAction.isEmpty else { return }
 
-        guard let name = CoderClawCanvasA2UIAction.extractActionName(userAction) else { return }
+        guard let name = BuilderforceCanvasA2UIAction.extractActionName(userAction) else { return }
         let actionId: String = {
             let id = (userAction["id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return id.isEmpty ? UUID().uuidString : id
@@ -221,15 +221,15 @@ final class NodeAppModel {
             deviceName: UIDevice.current.name,
             interfaceIdiom: UIDevice.current.userInterfaceIdiom)
         let instanceId = (UserDefaults.standard.string(forKey: "node.instanceId") ?? "ios-node").lowercased()
-        let contextJSON = CoderClawCanvasA2UIAction.compactJSON(userAction["context"])
+        let contextJSON = BuilderforceCanvasA2UIAction.compactJSON(userAction["context"])
         let sessionKey = self.mainSessionKey
 
-        let messageContext = CoderClawCanvasA2UIAction.AgentMessageContext(
+        let messageContext = BuilderforceCanvasA2UIAction.AgentMessageContext(
             actionName: name,
             session: .init(key: sessionKey, surfaceId: surfaceId),
             component: .init(id: sourceComponentId, host: host, instanceId: instanceId),
             contextJSON: contextJSON)
-        let message = CoderClawCanvasA2UIAction.formatAgentMessage(messageContext)
+        let message = BuilderforceCanvasA2UIAction.formatAgentMessage(messageContext)
 
         let ok: Bool
         var errorText: String?
@@ -254,7 +254,7 @@ final class NodeAppModel {
             }
         }
 
-        let js = CoderClawCanvasA2UIAction.jsDispatchA2UIActionStatus(actionId: actionId, ok: ok, error: errorText)
+        let js = BuilderforceCanvasA2UIAction.jsDispatchA2UIActionStatus(actionId: actionId, ok: ok, error: errorText)
         do {
             _ = try await self.screen.eval(javaScript: js)
         } catch {
@@ -366,7 +366,7 @@ final class NodeAppModel {
         }
     }
 
-    func requestLocationPermissions(mode: CoderClawLocationMode) async -> Bool {
+    func requestLocationPermissions(mode: BuilderforceLocationMode) async -> Bool {
         guard mode != .off else { return true }
         let status = await self.locationService.ensureAuthorization(mode: mode)
         switch status {
@@ -561,7 +561,7 @@ final class NodeAppModel {
                 if await self.isGatewayHealthMonitorDisabled() { return true }
                 do {
                     let data = try await self.operatorGateway.request(method: "health", paramsJSON: nil, timeoutSeconds: 6)
-                    guard let decoded = try? JSONDecoder().decode(CoderClawGatewayHealthOK.self, from: data) else {
+                    guard let decoded = try? JSONDecoder().decode(BuilderforceGatewayHealthOK.self, from: data) else {
                         return false
                     }
                     return decoded.ok ?? false
@@ -690,7 +690,7 @@ final class NodeAppModel {
         }
 
         // iOS gateway forwards to the gateway; no local auth prompts here.
-        // (Key-based unattended auth is handled on macOS for coderclaw:// links.)
+        // (Key-based unattended auth is handled on macOS for builderforce:// links.)
         let data = try JSONEncoder().encode(link)
         guard let json = String(bytes: data, encoding: .utf8) else {
             throw NSError(domain: "NodeAppModel", code: 2, userInfo: [
@@ -711,7 +711,7 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(
+                error: BuilderforceNodeError(
                     code: .backgroundUnavailable,
                     message: "NODE_BACKGROUND_UNAVAILABLE: canvas/camera/screen commands require foreground"))
         }
@@ -720,7 +720,7 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(
+                error: BuilderforceNodeError(
                     code: .unavailable,
                     message: "CAMERA_DISABLED: enable Camera in iOS Settings → Camera → Allow Camera"))
         }
@@ -733,12 +733,12 @@ final class NodeAppModel {
                 return BridgeInvokeResponse(
                     id: req.id,
                     ok: false,
-                    error: CoderClawNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
+                    error: BuilderforceNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
             case .handlerUnavailable:
                 return BridgeInvokeResponse(
                     id: req.id,
                     ok: false,
-                    error: CoderClawNodeError(code: .unavailable, message: "node handler unavailable"))
+                    error: BuilderforceNodeError(code: .unavailable, message: "node handler unavailable"))
             }
         } catch {
             if command.hasPrefix("camera.") {
@@ -748,7 +748,7 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .unavailable, message: error.localizedDescription))
+                error: BuilderforceNodeError(code: .unavailable, message: error.localizedDescription))
         }
     }
 
@@ -763,7 +763,7 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(
+                error: BuilderforceNodeError(
                     code: .unavailable,
                     message: "LOCATION_DISABLED: enable Location in Settings"))
         }
@@ -771,12 +771,12 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(
+                error: BuilderforceNodeError(
                     code: .backgroundUnavailable,
                     message: "LOCATION_BACKGROUND_UNAVAILABLE: background location requires Always"))
         }
-        let params = (try? Self.decodeParams(CoderClawLocationGetParams.self, from: req.paramsJSON)) ??
-            CoderClawLocationGetParams()
+        let params = (try? Self.decodeParams(BuilderforceLocationGetParams.self, from: req.paramsJSON)) ??
+            BuilderforceLocationGetParams()
         let desired = params.desiredAccuracy ??
             (self.isLocationPreciseEnabled() ? .precise : .balanced)
         let status = self.locationService.authorizationStatus()
@@ -784,7 +784,7 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(
+                error: BuilderforceNodeError(
                     code: .unavailable,
                     message: "LOCATION_PERMISSION_REQUIRED: grant Location permission"))
         }
@@ -792,7 +792,7 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(
+                error: BuilderforceNodeError(
                     code: .unavailable,
                     message: "LOCATION_PERMISSION_REQUIRED: enable Always for background access"))
         }
@@ -802,7 +802,7 @@ final class NodeAppModel {
             maxAgeMs: params.maxAgeMs,
             timeoutMs: params.timeoutMs)
         let isPrecise = self.locationService.accuracyAuthorization() == .fullAccuracy
-        let payload = CoderClawLocationPayload(
+        let payload = BuilderforceLocationPayload(
             lat: location.coordinate.latitude,
             lon: location.coordinate.longitude,
             accuracyMeters: location.horizontalAccuracy,
@@ -818,10 +818,10 @@ final class NodeAppModel {
 
     private func handleCanvasInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
         switch req.command {
-        case CoderClawCanvasCommand.present.rawValue:
+        case BuilderforceCanvasCommand.present.rawValue:
             // iOS ignores placement hints; canvas always fills the screen.
-            let params = (try? Self.decodeParams(CoderClawCanvasPresentParams.self, from: req.paramsJSON)) ??
-                CoderClawCanvasPresentParams()
+            let params = (try? Self.decodeParams(BuilderforceCanvasPresentParams.self, from: req.paramsJSON)) ??
+                BuilderforceCanvasPresentParams()
             let url = params.url?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if url.isEmpty {
                 self.screen.showDefaultCanvas()
@@ -829,20 +829,20 @@ final class NodeAppModel {
                 self.screen.navigate(to: url)
             }
             return BridgeInvokeResponse(id: req.id, ok: true)
-        case CoderClawCanvasCommand.hide.rawValue:
+        case BuilderforceCanvasCommand.hide.rawValue:
             self.screen.showDefaultCanvas()
             return BridgeInvokeResponse(id: req.id, ok: true)
-        case CoderClawCanvasCommand.navigate.rawValue:
-            let params = try Self.decodeParams(CoderClawCanvasNavigateParams.self, from: req.paramsJSON)
+        case BuilderforceCanvasCommand.navigate.rawValue:
+            let params = try Self.decodeParams(BuilderforceCanvasNavigateParams.self, from: req.paramsJSON)
             self.screen.navigate(to: params.url)
             return BridgeInvokeResponse(id: req.id, ok: true)
-        case CoderClawCanvasCommand.evalJS.rawValue:
-            let params = try Self.decodeParams(CoderClawCanvasEvalParams.self, from: req.paramsJSON)
+        case BuilderforceCanvasCommand.evalJS.rawValue:
+            let params = try Self.decodeParams(BuilderforceCanvasEvalParams.self, from: req.paramsJSON)
             let result = try await self.screen.eval(javaScript: params.javaScript)
             let payload = try Self.encodePayload(["result": result])
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: payload)
-        case CoderClawCanvasCommand.snapshot.rawValue:
-            let params = try? Self.decodeParams(CoderClawCanvasSnapshotParams.self, from: req.paramsJSON)
+        case BuilderforceCanvasCommand.snapshot.rawValue:
+            let params = try? Self.decodeParams(BuilderforceCanvasSnapshotParams.self, from: req.paramsJSON)
             let format = params?.format ?? .jpeg
             let maxWidth: CGFloat? = {
                 if let raw = params?.maxWidth, raw > 0 { return CGFloat(raw) }
@@ -866,19 +866,19 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
+                error: BuilderforceNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
         }
     }
 
     private func handleCanvasA2UIInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
         let command = req.command
         switch command {
-        case CoderClawCanvasA2UICommand.reset.rawValue:
+        case BuilderforceCanvasA2UICommand.reset.rawValue:
             guard let a2uiUrl = await self.resolveA2UIHostURL() else {
                 return BridgeInvokeResponse(
                     id: req.id,
                     ok: false,
-                    error: CoderClawNodeError(
+                    error: BuilderforceNodeError(
                         code: .unavailable,
                         message: "A2UI_HOST_NOT_CONFIGURED: gateway did not advertise canvas host"))
             }
@@ -887,32 +887,32 @@ final class NodeAppModel {
                 return BridgeInvokeResponse(
                     id: req.id,
                     ok: false,
-                    error: CoderClawNodeError(
+                    error: BuilderforceNodeError(
                         code: .unavailable,
                         message: "A2UI_HOST_UNAVAILABLE: A2UI host not reachable"))
             }
 
             let json = try await self.screen.eval(javaScript: """
             (() => {
-              const host = globalThis.coderclawA2UI;
-              if (!host) return JSON.stringify({ ok: false, error: "missing coderclawA2UI" });
+              const host = globalThis.builderforceA2UI;
+              if (!host) return JSON.stringify({ ok: false, error: "missing builderforceA2UI" });
               return JSON.stringify(host.reset());
             })()
             """)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
-        case CoderClawCanvasA2UICommand.push.rawValue, CoderClawCanvasA2UICommand.pushJSONL.rawValue:
-            let messages: [CoderClawKit.AnyCodable]
-            if command == CoderClawCanvasA2UICommand.pushJSONL.rawValue {
-                let params = try Self.decodeParams(CoderClawCanvasA2UIPushJSONLParams.self, from: req.paramsJSON)
-                messages = try CoderClawCanvasA2UIJSONL.decodeMessagesFromJSONL(params.jsonl)
+        case BuilderforceCanvasA2UICommand.push.rawValue, BuilderforceCanvasA2UICommand.pushJSONL.rawValue:
+            let messages: [BuilderforceKit.AnyCodable]
+            if command == BuilderforceCanvasA2UICommand.pushJSONL.rawValue {
+                let params = try Self.decodeParams(BuilderforceCanvasA2UIPushJSONLParams.self, from: req.paramsJSON)
+                messages = try BuilderforceCanvasA2UIJSONL.decodeMessagesFromJSONL(params.jsonl)
             } else {
                 do {
-                    let params = try Self.decodeParams(CoderClawCanvasA2UIPushParams.self, from: req.paramsJSON)
+                    let params = try Self.decodeParams(BuilderforceCanvasA2UIPushParams.self, from: req.paramsJSON)
                     messages = params.messages
                 } catch {
                     // Be forgiving: some clients still send JSONL payloads to `canvas.a2ui.push`.
-                    let params = try Self.decodeParams(CoderClawCanvasA2UIPushJSONLParams.self, from: req.paramsJSON)
-                    messages = try CoderClawCanvasA2UIJSONL.decodeMessagesFromJSONL(params.jsonl)
+                    let params = try Self.decodeParams(BuilderforceCanvasA2UIPushJSONLParams.self, from: req.paramsJSON)
+                    messages = try BuilderforceCanvasA2UIJSONL.decodeMessagesFromJSONL(params.jsonl)
                 }
             }
 
@@ -920,7 +920,7 @@ final class NodeAppModel {
                 return BridgeInvokeResponse(
                     id: req.id,
                     ok: false,
-                    error: CoderClawNodeError(
+                    error: BuilderforceNodeError(
                         code: .unavailable,
                         message: "A2UI_HOST_NOT_CONFIGURED: gateway did not advertise canvas host"))
             }
@@ -929,17 +929,17 @@ final class NodeAppModel {
                 return BridgeInvokeResponse(
                     id: req.id,
                     ok: false,
-                    error: CoderClawNodeError(
+                    error: BuilderforceNodeError(
                         code: .unavailable,
                         message: "A2UI_HOST_UNAVAILABLE: A2UI host not reachable"))
             }
 
-            let messagesJSON = try CoderClawCanvasA2UIJSONL.encodeMessagesJSONArray(messages)
+            let messagesJSON = try BuilderforceCanvasA2UIJSONL.encodeMessagesJSONArray(messages)
             let js = """
             (() => {
               try {
-                const host = globalThis.coderclawA2UI;
-                if (!host) return JSON.stringify({ ok: false, error: "missing coderclawA2UI" });
+                const host = globalThis.builderforceA2UI;
+                if (!host) return JSON.stringify({ ok: false, error: "missing builderforceA2UI" });
                 const messages = \(messagesJSON);
                 return JSON.stringify(host.applyMessages(messages));
               } catch (e) {
@@ -953,24 +953,24 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
+                error: BuilderforceNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
         }
     }
 
     private func handleCameraInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
         switch req.command {
-        case CoderClawCameraCommand.list.rawValue:
+        case BuilderforceCameraCommand.list.rawValue:
             let devices = await self.camera.listDevices()
             struct Payload: Codable {
                 var devices: [CameraController.CameraDeviceInfo]
             }
             let payload = try Self.encodePayload(Payload(devices: devices))
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: payload)
-        case CoderClawCameraCommand.snap.rawValue:
+        case BuilderforceCameraCommand.snap.rawValue:
             self.showCameraHUD(text: "Taking photo…", kind: .photo)
             self.triggerCameraFlash()
-            let params = (try? Self.decodeParams(CoderClawCameraSnapParams.self, from: req.paramsJSON)) ??
-                CoderClawCameraSnapParams()
+            let params = (try? Self.decodeParams(BuilderforceCameraSnapParams.self, from: req.paramsJSON)) ??
+                BuilderforceCameraSnapParams()
             let res = try await self.camera.snap(params: params)
 
             struct Payload: Codable {
@@ -986,9 +986,9 @@ final class NodeAppModel {
                 height: res.height))
             self.showCameraHUD(text: "Photo captured", kind: .success, autoHideSeconds: 1.6)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: payload)
-        case CoderClawCameraCommand.clip.rawValue:
-            let params = (try? Self.decodeParams(CoderClawCameraClipParams.self, from: req.paramsJSON)) ??
-                CoderClawCameraClipParams()
+        case BuilderforceCameraCommand.clip.rawValue:
+            let params = (try? Self.decodeParams(BuilderforceCameraClipParams.self, from: req.paramsJSON)) ??
+                BuilderforceCameraClipParams()
 
             let suspended = (params.includeAudio ?? true) ? self.voiceWake.suspendForExternalAudioCapture() : false
             defer { self.voiceWake.resumeAfterExternalAudioCapture(wasSuspended: suspended) }
@@ -1013,13 +1013,13 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
+                error: BuilderforceNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
         }
     }
 
     private func handleScreenRecordInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
-        let params = (try? Self.decodeParams(CoderClawScreenRecordParams.self, from: req.paramsJSON)) ??
-            CoderClawScreenRecordParams()
+        let params = (try? Self.decodeParams(BuilderforceScreenRecordParams.self, from: req.paramsJSON)) ??
+            BuilderforceScreenRecordParams()
         if let format = params.format, format.lowercased() != "mp4" {
             throw NSError(domain: "Screen", code: 30, userInfo: [
                 NSLocalizedDescriptionKey: "INVALID_REQUEST: screen format must be mp4",
@@ -1055,14 +1055,14 @@ final class NodeAppModel {
     }
 
     private func handleSystemNotify(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
-        let params = try Self.decodeParams(CoderClawSystemNotifyParams.self, from: req.paramsJSON)
+        let params = try Self.decodeParams(BuilderforceSystemNotifyParams.self, from: req.paramsJSON)
         let title = params.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let body = params.body.trimmingCharacters(in: .whitespacesAndNewlines)
         if title.isEmpty, body.isEmpty {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .invalidRequest, message: "INVALID_REQUEST: empty notification"))
+                error: BuilderforceNodeError(code: .invalidRequest, message: "INVALID_REQUEST: empty notification"))
         }
 
         let finalStatus = await self.requestNotificationAuthorizationIfNeeded()
@@ -1070,7 +1070,7 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .unavailable, message: "NOT_AUTHORIZED: notifications"))
+                error: BuilderforceNodeError(code: .unavailable, message: "NOT_AUTHORIZED: notifications"))
         }
 
         let addResult = await self.runNotificationCall(timeoutSeconds: 2.0) { [notificationCenter] in
@@ -1103,19 +1103,19 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .unavailable, message: "NOTIFICATION_FAILED: \(error.message)"))
+                error: BuilderforceNodeError(code: .unavailable, message: "NOTIFICATION_FAILED: \(error.message)"))
         }
         return BridgeInvokeResponse(id: req.id, ok: true)
     }
 
     private func handleChatPushInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
-        let params = try Self.decodeParams(CoderClawChatPushParams.self, from: req.paramsJSON)
+        let params = try Self.decodeParams(BuilderforceChatPushParams.self, from: req.paramsJSON)
         let text = params.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .invalidRequest, message: "INVALID_REQUEST: empty chat.push text"))
+                error: BuilderforceNodeError(code: .invalidRequest, message: "INVALID_REQUEST: empty chat.push text"))
         }
 
         let finalStatus = await self.requestNotificationAuthorizationIfNeeded()
@@ -1123,7 +1123,7 @@ final class NodeAppModel {
         if finalStatus == .authorized || finalStatus == .provisional || finalStatus == .ephemeral {
             let addResult = await self.runNotificationCall(timeoutSeconds: 2.0) { [notificationCenter] in
                 let content = UNMutableNotificationContent()
-                content.title = "CoderClaw"
+                content.title = "Builderforce"
                 content.body = text
                 content.sound = .default
                 content.userInfo = ["messageId": messageId]
@@ -1137,7 +1137,7 @@ final class NodeAppModel {
                 return BridgeInvokeResponse(
                     id: req.id,
                     ok: false,
-                    error: CoderClawNodeError(code: .unavailable, message: "NOTIFICATION_FAILED: \(error.message)"))
+                    error: BuilderforceNodeError(code: .unavailable, message: "NOTIFICATION_FAILED: \(error.message)"))
             }
         }
 
@@ -1148,7 +1148,7 @@ final class NodeAppModel {
             }
         }
 
-        let payload = CoderClawChatPushPayload(messageId: messageId)
+        let payload = BuilderforceChatPushPayload(messageId: messageId)
         let json = try Self.encodePayload(payload)
         return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
     }
@@ -1210,11 +1210,11 @@ final class NodeAppModel {
 
     private func handleDeviceInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
         switch req.command {
-        case CoderClawDeviceCommand.status.rawValue:
+        case BuilderforceDeviceCommand.status.rawValue:
             let payload = try await self.deviceStatusService.status()
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
-        case CoderClawDeviceCommand.info.rawValue:
+        case BuilderforceDeviceCommand.info.rawValue:
             let payload = self.deviceStatusService.info()
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
@@ -1222,13 +1222,13 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
+                error: BuilderforceNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
         }
     }
 
     private func handlePhotosInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
-        let params = (try? Self.decodeParams(CoderClawPhotosLatestParams.self, from: req.paramsJSON)) ??
-            CoderClawPhotosLatestParams()
+        let params = (try? Self.decodeParams(BuilderforcePhotosLatestParams.self, from: req.paramsJSON)) ??
+            BuilderforcePhotosLatestParams()
         let payload = try await self.photosService.latest(params: params)
         let json = try Self.encodePayload(payload)
         return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
@@ -1236,14 +1236,14 @@ final class NodeAppModel {
 
     private func handleContactsInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
         switch req.command {
-        case CoderClawContactsCommand.search.rawValue:
-            let params = (try? Self.decodeParams(CoderClawContactsSearchParams.self, from: req.paramsJSON)) ??
-                CoderClawContactsSearchParams()
+        case BuilderforceContactsCommand.search.rawValue:
+            let params = (try? Self.decodeParams(BuilderforceContactsSearchParams.self, from: req.paramsJSON)) ??
+                BuilderforceContactsSearchParams()
             let payload = try await self.contactsService.search(params: params)
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
-        case CoderClawContactsCommand.add.rawValue:
-            let params = try Self.decodeParams(CoderClawContactsAddParams.self, from: req.paramsJSON)
+        case BuilderforceContactsCommand.add.rawValue:
+            let params = try Self.decodeParams(BuilderforceContactsAddParams.self, from: req.paramsJSON)
             let payload = try await self.contactsService.add(params: params)
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
@@ -1251,20 +1251,20 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
+                error: BuilderforceNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
         }
     }
 
     private func handleCalendarInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
         switch req.command {
-        case CoderClawCalendarCommand.events.rawValue:
-            let params = (try? Self.decodeParams(CoderClawCalendarEventsParams.self, from: req.paramsJSON)) ??
-                CoderClawCalendarEventsParams()
+        case BuilderforceCalendarCommand.events.rawValue:
+            let params = (try? Self.decodeParams(BuilderforceCalendarEventsParams.self, from: req.paramsJSON)) ??
+                BuilderforceCalendarEventsParams()
             let payload = try await self.calendarService.events(params: params)
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
-        case CoderClawCalendarCommand.add.rawValue:
-            let params = try Self.decodeParams(CoderClawCalendarAddParams.self, from: req.paramsJSON)
+        case BuilderforceCalendarCommand.add.rawValue:
+            let params = try Self.decodeParams(BuilderforceCalendarAddParams.self, from: req.paramsJSON)
             let payload = try await self.calendarService.add(params: params)
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
@@ -1272,20 +1272,20 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
+                error: BuilderforceNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
         }
     }
 
     private func handleRemindersInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
         switch req.command {
-        case CoderClawRemindersCommand.list.rawValue:
-            let params = (try? Self.decodeParams(CoderClawRemindersListParams.self, from: req.paramsJSON)) ??
-                CoderClawRemindersListParams()
+        case BuilderforceRemindersCommand.list.rawValue:
+            let params = (try? Self.decodeParams(BuilderforceRemindersListParams.self, from: req.paramsJSON)) ??
+                BuilderforceRemindersListParams()
             let payload = try await self.remindersService.list(params: params)
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
-        case CoderClawRemindersCommand.add.rawValue:
-            let params = try Self.decodeParams(CoderClawRemindersAddParams.self, from: req.paramsJSON)
+        case BuilderforceRemindersCommand.add.rawValue:
+            let params = try Self.decodeParams(BuilderforceRemindersAddParams.self, from: req.paramsJSON)
             let payload = try await self.remindersService.add(params: params)
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
@@ -1293,21 +1293,21 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
+                error: BuilderforceNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
         }
     }
 
     private func handleMotionInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
         switch req.command {
-        case CoderClawMotionCommand.activity.rawValue:
-            let params = (try? Self.decodeParams(CoderClawMotionActivityParams.self, from: req.paramsJSON)) ??
-                CoderClawMotionActivityParams()
+        case BuilderforceMotionCommand.activity.rawValue:
+            let params = (try? Self.decodeParams(BuilderforceMotionActivityParams.self, from: req.paramsJSON)) ??
+                BuilderforceMotionActivityParams()
             let payload = try await self.motionService.activities(params: params)
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
-        case CoderClawMotionCommand.pedometer.rawValue:
-            let params = (try? Self.decodeParams(CoderClawPedometerParams.self, from: req.paramsJSON)) ??
-                CoderClawPedometerParams()
+        case BuilderforceMotionCommand.pedometer.rawValue:
+            let params = (try? Self.decodeParams(BuilderforcePedometerParams.self, from: req.paramsJSON)) ??
+                BuilderforcePedometerParams()
             let payload = try await self.motionService.pedometer(params: params)
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
@@ -1315,30 +1315,30 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
+                error: BuilderforceNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
         }
     }
 
     private func handleTalkInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
         switch req.command {
-        case CoderClawTalkCommand.pttStart.rawValue:
+        case BuilderforceTalkCommand.pttStart.rawValue:
             self.pttVoiceWakeSuspended = self.voiceWake.suspendForExternalAudioCapture()
             let payload = try await self.talkMode.beginPushToTalk()
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
-        case CoderClawTalkCommand.pttStop.rawValue:
+        case BuilderforceTalkCommand.pttStop.rawValue:
             let payload = await self.talkMode.endPushToTalk()
             self.voiceWake.resumeAfterExternalAudioCapture(wasSuspended: self.pttVoiceWakeSuspended)
             self.pttVoiceWakeSuspended = false
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
-        case CoderClawTalkCommand.pttCancel.rawValue:
+        case BuilderforceTalkCommand.pttCancel.rawValue:
             let payload = await self.talkMode.cancelPushToTalk()
             self.voiceWake.resumeAfterExternalAudioCapture(wasSuspended: self.pttVoiceWakeSuspended)
             self.pttVoiceWakeSuspended = false
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
-        case CoderClawTalkCommand.pttOnce.rawValue:
+        case BuilderforceTalkCommand.pttOnce.rawValue:
             self.pttVoiceWakeSuspended = self.voiceWake.suspendForExternalAudioCapture()
             defer {
                 self.voiceWake.resumeAfterExternalAudioCapture(wasSuspended: self.pttVoiceWakeSuspended)
@@ -1351,7 +1351,7 @@ final class NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
+                error: BuilderforceNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
         }
     }
 
@@ -1368,113 +1368,113 @@ private extension NodeAppModel {
             }
         }
 
-        register([CoderClawLocationCommand.get.rawValue]) { [weak self] req in
+        register([BuilderforceLocationCommand.get.rawValue]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleLocationInvoke(req)
         }
 
         register([
-            CoderClawCanvasCommand.present.rawValue,
-            CoderClawCanvasCommand.hide.rawValue,
-            CoderClawCanvasCommand.navigate.rawValue,
-            CoderClawCanvasCommand.evalJS.rawValue,
-            CoderClawCanvasCommand.snapshot.rawValue,
+            BuilderforceCanvasCommand.present.rawValue,
+            BuilderforceCanvasCommand.hide.rawValue,
+            BuilderforceCanvasCommand.navigate.rawValue,
+            BuilderforceCanvasCommand.evalJS.rawValue,
+            BuilderforceCanvasCommand.snapshot.rawValue,
         ]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleCanvasInvoke(req)
         }
 
         register([
-            CoderClawCanvasA2UICommand.reset.rawValue,
-            CoderClawCanvasA2UICommand.push.rawValue,
-            CoderClawCanvasA2UICommand.pushJSONL.rawValue,
+            BuilderforceCanvasA2UICommand.reset.rawValue,
+            BuilderforceCanvasA2UICommand.push.rawValue,
+            BuilderforceCanvasA2UICommand.pushJSONL.rawValue,
         ]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleCanvasA2UIInvoke(req)
         }
 
         register([
-            CoderClawCameraCommand.list.rawValue,
-            CoderClawCameraCommand.snap.rawValue,
-            CoderClawCameraCommand.clip.rawValue,
+            BuilderforceCameraCommand.list.rawValue,
+            BuilderforceCameraCommand.snap.rawValue,
+            BuilderforceCameraCommand.clip.rawValue,
         ]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleCameraInvoke(req)
         }
 
-        register([CoderClawScreenCommand.record.rawValue]) { [weak self] req in
+        register([BuilderforceScreenCommand.record.rawValue]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleScreenRecordInvoke(req)
         }
 
-        register([CoderClawSystemCommand.notify.rawValue]) { [weak self] req in
+        register([BuilderforceSystemCommand.notify.rawValue]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleSystemNotify(req)
         }
 
-        register([CoderClawChatCommand.push.rawValue]) { [weak self] req in
+        register([BuilderforceChatCommand.push.rawValue]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleChatPushInvoke(req)
         }
 
         register([
-            CoderClawDeviceCommand.status.rawValue,
-            CoderClawDeviceCommand.info.rawValue,
+            BuilderforceDeviceCommand.status.rawValue,
+            BuilderforceDeviceCommand.info.rawValue,
         ]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleDeviceInvoke(req)
         }
 
         register([
-            CoderClawWatchCommand.status.rawValue,
-            CoderClawWatchCommand.notify.rawValue,
+            BuilderforceWatchCommand.status.rawValue,
+            BuilderforceWatchCommand.notify.rawValue,
         ]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleWatchInvoke(req)
         }
 
-        register([CoderClawPhotosCommand.latest.rawValue]) { [weak self] req in
+        register([BuilderforcePhotosCommand.latest.rawValue]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handlePhotosInvoke(req)
         }
 
         register([
-            CoderClawContactsCommand.search.rawValue,
-            CoderClawContactsCommand.add.rawValue,
+            BuilderforceContactsCommand.search.rawValue,
+            BuilderforceContactsCommand.add.rawValue,
         ]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleContactsInvoke(req)
         }
 
         register([
-            CoderClawCalendarCommand.events.rawValue,
-            CoderClawCalendarCommand.add.rawValue,
+            BuilderforceCalendarCommand.events.rawValue,
+            BuilderforceCalendarCommand.add.rawValue,
         ]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleCalendarInvoke(req)
         }
 
         register([
-            CoderClawRemindersCommand.list.rawValue,
-            CoderClawRemindersCommand.add.rawValue,
+            BuilderforceRemindersCommand.list.rawValue,
+            BuilderforceRemindersCommand.add.rawValue,
         ]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleRemindersInvoke(req)
         }
 
         register([
-            CoderClawMotionCommand.activity.rawValue,
-            CoderClawMotionCommand.pedometer.rawValue,
+            BuilderforceMotionCommand.activity.rawValue,
+            BuilderforceMotionCommand.pedometer.rawValue,
         ]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleMotionInvoke(req)
         }
 
         register([
-            CoderClawTalkCommand.pttStart.rawValue,
-            CoderClawTalkCommand.pttStop.rawValue,
-            CoderClawTalkCommand.pttCancel.rawValue,
-            CoderClawTalkCommand.pttOnce.rawValue,
+            BuilderforceTalkCommand.pttStart.rawValue,
+            BuilderforceTalkCommand.pttStop.rawValue,
+            BuilderforceTalkCommand.pttCancel.rawValue,
+            BuilderforceTalkCommand.pttOnce.rawValue,
         ]) { [weak self] req in
             guard let self else { throw NodeCapabilityRouter.RouterError.handlerUnavailable }
             return try await self.handleTalkInvoke(req)
@@ -1485,9 +1485,9 @@ private extension NodeAppModel {
 
     func handleWatchInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
         switch req.command {
-        case CoderClawWatchCommand.status.rawValue:
+        case BuilderforceWatchCommand.status.rawValue:
             let status = await self.watchMessagingService.status()
-            let payload = CoderClawWatchStatusPayload(
+            let payload = BuilderforceWatchStatusPayload(
                 supported: status.supported,
                 paired: status.paired,
                 appInstalled: status.appInstalled,
@@ -1495,15 +1495,15 @@ private extension NodeAppModel {
                 activationState: status.activationState)
             let json = try Self.encodePayload(payload)
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: json)
-        case CoderClawWatchCommand.notify.rawValue:
-            let params = try Self.decodeParams(CoderClawWatchNotifyParams.self, from: req.paramsJSON)
+        case BuilderforceWatchCommand.notify.rawValue:
+            let params = try Self.decodeParams(BuilderforceWatchNotifyParams.self, from: req.paramsJSON)
             let title = params.title.trimmingCharacters(in: .whitespacesAndNewlines)
             let body = params.body.trimmingCharacters(in: .whitespacesAndNewlines)
             if title.isEmpty && body.isEmpty {
                 return BridgeInvokeResponse(
                     id: req.id,
                     ok: false,
-                    error: CoderClawNodeError(
+                    error: BuilderforceNodeError(
                         code: .invalidRequest,
                         message: "INVALID_REQUEST: empty watch notification"))
             }
@@ -1513,7 +1513,7 @@ private extension NodeAppModel {
                     title: title,
                     body: body,
                     priority: params.priority)
-                let payload = CoderClawWatchNotifyPayload(
+                let payload = BuilderforceWatchNotifyPayload(
                     deliveredImmediately: result.deliveredImmediately,
                     queuedForDelivery: result.queuedForDelivery,
                     transport: result.transport)
@@ -1523,7 +1523,7 @@ private extension NodeAppModel {
                 return BridgeInvokeResponse(
                     id: req.id,
                     ok: false,
-                    error: CoderClawNodeError(
+                    error: BuilderforceNodeError(
                         code: .unavailable,
                         message: error.localizedDescription))
             }
@@ -1531,13 +1531,13 @@ private extension NodeAppModel {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
+                error: BuilderforceNodeError(code: .invalidRequest, message: "INVALID_REQUEST: unknown command"))
         }
     }
 
-    func locationMode() -> CoderClawLocationMode {
+    func locationMode() -> BuilderforceLocationMode {
         let raw = UserDefaults.standard.string(forKey: "location.enabledMode") ?? "off"
-        return CoderClawLocationMode(rawValue: raw) ?? .off
+        return BuilderforceLocationMode(rawValue: raw) ?? .off
     }
 
     func isLocationPreciseEnabled() -> Bool {
@@ -1785,7 +1785,7 @@ private extension NodeAppModel {
                             BridgeInvokeResponse(
                                 id: req.id,
                                 ok: false,
-                                error: CoderClawNodeError(
+                                error: BuilderforceNodeError(
                                     code: .invalidRequest,
                                     message: "INVALID_REQUEST: operator session cannot invoke node commands"))
                         })
@@ -1893,7 +1893,7 @@ private extension NodeAppModel {
                                 return BridgeInvokeResponse(
                                     id: req.id,
                                     ok: false,
-                                    error: CoderClawNodeError(
+                                    error: BuilderforceNodeError(
                                         code: .unavailable,
                                         message: "UNAVAILABLE: node not ready"))
                             }
@@ -1956,9 +1956,9 @@ private extension NodeAppModel {
                             self.gatewayPairingRequestId = requestId
                             if let requestId, !requestId.isEmpty {
                                 self.gatewayStatusText =
-                                    "Pairing required (requestId: \(requestId)). Approve on gateway and return to CoderClaw."
+                                    "Pairing required (requestId: \(requestId)). Approve on gateway and return to Builderforce."
                             } else {
-                                self.gatewayStatusText = "Pairing required. Approve on gateway and return to CoderClaw."
+                                self.gatewayStatusText = "Pairing required. Approve on gateway and return to Builderforce."
                             }
                         }
                         // Hard stop the underlying WebSocket watchdog reconnects so the UI stays stable and
@@ -2014,12 +2014,12 @@ private extension NodeAppModel {
 
     func legacyClientIdFallback(currentClientId: String, error: Error) -> String? {
         let normalizedClientId = currentClientId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard normalizedClientId == "coderclaw-ios" else { return nil }
+        guard normalizedClientId == "builderforce-ios" else { return nil }
         let message = error.localizedDescription.lowercased()
         guard message.contains("invalid connect params"), message.contains("/client/id") else {
             return nil
         }
-        return "coderclaw-ios"
+        return "builderforce-ios"
     }
 
     func isOperatorConnected() async -> Bool {
@@ -2090,7 +2090,7 @@ extension NodeAppModel {
         self.recordShareEvent("Share self-test running…")
 
         let payload = SharedContentPayload(
-            title: "CoderClaw Share Self-Test",
+            title: "Builderforce Share Self-Test",
             url: URL(string: "https://builderforce.ai/share-self-test"),
             text: "Validate iOS share->deep-link->gateway forwarding.")
         guard let deepLink = ShareToAgentDeepLink.buildURL(

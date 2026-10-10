@@ -1,13 +1,13 @@
 import AppKit
-import CoderClawProtocol
+import BuilderforceProtocol
 import Foundation
 import Testing
 
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite(.serialized)
 struct LowCoverageHelperTests {
-    private typealias ProtoAnyCodable = CoderClawProtocol.AnyCodable
+    private typealias ProtoAnyCodable = BuilderforceProtocol.AnyCodable
 
     @Test func anyCodableHelperAccessors() throws {
         let payload: [String: ProtoAnyCodable] = [

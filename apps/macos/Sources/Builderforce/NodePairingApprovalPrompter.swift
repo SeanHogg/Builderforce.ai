@@ -1,10 +1,10 @@
 import AppKit
 import Foundation
 import Observation
-import CoderClawDiscovery
-import CoderClawIPC
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceDiscovery
+import BuilderforceIPC
+import BuilderforceKit
+import BuilderforceProtocol
 import OSLog
 import UserNotifications
 
@@ -22,7 +22,7 @@ enum NodePairingReconcilePolicy {
 final class NodePairingApprovalPrompter {
     static let shared = NodePairingApprovalPrompter()
 
-    private let logger = Logger(subsystem: "ai.coderclaw", category: "node-pairing")
+    private let logger = Logger(subsystem: "ai.builderforce", category: "node-pairing")
     private var task: Task<Void, Never>?
     private var reconcileTask: Task<Void, Never>?
     private var reconcileOnceTask: Task<Void, Never>?

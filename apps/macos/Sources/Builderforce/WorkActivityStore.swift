@@ -1,7 +1,7 @@
 import Foundation
 import Observation
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceKit
+import BuilderforceProtocol
 import SwiftUI
 
 @MainActor
@@ -58,7 +58,7 @@ final class WorkActivityStore {
         phase: String,
         name: String?,
         meta: String?,
-        args: [String: CoderClawProtocol.AnyCodable]?)
+        args: [String: BuilderforceProtocol.AnyCodable]?)
     {
         let toolKind = Self.mapToolKind(name)
         let label = Self.buildLabel(name: name, meta: meta, args: args)
@@ -227,7 +227,7 @@ final class WorkActivityStore {
     private static func buildLabel(
         name: String?,
         meta: String?,
-        args: [String: CoderClawProtocol.AnyCodable]?) -> String
+        args: [String: BuilderforceProtocol.AnyCodable]?) -> String
     {
         let wrappedArgs = self.wrapToolArgs(args)
         let display = ToolDisplayRegistry.resolve(name: name ?? "tool", args: wrappedArgs, meta: meta)
@@ -238,17 +238,17 @@ final class WorkActivityStore {
         return display.label
     }
 
-    private static func wrapToolArgs(_ args: [String: CoderClawProtocol.AnyCodable]?) -> CoderClawKit.AnyCodable? {
+    private static func wrapToolArgs(_ args: [String: BuilderforceProtocol.AnyCodable]?) -> BuilderforceKit.AnyCodable? {
         guard let args else { return nil }
         let converted: [String: Any] = args.mapValues { self.unwrapJSONValue($0.value) }
-        return CoderClawKit.AnyCodable(converted)
+        return BuilderforceKit.AnyCodable(converted)
     }
 
     private static func unwrapJSONValue(_ value: Any) -> Any {
-        if let dict = value as? [String: CoderClawProtocol.AnyCodable] {
+        if let dict = value as? [String: BuilderforceProtocol.AnyCodable] {
             return dict.mapValues { self.unwrapJSONValue($0.value) }
         }
-        if let array = value as? [CoderClawProtocol.AnyCodable] {
+        if let array = value as? [BuilderforceProtocol.AnyCodable] {
             return array.map { self.unwrapJSONValue($0.value) }
         }
         if let dict = value as? [String: Any] {

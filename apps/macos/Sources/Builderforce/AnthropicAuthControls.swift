@@ -6,7 +6,7 @@ import SwiftUI
 struct AnthropicAuthControls: View {
     let connectionMode: AppState.ConnectionMode
 
-    @State private var oauthStatus: CoderClawOAuthStore.AnthropicOAuthStatus = CoderClawOAuthStore.anthropicOAuthStatus()
+    @State private var oauthStatus: BuilderforceOAuthStore.AnthropicOAuthStatus = BuilderforceOAuthStore.anthropicOAuthStatus()
     @State private var pkce: AnthropicOAuth.PKCE?
     @State private var code: String = ""
     @State private var busy = false
@@ -42,10 +42,10 @@ struct AnthropicAuthControls: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Reveal") {
-                    NSWorkspace.shared.activateFileViewerSelecting([CoderClawOAuthStore.oauthURL()])
+                    NSWorkspace.shared.activateFileViewerSelecting([BuilderforceOAuthStore.oauthURL()])
                 }
                 .buttonStyle(.bordered)
-                .disabled(!FileManager().fileExists(atPath: CoderClawOAuthStore.oauthURL().path))
+                .disabled(!FileManager().fileExists(atPath: BuilderforceOAuthStore.oauthURL().path))
 
                 Button("Refresh") {
                     self.refresh()
@@ -53,7 +53,7 @@ struct AnthropicAuthControls: View {
                 .buttonStyle(.bordered)
             }
 
-            Text(CoderClawOAuthStore.oauthURL().path)
+            Text(BuilderforceOAuthStore.oauthURL().path)
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -130,8 +130,8 @@ struct AnthropicAuthControls: View {
     }
 
     private func refresh() {
-        let imported = CoderClawOAuthStore.importLegacyAnthropicOAuthIfNeeded()
-        self.oauthStatus = CoderClawOAuthStore.anthropicOAuthStatus()
+        let imported = BuilderforceOAuthStore.importLegacyAnthropicOAuthIfNeeded()
+        self.oauthStatus = BuilderforceOAuthStore.anthropicOAuthStatus()
         if imported != nil {
             self.statusText = "Imported existing OAuth credentials."
         }
@@ -172,11 +172,11 @@ struct AnthropicAuthControls: View {
                 code: parsed.code,
                 state: parsed.state,
                 verifier: pkce.verifier)
-            try CoderClawOAuthStore.saveAnthropicOAuth(creds)
+            try BuilderforceOAuthStore.saveAnthropicOAuth(creds)
             self.refresh()
             self.pkce = nil
             self.code = ""
-            self.statusText = "Connected. CoderClaw can now use Claude via OAuth."
+            self.statusText = "Connected. Builderforce can now use Claude via OAuth."
         } catch {
             self.statusText = "OAuth failed: \(error.localizedDescription)"
         }
@@ -212,7 +212,7 @@ struct AnthropicAuthControls: View {
 extension AnthropicAuthControls {
     init(
         connectionMode: AppState.ConnectionMode,
-        oauthStatus: CoderClawOAuthStore.AnthropicOAuthStatus,
+        oauthStatus: BuilderforceOAuthStore.AnthropicOAuthStatus,
         pkce: AnthropicOAuth.PKCE? = nil,
         code: String = "",
         busy: Bool = false,

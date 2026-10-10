@@ -1,11 +1,11 @@
-package ai.coderclaw.android.node
+package ai.builderforce.android.node
 
 import android.content.Context
-import ai.coderclaw.android.CameraHudKind
-import ai.coderclaw.android.BuildConfig
-import ai.coderclaw.android.SecurePrefs
-import ai.coderclaw.android.gateway.GatewayEndpoint
-import ai.coderclaw.android.gateway.GatewaySession
+import ai.builderforce.android.CameraHudKind
+import ai.builderforce.android.BuildConfig
+import ai.builderforce.android.SecurePrefs
+import ai.builderforce.android.gateway.GatewayEndpoint
+import ai.builderforce.android.gateway.GatewaySession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
@@ -29,7 +29,7 @@ class CameraHandler(
       if (!BuildConfig.DEBUG) return
       val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
       logFile?.appendText("[$ts] $msg\n")
-      android.util.Log.w("coderclaw", "camera.snap: $msg")
+      android.util.Log.w("builderforce", "camera.snap: $msg")
     }
     try {
       logFile?.writeText("") // clear
@@ -67,7 +67,7 @@ class CameraHandler(
       if (!BuildConfig.DEBUG) return
       val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
       clipLogFile?.appendText("[CLIP $ts] $msg\n")
-      android.util.Log.w("coderclaw", "camera.clip: $msg")
+      android.util.Log.w("builderforce", "camera.clip: $msg")
     }
     val includeAudio = paramsJson?.contains("\"includeAudio\":true") != false
     if (includeAudio) externalAudioCaptureActive.value = true

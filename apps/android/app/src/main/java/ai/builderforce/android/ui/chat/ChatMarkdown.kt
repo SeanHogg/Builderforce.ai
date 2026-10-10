@@ -1,4 +1,4 @@
-package ai.coderclaw.android.ui.chat
+package ai.builderforce.android.ui.chat
 
 import android.graphics.BitmapFactory
 import android.util.Base64

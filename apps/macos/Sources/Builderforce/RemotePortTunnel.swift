@@ -9,7 +9,7 @@ import Darwin
 ///
 /// Uses `ssh -N -L` to forward the remote gateway ports to localhost.
 final class RemotePortTunnel {
-    private static let logger = Logger(subsystem: "ai.coderclaw", category: "remote.tunnel")
+    private static let logger = Logger(subsystem: "ai.builderforce", category: "remote.tunnel")
 
     let process: Process
     let localPort: UInt16?
@@ -136,7 +136,7 @@ final class RemotePortTunnel {
     }
 
     private static func resolveRemotePortOverride(for sshHost: String) -> Int? {
-        let root = CoderClawConfigFile.loadDict()
+        let root = BuilderforceConfigFile.loadDict()
         guard let gateway = root["gateway"] as? [String: Any],
               let remote = gateway["remote"] as? [String: Any],
               let urlRaw = remote["url"] as? String
@@ -186,7 +186,7 @@ final class RemotePortTunnel {
         }
 
         return try await withCheckedThrowingContinuation { cont in
-            let queue = DispatchQueue(label: "ai.coderclaw.remote.tunnel.port", qos: .utility)
+            let queue = DispatchQueue(label: "ai.builderforce.remote.tunnel.port", qos: .utility)
             do {
                 let listener = try NWListener(using: .tcp, on: .any)
                 listener.newConnectionHandler = { connection in connection.cancel() }

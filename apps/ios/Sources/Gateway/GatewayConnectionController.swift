@@ -5,7 +5,7 @@ import CoreMotion
 import CryptoKit
 import EventKit
 import Foundation
-import CoderClawKit
+import BuilderforceKit
 import Network
 import Observation
 import Photos
@@ -682,7 +682,7 @@ final class GatewayConnectionController {
         if manualClientId?.isEmpty == false {
             return manualClientId!
         }
-        return "coderclaw-ios"
+        return "builderforce-ios"
     }
 
     private func resolveManualPort(host: String, port: Int, useTLS: Bool) -> Int? {
@@ -712,32 +712,32 @@ final class GatewayConnectionController {
     }
 
     private func currentCaps() -> [String] {
-        var caps = [CoderClawCapability.canvas.rawValue, CoderClawCapability.screen.rawValue]
+        var caps = [BuilderforceCapability.canvas.rawValue, BuilderforceCapability.screen.rawValue]
 
         // Default-on: if the key doesn't exist yet, treat it as enabled.
         let cameraEnabled =
             UserDefaults.standard.object(forKey: "camera.enabled") == nil
                 ? true
                 : UserDefaults.standard.bool(forKey: "camera.enabled")
-        if cameraEnabled { caps.append(CoderClawCapability.camera.rawValue) }
+        if cameraEnabled { caps.append(BuilderforceCapability.camera.rawValue) }
 
         let voiceWakeEnabled = UserDefaults.standard.bool(forKey: VoiceWakePreferences.enabledKey)
-        if voiceWakeEnabled { caps.append(CoderClawCapability.voiceWake.rawValue) }
+        if voiceWakeEnabled { caps.append(BuilderforceCapability.voiceWake.rawValue) }
 
         let locationModeRaw = UserDefaults.standard.string(forKey: "location.enabledMode") ?? "off"
-        let locationMode = CoderClawLocationMode(rawValue: locationModeRaw) ?? .off
-        if locationMode != .off { caps.append(CoderClawCapability.location.rawValue) }
+        let locationMode = BuilderforceLocationMode(rawValue: locationModeRaw) ?? .off
+        if locationMode != .off { caps.append(BuilderforceCapability.location.rawValue) }
 
-        caps.append(CoderClawCapability.device.rawValue)
+        caps.append(BuilderforceCapability.device.rawValue)
         if WatchMessagingService.isSupportedOnDevice() {
-            caps.append(CoderClawCapability.watch.rawValue)
+            caps.append(BuilderforceCapability.watch.rawValue)
         }
-        caps.append(CoderClawCapability.photos.rawValue)
-        caps.append(CoderClawCapability.contacts.rawValue)
-        caps.append(CoderClawCapability.calendar.rawValue)
-        caps.append(CoderClawCapability.reminders.rawValue)
+        caps.append(BuilderforceCapability.photos.rawValue)
+        caps.append(BuilderforceCapability.contacts.rawValue)
+        caps.append(BuilderforceCapability.calendar.rawValue)
+        caps.append(BuilderforceCapability.reminders.rawValue)
         if Self.motionAvailable() {
-            caps.append(CoderClawCapability.motion.rawValue)
+            caps.append(BuilderforceCapability.motion.rawValue)
         }
 
         return caps
@@ -745,58 +745,58 @@ final class GatewayConnectionController {
 
     private func currentCommands() -> [String] {
         var commands: [String] = [
-            CoderClawCanvasCommand.present.rawValue,
-            CoderClawCanvasCommand.hide.rawValue,
-            CoderClawCanvasCommand.navigate.rawValue,
-            CoderClawCanvasCommand.evalJS.rawValue,
-            CoderClawCanvasCommand.snapshot.rawValue,
-            CoderClawCanvasA2UICommand.push.rawValue,
-            CoderClawCanvasA2UICommand.pushJSONL.rawValue,
-            CoderClawCanvasA2UICommand.reset.rawValue,
-            CoderClawScreenCommand.record.rawValue,
-            CoderClawSystemCommand.notify.rawValue,
-            CoderClawChatCommand.push.rawValue,
-            CoderClawTalkCommand.pttStart.rawValue,
-            CoderClawTalkCommand.pttStop.rawValue,
-            CoderClawTalkCommand.pttCancel.rawValue,
-            CoderClawTalkCommand.pttOnce.rawValue,
+            BuilderforceCanvasCommand.present.rawValue,
+            BuilderforceCanvasCommand.hide.rawValue,
+            BuilderforceCanvasCommand.navigate.rawValue,
+            BuilderforceCanvasCommand.evalJS.rawValue,
+            BuilderforceCanvasCommand.snapshot.rawValue,
+            BuilderforceCanvasA2UICommand.push.rawValue,
+            BuilderforceCanvasA2UICommand.pushJSONL.rawValue,
+            BuilderforceCanvasA2UICommand.reset.rawValue,
+            BuilderforceScreenCommand.record.rawValue,
+            BuilderforceSystemCommand.notify.rawValue,
+            BuilderforceChatCommand.push.rawValue,
+            BuilderforceTalkCommand.pttStart.rawValue,
+            BuilderforceTalkCommand.pttStop.rawValue,
+            BuilderforceTalkCommand.pttCancel.rawValue,
+            BuilderforceTalkCommand.pttOnce.rawValue,
         ]
 
         let caps = Set(self.currentCaps())
-        if caps.contains(CoderClawCapability.camera.rawValue) {
-            commands.append(CoderClawCameraCommand.list.rawValue)
-            commands.append(CoderClawCameraCommand.snap.rawValue)
-            commands.append(CoderClawCameraCommand.clip.rawValue)
+        if caps.contains(BuilderforceCapability.camera.rawValue) {
+            commands.append(BuilderforceCameraCommand.list.rawValue)
+            commands.append(BuilderforceCameraCommand.snap.rawValue)
+            commands.append(BuilderforceCameraCommand.clip.rawValue)
         }
-        if caps.contains(CoderClawCapability.location.rawValue) {
-            commands.append(CoderClawLocationCommand.get.rawValue)
+        if caps.contains(BuilderforceCapability.location.rawValue) {
+            commands.append(BuilderforceLocationCommand.get.rawValue)
         }
-        if caps.contains(CoderClawCapability.device.rawValue) {
-            commands.append(CoderClawDeviceCommand.status.rawValue)
-            commands.append(CoderClawDeviceCommand.info.rawValue)
+        if caps.contains(BuilderforceCapability.device.rawValue) {
+            commands.append(BuilderforceDeviceCommand.status.rawValue)
+            commands.append(BuilderforceDeviceCommand.info.rawValue)
         }
-        if caps.contains(CoderClawCapability.watch.rawValue) {
-            commands.append(CoderClawWatchCommand.status.rawValue)
-            commands.append(CoderClawWatchCommand.notify.rawValue)
+        if caps.contains(BuilderforceCapability.watch.rawValue) {
+            commands.append(BuilderforceWatchCommand.status.rawValue)
+            commands.append(BuilderforceWatchCommand.notify.rawValue)
         }
-        if caps.contains(CoderClawCapability.photos.rawValue) {
-            commands.append(CoderClawPhotosCommand.latest.rawValue)
+        if caps.contains(BuilderforceCapability.photos.rawValue) {
+            commands.append(BuilderforcePhotosCommand.latest.rawValue)
         }
-        if caps.contains(CoderClawCapability.contacts.rawValue) {
-            commands.append(CoderClawContactsCommand.search.rawValue)
-            commands.append(CoderClawContactsCommand.add.rawValue)
+        if caps.contains(BuilderforceCapability.contacts.rawValue) {
+            commands.append(BuilderforceContactsCommand.search.rawValue)
+            commands.append(BuilderforceContactsCommand.add.rawValue)
         }
-        if caps.contains(CoderClawCapability.calendar.rawValue) {
-            commands.append(CoderClawCalendarCommand.events.rawValue)
-            commands.append(CoderClawCalendarCommand.add.rawValue)
+        if caps.contains(BuilderforceCapability.calendar.rawValue) {
+            commands.append(BuilderforceCalendarCommand.events.rawValue)
+            commands.append(BuilderforceCalendarCommand.add.rawValue)
         }
-        if caps.contains(CoderClawCapability.reminders.rawValue) {
-            commands.append(CoderClawRemindersCommand.list.rawValue)
-            commands.append(CoderClawRemindersCommand.add.rawValue)
+        if caps.contains(BuilderforceCapability.reminders.rawValue) {
+            commands.append(BuilderforceRemindersCommand.list.rawValue)
+            commands.append(BuilderforceRemindersCommand.add.rawValue)
         }
-        if caps.contains(CoderClawCapability.motion.rawValue) {
-            commands.append(CoderClawMotionCommand.activity.rawValue)
-            commands.append(CoderClawMotionCommand.pedometer.rawValue)
+        if caps.contains(BuilderforceCapability.motion.rawValue) {
+            commands.append(BuilderforceMotionCommand.activity.rawValue)
+            commands.append(BuilderforceMotionCommand.pedometer.rawValue)
         }
 
         return commands

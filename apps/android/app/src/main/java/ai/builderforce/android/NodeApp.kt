@@ -1,4 +1,4 @@
-package ai.coderclaw.android
+package ai.builderforce.android
 
 import android.app.Application
 import android.os.StrictMode
@@ -7,6 +7,7 @@ import java.security.Security
 
 class NodeApp : Application() {
   val runtime: NodeRuntime by lazy { NodeRuntime(this) }
+  val cloud: CloudServices by lazy { CloudServices(runtime.prefs) }
 
   override fun onCreate() {
     super.onCreate()

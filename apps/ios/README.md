@@ -1,8 +1,8 @@
-# CoderClaw iOS (Super Alpha)
+# Builderforce iOS (Super Alpha)
 
 NO TEST FLIGHT AVAILABLE AT THIS POINT
 
-This iPhone app is super-alpha and internal-use only. It connects to an CoderClaw Gateway as a `role: node`.
+This iPhone app is super-alpha and internal-use only. It connects to a Builderforce Gateway as a `role: node`.
 
 ## Distribution Status
 
@@ -28,15 +28,14 @@ NO TEST FLIGHT AVAILABLE AT THIS POINT
 2. From repo root:
 
 ```bash
-pnpm install
-./scripts/ios-configure-signing.sh
+agent-runtime/scripts/ios-configure-signing.sh   # writes apps/ios/.local-signing.xcconfig
 cd apps/ios
 xcodegen generate
-open CoderClaw.xcodeproj
+open Builderforce.xcodeproj
 ```
 
 3. In Xcode:
-   - Scheme: `CoderClaw`
+   - Scheme: `Builderforce`
    - Destination: connected iPhone (recommended for real behavior)
    - Build configuration: `Debug`
    - Run (`Product` -> `Run`)
@@ -44,16 +43,28 @@ open CoderClaw.xcodeproj
    - Use unique local bundle IDs via `apps/ios/LocalSigning.xcconfig`.
    - Start from `apps/ios/LocalSigning.xcconfig.example`.
 
-Shortcut command (same flow + open project):
+## Project Layout And Identifiers
 
-```bash
-pnpm ios:open
-```
+- XcodeGen spec `apps/ios/project.yml` (project `Builderforce`, `bundleIdPrefix: ai.builderforce`).
+- Targets: `Builderforce` (app, `ai.builderforce.ios`), `BuilderforceShareExtension`
+  (`ai.builderforce.ios.share`), `BuilderforceWatchApp` (`ai.builderforce.ios.watchkitapp`),
+  `BuilderforceWatchExtension` (`ai.builderforce.ios.watchkitapp.extension`), `BuilderforceTests`
+  (`ai.builderforce.ios.tests`).
+- Signing variables are `BUILDERFORCE_*` (`BUILDERFORCE_DEVELOPMENT_TEAM`, `BUILDERFORCE_CODE_SIGN_STYLE`,
+  `BUILDERFORCE_APP_BUNDLE_ID`, `BUILDERFORCE_SHARE_BUNDLE_ID`, `BUILDERFORCE_WATCH_APP_BUNDLE_ID`,
+  `BUILDERFORCE_WATCH_EXTENSION_BUNDLE_ID`, `BUILDERFORCE_APP_PROFILE`, `BUILDERFORCE_SHARE_PROFILE`),
+  defined in both `Signing.xcconfig` (app + share) and `Config/Signing.xcconfig` (watch).
+- Shared code: `apps/shared/BuilderforceKit` (`BuilderforceKit`, `BuilderforceProtocol`,
+  `BuilderforceChatUI`); voice wake: `agent-runtime/Swabble` (`SwabbleKit`).
+- URL scheme `builderforce://`; Bonjour `_builderforce-gw._tcp`; gateway client id `builderforce-ios`;
+  app group `group.ai.builderforce.shared`; keychain services `ai.builderforce.gateway|node|talk`.
+- Version: `CFBundleShortVersionString` / `CFBundleVersion` in `project.yml` and every target's `Info.plist`.
+- TestFlight lane: `apps/ios/fastlane` (`fastlane beta`, see `fastlane/SETUP.md`).
 
 ## APNs Expectations For Local/Manual Builds
 
 - The app calls `registerForRemoteNotifications()` at launch.
-- `apps/ios/Sources/CoderClaw.entitlements` sets `aps-environment` to `development`.
+- `apps/ios/Sources/Builderforce.entitlements` sets `aps-environment` to `development`.
 - APNs token registration to gateway happens only after gateway connection (`push.apns.register`).
 - Your selected team/profile must support Push Notifications for the app bundle ID you are signing.
 - If push capability or provisioning is wrong, APNs registration fails at runtime (check Xcode logs for `APNs registration failed`).
@@ -102,7 +113,7 @@ Automatic wake/reconnect hardening:
 5. If network path is unclear:
    - switch to manual host/port + TLS in Gateway Advanced settings
 6. In Xcode console, filter for subsystem/category signals:
-   - `ai.coderclaw.ios`
+   - `ai.builderforce.ios` / `ai.builderforce`
    - `GatewayDiag`
    - `APNs registration failed`
 7. Validate background expectations:

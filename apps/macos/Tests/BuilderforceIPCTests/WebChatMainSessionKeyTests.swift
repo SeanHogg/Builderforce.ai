@@ -1,12 +1,12 @@
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite struct WebChatMainSessionKeyTests {
     @Test func configGetSnapshotMainKeyFallsBackToMainWhenMissing() throws {
         let json = """
         {
-          "path": "/Users/pete/.coderclaw/coderclaw.json",
+          "path": "/Users/pete/.builderforce/builderforce.json",
           "exists": true,
           "raw": null,
           "parsed": {},
@@ -22,7 +22,7 @@ import Testing
     @Test func configGetSnapshotMainKeyTrimsAndUsesValue() throws {
         let json = """
         {
-          "path": "/Users/pete/.coderclaw/coderclaw.json",
+          "path": "/Users/pete/.builderforce/builderforce.json",
           "exists": true,
           "raw": null,
           "parsed": {},

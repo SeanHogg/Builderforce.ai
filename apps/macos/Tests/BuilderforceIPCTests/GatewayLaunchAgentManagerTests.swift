@@ -1,16 +1,16 @@
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite struct GatewayLaunchAgentManagerTests {
     @Test func launchAgentPlistSnapshotParsesArgsAndEnv() throws {
         let url = FileManager().temporaryDirectory
-            .appendingPathComponent("coderclaw-launchd-\(UUID().uuidString).plist")
+            .appendingPathComponent("builderforce-launchd-\(UUID().uuidString).plist")
         let plist: [String: Any] = [
-            "ProgramArguments": ["coderclaw", "gateway-daemon", "--port", "18789", "--bind", "loopback"],
+            "ProgramArguments": ["builderforce", "gateway-daemon", "--port", "18789", "--bind", "loopback"],
             "EnvironmentVariables": [
-                "CODERCLAW_GATEWAY_TOKEN": " secret ",
-                "CODERCLAW_GATEWAY_PASSWORD": "pw",
+                "BUILDERFORCE_AGENTS_GATEWAY_TOKEN": " secret ",
+                "BUILDERFORCE_AGENTS_GATEWAY_PASSWORD": "pw",
             ],
         ]
         let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
@@ -26,9 +26,9 @@ import Testing
 
     @Test func launchAgentPlistSnapshotAllowsMissingBind() throws {
         let url = FileManager().temporaryDirectory
-            .appendingPathComponent("coderclaw-launchd-\(UUID().uuidString).plist")
+            .appendingPathComponent("builderforce-launchd-\(UUID().uuidString).plist")
         let plist: [String: Any] = [
-            "ProgramArguments": ["coderclaw", "gateway-daemon", "--port", "18789"],
+            "ProgramArguments": ["builderforce", "gateway-daemon", "--port", "18789"],
         ]
         let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
         try data.write(to: url, options: [.atomic])

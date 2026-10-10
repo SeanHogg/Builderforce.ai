@@ -46,7 +46,7 @@ final class NodesStore {
     var statusMessage: String?
     var isLoading = false
 
-    private let logger = Logger(subsystem: "ai.coderclaw", category: "nodes")
+    private let logger = Logger(subsystem: "ai.builderforce", category: "nodes")
     private var task: Task<Void, Never>?
     private let interval: TimeInterval = 30
     private var startCount = 0

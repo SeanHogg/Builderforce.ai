@@ -1,6 +1,6 @@
-import CoderClawProtocol
+import BuilderforceProtocol
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite struct InstancesStoreTests {
     @Test
@@ -8,7 +8,7 @@ import Testing
     func presenceEventPayloadDecodesViaJSONEncoder() {
         // Build a payload that mirrors the gateway's presence event shape:
         // { "presence": [ PresenceEntry ] }
-        let entry: [String: CoderClawProtocol.AnyCodable] = [
+        let entry: [String: BuilderforceProtocol.AnyCodable] = [
             "host": .init("gw"),
             "ip": .init("10.0.0.1"),
             "version": .init("2.0.0"),
@@ -18,10 +18,10 @@ import Testing
             "text": .init("Gateway node"),
             "ts": .init(1_730_000_000),
         ]
-        let payloadMap: [String: CoderClawProtocol.AnyCodable] = [
-            "presence": .init([CoderClawProtocol.AnyCodable(entry)]),
+        let payloadMap: [String: BuilderforceProtocol.AnyCodable] = [
+            "presence": .init([BuilderforceProtocol.AnyCodable(entry)]),
         ]
-        let payload = CoderClawProtocol.AnyCodable(payloadMap)
+        let payload = BuilderforceProtocol.AnyCodable(payloadMap)
 
         let store = InstancesStore(isPreview: true)
         store.handlePresenceEventPayload(payload)

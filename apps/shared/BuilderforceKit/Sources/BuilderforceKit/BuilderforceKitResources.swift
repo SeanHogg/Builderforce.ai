@@ -1,7 +1,7 @@
 import Foundation
 
-public enum CoderClawKitResources {
-    /// Resource bundle for CoderClawKit.
+public enum BuilderforceKitResources {
+    /// Resource bundle for BuilderforceKit.
     ///
     /// Locates the SwiftPM-generated resource bundle, checking multiple locations:
     /// 1. Inside Bundle.main (packaged apps)
@@ -13,7 +13,7 @@ public enum CoderClawKitResources {
     /// SwiftPM's expectations.
     public static let bundle: Bundle = locateBundle()
 
-    private static let bundleName = "CoderClawKit_CoderClawKit"
+    private static let bundleName = "BuilderforceKit_BuilderforceKit"
 
     private static func locateBundle() -> Bundle {
         // 1. Check inside Bundle.main (packaged apps copy resources here)

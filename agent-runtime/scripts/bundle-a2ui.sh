@@ -8,14 +8,16 @@ on_error() {
 trap on_error ERR
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "${ROOT_DIR}/.." && pwd)"  # monorepo root: apps/ lives here, not under agent-runtime/
 HASH_FILE="$ROOT_DIR/src/canvas-host/a2ui/.bundle.hash"
 OUTPUT_FILE="$ROOT_DIR/src/canvas-host/a2ui/a2ui.bundle.js"
 A2UI_RENDERER_DIR="$ROOT_DIR/vendor/a2ui/renderers/lit"
-A2UI_APP_DIR="$ROOT_DIR/apps/shared/BuilderForceAgentsKit/Tools/CanvasA2UI"
+A2UI_APP_DIR="$REPO_ROOT/apps/shared/BuilderforceKit/Tools/CanvasA2UI"
 A2UI_RENDERER_TSCONFIG="$A2UI_RENDERER_DIR/tsconfig.json"
 A2UI_APP_ROLLDOWN_CONFIG="$A2UI_APP_DIR/rolldown.config.mjs"
 A2UI_RENDERER_TSCONFIG_REL="vendor/a2ui/renderers/lit/tsconfig.json"
-A2UI_APP_ROLLDOWN_CONFIG_REL="apps/shared/BuilderForceAgentsKit/Tools/CanvasA2UI/rolldown.config.mjs"
+# Relative to ROOT_DIR (agent-runtime/), where the bundle commands run.
+A2UI_APP_ROLLDOWN_CONFIG_REL="../apps/shared/BuilderforceKit/Tools/CanvasA2UI/rolldown.config.mjs"
 
 PNPM_RUNNER=(pnpm)
 if ! command -v node >/dev/null 2>&1 && command -v cmd.exe >/dev/null 2>&1; then
@@ -62,11 +64,13 @@ compute_hash() {
     exit 1
   fi
 
+  # Hash paths relative to the monorepo root so the hash is machine-independent
+  # (the app sources live outside agent-runtime/).
   (
-    cd "$ROOT_DIR"
+    cd "$REPO_ROOT"
 
     for input in "${INPUT_PATHS[@]}"; do
-      rel_path="${input#"$ROOT_DIR"/}"
+      rel_path="${input#"$REPO_ROOT"/}"
       if [[ -d "$input" ]]; then
         find "$rel_path" -type f -print0
       else

@@ -1,9 +1,9 @@
-import CoderClawProtocol
+import BuilderforceProtocol
 import SwiftUI
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
-private typealias SnapshotAnyCodable = CoderClaw.AnyCodable
+private typealias SnapshotAnyCodable = Builderforce.AnyCodable
 
 @Suite(.serialized)
 @MainActor
@@ -52,7 +52,7 @@ struct ChannelsSettingsSmokeTests {
                         "ok": true,
                         "status": 200,
                         "elapsedMs": 120,
-                        "bot": ["id": 123, "username": "coderclawbot"],
+                        "bot": ["id": 123, "username": "builderforcebot"],
                         "webhook": ["url": "https://example.com/hook", "hasCustomCert": false],
                     ],
                     "lastProbeAt": 1_700_000_050_000,

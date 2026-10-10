@@ -1,17 +1,17 @@
-import CoderClawChatUI
-import CoderClawKit
+import BuilderforceChatUI
+import BuilderforceKit
 import SwiftUI
 
 struct ChatSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var viewModel: CoderClawChatViewModel
+    @State private var viewModel: BuilderforceChatViewModel
     private let userAccent: Color?
     private let agentName: String?
 
     init(gateway: GatewayNodeSession, sessionKey: String, agentName: String? = nil, userAccent: Color? = nil) {
         let transport = IOSGatewayChatTransport(gateway: gateway)
         self._viewModel = State(
-            initialValue: CoderClawChatViewModel(
+            initialValue: BuilderforceChatViewModel(
                 sessionKey: sessionKey,
                 transport: transport))
         self.userAccent = userAccent
@@ -20,7 +20,7 @@ struct ChatSheet: View {
 
     var body: some View {
         NavigationStack {
-            CoderClawChatView(
+            BuilderforceChatView(
                 viewModel: self.viewModel,
                 showsSessionSwitcher: true,
                 userAccent: self.userAccent)

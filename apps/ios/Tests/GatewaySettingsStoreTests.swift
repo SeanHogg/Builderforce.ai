@@ -1,14 +1,14 @@
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 private struct KeychainEntry: Hashable {
     let service: String
     let account: String
 }
 
-private let gatewayService = "ai.coderclaw.gateway"
-private let nodeService = "ai.coderclaw.node"
+private let gatewayService = "ai.builderforce.gateway"
+private let nodeService = "ai.builderforce.node"
 private let instanceIdEntry = KeychainEntry(service: nodeService, account: "instanceId")
 private let preferredGatewayEntry = KeychainEntry(service: gatewayService, account: "preferredStableID")
 private let lastGatewayEntry = KeychainEntry(service: gatewayService, account: "lastDiscoveredStableID")

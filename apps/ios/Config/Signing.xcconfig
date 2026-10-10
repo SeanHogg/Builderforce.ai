@@ -1,18 +1,25 @@
-// Shared iOS signing defaults for local development + CI.
-OPENCLAW_IOS_DEFAULT_TEAM = Y5PE65HELJ
-OPENCLAW_IOS_SELECTED_TEAM = $(OPENCLAW_IOS_DEFAULT_TEAM)
-OPENCLAW_APP_BUNDLE_ID = ai.openclaw.ios
-OPENCLAW_WATCH_APP_BUNDLE_ID = ai.openclaw.ios.watchkitapp
-OPENCLAW_WATCH_EXTENSION_BUNDLE_ID = ai.openclaw.ios.watchkitapp.extension
+// Shared iOS signing defaults for local development + CI (watch app + watch extension).
+// The same BUILDERFORCE_* set is defined in ../Signing.xcconfig (app + share extension).
+BUILDERFORCE_CODE_SIGN_STYLE = Automatic
+BUILDERFORCE_DEVELOPMENT_TEAM = Y5PE65HELJ
 
-// Local contributors can override this by running scripts/ios-configure-signing.sh.
+BUILDERFORCE_APP_BUNDLE_ID = ai.builderforce.ios
+BUILDERFORCE_SHARE_BUNDLE_ID = ai.builderforce.ios.share
+BUILDERFORCE_WATCH_APP_BUNDLE_ID = ai.builderforce.ios.watchkitapp
+BUILDERFORCE_WATCH_EXTENSION_BUNDLE_ID = ai.builderforce.ios.watchkitapp.extension
+
+// Leave empty: Xcode manages provisioning for the watch targets.
+BUILDERFORCE_APP_PROFILE =
+BUILDERFORCE_SHARE_PROFILE =
+
+// Local contributors can override this by running agent-runtime/scripts/ios-configure-signing.sh.
 // Keep include after defaults: xcconfig is evaluated top-to-bottom.
 #include? "../.local-signing.xcconfig"
 #include? "../LocalSigning.xcconfig"
 
 CODE_SIGN_STYLE = Automatic
 CODE_SIGN_IDENTITY = Apple Development
-DEVELOPMENT_TEAM = $(OPENCLAW_IOS_SELECTED_TEAM)
+DEVELOPMENT_TEAM = $(BUILDERFORCE_DEVELOPMENT_TEAM)
 
 // Let Xcode manage provisioning for the selected local team.
 PROVISIONING_PROFILE_SPECIFIER =

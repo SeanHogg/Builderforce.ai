@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build and bundle BuilderForceAgents into a minimal .app we can open.
-# Outputs to dist/BuilderForceAgents.app
+# Build and bundle Builderforce into a minimal .app we can open.
+# Outputs to dist/Builderforce.app
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-APP_ROOT="$ROOT_DIR/dist/BuilderForceAgents.app"
-BUILD_ROOT="$ROOT_DIR/apps/macos/.build"
-PRODUCT="BuilderForceAgents"
-BUNDLE_ID="${BUNDLE_ID:-ai.builderforce.mac.debug}"
+REPO_ROOT="$(cd "${ROOT_DIR}/.." && pwd)"  # monorepo root: apps/macos lives here, not under agent-runtime/
+APP_ROOT="$ROOT_DIR/dist/Builderforce.app"
+BUILD_ROOT="$REPO_ROOT/apps/macos/.build"
+PRODUCT="Builderforce"
+BUNDLE_ID="${BUNDLE_ID:-ai.builderforce.mac}"
 PKG_VERSION="$(cd "$ROOT_DIR" && node -p "require('./package.json').version" 2>/dev/null || echo "0.0.0")"
 BUILD_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 GIT_COMMIT=$(cd "$ROOT_DIR" && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -25,7 +26,8 @@ PRIMARY_ARCH="${BUILD_ARCHS[0]}"
 SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-AGCY8w5vHirVfGGDGc8Szc5iuOqupZSh9pMj/Qs67XI=}"
 SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://raw.githubusercontent.com/builderforce/builderforce/main/appcast.xml}"
 AUTO_CHECKS=true
-if [[ "$BUNDLE_ID" == *.debug ]]; then
+# Debug builds (BUILD_CONFIG=debug, or an explicit *.debug BUNDLE_ID override) never auto-update.
+if [[ "$BUILD_CONFIG" == "debug" || "$BUNDLE_ID" == *.debug ]]; then
   SPARKLE_FEED_URL=""
   AUTO_CHECKS=false
 fi
@@ -123,7 +125,7 @@ else
   echo "🖥  Skipping Control UI build (SKIP_UI_BUILD=1)"
 fi
 
-cd "$ROOT_DIR/apps/macos"
+cd "$REPO_ROOT/apps/macos"
 
 echo "🔨 Building $PRODUCT ($BUILD_CONFIG) [${BUILD_ARCHS[*]}]"
 for arch in "${BUILD_ARCHS[@]}"; do
@@ -140,7 +142,7 @@ mkdir -p "$APP_ROOT/Contents/Resources"
 mkdir -p "$APP_ROOT/Contents/Frameworks"
 
 echo "📄 Copying Info.plist template"
-INFO_PLIST_SRC="$ROOT_DIR/apps/macos/Sources/BuilderForceAgents/Resources/Info.plist"
+INFO_PLIST_SRC="$REPO_ROOT/apps/macos/Sources/Builderforce/Resources/Info.plist"
 if [ ! -f "$INFO_PLIST_SRC" ]; then
   echo "ERROR: Info.plist template missing at $INFO_PLIST_SRC" >&2
   exit 1
@@ -149,8 +151,8 @@ cp "$INFO_PLIST_SRC" "$APP_ROOT/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${BUNDLE_ID}" "$APP_ROOT/Contents/Info.plist" || true
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "$APP_ROOT/Contents/Info.plist" || true
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${APP_BUILD}" "$APP_ROOT/Contents/Info.plist" || true
-/usr/libexec/PlistBuddy -c "Set :BuilderForceAgentsBuildTimestamp ${BUILD_TS}" "$APP_ROOT/Contents/Info.plist" || true
-/usr/libexec/PlistBuddy -c "Set :BuilderForceAgentsGitCommit ${GIT_COMMIT}" "$APP_ROOT/Contents/Info.plist" || true
+/usr/libexec/PlistBuddy -c "Set :BuilderforceBuildTimestamp ${BUILD_TS}" "$APP_ROOT/Contents/Info.plist" || true
+/usr/libexec/PlistBuddy -c "Set :BuilderforceGitCommit ${GIT_COMMIT}" "$APP_ROOT/Contents/Info.plist" || true
 /usr/libexec/PlistBuddy -c "Set :SUFeedURL ${SPARKLE_FEED_URL}" "$APP_ROOT/Contents/Info.plist" \
   || /usr/libexec/PlistBuddy -c "Add :SUFeedURL string ${SPARKLE_FEED_URL}" "$APP_ROOT/Contents/Info.plist" || true
 /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey ${SPARKLE_PUBLIC_ED_KEY}" "$APP_ROOT/Contents/Info.plist" \
@@ -162,17 +164,17 @@ else
 fi
 
 echo "🚚 Copying binary"
-cp "$BIN_PRIMARY" "$APP_ROOT/Contents/MacOS/BuilderForceAgents"
+cp "$BIN_PRIMARY" "$APP_ROOT/Contents/MacOS/Builderforce"
 if [[ "${#BUILD_ARCHS[@]}" -gt 1 ]]; then
   BIN_INPUTS=()
   for arch in "${BUILD_ARCHS[@]}"; do
     BIN_INPUTS+=("$(bin_for_arch "$arch")")
   done
-  /usr/bin/lipo -create "${BIN_INPUTS[@]}" -output "$APP_ROOT/Contents/MacOS/BuilderForceAgents"
+  /usr/bin/lipo -create "${BIN_INPUTS[@]}" -output "$APP_ROOT/Contents/MacOS/Builderforce"
 fi
-chmod +x "$APP_ROOT/Contents/MacOS/BuilderForceAgents"
+chmod +x "$APP_ROOT/Contents/MacOS/Builderforce"
 # SwiftPM outputs ad-hoc signed binaries; strip the signature before install_name_tool to avoid warnings.
-/usr/bin/codesign --remove-signature "$APP_ROOT/Contents/MacOS/BuilderForceAgents" 2>/dev/null || true
+/usr/bin/codesign --remove-signature "$APP_ROOT/Contents/MacOS/Builderforce" 2>/dev/null || true
 
 SPARKLE_FRAMEWORK_PRIMARY="$(sparkle_framework_for_arch "$PRIMARY_ARCH")"
 if [ -d "$SPARKLE_FRAMEWORK_PRIMARY" ]; then
@@ -201,11 +203,11 @@ else
 fi
 
 echo "🖼  Copying app icon"
-cp "$ROOT_DIR/apps/macos/Sources/BuilderForceAgents/Resources/BuilderForceAgents.icns" "$APP_ROOT/Contents/Resources/BuilderForceAgents.icns"
+cp "$REPO_ROOT/apps/macos/Sources/Builderforce/Resources/Builderforce.icns" "$APP_ROOT/Contents/Resources/Builderforce.icns"
 
 echo "📦 Copying device model resources"
 rm -rf "$APP_ROOT/Contents/Resources/DeviceModels"
-cp -R "$ROOT_DIR/apps/macos/Sources/BuilderForceAgents/Resources/DeviceModels" "$APP_ROOT/Contents/Resources/DeviceModels"
+cp -R "$REPO_ROOT/apps/macos/Sources/Builderforce/Resources/DeviceModels" "$APP_ROOT/Contents/Resources/DeviceModels"
 
 echo "📦 Copying model catalog"
 MODEL_CATALOG_SRC="$ROOT_DIR/node_modules/@mariozechner/pi-ai/dist/models.generated.js"
@@ -216,13 +218,13 @@ else
   echo "WARN: model catalog missing at $MODEL_CATALOG_SRC (continuing)" >&2
 fi
 
-echo "📦 Copying BuilderForceAgentsKit resources"
-BUILDERFORCE_AGENTSKIT_BUNDLE="$(build_path_for_arch "$PRIMARY_ARCH")/$BUILD_CONFIG/BuilderForceAgentsKit_BuilderForceAgentsKit.bundle"
-if [ -d "$BUILDERFORCE_AGENTSKIT_BUNDLE" ]; then
-  rm -rf "$APP_ROOT/Contents/Resources/BuilderForceAgentsKit_BuilderForceAgentsKit.bundle"
-  cp -R "$BUILDERFORCE_AGENTSKIT_BUNDLE" "$APP_ROOT/Contents/Resources/BuilderForceAgentsKit_BuilderForceAgentsKit.bundle"
+echo "📦 Copying BuilderforceKit resources"
+BUILDERFORCEKIT_BUNDLE="$(build_path_for_arch "$PRIMARY_ARCH")/$BUILD_CONFIG/BuilderforceKit_BuilderforceKit.bundle"
+if [ -d "$BUILDERFORCEKIT_BUNDLE" ]; then
+  rm -rf "$APP_ROOT/Contents/Resources/BuilderforceKit_BuilderforceKit.bundle"
+  cp -R "$BUILDERFORCEKIT_BUNDLE" "$APP_ROOT/Contents/Resources/BuilderforceKit_BuilderforceKit.bundle"
 else
-  echo "WARN: BuilderForceAgentsKit resource bundle not found at $BUILDERFORCE_AGENTSKIT_BUNDLE (continuing)" >&2
+  echo "WARN: BuilderforceKit resource bundle not found at $BUILDERFORCEKIT_BUNDLE (continuing)" >&2
 fi
 
 echo "📦 Copying Textual resources"
@@ -252,8 +254,8 @@ else
   fi
 fi
 
-echo "⏹  Stopping any running BuilderForceAgents"
-killall -q BuilderForceAgents 2>/dev/null || true
+echo "⏹  Stopping any running Builderforce"
+killall -q Builderforce 2>/dev/null || true
 
 echo "🔏 Signing bundle (auto-selects signing identity if SIGN_IDENTITY is unset)"
 "$ROOT_DIR/scripts/codesign-mac-app.sh" "$APP_ROOT"

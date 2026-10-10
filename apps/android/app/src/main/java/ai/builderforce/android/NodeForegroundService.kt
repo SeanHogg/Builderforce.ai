@@ -1,4 +1,4 @@
-package ai.coderclaw.android
+package ai.builderforce.android
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -29,7 +29,7 @@ class NodeForegroundService : Service() {
   override fun onCreate() {
     super.onCreate()
     ensureChannel()
-    val initial = buildNotification(title = "CoderClaw Node", text = "Starting…")
+    val initial = buildNotification(title = getString(R.string.notification_title), text = getString(R.string.notification_starting))
     startForegroundWithTypes(notification = initial, requiresMic = false)
 
     val runtime = (application as NodeApp).runtime
@@ -44,7 +44,7 @@ class NodeForegroundService : Service() {
         ) { status, server, connected, voiceMode, voiceListening ->
           Quint(status, server, connected, voiceMode, voiceListening)
         }.collect { (status, server, connected, voiceMode, voiceListening) ->
-          val title = if (connected) "CoderClaw Node · Connected" else "CoderClaw Node"
+          val title = getString(if (connected) R.string.notification_title_connected else R.string.notification_title)
           val voiceSuffix =
             if (voiceMode == VoiceWakeMode.Always) {
               if (voiceListening) " · Voice Wake: Listening" else " · Voice Wake: Paused"
@@ -91,7 +91,7 @@ class NodeForegroundService : Service() {
         "Connection",
         NotificationManager.IMPORTANCE_LOW,
       ).apply {
-        description = "CoderClaw node connection status"
+        description = getString(R.string.notification_channel_description)
         setShowBadge(false)
       }
     mgr.createNotificationChannel(channel)
@@ -163,7 +163,7 @@ class NodeForegroundService : Service() {
     private const val CHANNEL_ID = "connection"
     private const val NOTIFICATION_ID = 1
 
-    private const val ACTION_STOP = "ai.coderclaw.android.action.STOP"
+    private const val ACTION_STOP = "ai.builderforce.android.action.STOP"
 
     fun start(context: Context) {
       val intent = Intent(context, NodeForegroundService::class.java)

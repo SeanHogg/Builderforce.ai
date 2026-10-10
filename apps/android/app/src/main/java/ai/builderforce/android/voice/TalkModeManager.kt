@@ -1,4 +1,4 @@
-package ai.coderclaw.android.voice
+package ai.builderforce.android.voice
 
 import android.Manifest
 import android.content.Context
@@ -20,9 +20,9 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import androidx.core.content.ContextCompat
-import ai.coderclaw.android.gateway.GatewaySession
-import ai.coderclaw.android.isCanonicalMainSessionKey
-import ai.coderclaw.android.normalizeMainKey
+import ai.builderforce.android.gateway.GatewaySession
+import ai.builderforce.android.isCanonicalMainSessionKey
+import ai.builderforce.android.normalizeMainKey
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID

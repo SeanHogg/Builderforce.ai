@@ -1,5 +1,5 @@
 import Foundation
-import CoderClawDiscovery
+import BuilderforceDiscovery
 
 enum GatewayDiscoveryHelpers {
     static func sshTarget(for gateway: GatewayDiscoveryModel.DiscoveredGateway) -> String? {

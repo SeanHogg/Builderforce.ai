@@ -1,7 +1,7 @@
 import Foundation
 import Observation
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceKit
+import BuilderforceProtocol
 import SwiftUI
 
 struct ControlHeartbeatEvent: Codable {
@@ -23,7 +23,7 @@ struct ControlAgentEvent: Codable, Sendable, Identifiable {
     let seq: Int
     let stream: String
     let ts: Double
-    let data: [String: CoderClawProtocol.AnyCodable]
+    let data: [String: BuilderforceProtocol.AnyCodable]
     let summary: String?
 }
 
@@ -79,7 +79,7 @@ final class ControlChannel {
     private(set) var lastPingMs: Double?
     private(set) var authSourceLabel: String?
 
-    private let logger = Logger(subsystem: "ai.coderclaw", category: "control")
+    private let logger = Logger(subsystem: "ai.builderforce", category: "control")
 
     private var eventTask: Task<Void, Never>?
     private var recoveryTask: Task<Void, Never>?
@@ -166,8 +166,8 @@ final class ControlChannel {
         timeoutMs: Double? = nil) async throws -> Data
     {
         do {
-            let rawParams = params?.reduce(into: [String: CoderClawKit.AnyCodable]()) {
-                $0[$1.key] = CoderClawKit.AnyCodable($1.value.base)
+            let rawParams = params?.reduce(into: [String: BuilderforceKit.AnyCodable]()) {
+                $0[$1.key] = BuilderforceKit.AnyCodable($1.value.base)
             }
             let data = try await GatewayConnection.shared.request(
                 method: method,
@@ -401,20 +401,20 @@ final class ControlChannel {
     }
 
     private static func bridgeToProtocolArgs(
-        _ value: CoderClawProtocol.AnyCodable?) -> [String: CoderClawProtocol.AnyCodable]?
+        _ value: BuilderforceProtocol.AnyCodable?) -> [String: BuilderforceProtocol.AnyCodable]?
     {
         guard let value else { return nil }
-        if let dict = value.value as? [String: CoderClawProtocol.AnyCodable] {
+        if let dict = value.value as? [String: BuilderforceProtocol.AnyCodable] {
             return dict
         }
-        if let dict = value.value as? [String: CoderClawKit.AnyCodable],
+        if let dict = value.value as? [String: BuilderforceKit.AnyCodable],
            let data = try? JSONEncoder().encode(dict),
-           let decoded = try? JSONDecoder().decode([String: CoderClawProtocol.AnyCodable].self, from: data)
+           let decoded = try? JSONDecoder().decode([String: BuilderforceProtocol.AnyCodable].self, from: data)
         {
             return decoded
         }
         if let data = try? JSONEncoder().encode(value),
-           let decoded = try? JSONDecoder().decode([String: CoderClawProtocol.AnyCodable].self, from: data)
+           let decoded = try? JSONDecoder().decode([String: BuilderforceProtocol.AnyCodable].self, from: data)
         {
             return decoded
         }
@@ -423,6 +423,6 @@ final class ControlChannel {
 }
 
 extension Notification.Name {
-    static let controlHeartbeat = Notification.Name("coderclaw.control.heartbeat")
-    static let controlAgentEvent = Notification.Name("coderclaw.control.agent")
+    static let controlHeartbeat = Notification.Name("builderforce.control.heartbeat")
+    static let controlAgentEvent = Notification.Name("builderforce.control.agent")
 }

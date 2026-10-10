@@ -1,6 +1,6 @@
 import Contacts
 import Foundation
-import CoderClawKit
+import BuilderforceKit
 
 final class ContactsService: ContactsServicing {
     private static var payloadKeys: [CNKeyDescriptor] {
@@ -14,7 +14,7 @@ final class ContactsService: ContactsServicing {
         ]
     }
 
-    func search(params: CoderClawContactsSearchParams) async throws -> CoderClawContactsSearchPayload {
+    func search(params: BuilderforceContactsSearchParams) async throws -> BuilderforceContactsSearchPayload {
         let store = CNContactStore()
         let status = CNContactStore.authorizationStatus(for: .contacts)
         let authorized = await Self.ensureAuthorization(store: store, status: status)
@@ -43,10 +43,10 @@ final class ContactsService: ContactsServicing {
         let sliced = Array(contacts.prefix(limit))
         let payload = sliced.map { Self.payload(from: $0) }
 
-        return CoderClawContactsSearchPayload(contacts: payload)
+        return BuilderforceContactsSearchPayload(contacts: payload)
     }
 
-    func add(params: CoderClawContactsAddParams) async throws -> CoderClawContactsAddPayload {
+    func add(params: BuilderforceContactsAddParams) async throws -> BuilderforceContactsAddPayload {
         let store = CNContactStore()
         let status = CNContactStore.authorizationStatus(for: .contacts)
         let authorized = await Self.ensureAuthorization(store: store, status: status)
@@ -78,7 +78,7 @@ final class ContactsService: ContactsServicing {
                 phoneNumbers: phoneNumbers,
                 emails: emails)
             {
-                return CoderClawContactsAddPayload(contact: Self.payload(from: existing))
+                return BuilderforceContactsAddPayload(contact: Self.payload(from: existing))
             }
         }
 
@@ -109,7 +109,7 @@ final class ContactsService: ContactsServicing {
             persisted = contact
         }
 
-        return CoderClawContactsAddPayload(contact: Self.payload(from: persisted))
+        return BuilderforceContactsAddPayload(contact: Self.payload(from: persisted))
     }
 
     private static func ensureAuthorization(store: CNContactStore, status: CNAuthorizationStatus) async -> Bool {
@@ -192,8 +192,8 @@ final class ContactsService: ContactsServicing {
         return normalized.isEmpty ? trimmed : normalized
     }
 
-    private static func payload(from contact: CNContact) -> CoderClawContactPayload {
-        CoderClawContactPayload(
+    private static func payload(from contact: CNContact) -> BuilderforceContactPayload {
+        BuilderforceContactPayload(
             identifier: contact.identifier,
             displayName: CNContactFormatter.string(from: contact, style: .fullName)
                 ?? "\(contact.givenName) \(contact.familyName)".trimmingCharacters(in: .whitespacesAndNewlines),

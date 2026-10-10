@@ -1,3 +1,79 @@
 <resources>
-    <string name="app_name">CoderClaw Node</string>
+    <string name="app_name">Builderforce</string>
+
+    <!-- Node foreground service and system prompts -->
+    <string name="notification_title">Builderforce</string>
+    <string name="notification_title_connected">Builderforce · Connected</string>
+    <string name="notification_starting">Starting…</string>
+    <string name="notification_channel_description">Builderforce node connection status</string>
+    <string name="update_notification_title">Builderforce update</string>
+    <string name="permission_rationale">Builderforce needs %1$s permissions to continue.</string>
+    <string name="screen_capture_rationale">Builderforce needs to record the screen for this command.</string>
+
+    <!-- Settings -->
+    <string name="settings_voice_foreground_only">Listens only while Builderforce is open.</string>
+    <string name="settings_location_while_using">Only while Builderforce is open.</string>
+    <string name="settings_prevent_sleep">Keeps the screen awake while Builderforce is open.</string>
+    <string name="settings_account_title">Builderforce account</string>
+    <string name="settings_account_signed_in">Signed in</string>
+    <string name="settings_account_signed_out">Not signed in. Open Chat to sign in.</string>
+    <string name="settings_account_workspace">Workspace</string>
+    <string name="settings_account_workspace_none">Choose a workspace</string>
+    <string name="settings_account_sign_out">Sign out</string>
+    <string name="settings_account_server">Server (developer)</string>
+    <string name="settings_account_server_note">Leave blank for builderforce.ai.</string>
+    <string name="settings_account_server_apply">Apply</string>
+
+    <!-- Sign-in -->
+    <string name="signin_title">Sign in to Builderforce</string>
+    <string name="signin_body">Chat with the Brain and your agents — the same conversations as the web app.</string>
+    <string name="signin_button">Sign in</string>
+    <string name="signin_starting">Getting a sign-in code…</string>
+    <string name="signin_enter_code">Enter this code in your browser to approve the sign-in:</string>
+    <string name="signin_open_browser">Open browser</string>
+    <string name="signin_waiting">Waiting for approval…</string>
+    <string name="signin_cancel">Cancel</string>
+    <string name="signin_failed_denied">The sign-in was declined.</string>
+    <string name="signin_failed_expired">The sign-in code expired. Try again.</string>
+    <string name="signin_failed_unreachable">Builderforce could not be reached. Check your connection and try again.</string>
+    <string name="signin_expired">Your sign-in expired. Sign in again.</string>
+    <string name="signin_no_browser">No browser is available to open the sign-in page.</string>
+
+    <!-- Chat -->
+    <string name="chat_placeholder">Message the Brain…</string>
+    <string name="chat_attach">Add images</string>
+    <string name="chat_send">Send</string>
+    <string name="chat_stop">Stop</string>
+    <string name="chat_dictate">Dictate</string>
+    <string name="chat_stop_dictation">Stop dictation</string>
+    <string name="chat_to">To %1$s</string>
+    <string name="chat_brain">Brain</string>
+    <string name="chat_you">You</string>
+    <string name="chat_remove_attachment">Remove %1$s</string>
+    <string name="chat_new">New chat</string>
+    <string name="chat_untitled">Untitled chat</string>
+    <string name="chat_pick">Choose a chat</string>
+    <string name="chat_thinking">Thinking…</string>
+    <string name="chat_using_tool">Using %1$s…</string>
+    <string name="chat_waiting_agent">Waiting for %1$s…</string>
+    <string name="chat_queued">Queued — sends after the current reply</string>
+    <string name="chat_unqueue">Don\'t send</string>
+    <string name="chat_tool_ask">The Brain wants to: %1$s</string>
+    <string name="chat_tool_ask_body">This changes something in your workspace.</string>
+    <string name="chat_tool_approve">Approve</string>
+    <string name="chat_tool_deny">Decline</string>
+    <string name="chat_empty">Ask the Brain anything about your workspace.</string>
+    <string name="chat_starter_1">What should I work on today?</string>
+    <string name="chat_starter_2">Summarize my open tickets</string>
+    <string name="chat_starter_3">Plan my week</string>
+    <string name="chat_mic_denied">Microphone permission is needed to dictate.</string>
+    <string name="chat_image_unreadable">That image could not be read.</string>
+
+    <!-- Cloud errors -->
+    <string name="cloud_error_signed_out">You\'re not signed in to Builderforce.</string>
+    <string name="cloud_error_key_rejected">Builderforce no longer accepts this sign-in. Sign in again.</string>
+    <string name="cloud_error_unreachable">Builderforce could not be reached: %1$s</string>
+    <string name="cloud_error_server">Builderforce answered: %1$s</string>
+    <string name="cloud_error_empty_answer">The Brain returned an empty answer.</string>
+    <string name="cloud_error_unexpected">Something went wrong: %1$s</string>
 </resources>

@@ -1,11 +1,11 @@
 import Foundation
 
-public enum CoderClawMotionCommand: String, Codable, Sendable {
+public enum BuilderforceMotionCommand: String, Codable, Sendable {
     case activity = "motion.activity"
     case pedometer = "motion.pedometer"
 }
 
-public struct CoderClawMotionActivityParams: Codable, Sendable, Equatable {
+public struct BuilderforceMotionActivityParams: Codable, Sendable, Equatable {
     public var startISO: String?
     public var endISO: String?
     public var limit: Int?
@@ -17,7 +17,7 @@ public struct CoderClawMotionActivityParams: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawMotionActivityEntry: Codable, Sendable, Equatable {
+public struct BuilderforceMotionActivityEntry: Codable, Sendable, Equatable {
     public var startISO: String
     public var endISO: String
     public var confidence: String
@@ -51,15 +51,15 @@ public struct CoderClawMotionActivityEntry: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawMotionActivityPayload: Codable, Sendable, Equatable {
-    public var activities: [CoderClawMotionActivityEntry]
+public struct BuilderforceMotionActivityPayload: Codable, Sendable, Equatable {
+    public var activities: [BuilderforceMotionActivityEntry]
 
-    public init(activities: [CoderClawMotionActivityEntry]) {
+    public init(activities: [BuilderforceMotionActivityEntry]) {
         self.activities = activities
     }
 }
 
-public struct CoderClawPedometerParams: Codable, Sendable, Equatable {
+public struct BuilderforcePedometerParams: Codable, Sendable, Equatable {
     public var startISO: String?
     public var endISO: String?
 
@@ -69,7 +69,7 @@ public struct CoderClawPedometerParams: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawPedometerPayload: Codable, Sendable, Equatable {
+public struct BuilderforcePedometerPayload: Codable, Sendable, Equatable {
     public var startISO: String
     public var endISO: String
     public var steps: Int?

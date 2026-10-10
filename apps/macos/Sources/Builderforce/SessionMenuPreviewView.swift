@@ -1,6 +1,6 @@
-import CoderClawChatUI
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceChatUI
+import BuilderforceKit
+import BuilderforceProtocol
 import OSLog
 import SwiftUI
 
@@ -219,7 +219,7 @@ struct SessionMenuPreviewView: View {
 }
 
 enum SessionMenuPreviewLoader {
-    private static let logger = Logger(subsystem: "ai.coderclaw", category: "SessionPreview")
+    private static let logger = Logger(subsystem: "ai.builderforce", category: "SessionPreview")
     private static let previewTimeoutSeconds: Double = 4
     private static let cacheMaxAgeSeconds: TimeInterval = 30
     private static let previewMaxChars = 240
@@ -288,7 +288,7 @@ enum SessionMenuPreviewLoader {
 
     private static func requestPreview(
         keys: [String],
-        maxItems: Int) async throws -> CoderClawSessionsPreviewPayload
+        maxItems: Int) async throws -> BuilderforceSessionsPreviewPayload
     {
         let boundedItems = self.normalizeMaxItems(maxItems)
         let timeoutMs = Int(self.previewTimeoutSeconds * 1000)
@@ -331,7 +331,7 @@ enum SessionMenuPreviewLoader {
     }
 
     private static func snapshot(
-        from entry: CoderClawSessionPreviewEntry,
+        from entry: BuilderforceSessionPreviewEntry,
         maxItems: Int) -> SessionMenuPreviewSnapshot
     {
         let items = self.previewItems(from: entry, maxItems: maxItems)
@@ -348,7 +348,7 @@ enum SessionMenuPreviewLoader {
         }
     }
 
-    private static func cache(payload: CoderClawSessionsPreviewPayload, maxItems: Int) async {
+    private static func cache(payload: BuilderforceSessionsPreviewPayload, maxItems: Int) async {
         for entry in payload.previews {
             let snapshot = self.snapshot(from: entry, maxItems: maxItems)
             await SessionPreviewCache.shared.store(snapshot: snapshot, for: entry.key)
@@ -365,7 +365,7 @@ enum SessionMenuPreviewLoader {
     }
 
     private static func previewItems(
-        from entry: CoderClawSessionPreviewEntry,
+        from entry: BuilderforceSessionPreviewEntry,
         maxItems: Int) -> [SessionPreviewItem]
     {
         let boundedItems = self.normalizeMaxItems(maxItems)
@@ -381,11 +381,11 @@ enum SessionMenuPreviewLoader {
     }
 
     private static func previewItems(
-        from payload: CoderClawChatHistoryPayload,
+        from payload: BuilderforceChatHistoryPayload,
         maxItems: Int) -> [SessionPreviewItem]
     {
         let boundedItems = self.normalizeMaxItems(maxItems)
-        let raw: [CoderClawKit.AnyCodable] = payload.messages ?? []
+        let raw: [BuilderforceKit.AnyCodable] = payload.messages ?? []
         let messages = self.decodeMessages(raw)
         let built = messages.compactMap { message -> SessionPreviewItem? in
             guard let text = self.previewText(for: message) else { return nil }
@@ -399,10 +399,10 @@ enum SessionMenuPreviewLoader {
         return Array(trimmed.reversed())
     }
 
-    private static func decodeMessages(_ raw: [CoderClawKit.AnyCodable]) -> [CoderClawChatMessage] {
+    private static func decodeMessages(_ raw: [BuilderforceKit.AnyCodable]) -> [BuilderforceChatMessage] {
         raw.compactMap { item in
             guard let data = try? JSONEncoder().encode(item) else { return nil }
-            return try? JSONDecoder().decode(CoderClawChatMessage.self, from: data)
+            return try? JSONDecoder().decode(BuilderforceChatMessage.self, from: data)
         }
     }
 
@@ -421,7 +421,7 @@ enum SessionMenuPreviewLoader {
         }
     }
 
-    private static func previewText(for message: CoderClawChatMessage) -> String? {
+    private static func previewText(for message: BuilderforceChatMessage) -> String? {
         let text = message.content.compactMap(\.text).joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.isEmpty { return text }
@@ -442,12 +442,12 @@ enum SessionMenuPreviewLoader {
         return nil
     }
 
-    private static func isToolCall(_ message: CoderClawChatMessage) -> Bool {
+    private static func isToolCall(_ message: BuilderforceChatMessage) -> Bool {
         if message.toolName?.nonEmpty != nil { return true }
         return message.content.contains { $0.name?.nonEmpty != nil || $0.type?.lowercased() == "toolcall" }
     }
 
-    private static func toolNames(for message: CoderClawChatMessage) -> [String] {
+    private static func toolNames(for message: BuilderforceChatMessage) -> [String] {
         var names: [String] = []
         for content in message.content {
             if let name = content.name?.nonEmpty {
@@ -460,7 +460,7 @@ enum SessionMenuPreviewLoader {
         return Self.dedupePreservingOrder(names)
     }
 
-    private static func mediaSummary(for message: CoderClawChatMessage) -> String? {
+    private static func mediaSummary(for message: BuilderforceChatMessage) -> String? {
         let types = message.content.compactMap { content -> String? in
             let raw = content.type?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             guard let raw, !raw.isEmpty else { return nil }

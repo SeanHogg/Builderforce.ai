@@ -53,7 +53,7 @@ enum RuntimeResolutionError: Error {
 }
 
 enum RuntimeLocator {
-    private static let logger = Logger(subsystem: "ai.coderclaw", category: "runtime")
+    private static let logger = Logger(subsystem: "ai.builderforce", category: "runtime")
     private static let minNode = RuntimeVersion(major: 22, minor: 0, patch: 0)
 
     static func resolve(
@@ -91,7 +91,7 @@ enum RuntimeLocator {
         switch error {
         case let .notFound(searchPaths):
             [
-                "coderclaw needs Node >=22.0.0 but found no runtime.",
+                "builderforce needs Node >=22.0.0 but found no runtime.",
                 "PATH searched: \(searchPaths.joined(separator: ":"))",
                 "Install Node: https://nodejs.org/en/download",
             ].joined(separator: "\n")

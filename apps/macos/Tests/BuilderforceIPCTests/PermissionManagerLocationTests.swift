@@ -1,7 +1,7 @@
 import CoreLocation
 import Testing
 
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite("PermissionManager Location")
 struct PermissionManagerLocationTests {

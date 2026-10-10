@@ -1,18 +1,18 @@
 import Foundation
 import Observation
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceKit
+import BuilderforceProtocol
 import OSLog
 import SwiftUI
 
-private let onboardingWizardLogger = Logger(subsystem: "ai.coderclaw", category: "onboarding.wizard")
+private let onboardingWizardLogger = Logger(subsystem: "ai.builderforce", category: "onboarding.wizard")
 
 // MARK: - Swift 6 AnyCodable Bridging Helpers
 
-// Bridge between CoderClawProtocol.AnyCodable and the local module to avoid
+// Bridge between BuilderforceProtocol.AnyCodable and the local module to avoid
 // Swift 6 strict concurrency type conflicts.
 
-private typealias ProtocolAnyCodable = CoderClawProtocol.AnyCodable
+private typealias ProtocolAnyCodable = BuilderforceProtocol.AnyCodable
 
 private func bridgeToLocal(_ value: ProtocolAnyCodable) -> AnyCodable {
     if let data = try? JSONEncoder().encode(value),
@@ -192,7 +192,7 @@ final class OnboardingWizardModel {
     }
 
     private func shouldSkipWizard() -> Bool {
-        let root = CoderClawConfigFile.loadDict()
+        let root = BuilderforceConfigFile.loadDict()
         if let wizard = root["wizard"] as? [String: Any], !wizard.isEmpty {
             return true
         }

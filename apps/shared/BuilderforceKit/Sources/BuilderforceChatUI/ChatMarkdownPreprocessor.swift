@@ -4,7 +4,7 @@ enum ChatMarkdownPreprocessor {
     struct InlineImage: Identifiable {
         let id = UUID()
         let label: String
-        let image: CoderClawPlatformImage?
+        let image: BuilderforcePlatformImage?
     }
 
     struct Result {
@@ -30,11 +30,11 @@ enum ChatMarkdownPreprocessor {
             let label = ns.substring(with: match.range(at: 1))
             let dataURL = ns.substring(with: match.range(at: 2))
 
-            let image: CoderClawPlatformImage? = {
+            let image: BuilderforcePlatformImage? = {
                 guard let comma = dataURL.firstIndex(of: ",") else { return nil }
                 let b64 = String(dataURL[dataURL.index(after: comma)...])
                 guard let data = Data(base64Encoded: b64) else { return nil }
-                return CoderClawPlatformImage(data: data)
+                return BuilderforcePlatformImage(data: data)
             }()
             images.append(InlineImage(label: label, image: image))
 

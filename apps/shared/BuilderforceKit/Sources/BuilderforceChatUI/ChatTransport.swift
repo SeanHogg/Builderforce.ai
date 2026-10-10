@@ -1,44 +1,44 @@
 import Foundation
 
-public enum CoderClawChatTransportEvent: Sendable {
+public enum BuilderforceChatTransportEvent: Sendable {
     case health(ok: Bool)
     case tick
-    case chat(CoderClawChatEventPayload)
-    case agent(CoderClawAgentEventPayload)
+    case chat(BuilderforceChatEventPayload)
+    case agent(BuilderforceAgentEventPayload)
     case seqGap
 }
 
-public protocol CoderClawChatTransport: Sendable {
-    func requestHistory(sessionKey: String) async throws -> CoderClawChatHistoryPayload
+public protocol BuilderforceChatTransport: Sendable {
+    func requestHistory(sessionKey: String) async throws -> BuilderforceChatHistoryPayload
     func sendMessage(
         sessionKey: String,
         message: String,
         thinking: String,
         idempotencyKey: String,
-        attachments: [CoderClawChatAttachmentPayload]) async throws -> CoderClawChatSendResponse
+        attachments: [BuilderforceChatAttachmentPayload]) async throws -> BuilderforceChatSendResponse
 
     func abortRun(sessionKey: String, runId: String) async throws
-    func listSessions(limit: Int?) async throws -> CoderClawChatSessionsListResponse
+    func listSessions(limit: Int?) async throws -> BuilderforceChatSessionsListResponse
 
     func requestHealth(timeoutMs: Int) async throws -> Bool
-    func events() -> AsyncStream<CoderClawChatTransportEvent>
+    func events() -> AsyncStream<BuilderforceChatTransportEvent>
 
     func setActiveSessionKey(_ sessionKey: String) async throws
 }
 
-extension CoderClawChatTransport {
+extension BuilderforceChatTransport {
     public func setActiveSessionKey(_: String) async throws {}
 
     public func abortRun(sessionKey _: String, runId _: String) async throws {
         throw NSError(
-            domain: "CoderClawChatTransport",
+            domain: "BuilderforceChatTransport",
             code: 0,
             userInfo: [NSLocalizedDescriptionKey: "chat.abort not supported by this transport"])
     }
 
-    public func listSessions(limit _: Int?) async throws -> CoderClawChatSessionsListResponse {
+    public func listSessions(limit _: Int?) async throws -> BuilderforceChatSessionsListResponse {
         throw NSError(
-            domain: "CoderClawChatTransport",
+            domain: "BuilderforceChatTransport",
             code: 0,
             userInfo: [NSLocalizedDescriptionKey: "sessions.list not supported by this transport"])
     }

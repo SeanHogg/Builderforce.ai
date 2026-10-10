@@ -1,15 +1,15 @@
 import AVFoundation
 import Foundation
-import CoderClawChatUI
-import CoderClawKit
+import BuilderforceChatUI
+import BuilderforceKit
 import OSLog
 import Speech
 
 actor TalkModeRuntime {
     static let shared = TalkModeRuntime()
 
-    private let logger = Logger(subsystem: "ai.coderclaw", category: "talk.runtime")
-    private let ttsLogger = Logger(subsystem: "ai.coderclaw", category: "talk.tts")
+    private let logger = Logger(subsystem: "ai.builderforce", category: "talk.runtime")
+    private let ttsLogger = Logger(subsystem: "ai.builderforce", category: "talk.tts")
     private static let defaultModelIdFallback = "eleven_v3"
 
     private final class RMSMeter: @unchecked Sendable {
@@ -416,9 +416,9 @@ actor TalkModeRuntime {
         do {
             let history = try await GatewayConnection.shared.chatHistory(sessionKey: sessionKey)
             let messages = history.messages ?? []
-            let decoded: [CoderClawChatMessage] = messages.compactMap { item in
+            let decoded: [BuilderforceChatMessage] = messages.compactMap { item in
                 guard let data = try? JSONEncoder().encode(item) else { return nil }
-                return try? JSONDecoder().decode(CoderClawChatMessage.self, from: data)
+                return try? JSONDecoder().decode(BuilderforceChatMessage.self, from: data)
             }
             let assistant = decoded.last { message in
                 guard message.role == "assistant" else { return false }

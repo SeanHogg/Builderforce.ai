@@ -1,4 +1,4 @@
-import CoderClawKit
+import BuilderforceKit
 import Foundation
 import Network
 import Observation
@@ -54,7 +54,7 @@ final class GatewayDiscoveryModel {
         self.appendDebugLog("start()")
 
         // One browser per (gateway service type, domain), so current and legacy runtimes are both found.
-        for target in CoderClawBonjour.gatewayBrowseTargets {
+        for target in BuilderforceBonjour.gatewayBrowseTargets {
             let key = target.key
             let params = NWParameters.tcp
             params.includePeerToPeer = true
@@ -107,7 +107,7 @@ final class GatewayDiscoveryModel {
             }
 
             self.browsers[key] = browser
-            browser.start(queue: DispatchQueue(label: "bot.molt.ios.gateway-discovery.\(key)"))
+            browser.start(queue: DispatchQueue(label: "ai.builderforce.ios.gateway-discovery.\(key)"))
         }
     }
 
@@ -171,7 +171,7 @@ final class GatewayDiscoveryModel {
 
     private static func prettifyInstanceName(_ decodedName: String) -> String {
         let normalized = decodedName.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        let stripped = normalized.replacingOccurrences(of: " (CoderClaw)", with: "")
+        let stripped = normalized.replacingOccurrences(of: " (Builderforce)", with: "")
             .replacingOccurrences(of: #"\s+\(\d+\)$"#, with: "", options: .regularExpression)
         return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
     }

@@ -1,12 +1,12 @@
-package ai.coderclaw.android.node
+package ai.builderforce.android.node
 
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import ai.coderclaw.android.InstallResultReceiver
-import ai.coderclaw.android.MainActivity
-import ai.coderclaw.android.gateway.GatewayEndpoint
-import ai.coderclaw.android.gateway.GatewaySession
+import ai.builderforce.android.InstallResultReceiver
+import ai.builderforce.android.MainActivity
+import ai.builderforce.android.gateway.GatewayEndpoint
+import ai.builderforce.android.gateway.GatewaySession
 import java.io.File
 import java.net.URI
 import java.security.MessageDigest
@@ -107,7 +107,7 @@ class AppUpdateHandler(
       val url = updateRequest.url
       val expectedSha256 = updateRequest.expectedSha256
 
-      android.util.Log.w("coderclaw", "app.update: downloading from $url")
+      android.util.Log.w("builderforce", "app.update: downloading from $url")
 
       val notifId = 9001
       val channelId = "app_update"
@@ -135,7 +135,7 @@ class AppUpdateHandler(
           fun buildProgressNotif(progress: Int, max: Int, text: String): android.app.Notification {
             return android.app.Notification.Builder(appContext, channelId)
               .setSmallIcon(android.R.drawable.stat_sys_download)
-              .setContentTitle("CoderClaw Update")
+              .setContentTitle(appContext.getString(ai.builderforce.android.R.string.update_notification_title))
               .setContentText(text)
               .setProgress(max, progress, max == 0)
               
@@ -199,11 +199,11 @@ class AppUpdateHandler(
             }
           }
 
-          android.util.Log.w("coderclaw", "app.update: downloaded ${file.length()} bytes")
+          android.util.Log.w("builderforce", "app.update: downloaded ${file.length()} bytes")
           val actualSha256 = sha256Hex(file)
           if (actualSha256 != expectedSha256) {
             android.util.Log.e(
-              "coderclaw",
+              "builderforce",
               "app.update: sha256 mismatch expected=$expectedSha256 actual=$actualSha256",
             )
             file.delete()
@@ -223,7 +223,7 @@ class AppUpdateHandler(
           // Verify file is a valid APK (basic check: ZIP magic bytes)
           val magic = file.inputStream().use { it.read().toByte() to it.read().toByte() }
           if (magic.first != 0x50.toByte() || magic.second != 0x4B.toByte()) {
-            android.util.Log.e("coderclaw", "app.update: invalid APK (bad magic: ${magic.first}, ${magic.second})")
+            android.util.Log.e("builderforce", "app.update: invalid APK (bad magic: ${magic.first}, ${magic.second})")
             file.delete()
             notifManager.cancel(notifId)
             notifManager.notify(notifId, android.app.Notification.Builder(appContext, channelId)
@@ -256,7 +256,7 @@ class AppUpdateHandler(
           params.setSize(file.length())
           val sessionId = installer.createSession(params)
           val session = installer.openSession(sessionId)
-          session.openWrite("coderclaw-update.apk", 0, file.length()).use { out ->
+          session.openWrite("builderforce-update.apk", 0, file.length()).use { out ->
             file.inputStream().use { inp -> inp.copyTo(out) }
             session.fsync(out)
           }
@@ -267,9 +267,9 @@ class AppUpdateHandler(
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE
           )
           session.commit(pi.intentSender)
-          android.util.Log.w("coderclaw", "app.update: PackageInstaller session committed, waiting for user confirmation")
+          android.util.Log.w("builderforce", "app.update: PackageInstaller session committed, waiting for user confirmation")
         } catch (err: Throwable) {
-          android.util.Log.e("coderclaw", "app.update: async error", err)
+          android.util.Log.e("builderforce", "app.update: async error", err)
           notifManager.cancel(notifId)
           notifManager.notify(notifId, android.app.Notification.Builder(appContext, channelId)
             .setSmallIcon(android.R.drawable.stat_notify_error)
@@ -288,7 +288,7 @@ class AppUpdateHandler(
           put("sha256", expectedSha256)
         }.toString())
     } catch (err: Throwable) {
-      android.util.Log.e("coderclaw", "app.update: error", err)
+      android.util.Log.e("builderforce", "app.update: error", err)
       return GatewaySession.InvokeResult.error(code = "UNAVAILABLE", message = err.message ?: "update failed")
     }
   }

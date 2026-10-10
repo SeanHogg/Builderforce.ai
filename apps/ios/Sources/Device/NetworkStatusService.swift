@@ -1,12 +1,12 @@
 import Foundation
 import Network
-import CoderClawKit
+import BuilderforceKit
 
 final class NetworkStatusService: @unchecked Sendable {
-    func currentStatus(timeoutMs: Int = 1500) async -> CoderClawNetworkStatusPayload {
+    func currentStatus(timeoutMs: Int = 1500) async -> BuilderforceNetworkStatusPayload {
         await withCheckedContinuation { cont in
             let monitor = NWPathMonitor()
-            let queue = DispatchQueue(label: "bot.molt.ios.network-status")
+            let queue = DispatchQueue(label: "ai.builderforce.ios.network-status")
             let state = NetworkStatusState()
 
             monitor.pathUpdateHandler = { path in
@@ -25,29 +25,29 @@ final class NetworkStatusService: @unchecked Sendable {
         }
     }
 
-    private static func payload(from path: NWPath) -> CoderClawNetworkStatusPayload {
-        let status: CoderClawNetworkPathStatus = switch path.status {
+    private static func payload(from path: NWPath) -> BuilderforceNetworkStatusPayload {
+        let status: BuilderforceNetworkPathStatus = switch path.status {
         case .satisfied: .satisfied
         case .requiresConnection: .requiresConnection
         case .unsatisfied: .unsatisfied
         @unknown default: .unsatisfied
         }
 
-        var interfaces: [CoderClawNetworkInterfaceType] = []
+        var interfaces: [BuilderforceNetworkInterfaceType] = []
         if path.usesInterfaceType(.wifi) { interfaces.append(.wifi) }
         if path.usesInterfaceType(.cellular) { interfaces.append(.cellular) }
         if path.usesInterfaceType(.wiredEthernet) { interfaces.append(.wired) }
         if interfaces.isEmpty { interfaces.append(.other) }
 
-        return CoderClawNetworkStatusPayload(
+        return BuilderforceNetworkStatusPayload(
             status: status,
             isExpensive: path.isExpensive,
             isConstrained: path.isConstrained,
             interfaces: interfaces)
     }
 
-    private static func fallbackPayload() -> CoderClawNetworkStatusPayload {
-        CoderClawNetworkStatusPayload(
+    private static func fallbackPayload() -> BuilderforceNetworkStatusPayload {
+        BuilderforceNetworkStatusPayload(
             status: .unsatisfied,
             isExpensive: false,
             isConstrained: false,

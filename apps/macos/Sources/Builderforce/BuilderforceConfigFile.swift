@@ -1,20 +1,20 @@
 import Foundation
-import CoderClawProtocol
+import BuilderforceProtocol
 
-enum CoderClawConfigFile {
-    private static let logger = Logger(subsystem: "ai.coderclaw", category: "config")
+enum BuilderforceConfigFile {
+    private static let logger = Logger(subsystem: "ai.builderforce", category: "config")
     private static let configAuditFileName = "config-audit.jsonl"
 
     static func url() -> URL {
-        CoderClawPaths.configURL
+        BuilderforcePaths.configURL
     }
 
     static func stateDirURL() -> URL {
-        CoderClawPaths.stateDirURL
+        BuilderforcePaths.stateDirURL
     }
 
     static func defaultWorkspaceURL() -> URL {
-        CoderClawPaths.workspaceURL
+        BuilderforcePaths.workspaceURL
     }
 
     static func loadDict() -> [String: Any] {
@@ -325,7 +325,7 @@ enum CoderClawConfigFile {
     private static func appendConfigWriteAudit(_ fields: [String: Any]) {
         var record: [String: Any] = [
             "ts": ISO8601DateFormatter().string(from: Date()),
-            "source": "macos-coderclaw-config-file",
+            "source": "macos-builderforce-config-file",
             "event": "config.write",
             "pid": ProcessInfo.processInfo.processIdentifier,
             "argv": Array(ProcessInfo.processInfo.arguments.prefix(8)),

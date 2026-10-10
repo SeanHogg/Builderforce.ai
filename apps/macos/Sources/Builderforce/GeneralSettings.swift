@@ -1,8 +1,8 @@
 import AppKit
 import Observation
-import CoderClawDiscovery
-import CoderClawIPC
-import CoderClawKit
+import BuilderforceDiscovery
+import BuilderforceIPC
+import BuilderforceKit
 import SwiftUI
 
 struct GeneralSettings: View {
@@ -29,8 +29,8 @@ struct GeneralSettings: View {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 12) {
                     SettingsToggleRow(
-                        title: "CoderClaw active",
-                        subtitle: "Pause to stop the CoderClaw gateway; no messages will be processed.",
+                        title: "Builderforce active",
+                        subtitle: "Pause to stop the Builderforce gateway; no messages will be processed.",
                         binding: self.activeBinding)
 
                     self.connectionSection
@@ -39,12 +39,12 @@ struct GeneralSettings: View {
 
                     SettingsToggleRow(
                         title: "Launch at login",
-                        subtitle: "Automatically start CoderClaw after you sign in.",
+                        subtitle: "Automatically start Builderforce after you sign in.",
                         binding: self.$state.launchAtLogin)
 
                     SettingsToggleRow(
                         title: "Show Dock icon",
-                        subtitle: "Keep CoderClaw visible in the Dock instead of menu-bar-only mode.",
+                        subtitle: "Keep Builderforce visible in the Dock instead of menu-bar-only mode.",
                         binding: self.$state.showDockIcon)
 
                     SettingsToggleRow(
@@ -76,7 +76,7 @@ struct GeneralSettings: View {
                 Spacer(minLength: 12)
                 HStack {
                     Spacer()
-                    Button("Quit CoderClaw") { NSApp.terminate(nil) }
+                    Button("Quit Builderforce") { NSApp.terminate(nil) }
                         .buttonStyle(.borderedProminent)
                 }
             }
@@ -103,7 +103,7 @@ struct GeneralSettings: View {
 
     private var connectionSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("CoderClaw runs")
+            Text("Builderforce runs")
                 .font(.title3.weight(.semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -172,7 +172,7 @@ struct GeneralSettings: View {
                                 .frame(width: 280)
                         }
                         LabeledContent("Project root") {
-                            TextField("/home/you/Projects/coderclaw", text: self.$state.remoteProjectRoot)
+                            TextField("/home/you/Projects/builderforce", text: self.$state.remoteProjectRoot)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 280)
                         }
@@ -664,7 +664,7 @@ extension GeneralSettings {
         let alert = NSAlert()
         alert.messageText = "Log file not found"
         alert.informativeText = """
-        Looked for coderclaw logs in /tmp/coderclaw/.
+        Looked for builderforce logs in /tmp/builderforce/.
         Run a health check or send a message to generate activity, then try again.
         """
         alert.alertStyle = .informational
@@ -688,7 +688,7 @@ extension GeneralSettings {
                 host: host,
                 port: gateway.sshPort)
             self.state.remoteCliPath = gateway.cliPath ?? ""
-            CoderClawConfigFile.setRemoteGatewayUrl(
+            BuilderforceConfigFile.setRemoteGatewayUrl(
                 host: gateway.serviceHost ?? host,
                 port: gateway.servicePort ?? gateway.gatewayPort)
         }
@@ -718,8 +718,8 @@ extension GeneralSettings {
         state.remoteTarget = "user@host:2222"
         state.remoteUrl = "wss://gateway.example.ts.net"
         state.remoteIdentity = "/tmp/id_ed25519"
-        state.remoteProjectRoot = "/tmp/coderclaw"
-        state.remoteCliPath = "/tmp/coderclaw"
+        state.remoteProjectRoot = "/tmp/builderforce"
+        state.remoteCliPath = "/tmp/builderforce"
 
         let view = GeneralSettings(state: state)
         view.gatewayStatus = GatewayEnvironmentStatus(

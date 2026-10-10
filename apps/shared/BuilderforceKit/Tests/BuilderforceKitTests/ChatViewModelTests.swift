@@ -1,7 +1,7 @@
-import CoderClawKit
+import BuilderforceKit
 import Foundation
 import Testing
-@testable import CoderClawChatUI
+@testable import BuilderforceChatUI
 
 private struct TimeoutError: Error, CustomStringConvertible {
     let label: String
@@ -31,40 +31,40 @@ private actor TestChatTransportState {
     var abortedRunIds: [String] = []
 }
 
-private final class TestChatTransport: @unchecked Sendable, CoderClawChatTransport {
+private final class TestChatTransport: @unchecked Sendable, BuilderforceChatTransport {
     private let state = TestChatTransportState()
-    private let historyResponses: [CoderClawChatHistoryPayload]
-    private let sessionsResponses: [CoderClawChatSessionsListResponse]
+    private let historyResponses: [BuilderforceChatHistoryPayload]
+    private let sessionsResponses: [BuilderforceChatSessionsListResponse]
 
-    private let stream: AsyncStream<CoderClawChatTransportEvent>
-    private let continuation: AsyncStream<CoderClawChatTransportEvent>.Continuation
+    private let stream: AsyncStream<BuilderforceChatTransportEvent>
+    private let continuation: AsyncStream<BuilderforceChatTransportEvent>.Continuation
 
     init(
-        historyResponses: [CoderClawChatHistoryPayload],
-        sessionsResponses: [CoderClawChatSessionsListResponse] = [])
+        historyResponses: [BuilderforceChatHistoryPayload],
+        sessionsResponses: [BuilderforceChatSessionsListResponse] = [])
     {
         self.historyResponses = historyResponses
         self.sessionsResponses = sessionsResponses
-        var cont: AsyncStream<CoderClawChatTransportEvent>.Continuation!
+        var cont: AsyncStream<BuilderforceChatTransportEvent>.Continuation!
         self.stream = AsyncStream { c in
             cont = c
         }
         self.continuation = cont
     }
 
-    func events() -> AsyncStream<CoderClawChatTransportEvent> {
+    func events() -> AsyncStream<BuilderforceChatTransportEvent> {
         self.stream
     }
 
     func setActiveSessionKey(_: String) async throws {}
 
-    func requestHistory(sessionKey: String) async throws -> CoderClawChatHistoryPayload {
+    func requestHistory(sessionKey: String) async throws -> BuilderforceChatHistoryPayload {
         let idx = await self.state.historyCallCount
         await self.state.setHistoryCallCount(idx + 1)
         if idx < self.historyResponses.count {
             return self.historyResponses[idx]
         }
-        return self.historyResponses.last ?? CoderClawChatHistoryPayload(
+        return self.historyResponses.last ?? BuilderforceChatHistoryPayload(
             sessionKey: sessionKey,
             sessionId: nil,
             messages: [],
@@ -76,23 +76,23 @@ private final class TestChatTransport: @unchecked Sendable, CoderClawChatTranspo
         message _: String,
         thinking _: String,
         idempotencyKey: String,
-        attachments _: [CoderClawChatAttachmentPayload]) async throws -> CoderClawChatSendResponse
+        attachments _: [BuilderforceChatAttachmentPayload]) async throws -> BuilderforceChatSendResponse
     {
         await self.state.sentRunIdsAppend(idempotencyKey)
-        return CoderClawChatSendResponse(runId: idempotencyKey, status: "ok")
+        return BuilderforceChatSendResponse(runId: idempotencyKey, status: "ok")
     }
 
     func abortRun(sessionKey _: String, runId: String) async throws {
         await self.state.abortedRunIdsAppend(runId)
     }
 
-    func listSessions(limit _: Int?) async throws -> CoderClawChatSessionsListResponse {
+    func listSessions(limit _: Int?) async throws -> BuilderforceChatSessionsListResponse {
         let idx = await self.state.sessionsCallCount
         await self.state.setSessionsCallCount(idx + 1)
         if idx < self.sessionsResponses.count {
             return self.sessionsResponses[idx]
         }
-        return self.sessionsResponses.last ?? CoderClawChatSessionsListResponse(
+        return self.sessionsResponses.last ?? BuilderforceChatSessionsListResponse(
             ts: nil,
             path: nil,
             count: 0,
@@ -104,7 +104,7 @@ private final class TestChatTransport: @unchecked Sendable, CoderClawChatTranspo
         true
     }
 
-    func emit(_ evt: CoderClawChatTransportEvent) {
+    func emit(_ evt: BuilderforceChatTransportEvent) {
         self.continuation.yield(evt)
     }
 
@@ -139,12 +139,12 @@ extension TestChatTransportState {
 @Suite struct ChatViewModelTests {
     @Test func streamsAssistantAndClearsOnFinal() async throws {
         let sessionId = "sess-main"
-        let history1 = CoderClawChatHistoryPayload(
+        let history1 = BuilderforceChatHistoryPayload(
             sessionKey: "main",
             sessionId: sessionId,
             messages: [],
             thinkingLevel: "off")
-        let history2 = CoderClawChatHistoryPayload(
+        let history2 = BuilderforceChatHistoryPayload(
             sessionKey: "main",
             sessionId: sessionId,
             messages: [
@@ -157,7 +157,7 @@ extension TestChatTransportState {
             thinkingLevel: "off")
 
         let transport = TestChatTransport(historyResponses: [history1, history2])
-        let vm = await MainActor.run { CoderClawChatViewModel(sessionKey: "main", transport: transport) }
+        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
 
         await MainActor.run { vm.load() }
         try await waitUntil("bootstrap") { await MainActor.run { vm.healthOK && vm.sessionId == sessionId } }
@@ -170,7 +170,7 @@ extension TestChatTransportState {
 
         transport.emit(
             .agent(
-                CoderClawAgentEventPayload(
+                BuilderforceAgentEventPayload(
                     runId: sessionId,
                     seq: 1,
                     stream: "assistant",
@@ -183,7 +183,7 @@ extension TestChatTransportState {
 
         transport.emit(
             .agent(
-                CoderClawAgentEventPayload(
+                BuilderforceAgentEventPayload(
                     runId: sessionId,
                     seq: 2,
                     stream: "tool",
@@ -200,7 +200,7 @@ extension TestChatTransportState {
         let runId = try #require(await transport.lastSentRunId())
         transport.emit(
             .chat(
-                CoderClawChatEventPayload(
+                BuilderforceChatEventPayload(
                     runId: runId,
                     sessionKey: "main",
                     state: "final",
@@ -216,12 +216,12 @@ extension TestChatTransportState {
     }
 
     @Test func acceptsCanonicalSessionKeyEventsForOwnPendingRun() async throws {
-        let history1 = CoderClawChatHistoryPayload(
+        let history1 = BuilderforceChatHistoryPayload(
             sessionKey: "main",
             sessionId: "sess-main",
             messages: [],
             thinkingLevel: "off")
-        let history2 = CoderClawChatHistoryPayload(
+        let history2 = BuilderforceChatHistoryPayload(
             sessionKey: "main",
             sessionId: "sess-main",
             messages: [
@@ -234,7 +234,7 @@ extension TestChatTransportState {
             thinkingLevel: "off")
 
         let transport = TestChatTransport(historyResponses: [history1, history2])
-        let vm = await MainActor.run { CoderClawChatViewModel(sessionKey: "main", transport: transport) }
+        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
 
         await MainActor.run { vm.load() }
         try await waitUntil("bootstrap") { await MainActor.run { vm.healthOK } }
@@ -248,7 +248,7 @@ extension TestChatTransportState {
         let runId = try #require(await transport.lastSentRunId())
         transport.emit(
             .chat(
-                CoderClawChatEventPayload(
+                BuilderforceChatEventPayload(
                     runId: runId,
                     sessionKey: "agent:main:main",
                     state: "final",
@@ -263,7 +263,7 @@ extension TestChatTransportState {
 
     @Test func acceptsCanonicalSessionKeyEventsForExternalRuns() async throws {
         let now = Date().timeIntervalSince1970 * 1000
-        let history1 = CoderClawChatHistoryPayload(
+        let history1 = BuilderforceChatHistoryPayload(
             sessionKey: "main",
             sessionId: "sess-main",
             messages: [
@@ -274,7 +274,7 @@ extension TestChatTransportState {
                 ]),
             ],
             thinkingLevel: "off")
-        let history2 = CoderClawChatHistoryPayload(
+        let history2 = BuilderforceChatHistoryPayload(
             sessionKey: "main",
             sessionId: "sess-main",
             messages: [
@@ -292,14 +292,14 @@ extension TestChatTransportState {
             thinkingLevel: "off")
 
         let transport = TestChatTransport(historyResponses: [history1, history2])
-        let vm = await MainActor.run { CoderClawChatViewModel(sessionKey: "main", transport: transport) }
+        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
 
         await MainActor.run { vm.load() }
         try await waitUntil("bootstrap") { await MainActor.run { vm.messages.count == 1 } }
 
         transport.emit(
             .chat(
-                CoderClawChatEventPayload(
+                BuilderforceChatEventPayload(
                     runId: "external-run",
                     sessionKey: "agent:main:main",
                     state: "final",
@@ -313,7 +313,7 @@ extension TestChatTransportState {
 
     @Test func preservesMessageIDsAcrossHistoryRefreshes() async throws {
         let now = Date().timeIntervalSince1970 * 1000
-        let history1 = CoderClawChatHistoryPayload(
+        let history1 = BuilderforceChatHistoryPayload(
             sessionKey: "main",
             sessionId: "sess-main",
             messages: [
@@ -324,7 +324,7 @@ extension TestChatTransportState {
                 ]),
             ],
             thinkingLevel: "off")
-        let history2 = CoderClawChatHistoryPayload(
+        let history2 = BuilderforceChatHistoryPayload(
             sessionKey: "main",
             sessionId: "sess-main",
             messages: [
@@ -342,7 +342,7 @@ extension TestChatTransportState {
             thinkingLevel: "off")
 
         let transport = TestChatTransport(historyResponses: [history1, history2])
-        let vm = await MainActor.run { CoderClawChatViewModel(sessionKey: "main", transport: transport) }
+        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
 
         await MainActor.run { vm.load() }
         try await waitUntil("bootstrap") { await MainActor.run { vm.messages.count == 1 } }
@@ -350,7 +350,7 @@ extension TestChatTransportState {
 
         transport.emit(
             .chat(
-                CoderClawChatEventPayload(
+                BuilderforceChatEventPayload(
                     runId: "other-run",
                     sessionKey: "main",
                     state: "final",
@@ -364,20 +364,20 @@ extension TestChatTransportState {
 
     @Test func clearsStreamingOnExternalFinalEvent() async throws {
         let sessionId = "sess-main"
-        let history = CoderClawChatHistoryPayload(
+        let history = BuilderforceChatHistoryPayload(
             sessionKey: "main",
             sessionId: sessionId,
             messages: [],
             thinkingLevel: "off")
         let transport = TestChatTransport(historyResponses: [history, history])
-        let vm = await MainActor.run { CoderClawChatViewModel(sessionKey: "main", transport: transport) }
+        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
 
         await MainActor.run { vm.load() }
         try await waitUntil("bootstrap") { await MainActor.run { vm.healthOK && vm.sessionId == sessionId } }
 
         transport.emit(
             .agent(
-                CoderClawAgentEventPayload(
+                BuilderforceAgentEventPayload(
                     runId: sessionId,
                     seq: 1,
                     stream: "assistant",
@@ -386,7 +386,7 @@ extension TestChatTransportState {
 
         transport.emit(
             .agent(
-                CoderClawAgentEventPayload(
+                BuilderforceAgentEventPayload(
                     runId: sessionId,
                     seq: 2,
                     stream: "tool",
@@ -405,7 +405,7 @@ extension TestChatTransportState {
 
         transport.emit(
             .chat(
-                CoderClawChatEventPayload(
+                BuilderforceChatEventPayload(
                     runId: "other-run",
                     sessionKey: "main",
                     state: "final",
@@ -421,18 +421,18 @@ extension TestChatTransportState {
         let recent = now - (2 * 60 * 60 * 1000)
         let recentOlder = now - (5 * 60 * 60 * 1000)
         let stale = now - (26 * 60 * 60 * 1000)
-        let history = CoderClawChatHistoryPayload(
+        let history = BuilderforceChatHistoryPayload(
             sessionKey: "main",
             sessionId: "sess-main",
             messages: [],
             thinkingLevel: "off")
-        let sessions = CoderClawChatSessionsListResponse(
+        let sessions = BuilderforceChatSessionsListResponse(
             ts: now,
             path: nil,
             count: 4,
             defaults: nil,
             sessions: [
-                CoderClawChatSessionEntry(
+                BuilderforceChatSessionEntry(
                     key: "recent-1",
                     kind: nil,
                     displayName: nil,
@@ -451,7 +451,7 @@ extension TestChatTransportState {
                     totalTokens: nil,
                     model: nil,
                     contextTokens: nil),
-                CoderClawChatSessionEntry(
+                BuilderforceChatSessionEntry(
                     key: "main",
                     kind: nil,
                     displayName: nil,
@@ -470,7 +470,7 @@ extension TestChatTransportState {
                     totalTokens: nil,
                     model: nil,
                     contextTokens: nil),
-                CoderClawChatSessionEntry(
+                BuilderforceChatSessionEntry(
                     key: "recent-2",
                     kind: nil,
                     displayName: nil,
@@ -489,7 +489,7 @@ extension TestChatTransportState {
                     totalTokens: nil,
                     model: nil,
                     contextTokens: nil),
-                CoderClawChatSessionEntry(
+                BuilderforceChatSessionEntry(
                     key: "old-1",
                     kind: nil,
                     displayName: nil,
@@ -513,7 +513,7 @@ extension TestChatTransportState {
         let transport = TestChatTransport(
             historyResponses: [history],
             sessionsResponses: [sessions])
-        let vm = await MainActor.run { CoderClawChatViewModel(sessionKey: "main", transport: transport) }
+        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
         await MainActor.run { vm.load() }
         try await waitUntil("sessions loaded") { await MainActor.run { !vm.sessions.isEmpty } }
 
@@ -524,18 +524,18 @@ extension TestChatTransportState {
     @Test func sessionChoicesIncludeCurrentWhenMissing() async throws {
         let now = Date().timeIntervalSince1970 * 1000
         let recent = now - (30 * 60 * 1000)
-        let history = CoderClawChatHistoryPayload(
+        let history = BuilderforceChatHistoryPayload(
             sessionKey: "custom",
             sessionId: "sess-custom",
             messages: [],
             thinkingLevel: "off")
-        let sessions = CoderClawChatSessionsListResponse(
+        let sessions = BuilderforceChatSessionsListResponse(
             ts: now,
             path: nil,
             count: 1,
             defaults: nil,
             sessions: [
-                CoderClawChatSessionEntry(
+                BuilderforceChatSessionEntry(
                     key: "main",
                     kind: nil,
                     displayName: nil,
@@ -559,7 +559,7 @@ extension TestChatTransportState {
         let transport = TestChatTransport(
             historyResponses: [history],
             sessionsResponses: [sessions])
-        let vm = await MainActor.run { CoderClawChatViewModel(sessionKey: "custom", transport: transport) }
+        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "custom", transport: transport) }
         await MainActor.run { vm.load() }
         try await waitUntil("sessions loaded") { await MainActor.run { !vm.sessions.isEmpty } }
 
@@ -569,20 +569,20 @@ extension TestChatTransportState {
 
     @Test func clearsStreamingOnExternalErrorEvent() async throws {
         let sessionId = "sess-main"
-        let history = CoderClawChatHistoryPayload(
+        let history = BuilderforceChatHistoryPayload(
             sessionKey: "main",
             sessionId: sessionId,
             messages: [],
             thinkingLevel: "off")
         let transport = TestChatTransport(historyResponses: [history, history])
-        let vm = await MainActor.run { CoderClawChatViewModel(sessionKey: "main", transport: transport) }
+        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
 
         await MainActor.run { vm.load() }
         try await waitUntil("bootstrap") { await MainActor.run { vm.healthOK && vm.sessionId == sessionId } }
 
         transport.emit(
             .agent(
-                CoderClawAgentEventPayload(
+                BuilderforceAgentEventPayload(
                     runId: sessionId,
                     seq: 1,
                     stream: "assistant",
@@ -595,7 +595,7 @@ extension TestChatTransportState {
 
         transport.emit(
             .chat(
-                CoderClawChatEventPayload(
+                BuilderforceChatEventPayload(
                     runId: "other-run",
                     sessionKey: "main",
                     state: "error",
@@ -607,13 +607,13 @@ extension TestChatTransportState {
 
     @Test func abortRequestsDoNotClearPendingUntilAbortedEvent() async throws {
         let sessionId = "sess-main"
-        let history = CoderClawChatHistoryPayload(
+        let history = BuilderforceChatHistoryPayload(
             sessionKey: "main",
             sessionId: sessionId,
             messages: [],
             thinkingLevel: "off")
         let transport = TestChatTransport(historyResponses: [history, history])
-        let vm = await MainActor.run { CoderClawChatViewModel(sessionKey: "main", transport: transport) }
+        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
 
         await MainActor.run { vm.load() }
         try await waitUntil("bootstrap") { await MainActor.run { vm.healthOK && vm.sessionId == sessionId } }
@@ -637,7 +637,7 @@ extension TestChatTransportState {
 
         transport.emit(
             .chat(
-                CoderClawChatEventPayload(
+                BuilderforceChatEventPayload(
                     runId: runId,
                     sessionKey: "main",
                     state: "aborted",

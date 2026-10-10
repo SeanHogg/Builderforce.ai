@@ -1,28 +1,28 @@
-import CoderClawKit
+import BuilderforceKit
 import Foundation
 import Testing
 
 @Suite struct CanvasA2UIActionTests {
     @Test func sanitizeTagValueIsStable() {
-        #expect(CoderClawCanvasA2UIAction.sanitizeTagValue("Hello World!") == "Hello_World_")
-        #expect(CoderClawCanvasA2UIAction.sanitizeTagValue("  ") == "-")
-        #expect(CoderClawCanvasA2UIAction.sanitizeTagValue("macOS 26.2") == "macOS_26.2")
+        #expect(BuilderforceCanvasA2UIAction.sanitizeTagValue("Hello World!") == "Hello_World_")
+        #expect(BuilderforceCanvasA2UIAction.sanitizeTagValue("  ") == "-")
+        #expect(BuilderforceCanvasA2UIAction.sanitizeTagValue("macOS 26.2") == "macOS_26.2")
     }
 
     @Test func extractActionNameAcceptsNameOrAction() {
-        #expect(CoderClawCanvasA2UIAction.extractActionName(["name": "Hello"]) == "Hello")
-        #expect(CoderClawCanvasA2UIAction.extractActionName(["action": "Wave"]) == "Wave")
-        #expect(CoderClawCanvasA2UIAction.extractActionName(["name": "  ", "action": "Fallback"]) == "Fallback")
-        #expect(CoderClawCanvasA2UIAction.extractActionName(["action": " "]) == nil)
+        #expect(BuilderforceCanvasA2UIAction.extractActionName(["name": "Hello"]) == "Hello")
+        #expect(BuilderforceCanvasA2UIAction.extractActionName(["action": "Wave"]) == "Wave")
+        #expect(BuilderforceCanvasA2UIAction.extractActionName(["name": "  ", "action": "Fallback"]) == "Fallback")
+        #expect(BuilderforceCanvasA2UIAction.extractActionName(["action": " "]) == nil)
     }
 
     @Test func formatAgentMessageIsTokenEfficientAndUnambiguous() {
-        let messageContext = CoderClawCanvasA2UIAction.AgentMessageContext(
+        let messageContext = BuilderforceCanvasA2UIAction.AgentMessageContext(
             actionName: "Get Weather",
             session: .init(key: "main", surfaceId: "main"),
             component: .init(id: "btnWeather", host: "Peter’s iPad", instanceId: "ipad16,6"),
             contextJSON: "{\"city\":\"Vienna\"}")
-        let msg = CoderClawCanvasA2UIAction.formatAgentMessage(messageContext)
+        let msg = BuilderforceCanvasA2UIAction.formatAgentMessage(messageContext)
 
         #expect(msg.contains("CANVAS_A2UI "))
         #expect(msg.contains("action=Get_Weather"))

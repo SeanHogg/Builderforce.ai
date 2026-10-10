@@ -1,38 +1,38 @@
 import Foundation
 
-public enum CoderClawCameraCommand: String, Codable, Sendable {
+public enum BuilderforceCameraCommand: String, Codable, Sendable {
     case list = "camera.list"
     case snap = "camera.snap"
     case clip = "camera.clip"
 }
 
-public enum CoderClawCameraFacing: String, Codable, Sendable {
+public enum BuilderforceCameraFacing: String, Codable, Sendable {
     case back
     case front
 }
 
-public enum CoderClawCameraImageFormat: String, Codable, Sendable {
+public enum BuilderforceCameraImageFormat: String, Codable, Sendable {
     case jpg
     case jpeg
 }
 
-public enum CoderClawCameraVideoFormat: String, Codable, Sendable {
+public enum BuilderforceCameraVideoFormat: String, Codable, Sendable {
     case mp4
 }
 
-public struct CoderClawCameraSnapParams: Codable, Sendable, Equatable {
-    public var facing: CoderClawCameraFacing?
+public struct BuilderforceCameraSnapParams: Codable, Sendable, Equatable {
+    public var facing: BuilderforceCameraFacing?
     public var maxWidth: Int?
     public var quality: Double?
-    public var format: CoderClawCameraImageFormat?
+    public var format: BuilderforceCameraImageFormat?
     public var deviceId: String?
     public var delayMs: Int?
 
     public init(
-        facing: CoderClawCameraFacing? = nil,
+        facing: BuilderforceCameraFacing? = nil,
         maxWidth: Int? = nil,
         quality: Double? = nil,
-        format: CoderClawCameraImageFormat? = nil,
+        format: BuilderforceCameraImageFormat? = nil,
         deviceId: String? = nil,
         delayMs: Int? = nil)
     {
@@ -45,18 +45,18 @@ public struct CoderClawCameraSnapParams: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawCameraClipParams: Codable, Sendable, Equatable {
-    public var facing: CoderClawCameraFacing?
+public struct BuilderforceCameraClipParams: Codable, Sendable, Equatable {
+    public var facing: BuilderforceCameraFacing?
     public var durationMs: Int?
     public var includeAudio: Bool?
-    public var format: CoderClawCameraVideoFormat?
+    public var format: BuilderforceCameraVideoFormat?
     public var deviceId: String?
 
     public init(
-        facing: CoderClawCameraFacing? = nil,
+        facing: BuilderforceCameraFacing? = nil,
         durationMs: Int? = nil,
         includeAudio: Bool? = nil,
-        format: CoderClawCameraVideoFormat? = nil,
+        format: BuilderforceCameraVideoFormat? = nil,
         deviceId: String? = nil)
     {
         self.facing = facing

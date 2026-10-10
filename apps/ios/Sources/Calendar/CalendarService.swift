@@ -1,9 +1,9 @@
 import EventKit
 import Foundation
-import CoderClawKit
+import BuilderforceKit
 
 final class CalendarService: CalendarServicing {
-    func events(params: CoderClawCalendarEventsParams) async throws -> CoderClawCalendarEventsPayload {
+    func events(params: BuilderforceCalendarEventsParams) async throws -> BuilderforceCalendarEventsPayload {
         let store = EKEventStore()
         let status = EKEventStore.authorizationStatus(for: .event)
         let authorized = EventKitAuthorization.allowsRead(status: status)
@@ -23,7 +23,7 @@ final class CalendarService: CalendarServicing {
 
         let formatter = ISO8601DateFormatter()
         let payload = selected.map { event in
-            CoderClawCalendarEventPayload(
+            BuilderforceCalendarEventPayload(
                 identifier: event.eventIdentifier ?? UUID().uuidString,
                 title: event.title ?? "(untitled)",
                 startISO: formatter.string(from: event.startDate),
@@ -33,10 +33,10 @@ final class CalendarService: CalendarServicing {
                 calendarTitle: event.calendar.title)
         }
 
-        return CoderClawCalendarEventsPayload(events: payload)
+        return BuilderforceCalendarEventsPayload(events: payload)
     }
 
-    func add(params: CoderClawCalendarAddParams) async throws -> CoderClawCalendarAddPayload {
+    func add(params: BuilderforceCalendarAddParams) async throws -> BuilderforceCalendarAddPayload {
         let store = EKEventStore()
         let status = EKEventStore.authorizationStatus(for: .event)
         let authorized = EventKitAuthorization.allowsWrite(status: status)
@@ -83,7 +83,7 @@ final class CalendarService: CalendarServicing {
 
         try store.save(event, span: .thisEvent)
 
-        let payload = CoderClawCalendarEventPayload(
+        let payload = BuilderforceCalendarEventPayload(
             identifier: event.eventIdentifier ?? UUID().uuidString,
             title: event.title ?? title,
             startISO: formatter.string(from: event.startDate),
@@ -92,7 +92,7 @@ final class CalendarService: CalendarServicing {
             location: event.location,
             calendarTitle: event.calendar.title)
 
-        return CoderClawCalendarAddPayload(event: payload)
+        return BuilderforceCalendarAddPayload(event: payload)
     }
 
     private static func resolveCalendar(

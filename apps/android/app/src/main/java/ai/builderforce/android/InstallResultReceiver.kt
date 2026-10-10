@@ -1,4 +1,4 @@
-package ai.coderclaw.android
+package ai.builderforce.android
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -19,14 +19,14 @@ class InstallResultReceiver : BroadcastReceiver() {
         if (confirmIntent != null) {
           confirmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
           context.startActivity(confirmIntent)
-          Log.w("coderclaw", "app.update: user confirmation requested, launching install dialog")
+          Log.w("builderforce", "app.update: user confirmation requested, launching install dialog")
         }
       }
       PackageInstaller.STATUS_SUCCESS -> {
-        Log.w("coderclaw", "app.update: install SUCCESS")
+        Log.w("builderforce", "app.update: install SUCCESS")
       }
       else -> {
-        Log.e("coderclaw", "app.update: install FAILED status=$status message=$message")
+        Log.e("builderforce", "app.update: install FAILED status=$status message=$message")
       }
     }
   }

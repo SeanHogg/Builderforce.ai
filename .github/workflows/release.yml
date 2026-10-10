@@ -147,7 +147,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # vendor/ and apps/shared/BuilderForceAgentsKit are gitignored (Docker builds
+      # vendor/ and apps/shared/BuilderforceKit are gitignored (Docker builds
       # exclude them too), so a fresh checkout here has neither the A2UI renderer
       # sources nor a prebuilt bundle. bundle-a2ui.sh's own documented escape hatch
       # for exactly this environment: skip bundling and ship the CLI without the

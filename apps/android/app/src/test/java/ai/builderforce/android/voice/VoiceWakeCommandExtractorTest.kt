@@ -1,4 +1,4 @@
-package ai.coderclaw.android.voice
+package ai.builderforce.android.voice
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -7,13 +7,13 @@ import org.junit.Test
 class VoiceWakeCommandExtractorTest {
   @Test
   fun extractsCommandAfterTriggerWord() {
-    val res = VoiceWakeCommandExtractor.extractCommand("Claude take a photo", listOf("coderclaw", "claude"))
+    val res = VoiceWakeCommandExtractor.extractCommand("Claude take a photo", listOf("builderforce", "claude"))
     assertEquals("take a photo", res)
   }
 
   @Test
   fun extractsCommandWithPunctuation() {
-    val res = VoiceWakeCommandExtractor.extractCommand("hey coderclaw, what's the weather?", listOf("coderclaw"))
+    val res = VoiceWakeCommandExtractor.extractCommand("hey builderforce, what's the weather?", listOf("builderforce"))
     assertEquals("what's the weather?", res)
   }
 

@@ -1,4 +1,4 @@
-package ai.coderclaw.android
+package ai.builderforce.android
 
 enum class LocationMode(val rawValue: String) {
   Off("off"),

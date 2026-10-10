@@ -1,17 +1,17 @@
-import CoderClawKit
+import BuilderforceKit
 import Network
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite struct GatewayEndpointIDTests {
     @Test func stableIDForServiceDecodesAndNormalizesName() {
         let endpoint = NWEndpoint.service(
-            name: "CoderClaw\\032Gateway   \\032  Node\n",
-            type: "_coderclaw-gw._tcp",
+            name: "Builderforce\\032Gateway   \\032  Node\n",
+            type: "_builderforce-gw._tcp",
             domain: "local.",
             interface: nil)
 
-        #expect(GatewayEndpointID.stableID(endpoint) == "_coderclaw-gw._tcp|local.|CoderClaw Gateway Node")
+        #expect(GatewayEndpointID.stableID(endpoint) == "_builderforce-gw._tcp|local.|Builderforce Gateway Node")
     }
 
     @Test func stableIDForNonServiceUsesEndpointDescription() {
@@ -21,8 +21,8 @@ import Testing
 
     @Test func prettyDescriptionDecodesBonjourEscapes() {
         let endpoint = NWEndpoint.service(
-            name: "CoderClaw\\032Gateway",
-            type: "_coderclaw-gw._tcp",
+            name: "Builderforce\\032Gateway",
+            type: "_builderforce-gw._tcp",
             domain: "local.",
             interface: nil)
 

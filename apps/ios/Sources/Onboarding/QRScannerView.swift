@@ -1,4 +1,4 @@
-import CoderClawKit
+import BuilderforceKit
 import SwiftUI
 import VisionKit
 
@@ -72,7 +72,7 @@ struct QRScannerView: UIViewControllerRepresentable {
                     return
                 }
 
-                // Fall back to deep link URL format (coderclaw://gateway?...).
+                // Fall back to deep link URL format (builderforce://gateway?...).
                 if let url = URL(string: payload),
                    let route = DeepLinkParser.parse(url),
                    case let .gateway(link) = route

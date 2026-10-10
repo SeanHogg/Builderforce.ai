@@ -1,6 +1,6 @@
-package ai.coderclaw.android.node
+package ai.builderforce.android.node
 
-import ai.coderclaw.android.gateway.GatewaySession
+import ai.builderforce.android.gateway.GatewaySession
 
 class ScreenHandler(
   private val screenRecorder: ScreenRecordManager,

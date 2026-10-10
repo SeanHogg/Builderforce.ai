@@ -54,14 +54,14 @@ enum AppLogLevel: String, CaseIterable, Identifiable {
     }
 }
 
-enum CoderClawLogging {
+enum BuilderforceLogging {
     private static let labelSeparator = "::"
 
     private static let didBootstrap: Void = {
         LoggingSystem.bootstrap { label in
             let (subsystem, category) = Self.parseLabel(label)
-            let osHandler = CoderClawOSLogHandler(subsystem: subsystem, category: category)
-            let fileHandler = CoderClawFileLogHandler(label: label)
+            let osHandler = BuilderforceOSLogHandler(subsystem: subsystem, category: category)
+            let fileHandler = BuilderforceFileLogHandler(label: label)
             return MultiplexLogHandler([osHandler, fileHandler])
         }
     }()
@@ -76,7 +76,7 @@ enum CoderClawLogging {
 
     static func parseLabel(_ label: String) -> (String, String) {
         guard let range = label.range(of: labelSeparator) else {
-            return ("ai.coderclaw", label)
+            return ("ai.builderforce", label)
         }
         let subsystem = String(label[..<range.lowerBound])
         let category = String(label[range.upperBound...])
@@ -86,8 +86,8 @@ enum CoderClawLogging {
 
 extension Logging.Logger {
     init(subsystem: String, category: String) {
-        CoderClawLogging.bootstrapIfNeeded()
-        let label = CoderClawLogging.makeLabel(subsystem: subsystem, category: category)
+        BuilderforceLogging.bootstrapIfNeeded()
+        let label = BuilderforceLogging.makeLabel(subsystem: subsystem, category: category)
         self.init(label: label)
     }
 }
@@ -98,7 +98,7 @@ extension Logger.Message.StringInterpolation {
     }
 }
 
-struct CoderClawOSLogHandler: LogHandler {
+struct BuilderforceOSLogHandler: LogHandler {
     private let osLogger: os.Logger
     var metadata: Logger.Metadata = [:]
 
@@ -176,7 +176,7 @@ struct CoderClawOSLogHandler: LogHandler {
     }
 }
 
-struct CoderClawFileLogHandler: LogHandler {
+struct BuilderforceFileLogHandler: LogHandler {
     let label: String
     var metadata: Logger.Metadata = [:]
 
@@ -200,7 +200,7 @@ struct CoderClawFileLogHandler: LogHandler {
         line: UInt)
     {
         guard AppLogSettings.fileLoggingEnabled() else { return }
-        let (subsystem, category) = CoderClawLogging.parseLabel(self.label)
+        let (subsystem, category) = BuilderforceLogging.parseLabel(self.label)
         var fields: [String: String] = [
             "subsystem": subsystem,
             "category": category,

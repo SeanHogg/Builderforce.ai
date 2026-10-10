@@ -73,7 +73,7 @@ public enum CanvasShowStatus: String, Codable, Sendable {
 }
 
 public struct CanvasShowResult: Codable, Sendable {
-    /// Session directory on disk (e.g. `~/Library/Application Support/CoderClaw/canvas/<session>/`).
+    /// Session directory on disk (e.g. `~/Library/Application Support/Builderforce/canvas/<session>/`).
     public var directory: String
     /// Target as provided by the caller (may be nil/empty).
     public var target: String?
@@ -411,6 +411,6 @@ extension Request: Codable {
 public let controlSocketPath: String = {
     let home = FileManager().homeDirectoryForCurrentUser
     return home
-        .appendingPathComponent("Library/Application Support/CoderClaw/control.sock")
+        .appendingPathComponent("Library/Application Support/Builderforce/control.sock")
         .path
 }()

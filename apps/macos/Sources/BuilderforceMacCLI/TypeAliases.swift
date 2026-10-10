@@ -1,5 +1,5 @@
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceKit
+import BuilderforceProtocol
 
-typealias ProtoAnyCodable = CoderClawProtocol.AnyCodable
-typealias KitAnyCodable = CoderClawKit.AnyCodable
+typealias ProtoAnyCodable = BuilderforceProtocol.AnyCodable
+typealias KitAnyCodable = BuilderforceKit.AnyCodable

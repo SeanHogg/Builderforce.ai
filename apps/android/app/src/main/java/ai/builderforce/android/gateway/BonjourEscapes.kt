@@ -1,4 +1,4 @@
-package ai.coderclaw.android.gateway
+package ai.builderforce.android.gateway
 
 object BonjourEscapes {
   fun decode(input: String): String {

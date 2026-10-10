@@ -1,4 +1,4 @@
-import CoderClawProtocol
+import BuilderforceProtocol
 
-public typealias AnyCodable = CoderClawProtocol.AnyCodable
+public typealias AnyCodable = BuilderforceProtocol.AnyCodable
 

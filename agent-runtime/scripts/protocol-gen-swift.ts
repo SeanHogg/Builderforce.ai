@@ -13,16 +13,17 @@ type JsonSchema = {
 };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(__dirname, "..");
+// scripts/ lives in agent-runtime/; the Swift apps live at the monorepo root (apps/).
+const repoRoot = path.resolve(__dirname, "..", "..");
 const outPaths = [
-  path.join(repoRoot, "apps", "macos", "Sources", "BuilderForceAgentsProtocol", "GatewayModels.swift"),
+  path.join(repoRoot, "apps", "macos", "Sources", "BuilderforceProtocol", "GatewayModels.swift"),
   path.join(
     repoRoot,
     "apps",
     "shared",
-    "BuilderForceAgentsKit",
+    "BuilderforceKit",
     "Sources",
-    "BuilderForceAgentsProtocol",
+    "BuilderforceProtocol",
     "GatewayModels.swift",
   ),
 ];

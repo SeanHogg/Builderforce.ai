@@ -1,0 +1,84 @@
+# Compiles the native Builderforce apps (Android, the shared Swift kit, macOS, iOS).
+# Nothing built them before, so a rename or an API change could break them silently.
+# Runs only when apps/ changes; it builds and unit-tests, it does not sign or publish.
+name: Native apps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'agent-runtime/Swabble/**'
+      - '.github/workflows/native-apps.yml'
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'agent-runtime/Swabble/**'
+      - '.github/workflows/native-apps.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: native-apps-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: apps/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build and unit-test
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest
+
+  swift-kit:
+    runs-on: macos-15
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: apps/shared/BuilderforceKit
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test the shared kit
+        run: |
+          swift build
+          swift test
+
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 50
+    defaults:
+      run:
+        working-directory: apps/macos
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the macOS app
+        run: swift build
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 50
+    defaults:
+      run:
+        working-directory: apps/ios
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate the Xcode project
+        # swiftlint/swiftformat: the project's pre-build lint phases need them.
+        run: |
+          brew install xcodegen swiftlint swiftformat
+          xcodegen generate
+      - name: Build for the simulator (unsigned)
+        run: |
+          xcodebuild -project Builderforce.xcodeproj -scheme Builderforce \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build

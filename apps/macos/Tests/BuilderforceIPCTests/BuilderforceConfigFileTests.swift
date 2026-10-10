@@ -1,18 +1,18 @@
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite(.serialized)
-struct CoderClawConfigFileTests {
+struct BuilderforceConfigFileTests {
     @Test
     func configPathRespectsEnvOverride() async {
         let override = FileManager().temporaryDirectory
-            .appendingPathComponent("coderclaw-config-\(UUID().uuidString)")
-            .appendingPathComponent("coderclaw.json")
+            .appendingPathComponent("builderforce-config-\(UUID().uuidString)")
+            .appendingPathComponent("builderforce.json")
             .path
 
-        await TestIsolation.withEnvValues(["CODERCLAW_CONFIG_PATH": override]) {
-            #expect(CoderClawConfigFile.url().path == override)
+        await TestIsolation.withEnvValues(["BUILDERFORCE_AGENTS_CONFIG_PATH": override]) {
+            #expect(BuilderforceConfigFile.url().path == override)
         }
     }
 
@@ -20,22 +20,22 @@ struct CoderClawConfigFileTests {
     @Test
     func remoteGatewayPortParsesAndMatchesHost() async {
         let override = FileManager().temporaryDirectory
-            .appendingPathComponent("coderclaw-config-\(UUID().uuidString)")
-            .appendingPathComponent("coderclaw.json")
+            .appendingPathComponent("builderforce-config-\(UUID().uuidString)")
+            .appendingPathComponent("builderforce.json")
             .path
 
-        await TestIsolation.withEnvValues(["CODERCLAW_CONFIG_PATH": override]) {
-            CoderClawConfigFile.saveDict([
+        await TestIsolation.withEnvValues(["BUILDERFORCE_AGENTS_CONFIG_PATH": override]) {
+            BuilderforceConfigFile.saveDict([
                 "gateway": [
                     "remote": [
                         "url": "ws://gateway.ts.net:19999",
                     ],
                 ],
             ])
-            #expect(CoderClawConfigFile.remoteGatewayPort() == 19999)
-            #expect(CoderClawConfigFile.remoteGatewayPort(matchingHost: "gateway.ts.net") == 19999)
-            #expect(CoderClawConfigFile.remoteGatewayPort(matchingHost: "gateway") == 19999)
-            #expect(CoderClawConfigFile.remoteGatewayPort(matchingHost: "other.ts.net") == nil)
+            #expect(BuilderforceConfigFile.remoteGatewayPort() == 19999)
+            #expect(BuilderforceConfigFile.remoteGatewayPort(matchingHost: "gateway.ts.net") == 19999)
+            #expect(BuilderforceConfigFile.remoteGatewayPort(matchingHost: "gateway") == 19999)
+            #expect(BuilderforceConfigFile.remoteGatewayPort(matchingHost: "other.ts.net") == nil)
         }
     }
 
@@ -43,20 +43,20 @@ struct CoderClawConfigFileTests {
     @Test
     func setRemoteGatewayUrlPreservesScheme() async {
         let override = FileManager().temporaryDirectory
-            .appendingPathComponent("coderclaw-config-\(UUID().uuidString)")
-            .appendingPathComponent("coderclaw.json")
+            .appendingPathComponent("builderforce-config-\(UUID().uuidString)")
+            .appendingPathComponent("builderforce.json")
             .path
 
-        await TestIsolation.withEnvValues(["CODERCLAW_CONFIG_PATH": override]) {
-            CoderClawConfigFile.saveDict([
+        await TestIsolation.withEnvValues(["BUILDERFORCE_AGENTS_CONFIG_PATH": override]) {
+            BuilderforceConfigFile.saveDict([
                 "gateway": [
                     "remote": [
                         "url": "wss://old-host:111",
                     ],
                 ],
             ])
-            CoderClawConfigFile.setRemoteGatewayUrl(host: "new-host", port: 2222)
-            let root = CoderClawConfigFile.loadDict()
+            BuilderforceConfigFile.setRemoteGatewayUrl(host: "new-host", port: 2222)
+            let root = BuilderforceConfigFile.loadDict()
             let url = ((root["gateway"] as? [String: Any])?["remote"] as? [String: Any])?["url"] as? String
             #expect(url == "wss://new-host:2222")
         }
@@ -65,15 +65,15 @@ struct CoderClawConfigFileTests {
     @Test
     func stateDirOverrideSetsConfigPath() async {
         let dir = FileManager().temporaryDirectory
-            .appendingPathComponent("coderclaw-state-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("builderforce-state-\(UUID().uuidString)", isDirectory: true)
             .path
 
         await TestIsolation.withEnvValues([
-            "CODERCLAW_CONFIG_PATH": nil,
-            "CODERCLAW_STATE_DIR": dir,
+            "BUILDERFORCE_AGENTS_CONFIG_PATH": nil,
+            "BUILDERFORCE_AGENTS_STATE_DIR": dir,
         ]) {
-            #expect(CoderClawConfigFile.stateDirURL().path == dir)
-            #expect(CoderClawConfigFile.url().path == "\(dir)/coderclaw.json")
+            #expect(BuilderforceConfigFile.stateDirURL().path == dir)
+            #expect(BuilderforceConfigFile.url().path == "\(dir)/builderforce.json")
         }
     }
 
@@ -81,17 +81,17 @@ struct CoderClawConfigFileTests {
     @Test
     func saveDictAppendsConfigAuditLog() async throws {
         let stateDir = FileManager().temporaryDirectory
-            .appendingPathComponent("coderclaw-state-\(UUID().uuidString)", isDirectory: true)
-        let configPath = stateDir.appendingPathComponent("coderclaw.json")
+            .appendingPathComponent("builderforce-state-\(UUID().uuidString)", isDirectory: true)
+        let configPath = stateDir.appendingPathComponent("builderforce.json")
         let auditPath = stateDir.appendingPathComponent("logs/config-audit.jsonl")
 
         defer { try? FileManager().removeItem(at: stateDir) }
 
         try await TestIsolation.withEnvValues([
-            "CODERCLAW_STATE_DIR": stateDir.path,
-            "CODERCLAW_CONFIG_PATH": configPath.path,
+            "BUILDERFORCE_AGENTS_STATE_DIR": stateDir.path,
+            "BUILDERFORCE_AGENTS_CONFIG_PATH": configPath.path,
         ]) {
-            CoderClawConfigFile.saveDict([
+            BuilderforceConfigFile.saveDict([
                 "gateway": ["mode": "local"],
             ])
 
@@ -109,7 +109,7 @@ struct CoderClawConfigFileTests {
                 return
             }
             let auditRoot = try JSONSerialization.jsonObject(with: Data(last.utf8)) as? [String: Any]
-            #expect(auditRoot?["source"] as? String == "macos-coderclaw-config-file")
+            #expect(auditRoot?["source"] as? String == "macos-builderforce-config-file")
             #expect(auditRoot?["event"] as? String == "config.write")
             #expect(auditRoot?["result"] as? String == "success")
             #expect(auditRoot?["configPath"] as? String == configPath.path)

@@ -279,7 +279,7 @@ final class AppState {
             UserDefaults.standard.set(IconOverrideSelection.system.rawValue, forKey: iconOverrideKey)
         }
 
-        let configRoot = CoderClawConfigFile.loadDict()
+        let configRoot = BuilderforceConfigFile.loadDict()
         let configRemoteUrl = GatewayRemoteConfig.resolveUrlString(root: configRoot)
         let configRemoteTransport = GatewayRemoteConfig.resolveTransport(root: configRoot)
         let resolvedConnectionMode = ConnectionModeResolver.resolve(root: configRoot).mode
@@ -357,7 +357,7 @@ final class AppState {
     }
 
     private func startConfigWatcher() {
-        let configUrl = CoderClawConfigFile.url()
+        let configUrl = BuilderforceConfigFile.url()
         self.configWatcher = ConfigFileWatcher(url: configUrl) { [weak self] in
             Task { @MainActor in
                 self?.applyConfigFromDisk()
@@ -367,7 +367,7 @@ final class AppState {
     }
 
     private func applyConfigFromDisk() {
-        let root = CoderClawConfigFile.loadDict()
+        let root = BuilderforceConfigFile.loadDict()
         self.applyConfigOverrides(root)
     }
 
@@ -454,7 +454,7 @@ final class AppState {
 
         Task { @MainActor in
             // Keep app-only connection settings local to avoid overwriting remote gateway config.
-            var root = CoderClawConfigFile.loadDict()
+            var root = BuilderforceConfigFile.loadDict()
             var gateway = root["gateway"] as? [String: Any] ?? [:]
             var changed = false
 
@@ -544,7 +544,7 @@ final class AppState {
             } else {
                 root["gateway"] = gateway
             }
-            CoderClawConfigFile.saveDict(root)
+            BuilderforceConfigFile.saveDict(root)
         }
     }
 
@@ -688,7 +688,7 @@ extension AppState {
         state.remoteTarget = "user@example.com"
         state.remoteUrl = "wss://gateway.example.ts.net"
         state.remoteIdentity = "~/.ssh/id_ed25519"
-        state.remoteProjectRoot = "~/Projects/coderclaw"
+        state.remoteProjectRoot = "~/Projects/builderforce"
         state.remoteCliPath = ""
         return state
     }

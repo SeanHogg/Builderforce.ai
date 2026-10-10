@@ -1,6 +1,6 @@
 import CoreLocation
-import CoderClawIPC
-import CoderClawKit
+import BuilderforceIPC
+import BuilderforceKit
 import SwiftUI
 
 struct PermissionsSettings: View {
@@ -12,7 +12,7 @@ struct PermissionsSettings: View {
         VStack(alignment: .leading, spacing: 14) {
             SystemRunSettingsView()
 
-            Text("Allow these so CoderClaw can notify and capture when needed.")
+            Text("Allow these so Builderforce can notify and capture when needed.")
                 .padding(.top, 4)
 
             PermissionStatusList(status: self.status, refresh: self.refresh)
@@ -31,9 +31,9 @@ struct PermissionsSettings: View {
 }
 
 private struct LocationAccessSettings: View {
-    @AppStorage(locationModeKey) private var locationModeRaw: String = CoderClawLocationMode.off.rawValue
+    @AppStorage(locationModeKey) private var locationModeRaw: String = BuilderforceLocationMode.off.rawValue
     @AppStorage(locationPreciseKey) private var locationPreciseEnabled: Bool = true
-    @State private var lastLocationModeRaw: String = CoderClawLocationMode.off.rawValue
+    @State private var lastLocationModeRaw: String = BuilderforceLocationMode.off.rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -41,9 +41,9 @@ private struct LocationAccessSettings: View {
                 .font(.body)
 
             Picker("", selection: self.$locationModeRaw) {
-                Text("Off").tag(CoderClawLocationMode.off.rawValue)
-                Text("While Using").tag(CoderClawLocationMode.whileUsing.rawValue)
-                Text("Always").tag(CoderClawLocationMode.always.rawValue)
+                Text("Off").tag(BuilderforceLocationMode.off.rawValue)
+                Text("While Using").tag(BuilderforceLocationMode.whileUsing.rawValue)
+                Text("Always").tag(BuilderforceLocationMode.always.rawValue)
             }
             .labelsHidden()
             .pickerStyle(.menu)
@@ -62,7 +62,7 @@ private struct LocationAccessSettings: View {
         .onChange(of: self.locationModeRaw) { _, newValue in
             let previous = self.lastLocationModeRaw
             self.lastLocationModeRaw = newValue
-            guard let mode = CoderClawLocationMode(rawValue: newValue) else { return }
+            guard let mode = BuilderforceLocationMode(rawValue: newValue) else { return }
             Task {
                 let granted = await self.requestLocationAuthorization(mode: mode)
                 if !granted {
@@ -75,11 +75,11 @@ private struct LocationAccessSettings: View {
         }
     }
 
-    private var locationMode: CoderClawLocationMode {
-        CoderClawLocationMode(rawValue: self.locationModeRaw) ?? .off
+    private var locationMode: BuilderforceLocationMode {
+        BuilderforceLocationMode(rawValue: self.locationModeRaw) ?? .off
     }
 
-    private func requestLocationAuthorization(mode: CoderClawLocationMode) async -> Bool {
+    private func requestLocationAuthorization(mode: BuilderforceLocationMode) async -> Bool {
         guard mode != .off else { return true }
         guard CLLocationManager.locationServicesEnabled() else {
             await MainActor.run { LocationPermissionHelper.openSettings() }

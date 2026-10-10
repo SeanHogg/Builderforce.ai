@@ -6,8 +6,8 @@
     {
       "layers" : [
         {
-          "image-name" : "coderclaw-mac.png",
-          "name" : "coderclaw-mac",
+          "image-name" : "builderforce-mac.png",
+          "name" : "builderforce-mac",
           "position" : {
             "scale" : 1.07,
             "translation-in-points" : [

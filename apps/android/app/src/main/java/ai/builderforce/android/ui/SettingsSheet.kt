@@ -1,4 +1,4 @@
-package ai.coderclaw.android.ui
+package ai.builderforce.android.ui
 
 import android.Manifest
 import android.content.Context
@@ -60,12 +60,14 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import ai.coderclaw.android.BuildConfig
-import ai.coderclaw.android.LocationMode
-import ai.coderclaw.android.MainViewModel
-import ai.coderclaw.android.NodeForegroundService
-import ai.coderclaw.android.VoiceWakeMode
-import ai.coderclaw.android.WakeWords
+import ai.builderforce.android.BuildConfig
+import ai.builderforce.android.R
+import androidx.compose.ui.res.stringResource
+import ai.builderforce.android.LocationMode
+import ai.builderforce.android.MainViewModel
+import ai.builderforce.android.NodeForegroundService
+import ai.builderforce.android.VoiceWakeMode
+import ai.builderforce.android.WakeWords
 
 @Composable
 fun SettingsSheet(viewModel: MainViewModel) {
@@ -295,7 +297,12 @@ fun SettingsSheet(viewModel: MainViewModel) {
     contentPadding = PaddingValues(16.dp),
     verticalArrangement = Arrangement.spacedBy(6.dp),
   ) {
-    // Order parity: Node → Gateway → Voice → Camera → Messaging → Location → Screen.
+    // Builderforce account (chat runs in the cloud), then the node: Node → Gateway → Voice →
+    // Camera → Messaging → Location → Screen.
+    item { CloudAccountSettings(account = viewModel.account) }
+
+    item { HorizontalDivider() }
+
     item { Text("Node", style = MaterialTheme.typography.titleSmall) }
     item {
       OutlinedTextField(
@@ -494,7 +501,7 @@ fun SettingsSheet(viewModel: MainViewModel) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
           ListItem(
             headlineContent = { Text("Foreground Only") },
-            supportingContent = { Text("Listens only while CoderClaw is open.") },
+            supportingContent = { Text(stringResource(R.string.settings_voice_foreground_only)) },
             trailingContent = {
               RadioButton(
                 selected = voiceWakeMode == VoiceWakeMode.Foreground,
@@ -640,7 +647,7 @@ fun SettingsSheet(viewModel: MainViewModel) {
         )
         ListItem(
           headlineContent = { Text("While Using") },
-          supportingContent = { Text("Only while CoderClaw is open.") },
+          supportingContent = { Text(stringResource(R.string.settings_location_while_using)) },
           trailingContent = {
             RadioButton(
               selected = locationMode == LocationMode.WhileUsing,
@@ -687,7 +694,7 @@ fun SettingsSheet(viewModel: MainViewModel) {
     item {
       ListItem(
         headlineContent = { Text("Prevent Sleep") },
-        supportingContent = { Text("Keeps the screen awake while CoderClaw is open.") },
+        supportingContent = { Text(stringResource(R.string.settings_prevent_sleep)) },
         trailingContent = { Switch(checked = preventSleep, onCheckedChange = viewModel::setPreventSleep) },
       )
     }

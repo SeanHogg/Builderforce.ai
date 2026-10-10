@@ -1,12 +1,12 @@
-package ai.coderclaw.android.node
+package ai.builderforce.android.node
 
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import androidx.core.content.ContextCompat
-import ai.coderclaw.android.LocationMode
-import ai.coderclaw.android.gateway.GatewaySession
+import ai.builderforce.android.LocationMode
+import ai.builderforce.android.gateway.GatewaySession
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject

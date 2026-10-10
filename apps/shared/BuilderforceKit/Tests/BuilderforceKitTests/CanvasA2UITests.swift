@@ -1,11 +1,11 @@
-import CoderClawKit
+import BuilderforceKit
 import Testing
 
 @Suite struct CanvasA2UITests {
     @Test func commandStringsAreStable() {
-        #expect(CoderClawCanvasA2UICommand.push.rawValue == "canvas.a2ui.push")
-        #expect(CoderClawCanvasA2UICommand.pushJSONL.rawValue == "canvas.a2ui.pushJSONL")
-        #expect(CoderClawCanvasA2UICommand.reset.rawValue == "canvas.a2ui.reset")
+        #expect(BuilderforceCanvasA2UICommand.push.rawValue == "canvas.a2ui.push")
+        #expect(BuilderforceCanvasA2UICommand.pushJSONL.rawValue == "canvas.a2ui.pushJSONL")
+        #expect(BuilderforceCanvasA2UICommand.reset.rawValue == "canvas.a2ui.reset")
     }
 
     @Test func jsonlDecodesAndValidatesV0_8() throws {
@@ -16,7 +16,7 @@ import Testing
         {"deleteSurface":{"surfaceId":"main"}}
         """
 
-        let messages = try CoderClawCanvasA2UIJSONL.decodeMessagesFromJSONL(jsonl)
+        let messages = try BuilderforceCanvasA2UIJSONL.decodeMessagesFromJSONL(jsonl)
         #expect(messages.count == 4)
     }
 
@@ -26,7 +26,7 @@ import Testing
         """
 
         #expect(throws: Error.self) {
-            _ = try CoderClawCanvasA2UIJSONL.decodeMessagesFromJSONL(jsonl)
+            _ = try BuilderforceCanvasA2UIJSONL.decodeMessagesFromJSONL(jsonl)
         }
     }
 
@@ -36,7 +36,7 @@ import Testing
         """
 
         #expect(throws: Error.self) {
-            _ = try CoderClawCanvasA2UIJSONL.decodeMessagesFromJSONL(jsonl)
+            _ = try BuilderforceCanvasA2UIJSONL.decodeMessagesFromJSONL(jsonl)
         }
     }
 }

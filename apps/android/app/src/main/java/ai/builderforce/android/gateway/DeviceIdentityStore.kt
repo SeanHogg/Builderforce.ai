@@ -1,4 +1,4 @@
-package ai.coderclaw.android.gateway
+package ai.builderforce.android.gateway
 
 import android.content.Context
 import android.util.Base64
@@ -21,7 +21,7 @@ data class DeviceIdentity(
 
 class DeviceIdentityStore(context: Context) {
   private val json = Json { ignoreUnknownKeys = true }
-  private val identityFile = File(context.filesDir, "coderclaw/identity/device.json")
+  private val identityFile = File(context.filesDir, "builderforce/identity/device.json")
 
   @Synchronized
   fun loadOrCreate(): DeviceIdentity {

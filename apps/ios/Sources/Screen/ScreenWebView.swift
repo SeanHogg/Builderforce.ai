@@ -1,4 +1,4 @@
-import CoderClawKit
+import BuilderforceKit
 import SwiftUI
 import WebKit
 
@@ -125,7 +125,7 @@ final class ScreenWebViewCoordinator: NSObject {
 
 // MARK: - Navigation Delegate
 
-/// Handles navigation policy to intercept coderclaw:// deep links from canvas
+/// Handles navigation policy to intercept builderforce:// deep links from canvas
 @MainActor
 private final class ScreenNavigationDelegate: NSObject, WKNavigationDelegate {
     weak var controller: ScreenController?
@@ -140,8 +140,8 @@ private final class ScreenNavigationDelegate: NSObject, WKNavigationDelegate {
             return
         }
 
-        // Intercept coderclaw:// deep links.
-        if url.scheme?.lowercased() == "coderclaw" {
+        // Intercept builderforce:// deep links.
+        if url.scheme?.lowercased() == "builderforce" {
             decisionHandler(.cancel)
             self.controller?.onDeepLink?(url)
             return
@@ -169,7 +169,7 @@ private final class ScreenNavigationDelegate: NSObject, WKNavigationDelegate {
 }
 
 private final class CanvasA2UIActionMessageHandler: NSObject, WKScriptMessageHandler {
-    static let messageName = "coderclawCanvasA2UIAction"
+    static let messageName = "builderforceCanvasA2UIAction"
     static let handlerNames = [messageName]
 
     weak var controller: ScreenController?

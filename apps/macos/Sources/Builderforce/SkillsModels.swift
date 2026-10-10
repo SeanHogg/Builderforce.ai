@@ -1,5 +1,5 @@
 import Foundation
-import CoderClawProtocol
+import BuilderforceProtocol
 
 struct SkillsStatusReport: Codable {
     let workspaceDir: String

@@ -1,4 +1,4 @@
-import CoderClawKit
+import BuilderforceKit
 import Foundation
 import SwiftUI
 
@@ -135,8 +135,8 @@ private struct ChatBubbleShape: InsettableShape {
 
 @MainActor
 struct ChatMessageBubble: View {
-    let message: CoderClawChatMessage
-    let style: CoderClawChatView.Style
+    let message: BuilderforceChatMessage
+    let style: BuilderforceChatView.Style
     let markdownVariant: ChatMarkdownVariant
     let userAccent: Color?
 
@@ -157,15 +157,15 @@ struct ChatMessageBubble: View {
 
 @MainActor
 private struct ChatMessageBody: View {
-    let message: CoderClawChatMessage
+    let message: BuilderforceChatMessage
     let isUser: Bool
-    let style: CoderClawChatView.Style
+    let style: BuilderforceChatView.Style
     let markdownVariant: ChatMarkdownVariant
     let userAccent: Color?
 
     var body: some View {
         let text = self.primaryText
-        let textColor = self.isUser ? CoderClawChatTheme.userText : CoderClawChatTheme.assistantText
+        let textColor = self.isUser ? BuilderforceChatTheme.userText : BuilderforceChatTheme.assistantText
 
         VStack(alignment: .leading, spacing: 10) {
             if self.isToolResultMessage {
@@ -232,7 +232,7 @@ private struct ChatMessageBody: View {
         return parts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var inlineAttachments: [CoderClawChatMessageContent] {
+    private var inlineAttachments: [BuilderforceChatMessageContent] {
         self.message.content.filter { content in
             switch content.type ?? "text" {
             case "file", "attachment":
@@ -243,7 +243,7 @@ private struct ChatMessageBody: View {
         }
     }
 
-    private var toolCalls: [CoderClawChatMessageContent] {
+    private var toolCalls: [BuilderforceChatMessageContent] {
         self.message.content.filter { content in
             let kind = (content.type ?? "").lowercased()
             if ["toolcall", "tool_call", "tooluse", "tool_use"].contains(kind) {
@@ -253,7 +253,7 @@ private struct ChatMessageBody: View {
         }
     }
 
-    private var inlineToolResults: [CoderClawChatMessageContent] {
+    private var inlineToolResults: [BuilderforceChatMessageContent] {
         self.message.content.filter { content in
             let kind = (content.type ?? "").lowercased()
             return kind == "toolresult" || kind == "tool_result"
@@ -276,12 +276,12 @@ private struct ChatMessageBody: View {
 
     private var bubbleFillColor: Color {
         if self.isUser {
-            return self.userAccent ?? CoderClawChatTheme.userBubble
+            return self.userAccent ?? BuilderforceChatTheme.userBubble
         }
         if self.style == .onboarding {
-            return CoderClawChatTheme.onboardingAssistantBubble
+            return BuilderforceChatTheme.onboardingAssistantBubble
         }
-        return CoderClawChatTheme.assistantBubble
+        return BuilderforceChatTheme.assistantBubble
     }
 
     private var bubbleBackground: AnyShapeStyle {
@@ -293,7 +293,7 @@ private struct ChatMessageBody: View {
             return Color.white.opacity(0.12)
         }
         if self.style == .onboarding {
-            return CoderClawChatTheme.onboardingAssistantBorder
+            return BuilderforceChatTheme.onboardingAssistantBorder
         }
         return Color.white.opacity(0.08)
     }
@@ -339,7 +339,7 @@ private struct ChatMessageBody: View {
 }
 
 private struct AttachmentRow: View {
-    let att: CoderClawChatMessageContent
+    let att: BuilderforceChatMessageContent
     let isUser: Bool
 
     var body: some View {
@@ -348,7 +348,7 @@ private struct AttachmentRow: View {
             Text(self.att.fileName ?? "Attachment")
                 .font(.footnote)
                 .lineLimit(1)
-                .foregroundStyle(self.isUser ? CoderClawChatTheme.userText : CoderClawChatTheme.assistantText)
+                .foregroundStyle(self.isUser ? BuilderforceChatTheme.userText : BuilderforceChatTheme.assistantText)
             Spacer()
         }
         .padding(10)
@@ -358,7 +358,7 @@ private struct AttachmentRow: View {
 }
 
 private struct ToolCallCard: View {
-    let content: CoderClawChatMessageContent
+    let content: BuilderforceChatMessageContent
     let isUser: Bool
 
     var body: some View {
@@ -379,7 +379,7 @@ private struct ToolCallCard: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(CoderClawChatTheme.subtleCard)
+                .fill(BuilderforceChatTheme.subtleCard)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)))
@@ -414,7 +414,7 @@ private struct ToolResultCard: View {
 
             Text(self.displayText)
                 .font(.footnote.monospaced())
-                .foregroundStyle(self.isUser ? CoderClawChatTheme.userText : CoderClawChatTheme.assistantText)
+                .foregroundStyle(self.isUser ? BuilderforceChatTheme.userText : BuilderforceChatTheme.assistantText)
                 .lineLimit(self.expanded ? nil : Self.previewLineLimit)
 
             if self.shouldShowToggle {
@@ -429,7 +429,7 @@ private struct ToolResultCard: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(CoderClawChatTheme.subtleCard)
+                .fill(BuilderforceChatTheme.subtleCard)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)))
@@ -453,13 +453,13 @@ private struct ToolResultCard: View {
 
 @MainActor
 struct ChatTypingIndicatorBubble: View {
-    let style: CoderClawChatView.Style
+    let style: BuilderforceChatView.Style
 
     var body: some View {
         HStack(spacing: 10) {
             TypingDots()
             if self.style == .standard {
-                Text("CoderClaw is thinking…")
+                Text("Builderforce is thinking…")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -469,7 +469,7 @@ struct ChatTypingIndicatorBubble: View {
         .padding(.horizontal, self.style == .standard ? 12 : 14)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(CoderClawChatTheme.assistantBubble))
+                .fill(BuilderforceChatTheme.assistantBubble))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
@@ -496,7 +496,7 @@ struct ChatStreamingAssistantBubble: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(CoderClawChatTheme.assistantBubble))
+                .fill(BuilderforceChatTheme.assistantBubble))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
@@ -507,7 +507,7 @@ struct ChatStreamingAssistantBubble: View {
 
 @MainActor
 struct ChatPendingToolsBubble: View {
-    let toolCalls: [CoderClawChatPendingToolCall]
+    let toolCalls: [BuilderforceChatPendingToolCall]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -540,7 +540,7 @@ struct ChatPendingToolsBubble: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(CoderClawChatTheme.assistantBubble))
+                .fill(BuilderforceChatTheme.assistantBubble))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
@@ -609,7 +609,7 @@ private struct ChatAssistantTextBody: View {
                     context: .assistant,
                     variant: self.markdownVariant,
                     font: font,
-                    textColor: CoderClawChatTheme.assistantText)
+                    textColor: BuilderforceChatTheme.assistantText)
             }
         }
     }

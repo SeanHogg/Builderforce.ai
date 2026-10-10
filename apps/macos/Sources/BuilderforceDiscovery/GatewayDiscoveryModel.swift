@@ -1,7 +1,7 @@
 import Foundation
 import Network
 import Observation
-import CoderClawKit
+import BuilderforceKit
 import OSLog
 
 @MainActor
@@ -79,7 +79,7 @@ public final class GatewayDiscoveryModel {
     private var pendingServiceResolvers: [String: GatewayServiceResolver] = [:]
     private var wideAreaFallbackTask: Task<Void, Never>?
     private var wideAreaFallbackGateways: [DiscoveredGateway] = []
-    private let logger = Logger(subsystem: "ai.coderclaw", category: "gateway-discovery")
+    private let logger = Logger(subsystem: "ai.builderforce", category: "gateway-discovery")
 
     public init(
         localDisplayName: String? = nil,
@@ -95,7 +95,7 @@ public final class GatewayDiscoveryModel {
         if !self.browsers.isEmpty { return }
 
         // One browser per (gateway service type, domain), so current and legacy runtimes are both found.
-        for target in CoderClawBonjour.gatewayBrowseTargets {
+        for target in BuilderforceBonjour.gatewayBrowseTargets {
             let key = target.key
             let domain = target.domain
             let params = NWParameters.tcp
@@ -123,14 +123,14 @@ public final class GatewayDiscoveryModel {
             }
 
             self.browsers[key] = browser
-            browser.start(queue: DispatchQueue(label: "ai.coderclaw.macos.gateway-discovery.\(key)"))
+            browser.start(queue: DispatchQueue(label: "ai.builderforce.macos.gateway-discovery.\(key)"))
         }
 
         self.scheduleWideAreaFallback()
     }
 
     public func refreshWideAreaFallbackNow(timeoutSeconds: TimeInterval = 5.0) {
-        guard let domain = CoderClawBonjour.wideAreaGatewayServiceDomain else { return }
+        guard let domain = BuilderforceBonjour.wideAreaGatewayServiceDomain else { return }
         Task.detached(priority: .utility) { [weak self] in
             guard let self else { return }
             let beacons = WideAreaGatewayDiscovery.discover(timeoutSeconds: timeoutSeconds)
@@ -260,7 +260,7 @@ public final class GatewayDiscoveryModel {
         }
         .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
 
-        if let wideAreaDomain = CoderClawBonjour.wideAreaGatewayServiceDomain,
+        if let wideAreaDomain = BuilderforceBonjour.wideAreaGatewayServiceDomain,
            domain == wideAreaDomain,
            self.hasUsableWideAreaResults
         {
@@ -269,7 +269,7 @@ public final class GatewayDiscoveryModel {
     }
 
     private func scheduleWideAreaFallback() {
-        guard let domain = CoderClawBonjour.wideAreaGatewayServiceDomain else { return }
+        guard let domain = BuilderforceBonjour.wideAreaGatewayServiceDomain else { return }
         if Self.isRunningTests { return }
         guard self.wideAreaFallbackTask == nil else { return }
         self.wideAreaFallbackTask = Task.detached(priority: .utility) { [weak self] in
@@ -302,7 +302,7 @@ public final class GatewayDiscoveryModel {
     }
 
     private var hasUsableWideAreaResults: Bool {
-        guard let domain = CoderClawBonjour.wideAreaGatewayServiceDomain else { return false }
+        guard let domain = BuilderforceBonjour.wideAreaGatewayServiceDomain else { return false }
         guard let gateways = self.gatewaysByDomain[domain], !gateways.isEmpty else { return false }
         if !self.filterLocalGateways { return true }
         return gateways.contains(where: { !$0.isLocal })
@@ -332,7 +332,7 @@ public final class GatewayDiscoveryModel {
 
     /// A domain's results are the union across every gateway service type browsed in it.
     private func mergedResults(for domain: String) -> Set<NWBrowser.Result> {
-        CoderClawBonjour.gatewayBrowseTargets
+        BuilderforceBonjour.gatewayBrowseTargets
             .filter { $0.domain == domain }
             .reduce(into: Set<NWBrowser.Result>()) { merged, target in
                 merged.formUnion(self.resultsByBrowser[target.key] ?? [])
@@ -456,7 +456,7 @@ public final class GatewayDiscoveryModel {
 
     private nonisolated static func prettifyInstanceName(_ decodedName: String) -> String {
         let normalized = decodedName.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        let stripped = normalized.replacingOccurrences(of: " (CoderClaw)", with: "")
+        let stripped = normalized.replacingOccurrences(of: " (Builderforce)", with: "")
             .replacingOccurrences(of: #"\s+\(\d+\)$"#, with: "", options: .regularExpression)
         return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
     }

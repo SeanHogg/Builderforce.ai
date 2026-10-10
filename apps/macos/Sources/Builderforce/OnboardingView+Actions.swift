@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
-import CoderClawDiscovery
-import CoderClawIPC
+import BuilderforceDiscovery
+import BuilderforceIPC
 import SwiftUI
 
 extension OnboardingView {
@@ -35,7 +35,7 @@ extension OnboardingView {
                 user: user,
                 host: host,
                 port: gateway.sshPort)
-            CoderClawConfigFile.setRemoteGatewayUrl(
+            BuilderforceConfigFile.setRemoteGatewayUrl(
                 host: gateway.serviceHost ?? host,
                 port: gateway.servicePort ?? gateway.gatewayPort)
         }
@@ -49,7 +49,7 @@ extension OnboardingView {
         SettingsTabRouter.request(tab)
         self.openSettings()
         DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .coderclawSelectSettingsTab, object: tab)
+            NotificationCenter.default.post(name: .builderforceSelectSettingsTab, object: tab)
         }
     }
 
@@ -69,7 +69,7 @@ extension OnboardingView {
     }
 
     func finish() {
-        UserDefaults.standard.set(true, forKey: "coderclaw.onboardingSeen")
+        UserDefaults.standard.set(true, forKey: "builderforce.onboardingSeen")
         UserDefaults.standard.set(currentOnboardingVersion, forKey: onboardingVersionKey)
         OnboardingController.shared.close()
     }
@@ -115,9 +115,9 @@ extension OnboardingView {
                 code: parsed.code,
                 state: parsed.state,
                 verifier: pkce.verifier)
-            try CoderClawOAuthStore.saveAnthropicOAuth(creds)
+            try BuilderforceOAuthStore.saveAnthropicOAuth(creds)
             self.refreshAnthropicOAuthStatus()
-            self.anthropicAuthStatus = "Connected. CoderClaw can now use Claude."
+            self.anthropicAuthStatus = "Connected. Builderforce can now use Claude."
         } catch {
             self.anthropicAuthStatus = "OAuth failed: \(error.localizedDescription)"
         }

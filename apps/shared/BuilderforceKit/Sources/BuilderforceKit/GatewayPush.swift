@@ -1,4 +1,4 @@
-import CoderClawProtocol
+import BuilderforceProtocol
 
 /// Server-push messages from the gateway websocket.
 ///

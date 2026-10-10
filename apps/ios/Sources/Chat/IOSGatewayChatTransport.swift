@@ -1,11 +1,11 @@
-import CoderClawChatUI
-import CoderClawKit
-import CoderClawProtocol
+import BuilderforceChatUI
+import BuilderforceKit
+import BuilderforceProtocol
 import Foundation
 import OSLog
 
-struct IOSGatewayChatTransport: CoderClawChatTransport, Sendable {
-    private static let logger = Logger(subsystem: "ai.coderclaw", category: "ios.chat.transport")
+struct IOSGatewayChatTransport: BuilderforceChatTransport, Sendable {
+    private static let logger = Logger(subsystem: "ai.builderforce", category: "ios.chat.transport")
     private let gateway: GatewayNodeSession
 
     init(gateway: GatewayNodeSession) {
@@ -22,7 +22,7 @@ struct IOSGatewayChatTransport: CoderClawChatTransport, Sendable {
         _ = try await self.gateway.request(method: "chat.abort", paramsJSON: json, timeoutSeconds: 10)
     }
 
-    func listSessions(limit: Int?) async throws -> CoderClawChatSessionsListResponse {
+    func listSessions(limit: Int?) async throws -> BuilderforceChatSessionsListResponse {
         struct Params: Codable {
             var includeGlobal: Bool
             var includeUnknown: Bool
@@ -31,7 +31,7 @@ struct IOSGatewayChatTransport: CoderClawChatTransport, Sendable {
         let data = try JSONEncoder().encode(Params(includeGlobal: true, includeUnknown: false, limit: limit))
         let json = String(data: data, encoding: .utf8)
         let res = try await self.gateway.request(method: "sessions.list", paramsJSON: json, timeoutSeconds: 15)
-        return try JSONDecoder().decode(CoderClawChatSessionsListResponse.self, from: res)
+        return try JSONDecoder().decode(BuilderforceChatSessionsListResponse.self, from: res)
     }
 
     func setActiveSessionKey(_ sessionKey: String) async throws {
@@ -39,12 +39,12 @@ struct IOSGatewayChatTransport: CoderClawChatTransport, Sendable {
         // (chat.subscribe is a node event, not an operator RPC method.)
     }
 
-    func requestHistory(sessionKey: String) async throws -> CoderClawChatHistoryPayload {
+    func requestHistory(sessionKey: String) async throws -> BuilderforceChatHistoryPayload {
         struct Params: Codable { var sessionKey: String }
         let data = try JSONEncoder().encode(Params(sessionKey: sessionKey))
         let json = String(data: data, encoding: .utf8)
         let res = try await self.gateway.request(method: "chat.history", paramsJSON: json, timeoutSeconds: 15)
-        return try JSONDecoder().decode(CoderClawChatHistoryPayload.self, from: res)
+        return try JSONDecoder().decode(BuilderforceChatHistoryPayload.self, from: res)
     }
 
     func sendMessage(
@@ -52,14 +52,14 @@ struct IOSGatewayChatTransport: CoderClawChatTransport, Sendable {
         message: String,
         thinking: String,
         idempotencyKey: String,
-        attachments: [CoderClawChatAttachmentPayload]) async throws -> CoderClawChatSendResponse
+        attachments: [BuilderforceChatAttachmentPayload]) async throws -> BuilderforceChatSendResponse
     {
         Self.logger.info("chat.send start sessionKey=\(sessionKey, privacy: .public) len=\(message.count, privacy: .public) attachments=\(attachments.count, privacy: .public)")
         struct Params: Codable {
             var sessionKey: String
             var message: String
             var thinking: String
-            var attachments: [CoderClawChatAttachmentPayload]?
+            var attachments: [BuilderforceChatAttachmentPayload]?
             var timeoutMs: Int
             var idempotencyKey: String
         }
@@ -75,7 +75,7 @@ struct IOSGatewayChatTransport: CoderClawChatTransport, Sendable {
         let json = String(data: data, encoding: .utf8)
         do {
             let res = try await self.gateway.request(method: "chat.send", paramsJSON: json, timeoutSeconds: 35)
-            let decoded = try JSONDecoder().decode(CoderClawChatSendResponse.self, from: res)
+            let decoded = try JSONDecoder().decode(BuilderforceChatSendResponse.self, from: res)
             Self.logger.info("chat.send ok runId=\(decoded.runId, privacy: .public)")
             return decoded
         } catch {
@@ -87,10 +87,10 @@ struct IOSGatewayChatTransport: CoderClawChatTransport, Sendable {
     func requestHealth(timeoutMs: Int) async throws -> Bool {
         let seconds = max(1, Int(ceil(Double(timeoutMs) / 1000.0)))
         let res = try await self.gateway.request(method: "health", paramsJSON: nil, timeoutSeconds: seconds)
-        return (try? JSONDecoder().decode(CoderClawGatewayHealthOK.self, from: res))?.ok ?? true
+        return (try? JSONDecoder().decode(BuilderforceGatewayHealthOK.self, from: res))?.ok ?? true
     }
 
-    func events() -> AsyncStream<CoderClawChatTransportEvent> {
+    func events() -> AsyncStream<BuilderforceChatTransportEvent> {
         AsyncStream { continuation in
             let task = Task {
                 let stream = await self.gateway.subscribeServerEvents()
@@ -105,13 +105,13 @@ struct IOSGatewayChatTransport: CoderClawChatTransport, Sendable {
                         guard let payload = evt.payload else { break }
                         let ok = (try? GatewayPayloadDecoding.decode(
                             payload,
-                            as: CoderClawGatewayHealthOK.self))?.ok ?? true
+                            as: BuilderforceGatewayHealthOK.self))?.ok ?? true
                         continuation.yield(.health(ok: ok))
                     case "chat":
                         guard let payload = evt.payload else { break }
                         if let chatPayload = try? GatewayPayloadDecoding.decode(
                             payload,
-                            as: CoderClawChatEventPayload.self)
+                            as: BuilderforceChatEventPayload.self)
                         {
                             continuation.yield(.chat(chatPayload))
                         }
@@ -119,7 +119,7 @@ struct IOSGatewayChatTransport: CoderClawChatTransport, Sendable {
                         guard let payload = evt.payload else { break }
                         if let agentPayload = try? GatewayPayloadDecoding.decode(
                             payload,
-                            as: CoderClawAgentEventPayload.self)
+                            as: BuilderforceAgentEventPayload.self)
                         {
                             continuation.yield(.agent(agentPayload))
                         }

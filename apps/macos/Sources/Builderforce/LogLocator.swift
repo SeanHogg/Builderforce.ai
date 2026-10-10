@@ -2,20 +2,20 @@ import Foundation
 
 enum LogLocator {
     private static var logDir: URL {
-        if let override = ProcessInfo.processInfo.environment["CODERCLAW_LOG_DIR"],
+        if let override = ProcessInfo.processInfo.environment["BUILDERFORCE_AGENTS_LOG_DIR"],
            !override.isEmpty
         {
             return URL(fileURLWithPath: override)
         }
-        return URL(fileURLWithPath: "/tmp/coderclaw")
+        return URL(fileURLWithPath: "/tmp/builderforce")
     }
 
     private static var stdoutLog: URL {
-        logDir.appendingPathComponent("coderclaw-stdout.log")
+        logDir.appendingPathComponent("builderforce-stdout.log")
     }
 
     private static var gatewayLog: URL {
-        logDir.appendingPathComponent("coderclaw-gateway.log")
+        logDir.appendingPathComponent("builderforce-gateway.log")
     }
 
     private static func ensureLogDirExists() {
@@ -26,7 +26,7 @@ enum LogLocator {
         (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
     }
 
-    /// Returns the newest log file under /tmp/coderclaw/ (rolling or stdout), or nil if none exist.
+    /// Returns the newest log file under /tmp/builderforce/ (rolling or stdout), or nil if none exist.
     static func bestLogFile() -> URL? {
         self.ensureLogDirExists()
         let fm = FileManager()
@@ -35,10 +35,9 @@ enum LogLocator {
             includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles])) ?? []
 
-        let prefixes = ["builderforce", "coderclaw"]
         return files
             .filter { file in
-                prefixes.contains { file.lastPathComponent.hasPrefix($0) } && file.pathExtension == "log"
+                file.lastPathComponent.hasPrefix("builderforce") && file.pathExtension == "log"
             }
             .max { lhs, rhs in
                 self.modificationDate(for: lhs) < self.modificationDate(for: rhs)

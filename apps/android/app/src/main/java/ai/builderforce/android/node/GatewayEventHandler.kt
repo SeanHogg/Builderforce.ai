@@ -1,7 +1,7 @@
-package ai.coderclaw.android.node
+package ai.builderforce.android.node
 
-import ai.coderclaw.android.SecurePrefs
-import ai.coderclaw.android.gateway.GatewaySession
+import ai.builderforce.android.SecurePrefs
+import ai.builderforce.android.gateway.GatewaySession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay

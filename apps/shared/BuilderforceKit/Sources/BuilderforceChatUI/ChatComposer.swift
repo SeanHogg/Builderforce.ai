@@ -8,9 +8,9 @@ import UniformTypeIdentifiers
 #endif
 
 @MainActor
-struct CoderClawChatComposer: View {
-    @Bindable var viewModel: CoderClawChatViewModel
-    let style: CoderClawChatView.Style
+struct BuilderforceChatComposer: View {
+    @Bindable var viewModel: BuilderforceChatViewModel
+    let style: BuilderforceChatView.Style
     let showsSessionSwitcher: Bool
 
     #if !os(macOS)
@@ -54,21 +54,21 @@ struct CoderClawChatComposer: View {
                         topTrailing: 0),
                     style: .continuous)
                 shape
-                    .fill(CoderClawChatTheme.composerBackground)
-                    .overlay(shape.strokeBorder(CoderClawChatTheme.composerBorder, lineWidth: 1))
+                    .fill(BuilderforceChatTheme.composerBackground)
+                    .overlay(shape.strokeBorder(BuilderforceChatTheme.composerBorder, lineWidth: 1))
                     .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
             } else {
                 let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 shape
-                    .fill(CoderClawChatTheme.composerBackground)
-                    .overlay(shape.strokeBorder(CoderClawChatTheme.composerBorder, lineWidth: 1))
+                    .fill(BuilderforceChatTheme.composerBackground)
+                    .overlay(shape.strokeBorder(BuilderforceChatTheme.composerBorder, lineWidth: 1))
                     .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
             }
             #else
             let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             shape
-                .fill(CoderClawChatTheme.composerBackground)
-                .overlay(shape.strokeBorder(CoderClawChatTheme.composerBorder, lineWidth: 1))
+                .fill(BuilderforceChatTheme.composerBackground)
+                .overlay(shape.strokeBorder(BuilderforceChatTheme.composerBorder, lineWidth: 1))
                 .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
             #endif
         }
@@ -144,11 +144,11 @@ struct CoderClawChatComposer: View {
             HStack(spacing: 6) {
                 ForEach(
                     self.viewModel.attachments,
-                    id: \CoderClawPendingAttachment.id)
-                { (att: CoderClawPendingAttachment) in
+                    id: \BuilderforcePendingAttachment.id)
+                { (att: BuilderforcePendingAttachment) in
                     HStack(spacing: 6) {
                         if let img = att.preview {
-                            CoderClawPlatformImageFactory.image(img)
+                            BuilderforcePlatformImageFactory.image(img)
                                 .resizable()
                                 .scaledToFill()
                                 .frame(width: 22, height: 22)
@@ -181,7 +181,7 @@ struct CoderClawChatComposer: View {
             self.editorOverlay
 
             Rectangle()
-                .fill(CoderClawChatTheme.divider)
+                .fill(BuilderforceChatTheme.divider)
                 .frame(height: 1)
                 .padding(.horizontal, 2)
 
@@ -197,10 +197,10 @@ struct CoderClawChatComposer: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(CoderClawChatTheme.composerField)
+                .fill(BuilderforceChatTheme.composerField)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(CoderClawChatTheme.composerBorder)))
+                        .strokeBorder(BuilderforceChatTheme.composerBorder)))
         .padding(self.editorPadding)
     }
 
@@ -217,7 +217,7 @@ struct CoderClawChatComposer: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(CoderClawChatTheme.subtleCard)
+        .background(BuilderforceChatTheme.subtleCard)
         .clipShape(Capsule())
     }
 
@@ -230,7 +230,7 @@ struct CoderClawChatComposer: View {
     private var editorOverlay: some View {
         ZStack(alignment: .topLeading) {
             if self.viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("Message CoderClaw…")
+                Text("Message the Brain…")
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 4)

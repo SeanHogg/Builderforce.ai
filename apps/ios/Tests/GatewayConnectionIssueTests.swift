@@ -1,5 +1,5 @@
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite(.serialized) struct GatewayConnectionIssueTests {
     @Test func detectsTokenMissing() {

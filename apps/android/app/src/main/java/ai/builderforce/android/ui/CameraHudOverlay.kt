@@ -1,4 +1,4 @@
-package ai.coderclaw.android.ui
+package ai.builderforce.android.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box

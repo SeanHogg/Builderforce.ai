@@ -94,3 +94,39 @@ package-lock.json
 # subagent work. Never track them: committed, they become gitlinks with no
 # .gitmodules, which breaks submodule-aware checkouts and the VS Code Git view.
 .claude/worktrees/
+
+# Native apps (apps/ at the monorepo root). Each app also carries its own
+# .gitignore; these root entries keep generated/local state out regardless.
+# Swift packages (apps/macos, apps/shared/BuilderforceKit)
+apps/**/.build/
+apps/**/.build-local/
+apps/**/.build-swift/
+apps/**/.swiftpm/
+apps/**/DerivedData/
+**/ModuleCache/
+# Xcode / XcodeGen (apps/ios — regenerate with `xcodegen generate`)
+apps/ios/*.xcodeproj/
+apps/ios/*.xcworkspace/
+apps/ios/*.xcfilelist
+apps/ios/.derivedData/
+xcuserdata/
+# Local iOS signing overrides (see apps/ios/Signing.xcconfig)
+apps/ios/LocalSigning.xcconfig
+apps/ios/.local-signing.xcconfig
+# fastlane (iOS) local state + build artifacts
+apps/ios/fastlane/README.md
+apps/ios/fastlane/report.xml
+apps/ios/fastlane/Preview.html
+apps/ios/fastlane/screenshots/
+apps/ios/fastlane/test_output/
+apps/ios/fastlane/logs/
+apps/ios/fastlane/.env
+apps/ios/*.ipa
+apps/ios/*.dSYM.zip
+apps/ios/*.mobileprovision
+# Android (apps/android)
+apps/android/.gradle/
+apps/android/**/build/
+apps/android/.cxx/
+apps/android/app/.cxx/
+apps/android/local.properties

@@ -1,4 +1,4 @@
-import CoderClawProtocol
+import BuilderforceProtocol
 import SwiftUI
 
 extension ChannelsSettings {

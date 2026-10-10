@@ -1,110 +1,78 @@
-package ai.coderclaw.android.ui.chat
+package ai.builderforce.android.ui.chat
 
+import ai.builderforce.android.R
+import ai.builderforce.android.chat.LiveReply
+import ai.builderforce.android.chat.QueuedMessage
+import ai.builderforce.android.cloud.BrainMessage
+import ai.builderforce.android.cloud.visibleMessages
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowCircleDown
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import ai.coderclaw.android.chat.ChatMessage
-import ai.coderclaw.android.chat.ChatPendingToolCall
 
+/** The open chat's transcript, newest at the bottom, with the reply being written and the queue. */
 @Composable
 fun ChatMessageListCard(
-  messages: List<ChatMessage>,
-  pendingRunCount: Int,
-  pendingToolCalls: List<ChatPendingToolCall>,
-  streamingAssistantText: String?,
+  messages: List<BrainMessage>,
+  queued: List<QueuedMessage>,
+  live: LiveReply?,
+  awaitingAgent: String?,
+  onDecideTool: (approve: Boolean) -> Unit,
+  onUnqueue: (id: Long) -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val shown = remember(messages) { visibleMessages(messages) }
   val listState = rememberLazyListState()
 
   // With reverseLayout the newest item is at index 0 (bottom of screen).
-  LaunchedEffect(messages.size, pendingRunCount, pendingToolCalls.size, streamingAssistantText) {
+  LaunchedEffect(shown.size, queued.size, live?.draft?.length, live?.approval, awaitingAgent) {
     listState.animateScrollToItem(index = 0)
   }
 
-  Card(
-    modifier = modifier.fillMaxWidth(),
-    shape = MaterialTheme.shapes.large,
-    colors =
-      CardDefaults.cardColors(
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-      ),
-    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-  ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-      LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        state = listState,
-        reverseLayout = true,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 12.dp, bottom = 12.dp, start = 12.dp, end = 12.dp),
-      ) {
-        // With reverseLayout = true, index 0 renders at the BOTTOM.
-        // So we emit newest items first: streaming → tools → typing → messages (newest→oldest).
-
-        val stream = streamingAssistantText?.trim()
-        if (!stream.isNullOrEmpty()) {
-          item(key = "stream") {
-            ChatStreamingAssistantBubble(text = stream)
-          }
-        }
-
-        if (pendingToolCalls.isNotEmpty()) {
-          item(key = "tools") {
-            ChatPendingToolsBubble(toolCalls = pendingToolCalls)
-          }
-        }
-
-        if (pendingRunCount > 0) {
-          item(key = "typing") {
-            ChatTypingIndicatorBubble()
-          }
-        }
-
-        items(count = messages.size, key = { idx -> messages[messages.size - 1 - idx].id }) { idx ->
-          ChatMessageBubble(message = messages[messages.size - 1 - idx])
-        }
+  Box(modifier = modifier.fillMaxWidth()) {
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      state = listState,
+      reverseLayout = true,
+      verticalArrangement = Arrangement.spacedBy(12.dp),
+      contentPadding = PaddingValues(vertical = 12.dp),
+    ) {
+      // reverseLayout: emit newest first — queue → live reply → waiting → messages (newest→oldest).
+      for (q in queued.asReversed()) {
+        item(key = "queued-${q.id}") { QueuedMessageBubble(message = q, onUnqueue = { onUnqueue(q.id) }) }
       }
-
-      if (messages.isEmpty() && pendingRunCount == 0 && pendingToolCalls.isEmpty() && streamingAssistantText.isNullOrBlank()) {
-        EmptyChatHint(modifier = Modifier.align(Alignment.Center))
+      if (live != null) {
+        item(key = "live") { LiveReplyBubble(live = live, onDecide = onDecideTool) }
+      } else if (awaitingAgent != null) {
+        item(key = "awaiting") { AwaitingAgentBubble(names = awaitingAgent) }
+      }
+      items(count = shown.size, key = { idx -> "m-" + shown[shown.size - 1 - idx].id }) { idx ->
+        ChatMessageBubble(message = shown[shown.size - 1 - idx])
       }
     }
-  }
-}
 
-@Composable
-private fun EmptyChatHint(modifier: Modifier = Modifier) {
-  Row(
-    modifier = modifier.alpha(0.7f),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
-  ) {
-    Icon(
-      imageVector = Icons.Default.ArrowCircleDown,
-      contentDescription = null,
-      tint = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Text(
-      text = "Message CoderClaw…",
-      style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    if (shown.isEmpty() && live == null && queued.isEmpty()) {
+      Text(
+        text = stringResource(R.string.chat_empty),
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.align(Alignment.Center).padding(horizontal = 24.dp),
+      )
+    }
   }
 }

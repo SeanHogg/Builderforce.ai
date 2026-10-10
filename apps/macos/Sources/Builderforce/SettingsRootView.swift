@@ -77,7 +77,7 @@ struct SettingsRootView: View {
         .padding(.vertical, 22)
         .frame(width: SettingsTab.windowWidth, height: SettingsTab.windowHeight, alignment: .topLeading)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onReceive(NotificationCenter.default.publisher(for: .coderclawSelectSettingsTab)) { note in
+        .onReceive(NotificationCenter.default.publisher(for: .builderforceSelectSettingsTab)) { note in
             if let tab = note.object as? SettingsTab {
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
                     self.selectedTab = tab
@@ -111,8 +111,8 @@ struct SettingsRootView: View {
 
     private var nixManagedBanner: some View {
         // Prefer gateway-resolved paths; fall back to local env defaults if disconnected.
-        let configPath = self.snapshotPaths.configPath ?? CoderClawPaths.configURL.path
-        let stateDir = self.snapshotPaths.stateDir ?? CoderClawPaths.stateDirURL.path
+        let configPath = self.snapshotPaths.configPath ?? BuilderforcePaths.configURL.path
+        let stateDir = self.snapshotPaths.stateDir ?? BuilderforcePaths.stateDirURL.path
 
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
@@ -227,7 +227,7 @@ enum SettingsTabRouter {
 }
 
 extension Notification.Name {
-    static let coderclawSelectSettingsTab = Notification.Name("coderclawSelectSettingsTab")
+    static let builderforceSelectSettingsTab = Notification.Name("builderforceSelectSettingsTab")
 }
 
 #if DEBUG

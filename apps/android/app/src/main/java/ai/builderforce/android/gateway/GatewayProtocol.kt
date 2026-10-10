@@ -1,3 +1,3 @@
-package ai.coderclaw.android.gateway
+package ai.builderforce.android.gateway
 
 const val GATEWAY_PROTOCOL_VERSION = 3

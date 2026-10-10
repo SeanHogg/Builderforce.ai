@@ -1,4 +1,4 @@
-package ai.coderclaw.android
+package ai.builderforce.android
 
 import android.app.Activity
 import android.content.Context
@@ -55,7 +55,7 @@ class ScreenCaptureRequester(private val activity: ComponentActivity) {
       suspendCancellableCoroutine { cont ->
         AlertDialog.Builder(activity)
           .setTitle("Screen recording required")
-          .setMessage("CoderClaw needs to record the screen for this command.")
+          .setMessage(activity.getString(R.string.screen_capture_rationale))
           .setPositiveButton("Continue") { _, _ -> cont.resume(true) }
           .setNegativeButton("Not now") { _, _ -> cont.resume(false) }
           .setOnCancelListener { cont.resume(false) }

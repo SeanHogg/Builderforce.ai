@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_BUNDLE="${1:-dist/BuilderForceAgents.app}"
+APP_BUNDLE="${1:-dist/Builderforce.app}"
 IDENTITY="${SIGN_IDENTITY:-}"
 TIMESTAMP_MODE="${CODESIGN_TIMESTAMP:-auto}"
 DISABLE_LIBRARY_VALIDATION="${DISABLE_LIBRARY_VALIDATION:-0}"
@@ -248,8 +248,8 @@ verify_team_ids() {
 }
 
 # Sign main binary
-if [ -f "$APP_BUNDLE/Contents/MacOS/BuilderForceAgents" ]; then
-  echo "Signing main binary"; sign_item "$APP_BUNDLE/Contents/MacOS/BuilderForceAgents" "$APP_ENTITLEMENTS"
+if [ -f "$APP_BUNDLE/Contents/MacOS/Builderforce" ]; then
+  echo "Signing main binary"; sign_item "$APP_BUNDLE/Contents/MacOS/Builderforce" "$APP_ENTITLEMENTS"
 fi
 
 # Sign Sparkle deeply if present

@@ -14,7 +14,7 @@ extension NSAppearance {
 }
 #endif
 
-enum CoderClawChatTheme {
+enum BuilderforceChatTheme {
     #if os(macOS)
     static func resolvedAssistantBubbleColor(for appearance: NSAppearance) -> NSColor {
         // NSColor semantic colors don't reliably resolve for arbitrary NSAppearance in SwiftPM.
@@ -31,11 +31,11 @@ enum CoderClawChatTheme {
     }
 
     static let assistantBubbleDynamicNSColor = NSColor(
-        name: NSColor.Name("CoderClawChatTheme.assistantBubble"),
+        name: NSColor.Name("BuilderforceChatTheme.assistantBubble"),
         dynamicProvider: resolvedAssistantBubbleColor(for:))
 
     static let onboardingAssistantBubbleDynamicNSColor = NSColor(
-        name: NSColor.Name("CoderClawChatTheme.onboardingAssistantBubble"),
+        name: NSColor.Name("BuilderforceChatTheme.onboardingAssistantBubble"),
         dynamicProvider: resolvedOnboardingAssistantBubbleColor(for:))
     #endif
 
@@ -163,8 +163,8 @@ enum CoderClawChatTheme {
     }
 }
 
-enum CoderClawPlatformImageFactory {
-    static func image(_ image: CoderClawPlatformImage) -> Image {
+enum BuilderforcePlatformImageFactory {
+    static func image(_ image: BuilderforcePlatformImage) -> Image {
         #if os(macOS)
         Image(nsImage: image)
         #else

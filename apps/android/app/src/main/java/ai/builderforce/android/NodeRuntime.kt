@@ -1,25 +1,20 @@
-package ai.coderclaw.android
+package ai.builderforce.android
 
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
-import ai.coderclaw.android.chat.ChatController
-import ai.coderclaw.android.chat.ChatMessage
-import ai.coderclaw.android.chat.ChatPendingToolCall
-import ai.coderclaw.android.chat.ChatSessionEntry
-import ai.coderclaw.android.chat.OutgoingAttachment
-import ai.coderclaw.android.gateway.DeviceAuthStore
-import ai.coderclaw.android.gateway.DeviceIdentityStore
-import ai.coderclaw.android.gateway.GatewayDiscovery
-import ai.coderclaw.android.gateway.GatewayEndpoint
-import ai.coderclaw.android.gateway.GatewaySession
-import ai.coderclaw.android.gateway.probeGatewayTlsFingerprint
-import ai.coderclaw.android.node.*
-import ai.coderclaw.android.protocol.CoderClawCanvasA2UIAction
-import ai.coderclaw.android.voice.TalkModeManager
-import ai.coderclaw.android.voice.VoiceWakeManager
+import ai.builderforce.android.gateway.DeviceAuthStore
+import ai.builderforce.android.gateway.DeviceIdentityStore
+import ai.builderforce.android.gateway.GatewayDiscovery
+import ai.builderforce.android.gateway.GatewayEndpoint
+import ai.builderforce.android.gateway.GatewaySession
+import ai.builderforce.android.gateway.probeGatewayTlsFingerprint
+import ai.builderforce.android.node.*
+import ai.builderforce.android.protocol.BuilderforceCanvasA2UIAction
+import ai.builderforce.android.voice.TalkModeManager
+import ai.builderforce.android.voice.VoiceWakeManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -64,7 +59,7 @@ class NodeRuntime(context: Context) {
             buildJsonObject {
               put("message", JsonPrimitive(command))
               put("sessionKey", JsonPrimitive(resolveMainSessionKey()))
-              put("thinking", JsonPrimitive(chatThinkingLevel.value))
+              put("thinking", JsonPrimitive(VOICE_WAKE_THINKING))
               put("deliver", JsonPrimitive(false))
             }.toString(),
         )
@@ -182,7 +177,6 @@ class NodeRuntime(context: Context) {
   val pendingGatewayTrust: StateFlow<GatewayTrustPrompt?> = _pendingGatewayTrust.asStateFlow()
 
   private val _mainSessionKey = MutableStateFlow("main")
-  val mainSessionKey: StateFlow<String> = _mainSessionKey.asStateFlow()
 
   private val cameraHudSeq = AtomicLong(0)
   private val _cameraHud = MutableStateFlow<CameraHudState?>(null)
@@ -237,10 +231,7 @@ class NodeRuntime(context: Context) {
         if (!isCanonicalMainSessionKey(_mainSessionKey.value)) {
           _mainSessionKey.value = "main"
         }
-        val mainKey = resolveMainSessionKey()
-        talkMode.setMainSessionKey(mainKey)
-        chat.applyMainSessionKey(mainKey)
-        chat.onDisconnected(message)
+        talkMode.setMainSessionKey(resolveMainSessionKey())
         updateStatus()
       },
       onEvent = { event, payloadJson ->
@@ -274,13 +265,6 @@ class NodeRuntime(context: Context) {
       },
     )
 
-  private val chat: ChatController =
-    ChatController(
-      scope = scope,
-      session = operatorSession,
-      json = json,
-      supportsChatSubscribe = false,
-    )
   private val talkMode: TalkModeManager by lazy {
     TalkModeManager(
       context = appContext,
@@ -297,7 +281,6 @@ class NodeRuntime(context: Context) {
     if (_mainSessionKey.value == trimmed) return
     _mainSessionKey.value = trimmed
     talkMode.setMainSessionKey(trimmed)
-    chat.applyMainSessionKey(trimmed)
   }
 
   private fun updateStatus() {
@@ -350,17 +333,6 @@ class NodeRuntime(context: Context) {
   val canvasDebugStatusEnabled: StateFlow<Boolean> = prefs.canvasDebugStatusEnabled
 
   private var didAutoConnect = false
-
-  val chatSessionKey: StateFlow<String> = chat.sessionKey
-  val chatSessionId: StateFlow<String?> = chat.sessionId
-  val chatMessages: StateFlow<List<ChatMessage>> = chat.messages
-  val chatError: StateFlow<String?> = chat.errorText
-  val chatHealthOk: StateFlow<Boolean> = chat.healthOk
-  val chatThinkingLevel: StateFlow<String> = chat.thinkingLevel
-  val chatStreamingAssistantText: StateFlow<String?> = chat.streamingAssistantText
-  val chatPendingToolCalls: StateFlow<List<ChatPendingToolCall>> = chat.pendingToolCalls
-  val chatSessions: StateFlow<List<ChatSessionEntry>> = chat.sessions
-  val pendingRunCount: StateFlow<Int> = chat.pendingRunCount
 
   init {
     gatewayEventHandler = GatewayEventHandler(
@@ -619,7 +591,7 @@ class NodeRuntime(context: Context) {
       val actionId = (userActionObj["id"] as? JsonPrimitive)?.content?.trim().orEmpty().ifEmpty {
         java.util.UUID.randomUUID().toString()
       }
-      val name = CoderClawCanvasA2UIAction.extractActionName(userActionObj) ?: return@launch
+      val name = BuilderforceCanvasA2UIAction.extractActionName(userActionObj) ?: return@launch
 
       val surfaceId =
         (userActionObj["surfaceId"] as? JsonPrimitive)?.content?.trim().orEmpty().ifEmpty { "main" }
@@ -629,7 +601,7 @@ class NodeRuntime(context: Context) {
 
       val sessionKey = resolveMainSessionKey()
       val message =
-        CoderClawCanvasA2UIAction.formatAgentMessage(
+        BuilderforceCanvasA2UIAction.formatAgentMessage(
           actionName = name,
           sessionKey = sessionKey,
           surfaceId = surfaceId,
@@ -663,7 +635,7 @@ class NodeRuntime(context: Context) {
 
       try {
         canvas.eval(
-          CoderClawCanvasA2UIAction.jsDispatchA2UIActionStatus(
+          BuilderforceCanvasA2UIAction.jsDispatchA2UIActionStatus(
             actionId = actionId,
             ok = connected && error == null,
             error = error,
@@ -675,35 +647,6 @@ class NodeRuntime(context: Context) {
     }
   }
 
-  fun loadChat(sessionKey: String) {
-    val key = sessionKey.trim().ifEmpty { resolveMainSessionKey() }
-    chat.load(key)
-  }
-
-  fun refreshChat() {
-    chat.refresh()
-  }
-
-  fun refreshChatSessions(limit: Int? = null) {
-    chat.refreshSessions(limit = limit)
-  }
-
-  fun setChatThinkingLevel(level: String) {
-    chat.setThinkingLevel(level)
-  }
-
-  fun switchChatSession(sessionKey: String) {
-    chat.switchSession(sessionKey)
-  }
-
-  fun abortChat() {
-    chat.abort()
-  }
-
-  fun sendChat(message: String, thinking: String, attachments: List<OutgoingAttachment>) {
-    chat.sendMessage(message = message, thinkingLevel = thinking, attachments = attachments)
-  }
-
   private fun handleGatewayEvent(event: String, payloadJson: String?) {
     if (event == "voicewake.changed") {
       gatewayEventHandler.handleVoiceWakeChangedEvent(payloadJson)
@@ -711,7 +654,6 @@ class NodeRuntime(context: Context) {
     }
 
     talkMode.handleGatewayEvent(event, payloadJson)
-    chat.handleGatewayEvent(event, payloadJson)
   }
 
   private suspend fun refreshBrandingFromGateway() {
@@ -750,4 +692,8 @@ class NodeRuntime(context: Context) {
     }
   }
 
+  private companion object {
+    /** Voice Wake commands go to the gateway agent with a light thinking budget. */
+    const val VOICE_WAKE_THINKING = "low"
+  }
 }

@@ -1,9 +1,9 @@
 import CoreMotion
 import Foundation
-import CoderClawKit
+import BuilderforceKit
 
 final class MotionService: MotionServicing {
-    func activities(params: CoderClawMotionActivityParams) async throws -> CoderClawMotionActivityPayload {
+    func activities(params: BuilderforceMotionActivityParams) async throws -> BuilderforceMotionActivityPayload {
         guard CMMotionActivityManager.isActivityAvailable() else {
             throw NSError(domain: "Motion", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "MOTION_UNAVAILABLE: activity not supported on this device",
@@ -20,7 +20,7 @@ final class MotionService: MotionServicing {
         let limit = max(1, min(params.limit ?? 200, 1000))
 
         let manager = CMMotionActivityManager()
-        let mapped = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<[CoderClawMotionActivityEntry], Error>) in
+        let mapped = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<[BuilderforceMotionActivityEntry], Error>) in
             manager.queryActivityStarting(from: start, to: end, to: OperationQueue()) { activity, error in
                 if let error {
                     cont.resume(throwing: error)
@@ -28,7 +28,7 @@ final class MotionService: MotionServicing {
                     let formatter = ISO8601DateFormatter()
                     let sliced = Array((activity ?? []).suffix(limit))
                     let entries = sliced.map { entry in
-                        CoderClawMotionActivityEntry(
+                        BuilderforceMotionActivityEntry(
                             startISO: formatter.string(from: entry.startDate),
                             endISO: formatter.string(from: end),
                             confidence: Self.confidenceString(entry.confidence),
@@ -44,10 +44,10 @@ final class MotionService: MotionServicing {
             }
         }
 
-        return CoderClawMotionActivityPayload(activities: mapped)
+        return BuilderforceMotionActivityPayload(activities: mapped)
     }
 
-    func pedometer(params: CoderClawPedometerParams) async throws -> CoderClawPedometerPayload {
+    func pedometer(params: BuilderforcePedometerParams) async throws -> BuilderforcePedometerPayload {
         guard CMPedometer.isStepCountingAvailable() else {
             throw NSError(domain: "Motion", code: 2, userInfo: [
                 NSLocalizedDescriptionKey: "PEDOMETER_UNAVAILABLE: step counting not supported",
@@ -62,13 +62,13 @@ final class MotionService: MotionServicing {
 
         let (start, end) = Self.resolveRange(startISO: params.startISO, endISO: params.endISO)
         let pedometer = CMPedometer()
-        let payload = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<CoderClawPedometerPayload, Error>) in
+        let payload = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<BuilderforcePedometerPayload, Error>) in
             pedometer.queryPedometerData(from: start, to: end) { data, error in
                 if let error {
                     cont.resume(throwing: error)
                 } else {
                     let formatter = ISO8601DateFormatter()
-                    let payload = CoderClawPedometerPayload(
+                    let payload = BuilderforcePedometerPayload(
                         startISO: formatter.string(from: start),
                         endISO: formatter.string(from: end),
                         steps: data?.numberOfSteps.intValue,

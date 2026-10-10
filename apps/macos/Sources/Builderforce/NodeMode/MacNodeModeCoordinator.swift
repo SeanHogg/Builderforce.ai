@@ -1,12 +1,12 @@
 import Foundation
-import CoderClawKit
+import BuilderforceKit
 import OSLog
 
 @MainActor
 final class MacNodeModeCoordinator {
     static let shared = MacNodeModeCoordinator()
 
-    private let logger = Logger(subsystem: "ai.coderclaw", category: "mac-node")
+    private let logger = Logger(subsystem: "ai.builderforce", category: "mac-node")
     private var task: Task<Void, Never>?
     private let runtime = MacNodeRuntime()
     private let session = GatewayNodeSession()
@@ -60,7 +60,7 @@ final class MacNodeModeCoordinator {
                     caps: caps,
                     commands: commands,
                     permissions: permissions,
-                    clientId: "coderclaw-macos",
+                    clientId: "builderforce-macos",
                     clientMode: "node",
                     clientDisplayName: InstanceIdentity.displayName)
                 let sessionBox = self.buildSessionBox(url: config.url)
@@ -91,7 +91,7 @@ final class MacNodeModeCoordinator {
                             return BridgeInvokeResponse(
                                 id: req.id,
                                 ok: false,
-                                error: CoderClawNodeError(code: .unavailable, message: "UNAVAILABLE: node not ready"))
+                                error: BuilderforceNodeError(code: .unavailable, message: "UNAVAILABLE: node not ready"))
                         }
                         return await self.runtime.handleInvoke(req)
                     })
@@ -107,13 +107,13 @@ final class MacNodeModeCoordinator {
     }
 
     private func currentCaps() -> [String] {
-        var caps: [String] = [CoderClawCapability.canvas.rawValue, CoderClawCapability.screen.rawValue]
+        var caps: [String] = [BuilderforceCapability.canvas.rawValue, BuilderforceCapability.screen.rawValue]
         if UserDefaults.standard.object(forKey: cameraEnabledKey) as? Bool ?? false {
-            caps.append(CoderClawCapability.camera.rawValue)
+            caps.append(BuilderforceCapability.camera.rawValue)
         }
         let rawLocationMode = UserDefaults.standard.string(forKey: locationModeKey) ?? "off"
-        if CoderClawLocationMode(rawValue: rawLocationMode) != .off {
-            caps.append(CoderClawCapability.location.rawValue)
+        if BuilderforceLocationMode(rawValue: rawLocationMode) != .off {
+            caps.append(BuilderforceCapability.location.rawValue)
         }
         return caps
     }
@@ -125,30 +125,30 @@ final class MacNodeModeCoordinator {
 
     private func currentCommands(caps: [String]) -> [String] {
         var commands: [String] = [
-            CoderClawCanvasCommand.present.rawValue,
-            CoderClawCanvasCommand.hide.rawValue,
-            CoderClawCanvasCommand.navigate.rawValue,
-            CoderClawCanvasCommand.evalJS.rawValue,
-            CoderClawCanvasCommand.snapshot.rawValue,
-            CoderClawCanvasA2UICommand.push.rawValue,
-            CoderClawCanvasA2UICommand.pushJSONL.rawValue,
-            CoderClawCanvasA2UICommand.reset.rawValue,
+            BuilderforceCanvasCommand.present.rawValue,
+            BuilderforceCanvasCommand.hide.rawValue,
+            BuilderforceCanvasCommand.navigate.rawValue,
+            BuilderforceCanvasCommand.evalJS.rawValue,
+            BuilderforceCanvasCommand.snapshot.rawValue,
+            BuilderforceCanvasA2UICommand.push.rawValue,
+            BuilderforceCanvasA2UICommand.pushJSONL.rawValue,
+            BuilderforceCanvasA2UICommand.reset.rawValue,
             MacNodeScreenCommand.record.rawValue,
-            CoderClawSystemCommand.notify.rawValue,
-            CoderClawSystemCommand.which.rawValue,
-            CoderClawSystemCommand.run.rawValue,
-            CoderClawSystemCommand.execApprovalsGet.rawValue,
-            CoderClawSystemCommand.execApprovalsSet.rawValue,
+            BuilderforceSystemCommand.notify.rawValue,
+            BuilderforceSystemCommand.which.rawValue,
+            BuilderforceSystemCommand.run.rawValue,
+            BuilderforceSystemCommand.execApprovalsGet.rawValue,
+            BuilderforceSystemCommand.execApprovalsSet.rawValue,
         ]
 
         let capsSet = Set(caps)
-        if capsSet.contains(CoderClawCapability.camera.rawValue) {
-            commands.append(CoderClawCameraCommand.list.rawValue)
-            commands.append(CoderClawCameraCommand.snap.rawValue)
-            commands.append(CoderClawCameraCommand.clip.rawValue)
+        if capsSet.contains(BuilderforceCapability.camera.rawValue) {
+            commands.append(BuilderforceCameraCommand.list.rawValue)
+            commands.append(BuilderforceCameraCommand.snap.rawValue)
+            commands.append(BuilderforceCameraCommand.clip.rawValue)
         }
-        if capsSet.contains(CoderClawCapability.location.rawValue) {
-            commands.append(CoderClawLocationCommand.get.rawValue)
+        if capsSet.contains(BuilderforceCapability.location.rawValue) {
+            commands.append(BuilderforceLocationCommand.get.rawValue)
         }
 
         return commands

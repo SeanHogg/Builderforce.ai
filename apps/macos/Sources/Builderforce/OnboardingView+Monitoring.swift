@@ -1,5 +1,5 @@
 import Foundation
-import CoderClawIPC
+import BuilderforceIPC
 
 extension OnboardingView {
     @MainActor
@@ -115,7 +115,7 @@ extension OnboardingView {
                 return
             }
             let command = desc.command.trimmingCharacters(in: .whitespacesAndNewlines)
-            let expectedTokens = ["node", "builderforce", "coderclaw", "tsx", "pnpm", "bun"]
+            let expectedTokens = ["node", "builderforce", "tsx", "pnpm", "bun"]
             let lower = command.lowercased()
             let expected = expectedTokens.contains { lower.contains($0) }
             self.localGatewayProbe = LocalGatewayProbe(
@@ -127,9 +127,9 @@ extension OnboardingView {
     }
 
     func refreshAnthropicOAuthStatus() {
-        _ = CoderClawOAuthStore.importLegacyAnthropicOAuthIfNeeded()
+        _ = BuilderforceOAuthStore.importLegacyAnthropicOAuthIfNeeded()
         let previous = self.anthropicAuthDetectedStatus
-        let status = CoderClawOAuthStore.anthropicOAuthStatus()
+        let status = BuilderforceOAuthStore.anthropicOAuthStatus()
         self.anthropicAuthDetectedStatus = status
         self.anthropicAuthConnected = status.isConnected
 
@@ -154,7 +154,7 @@ extension OnboardingView {
         self.anthropicAuthVerificationFailed = false
         defer { self.anthropicAuthVerifying = false }
 
-        guard let refresh = CoderClawOAuthStore.loadAnthropicOAuthRefreshToken(), !refresh.isEmpty else {
+        guard let refresh = BuilderforceOAuthStore.loadAnthropicOAuthRefreshToken(), !refresh.isEmpty else {
             self.anthropicAuthStatus = "OAuth verification failed: missing refresh token."
             self.anthropicAuthVerificationFailed = true
             return
@@ -162,7 +162,7 @@ extension OnboardingView {
 
         do {
             let updated = try await AnthropicOAuth.refresh(refreshToken: refresh)
-            try CoderClawOAuthStore.saveAnthropicOAuth(updated)
+            try BuilderforceOAuthStore.saveAnthropicOAuth(updated)
             self.refreshAnthropicOAuthStatus()
             self.anthropicAuthVerified = true
             self.anthropicAuthVerifiedAt = Date()

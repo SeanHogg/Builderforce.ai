@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
-import CoderClawIPC
-import CoderClawKit
+import BuilderforceIPC
+import BuilderforceKit
 import WebKit
 
 @MainActor
@@ -61,8 +61,8 @@ final class CanvasWindowController: NSWindowController, WKNavigationDelegate, NS
             const allowedSchemes = \(String(describing: CanvasScheme.allSchemes));
             const protocol = location.protocol.replace(':', '');
             if (!allowedSchemes.includes(protocol)) return;
-            if (globalThis.__coderclawA2UIBridgeInstalled) return;
-            globalThis.__coderclawA2UIBridgeInstalled = true;
+            if (globalThis.__builderforceA2UIBridgeInstalled) return;
+            globalThis.__builderforceA2UIBridgeInstalled = true;
 
             const deepLinkKey = \(Self.jsStringLiteral(deepLinkKey));
             const sessionKey = \(Self.jsStringLiteral(injectedSessionKey));
@@ -89,13 +89,13 @@ final class CanvasWindowController: NSWindowController, WKNavigationDelegate, NS
                   ...(context.length ? { context } : {}),
                 };
 
-                const handler = globalThis.webkit?.messageHandlers?.coderclawCanvasA2UIAction;
+                const handler = globalThis.webkit?.messageHandlers?.builderforceCanvasA2UIAction;
 
                 // If the bundled A2UI shell is present, let it forward actions so we keep its richer
                 // context resolution (data model path lookups, surface detection, etc.).
                 const hasBundledA2UIHost =
-                  !!globalThis.coderclawA2UI ||
-                  !!document.querySelector('coderclaw-a2ui-host');
+                  !!globalThis.builderforceA2UI ||
+                  !!document.querySelector('builderforce-a2ui-host');
                 if (hasBundledA2UIHost && handler?.postMessage) return;
 
                 // Otherwise, forward directly when possible.
@@ -121,7 +121,7 @@ final class CanvasWindowController: NSWindowController, WKNavigationDelegate, NS
                 params.set('deliver', 'false');
                 params.set('channel', 'last');
                 params.set('key', deepLinkKey);
-                location.href = 'coderclaw://agent?' + params.toString();
+                location.href = 'builderforce://agent?' + params.toString();
               } catch {}
             }, true);
           } catch {}
@@ -280,7 +280,7 @@ final class CanvasWindowController: NSWindowController, WKNavigationDelegate, NS
         let js = """
         (() => {
           try {
-            const api = globalThis.__coderclaw;
+            const api = globalThis.__builderforce;
             if (!api) return;
             if (typeof api.setDebugStatusEnabled === 'function') {
               api.setDebugStatusEnabled(\(enabled ? "true" : "false"));
@@ -348,7 +348,7 @@ final class CanvasWindowController: NSWindowController, WKNavigationDelegate, NS
             path = outPath
         } else {
             let ts = Int(Date().timeIntervalSince1970)
-            path = "/tmp/coderclaw-canvas-\(CanvasWindowController.sanitizeSessionKey(self.sessionKey))-\(ts).png"
+            path = "/tmp/builderforce-canvas-\(CanvasWindowController.sanitizeSessionKey(self.sessionKey))-\(ts).png"
         }
 
         try png.write(to: URL(fileURLWithPath: path), options: [.atomic])

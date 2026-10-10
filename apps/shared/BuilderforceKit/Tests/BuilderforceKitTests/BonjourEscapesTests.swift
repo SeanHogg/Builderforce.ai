@@ -1,4 +1,4 @@
-import CoderClawKit
+import BuilderforceKit
 import Testing
 
 @Suite struct BonjourEscapesTests {
@@ -8,7 +8,7 @@ import Testing
     }
 
     @Test func decodeSpaces() {
-        #expect(BonjourEscapes.decode("CoderClaw\\032Gateway") == "CoderClaw Gateway")
+        #expect(BonjourEscapes.decode("Builderforce\\032Gateway") == "Builderforce Gateway")
     }
 
     @Test func decodeMultipleEscapes() {

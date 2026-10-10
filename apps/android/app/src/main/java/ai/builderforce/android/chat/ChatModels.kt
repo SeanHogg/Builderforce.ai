@@ -1,44 +1,37 @@
-package ai.coderclaw.android.chat
+package ai.builderforce.android.chat
 
-data class ChatMessage(
-  val id: String,
-  val role: String,
-  val content: List<ChatMessageContent>,
-  val timestampMs: Long?,
+import ai.builderforce.android.cloud.ImageAttachment
+import ai.builderforce.android.cloud.Recipient
+
+/** A message typed while a reply was running: it goes once the reply is done. */
+data class QueuedMessage(
+  val id: Long,
+  val chatId: Long?,
+  val text: String,
+  val to: Recipient?,
+  val images: List<ImageAttachment>,
 )
 
-data class ChatMessageContent(
-  val type: String = "text",
-  val text: String? = null,
-  val mimeType: String? = null,
-  val fileName: String? = null,
-  val base64: String? = null,
+/** A tool that changes something, waiting for the person's Approve or Decline. */
+data class ToolApproval(val id: Long, val label: String, val arguments: String)
+
+/** The Brain's reply in [chatId] while it is being written. */
+data class LiveReply(
+  val chatId: Long,
+  val draft: String = "",
+  val activity: String? = null,
+  val approval: ToolApproval? = null,
 )
 
-data class ChatPendingToolCall(
-  val toolCallId: String,
-  val name: String,
-  val args: kotlinx.serialization.json.JsonObject? = null,
-  val startedAtMs: Long,
-  val isError: Boolean? = null,
-)
-
-data class ChatSessionEntry(
-  val key: String,
-  val updatedAtMs: Long?,
-  val displayName: String? = null,
-)
-
-data class ChatHistory(
-  val sessionKey: String,
-  val sessionId: String?,
-  val thinkingLevel: String?,
-  val messages: List<ChatMessage>,
-)
-
-data class OutgoingAttachment(
-  val type: String,
-  val mimeType: String,
-  val fileName: String,
-  val base64: String,
-)
+/**
+ * The agent a message opens with `@Name` for, if any — the longest name wins ("@Ann Lee"
+ * over "@Ann"), and the name must end at a word boundary.
+ */
+fun mentionedAgent(text: String, agents: List<Recipient>): Recipient? {
+  val lower = text.trimStart().lowercase()
+  if (!lower.startsWith("@")) return null
+  return agents.sortedByDescending { it.name.length }.firstOrNull { agent ->
+    val name = "@${agent.name.lowercase()}"
+    lower.startsWith(name) && lower.getOrNull(name.length)?.isLetterOrDigit() != true
+  }
+}

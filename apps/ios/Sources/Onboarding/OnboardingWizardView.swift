@@ -1,6 +1,6 @@
 import CoreImage
 import Combine
-import CoderClawKit
+import BuilderforceKit
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -304,7 +304,7 @@ struct OnboardingWizardView: View {
                 .font(.largeTitle.weight(.bold))
                 .padding(.bottom, 8)
 
-            Text("Connect to your CoderClaw gateway")
+            Text("Connect to your Builderforce gateway")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -549,7 +549,7 @@ struct OnboardingWizardView: View {
                             + "1) `builderforce devices approve` (or `builderforce devices approve <requestId>`)\n"
                             + "2) `/pair approve` in Telegram\n"
                             + "\(requestLine)\n"
-                            + "CoderClaw will also retry automatically when you return to this app.")
+                            + "Builderforce will also retry automatically when you return to this app.")
                 }
             }
 
@@ -606,7 +606,7 @@ struct OnboardingWizardView: View {
             Button {
                 self.onClose()
             } label: {
-                Text("Open CoderClaw")
+                Text("Open Builderforce")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -747,12 +747,12 @@ struct OnboardingWizardView: View {
                     self.manualPort = port
                     self.manualTLS = useTLS
                 case .discovered:
-                    self.manualHost = "coderclaw.local"
+                    self.manualHost = "builderforce.local"
                     self.manualPort = 18789
                     self.manualTLS = true
                 }
             } else {
-                self.manualHost = "coderclaw.local"
+                self.manualHost = "builderforce.local"
                 self.manualPort = 18789
                 self.manualTLS = true
             }
@@ -761,7 +761,7 @@ struct OnboardingWizardView: View {
         if self.selectedMode == nil {
             self.selectedMode = OnboardingStateStore.lastMode()
         }
-        if self.selectedMode == .developerLocal && self.manualHost == "coderclaw.local" {
+        if self.selectedMode == .developerLocal && self.manualHost == "builderforce.local" {
             self.manualHost = "localhost"
             self.manualTLS = false
         }
@@ -816,15 +816,15 @@ struct OnboardingWizardView: View {
 
     private func applyModeDefaults(_ mode: OnboardingConnectionMode) {
         let host = self.manualHost.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let hostIsDefaultLike = host.isEmpty || host == "coderclaw.local" || host == "localhost"
+        let hostIsDefaultLike = host.isEmpty || host == "builderforce.local" || host == "localhost"
 
         switch mode {
         case .homeNetwork:
-            if hostIsDefaultLike { self.manualHost = "coderclaw.local" }
+            if hostIsDefaultLike { self.manualHost = "builderforce.local" }
             self.manualTLS = true
             if self.manualPort <= 0 || self.manualPort > 65535 { self.manualPort = 18789 }
         case .remoteDomain:
-            if host == "coderclaw.local" || host == "localhost" { self.manualHost = "" }
+            if host == "builderforce.local" || host == "localhost" { self.manualHost = "" }
             self.manualTLS = true
             if self.manualPort <= 0 || self.manualPort > 65535 { self.manualPort = 18789 }
         case .developerLocal:

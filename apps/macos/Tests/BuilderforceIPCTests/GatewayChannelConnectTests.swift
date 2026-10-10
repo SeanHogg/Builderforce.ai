@@ -1,8 +1,8 @@
-import CoderClawKit
+import BuilderforceKit
 import Foundation
 import os
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite struct GatewayChannelConnectTests {
     private enum FakeResponse {

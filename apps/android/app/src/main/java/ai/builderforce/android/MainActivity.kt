@@ -1,4 +1,4 @@
-package ai.coderclaw.android
+package ai.builderforce.android
 
 import android.Manifest
 import android.content.pm.ApplicationInfo
@@ -18,8 +18,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import ai.coderclaw.android.ui.RootScreen
-import ai.coderclaw.android.ui.CoderClawTheme
+import ai.builderforce.android.ui.RootScreen
+import ai.builderforce.android.ui.BuilderforceTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
     }
 
     setContent {
-      CoderClawTheme {
+      BuilderforceTheme {
         Surface(modifier = Modifier) {
           RootScreen(viewModel = viewModel)
         }

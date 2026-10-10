@@ -123,11 +123,11 @@
 - Never update the Carbon dependency.
 - Any dependency with `pnpm.patchedDependencies` must use an exact version (no `^`/`~`). Patching deps requires explicit approval.
 - CLI progress: use `src/cli/progress.ts`; status tables: `src/terminal/table.ts`.
-- Gateway runs as menubar app; restart via BuilderForce Agents Mac app or `scripts/restart-mac.sh`.
+- Gateway runs as menubar app; restart via the Builderforce Mac app or `scripts/restart-mac.sh`.
 - macOS logs: `./scripts/agentlog.sh`. Do not rebuild the macOS app over SSH.
 - SwiftUI: prefer `@Observable`/`@Bindable` over `ObservableObject`/`@StateObject`.
 - Connection providers: update every UI surface + docs when adding a new connection.
-- Version locations: `package.json`, `apps/android/app/build.gradle.kts`, `apps/ios/Sources/Info.plist`, `apps/macos/Sources/BuilderForce Agents/Resources/Info.plist`, `docs/install/updating.md`, `docs/platforms/mac/release.md`. "Bump everywhere" excludes `appcast.xml`.
+- Version locations: `package.json`, `../apps/android/app/build.gradle.kts`, `../apps/ios/project.yml` + `../apps/ios/{Sources,ShareExtension,WatchApp,WatchExtension,Tests}/Info.plist` (CFBundleShortVersionString/CFBundleVersion), `../apps/macos/Sources/Builderforce/Resources/Info.plist`, `docs/install/updating.md`, `docs/platforms/mac/release.md`. "Bump everywhere" excludes `appcast.xml`.
 - **Multi-agent safety:** no `git stash`/`worktree`/branch switches unless explicitly requested. Scope commits to your changes. Keep unrelated WIP untouched. Focus reports on your edits.
 - Lint/format churn: auto-resolve formatting-only diffs; only ask on semantic changes.
 - CLI palette: `src/terminal/palette.ts` (no hardcoded colors).

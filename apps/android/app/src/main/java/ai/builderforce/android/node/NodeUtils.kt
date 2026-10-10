@@ -1,4 +1,4 @@
-package ai.coderclaw.android.node
+package ai.builderforce.android.node
 
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull

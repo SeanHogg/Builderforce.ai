@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite
 struct ScreenshotSizeTests {

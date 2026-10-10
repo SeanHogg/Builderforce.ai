@@ -3,15 +3,15 @@
 import PackageDescription
 
 let package = Package(
-    name: "CoderClawKit",
+    name: "BuilderforceKit",
     platforms: [
         .iOS(.v18),
         .macOS(.v15),
     ],
     products: [
-        .library(name: "CoderClawProtocol", targets: ["CoderClawProtocol"]),
-        .library(name: "CoderClawKit", targets: ["CoderClawKit"]),
-        .library(name: "CoderClawChatUI", targets: ["CoderClawChatUI"]),
+        .library(name: "BuilderforceProtocol", targets: ["BuilderforceProtocol"]),
+        .library(name: "BuilderforceKit", targets: ["BuilderforceKit"]),
+        .library(name: "BuilderforceChatUI", targets: ["BuilderforceChatUI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/steipete/ElevenLabsKit", exact: "0.1.0"),
@@ -19,18 +19,18 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "CoderClawProtocol",
-            path: "Sources/CoderClawProtocol",
+            name: "BuilderforceProtocol",
+            path: "Sources/BuilderforceProtocol",
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
             ]),
         .target(
-            name: "CoderClawKit",
+            name: "BuilderforceKit",
             dependencies: [
-                "CoderClawProtocol",
+                "BuilderforceProtocol",
                 .product(name: "ElevenLabsKit", package: "ElevenLabsKit"),
             ],
-            path: "Sources/CoderClawKit",
+            path: "Sources/BuilderforceKit",
             resources: [
                 .process("Resources"),
             ],
@@ -38,22 +38,22 @@ let package = Package(
                 .enableUpcomingFeature("StrictConcurrency"),
             ]),
         .target(
-            name: "CoderClawChatUI",
+            name: "BuilderforceChatUI",
             dependencies: [
-                "CoderClawKit",
+                "BuilderforceKit",
                 .product(
                     name: "Textual",
                     package: "textual",
                     condition: .when(platforms: [.macOS, .iOS])),
             ],
-            path: "Sources/CoderClawChatUI",
+            path: "Sources/BuilderforceChatUI",
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
             ]),
         .testTarget(
-            name: "CoderClawKitTests",
-            dependencies: ["CoderClawKit", "CoderClawChatUI"],
-            path: "Tests/CoderClawKitTests",
+            name: "BuilderforceKitTests",
+            dependencies: ["BuilderforceKit", "BuilderforceChatUI"],
+            path: "Tests/BuilderforceKitTests",
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
                 .enableExperimentalFeature("SwiftTesting"),

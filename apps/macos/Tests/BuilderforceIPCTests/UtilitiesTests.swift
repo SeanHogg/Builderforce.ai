@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite(.serialized) struct UtilitiesTests {
     @Test func ageStringsCoverCommonWindows() {
@@ -46,7 +46,7 @@ import Testing
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let dist = tmp.appendingPathComponent("dist/index.js")
-        let bin = tmp.appendingPathComponent("bin/coderclaw.js")
+        let bin = tmp.appendingPathComponent("bin/builderforce.js")
         try FileManager().createDirectory(at: dist.deletingLastPathComponent(), withIntermediateDirectories: true)
         try FileManager().createDirectory(at: bin.deletingLastPathComponent(), withIntermediateDirectories: true)
         FileManager().createFile(atPath: dist.path, contents: Data())
@@ -58,11 +58,11 @@ import Testing
 
     @Test func logLocatorPicksNewestLogFile() throws {
         let fm = FileManager()
-        let dir = URL(fileURLWithPath: "/tmp/coderclaw", isDirectory: true)
+        let dir = URL(fileURLWithPath: "/tmp/builderforce", isDirectory: true)
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
 
-        let older = dir.appendingPathComponent("coderclaw-old-\(UUID().uuidString).log")
-        let newer = dir.appendingPathComponent("coderclaw-new-\(UUID().uuidString).log")
+        let older = dir.appendingPathComponent("builderforce-old-\(UUID().uuidString).log")
+        let newer = dir.appendingPathComponent("builderforce-new-\(UUID().uuidString).log")
         fm.createFile(atPath: older.path, contents: Data("old".utf8))
         fm.createFile(atPath: newer.path, contents: Data("new".utf8))
         try fm.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -100)], ofItemAtPath: older.path)

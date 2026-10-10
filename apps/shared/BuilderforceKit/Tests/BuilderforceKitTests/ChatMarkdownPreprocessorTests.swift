@@ -1,5 +1,5 @@
 import Testing
-@testable import CoderClawChatUI
+@testable import BuilderforceChatUI
 
 @Suite("ChatMarkdownPreprocessor")
 struct ChatMarkdownPreprocessorTests {

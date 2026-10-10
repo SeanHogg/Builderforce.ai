@@ -1,7 +1,7 @@
-import CoderClawIPC
+import BuilderforceIPC
 import CoreLocation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite(.serialized)
 @MainActor

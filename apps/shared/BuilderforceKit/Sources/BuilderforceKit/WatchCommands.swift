@@ -1,11 +1,11 @@
 import Foundation
 
-public enum CoderClawWatchCommand: String, Codable, Sendable {
+public enum BuilderforceWatchCommand: String, Codable, Sendable {
     case status = "watch.status"
     case notify = "watch.notify"
 }
 
-public struct CoderClawWatchStatusPayload: Codable, Sendable, Equatable {
+public struct BuilderforceWatchStatusPayload: Codable, Sendable, Equatable {
     public var supported: Bool
     public var paired: Bool
     public var appInstalled: Bool
@@ -27,19 +27,19 @@ public struct CoderClawWatchStatusPayload: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawWatchNotifyParams: Codable, Sendable, Equatable {
+public struct BuilderforceWatchNotifyParams: Codable, Sendable, Equatable {
     public var title: String
     public var body: String
-    public var priority: CoderClawNotificationPriority?
+    public var priority: BuilderforceNotificationPriority?
 
-    public init(title: String, body: String, priority: CoderClawNotificationPriority? = nil) {
+    public init(title: String, body: String, priority: BuilderforceNotificationPriority? = nil) {
         self.title = title
         self.body = body
         self.priority = priority
     }
 }
 
-public struct CoderClawWatchNotifyPayload: Codable, Sendable, Equatable {
+public struct BuilderforceWatchNotifyPayload: Codable, Sendable, Equatable {
     public var deliveredImmediately: Bool
     public var queuedForDelivery: Bool
     public var transport: String

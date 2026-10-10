@@ -16,7 +16,7 @@ public struct DeviceIdentity: Codable, Sendable {
 }
 
 enum DeviceIdentityPaths {
-    private static let stateDirEnv = ["CODERCLAW_STATE_DIR"]
+    private static let stateDirEnv = ["BUILDERFORCE_AGENTS_STATE_DIR"]
 
     static func stateDirURL() -> URL {
         for key in self.stateDirEnv {
@@ -29,10 +29,10 @@ enum DeviceIdentityPaths {
         }
 
         if let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-            return appSupport.appendingPathComponent("CoderClaw", isDirectory: true)
+            return appSupport.appendingPathComponent("Builderforce", isDirectory: true)
         }
 
-        return FileManager.default.temporaryDirectory.appendingPathComponent("coderclaw", isDirectory: true)
+        return FileManager.default.temporaryDirectory.appendingPathComponent("builderforce", isDirectory: true)
     }
 }
 

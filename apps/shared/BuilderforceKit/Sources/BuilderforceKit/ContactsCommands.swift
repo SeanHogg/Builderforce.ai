@@ -1,11 +1,11 @@
 import Foundation
 
-public enum CoderClawContactsCommand: String, Codable, Sendable {
+public enum BuilderforceContactsCommand: String, Codable, Sendable {
     case search = "contacts.search"
     case add = "contacts.add"
 }
 
-public struct CoderClawContactsSearchParams: Codable, Sendable, Equatable {
+public struct BuilderforceContactsSearchParams: Codable, Sendable, Equatable {
     public var query: String?
     public var limit: Int?
 
@@ -15,7 +15,7 @@ public struct CoderClawContactsSearchParams: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawContactsAddParams: Codable, Sendable, Equatable {
+public struct BuilderforceContactsAddParams: Codable, Sendable, Equatable {
     public var givenName: String?
     public var familyName: String?
     public var organizationName: String?
@@ -40,7 +40,7 @@ public struct CoderClawContactsAddParams: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawContactPayload: Codable, Sendable, Equatable {
+public struct BuilderforceContactPayload: Codable, Sendable, Equatable {
     public var identifier: String
     public var displayName: String
     public var givenName: String
@@ -68,18 +68,18 @@ public struct CoderClawContactPayload: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawContactsSearchPayload: Codable, Sendable, Equatable {
-    public var contacts: [CoderClawContactPayload]
+public struct BuilderforceContactsSearchPayload: Codable, Sendable, Equatable {
+    public var contacts: [BuilderforceContactPayload]
 
-    public init(contacts: [CoderClawContactPayload]) {
+    public init(contacts: [BuilderforceContactPayload]) {
         self.contacts = contacts
     }
 }
 
-public struct CoderClawContactsAddPayload: Codable, Sendable, Equatable {
-    public var contact: CoderClawContactPayload
+public struct BuilderforceContactsAddPayload: Codable, Sendable, Equatable {
+    public var contact: BuilderforceContactPayload
 
-    public init(contact: CoderClawContactPayload) {
+    public init(contact: BuilderforceContactPayload) {
         self.contact = contact
     }
 }

@@ -1,6 +1,6 @@
-import CoderClawKit
+import BuilderforceKit
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite struct DeepLinkAgentPolicyTests {
     @Test func validateMessageForHandleRejectsTooLongWhenUnkeyed() {

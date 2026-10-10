@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
-import CoderClawIPC
-import CoderClawKit
+import BuilderforceIPC
+import BuilderforceKit
 
 actor MacNodeRuntime {
     private let cameraCapture = CameraCaptureService()
@@ -34,39 +34,39 @@ actor MacNodeRuntime {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(
+                error: BuilderforceNodeError(
                     code: .unavailable,
                     message: "CANVAS_DISABLED: enable Canvas in Settings"))
         }
         do {
             switch command {
-            case CoderClawCanvasCommand.present.rawValue,
-                 CoderClawCanvasCommand.hide.rawValue,
-                 CoderClawCanvasCommand.navigate.rawValue,
-                 CoderClawCanvasCommand.evalJS.rawValue,
-                 CoderClawCanvasCommand.snapshot.rawValue:
+            case BuilderforceCanvasCommand.present.rawValue,
+                 BuilderforceCanvasCommand.hide.rawValue,
+                 BuilderforceCanvasCommand.navigate.rawValue,
+                 BuilderforceCanvasCommand.evalJS.rawValue,
+                 BuilderforceCanvasCommand.snapshot.rawValue:
                 return try await self.handleCanvasInvoke(req)
-            case CoderClawCanvasA2UICommand.reset.rawValue,
-                 CoderClawCanvasA2UICommand.push.rawValue,
-                 CoderClawCanvasA2UICommand.pushJSONL.rawValue:
+            case BuilderforceCanvasA2UICommand.reset.rawValue,
+                 BuilderforceCanvasA2UICommand.push.rawValue,
+                 BuilderforceCanvasA2UICommand.pushJSONL.rawValue:
                 return try await self.handleA2UIInvoke(req)
-            case CoderClawCameraCommand.snap.rawValue,
-                 CoderClawCameraCommand.clip.rawValue,
-                 CoderClawCameraCommand.list.rawValue:
+            case BuilderforceCameraCommand.snap.rawValue,
+                 BuilderforceCameraCommand.clip.rawValue,
+                 BuilderforceCameraCommand.list.rawValue:
                 return try await self.handleCameraInvoke(req)
-            case CoderClawLocationCommand.get.rawValue:
+            case BuilderforceLocationCommand.get.rawValue:
                 return try await self.handleLocationInvoke(req)
             case MacNodeScreenCommand.record.rawValue:
                 return try await self.handleScreenRecordInvoke(req)
-            case CoderClawSystemCommand.run.rawValue:
+            case BuilderforceSystemCommand.run.rawValue:
                 return try await self.handleSystemRun(req)
-            case CoderClawSystemCommand.which.rawValue:
+            case BuilderforceSystemCommand.which.rawValue:
                 return try await self.handleSystemWhich(req)
-            case CoderClawSystemCommand.notify.rawValue:
+            case BuilderforceSystemCommand.notify.rawValue:
                 return try await self.handleSystemNotify(req)
-            case CoderClawSystemCommand.execApprovalsGet.rawValue:
+            case BuilderforceSystemCommand.execApprovalsGet.rawValue:
                 return try await self.handleSystemExecApprovalsGet(req)
-            case CoderClawSystemCommand.execApprovalsSet.rawValue:
+            case BuilderforceSystemCommand.execApprovalsSet.rawValue:
                 return try await self.handleSystemExecApprovalsSet(req)
             default:
                 return Self.errorResponse(req, code: .invalidRequest, message: "INVALID_REQUEST: unknown command")
@@ -82,9 +82,9 @@ actor MacNodeRuntime {
 
     private func handleCanvasInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
         switch req.command {
-        case CoderClawCanvasCommand.present.rawValue:
-            let params = (try? Self.decodeParams(CoderClawCanvasPresentParams.self, from: req.paramsJSON)) ??
-                CoderClawCanvasPresentParams()
+        case BuilderforceCanvasCommand.present.rawValue:
+            let params = (try? Self.decodeParams(BuilderforceCanvasPresentParams.self, from: req.paramsJSON)) ??
+                BuilderforceCanvasPresentParams()
             let urlTrimmed = params.url?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let url = urlTrimmed.isEmpty ? nil : urlTrimmed
             let placement = params.placement.map {
@@ -98,29 +98,29 @@ actor MacNodeRuntime {
                     placement: placement)
             }
             return BridgeInvokeResponse(id: req.id, ok: true)
-        case CoderClawCanvasCommand.hide.rawValue:
+        case BuilderforceCanvasCommand.hide.rawValue:
             let sessionKey = self.mainSessionKey
             await MainActor.run {
                 CanvasManager.shared.hide(sessionKey: sessionKey)
             }
             return BridgeInvokeResponse(id: req.id, ok: true)
-        case CoderClawCanvasCommand.navigate.rawValue:
-            let params = try Self.decodeParams(CoderClawCanvasNavigateParams.self, from: req.paramsJSON)
+        case BuilderforceCanvasCommand.navigate.rawValue:
+            let params = try Self.decodeParams(BuilderforceCanvasNavigateParams.self, from: req.paramsJSON)
             let sessionKey = self.mainSessionKey
             try await MainActor.run {
                 _ = try CanvasManager.shared.show(sessionKey: sessionKey, path: params.url)
             }
             return BridgeInvokeResponse(id: req.id, ok: true)
-        case CoderClawCanvasCommand.evalJS.rawValue:
-            let params = try Self.decodeParams(CoderClawCanvasEvalParams.self, from: req.paramsJSON)
+        case BuilderforceCanvasCommand.evalJS.rawValue:
+            let params = try Self.decodeParams(BuilderforceCanvasEvalParams.self, from: req.paramsJSON)
             let sessionKey = self.mainSessionKey
             let result = try await CanvasManager.shared.eval(
                 sessionKey: sessionKey,
                 javaScript: params.javaScript)
             let payload = try Self.encodePayload(["result": result] as [String: String])
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: payload)
-        case CoderClawCanvasCommand.snapshot.rawValue:
-            let params = try? Self.decodeParams(CoderClawCanvasSnapshotParams.self, from: req.paramsJSON)
+        case BuilderforceCanvasCommand.snapshot.rawValue:
+            let params = try? Self.decodeParams(BuilderforceCanvasSnapshotParams.self, from: req.paramsJSON)
             let format = params?.format ?? .jpeg
             let maxWidth: Int? = {
                 if let raw = params?.maxWidth, raw > 0 { return raw }
@@ -155,10 +155,10 @@ actor MacNodeRuntime {
 
     private func handleA2UIInvoke(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
         switch req.command {
-        case CoderClawCanvasA2UICommand.reset.rawValue:
+        case BuilderforceCanvasA2UICommand.reset.rawValue:
             try await self.handleA2UIReset(req)
-        case CoderClawCanvasA2UICommand.push.rawValue,
-             CoderClawCanvasA2UICommand.pushJSONL.rawValue:
+        case BuilderforceCanvasA2UICommand.push.rawValue,
+             BuilderforceCanvasA2UICommand.pushJSONL.rawValue:
             try await self.handleA2UIPush(req)
         default:
             Self.errorResponse(req, code: .invalidRequest, message: "INVALID_REQUEST: unknown command")
@@ -170,14 +170,14 @@ actor MacNodeRuntime {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(
+                error: BuilderforceNodeError(
                     code: .unavailable,
                     message: "CAMERA_DISABLED: enable Camera in Settings"))
         }
         switch req.command {
-        case CoderClawCameraCommand.snap.rawValue:
-            let params = (try? Self.decodeParams(CoderClawCameraSnapParams.self, from: req.paramsJSON)) ??
-                CoderClawCameraSnapParams()
+        case BuilderforceCameraCommand.snap.rawValue:
+            let params = (try? Self.decodeParams(BuilderforceCameraSnapParams.self, from: req.paramsJSON)) ??
+                BuilderforceCameraSnapParams()
             let delayMs = min(10000, max(0, params.delayMs ?? 2000))
             let res = try await self.cameraCapture.snap(
                 facing: CameraFacing(rawValue: params.facing?.rawValue ?? "") ?? .front,
@@ -197,9 +197,9 @@ actor MacNodeRuntime {
                 width: Int(res.size.width),
                 height: Int(res.size.height)))
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: payload)
-        case CoderClawCameraCommand.clip.rawValue:
-            let params = (try? Self.decodeParams(CoderClawCameraClipParams.self, from: req.paramsJSON)) ??
-                CoderClawCameraClipParams()
+        case BuilderforceCameraCommand.clip.rawValue:
+            let params = (try? Self.decodeParams(BuilderforceCameraClipParams.self, from: req.paramsJSON)) ??
+                BuilderforceCameraClipParams()
             let res = try await self.cameraCapture.clip(
                 facing: CameraFacing(rawValue: params.facing?.rawValue ?? "") ?? .front,
                 durationMs: params.durationMs,
@@ -220,7 +220,7 @@ actor MacNodeRuntime {
                 durationMs: res.durationMs,
                 hasAudio: res.hasAudio))
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: payload)
-        case CoderClawCameraCommand.list.rawValue:
+        case BuilderforceCameraCommand.list.rawValue:
             let devices = await self.cameraCapture.listDevices()
             let payload = try Self.encodePayload(["devices": devices])
             return BridgeInvokeResponse(id: req.id, ok: true, payloadJSON: payload)
@@ -235,12 +235,12 @@ actor MacNodeRuntime {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(
+                error: BuilderforceNodeError(
                     code: .unavailable,
                     message: "LOCATION_DISABLED: enable Location in Settings"))
         }
-        let params = (try? Self.decodeParams(CoderClawLocationGetParams.self, from: req.paramsJSON)) ??
-            CoderClawLocationGetParams()
+        let params = (try? Self.decodeParams(BuilderforceLocationGetParams.self, from: req.paramsJSON)) ??
+            BuilderforceLocationGetParams()
         let desired = params.desiredAccuracy ??
             (Self.locationPreciseEnabled() ? .precise : .balanced)
         let services = await self.mainActorServices()
@@ -257,7 +257,7 @@ actor MacNodeRuntime {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(
+                error: BuilderforceNodeError(
                     code: .unavailable,
                     message: "LOCATION_PERMISSION_REQUIRED: grant Location permission"))
         }
@@ -267,7 +267,7 @@ actor MacNodeRuntime {
                 maxAgeMs: params.maxAgeMs,
                 timeoutMs: params.timeoutMs)
             let isPrecise = await services.locationAccuracyAuthorization() == .fullAccuracy
-            let payload = CoderClawLocationPayload(
+            let payload = BuilderforceLocationPayload(
                 lat: location.coordinate.latitude,
                 lon: location.coordinate.longitude,
                 accuracyMeters: location.horizontalAccuracy,
@@ -283,14 +283,14 @@ actor MacNodeRuntime {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(
+                error: BuilderforceNodeError(
                     code: .unavailable,
                     message: "LOCATION_TIMEOUT: no fix in time"))
         } catch {
             return BridgeInvokeResponse(
                 id: req.id,
                 ok: false,
-                error: CoderClawNodeError(
+                error: BuilderforceNodeError(
                     code: .unavailable,
                     message: "LOCATION_UNAVAILABLE: \(error.localizedDescription)"))
         }
@@ -345,8 +345,8 @@ actor MacNodeRuntime {
         let sessionKey = self.mainSessionKey
         let json = try await CanvasManager.shared.eval(sessionKey: sessionKey, javaScript: """
         (() => {
-          const host = globalThis.coderclawA2UI;
-          if (!host) return JSON.stringify({ ok: false, error: "missing coderclawA2UI" });
+          const host = globalThis.builderforceA2UI;
+          if (!host) return JSON.stringify({ ok: false, error: "missing builderforceA2UI" });
           return JSON.stringify(host.reset());
         })()
         """)
@@ -355,28 +355,28 @@ actor MacNodeRuntime {
 
     private func handleA2UIPush(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
         let command = req.command
-        let messages: [CoderClawKit.AnyCodable]
-        if command == CoderClawCanvasA2UICommand.pushJSONL.rawValue {
-            let params = try Self.decodeParams(CoderClawCanvasA2UIPushJSONLParams.self, from: req.paramsJSON)
-            messages = try CoderClawCanvasA2UIJSONL.decodeMessagesFromJSONL(params.jsonl)
+        let messages: [BuilderforceKit.AnyCodable]
+        if command == BuilderforceCanvasA2UICommand.pushJSONL.rawValue {
+            let params = try Self.decodeParams(BuilderforceCanvasA2UIPushJSONLParams.self, from: req.paramsJSON)
+            messages = try BuilderforceCanvasA2UIJSONL.decodeMessagesFromJSONL(params.jsonl)
         } else {
             do {
-                let params = try Self.decodeParams(CoderClawCanvasA2UIPushParams.self, from: req.paramsJSON)
+                let params = try Self.decodeParams(BuilderforceCanvasA2UIPushParams.self, from: req.paramsJSON)
                 messages = params.messages
             } catch {
-                let params = try Self.decodeParams(CoderClawCanvasA2UIPushJSONLParams.self, from: req.paramsJSON)
-                messages = try CoderClawCanvasA2UIJSONL.decodeMessagesFromJSONL(params.jsonl)
+                let params = try Self.decodeParams(BuilderforceCanvasA2UIPushJSONLParams.self, from: req.paramsJSON)
+                messages = try BuilderforceCanvasA2UIJSONL.decodeMessagesFromJSONL(params.jsonl)
             }
         }
 
         try await self.ensureA2UIHost()
 
-        let messagesJSON = try CoderClawCanvasA2UIJSONL.encodeMessagesJSONArray(messages)
+        let messagesJSON = try BuilderforceCanvasA2UIJSONL.encodeMessagesJSONArray(messages)
         let js = """
         (() => {
           try {
-            const host = globalThis.coderclawA2UI;
-            if (!host) return JSON.stringify({ ok: false, error: "missing coderclawA2UI" });
+            const host = globalThis.builderforceA2UI;
+            if (!host) return JSON.stringify({ ok: false, error: "missing builderforceA2UI" });
             const messages = \(messagesJSON);
             return JSON.stringify(host.applyMessages(messages));
           } catch (e) {
@@ -410,7 +410,7 @@ actor MacNodeRuntime {
         guard let raw = await GatewayConnection.shared.canvasHostUrl() else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let baseUrl = URL(string: trimmed) else { return nil }
-        return baseUrl.appendingPathComponent("__coderclaw__/a2ui/").absoluteString + "?platform=macos"
+        return baseUrl.appendingPathComponent("__builderforce__/a2ui/").absoluteString + "?platform=macos"
     }
 
     private func isA2UIReady(poll: Bool = false) async -> Bool {
@@ -420,7 +420,7 @@ actor MacNodeRuntime {
                 let sessionKey = self.mainSessionKey
                 let ready = try await CanvasManager.shared.eval(sessionKey: sessionKey, javaScript: """
                 (() => {
-                  const host = globalThis.coderclawA2UI;
+                  const host = globalThis.builderforceA2UI;
                   return String(Boolean(host));
                 })()
                 """)
@@ -436,7 +436,7 @@ actor MacNodeRuntime {
     }
 
     private func handleSystemRun(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
-        let params = try Self.decodeParams(CoderClawSystemRunParams.self, from: req.paramsJSON)
+        let params = try Self.decodeParams(BuilderforceSystemRunParams.self, from: req.paramsJSON)
         let command = params.command
         guard !command.isEmpty else {
             return Self.errorResponse(req, code: .invalidRequest, message: "INVALID_REQUEST: command required")
@@ -598,7 +598,7 @@ actor MacNodeRuntime {
     }
 
     private func handleSystemWhich(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
-        let params = try Self.decodeParams(CoderClawSystemWhichParams.self, from: req.paramsJSON)
+        let params = try Self.decodeParams(BuilderforceSystemWhichParams.self, from: req.paramsJSON)
         let bins = params.bins
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -644,7 +644,7 @@ actor MacNodeRuntime {
 
     private func resolveSystemRunApproval(
         req: BridgeInvokeRequest,
-        params: CoderClawSystemRunParams,
+        params: BuilderforceSystemRunParams,
         context: ExecRunContext) async -> ExecApprovalOutcome
     {
         let requiresAsk = ExecApprovalHelpers.requiresAsk(
@@ -795,7 +795,7 @@ actor MacNodeRuntime {
     }
 
     private func handleSystemNotify(_ req: BridgeInvokeRequest) async throws -> BridgeInvokeResponse {
-        let params = try Self.decodeParams(CoderClawSystemNotifyParams.self, from: req.paramsJSON)
+        let params = try Self.decodeParams(BuilderforceSystemNotifyParams.self, from: req.paramsJSON)
         let title = params.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let body = params.body.trimmingCharacters(in: .whitespacesAndNewlines)
         if title.isEmpty, body.isEmpty {
@@ -891,9 +891,9 @@ extension MacNodeRuntime {
         return merged
     }
 
-    private nonisolated static func locationMode() -> CoderClawLocationMode {
+    private nonisolated static func locationMode() -> BuilderforceLocationMode {
         let raw = UserDefaults.standard.string(forKey: locationModeKey) ?? "off"
-        return CoderClawLocationMode(rawValue: raw) ?? .off
+        return BuilderforceLocationMode(rawValue: raw) ?? .off
     }
 
     private nonisolated static func locationPreciseEnabled() -> Bool {
@@ -903,18 +903,18 @@ extension MacNodeRuntime {
 
     private static func errorResponse(
         _ req: BridgeInvokeRequest,
-        code: CoderClawNodeErrorCode,
+        code: BuilderforceNodeErrorCode,
         message: String) -> BridgeInvokeResponse
     {
         BridgeInvokeResponse(
             id: req.id,
             ok: false,
-            error: CoderClawNodeError(code: code, message: message))
+            error: BuilderforceNodeError(code: code, message: message))
     }
 
     private static func encodeCanvasSnapshot(
         image: NSImage,
-        format: CoderClawCanvasSnapshotFormat,
+        format: BuilderforceCanvasSnapshotFormat,
         maxWidth: Int?,
         quality: Double) throws -> Data
     {

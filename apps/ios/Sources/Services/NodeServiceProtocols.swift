@@ -1,12 +1,12 @@
 import CoreLocation
 import Foundation
-import CoderClawKit
+import BuilderforceKit
 import UIKit
 
 protocol CameraServicing: Sendable {
     func listDevices() async -> [CameraController.CameraDeviceInfo]
-    func snap(params: CoderClawCameraSnapParams) async throws -> (format: String, base64: String, width: Int, height: Int)
-    func clip(params: CoderClawCameraClipParams) async throws -> (format: String, base64: String, durationMs: Int, hasAudio: Bool)
+    func snap(params: BuilderforceCameraSnapParams) async throws -> (format: String, base64: String, width: Int, height: Int)
+    func clip(params: BuilderforceCameraClipParams) async throws -> (format: String, base64: String, durationMs: Int, hasAudio: Bool)
 }
 
 protocol ScreenRecordingServicing: Sendable {
@@ -22,14 +22,14 @@ protocol ScreenRecordingServicing: Sendable {
 protocol LocationServicing: Sendable {
     func authorizationStatus() -> CLAuthorizationStatus
     func accuracyAuthorization() -> CLAccuracyAuthorization
-    func ensureAuthorization(mode: CoderClawLocationMode) async -> CLAuthorizationStatus
+    func ensureAuthorization(mode: BuilderforceLocationMode) async -> CLAuthorizationStatus
     func currentLocation(
-        params: CoderClawLocationGetParams,
-        desiredAccuracy: CoderClawLocationAccuracy,
+        params: BuilderforceLocationGetParams,
+        desiredAccuracy: BuilderforceLocationAccuracy,
         maxAgeMs: Int?,
         timeoutMs: Int?) async throws -> CLLocation
     func startLocationUpdates(
-        desiredAccuracy: CoderClawLocationAccuracy,
+        desiredAccuracy: BuilderforceLocationAccuracy,
         significantChangesOnly: Bool) -> AsyncStream<CLLocation>
     func stopLocationUpdates()
     func startMonitoringSignificantLocationChanges(onUpdate: @escaping @Sendable (CLLocation) -> Void)
@@ -37,32 +37,32 @@ protocol LocationServicing: Sendable {
 }
 
 protocol DeviceStatusServicing: Sendable {
-    func status() async throws -> CoderClawDeviceStatusPayload
-    func info() -> CoderClawDeviceInfoPayload
+    func status() async throws -> BuilderforceDeviceStatusPayload
+    func info() -> BuilderforceDeviceInfoPayload
 }
 
 protocol PhotosServicing: Sendable {
-    func latest(params: CoderClawPhotosLatestParams) async throws -> CoderClawPhotosLatestPayload
+    func latest(params: BuilderforcePhotosLatestParams) async throws -> BuilderforcePhotosLatestPayload
 }
 
 protocol ContactsServicing: Sendable {
-    func search(params: CoderClawContactsSearchParams) async throws -> CoderClawContactsSearchPayload
-    func add(params: CoderClawContactsAddParams) async throws -> CoderClawContactsAddPayload
+    func search(params: BuilderforceContactsSearchParams) async throws -> BuilderforceContactsSearchPayload
+    func add(params: BuilderforceContactsAddParams) async throws -> BuilderforceContactsAddPayload
 }
 
 protocol CalendarServicing: Sendable {
-    func events(params: CoderClawCalendarEventsParams) async throws -> CoderClawCalendarEventsPayload
-    func add(params: CoderClawCalendarAddParams) async throws -> CoderClawCalendarAddPayload
+    func events(params: BuilderforceCalendarEventsParams) async throws -> BuilderforceCalendarEventsPayload
+    func add(params: BuilderforceCalendarAddParams) async throws -> BuilderforceCalendarAddPayload
 }
 
 protocol RemindersServicing: Sendable {
-    func list(params: CoderClawRemindersListParams) async throws -> CoderClawRemindersListPayload
-    func add(params: CoderClawRemindersAddParams) async throws -> CoderClawRemindersAddPayload
+    func list(params: BuilderforceRemindersListParams) async throws -> BuilderforceRemindersListPayload
+    func add(params: BuilderforceRemindersAddParams) async throws -> BuilderforceRemindersAddPayload
 }
 
 protocol MotionServicing: Sendable {
-    func activities(params: CoderClawMotionActivityParams) async throws -> CoderClawMotionActivityPayload
-    func pedometer(params: CoderClawPedometerParams) async throws -> CoderClawPedometerPayload
+    func activities(params: BuilderforceMotionActivityParams) async throws -> BuilderforceMotionActivityPayload
+    func pedometer(params: BuilderforcePedometerParams) async throws -> BuilderforcePedometerPayload
 }
 
 struct WatchMessagingStatus: Sendable, Equatable {
@@ -85,7 +85,7 @@ protocol WatchMessagingServicing: AnyObject, Sendable {
         id: String,
         title: String,
         body: String,
-        priority: CoderClawNotificationPriority?) async throws -> WatchNotificationSendResult
+        priority: BuilderforceNotificationPriority?) async throws -> WatchNotificationSendResult
 }
 
 extension CameraController: CameraServicing {}

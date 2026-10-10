@@ -1,20 +1,20 @@
 import Foundation
 import Testing
-@testable import CoderClaw
+@testable import Builderforce
 
 @Suite
-struct CoderClawOAuthStoreTests {
+struct BuilderforceOAuthStoreTests {
     @Test
     func returnsMissingWhenFileAbsent() {
         let url = FileManager().temporaryDirectory
-            .appendingPathComponent("coderclaw-oauth-\(UUID().uuidString)")
+            .appendingPathComponent("builderforce-oauth-\(UUID().uuidString)")
             .appendingPathComponent("oauth.json")
-        #expect(CoderClawOAuthStore.anthropicOAuthStatus(at: url) == .missingFile)
+        #expect(BuilderforceOAuthStore.anthropicOAuthStatus(at: url) == .missingFile)
     }
 
     @Test
-    func usesEnvOverrideForCoderClawOAuthDir() throws {
-        let key = "CODERCLAW_OAUTH_DIR"
+    func usesEnvOverrideForBuilderforceOAuthDir() throws {
+        let key = "BUILDERFORCE_AGENTS_OAUTH_DIR"
         let previous = ProcessInfo.processInfo.environment[key]
         defer {
             if let previous {
@@ -25,10 +25,10 @@ struct CoderClawOAuthStoreTests {
         }
 
         let dir = FileManager().temporaryDirectory
-            .appendingPathComponent("coderclaw-oauth-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("builderforce-oauth-\(UUID().uuidString)", isDirectory: true)
         setenv(key, dir.path, 1)
 
-        #expect(CoderClawOAuthStore.oauthDir().standardizedFileURL == dir.standardizedFileURL)
+        #expect(BuilderforceOAuthStore.oauthDir().standardizedFileURL == dir.standardizedFileURL)
     }
 
     @Test
@@ -42,7 +42,7 @@ struct CoderClawOAuthStoreTests {
             ],
         ])
 
-        #expect(CoderClawOAuthStore.anthropicOAuthStatus(at: url).isConnected)
+        #expect(BuilderforceOAuthStore.anthropicOAuthStatus(at: url).isConnected)
     }
 
     @Test
@@ -55,7 +55,7 @@ struct CoderClawOAuthStoreTests {
             ],
         ])
 
-        #expect(CoderClawOAuthStore.anthropicOAuthStatus(at: url).isConnected)
+        #expect(BuilderforceOAuthStore.anthropicOAuthStatus(at: url).isConnected)
     }
 
     @Test
@@ -68,7 +68,7 @@ struct CoderClawOAuthStoreTests {
             ],
         ])
 
-        #expect(CoderClawOAuthStore.anthropicOAuthStatus(at: url) == .missingProviderEntry)
+        #expect(BuilderforceOAuthStore.anthropicOAuthStatus(at: url) == .missingProviderEntry)
     }
 
     @Test
@@ -81,12 +81,12 @@ struct CoderClawOAuthStoreTests {
             ],
         ])
 
-        #expect(CoderClawOAuthStore.anthropicOAuthStatus(at: url) == .missingTokens)
+        #expect(BuilderforceOAuthStore.anthropicOAuthStatus(at: url) == .missingTokens)
     }
 
     private func writeOAuthFile(_ json: [String: Any]) throws -> URL {
         let dir = FileManager().temporaryDirectory
-            .appendingPathComponent("coderclaw-oauth-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("builderforce-oauth-\(UUID().uuidString)", isDirectory: true)
         try FileManager().createDirectory(at: dir, withIntermediateDirectories: true)
 
         let url = dir.appendingPathComponent("oauth.json")

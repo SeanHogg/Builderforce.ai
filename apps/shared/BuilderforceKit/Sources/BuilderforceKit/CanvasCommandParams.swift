@@ -1,6 +1,6 @@
 import Foundation
 
-public struct CoderClawCanvasNavigateParams: Codable, Sendable, Equatable {
+public struct BuilderforceCanvasNavigateParams: Codable, Sendable, Equatable {
     public var url: String
 
     public init(url: String) {
@@ -8,7 +8,7 @@ public struct CoderClawCanvasNavigateParams: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawCanvasPlacement: Codable, Sendable, Equatable {
+public struct BuilderforceCanvasPlacement: Codable, Sendable, Equatable {
     public var x: Double?
     public var y: Double?
     public var width: Double?
@@ -22,17 +22,17 @@ public struct CoderClawCanvasPlacement: Codable, Sendable, Equatable {
     }
 }
 
-public struct CoderClawCanvasPresentParams: Codable, Sendable, Equatable {
+public struct BuilderforceCanvasPresentParams: Codable, Sendable, Equatable {
     public var url: String?
-    public var placement: CoderClawCanvasPlacement?
+    public var placement: BuilderforceCanvasPlacement?
 
-    public init(url: String? = nil, placement: CoderClawCanvasPlacement? = nil) {
+    public init(url: String? = nil, placement: BuilderforceCanvasPlacement? = nil) {
         self.url = url
         self.placement = placement
     }
 }
 
-public struct CoderClawCanvasEvalParams: Codable, Sendable, Equatable {
+public struct BuilderforceCanvasEvalParams: Codable, Sendable, Equatable {
     public var javaScript: String
 
     public init(javaScript: String) {
@@ -40,7 +40,7 @@ public struct CoderClawCanvasEvalParams: Codable, Sendable, Equatable {
     }
 }
 
-public enum CoderClawCanvasSnapshotFormat: String, Codable, Sendable {
+public enum BuilderforceCanvasSnapshotFormat: String, Codable, Sendable {
     case png
     case jpeg
 
@@ -63,12 +63,12 @@ public enum CoderClawCanvasSnapshotFormat: String, Codable, Sendable {
     }
 }
 
-public struct CoderClawCanvasSnapshotParams: Codable, Sendable, Equatable {
+public struct BuilderforceCanvasSnapshotParams: Codable, Sendable, Equatable {
     public var maxWidth: Int?
     public var quality: Double?
-    public var format: CoderClawCanvasSnapshotFormat?
+    public var format: BuilderforceCanvasSnapshotFormat?
 
-    public init(maxWidth: Int? = nil, quality: Double? = nil, format: CoderClawCanvasSnapshotFormat? = nil) {
+    public init(maxWidth: Int? = nil, quality: Double? = nil, format: BuilderforceCanvasSnapshotFormat? = nil) {
         self.maxWidth = maxWidth
         self.quality = quality
         self.format = format
