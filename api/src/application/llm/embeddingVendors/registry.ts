@@ -12,6 +12,7 @@ import { reportCaughtError } from '../../observability/caughtErrorReporter';
 
 import { openRouterEmbeddingModule } from './openrouter';
 import { voyageEmbeddingModule } from './voyage';
+import { cloudflareEmbeddingModule } from './cloudflare';
 import {
   VendorRetryableError,
   type EmbeddingGenParams,
@@ -24,10 +25,13 @@ import {
 
 /**
  * Vendor priority — OpenRouter primary (broadest model coverage incl. the free
- * Nemotron default), Voyage failover. This is the order the dispatcher walks
- * the cascade when no caller-pinned, vendor-prefixed model forces a vendor.
+ * Nemotron default), Voyage failover, Cloudflare Workers AI (BGE, the account's own
+ * quota) last. This is the order the dispatcher walks the cascade when no
+ * caller-pinned, vendor-prefixed model forces a vendor. An unpinned cascade can answer
+ * with a different vector width per vendor — the response names the model; a caller
+ * that STORES vectors pins one (`openrouter/…`, `cloudflare/…`).
  */
-const MODULES: ReadonlyArray<EmbeddingVendorModule> = [openRouterEmbeddingModule, voyageEmbeddingModule];
+const MODULES: ReadonlyArray<EmbeddingVendorModule> = [openRouterEmbeddingModule, voyageEmbeddingModule, cloudflareEmbeddingModule];
 
 /** First vendor in priority order — the cascade's primary and the fallback
  *  primary when a bare/unknown model id can't be attributed to a vendor. */
@@ -36,6 +40,7 @@ const PRIMARY_VENDOR: EmbeddingVendorId = openRouterEmbeddingModule.id;
 const MODULES_BY_ID: Record<EmbeddingVendorId, EmbeddingVendorModule> = {
   openrouter: openRouterEmbeddingModule,
   voyage:     voyageEmbeddingModule,
+  cloudflare: cloudflareEmbeddingModule,
 };
 
 const INDEX: Map<string, { vendor: EmbeddingVendorId; entry: EmbeddingVendorModelEntry }> = new Map();
@@ -48,6 +53,7 @@ for (const mod of MODULES) {
 const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: EmbeddingVendorId }> = [
   { prefix: 'openrouter/', vendor: 'openrouter' },
   { prefix: 'voyage/',     vendor: 'voyage' },
+  { prefix: 'cloudflare/', vendor: 'cloudflare' },
 ];
 
 /**

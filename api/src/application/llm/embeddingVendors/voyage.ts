@@ -31,9 +31,9 @@ const ENDPOINT = 'https://api.voyageai.com/v1/embeddings';
 export const DEFAULT_VOYAGE_EMBEDDING_MODEL = 'voyage-3-lite';
 
 const CATALOG: ReadonlyArray<EmbeddingVendorModelEntry> = [
-  { id: 'voyage-3-lite', label: 'Voyage 3 Lite',  brand: 'Voyage AI' },
-  { id: 'voyage-3',      label: 'Voyage 3',       brand: 'Voyage AI' },
-  { id: 'voyage-code-3', label: 'Voyage Code 3',  brand: 'Voyage AI' },
+  { id: 'voyage-3-lite', label: 'Voyage 3 Lite',  brand: 'Voyage AI', dimensions: 512 },
+  { id: 'voyage-3',      label: 'Voyage 3',       brand: 'Voyage AI', dimensions: 1024 },
+  { id: 'voyage-code-3', label: 'Voyage Code 3',  brand: 'Voyage AI', dimensions: 1024 },
 ];
 
 function buildBody(params: EmbeddingGenParams): Record<string, unknown> {

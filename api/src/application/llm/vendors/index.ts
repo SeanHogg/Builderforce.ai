@@ -19,3 +19,5 @@ export {
   OPENAI_COMPATIBLE_VENDOR_KEYS,
   passthroughVendorKeys,
 } from './openaiCompatibleVendors';
+export { ModelInputUnsupportedError, requestCarriesImages } from './capabilityGate';
+export { MAX_DECLARED_ATTEMPT_TIMEOUT_MS, declaredAttemptTimeoutMs, resolveAttemptTimeoutMs } from './attemptTimeout';

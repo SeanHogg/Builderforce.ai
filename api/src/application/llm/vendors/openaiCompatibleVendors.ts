@@ -20,7 +20,7 @@
  */
 
 import { createOpenAICompatibleVendor, type VendorApiKeyEnv } from './openaiCompatible';
-import type { AiModelTier, VendorEnv, VendorModule } from './types';
+import type { AiCapability, AiModelTier, VendorEnv, VendorModule } from './types';
 
 /**
  * Declarative spec for one OpenAI-compatible vendor. Kept as data so the list is
@@ -41,6 +41,11 @@ interface VendorSpec {
   altBaseUrl?: string;
   /** Default catalog model ids (real, current). */
   models: string[];
+  /** Declared shape capabilities per catalog id (see `VendorModelEntry.capabilities`).
+   *  Declaring a model's set is also a statement of what it does NOT do: an entry that
+   *  declares capabilities without `vision` is refused image input by the dispatcher
+   *  (`capabilityGate.ts`). Leave a model out when its capabilities are not verified. */
+  modelCapabilities?: Readonly<Record<string, readonly AiCapability[]>>;
   /** The vendor's flagship catalog ids (BARE — the `direct/<vendor>/` route prefix is
    *  added when the module is built). One declaration feeds every flagship list. */
   flagships?: { agentic: string; chat: string };
@@ -268,6 +273,11 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     id: 'minimax', brand: 'MiniMax', apiKeyEnv: 'MINIMAX_API_KEY',
     baseUrl: 'https://api.minimax.io/v1/chat/completions',
     models: ['MiniMax-M1', 'MiniMax-Text-01'],
+    // Both are TEXT-only (MiniMax's vision model is the separate `MiniMax-VL-01`):
+    // image parts sent to M1 answer `invalid params, MiniMax-M1 not support img (2013)`
+    // — 31 refusals in 2026-10-03..10. Declaring the set lets the dispatcher skip them
+    // for image-bearing requests instead of spending the attempt.
+    modelCapabilities: { 'MiniMax-M1': ['tools'], 'MiniMax-Text-01': ['tools'] },
     flagships: { agentic: 'MiniMax-M1', chat: 'MiniMax-Text-01' },
   },
   {
@@ -309,7 +319,8 @@ export const openAICompatibleModules: ReadonlyArray<VendorModule> = SPECS.map((s
     apiKeyEnv: spec.apiKeyEnv,
     catalog: spec.models.map((entry) => {
       const { id, tier } = parseModelShorthand(entry);
-      return { id, label: `${id} (${spec.brand})`, brand: spec.brand, tier };
+      const capabilities = spec.modelCapabilities?.[id];
+      return { id, label: `${id} (${spec.brand})`, brand: spec.brand, tier, ...(capabilities ? { capabilities: [...capabilities] } : {}) };
     }),
     ...(spec.maxTokensField ? { maxTokensField: spec.maxTokensField } : {}),
     ...(spec.headers ? { headers: spec.headers } : {}),

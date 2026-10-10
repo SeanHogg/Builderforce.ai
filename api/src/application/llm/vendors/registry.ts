@@ -25,6 +25,8 @@ import { openAICompatibleModules, openAICompatibleModulesById } from './openaiCo
 import { registerSchemaDialectResolver } from '../jsonSchemaSanitize';
 import { registerStrictShapeResolver } from '../messageShapeSanitizer';
 import { reasoningParamsForModel } from '../reasoningCapability';
+import { declaredAttemptTimeoutMs, resolveAttemptTimeoutMs } from './attemptTimeout';
+import { ModelInputUnsupportedError, entryRefusesImages, requestCarriesImages } from './capabilityGate';
 import {
   VendorRetryableError,
   VendorFatalError,
@@ -110,19 +112,27 @@ const MODULES_BY_ID: Record<VendorId, VendorModule> = {
  *  one piece of catalog metadata answers both questions. */
 registerStrictShapeResolver((model: string): boolean => strictSchemaSupport(model) !== 'full');
 
-registerSchemaDialectResolver((vendorId: string): readonly string[] => {
+registerSchemaDialectResolver((vendorId: string) => {
   const mod = (MODULES_BY_ID as Record<string, VendorModule | undefined>)[vendorId];
-  return mod?.schemaDialect?.stripKeywords ?? [];
+  return mod?.schemaDialect;
 });
 
 /** Used when a model id isn't in any vendor's catalog (treats as OpenRouter). */
 const DEFAULT_VENDOR: VendorId = 'openrouter';
 
 const INDEX: Map<string, { vendor: VendorId; entry: VendorModelEntry }> = new Map();
+/** Per-vendor catalog lookup by the vendor's OWN (un-prefixed) id. Distinct from
+ *  {@link INDEX}, which is keyed globally and lets two vendors that list the same id
+ *  shadow each other — a per-candidate capability check must read the entry of the
+ *  vendor it is actually about to call. */
+const CATALOG_BY_VENDOR: Map<VendorId, Map<string, VendorModelEntry>> = new Map();
 for (const mod of MODULES) {
+  const own = new Map<string, VendorModelEntry>();
   for (const entry of mod.catalog) {
     INDEX.set(entry.id, { vendor: mod.id, entry });
+    own.set(entry.id, entry);
   }
+  CATALOG_BY_VENDOR.set(mod.id, own);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,6 +437,7 @@ export class CascadeExhaustedError extends Error {
   public readonly skippedNoStream: ReadonlyArray<string>;
   public readonly skippedCooled: ReadonlyArray<string>;
   public readonly skippedNoEgress: ReadonlyArray<string>;
+  public readonly skippedNoVision: ReadonlyArray<string>;
   constructor(
     kind: 'json' | 'stream',
     attempts: ReadonlyArray<DispatchAttempt>,
@@ -439,20 +450,25 @@ export class CascadeExhaustedError extends Error {
      *  runtime online. Named separately because the remedy is "connect a runtime", not
      *  "reconnect the account" — the credential was never even presented. */
     skippedNoEgress: ReadonlyArray<string> = [],
+    /** Candidates the catalog declares text-only, skipped because the request carries
+     *  image input (see `capabilityGate.ts`). */
+    skippedNoVision: ReadonlyArray<string> = [],
   ) {
     const summary = attempts.map((a) => `${a.vendor}/${a.model}=${a.status}`).join(', ');
     const noKey = skippedNoKey.length    > 0 ? ` (skipped no-key: ${skippedNoKey.join(', ')})` : '';
     const noStr = skippedNoStream.length > 0 ? ` (skipped no-stream: ${skippedNoStream.join(', ')})` : '';
     const cooled = skippedCooled.length  > 0 ? ` (skipped cooled: ${skippedCooled.join(', ')})` : '';
     const noEgr = skippedNoEgress.length > 0 ? ` (skipped no-local-egress: ${skippedNoEgress.join(', ')})` : '';
+    const noVis = skippedNoVision.length > 0 ? ` (skipped no-vision: ${skippedNoVision.join(', ')})` : '';
     const head  = kind === 'stream' ? 'AI streaming vendor cascade exhausted' : 'AI vendor cascade exhausted';
-    super(`${head} (${attempts.length} attempts: ${summary})${noKey}${noStr}${cooled}${noEgr}`);
+    super(`${head} (${attempts.length} attempts: ${summary})${noKey}${noStr}${cooled}${noEgr}${noVis}`);
     this.name = 'CascadeExhaustedError';
     this.attempts = attempts;
     this.skippedNoKey = skippedNoKey;
     this.skippedNoStream = skippedNoStream;
     this.skippedCooled = skippedCooled;
     this.skippedNoEgress = skippedNoEgress;
+    this.skippedNoVision = skippedNoVision;
   }
 }
 
@@ -546,6 +562,9 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
 
   const skippedCooled: string[] = [];
   const skippedNoEgress: string[] = [];
+  const skippedNoVision: string[] = [];
+  // Loop-invariant: does this request carry image input? Decides the vision gate below.
+  const needsVision = requestCarriesImages(rest.messages);
 
   // A tenant's own runtime is an egress of LAST resort, not a general route: only a
   // vendor whose upstream the Worker cannot reach — Kimi Code's edge 403, or the
@@ -559,6 +578,13 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
     const mod = MODULES_BY_ID[vendorId];
     if (!cfg.supports(mod)) {
       skippedNoStream.push(`${vendorId}:${model}`);
+      continue;
+    }
+    // Image input onto a model the catalog declares text-only is a guaranteed 400
+    // (`MiniMax-M1 not support img`). Skip it before it costs an attempt; an
+    // uncatalogued model is unknown, not text-only, and is still tried.
+    if (needsVision && entryRefusesImages(CATALOG_BY_VENDOR.get(vendorId)?.get(vendorModel))) {
+      skippedNoVision.push(`${vendorId}:${model}`);
       continue;
     }
     // Re-check cooldown from the second candidate onward — see `isCooled`. A store
@@ -603,6 +629,10 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
     // someone's laptop. The `!egress` half is already settled by the skip above.
     const egressForVendor = mod.requiresLocalEgress ? { egress } : {};
 
+    // This candidate's deadline: the dispatch's budget, raised to the model's declared
+    // floor (a frontier/large model must not inherit the free plan's 15s fast-fail).
+    const attemptTimeoutMs = resolveAttemptTimeoutMs(rest.timeoutMs, declaredAttemptTimeoutMs(mod, vendorModel));
+
     const startedAt = Date.now();
     try {
       const result = await cfg.invoke(mod, {
@@ -610,6 +640,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
         ...egressForVendor,
         apiKey,
         model: vendorModel,
+        ...(attemptTimeoutMs ? { timeoutMs: attemptTimeoutMs } : {}),
         ...(reasoningParams ? { extraBody: { ...rest.extraBody, ...reasoningParams } } : {}),
       });
       cfg.validate?.(result, vendorId, vendorModel);
@@ -665,7 +696,14 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
     }
   }
 
-  throw new CascadeExhaustedError(cfg.kind, attempts, skippedNoKey, skippedNoStream, skippedCooled, skippedNoEgress);
+  // EVERY candidate was refused for the input it cannot read: that is a request the
+  // caller must change (pin a vision model / drop the image), not an exhausted cascade —
+  // a strict pin otherwise surfaced as a 429 that invites a doomed retry.
+  if (attempts.length === 0 && skippedNoVision.length === modelChain.length) {
+    const first = resolveVendorAndModel(modelChain[0]!);
+    throw new ModelInputUnsupportedError(first.vendorId, [...new Set(modelChain)]);
+  }
+  throw new CascadeExhaustedError(cfg.kind, attempts, skippedNoKey, skippedNoStream, skippedCooled, skippedNoEgress, skippedNoVision);
 }
 
 /** Walk a model chain non-streaming. Throws if every model in the chain fails. */

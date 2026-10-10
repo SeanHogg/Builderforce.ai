@@ -25,6 +25,7 @@ import {
   type ReconciliationPrInput,
   type ReconciliationDecision,
 } from './prReconciliationClassifier';
+import { githubCooldownFor, githubRetryAfterSeconds } from './githubCredentialCooldown';
 
 type FetchLike = typeof fetch;
 
@@ -81,7 +82,7 @@ query ReconcilePullRequests($owner: String!, $repo: String!, $cursor: String) {
   }
 }`;
 
-class ReconciliationError extends Error {
+export class ReconciliationError extends Error {
   constructor(readonly code: string, message: string, readonly details: Record<string, unknown> = {}) {
     super(message);
   }
@@ -119,6 +120,8 @@ export async function fetchOpenPullRequests(
     if (!response.ok) {
       throw new ReconciliationError('GITHUB_HTTP_ERROR', `GitHub GraphQL returned HTTP ${response.status}`, {
         status: response.status,
+        // GitHub's own "come back at" — the sweep's credential cooldown honours it.
+        retryAfterSeconds: githubRetryAfterSeconds(response.headers),
         response: (await response.text().catch(() => '')).slice(0, 2_000),
       });
     }
@@ -165,11 +168,16 @@ interface ErrorContext {
   details?: Record<string, unknown>;
 }
 
-async function recordError(db: Db, context: ErrorContext, error: unknown): Promise<void> {
+async function recordError(
+  db: Db,
+  context: ErrorContext,
+  error: unknown,
+  opts: { report?: boolean } = {},
+): Promise<void> {
   const normalized = error instanceof Error ? error : new Error(String(error));
   const code = error instanceof ReconciliationError ? error.code : (context.code ?? 'UNEXPECTED_ERROR');
   const details = { ...context.details, ...(error instanceof ReconciliationError ? error.details : {}) };
-  reportCaughtError(error, {
+  if (opts.report !== false) reportCaughtError(error, {
     source: 'application/reconciliation/prReconciliationService.ts',
     operation: `prReconciliation.${context.phase}`,
     context: { runId: context.runId, repoId: context.repoId, prNumber: context.prNumber, code, details },
@@ -381,7 +389,12 @@ export async function runPrTicketReconciliation(
       githubPrs = await fetchOpenPullRequests(resolved.token, repo.owner, repo.repo, repo.host, fetchFn);
     } catch (error) {
       errorCount++;
-      await recordError(db, { runId, tenantId: args.tenantId, repoId: repo.id, phase: 'collection' }, error);
+      // A refused/throttled credential is persisted on the run but NOT reported:
+      // the sweep starts a credential cooldown and reports that once instead of
+      // filing the same 403 every tick (githubCredentialCooldown).
+      await recordError(db, { runId, tenantId: args.tenantId, repoId: repo.id, phase: 'collection' }, error, {
+        report: githubCooldownFor(error) == null,
+      });
       throw error;
     }
 

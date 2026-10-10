@@ -23,11 +23,11 @@ const ENDPOINT = 'https://api.together.xyz/v1/images/generations';
 
 /**
  * Free Together image models. `FLUX.1-schnell-Free` is Together's free-tier
- * hosted Flux Schnell. DreamShaper is a competent free SD-style fallback.
+ * hosted Flux Schnell. `Lykon/DreamShaper` was removed 2026-10-10: Together answers
+ * 404 for it (DreamShaper is still served by Cloudflare and Pollinations).
  */
 const CATALOG: ReadonlyArray<ImageVendorModelEntry> = [
   { id: 'black-forest-labs/FLUX.1-schnell-Free', tier: 'FREE', label: 'Flux Schnell (Together · Free)', brand: 'Black Forest Labs' },
-  { id: 'Lykon/DreamShaper',                     tier: 'FREE', label: 'DreamShaper (Together · Free)',  brand: 'Lykon' },
 ];
 
 const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));

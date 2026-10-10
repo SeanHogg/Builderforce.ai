@@ -77,6 +77,7 @@ import { assignTicketOwner } from './assignOwner';
 import { classifySignoffOwnership, resolveRequiredSignoffGate } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
 import { decideTicketReadiness, type CompletionShape, type TicketPrState } from './evaluateTicketReadiness';
+import { describeReturnBlock, returnToImplementation } from './returnToImplementation';
 import { normalizeBuildStatus, pickCurrentPr } from '../../domain/task/buildStatus';
 import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
 import {
@@ -1945,9 +1946,24 @@ async function coordinatePullRequests(
         // not reviewable, it is unfinished. Send it BACK to implementation and start its
         // agent — the behaviour whose absence let implementable work rot in review.
         if (readiness.action === 'return_to_implementation' || readiness.action === 'return_build_failed') {
-          await db.update(tasks)
-            .set({ status: TaskStatus.IN_PROGRESS, completedAt: null, updatedAt: new Date() })
-            .where(scopedToTenant(tasks, tenantId, eq(tasks.id, t.id), eq(tasks.status, TaskStatus.IN_REVIEW)));
+          // ONE return primitive: it holds a ticket whose repository is unavailable (no run
+          // could land the deliverable — re-dispatching would loop) and otherwise records
+          // the reopen of the implementation producer, which is what makes the rework run
+          // below dispatchable now that a completed producer slot stays closed.
+          const returned = await returnToImplementation(env, db, {
+            tenantId, taskId: t.id, fromStatus: TaskStatus.IN_REVIEW,
+            expectsCode: readiness.expectsCode,
+            reason: readiness.detail,
+            actor: { kind: 'agent', ref: policy.managerRef ?? null, name: 'AI Manager' },
+          });
+          if (!returned.returned) {
+            await recordManagerAction(db, {
+              tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
+              summary: `Held "${t.title}" in review — ${describeReturnBlock(returned.blockedReason)}`,
+              detail: { action: readiness.action, expectsCode: readiness.expectsCode, held: true, blockedReason: returned.blockedReason },
+            });
+            continue;
+          }
           // The RETURN is a state change and always happens; the restart is billable, so
           // it reserves first. A ticket returned but not restarted is picked up by the
           // executor's next tick — strictly better than silently outspending the ceiling.
@@ -1962,7 +1978,7 @@ async function coordinatePullRequests(
           await recordManagerAction(db, {
             tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
             summary: `Returned "${t.title}" to implementation — ${readiness.detail}`,
-            detail: { action: readiness.action, expectsCode: readiness.expectsCode, restarted },
+            detail: { action: readiness.action, expectsCode: readiness.expectsCode, restarted, reopenedRoles: returned.reopenedRoles },
           });
           continue;
         }

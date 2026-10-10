@@ -57,7 +57,10 @@ export interface ImageVendorProbeResult {
   models: ModelProbeResult[];
 }
 
-const PROBE_PROMPT = 'ping';
+// Must DESCRIBE an image. Gemini's image models answer a non-visual prompt such as
+// 'ping' with `finishReason=NO_IMAGE`, so the probe marked Gemini `down` in every
+// sweep (2026-10-04..10) for a reason no real request would hit.
+const PROBE_PROMPT = 'a red apple on a white table';
 
 /** Probe every model in one image vendor's catalog in parallel. Timing +
  *  exception classification + the status ladder are owned by the shared

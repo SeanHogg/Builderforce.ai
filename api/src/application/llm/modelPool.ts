@@ -621,6 +621,10 @@ export const PREMIUM_VENDOR_CALL_TIMEOUT_MS = 60_000;
  * backstop within the caller's deadline instead of spending 2×25s up front.
  * Paid/premium routing keeps the longer budget — those calls are worth waiting
  * for. The backstop itself overrides this with `PREMIUM_VENDOR_CALL_TIMEOUT_MS`.
+ *
+ * This is the DISPATCH budget, not every model's: a vendor that declares
+ * `attemptTimeoutMs` (frontier Claude/Gemini, the large NIM Nemotrons) raises it for
+ * its own attempts — see `vendors/attemptTimeout.ts`.
  */
 export const FREE_VENDOR_CALL_TIMEOUT_MS = 15_000;
 

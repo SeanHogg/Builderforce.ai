@@ -94,7 +94,7 @@ describe('dispatchVendor stops the cascade on caller cancellation', () => {
     await expect(
       dispatchVendor({
         env: { OPENROUTER_API_KEY: 'sk-test', CEREBRAS_API_KEY: 'sk-test' },
-        modelChain: ['qwen/qwen3-coder:free', 'qwen/qwen3-next-80b-a3b-instruct:free', 'llama3.1-8b'],
+        modelChain: ['qwen/qwen3-coder:free', 'qwen/qwen3-next-80b-a3b-instruct:free', 'gpt-oss-120b'],
         messages: [{ role: 'user', content: 'hi' }],
         signal: ac.signal,
       }),
@@ -119,7 +119,7 @@ describe('dispatchVendor short-circuits on subrequest exhaustion', () => {
         modelChain: [
           'qwen/qwen3-coder:free',                  // openrouter
           'qwen/qwen3-next-80b-a3b-instruct:free',  // openrouter
-          'llama3.1-8b',                            // cerebras
+          'gpt-oss-120b',                            // cerebras
         ],
         messages: [{ role: 'user', content: 'hi' }],
       }),
@@ -150,7 +150,7 @@ describe('dispatchVendor short-circuits on subrequest exhaustion', () => {
       modelChain: [
         'qwen/qwen3-coder:free',
         'qwen/qwen3-next-80b-a3b-instruct:free',
-        'llama3.1-8b',
+        'gpt-oss-120b',
       ],
       messages: [{ role: 'user', content: 'hi' }],
     });
@@ -183,7 +183,7 @@ describe('dispatchVendor advances the cascade on a request-error (400) [1488]', 
 
     const result = await dispatchVendor({
       env: { OPENROUTER_API_KEY: 'sk-test', CEREBRAS_API_KEY: 'sk-test' },
-      modelChain: ['qwen/qwen3-coder:free' /* openrouter → 400 */, 'llama3.1-8b' /* cerebras → 200 */],
+      modelChain: ['qwen/qwen3-coder:free' /* openrouter → 400 */, 'gpt-oss-120b' /* cerebras → 200 */],
       messages: [{ role: 'user', content: 'hi' }],
     });
 

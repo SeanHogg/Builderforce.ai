@@ -9458,7 +9458,7 @@ export const creationSessionsApi = {
   attributedOutcomes: (id: string): Promise<AttributedOutcomes> => request(`/api/creation-sessions/${encodeURIComponent(id)}/attributed-outcomes`),
   proofJourney: (id: string): Promise<ProofJourney> => request(`/api/creation-sessions/${encodeURIComponent(id)}/proof-journey`),
   recordOutcome: (id: string, body: { correlationId: string; action: string; phase: 'started' | 'succeeded' | 'failed' | 'validated' | 'reused'; actorType?: 'user' | 'agent' | 'brain' | 'system'; actorRef?: string; projectId?: number; metricKey?: string; metricValue?: number; unit?: string; artifactId?: string; durationMs?: number; costUsdMillicents?: number; metadata?: unknown }) =>
-    request<{ recorded: boolean; duplicate: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/outcomes`, { method: 'POST', body: JSON.stringify(body) }),
+    request<{ recorded: boolean; duplicate: boolean; projectAttributed?: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/outcomes`, { method: 'POST', body: JSON.stringify(body) }),
   update: (id: string, body: { title?: string; description?: string | null; folderId?: string | null; status?: 'active' | 'archived'; preview?: unknown; mode?: string }) =>
     request<CreationSessionSummary>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (id: string) => request<{ session: { id: string; status: 'deleted' }; recoverable: true }>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),

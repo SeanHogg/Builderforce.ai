@@ -38,7 +38,7 @@ export {
   fetchWithVendorTimeout,
 };
 
-export type EmbeddingVendorId = 'openrouter' | 'voyage';
+export type EmbeddingVendorId = 'openrouter' | 'voyage' | 'cloudflare';
 
 export interface EmbeddingVendorEnv {
   /** Resolved per-plan OpenRouter key — the proxy picks Free vs Pro before
@@ -46,6 +46,10 @@ export interface EmbeddingVendorEnv {
   OPENROUTER_API_KEY?: string | null;
   /** Voyage AI key — embeddings failover. Optional; vendor is skipped when unset. */
   VOYAGE_API_KEY?: string | null;
+  /** Cloudflare Workers AI token + account id — the BGE embedders on the account's own
+   *  Workers AI quota. Both required; either missing → vendor skipped. */
+  CLOUDFLARE_AI_API_TOKEN?: string | null;
+  CLOUDFLARE_ACCOUNT_ID?: string | null;
 }
 
 export interface EmbeddingGenParams {
@@ -79,6 +83,9 @@ export interface EmbeddingVendorModelEntry {
   id: string;
   label: string;
   brand: string;
+  /** Output vector width. Vectors of different widths (or from different models) are
+   *  never comparable — a store that persists vectors must pin ONE model. */
+  dimensions?: number;
 }
 
 export interface EmbeddingVendorModule {

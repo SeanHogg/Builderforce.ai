@@ -209,9 +209,8 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
     }
 
     // Backing storage project — reuses the proven project create + template seed.
-    const storage = await projectService.createProject({
+    const storage = await projectService.createProjectWithGeneratedKey({
       tenantId,
-      key: await projectService.buildUniqueKey(tenantId, name),
       name,
       template: body.template ?? null,
       modality,

@@ -16,9 +16,16 @@
 # prerendered routes under next-on-pages. Dynamically-rendered Canvas routes are
 # SSR, so _headers does not apply to them — their COOP/COEP are set
 # in src/middleware.ts (withCoi). Keep all three in sync.
+#
+# HSTS is here as well as in src/middleware.ts because prerendered pages are
+# answered by the assets layer without running the Worker (`run_worker_first`
+# covers only `/`), so the middleware cannot redirect their first plain-HTTP visit.
+# A page served over HTTP is not a secure context and has no crypto.randomUUID —
+# see src/lib/secureTransport.ts. No `preload`: that is a separate, one-way submission.
 /*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: credentialless
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
 
 # The service worker script must always be revalidated against the network so a
 # new deploy's stamped BUILD_VERSION is picked up promptly. Caching /sw.js (even

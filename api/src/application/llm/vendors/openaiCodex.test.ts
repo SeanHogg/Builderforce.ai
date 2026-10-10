@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { openAiCodexModule } from './openaiCodex';
+import { codexRequestBody, openAiCodexModule } from './openaiCodex';
 import { byoAutoSeedModels } from '../LlmProxyService';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -181,5 +181,27 @@ describe('OpenAI Codex subscription vendor', () => {
       model: 'gpt-5.3-codex', messages: [{ role: 'user', content: 'hi' }],
     });
     expect(result.content).toBe('json path');
+  });
+
+  // Production 2026-10 (8x on the daily cron): `X-OpenAI-Internal-Codex-Responses-Lite
+  // requires `reasoning.context` to be `all_turns``.
+  it('sends reasoning.context = all_turns on the Responses Lite contract', async () => {
+    let sent: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      sent = JSON.parse(String(init.body)) as Record<string, unknown>;
+      return codexStream({ id: 'resp_lite', output_text: 'OK' });
+    }));
+    await openAiCodexModule.call({
+      apiKey: JSON.stringify({ accessToken: 'access', accountId: 'acct' }),
+      model: 'gpt-5.6-sol', messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(sent.reasoning).toEqual({ context: 'all_turns' });
+    expect(sent.include).toEqual(['reasoning.encrypted_content']);
+  });
+
+  it('leaves the classic (non-Lite) Codex body without a reasoning field', () => {
+    const body = codexRequestBody({ apiKey: 'x', model: 'gpt-5.3-codex', messages: [{ role: 'user', content: 'hi' }] });
+    expect(body).not.toHaveProperty('reasoning');
+    expect(body.stream).toBe(true);
   });
 });

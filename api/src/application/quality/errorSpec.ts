@@ -60,17 +60,64 @@ export function normalizeLevel(raw: unknown): ErrorLevel {
   return LEVEL_ALIASES[raw.trim().toLowerCase()] ?? 'error';
 }
 
-/** The first frame of a parsed/raw stack, as a stable string for fingerprinting. */
+/** Chrome `at fn (file:l:c)` / `at file:l:c` and Firefox/Safari `fn@file:l:c`. */
+const STACK_LINE_PATTERNS: ReadonlyArray<RegExp> = [
+  /^at\s+(.+?)\s+\((.+?):\d+(?::\d+)?\)$/,
+  /^at\s+()(.+?):\d+(?::\d+)?$/,
+  /^(.*?)@(.+?):\d+(?::\d+)?$/,
+];
+
+/** Parse a raw stack string into frames (function + file only — positions are not kept). */
+function framesFromString(stack: string): StackFrame[] {
+  const frames: StackFrame[] = [];
+  for (const raw of stack.split('\n')) {
+    const line = raw.trim();
+    for (const re of STACK_LINE_PATTERNS) {
+      const m = line.match(re);
+      if (m) { frames.push({ function: m[1] || null, file: m[2] || null }); break; }
+    }
+  }
+  return frames;
+}
+
+/**
+ * A build-stable name for a frame's file: its basename, without query/fragment
+ * and without a content-hash segment (`page-3f2a9c1b7d4e.js` → `page.js`). A
+ * chunk's directory and hash are per-deploy facts, not per-bug ones.
+ */
+export function stableFrameFile(file: string | null | undefined): string {
+  if (!file) return '';
+  const base = file.split(/[?#]/)[0]!.split(/[\\/]/).pop() ?? '';
+  return base.replace(/[-.~](?=[A-Za-z0-9_]*\d)[A-Za-z0-9_]{8,}(?=\.[cm]?js$)/, '');
+}
+
+/** A real function name — not anonymous, not a minifier's one/two-letter rename. */
+function isMeaningfulFunction(name: string | null | undefined): name is string {
+  if (!name) return false;
+  const bare = name.replace(/^(?:async|new)\s+/, '').trim();
+  return bare.length > 2 && !/^<?anonymous>?$/i.test(bare);
+}
+
+/**
+ * The top frame of a stack, as a key that is STABLE ACROSS DEPLOYS.
+ *
+ * Line and column are deliberately excluded. Every ingest source ships bundled
+ * code (the Worker's single `index.js`, Next's hashed chunks), so a frame's
+ * position moves with every unrelated edit: the identical Cerebras 404 kept
+ * landing at `index.js:40196`, `:40262`, `:40277` … and every deploy opened a
+ * fresh error group for it — which read as "the same error forms a new group per
+ * release", though `release` itself was never part of the basis. The key is the
+ * first frame with a meaningful function name plus its hash-stripped file;
+ * anonymous / minified frames are skipped. With none, the frame contributes
+ * nothing and the group is keyed by type + normalized message alone.
+ */
 function topFrameKey(stack: NormalizedErrorEvent['stack']): string {
   if (!stack) return '';
-  if (typeof stack === 'string') {
-    // First non-empty line that looks like a frame.
-    const line = stack.split('\n').map((l) => l.trim()).find((l) => l.length > 0);
-    return line ?? '';
-  }
-  const f = stack[0];
-  if (!f) return '';
-  return `${f.function ?? ''}@${f.file ?? ''}:${f.line ?? ''}`;
+  const frames = typeof stack === 'string' ? framesFromString(stack) : stack;
+  const frame = frames.find((f) => isMeaningfulFunction(f?.function));
+  if (!frame) return '';
+  const fn = frame.function!.replace(/^(?:async|new)\s+/, '').trim();
+  return `${fn}@${stableFrameFile(frame.file)}`;
 }
 
 /**
@@ -100,6 +147,8 @@ export function normalizeErrorMessage(message: string): string {
  * Stable grouping fingerprint for an event. Honors an explicit `fingerprint` when
  * the source supplied one (e.g. Sentry issue id); otherwise derives a stable hash
  * from `type + normalizedMessage + topFrame` so the same bug recurs into one group.
+ * `release` is NOT part of the basis, and `topFrameKey` excludes positions, so a
+ * group spans deploys; the release stays a field on the group and each event.
  */
 export async function computeFingerprint(e: NormalizedErrorEvent): Promise<string> {
   if (e.fingerprint && e.fingerprint.trim()) return e.fingerprint.trim().slice(0, 128);

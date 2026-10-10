@@ -45,6 +45,14 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   +1 file (2026-10-10, kept-board release) — `lib/canvas/boardRetention.ts` (~76 lines,
+ *     pure, no imports beyond types). `ActiveCanvasContext` is mounted by the persistent shell
+ *     and now bounds how many boards stay mounted, so the decision it calls is root work by
+ *     construction. Lazy-loading 76 lines of arithmetic would cost more than it saves.
+ *   +1 file (2026-10-10, insecure-context ids) — `lib/randomUuidPolyfill.ts` (one string
+ *     constant, import-free). It is the inline `<head>` script that gives a plain-HTTP
+ *     document `crypto.randomUUID`, so it has to be in the root layout and has to run
+ *     before any bundle — the same reason `lib/embed/embedErrorReporter.ts` is here.
  *   +1 file (2026-10-10, one "which project?" resolution) — `lib/projectScopeResolution.ts`
  *     (~70 lines, import-free). Not new first-paint work: it is the URL/storage parsing
  *     that `ProjectScopeContext` (already here) did inline, moved out so the shell, the

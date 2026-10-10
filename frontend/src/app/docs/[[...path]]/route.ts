@@ -18,6 +18,23 @@ type RouteContext = {
  * unrelated app route). Fetching the canonical upstream directory URL here
  * avoids that redirect and lets us repair any other upstream Location header.
  */
+/**
+ * Root-absolute links inside a documentation page, re-homed under `/docs`.
+ *
+ * Astro prefixes its own navigation and assets with `base: '/docs'`, but it does
+ * NOT touch links written in the Markdown, and the content is authored against
+ * the docs site's own root (`[Agent send](/tools/agent-send)`). On the public
+ * origin those resolved to the APP: `/tools/agent-send` is the free-diagnostics
+ * page, which asked the API for a tool called `agent-send` and logged
+ * `404 Unknown tool` for every click. A link already under `/docs`, and a
+ * protocol-relative `//host` link, are left alone.
+ */
+const ROOT_LINK = /(\shref=["'])\/(?!\/|docs(?:[/"'?#]|$))/g;
+
+function rehomeDocsLinks(html: string): string {
+  return html.replace(ROOT_LINK, '$1/docs/');
+}
+
 async function proxyDocs(request: NextRequest, context: RouteContext): Promise<Response> {
   const { path = [] } = await context.params;
   const encodedPath = path.map(encodeURIComponent).join('/');
@@ -45,6 +62,18 @@ async function proxyDocs(request: NextRequest, context: RouteContext): Promise<R
   const location = responseHeaders.get('location');
   if (location?.startsWith('/')) {
     responseHeaders.set('location', `/docs${location}`);
+  }
+
+  if (responseHeaders.get('content-type')?.includes('text/html')) {
+    // The body is re-encoded from the rewritten text, so the upstream's encoding
+    // and length no longer describe it.
+    responseHeaders.delete('content-encoding');
+    responseHeaders.delete('content-length');
+    return new Response(rehomeDocsLinks(await upstreamResponse.text()), {
+      status: upstreamResponse.status,
+      statusText: upstreamResponse.statusText,
+      headers: responseHeaders,
+    });
   }
 
   return new Response(upstreamResponse.body, {

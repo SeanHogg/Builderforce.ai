@@ -68,7 +68,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * it. The ledger is the only durable representation of "this role is done"; writing
  * anywhere else is writing to a value that is about to be recomputed away.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { ticketParticipants, ticketRoleSignoffs } from '../../infrastructure/database/schema';
@@ -132,12 +132,39 @@ interface AttestableSlot {
  * rule exactly — an exact `lane:role` row wins, and a lane-less row applies to the role
  * as a fallback — so this function and the state it is about to trigger can never
  * disagree about whether a verdict exists.
+ *
+ * `rows` must be oldest-first (the ledger is append-only; the last verdict wins).
+ *
+ * A PRODUCER slot is covered only by a CLOSING verdict (approved / waived). A producer's
+ * latest row being `changes_requested` is the explicit, recorded reopen of its slot
+ * (`reopenProducerSlots.ts`): the rework run it asks for must be credited when it
+ * finishes, or the reopened slot could never close again and would be re-dispatched
+ * forever — the very loop the reopen exists to avoid. A REVIEWER slot keeps the old
+ * reading (any verdict covers it): its own `changes_requested` IS its answer.
  */
-function ledgerCovers(
-  rows: ReadonlyArray<{ laneKey: string | null }>,
+export function ledgerCovers(
+  rows: ReadonlyArray<{ laneKey: string | null; verdict?: string | null }>,
   stageKey: string | null,
+  responsibility?: string | null,
 ): boolean {
-  return rows.some((r) => r.laneKey === null || r.laneKey === stageKey);
+  const covering = rows.filter((r) => r.laneKey === null || r.laneKey === stageKey);
+  if (!isProducerResponsibility(responsibility)) return covering.length > 0;
+  // Same precedence as `syncStates`: an exact lane row wins over a lane-less fallback.
+  const exact = covering.filter((r) => r.laneKey === stageKey && stageKey !== null);
+  const latest = (exact.length ? exact : covering).at(-1);
+  return latest != null && (latest.verdict === 'approved' || latest.verdict === 'waived');
+}
+
+/**
+ * Which slots a finished run may close. The non-destructive rule `recordRunAttribution`
+ * follows ({@link ADVANCEABLE_PARTICIPANT_STATES}), plus ONE deliberate addition: a
+ * PRODUCER slot reopened by an explicit `changes_requested` — the rework it asks for is
+ * exactly what the finished run delivered. A reviewer's `changes_requested` is its own
+ * verdict and is never touched.
+ */
+function isAttestableSlot(slot: { state: string; responsibility: string }): boolean {
+  return ADVANCEABLE_PARTICIPANT_STATES.has(slot.state as ParticipantState)
+    || (slot.state === 'changes_requested' && isProducerResponsibility(slot.responsibility));
 }
 
 export interface AttestRoleRunArgs {
@@ -192,20 +219,21 @@ export async function attestCompletedRoleRun(
     // Only a slot that has not reached a terminal verdict can be advanced — the same
     // non-destructive rule `recordRunAttribution` follows. Prefer the slot for the exact
     // stage the run served; fall back to any advanceable slot for the role.
-    const advanceable = slots.filter((s) => ADVANCEABLE_PARTICIPANT_STATES.has(s.state as ParticipantState));
+    const advanceable = slots.filter(isAttestableSlot);
     const exact = args.laneKey != null ? advanceable.filter((s) => s.stageKey === args.laneKey) : [];
     const targets = exact.length ? exact : advanceable;
     if (!targets.length) return ['not_applicable'];
 
     const verdicts = await db
-      .select({ laneKey: ticketRoleSignoffs.laneKey })
+      .select({ laneKey: ticketRoleSignoffs.laneKey, verdict: ticketRoleSignoffs.verdict })
       .from(ticketRoleSignoffs)
       .where(scopedToTenant(
         ticketRoleSignoffs,
         args.tenantId,
         eq(ticketRoleSignoffs.taskId, args.taskId),
         eq(ticketRoleSignoffs.roleKey, args.roleKey),
-      ));
+      ))
+      .orderBy(asc(ticketRoleSignoffs.createdAt));
 
     const participants = new TicketParticipantsService(db);
     const outcomes: AttestationOutcome[] = [];
@@ -214,7 +242,7 @@ export async function attestCompletedRoleRun(
     for (const slot of targets) {
       const outcome = decideRunAttestation({
         responsibility: slot.responsibility,
-        hasVerdict: ledgerCovers(verdicts, slot.stageKey),
+        hasVerdict: ledgerCovers(verdicts, slot.stageKey, slot.responsibility),
         priorUnattestedRuns: readUnattestedRuns(slot.evidence),
         ...(args.maxUnattestedRuns != null ? { maxUnattestedRuns: args.maxUnattestedRuns } : {}),
       });

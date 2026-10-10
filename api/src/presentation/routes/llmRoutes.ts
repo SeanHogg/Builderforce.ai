@@ -3193,7 +3193,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const openRouterKey = access.effectivePlan === 'free'
       ? c.env.OPENROUTER_API_KEY
       : (c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY);
-    if (!openRouterKey && !c.env.VOYAGE_API_KEY) {
+    if (!openRouterKey && !c.env.VOYAGE_API_KEY && !(c.env.CLOUDFLARE_AI_API_TOKEN && c.env.CLOUDFLARE_ACCOUNT_ID)) {
       return c.json({ error: 'Embeddings vendor not configured (missing OPENROUTER_API_KEY and VOYAGE_API_KEY)' }, 503);
     }
 
@@ -3226,7 +3226,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     try {
       const result = await dispatchEmbeddingVendor({
-        env: { OPENROUTER_API_KEY: openRouterKey, VOYAGE_API_KEY: c.env.VOYAGE_API_KEY },
+        env: { OPENROUTER_API_KEY: openRouterKey, VOYAGE_API_KEY: c.env.VOYAGE_API_KEY, CLOUDFLARE_AI_API_TOKEN: c.env.CLOUDFLARE_AI_API_TOKEN, CLOUDFLARE_ACCOUNT_ID: c.env.CLOUDFLARE_ACCOUNT_ID },
         model,
         input,
         extraBody,

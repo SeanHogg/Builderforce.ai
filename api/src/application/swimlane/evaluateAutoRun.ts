@@ -201,10 +201,13 @@ export const MAX_CONSECUTIVE_AUTORUN_FAILURES = 3;
  * enough that any per-hour rate limit permissive enough to be safe would have let it run
  * indefinitely. What is abnormal is the TOTAL, not the tempo.
  *
- * This is defence in depth, not the root-cause fix. Whatever re-opens the role slot to be
- * re-picked is still unidentified (the subsystem has been idle since 2026-08-04, so it
- * cannot be reproduced) — but that mechanism can only spend runs THROUGH this choke
- * point, so bounding it here bounds the damage regardless of the cause. It reports as
+ * This is defence in depth. The root cause, found 2026-10-10 from the 2026-09-16 burst
+ * (ticket #2180), was not a slot re-opening at all: `pickManagedProducer`'s fallback
+ * tiers re-picked a role whose slot was already COMPLETED, behind a reviewer verdict
+ * taken before any work existed (fixed in `managedLaneRoles.ts` and
+ * `laneRequirementGate.ts`). The ceiling stays because any future re-pick path can
+ * only spend runs THROUGH this choke point, so bounding it here bounds the damage
+ * regardless of the cause. It reports as
  * `run_cap_exhausted`, the existing "autonomy has stopped, a human may override" verdict,
  * because that is exactly what it means; a human "Run now" (`force`) still dispatches.
  */
@@ -553,6 +556,19 @@ export function classifyResolvedAutoRun(input: {
   sameLaneReentry: boolean;
   hasLiveExecution: boolean;
   /**
+   * LIFECYCLE-MANAGED stage whose PRODUCTION is already delivered — every producer slot
+   * on it is satisfied (`isStageProductionDischarged`). No producer run is owed, so the
+   * stage is held on its outstanding sign-off(s): `lane_requirement_gate`, the reason
+   * that already means "a required role's verdict is owed before the lane's agent runs".
+   *
+   * Ranked above `managed_no_role` because it is the reason that role is null: reporting
+   * a delivered stage as an unbound role is what would send the staffing ladder after a
+   * gap that does not exist. Before this existed the stage was not null at all — the
+   * generic producer pick re-chose the role that had just finished, and ticket #2180's
+   * Business Analyst was dispatched seven more times after completing its slot.
+   */
+  stageDischarged?: boolean;
+  /**
    * LIFECYCLE-MANAGED board with no role-attributed producer for this stage. Ranked
    * directly under the human gate and ABOVE `no_agent`, because it is a strictly more
    * specific answer: `no_agent` tells an operator to staff the lane or assign an owner,
@@ -587,6 +603,7 @@ export function classifyResolvedAutoRun(input: {
   totalRuns?: number;
 }): { reason: AutoRunReason; canRunNow: boolean } {
   if (input.gate === 'human') return { reason: 'human_gate', canRunNow: false };
+  if (input.stageDischarged) return { reason: 'lane_requirement_gate', canRunNow: false };
   // The more specific reading first: "there is no role here" outranks "no role bound".
   if (input.managedLaneUnconfigured) return { reason: 'lane_unconfigured', canRunNow: false };
   if (input.managedNoRole) return { reason: 'managed_no_role', canRunNow: false };
@@ -827,6 +844,9 @@ export async function evaluateTaskAutoRun(
   // which must NOT read as `none`, or a failed read becomes the most alarming verdict
   // available (the mistake `stallCensus` had to be repaired for on 2026-07-31).
   let managedLaneTier: 'requirements' | 'lane_agents' | 'none' | null = null;
+  // The stage's production is delivered — see `classifyResolvedAutoRun.stageDischarged`.
+  let stageDischarged = false;
+  let stageOutstandingRoleKeys: string[] = [];
   if (board.lifecycleManaged && !isReviewLane(status)) {
     const resolved = await resolveManagedProducer(db, {
       tenantId: args.tenantId,
@@ -846,6 +866,11 @@ export async function evaluateTaskAutoRun(
         source: resolved.producer.source,
         authorizedRoleKeys: resolved.authority.roleKeys,
       };
+    } else if (resolved?.stageDischarged) {
+      // A COMPLETED PRODUCER SLOT STAYS CLOSED: nothing to dispatch, and nothing to
+      // staff either — the stage waits on the verdict(s) its slots still owe.
+      stageDischarged = true;
+      stageOutstandingRoleKeys = resolved.outstandingRoleKeys;
     } else {
       // No producer bound. Keep the authority decision instead of dropping it — these
       // are the roles that must be staffed for this stage to ever dispatch, and they are
@@ -866,8 +891,9 @@ export async function evaluateTaskAutoRun(
       : [];
     return finishEvaluation({
       db, runtimeService, args, status, assignedAgentRef, gate, staffedAgentRefs,
-      agents: managedAgents, managedNoRole: !managedRole,
-      managedLaneUnconfigured: !managedRole && managedLaneTier === 'none',
+      agents: managedAgents, managedNoRole: !managedRole && !stageDischarged,
+      managedLaneUnconfigured: !managedRole && !stageDischarged && managedLaneTier === 'none',
+      stageDischarged, stageOutstandingRoleKeys,
       lifecycleManaged: true, managedRole, unfilledRoleKeys, execMemo: args.execMemo,
     });
   }
@@ -923,6 +949,10 @@ async function finishEvaluation(input: {
   managedNoRole: boolean;
   /** See {@link classifyResolvedAutoRun} — the stage authorizes no role AT ALL. */
   managedLaneUnconfigured?: boolean;
+  /** See {@link classifyResolvedAutoRun} — the stage's production is already delivered. */
+  stageDischarged?: boolean;
+  /** The roles a discharged stage still waits on — reported as `requirementGateRoles`. */
+  stageOutstandingRoleKeys?: string[];
   lifecycleManaged: boolean;
   managedRole: ManagedRoleAttribution | null;
   unfilledRoleKeys: string[];
@@ -977,6 +1007,7 @@ async function finishEvaluation(input: {
     totalRuns: plainExecs.length,
     managedNoRole: input.managedNoRole,
     managedLaneUnconfigured: input.managedLaneUnconfigured ?? false,
+    stageDischarged: input.stageDischarged ?? false,
   });
 
   // WORKSPACE TOKEN GATE — last, and only for a ticket that would otherwise run.
@@ -997,7 +1028,7 @@ async function finishEvaluation(input: {
   // costs nothing there either.
   let tenantTokens: TenantTokenVerdict | null = null;
   let { reason, canRunNow } = classified;
-  let requirementGateRoles: string[] = [];
+  let requirementGateRoles: string[] = input.stageDischarged ? (input.stageOutstandingRoleKeys ?? []) : [];
   if (canRunNow) {
     tenantTokens = await resolveTenantTokenGate(db, args.tenantId, args.tenantTokens, args.env);
     if (tenantTokens && !tenantTokens.hasTokens) {

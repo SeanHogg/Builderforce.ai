@@ -39,6 +39,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import { ChunkErrorRecovery } from '@/components/ChunkErrorRecovery';
 import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
+import { RANDOM_UUID_POLYFILL } from '@/lib/randomUuidPolyfill';
 import { QUALITY_INGEST_ENDPOINT } from '@/lib/reportError';
 import { VisitorJourneyTracker } from '@/components/VisitorJourneyTracker';
 import { DiscountCodeCapture } from '@/components/DiscountCodeCapture';
@@ -163,6 +164,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           diagnosable instead of a silent 15s timeout. See embedErrorReporter.ts.
         */}
         <script dangerouslySetInnerHTML={{ __html: EMBED_ERROR_REPORTER }} />
+
+        {/* `crypto.randomUUID` on a plain-HTTP (insecure-context) document, before
+            any bundle runs — see randomUuidPolyfill.ts. A no-op over HTTPS. */}
+        <script dangerouslySetInnerHTML={{ __html: RANDOM_UUID_POLYFILL }} />
 
         {/* JetBrains Mono self-hosted via next/font/local (see jetbrainsMono variable above) — no <link> needed.
             Body/display text uses the system stack in globals.css (--font-sans), so no font origin

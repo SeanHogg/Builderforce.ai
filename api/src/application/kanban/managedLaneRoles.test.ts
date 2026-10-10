@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  bindStaffedAgentsToRoles, decideManagedLaneAuthority, pickManagedProducer,
+  bindStaffedAgentsToRoles, decideManagedLaneAuthority, dischargedStageRoles, isStageProductionDischarged,
+  pickManagedProducer,
   type LaneAuthorityInputs, type ManagedLaneAuthority, type ManagedProducerSlot,
 } from './managedLaneRoles';
 import { EMPTY_ROLE_ROSTER, type RoleRoster } from './roleCapability';
@@ -300,5 +301,99 @@ describe('pickManagedProducer', () => {
       slot({ assigneeRef: 'bob-dev', roleKey: 'developer' }),
     ];
     expect(pickManagedProducer(authority(['code-reviewer', 'product-owner', 'developer']), rows)?.agentRef).toBe('bob-dev');
+  });
+});
+
+/**
+ * TICKET #2180 — the re-dispatch loop, replayed.
+ *
+ * Production `activity_log`, project 11, 2026-09-16 (tenant 1). On the managed template's
+ * `ready` stage (BA owner → Product Owner reviewer → Architect owner):
+ *
+ *   19:17 PO dispatched (reviewer)      19:23 PO signed off (not approved)
+ *   19:32 BA dispatched (producer)      19:50 BA completed
+ *   19:57 Architect dispatched          20:06 Architect completed
+ *   20:12 BA dispatched … and again at 20:28, 20:44, 21:03, 21:25, 21:35, 21:55, 22:20,
+ *   with `ticket.prd.reconcile_needed` ("no repo bound to this task") between them.
+ *
+ * Nothing reopened the BA's slot. With every producer slot satisfied the manifest tier
+ * found nothing open, and the GENERIC tier (requirement roles bound to roster agents)
+ * returned the stage's first producing role — the BA — on every sweep. The PRD commit
+ * failure is deliberately not an input below: it never was one. The pick reads the
+ * manifest, which is why a missing repository could not stop the loop either.
+ */
+describe('ticket #2180 — a completed producer slot stays closed', () => {
+  const readyAuthority = decideManagedLaneAuthority(inputs({
+    requirements: [
+      { kind: 'role', ref: 'business-analyst', ticketType: null, condition: null },
+      { kind: 'review', ref: 'product-owner', ticketType: null, condition: null },
+      { kind: 'role', ref: 'architect', ticketType: null, condition: null },
+    ],
+    roster: roster({ 'business-analyst': 'ba-1', 'product-owner': 'po-1', architect: 'arch-1' }),
+  }), { taskType: 'task', actionType: null });
+
+  const manifest = (states: { ba: string; po: string; architect: string }): ManagedProducerSlot[] => [
+    { roleKey: 'business-analyst', responsibility: 'owner', state: states.ba, assigneeKind: 'agent', assigneeRef: 'ba-1' },
+    { roleKey: 'product-owner', responsibility: 'reviewer', state: states.po, assigneeKind: 'agent', assigneeRef: 'po-1' },
+    { roleKey: 'architect', responsibility: 'owner', state: states.architect, assigneeKind: 'agent', assigneeRef: 'arch-1' },
+  ];
+
+  it('binds every role of the stage — the precondition the loop depended on', () => {
+    expect(readyAuthority.approvers.map((a) => [a.roleKey, a.agentRef])).toEqual([
+      ['business-analyst', 'ba-1'], ['product-owner', 'po-1'], ['architect', 'arch-1'],
+    ]);
+  });
+
+  it('replays the sequence: BA, then Architect, then NO further producer run', () => {
+    // 19:23 — the PO's early, pre-work verdict leaves its reviewer slot changes_requested.
+    expect(pickManagedProducer(readyAuthority, manifest({ ba: 'assigned', po: 'changes_requested', architect: 'assigned' }))?.roleKey)
+      .toBe('business-analyst');
+    // 19:50 — BA completed: the Architect is next, as it was in production.
+    expect(pickManagedProducer(readyAuthority, manifest({ ba: 'completed', po: 'changes_requested', architect: 'assigned' }))?.roleKey)
+      .toBe('architect');
+    // 20:06 — Architect completed. Production on this stage is DELIVERED; what is owed is
+    // the PO's verdict. This used to return the BA, every sweep, for the rest of the night.
+    const after = manifest({ ba: 'completed', po: 'changes_requested', architect: 'completed' });
+    expect(pickManagedProducer(readyAuthority, after)).toBeNull();
+    expect(isStageProductionDischarged(readyAuthority, after)).toBe(true);
+  });
+
+  it('never hands a delivered stage to its REVIEWER as if it were the producer', () => {
+    // The "review-only stage still needs somebody" fallback must not turn the PO's owed
+    // verdict into a producer run once every producing role has finished.
+    const after = manifest({ ba: 'completed', po: 'assigned', architect: 'completed' });
+    expect(pickManagedProducer(readyAuthority, after)).toBeNull();
+  });
+
+  it('reopens ONLY on an explicit verdict on the producer\'s own slot', () => {
+    // `reopenProducerSlots` records `changes_requested` on the BA's slot → it is open again.
+    const reopened = manifest({ ba: 'changes_requested', po: 'changes_requested', architect: 'completed' });
+    expect(pickManagedProducer(readyAuthority, reopened)).toMatchObject({ roleKey: 'business-analyst', source: 'manifest' });
+    expect(isStageProductionDischarged(readyAuthority, reopened)).toBe(false);
+  });
+
+  it('a waived or skipped producer counts as delivered, too', () => {
+    expect(pickManagedProducer(readyAuthority, manifest({ ba: 'waived', po: 'assigned', architect: 'skipped' }))).toBeNull();
+  });
+
+  it('does not re-pick a role that discharged the stage through a lane-agent slot (tier b)', () => {
+    // A board with no requirements: the lane's agent holds a `reviewer` slot (the
+    // lane-agent approval) and is ALSO the generic pick. Once its slot is satisfied the
+    // generic tier must not choose it again.
+    const a = decideManagedLaneAuthority(inputs({ laneAgents: [agent()] }), { taskType: 'task', actionType: null });
+    const slots: ManagedProducerSlot[] = [
+      { roleKey: 'developer', responsibility: 'reviewer', state: 'completed', assigneeKind: 'agent', assigneeRef: 'bob-dev' },
+    ];
+    expect(dischargedStageRoles(slots)).toEqual(new Set(['developer']));
+    expect(pickManagedProducer(a, slots)).toBeNull();
+    expect(pickManagedProducer(a, [])).toMatchObject({ roleKey: 'developer', agentRef: 'bob-dev' });
+  });
+
+  it('a role with an OPEN slot is not discharged even if another of its slots is satisfied', () => {
+    const slots: ManagedProducerSlot[] = [
+      { roleKey: 'developer', responsibility: 'reviewer', state: 'completed', assigneeKind: 'agent', assigneeRef: 'bob-dev' },
+      { roleKey: 'developer', responsibility: 'owner', state: 'assigned', assigneeKind: 'agent', assigneeRef: 'bob-dev' },
+    ];
+    expect(dischargedStageRoles(slots).has('developer')).toBe(false);
   });
 });

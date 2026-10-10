@@ -169,6 +169,27 @@ export async function pollFluxTask(args: {
   }
 }
 
+/**
+ * The error for a 200 envelope that carries neither an image URL nor a task id.
+ *
+ * FluxAPI reports account-level refusals IN BAND: HTTP 200 with `{ code: 402, message }`
+ * when the credit balance is spent. That used to surface as a generic 502
+ * (`embedded: code=402: no image url or task id in response`), so the cascade and the
+ * health probe filed a CAPACITY failure as a malformed response. An embedded HTTP-range
+ * code is now carried as the error's status — 402 classifies as payment/capacity, 429 as
+ * a rate limit — and only an envelope with no usable code stays the generic 502.
+ * Always retryable: another vendor can still serve the prompt.
+ */
+export function fluxEnvelopeError(model: string, raw: unknown): VendorRetryableError {
+  const r = raw as Record<string, unknown> | null;
+  const code = r?.['code'];
+  const msg = typeof r?.['message'] === 'string' ? (r['message'] as string) : 'no image url or task id in response';
+  const embedded = typeof code === 'number' ? code : typeof code === 'string' && /^\d{3}$/.test(code) ? Number(code) : NaN;
+  const status = embedded >= 400 && embedded <= 599 ? embedded : 502;
+  const prefix = status === 402 ? 'payment required' : 'embedded';
+  return new VendorRetryableError('fluxapi', model, status, `${prefix}: code=${String(code)}: ${msg}`);
+}
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Live task-status fetcher built on the shared per-call timeout transport. */
@@ -215,14 +236,7 @@ export const fluxApiModule: ImageVendorModule = {
     if (result.data.length > 0) return result; // sync path resolved
 
     const taskId = extractFluxTaskId(initialRaw);
-    if (!taskId) {
-      // 200 OK, no URL and no task id — genuinely unusable. Retryable so the
-      // cascade advances (unchanged from the pre-poll behaviour for this case).
-      const r = initialRaw as Record<string, unknown> | null;
-      const code = r?.['code'];
-      const msg = typeof r?.['message'] === 'string' ? (r['message'] as string) : 'no image url or task id in response';
-      throw new VendorRetryableError('fluxapi', params.model, 502, `embedded: code=${String(code)}: ${msg}`);
-    }
+    if (!taskId) throw fluxEnvelopeError(params.model, initialRaw);
 
     const pollTimeoutMs = imageVendorTimeoutMs(params.timeoutMs);
     return pollFluxTask({

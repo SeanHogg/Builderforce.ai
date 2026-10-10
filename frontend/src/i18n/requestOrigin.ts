@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { BRAND } from '@/lib/content/brand';
+import { hostnameOf, isLocalHost, requestScheme } from '@/lib/secureTransport';
 
 /**
  * Absolute origin of the current request — what a server render resolves a
@@ -17,6 +18,6 @@ export async function requestOrigin(): Promise<string> {
   const head = await headers();
   const host = head.get('host');
   if (!host) return BRAND.url;
-  const protocol = head.get('x-forwarded-proto') ?? (host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https');
+  const protocol = requestScheme(head, isLocalHost(hostnameOf(host)) ? 'http' : 'https');
   return `${protocol}://${host}`;
 }

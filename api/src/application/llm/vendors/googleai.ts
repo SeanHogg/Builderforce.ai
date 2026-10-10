@@ -45,4 +45,7 @@ export const googleAiModule: VendorModule = createOpenAICompatibleVendor({
   defaultTier: 'PREMIUM',
   autoRoute: true,
   flagships: { agentic: 'googleai/gemini-2.5-pro', chat: 'googleai/gemini-2.5-pro' },
+  // Gemini 2.5 thinks before it answers: `gemini-2.5-flash` timed out 34x at exactly the
+  // free plan's 15000ms in 2026-10-03..10. Pro is the frontier member and gets the most.
+  attemptTimeoutMs: { default: 45_000, byModel: { 'gemini-2.5-pro': 90_000 } },
 });

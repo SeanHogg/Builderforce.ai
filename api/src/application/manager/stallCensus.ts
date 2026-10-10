@@ -54,7 +54,7 @@ import { isUnapprovedFeedbackTask } from '../feedback/feedbackSpec';
 import { isReviewLane } from '../task/taskLifecycle';
 import { isParticipantOpen } from '../kanban/participantStates';
 import {
-  decideManagedLaneAuthority, loadBoardLaneAuthorities, pickManagedProducer,
+  decideManagedLaneAuthority, isStageProductionDischarged, loadBoardLaneAuthorities, pickManagedProducer,
   type LaneAuthorityInputs, type ManagedProducerSlot,
 } from '../kanban/managedLaneRoles';
 import { MAX_AUTONOMOUS_RUNS_PER_TASK, MAX_CONSECUTIVE_AUTORUN_FAILURES, type AutoRunReason } from '../swimlane/evaluateAutoRun';
@@ -456,7 +456,11 @@ export async function loadCensusFacts(
       if (inputs) {
         const authority = decideManagedLaneAuthority(inputs, { taskType: t.taskType ?? null, actionType: t.actionType ?? null });
         const slots = (producerSlots as Map<string, ManagedProducerSlot[]>).get(`${t.id}:${t.status}`) ?? [];
-        managedProducerResolvable = pickManagedProducer(authority, slots) != null;
+        // A stage whose production is DELIVERED has no producer to pick by design (a
+        // completed producer slot stays closed) — that is not a role that failed to bind,
+        // so it must not read as `managed_no_role`, the same rule the evaluator applies.
+        managedProducerResolvable = pickManagedProducer(authority, slots) != null
+          || isStageProductionDischarged(authority, slots);
         managedLaneAuthorityTier = authority.tier;
       }
     }

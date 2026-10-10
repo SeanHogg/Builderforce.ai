@@ -78,6 +78,19 @@ const SOURCES = [
     // which the guard treats as "do not judge", never as "not tool-capable".
     parse: (json) => Object.fromEntries((json.data ?? []).map((m) => [m.id, { tools: null }])),
   },
+  {
+    id: 'cerebras',
+    // The PUBLIC list needs no key and carries real capability metadata. Cerebras
+    // retired both previously-cataloged ids (`llama3.1-8b`,
+    // `qwen-3-235b-a22b-instruct-2507`) in 2026-10 and nothing caught it, because
+    // this source did not exist.
+    url: 'https://api.cerebras.ai/public/v1/models',
+    vendor: 'cerebras',
+    headers: () => ({ Accept: 'application/json' }),
+    parse: (json) => Object.fromEntries(
+      (json.data ?? []).filter((m) => !m.deprecated).map((m) => [m.id, { tools: m.capabilities?.tools ?? null }]),
+    ),
+  },
 ];
 
 const checkOnly = process.argv.includes('--check');

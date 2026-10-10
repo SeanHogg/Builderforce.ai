@@ -81,42 +81,120 @@ export const CEREBRAS_STRICT_KEYWORDS: readonly string[] = [
 ];
 
 /**
- * Resolve the strip-keyword set for a vendor id from the registry's module
- * metadata. Returns an empty set for permissive vendors (no `schemaDialect`).
+ * A vendor's JSON-Schema dialect, as declared on its module (`VendorModule.schemaDialect`).
+ *
+ *   - `stripKeywords` — draft-07 keywords the vendor's validator rejects; removed.
+ *   - `closeObjects`  — the vendor REQUIRES every object node to be closed
+ *     (`additionalProperties: false`). Anthropic's structured-output compiler 400s with
+ *     `For 'object' type, 'additionalProperties' must be false` on any object node that
+ *     omits it or sets it to anything else, so the normaliser forces it on every
+ *     object-typed node in the tree. A node whose caller-supplied `additionalProperties`
+ *     was a SCHEMA (a `z.record`) is closed too: that shape cannot be expressed on this
+ *     vendor at all, and a closed object the model can still answer beats a 400.
+ *
+ * Adding a stricter vendor = declare its dialect on its module. NO edit here.
+ */
+export interface SchemaDialect {
+  readonly stripKeywords: readonly string[];
+  readonly closeObjects?: boolean;
+}
+
+/**
+ * Resolve a vendor id to its module's declared dialect. Absent for permissive vendors.
  *
  * Lives here (not in the registry) but the registry injects the lookup at
  * import time via `registerSchemaDialectResolver` to avoid a circular import
  * (`vendors/registry` → `vendors/*` modules → `jsonSchemaSanitize`).
  */
-type SchemaDialectResolver = (vendorId: string) => readonly string[];
+type SchemaDialectResolver = (vendorId: string) => SchemaDialect | undefined;
 
-let dialectResolver: SchemaDialectResolver = () => [];
+let dialectResolver: SchemaDialectResolver = () => undefined;
 
-/** Registry calls this once at module-init to wire the vendor → strip-set map.
+/** Registry calls this once at module-init to wire the vendor → dialect map.
  *  Keeps the sanitizer metadata-driven without a circular import. */
 export function registerSchemaDialectResolver(resolver: SchemaDialectResolver): void {
   dialectResolver = resolver;
 }
 
+/** The vendor's declared dialect, or `undefined` for a permissive vendor. */
+export function schemaDialectForVendor(vendorId: string): SchemaDialect | undefined {
+  return dialectResolver(vendorId);
+}
+
 /** The keywords a given vendor's strict-mode validator rejects, from its
  *  module's declared `schemaDialect`. Empty for permissive vendors. */
 export function schemaStripKeywordsForVendor(vendorId: string): ReadonlySet<string> {
-  return new Set(dialectResolver(vendorId));
+  return new Set(dialectResolver(vendorId)?.stripKeywords ?? []);
 }
 
-/** True when the vendor's strict-mode JSON-Schema validator rejects any
- *  draft-07 keywords (i.e. its module declares a non-empty `schemaDialect`). */
+/** True when the vendor's dialect requires ANY rewrite of a caller schema — a
+ *  non-empty strip set or forced object closing. */
 export function vendorNeedsSchemaStrip(vendorId: string): boolean {
-  return dialectResolver(vendorId).length > 0;
+  return dialectNeedsRewrite(dialectResolver(vendorId));
+}
+
+function dialectNeedsRewrite(dialect: SchemaDialect | undefined): dialect is SchemaDialect {
+  return !!dialect && (dialect.stripKeywords.length > 0 || dialect.closeObjects === true);
+}
+
+/** Keywords whose value is a MAP of name → sub-schema (walked per entry, so a
+ *  property literally named `pattern` is never mistaken for the keyword). */
+const SCHEMA_MAP_KEYWORDS = new Set(['properties', 'patternProperties', '$defs', 'definitions']);
+
+/** Keywords whose value is a sub-schema or an array of sub-schemas. */
+const SCHEMA_CHILD_KEYWORDS = new Set([
+  'items', 'prefixItems', 'additionalProperties', 'additionalItems', 'contains',
+  'oneOf', 'anyOf', 'allOf', 'not', 'if', 'then', 'else', 'propertyNames',
+]);
+
+function isObjectTypedNode(node: Record<string, unknown>): boolean {
+  const t = node['type'];
+  if (t === 'object') return true;
+  if (Array.isArray(t)) return t.includes('object');
+  // No `type` but `properties` — an object schema by construction.
+  return t === undefined && !!node['properties'] && typeof node['properties'] === 'object';
 }
 
 /**
- * Deep-strip the given keyword set from a JSON-Schema tree. Pure / non-mutating —
- * returns a new object even when nothing was stripped, so the caller can hand
- * the result back to the vendor body without worrying about shared references.
+ * Rewrite a JSON-Schema tree into a vendor's dialect. Pure / non-mutating — returns
+ * a new object even when nothing changed, so the caller can hand the result to the
+ * vendor body without worrying about shared (possibly frozen) references.
  *
- * Walks `properties`, `items`, `additionalProperties` (schema form), `oneOf`,
- * `anyOf`, `allOf`. Other keywords are passed through verbatim.
+ * Walks every sub-schema position: `properties` / `patternProperties` / `$defs` /
+ * `definitions` (maps), `items` / `prefixItems` / `additionalProperties` / `contains` /
+ * `oneOf` / `anyOf` / `allOf` / `not` / `if` / `then` / `else` / `propertyNames`.
+ * Other keywords (`enum`, `required`, `$ref`, …) pass through verbatim.
+ */
+export function applySchemaDialect(schema: unknown, dialect: SchemaDialect): unknown {
+  return rewriteNode(schema, new Set(dialect.stripKeywords), dialect.closeObjects === true);
+}
+
+function rewriteNode(schema: unknown, strip: ReadonlySet<string>, closeObjects: boolean): unknown {
+  if (Array.isArray(schema)) return schema.map((s) => rewriteNode(s, strip, closeObjects));
+  if (schema === null || typeof schema !== 'object') return schema;
+  const node = schema as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(node)) {
+    if (strip.has(k)) continue;
+    if (SCHEMA_MAP_KEYWORDS.has(k) && v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      const sub: Record<string, unknown> = {};
+      for (const [pk, pv] of Object.entries(v as Record<string, unknown>)) {
+        sub[pk] = rewriteNode(pv, strip, closeObjects);
+      }
+      out[k] = sub;
+    } else if (SCHEMA_CHILD_KEYWORDS.has(k)) {
+      out[k] = rewriteNode(v, strip, closeObjects);
+    } else {
+      out[k] = v;
+    }
+  }
+  if (closeObjects && isObjectTypedNode(node)) out['additionalProperties'] = false;
+  return out;
+}
+
+/**
+ * Deep-strip the given keyword set from a JSON-Schema tree — the strip-only form of
+ * {@link applySchemaDialect}, kept for callers and tests that hold a bare keyword set.
  *
  * `stripKeywords` defaults to {@link CEREBRAS_STRICT_KEYWORDS} so existing
  * callers and tests that don't pass a set keep the historical behaviour.
@@ -125,42 +203,14 @@ export function stripUnsupportedSchemaKeywords(
   schema: unknown,
   stripKeywords: ReadonlySet<string> = new Set(CEREBRAS_STRICT_KEYWORDS),
 ): unknown {
-  if (Array.isArray(schema)) {
-    return schema.map((s) => stripUnsupportedSchemaKeywords(s, stripKeywords));
-  }
-  if (schema === null || typeof schema !== 'object') {
-    return schema;
-  }
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(schema as Record<string, unknown>)) {
-    if (stripKeywords.has(k)) continue;
-    if (k === 'properties' && v !== null && typeof v === 'object' && !Array.isArray(v)) {
-      const subProps: Record<string, unknown> = {};
-      for (const [pk, pv] of Object.entries(v as Record<string, unknown>)) {
-        subProps[pk] = stripUnsupportedSchemaKeywords(pv, stripKeywords);
-      }
-      out[k] = subProps;
-    } else if (
-      k === 'items'
-      || k === 'additionalProperties'
-      || k === 'oneOf'
-      || k === 'anyOf'
-      || k === 'allOf'
-      || k === 'not'
-    ) {
-      out[k] = stripUnsupportedSchemaKeywords(v, stripKeywords);
-    } else {
-      out[k] = v;
-    }
-  }
-  return out;
+  return rewriteNode(schema, stripKeywords, false);
 }
 
 /**
  * Vendor-aware passthrough for the `extraBody` blob each vendor module hands
  * to its HTTP transport. When the body contains a `response_format` with a
- * `json_schema.schema` payload and the vendor declares a non-empty
- * `schemaDialect`, strips that vendor's incompatible keywords. Everything else
+ * `json_schema.schema` payload and the vendor declares a `schemaDialect`
+ * that rewrites anything, applies it ({@link applySchemaDialect}). Everything else
  * is returned verbatim (same object reference) so the call site can do
  *
  *   const safeExtra = sanitizeExtraBodyForVendor('cerebras', extraBody);
@@ -172,8 +222,8 @@ export function sanitizeExtraBodyForVendor(
   extraBody: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   if (!extraBody) return extraBody;
-  const stripKeywords = schemaStripKeywordsForVendor(vendorId);
-  if (stripKeywords.size === 0) return extraBody;
+  const dialect = dialectResolver(vendorId);
+  if (!dialectNeedsRewrite(dialect)) return extraBody;
 
   const rf = extraBody['response_format'];
   if (!rf || typeof rf !== 'object') return extraBody;
@@ -192,7 +242,7 @@ export function sanitizeExtraBodyForVendor(
       ...rfObj,
       json_schema: {
         ...jsObj,
-        schema: stripUnsupportedSchemaKeywords(inner, stripKeywords),
+        schema: applySchemaDialect(inner, dialect),
       },
     },
   };

@@ -386,6 +386,19 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return access;
   }
 
+  /** True when the project is linked to the session or carried by a card on its board. */
+  async function projectTiedToSession(sessionId: string, projectId: number): Promise<boolean> {
+    const [[linked], [placed]] = await Promise.all([
+      db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(and(
+        eq(creationSessionProjectLinks.sessionId, sessionId), eq(creationSessionProjectLinks.projectId, projectId),
+      )).limit(1),
+      db.select({ id: creationSessionObjects.id }).from(creationSessionObjects).where(and(
+        eq(creationSessionObjects.sessionId, sessionId), eq(creationSessionObjects.resourceType, 'project'), eq(creationSessionObjects.resourceId, String(projectId)),
+      )).limit(1),
+    ]);
+    return Boolean(linked || placed);
+  }
+
   async function visibleGraph(
     sessionId: string,
     tenantId: number,
@@ -1097,8 +1110,16 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
    * — the proof lifecycle writes through the same port — so what stays here is
    * the part that is genuinely about THIS session: who is allowed to record
    * what, and the rule that a project id is accepted only when it is actually
-   * linked to the board. Tenant and user identity are derived from the proven
+   * tied to the board. Tenant and user identity are derived from the proven
    * session, never read off the body.
+   *
+   * "Tied" is a link row OR a project card on this board. Cards are tenant-checked
+   * when the graph is written (`validateResourceAccess`), so either proves the
+   * project is the board's; requiring the link alone 400'd every outcome about a
+   * project a creator merely placed on the board, which is most of them. A project
+   * the board does not hold is DROPPED from the event rather than refused: the
+   * outcome itself is still real, so it is recorded unattributed and the response
+   * says so (`projectAttributed: false`) instead of the whole ledger write failing.
    */
   router.post('/:id/outcomes', async (c) => {
     const access = await requireSession(c, 'viewer');
@@ -1109,13 +1130,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!correlationId || !action || !isOutcomePhase(body.phase)) return c.json({ error: 'correlationId, action, and a valid phase are required' }, 400);
     if (action !== 'session.open' && ROLE_RANK[access.role as SessionRole] < ROLE_RANK.editor) return c.json({ error: 'Session role cannot record this outcome' }, 403);
     const actorType = action === 'session.open' ? 'user' : body.actorType === 'agent' || body.actorType === 'brain' || body.actorType === 'system' ? body.actorType : 'user';
-    const projectId = Number.isInteger(body.projectId) && Number(body.projectId) > 0 ? Number(body.projectId) : null;
-    if (projectId != null) {
-      const [linked] = await db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(and(
-        eq(creationSessionProjectLinks.sessionId, access.session.id), eq(creationSessionProjectLinks.projectId, projectId),
-      )).limit(1);
-      if (!linked) return c.json({ error: 'Project is not linked to this session' }, 400);
-    }
+    const requestedProjectId = Number.isInteger(body.projectId) && Number(body.projectId) > 0 ? Number(body.projectId) : null;
+    const projectId = requestedProjectId != null && await projectTiedToSession(access.session.id, requestedProjectId) ? requestedProjectId : null;
     const recorded = await recordOutcomeEvent(db, {
       correlationId,
       sessionId: access.session.id,
@@ -1133,7 +1149,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       costUsdMillicents: body.costUsdMillicents ?? null,
       metadata: body.metadata,
     });
-    return c.json({ recorded, duplicate: !recorded }, recorded ? 201 : 200);
+    return c.json({ recorded, duplicate: !recorded, projectAttributed: requestedProjectId == null || projectId != null }, recorded ? 201 : 200);
   });
 
   /**

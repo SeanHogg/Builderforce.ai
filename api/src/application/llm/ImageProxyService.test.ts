@@ -130,9 +130,10 @@ describe('ImageProxyService.generate — cascade', () => {
     expect(result.resolvedVendor).toBe('fluxapi');
     expect(result.resolvedModel).toBe('fluxapi/flux-kontext-pro');
     expect(result.body.data).toEqual([{ url: 'https://flux/result.jpg' }]);
-    // FREE_IMAGE_ATTEMPT_BUDGET = 2 Together attempts → retries === 2 failovers recorded
-    expect(result.retries).toBe(2);
-    expect(result.failovers.map((f) => f.vendor)).toEqual(['together', 'together']);
+    // Together serves ONE free model since Lykon/DreamShaper was retired (404), so the
+    // free budget spends one Together attempt before the premium fallback.
+    expect(result.retries).toBe(1);
+    expect(result.failovers.map((f) => f.vendor)).toEqual(['together']);
   });
 
   it('skips models cooled by a recent failure and falls through to premium [1438]', async () => {
@@ -175,9 +176,9 @@ describe('ImageProxyService.generate — cascade', () => {
     const proxy = new ImageProxyService(env);
     const result = await proxy.generate({ prompt: 'a duck' });
     expect(result.body.data).toEqual([]);
-    // 2 Together failures + 1 Flux failure
-    expect(result.failovers.length).toBe(3);
-    expect(result.failovers.map((f) => f.vendor)).toEqual(['together', 'together', 'fluxapi']);
+    // 1 Together failure (its one free model) + 1 Flux failure
+    expect(result.failovers.length).toBe(2);
+    expect(result.failovers.map((f) => f.vendor)).toEqual(['together', 'fluxapi']);
   });
 
   it('respects caller-pinned model when supplied (puts it at chain head)', async () => {
@@ -192,8 +193,8 @@ describe('ImageProxyService.generate — cascade', () => {
       },
     });
     const proxy = new ImageProxyService(env);
-    const result = await proxy.generate({ prompt: 'a duck', model: 'Lykon/DreamShaper' });
-    expect(result.resolvedModel).toBe('Lykon/DreamShaper');
+    const result = await proxy.generate({ prompt: 'a duck', model: 'black-forest-labs/FLUX.1-schnell-Free' });
+    expect(result.resolvedModel).toBe('black-forest-labs/FLUX.1-schnell-Free');
     expect(requests).toEqual([TOGETHER_ENDPOINT]);
   });
 
@@ -225,8 +226,8 @@ describe('ImageProxyService — FREE cap enforcement', () => {
   });
 
   it('attempts every bound free model up to FREE_IMAGE_ATTEMPT_BUDGET before falling through', async () => {
-    // Only Together is bound here, and it ships two free models — both are
-    // tried (2 < budget 3), then the premium fallback.
+    // Only Together is bound here, and it ships one free model (Lykon/DreamShaper
+    // was retired 2026-10-10) — it is tried (1 < budget 3), then the premium fallback.
     let togetherCalls = 0;
     let fluxCalls = 0;
     installFetchRouter({
@@ -243,7 +244,7 @@ describe('ImageProxyService — FREE cap enforcement', () => {
     });
     const proxy = new ImageProxyService(env);
     await proxy.generate({ prompt: 'a duck' });
-    expect(togetherCalls).toBe(2);
+    expect(togetherCalls).toBe(1);
     expect(fluxCalls).toBe(1);
   });
 });

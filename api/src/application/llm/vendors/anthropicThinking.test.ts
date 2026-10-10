@@ -171,4 +171,49 @@ describe('direct-Anthropic structured-output schema sanitization', () => {
     expect(cap.get().output_config.format.schema).toBeDefined();
     expect((SHOT_PLANNER_SCHEMA.properties.shots.items.properties.durationFrames as any).minimum).toBe(1);
   });
+
+  // Production 2026-10-10 (5x): `output_config.format.schema: For 'object' type,
+  // 'additionalProperties' must be false` — a caller schema whose NESTED objects
+  // (a z.object inside an array / union / $defs) omitted additionalProperties.
+  it('closes every nested object node with additionalProperties:false', async () => {
+    const cap = captureBody();
+    await anthropicModule.call({
+      apiKey: 'sk-ant-test',
+      model: 'claude-opus-5-5',
+      messages: [{ role: 'user', content: 'Extract.' }],
+      extraBody: {
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'extract',
+            strict: true,
+            schema: {
+              type: 'object',
+              properties: {
+                items: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' } } } },
+                meta: { anyOf: [{ type: 'object', properties: { k: { type: 'string' } } }, { type: 'null' }] },
+                tags: { type: 'object', additionalProperties: { type: 'string' } },
+                owner: { $ref: '#/$defs/Person' },
+              },
+              $defs: { Person: { type: 'object', properties: { email: { type: 'string', pattern: '.+@.+' } } } },
+            },
+          },
+        },
+      },
+    });
+    const schema = cap.get().output_config.format.schema;
+    expect(schema.additionalProperties).toBe(false);
+    expect(schema.properties.items.items.additionalProperties).toBe(false);
+    expect(schema.properties.meta.anyOf[0].additionalProperties).toBe(false);
+    expect(schema.properties.meta.anyOf[1]).toEqual({ type: 'null' });
+    expect(schema.properties.tags.additionalProperties).toBe(false);
+    expect(schema.$defs.Person.additionalProperties).toBe(false);
+    // Unsupported keywords are still stripped inside $defs.
+    expect(schema.$defs.Person.properties.email).toEqual({ type: 'string' });
+  });
+
+  it('declares its dialect on the module (the ONE metadata-driven sanitizer serves it)', () => {
+    expect(anthropicModule.schemaDialect?.closeObjects).toBe(true);
+    expect(anthropicModule.schemaDialect?.stripKeywords).toContain('minimum');
+  });
 });

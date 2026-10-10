@@ -5,6 +5,17 @@ import { Project } from '../../domain/project/Project';
 import { ProjectId, ProjectStatus, TenantId, asProjectId, asTenantId } from '../../domain/shared/types';
 import { NotFoundError, ConflictError, ForbiddenError } from '../../domain/shared/errors';
 import { buildProjectKey } from './projectKey';
+import { isUniqueViolation } from '../../infrastructure/database/uniqueViolation';
+
+/**
+ * The GLOBAL unique index on `projects.key` (delivery schema: `key … .unique()`).
+ * Named so a key collision is recognised precisely — any other unique violation
+ * raised by the same insert must keep surfacing as itself, not as "key taken".
+ */
+export const PROJECT_KEY_CONSTRAINT = 'projects_key_key';
+
+/** Bounded retries when a generated key loses an insert race to a concurrent create. */
+const MAX_GENERATED_KEY_ATTEMPTS = 5;
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -94,7 +105,7 @@ export class ProjectService {
   /**
    * Derive a project key from `name` (via `buildProjectKey`) that is free of
    * collisions, suffixing `-2`, `-3`, … when the base key is already taken.
-   * Use this for the AUTO-generated key path; an explicitly user-supplied key
+   * `createProjectWithGeneratedKey` uses this (and retries past insert races); an explicitly user-supplied key
    * keeps the hard `ConflictError` in `createProject` so the user learns their
    * chosen key is taken. The project key is globally unique, so an unsuffixed
    * collapse (e.g. every "Untitled" project → `<tid>-PROJECT`) would otherwise
@@ -121,12 +132,45 @@ export class ProjectService {
     return project;
   }
 
+  /**
+   * Create a project with an EXPLICIT, caller-chosen key. A taken key is the
+   * caller's to fix, so it answers `ConflictError` (409) — both when the
+   * pre-check sees it and when a concurrent create wins the insert race between
+   * that check and the insert (the unique index is the real arbiter).
+   */
   async createProject(dto: CreateProjectDto): Promise<Project> {
-    const existing = await this.projects.findByKey(dto.key.trim().toUpperCase());
-    if (existing) {
-      throw new ConflictError(`Project key '${dto.key.toUpperCase()}' is already taken`);
+    const key = dto.key.trim().toUpperCase();
+    const taken = () => new ConflictError(`Project key '${key}' is already taken`);
+    if (await this.projects.findByKey(key)) throw taken();
+    try {
+      return await this.insertProject(dto);
+    } catch (e) {
+      if (isUniqueViolation(e, PROJECT_KEY_CONSTRAINT)) throw taken();
+      throw e;
     }
+  }
 
+  /**
+   * Create a project whose key is DERIVED from its name (`buildUniqueKey`).
+   * The caller never chose the key, so a collision is never theirs to resolve:
+   * when a concurrent create claims the derived key between the lookup and the
+   * insert, the key is re-derived (the lookup now sees the winner and suffixes
+   * past it) and the insert retried, a bounded number of times.
+   */
+  async createProjectWithGeneratedKey(dto: Omit<CreateProjectDto, 'key'>): Promise<Project> {
+    for (let attempt = 0; ; attempt++) {
+      const key = await this.buildUniqueKey(dto.tenantId, dto.name);
+      try {
+        return await this.insertProject({ ...dto, key });
+      } catch (e) {
+        if (!isUniqueViolation(e, PROJECT_KEY_CONSTRAINT)) throw e;
+        if (attempt < MAX_GENERATED_KEY_ATTEMPTS - 1) continue;
+        throw new ConflictError('Could not allocate a free project key — please try again');
+      }
+    }
+  }
+
+  private async insertProject(dto: CreateProjectDto): Promise<Project> {
     const { githubRepoOwner, githubRepoName } = parseGithubUrl(dto.githubRepoUrl ?? null);
 
     const project = Project.create({

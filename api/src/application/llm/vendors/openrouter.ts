@@ -30,20 +30,25 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   // ── FREE tier — live zero-priced OpenRouter chat endpoints, strongest first.
   // Verified against GET /api/v1/models on 2026-08-11. Free availability is
   // volatile, so keep this list current rather than retaining retired slugs.
-  { id: 'nvidia/nemotron-3-ultra-550b-a55b:free',    tier: 'FREE', label: 'Nemotron 3 Ultra 550B (Free)',       brand: 'NVIDIA'     },
+  // Free → free supersessions catch CALLER-supplied retired slugs (production 2026-10:
+  // `qwen/qwen3-coder:free`, `qwen/qwen3-next-80b-a3b-instruct:free` and
+  // `nousresearch/hermes-3-llama-3.1-405b:free` still arrive from older clients and
+  // burned a step each). Same tier, so no plan change rides on the rewrite.
+  { id: 'nvidia/nemotron-3-ultra-550b-a55b:free',    tier: 'FREE', label: 'Nemotron 3 Ultra 550B (Free)',       brand: 'NVIDIA',    supersedes: ['nousresearch/hermes-3-llama-3.1-405b:free'] },
   { id: 'google/gemma-4-26b-a4b-it:free',            tier: 'FREE', label: 'Gemma 4 26B A4B (Free)',             brand: 'Google',    capabilities: ['vision'] },
-  { id: 'nvidia/nemotron-3-super-120b-a12b:free',    tier: 'FREE', label: 'Nemotron 3 Super 120B (Free)',       brand: 'NVIDIA'     },
-  { id: 'poolside/laguna-s-2.1:free',                tier: 'FREE', label: 'Laguna S 2.1 (Free)',                 brand: 'Poolside'   },
+  { id: 'nvidia/nemotron-3-super-120b-a12b:free',    tier: 'FREE', label: 'Nemotron 3 Super 120B (Free)',       brand: 'NVIDIA',    supersedes: ['qwen/qwen3-next-80b-a3b-instruct:free', 'meta-llama/llama-3.3-70b-instruct:free'] },
+  { id: 'poolside/laguna-s-2.1:free',                tier: 'FREE', label: 'Laguna S 2.1 (Free)',                 brand: 'Poolside',  supersedes: ['qwen/qwen3-coder:free'] },
   { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', tier: 'FREE', label: 'Nemotron 3 Nano Omni 30B Reasoning (Free)', brand: 'NVIDIA' },
-  { id: 'google/gemma-4-31b-it:free',                tier: 'FREE', label: 'Gemma 4 31B (Free)',                  brand: 'Google'     },
+  { id: 'google/gemma-4-31b-it:free',                tier: 'FREE', label: 'Gemma 4 31B (Free)',                  brand: 'Google',    supersedes: ['qwen/qwen3.8-27b:free', 'google/gemma-3-27b-it:free'] },
   { id: 'poolside/laguna-xs-2.1:free',               tier: 'FREE', label: 'Laguna XS 2.1 (Free)',                brand: 'Poolside'   },
   { id: 'cohere/north-mini-code:free',               tier: 'FREE', label: 'North Mini Code (Free)',              brand: 'Cohere'     },
   { id: 'nvidia/nemotron-3.5-lightning:free',        tier: 'FREE', label: 'Nemotron 3.5 Lightning (Free)',      brand: 'NVIDIA'     },
-  { id: 'qwen/qwen3.8-27b:free',                     tier: 'FREE', label: 'Qwen 3.8 27B (Free)',                 brand: 'Qwen'       },
   // Free slugs retired on 2026-10-04 with no free successor (each still exists PAID,
   // and mapping free → paid is a tier change, so they are dropped, not superseded):
   // `openai/gpt-oss-20b:free`, `nvidia/nemotron-3-nano-30b-a3b:free`,
   // `nvidia/nemotron-nano-12b-v2-vl:free`, `nvidia/nemotron-nano-9b-v2:free`, `z-ai/glm-5.2:free`.
+  // 2026-10-10: `qwen/qwen3.8-27b:free` retired (paid `qwen/qwen3.8-27b` remains); free
+  // pins are rewritten to Gemma 4 31B (free) above.
 
   // ── STANDARD tier — paid low-cost models, prefixed in the paid pool so
   //    Pro/Teams tenants land on cheap models before reaching PREMIUM/ULTRA.
@@ -122,6 +127,15 @@ export const openRouterModule: VendorModule = {
   // OpenRouter routes many `:free` ids to Cerebras as upstream, so it inherits
   // Cerebras's strict-mode strip set (metadata-driven — see jsonSchemaSanitize.ts).
   schemaDialect: { stripKeywords: CEREBRAS_STRICT_KEYWORDS },
+  // The same frontier Claude/Gemini models as the direct vendors, so the same budget:
+  // a thinking turn must not inherit the free plan's 15s fast-fail (see attemptTimeout.ts).
+  attemptTimeoutMs: {
+    byModel: {
+      'anthropic/claude-opus-5.5': 90_000,
+      'anthropic/claude-sonnet-5.5': 90_000,
+      'google/gemini-2.5-pro': 90_000,
+    },
+  },
   tierFor: tierForOpenRouterModel,
   apiKeyFrom(env) { return env.OPENROUTER_API_KEY ?? null; },
   async call(params: VendorCallParams): Promise<VendorCallResult> {

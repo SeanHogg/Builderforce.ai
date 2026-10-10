@@ -44,7 +44,7 @@ import {
   type LaneApprover, type LaneApproverTier, type LaneStaffedAgent,
 } from '../swimlane/laneApprover';
 import { EMPTY_ROLE_ROSTER, loadRoleRoster, type RoleRoster } from './roleCapability';
-import { isParticipantOpen } from './participantStates';
+import { isParticipantOpen, isParticipantSatisfied, isProducerResponsibility } from './participantStates';
 import { isReviewRole } from './roleCatalog';
 import { requirementApplies, type RequirementTaskScope } from './types';
 
@@ -240,6 +240,49 @@ export interface ManagedProducer {
 }
 
 /**
+ * Roles that have DISCHARGED this stage: they hold a satisfied slot here (completed,
+ * waived, skipped) and no open one. PURE.
+ *
+ * A role in this set has done what the stage asked of it. Re-dispatching it is not
+ * progress — it is the loop measured on project 11 (2026-09-16, ticket #2180): the
+ * Business Analyst completed `ready`, the Architect completed `ready`, and the BA was
+ * then dispatched again every 6–20 minutes for the rest of the evening — 625 role
+ * dispatches across 119 tickets in three hours. Nothing reopened its slot; the producer
+ * pick below simply never asked whether the role it chose had already finished.
+ */
+export function dischargedStageRoles(slots: readonly ManagedProducerSlot[]): Set<string> {
+  const open = new Set(slots.filter((s) => isParticipantOpen(s.state)).map((s) => s.roleKey));
+  return new Set(slots
+    .filter((s) => isParticipantSatisfied(s.state) && !open.has(s.roleKey))
+    .map((s) => s.roleKey));
+}
+
+/**
+ * Has this stage's PRODUCTION been delivered, so that no producer run is owed here? PURE.
+ *
+ * True when either
+ *  • the ticket's manifest names producer (owner/contributor) slots on this stage and
+ *    every one of them is satisfied — the work exists, and whatever is still owed (a
+ *    reviewer's verdict) is a sign-off, not a run; or
+ *  • every agent the stage authority could dispatch belongs to a role that has already
+ *    discharged the stage (see {@link dischargedStageRoles}).
+ *
+ * A completed producer slot reopens only through an explicit, recorded verdict on the
+ * producer's own slot (see `reopenProducerSlots.ts`), which makes the slot OPEN again and
+ * therefore no longer counted here.
+ */
+export function isStageProductionDischarged(
+  authority: ManagedLaneAuthority,
+  slots: readonly ManagedProducerSlot[],
+): boolean {
+  const producers = slots.filter((s) => isProducerResponsibility(s.responsibility));
+  if (producers.length > 0 && producers.every((s) => isParticipantSatisfied(s.state))) return true;
+  const discharged = dischargedStageRoles(slots);
+  const bound = authority.approvers.filter((a) => !!a.agentRef);
+  return bound.length > 0 && bound.every((a) => discharged.has(a.roleKey));
+}
+
+/**
  * Pick the role-attributed producer for a managed stage. PURE.
  *
  * Order, most-specific first:
@@ -275,12 +318,21 @@ export function pickManagedProducer(
     return { roleKey: slot.roleKey, agentRef: slot.assigneeRef, model: approver?.model ?? null, source: 'manifest' };
   }
 
+  // A COMPLETED PRODUCER SLOT STAYS CLOSED. The tiers below are generic — lane staffing
+  // and the roster know nothing about this ticket — so without this check they re-picked
+  // the stage's first producing role on every sweep after it had finished: the #2180
+  // loop (see {@link dischargedStageRoles}). Once the stage's production is delivered,
+  // what is owed is a verdict, and that belongs to the requirement gate and the manager's
+  // sign-off drive, never to another producer run.
+  if (isStageProductionDischarged(authority, slots)) return null;
+  const discharged = dischargedStageRoles(slots);
+
   // A PRODUCER builds the stage's deliverable, so a producing role is preferred over a
   // reviewing one even when the reviewer is listed first: dispatching a Code Reviewer to
   // write the code it is meant to judge is a run that cannot succeed and cannot be
   // reviewed. Falls back to any bound role, because a stage whose only authorized role is
   // a review role still needs SOMEBODY to act on it.
-  const bound = authority.approvers.filter((a) => !!a.agentRef);
+  const bound = authority.approvers.filter((a) => !!a.agentRef && !discharged.has(a.roleKey));
   const staffed = bound.find((a) => !isReviewRole(a.roleKey)) ?? bound[0];
   if (staffed?.agentRef) {
     return {
@@ -371,7 +423,20 @@ export async function resolveManagedProducer(
     tenantId: number; projectId: number; taskId: number; swimlaneId: string;
     stageKey: string; task: ManagedTaskScope; env?: Env;
   },
-): Promise<{ producer: ManagedProducer | null; authority: ManagedLaneAuthority }> {
+): Promise<{
+  producer: ManagedProducer | null;
+  authority: ManagedLaneAuthority;
+  /**
+   * No producer because the stage's production is already DELIVERED (see
+   * {@link isStageProductionDischarged}) — not because a role failed to bind. The two
+   * demand opposite responses: a discharged stage waits on a verdict, an unbound one on
+   * staffing, and reporting the first as `managed_no_role` would send the manager's
+   * staffing ladder after a gap that does not exist.
+   */
+  stageDischarged: boolean;
+  /** Required roles on this stage whose slot is still unsatisfied — what it waits on. */
+  outstandingRoleKeys: string[];
+}> {
   // The roster is loaded HERE, not passed in, because this is the selector's entry point:
   // every caller of it needs binding, so making them each remember to supply one is the
   // optional-parameter trap that produced the 447-ticket cohort.
@@ -388,7 +453,12 @@ export async function resolveManagedProducer(
   const effectiveAuthority = effectiveRoleKeys.length === authority.roleKeys.length
     ? authority
     : { ...authority, roleKeys: effectiveRoleKeys };
-  return { producer, authority: effectiveAuthority };
+  return {
+    producer,
+    authority: effectiveAuthority,
+    stageDischarged: producer == null && isStageProductionDischarged(authority, slots),
+    outstandingRoleKeys: [...new Set(slots.filter((s) => !isParticipantSatisfied(s.state)).map((s) => s.roleKey))],
+  };
 }
 
 /**

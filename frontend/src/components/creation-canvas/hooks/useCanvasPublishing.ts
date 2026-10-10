@@ -24,6 +24,7 @@ import type { CanvasLayoutViewport } from '@/lib/canvasGridFit';
 import { sendWorkspaceCommand } from '@/lib/workspace/workspaceCommands';
 import { useRecordAppDeployments } from './useRecordAppDeployments';
 import { useLatestRef } from './useLatestRef';
+import { reportBackgroundFailure } from '@/lib/reportError';
 
 export interface UseCanvasPublishingDeps {
   /** This viewer may change the board — a publish recorded as a deployment card writes it. */
@@ -176,6 +177,17 @@ export function useCanvasPublishing({ canEdit, confirm, connectionKind, creating
       .catch(() => null);
     if (appProject) return appProject.projectId;
     const project = await createProject({ name: name.trim().slice(0, 120) || 'Untitled project', origin: 'canvas' });
+    // Tie the new project to this board BEFORE the publish records outcomes about
+    // it. The card drawn below reaches the server only on the next graph save, so
+    // the publish's `started` outcome would otherwise name a project the session
+    // does not hold yet. Best-effort: a failed link costs attribution, not the publish.
+    await creationSessionsApi.linkProject(sessionId, project.id).catch((error: unknown) => {
+      void reportBackgroundFailure({
+        message: error instanceof Error ? error.message : 'Linking the published project to its board failed',
+        level: 'warning',
+        context: { sessionId, projectId: project.id },
+      });
+    });
     // Left of the object it serves, so the edge reads container → thing, and far
     // enough out that the two cards do not overlap on a fresh board.
     const node = newNode('project', source ? { x: source.position.x - 380, y: source.position.y } : { x: 200, y: 200 });

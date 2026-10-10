@@ -29,3 +29,19 @@ describe('scheduled PR reconciliation policy wiring', () => {
     expect(source).toContain('6 * 60 * 60 * 1_000');
   });
 });
+
+describe('scheduled PR reconciliation GitHub throttle back-off', () => {
+  it('skips a credential while GitHub has it cooled down, via the shared cooldown helper', () => {
+    expect(source).toContain('activeGithubCooldown(env, credentialKey)');
+    expect(source).toContain('recordGithubCooldown(env, credentialKey');
+  });
+
+  it('reports a refused credential once as a warning rather than an error every tick', () => {
+    // The cooldown branch reports ONCE at warning level and skips the error report
+    // below it; cooled ticks never reach this branch at all.
+    const catchBlock = source.slice(source.indexOf('githubCooldownFor(error)'));
+    const cooldownBranch = catchBlock.slice(0, catchBlock.indexOf('continue;'));
+    expect(cooldownBranch).toContain("level: 'warning'");
+    expect(cooldownBranch).toContain('recordGithubCooldown(');
+  });
+});

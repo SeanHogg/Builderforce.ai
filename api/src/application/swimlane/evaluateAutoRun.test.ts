@@ -96,6 +96,16 @@ describe('classifyResolvedAutoRun', () => {
   it('a human gate still outranks it — an operator gate is not a configuration defect', () => {
     expect(classifyResolvedAutoRun({ ...base, gate: 'human', managedNoRole: true }).reason).toBe('human_gate');
   });
+
+  // Ticket #2180: a stage whose producers have all DELIVERED is waiting on a verdict, not
+  // on a run — and it is certainly not a staffing gap. It must never read `will_run`, and
+  // it must outrank `managed_no_role` so the staffing ladder is not sent after nothing.
+  it('holds a DISCHARGED managed stage on its sign-off, ahead of managed_no_role', () => {
+    expect(classifyResolvedAutoRun({ ...base, decisionAutoRun: false, stageDischarged: true, managedNoRole: true }))
+      .toEqual({ reason: 'lane_requirement_gate', canRunNow: false });
+    expect(classifyResolvedAutoRun({ ...base, stageDischarged: true }).canRunNow).toBe(false);
+    expect(classifyResolvedAutoRun({ ...base, gate: 'human', stageDischarged: true }).reason).toBe('human_gate');
+  });
 });
 
 describe('AUTO_RUN_REASON_TEXT / EVALUATED_AUTO_RUN_REASONS — the reason vocabulary', () => {
@@ -473,6 +483,8 @@ describe('evaluateTaskAutoRun — a lifecycle-managed board', () => {
     vi.mocked(resolveManagedProducer).mockResolvedValue({
       producer: { roleKey: 'developer', agentRef: 'bob-dev', model: null, source: 'manifest' },
       authority: { roleKeys: ['developer', 'architect'], approvers: [], tier: 'requirements' },
+      stageDischarged: false,
+      outstandingRoleKeys: ['developer'],
     });
 
     const e = await evaluateTaskAutoRun(stubDb(rows(TaskStatus.TODO)), noRuns, args);
@@ -492,6 +504,8 @@ describe('evaluateTaskAutoRun — a lifecycle-managed board', () => {
     vi.mocked(resolveManagedProducer).mockResolvedValue({
       producer: null,
       authority: { roleKeys: ['architect'], approvers: [], tier: 'requirements' },
+      stageDischarged: false,
+      outstandingRoleKeys: ['architect'],
     });
 
     const e = await evaluateTaskAutoRun(stubDb(rows(TaskStatus.TODO)), noRuns, args);
@@ -503,6 +517,34 @@ describe('evaluateTaskAutoRun — a lifecycle-managed board', () => {
     expect(e.staffedAgentRefs).toEqual(['lane-agent']);
     // And Run-now cannot force it either: there is no role-attributed run to force.
     expect(e.candidate).toBeNull();
+  });
+
+  // TICKET #2180, at the evaluator. BA and Architect both completed `ready`; the Product
+  // Owner's verdict is still owed. The stage's producer pick is null BECAUSE the work is
+  // delivered — so the verdict is a hold on the sign-off, never a BA run, and never the
+  // `managed_no_role` staffing verdict either.
+  it('holds a stage whose production is delivered — no producer run, no staffing verdict', async () => {
+    vi.mocked(resolveManagedProducer).mockResolvedValue({
+      producer: null,
+      authority: {
+        roleKeys: ['business-analyst', 'product-owner', 'architect'],
+        approvers: [
+          { roleKey: 'business-analyst', roleName: 'Business Analyst', agentRef: 'ba-1', agentName: 'BA', model: null },
+          { roleKey: 'architect', roleName: 'Architect', agentRef: 'arch-1', agentName: 'Architect', model: null },
+        ],
+        tier: 'requirements',
+      },
+      stageDischarged: true,
+      outstandingRoleKeys: ['product-owner'],
+    });
+
+    const e = await evaluateTaskAutoRun(stubDb(rows(TaskStatus.READY)), noRuns, { ...args, status: TaskStatus.READY });
+
+    expect(e.canRunNow).toBe(false);
+    expect(e.reason).toBe('lane_requirement_gate');
+    expect(e.managedRole).toBeNull();
+    expect(e.unfilledRoleKeys).toEqual([]);
+    expect(e.requirementGateRoles).toEqual(['product-owner']);
   });
 
   // The no-self-review guarantee, preserved: a review lane's reviewer round-trip belongs

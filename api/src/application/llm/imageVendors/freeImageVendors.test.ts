@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VendorRetryableError } from '../vendors/types';
 import { buildCloudflareImageBody, cloudflareImageModule, parseCloudflareImageBody } from './cloudflare';
 import { buildGoogleImageBody, googleImageModule, parseGoogleImageResponse } from './googleai';
-import { buildHuggingFaceImageBody, huggingFaceImageModule } from './huggingface';
+import { HUGGING_FACE_IMAGE_ENDPOINT, buildHuggingFaceImageBody, huggingFaceImageModule, parseHuggingFaceImageResponse } from './huggingface';
 import { pollinationsImageModule, pollinationsImageUrl } from './pollinations';
 import { anyImageVendorBound, getAllImageVendorIds, imageModelsByTierPrefixed } from './registry';
 import { executeImageGeneration, parseImageSize } from './types';
@@ -95,9 +95,45 @@ describe('google (gemini) image vendor', () => {
 });
 
 describe('hugging face image vendor', () => {
-  it('sends inputs + size parameters', () => {
-    expect(buildHuggingFaceImageBody({ apiKey: 'k', model: 'm', prompt: 'p', size: '512x512' }))
-      .toEqual({ inputs: 'p', parameters: { width: 512, height: 512 } });
+  // hf-inference answers `410 ... deprecated and no longer supported by provider
+  // hf-inference` (2026-10); FLUX.1-schnell is served by the nscale provider's
+  // OpenAI-compatible images endpoint behind the same HF router.
+  it('sends the OpenAI images body (b64_json, n, size) to the nscale provider route', () => {
+    expect(buildHuggingFaceImageBody({ apiKey: 'k', model: 'black-forest-labs/FLUX.1-schnell', prompt: 'p', size: '512x512' }))
+      .toEqual({ model: 'black-forest-labs/FLUX.1-schnell', prompt: 'p', response_format: 'b64_json', n: 1, size: '512x512' });
+    expect(buildHuggingFaceImageBody({ apiKey: 'k', model: 'm', prompt: 'p', n: 2 })).not.toHaveProperty('size');
+    expect(HUGGING_FACE_IMAGE_ENDPOINT).toBe('https://router.huggingface.co/nscale/v1/images/generations');
+  });
+
+  it('lists only FLUX.1-schnell — SDXL base is fal-ai-only on HF and was dropped', () => {
+    expect(huggingFaceImageModule.catalog.map((e) => e.id)).toEqual(['black-forest-labs/FLUX.1-schnell']);
+  });
+
+  it('POSTs to the nscale route with the hf token and parses data[0].b64_json', async () => {
+    const fetchFn = mockFetch(() => new Response(JSON.stringify({ created: 1, data: [{ b64_json: PNG_B64 }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const result = await huggingFaceImageModule.generate({ apiKey: 'hf_x', model: 'black-forest-labs/FLUX.1-schnell', prompt: 'p', responseFormat: 'b64_json' });
+    expect(String(fetchFn.mock.calls[0]![0])).toBe(HUGGING_FACE_IMAGE_ENDPOINT);
+    expect((fetchFn.mock.calls[0]![1]!.headers as Record<string, string>)['Authorization']).toBe('Bearer hf_x');
+    expect(result.data).toEqual([{ b64_json: PNG_B64 }]);
+  });
+
+  it('returns a data: URL with the sniffed mime type for url callers', () => {
+    expect(parseHuggingFaceImageResponse('m', { data: [{ b64_json: '/9j/4AAQ' }] }, 'url').data)
+      .toEqual([{ url: 'data:image/jpeg;base64,/9j/4AAQ' }]);
+    expect(parseHuggingFaceImageResponse('m', { data: [{ b64_json: PNG_B64 }] }, 'url').data)
+      .toEqual([{ url: `data:image/png;base64,${PNG_B64}` }]);
+  });
+
+  it('treats a 200 without b64_json as retryable (no image), not a success', () => {
+    expect(() => parseHuggingFaceImageResponse('m', { data: [] }, 'url')).toThrow(VendorRetryableError);
+  });
+
+  it('surfaces "no remaining credits" (402) as a retryable 402 capacity failure', async () => {
+    mockFetch(() => new Response('{"error":"You have no remaining credits"}', { status: 402 }));
+    const err = await huggingFaceImageModule.generate({ apiKey: 'hf', model: 'black-forest-labs/FLUX.1-schnell', prompt: 'p' })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(VendorRetryableError);
+    expect((err as VendorRetryableError).status).toBe(402);
   });
 
   it('cascades (retryable) when the monthly credit is spent — 402', async () => {

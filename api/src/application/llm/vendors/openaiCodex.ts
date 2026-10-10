@@ -57,13 +57,27 @@ function unpack(value: string): PackedAuth {
  * it either, and the output ceiling here is a server-side per-model property, so
  * there is nothing to cap client-side. See {@link ResponsesBodyOptions.omitMaxOutputTokens}.
  */
-function requestBody(params: VendorCallParams): Record<string, unknown> {
-  const responsesLite = params.model.startsWith('gpt-5.6-');
+export function codexRequestBody(params: VendorCallParams): Record<string, unknown> {
+  const responsesLite = usesResponsesLite(params.model);
   return buildResponsesBody(params, {
     omitMaxOutputTokens: true,
     responsesLite,
-    extra: { stream: true, include: ['reasoning.encrypted_content'] },
+    extra: {
+      stream: true,
+      include: ['reasoning.encrypted_content'],
+      // Responses Lite REQUIRES the reasoning context to span every turn: without it the
+      // backend answers `400 X-OpenAI-Internal-Codex-Responses-Lite requires
+      // `reasoning.context` to be `all_turns`` (8x on the daily cron, 2026-10). The
+      // classic shape has no such field, so it is sent on the Lite contract only.
+      ...(responsesLite ? { reasoning: { context: 'all_turns' } } : {}),
+    },
   });
+}
+
+/** Codex 5.6 models speak the Responses Lite contract (header + body shape). ONE
+ *  predicate, read by both the body builder and the header set, so they cannot drift. */
+function usesResponsesLite(model: string): boolean {
+  return model.startsWith('gpt-5.6-');
 }
 
 /**
@@ -131,7 +145,7 @@ async function codexFetch(params: VendorCallParams): Promise<Response> {
   const auth = unpack(params.apiKey);
   const sessionId = crypto.randomUUID();
   const threadId = crypto.randomUUID();
-  const responsesLite = params.model.startsWith('gpt-5.6-');
+  const responsesLite = usesResponsesLite(params.model);
   const response = await fetch(ENDPOINT, {
     method: 'POST',
     headers: {
@@ -145,7 +159,7 @@ async function codexFetch(params: VendorCallParams): Promise<Response> {
       'x-client-request-id': threadId,
       ...(responsesLite ? { 'x-openai-internal-codex-responses-lite': 'true' } : {}),
     },
-    body: JSON.stringify(requestBody(params)),
+    body: JSON.stringify(codexRequestBody(params)),
     signal: params.signal,
   });
   if (!response.ok) {

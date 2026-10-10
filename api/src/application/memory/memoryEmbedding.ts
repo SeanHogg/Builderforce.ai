@@ -8,6 +8,18 @@
  * space into the same column. Pinning costs the failover on the write path (a
  * failed embed leaves the row unembedded and the backfill sweep retries it) and
  * buys a column whose contents are always comparable.
+ *
+ * Why there is still no fallback VENDOR for memory (decided 2026-10-10, after the
+ * OpenRouter embedding key died and every write in the window went unembedded): the
+ * second embedder the platform has, Cloudflare Workers AI BGE, answers 1024 dimensions
+ * and the column is `vector(1536)`. A fallback is only sound if it produces the SAME
+ * SPACE — the same model on another host — because recall compares a query vector
+ * against stored ones; zero-padding a BGE vector to fit would store it, but it could
+ * never be compared with a text-embedding-3-small query. The failure is therefore
+ * contained rather than routed around: a write never fails on a missing vector (the
+ * lexical arm still recalls it) and `memoryEmbeddingBackfill` vectorises the row once
+ * the pinned model answers again. A second model means a second column (or a per-row
+ * dimension) plus a recall that embeds the query once per stored model.
  */
 
 import { dispatchEmbeddingVendor } from '../llm/embeddingVendors/registry';

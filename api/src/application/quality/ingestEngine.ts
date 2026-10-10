@@ -20,6 +20,7 @@ import type { Env } from '../../env';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { computeFingerprint, eventTitle, type NormalizedErrorEvent } from './errorSpec';
 import { enforceErrorEventsCap } from './errorEventsLedger';
+import { ignoredEventReason } from './ingestIgnoreList';
 import { resolveEventProjectId, type CollectorRef, type MappingRule } from './errorMapping';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { excluded } from '../../infrastructure/database/upsert';
@@ -56,6 +57,12 @@ export interface IngestResult {
   unmapped: number;
   /** Set when the monthly cap rejected the batch. */
   capExceeded?: boolean;
+  /**
+   * The subset of `dropped` matched by the declared ignore-list
+   * (`ingestIgnoreList`) — benign notices dropped before metering, so they
+   * neither consume the allowance nor open groups.
+   */
+  ignored?: number;
 }
 
 /**
@@ -73,13 +80,19 @@ export async function ingestErrorEvents(
 ): Promise<IngestResult> {
   if (events.length === 0) return { accepted: 0, dropped: 0, unmapped: 0 };
 
+  // Phase 0 — drop declared noise BEFORE the allowance gate, so a browser's
+  // benign notices never spend a tenant's monthly events or open a group.
+  const kept = events.filter((e) => ignoredEventReason(e) === null);
+  const ignoredCount = events.length - kept.length;
+  if (kept.length === 0) return { accepted: 0, dropped: ignoredCount, unmapped: 0, ignored: ignoredCount };
+
   // Monthly allowance gate — graceful backpressure: stored data stays usable,
   // only NEW ingestion stops. Fails open on a metering error (see the ledger).
   // `env` matters here: it serves the superadmin-unlimited lookup through the
   // 5-min read-through cache. Without it this ingest path — the hottest one in the
   // system — ran an extra uncached membership query per batch on every capped tenant.
   const cap = await enforceErrorEventsCap(db, collector.tenantId, env);
-  if (!cap.allowed) return { accepted: 0, dropped: events.length, unmapped: 0, capExceeded: true };
+  if (!cap.allowed) return { accepted: 0, dropped: events.length, unmapped: 0, capExceeded: true, ignored: ignoredCount };
 
   const now = new Date();
   const eventRows: Array<typeof errorEvents.$inferInsert> = [];
@@ -88,7 +101,7 @@ export async function ingestErrorEvents(
   const userPairs: Array<{ groupId: string; userKey: string }> = [];
   // Projects touched this batch (a tenant collector can fan across several).
   const touchedProjects = new Set<number>();
-  let dropped = 0;
+  let dropped = ignoredCount;
   // Dropped BECAUSE nothing routes it, as opposed to dropped because it threw.
   let unmapped = 0;
 
@@ -96,7 +109,7 @@ export async function ingestErrorEvents(
   // throws is dropped, the batch continues.
   type Routed = { e: NormalizedErrorEvent; projectId: number; fingerprint: string; seenAt: Date };
   const routed: Routed[] = [];
-  for (const e of events) {
+  for (const e of kept) {
     try {
       const projectId = resolveEventProjectId(e, collector, rules);
       if (projectId == null) { dropped++; unmapped++; continue; } // unmappable tenant-level event
@@ -259,7 +272,7 @@ export async function ingestErrorEvents(
     await bumpCacheVersion(env, qualityGroupsTenantVersionKey(collector.tenantId));
   }
 
-  return { accepted: eventRows.length, dropped, unmapped };
+  return { accepted: eventRows.length, dropped, unmapped, ignored: ignoredCount };
 }
 
 /**

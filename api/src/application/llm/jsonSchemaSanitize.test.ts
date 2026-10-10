@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CEREBRAS_STRICT_KEYWORDS,
+  applySchemaDialect,
   sanitizeExtraBodyForVendor,
   schemaStripKeywordsForVendor,
   stripUnsupportedSchemaKeywords,
@@ -25,9 +26,13 @@ describe('vendorNeedsSchemaStrip', () => {
     expect(vendorNeedsSchemaStrip('openrouter')).toBe(true);
   });
 
+  it('rewrites for nvidia (propertyNames) and anthropic (closed objects)', () => {
+    expect(vendorNeedsSchemaStrip('nvidia')).toBe(true);
+    expect(vendorNeedsSchemaStrip('anthropic')).toBe(true);
+  });
+
   it('passes through for vendors with permissive validators', () => {
     expect(vendorNeedsSchemaStrip('googleai')).toBe(false);
-    expect(vendorNeedsSchemaStrip('nvidia')).toBe(false);
     expect(vendorNeedsSchemaStrip('ollama')).toBe(false);
     expect(vendorNeedsSchemaStrip('cloudflare')).toBe(false);
   });
@@ -52,7 +57,10 @@ describe('schemaStripKeywordsForVendor (metadata-driven)', () => {
 
   it('returns an empty set for permissive vendors', () => {
     expect(schemaStripKeywordsForVendor('googleai').size).toBe(0);
-    expect(schemaStripKeywordsForVendor('nvidia').size).toBe(0);
+  });
+
+  it('nvidia strips only propertyNames (NIM grammar: Unimplemented keys: ["propertyNames"])', () => {
+    expect([...schemaStripKeywordsForVendor('nvidia')]).toEqual(['propertyNames']);
   });
 });
 
@@ -218,5 +226,117 @@ describe('sanitizeExtraBodyForVendor', () => {
     const js = rf.json_schema as Record<string, unknown>;
     expect(js.name).toBe('roadmap');
     expect(js.strict).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dialect rewrites beyond stripping — production 2026-10-10:
+//   Anthropic 400 `output_config.format.schema: For 'object' type,
+//     'additionalProperties' must be false`
+//   NVIDIA NIM 400 `Grammar error: Unimplemented keys: ["propertyNames"]`
+// ---------------------------------------------------------------------------
+
+describe('applySchemaDialect — closeObjects', () => {
+  const CLOSE = { stripKeywords: [], closeObjects: true } as const;
+
+  it('closes every object node: root, properties, items, anyOf/oneOf/allOf, $defs, definitions', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        a: { type: 'object', properties: { x: { type: 'string' } } },
+        list: { type: 'array', items: { type: 'object', properties: { y: { type: 'number' } } } },
+        either: { anyOf: [{ type: 'object', properties: {} }, { type: 'string' }] },
+        one: { oneOf: [{ type: ['object', 'null'], properties: {} }] },
+        all: { allOf: [{ properties: { z: { type: 'boolean' } } }] },
+        ref: { $ref: '#/$defs/Thing' },
+      },
+      $defs: { Thing: { type: 'object', properties: { t: { type: 'string' } } } },
+      definitions: { Legacy: { type: 'object' } },
+    };
+    const out = applySchemaDialect(schema, CLOSE) as any;
+    expect(out.additionalProperties).toBe(false);
+    expect(out.properties.a.additionalProperties).toBe(false);
+    expect(out.properties.list.items.additionalProperties).toBe(false);
+    expect(out.properties.either.anyOf[0].additionalProperties).toBe(false);
+    expect(out.properties.either.anyOf[1]).toEqual({ type: 'string' });
+    expect(out.properties.one.oneOf[0].additionalProperties).toBe(false);
+    expect(out.properties.all.allOf[0].additionalProperties).toBe(false);
+    expect(out.$defs.Thing.additionalProperties).toBe(false);
+    expect(out.definitions.Legacy.additionalProperties).toBe(false);
+    expect(out.properties.ref).toEqual({ $ref: '#/$defs/Thing' });
+  });
+
+  it('overrides a caller-supplied `true` or schema-valued additionalProperties (z.record)', () => {
+    const out = applySchemaDialect({
+      type: 'object',
+      properties: { open: { type: 'object', additionalProperties: true }, rec: { type: 'object', additionalProperties: { type: 'string' } } },
+    }, CLOSE) as any;
+    expect(out.properties.open.additionalProperties).toBe(false);
+    expect(out.properties.rec.additionalProperties).toBe(false);
+  });
+
+  it('does not touch non-object nodes and never mutates the input', () => {
+    const schema = { type: 'object', properties: { s: { type: 'string' } } };
+    const snapshot = JSON.parse(JSON.stringify(schema));
+    const out = applySchemaDialect(schema, CLOSE) as any;
+    expect(out.properties.s).toEqual({ type: 'string' });
+    expect(schema).toEqual(snapshot);
+  });
+
+  it('strips per keyword without mistaking a PROPERTY named like a keyword', () => {
+    const out = applySchemaDialect({
+      type: 'object',
+      properties: { pattern: { type: 'string', pattern: '^a' }, propertyNames: { type: 'string' } },
+      propertyNames: { pattern: '^[a-z]+$' },
+    }, { stripKeywords: ['pattern', 'propertyNames'] }) as any;
+    expect(Object.keys(out.properties)).toEqual(['pattern', 'propertyNames']);
+    expect(out.properties.pattern).toEqual({ type: 'string' });
+    expect(out.propertyNames).toBeUndefined();
+  });
+});
+
+describe('sanitizeExtraBodyForVendor — nvidia propertyNames', () => {
+  it('drops propertyNames at every depth for nvidia and keeps the value shape', () => {
+    const body = {
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'x',
+          schema: {
+            type: 'object',
+            properties: {
+              scores: { type: 'object', propertyNames: { enum: ['a', 'b'] }, additionalProperties: { type: 'number' } },
+            },
+            $defs: { M: { type: 'object', propertyNames: { type: 'string' } } },
+          },
+        },
+      },
+    };
+    const out = sanitizeExtraBodyForVendor('nvidia', body) as any;
+    const schema = out.response_format.json_schema.schema;
+    expect(JSON.stringify(schema)).not.toContain('propertyNames');
+    expect(schema.properties.scores.additionalProperties).toEqual({ type: 'number' });
+    // NIM keeps every other draft-07 keyword — only the observed rejection is stripped.
+    expect(sanitizeExtraBodyForVendor('nvidia', { response_format: { type: 'json_schema', json_schema: { schema: { type: 'string', maxLength: 3 } } } }))
+      .toMatchObject({ response_format: { json_schema: { schema: { type: 'string', maxLength: 3 } } } });
+  });
+
+  it('is applied by the nvidia module itself (the factory wires a declared dialect)', async () => {
+    const { nvidiaModule } = await import('./vendors/nvidia');
+    let sent: any = null;
+    const originalFetch = globalThis.fetch;
+    (globalThis as { fetch: typeof fetch }).fetch = (async (_url: unknown, init?: RequestInit) => {
+      sent = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }) as unknown as typeof fetch;
+    try {
+      await nvidiaModule.call({
+        apiKey: 'nv', model: 'nvidia/nemotron-3-super-120b-a12b', messages: [{ role: 'user', content: 'hi' }],
+        extraBody: { response_format: { type: 'json_schema', json_schema: { name: 'x', schema: { type: 'object', propertyNames: { enum: ['k'] } } } } },
+      });
+    } finally {
+      (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+    }
+    expect(JSON.stringify(sent.response_format)).not.toContain('propertyNames');
   });
 });

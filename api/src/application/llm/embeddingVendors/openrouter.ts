@@ -26,9 +26,9 @@ const ENDPOINT = 'https://openrouter.ai/api/v1/embeddings';
 export const DEFAULT_EMBEDDING_MODEL = 'nvidia/llama-nemotron-embed-vl-1b-v2:free';
 
 const CATALOG: ReadonlyArray<EmbeddingVendorModelEntry> = [
-  { id: DEFAULT_EMBEDDING_MODEL,           label: 'Nemotron Embed VL 1B (Free)', brand: 'NVIDIA' },
-  { id: 'openai/text-embedding-3-small',   label: 'Text Embedding 3 Small',      brand: 'OpenAI' },
-  { id: 'openai/text-embedding-3-large',   label: 'Text Embedding 3 Large',      brand: 'OpenAI' },
+  { id: DEFAULT_EMBEDDING_MODEL,           label: 'Nemotron Embed VL 1B (Free)', brand: 'NVIDIA', dimensions: 2048 },
+  { id: 'openai/text-embedding-3-small',   label: 'Text Embedding 3 Small',      brand: 'OpenAI', dimensions: 1536 },
+  { id: 'openai/text-embedding-3-large',   label: 'Text Embedding 3 Large',      brand: 'OpenAI', dimensions: 3072 },
 ];
 
 const HEADERS = { 'HTTP-Referer': 'https://builderforce.ai' };

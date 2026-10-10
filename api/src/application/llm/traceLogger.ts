@@ -23,6 +23,7 @@ import { llmTraces } from '../../infrastructure/database/schema';
 import { redactSecrets } from '../../infrastructure/security/redactSecrets';
 import type { ImageProxyResult } from './ImageProxyService';
 import type { HonoEnv } from '../../env';
+import { requestCarriesImages } from './vendors/capabilityGate';
 
 type Env = HonoEnv['Bindings'];
 
@@ -122,10 +123,7 @@ function requestShapeOf(body: Record<string, unknown> | undefined): Record<strin
   if (!body) return null;
   const messages = Array.isArray(body.messages) ? (body.messages as unknown[]) : [];
   const rf = body.response_format as { type?: string } | undefined;
-  const hasVision = messages.some((m) => {
-    const content = (m as { content?: unknown })?.content;
-    return Array.isArray(content) && content.some((p) => (p as { type?: string })?.type === 'image_url');
-  });
+  const hasVision = requestCarriesImages(messages);
   return {
     messageCount: messages.length,
     hasTools: Array.isArray(body.tools) && (body.tools as unknown[]).length > 0,

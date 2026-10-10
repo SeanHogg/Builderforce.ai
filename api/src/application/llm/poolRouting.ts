@@ -13,6 +13,7 @@
 import type { ChatCompletionRequest } from './LlmProxyService';
 import { CODING_MODEL_POOL, CODING_DEFAULT_MODEL, RECOGNIZED_CODER_MODELS } from './modelPool';
 import { catalogEntry, strictSchemaSupport, tierForModel, type AiCapability } from './vendors';
+import { requestCarriesImages } from './vendors/capabilityGate';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shape-driven routing — single source of truth for "which capability does
@@ -113,12 +114,9 @@ export function inferShape(body: ChatCompletionRequest): ShapeFlags {
   // `json_object` is loose and never trips `schema_too_complex`.
   const hasStrictSchema = rf?.type === 'json_schema';
 
-  const hasVision = Array.isArray(body.messages) && body.messages.some((m) => {
-    const content = (m as unknown as { content?: unknown }).content;
-    return Array.isArray(content) && content.some(
-      (part) => (part as { type?: string } | null)?.type === 'image_url',
-    );
-  });
+  // The SAME detector the dispatcher's vision gate uses (capabilityGate.ts), so the
+  // soft reorder here and the hard skip there can never disagree on "has an image".
+  const hasVision = requestCarriesImages(body.messages as unknown as ReadonlyArray<unknown>);
 
   // OCR is signalled via `useCase` slug — the SDK's free-form telemetry tag.
   // Substring match on /ocr/i so tenant slugs like `invoice_ocr` or

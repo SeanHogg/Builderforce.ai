@@ -1,3 +1,63 @@
+## ✅ RESOLVED 2026-10-10 — Production log defects fixed (api, frontend, agent-runtime)
+
+All the code defects in the 2026-10-10 production log review ("Production signals" in ROADMAP.md) are fixed. The account actions left over stay on the roadmap.
+
+**Gateway and models**
+- **Dead model ids.**
+  - Cerebras retired `llama3.1-8b` and `qwen-3-235b-a22b-instruct-2507` (167 × 404 in a week). They are superseded by `gpt-oss-120b` and `qwen-3.8-27b`.
+  - NIM's `moonshotai/kimi-k2.6` is still listed but invoking it 404s. It is superseded by `kimi-k3`.
+  - OpenRouter retired `qwen/qwen3.8-27b:free`.
+  - Old free slugs that older clients still send now resolve to live free models through catalog `supersedes`: `qwen3-coder:free`, `qwen3-next-80b…:free`, `hermes-3…:free`, `llama-3.3-70b:free` and `gemma-3-27b:free`.
+  - agent-runtime's hard-coded free list uses live ids.
+  - The drift guard gained a Cerebras source (the public `/public/v1/models`), and the snapshot was refreshed.
+- **Strict structured output.** One schema-dialect walker (`jsonSchemaSanitize.ts`):
+  - Anthropic declares `closeObjects` (`additionalProperties:false` on every object node).
+  - NVIDIA strips `propertyNames`.
+  - The parallel Anthropic sanitizer is gone, and so is its bug of dropping a property named `pattern`.
+- **Codex.** Responses-Lite requests send `reasoning.context: 'all_turns'`.
+- **Vision gate** (`vendors/capabilityGate.ts`). An image request skips models declared text-only; a strict pin answers a typed 400. MiniMax-M1 and MiniMax-Text-01 are declared text-only (31 × "not support img").
+- **Per-model attempt budgets** (`vendors/attemptTimeout.ts`). Frontier models are no longer cut at the free plan's 15 s: Anthropic gets 90 s and Gemini Pro 90 s. Undeclared models keep the plan budget.
+- **Embeddings.** Cloudflare Workers AI is a third vendor in the general `/v1/embeddings` cascade; the secrets already exist on the Worker. Project memory stays pinned to `text-embedding-3-small` because its vectors are `vector(1536)` (an open roadmap decision).
+- **Image vendors.**
+  - The health probe sent the prompt `'ping'`, which Gemini's image models answer with `NO_IMAGE`, so Gemini was marked down for a reason no real request hits. The probe now describes an image.
+  - Hugging Face moved off the deprecated `hf-inference` route (410) onto `nscale`.
+  - FluxAPI's in-band `code=402` now surfaces as a 402.
+  - Together's dead `Lykon/DreamShaper` was removed.
+- **Strict-pin 503 → 500** (earlier the same day, see below).
+
+**API**
+- **Brain usage rows landed on the core database.** `BrainService.recordUsage` built a stub env with no transactional binding, so `resolveUsageDatabase` fell back to core. These are the "writerless" core `llm_usage_log` rows (2026-09-13/14 and 10-05). It now passes the real env (`brainUsageEnv.ts`).
+- **Unique-key races.**
+  - `projects_key_key`: a generated key re-derives and retries, and an explicit key answers 409. Every generated-key caller uses `createProjectWithGeneratedKey`, including `builtinMcpService`.
+  - `project_sites_subdomain_key`: a derived subdomain is suffixed and a chosen one answers 409. A project's old subdomain is retired only after the new one is claimed.
+- **Error ingest.**
+  - A declared ignore list drops the benign ResizeObserver notice (57 % of events).
+  - The fingerprint no longer includes bundle line/column positions or content hashes, which is what split one error into a group per deploy. `release` is still stored on the group.
+- **PR reconciliation.** A GitHub 403/429 cools the credential down through the shared KV cache, honouring `retry-after` / `x-ratelimit-reset`. It reports once instead of on every 5-minute tick.
+- **The role re-dispatch loop (510,632 dispatches July–August; the 2026-09-16 burst).**
+  - Root cause: nothing reopened a slot. `pickManagedProducer`'s fallback tiers re-picked a role whose slot was already COMPLETED, behind a reviewer verdict asked for before any work existed.
+  - The pick now skips discharged roles. A delivered stage reports `lane_requirement_gate`.
+  - Reviewers are asked only after the producers ahead of them deliver.
+  - A reopen is explicit and recorded (`reopenProducerSlots.ts`).
+  - Manager returns go through `returnToImplementation.ts`, which holds a code ticket with no usable repo instead of re-dispatching it.
+  - Regression test: `managedLaneRoles.test.ts`, "ticket #2180 — a completed producer slot stays closed".
+  - The 50-run ceiling stays as defence in depth.
+
+**Frontend**
+- **Plain-HTTP crash** (`crypto.randomUUID is not a function`, 69 events). An inline polyfill runs before any bundle (`lib/randomUuidPolyfill.ts`). `middleware.ts` 301s plain HTTP to https and folds www onto the apex in one hop (`lib/secureTransport.ts`). HSTS is sent in `_headers` and on middleware responses.
+- **`/api/tools/agent-send` 404s.** Docs Markdown links are root-absolute (`/tools/agent-send`), so through the `/docs` proxy they landed on the app's `/tools/[id]` diagnostics page. The proxy now re-homes root-absolute links under `/docs`. An unknown tool id renders a localized "this tool doesn't exist" state with a link to all tools, not a load error (`tools.unknownTool`, five locales).
+- **Outcomes 400** ("Project is not linked to this session"). A project carried by a card on the board now counts. Publish links the project it creates before recording outcomes, and reports a failed link instead of swallowing it. An unheld project is recorded unattributed rather than refused.
+- **Root-closure baseline** now records `lib/canvas/boardRetention.ts`, which came in with the kept-board release commit `59c8c9283` and had left the guard red.
+
+**Operator actions taken:** `OPENROUTER_API_KEY` and `OPENROUTER_API_KEY_PRO` were verified (chat + embeddings) and set on the `builderforce-api` Worker.
+
+**Verified by Sonnet:**
+- API type-check (tsc + tsgo) clean.
+- 523 targeted API tests across 33 files. The one stale expectation (Together now has one free image model) was fixed and re-run.
+- 122 targeted frontend tests across 4 files, and agent-runtime tsc clean.
+- API guards and the root-closure guard after the follow-up fixes.
+- The frontend type-check's single error is in another session's in-flight composer file (`ComposerOptionsMenu.tsx`), not in this change set.
+
 ## ✅ RESOLVED 2026-10-10 — One prompt for every edit: "Select to edit" feeds the Brain, and the composer suggests fixed next steps (frontend)
 
 **Was:** two parts of the simplified Studio prompt design were unbuilt (ROADMAP, 2026-10-09):

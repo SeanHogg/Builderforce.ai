@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VendorFatalError, VendorRetryableError } from '../vendors/types';
 import {
+  fluxEnvelopeError,
   classifyFluxTaskResponse,
   extractFluxImageUrl,
   extractFluxTaskId,
@@ -183,9 +184,31 @@ describe('fluxapi: generate()', () => {
 
   it('throws VendorRetryableError on a 200 with neither url nor task id', async () => {
     mockFetchOnce(200, { code: 200, data: {}, message: 'pending' });
-    await expect(fluxApiModule.generate({
+    const err = await fluxApiModule.generate({
       apiKey: 'test-key', model: 'flux-kontext-pro', prompt: 'a duck',
-    })).rejects.toBeInstanceOf(VendorRetryableError);
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(VendorRetryableError);
+    // No HTTP-range embedded code → stays the generic malformed-envelope 502.
+    expect((err as VendorRetryableError).status).toBe(502);
+  });
+
+  // Production 2026-10: `embedded: code=402: no image url or task id in response` was
+  // filed as a 502. FluxAPI's in-band code 402 is "insufficient credit" — a payment /
+  // capacity failure, and must carry that status to the cascade and the probe.
+  it('surfaces an embedded code 402 (insufficient credit) as a retryable 402', async () => {
+    mockFetchOnce(200, { code: 402, data: null, message: 'Insufficient credits' });
+    const err = await fluxApiModule.generate({
+      apiKey: 'test-key', model: 'flux-kontext-pro', prompt: 'a duck',
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(VendorRetryableError);
+    expect((err as VendorRetryableError).status).toBe(402);
+    expect((err as Error).message).toContain('payment required');
+  });
+
+  it('fluxEnvelopeError carries any embedded HTTP-range code and accepts a numeric string', () => {
+    expect(fluxEnvelopeError('m', { code: '429', message: 'slow down' }).status).toBe(429);
+    expect(fluxEnvelopeError('m', { code: 'OK' }).status).toBe(502);
+    expect(fluxEnvelopeError('m', null).status).toBe(502);
   });
 
   it('async-poll: resolves a taskId by polling the task endpoint until a url appears', async () => {
@@ -262,14 +285,14 @@ describe('together: generate()', () => {
   it('throws retryable error on empty data array (cascade advances)', async () => {
     mockFetchOnce(200, { created: 1, data: [] });
     await expect(togetherImageModule.generate({
-      apiKey: 'test-key', model: 'Lykon/DreamShaper', prompt: 'a duck',
+      apiKey: 'test-key', model: 'black-forest-labs/FLUX.1-schnell-Free', prompt: 'a duck',
     })).rejects.toBeInstanceOf(VendorRetryableError);
   });
 
   it('throws retryable on 503 (cascade-eligible)', async () => {
     mockFetchOnce(503, { error: 'overloaded' });
     await expect(togetherImageModule.generate({
-      apiKey: 'test-key', model: 'Lykon/DreamShaper', prompt: 'a duck',
+      apiKey: 'test-key', model: 'black-forest-labs/FLUX.1-schnell-Free', prompt: 'a duck',
     })).rejects.toBeInstanceOf(VendorRetryableError);
   });
 
@@ -277,7 +300,7 @@ describe('together: generate()', () => {
     const fn = mockFetchOnce(200, { data: [{ url: 'x' }] });
     await togetherImageModule.generate({
       apiKey: 'test-key',
-      model: 'Lykon/DreamShaper',
+      model: 'black-forest-labs/FLUX.1-schnell-Free',
       prompt: 'p',
       size: '1024x768',
     });
@@ -293,6 +316,10 @@ describe('together: generate()', () => {
 // ===========================================================================
 
 describe('image vendor catalogs', () => {
+  it('together.catalog no longer lists Lykon/DreamShaper (Together answers 404)', () => {
+    expect(togetherImageModule.catalog.map((e) => e.id)).not.toContain('Lykon/DreamShaper');
+  });
+
   it('together.catalog uses FREE tier (cascade contract)', () => {
     for (const entry of togetherImageModule.catalog) {
       expect(entry.tier).toBe('FREE');

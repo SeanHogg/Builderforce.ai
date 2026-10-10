@@ -761,9 +761,9 @@ const CATALOG: BuiltinTool[] = [
     run: async (ctx, a) => {
       const name = str(a.name).trim();
       if (!name) throw new Error('name is required');
-      const p = await ctx.projects.createProject({
+      // Collision-safe: re-derives the key if a concurrent create wins it.
+      const p = await ctx.projects.createProjectWithGeneratedKey({
         tenantId: ctx.tenantId,
-        key: await ctx.projects.buildUniqueKey(ctx.tenantId, name),
         name,
         description: a.description != null ? str(a.description) : null,
         template: a.template != null ? str(a.template) : null,

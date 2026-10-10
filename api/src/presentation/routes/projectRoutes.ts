@@ -720,8 +720,11 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     });
     if (!assignment.ok) return c.json({ error: assignment.message }, assignment.status);
 
-    const project = await projectService.createProject({
-      key:           body.key?.trim() || (await projectService.buildUniqueKey(tenantId, name)),
+    // A caller-chosen key that is taken answers 409; a derived key retries past
+    // insert races instead (both inside ProjectService — the global unique index
+    // on `projects.key` is the arbiter, never a 500).
+    const explicitKey = body.key?.trim();
+    const createDto = {
       name,
       description:   body.description,
       template:      body.template ?? null,
@@ -736,7 +739,10 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       origin: body.origin ?? null,
       companyId: body.companyId ?? null,
       tenantId,
-    });
+    };
+    const project = explicitKey
+      ? await projectService.createProject({ ...createDto, key: explicitKey })
+      : await projectService.createProjectWithGeneratedKey(createDto);
     await provisionProject(c.env as Env, db, tenantId, project, {
       kanbanTemplateId: body.kanbanTemplateId,
     });
@@ -793,9 +799,8 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       return c.json({ action: 'updated', project: updated.toPlain() });
     }
 
-    const created = await projectService.createProject({
+    const created = await projectService.createProjectWithGeneratedKey({
       tenantId,
-      key: await projectService.buildUniqueKey(tenantId, name),
       name,
       description: body.description,
       rootWorkingDirectory: body.rootWorkingDirectory,
@@ -894,9 +899,8 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
           { description, rootWorkingDirectory },
           tenantId,
         )
-      : await projectService.createProject({
+      : await projectService.createProjectWithGeneratedKey({
           tenantId,
-          key: await projectService.buildUniqueKey(tenantId, name),
           name,
           description,
           rootWorkingDirectory,

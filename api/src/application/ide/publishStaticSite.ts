@@ -24,12 +24,12 @@ import { appsDatabaseOf } from './appsDatabase';
 import {
   SITES_PREFIX,
   HOSTING_APEX,
-  checkSubdomainAvailability,
   newVersionToken,
   invalidateSite,
   contentTypeFor,
 } from './siteHosting';
 import { ensureDefaultCollection } from './siteData';
+import { choosePublishSubdomain, claimSiteRow } from './siteSubdomainClaim';
 import { ensureProjectBackend } from '../backend';
 import { recordSiteRelease, type ReleaseSource } from './siteReleases';
 import { SITE_LANDING_KEY, landingPageForProject } from './siteLandingPage';
@@ -83,7 +83,8 @@ export type PublishResult = PublishSuccess | PublishFailure;
  * Claim the subdomain, replace its contents with `assets`, and record the
  * release. Returns a typed failure (rather than throwing) for the two cases a
  * caller must surface to the user: an unusable subdomain and one already owned
- * by a different project.
+ * by a different project — including one claimed by a concurrent publish
+ * between the availability check and the insert.
  */
 export async function publishStaticSite(input: PublishInput): Promise<PublishResult> {
   const { env, db, bucket, projectId, tenantId, projectName, requestedSubdomain, assets } = input;
@@ -100,25 +101,13 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
     .limit(1);
   const oldSub = current?.subdomain;
 
-  const requested = requestedSubdomain?.trim() || oldSub || projectName || `app-${projectId}`;
-  // ONE uniqueness rule, shared with the availability endpoint and the
-  // conversion path (`checkSubdomainAvailability`). This used to normalise and
-  // check ownership inline; three copies of that rule is how one of them starts
-  // accepting a reserved label that the serving side then refuses to route.
-  const availability = await checkSubdomainAvailability(db, requested, projectId);
-  if (!availability.label) {
-    return {
-      ok: false,
-      status: 400,
-      error: availability.reason === 'reserved'
-        ? `"${requested}" is reserved by the platform. Choose another address.`
-        : 'Invalid subdomain. Use lowercase letters, numbers and hyphens.',
-    };
-  }
-  if (!availability.available) {
-    return { ok: false, status: 409, error: `Subdomain "${availability.label}" is taken.` };
-  }
-  const subdomain = availability.label;
+  // Which label this publish claims: a chosen one must be free, a name-derived
+  // one is suffixed past a collision (`siteSubdomainClaim`).
+  const choice = await choosePublishSubdomain(db, {
+    projectId, projectName, requestedSubdomain, currentSubdomain: oldSub ?? null,
+  });
+  if (!choice.ok) return choice;
+  const subdomain = choice.subdomain;
 
   // Each build lands under its OWN version prefix rather than overwriting the
   // subdomain root. Publishing used to delete every object under the subdomain
@@ -127,16 +116,6 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
   // will eventually need. Old versions are pruned below, not here.
   const versionToken = newVersionToken();
   const newPrefix = `${SITES_PREFIX}${subdomain}/${versionToken}/`;
-
-  // If this project previously published under a DIFFERENT subdomain, retire it —
-  // the name is now free for someone else, so nothing of ours may remain there.
-  if (oldSub && oldSub !== subdomain) {
-    const oldPrefix = `${SITES_PREFIX}${oldSub}/`;
-    for (const obj of (await bucket.list({ prefix: oldPrefix })).objects ?? []) {
-      await bucket.delete(obj.key!);
-    }
-    await invalidateSite(env, oldSub);
-  }
 
   let totalBytes = 0;
   for (const asset of assets) {
@@ -180,7 +159,7 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
     });
   }
 
-  const [siteRow] = await apps
+  const claim = await claimSiteRow(db, subdomain, projectId, () => apps
     .insert(projectSites)
     .values({
       projectId,
@@ -212,8 +191,33 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
         updatedAt: sql`NOW()`,
       },
     })
-    .returning({ id: projectSites.id });
+    .returning({ id: projectSites.id }));
+  if (!claim.ok) {
+    // Another project won the address between the check and the insert. The
+    // build we just uploaded is unreachable; drop it rather than strand it.
+    try {
+      for (const obj of (await bucket.list({ prefix: newPrefix })).objects ?? []) {
+        await bucket.delete(obj.key!);
+      }
+    } catch (error) {
+      reportCaughtError(error, { source: 'application/ide/publishStaticSite.ts', operation: 'dropUnclaimedBuild' });
+    }
+    return claim;
+  }
+  const [siteRow] = claim.row;
   await invalidateSite(env, subdomain);
+
+  // If this project previously published under a DIFFERENT subdomain, retire it —
+  // the name is now free for someone else, so nothing of ours may remain there.
+  // Only AFTER the new address is claimed: retiring first meant a publish that
+  // then lost its new address left the project with no live site at all.
+  if (oldSub && oldSub !== subdomain) {
+    const oldPrefix = `${SITES_PREFIX}${oldSub}/`;
+    for (const obj of (await bucket.list({ prefix: oldPrefix })).objects ?? []) {
+      await bucket.delete(obj.key!);
+    }
+    await invalidateSite(env, oldSub);
+  }
 
   // Register the release and prune old ones. Best-effort for the same reason the
   // convenience rows below are: a publish that succeeded must not be reported as

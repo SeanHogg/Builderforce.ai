@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideRunAttestation } from './attestRoleRun';
+import { decideRunAttestation, ledgerCovers } from './attestRoleRun';
 import {
   MAX_UNATTESTED_RUNS, isAttestationExhausted, isProducerResponsibility, readUnattestedRuns,
 } from './participantStates';
@@ -95,5 +95,36 @@ describe('unattested-run bookkeeping', () => {
     expect(isProducerResponsibility('contributor')).toBe(true);
     expect(isProducerResponsibility('reviewer')).toBe(false);
     expect(isProducerResponsibility(undefined)).toBe(false);
+  });
+});
+
+/**
+ * A producer reopened by an explicit `changes_requested` (see `reopenProducerSlots.ts`)
+ * must be credited when its rework run finishes — otherwise the reopened slot can never
+ * close, and an open producer slot is re-dispatched on every sweep: the loop the reopen
+ * exists to replace. A reviewer's own `changes_requested` stays its answer.
+ */
+describe('ledgerCovers', () => {
+  const row = (verdict: string, laneKey: string | null = 'in_progress') => ({ laneKey, verdict });
+
+  it('covers a producer slot only with a CLOSING latest verdict', () => {
+    expect(ledgerCovers([row('approved')], 'in_progress', 'owner')).toBe(true);
+    expect(ledgerCovers([row('waived')], 'in_progress', 'owner')).toBe(true);
+    // Reopened after its credit: the rework run must be credited again.
+    expect(ledgerCovers([row('approved'), row('changes_requested')], 'in_progress', 'owner')).toBe(false);
+    // …and once credited, the slot is closed again — one reason, one rework run.
+    expect(ledgerCovers([row('approved'), row('changes_requested'), row('approved')], 'in_progress', 'contributor')).toBe(true);
+    expect(ledgerCovers([], 'in_progress', 'owner')).toBe(false);
+  });
+
+  it('lets an exact-lane verdict outrank a lane-less one, exactly as syncStates does', () => {
+    expect(ledgerCovers([row('changes_requested'), row('approved', null)], 'in_progress', 'owner')).toBe(false);
+    expect(ledgerCovers([row('approved', null)], 'in_progress', 'owner')).toBe(true);
+    expect(ledgerCovers([row('approved', 'ready')], 'in_progress', 'owner')).toBe(false);
+  });
+
+  it('keeps the reviewer reading: ANY verdict is the reviewer\'s answer', () => {
+    expect(ledgerCovers([row('changes_requested')], 'in_progress', 'reviewer')).toBe(true);
+    expect(ledgerCovers([row('approved', 'ready')], 'in_progress', 'reviewer')).toBe(false);
   });
 });

@@ -6,6 +6,7 @@ import { isUnknownRootSlug, NOT_FOUND_REWRITE_PATH } from '@/lib/rootRoutes';
 import { isCanvasInvitationRoute } from '@/lib/shellRouting';
 import { canvasAppPath, STUDIO_ROUTE } from '@/lib/studio/studioHost';
 import { productHostRedirect } from '@/lib/productHosts';
+import { HSTS_HEADERS, isLocalHost, secureCanonicalRedirect } from '@/lib/secureTransport';
 
 /**
  * Route protection rules:
@@ -99,7 +100,23 @@ function ensureLocaleCookie(request: NextRequest, res: NextResponse): NextRespon
   return res;
 }
 
+/**
+ * Transport first, routing second. A plain-HTTP or `www.` request is sent to the
+ * HTTPS apex before any rule below sees it (`lib/secureTransport.ts` for why —
+ * an insecure page has no `crypto.randomUUID`, and the app crashed on it), and
+ * every response served over HTTPS carries HSTS so the browser never asks over
+ * HTTP again. Prerendered pages the Worker never sees get the same header from
+ * `public/_headers`.
+ */
 export function middleware(request: NextRequest) {
+  const secureTarget = secureCanonicalRedirect(new URL(request.url), request.headers);
+  if (secureTarget) return NextResponse.redirect(secureTarget, 301);
+  // Past the redirect, every non-development request arrived over HTTPS.
+  const res = route(request);
+  return isLocalHost(request.nextUrl.hostname) ? res : withHeaders(res, HSTS_HEADERS);
+}
+
+function route(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
 
   // A product host (`studio.`, `spawn.`) sends its root to the product's route, and an

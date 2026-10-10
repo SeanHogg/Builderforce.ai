@@ -430,11 +430,33 @@ export interface VendorModule {
    */
   schemaDialect?: {
     stripKeywords: readonly string[];
+    /** Force `additionalProperties: false` onto every object-typed node of a caller
+     *  schema — the vendor's structured-output compiler requires closed objects
+     *  (Anthropic). See `SchemaDialect` in jsonSchemaSanitize.ts. */
+    closeObjects?: boolean;
     /** Vendor-wide strict-`json_schema` ceiling. Absent = 'full'. A per-model entry
      *  may override it — an aggregator like OpenRouter is 'full' overall while the
      *  Gemini models it routes are 'limited', because the ceiling belongs to the
      *  DECODER, not to the vendor that fronts it. */
     strictSchema?: SchemaSupport;
+  };
+  /**
+   * This vendor's per-ATTEMPT deadline, as data. The plan sets one budget for a whole
+   * dispatch (the free plan's fast-fail 15s, the paid default 25s), which is right for a
+   * small free model and wrong for a frontier one: a thinking Opus turn or a 550B NIM
+   * model legitimately needs longer than 15s to first byte, and a strict-pinned turn has
+   * no fallback, so the plan's timeout BECOMES the failure. A declared budget is a FLOOR
+   * on that attempt only — it raises the plan budget for this model and never lowers a
+   * caller's longer one — and is clamped to `MAX_DECLARED_ATTEMPT_TIMEOUT_MS`. It bounds
+   * the time to the response HEADERS (see `fetchWithVendorTimeout`), so on a streaming
+   * call it only lengthens the wait for the first byte.
+   *
+   * `byModel` keys are this vendor's own (un-prefixed) model ids; `default` covers the
+   * rest. Absent = the plan budget applies unchanged. Resolved by `vendors/attemptTimeout.ts`.
+   */
+  attemptTimeoutMs?: {
+    default?: number;
+    byModel?: Readonly<Record<string, number>>;
   };
   /**
    * Whether this vendor's upstream REFUSES the Worker's own egress and must therefore

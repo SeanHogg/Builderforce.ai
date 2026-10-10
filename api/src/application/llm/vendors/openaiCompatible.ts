@@ -19,6 +19,7 @@
  */
 
 import { pseudoStreamFromCall } from './pseudoStream';
+import { sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
 import {
   AUTH_STATUSES,
   buildOpenAIChatBody,
@@ -94,8 +95,12 @@ export interface OpenAICompatibleVendorOptions {
    * that streams would silently never reach the account they connected.
    */
   pseudoStream?: boolean;
-  /** Per-vendor JSON-Schema strict-mode strip set (see `VendorModule.schemaDialect`). */
-  schemaDialect?: { stripKeywords: readonly string[] };
+  /** Per-vendor JSON-Schema dialect (see `VendorModule.schemaDialect`). Declaring it is
+   *  enough: unless `transformExtra` is given explicitly, the factory applies it to every
+   *  request's `response_format` via `sanitizeExtraBodyForVendor`. */
+  schemaDialect?: VendorModule['schemaDialect'];
+  /** Per-attempt deadline declaration (see `VendorModule.attemptTimeoutMs`). */
+  attemptTimeoutMs?: VendorModule['attemptTimeoutMs'];
   /** This upstream refuses the Worker's own egress — see `VendorModule.requiresLocalEgress`. */
   requiresLocalEgress?: boolean;
   /** The vendor's flagships as ROUTED ids — see `VendorModule.flagships`. */
@@ -213,14 +218,18 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     catalog = [],
     defaultTier = 'STANDARD',
     maxTokensField,
-    transformExtra,
     autoRoute = false,
     noStream = false,
     pseudoStream = false,
     schemaDialect,
     requiresLocalEgress = false,
     flagships,
+    attemptTimeoutMs,
   } = opts;
+  // A declared dialect applies itself — a vendor never has to remember to wire the
+  // sanitizer as well as declare what it rejects. An explicit `transformExtra` wins.
+  const transformExtra = opts.transformExtra
+    ?? (schemaDialect ? (extra: Record<string, unknown> | undefined) => sanitizeExtraBodyForVendor(id, extra) : undefined);
 
   const catalogById = new Map(catalog.map((m) => [m.id, m]));
   const bodyOpts = (maxTokensField || transformExtra)
@@ -237,6 +246,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     catalog,
     autoRoute,
     ...(schemaDialect ? { schemaDialect } : {}),
+    ...(attemptTimeoutMs ? { attemptTimeoutMs } : {}),
     ...(requiresLocalEgress ? { requiresLocalEgress } : {}),
     ...(flagships ? { flagships } : {}),
     tierFor(modelId: string): AiModelTier {

@@ -144,9 +144,8 @@ async function provisionOwnedWorkspace(
     if (opts.seedProject) {
       try {
         const projectService = new ProjectService(new ProjectRepository(db));
-        const project = await projectService.createProject({
+        const project = await projectService.createProjectWithGeneratedKey({
           tenantId,
-          key: await projectService.buildUniqueKey(tenantId, STARTER_PROJECT_NAME),
           name: STARTER_PROJECT_NAME,
         });
         await provisionProject(env, db, tenantId, project);

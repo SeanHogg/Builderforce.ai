@@ -32,7 +32,7 @@ import { trackToolRun } from '@/lib/marketingApi';
 import { defaultInput, answersComplete, type ToolDefinition, type ToolResult } from '@/lib/tools';
 import { getStoredUser, getStoredTenantToken } from '@/lib/auth';
 import { useComponentProjectId } from '@/lib/components/scope';
-import { faultText } from '@/lib/apiClient';
+import { ApiRequestError, faultText } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const fieldInput: React.CSSProperties = {
@@ -77,6 +77,9 @@ export default function ToolRunner({
   const [input, setInput] = useState<Record<string, number>>(initialInput ?? {});
   const [result, setResult] = useState<ToolResult | null>(initialResult);
   const [error, setError] = useState<string | null>(null);
+  // An id the catalog does not know (an old or mistyped `/tools/<id>` link) is not a
+  // load failure: it is a page with nothing on it, and says so.
+  const [unknownTool, setUnknownTool] = useState(false);
   const [computing, setComputing] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveMsg, setSaveMsg] = useState('');
@@ -98,7 +101,11 @@ export default function ToolRunner({
         setInput(initialInput && Object.keys(initialInput).length ? initialInput : defaultInput(d));
         onDefinitionLoad?.(d);
       })
-      .catch((e: Error) => { if (active) setError(errorMessage(e)); });
+      .catch((e: Error) => {
+        if (!active) return;
+        if (e instanceof ApiRequestError && e.status === 404) setUnknownTool(true);
+        else setError(errorMessage(e));
+      });
     return () => { active = false; };
     // The definition is keyed by the tool alone. `initialInput` / `onDefinitionLoad`
     // are deliberately out: both change identity on every host render, and a
@@ -142,6 +149,13 @@ export default function ToolRunner({
     }
   };
 
+  if (unknownTool) {
+    return (
+      <div role="status" style={card}>
+        {t('unknownTool')} <Link href="/tools">{t('allTools')}</Link>
+      </div>
+    );
+  }
   if (error && !def) return <div role="alert" style={card}>{t('loadError')}: {error}</div>;
   if (!def) return <div role="status" style={{ color: 'var(--muted)' }}>{t('loading')}</div>;
 

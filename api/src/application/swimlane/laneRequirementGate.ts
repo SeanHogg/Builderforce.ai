@@ -292,7 +292,7 @@ export async function enforceLaneRequirements(
     // ticket requires the security role; a docs ticket doesn't require QA).
     const [taskRow] = await db.select({ title: tasks.title, taskType: tasks.taskType, actionType: tasks.actionType }).from(tasks).where(eq(tasks.id, args.taskId)).limit(1);
     const allReqRows = await db
-      .select({ kind: swimlaneRequirements.kind, ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, isRequired: swimlaneRequirements.isRequired, ticketType: swimlaneRequirements.ticketType, condition: swimlaneRequirements.condition, quorum: swimlaneRequirements.quorum })
+      .select({ kind: swimlaneRequirements.kind, ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, isRequired: swimlaneRequirements.isRequired, ticketType: swimlaneRequirements.ticketType, condition: swimlaneRequirements.condition, quorum: swimlaneRequirements.quorum, position: swimlaneRequirements.position })
       .from(swimlaneRequirements)
       .where(eq(swimlaneRequirements.swimlaneId, lane.id))
       .orderBy(asc(swimlaneRequirements.position));
@@ -389,7 +389,20 @@ export async function enforceLaneRequirements(
       // reviewer per stage; re-asking is the AI Manager's `driveOutstandingSignoffs`,
       // which is bounded, journalled to `manager_actions`, and escalates through stall
       // triage — the path that is supposed to own retries.
-      const toDispatch = requiredReviewers.filter((r) => !latest.has(r.ref) && stateByRole.get(r.ref) !== 'in_progress');
+      //
+      // NOR IS A REVIEWER ASKED BEFORE THE WORK IT JUDGES EXISTS. Reviewers used to be
+      // dispatched ahead of every producer on the same stage, so on the managed
+      // template's `ready` lane (BA → Product Owner → Architect) the Product Owner was
+      // asked to approve requirements nobody had written yet. Measured on ticket #2180:
+      // the PO answered at 19:23, twenty-seven minutes BEFORE the BA finished, and that
+      // pre-work verdict is the one the stage then sat on. Tier (b) already refuses to
+      // preempt the work (`enforceLaneAgentApproval`); this is the same rule for tier (a):
+      // a reviewer waits until every required producer declared AHEAD of it (by
+      // requirement position) has delivered.
+      const producerAheadUnmet = (reviewer: { position: number | null }): boolean => requiredProducers.some((p) =>
+        (p.position ?? 0) < (reviewer.position ?? 0) && !isParticipantSatisfied(stateByRole.get(p.ref) ?? ''));
+      const toDispatch = requiredReviewers.filter((r) =>
+        !latest.has(r.ref) && stateByRole.get(r.ref) !== 'in_progress' && !producerAheadUnmet(r));
       for (const req of toDispatch) {
         const agentRef = await resolveRoleAgent(env, db, args.tenantId, args.projectId, board.id, req.ref);
         if (!agentRef) continue;

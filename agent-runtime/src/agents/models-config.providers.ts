@@ -671,8 +671,11 @@ export function buildBuilderForceAgentsllmProvider(): ProviderConfig {
         maxTokens: 8192,
       },
       {
-        id: "qwen/qwen3-coder:free",
-        name: "Qwen3 Coder (262k ctx)",
+        // Free slugs are re-checked against OpenRouter's live list (2026-10-10): the
+        // previous Qwen3 Coder / Gemma 3 / Llama 3.3 free endpoints are retired. The
+        // gateway also rewrites those old ids for older hosts (catalog `supersedes`).
+        id: "poolside/laguna-s-2.1:free",
+        name: "Laguna S 2.1 coder (262k ctx)",
         reasoning: false,
         input: ["text"],
         cost: BUILDERFORCE_AGENTSLLM_FREE_COST,
@@ -680,21 +683,21 @@ export function buildBuilderForceAgentsllmProvider(): ProviderConfig {
         maxTokens: 8192,
       },
       {
-        id: "google/gemma-3-27b-it:free",
-        name: "Gemma 3 27B (131k ctx)",
+        id: "google/gemma-4-31b-it:free",
+        name: "Gemma 4 31B (262k ctx)",
         reasoning: false,
         input: ["text"],
         cost: BUILDERFORCE_AGENTSLLM_FREE_COST,
-        contextWindow: 131072,
+        contextWindow: 262144,
         maxTokens: 8192,
       },
       {
-        id: "meta-llama/llama-3.3-70b-instruct:free",
-        name: "Llama 3.3 70B (128k ctx)",
+        id: "nvidia/nemotron-3-super-120b-a12b:free",
+        name: "Nemotron 3 Super 120B (262k ctx)",
         reasoning: false,
         input: ["text"],
         cost: BUILDERFORCE_AGENTSLLM_FREE_COST,
-        contextWindow: 131072,
+        contextWindow: 262144,
         maxTokens: 8192,
       },
     ],

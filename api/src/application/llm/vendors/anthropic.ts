@@ -49,6 +49,7 @@ import {
 } from './types';
 import { ANTHROPIC_OAUTH_BETA, CLAUDE_CODE_SYSTEM_PROMPT } from '../anthropicOAuth';
 import { markAnthropicHistoryBreakpoint } from '../promptCaching';
+import { applySchemaDialect } from '../jsonSchemaSanitize';
 
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
 
@@ -209,27 +210,31 @@ interface AnthropicMessage { role: 'user' | 'assistant'; content: AnthropicBlock
  * model still returns the right structure — the constraint just stops being
  * machine-enforced. That is strictly better than a 400.
  */
-const UNSUPPORTED_SCHEMA_KEYWORDS = new Set([
+const UNSUPPORTED_SCHEMA_KEYWORDS: readonly string[] = [
   'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf',
   'minLength', 'maxLength', 'pattern',
   'minItems', 'maxItems', 'uniqueItems',
   'minProperties', 'maxProperties',
-]);
+];
 
 /**
- * Recursively drop {@link UNSUPPORTED_SCHEMA_KEYWORDS} from a JSON Schema so
- * Anthropic's structured-outputs compiler accepts it. Returns a new object —
- * the caller's schema is never mutated (it may be a shared/frozen constant).
+ * Anthropic's structured-output dialect, declared on the module (`schemaDialect`) so
+ * the ONE metadata-driven sanitizer (`jsonSchemaSanitize.applySchemaDialect`) serves it
+ * like every other strict vendor. Besides the stripped keywords, Anthropic requires
+ * every object node to be CLOSED — `output_config.format.schema: For 'object' type,
+ * 'additionalProperties' must be false` (400, 5x through 2026-10-10) whenever a caller's
+ * Zod-serialised schema omitted it on a nested object.
+ */
+export const ANTHROPIC_SCHEMA_DIALECT = { stripKeywords: UNSUPPORTED_SCHEMA_KEYWORDS, closeObjects: true } as const;
+
+/**
+ * Rewrite a caller's JSON Schema into Anthropic's dialect: drop
+ * {@link UNSUPPORTED_SCHEMA_KEYWORDS} and close every object node, recursively through
+ * `properties`, `items`, `anyOf`/`oneOf`/`allOf`, `$defs`/`definitions`. Returns a new
+ * object — the caller's schema is never mutated (it may be a shared/frozen constant).
  */
 export function sanitizeAnthropicJsonSchema(schema: unknown): unknown {
-  if (Array.isArray(schema)) return schema.map(sanitizeAnthropicJsonSchema);
-  if (!schema || typeof schema !== 'object') return schema;
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
-    if (UNSUPPORTED_SCHEMA_KEYWORDS.has(key)) continue;
-    out[key] = sanitizeAnthropicJsonSchema(value);
-  }
-  return out;
+  return applySchemaDialect(schema, ANTHROPIC_SCHEMA_DIALECT);
 }
 
 /** Map an OpenAI `tools[]` entry (or an already-Anthropic-shaped one) to the
@@ -707,6 +712,11 @@ function streamAnthropicToOpenAi(body: ReadableStream<Uint8Array>, model: string
 export const anthropicModule: VendorModule = {
   id: 'anthropic',
   catalog: CATALOG,
+  schemaDialect: ANTHROPIC_SCHEMA_DIALECT,
+  // Every catalog model thinks (adaptive, or always-on for Opus/Fable 5.x), so a
+  // non-streaming turn routinely exceeds the free plan's 15s fast-fail: strict-pinned
+  // Opus 5.5 timed out 15x at exactly 15000ms (2026-10-03..10) with no fallback.
+  attemptTimeoutMs: { default: 90_000 },
   // Sonnet leads plain turns and is the cheaper first rung of the coding floor; Opus
   // leads tool-driven agentic turns. Bare ids: the direct vendor has no route prefix.
   flagships: { agentic: 'claude-opus-5-5', chat: 'claude-sonnet-5-5' },

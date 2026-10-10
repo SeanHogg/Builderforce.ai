@@ -45,7 +45,8 @@ import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../runtime/dispatchCloudRun';
 import { classifySignoffOwnership, resolveRequiredSignoffGate, type SignoffGateResult } from '../kanban/signoffGate';
 import { driveOutstandingSignoffs } from '../kanban/driveSignoffs';
-import { decideTicketReadiness } from './evaluateTicketReadiness';
+import { decideTicketReadiness, expectsCodeDeliverable } from './evaluateTicketReadiness';
+import { describeReturnBlock, returnToImplementation } from './returnToImplementation';
 import { managerHoldsReviewGate } from './reviewGateAuthority';
 import { classifyDeliverablePaths, type DeliverableEvidence } from '../delivery/deliverableEvidence';
 import { coordinateTicket } from './coordinateTicket';
@@ -1105,9 +1106,17 @@ export async function applyRemedy(
     }
 
     case 'return_to_implementation': {
-      await db.update(tasks)
-        .set({ status: TaskStatus.IN_PROGRESS, completedAt: null, updatedAt: new Date() })
-        .where(scopedToTenant(tasks, args.tenantId, eq(tasks.id, task.id), eq(tasks.status, task.status)));
+      // The shared return primitive (see `returnToImplementation.ts`). A HELD return —
+      // the ticket expects code and its repository is unavailable — RAN and changed
+      // nothing, so it counts toward escalation and reaches a person, instead of being
+      // re-dispatched into an infrastructure failure no run can fix.
+      const returned = await returnToImplementation(env, db, {
+        tenantId, taskId: task.id, fromStatus: task.status,
+        expectsCode: expectsCodeDeliverable(task.taskType, task.actionType),
+        reason: 'stall triage returned it to implementation — it reached review missing its expected deliverable, or with a failing build',
+        actor: { kind: 'agent', ref: policy.managerRef ?? null, name: 'AI Manager' },
+      });
+      if (!returned.returned) return { ...ineffective, note: ` ${describeReturnBlock(returned.blockedReason)}` };
       const restarted = args.mayRaceExecutor
         ? await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
           tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS, submittedBy: by,

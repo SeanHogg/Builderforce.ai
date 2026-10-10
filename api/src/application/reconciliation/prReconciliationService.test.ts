@@ -103,6 +103,18 @@ describe('GitHub PR reconciliation collector', () => {
     expect(String(request?.body)).not.toContain('secret-token');
   });
 
+  it('carries the GitHub rate-limit reset onto the error so the sweep can honour it', async () => {
+    const reset = Math.floor(Date.now() / 1000) + 600;
+    const fetchFn = vi.fn().mockResolvedValue(new Response('API rate limit exceeded', {
+      status: 403,
+      headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(reset) },
+    }));
+    const error = await fetchOpenPullRequests('token', 'acme', 'app', 'github.com', fetchFn).catch((e) => e);
+    expect(error.details.status).toBe(403);
+    expect(error.details.retryAfterSeconds).toBeGreaterThan(500);
+    expect(error.details.retryAfterSeconds).toBeLessThanOrEqual(600);
+  });
+
   it('surfaces GraphQL errors rather than silently returning an incomplete inventory', async () => {
     const fetchFn = vi.fn().mockResolvedValue(new Response(JSON.stringify({ errors: [{ message: 'Something failed' }] }), { status: 200 }));
     await expect(fetchOpenPullRequests('token', 'acme', 'app', 'github.com', fetchFn)).rejects.toThrow('Something failed');

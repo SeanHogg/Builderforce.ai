@@ -32,6 +32,7 @@ import { learnFromPersistedTurns } from './brainEvermindLearning';
 import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
+import { brainUsageEnv } from './brainUsageEnv';
 import { recordActionRating } from '../llm/actionRatings';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
@@ -485,8 +486,11 @@ export class BrainService {
    *  were previously invisible to billing. The apiKey-only env is enough for the
    *  usage row; pricing lookup is best-effort. `traceId` links the billing row to
    *  the diagnostic trace {@link completeTraced} wrote for the same call. */
-  private recordUsage(apiKey: string | undefined, tenantId: number, useCase: string, result: Parameters<typeof recordProxyUsage>[2]['result'], traceId?: string): void {
-    void recordProxyUsage(this.db, { OPENROUTER_API_KEY: apiKey } as Env, { tenantId, useCase, result, ...(traceId ? { traceId } : {}) });
+  private recordUsage(call: BrainCallContext, result: Parameters<typeof recordProxyUsage>[2]['result'], traceId?: string): void {
+    // The REAL env (see brainUsageEnv): a stub env routed these rows to core.
+    void recordProxyUsage(this.db, brainUsageEnv(call.env, call.apiKey), {
+      tenantId: call.tenantId, useCase: call.useCase, result, ...(traceId ? { traceId } : {}),
+    });
   }
 
   /**
@@ -519,7 +523,7 @@ export class BrainService {
     const result = await service.complete(request, undefined, traceId);
     // Clone BEFORE the caller reads the body — a Response can only be consumed once.
     const cloned = (() => { try { return result.response.clone(); } catch { return null; } })();
-    this.recordUsage(call.apiKey, call.tenantId, call.useCase, result, traceId);
+    this.recordUsage(call, result, traceId);
     const responseBody = cloned ? await cloned.json().catch(() => null) : null;
     logTrace(call.env, call.executionCtx, {
       traceId,

@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-10-04T13:49:38.433Z",
+  "fetchedAt": "2026-10-10T14:52:23.574Z",
   "sources": {
     "openrouter": {
       "vendor": "openrouter",
@@ -114,6 +114,12 @@
         "anthropic/claude-haiku-4.5:batch": {
           "tools": true
         },
+        "anthropic/claude-haiku-5.5": {
+          "tools": true
+        },
+        "anthropic/claude-haiku-5.5:batch": {
+          "tools": true
+        },
         "anthropic/claude-opus-4.1": {
           "tools": true
         },
@@ -188,9 +194,6 @@
         },
         "arcee-ai/trinity-large-thinking": {
           "tools": true
-        },
-        "baidu/ernie-4.5-vl-424b-a47b": {
-          "tools": false
         },
         "bytedance-seed/seed-1.6": {
           "tools": true
@@ -378,6 +381,9 @@
         "google/gemini-3.8-flash:batch": {
           "tools": true
         },
+        "google/gemini-nano-banana-2.1": {
+          "tools": true
+        },
         "google/gemma-2-27b-it": {
           "tools": false
         },
@@ -429,7 +435,7 @@
         "inclusionai/ling-3.0-flash-fin": {
           "tools": true
         },
-        "inclusionai/ling-3.0-flash-sante:free": {
+        "inclusionai/ling-3.0-flash-sante": {
           "tools": true
         },
         "inclusionai/ling-3.0-flash-vl": {
@@ -443,9 +449,6 @@
         },
         "inference-net/schematron-v2-turbo": {
           "tools": false
-        },
-        "kwaipilot/kat-coder-pro-v2.5": {
-          "tools": true
         },
         "liquid/lfm-2.5-2.6b:free": {
           "tools": true
@@ -559,6 +562,9 @@
           "tools": true
         },
         "mistralai/mistral-large-2512:batch": {
+          "tools": true
+        },
+        "mistralai/mistral-large-4-0": {
           "tools": true
         },
         "mistralai/mistral-medium-3": {
@@ -930,6 +936,12 @@
         "openai/gpt-6.1-sol-pro": {
           "tools": true
         },
+        "openai/gpt-6.1-sol-pro:batch": {
+          "tools": true
+        },
+        "openai/gpt-6.1-sol:batch": {
+          "tools": true
+        },
         "openai/gpt-audio": {
           "tools": true
         },
@@ -1053,16 +1065,10 @@
         "qwen/qwen-plus": {
           "tools": true
         },
-        "qwen/qwen-plus-2025-07-28": {
-          "tools": true
-        },
         "qwen/qwen2.5-vl-72b-instruct": {
           "tools": false
         },
         "qwen/qwen3-14b": {
-          "tools": true
-        },
-        "qwen/qwen3-235b-a22b": {
           "tools": true
         },
         "qwen/qwen3-235b-a22b-2507": {
@@ -1077,13 +1083,7 @@
         "qwen/qwen3-30b-a3b-instruct-2507": {
           "tools": true
         },
-        "qwen/qwen3-30b-a3b-thinking-2507": {
-          "tools": true
-        },
         "qwen/qwen3-32b": {
-          "tools": true
-        },
-        "qwen/qwen3-8b": {
           "tools": true
         },
         "qwen/qwen3-coder": {
@@ -1098,15 +1098,6 @@
         "qwen/qwen3-coder-next": {
           "tools": true
         },
-        "qwen/qwen3-coder-plus": {
-          "tools": true
-        },
-        "qwen/qwen3-max": {
-          "tools": true
-        },
-        "qwen/qwen3-max-thinking": {
-          "tools": true
-        },
         "qwen/qwen3-next-80b-a3b-instruct": {
           "tools": true
         },
@@ -1116,22 +1107,13 @@
         "qwen/qwen3-vl-235b-a22b-instruct": {
           "tools": true
         },
-        "qwen/qwen3-vl-235b-a22b-thinking": {
-          "tools": true
-        },
         "qwen/qwen3-vl-30b-a3b-instruct": {
           "tools": true
         },
         "qwen/qwen3-vl-30b-a3b-thinking": {
           "tools": true
         },
-        "qwen/qwen3-vl-32b-instruct": {
-          "tools": true
-        },
         "qwen/qwen3-vl-8b-instruct": {
-          "tools": true
-        },
-        "qwen/qwen3-vl-8b-thinking": {
           "tools": true
         },
         "qwen/qwen3.5-122b-a10b": {
@@ -1167,9 +1149,6 @@
         "qwen/qwen3.6-flash": {
           "tools": true
         },
-        "qwen/qwen3.6-max-preview": {
-          "tools": true
-        },
         "qwen/qwen3.6-plus": {
           "tools": true
         },
@@ -1186,9 +1165,6 @@
           "tools": true
         },
         "qwen/qwen3.8-27b": {
-          "tools": true
-        },
-        "qwen/qwen3.8-27b:free": {
           "tools": true
         },
         "qwen/qwen3.8-flash": {
@@ -1231,18 +1207,18 @@
           "tools": false
         },
         "sao10k/l3.1-euryale-70b": {
-          "tools": true
+          "tools": false
         },
         "sao10k/l3.3-euryale-70b": {
           "tools": false
-        },
-        "stealth/space-bunny-alpha": {
-          "tools": true
         },
         "stepfun/step-3.5-flash": {
           "tools": true
         },
         "stepfun/step-3.7-flash": {
+          "tools": true
+        },
+        "stepfun/step-5-preview": {
           "tools": true
         },
         "tencent/hunyuan-a13b-instruct": {
@@ -1615,9 +1591,6 @@
         "nvidia/riva-translate-4b-instruct": {
           "tools": null
         },
-        "nvidia/riva-translate-4b-instruct-v1.1": {
-          "tools": null
-        },
         "nvidia/riva-translate-4b-instruct-v2": {
           "tools": null
         },
@@ -1653,6 +1626,19 @@
         },
         "zyphra/zamba2-7b-instruct": {
           "tools": null
+        }
+      }
+    },
+    "cerebras": {
+      "vendor": "cerebras",
+      "url": "https://api.cerebras.ai/public/v1/models",
+      "reachable": true,
+      "models": {
+        "gpt-oss-120b": {
+          "tools": true
+        },
+        "qwen-3.8-27b": {
+          "tools": true
         }
       }
     }
