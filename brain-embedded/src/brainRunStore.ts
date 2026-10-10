@@ -48,7 +48,7 @@ import { selectToolsForTurn } from './selectTools';
 import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel, withObservedModel, forgetResolvedModels } from './lastResolvedModel';
 import { isTicketRecordingTool, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, linkedTicketsReviewedComplete, isReadOnlyPlatformTool, type LinkedTicketToAdvance } from './chatWorkLinking';
-import { isCodeChangeTool, canChangeCodeHere, canShipHere, canReviewInPreview, localToolsIn, memoryToolsIn, studioToolsIn } from './localWorkspaceTools';
+import { isCodeChangeTool, isRepoStateReadTool, canChangeCodeHere, canShipHere, canReviewInPreview, localToolsIn, memoryToolsIn, studioToolsIn } from './localWorkspaceTools';
 import { codeChangesOf, isDelegationTool } from './codeChanges';
 import { delegationPlaceholders, placeholderAdvisory, placeholdersWritten, placeholderTraceEvent } from './placeholderGuard';
 import { canCompleteTicket, completionAdvisory, isTicketCompletion, notOnBaseBranchAdvisory, PlaceholderLedger } from './completionGuard';
@@ -139,11 +139,13 @@ function provenanceMetadata(result: StreamChatResult, requested?: string): strin
 const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files', 'find_symbol', 'file_outline', 'semantic_search', 'repo_map']);
 
 /** A tool whose identical-args repeat within a run is safe to suppress: a local file/search
- *  tool OR a read-only platform tool. This is the fix for the "Brain re-checks the same
+ *  tool, a host read of repository state (`review_ticket_branches` — forgotten by every
+ *  push / sync / platform write, see `REPO_STATE_READ_TOOLS`) OR a read-only platform tool. This is the fix for the "Brain re-checks the same
  *  roster / tickets / tasks every turn until it burns the iteration cap" loop — previously
  *  ONLY the 3 local file tools deduped, and any platform (MCP) call both went un-deduped
  *  AND wiped the cache, so repeated `builtin_*_list`/`_assignees` calls re-ran every turn. */
-const isDedupableRead = (name: string): boolean => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
+const isDedupableRead = (name: string): boolean =>
+  DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
 
 /** Fold a `x-builderforce-byo-unresolved` header value (comma-separated providers)
  *  into the run cell's accumulated set, updating the snapshot only when it grows so a

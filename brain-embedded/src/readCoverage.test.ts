@@ -236,6 +236,52 @@ describe('ReadCoverage · the exact-repeat guard', () => {
   });
 });
 
+describe('ReadCoverage · repository-state reads (review_ticket_branches)', () => {
+  const REVIEW = 'review_ticket_branches';
+  const args = { repo: 'Builderforce.ai', scope: 'open' };
+
+  it('dedupes an identical repeat review with nothing in between', () => {
+    // 21–31s a call: the repeat with byte-identical arguments is answered from the cache.
+    const cov = new ReadCoverage();
+    cov.record(REVIEW, args);
+    expect(cov.isRepeat(REVIEW, { scope: 'open', repo: './Builderforce.ai/' })).toBe(true);
+  });
+
+  it('keeps the review across calls that move no branch', () => {
+    const cov = new ReadCoverage();
+    cov.record(REVIEW, args);
+    for (const tool of ['git_status', 'git_diff', 'git_history']) cov.invalidate(tool, { repo: 'Builderforce.ai' });
+    cov.invalidate('edit_file', { path: CSS, oldText: 'a', newText: 'b' });
+    expect(cov.isRepeat(REVIEW, args)).toBe(true);
+  });
+
+  it.each(['git_push', 'git_commit', 'open_pull_request', 'git_cleanup_merged', 'git_sync_latest', 'git_undo', 'git_redo'])(
+    'RE-RUNS the review after %s — a cached branch picture must not outlive a repo-state change',
+    (tool) => {
+      const cov = new ReadCoverage();
+      cov.record(REVIEW, args);
+      cov.invalidate(tool, { repo: 'Builderforce.ai' });
+      expect(cov.isRepeat(REVIEW, args)).toBe(false);
+    },
+  );
+
+  it('RE-RUNS the review after a mutating shell command, not after a read-only one', () => {
+    const cov = new ReadCoverage();
+    cov.record(REVIEW, args);
+    cov.invalidate('run_command', { command: 'git log --oneline -5' });
+    expect(cov.isRepeat(REVIEW, args)).toBe(true);
+    cov.invalidate('run_command', { command: 'git branch -D ticket-42' });
+    expect(cov.isRepeat(REVIEW, args)).toBe(false);
+  });
+
+  it('RE-RUNS the review after a platform write (a PR merge or ticket update)', () => {
+    const cov = new ReadCoverage();
+    cov.record(REVIEW, args);
+    cov.invalidate('builtin_tasks_update', { id: 7, status: 'done' });
+    expect(cov.isRepeat(REVIEW, args)).toBe(false);
+  });
+});
+
 describe('ReadCoverage · fewer false misses', () => {
   it('treats spelling variants of one path as the same read', () => {
     const cov = new ReadCoverage();
