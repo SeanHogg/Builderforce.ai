@@ -768,6 +768,41 @@ export const jobWebsites = pgTable('job_websites', {
   uniqueIndex('uq_job_websites_slug').on(t.tenantId, t.slug),
 ]);
 
+/**
+ * Where a posting was PUBLISHED, as the board confirmed it (FO-B4, migration 1205).
+ *
+ * One row per (posting, job board), written ONLY by `hiring/distributePosting.ts` from
+ * the board's own answer read through the manifest's `response` mapping. `status` is
+ * `posted` only when that answer carried the board's id for the posting — a 2xx with no
+ * id is a `failed` row with the reason, never a confirmed one. The canvas card's
+ * `distribution` field is a projection of these rows, not a copy the board keeps.
+ *
+ * The board is named by `connector_key` (the identity applications are attributed to,
+ * via `job_applications.source`) and the credentials it ran under by `connection_id`.
+ * That second one is a cross-domain reference to `connector_connections`, so it is a
+ * plain column here and its foreign key (ON DELETE SET NULL — removing a connection
+ * must not erase the record that a posting went out) is declared in the migration.
+ */
+export const jobPostingDistributions = pgTable('job_posting_distributions', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull(),
+  jobPostingId: varchar('job_posting_id', { length: 36 }).notNull().references(() => jobPostings.id, { onDelete: 'cascade' }),
+  connectorKey: varchar('connector_key', { length: 64 }).notNull(),
+  connectionId: uuid('connection_id'),
+  /** The BOARD's id for the posting. Null exactly when no publication was confirmed. */
+  externalId:   varchar('external_id', { length: 255 }),
+  /** The public URL the board reported. Null when the board reports none — never derived. */
+  url:          varchar('url', { length: 1000 }),
+  /** 'posted' | 'failed'. */
+  status:       varchar('status', { length: 16 }).notNull(),
+  postedAt:     timestamp('posted_at'),
+  lastError:    text('last_error'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_job_posting_distributions_board').on(t.tenantId, t.jobPostingId, t.connectorKey),
+]);
+
 /** How long a cohort of hires took to reach productivity. A measured number with
  *  a stable definition — kept as its own table rather than a `metric_fact`
  *  because the definition (what "ramped" means for a role) is the data. */

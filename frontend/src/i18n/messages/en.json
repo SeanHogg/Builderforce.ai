@@ -23604,6 +23604,7 @@
         "board": "Board",
         "postedAt": "Posted",
         "url": "URL",
+        "applicants": "Applicants",
         "step": "Step",
         "channel": "Channel",
         "delayDays": "Delay (days)",
@@ -24314,6 +24315,23 @@
       "tooLarge": "That file is larger than the 25MB legal-file limit.",
       "uploadFailed": "The upload failed. Try again.",
       "statusDraft": "Draft"
+    },
+    "jobDistribution": {
+      "title": "Distribute to job boards",
+      "needsPosting": "Create the real posting first — this card has no posting id yet. Ask Brain to sync the job posting.",
+      "loading": "Reading connected job boards…",
+      "noneYet": "Not published to any job board yet.",
+      "noBoards": "No job board is connected to this workspace.",
+      "connectBoards": "Connect one under Integrations",
+      "chooseBoards": "Publish to",
+      "distribute": "{count, plural, =0 {Distribute} one {Distribute to # board} other {Distribute to # boards}}",
+      "distributing": "Distributing…",
+      "statusPosted": "Live",
+      "statusFailed": "Failed",
+      "postedOn": "Since {date}",
+      "view": "View posting",
+      "readFailed": "Where this posting is published could not be read.",
+      "distributeFailed": "The posting could not be distributed. Try again."
     },
     "notice": {
       "addedToCanvas": "I added the requested content to the canvas.",

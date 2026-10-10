@@ -21,7 +21,8 @@ vi.mock('../marketplace/jobPostings', () => ({
 }));
 
 import { upsertJobPosting } from '../marketplace/jobPostings';
-import { listCanvasPostings, readCanvasPosting, syncCanvasPosting } from './postings';
+import { attributeSources, listCanvasPostings, readCanvasPosting, syncCanvasPosting } from './postings';
+import type { PostingDistributionView } from './postingDistributionStore';
 
 const upserted = vi.mocked(upsertJobPosting);
 const ENV = {} as Env;
@@ -166,5 +167,37 @@ describe('syncCanvasPosting', () => {
     const { db } = atsDbStub({ rows: [[countRow({ postingId: 'posting-new' })], []] });
     const result = await syncCanvasPosting(db, ENV, { tenantId: 7, actorUserId: 'user-1', postingId: '  ', draft: { title: 'X' } });
     expect(result.created).toBe(true);
+  });
+});
+
+describe('attributing applicants to the boards a posting went out on (FO-B4)', () => {
+  const row = (connectorKey: string, board: string): PostingDistributionView => ({
+    postingId: 'posting-a', connectorKey, board, connectionId: null, externalId: 'x', url: null,
+    status: 'posted', postedAt: '2026-10-01T00:00:00.000Z', lastError: null, updatedAt: '2026-10-01T00:00:00.000Z',
+    applicantCount: 0,
+  });
+
+  it('names the board on a source that IS one, and shows a silent board at zero', () => {
+    const sources = attributeSources(
+      [{ source: 'lever-postings', count: 12 }, { source: 'referral', count: 3 }],
+      [row('lever-postings', 'Lever Postings'), row('indeed-jobs', 'Indeed')],
+    );
+    expect(sources).toEqual([
+      { source: 'lever-postings', count: 12, board: 'Lever Postings' },
+      { source: 'referral', count: 3 },
+      // "Indeed: 0" is the number that says a board is not working; leaving it out
+      // would read as "never posted there".
+      { source: 'indeed-jobs', count: 0, board: 'Indeed' },
+    ]);
+  });
+
+  it('never guesses a free-text source onto a board', () => {
+    const sources = attributeSources([{ source: 'LinkedIn', count: 5 }], [row('linkedin-jobs', 'LinkedIn Jobs')]);
+    expect(sources[0]).toEqual({ source: 'LinkedIn', count: 5 });
+    expect(sources[1]).toEqual({ source: 'linkedin-jobs', count: 0, board: 'LinkedIn Jobs' });
+  });
+
+  it('is the plain breakdown when nothing was distributed', () => {
+    expect(attributeSources([{ source: 'referral', count: 3 }], [])).toEqual([{ source: 'referral', count: 3 }]);
   });
 });

@@ -23604,6 +23604,7 @@
         "board": "Plateforme",
         "postedAt": "Publiée le",
         "url": "URL",
+        "applicants": "Candidatures",
         "step": "Étape",
         "channel": "Canal",
         "delayDays": "Délai (jours)",
@@ -24314,6 +24315,23 @@
       "tooLarge": "Ce fichier dépasse la limite de 25 Mo pour les documents juridiques.",
       "uploadFailed": "Le téléversement a échoué. Réessayez.",
       "statusDraft": "Brouillon"
+    },
+    "jobDistribution": {
+      "title": "Diffuser sur les sites d'emploi",
+      "needsPosting": "Créez d'abord la véritable offre : cette carte n'a pas encore d'identifiant d'offre. Demandez à Brain de synchroniser l'offre d'emploi.",
+      "loading": "Lecture des sites d'emploi connectés…",
+      "noneYet": "Pas encore diffusée sur un site d'emploi.",
+      "noBoards": "Aucun site d'emploi n'est connecté à cet espace de travail.",
+      "connectBoards": "Connectez-en un dans Intégrations",
+      "chooseBoards": "Diffuser sur",
+      "distribute": "{count, plural, =0 {Diffuser} one {Diffuser sur # site} other {Diffuser sur # sites}}",
+      "distributing": "Diffusion…",
+      "statusPosted": "En ligne",
+      "statusFailed": "Échec",
+      "postedOn": "Depuis le {date}",
+      "view": "Voir l'offre",
+      "readFailed": "Impossible de lire où cette offre est diffusée.",
+      "distributeFailed": "L'offre n'a pas pu être diffusée. Réessayez."
     },
     "notice": {
       "addedToCanvas": "J’ai ajouté le contenu demandé au canevas.",

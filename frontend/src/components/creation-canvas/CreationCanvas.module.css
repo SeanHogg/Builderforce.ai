@@ -1475,6 +1475,25 @@
 .legalUpload button:disabled { cursor:not-allowed; opacity:.48; }
 .legalUpload small { flex-basis:100%; color:var(--text-muted); font-size:10px; }
 .legalUploadError { flex-basis:100%; margin:0; color:var(--danger, #b91c1c) !important; font-size:11px; }
+/* The jobPosting Distribute control (FO-B4). Wraps at 360px: the board list and the
+   status chips flow onto their own lines rather than pushing the card wider. */
+.jobDistribution { display:flex; flex-direction:column; gap:8px; padding:10px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); color:var(--canvas-ink); max-width:100%; min-width:0; }
+.jobDistributionHint { margin:0; color:var(--canvas-muted); font-size:12px; }
+.jobDistributionTitle { font-size:11px; font-weight:700; text-transform:uppercase; color:var(--canvas-muted); }
+.jobDistributionList { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.jobDistributionList li { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; min-width:0; }
+.jobDistributionBoard { font-weight:600; overflow-wrap:anywhere; }
+.jobDistributionStatus { border-radius:var(--radius-full); padding:1px 8px; font-size:11px; border:1px solid var(--canvas-line); }
+.jobDistributionStatus[data-status="posted"] { color:var(--tone-success-ink); background:var(--tone-success-bg); border-color:var(--tone-success-mark); }
+.jobDistributionStatus[data-status="failed"] { color:var(--tone-danger-ink); background:var(--tone-danger-bg); border-color:var(--tone-danger-mark); }
+.jobDistribution small { color:var(--canvas-muted); font-size:11px; overflow-wrap:anywhere; }
+.jobDistribution a { color:var(--canvas-accent); font-size:12px; }
+.jobDistributionBoards { display:flex; flex-wrap:wrap; gap:6px 12px; margin:0; padding:0; border:0; min-width:0; }
+.jobDistributionBoards legend { padding:0; margin-bottom:4px; color:var(--canvas-muted); font-size:11px; }
+.jobDistributionBoards label { display:inline-flex; align-items:center; gap:6px; font-size:12px; min-width:0; }
+.jobDistribution button { align-self:flex-start; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:inherit; padding:7px 10px; cursor:pointer; max-width:100%; }
+.jobDistribution button:disabled { cursor:not-allowed; opacity:.48; }
+.jobDistributionError { margin:0; color:var(--tone-danger-ink) !important; font-size:11px; }
 .resumeControls input[type="range"] { width:140px; accent-color:#7c3aed; }
 .resumeTemplateGallery { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; max-height:520px; overflow:auto; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--canvas-panel-muted); padding:9px; }
 .resumeTemplateGallery > button { position:relative; display:flex; min-width:0; flex-direction:column; gap:4px; border:2px solid transparent; border-radius:8px; background:var(--surface); color:inherit; padding:6px; text-align:left; cursor:pointer; }

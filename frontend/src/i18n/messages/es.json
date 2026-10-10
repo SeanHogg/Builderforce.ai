@@ -23604,6 +23604,7 @@
         "board": "Portal",
         "postedAt": "Publicado",
         "url": "URL",
+        "applicants": "Candidaturas",
         "step": "Paso",
         "channel": "Canal",
         "delayDays": "Espera (días)",
@@ -24314,6 +24315,23 @@
       "tooLarge": "Ese archivo supera el límite de 25 MB para documentos legales.",
       "uploadFailed": "No se pudo subir el archivo. Inténtalo de nuevo.",
       "statusDraft": "Borrador"
+    },
+    "jobDistribution": {
+      "title": "Publicar en portales de empleo",
+      "needsPosting": "Crea primero la oferta real: esta tarjeta aún no tiene ID de oferta. Pide a Brain que sincronice la oferta de empleo.",
+      "loading": "Leyendo los portales de empleo conectados…",
+      "noneYet": "Aún no se ha publicado en ningún portal de empleo.",
+      "noBoards": "No hay ningún portal de empleo conectado a este espacio de trabajo.",
+      "connectBoards": "Conéctalo en Integraciones",
+      "chooseBoards": "Publicar en",
+      "distribute": "{count, plural, =0 {Publicar} one {Publicar en # portal} other {Publicar en # portales}}",
+      "distributing": "Publicando…",
+      "statusPosted": "Publicada",
+      "statusFailed": "Fallida",
+      "postedOn": "Desde el {date}",
+      "view": "Ver oferta",
+      "readFailed": "No se pudo leer dónde está publicada esta oferta.",
+      "distributeFailed": "No se pudo publicar la oferta. Inténtalo de nuevo."
     },
     "notice": {
       "addedToCanvas": "He añadido al lienzo el contenido solicitado.",

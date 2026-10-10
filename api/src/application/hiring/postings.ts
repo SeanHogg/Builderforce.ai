@@ -51,6 +51,7 @@ import {
   type JobPostingDraft,
 } from '../marketplace/jobPostings';
 import { AtsError } from './atsError';
+import { readPostingDistributions, type PostingDistributionView } from './postingDistributionStore';
 
 /** How many postings one projection read returns. A workspace with more requisitions
  *  than this has a reporting question rather than a board question, and the seat's own
@@ -91,11 +92,26 @@ export interface CanvasPostingProjection {
   unreviewedCount: number;
   rejectedCount: number;
   /** Where they came from — `job_applications.source`, counted, busiest first. Empty
-   *  for a posting with no applications, never a fabricated spread. */
-  sources: Array<{ source: string; count: number }>;
+   *  for a posting with no applications and no distributions, never a fabricated
+   *  spread. A board the posting was DISTRIBUTED to appears here too, carrying its
+   *  `board` name and its real count — zero included, after the sources that have
+   *  applications — because "Indeed: 0" is the number that says a board is not working,
+   *  and leaving it out reads as "never posted there". See {@link attributeSources}. */
+  sources: PostingSource[];
+  /** Where the posting is published, as each board confirmed it (FO-B4) — read from
+   *  `job_posting_distributions`, which the card's `distribution` field projects. */
+  distributions: PostingDistributionView[];
   lastApplicationAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** One source-of-application line. `board` is present when the source IS a job board
+ *  this posting was distributed to. */
+export interface PostingSource {
+  source: string;
+  count: number;
+  board?: string;
 }
 
 /** One row of the aggregate read, before it is shaped. */
@@ -223,9 +239,39 @@ async function readPostingSources(
   return byPosting;
 }
 
+/**
+ * Applicant volume, attributed to the boards a posting went out on.
+ *
+ * The join is the board's catalog key: an application recorded as coming from a board
+ * carries that key in `job_applications.source` (the value `POST /api/ats/applications`
+ * takes as `source`, and the posting's id travels to every board as `external_id` so
+ * the board can name it back), and a distribution row is keyed on the same value. An EXACT match on a
+ * controlled key, not a fuzzy one — a free-text source like "LinkedIn" is left as the
+ * plain source it is rather than guessed onto `linkedin-jobs`, because a misattributed
+ * applicant is a wrong answer to "which board is working".
+ *
+ * Exported so the attribution is asserted directly.
+ */
+export function attributeSources(
+  sources: ReadonlyArray<{ source: string; count: number }>,
+  distributions: readonly PostingDistributionView[],
+): PostingSource[] {
+  const boards = new Map(distributions.map((row) => [row.connectorKey, row.board]));
+  const out: PostingSource[] = sources.map((entry) => {
+    const board = boards.get(entry.source);
+    return board ? { ...entry, board } : { ...entry };
+  });
+  const counted = new Set(sources.map((entry) => entry.source));
+  for (const row of distributions) {
+    if (!counted.has(row.connectorKey)) out.push({ source: row.connectorKey, count: 0, board: row.board });
+  }
+  return out;
+}
+
 function project(
   row: PostingCountRow,
   sources: Array<{ source: string; count: number }>,
+  distributions: PostingDistributionView[],
 ): CanvasPostingProjection {
   return {
     postingId: row.postingId,
@@ -242,7 +288,8 @@ function project(
     activeApplicantCount: Number(row.activeApplicantCount ?? 0),
     unreviewedCount: Number(row.unreviewedCount ?? 0),
     rejectedCount: Number(row.rejectedCount ?? 0),
-    sources,
+    sources: attributeSources(sources, distributions),
+    distributions,
     lastApplicationAt: iso(row.lastApplicationAt),
     createdAt: iso(row.createdAt) ?? new Date(0).toISOString(),
     updatedAt: iso(row.updatedAt) ?? new Date(0).toISOString(),
@@ -262,14 +309,15 @@ export async function listCanvasPostings(
   tenantId: number,
   opts: { status?: string | null } = {},
 ): Promise<CanvasPostingProjection[]> {
-  const [rows, sources] = await Promise.all([
+  const [rows, sources, distributions] = await Promise.all([
     readPostingCounts(db, tenantId),
     readPostingSources(db, tenantId),
+    readPostingDistributions(db, tenantId),
   ]);
   const wanted = typeof opts.status === 'string' && opts.status.trim() ? opts.status.trim() : null;
   return rows
     .filter((row) => !wanted || row.status === wanted)
-    .map((row) => project(row, sources.get(row.postingId) ?? []));
+    .map((row) => project(row, sources.get(row.postingId) ?? [], distributions.get(row.postingId) ?? []));
 }
 
 /** One posting by id, tenant-scoped. `null` for an id this workspace does not own —
@@ -280,12 +328,13 @@ export async function readCanvasPosting(
   tenantId: number,
   postingId: string,
 ): Promise<CanvasPostingProjection | null> {
-  const [rows, sources] = await Promise.all([
+  const [rows, sources, distributions] = await Promise.all([
     readPostingCounts(db, tenantId, postingId),
     readPostingSources(db, tenantId, postingId),
+    readPostingDistributions(db, tenantId, postingId),
   ]);
   const row = rows[0];
-  return row ? project(row, sources.get(row.postingId) ?? []) : null;
+  return row ? project(row, sources.get(row.postingId) ?? [], distributions.get(row.postingId) ?? []) : null;
 }
 
 export interface SyncCanvasPostingInput {

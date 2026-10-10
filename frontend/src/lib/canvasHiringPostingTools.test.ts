@@ -10,11 +10,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import en from '@/i18n/messages/en.json';
-import { jobPostingFieldsFrom, postingDraftFromCard, postingSummary } from './canvasHiringPostingTools';
+import { distributionListingFromCard, distributionRowsFrom, jobPostingFieldsFrom, postingDraftFromCard, postingSummary } from './canvasHiringPostingTools';
 import { creationObjectMutableFields, sanitizeCreationObjectPatch } from '@/components/creation-canvas/creationObjectRegistry';
 import { HIRING_OBJECT_SPECS } from './hiringObjects';
 import './specObjectSets';
-import type { CanvasPosting } from './hiringApi';
+import type { CanvasPosting, PostingDistribution } from './hiringApi';
 
 const AT = '2026-08-25T09:30:00.000Z';
 
@@ -34,6 +34,7 @@ const posting = (over: Partial<CanvasPosting> = {}): CanvasPosting => ({
   unreviewedCount: 9,
   rejectedCount: 8,
   sources: [{ source: 'careers-site', count: 26 }, { source: 'referral', count: 15 }],
+  distributions: [],
   lastApplicationAt: '2026-08-24T18:02:00.000Z',
   createdAt: '2026-07-01T10:00:00.000Z',
   updatedAt: '2026-08-24T18:02:00.000Z',
@@ -52,7 +53,7 @@ describe('the requisition binding (FO-B3)', () => {
     // The record owns status, the counts and the id. It must not be able to blank the
     // comp band, the headcount or the hiring manager a recruiter typed on the card.
     const fields = jobPostingFieldsFrom(posting(), AT);
-    for (const untouched of ['compBand', 'headcount', 'hiringManager', 'targetStartDate', 'distribution', 'postingUrl', 'mustHaves']) {
+    for (const untouched of ['compBand', 'headcount', 'hiringManager', 'targetStartDate', 'postingUrl', 'mustHaves']) {
       expect(fields).not.toHaveProperty(untouched);
     }
   });
@@ -157,5 +158,68 @@ describe('the identity field is declared, labelled and authorable', () => {
 
   it('has a label rather than rendering its own dotted key', () => {
     expect(en.creationCanvas.hiring.field.postingId).toBeTruthy();
+  });
+});
+
+const distribution = (over: Partial<PostingDistribution> = {}): PostingDistribution => ({
+  postingId: 'e2b1c0d4-0000-4000-8000-000000000001',
+  connectorKey: 'lever-postings',
+  board: 'Lever Postings',
+  connectionId: 'conn-1',
+  externalId: 'lever-9',
+  url: 'https://jobs.lever.co/acme/lever-9',
+  status: 'posted',
+  postedAt: '2026-10-09T08:00:00.000Z',
+  lastError: null,
+  updatedAt: '2026-10-09T08:00:00.000Z',
+  applicantCount: 4,
+  ...over,
+});
+
+describe('the distribution projection (FO-B4)', () => {
+  it('draws the card's rows from the record, with applicants attributed per board', () => {
+    const rows = distributionRowsFrom([
+      distribution(),
+      distribution({ connectorKey: 'indeed-jobs', board: 'Indeed', status: 'failed', externalId: null, url: 'https://example.test/x', postedAt: null, lastError: 'Unauthorized', applicantCount: 0 }),
+    ]);
+    expect(rows).toEqual([
+      { board: 'Lever Postings', status: 'posted', postedAt: '2026-10-09', url: 'https://jobs.lever.co/acme/lever-9', applicants: 4 },
+      // A failed board carries no url, even if one were somehow on the row.
+      { board: 'Indeed', status: 'failed', postedAt: '', url: '', applicants: 0 },
+    ]);
+  });
+
+  it('is written by the sync, so the card cannot keep a publication the table does not hold', () => {
+    expect(jobPostingFieldsFrom(posting(), AT).distribution).toEqual([]);
+    const fields = jobPostingFieldsFrom(posting({ distributions: [distribution({ applicantCount: 2 })] }), AT);
+    expect(fields.distribution).toEqual([{ board: 'Lever Postings', status: 'posted', postedAt: '2026-10-09', url: 'https://jobs.lever.co/acme/lever-9', applicants: 2 }]);
+  });
+
+  it('never names a zero-count board as where applications came from', () => {
+    const summary = postingSummary(posting({
+      applicantCount: 3, activeApplicantCount: 3, unreviewedCount: 0, rejectedCount: 0,
+      sources: [{ source: 'indeed-jobs', count: 0, board: 'Indeed' }],
+    }), AT);
+    expect(summary).not.toContain('Most came from');
+    expect(postingSummary(posting({ sources: [{ source: 'lever-postings', count: 26, board: 'Lever Postings' }] }), AT)).toContain('Lever Postings (26)');
+  });
+
+  it('declares a label for the applicants column', () => {
+    expect(en.creationCanvas.hiring.column.applicants).toBeTruthy();
+  });
+});
+
+describe('the listing a card contributes to a board', () => {
+  it('sends only what the recruiter wrote', () => {
+    expect(distributionListingFromCard({
+      location: 'Remote (EU timezones)', employmentType: 'Permanent', level: 'Senior (L5)', postingUrl: 'https://careers.acme.test/jobs/1',
+    })).toEqual({
+      location: 'Remote (EU timezones)', remote: true, employmentType: 'permanent', seniority: 'Senior (L5)', applyUrl: 'https://careers.acme.test/jobs/1',
+    });
+  });
+
+  it('never infers "not remote" from a city, and never sends a non-http apply link', () => {
+    expect(distributionListingFromCard({ location: 'Berlin — hybrid', postingUrl: 'javascript:alert(1)' })).toEqual({ location: 'Berlin — hybrid' });
+    expect(distributionListingFromCard({})).toEqual({});
   });
 });

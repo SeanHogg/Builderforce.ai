@@ -71,6 +71,10 @@ const greenhouseJobBoard: ConnectorManifest = {
       key: 'create_posting', label: 'Publish posting', description: 'Create a job post on the board.',
       method: 'POST', path: '/jobs', mutates: true, required: ['title', 'description'],
       params: POSTING_PARAMS,
+      // Harvest answers `201` with the created job object, whose `id` is the job. The
+      // job object carries no public URL — that belongs to the job POST on a board,
+      // which is a separate record — so none is declared rather than one guessed.
+      response: { externalId: ['id'], error: ['errors.0.message', 'message'] },
     },
     {
       key: 'update_posting', label: 'Update posting', description: 'Amend a live posting in place.',
@@ -107,6 +111,8 @@ const leverPostings: ConnectorManifest = {
       key: 'create_posting', label: 'Publish posting', description: 'Create a Lever posting.',
       method: 'POST', path: '/postings', mutates: true, required: ['title', 'description'],
       params: POSTING_PARAMS,
+      // `{ data: { id, urls: { list, show, apply } } }` — `show` is the public posting.
+      response: { externalId: ['data.id'], url: ['data.urls.show', 'data.urls.apply'], error: ['message'] },
     },
     {
       key: 'list_postings', label: 'List postings', description: 'Read the tenant\'s postings and their states.',
@@ -138,6 +144,14 @@ const ashbyPostings: ConnectorManifest = {
       key: 'create_posting', label: 'Publish posting', description: 'Create a job posting.',
       method: 'POST', path: '/jobPosting.create', mutates: true, required: ['title', 'description'],
       params: POSTING_PARAMS,
+      // Ashby answers every RPC `200 { success, results }` and reports a refusal as
+      // `200 { success: false, errors: [...] }` (or `errorInfo`), which is why `error`
+      // is declared: trusting the status would read a refused posting as a live one.
+      response: {
+        externalId: ['results.id'],
+        url: ['results.externalLink', 'results.applyLink'],
+        error: ['errorInfo.message', 'errors.0'],
+      },
     },
     {
       key: 'list_postings', label: 'List postings', description: 'Read published postings.',
@@ -175,6 +189,13 @@ const indeedSponsored: ConnectorManifest = {
       key: 'create_posting', label: 'Publish posting', description: 'Publish a job to Indeed.',
       method: 'POST', path: '/graphql', mutates: true, required: ['title', 'description'],
       params: POSTING_PARAMS,
+      // Job Sync's `createSourcedJobPostings` mutation. GraphQL reports failure in a
+      // `200` body's `errors`, so the error selector is what keeps a refused posting from
+      // reading as live. Indeed returns no public URL for a sourced posting.
+      response: {
+        externalId: ['data.jobsIngest.createSourcedJobPostings.results.0.jobPosting.sourcedPostingId'],
+        error: ['errors.0.message'],
+      },
     },
     {
       key: 'list_applications', label: 'List applications', description: 'Read applications delivered by Indeed.',
@@ -204,6 +225,13 @@ const linkedinJobs: ConnectorManifest = {
       key: 'create_posting', label: 'Publish posting', description: 'Publish a job to LinkedIn Jobs.',
       method: 'POST', path: '/simpleJobPostings', mutates: true, required: ['title', 'description'],
       params: { ...POSTING_PARAMS, company_id: b('LinkedIn organisation URN the job is posted under') },
+      // A batch create: `{ elements: [{ id, status, error? }] }`, one element per job,
+      // with the per-job failure inside an element of a `200`. Rest.li also carries a
+      // single created id in `x-restli-id`, kept as the fallback.
+      response: {
+        externalId: ['elements.0.id', 'header:x-restli-id'],
+        error: ['elements.0.error.message', 'message'],
+      },
     },
     {
       key: 'close_posting', label: 'Close posting', description: 'Close a live job posting.',
@@ -242,9 +270,17 @@ const jobFeed: ConnectorManifest = {
   },
   actions: [
     {
-      key: 'upsert_posting', label: 'Publish to feed', description: 'Create or replace a posting in the feed by external id.',
+      // `create_posting`, like every other board here, so "publish this requisition"
+      // is one action key across the category and the distribute use case never has to
+      // know which board it is talking to. It is still an UPSERT on the wire — the
+      // feed is keyed on `external_id`, so re-publishing replaces rather than duplicates.
+      key: 'create_posting', label: 'Publish to feed', description: 'Create or replace a posting in the feed by external id.',
       method: 'PUT', path: '/jobs/{external_id}', mutates: true, required: ['external_id', 'title', 'description'],
       params: { ...POSTING_PARAMS, external_id: p('Your posting id — the feed is keyed on it, so re-publishing updates rather than duplicates') },
+      // The careers site's own contract: it echoes the posting it now serves. An echo
+      // with no id is NOT taken as confirmation, even though the id was ours to begin
+      // with — a site that answered 200 and stored nothing must not read as live.
+      response: { externalId: ['id', 'external_id', 'job.id'], url: ['url', 'job.url'], error: ['error'] },
     },
     {
       key: 'remove_posting', label: 'Remove from feed', description: 'Drop a posting from the feed.',
