@@ -43,6 +43,7 @@ import {
   concludeCeremonySession, recordCeremonyPresence, CEREMONY_TARGET_TYPE,
 } from '../../application/ceremony/concludeCeremony';
 import { ensureCeremonyMeeting } from '../../application/ceremony/ceremonyMeeting';
+import { syncCeremonyMinutesToCanvas } from '../../application/ceremony/ceremonyMinutesToCanvas';
 import { getActivityLog, recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
 import { relayToRoom } from './realtimeRelay';
@@ -515,6 +516,20 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
     });
 
     return c.json(await hydrateChanged(c, tenantId, segmentId, id));
+  });
+
+  // POST /sessions/:id/minutes/canvas — write a concluded ceremony's minutes back onto
+  // every board holding its card (the stand-up card's "Pull minutes onto the board").
+  // The SAME use case that runs automatically when minutes are written or the ceremony
+  // concludes — this is the on-demand door to it, not a second implementation. Any
+  // member: generating minutes is member-level, and so is putting them where the team is.
+  r.post('/sessions/:id/minutes/canvas', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const id = c.req.param('id');
+    const [session] = await db.select({ id: ceremonySessions.id }).from(ceremonySessions)
+      .where(and(eq(ceremonySessions.id, id), eq(ceremonySessions.tenantId, tenantId), eq(ceremonySessions.segmentId, segmentId)));
+    if (!session) return c.json({ error: 'Not found' }, 404);
+    return c.json(await syncCeremonyMinutesToCanvas(db, c.env as Env, { tenantId, ceremonyId: session.id }));
   });
 
   // GET /sessions/history?projectId=&kind=&limit=&before= — the ceremonies that HAVE run.

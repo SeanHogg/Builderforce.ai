@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
 import { InitialAvatar } from '@/components/workforce/WorkforceCard';
@@ -6,8 +5,8 @@ import MascotIcon from '@/components/MascotIcon';
 import { CeremonyTaskCard } from './CeremonyTaskCard';
 import { PowerMeter } from './PowerMeter';
 import { BriefcaseBadge } from './BriefcaseBadge';
-import { DRAG_TASK, type CeremonyMember } from './types';
-import { placeTargetProps, useCeremonyPick } from './pickToPlace';
+import type { CeremonyMember } from './types';
+import { CeremonyDropZone } from './pickToPlace';
 
 /** The chip under the name. i18n key per kind — it is UI copy, not an id. */
 const KIND_KEY: Record<CeremonyMember['kind'], 'kindHuman' | 'kindAgent' | 'kindRemote'> = {
@@ -53,24 +52,15 @@ export function CeremonySeat({
   onOpenScorecard: () => void;
   onOpenAssigned: () => void;
 }) {
-  const [over, setOver] = useState(false);
   const t = useTranslations('ceremony');
-  const pick = useCeremonyPick();
   const isHuman = member.kind === 'human';
   const ringColor = isCurrentTurn ? 'var(--coral-bright)' : present ? 'var(--cyan-bright)' : 'var(--border-subtle)';
 
   return (
-    <div
-      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        const id = Number(e.dataTransfer.getData(DRAG_TASK));
-        if (id) onDropTask(id);
-      }}
-      {...placeTargetProps(pick, t('assignTo', { name: member.name }), onDropTask)}
-      style={{
+    <CeremonyDropZone
+      label={t('assignTo', { name: member.name })}
+      onPlace={onDropTask}
+      style={({ over }) => ({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -81,7 +71,7 @@ export function CeremonySeat({
         background: over ? 'var(--surface-coral-soft)' : 'transparent',
         border: over ? '1px dashed var(--coral-bright)' : '1px solid transparent',
         transition: 'background 0.12s, border-color 0.12s',
-      }}
+      })}
     >
       <PowerMeter load={activeLoad} cap={cap} onClick={onOpenScorecard} />
       <div
@@ -133,6 +123,6 @@ export function CeremonySeat({
           )}
         </div>
       )}
-    </div>
+    </CeremonyDropZone>
   );
 }

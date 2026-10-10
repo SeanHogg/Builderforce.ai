@@ -39,7 +39,9 @@ export function CeremonyTaskCard({
         // highlights its target explicitly) already had and dragging did not.
         setDragGhost(e, task.key ? `${task.key} · ${task.title}` : task.title);
       }}
-      onClick={() => onOpen?.(task)}
+      // While a task is in hand, tapping a card is tapping the destination it sits in
+      // (the backlog rail, a seat) — it must not also open a drawer over the stage.
+      onClick={() => { if (pick?.pickedTaskId == null) onOpen?.(task); }}
       style={{
         background: 'var(--bg-base)',
         border: '1px solid var(--border-subtle)',
@@ -82,7 +84,9 @@ export function CeremonyTaskCard({
             onClick={(event) => { event.stopPropagation(); pick.pick(task.id, task.title); }}
             style={{
               marginLeft: 'auto',
-              padding: '2px 8px',
+              // A finger-sized target: this button is the ONLY way to move work on touch.
+              minHeight: 28,
+              padding: '4px 10px',
               fontSize: 10,
               fontWeight: 600,
               borderRadius: 'var(--radius-sm)',

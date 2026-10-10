@@ -33,6 +33,7 @@ import { readProxyChoice } from '../llm/LlmProxyService';
 import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { broadcastRoom } from '../../infrastructure/relay/broadcastRoom';
+import { syncMinutesForMeeting } from '../ceremony/ceremonyMinutesToCanvas';
 
 type Meeting = typeof meetings.$inferSelect;
 export type TranscriptSegment = typeof meetingTranscriptSegments.$inferSelect;
@@ -200,8 +201,9 @@ export async function condenseTranscript(
 }
 
 /**
- * Generate meeting minutes from the transcript, store them on the meeting, and post
- * them into the linked team chat. Returns the summary text, or an error when there
+ * Generate meeting minutes from the transcript, store them on the meeting, post them
+ * into the linked team chat, and — for a ceremony's meeting — write them back onto the
+ * board card that convened it. Returns the summary text, or an error when there
  * is nothing to summarize / the model produced nothing.
  */
 export async function summarizeMeeting(
@@ -225,5 +227,11 @@ export async function summarizeMeeting(
   if (meeting.chatId != null) {
     await postMeetingChatLine(db, meeting.chatId, `📝 **Meeting minutes — ${meeting.title}**\n\n${summary}`, { kind: 'agent', ref: 'meeting-notes', name: 'Meeting Notes' });
   }
+  // A ceremony's companion meeting: the minutes go back onto the board card that
+  // convened it (summary + follow-up tasks). Skipped while the ceremony still runs, and
+  // idempotent, so regenerating minutes updates the board rather than duplicating it.
+  await syncMinutesForMeeting(db, env, { tenantId: meeting.tenantId, meetingId: meeting.id }).catch((error) => {
+    reportCaughtError(error, { source: 'application/meetings/meetingIntelligence.ts', operation: 'summarizeMeeting:canvas-write-back', context: { details: { meetingId: meeting.id } } });
+  });
   return { summary };
 }

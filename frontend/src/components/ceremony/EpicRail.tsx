@@ -4,8 +4,7 @@ import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { InlineNameForm } from '@/components/ui/InlineNameForm';
-import { placeTargetProps, useCeremonyPick } from './pickToPlace';
-import { DRAG_TASK } from './types';
+import { CeremonyDropZone } from './pickToPlace';
 
 /** One Epic container — a drop target that nests the dropped task under the Epic. */
 function EpicCard({
@@ -19,27 +18,17 @@ function EpicCard({
   onDropTask: (taskId: number) => void;
   onOpen: (task: Task) => void;
 }) {
-  const [over, setOver] = useState(false);
   const t = useTranslations('ceremony');
-  const pick = useCeremonyPick();
   return (
-    <div
-      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        const id = Number(e.dataTransfer.getData(DRAG_TASK));
-        if (id && id !== epic.id) onDropTask(id);
-      }}
-      // A pick in flight turns this card into a DESTINATION rather than a link:
-      // `placeTargetProps` supplies its own onClick and must win, so it is
-      // spread after the open handler.
+    <CeremonyDropZone
+      label={t('groupIntoEpic', { title: epic.title })}
+      // An epic cannot be grouped under itself — by drag or by tap.
+      onPlace={(taskId) => { if (taskId !== epic.id) onDropTask(taskId); }}
+      // A pick in flight turns this card into a DESTINATION rather than a link; the
+      // drop zone hands the click to placing while something is picked.
       onClick={() => onOpen(epic)}
-      {...placeTargetProps(pick, t('groupIntoEpic', { title: epic.title }), (taskId) => {
-        if (taskId !== epic.id) onDropTask(taskId);
-      })}
-      style={{
+      title={epic.title}
+      style={({ over }) => ({
         padding: 10,
         borderRadius: 'var(--radius-lg)',
         cursor: 'pointer',
@@ -48,8 +37,7 @@ function EpicCard({
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
-      }}
-      title={epic.title}
+      })}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span aria-hidden><Icon source="🗂️" size="1em" /></span>
@@ -69,7 +57,7 @@ function EpicCard({
       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
         {t('taskCount', { count: childCount })}
       </div>
-    </div>
+    </CeremonyDropZone>
   );
 }
 
