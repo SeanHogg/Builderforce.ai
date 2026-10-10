@@ -25,7 +25,7 @@ const GPT = 'openai/gpt-4.1';                    // PREMIUM, high-ceiling, struc
 const GEMINI_LITE = 'google/gemini-2.5-flash-lite'; // STANDARD, LOW-ceiling
 const GEMINI_PRO = 'google/gemini-2.5-pro';      // PREMIUM, LOW-ceiling
 const GROK = 'x-ai/grok-3-mini';                 // tools-capable, NOT structured, NOT gemini
-const QWEN_FREE = 'qwen/qwen3-coder:free';       // FREE, structured
+const FREE_MODEL = 'google/gemma-4-31b-it:free';  // FREE, structured
 const DEEPSEEK = 'deepseek/deepseek-v4-flash';   // STANDARD
 
 describe('isLowSchemaCeilingModel', () => {
@@ -72,12 +72,12 @@ describe('isQualityCriticalUseCase', () => {
 
 describe('reorderPoolForQuality — quality tier (Feature 2)', () => {
   it('leads with the highest-tier models the pool contains (PREMIUM → STANDARD → FREE)', () => {
-    const out = reorderPoolForQuality([QWEN_FREE, DEEPSEEK, CLAUDE]);
-    expect(out).toEqual([CLAUDE, DEEPSEEK, QWEN_FREE]);
+    const out = reorderPoolForQuality([FREE_MODEL, DEEPSEEK, CLAUDE]);
+    expect(out).toEqual([CLAUDE, DEEPSEEK, FREE_MODEL]);
   });
 
   it('is a no-op within an all-FREE pool (plan-respecting — free stays free)', () => {
-    const freePool = ['minimax/minimax-m2.5:free', QWEN_FREE];
+    const freePool = ['minimax/minimax-m2.5:free', FREE_MODEL];
     expect(reorderPoolForQuality(freePool)).toEqual(freePool);
   });
 
@@ -106,7 +106,7 @@ describe('fundedFloorHintDemoted — a free plan\'s soft pin on a funded floor m
 
   it('leaves a paid plan, a plan-pool model and an absent hint exactly as before', () => {
     expect(fundedFloorHintDemoted('claude-sonnet-5', true)).toBe(false);
-    expect(fundedFloorHintDemoted(QWEN_FREE, false)).toBe(false);
+    expect(fundedFloorHintDemoted(FREE_MODEL, false)).toBe(false);
     expect(fundedFloorHintDemoted(CLAUDE, false)).toBe(false); // OpenRouter-routed Sonnet is a Pro plan-pool model, not the funded floor
     expect(fundedFloorHintDemoted(undefined, false)).toBe(false);
   });

@@ -33,10 +33,11 @@ All the code defects in the 2026-10-10 production log review ("Production signal
 
 **Gateway and models**
 - **Dead model ids.**
-  - Cerebras retired `llama3.1-8b` and `qwen-3-235b-a22b-instruct-2507` (167 × 404 in a week). They are superseded by `gpt-oss-120b` and `qwen-3.8-27b`.
+  - Cerebras retired `llama3.1-8b` and `qwen-3-235b-a22b-instruct-2507` (167 × 404 in a week). They left the catalog, and Cerebras now serves `gpt-oss-120b` and `qwen-3.8-27b`.
   - NIM's `moonshotai/kimi-k2.6` is still listed but invoking it 404s. It is superseded by `kimi-k3`.
   - OpenRouter retired `qwen/qwen3.8-27b:free`.
-  - Old free slugs that older clients still send now resolve to live free models through catalog `supersedes`: `qwen3-coder:free`, `qwen3-next-80b…:free`, `hermes-3…:free`, `llama-3.3-70b:free` and `gemma-3-27b:free`.
+  - A retired id is redirected (`supersedes`) only to a successor in the same model family: `gemma-3-27b:free` → `gemma-4-31b:free` and Kimi K2.6 → K3. Retired ids from other families (`qwen3-coder:free`, `qwen3-next-80b…:free`, `hermes-3…:free`, `llama-3.3-70b:free`) answer an honest 404 instead of a silent swap, as the `canonicalModelId` family guard requires.
+  - **BYO backfill misattribution.** Cerebras's new bare `gpt-oss-120b` fell into Ollama's derived `gpt-` family, so backfill would have charged platform spend to a tenant's Ollama key. Bare ids from vendors no tenant can own now contest a family, which makes it ambiguous and drops it (`scripts/lib/byoProviderMap.mjs`).
   - agent-runtime's hard-coded free list uses live ids.
   - The drift guard gained a Cerebras source (the public `/public/v1/models`), and the snapshot was refreshed.
 - **Strict structured output.** One schema-dialect walker (`jsonSchemaSanitize.ts`):

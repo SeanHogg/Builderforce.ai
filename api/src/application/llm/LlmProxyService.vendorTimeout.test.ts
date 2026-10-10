@@ -76,7 +76,7 @@ describe('per-call vendor timeout override (integration)', () => {
     const proxy = llmProxyForPlan(env, 'free');
 
     const result = await proxy.complete({
-      model: 'openrouter/qwen/qwen3-coder:free',
+      model: 'openrouter/poolside/laguna-s-2.1:free',
       messages: [{ role: 'user', content: 'hi' }],
       _builderforce: { vendorTimeoutMs: 45_000 },
     });
@@ -111,7 +111,7 @@ describe('per-call vendor timeout override (integration)', () => {
 
       const proxy = llmProxyForPlan(env, 'free');
       const promise = proxy.complete({
-        model: 'openrouter/qwen/qwen3-coder:free',
+        model: 'openrouter/poolside/laguna-s-2.1:free',
         strict: true, // pin to one model so no cascade muddies the timer assertion
         messages: [{ role: 'user', content: 'hi' }],
         _builderforce: { vendorTimeoutMs: 45_000 },
@@ -119,7 +119,7 @@ describe('per-call vendor timeout override (integration)', () => {
       await vi.advanceTimersByTimeAsync(18_000);
       const result = await promise;
       expect(result.response.status).toBe(200);
-      expect(result.resolvedModel).toBe('openrouter/qwen/qwen3-coder:free');
+      expect(result.resolvedModel).toBe('openrouter/poolside/laguna-s-2.1:free');
     } finally {
       vi.useRealTimers();
     }

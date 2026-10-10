@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const projectSvc = vi.hoisted(() => ({
   listProjects: vi.fn(),
   getProject: vi.fn(),
-  createProject: vi.fn(),
+  createProjectWithGeneratedKey: vi.fn(),
   updateProject: vi.fn(),
   deleteProject: vi.fn(),
   buildUniqueKey: vi.fn(async (tid: number, name: string) => `${tid}-${name.toUpperCase().replace(/[^A-Z0-9]+/g, '-')}`),
@@ -317,11 +317,11 @@ describe('callBuiltinTool', () => {
     expect(res).toEqual({ projects: [{ id: 1, name: 'P' }], total: 1, returned: 1, truncated: false });
   });
 
-  it('mints a key + tenant on create', async () => {
-    projectSvc.createProject.mockResolvedValue({ toPlain: () => ({ id: 2 }) });
+  it('creates in the caller tenant through the collision-safe key path', async () => {
+    projectSvc.createProjectWithGeneratedKey.mockResolvedValue({ toPlain: () => ({ id: 2 }) });
     await callBuiltinTool(db, { tenantId: TENANT, tool: 'projects.create', arguments: { name: 'Acme App' } });
-    expect(projectSvc.createProject).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: TENANT, name: 'Acme App', key: expect.stringContaining('ACME') }),
+    expect(projectSvc.createProjectWithGeneratedKey).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: TENANT, name: 'Acme App' }),
     );
   });
 
@@ -345,7 +345,7 @@ describe('callBuiltinTool', () => {
         .rejects.toThrow(/requires at least the 'developer' role/);
     }
     expect(taskSvc.createTask).not.toHaveBeenCalled();
-    expect(projectSvc.createProject).not.toHaveBeenCalled();
+    expect(projectSvc.createProjectWithGeneratedKey).not.toHaveBeenCalled();
   });
 
   it('still lets a developer write, and a contributor read', async () => {

@@ -36,7 +36,7 @@ export const PreviewPickChip = memo(function PreviewPickChip() {
 const chipStyle: CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%',
   height: 'var(--chat-ctl-size, 32px)', padding: '0 4px 0 10px', borderRadius: 'var(--radius-md)',
-  background: 'color-mix(in srgb, var(--accent, #3b82f6) 16%, transparent)',
+  background: 'var(--accent-subtle)',
   color: 'var(--text-primary)', fontSize: 'var(--font-size-small)', fontWeight: 600,
 };
 

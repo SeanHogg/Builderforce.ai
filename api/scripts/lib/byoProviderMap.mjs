@@ -94,6 +94,8 @@ function loadStandalonePrefixes(providerByVendor) {
  * prefix, which is matched exactly). Any family claimed by two different providers is
  * dropped as ambiguous rather than guessed at.
  */
+const UNOWNED = Symbol('unowned');
+
 function loadModelFamilies(providerByVendor) {
   const claims = new Map(); // family → Set<provider>
   for (const name of readdirSync(VENDORS_DIR)) {
@@ -105,8 +107,12 @@ function loadModelFamilies(providerByVendor) {
         .map(([, id]) => id)
         .filter((id) => providerByVendor.has(id)),
     );
-    if (vendors.size !== 1) continue;
-    const provider = providerByVendor.get([...vendors][0]);
+    if (vendors.size > 1) continue;
+    // A module with NO tenant-ownable vendor (Cerebras, OpenRouter) still serves bare
+    // ids, so its families are claimed by "no tenant" — the claim that makes a family
+    // shared with an owned vendor ambiguous. Without it, Cerebras's `gpt-oss-120b`
+    // fell into Ollama's `gpt-` family and platform spend was attributed to a tenant.
+    const provider = vendors.size === 1 ? providerByVendor.get([...vendors][0]) : UNOWNED;
 
     let catalog;
     try {
@@ -119,13 +125,15 @@ function loadModelFamilies(providerByVendor) {
       // a vendor no tenant can own.
       const family = /^([a-z][a-z0-9]*-)/.exec(modelId);
       if (!family) continue;
+      // An unowned `<org>/<slug>` id is never matched bare, so it contests nothing.
+      if (provider === UNOWNED && modelId.includes('/')) continue;
       const claimed = claims.get(family[1]) ?? new Set();
       claimed.add(provider);
       claims.set(family[1], claimed);
     }
   }
   return [...claims]
-    .filter(([, providers]) => providers.size === 1)
+    .filter(([, providers]) => providers.size === 1 && !providers.has(UNOWNED))
     .map(([family, providers]) => [family, [...providers][0]])
     .sort((a, b) => b[0].length - a[0].length);
 }

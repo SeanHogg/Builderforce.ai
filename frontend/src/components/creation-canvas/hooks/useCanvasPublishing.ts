@@ -183,7 +183,8 @@ export function useCanvasPublishing({ canEdit, confirm, connectionKind, creating
     // does not hold yet. Best-effort: a failed link costs attribution, not the publish.
     await creationSessionsApi.linkProject(sessionId, project.id).catch((error: unknown) => {
       void reportBackgroundFailure({
-        message: error instanceof Error ? error.message : 'Linking the published project to its board failed',
+        title: 'CanvasPublishProjectLinkFailed',
+        message: error instanceof Error ? error.message : String(error),
         level: 'warning',
         context: { sessionId, projectId: project.id },
       });

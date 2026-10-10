@@ -30,16 +30,15 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   // ── FREE tier — live zero-priced OpenRouter chat endpoints, strongest first.
   // Verified against GET /api/v1/models on 2026-08-11. Free availability is
   // volatile, so keep this list current rather than retaining retired slugs.
-  // Free → free supersessions catch CALLER-supplied retired slugs (production 2026-10:
-  // `qwen/qwen3-coder:free`, `qwen/qwen3-next-80b-a3b-instruct:free` and
-  // `nousresearch/hermes-3-llama-3.1-405b:free` still arrive from older clients and
-  // burned a step each). Same tier, so no plan change rides on the rewrite.
-  { id: 'nvidia/nemotron-3-ultra-550b-a55b:free',    tier: 'FREE', label: 'Nemotron 3 Ultra 550B (Free)',       brand: 'NVIDIA',    supersedes: ['nousresearch/hermes-3-llama-3.1-405b:free'] },
+  // A retired slug is superseded only by a successor in the SAME family (Gemma 3 →
+  // Gemma 4). Older clients still send `qwen/qwen3-coder:free` and friends; those get
+  // an honest 404 rather than a silent swap to another vendor's model.
+  { id: 'nvidia/nemotron-3-ultra-550b-a55b:free',    tier: 'FREE', label: 'Nemotron 3 Ultra 550B (Free)',       brand: 'NVIDIA'    },
   { id: 'google/gemma-4-26b-a4b-it:free',            tier: 'FREE', label: 'Gemma 4 26B A4B (Free)',             brand: 'Google',    capabilities: ['vision'] },
-  { id: 'nvidia/nemotron-3-super-120b-a12b:free',    tier: 'FREE', label: 'Nemotron 3 Super 120B (Free)',       brand: 'NVIDIA',    supersedes: ['qwen/qwen3-next-80b-a3b-instruct:free', 'meta-llama/llama-3.3-70b-instruct:free'] },
-  { id: 'poolside/laguna-s-2.1:free',                tier: 'FREE', label: 'Laguna S 2.1 (Free)',                 brand: 'Poolside',  supersedes: ['qwen/qwen3-coder:free'] },
+  { id: 'nvidia/nemotron-3-super-120b-a12b:free',    tier: 'FREE', label: 'Nemotron 3 Super 120B (Free)',       brand: 'NVIDIA'    },
+  { id: 'poolside/laguna-s-2.1:free',                tier: 'FREE', label: 'Laguna S 2.1 (Free)',                 brand: 'Poolside'  },
   { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', tier: 'FREE', label: 'Nemotron 3 Nano Omni 30B Reasoning (Free)', brand: 'NVIDIA' },
-  { id: 'google/gemma-4-31b-it:free',                tier: 'FREE', label: 'Gemma 4 31B (Free)',                  brand: 'Google',    supersedes: ['qwen/qwen3.8-27b:free', 'google/gemma-3-27b-it:free'] },
+  { id: 'google/gemma-4-31b-it:free',                tier: 'FREE', label: 'Gemma 4 31B (Free)',                  brand: 'Google',    supersedes: ['google/gemma-3-27b-it:free'] },
   { id: 'poolside/laguna-xs-2.1:free',               tier: 'FREE', label: 'Laguna XS 2.1 (Free)',                brand: 'Poolside'   },
   { id: 'cohere/north-mini-code:free',               tier: 'FREE', label: 'North Mini Code (Free)',              brand: 'Cohere'     },
   { id: 'nvidia/nemotron-3.5-lightning:free',        tier: 'FREE', label: 'Nemotron 3.5 Lightning (Free)',      brand: 'NVIDIA'     },
