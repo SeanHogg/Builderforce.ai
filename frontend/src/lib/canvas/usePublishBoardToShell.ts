@@ -20,7 +20,9 @@ const ASSESSMENT_CLOCK_MS = 30_000;
  *     per `canvasScopePolicy`;
  *   • the strictest assessment being SAT on it right now — read by every composer
  *     in the shell through `useAssistantGate`, so a closed-book exam closes the
- *     floating Brain as well as the canvas prompt.
+ *     floating Brain as well as the canvas prompt;
+ *   • whether a Brain turn is in flight on it — read by the stage's retention bound
+ *     (`boardRetention.ts`), which never releases a board whose turn is still streaming.
  *
  * Returns the board's OWN gate too, for the turns the board starts without a
  * composer (per-object actions, replays), which must refuse exactly as the
@@ -29,10 +31,16 @@ const ASSESSMENT_CLOCK_MS = 30_000;
 export function usePublishBoardToShell(
   sessionId: string,
   nodes: readonly { id: string; data: CreationNodeData }[],
+  busy: boolean,
 ): AssessmentGate {
   const activeCanvas = useOptionalActiveCanvas();
   const publishProjectIds = activeCanvas?.publishProjectIds;
   const publishAssessmentMode = activeCanvas?.publishAssessmentMode;
+  const publishBusy = activeCanvas?.publishBusy;
+
+  useEffect(() => {
+    publishBusy?.(sessionId, busy);
+  }, [busy, publishBusy, sessionId]);
 
   const boardProjectIds = useMemo(
     () => [...new Set(canvasProjectNodes(nodes).flatMap((node) => { const id = canvasProjectId(node.data); return id == null ? [] : [id]; }))],

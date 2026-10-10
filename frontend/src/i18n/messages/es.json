@@ -27091,6 +27091,7 @@
     "newCanvas": "+ Nuevo lienzo",
     "active": "Activo",
     "renameAria": "Cambiar el nombre de este lienzo",
+    "closeAria": "Cerrar este lienzo (sigue en Recientes)",
     "recents": "Recientes",
     "untitled": "Lienzo sin título",
     "draft": "Borrador",

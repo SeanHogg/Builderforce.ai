@@ -1,3 +1,23 @@
+## ✅ RESOLVED 2026-10-10 — Opened boards are released, and a board (or its App) can be closed (frontend 2026.10.32)
+
+**Was:**
+- `ActiveCanvasContext.opened` only grew. Every board visited in a shell session stayed mounted behind `CanvasStage`, each with any App runtime and polls it held. The only way to release one was a project switch, which dropped all of them.
+- There was no per-board close.
+- The App surface had no visible way back to the board, only the switcher chip and Escape. Its stylesheet still described a "Back to the board" control that no longer existed.
+
+**Now:**
+- **`lib/canvas/boardRetention.ts`** (new, pure, tested) decides which kept boards may go. At most `KEPT_BOARD_CAP` (3) boards stay mounted, the one on stage included. A board is released only when that loses nothing:
+  - it is not the board on stage;
+  - no Brain turn is in flight on it;
+  - it is not held only in this browser;
+  - it has been off stage for at least `RELEASE_IDLE_MS` (5s), so the 300ms autosave behind its last edit has already written.
+
+  The least recently on stage goes first. A board that isn't yet releasable is checked again when it becomes so.
+- **`ActiveCanvasContext`** gains `closeBoard(board)` and `publishBusy(sessionId, busy)`. It tracks when each board left the stage and applies the bound.
+- **`usePublishBoardToShell`** publishes the board's Brain turn (`thinking`) as `busy`. `CreationCanvas` passes one more argument and does not grow.
+- **`SessionList`:** the ACTIVE row has a close ✕. It puts the board away, releasing its instance and runtime, and lands in the library. Nothing is deleted; the board stays in Recents. It is localized in five locales (`sessions.closeAria`), uses theme tokens, and is a 32px target on a coarse pointer.
+- **`CanvasAppSurface`:** a header carries the shared `.objectSurfaceExit` "Back to the board" with a close icon. The surface works out whether it can be left at all; under the Studio lens, App is home and none is drawn.
+
 ## ✅ RESOLVED 2026-10-10 — A hidden board's App no longer paints over the board on stage (frontend 2026.10.31)
 
 **Was:** after opening a board's App surface and switching to another session, the first board's live preview (address bar, "Select to edit", device toggles, the running app) stayed on screen over the new board, whatever surface it was on. There was no way to close it, because it belonged to a board that was no longer on stage.

@@ -717,7 +717,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
    * assessment being sat on it (see `usePublishBoardToShell`). The gate it returns is
    * what a turn started WITHOUT the composer (a per-object action) must also obey.
    */
-  const assistantGate = usePublishBoardToShell(sessionId, nodes);
+  const assistantGate = usePublishBoardToShell(sessionId, nodes, thinking);
   const evermindProjectId = useMemo(() => {
     const candidates = [...scopedNodes, ...nodes.filter((node) => !scopedNodeIds.has(node.id))];
     for (const node of candidates) {

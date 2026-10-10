@@ -40,8 +40,8 @@ const ASK_IDS = ['overview.ask'];
  * view; this surface is that view, reachable without leaving the board.
  */
 export interface CanvasInsightsSurfaceProps {
-  /** Escape hands the board back. No exit BUTTON, same as `CanvasAppSurface`: this
-   *  surface is in the rail, so pressing Insights again is the way out. */
+  /** Escape hands the board back. No exit button: this surface is in the rail, so
+   *  pressing Insights again is the way out. */
   onExit: () => void;
 }
 

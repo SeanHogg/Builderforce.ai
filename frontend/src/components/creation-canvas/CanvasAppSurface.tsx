@@ -7,12 +7,15 @@ import { useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
+import { Icon } from '@/components/ui/Icon';
 import { useStoreFiles } from '@/components/builder/useStoreFiles';
 import { canvasAppFiles } from '@/lib/canvasApp';
 import { appCardSignature, type SessionApp } from '@/lib/canvasSessionApp';
+import { canvasLensDefinition, canvasLensExit } from '@/lib/canvasLens';
 import type { ProjectModality } from '@/lib/modality';
 import { CanvasAppStart } from './CanvasAppStart';
 import type { CanvasSessionAppActions } from './hooks/useCanvasSessionApp';
+import { useCanvasSessionFacts } from './chrome/canvasSessionContext';
 import styles from './CreationCanvas.module.css';
 import type { CreationNodeData } from './types';
 
@@ -53,13 +56,19 @@ export interface CanvasAppSurfaceProps {
   /** The lens that opened this surface is creating the board's app (`useCanvasEntryApp`):
    *  say so rather than offering the chooser it is about to make moot. */
   entryAppPending?: boolean;
-  /** Escape hands the board back. Pressing "App" again in the switcher is the other way out. */
+  /** Escape and the header's "Back to the board" hand the board back. */
   onExit: () => void;
 }
 
 export function CanvasAppSurface({ nodes, session, persistence, sessionTitle, entryAppPending = false, onExit }: CanvasAppSurfaceProps) {
   const t = useTranslations('creationCanvas.surface.app');
+  const tc = useTranslations('creationCanvas');
   const { app, apps, createApp, importCards, selectApp } = session;
+  // The way out is a visible control, not only the switcher chip and Escape — the same
+  // "Back to the board" every object surface wears. A lens whose HOME is this surface
+  // (Studio) has nowhere to leave to, so it draws none.
+  const { lens } = useCanvasSessionFacts();
+  const leaves = canvasLensExit(canvasLensDefinition(lens), 'app') != null;
   // Recomputed only when a card's content changes, never on a drag (see `appCardSignature`).
   const cards = appCardSignature(nodes);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `cards` is the dependency: it changes exactly when these cards do.
@@ -93,6 +102,14 @@ export function CanvasAppSurface({ nodes, session, persistence, sessionTitle, en
       aria-label={t('regionLabel')}
       onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); onExit(); } }}
     >
+      {leaves && (
+        <header className={styles.appSurfaceHeader}>
+          <button type="button" className={styles.objectSurfaceExit} onClick={onExit} aria-label={tc('surface.backToBoard')} title={tc('surface.backToBoard')}>
+            <Icon name="close" size={14} />
+            <span>{tc('surface.backToBoard')}</span>
+          </button>
+        </header>
+      )}
       <div className={styles.appSurfaceBody}>
         {app ? (
           <SessionAppWorkspace app={app} apps={apps} onSelectApp={selectApp} />

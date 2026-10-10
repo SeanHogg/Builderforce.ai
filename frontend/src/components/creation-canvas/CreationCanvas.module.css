@@ -2580,6 +2580,11 @@
    header wraps rather than fixing a width, and the toolbar collapses to two rows before
    360px instead of overflowing. */
 .appSurfaceBody,.insightsSurfaceBody,.placeSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; min-width:0; }
+/* The App surface's way home: the shared `.objectSurfaceExit`, right-aligned in a slim row
+   so it never competes with the session bar's own controls. Wraps nothing, fixes no width. */
+.appSurfaceHeader { flex:none; display:flex; justify-content:flex-end; padding:0 16px 8px; }
+.appSurfaceHeader .objectSurfaceExit { display:inline-flex; align-items:center; gap:6px; }
+@media (max-width:720px) { .appSurfaceHeader { padding:0 10px 6px; } }
 /* The insights body scrolls where the app surface's does not: a running app fills its
    own frame, but a widget grid is exactly as tall as however many cards are pinned —
    sometimes one, sometimes a screenful — so the surface has to be able to grow past

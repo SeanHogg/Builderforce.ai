@@ -2165,6 +2165,33 @@ html[data-theme='light'] .nebula {
   background: var(--error);
 }
 
+/* Put the board on stage away. Quiet until hovered, but always present — a hover-only
+   control is one a touchscreen never finds — and a full tap target on a coarse pointer. */
+.nav-sessions__close {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.nav-sessions__close:hover,
+.nav-sessions__close:focus-visible {
+  border-color: var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  outline: none;
+}
+@media (pointer: coarse) {
+  .nav-sessions__close { width: 32px; height: 32px; }
+}
+
 .nav-section-label {
   font-size: 10px;
   font-weight: 600;

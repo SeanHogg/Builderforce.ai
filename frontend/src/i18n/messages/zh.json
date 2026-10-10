@@ -27091,6 +27091,7 @@
     "newCanvas": "+ 新建画布",
     "active": "进行中",
     "renameAria": "重命名此画布",
+    "closeAria": "关闭此画布（仍保留在“最近”中）",
     "recents": "最近",
     "untitled": "未命名画布",
     "draft": "草稿",

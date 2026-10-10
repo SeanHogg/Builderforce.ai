@@ -1,8 +1,9 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { rendersAppShell } from '@/lib/shellRouting';
 import type { AssessmentMode } from '@/lib/academic/assessment';
 import type { CanvasLens } from '@/lib/canvasLens';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
+import { boardKey, boardsToRelease, type RetainedBoard } from './boardRetention';
 
 /**
  * WHICH board is on the stage — shell state, so the board is no longer owned by
@@ -62,7 +63,16 @@ export interface ActiveCanvasValue {
    */
   assessmentMode: AssessmentMode;
   open: (canvas: ActiveCanvas) => void;
+  /** Put every board away — a project switch. */
   close: () => void;
+  /**
+   * Put ONE board away: its mounted instance (and whatever runtime it holds — an App
+   * surface's preview, its polls) is released. The board itself is untouched; it is in
+   * Recents and opens again from there. Closing the board on stage leaves no board on it.
+   */
+  closeBoard: (board: RetainedBoard) => void;
+  /** A board says whether a Brain turn is in flight on it — such a board is never released. */
+  publishBusy: (sessionId: string, busy: boolean) => void;
   publishProjectIds: (sessionId: string, ids: number[]) => void;
   publishAssessmentMode: (sessionId: string, mode: AssessmentMode) => void;
 }
@@ -95,6 +105,10 @@ export function ActiveCanvasProvider({
   const [opened, setOpened] = useState<ActiveCanvas[]>([]);
   const [projectIdsBySession, setProjectIdsBySession] = useState<Record<string, number[]>>({});
   const [assessmentModeBySession, setAssessmentModeBySession] = useState<Record<string, AssessmentMode>>({});
+  const [busyBySession, setBusyBySession] = useState<Record<string, boolean>>({});
+  /** When each kept board last left the stage (`boardRetention`). A ref: it decides, it never renders. */
+  const leftAtRef = useRef(new Map<string, number>());
+  const [retentionTick, setRetentionTick] = useState(0);
 
   const open = useCallback((canvas: ActiveCanvas) => {
     setActive((current) => {
@@ -132,7 +146,46 @@ export function ActiveCanvasProvider({
     setOpened([]);
     setProjectIdsBySession({});
     setAssessmentModeBySession({});
+    setBusyBySession({});
+    leftAtRef.current.clear();
   }, []);
+
+  const closeBoard = useCallback((board: RetainedBoard) => {
+    const key = boardKey(board);
+    setActive((current) => (current && boardKey(current) === key ? null : current));
+    setOpened((current) => (current.some((item) => boardKey(item) === key) ? current.filter((item) => boardKey(item) !== key) : current));
+    leftAtRef.current.delete(key);
+  }, []);
+
+  const publishBusy = useCallback((sessionId: string, busy: boolean) => {
+    setBusyBySession((current) => (Boolean(current[sessionId]) === busy ? current : { ...current, [sessionId]: busy }));
+  }, []);
+
+  // The board that just left the stage starts its idle clock; the one arriving stops its.
+  const activeKey = active ? boardKey(active) : null;
+  const priorActiveKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prior = priorActiveKeyRef.current;
+    if (prior === activeKey) return;
+    if (prior) leftAtRef.current.set(prior, Date.now());
+    if (activeKey) leftAtRef.current.delete(activeKey);
+    priorActiveKeyRef.current = activeKey;
+  }, [activeKey]);
+
+  // THE BOUND. Kept boards past `KEPT_BOARD_CAP` are released once releasing one loses
+  // nothing; one not yet releasable is checked again the moment it becomes so.
+  useEffect(() => {
+    const decision = boardsToRelease(opened, { activeKey, leftAt: leftAtRef.current, busy: busyBySession, now: Date.now() });
+    if (decision.release.length) {
+      const released = new Set(decision.release);
+      for (const key of released) leftAtRef.current.delete(key);
+      setOpened((current) => current.filter((item) => !released.has(boardKey(item))));
+      return;
+    }
+    if (decision.recheckAt == null) return;
+    const timer = window.setTimeout(() => setRetentionTick((tick) => tick + 1), Math.max(0, decision.recheckAt - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [activeKey, busyBySession, opened, retentionTick]);
 
   const publishProjectIds = useCallback((sessionId: string, ids: number[]) => {
     setProjectIdsBySession((current) => {
@@ -162,8 +215,8 @@ export function ActiveCanvasProvider({
   const hosted = stageHosted || active != null;
 
   const value = useMemo<ActiveCanvasValue>(
-    () => ({ active, opened, stageHosted: hosted, projectIds, assessmentMode, open, close, publishProjectIds, publishAssessmentMode }),
-    [active, assessmentMode, close, hosted, open, opened, projectIds, publishAssessmentMode, publishProjectIds],
+    () => ({ active, opened, stageHosted: hosted, projectIds, assessmentMode, open, close, closeBoard, publishBusy, publishProjectIds, publishAssessmentMode }),
+    [active, assessmentMode, close, closeBoard, hosted, open, opened, projectIds, publishAssessmentMode, publishBusy, publishProjectIds],
   );
 
   return <ActiveCanvasContext.Provider value={value}>{children}</ActiveCanvasContext.Provider>;

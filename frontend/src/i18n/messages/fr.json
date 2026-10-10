@@ -27091,6 +27091,7 @@
     "newCanvas": "+ Nouveau tableau",
     "active": "En cours",
     "renameAria": "Renommer ce tableau",
+    "closeAria": "Fermer ce tableau (il reste dans Récents)",
     "recents": "Récents",
     "untitled": "Tableau sans titre",
     "draft": "Brouillon",

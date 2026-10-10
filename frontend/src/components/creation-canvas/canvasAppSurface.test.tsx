@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { ReactElement, ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 // The copy IS part of the assertion, exactly as it is for the surface switcher.
@@ -19,6 +20,25 @@ import { seedLocalWorkspace } from '@/lib/workspace/localFileStore';
 import type { CreationNodeData } from './types';
 import { CanvasAppSurface } from './CanvasAppSurface';
 import type { CanvasSessionAppActions } from './hooks/useCanvasSessionApp';
+import { CanvasSessionProvider, type CanvasSessionFacts } from './chrome/canvasSessionContext';
+import type { CanvasLens } from '@/lib/canvasLens';
+
+/** The surface reads the session's lens to decide whether it can be left at all. */
+const facts = (lens: CanvasLens): CanvasSessionFacts => ({
+  sessionId: 'app-surface-test',
+  persistence: 'server',
+  role: 'owner' as CanvasSessionFacts['role'],
+  lens,
+  boardPath: '/create/app-surface-test',
+  canEdit: true,
+  notify: vi.fn(),
+  requireAccount: vi.fn() as unknown as CanvasSessionFacts['requireAccount'],
+});
+
+function renderSurface(ui: ReactElement, lens: CanvasLens = 'canvas') {
+  const value = facts(lens);
+  return render(ui, { wrapper: ({ children }: { children: ReactNode }) => <CanvasSessionProvider value={value}>{children}</CanvasSessionProvider> });
+}
 
 const card = (id: string, path: string, code: string, language = ''): { id: string; data: CreationNodeData } =>
   ({ id, data: { kind: 'code', title: path, path, code, language } as CreationNodeData });
@@ -142,14 +162,14 @@ const localBuild = (id: string, key: string) => ({ id, data: { kind: 'build', ti
 describe('the app surface', () => {
   it('offers what to make on a board with no app and no code', async () => {
     const actions = session([]);
-    render(<CanvasAppSurface nodes={[]} session={actions} persistence="server" sessionTitle="Launch" onExit={vi.fn()} />);
+    renderSurface(<CanvasAppSurface nodes={[]} session={actions} persistence="server" sessionTitle="Launch" onExit={vi.fn()} />);
     expect(screen.getByText('Start this session’s app')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Website/ }));
     await waitFor(() => expect(actions.createApp).toHaveBeenCalledWith({ title: 'Launch', modality: 'designer' }));
   });
 
   it('offers a board with no account only the kinds that run in the browser', () => {
-    render(<CanvasAppSurface nodes={[]} session={session([])} persistence="local" sessionTitle="" onExit={vi.fn()} />);
+    renderSurface(<CanvasAppSurface nodes={[]} session={session([])} persistence="local" sessionTitle="" onExit={vi.fn()} />);
     expect(screen.getByRole('button', { name: /Website/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Evermind/ })).toBeNull();
   });
@@ -157,7 +177,7 @@ describe('the app surface', () => {
   /** The operator's decision: code cards on the board become the app without asking. */
   it('makes the app a board of code cards already is, once, without asking', async () => {
     const actions = session(SESSION);
-    const { rerender } = render(<CanvasAppSurface nodes={SESSION} session={actions} persistence="local" sessionTitle="" onExit={vi.fn()} />);
+    const { rerender } = renderSurface(<CanvasAppSurface nodes={SESSION} session={actions} persistence="local" sessionTitle="" onExit={vi.fn()} />);
     expect(screen.queryByText('Start this session’s app')).toBeNull();
     await waitFor(() => expect(actions.createApp).toHaveBeenCalledWith({ title: 'My app', modality: 'designer' }));
     rerender(<CanvasAppSurface nodes={SESSION} session={actions} persistence="local" sessionTitle="" onExit={vi.fn()} />);
@@ -168,7 +188,7 @@ describe('the app surface', () => {
     await seedLocalWorkspace('surface-test', { 'index.html': '<h1>Hi</h1>', 'src/main.jsx': '' });
     const nodes = [localBuild('b1', 'surface-test'), card('n4', 'frontend/app.js', '1')];
     const actions = session(nodes);
-    render(<CanvasAppSurface nodes={nodes} session={actions} persistence="local" sessionTitle="" onExit={vi.fn()} />);
+    renderSurface(<CanvasAppSurface nodes={nodes} session={actions} persistence="local" sessionTitle="" onExit={vi.fn()} />);
     const workspace = await screen.findByTestId('workspace');
     expect(workspace).toHaveAttribute('data-app', 'b1');
     expect(workspace).toHaveAttribute('data-files', 'index.html,src/main.jsx');
@@ -178,7 +198,7 @@ describe('the app surface', () => {
   /** The Studio lens creates the board's app itself (`useCanvasEntryApp`); the chooser would be moot. */
   it('says the app is being prepared, not what to make, while a lens is creating it', () => {
     const actions = session([]);
-    render(<CanvasAppSurface nodes={[]} session={actions} persistence="local" sessionTitle="" entryAppPending onExit={vi.fn()} />);
+    renderSurface(<CanvasAppSurface nodes={[]} session={actions} persistence="local" sessionTitle="" entryAppPending onExit={vi.fn()} />);
     expect(screen.queryByText('Start this session’s app')).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('Bringing your code into the app');
     expect(actions.createApp).not.toHaveBeenCalled();
@@ -186,8 +206,20 @@ describe('the app surface', () => {
 
   it('hands the board back on Escape, the way every other surface does', () => {
     const onExit = vi.fn();
-    render(<CanvasAppSurface nodes={[]} session={session([])} persistence="server" sessionTitle="" onExit={onExit} />);
+    renderSurface(<CanvasAppSurface nodes={[]} session={session([])} persistence="server" sessionTitle="" onExit={onExit} />);
     fireEvent.keyDown(screen.getByTestId('canvas-app-surface'), { key: 'Escape' });
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('wears a visible way back to the board, as every object surface does', () => {
+    const onExit = vi.fn();
+    renderSurface(<CanvasAppSurface nodes={[]} session={session([])} persistence="server" sessionTitle="" onExit={onExit} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the board' }));
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('draws no way back where the lens keeps the App as its home (Studio)', () => {
+    renderSurface(<CanvasAppSurface nodes={[]} session={session([])} persistence="server" sessionTitle="" onExit={vi.fn()} />, 'studio');
+    expect(screen.queryByRole('button', { name: 'Back to the board' })).toBeNull();
   });
 });

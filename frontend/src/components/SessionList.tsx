@@ -32,7 +32,9 @@ import { useAuth } from '@/lib/AuthContext';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { fetchRecentCanvases, invalidateRecentCanvases, listPendingDrafts } from '@/lib/pendingWork';
-import { updateLocalCreationSession, type LocalCreationEntry } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { isLocalCreationSession, updateLocalCreationSession, type LocalCreationEntry } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
+import { Icon } from '@/components/ui/Icon';
 import { CanvasSyncBadge } from '@/components/canvas/CanvasSyncBadge';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { SplitButton } from '@/components/ui';
@@ -104,6 +106,17 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
   });
 
   const currentId = activeCanvasId(pathname);
+
+  // Put the board on stage AWAY: its kept instance — and whatever runtime it holds, an App
+  // preview included — is released, and the person lands in the library. Nothing is
+  // deleted; the board is in Recents and opens again from there. Absent where this list
+  // mounts without a stage.
+  const closeBoard = useOptionalActiveCanvas()?.closeBoard;
+  const closeActive = closeBoard && currentId ? () => {
+    onNavigate?.();
+    router.push('/create');
+    closeBoard({ sessionId: currentId, persistence: isLocalCreationSession(currentId) ? 'local' : 'server' });
+  } : null;
 
   useEffect(() => {
     setDrafts(listPendingDrafts());
@@ -263,6 +276,11 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
                 }}
               />
               <CanvasSyncBadge sessionId={currentId} />
+              {closeActive && (
+                <button type="button" className="nav-sessions__close" onClick={closeActive} aria-label={t('closeAria')} title={t('closeAria')}>
+                  <Icon name="close" size={12} />
+                </button>
+              )}
             </span>
           </>
         )}
