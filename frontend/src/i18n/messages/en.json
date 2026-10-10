@@ -19965,6 +19965,7 @@
       "visibilityPublic": "Public",
       "publishYouTube": "Publish to YouTube",
       "publishingYouTube": "Uploading to YouTube…",
+      "youtubeUploading": "Uploading to YouTube — {percent}% confirmed. You can close this; the upload keeps going.",
       "uploadedYouTube": "Uploaded to YouTube",
       "youtubePublishFailed": "YouTube could not publish this video. Check the connection and try again.",
       "viewOnYouTube": "View on YouTube",
@@ -20464,6 +20465,7 @@
       "socialCopy": "Copy",
       "socialStatus": {
         "queued": "Queued",
+        "uploading": "Uploading · {percent}%",
         "published": "Published",
         "pending": "Processing",
         "failed": "Failed",
@@ -22475,6 +22477,7 @@
       "publishPending": "Accepted — the network is still processing it.",
       "publishFailed": "That post could not be published.",
       "campaignPublished": "Published to {published} of {targets} accounts.",
+      "campaignPublishedUploading": "Published to {published} of {targets} accounts. {uploading} still uploading to YouTube — progress shows on the campaign.",
       "campaignScheduled": "Scheduled for {count} accounts.",
       "campaignUpdateFailed": "That campaign could not be updated.",
       "boardMedia": "Attach from this board",

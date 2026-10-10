@@ -19965,6 +19965,7 @@
       "visibilityPublic": "Público",
       "publishYouTube": "Publicar en YouTube",
       "publishingYouTube": "Subiendo a YouTube…",
+      "youtubeUploading": "Subiendo a YouTube: {percent} % confirmado. Puedes cerrar esto; la subida continúa.",
       "uploadedYouTube": "Subido a YouTube",
       "youtubePublishFailed": "YouTube no pudo publicar este video. Revisa la conexión e inténtalo de nuevo.",
       "viewOnYouTube": "Ver en YouTube",
@@ -20464,6 +20465,7 @@
       "socialCopy": "Texto",
       "socialStatus": {
         "queued": "En cola",
+        "uploading": "Subiendo · {percent} %",
         "published": "Publicada",
         "pending": "Procesando",
         "failed": "Con error",
@@ -22475,6 +22477,7 @@
       "publishPending": "Aceptado: la red todavía lo está procesando.",
       "publishFailed": "No se pudo publicar esa publicación.",
       "campaignPublished": "Publicado en {published} de {targets} cuentas.",
+      "campaignPublishedUploading": "Publicado en {published} de {targets} cuentas. {uploading} aún se está subiendo a YouTube; el progreso aparece en la campaña.",
       "campaignScheduled": "Programado para {count} cuentas.",
       "campaignUpdateFailed": "No se pudo actualizar esa campaña.",
       "boardMedia": "Adjuntar desde este lienzo",

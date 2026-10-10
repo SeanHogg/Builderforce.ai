@@ -14,24 +14,37 @@
  *      campaign would never complete. This is the same rule `campaignTransports`
  *      draws for email, and it is why {@link SocialProviderError} carries the flag.
  *
- * A network that refuses text-only posts (Instagram, TikTok) is SKIPPED rather than
- * failed when the campaign carries no media, and says so in the blocker list before
+ * A network that refuses text-only posts (Instagram, TikTok, YouTube) is SKIPPED rather
+ * than failed when the campaign carries no media, and says so in the blocker list before
  * anything is published — a campaign that "failed on Instagram" every time because a
  * text announcement can never be an Instagram post is a false alarm, not a defect.
+ *
+ * A network whose transport is `upload` (YouTube) is not published in the batch at all:
+ * its post is handed to the resumable upload job and sits `uploading` until the job
+ * settles it — see {@link ./socialCampaignUploads}.
  */
 
-import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, type SQL } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { socialCampaignPosts, socialCampaigns } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
+import { uploadPercent } from '../youtube/youtubeResumableUpload';
+import { youtubeUploadsForPosts, type YouTubeUploadRow } from '../youtube/youtubeUploadJobs';
 import {
   isSocialNetwork,
+  publishTransportOf,
   type SocialNetwork,
   type SocialPostDraft,
 } from './socialProviders';
+import {
+  markSocialPost,
+  settleSocialCampaign,
+  type SocialCampaignStatus,
+  type SocialPostStatus,
+} from './socialCampaignTotals';
+import { enqueueCampaignVideoUpload, reconcileSettledCampaignUploads } from './socialCampaignUploads';
 import {
   publishSocialPost,
   socialAccountView,
@@ -47,8 +60,7 @@ export const SOCIAL_PUBLISH_MAX_ATTEMPTS = 3;
  *  each post is an outbound call, so a large campaign finishes on the cron sweep. */
 export const SOCIAL_PUBLISH_BATCH_SIZE = 8;
 
-export type SocialCampaignStatus = 'draft' | 'scheduled' | 'publishing' | 'published' | 'failed';
-export type SocialPostStatus = 'queued' | 'published' | 'pending' | 'failed' | 'skipped';
+export type { SocialCampaignStatus, SocialPostStatus };
 
 export interface SocialCampaignPostView {
   id: number;
@@ -62,11 +74,13 @@ export interface SocialCampaignPostView {
   error: string | null;
   attempts: number;
   publishedAtISO: string | null;
+  /** While `uploading`: the share of the video the network has CONFIRMED, 0–100. */
+  uploadPercent: number | null;
 }
 
 /** A reason a campaign cannot fully publish. Rendered by the client, in its language. */
 export interface SocialCampaignBlocker {
-  /** `cannotPublish` is a read-and-measure-only network (YouTube) selected as a target —
+  /** `cannotPublish` is a read-and-measure-only network (`publishMode: 'none'`) selected as a target —
    *  distinct from `needsMedia`, which is fixable by attaching an image. */
   code: 'noCopy' | 'noAccounts' | 'needsMedia' | 'cannotPublish' | 'accountNotReady' | 'accountMissing';
   network?: string;
@@ -176,7 +190,17 @@ function blockersFor(campaign: CampaignRow, posts: PostRow[], accounts: readonly
   return blockers;
 }
 
-function toView(campaign: CampaignRow, posts: PostRow[], accounts: readonly SocialAccountView[]): SocialCampaignView {
+/** Confirmed progress of a post handed to an upload job; null for every other post. */
+function postUploadPercent(post: PostRow, uploads: ReadonlyMap<number, YouTubeUploadRow>): number | null {
+  if (post.status !== 'uploading') return null;
+  const upload = uploads.get(post.id);
+  return upload ? uploadPercent(upload.bytesSent, upload.byteSize) : 0;
+}
+
+function toView(
+  campaign: CampaignRow, posts: PostRow[], accounts: readonly SocialAccountView[],
+  uploads: ReadonlyMap<number, YouTubeUploadRow> = new Map(),
+): SocialCampaignView {
   return {
     id: campaign.id,
     name: campaign.name,
@@ -206,6 +230,7 @@ function toView(campaign: CampaignRow, posts: PostRow[], accounts: readonly Soci
       error: post.error,
       attempts: post.attempts,
       publishedAtISO: post.publishedAt ? post.publishedAt.toISOString() : null,
+      uploadPercent: postUploadPercent(post, uploads),
     })),
     blockers: blockersFor(campaign, posts, accounts),
   };
@@ -225,39 +250,45 @@ function toView(campaign: CampaignRow, posts: PostRow[], accounts: readonly Soci
  */
 async function loadCampaigns(
   db: Db, tenantId: number, extra: SQL | undefined, limit: number,
-): Promise<Array<{ campaign: CampaignRow; posts: PostRow[] }>> {
+): Promise<{ rows: Array<{ campaign: CampaignRow; posts: PostRow[] }>; uploads: Map<number, YouTubeUploadRow> }> {
   const campaigns = await db
     .select().from(socialCampaigns)
     .where(scopedToTenant(socialCampaigns, tenantId, extra))
     .orderBy(desc(socialCampaigns.updatedAt)).limit(limit);
-  if (campaigns.length === 0) return [];
+  if (campaigns.length === 0) return { rows: [], uploads: new Map() };
   const posts = await db
     .select().from(socialCampaignPosts)
     .where(scopedToTenant(socialCampaignPosts, tenantId, inArray(socialCampaignPosts.campaignId, campaigns.map((c) => c.id))))
     .orderBy(asc(socialCampaignPosts.id));
-  return campaigns.map((campaign) => ({
-    campaign,
-    posts: posts.filter((p) => p.campaignId === campaign.id),
-  }));
+  // A third query only when something is mid-upload — the common read pays nothing.
+  const uploading = posts.filter((p) => p.status === 'uploading').map((p) => p.id);
+  const uploads = await youtubeUploadsForPosts(db, tenantId, uploading);
+  return {
+    rows: campaigns.map((campaign) => ({
+      campaign,
+      posts: posts.filter((p) => p.campaignId === campaign.id),
+    })),
+    uploads,
+  };
 }
 
 export async function listSocialCampaigns(
   db: Db, tenantId: number, accounts: readonly SocialAccountView[], opts: { projectId?: number; limit?: number } = {},
 ): Promise<SocialCampaignView[]> {
-  const rows = await loadCampaigns(
+  const { rows, uploads } = await loadCampaigns(
     db, tenantId,
     opts.projectId != null ? eq(socialCampaigns.projectId, opts.projectId) : undefined,
     Math.min(Math.max(opts.limit ?? 50, 1), 100),
   );
-  return rows.map(({ campaign, posts }) => toView(campaign, posts, accounts));
+  return rows.map(({ campaign, posts }) => toView(campaign, posts, accounts, uploads));
 }
 
 export async function getSocialCampaign(
   db: Db, tenantId: number, id: number, accounts: readonly SocialAccountView[],
 ): Promise<SocialCampaignView | null> {
-  const rows = await loadCampaigns(db, tenantId, eq(socialCampaigns.id, id), 1);
+  const { rows, uploads } = await loadCampaigns(db, tenantId, eq(socialCampaigns.id, id), 1);
   const first = rows[0];
-  return first ? toView(first.campaign, first.posts, accounts) : null;
+  return first ? toView(first.campaign, first.posts, accounts, uploads) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -424,6 +455,8 @@ export interface SocialPublishBatchResult {
   published: number;
   failed: number;
   skipped: number;
+  /** Posts handed to a background upload job in this batch (YouTube). */
+  uploading: number;
   /** Posts still queued after this batch — a large campaign finishes on the sweep. */
   remaining: number;
   status: SocialCampaignStatus;
@@ -444,7 +477,7 @@ export async function runSocialCampaignBatch(
     .where(scopedToTenant(socialCampaigns, tenantId, eq(socialCampaigns.id, campaignId))).limit(1);
   if (!campaign) throw new SocialCampaignError('Campaign not found', 404);
   if (campaign.status === 'published') {
-    return { campaignId, published: 0, failed: 0, skipped: 0, remaining: 0, status: 'published', results: [] };
+    return { campaignId, published: 0, failed: 0, skipped: 0, uploading: 0, remaining: 0, status: 'published', results: [] };
   }
 
   if (campaign.status !== 'publishing') {
@@ -452,6 +485,9 @@ export async function runSocialCampaignBatch(
       .set({ status: 'publishing', startedAt: campaign.startedAt ?? new Date(), updatedAt: new Date() })
       .where(scopedToTenant(socialCampaigns, tenantId, eq(socialCampaigns.id, campaignId)));
   }
+
+  // A video whose upload finished but whose write-back was lost settles here.
+  await reconcileSettledCampaignUploads(db, tenantId, campaignId);
 
   const queued = await db.select().from(socialCampaignPosts)
     .where(scopedToTenant(socialCampaignPosts, tenantId, and(
@@ -467,6 +503,7 @@ export async function runSocialCampaignBatch(
   let published = 0;
   let failed = 0;
   let skipped = 0;
+  let uploading = 0;
   const results: SocialPublishBatchResult['results'] = [];
 
   for (const post of queued) {
@@ -474,7 +511,7 @@ export async function runSocialCampaignBatch(
     const network = post.network as SocialNetwork;
 
     if (!account) {
-      await markPost(db, tenantId, post.id, {
+      await markSocialPost(db, tenantId, post.id, {
         status: 'failed',
         error: 'That account is no longer connected, or is missing a required account id.',
       });
@@ -486,12 +523,32 @@ export async function runSocialCampaignBatch(
     // Not a failure: a text announcement can NEVER be an Instagram post, so calling
     // it failed would raise the same false alarm on every campaign.
     if (account.provider.publishMode === 'media' && (campaign.mediaUrls ?? []).length === 0) {
-      await markPost(db, tenantId, post.id, {
+      await markSocialPost(db, tenantId, post.id, {
         status: 'skipped',
         error: `${account.provider.label} needs an image or video — this campaign has no media.`,
       });
       skipped += 1;
       results.push({ network, accountName: account.row.name, ok: false, permalink: null, error: 'Needs media.' });
+      continue;
+    }
+
+    // An upload-transport network (YouTube) is handed to its upload job, not called.
+    // The post stays `uploading` until the job settles it, so "published" is never
+    // claimed for a video that is still 40% of the way there.
+    if (publishTransportOf(account.provider) === 'upload') {
+      const handed = await enqueueCampaignVideoUpload(db, env, tenantId, {
+        campaign: { name: campaign.name, linkUrl: campaign.linkUrl, mediaUrls: campaign.mediaUrls ?? [] },
+        post: { id: post.id, connectionId: post.connectionId, body: post.body },
+      });
+      if (handed.ok) {
+        await markSocialPost(db, tenantId, post.id, { status: 'uploading', attempts: post.attempts + 1, error: null });
+        uploading += 1;
+        results.push({ network, accountName: account.row.name, ok: true, permalink: null, error: null });
+      } else {
+        await markSocialPost(db, tenantId, post.id, { status: handed.outcome === 'skip' ? 'skipped' : 'failed', error: handed.error });
+        if (handed.outcome === 'skip') skipped += 1; else failed += 1;
+        results.push({ network, accountName: account.row.name, ok: false, permalink: null, error: handed.error });
+      }
       continue;
     }
 
@@ -504,7 +561,7 @@ export async function runSocialCampaignBatch(
     }, network), actorKind);
 
     if (outcome.ok) {
-      await markPost(db, tenantId, post.id, {
+      await markSocialPost(db, tenantId, post.id, {
         // A network that has accepted but not finished processing (TikTok transcodes)
         // is `pending`, not `published` — claiming otherwise is an overclaim the
         // campaign counters would then carry forever.
@@ -522,7 +579,7 @@ export async function runSocialCampaignBatch(
 
     const exhausted = attempts >= SOCIAL_PUBLISH_MAX_ATTEMPTS;
     const requeue = outcome.retryable && !exhausted;
-    await markPost(db, tenantId, post.id, {
+    await markSocialPost(db, tenantId, post.id, {
       status: requeue ? 'queued' : 'failed',
       attempts,
       error: outcome.error.slice(0, 1000),
@@ -531,89 +588,7 @@ export async function runSocialCampaignBatch(
     results.push({ network, accountName: account.row.name, ok: false, permalink: null, error: outcome.error });
   }
 
-  const [{ remaining = 0 } = { remaining: 0 }] = await db
-    .select({ remaining: sql<number>`count(*)::int` })
-    .from(socialCampaignPosts)
-    .where(scopedToTenant(socialCampaignPosts, tenantId, and(
-      eq(socialCampaignPosts.campaignId, campaignId),
-      eq(socialCampaignPosts.status, 'queued'),
-    )));
-
-  const totals = await db
-    .select({ status: socialCampaignPosts.status, count: sql<number>`count(*)::int` })
-    .from(socialCampaignPosts)
-    .where(scopedToTenant(socialCampaignPosts, tenantId, eq(socialCampaignPosts.campaignId, campaignId)))
-    .groupBy(socialCampaignPosts.status);
-  const totalBy = (status: SocialPostStatus) => totals.find((t) => t.status === status)?.count ?? 0;
-  const publishedTotal = totalBy('published') + totalBy('pending');
-  const failedTotal = totalBy('failed');
-
-  const status: SocialCampaignStatus = remaining > 0
-    ? 'publishing'
-    : publishedTotal > 0 ? 'published' : 'failed';
-
-  await db.update(socialCampaigns).set({
-    status,
-    published: publishedTotal,
-    failed: failedTotal,
-    updatedAt: new Date(),
-    ...(remaining === 0 ? { completedAt: new Date() } : {}),
-  }).where(scopedToTenant(socialCampaigns, tenantId, eq(socialCampaigns.id, campaignId)));
-
-  // Anything left queued only finishes if the gated cron actually runs.
-  if (remaining > 0) await signalPendingWork(env);
-
-  return { campaignId, published, failed, skipped, remaining, status, results };
-}
-
-async function markPost(
-  db: Db, tenantId: number, id: number,
-  patch: Partial<typeof socialCampaignPosts.$inferInsert>,
-): Promise<void> {
-  await db.update(socialCampaignPosts).set(patch)
-    .where(scopedToTenant(socialCampaignPosts, tenantId, eq(socialCampaignPosts.id, id)));
-}
-
-// ---------------------------------------------------------------------------
-// Sweep
-// ---------------------------------------------------------------------------
-
-/** Campaigns the sweep should advance: mid-publish, or scheduled and now due. */
-export async function socialCampaignsDue(db: Db, limit = 5): Promise<Array<{ id: number; tenantId: number }>> {
-  return db
-    .select({ id: socialCampaigns.id, tenantId: socialCampaigns.tenantId })
-    .from(socialCampaigns)
-    .where(sql`(${socialCampaigns.status} = 'publishing')
-      OR (${socialCampaigns.status} = 'scheduled' AND ${socialCampaigns.scheduledAt} IS NOT NULL AND ${socialCampaigns.scheduledAt} <= NOW())`)
-    .orderBy(asc(socialCampaigns.scheduledAt), asc(socialCampaigns.id))
-    .limit(limit);
-}
-
-/**
- * Advance every due social campaign by one batch.
- *
- * Without this, a `scheduled` campaign would sit forever and a campaign larger than
- * one batch would stop halfway — the same reason the email engine has a sweep.
- */
-export async function runSocialCampaignSweep(
-  env: Env, db: Db, opts: { maxCampaigns?: number } = {},
-): Promise<{ campaigns: number; published: number; failed: number }> {
-  const due = await socialCampaignsDue(db, opts.maxCampaigns ?? 5);
-  let published = 0;
-  let failed = 0;
-  for (const campaign of due) {
-    try {
-      const batch = await runSocialCampaignBatch(db, env, campaign.tenantId, campaign.id, 'agent');
-      published += batch.published;
-      failed += batch.failed;
-    } catch (error) {
-      // One tenant's broken campaign must not stop the tick for everyone else.
-      reportCaughtError(error, {
-        source: 'application/social/socialCampaignService.ts',
-        operation: 'runSocialCampaignSweep',
-        context: { campaignId: campaign.id },
-      });
-    }
-  }
-  return { campaigns: due.length, published, failed };
+  // The same recount an upload job runs when it settles a post — one arithmetic.
+  const settled = await settleSocialCampaign(db, env, tenantId, campaignId);
+  return { campaignId, published, failed, skipped, uploading, remaining: settled.remaining, status: settled.status, results };
 }
