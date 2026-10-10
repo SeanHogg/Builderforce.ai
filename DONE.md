@@ -9,6 +9,7 @@
 - `consecutiveStalls` drives the ladder and resets on every returned completion. `stalledStreams` stays as the turn total.
 - An unpinned turn with no proven fallback re-routes once (`MAX_STALL_REROUTES`): the stalled model is excluded via `excludeModels` and the gateway picks again. This is turn-scoped and never reported as session-disabled. A caller's explicit pick is never overridden.
 - A turn abandoned after changing the board returns the new `stoppedPartway` notice (all five catalogs) and reports `onUnanswered` (`provider-stalled` / `model-looped`), so it stays out of the transcript.
+- `switchToProvenModel` never picks a model the turn re-routed away from. Before this, a stall after the re-route had no model name to report, so the "proven" fallback picked was the model that had just gone silent.
 - Tests: three cases in `creationCanvasAi.test.ts` → "part-way through a build".
 
 ## ✅ RESOLVED 2026-10-10 — Every prompt is the same one-box composer: web, VS Code, Synapse, Spawn (brain-ui 2026.10.4 · brain-embedded 2026.10.5 · frontend 2026.10.33 · VSIX 2026.10.6 · desktop 2026.10.3)
