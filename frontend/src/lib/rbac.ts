@@ -124,6 +124,11 @@ export const CAPABILITIES = {
   // schedules the cron sweep runs. Mirrors the API's requireRole(MANAGER) on the
   // POST/PATCH/DELETE /api/agile/ceremonies/schedules routes (reads are open).
   'ceremonies.manageSchedules': 'manager',
+  // Scheduled reports — create/edit/pause/delete the standups, executive
+  // summaries, rollups and board packs the report cron delivers. Mirrors
+  // requireRole(MANAGER) on POST/PATCH/DELETE /api/reports/schedules (the list
+  // read is MANAGER+ too, which the panel's error state answers).
+  'reports.manageSchedules': 'manager',
 
   // Enterprise insight lenses (the role-based dashboards from the platform
   // assessment). Gating them now means the lens surfaces light up for the right

@@ -1,5 +1,19 @@
 [
   {
+    "slug": "schedule-your-board-pack-from-finance",
+    "title": "Schedule the board pack once, and stop rebuilding it every month",
+    "date": "2026-10-10",
+    "description": "Report schedules have run on a cron for a while, but you couldn't see them, change them or make one from a page. Finance now has a Reports tab. Pick a report, a cadence and the people it goes to. A board pack sends a frame from one of your boards, picked board first and then frame. The experiments behind your numbers sit on the same page.",
+    "tags": [
+      "finance",
+      "reporting",
+      "board-pack",
+      "scheduling",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "your-private-evermind-on-your-machine",
     "title": "Your private Evermind, on your machine — with local models, connectors and approvals from your phone",
     "date": "2026-10-10",

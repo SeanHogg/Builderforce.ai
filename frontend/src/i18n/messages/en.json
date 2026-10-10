@@ -775,7 +775,8 @@
       "inquiries": "Interest",
       "runway": "Runway",
       "cashflow": "Cashflow",
-      "dashboard": "Dashboard"
+      "dashboard": "Dashboard",
+      "reports": "Reports"
     },
     "primaryAria": "Primary",
     "destination": {
@@ -32585,6 +32586,96 @@
       "loading": "Loading your dashboard…",
       "installPrompt": "No KPI dashboard installed yet. Install the one built for your vertical to see the metrics your peers track.",
       "installCta": "Install from Marketplace"
+    },
+    "reports": {
+      "title": "Scheduled reports",
+      "blurb": "Reports this workspace emails on a cadence — standups, executive summaries, rollups, and board packs built from a canvas frame.",
+      "new": "New schedule",
+      "loading": "Loading…",
+      "empty": "No reports are scheduled yet. Create one to have it emailed daily, weekly or monthly.",
+      "crumb": "Finance · Reports",
+      "createTitle": "New report schedule",
+      "editTitle": "Edit report schedule",
+      "cancel": "Cancel",
+      "save": "Save changes",
+      "create": "Create schedule",
+      "edit": "Edit",
+      "pause": "Pause",
+      "resume": "Resume",
+      "delete": "Delete",
+      "deleteTitle": "Delete this schedule?",
+      "deleteMessage": "The {type} report will stop being sent. Reports already delivered are not affected.",
+      "statusOn": "Active",
+      "statusPaused": "Paused",
+      "cadenceSummary": "{cadence} at {hour}:00 UTC",
+      "recipientsCount": "{count, plural, one {# recipient} other {# recipients}}",
+      "subjectFrame": "Canvas frame",
+      "nextRun": "Next: {when}",
+      "nextRunPending": "Next run is set when the scheduler next runs",
+      "fixedOnEdit": "Report type, cadence and frame are fixed once a schedule exists. To change them, create a new schedule.",
+      "needRecipients": "Add at least one recipient.",
+      "fixRecipients": "Fix the entries that are not email addresses.",
+      "needFrame": "Choose the frame this board pack should send.",
+      "recipientsInvalid": "Not an email address: {entries}",
+      "recipientsHint": "One address per line, or separated by commas.",
+      "recipientsPlaceholder": "cfo@example.com\nboard@example.com",
+      "hourOption": "{hour}:00 UTC",
+      "boardPlaceholder": "Choose a board",
+      "framePlaceholder": "Choose a frame",
+      "frameOption": "{title} ({count, plural, one {# tile} other {# tiles}})",
+      "noBoards": "You have no active boards yet. A board pack sends a frame from one.",
+      "noFrames": "This board has no frames. Add a frame around the tiles you want to send, then pick it here.",
+      "field": {
+        "type": "Report",
+        "cadence": "Cadence",
+        "hour": "Delivery time",
+        "recipients": "Recipients",
+        "enabled": "Send this report",
+        "board": "Board",
+        "frame": "Frame"
+      },
+      "type": {
+        "standup": "Daily standup",
+        "code_review": "Code review",
+        "project_status": "Project status",
+        "executive_summary": "Executive summary",
+        "portfolio_rollup": "Portfolio rollup",
+        "board_pack": "Board pack"
+      },
+      "cadence": {
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "monthly": "Monthly"
+      }
+    },
+    "validation": {
+      "title": "Validation engagements",
+      "blurb": "The experiments, validation dashboards and feedback collectors running in this workspace.",
+      "loading": "Loading engagements…",
+      "empty": "Nothing is being validated yet. Experiments, validation dashboards and feedback collectors appear here once you start one.",
+      "untitled": "Untitled",
+      "more": "{count, plural, one {and # more} other {and # more}}",
+      "responses": "{count, plural, one {# response} other {# responses}}",
+      "count": {
+        "validation": "{count, plural, one {# experiment} other {# experiments}}",
+        "dashboard": "{count, plural, one {# dashboard} other {# dashboards}}",
+        "feedback_collector": "{count, plural, one {# collector} other {# collectors}}"
+      },
+      "kind": {
+        "validation": "Experiment",
+        "dashboard": "Dashboard",
+        "feedback_collector": "Feedback collector"
+      },
+      "status": {
+        "in_progress": "In progress",
+        "validated": "Validated",
+        "invalidated": "Invalidated",
+        "inconclusive": "Inconclusive",
+        "running": "Running",
+        "active": "Active",
+        "completed": "Completed",
+        "disabled": "Off"
+      }
     }
   },
   "proBonoBadge": {

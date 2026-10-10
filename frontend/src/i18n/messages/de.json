@@ -775,7 +775,8 @@
       "inquiries": "Interesse",
       "runway": "Runway",
       "cashflow": "Cashflow",
-      "dashboard": "Dashboard"
+      "dashboard": "Dashboard",
+      "reports": "Berichte"
     },
     "primaryAria": "Primär",
     "destination": {
@@ -32585,6 +32586,96 @@
       "loading": "Dashboard wird geladen…",
       "installPrompt": "Noch kein KPI-Dashboard installiert. Installieren Sie das Dashboard für Ihre Branche, um die Kennzahlen Ihrer Vergleichsgruppe zu sehen.",
       "installCta": "Aus dem Marktplatz installieren"
+    },
+    "reports": {
+      "title": "Geplante Berichte",
+      "blurb": "Berichte, die dieser Workspace regelmäßig per E-Mail versendet – Standups, Management-Zusammenfassungen, Rollups und Board-Packs aus einem Canvas-Rahmen.",
+      "new": "Neuer Zeitplan",
+      "loading": "Wird geladen…",
+      "empty": "Noch keine Berichte geplant. Lege einen an, um ihn täglich, wöchentlich oder monatlich per E-Mail zu erhalten.",
+      "crumb": "Finanzen · Berichte",
+      "createTitle": "Neuer Berichtszeitplan",
+      "editTitle": "Berichtszeitplan bearbeiten",
+      "cancel": "Abbrechen",
+      "save": "Änderungen speichern",
+      "create": "Zeitplan anlegen",
+      "edit": "Bearbeiten",
+      "pause": "Pausieren",
+      "resume": "Fortsetzen",
+      "delete": "Löschen",
+      "deleteTitle": "Diesen Zeitplan löschen?",
+      "deleteMessage": "Der Bericht „{type}“ wird nicht mehr versendet. Bereits zugestellte Berichte bleiben unberührt.",
+      "statusOn": "Aktiv",
+      "statusPaused": "Pausiert",
+      "cadenceSummary": "{cadence} um {hour}:00 UTC",
+      "recipientsCount": "{count, plural, one {# Empfänger} other {# Empfänger}}",
+      "subjectFrame": "Canvas-Rahmen",
+      "nextRun": "Nächster Versand: {when}",
+      "nextRunPending": "Der nächste Versand wird beim nächsten Lauf des Planers festgelegt",
+      "fixedOnEdit": "Berichtstyp, Rhythmus und Rahmen stehen fest, sobald ein Zeitplan existiert. Um sie zu ändern, lege einen neuen Zeitplan an.",
+      "needRecipients": "Füge mindestens einen Empfänger hinzu.",
+      "fixRecipients": "Korrigiere die Einträge, die keine E-Mail-Adressen sind.",
+      "needFrame": "Wähle den Rahmen, den dieses Board-Pack senden soll.",
+      "recipientsInvalid": "Keine E-Mail-Adresse: {entries}",
+      "recipientsHint": "Eine Adresse pro Zeile oder durch Kommas getrennt.",
+      "recipientsPlaceholder": "cfo@example.com\nboard@example.com",
+      "hourOption": "{hour}:00 UTC",
+      "boardPlaceholder": "Board wählen",
+      "framePlaceholder": "Rahmen wählen",
+      "frameOption": "{title} ({count, plural, one {# Kachel} other {# Kacheln}})",
+      "noBoards": "Du hast noch keine aktiven Boards. Ein Board-Pack versendet einen Rahmen aus einem davon.",
+      "noFrames": "Dieses Board hat keine Rahmen. Lege einen Rahmen um die Kacheln, die du senden willst, und wähle ihn dann hier.",
+      "field": {
+        "type": "Bericht",
+        "cadence": "Rhythmus",
+        "hour": "Versandzeit",
+        "recipients": "Empfänger",
+        "enabled": "Diesen Bericht senden",
+        "board": "Board",
+        "frame": "Rahmen"
+      },
+      "type": {
+        "standup": "Daily Standup",
+        "code_review": "Code-Review",
+        "project_status": "Projektstatus",
+        "executive_summary": "Management-Zusammenfassung",
+        "portfolio_rollup": "Portfolio-Rollup",
+        "board_pack": "Board-Pack"
+      },
+      "cadence": {
+        "daily": "Täglich",
+        "weekly": "Wöchentlich",
+        "monthly": "Monatlich"
+      }
+    },
+    "validation": {
+      "title": "Validierungen",
+      "blurb": "Die Experimente, Validierungs-Dashboards und Feedback-Sammler, die in diesem Workspace laufen.",
+      "loading": "Validierungen werden geladen…",
+      "empty": "Noch wird nichts validiert. Experimente, Validierungs-Dashboards und Feedback-Sammler erscheinen hier, sobald du eines startest.",
+      "untitled": "Ohne Titel",
+      "more": "{count, plural, one {und # weiteres} other {und # weitere}}",
+      "responses": "{count, plural, one {# Antwort} other {# Antworten}}",
+      "count": {
+        "validation": "{count, plural, one {# Experiment} other {# Experimente}}",
+        "dashboard": "{count, plural, one {# Dashboard} other {# Dashboards}}",
+        "feedback_collector": "{count, plural, one {# Sammler} other {# Sammler}}"
+      },
+      "kind": {
+        "validation": "Experiment",
+        "dashboard": "Dashboard",
+        "feedback_collector": "Feedback-Sammler"
+      },
+      "status": {
+        "in_progress": "In Arbeit",
+        "validated": "Bestätigt",
+        "invalidated": "Widerlegt",
+        "inconclusive": "Ohne Ergebnis",
+        "running": "Läuft",
+        "active": "Aktiv",
+        "completed": "Abgeschlossen",
+        "disabled": "Aus"
+      }
     }
   },
   "proBonoBadge": {
