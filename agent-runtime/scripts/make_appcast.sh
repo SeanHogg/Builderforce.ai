@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 REPO_ROOT=$(cd "$ROOT/.." && pwd)  # monorepo root: apps/macos lives here, not under agent-runtime/
 ZIP=${1:?"Usage: $0 Builderforce-<ver>.zip"}
-FEED_URL=${2:-"https://raw.githubusercontent.com/builderforce/builderforce/main/appcast.xml"}
+FEED_URL=${2:-"https://raw.githubusercontent.com/SeanHogg/Builderforce.ai/main/agent-runtime/appcast.xml"}
 PRIVATE_KEY_FILE=${SPARKLE_PRIVATE_KEY_FILE:-}
 if [[ -z "$PRIVATE_KEY_FILE" ]]; then
   echo "Set SPARKLE_PRIVATE_KEY_FILE to your ed25519 private key (Sparkle)." >&2

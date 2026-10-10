@@ -279,6 +279,7 @@ public final class BuilderforceChatViewModel {
         self.isSending = true
         self.errorText = nil
         defer { self.isSending = false }
+        var optimisticID: UUID?
         do {
             let chatID = try await self.ensureChat()
             var content = text
@@ -297,10 +298,13 @@ public final class BuilderforceChatViewModel {
             }
             let to = self.recipient
             let optimistic = Self.optimisticTurn(content.trimmingCharacters(in: .whitespacesAndNewlines))
+            optimisticID = optimistic.id
             self.messages.append(optimistic)
             try await self.transport.send(chatID: chatID, content: optimistic.plainText, to: to, attachments: stored)
             self.beginReply(chatID: chatID, to: to, imageURLs: imageURLs)
         } catch {
+            // The turn was not saved: take it back out and give the text back to the box.
+            self.messages.removeAll { $0.id == optimisticID }
             self.input = self.input.isEmpty ? text : self.input
             self.attachments = attachments + self.attachments
             self.fail(error)

@@ -111,7 +111,6 @@ struct BuilderforceChatComposer: View {
             .font(.body)
             .lineLimit(1...6)
             .focused(self.$isFocused)
-            .submitLabel(.send)
         #endif
     }
 

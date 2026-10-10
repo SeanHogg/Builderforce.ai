@@ -37,7 +37,7 @@ public enum ChatStrings {
     public static var removeQueued: String { text("chat.composer.removeQueued", "Remove queued message") }
 
     public static func to(_ name: String) -> String {
-        String(localized: "chat.composer.to", defaultValue: "To \(name)", bundle: .module)
+        String(localized: "chat.composer.to", defaultValue: "To \(name)", bundle: self.bundle)
     }
 
     /// Three short starters shown above an empty chat.
@@ -66,7 +66,7 @@ public enum ChatStrings {
     // MARK: - Approvals
 
     public static func approvalTitle(_ action: String) -> String {
-        String(localized: "chat.approval.title", defaultValue: "The Brain wants to run “\(action)”", bundle: .module)
+        String(localized: "chat.approval.title", defaultValue: "The Brain wants to run “\(action)”", bundle: self.bundle)
     }
 
     public static var approve: String { text("chat.approval.approve", "Approve") }
@@ -99,15 +99,15 @@ public enum ChatStrings {
         String(
             localized: "chat.error.agentNoReply",
             defaultValue: "\(name) hasn't replied yet. The answer appears here when it arrives.",
-            bundle: .module)
+            bundle: self.bundle)
     }
 
     public static func attachmentTooLarge(_ fileName: String) -> String {
-        String(localized: "chat.error.attachmentTooLarge", defaultValue: "\(fileName) is larger than 5 MB.", bundle: .module)
+        String(localized: "chat.error.attachmentTooLarge", defaultValue: "\(fileName) is larger than 5 MB.", bundle: self.bundle)
     }
 
     public static func serverError(_ message: String) -> String {
-        String(localized: "chat.error.server", defaultValue: "Builderforce answered with an error: \(message)", bundle: .module)
+        String(localized: "chat.error.server", defaultValue: "Builderforce answered with an error: \(message)", bundle: self.bundle)
     }
 
     /// An error as a person reads it.
@@ -138,7 +138,12 @@ public enum ChatStrings {
         }
     }
 
+    /// The ChatUI resource bundle (the string catalog). A packaged app without it falls
+    /// back to the main bundle, where each string reads in English (its default value).
+    private static let bundle: Bundle =
+        BuilderforceKitResources.packageBundle(named: "BuilderforceKit_BuilderforceChatUI") ?? .main
+
     private static func text(_ key: StaticString, _ value: String.LocalizationValue) -> String {
-        String(localized: key, defaultValue: value, bundle: .module)
+        String(localized: key, defaultValue: value, bundle: self.bundle)
     }
 }

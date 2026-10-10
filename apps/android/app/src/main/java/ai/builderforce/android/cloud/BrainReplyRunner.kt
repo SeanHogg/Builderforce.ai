@@ -28,7 +28,7 @@ class EmptyAnswerException : Exception("the model returned an empty answer")
  * The Brain's reply in a chat — Synapse's `brain.rs`. The platform answers only messages
  * addressed to an agent; the Brain's own turn is run by the surface the person is in,
  * through the same loop: the model streams its answer (`/llm/v1/chat/completions`) and
- * may call the platform's tools (`/llm/v1/mcp/*`), each run as the person; then the
+ * may call the platform's tools (the `/llm/v1/mcp` routes), each run as the person; then the
  * answer is persisted to the chat. A tool that only reads runs at once; one that changes
  * something waits for the person's Approve. Cancel the coroutine to stop.
  */

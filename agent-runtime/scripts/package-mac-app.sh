@@ -24,7 +24,7 @@ fi
 IFS=' ' read -r -a BUILD_ARCHS <<< "$BUILD_ARCHS_VALUE"
 PRIMARY_ARCH="${BUILD_ARCHS[0]}"
 SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-AGCY8w5vHirVfGGDGc8Szc5iuOqupZSh9pMj/Qs67XI=}"
-SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://raw.githubusercontent.com/builderforce/builderforce/main/appcast.xml}"
+SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://raw.githubusercontent.com/SeanHogg/Builderforce.ai/main/agent-runtime/appcast.xml}"
 AUTO_CHECKS=true
 # Debug builds (BUILD_CONFIG=debug, or an explicit *.debug BUNDLE_ID override) never auto-update.
 if [[ "$BUILD_CONFIG" == "debug" || "$BUNDLE_ID" == *.debug ]]; then
@@ -219,13 +219,16 @@ else
 fi
 
 echo "📦 Copying BuilderforceKit resources"
-BUILDERFORCEKIT_BUNDLE="$(build_path_for_arch "$PRIMARY_ARCH")/$BUILD_CONFIG/BuilderforceKit_BuilderforceKit.bundle"
-if [ -d "$BUILDERFORCEKIT_BUNDLE" ]; then
-  rm -rf "$APP_ROOT/Contents/Resources/BuilderforceKit_BuilderforceKit.bundle"
-  cp -R "$BUILDERFORCEKIT_BUNDLE" "$APP_ROOT/Contents/Resources/BuilderforceKit_BuilderforceKit.bundle"
-else
-  echo "WARN: BuilderforceKit resource bundle not found at $BUILDERFORCEKIT_BUNDLE (continuing)" >&2
-fi
+# BuilderforceChatUI carries the chat's string catalog; without it the packaged app is English-only.
+for KIT_BUNDLE_NAME in BuilderforceKit_BuilderforceKit.bundle BuilderforceKit_BuilderforceChatUI.bundle; do
+  KIT_BUNDLE="$(build_path_for_arch "$PRIMARY_ARCH")/$BUILD_CONFIG/$KIT_BUNDLE_NAME"
+  if [ -d "$KIT_BUNDLE" ]; then
+    rm -rf "$APP_ROOT/Contents/Resources/$KIT_BUNDLE_NAME"
+    cp -R "$KIT_BUNDLE" "$APP_ROOT/Contents/Resources/$KIT_BUNDLE_NAME"
+  else
+    echo "WARN: BuilderforceKit resource bundle not found at $KIT_BUNDLE (continuing)" >&2
+  fi
+done
 
 echo "📦 Copying Textual resources"
 TEXTUAL_BUNDLE_DIR="$(build_path_for_arch "$PRIMARY_ARCH")/$BUILD_CONFIG"

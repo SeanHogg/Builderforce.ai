@@ -51,8 +51,6 @@ struct AboutSettings: View {
                     title: "GitHub",
                     url: "https://github.com/SeanHogg/Builderforce.ai")
                 AboutLinkRow(icon: "globe", title: "Website", url: "https://builderforce.ai")
-                AboutLinkRow(icon: "bird", title: "Twitter", url: "https://twitter.com/steipete")
-                AboutLinkRow(icon: "envelope", title: "Email", url: "mailto:peter@steipete.me")
             }
             .frame(maxWidth: .infinity)
             .multilineTextAlignment(.center)

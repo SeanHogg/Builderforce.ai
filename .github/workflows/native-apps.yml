@@ -41,7 +41,7 @@ jobs:
           ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest
 
   swift-kit:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 40
     defaults:
       run:
@@ -54,7 +54,7 @@ jobs:
           swift test
 
   macos:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 50
     defaults:
       run:
@@ -65,7 +65,7 @@ jobs:
         run: swift build
 
   ios:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 50
     defaults:
       run:
