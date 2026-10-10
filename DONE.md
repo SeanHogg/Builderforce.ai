@@ -50,7 +50,11 @@
 - **One-box composer** on all three: text on top, then `+`, "To ▾" (only when the chat has agents), and one round trailing button (mic → Send → Stop). Suggestion chips sit over an empty chat, and text typed during a reply is queued.
 - **Images persist.** On all three apps, an attached image goes to `POST /api/brain/upload`, its `{key,name,type}` rides in the message `metadata` beside `addressedTo`, and a reopened chat shows it as a thumbnail, read back through the signed-in session.
 - **Localized:** Android 225 strings and Swift ChatUI 51 keys, each in en/de/es/fr/zh. The Mac packager ships the ChatUI resource bundle.
-- **CI:** `.github/workflows/native-apps.yml` runs Android assemble and unit tests, BuilderforceKit build and test, macOS build, and the iOS simulator build, on Xcode 26 runners.
+- **CI:** `.github/workflows/native-apps.yml` builds Android (assemble and unit tests), BuilderforceKit (build and test), the macOS app, the iOS simulator app and Swabble on Xcode 26 runners. All five jobs pass on run 38078637198 (`188c595f3`). Getting there needed four fixes:
+  - a KDoc `/*` that opened a Kotlin nested comment;
+  - runners moved from `macos-15` (Swift 6.1) to `macos-26`, because the packages declare tools 6.2;
+  - Peekaboo pinned to exactly 4.9.0 instead of a January `main` that called `CGWindowListCreateImage`, which the macOS 26 SDK removes. The bridge host now supplies `desktopObservation`, and Swabble moved to Commander 0.3.0 to match AXorcist's pin;
+  - Swabble's sentence timing and `transcribe` gated to macOS 26.
 - **Fixed along the way:** the Sparkle feed and contributors script point at the real repository, and the About page drops the upstream author's personal links.
 
 **Still open (ROADMAP):** Evermind recall and the agent invite UI in the native chat.
