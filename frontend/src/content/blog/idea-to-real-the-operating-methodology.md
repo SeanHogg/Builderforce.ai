@@ -1,7 +1,7 @@
 ---
 title: Idea to Real — the operating methodology behind Builderforce
 date: 2026-08-15
-description: Four stages say where you are. Three acts say what you do. This is the method Builderforce is built around, why the middle act is the one that matters, and how a kill condition turns a straight line into a loop.
+description: Five stages say where you are. Three acts say what you do. This is the method Builderforce is built around, why the middle act is the one that matters, and how a kill condition turns a straight line into a loop.
 tags: [methodology, idea-to-real, product-strategy, validation]
 author: Sean Hogg
 ---
@@ -14,7 +14,7 @@ Builderforce is organised around a method instead. The navigation is the method.
 
 ## The arc: where you are
 
-There are four stages, and they are not departments. They are positions in a journey, and every destination in the product sits in exactly one of them.
+There are five stages, and they are not departments. They are positions in a journey, and every destination in the product sits in exactly one of them.
 
 ```bf-figure
 {
@@ -24,9 +24,10 @@ There are four stages, and they are not departments. They are positions in a jou
     { "label": "Idea", "note": "What if? — the canvas, the brief, the reading of what you actually said.", "hue": "idea", "tag": "free" },
     { "label": "Make", "note": "Build it. — proofs, projects, the workforce that picks up the tickets.", "hue": "make" },
     { "label": "Run", "note": "Run it as a company. — finance, revenue, people, support, governance.", "hue": "run" },
-    { "label": "Measure", "note": "Is it working? — where the kill condition set two stages earlier is graded.", "hue": "measure", "tag": "closes the loop" }
+    { "label": "Measure", "note": "Is it working? — where the kill condition set two stages earlier is graded.", "hue": "measure", "tag": "closes the loop" },
+    { "label": "Reach", "note": "Sell it, be found, grow it. — the marketplace, publishing, the sales programme.", "hue": "reach" }
   ],
-  "caption": "Two further stages sit past these four — Market (sell, buy, hire, be found) and Expand (grow the business off the back of it). They are what a company does once it has something that works, so they are not part of the decision to start."
+  "caption": "Measure grades the proof; Reach is where something that passed it meets buyers. Stopping at any stage is still a complete use of the product."
 }
 ```
 

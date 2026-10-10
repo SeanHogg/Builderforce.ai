@@ -16,10 +16,10 @@
  *
  * ── THE TWO HALVES ──────────────────────────────────────────────────────────
  *
- *   THE ARC   Idea → Make → Run → Measure (→ Reach → Expand)
- *             Where you are. Owned by `STAGES`; this file does not restate it,
- *             it points at it, so a seventh stage cannot appear in one place and
- *             not the other.
+ *   THE ARC   Idea → Make → Run → Measure → Reach
+ *             Where you are. Owned by `ARC_STAGES` in navGroups.ts; this file
+ *             does not restate it, it points at it, so a sixth stage cannot
+ *             appear in one place and not the other.
  *
  *   THE LOOP  Read → Prove → Build
  *             What you DO to cross from Idea into Make. Three acts, and the
@@ -43,7 +43,7 @@
  */
 
 import type { RealizationKey } from './builderforceApi';
-import type { Stage } from './navGroups';
+import { ARC_STAGES, type Stage } from './navGroups';
 
 /**
  * The inner loop, in order. These are the same three words the Learn ▾ menu
@@ -82,15 +82,12 @@ export const METHOD_STEP_SPECS: readonly MethodStepSpec[] = [
 export const LOOP_CLOSES_IN: Stage = 'measure';
 
 /**
- * The four stages the method is normally SOLD as.
- *
- * A subset of `STAGES`, and a subset with a reason rather than an omission:
- * Reach and Expand are what a business does once it has something that works,
- * and Admin is settings. Somebody deciding whether to start is choosing between
- * these four. `/features` still renders the whole arc from `STAGES` — this list
- * is for the surfaces that have one paragraph, not a table.
+ * The five stages of the method — the whole arc, Reach included. Every surface
+ * that shows the arc (marketing method section, panel header switcher, canvas
+ * phases, Product ▾ menu) reads this one list, so none can sell a shorter arc
+ * than the product has.
  */
-export const METHOD_STAGES: readonly Stage[] = ['idea', 'make', 'run', 'measure'];
+export const METHOD_STAGES = ARC_STAGES;
 
 /**
  * One way to make an idea real.

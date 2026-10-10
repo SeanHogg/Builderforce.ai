@@ -40,7 +40,7 @@ import { DOMAINS, type Domain } from './ObjectRegistry';
  * other — so there is one list, here, and the navigation, the permission
  * modules and the schema's `domain` column all read it.
  *
- * Adding the sixteenth seat is this one entry plus its name in `DOMAINS`: the
+ * There are seventeen seats. Adding an eighteenth is one entry plus its name in `DOMAINS`: the
  * four use cases below are identical across domains and the per-domain
  * difference is DATA, which is exactly the open/closed claim this file's header
  * makes. It is worth noting that the claim held — `operations` needed no

@@ -38,6 +38,7 @@
 .cell[data-stage='make'] .dot { background: var(--stage-make); }
 .cell[data-stage='run'] .dot { background: var(--stage-run); }
 .cell[data-stage='measure'] .dot { background: var(--stage-measure); }
+.cell[data-stage='reach'] .dot { background: var(--stage-reach); }
 
 @media (max-width: 640px) {
   .cell { padding: 6px 8px; font-size: var(--font-size-eyebrow); }

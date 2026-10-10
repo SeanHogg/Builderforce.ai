@@ -12,7 +12,7 @@
  */
 
 import type { NavGroup, Stage } from './navGroups';
-import { NAV_GROUPS, groupsForStage } from './navGroups';
+import { ARC_STAGES, NAV_GROUPS, groupsForStage } from './navGroups';
 import type { SeatOrPlatform } from './seats';
 
 /**
@@ -264,9 +264,10 @@ export function columnOf(column: Placement): PublicDestination[] {
  * — Developers (publishing to it) and the Sales Hub (every account's own
  * pipeline) — were advertised nowhere. A visitor read the menu, learned an arc
  * that stopped at Measure, signed up and found a fifth stage. The menu is the
- * rail or it is a second navigation list; there is no third option.
+ * rail or it is a second navigation list; there is no third option — so this
+ * IS `ARC_STAGES`, not a copy of it.
  */
-export const PRODUCT_STAGES = ['idea', 'make', 'run', 'measure', 'reach'] as const;
+export const PRODUCT_STAGES = ARC_STAGES;
 
 /**
  * One row of the public Product menu — a RAIL destination, wearing whichever

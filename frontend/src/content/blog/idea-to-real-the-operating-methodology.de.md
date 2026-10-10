@@ -4,7 +4,7 @@ Builderforce ist stattdessen um eine Methode herum organisiert. Die Navigation i
 
 ## Der Bogen: Wo Sie stehen
 
-Es gibt vier Phasen, und sie sind keine Abteilungen. Sie sind Positionen auf einem Weg, und jedes Ziel im Produkt liegt in genau einer davon.
+Es gibt fünf Phasen, und sie sind keine Abteilungen. Sie sind Positionen auf einem Weg, und jedes Ziel im Produkt liegt in genau einer davon.
 
 ```bf-figure
 {
@@ -14,9 +14,10 @@ Es gibt vier Phasen, und sie sind keine Abteilungen. Sie sind Positionen auf ein
     { "label": "Idee", "note": "Was wäre, wenn? – der Canvas, das Briefing, die Lesart dessen, was Sie tatsächlich gesagt haben.", "hue": "idea", "tag": "kostenlos" },
     { "label": "Bauen", "note": "Bauen Sie es. – Nachweise, Projekte, die Workforce, die die Tickets übernimmt.", "hue": "make" },
     { "label": "Betreiben", "note": "Führen Sie es als Unternehmen. – Finanzen, Umsatz, Personal, Support, Governance.", "hue": "run" },
-    { "label": "Messen", "note": "Funktioniert es? – hier wird das Abbruchkriterium bewertet, das zwei Phasen vorher gesetzt wurde.", "hue": "measure", "tag": "schließt den Kreis" }
+    { "label": "Messen", "note": "Funktioniert es? – hier wird das Abbruchkriterium bewertet, das zwei Phasen vorher gesetzt wurde.", "hue": "measure", "tag": "schließt den Kreis" },
+    { "label": "Reichweite", "note": "Verkaufen, gefunden werden, wachsen. – der Marktplatz, das Veröffentlichen, das Vertriebsprogramm.", "hue": "reach" }
   ],
-  "caption": "Hinter diesen vier liegen zwei weitere Phasen – Markt (verkaufen, einkaufen, einstellen, gefunden werden) und Expansion (das Geschäft darauf aufbauend wachsen lassen). Sie beschreiben, was ein Unternehmen tut, sobald es etwas hat, das funktioniert – deshalb gehören sie nicht zur Entscheidung, überhaupt anzufangen."
+  "caption": "Messen bewertet den Nachweis; Reichweite ist der Ort, an dem das, was ihn bestanden hat, auf Käufer trifft. An jeder Phase aufzuhören ist trotzdem eine vollständige Nutzung des Produkts."
 }
 ```
 

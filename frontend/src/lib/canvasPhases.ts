@@ -20,29 +20,21 @@
  * the `--stage-*` tokens) because they name the same five words, not because one is
  * computed from the other.
  *
- * ── WHY REACH IS HERE AND `METHOD_STAGES` STOPS AT MEASURE ──────────────────────
- * `lib/methodology.ts`'s `METHOD_STAGES` is a deliberate four-stage SUBSET for a
- * one-paragraph marketing pitch — "somebody deciding whether to start" never asks
- * about distribution yet. A person already working a canvas has moved past that
- * pitch, and asking a board in Reach to offer Insights is exactly the case this
- * registry exists for. So this list is its own five, not an import of that four.
- *
- * ── ADDING A PHASE ────────────────────────────────────────────────────────────────
- *   1. an entry in `CANVAS_PHASES`,
- *   2. an entry in `PHASE_SURFACES` naming what it unlocks (a superset of the phase
- *      before it — see the comment there for why this never removes a surface).
- * `nav.stage.<id>` already exists in all five catalogs for every `Stage` value, so a
- * new phase needs no new copy as long as it names an existing stage.
+ * ── THE PHASES ARE THE ARC ────────────────────────────────────────────────────────
+ * `CANVAS_PHASES` IS `ARC_STAGES` (navGroups.ts), the same five the method, the panel
+ * header and the Product ▾ menu show. A new stage is added there, plus an entry in
+ * `PHASE_SURFACES` naming what it unlocks (a superset of the phase before it — see
+ * the comment there for why this never removes a surface).
  */
 
-import type { Stage } from './navGroups';
+import { ARC_STAGES, type ArcStage } from './navGroups';
 import type { CanvasSurfaceId } from './canvasSurfaces';
 import { readLocal, removeLocal, writeLocal } from './storage';
 
-export type CanvasPhase = Extract<Stage, 'idea' | 'make' | 'run' | 'measure' | 'reach'>;
+export type CanvasPhase = ArcStage;
 
 /** Declaration order is display order, same convention as `CANVAS_SURFACES`. */
-export const CANVAS_PHASES: readonly CanvasPhase[] = ['idea', 'make', 'run', 'measure', 'reach'];
+export const CANVAS_PHASES: readonly CanvasPhase[] = ARC_STAGES;
 
 /**
  * Which board surfaces a phase offers.

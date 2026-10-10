@@ -4,7 +4,7 @@ Builderforce, en cambio, se organiza en torno a un método. La navegación es el
 
 ## El arco: dónde estás
 
-Hay cuatro etapas, y no son departamentos. Son posiciones en un recorrido, y cada destino del producto está exactamente en una de ellas.
+Hay cinco etapas, y no son departamentos. Son posiciones en un recorrido, y cada destino del producto está exactamente en una de ellas.
 
 ```bf-figure
 {
@@ -14,9 +14,10 @@ Hay cuatro etapas, y no son departamentos. Son posiciones en un recorrido, y cad
     { "label": "Idea", "note": "¿Y si…? — el lienzo, el briefing, la lectura de lo que realmente dijiste.", "hue": "idea", "tag": "gratis" },
     { "label": "Crear", "note": "Constrúyelo. — pruebas, proyectos, la fuerza de trabajo que recoge los tickets.", "hue": "make" },
     { "label": "Operar", "note": "Llévalo como una empresa. — finanzas, ingresos, personas, soporte, gobernanza.", "hue": "run" },
-    { "label": "Medir", "note": "¿Está funcionando? — donde se evalúa la condición de parada fijada dos etapas antes.", "hue": "measure", "tag": "cierra el bucle" }
+    { "label": "Medir", "note": "¿Está funcionando? — donde se evalúa la condición de parada fijada dos etapas antes.", "hue": "measure", "tag": "cierra el bucle" },
+    { "label": "Alcance", "note": "Véndelo, que te encuentren, hazlo crecer. — el marketplace, la publicación, el programa de ventas.", "hue": "reach" }
   ],
-  "caption": "Hay dos etapas más allá de estas cuatro: Mercado (vender, comprar, contratar, que te encuentren) y Expansión (hacer crecer el negocio a partir de ello). Son lo que hace una empresa cuando ya tiene algo que funciona, así que no forman parte de la decisión de empezar."
+  "caption": "Medir evalúa la prueba; Alcance es donde lo que la superó se encuentra con compradores. Detenerse en cualquier etapa sigue siendo un uso completo del producto."
 }
 ```
 

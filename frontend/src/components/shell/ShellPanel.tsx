@@ -37,7 +37,7 @@ import { useOwnReferenceRail, useReferenceChrome, useReferenceSelect, useStageSe
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { StageHeaderSwitcher } from './StageHeaderSwitcher';
 
-/** `group.stage` narrowed to the four the header switcher offers (§ methodology.ts). */
+/** `group.stage` narrowed to the five arc stages the header switcher offers (§ methodology.ts). */
 function asMethodStage(stage: Stage | undefined): (typeof METHOD_STAGES)[number] | undefined {
   return stage && (METHOD_STAGES as readonly Stage[]).includes(stage) ? (stage as (typeof METHOD_STAGES)[number]) : undefined;
 }

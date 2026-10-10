@@ -56,7 +56,11 @@ import type { SeatOrPlatform } from './seats';
  * commerce surface. `growth` was considered next but collided with the existing
  * CMO destination at `/growth`, so `reach` won.)
  */
-export const STAGES = ['idea', 'make', 'run', 'measure', 'reach', 'admin'] as const;
+export const ARC_STAGES = ['idea', 'make', 'run', 'measure', 'reach'] as const;
+export type ArcStage = (typeof ARC_STAGES)[number];
+
+/** The arc plus `admin`, which groups settings rows and is not a stage of the work. */
+export const STAGES = [...ARC_STAGES, 'admin'] as const;
 export type Stage = (typeof STAGES)[number];
 
 /**

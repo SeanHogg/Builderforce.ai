@@ -4,7 +4,7 @@ Builderforce est organisé autour d'une méthode. La navigation est la méthode.
 
 ## L'arc : où vous en êtes
 
-Il y a quatre étapes, et ce ne sont pas des départements. Ce sont des positions sur un parcours, et chaque destination du produit se trouve dans exactement l'une d'elles.
+Il y a cinq étapes, et ce ne sont pas des départements. Ce sont des positions sur un parcours, et chaque destination du produit se trouve dans exactement l'une d'elles.
 
 ```bf-figure
 {
@@ -14,9 +14,10 @@ Il y a quatre étapes, et ce ne sont pas des départements. Ce sont des position
     { "label": "Idée", "note": "Et si ? — le canevas, le brief, la lecture de ce que vous avez réellement dit.", "hue": "idea", "tag": "gratuit" },
     { "label": "Créer", "note": "Construisez-le. — les preuves, les projets, la main-d'œuvre qui prend en charge les tickets.", "hue": "make" },
     { "label": "Piloter", "note": "Faites-en une entreprise. — finance, revenus, équipes, support, gouvernance.", "hue": "run" },
-    { "label": "Mesurer", "note": "Est-ce que ça marche ? — là où la condition d'arrêt fixée deux étapes plus tôt est évaluée.", "hue": "measure", "tag": "referme la boucle" }
+    { "label": "Mesurer", "note": "Est-ce que ça marche ? — là où la condition d'arrêt fixée deux étapes plus tôt est évaluée.", "hue": "measure", "tag": "referme la boucle" },
+    { "label": "Portée", "note": "Vendez-le, soyez trouvé, faites-le grandir. — la marketplace, la publication, le programme commercial.", "hue": "reach" }
   ],
-  "caption": "Deux étapes supplémentaires se situent au-delà de ces quatre — Marché (vendre, acheter, recruter, être trouvé) et Développer (faire grandir l'entreprise sur cette base). C'est ce que fait une entreprise une fois qu'elle a quelque chose qui fonctionne ; elles ne font donc pas partie de la décision de se lancer."
+  "caption": "Mesurer évalue la preuve ; Portée est l'endroit où ce qui l'a réussie rencontre des acheteurs. S'arrêter à n'importe quelle étape reste un usage complet du produit."
 }
 ```
 

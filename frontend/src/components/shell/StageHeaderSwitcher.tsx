@@ -4,7 +4,7 @@ import type { Stage } from '@/lib/navGroups';
 import styles from './StageHeaderSwitcher.module.css';
 
 /**
- * The founder's journey — Idea / Make / Run / Measure — as the panel header's
+ * The founder's journey — Idea / Make / Run / Measure / Reach — as the panel header's
  * own control (PRD: "Idea to Real"). Published by a page via
  * `chrome.stage` + `usePublishStageSelect` (see `lib/referenceChrome.tsx`) and
  * rendered by `ShellPanel`, so it lives in `components/shell/` rather than

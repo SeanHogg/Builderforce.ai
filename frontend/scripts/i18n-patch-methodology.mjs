@@ -12,7 +12,7 @@ export const PATCHES = {
     methodology: {
       eyebrow: 'The method',
       title: 'Idea to real',
-      lede: 'Four stages say where you are. Three acts say what you do. The middle act is the whole opinion: reading an idea is cheap, building is not, and choosing which proof is worth running is the most consequential decision in the first month of anything.',
+      lede: 'Five stages say where you are. Three acts say what you do. The middle act is the whole opinion: reading an idea is cheap, building is not, and choosing which proof is worth running is the most consequential decision in the first month of anything.',
       step: {
         read: {
           title: 'Read',

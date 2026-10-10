@@ -89,8 +89,8 @@ export default function MethodologySection({
    * Mark WHERE IN THE ARC the host page sits. The four marketing pages have no
    * answer (they are about the whole method), but a route teaser does — the
    * destination it is standing in front of has a `stage` — and a visitor read
-   * the arc very differently once it points at the page they asked for. A stage
-   * outside `METHOD_STAGES` (reach / admin) simply marks nothing.
+   * the arc very differently once it points at the page they asked for. `admin`
+   * is not an arc stage, so it marks nothing.
    */
   activeStage?: Stage;
 }) {
