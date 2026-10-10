@@ -107,6 +107,7 @@ private final class BuilderforcePeekabooBridgeServices: PeekabooBridgeServicePro
     let dock: any DockServiceProtocol
     let dialogs: any DialogServiceProtocol
     let snapshots: any SnapshotManagerProtocol
+    let desktopObservation: any DesktopObservationServiceProtocol
 
     init() {
         let logging = LoggingService(subsystem: "ai.builderforce.peekaboo")
@@ -124,14 +125,23 @@ private final class BuilderforcePeekabooBridgeServices: PeekabooBridgeServicePro
         self.snapshots = snapshots
         self.applications = applications
         self.screenCapture = screenCapture
-        self.automation = UIAutomationService(
+        let automation = UIAutomationService(
             snapshotManager: snapshots,
             loggingService: logging,
             searchPolicy: .balanced,
             feedbackClient: feedbackClient)
+        self.automation = automation
         self.windows = WindowManagementService(applicationService: applications, feedbackClient: feedbackClient)
-        self.menu = MenuService(applicationService: applications, feedbackClient: feedbackClient)
+        let menu = MenuService(applicationService: applications, feedbackClient: feedbackClient)
+        self.menu = menu
         self.dock = DockService(feedbackClient: feedbackClient)
         self.dialogs = DialogService(feedbackClient: feedbackClient)
+        // Observation reads the desktop through the same capture, automation and snapshot services.
+        self.desktopObservation = DesktopObservationService(
+            screenCapture: screenCapture,
+            automation: automation,
+            applications: applications,
+            menu: menu,
+            snapshotManager: snapshots)
     }
 }

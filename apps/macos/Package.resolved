@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/steipete/Peekaboo.git",
       "state" : {
-        "branch" : "main",
-        "revision" : "bace59f90bb276f1c6fb613acfda3935ec4a7a90"
+        "revision" : "7020aedd362038043e4fc1988a8634657270e476",
+        "version" : "4.9.0"
       }
     },
     {
