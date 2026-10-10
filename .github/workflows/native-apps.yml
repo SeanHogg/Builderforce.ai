@@ -53,6 +53,17 @@ jobs:
           swift build
           swift test
 
+  swabble:
+    runs-on: macos-26
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: agent-runtime/Swabble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Swabble (library, kit and CLI)
+        run: swift build
+
   macos:
     runs-on: macos-26
     timeout-minutes: 50
