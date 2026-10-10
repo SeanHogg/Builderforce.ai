@@ -10,8 +10,14 @@
  *
  * Every surface that wants an action item out of that text has to agree on how to read
  * it, and a second reading is a second set of follow-ups from one meeting — the board
- * would place cards the notes panel never showed. So the parse lives here, once, and is
- * shared by the minutes panel and the board act that turns the checklist into cards.
+ * would place cards the notes panel never showed. So the parse lives here, once.
+ *
+ * It lives in the API's domain layer (it began in `frontend/src/lib/meetings/`) because
+ * the ONE place the checklist becomes canvas cards is now server-side —
+ * `application/ceremony/ceremonyMinutesToCanvas.ts`, run when minutes are written and
+ * when a ceremony concludes. A board act that parsed the same text in the browser would
+ * be a second writer with a second idempotency key, which is how one meeting ends up
+ * with its action items on the board twice.
  *
  * It is deliberately TOLERANT and never throws. The input is model-authored prose, so
  * "the section header came back as `### Action Items`" and "the em dash is a hyphen" are

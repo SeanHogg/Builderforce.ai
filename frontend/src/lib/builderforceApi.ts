@@ -6056,6 +6056,11 @@ export interface CeremonySessionDetail {
   journal?: CeremonyJournalEvent[];
 }
 
+/** `POST /sessions/:id/minutes/canvas` — mirrors the API's `MinutesToCanvasOutcome`. */
+export type CeremonyMinutesToCanvasResult =
+  | { status: 'not_found' | 'still_running' | 'no_meeting' | 'not_summarized' | 'nothing_captured' }
+  | { status: 'synced'; boards: number; written: number; placed: number; updated: number; removed: number; actionItems: number };
+
 /** A page of concluded ceremonies for one project. */
 export interface CeremonyHistoryPage {
   sessions: CeremonySession[];
@@ -6129,6 +6134,11 @@ export const ceremonySessionsApi = {
    *  it did (reassignments, the close), read from the shared activity log. */
   detail: (id: string): Promise<CeremonySessionDetail> =>
     request<CeremonySessionDetail>(`${CEREMONY_BASE}/sessions/${id}`),
+  /** Write a concluded ceremony's minutes back onto every board holding its card — the
+   *  same server use case that runs when minutes are written; the board adopts the
+   *  result through `canvas.changed`. Idempotent: a re-run updates, never duplicates. */
+  minutesToCanvas: (id: string): Promise<CeremonyMinutesToCanvasResult> =>
+    request<CeremonyMinutesToCanvasResult>(`${CEREMONY_BASE}/sessions/${id}/minutes/canvas`, { method: 'POST' }),
   /** CORRECT one seat's attendance verdict (0366, MANAGER+). Stored as `manual`, which
    *  is what makes it survive a re-conclude — the server never recomputes a manual row.
    *  Allowed on concluded sessions: most corrections are noticed after the fact. */
