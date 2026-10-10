@@ -9,7 +9,7 @@ import { listMyInvites, respondToInvite, markInviteViewed, type JobInvite } from
 import { listSavedJobs, saveJob, unsaveJob } from '@/lib/freelance/jobSeeker';
 import { listRecommendedJobs, type PostingMatch } from '@/lib/freelance/matching';
 import { openJobAttachment, openMyProposalAttachment, uploadProposalAttachment, deleteProposalAttachment } from '@/lib/freelance/postingAttachments';
-import { listJobs, getJob, bidJob, listMyProposals, withdrawProposal, type JobPosting, type JobProposal, type ScreeningQuestion } from '@/lib/freelance/postings';
+import { listJobs, getJob, bidJob, listMyProposals, withdrawProposal, type EngagementType, type JobPosting, type JobProposal, type ScreeningQuestion } from '@/lib/freelance/postings';
 import {
   ENGAGEMENT_TYPES, EXPERIENCE_LEVELS, JOB_DISCIPLINES, JOB_SPECIALTIES, PROJECT_LENGTHS,
   experienceKey, inviteStatusKey, projectLengthKey, specialtyKey,
@@ -81,7 +81,18 @@ const NO_FILTERS: BrowseFilters = {
 
 const optionStyle: React.CSSProperties = { background: 'var(--bg-elevated)', color: 'var(--text-primary)' };
 
-export default function MarketplaceGigsSection({ search }: { search: string }) {
+export interface MarketplaceGigsSectionProps {
+  search: string;
+  /**
+   * Lock the board to ONE engagement shape. The Jobs chip is this surface locked
+   * to `fte`: applying to a full-time role and bidding on a gig are the same act
+   * (a proposal on a posting), so the chip is a lens over this ONE flow rather
+   * than a second browse-and-apply surface that would drift from it.
+   */
+  engagement?: EngagementType;
+}
+
+export default function MarketplaceGigsSection({ search, engagement }: MarketplaceGigsSectionProps) {
   const { formatCents } = useMoneyFormat();
   const fmt = useFormat();
   const t = useTranslations('freelancer');
@@ -104,7 +115,10 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
   const [engagements, setEngagements] = useState<Engagement[]>([]);
   const [invites, setInvites] = useState<JobInvite[]>([]);
   const [recommended, setRecommended] = useState<PostingMatch[]>([]);
-  const [filters, setFilters] = useState<BrowseFilters>(NO_FILTERS);
+  // The locked shape travels in the SAME filter object, so it reaches `listJobs`
+  // (and the server's `jobFilters` spec) like any other criterion.
+  const baseFilters: BrowseFilters = { ...NO_FILTERS, engagementType: engagement ?? '' };
+  const [filters, setFilters] = useState<BrowseFilters>(baseFilters);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [bidFor, setBidFor] = useState<string | null>(null);
@@ -292,7 +306,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
   /** The two tabs that are about the VIEWER rather than about the work on offer. */
   const guestWall = !isAuthenticated && tab !== 'work' ? (
     <GuestSignupCta
-      prompt={{ next: '/marketplace?category=gigs' }}
+      prompt={{ next: engagement === 'fte' ? '/marketplace?category=jobs' : '/marketplace?category=gigs' }}
       title={t('gigs.signedOutTitle')}
       body={t('gigs.signedOutBody')}
     />
@@ -354,13 +368,13 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
             <option value="" style={optionStyle}>{t('jobs.filterLength')}</option>
             {PROJECT_LENGTHS.map((value) => <option key={value} value={value} style={optionStyle}>{t(projectLengthKey(value))}</option>)}
           </select>
-          <select style={input} aria-label={t('jobs.filterEngagement')} value={filters.engagementType}
+          {!engagement && <select style={input} aria-label={t('jobs.filterEngagement')} value={filters.engagementType}
             onChange={(e) => setFilters((f) => ({ ...f, engagementType: e.target.value }))}>
             <option value="" style={optionStyle}>{t('jobs.filterEngagement')}</option>
             {ENGAGEMENT_TYPES.map((value) => <option key={value} value={value} style={optionStyle}>{tg(`engagementType.${value}`)}</option>)}
-          </select>
-          {(filters.discipline || filters.specialty || filters.experienceLevel || filters.projectLength || filters.engagementType) && (
-            <button type="button" onClick={() => setFilters(NO_FILTERS)}
+          </select>}
+          {(filters.discipline || filters.specialty || filters.experienceLevel || filters.projectLength || (!engagement && filters.engagementType)) && (
+            <button type="button" onClick={() => setFilters(baseFilters)}
               style={{ padding: '7px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer' }}>
               {t('jobs.filterClear')}
             </button>

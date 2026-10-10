@@ -32,8 +32,6 @@ import type { PublishedAgent } from '@/lib/types';
 import { isAgentOwner } from '@/lib/agentPermissions';
 import { formatAgentPrice } from '@/lib/agentPresentation';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
-import { KnowledgeMarketSection } from './KnowledgeMarketSection';
-import { TemplateGallery } from '@/components/templates/TemplateGallery';
 import { CreationsSection } from './CreationsSection';
 import { SellerEarnings } from './SellerEarnings';
 import { type ViewMode } from '@/components/ViewToggle';
@@ -53,7 +51,7 @@ import { FAMILIES, FAMILY_IDS, creationKindForChip, kindLabelKey, publishActionF
 import { MARKETPLACE_LISTING_KINDS } from '@builderforce/creation-canvas-contract';
 import { SkeletonGrid } from './SkeletonGrid';
 import { ModelsExplorer } from './ModelsExplorer';
-import MarketplaceGigsSection from './MarketplaceGigsSection';
+import { searchSectionFor } from './marketplaceSections';
 import { StartupDirectory } from '@/components/startups/StartupDirectory';
 import { signInHref } from '@/lib/auth';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
@@ -67,12 +65,13 @@ import { faultMessage } from '@/lib/apiClient';
 // verb that was never a category — became the primary button. This stays the
 // INTERNAL section discriminator; the families above it are the vocabulary a
 // person sees, and `SECTION_BY_KIND` is the one place the two meet.
-type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'workforce' | 'talent' | 'models' | 'gigs' | 'publish' | 'company' | 'knowledge' | 'creations' | 'templates';
+type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'workforce' | 'talent' | 'models' | 'gigs' | 'jobs' | 'publish' | 'company' | 'knowledge' | 'creations' | 'templates';
 
 /** (family, kind) → which section renders. A table, so a new kind is a row. */
 const SECTION_BY_KIND: Record<string, MarketplaceCategory> = {
   'talent:person': 'talent',
   'talent:gig': 'gigs',
+  'talent:job': 'jobs',
   'agent:builtin': 'workforce',
   'agent:community': 'workforce',
   'asset:model': 'models',
@@ -417,6 +416,7 @@ export default function MarketplacePageClient() {
   // its disabled state and its label, so the button cannot advertise a path the
   // storefront does not run.
   const publishAction = publishActionFor(family, kind);
+  const SearchSection = searchSectionFor(category);
 
   useEffect(() => {
     setCategory(SECTION_BY_KIND[`${family}:${kind}`] ?? 'all');
@@ -956,16 +956,11 @@ export default function MarketplacePageClient() {
         </div>
       ) : category === 'models' ? (
         <ModelsExplorer search={search} viewMode={viewMode} />
-      ) : category === 'gigs' ? (
-        <MarketplaceGigsSection search={search} />
-      ) : category === 'knowledge' ? (
-        <KnowledgeMarketSection search={search} />
-      ) : category === 'templates' ? (
-        // The SAME gallery `/templates` renders, reading the SAME catalogue the
-        // starting-point picker reads. A template listed here and a template
-        // offered in the prompt bar are one row, not two lists that agree by
-        // accident — which is the drift this consolidation exists to end.
-        <TemplateGallery search={search} />
+      ) : SearchSection ? (
+        // Gigs, Jobs, Knowledge, Templates — the sections the search box alone
+        // drives, looked up in ONE table (`marketplaceSections`) and loaded on
+        // demand, so a new one is a row there rather than an arm here.
+        <SearchSection search={search} />
       ) : category === 'creations' ? (
         // What people BUILT on the canvas, on sale and runnable. One kind per
         // chip, filtered server-side by the same registry the seller published

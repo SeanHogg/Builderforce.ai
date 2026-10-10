@@ -11,6 +11,9 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { ListingLaunch } from './ListingLaunch';
 import type { CreationListing, LaunchPayload } from '@/lib/creationListings';
+import en from '@/i18n/messages/en.json';
+
+const t = en as unknown as { guest: { gate: { create: string; signIn: string; reason: { takeCopy: string } } } };
 
 // The REAL catalog, through the shared resolver — these tests assert on the copy a
 // buyer reads (a price, "Sign in to buy"), and a key-passthrough mock would let
@@ -29,8 +32,16 @@ vi.mock('@/lib/creationListings', async (importOriginal) => {
   };
 });
 
-vi.mock('@/lib/AuthContext', () => ({ useAuth: () => ({ user: null }) }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+const auth = vi.hoisted(() => ({ current: { user: null as null | { id: string } } }));
+vi.mock('@/lib/AuthContext', () => ({ useAuth: () => auth.current }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/marketplace/listing/space-game' }));
+
+// `SessionGate` decides its own state from the sample-workspace hook; the tests
+// drive that hook directly, the same way `RoleGate.test.tsx` does.
+const sampleWorkspace = vi.hoisted(() => ({ current: { ready: true, signedIn: false, isSample: true } }));
+vi.mock('@/domains/guest/presentation/useSampleWorkspace', () => ({
+  useSampleWorkspace: () => sampleWorkspace.current,
+}));
 
 const listing = (over: Partial<CreationListing> = {}): CreationListing => ({
   id: 'l1', slug: 'space-game', kind: 'game', name: 'Space Game', summary: null,
@@ -42,7 +53,11 @@ const listing = (over: Partial<CreationListing> = {}): CreationListing => ({
 
 const renderLaunch = (item: CreationListing) => render(<ListingLaunch listing={item} />);
 
-beforeEach(() => { launchMock.mockReset(); });
+beforeEach(() => {
+  launchMock.mockReset();
+  auth.current = { user: null };
+  sampleWorkspace.current = { ready: true, signedIn: false, isSample: true };
+});
 
 describe('ListingLaunch', () => {
   it('plays a game in a frame that can never reach this origin', async () => {
@@ -86,16 +101,52 @@ describe('ListingLaunch', () => {
     expect(await screen.findByText('$12.50')).toBeInTheDocument();
   });
 
-  it('asks a signed-out visitor to sign in rather than failing the purchase', async () => {
-    launchMock.mockResolvedValue({ mode: 'play', entitled: true, title: 'x', document: '<p>p</p>' });
-    renderLaunch(listing({ priceCents: 500 }));
+  it('asks a signed-out visitor to sign in to a HOSTED listing rather than failing the purchase', async () => {
+    launchMock.mockResolvedValue({ mode: 'open', entitled: false, title: 'x', url: 'https://acme.example' });
+    renderLaunch(listing({ kind: 'app', launch: 'open', delivery: 'hosted', priceCents: 500 }));
     expect(await screen.findByRole('link', { name: /sign in to buy/i })).toBeInTheDocument();
+    expect(screen.queryByText(t.guest.gate.reason.takeCopy)).toBeNull();
   });
 
   it('still launches for a logged-out visitor — a free listing runs for anyone', async () => {
     launchMock.mockResolvedValue({ mode: 'play', entitled: true, title: 'x', document: '<p>free</p>' });
     renderLaunch(listing());
     await waitFor(() => expect(launchMock).toHaveBeenCalledWith('space-game', false));
+  });
+});
+
+/**
+ * `requiresWorkspace(delivery)` at the buy control: a COPY needs a board to land
+ * on, so a guest is told so BEFORE the click, by the same contract rule the server
+ * applies at purchase.
+ */
+describe('a copy needs a workspace', () => {
+  it('shows a guest the refusal and the way past it, before any click', async () => {
+    launchMock.mockResolvedValue({ mode: 'play', entitled: true, title: 'x', document: '<p>p</p>' });
+    renderLaunch(listing({ priceCents: 500, delivery: 'copy' }));
+    expect(await screen.findByText(t.guest.gate.reason.takeCopy)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: t.guest.gate.create })).toHaveAttribute('href', expect.stringContaining('/register?next='));
+    expect(screen.getByRole('link', { name: t.guest.gate.signIn })).toBeInTheDocument();
+    // The control is still there — indicated, never hidden — but it refuses.
+    const buy = screen.getByRole('button', { name: /buy/i });
+    expect(buy.closest('[aria-disabled]')).not.toBeNull();
+  });
+
+  it('falls back to the kind’s own delivery when an older response omits it', async () => {
+    launchMock.mockResolvedValue({ mode: 'play', entitled: true, title: 'x', document: '<p>p</p>' });
+    // A game is copy-only in the listing registry, so no `delivery` still means copy.
+    renderLaunch(listing({ priceCents: 500 }));
+    expect(await screen.findByText(t.guest.gate.reason.takeCopy)).toBeInTheDocument();
+  });
+
+  it('hands a signed-in buyer with a workspace the live control', async () => {
+    auth.current = { user: { id: 'u2' } };
+    sampleWorkspace.current = { ready: true, signedIn: true, isSample: false };
+    launchMock.mockResolvedValue({ mode: 'preview', entitled: false, title: 'x', objects: [] });
+    renderLaunch(listing({ priceCents: 500, delivery: 'copy' }));
+    const buy = await screen.findByRole('button', { name: /buy/i });
+    expect(buy.closest('[aria-disabled]')).toBeNull();
+    expect(screen.queryByText(t.guest.gate.reason.takeCopy)).toBeNull();
   });
 });
 

@@ -13108,6 +13108,7 @@
         "person": "Personas",
         "advisor": "Asesores",
         "gig": "Encargos",
+        "job": "Empleos",
         "business": "Negocios",
         "storefront": "Tiendas",
         "builtin": "Integrados",
@@ -31317,7 +31318,8 @@
         "pay": "Inicia sesión para completar un pago.",
         "save": "Inicia sesión para guardar este trabajo.",
         "account": "Crea una cuenta para desbloquear esto.",
-        "installTemplate": "Inicia sesión para configurar esta plantilla en un espacio de trabajo."
+        "installTemplate": "Inicia sesión para configurar esta plantilla en un espacio de trabajo.",
+        "takeCopy": "Una copia se coloca en un tablero de tu espacio de trabajo: inicia sesión o crea una cuenta para obtenerla."
       }
     },
     "wall": {

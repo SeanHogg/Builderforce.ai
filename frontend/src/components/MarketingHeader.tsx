@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { BrandLockup } from '@/components/BrandLockup';
 import { usePathname } from 'next/navigation';
@@ -18,6 +18,7 @@ import { isNavItemActive } from '@/lib/nav';
 import { registerHref } from '@/lib/auth';
 import { rendersAppShell } from '@/lib/shellRouting';
 import { useMobileNav } from '@/lib/useMobileNav';
+import { useDismissOnOutsidePress } from '@/lib/useDismissable';
 import { listLocalCreationSessions } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { Icon } from '@/components/ui/Icon';
 import { HeaderCartButton } from './HeaderCartButton';
@@ -214,28 +215,75 @@ type MenuId = 'product' | 'learn';
  *     fast path is unchanged for the people who had one.
  */
 function MegaTrigger({
-  id, label, open, onToggle, active, children,
+  id, label, open, onOpen, onClose, active, children,
 }: {
   id: MenuId;
   label: string;
   open: boolean;
-  onToggle: (id: MenuId) => void;
+  onOpen: (id: MenuId) => void;
+  onClose: () => void;
   active?: boolean;
   children: React.ReactNode;
 }) {
+  const panelId = useId();
+  const itemRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  // Whether the CURRENT open state came from a mouse hover rather than a click.
+  // A hover-opened menu closes when the pointer leaves; a clicked one stays put
+  // until a press outside or Escape — and a click on a menu the pointer already
+  // opened pins it rather than slamming it shut under the cursor.
+  const hoverOpened = useRef(false);
+
+  useEffect(() => {
+    if (open) return;
+    hoverOpened.current = false;
+    // Closing with focus INSIDE the panel (Escape from a link) hands focus back
+    // to the trigger, so a keyboard user is not dropped onto <body>.
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && focused !== buttonRef.current && itemRef.current?.contains(focused)) {
+      buttonRef.current?.focus();
+    }
+  }, [open]);
+
   return (
-    <div className="mh-item has-menu" data-open={open || undefined}>
+    <div
+      ref={itemRef}
+      className="mh-item has-menu"
+      data-open={open || undefined}
+      // Hover is JS as well, and only for a real mouse. CSS `:hover` stuck "on"
+      // after a tap and `:focus-within` outlived Escape, so a menu stayed visible
+      // that its own state said was shut and `aria-expanded` lied. One open
+      // state now, and the stylesheet reads only `data-open`.
+      onPointerEnter={(event) => {
+        if (event.pointerType !== 'mouse' || open) return;
+        hoverOpened.current = true;
+        onOpen(id);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === 'mouse' && open && hoverOpened.current) onClose();
+      }}
+      // Tabbing past the last link leaves the menu; it closes behind the focus.
+      onBlur={(event) => {
+        const next = event.relatedTarget as Node | null;
+        if (open && next && !event.currentTarget.contains(next)) onClose();
+      }}
+    >
       <button
+        ref={buttonRef}
         type="button"
         className={`mh-link mh-trigger${active ? ' active' : ''}`}
         aria-haspopup="true"
         aria-expanded={open}
-        onClick={() => onToggle(id)}
+        aria-controls={panelId}
+        onClick={() => {
+          if (open && hoverOpened.current) { hoverOpened.current = false; return; }
+          if (open) onClose(); else onOpen(id);
+        }}
       >
         {label}
-        <svg className="mh-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+        <svg className="mh-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
       </button>
-      <div className="mh-panel mh-panel-wide">{children}</div>
+      <div id={panelId} className="mh-panel mh-panel-wide">{children}</div>
     </div>
   );
 }
@@ -247,23 +295,12 @@ export default function MarketingHeader() {
   const navRef = useRef<HTMLElement | null>(null);
 
   const closeMenu = useCallback(() => setMenu(null), []);
-  const toggleMenu = useCallback((id: MenuId) => setMenu((current) => (current === id ? null : id)), []);
+  const openMenu = useCallback((id: MenuId) => setMenu(id), []);
 
   // A menu that only closes on its own trigger is a menu that follows you around
-  // the page. Escape and a click outside are the two exits every disclosure owes.
-  useEffect(() => {
-    if (!menu) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') closeMenu(); };
-    const onPointer = (event: MouseEvent) => {
-      if (!navRef.current?.contains(event.target as Node)) closeMenu();
-    };
-    document.addEventListener('keydown', onKey);
-    document.addEventListener('mousedown', onPointer);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.removeEventListener('mousedown', onPointer);
-    };
-  }, [menu, closeMenu]);
+  // the page. Escape and a press outside are the two exits every disclosure owes —
+  // through the ONE shared dismiss hook rather than a hand-rolled listener pair.
+  useDismissOnOutsidePress(navRef, menu !== null, closeMenu);
 
   // Following a link inside the panel must leave it shut behind you.
   useEffect(() => { setMenu(null); }, [pathname]);
@@ -331,13 +368,14 @@ export default function MarketingHeader() {
             id="product"
             label={t('product')}
             open={menu === 'product'}
-            onToggle={toggleMenu}
+            onOpen={openMenu}
+            onClose={closeMenu}
             active={pathname.startsWith('/product')}
           >
             <MegaMenu columns={productColumns()} footNoteKey="marketingNav.megaFoot" onNavigate={closeMenu} />
           </MegaTrigger>
 
-          <MegaTrigger id="learn" label={t('learn')} open={menu === 'learn'} onToggle={toggleMenu}>
+          <MegaTrigger id="learn" label={t('learn')} open={menu === 'learn'} onOpen={openMenu} onClose={closeMenu}>
             <MegaMenu columns={learnColumns()} footNoteKey="marketingNav.megaFootLearn" onNavigate={closeMenu} />
           </MegaTrigger>
 

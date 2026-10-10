@@ -13108,6 +13108,7 @@
         "person": "Personnes",
         "advisor": "Conseillers",
         "gig": "Missions",
+        "job": "Emplois",
         "business": "Entreprises",
         "storefront": "Boutiques",
         "builtin": "Intégrés",
@@ -31317,7 +31318,8 @@
         "pay": "Connectez-vous pour effectuer un paiement.",
         "save": "Connectez-vous pour enregistrer ce travail.",
         "account": "Créez un compte pour débloquer ceci.",
-        "installTemplate": "Connectez-vous pour configurer ce modèle dans un espace de travail."
+        "installTemplate": "Connectez-vous pour configurer ce modèle dans un espace de travail.",
+        "takeCopy": "Une copie arrive sur un tableau de votre espace de travail : connectez-vous ou créez un compte pour l’obtenir."
       }
     },
     "wall": {

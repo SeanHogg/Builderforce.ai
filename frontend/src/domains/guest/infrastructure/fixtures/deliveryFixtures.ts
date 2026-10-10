@@ -11,6 +11,7 @@
 import {
   SAMPLE_PROJECTS,
   isSampleTaskCompleted,
+  sampleTaskId,
   type SampleProject,
   type SampleTask,
 } from '../../domain/sampleWorkspace';
@@ -55,7 +56,7 @@ function projectRow(project: SampleProject, now: number) {
 
 function taskRow(task: SampleTask, project: SampleProject, now: number) {
   return {
-    id: Number(`${project.id}${task.key.split('-')[1]}`),
+    id: sampleTaskId(project, task),
     key: task.key,
     title: task.title,
     description: task.description ?? null,

@@ -13108,6 +13108,7 @@
         "person": "People",
         "advisor": "Advisors",
         "gig": "Gigs",
+        "job": "Jobs",
         "business": "Businesses",
         "storefront": "Storefronts",
         "builtin": "Built-in",
@@ -31317,7 +31318,8 @@
         "pay": "Sign in to complete a payment.",
         "save": "Sign in to save this work.",
         "account": "Create an account to unlock this.",
-        "installTemplate": "Sign in to set this template up in a workspace."
+        "installTemplate": "Sign in to set this template up in a workspace.",
+        "takeCopy": "A copy lands on a board in your workspace — sign in or create an account to take it."
       }
     },
     "wall": {
