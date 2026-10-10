@@ -3,7 +3,7 @@
    three rows deep. */
 .row { display:flex; flex-wrap:wrap; gap:6px; min-width:0; }
 .chip {
-  flex:0 0 auto; min-height:32px; padding:0 12px; border:1px solid var(--prompt-panel-border, var(--border-subtle)); border-radius:999px;
+  flex:0 0 auto; min-height:32px; padding:0 12px; border:1px solid var(--prompt-panel-border, var(--border-subtle)); border-radius:var(--radius-full);
   background:transparent; color:var(--text-primary); font:600 var(--font-size-small)/1.2 var(--font-body, inherit); white-space:nowrap; cursor:pointer;
 }
 .chip:hover, .chip:focus-visible { border-color:var(--accent); color:var(--accent); outline:none; }

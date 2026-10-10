@@ -1,3 +1,18 @@
+## ✅ RESOLVED 2026-10-10 — The Android, iPhone and Mac apps are Builderforce apps: renamed, signed in to the cloud, chatting in the one-box composer, built by CI (android 2026.10.2 · ios · macos 2026.10.1)
+
+**Was:** `apps/` was raw source from a half-finished OpenClaw→CoderClaw rename that had never compiled here. `Package.swift` paths did not match the folders, xcconfig variables were undefined, the icns, entitlements and Swabble paths were missing, and the gateway rejected the apps' `coderclaw-*` client ids. Chat went over the local gateway's session protocol, not the workspace's Brain chats, and nothing built the apps in CI. (Gap Register "Brand residuals", the native-app part.)
+
+**Now:**
+- **Rename, by the operator's call (2026-10-10).** Android `ai.builderforce.android`; Swift `BuilderforceKit` / `BuilderforceProtocol` / `BuilderforceChatUI`; macOS package and iOS project `Builderforce`. Also: bundle ids `ai.builderforce.*`, app group `group.ai.builderforce.shared` (now declared by the iOS app and share extension), the `builderforce://` scheme, `BUILDERFORCE_*` env vars, `~/.builderforce/builderforce.json`, and gateway client ids `builderforce-*`. The packaging, release, lint and docs scripts were repathed to match. `grep -ri claw apps/` is empty.
+- **Cloud Brain chat**, the same as Synapse (`desktop/app/src-tauri/src/cloud/*`). Sign-in uses the device code (`DEVICE_CLIENTS` now names `android` / `ios` / `macos`). Chats go through `/api/brain/chats`, with `addressedTo` for agents. The Brain reply streams from `/llm/v1/chat/completions` with the delivery tool catalog, and tools that change something wait for the person's approval. Android: `cloud/*`. Swift: one shared client in `BuilderforceKit/Cloud`. The old gateway chat transports are deleted. Camera, location, SMS, screen, canvas and voice stay on the local agent-runtime gateway.
+- **One-box composer** on all three: text on top, then `+`, "To ▾" (only when the chat has agents), and one round trailing button (mic → Send → Stop). Suggestion chips sit over an empty chat, and text typed during a reply is queued.
+- **Images persist.** On all three apps, an attached image goes to `POST /api/brain/upload`, its `{key,name,type}` rides in the message `metadata` beside `addressedTo`, and a reopened chat shows it as a thumbnail, read back through the signed-in session.
+- **Localized:** Android 225 strings and Swift ChatUI 51 keys, each in en/de/es/fr/zh. The Mac packager ships the ChatUI resource bundle.
+- **CI:** `.github/workflows/native-apps.yml` runs Android assemble and unit tests, BuilderforceKit build and test, macOS build, and the iOS simulator build, on Xcode 26 runners.
+- **Fixed along the way:** the Sparkle feed and contributors script point at the real repository, and the About page drops the upstream author's personal links.
+
+**Still open (ROADMAP):** Evermind recall and the agent invite UI in the native chat.
+
 ## ✅ RESOLVED 2026-10-10 — A canvas build that stalls part-way says so, and an auto turn routes around the stalled model (frontend 2026.10.34)
 
 **Was** (session `local-6d36899d`, ui 2026.10.31, "build a marketing site for phones"): the free `nemotron-3-ultra-550b-a55b:free` wrote only `index.html`, stalled, hit the 8K output limit, then stalled again. The user got **"I added the requested content to the canvas."** above a "Hello World!" preview. Three faults in `creationCanvasAi.ts`:

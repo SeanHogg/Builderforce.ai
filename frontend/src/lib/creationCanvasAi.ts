@@ -4,12 +4,9 @@ import {
   streamChatCompletion,
   RepetitionLoopError,
   formatEvermindMemoryBlock,
-  countReconciledMemories,
   type BrainAction,
   type BrainTraceEvent,
-  type BrainToolSpec,
   type ChatCompletionMessage,
-  type EvermindRecallResult,
   type ChatMode,
   selectToolsForTurn,
   turnInterruption,
@@ -22,11 +19,8 @@ import { loadGuestCareerActions } from '@/lib/guestCareerActions';
 import { conversationSpeakerLabels, echoesEarlierAnswer, stripSpeakerLabel } from '@/lib/canvasTranscript';
 import {
   NON_AUTHORING_TOOL_NAMES,
-  RESEARCH_TOOL_NAMES,
-  WORDS_PER_DRAFT_PAGE,
   authoredDocumentWords,
   documentWordsInSnapshot,
-  incompleteDocumentAnswer,
   isExecutiveTeammateRequest,
   isNarrowSearchResult,
   requestedPagesForTurn,
@@ -52,14 +46,15 @@ import {
   MAX_INTERRUPTED_TURN_RECOVERIES,
   MAX_MUTATION_RECOVERIES,
   MAX_NARROW_SEARCHES,
-  MAX_STALL_REROUTES,
-  MAX_STALLED_STREAMS,
   RESERVED_AUTHORING_TURNS,
   TRUNCATED_ROUND_DIRECTIVE,
   TRUNCATED_TURN_DIRECTIVE,
 } from '@/lib/canvasAiTurnBudget';
 import { runAgentLoop, openAiChatCodec, malformedCallOutcome, malformedCallLabel } from '@builderforce/agent-loop';
-import { toolErrorMessage } from '@/lib/toolErrorMessage';
+import { executeCanvasTool, specsFor, type CanvasConfirmAction } from '@/lib/canvasAiToolExecution';
+import { CanvasModelRouter } from '@/lib/canvasAiModelRouting';
+import { composeTurnTail, documentShortfallAnswer, type CanvasUnansweredOutcome } from '@/lib/canvasAiTurnTail';
+import { learnFromCanvasAnswer, recallCanvasMemory, type CanvasEvermindPort } from '@/lib/canvasAiEvermind';
 
 type CanvasAiOptions = {
   prompt: string;
@@ -83,10 +78,7 @@ type CanvasAiOptions = {
   /** Uses the same persisted mode as the canonical Brain: mutating tenant tools run
    * without an additional browser confirmation and canvas proposals auto-apply. */
   autoApprove?: boolean;
-  evermind?: {
-    recall: (query: string) => Promise<EvermindRecallResult | null>;
-    learn: (answer: string, prompt: string) => Promise<{ ok: boolean; queued?: number }>;
-  };
+  evermind?: CanvasEvermindPort;
   onTrace?: (event: BrainTraceEvent) => void;
   /** Session diagnostics hook. Contains routing facts only; never prompt text,
    * credentials, or provider response bodies. */
@@ -109,10 +101,10 @@ type CanvasAiOptions = {
    * as an example assistant reply, and a free model reproduced it verbatim instead of
    * answering (2026-08-12, ui 2026.7.210).
    */
-  onUnanswered?: (outcome: { reason: 'no-answer' | 'command-not-executed' | 'tool-error'; detail?: string }) => void;
+  onUnanswered?: (outcome: CanvasUnansweredOutcome) => void;
   /** Awaitable in-app approval. Mutating tenant actions are refused when this is
    * absent; the runner must never fall back to a browser-native prompt. */
-  confirmAction?: (request: { name: string; args: unknown }) => Promise<boolean>;
+  confirmAction?: CanvasConfirmAction;
   /** Session-owned transcript. The Canvas is the chat, so prior turns must travel with
    * every request just as they do in the standalone Brain surface. */
   conversation?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
@@ -156,22 +148,6 @@ export interface CanvasAiCompletion {
   toolCalls: string[];
   finishReason: string | null;
 }
-
-function specsFor(actions: BrainAction[]): BrainToolSpec[] {
-  return actions.map((action) => ({
-    type: 'function',
-    function: { name: action.name, description: action.description, parameters: action.parameters },
-  }));
-}
-
-function mutates(action: BrainAction, args: unknown): boolean {
-  if (typeof action.mutates === 'function') {
-    try { return !!action.mutates(args); } catch { return true; }
-  }
-  return !!action.mutates;
-}
-
-
 
 /** Run a small, bounded agent loop over the active canvas and shared MCP catalog. */
 export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<string> {
@@ -222,15 +198,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   const careerActions = options.persistence === 'server' ? [] : await loadGuestCareerActions();
   const actions = [...options.canvasActions, ...mcpActions, ...researchActions, ...careerActions];
   const byName = new Map(actions.map((action) => [action.name, action]));
-  let recalled: EvermindRecallResult | null = null;
-  if (options.evermind) {
-    try { recalled = await options.evermind.recall(options.prompt); } catch { recalled = null; }
-    if (recalled?.seeded && recalled.items.length) options.onTrace?.({
-      ts: new Date().toISOString(), category: 'recall', label: 'evermind.recall',
-      args: { query: options.prompt, version: recalled.version },
-      result: { count: recalled.items.length, version: recalled.version, mode: recalled.mode, items: recalled.items },
-    });
-  }
+  const recalled = await recallCanvasMemory(options.evermind, options.prompt, options.onTrace);
   const memoryBlock = recalled?.seeded ? formatEvermindMemoryBlock(recalled.items) : '';
   const messages = canvasSystemMessages({
     prompt: options.prompt,
@@ -242,21 +210,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     projectId: options.projectId,
     conversation: options.conversation,
   });
+  /** Settle on `answer`, handing it to Evermind's best-effort learn path first. */
   const finish = async (answer: string): Promise<string> => {
-    const text = answer.trim();
-    if (!options.evermind || !text || text.length < 40 || !recalled) return answer;
-    if (!recalled.seeded || recalled.mode === 'offline-frozen') {
-      options.onTrace?.({ ts: new Date().toISOString(), category: 'learn', label: 'evermind.learn', result: { version: recalled.version, skipped: true, reason: recalled.seeded ? 'frozen' : 'not-seeded' } });
-      return answer;
-    }
-    try {
-      const learned = await options.evermind.learn(text, options.prompt);
-      if (learned.ok) {
-        options.onTrace?.({ ts: new Date().toISOString(), category: 'learn', label: 'evermind.learn', result: { version: recalled.version, queued: learned.queued ?? true } });
-        const reconciled = countReconciledMemories(recalled.items, text);
-        if (reconciled) options.onTrace?.({ ts: new Date().toISOString(), category: 'reconcile', label: 'evermind.reconcile', result: { count: reconciled, version: recalled.version } });
-      }
-    } catch { /* Evermind learning is best-effort and must not fail the canvas turn. */ }
+    await learnFromCanvasAnswer(options.evermind, recalled, answer, options.prompt, options.onTrace);
     return answer;
   };
   let finalText = '';
@@ -273,17 +229,6 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   let buildAuthoringRecoveries = 0;
   let degenerateAnswerRecoveryUsed = false;
   let interruptedTurnRecoveries = 0;
-  /** Round-trips this turn abandoned because the provider went silent — in total, for the
-   *  tail's "the provider stalled" verdict. */
-  let stalledStreams = 0;
-  /** Silent round-trips IN A ROW on the current model — what the stall ladder counts. A
-   *  completion that returns resets it: two stalls minutes apart with a file written in
-   *  between are two bad connections, not a dead model. */
-  let consecutiveStalls = 0;
-  /** Models this AUTO-routed turn handed back to the gateway after they stalled with no
-   *  proven model to switch to (`MAX_STALL_REROUTES`). Turn-scoped and never reported as
-   *  disabled: a stall says nothing about the model's next turn. */
-  const stallReroutedModels = new Set<string>();
   /** The loop stopped on a `failed` rung — the turn was ABANDONED, not finished — so a
    *  board change it made is partial work, never "added to the canvas". */
   let abandonedMidTurn = false;
@@ -297,10 +242,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
    * answer the model actually produced is unrecoverable by the time the loop ends.
    */
   let lastSpokenAnswer = '';
-  let activeModel = options.model;
-  let activeModelStrict = options.modelStrict;
-  const toolCallingModels: string[] = [];
-  const commandFailedModels = new Set(options.disabledModels ?? []);
+  const router = new CanvasModelRouter(options.model, options.modelStrict, excludeModels, options.disabledModels ?? []);
   /** Labels this session's transcript uses, so a copied `Brain: ` prefix can be
    *  recognised and removed without touching an answer that legitimately opens with
    *  a colon. */
@@ -314,28 +256,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
    * Returns false when no proven model is left, which is the caller's signal to stop.
    */
   const switchToProvenModel = (failedModel: string | null | undefined, directive: string): boolean => {
-    // A model this turn already re-routed AWAY from after it stalled is never a fallback:
-    // the next stall has no model name to report (nothing resolved), and the "proven"
-    // model it would otherwise pick is the one that went silent.
-    const alreadyFailed = new Set([...commandFailedModels, ...stallReroutedModels, ...(failedModel ? [failedModel] : [])]);
-    const fallback = [...toolCallingModels].reverse().find((model) => !alreadyFailed.has(model));
-    if (!fallback || (fallback === activeModel && activeModelStrict === true)) {
-      // NOTHING TO SWITCH TO. Do NOT record the failure in that case: the record's
-      // only purpose is to route around the model on a later turn, and a session that
-      // has no alternative gains nothing from it while paying the full price — the
-      // list is session-scoped, so one weak turn used to end the session outright.
-      // Release the pin instead, so the next iteration asks the gateway to choose
-      // again rather than re-pinning the model that just failed.
-      activeModel = options.model;
-      activeModelStrict = options.modelStrict;
-      return false;
-    }
-    if (failedModel) {
-      commandFailedModels.add(failedModel);
-      options.onModelDisabled?.(failedModel);
-    }
-    activeModel = fallback;
-    activeModelStrict = true;
+    const fallback = router.switchToProven(failedModel);
+    if (!fallback) return false;
+    if (failedModel) options.onModelDisabled?.(failedModel);
     mutationRecoveries = 0;
     buildAuthoringRecoveries = 0;
     degenerateAnswerRecoveryUsed = false;
@@ -440,16 +363,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             tool_choice: 'auto',
             maxTokens: buildTurn || truncatedOnce ? CANVAS_BUILD_RESPONSE_TOKENS : CANVAS_RESPONSE_TOKENS,
             reasoning: { level: 'low' },
-            model: activeModel,
-            modelStrict: activeModelStrict,
+            model: router.model,
+            modelStrict: router.modelStrict,
             routingMode: options.routingMode,
-            // Models this session (or this turn) already proved will not execute a Canvas
-            // command. Only meaningful while UNPINNED — with a pin the caller has made the
-            // choice — and the gateway ignores it rather than emptying the cascade, so this
-            // can steer routing without ever refusing to answer.
-            ...(!activeModel && (excludeModels.length || commandFailedModels.size || stallReroutedModels.size)
-              ? { excludeModels: [...new Set([...excludeModels, ...commandFailedModels, ...stallReroutedModels])] }
-              : {}),
+            ...router.exclusionField(),
             metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
           }, (delta) => { finalText += delta; options.onText?.(finalText); }, options.signal);
         } catch (error) {
@@ -461,9 +378,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             throwIfStopped();
             options.onTrace?.({
               ts: new Date().toISOString(), category: 'error', label: 'model stuck repeating itself', isError: true,
-              result: { model: error.model ?? activeModel ?? null, copies: error.copies },
+              result: { model: error.model ?? router.model ?? null, copies: error.copies },
             });
-            const switched = switchToProvenModel(error.model ?? activeModel, 'The prior model got stuck repeating the same sentence and has been disabled for this session.');
+            const switched = switchToProvenModel(error.model ?? router.model, 'The prior model got stuck repeating the same sentence and has been disabled for this session.');
             finalText = switched ? '' : error.kept;
             options.onText?.(finalText);
             if (switched) return { skip: true };
@@ -477,28 +394,21 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           // exists to end, and by here the turn still delivers whatever it already has.
           if (!(error instanceof CanvasStreamStalledError)) throw error;
           throwIfStopped();
-          stalledStreams += 1;
-          consecutiveStalls += 1;
-          const stalledModel = activeModel;
+          const stall = router.recordStall();
+          const stalledModel = stall.model;
           options.onTrace?.({
             ts: new Date().toISOString(), category: 'error', label: 'provider stopped responding', isError: true,
-            result: { model: stalledModel ?? null, seconds: Math.round(CANVAS_STREAM_STALL_MS / 1_000), attempt: consecutiveStalls },
+            result: { model: stalledModel ?? null, seconds: Math.round(CANVAS_STREAM_STALL_MS / 1_000), attempt: stall.attempt },
           });
           finalText = '';
-          if (consecutiveStalls < MAX_STALLED_STREAMS) return { skip: true };
+          if (stall.retry) return { skip: true };
           if (switchToProvenModel(stalledModel, 'The prior model stopped responding mid-request and has been disabled for this session.')) {
-            consecutiveStalls = 0;
+            router.resetStalls();
             return { skip: true };
           }
-          // No PROVEN model to hand over to — but on auto routing the gateway still has its
-          // pool. Ask it again with the stalled model excluded before giving up. Never with
-          // a model the caller picked: that choice is theirs, and the notice tells them so.
-          if (!options.model && stalledModel && !stallReroutedModels.has(stalledModel)
-            && stallReroutedModels.size < MAX_STALL_REROUTES) {
-            stallReroutedModels.add(stalledModel);
-            consecutiveStalls = 0;
-            activeModel = undefined;
-            activeModelStrict = options.modelStrict;
+          // No PROVEN model to hand over to — ask the gateway's pool again with the stalled
+          // model excluded (auto routing only; a model the caller picked is their choice).
+          if (router.rerouteAfterStall(stalledModel)) {
             options.onTrace?.({ ts: new Date().toISOString(), category: 'llm', label: 'rerouted after stall', result: { excluded: stalledModel } });
             messages.push({ role: 'system', content: 'The prior model stopped responding mid-request, so this turn now continues on a different model. Continue the user\'s request from where it left off, building on the work already done.' });
             return { skip: true };
@@ -508,10 +418,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           return { failed: 'provider stopped responding' };
         }
         throwIfStopped();
-        consecutiveStalls = 0;
         options.onCompletion?.({
           at: new Date().toISOString(), iteration: turn + 1,
-          requestedModel: activeModel ?? null,
+          requestedModel: router.model ?? null,
           resolvedModel: result.resolvedModel ?? null,
           resolvedVendor: result.resolvedVendor ?? null,
           account: result.account ?? null,
@@ -521,18 +430,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           finishReason: result.finishReason,
         });
         lastTurnInterruption = turnInterruption(result.finishReason);
-        if (result.toolCalls.length && result.resolvedModel && !toolCallingModels.includes(result.resolvedModel)) {
-          toolCallingModels.push(result.resolvedModel);
-        }
-        // A bounded tool loop is one logical agent turn. Keep its continuations on
-        // the model that began it instead of asking Auto to reroute every tool result
-        // independently (which previously moved research from MiniMax to Gemini just
-        // before the required Canvas write). This is a preference, not a strict pin:
-        // the gateway may still substitute when the provider becomes unavailable.
-        if (!activeModel && result.resolvedModel) {
-          activeModel = result.resolvedModel;
-          activeModelStrict = false;
-        }
+        router.recordCompletion(result.resolvedModel, result.toolCalls.length > 0);
         return {
           content: result.text,
           toolCalls: result.toolCalls.map((call) => ({ id: call.id, name: call.name, arguments: call.args })),
@@ -568,22 +466,12 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           documentWords = Math.max(documentWords ?? 0, words);
           documentWordCountExact = true;
         }
-        let outcome: unknown;
-        if (authoringOnly && NON_AUTHORING_TOOL_NAMES.has(call.name)) {
-          outcome = { error: 'The bounded research phase has ended. Create the requested Canvas artifacts from the evidence already gathered and the board snapshot you already have.' };
-        } else if (call.name === 'builtin_web_search' && narrowSearches >= MAX_NARROW_SEARCHES) {
-          outcome = { error: 'Search stopped after two encyclopedic results. Fetch a known official URL directly or create the requested Canvas artifacts with the evidence already gathered.' };
-        } else if (!action) {
-          outcome = { error: `Unknown tool: ${call.name}` };
-        } else if (!call.name.startsWith('canvas_') && mutates(action, args) && !options.autoApprove) {
-          const approved = options.confirmAction ? await options.confirmAction({ name: call.name, args }) : false;
-          if (!approved) outcome = { error: options.confirmAction ? 'The user declined this tenant mutation.' : 'This tenant mutation requires in-app approval.' };
-          else {
-            try { outcome = await action.run(args); } catch (error) { outcome = { error: toolErrorMessage(error, 'Tool failed') }; }
-          }
-        } else {
-          try { outcome = await action.run(args); } catch (error) { outcome = { error: toolErrorMessage(error, 'Tool failed') }; }
-        }
+        const outcome = await executeCanvasTool(call.name, action, args, {
+          authoringOnly,
+          searchesExhausted: narrowSearches >= MAX_NARROW_SEARCHES,
+          autoApprove: !!options.autoApprove,
+          confirmAction: options.confirmAction,
+        });
         if (call.name === 'builtin_web_search' && isNarrowSearchResult(outcome)) narrowSearches += 1;
         if (toolOutcomeChangedCanvas(outcome)) {
           canvasChanged = true;
@@ -759,8 +647,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           finalText = '';
           return { action: 'continue' };
         }
-        if (requestedPages != null && documentWords != null && documentWords < requestedPages * WORDS_PER_DRAFT_PAGE) {
-          settled = await finish(incompleteDocumentAnswer(notices, requestedPages, documentWords, documentWordCountExact));
+        const shortfall = documentShortfallAnswer(notices, requestedPages, documentWords, documentWordCountExact);
+        if (shortfall !== null) {
+          settled = await finish(shortfall);
           return { action: 'stop', ok: true };
         }
         // `spoken` is the answer with any copied speaker label already removed, so a
@@ -774,63 +663,23 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // on its own): typed, so the surface records "you stopped this", not a failure.
   if (loop.cancelled) throw new CanvasRunAbortedError();
   if (settled !== null) return settled;
-  if (requestedPages != null && documentWords != null && documentWords < requestedPages * WORDS_PER_DRAFT_PAGE) {
-    return finish(incompleteDocumentAnswer(notices, requestedPages, documentWords, documentWordCountExact));
-  }
   const trailing = stripSpeakerLabel(finalText, speakerLabels).trim();
-  if (trailing && !echoesEarlierAnswer(trailing, options.conversation, speakerLabels)) return finish(verified(trailing));
-  // The board changed and the model never got to say so. Two cases, two sentences: the
-  // loop ran out of steps mid-work (a build that needs another turn to finish), or it
-  // simply ended on a tool call.
-  //
-  // `loop.exhausted` alone is NOT the discriminator, and reading it as one is a
-  // regression this line already shipped once. Exhausted means "the cap stopped the
-  // model", which is equally true of a turn that authored everything it was asked for
-  // on its LAST step — and `stepsExhausted` then tells a user holding a finished
-  // website and its comparison document that the work is half-done and to say
-  // "continue". `buildTurn` is the case the notice was written for and says so in its
-  // own docstring (see MAX_CANVAS_BUILD_TURNS): a workspace is written one file per
-  // step, so hitting the cap there really does mean a part-written app. Everywhere
-  // else, a changed board at the cap is a delivered board.
-  // A build turn that only provisioned the workspace is neither: the board holds the
-  // starter template, so "added to the canvas" would misreport it.
-  if (canvasChanged) {
-    // ABANDONED, not finished: the provider went silent (or the model looped) with no
-    // model left to take over, part-way through work that had already touched the board.
-    // Measured (session `local-6d36899d`, ui 2026.10.31): a build wrote `index.html`, then
-    // stalled, and "I added the requested content" sat above a "Hello World!" preview.
-    // A runtime notice, so it stays out of the transcript like `providerStalled`.
-    if (abandonedMidTurn) {
-      options.onUnanswered?.({ reason: 'no-answer', detail: stalledStreams ? 'provider-stalled' : 'model-looped' });
-      return notices.stoppedPartway;
-    }
-    if (loop.exhausted && buildTurn) return finish(notices.stepsExhausted);
-    return finish(buildTurn && !buildAuthored ? notices.buildNotAuthored : notices.addedToCanvas);
-  }
-  // From here down the string is a RUNTIME NOTICE, not something the model said. The
-  // caller is told so it can record it as a failed turn instead of writing it into the
-  // transcript as an assistant reply for the next turn to copy.
-  // A tool that FAILED still outranks prose: the error names what blocked the turn and
-  // what would clear it, which the model's own narration routinely gets wrong.
-  if (lastToolError) {
-    options.onUnanswered?.({ reason: 'tool-error', detail: lastToolError });
-    return notices.toolError(lastToolError);
-  }
-  // Otherwise: an answer the model gave earlier in this turn is NOT a runtime notice, and
-  // the fact that it never reached canvas_add_object does not make it worthless — for a
-  // drafting request it IS the deliverable. Deliver it (still subject to the
-  // unverified-creation check, which replaces an answer CLAIMING a canvas change nobody
-  // made) rather than discarding the user's result in favour of a dead end.
-  if (lastSpokenAnswer) {
-    const checked = verified(lastSpokenAnswer);
-    return finish(checked === lastSpokenAnswer ? notices.answeredWithoutCanvasChange(checked) : checked);
-  }
-  // A turn that ran out of PROVIDERS is not a turn that had nothing to say. Reporting it
-  // as "no answer" blames the request, so the user rewrites a prompt that was fine.
-  if (stalledStreams) {
-    options.onUnanswered?.({ reason: 'no-answer', detail: 'provider-stalled' });
-    return notices.providerStalled;
-  }
-  options.onUnanswered?.({ reason: mutationRequested ? 'command-not-executed' : 'no-answer' });
-  return notices.noAnswer;
+  const tail = composeTurnTail({
+    notices,
+    documentShortfall: documentShortfallAnswer(notices, requestedPages, documentWords, documentWordCountExact),
+    trailingAnswer: trailing && !echoesEarlierAnswer(trailing, options.conversation, speakerLabels) ? trailing : '',
+    lastSpokenAnswer,
+    lastToolError,
+    canvasChanged,
+    abandonedMidTurn,
+    stalledStreams: router.stalledStreams,
+    stepsExhausted: loop.exhausted,
+    buildTurn,
+    buildAuthored,
+    mutationRequested,
+    verify: verified,
+  });
+  // A runtime notice is reported first, so the surface keeps it out of the transcript.
+  if (tail.unanswered) options.onUnanswered?.(tail.unanswered);
+  return tail.learn ? finish(tail.answer) : tail.answer;
 }

@@ -137,8 +137,7 @@ import { CanvasSessionProvider, type CanvasSessionFacts } from './chrome/canvasS
 import { useCanvasChromeMenus } from './chrome/useCanvasChromeMenus';
 import { useCanvasSessionActionHandlers } from './chrome/useCanvasSessionActionHandlers';
 import { CanvasPromptComposer } from './chrome/CanvasPromptComposer';
-import { useOnPreviewPick } from '@/lib/workspace/previewPick';
-import { effectiveCanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
+import { useCanvasPromptPlacement } from './chrome/useCanvasPromptPlacement';
 import { canvasLensDefinition, type CanvasLens } from '@/lib/canvasLens';
 import { CanvasLensBar } from './chrome/CanvasLensBar';
 import { useCanvasLens } from './hooks/useCanvasLens';
@@ -977,12 +976,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   /* The prompt sits bottom-centre, where every chat product people already use puts it,
      and is deliberately NOT part of the Brain surface: it stays reachable whether Brain
      is inline in its Object, docked to either edge, or closed entirely. */
-  // WHERE THE ONE COMPOSER GOES — see `effectiveCanvasPromptPlacement`.
-  const brainDockDrawn = brainSurfaceOpen && brainPlacement === 'docked' && !surfaceDef.brainIsSurface;
-  const effectivePromptPlacement = effectiveCanvasPromptPlacement({ hostOwnsSurface: !!hostSurfaces?.[surface], brainIsSurface: surfaceDef.brainIsSurface, preference: promptPlacement, brainDockDrawn, lensPlacement: lensDef.promptPlacement });
-  const promptInBrainPanel = effectivePromptPlacement === 'docked';
-  // A pick in the App preview lands as a chip in the prompt; a closed prompt reopens.
-  useOnPreviewPick(() => { if (effectivePromptPlacement === 'closed') setPromptPlacement('float'); });
+  const { brainDockDrawn, placement: effectivePromptPlacement, inBrainPanel: promptInBrainPanel } = useCanvasPromptPlacement({ hostOwnsSurface: !!hostSurfaces?.[surface], brainIsSurface: surfaceDef.brainIsSurface, preference: promptPlacement, setPreference: setPromptPlacement, brainSurfaceOpen, brainPlacement, lensPlacement: lensDef.promptPlacement });
   /** THE ONE COMPOSER — see `CanvasPromptComposer`. One element, drawn in exactly one of
    *  its two homes below: the Brain panel's last row, or floating over the board. */
   const composer = !presentMode && effectivePromptPlacement !== 'closed' && <CanvasPromptComposer
