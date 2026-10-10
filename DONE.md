@@ -1,3 +1,21 @@
+## ✅ RESOLVED 2026-10-10 — One prompt for every edit: "Select to edit" feeds the Brain, and the composer suggests fixed next steps (frontend)
+
+**Was:** two parts of the simplified Studio prompt design were unbuilt (ROADMAP, 2026-10-09):
+1. **Separate edit flows.** "Select to edit" in the preview opened its own two-field form under the preview (copy, classes) that rewrote one source line without the Brain. That was a second place, with a second vocabulary, to ask for a change.
+2. **A blank box after each reply.** Nothing suggested what to do next.
+
+**Operator decisions:** (1) no separate flows, so everything goes through the one prompt; (2) next steps cost nothing: a fixed list, never a model call.
+
+**Now:**
+- **`lib/workspace/previewPick.ts`** (new) is the one pick store, one per window. `PreviewPick` = the `VisualSelection` plus its workspace id and app name. `previewPickContext()` is the model-facing note naming the element's tag, file, line, text and classes. The preview that made a pick withdraws it when it unmounts.
+- **`usePointAndEdit`** publishes the pick and disarms. `PointAndEditPanel` is deleted, along with `replaceTextAtLine`, `replaceClassNameAtLine`, `LineEdit` (`lib/visualEditor.ts`) and their tests.
+- **`components/builder/PreviewPickChip.tsx`** (new): the pick as a removable chip in the prompt's tool row. It renders nothing without a pick. Both prompts carry it: the canvas prompt (`CanvasPromptComposer`) and the Studio workspace Brain (`BrainComposer`).
+- **The canvas turn** (`useCanvasBrainTurn`): a typed turn takes the pick and appends its note to every loop's board snapshot. Replays and queued turns leave it standing.
+- **The workspace Brain** (`useWorkspaceBrainContext`): the pick note joins `extraSystem`. `useSpendPreviewPickOnSettle` withdraws the pick once the turn that carried it settles, unless a newer pick replaced it.
+- **Next steps:** `CanvasSurfaceDef.composerNextSteps` (data). The App surface lists polish, phones, a section, real copy and fixing errors. `lib/composerNextSteps.ts` falls back to the phase's `PHASE_STARTERS`. `CanvasNextSteps` (new) shows them as chips above an empty prompt once a conversation has started. A chip seeds the box and never sends. The chips hide while Brain works, while the starting-points catalogue is open and once the person types; they wrap when wide and scroll sideways on a phone.
+- **`CanvasPromptComposer`** takes `surface` instead of `intents` and derives both lists from the surface registry.
+- **i18n:** `creationCanvas.nextSteps.app.*` and `creationCanvas.nextStepsLabel`, `ide.previewPick.*`, and a reworded `ide.visualEditHint`, in all five catalogs. The seven `ide.visual*` form keys were retired.
+
 ## ✅ RESOLVED 2026-10-10 — The editor draws the whole board: one "which project?" resolution for every surface (VSIX 2026.10.5)
 
 **Was:** four canvas surfaces threw in the VS Code panel and dropped the board to chat: `usePins()` in `CanvasInsightsSurface`, `useProjectScope()` in the Insights lenses, `usePmScope()` in the PM widgets, and `useLiveSession()` in `CeremonyStage`. The roadmap held it for a product decision, because "which project?" had five private answers, each with its own order: `ProjectScopeProvider` (URL, then localStorage), `PmScopeProvider` (prop, then shell), `useComponentProjectId` (pin, then embed URL, then shell), `useEmbedProjectId` (`?project=`, then `#projectId=`), and `ToolRunner` (`?project=` / `?projectId=`, then shell). None of them knew that the editor owns a project selection of its own. Two bugs came with that: `/workflows` read `?projectId=` while every link into it wrote `?project=`, so the project was dropped; and a component under the shell let a stale deep-link outrank a fresh TopBar pick.

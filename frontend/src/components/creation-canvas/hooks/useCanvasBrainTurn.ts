@@ -25,6 +25,7 @@ import { canvasTurnSnapshot } from '../brainTurn/turnSnapshot';
 import { turnAgentNodes } from '../brainTurn/turnParticipants';
 import { runCanvasGroupTurn } from '../brainTurn/runCanvasGroupTurn';
 import { type CanvasTurnSettleContext, settleCanvasTurnFailure, settleCanvasTurnSuccess } from '../brainTurn/settleCanvasTurn';
+import { previewPickContext, takePreviewPick } from '@/lib/workspace/previewPick';
 
 export interface UseCanvasBrainTurnDeps {
   appendTimeline: (role: 'user' | 'assistant' | 'system', body: string, metadata?: CreationTimelineMessage['metadata'], clientMessageId?: string) => string;
@@ -154,7 +155,12 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeR
     // added since the turn began is in scope for a later loop whatever the selection
     // was — it is this turn's own work.
     const startIds = new Set(nodes.map((node) => node.id));
-    const turnSnapshot = (board: readonly CreationFlowNode[]): string => canvasTurnSnapshot(board, stage.edges(), { sessionId, scope: resolvedScopeMode, selectedObjectIds: effectiveSelectedIds, scopedNodeIds, startIds });
+    // An element picked in the app's preview ("Select to edit") is what a TYPED turn is
+    // about; it rides every loop's view of the board and is spent by this turn. A replay
+    // or a queued turn carries its own text and leaves a standing pick for the next one.
+    const pick = promptOverride === undefined ? takePreviewPick() : null;
+    const pickNote = pick ? `\n\n${previewPickContext(pick)}` : '';
+    const turnSnapshot = (board: readonly CreationFlowNode[]): string => canvasTurnSnapshot(board, stage.edges(), { sessionId, scope: resolvedScopeMode, selectedObjectIds: effectiveSelectedIds, scopedNodeIds, startIds }) + pickNote;
     clearComposer();
     const connectedAgentNodes = turnAgentNodes(requestText, nodes, edges, effectiveSelectedIds, brainId);
     setActiveAgentIds(new Set(connectedAgentNodes.map((agent) => agent.id)));

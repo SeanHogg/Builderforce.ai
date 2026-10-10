@@ -1492,15 +1492,15 @@
     "previewMobile": "Móvil",
     "previewTitle": "Vista previa",
     "visualEdit": "Seleccionar para editar",
-    "visualEditHint": "Haz clic en cualquier elemento de la vista previa para cambiar su texto o estilo sin pedírselo al agente.",
+    "visualEditHint": "Haz clic en cualquier elemento de la vista previa y di en el cuadro de texto qué quieres cambiar.",
     "visualEditOn": "Seleccionando — haz clic en un elemento",
-    "visualSelected": "Seleccionado {tag} · {file}:{line}",
-    "visualText": "Texto",
-    "visualClasses": "Clases de estilo",
-    "visualApply": "Aplicar",
-    "visualCancel": "Cancelar",
-    "visualApplied": "{file} actualizado",
-    "visualNoPreview": "Ejecuta primero el proyecto: señalar y editar necesita una vista previa en vivo.",
+    "previewPick": {
+      "label": "{tag}",
+      "labelWithText": "{tag} · «{text}»",
+      "where": "Elegido en la vista previa: {file}, línea {line}",
+      "aria": "Elemento elegido:",
+      "remove": "Quitar el elemento elegido"
+    },
     "releases": {
       "title": "Versiones anteriores",
       "description": "Cada compilación se conserva. Restaura una anterior al instante, sin recompilar.",
@@ -1776,6 +1776,7 @@
     "saveFailed": "Error al guardar (se requiere rol de gestor).",
     "loadError": "No se pudo cargar esta herramienta",
     "allTools": "Todas las herramientas",
+    "unknownTool": "Esta herramienta no existe o se ha movido.",
     "freeNoLogin": "Gratis · sin iniciar sesión",
     "answerAll": "Responde todas las preguntas para un resultado completo.",
     "scaleHint": "Cómo puntuar: elige el número que mejor describa cada afirmación:",
@@ -26171,6 +26172,31 @@
         }
       }
     },
+    "nextSteps": {
+      "app": {
+        "polish": {
+          "label": "Pulir el diseño",
+          "prompt": "Pule el diseño de la app: espaciado coherente, una escala tipográfica clara y colores que combinen. No cambies lo que hace."
+        },
+        "mobile": {
+          "label": "Adaptarla a móviles",
+          "prompt": "Haz que la app funcione bien en un móvil: nada se desborda a 360 px de ancho, los menús se apilan y cada botón es fácil de tocar."
+        },
+        "section": {
+          "label": "Añadir una sección",
+          "prompt": "Añade a la app una sección nueva que encaje con su propósito y dime qué añadiste y por qué."
+        },
+        "copy": {
+          "label": "Escribir textos reales",
+          "prompt": "Sustituye el texto de relleno de la app por textos reales que encajen con su propósito."
+        },
+        "fix": {
+          "label": "Corregir errores",
+          "prompt": "Revisa la vista previa y la consola de la app en busca de errores y corrígelos."
+        }
+      }
+    },
+    "nextStepsLabel": "Próximos pasos sugeridos",
     "boardMenu": {
       "phaseFocus": "Enfoque de fase",
       "phaseFocusOn": "El enfoque de fase está activado: las tarjetas de la fase pasan al frente",

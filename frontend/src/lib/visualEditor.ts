@@ -1,13 +1,14 @@
 /**
- * Click-to-source editing — change what you can see without spending a model turn.
+ * Click-to-source picking — point at what you can see, and the Brain knows exactly
+ * which element you mean.
  *
  * ── THE GAP THIS CLOSES ─────────────────────────────────────────────────────
- * Every cosmetic change cost a full agent turn. "Make this button bigger" meant
- * describing an element the user was pointing at, the model guessing which file
- * it lived in, and a write — the most expensive possible way to change one
- * Tailwind class or one line of copy. Competing products resolve a clicked
- * element back to its JSX node and edit the source directly, reserving the model
- * for structural work. That is what this is.
+ * "Make this button bigger" used to mean describing an element the user was looking
+ * at, and the model guessing which file it lived in. Competing products resolve a
+ * clicked element back to its JSX node. That is what this does: the pick becomes the
+ * ONE prompt's context (`lib/workspace/previewPick.ts`) — a chip in the composer, and
+ * the exact file and line the next request is about — so the change goes through the
+ * same Brain and the same transcript as every other one, with no search for the source.
  *
  * ── WHY NO BUILD-STEP CHANGE ────────────────────────────────────────────────
  * The obvious implementation is a Babel/SWC transform stamping
@@ -25,14 +26,6 @@
  * injected into the MOUNTED copy of `index.html` for the dev server and never
  * into the user's files or a published build, so a production site can neither be
  * inspected this way nor ship the overlay.
- *
- * ── WHY THE EDITS ARE THIS NARROW ───────────────────────────────────────────
- * Two operations only: the element's visible TEXT, and its `className`. Both are
- * unambiguous single-line, single-attribute changes anchored to a line React
- * itself reported, so the edit either matches exactly or is refused. Anything
- * structural — moving a node, adding a prop, changing a handler — stays with the
- * model, where the reasoning belongs. A visual editor that tries to do more than
- * this is how a file gets silently rewritten by a regex.
  */
 
 import { injectIntoHead } from '@/lib/previewInjection';
@@ -201,67 +194,4 @@ export function visualSelectionFrom(data: unknown): VisualSelection | null {
     className: typeof payload?.className === 'string' ? payload.className : '',
     text: typeof payload?.text === 'string' ? payload.text : null,
   };
-}
-
-export type LineEdit =
-  | { ok: true; content: string }
-  | { ok: false; reason: string };
-
-/**
- * Replace the `className` (or `class`) attribute on the selected line.
- *
- * Anchored to the line React reported, and only the FIRST attribute on it is
- * touched — a line holding two elements is refused rather than guessed at,
- * because getting that wrong edits an element the user was not pointing at.
- */
-export function replaceClassNameAtLine(source: string, line: number, next: string): LineEdit {
-  const lines = source.split('\n');
-  const index = line - 1;
-  if (index < 0 || index >= lines.length) return { ok: false, reason: 'That line is no longer in the file. Re-run the preview and pick the element again.' };
-  const target = lines[index];
-  const attribute = /(\bclassName|\bclass)\s*=\s*(["'])([^"']*)\2/;
-  const match = attribute.exec(target);
-  if (!match) {
-    // No attribute yet: add one to the opening tag on this line.
-    const tag = /<([A-Za-z][\w.]*)/.exec(target);
-    if (!tag) return { ok: false, reason: 'That line has no element to style. Ask the agent to make this change instead.' };
-    const at = tag.index + tag[0].length;
-    lines[index] = `${target.slice(0, at)} className="${next}"${target.slice(at)}`;
-    return { ok: true, content: lines.join('\n') };
-  }
-  if (attribute.exec(target.slice(match.index + match[0].length))) {
-    return { ok: false, reason: 'That line holds more than one element. Ask the agent to make this change instead.' };
-  }
-  lines[index] = target.slice(0, match.index)
-    + `${match[1]}=${match[2]}${next}${match[2]}`
-    + target.slice(match.index + match[0].length);
-  return { ok: true, content: lines.join('\n') };
-}
-
-/**
- * Replace an element's visible text.
- *
- * Matched by the EXACT current text rather than by position, and only when it
- * occurs once on the line — the same refuse-rather-than-guess rule the class edit
- * uses, and the reason this is safe to run without a model checking it.
- */
-export function replaceTextAtLine(source: string, line: number, current: string, next: string): LineEdit {
-  const lines = source.split('\n');
-  const index = line - 1;
-  if (index < 0 || index >= lines.length) return { ok: false, reason: 'That line is no longer in the file. Re-run the preview and pick the element again.' };
-  const trimmed = current.trim();
-  if (!trimmed) return { ok: false, reason: 'That element has no editable text.' };
-
-  // The text may sit on the reported line or, for a multi-line element, just
-  // after it. Search a small window rather than only one line.
-  for (let offset = 0; offset < 4 && index + offset < lines.length; offset += 1) {
-    const at = index + offset;
-    const occurrences = lines[at].split(trimmed).length - 1;
-    if (occurrences === 0) continue;
-    if (occurrences > 1) return { ok: false, reason: 'That text appears more than once on the line. Ask the agent to make this change instead.' };
-    const start = lines[at].indexOf(trimmed);
-    lines[at] = lines[at].slice(0, start) + next + lines[at].slice(start + trimmed.length);
-    return { ok: true, content: lines.join('\n') };
-  }
-  return { ok: false, reason: 'That text is not in the source at this position — it may be computed. Ask the agent to make this change instead.' };
 }

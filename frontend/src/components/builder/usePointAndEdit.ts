@@ -1,23 +1,10 @@
 // No `'use client'`: this module exports a hook, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { useTranslations } from 'next-intl';
-import { validateFileContentForPath } from '@builderforce/ide-file-contract';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { previewErrorFrom, recordBuildFailure } from '@/lib/buildDiagnostics';
-import {
-  VISUAL_ARM_MESSAGE,
-  replaceClassNameAtLine,
-  replaceTextAtLine,
-  visualSelectionFrom,
-  type VisualSelection,
-} from '@/lib/visualEditor';
-import { faultMessage } from '@/lib/apiClient';
+import { VISUAL_ARM_MESSAGE, visualSelectionFrom } from '@/lib/visualEditor';
+import { clearPreviewPick, setPreviewPick } from '@/lib/workspace/previewPick';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
-
-export interface PointAndEditDraft {
-  text: string;
-  className: string;
-}
 
 /**
  * The host half of the preview conversation.
@@ -25,28 +12,34 @@ export interface PointAndEditDraft {
  * Two kinds of message come back from the overlay injected into the mounted
  * preview (`lib/visualEditor.ts`, `lib/buildDiagnostics.ts`): a runtime error
  * thrown inside the app — recorded so the agent can read it — and an element the
- * person pointed at, which opens a two-field edit (copy, classes) applied as an
- * exact single-line source change. No model turn, no tokens.
+ * person pointed at, which becomes the ONE prompt's context (`lib/workspace/previewPick.ts`):
+ * a chip in the composer, and the exact file and line the next request is about.
+ * There is no edit form of its own any more; the request goes to the same Brain as
+ * every other one.
+ *
+ * Picking disarms: one click chooses one element, and the app works normally again
+ * until "Select to edit" is pressed once more.
  *
  * `event.source` is deliberately not checked against the preview iframe: the
  * dev server is a cross-origin document whose `contentWindow` this frame cannot
  * compare, so the message TYPE plus the shape checks are the identification.
  * Both are namespaced, and the payload is only ever read as strings, so a
- * hostile sender's best case is a spurious diagnostic line.
+ * hostile sender's best case is a spurious diagnostic line or a wrong chip.
  */
-export function usePointAndEdit({ store, previewUrl, writePreviewFile, setFileContents }: {
+export function usePointAndEdit({ store, appName, previewUrl }: {
   store: WorkspaceFileStore;
+  /** Names the app in the pick — which app, on a board that holds more than one. */
+  appName: string;
   previewUrl: string | undefined;
-  writePreviewFile: (path: string, contents: string) => Promise<void>;
-  setFileContents: Dispatch<SetStateAction<Record<string, string>>>;
 }) {
-  const t = useTranslations('ide');
   // Cross-origin preview: postMessage through this window is the only channel.
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const [armed, setArmed] = useState(false);
-  const [selection, setSelection] = useState<VisualSelection | null>(null);
-  const [draft, setDraft] = useState<PointAndEditDraft>({ text: '', className: '' });
-  const [error, setError] = useState<string | null>(null);
+
+  const arm = useCallback((next: boolean) => {
+    setArmed(next);
+    frameRef.current?.contentWindow?.postMessage({ type: VISUAL_ARM_MESSAGE, armed: next }, '*');
+  }, []);
 
   useEffect(() => {
     if (!previewUrl) return undefined;
@@ -54,17 +47,16 @@ export function usePointAndEdit({ store, previewUrl, writePreviewFile, setFileCo
       const failure = previewErrorFrom(event.data);
       if (failure) { recordBuildFailure(store.id, failure); return; }
       const selected = visualSelectionFrom(event.data);
-      if (selected) { setSelection(selected); setDraft({ text: selected.text ?? '', className: selected.className }); }
+      if (!selected) return;
+      setPreviewPick({ ...selected, workspaceId: store.id, appName });
+      arm(false);
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [previewUrl, store.id]);
+  }, [previewUrl, store.id, appName, arm]);
 
-  const arm = useCallback((next: boolean) => {
-    setArmed(next);
-    if (!next) setSelection(null);
-    frameRef.current?.contentWindow?.postMessage({ type: VISUAL_ARM_MESSAGE, armed: next }, '*');
-  }, []);
+  // A pick never outlives the preview it points into.
+  useEffect(() => () => clearPreviewPick({ workspaceId: store.id }), [store.id]);
 
   // Re-arm after a reload: the overlay is a fresh script in a fresh document and
   // has no memory of having been armed before the dev server restarted it.
@@ -77,38 +69,7 @@ export function usePointAndEdit({ store, previewUrl, writePreviewFile, setFileCo
     return () => window.clearTimeout(id);
   }, [armed, previewUrl]);
 
-  const apply = useCallback(async () => {
-    if (!selection) return;
-    setError(null);
-    try {
-      let content = await store.read(selection.file);
-      if (selection.text !== null && draft.text !== selection.text) {
-        const edited = replaceTextAtLine(content, selection.line, selection.text, draft.text);
-        if (!edited.ok) { setError(edited.reason); return; }
-        content = edited.content;
-      }
-      if (draft.className !== selection.className) {
-        const edited = replaceClassNameAtLine(content, selection.line, draft.className);
-        if (!edited.ok) { setError(edited.reason); return; }
-        content = edited.content;
-      }
-      const valid = validateFileContentForPath(selection.file, content);
-      if (!valid.ok) { setError(valid.reason); return; }
-      await store.write(selection.file, content);
-      setFileContents((prev) => ({ ...prev, [selection.file]: content }));
-      if (previewUrl) await writePreviewFile(selection.file, content).catch(() => { /* best-effort */ });
-      setSelection(null);
-    } catch (e) {
-      setError(faultMessage(e, t('visualNoPreview')));
-    }
-  }, [store, previewUrl, t, draft, selection, writePreviewFile, setFileContents]);
-
-  const cancel = useCallback(() => {
-    setSelection(null);
-    setError(null);
-  }, []);
-
-  return { frameRef, armed, arm, selection, draft, setDraft, error, apply, cancel };
+  return { frameRef, armed, arm };
 }
 
 export type PointAndEdit = ReturnType<typeof usePointAndEdit>;

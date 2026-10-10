@@ -115,6 +115,14 @@ export interface CanvasSurfaceDef {
    * "ask Brain about this" has no answer. See `lib/canvasComposerIntents.ts`.
    */
   composerIntents: readonly CanvasComposerIntentId[];
+  /**
+   * The fixed next steps the ONE composer offers on this surface once a conversation has
+   * started — chips above an empty box that SEED it, never send it. Keys under
+   * `creationCanvas.nextSteps.<surface>.<key>.{label,prompt}`. Absent ⇒ the canvas
+   * phase's own starters (`PHASE_STARTERS`). A fixed list on purpose: suggesting costs no
+   * model call. See `lib/composerNextSteps.ts`.
+   */
+  composerNextSteps?: readonly string[];
 }
 
 /** Declaration order is display order; `order` is what consumers sort on. */
@@ -179,7 +187,7 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   //
   // It persists because it is a place somebody chose to work in — a builder iterating on
   // a running app is not taking a temporary reading of the board, the way 3D is.
-  { id: 'app', scope: 'board', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true, composerIntents: ['ask'] },
+  { id: 'app', scope: 'board', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true, composerIntents: ['ask'], composerNextSteps: ['polish', 'mobile', 'section', 'copy', 'fix'] },
   // What the session is worth, read back. Board-scoped for the same reason `app` is:
   // graded-proof rate, active builders and the rest are about the WHOLE session, not
   // one card, so there is no card to enter it from. Unlike `app` it draws no objects

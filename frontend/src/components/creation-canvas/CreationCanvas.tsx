@@ -983,7 +983,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   /** THE ONE COMPOSER — see `CanvasPromptComposer`. One element, drawn in exactly one of
    *  its two homes below: the Brain panel's last row, or floating over the board. */
   const composer = !presentMode && effectivePromptPlacement !== 'closed' && <CanvasPromptComposer
-    docked={promptInBrainPanel} intents={surfaceDef.composerIntents} editable={cardsEditable} preferAsk={phoneViewport && brainSurfaceOpen}
+    docked={promptInBrainPanel} surface={surfaceDef.id} editable={cardsEditable} preferAsk={phoneViewport && brainSurfaceOpen}
     startTurn={startCanvasTurn} onCaptureIdea={captureIdeaFromComposer} hostRef={composerDockRef} actionsOpen={actionsOpen} onToggleActions={toggleActionsSheet}
     running={thinking} trace={brainTrace} runStartedAt={brainRunStartedAt} brainIsSurface={surfaceDef.brainIsSurface}
     promptPlacement={promptPlacement} setPromptPlacement={setPromptPlacement} brainDockDrawn={brainDockDrawn} updateBrainDock={updateBrainDock}

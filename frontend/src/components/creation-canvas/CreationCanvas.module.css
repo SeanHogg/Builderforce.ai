@@ -2187,6 +2187,20 @@
 }
 .promptStarterTrigger:hover,.promptStarterTrigger:focus-visible { border-color:var(--canvas-brain-accent); color:var(--canvas-brain-accent); outline:none; }
 .promptStarterTrigger[aria-expanded='true'] { border-color:var(--canvas-brain-accent); background:color-mix(in srgb,var(--canvas-brain-accent) 14%,transparent); color:var(--canvas-brain-accent); }
+/* Next steps (`CanvasNextSteps`): fixed suggestions in the card's top band once a
+   conversation has started. Pills on the card's own ground in both themes; they wrap on
+   a wide card and scroll sideways on a phone rather than stacking three rows deep. */
+.composerNextSteps { grid-area:starters; display:flex; flex-wrap:wrap; gap:6px; min-width:0; padding:8px 8px 0; }
+.composerNextStep {
+  flex:0 0 auto; min-height:32px; padding:0 12px; border:1px solid var(--canvas-brain-border); border-radius:999px;
+  background:transparent; color:var(--canvas-ink); font:600 12px var(--font-sans); white-space:nowrap; cursor:pointer;
+}
+.composerNextStep:hover,.composerNextStep:focus-visible { border-color:var(--canvas-brain-accent); color:var(--canvas-brain-accent); outline:none; }
+@media (max-width: 640px) {
+  .composerNextSteps { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; }
+  .composerNextSteps::-webkit-scrollbar { display:none; }
+}
+@media (pointer: coarse) { .composerNextStep { min-height:44px; } }
 /* Scope is a chip in the card's tool row (`density="compact"`). The palette's
    generic surface rules paint `.scopeChip` as a panel tile; inside the card it is a pill
    on the card's own ground, in both themes. */

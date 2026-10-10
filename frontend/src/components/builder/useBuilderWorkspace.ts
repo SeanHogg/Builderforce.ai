@@ -131,7 +131,7 @@ export function useBuilderWorkspace({ store, name, modality: requestedModality, 
     log: logs.log, publishLog: logs.publishLog,
   });
   useAutoRun({ enabled: livePreview, files, phase: runner.phase, run: runner.run });
-  const edit = usePointAndEdit({ store, previewUrl: runner.previewUrl, writePreviewFile: runner.writePreviewFile, setFileContents });
+  const edit = usePointAndEdit({ store, appName: name, previewUrl: runner.previewUrl });
   const editor = useWorkspaceFiles({
     store, modality, setFiles, fileContents, setFileContents,
     previewUrl: runner.previewUrl, writePreviewFile: runner.writePreviewFile, refLog: logs.log, onOpenInEditor: showEditor,

@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { CanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
-import type { CanvasComposerIntentId } from '@/lib/canvasComposerIntents';
+import { canvasSurfaceDefinition, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import type { CreationTemplate } from '@/lib/templates/creationTemplates';
 import { Icon } from '@/components/ui/Icon';
+import { PreviewPickChip } from '@/components/builder/PreviewPickChip';
 import { CanvasComposer, type CanvasComposerInputProps } from '../CanvasComposer';
 import { CanvasActionsTrigger } from '../CanvasActionsTrigger';
 import { BrainActivityIndicator } from '../BrainActivityView';
 import type { BrainDockPreferences } from '../brainDockPreferences';
+import { CanvasNextSteps } from './CanvasNextSteps';
 import { CanvasPromptStarter } from './CanvasPromptStarter';
 import { CanvasScopeChip, type CanvasScopeMode } from './CanvasScopeChip';
 import { useCanvasSessionFacts } from './canvasSessionContext';
@@ -18,7 +20,8 @@ export interface CanvasPromptComposerProps extends Pick<CanvasComposerInputProps
   | 'onModelSelectionChange' | 'modelIdentity' | 'chatMode' | 'onChatModeChange' | 'memoryEnabled' | 'onMemoryChange'> {
   /** Docked = the Brain panel's last row; float = over the board. */
   docked: boolean;
-  intents: readonly CanvasComposerIntentId[];
+  /** The surface on screen: its composer verbs and its next steps come off its registry row. */
+  surface: CanvasSurfaceId;
   editable: boolean;
   /** Opening the conversation on a phone means you are talking to it. */
   preferAsk: boolean;
@@ -62,7 +65,7 @@ export interface CanvasPromptComposerProps extends Pick<CanvasComposerInputProps
  * PLACED, what its verbs DO, and the `ChatInput` wiring.
  */
 export function CanvasPromptComposer({
-  docked, intents, editable, preferAsk, startTurn, onCaptureIdea, hostRef, actionsOpen, onToggleActions,
+  docked, surface, editable, preferAsk, startTurn, onCaptureIdea, hostRef, actionsOpen, onToggleActions,
   running, trace, runStartedAt, brainIsSurface, promptPlacement, setPromptPlacement, brainDockDrawn, updateBrainDock,
   prompt, setPrompt, onStop, queuedCount, scopeMode, setScopeMode, scopeLabel, selectionCount, frameSelected,
   hasMemoryProject, onTwilioJourney, applyTemplate, conversationStarted, onAttach, onAddContext, autoMode, onAutoModeChange,
@@ -75,7 +78,7 @@ export function CanvasPromptComposer({
   const [startersOpen, setStartersOpen] = useState(false);
   return <CanvasComposer
     placement={docked ? 'docked' : 'float'}
-    intents={intents}
+    intents={canvasSurfaceDefinition(surface).composerIntents}
     // The same gate the scratchpad's own form used: a viewer who cannot add cards is
     // offered Ask alone rather than a verb that would silently do nothing.
     editable={editable}
@@ -87,14 +90,24 @@ export function CanvasPromptComposer({
     // row rather than the board's chrome, and the band reserved for it is zero.
     {...(docked ? {} : { hostRef })}
     leading={<CanvasActionsTrigger open={actionsOpen} onToggle={onToggleActions} />}
-    starter={<CanvasPromptStarter
-      open={startersOpen}
-      onOpenChange={setStartersOpen}
-      conversationStarted={conversationStarted}
-      onPrompt={setPrompt}
-      onTwilioJourney={onTwilioJourney}
-      onPack={applyTemplate}
-    />}
+    starter={<>
+      <CanvasPromptStarter
+        open={startersOpen}
+        onOpenChange={setStartersOpen}
+        conversationStarted={conversationStarted}
+        onPrompt={setPrompt}
+        onTwilioJourney={onTwilioJourney}
+        onPack={applyTemplate}
+      />
+      <CanvasNextSteps
+        surface={surface}
+        prompt={prompt}
+        conversationStarted={conversationStarted}
+        running={running}
+        catalogOpen={startersOpen}
+        onPrompt={setPrompt}
+      />
+    </>}
     activity={<BrainActivityIndicator
       running={running}
       trace={trace}
@@ -124,7 +137,12 @@ export function CanvasPromptComposer({
       running,
       onStop,
       queuedCount,
-      contextControls: <CanvasScopeChip scopeMode={scopeMode} onScopeModeChange={setScopeMode} autoLabel={scopeLabel} selectionCount={selectionCount} frameSelected={frameSelected} />,
+      // What the next request is about: an element picked in the app's preview, and the
+      // board scope. Each draws nothing when there is nothing to say.
+      contextControls: <>
+        <PreviewPickChip />
+        <CanvasScopeChip scopeMode={scopeMode} onScopeModeChange={setScopeMode} autoLabel={scopeLabel} selectionCount={selectionCount} frameSelected={frameSelected} />
+      </>,
       onAttach,
       onAddContext,
       ...(conversationStarted ? {

@@ -1492,15 +1492,15 @@
     "previewMobile": "Mobile",
     "previewTitle": "Preview",
     "visualEdit": "Select to edit",
-    "visualEditHint": "Click any element in the preview to change its text or styling without asking the agent.",
+    "visualEditHint": "Click any element in the preview, then say what to change in the prompt.",
     "visualEditOn": "Picking — click an element",
-    "visualSelected": "Selected {tag} · {file}:{line}",
-    "visualText": "Text",
-    "visualClasses": "Style classes",
-    "visualApply": "Apply",
-    "visualCancel": "Cancel",
-    "visualApplied": "Updated {file}",
-    "visualNoPreview": "Run the project first — point & edit needs a live preview.",
+    "previewPick": {
+      "label": "{tag}",
+      "labelWithText": "{tag} · “{text}”",
+      "where": "Picked in the preview: {file}, line {line}",
+      "aria": "Picked element:",
+      "remove": "Remove the picked element"
+    },
     "releases": {
       "title": "Previous versions",
       "description": "Every build is kept. Put an earlier one back instantly — no rebuild.",
@@ -1776,6 +1776,7 @@
     "saveFailed": "Save failed (manager role required).",
     "loadError": "Couldn’t load this tool",
     "allTools": "All tools",
+    "unknownTool": "This tool doesn't exist, or it has moved.",
     "freeNoLogin": "Free · no login required",
     "answerAll": "Answer every question for a full result.",
     "scaleHint": "How to rate — pick the number that fits each statement:",
@@ -26171,6 +26172,31 @@
         }
       }
     },
+    "nextSteps": {
+      "app": {
+        "polish": {
+          "label": "Polish the design",
+          "prompt": "Polish the app's design: consistent spacing, a clear type scale and colours that work together. Keep what it does the same."
+        },
+        "mobile": {
+          "label": "Make it work on phones",
+          "prompt": "Make the app work well on a phone: nothing overflows at 360px wide, menus stack, and every button is easy to tap."
+        },
+        "section": {
+          "label": "Add a section",
+          "prompt": "Add a new section to the app that fits what it is for, and tell me what you added and why."
+        },
+        "copy": {
+          "label": "Write real copy",
+          "prompt": "Replace the placeholder text in the app with real copy that fits what it is for."
+        },
+        "fix": {
+          "label": "Fix errors",
+          "prompt": "Check the app's preview and console for errors and fix them."
+        }
+      }
+    },
+    "nextStepsLabel": "Suggested next steps",
     "boardMenu": {
       "phaseFocus": "Phase focus",
       "phaseFocusOn": "Phase focus is on — cards the phase is about come forward",

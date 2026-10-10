@@ -3,6 +3,8 @@ import { useTranslations } from 'next-intl';
 import { PersonaPicker, RecipientPicker } from '@seanhogg/builderforce-brain-ui';
 import type { DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import { ChatInput } from '@/components/ChatInput';
+import { PreviewPickChip } from '@/components/builder/PreviewPickChip';
+import { useSpendPreviewPickOnSettle } from '@/lib/workspace/previewPick';
 import { EvermindStatusBadge } from '@/components/builder/EvermindStatusBadge';
 import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
 import { useLocalizedModalities } from '@/lib/useModalityCopy';
@@ -55,6 +57,9 @@ export function BrainComposer() {
     ctxProjectId,
   } = useBrainPanel();
   const tBrain = useTranslations('brain');
+  // The element picked in a preview rides the turn's context (`useWorkspaceBrainContext`);
+  // the turn that carried it spends it.
+  useSpendPreviewPickOnSettle(conv.sending);
   const localizedModalities = useLocalizedModalities();
   const personaLabels = useMemo(() => ({
     actingAs: tBrain('actingAs'),
@@ -127,6 +132,8 @@ export function BrainComposer() {
       focusToken={composerFocusToken}
       density={composerDensity}
       contextControls={<>
+        {/* What the next request is about, when an element was picked in the preview. */}
+        <PreviewPickChip />
         {/* "Acting as" and "To" are the shared brain-ui pickers — the SAME controls the
             editor's composer renders, so the two surfaces offer and word them alike.
             Compact: "Acting as" only when there is someone else to act as, or the

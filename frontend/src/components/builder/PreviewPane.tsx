@@ -9,7 +9,6 @@ import { navigatePreview } from '@/lib/visualEditor';
 import { previewDisplayAddress } from '@/lib/browserRuntime/previewAddress';
 import { DevicePreview } from './DevicePreview';
 import { PreviewStatus, type PreviewStatusState } from './PreviewStatus';
-import { PointAndEditPanel } from './PointAndEditPanel';
 import { PreviewChangeToast } from './PreviewChangeToast';
 import { usePreviewFreshness } from './usePreviewFreshness';
 import type { PointAndEdit } from './usePointAndEdit';
@@ -130,8 +129,6 @@ export function PreviewPane({ projectId, projectName, url, phase, step, runnable
         {!status && versions && <PreviewChangeToast versions={versions} />}
         {status && <PreviewStatus state={status} step={step} projectId={projectId} onRetry={onRestart} onOpenVersions={onOpenVersions} />}
       </div>
-
-      <PointAndEditPanel edit={edit} />
     </div>
   );
 }

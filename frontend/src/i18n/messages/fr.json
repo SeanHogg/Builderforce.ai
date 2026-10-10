@@ -1492,15 +1492,15 @@
     "previewMobile": "Mobile",
     "previewTitle": "Aperçu",
     "visualEdit": "Sélectionner pour modifier",
-    "visualEditHint": "Cliquez sur n'importe quel élément de l'aperçu pour changer son texte ou son style sans passer par l'agent.",
+    "visualEditHint": "Clique sur n'importe quel élément de l'aperçu, puis dis dans la zone de saisie ce qu'il faut changer.",
     "visualEditOn": "Sélection — cliquez sur un élément",
-    "visualSelected": "Sélectionné {tag} · {file}:{line}",
-    "visualText": "Texte",
-    "visualClasses": "Classes de style",
-    "visualApply": "Appliquer",
-    "visualCancel": "Annuler",
-    "visualApplied": "{file} mis à jour",
-    "visualNoPreview": "Lancez d'abord le projet — pointer et modifier nécessite un aperçu en direct.",
+    "previewPick": {
+      "label": "{tag}",
+      "labelWithText": "{tag} · « {text} »",
+      "where": "Choisi dans l'aperçu : {file}, ligne {line}",
+      "aria": "Élément choisi :",
+      "remove": "Retirer l'élément choisi"
+    },
     "releases": {
       "title": "Versions précédentes",
       "description": "Chaque build est conservé. Restaurez-en un instantanément, sans recompiler.",
@@ -1776,6 +1776,7 @@
     "saveFailed": "Échec de l’enregistrement (rôle de gestionnaire requis).",
     "loadError": "Impossible de charger cet outil",
     "allTools": "Tous les outils",
+    "unknownTool": "Cet outil n'existe pas ou a été déplacé.",
     "freeNoLogin": "Gratuit · sans connexion",
     "answerAll": "Répondez à toutes les questions pour un résultat complet.",
     "scaleHint": "Comment noter — choisissez le chiffre qui correspond à chaque affirmation :",
@@ -26171,6 +26172,31 @@
         }
       }
     },
+    "nextSteps": {
+      "app": {
+        "polish": {
+          "label": "Peaufiner le design",
+          "prompt": "Peaufine le design de l'app : des espacements cohérents, une échelle typographique claire et des couleurs qui s'accordent. Ne change pas ce qu'elle fait."
+        },
+        "mobile": {
+          "label": "L'adapter aux téléphones",
+          "prompt": "Fais en sorte que l'app fonctionne bien sur téléphone : rien ne déborde à 360 px de large, les menus s'empilent et chaque bouton est facile à toucher."
+        },
+        "section": {
+          "label": "Ajouter une section",
+          "prompt": "Ajoute à l'app une nouvelle section adaptée à son usage, et dis-moi ce que tu as ajouté et pourquoi."
+        },
+        "copy": {
+          "label": "Écrire de vrais textes",
+          "prompt": "Remplace le texte provisoire de l'app par de vrais textes adaptés à son usage."
+        },
+        "fix": {
+          "label": "Corriger les erreurs",
+          "prompt": "Vérifie l'aperçu et la console de l'app pour trouver les erreurs, puis corrige-les."
+        }
+      }
+    },
+    "nextStepsLabel": "Prochaines étapes suggérées",
     "boardMenu": {
       "phaseFocus": "Focus de phase",
       "phaseFocusOn": "Le focus de phase est activé — les cartes de la phase passent au premier plan",

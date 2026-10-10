@@ -1492,15 +1492,15 @@
     "previewMobile": "移动端",
     "previewTitle": "预览",
     "visualEdit": "选择以编辑",
-    "visualEditHint": "点击预览中的任意元素，即可直接修改其文本或样式，无需询问智能体。",
+    "visualEditHint": "点击预览中的任意元素，然后在输入框里说明要改什么。",
     "visualEditOn": "选择中 — 请点击一个元素",
-    "visualSelected": "已选择 {tag} · {file}:{line}",
-    "visualText": "文本",
-    "visualClasses": "样式类",
-    "visualApply": "应用",
-    "visualCancel": "取消",
-    "visualApplied": "已更新 {file}",
-    "visualNoPreview": "请先运行项目 — 点选编辑需要实时预览。",
+    "previewPick": {
+      "label": "{tag}",
+      "labelWithText": "{tag} · “{text}”",
+      "where": "在预览中选中：{file}，第 {line} 行",
+      "aria": "已选元素：",
+      "remove": "移除已选元素"
+    },
     "releases": {
       "title": "历史版本",
       "description": "每次构建都会保留。可立即回退到较早的版本，无需重新构建。",
@@ -1776,6 +1776,7 @@
     "saveFailed": "保存失败（需要管理员角色）。",
     "loadError": "无法加载此工具",
     "allTools": "所有工具",
+    "unknownTool": "此工具不存在或已被移动。",
     "freeNoLogin": "免费 · 无需登录",
     "answerAll": "回答所有问题以获得完整结果。",
     "scaleHint": "如何评分——为每条陈述选择最符合的数字：",
@@ -26171,6 +26172,31 @@
         }
       }
     },
+    "nextSteps": {
+      "app": {
+        "polish": {
+          "label": "打磨设计",
+          "prompt": "打磨应用的设计：统一间距、清晰的字号层级和协调的配色。保持现有功能不变。"
+        },
+        "mobile": {
+          "label": "适配手机",
+          "prompt": "让应用在手机上好用：360px 宽度下没有内容溢出，菜单可以折叠堆叠，每个按钮都容易点按。"
+        },
+        "section": {
+          "label": "添加一个版块",
+          "prompt": "为应用添加一个符合其用途的新版块，并告诉我你添加了什么以及原因。"
+        },
+        "copy": {
+          "label": "写真实文案",
+          "prompt": "把应用中的占位文字替换成符合其用途的真实文案。"
+        },
+        "fix": {
+          "label": "修复错误",
+          "prompt": "检查应用预览和控制台中的错误并修复它们。"
+        }
+      }
+    },
+    "nextStepsLabel": "建议的下一步",
     "boardMenu": {
       "phaseFocus": "阶段聚焦",
       "phaseFocusOn": "阶段聚焦已开启——与当前阶段相关的卡片会突出显示",
