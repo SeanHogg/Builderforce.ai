@@ -45,7 +45,7 @@
  */
 
 import { activityTarget, visitTarget, VISIT_QUESTION_SEPARATOR } from './runActivity';
-import { isUnscopedMutationTool, isCodeChangeTool, isLocalWorkspaceTool, isRepoPublishTool } from './localWorkspaceTools';
+import { isUnscopedMutationTool, isCodeChangeTool, isLocalWorkspaceTool, isRepoPublishTool, isRepoStateReadTool } from './localWorkspaceTools';
 import { isReadOnlyShellCommand } from './readOnlyShell';
 import { READ_DEFAULT_LINE_LIMIT, stableStringify } from '@builderforce/agent-tools';
 
@@ -362,6 +362,8 @@ export class ReadCoverage {
    *   branch / pull-request state returns, so it forgets the platform reads and keeps the
    *   file reads. See {@link isRepoPublishTool}: without this, a run that surveys the
    *   board, pushes the branches and surveys again is served its own pre-push answer.
+   *   The same sweep forgets host reads of REPOSITORY STATE (`review_ticket_branches`,
+   *   see {@link isRepoStateReadTool}) — a cached branch review must not outlive a push.
    * - The remaining local tools (`git_status`, `git_diff`, …) change nothing a read
    *   observes, so they forget nothing.
    * - Anything else is a platform or MCP call. It may have changed what a PLATFORM read
@@ -394,8 +396,12 @@ export class ReadCoverage {
     // A publish is a local tool that nonetheless moves platform-visible state, so it
     // falls THROUGH to the platform-forgetting sweep below instead of returning here.
     if (isLocalWorkspaceTool(tool) && !isRepoPublishTool(tool)) return;
+    // Platform reads AND host reads of repository state (`review_ticket_branches`): both
+    // answer from branch / PR / ticket state that a publish or a platform write moves.
+    // Named explicitly rather than left to "not a local tool", so a repo-state read can
+    // never survive a push just because a host later lists it as a workspace tool.
     for (const [key, read] of [...this.exact.entries()]) {
-      if (!isLocalWorkspaceTool(read.tool)) this.exact.delete(key);
+      if (!isLocalWorkspaceTool(read.tool) || isRepoStateReadTool(read.tool)) this.exact.delete(key);
     }
   }
 

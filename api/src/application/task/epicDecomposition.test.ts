@@ -15,7 +15,6 @@ import {
 // ---------------------------------------------------------------------------
 
 class InMemoryTaskRepo implements ITaskRepository {
-  async repointSegment(): Promise<boolean> { return false; }
   private seq = 1;
   readonly store = new Map<number, Task>();
 
