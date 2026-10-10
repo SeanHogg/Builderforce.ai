@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-10-10 — A hidden board's App no longer paints over the board on stage (frontend 2026.10.31)
+
+**Was:** after opening a board's App surface and switching to another session, the first board's live preview (address bar, "Select to edit", device toggles, the running app) stayed on screen over the new board, whatever surface it was on. There was no way to close it, because it belonged to a board that was no longer on stage.
+
+**Cause:** `CanvasStage` keeps every opened board mounted and hides the inactive ones with `visibility:hidden; pointer-events:none`. `components/builder/PaneLayer.tsx` gave its ACTIVE layer an explicit inline `visibility:visible; pointer-events:auto`. Both properties inherit, and an explicit value on a descendant overrides the ancestor's, so the hidden board's preview pane both painted and caught clicks.
+
+**Now:** an active `PaneLayer` sets neither property and inherits from its ancestors. Only an inactive layer sets `hidden`/`none`. This covers the canvas App surface, Studio and the workspace side panels. `PaneLayer.test.tsx` pins the contract.
+
 ## ✅ RESOLVED 2026-10-09 — The Studio/canvas prompt is a chat box again, not a form (frontend)
 
 **Was (Studio, session `local-148925cf`):** the docked prompt under the Brain transcript had seven controls on two rows, inside three nested borders:
