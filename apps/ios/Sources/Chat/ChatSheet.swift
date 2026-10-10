@@ -1,30 +1,24 @@
 import BuilderforceChatUI
-import BuilderforceKit
 import SwiftUI
 
+/// Chat with the Builderforce cloud Brain (signed in with the device flow). Node features
+/// stay on the gateway; only chat lives in the cloud.
 struct ChatSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: BuilderforceChatViewModel
     private let userAccent: Color?
-    private let agentName: String?
 
-    init(gateway: GatewayNodeSession, sessionKey: String, agentName: String? = nil, userAccent: Color? = nil) {
-        let transport = IOSGatewayChatTransport(gateway: gateway)
-        self._viewModel = State(
-            initialValue: BuilderforceChatViewModel(
-                sessionKey: sessionKey,
-                transport: transport))
+    init(transport: any BuilderforceChatTransport = BuilderforceCloudChatTransport(), userAccent: Color? = nil) {
+        self._viewModel = State(initialValue: BuilderforceChatViewModel(transport: transport))
         self.userAccent = userAccent
-        self.agentName = agentName
     }
 
     var body: some View {
         NavigationStack {
             BuilderforceChatView(
                 viewModel: self.viewModel,
-                showsSessionSwitcher: true,
                 userAccent: self.userAccent)
-                .navigationTitle(self.chatTitle)
+                .navigationTitle(ChatStrings.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -33,15 +27,9 @@ struct ChatSheet: View {
                         } label: {
                             Image(systemName: "xmark")
                         }
-                        .accessibilityLabel("Close")
+                        .accessibilityLabel(ChatStrings.close)
                     }
                 }
         }
-    }
-
-    private var chatTitle: String {
-        let trimmed = (self.agentName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return "Chat" }
-        return "Chat (\(trimmed))"
     }
 }

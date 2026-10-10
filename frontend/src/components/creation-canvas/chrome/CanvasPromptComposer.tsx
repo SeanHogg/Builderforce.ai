@@ -1,19 +1,16 @@
-import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { CanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
 import { canvasSurfaceDefinition, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import type { CreationTemplate } from '@/lib/templates/creationTemplates';
-import { Icon } from '@/components/ui/Icon';
 import { PreviewPickChip } from '@/components/builder/PreviewPickChip';
 import { CanvasComposer, type CanvasComposerInputProps } from '../CanvasComposer';
 import { CanvasActionsTrigger } from '../CanvasActionsTrigger';
 import { BrainActivityIndicator } from '../BrainActivityView';
 import type { BrainDockPreferences } from '../brainDockPreferences';
-import { CanvasNextSteps } from './CanvasNextSteps';
-import { CanvasPromptStarter } from './CanvasPromptStarter';
 import { CanvasScopeChip, type CanvasScopeMode } from './CanvasScopeChip';
 import { useCanvasSessionFacts } from './canvasSessionContext';
+import { useCanvasNextSteps, useCanvasStarters } from './useCanvasComposerOffers';
 
 export interface CanvasPromptComposerProps extends Pick<CanvasComposerInputProps,
   | 'onAttach' | 'onAddContext' | 'autoMode' | 'onAutoModeChange' | 'modelSelection' | 'modelOptions'
@@ -55,7 +52,7 @@ export interface CanvasPromptComposerProps extends Pick<CanvasComposerInputProps
   hasMemoryProject: boolean;
   onTwilioJourney: (selected: boolean) => void;
   applyTemplate: (template: CreationTemplate) => void;
-  /** The Brain conversation has turns, so starting points move into the `+` menu. */
+  /** The Brain conversation has turns, so next-step chips are offered above an empty box. */
   conversationStarted: boolean;
 }
 
@@ -73,12 +70,14 @@ export function CanvasPromptComposer({
 }: CanvasPromptComposerProps) {
   const t = useTranslations('creationCanvas');
   const { persistence } = useCanvasSessionFacts();
-  // Owned here, not by the starter: the `+` menu opens the same catalogue once the
-  // conversation has started and the starter's own trigger has stood down.
-  const [startersOpen, setStartersOpen] = useState(false);
+  const surfaceDef = canvasSurfaceDefinition(surface);
+  // The two affordances every prompt has — starting points from `+`, next-step chips
+  // above an empty box — fed with what the canvas knows: its phase and its surface.
+  const starters = useCanvasStarters({ onPrompt: setPrompt, onTwilioJourney, onPack: applyTemplate });
+  const suggestions = useCanvasNextSteps({ surface, conversationStarted, onPrompt: setPrompt });
   return <CanvasComposer
     placement={docked ? 'docked' : 'float'}
-    intents={canvasSurfaceDefinition(surface).composerIntents}
+    intents={surfaceDef.composerIntents}
     // The same gate the scratchpad's own form used: a viewer who cannot add cards is
     // offered Ask alone rather than a verb that would silently do nothing.
     editable={editable}
@@ -90,24 +89,6 @@ export function CanvasPromptComposer({
     // row rather than the board's chrome, and the band reserved for it is zero.
     {...(docked ? {} : { hostRef })}
     leading={<CanvasActionsTrigger open={actionsOpen} onToggle={onToggleActions} />}
-    starter={<>
-      <CanvasPromptStarter
-        open={startersOpen}
-        onOpenChange={setStartersOpen}
-        conversationStarted={conversationStarted}
-        onPrompt={setPrompt}
-        onTwilioJourney={onTwilioJourney}
-        onPack={applyTemplate}
-      />
-      <CanvasNextSteps
-        surface={surface}
-        prompt={prompt}
-        conversationStarted={conversationStarted}
-        running={running}
-        catalogOpen={startersOpen}
-        onPrompt={setPrompt}
-      />
-    </>}
     activity={<BrainActivityIndicator
       running={running}
       trace={trace}
@@ -138,21 +119,17 @@ export function CanvasPromptComposer({
       onStop,
       queuedCount,
       // What the next request is about: an element picked in the app's preview, and the
-      // board scope. Each draws nothing when there is nothing to say.
+      // board scope. Each draws nothing when there is nothing to say — and scope only on a
+      // surface that SHOWS the board, since a selection you cannot see (the App surface,
+      // where every turn selects the Brain card) is nothing to narrow to.
       contextControls: <>
         <PreviewPickChip />
-        <CanvasScopeChip scopeMode={scopeMode} onScopeModeChange={setScopeMode} autoLabel={scopeLabel} selectionCount={selectionCount} frameSelected={frameSelected} />
+        {surfaceDef.showsBoard && <CanvasScopeChip scopeMode={scopeMode} onScopeModeChange={setScopeMode} autoLabel={scopeLabel} selectionCount={selectionCount} frameSelected={frameSelected} />}
       </>,
       onAttach,
       onAddContext,
-      ...(conversationStarted ? {
-        addMenuItems: [{
-          id: 'starting-points',
-          icon: <Icon name="template" size={15} />,
-          label: t('startingPoints'),
-          onSelect: () => setStartersOpen(true),
-        }],
-      } : {}),
+      starters,
+      ...(suggestions ? { suggestions } : {}),
       autoMode,
       onAutoModeChange,
       modelSelection,

@@ -1,5 +1,7 @@
 package ai.builderforce.android.ui
 
+import ai.builderforce.android.GatewayPhase
+import ai.builderforce.android.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,11 +24,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun StatusPill(
-  gateway: GatewayState,
+  gateway: GatewayPhase,
   voiceEnabled: Boolean,
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
@@ -49,11 +52,11 @@ fun StatusPill(
         Surface(
           modifier = Modifier.size(9.dp),
           shape = CircleShape,
-          color = gateway.color,
+          color = gateway.dotColor(),
         ) {}
 
         Text(
-          text = gateway.title,
+          text = gateway.title(),
           style = MaterialTheme.typography.labelLarge,
         )
       }
@@ -83,7 +86,7 @@ fun StatusPill(
       } else {
         Icon(
           imageVector = if (voiceEnabled) Icons.Default.Mic else Icons.Default.MicOff,
-          contentDescription = if (voiceEnabled) "Voice enabled" else "Voice disabled",
+          contentDescription = stringResource(if (voiceEnabled) R.string.status_voice_enabled else R.string.status_voice_disabled),
           tint =
             if (voiceEnabled) {
               overlayIconColor()
@@ -106,9 +109,25 @@ data class StatusActivity(
   val tint: Color? = null,
 )
 
-enum class GatewayState(val title: String, val color: Color) {
-  Connected("Connected", Color(0xFF2ECC71)),
-  Connecting("Connecting…", Color(0xFFF1C40F)),
-  Error("Error", Color(0xFFE74C3C)),
-  Disconnected("Offline", Color(0xFF9E9E9E)),
+@Composable
+private fun GatewayPhase.title(): String =
+  stringResource(
+    when (this) {
+      GatewayPhase.Connected -> R.string.status_pill_connected
+      GatewayPhase.Connecting -> R.string.status_pill_connecting
+      GatewayPhase.Error -> R.string.status_pill_error
+      GatewayPhase.Offline -> R.string.status_pill_offline
+    },
+  )
+
+/** Status dot colour from the theme's roles (dynamic colour), never fixed literals. */
+@Composable
+private fun GatewayPhase.dotColor(): Color {
+  val scheme = MaterialTheme.colorScheme
+  return when (this) {
+    GatewayPhase.Connected -> scheme.primary
+    GatewayPhase.Connecting -> scheme.tertiary
+    GatewayPhase.Error -> scheme.error
+    GatewayPhase.Offline -> scheme.outline
+  }
 }

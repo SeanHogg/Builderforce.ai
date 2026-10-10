@@ -84,7 +84,7 @@ stay out of the immutable store.
 The macOS packaging flow expects a stable Info.plist template at:
 
 ```
-apps/macos/Sources/BuilderForce Agents/Resources/Info.plist
+apps/macos/Sources/Builderforce/Resources/Info.plist
 ```
 
 [`scripts/package-mac-app.sh`](https://github.com/SeanHogg/Builderforce.ai/blob/main/scripts/package-mac-app.sh) copies this template into the app bundle and patches dynamic fields

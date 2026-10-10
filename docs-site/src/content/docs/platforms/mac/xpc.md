@@ -40,7 +40,7 @@ Agent -> Gateway -> Node Service (WS)
 ### PeekabooBridge (UI automation)
 
 - UI automation uses a separate UNIX socket named `bridge.sock` and the PeekabooBridge JSON protocol.
-- Host preference order (client-side): Peekaboo.app → Claude.app → BuilderForce Agents.app → local execution.
+- Host preference order (client-side): Peekaboo.app → Claude.app → Builderforce.app → local execution.
 - Security: bridge hosts require an allowed TeamID; DEBUG-only same-UID escape hatch is guarded by `PEEKABOO_ALLOW_UNSIGNED_SOCKET_CLIENTS=1` (Peekaboo convention).
 - See: [PeekabooBridge usage](/platforms/mac/peekaboo) for details.
 

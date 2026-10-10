@@ -137,6 +137,7 @@ import { CanvasSessionProvider, type CanvasSessionFacts } from './chrome/canvasS
 import { useCanvasChromeMenus } from './chrome/useCanvasChromeMenus';
 import { useCanvasSessionActionHandlers } from './chrome/useCanvasSessionActionHandlers';
 import { CanvasPromptComposer } from './chrome/CanvasPromptComposer';
+import { useOnPreviewPick } from '@/lib/workspace/previewPick';
 import { effectiveCanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
 import { canvasLensDefinition, type CanvasLens } from '@/lib/canvasLens';
 import { CanvasLensBar } from './chrome/CanvasLensBar';
@@ -980,6 +981,8 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const brainDockDrawn = brainSurfaceOpen && brainPlacement === 'docked' && !surfaceDef.brainIsSurface;
   const effectivePromptPlacement = effectiveCanvasPromptPlacement({ hostOwnsSurface: !!hostSurfaces?.[surface], brainIsSurface: surfaceDef.brainIsSurface, preference: promptPlacement, brainDockDrawn, lensPlacement: lensDef.promptPlacement });
   const promptInBrainPanel = effectivePromptPlacement === 'docked';
+  // A pick in the App preview lands as a chip in the prompt; a closed prompt reopens.
+  useOnPreviewPick(() => { if (effectivePromptPlacement === 'closed') setPromptPlacement('float'); });
   /** THE ONE COMPOSER — see `CanvasPromptComposer`. One element, drawn in exactly one of
    *  its two homes below: the Brain panel's last row, or floating over the board. */
   const composer = !presentMode && effectivePromptPlacement !== 'closed' && <CanvasPromptComposer

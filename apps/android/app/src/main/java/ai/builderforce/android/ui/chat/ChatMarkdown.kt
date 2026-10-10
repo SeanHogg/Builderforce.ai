@@ -2,6 +2,7 @@ package ai.builderforce.android.ui.chat
 
 import android.graphics.BitmapFactory
 import android.util.Base64
+import ai.builderforce.android.R
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -200,13 +202,13 @@ private fun InlineBase64Image(base64: String, mimeType: String?) {
   if (image != null) {
     Image(
       bitmap = image!!,
-      contentDescription = mimeType ?: "image",
+      contentDescription = stringResource(R.string.chat_image),
       contentScale = ContentScale.Fit,
       modifier = Modifier.fillMaxWidth(),
     )
   } else if (failed) {
     Text(
-      text = "Image unavailable",
+      text = stringResource(R.string.chat_image_unavailable),
       modifier = Modifier.padding(vertical = 2.dp),
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,

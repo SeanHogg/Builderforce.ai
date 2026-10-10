@@ -1,0 +1,14 @@
+/* Suggestion chips (`ComposerSuggestions`): pills on the composer's own ground in both
+   themes. They wrap on a wide box and scroll sideways on a phone rather than stacking
+   three rows deep. */
+.row { display:flex; flex-wrap:wrap; gap:6px; min-width:0; }
+.chip {
+  flex:0 0 auto; min-height:32px; padding:0 12px; border:1px solid var(--prompt-panel-border, var(--border-subtle)); border-radius:999px;
+  background:transparent; color:var(--text-primary); font:600 var(--font-size-small)/1.2 var(--font-body, inherit); white-space:nowrap; cursor:pointer;
+}
+.chip:hover, .chip:focus-visible { border-color:var(--accent); color:var(--accent); outline:none; }
+@media (max-width: 640px) {
+  .row { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; }
+  .row::-webkit-scrollbar { display:none; }
+}
+@media (pointer: coarse) { .chip { min-height:44px; } }

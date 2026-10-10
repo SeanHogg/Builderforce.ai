@@ -54,9 +54,9 @@
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Builderforce can share your location when requested by the agent.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Builderforce needs the mic for Voice Wake tests and agent audio capture.</string>
+	<string>Builderforce needs the mic for Voice Wake, agent audio capture and dictating messages to the Brain.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Builderforce uses speech recognition to detect your Voice Wake trigger phrase.</string>
+    <string>Builderforce uses speech recognition to detect your Voice Wake trigger phrase and to turn your dictation into chat messages.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Builderforce needs Automation (AppleScript) permission to drive Terminal and other apps for agent actions.</string>
 

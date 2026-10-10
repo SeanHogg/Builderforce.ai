@@ -54,10 +54,10 @@ class ScreenCaptureRequester(private val activity: ComponentActivity) {
     withContext(Dispatchers.Main) {
       suspendCancellableCoroutine { cont ->
         AlertDialog.Builder(activity)
-          .setTitle("Screen recording required")
+          .setTitle(R.string.screen_capture_title)
           .setMessage(activity.getString(R.string.screen_capture_rationale))
-          .setPositiveButton("Continue") { _, _ -> cont.resume(true) }
-          .setNegativeButton("Not now") { _, _ -> cont.resume(false) }
+          .setPositiveButton(R.string.action_continue) { _, _ -> cont.resume(true) }
+          .setNegativeButton(R.string.action_not_now) { _, _ -> cont.resume(false) }
           .setOnCancelListener { cont.resume(false) }
           .show()
       }

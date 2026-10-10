@@ -99,7 +99,7 @@ repos:
       # swiftformat --lint (same as CI)
       - id: swiftformat
         name: swiftformat
-        entry: swiftformat --lint apps/macos/Sources --config .swiftformat
+        entry: swiftformat --lint ../apps/macos/Sources --config .swiftformat
         language: system
         pass_filenames: false
         types: [swift]

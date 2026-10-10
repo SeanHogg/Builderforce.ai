@@ -67,7 +67,7 @@ bun remove -g @seanhogg/builderforce-agents
 6. If you installed the macOS app:
 
 ```bash
-rm -rf /Applications/BuilderForce Agents.app
+rm -rf /Applications/Builderforce.app
 ```
 
 Notes:

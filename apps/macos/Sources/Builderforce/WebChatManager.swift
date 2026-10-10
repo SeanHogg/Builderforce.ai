@@ -50,7 +50,7 @@ final class WebChatManager {
             self.windowController = nil
             self.windowSessionKey = nil
         }
-        let controller = WebChatSwiftUIWindowController(sessionKey: sessionKey, presentation: .window)
+        let controller = WebChatSwiftUIWindowController(presentation: .window)
         controller.onVisibilityChanged = { [weak self] visible in
             self?.onPanelVisibilityChanged?(visible)
         }
@@ -75,9 +75,7 @@ final class WebChatManager {
             }
         }
 
-        let controller = WebChatSwiftUIWindowController(
-            sessionKey: sessionKey,
-            presentation: .panel(anchorProvider: anchorProvider))
+        let controller = WebChatSwiftUIWindowController(presentation: .panel(anchorProvider: anchorProvider))
         controller.onClosed = { [weak self] in
             self?.panelHidden()
         }

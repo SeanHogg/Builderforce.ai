@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import ai.builderforce.android.BuildConfig
 import ai.builderforce.android.R
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import ai.builderforce.android.LocationMode
 import ai.builderforce.android.MainViewModel
@@ -121,22 +122,18 @@ fun SettingsSheet(viewModel: MainViewModel) {
     val prompt = pendingTrust!!
     AlertDialog(
       onDismissRequest = { viewModel.declineGatewayTrustPrompt() },
-      title = { Text("Trust this gateway?") },
+      title = { Text(stringResource(R.string.gateway_trust_title)) },
       text = {
-        Text(
-          "First-time TLS connection.\n\n" +
-            "Verify this SHA-256 fingerprint out-of-band before trusting:\n" +
-            prompt.fingerprintSha256,
-        )
+        Text(stringResource(R.string.gateway_trust_body, prompt.fingerprintSha256))
       },
       confirmButton = {
         TextButton(onClick = { viewModel.acceptGatewayTrustPrompt() }) {
-          Text("Trust and connect")
+          Text(stringResource(R.string.gateway_trust_confirm))
         }
       },
       dismissButton = {
         TextButton(onClick = { viewModel.declineGatewayTrustPrompt() }) {
-          Text("Cancel")
+          Text(stringResource(R.string.action_cancel))
         }
       },
     )
@@ -281,9 +278,9 @@ fun SettingsSheet(viewModel: MainViewModel) {
     if (visibleGateways.isEmpty()) {
       discoveryStatusText
     } else if (isConnected) {
-      "Discovery active • ${visibleGateways.size} other gateway${if (visibleGateways.size == 1) "" else "s"} found"
+      pluralStringResource(R.plurals.discovery_found_other_gateways, visibleGateways.size, visibleGateways.size)
     } else {
-      "Discovery active • ${visibleGateways.size} gateway${if (visibleGateways.size == 1) "" else "s"} found"
+      pluralStringResource(R.plurals.discovery_found_gateways, visibleGateways.size, visibleGateways.size)
     }
 
   LazyColumn(
@@ -303,29 +300,29 @@ fun SettingsSheet(viewModel: MainViewModel) {
 
     item { HorizontalDivider() }
 
-    item { Text("Node", style = MaterialTheme.typography.titleSmall) }
+    item { Text(stringResource(R.string.settings_section_node), style = MaterialTheme.typography.titleSmall) }
     item {
       OutlinedTextField(
         value = displayName,
         onValueChange = viewModel::setDisplayName,
-        label = { Text("Name") },
+        label = { Text(stringResource(R.string.settings_node_name)) },
         modifier = Modifier.fillMaxWidth(),
       )
     }
-    item { Text("Instance ID: $instanceId", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    item { Text("Device: $deviceModel", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    item { Text("Version: $appVersion", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    item { Text(stringResource(R.string.settings_node_instance_id, instanceId), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    item { Text(stringResource(R.string.settings_node_device, deviceModel), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    item { Text(stringResource(R.string.settings_node_version, appVersion), color = MaterialTheme.colorScheme.onSurfaceVariant) }
 
     item { HorizontalDivider() }
 
     // Gateway
-    item { Text("Gateway", style = MaterialTheme.typography.titleSmall) }
-    item { ListItem(headlineContent = { Text("Status") }, supportingContent = { Text(statusText) }) }
+    item { Text(stringResource(R.string.settings_section_gateway), style = MaterialTheme.typography.titleSmall) }
+    item { ListItem(headlineContent = { Text(stringResource(R.string.settings_gateway_status)) }, supportingContent = { Text(statusText) }) }
     if (serverName != null) {
-      item { ListItem(headlineContent = { Text("Server") }, supportingContent = { Text(serverName!!) }) }
+      item { ListItem(headlineContent = { Text(stringResource(R.string.settings_gateway_server)) }, supportingContent = { Text(serverName!!) }) }
     }
     if (remoteAddress != null) {
-      item { ListItem(headlineContent = { Text("Address") }, supportingContent = { Text(remoteAddress!!) }) }
+      item { ListItem(headlineContent = { Text(stringResource(R.string.settings_gateway_address)) }, supportingContent = { Text(remoteAddress!!) }) }
     }
     item {
       // UI sanity: "Disconnect" only when we have an active remote.
@@ -336,7 +333,7 @@ fun SettingsSheet(viewModel: MainViewModel) {
             NodeForegroundService.stop(context)
           },
         ) {
-          Text("Disconnect")
+          Text(stringResource(R.string.action_disconnect))
         }
       }
     }
@@ -346,23 +343,27 @@ fun SettingsSheet(viewModel: MainViewModel) {
     if (!isConnected || visibleGateways.isNotEmpty()) {
       item {
         Text(
-          if (isConnected) "Other Gateways" else "Discovered Gateways",
+          if (isConnected) stringResource(R.string.settings_gateways_other) else stringResource(R.string.settings_gateways_discovered),
           style = MaterialTheme.typography.titleSmall,
         )
       }
       if (!isConnected && visibleGateways.isEmpty()) {
-        item { Text("No gateways found yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { Text(stringResource(R.string.settings_gateways_none), color = MaterialTheme.colorScheme.onSurfaceVariant) }
       } else {
         items(items = visibleGateways, key = { it.stableId }) { gateway ->
+          val ipLabel = stringResource(R.string.settings_gateway_ip, gateway.host, gateway.port)
+          val lanLabel = stringResource(R.string.settings_gateway_lan)
+          val tailnetLabel = stringResource(R.string.settings_gateway_tailnet)
+          val portsLabel = stringResource(R.string.settings_gateway_ports)
           val detailLines =
             buildList {
-              add("IP: ${gateway.host}:${gateway.port}")
-              gateway.lanHost?.let { add("LAN: $it") }
-              gateway.tailnetDns?.let { add("Tailnet: $it") }
+              add(ipLabel)
+              gateway.lanHost?.let { add(lanLabel.format(it)) }
+              gateway.tailnetDns?.let { add(tailnetLabel.format(it)) }
               if (gateway.gatewayPort != null || gateway.canvasPort != null) {
                 val gw = (gateway.gatewayPort ?: gateway.port).toString()
                 val canvas = gateway.canvasPort?.toString() ?: "—"
-                add("Ports: gw $gw · canvas $canvas")
+                add(portsLabel.format(gw, canvas))
               }
             }
           ListItem(
@@ -381,7 +382,7 @@ fun SettingsSheet(viewModel: MainViewModel) {
                   viewModel.connect(gateway)
                 },
               ) {
-                Text("Connect")
+                Text(stringResource(R.string.action_connect))
               }
             },
           )
@@ -402,12 +403,12 @@ fun SettingsSheet(viewModel: MainViewModel) {
 
     item {
       ListItem(
-        headlineContent = { Text("Advanced") },
-        supportingContent = { Text("Manual gateway connection") },
+        headlineContent = { Text(stringResource(R.string.settings_advanced)) },
+        supportingContent = { Text(stringResource(R.string.settings_advanced_summary)) },
         trailingContent = {
           Icon(
             imageVector = if (advancedExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-            contentDescription = if (advancedExpanded) "Collapse" else "Expand",
+            contentDescription = if (advancedExpanded) stringResource(R.string.action_collapse) else stringResource(R.string.action_expand),
           )
         },
         modifier =
@@ -420,36 +421,36 @@ fun SettingsSheet(viewModel: MainViewModel) {
       AnimatedVisibility(visible = advancedExpanded) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
           ListItem(
-            headlineContent = { Text("Use Manual Gateway") },
-            supportingContent = { Text("Use this when discovery is blocked.") },
+            headlineContent = { Text(stringResource(R.string.settings_manual_enable)) },
+            supportingContent = { Text(stringResource(R.string.settings_manual_enable_summary)) },
             trailingContent = { Switch(checked = manualEnabled, onCheckedChange = viewModel::setManualEnabled) },
           )
 
           OutlinedTextField(
             value = manualHost,
             onValueChange = viewModel::setManualHost,
-            label = { Text("Host") },
+            label = { Text(stringResource(R.string.settings_manual_host)) },
             modifier = Modifier.fillMaxWidth(),
             enabled = manualEnabled,
           )
           OutlinedTextField(
             value = manualPort.toString(),
             onValueChange = { v -> viewModel.setManualPort(v.toIntOrNull() ?: 0) },
-            label = { Text("Port") },
+            label = { Text(stringResource(R.string.settings_manual_port)) },
             modifier = Modifier.fillMaxWidth(),
             enabled = manualEnabled,
           )
           OutlinedTextField(
             value = gatewayToken,
             onValueChange = viewModel::setGatewayToken,
-            label = { Text("Gateway Token") },
+            label = { Text(stringResource(R.string.settings_manual_token)) },
             modifier = Modifier.fillMaxWidth(),
             enabled = manualEnabled,
             singleLine = true,
           )
           ListItem(
-            headlineContent = { Text("Require TLS") },
-            supportingContent = { Text("Pin the gateway certificate on first connect.") },
+            headlineContent = { Text(stringResource(R.string.settings_manual_tls)) },
+            supportingContent = { Text(stringResource(R.string.settings_manual_tls_summary)) },
             trailingContent = { Switch(checked = manualTls, onCheckedChange = viewModel::setManualTls, enabled = manualEnabled) },
             modifier = Modifier.alpha(if (manualEnabled) 1f else 0.5f),
           )
@@ -463,7 +464,7 @@ fun SettingsSheet(viewModel: MainViewModel) {
             },
             enabled = manualEnabled && hostOk && portOk,
           ) {
-            Text("Connect (Manual)")
+            Text(stringResource(R.string.settings_manual_connect))
           }
         }
       }
@@ -472,11 +473,11 @@ fun SettingsSheet(viewModel: MainViewModel) {
     item { HorizontalDivider() }
 
     // Voice
-    item { Text("Voice", style = MaterialTheme.typography.titleSmall) }
+    item { Text(stringResource(R.string.settings_section_voice), style = MaterialTheme.typography.titleSmall) }
     item {
       val enabled = voiceWakeMode != VoiceWakeMode.Off
       ListItem(
-        headlineContent = { Text("Voice Wake") },
+        headlineContent = { Text(stringResource(R.string.settings_voice_wake)) },
         supportingContent = { Text(voiceWakeStatusText) },
         trailingContent = {
           Switch(
@@ -500,7 +501,7 @@ fun SettingsSheet(viewModel: MainViewModel) {
       AnimatedVisibility(visible = voiceWakeMode != VoiceWakeMode.Off) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
           ListItem(
-            headlineContent = { Text("Foreground Only") },
+            headlineContent = { Text(stringResource(R.string.settings_voice_foreground)) },
             supportingContent = { Text(stringResource(R.string.settings_voice_foreground_only)) },
             trailingContent = {
               RadioButton(
@@ -516,8 +517,8 @@ fun SettingsSheet(viewModel: MainViewModel) {
             },
           )
           ListItem(
-            headlineContent = { Text("Always") },
-            supportingContent = { Text("Keeps listening in the background (shows a persistent notification).") },
+            headlineContent = { Text(stringResource(R.string.settings_always)) },
+            supportingContent = { Text(stringResource(R.string.settings_voice_always_summary)) },
             trailingContent = {
               RadioButton(
                 selected = voiceWakeMode == VoiceWakeMode.Always,
@@ -538,7 +539,7 @@ fun SettingsSheet(viewModel: MainViewModel) {
       OutlinedTextField(
         value = wakeWordsText,
         onValueChange = setWakeWordsText,
-        label = { Text("Wake Words (comma-separated)") },
+        label = { Text(stringResource(R.string.settings_wake_words)) },
         modifier =
           Modifier.fillMaxWidth().onFocusChanged { focusState ->
             if (focusState.isFocused) {
@@ -559,13 +560,13 @@ fun SettingsSheet(viewModel: MainViewModel) {
           ),
       )
     }
-    item { Button(onClick = viewModel::resetWakeWordsDefaults) { Text("Reset defaults") } }
+    item { Button(onClick = viewModel::resetWakeWordsDefaults) { Text(stringResource(R.string.settings_wake_words_reset)) } }
     item {
       Text(
         if (isConnected) {
-          "Any node can edit wake words. Changes sync via the gateway."
+          stringResource(R.string.settings_wake_words_sync_connected)
         } else {
-          "Connect to a gateway to sync wake words globally."
+          stringResource(R.string.settings_wake_words_sync_offline)
         },
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
@@ -574,17 +575,17 @@ fun SettingsSheet(viewModel: MainViewModel) {
     item { HorizontalDivider() }
 
     // Camera
-    item { Text("Camera", style = MaterialTheme.typography.titleSmall) }
+    item { Text(stringResource(R.string.settings_section_camera), style = MaterialTheme.typography.titleSmall) }
     item {
       ListItem(
-        headlineContent = { Text("Allow Camera") },
-        supportingContent = { Text("Allows the gateway to request photos or short video clips (foreground only).") },
+        headlineContent = { Text(stringResource(R.string.settings_camera_allow)) },
+        supportingContent = { Text(stringResource(R.string.settings_camera_allow_summary)) },
         trailingContent = { Switch(checked = cameraEnabled, onCheckedChange = ::setCameraEnabledChecked) },
       )
     }
     item {
       Text(
-        "Tip: grant Microphone permission for video clips with audio.",
+        stringResource(R.string.settings_camera_tip),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     }
@@ -592,22 +593,22 @@ fun SettingsSheet(viewModel: MainViewModel) {
     item { HorizontalDivider() }
 
     // Messaging
-    item { Text("Messaging", style = MaterialTheme.typography.titleSmall) }
+    item { Text(stringResource(R.string.settings_section_messaging), style = MaterialTheme.typography.titleSmall) }
     item {
       val buttonLabel =
         when {
-          !smsPermissionAvailable -> "Unavailable"
-          smsPermissionGranted -> "Manage"
-          else -> "Grant"
+          !smsPermissionAvailable -> stringResource(R.string.settings_sms_unavailable)
+          smsPermissionGranted -> stringResource(R.string.settings_sms_manage)
+          else -> stringResource(R.string.settings_sms_grant)
         }
       ListItem(
-        headlineContent = { Text("SMS Permission") },
+        headlineContent = { Text(stringResource(R.string.settings_sms_permission)) },
         supportingContent = {
           Text(
             if (smsPermissionAvailable) {
-              "Allow the gateway to send SMS from this device."
+              stringResource(R.string.settings_sms_summary)
             } else {
-              "SMS requires a device with telephony hardware."
+              stringResource(R.string.settings_sms_no_telephony)
             },
           )
         },
@@ -632,12 +633,12 @@ fun SettingsSheet(viewModel: MainViewModel) {
     item { HorizontalDivider() }
 
     // Location
-    item { Text("Location", style = MaterialTheme.typography.titleSmall) }
+    item { Text(stringResource(R.string.settings_section_location), style = MaterialTheme.typography.titleSmall) }
     item {
       Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
         ListItem(
-          headlineContent = { Text("Off") },
-          supportingContent = { Text("Disable location sharing.") },
+          headlineContent = { Text(stringResource(R.string.settings_location_off)) },
+          supportingContent = { Text(stringResource(R.string.settings_location_off_summary)) },
           trailingContent = {
             RadioButton(
               selected = locationMode == LocationMode.Off,
@@ -646,7 +647,7 @@ fun SettingsSheet(viewModel: MainViewModel) {
           },
         )
         ListItem(
-          headlineContent = { Text("While Using") },
+          headlineContent = { Text(stringResource(R.string.settings_location_while_using_title)) },
           supportingContent = { Text(stringResource(R.string.settings_location_while_using)) },
           trailingContent = {
             RadioButton(
@@ -656,8 +657,8 @@ fun SettingsSheet(viewModel: MainViewModel) {
           },
         )
         ListItem(
-          headlineContent = { Text("Always") },
-          supportingContent = { Text("Allow background location (requires system permission).") },
+          headlineContent = { Text(stringResource(R.string.settings_always)) },
+          supportingContent = { Text(stringResource(R.string.settings_location_always_summary)) },
           trailingContent = {
             RadioButton(
               selected = locationMode == LocationMode.Always,
@@ -669,8 +670,8 @@ fun SettingsSheet(viewModel: MainViewModel) {
     }
     item {
       ListItem(
-        headlineContent = { Text("Precise Location") },
-        supportingContent = { Text("Use precise GPS when available.") },
+        headlineContent = { Text(stringResource(R.string.settings_location_precise)) },
+        supportingContent = { Text(stringResource(R.string.settings_location_precise_summary)) },
         trailingContent = {
           Switch(
             checked = locationPreciseEnabled,
@@ -682,7 +683,7 @@ fun SettingsSheet(viewModel: MainViewModel) {
     }
     item {
       Text(
-        "Always may require Android Settings to allow background location.",
+        stringResource(R.string.settings_location_always_note),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     }
@@ -690,10 +691,10 @@ fun SettingsSheet(viewModel: MainViewModel) {
     item { HorizontalDivider() }
 
     // Screen
-    item { Text("Screen", style = MaterialTheme.typography.titleSmall) }
+    item { Text(stringResource(R.string.settings_section_screen), style = MaterialTheme.typography.titleSmall) }
     item {
       ListItem(
-        headlineContent = { Text("Prevent Sleep") },
+        headlineContent = { Text(stringResource(R.string.settings_prevent_sleep_title)) },
         supportingContent = { Text(stringResource(R.string.settings_prevent_sleep)) },
         trailingContent = { Switch(checked = preventSleep, onCheckedChange = viewModel::setPreventSleep) },
       )
@@ -702,11 +703,11 @@ fun SettingsSheet(viewModel: MainViewModel) {
     item { HorizontalDivider() }
 
     // Debug
-    item { Text("Debug", style = MaterialTheme.typography.titleSmall) }
+    item { Text(stringResource(R.string.settings_section_debug), style = MaterialTheme.typography.titleSmall) }
     item {
       ListItem(
-        headlineContent = { Text("Debug Canvas Status") },
-        supportingContent = { Text("Show status text in the canvas when debug is enabled.") },
+        headlineContent = { Text(stringResource(R.string.settings_debug_canvas_status)) },
+        supportingContent = { Text(stringResource(R.string.settings_debug_canvas_status_summary)) },
         trailingContent = {
           Switch(
             checked = canvasDebugStatusEnabled,

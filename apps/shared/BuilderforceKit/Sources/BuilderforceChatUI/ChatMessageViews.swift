@@ -459,7 +459,7 @@ struct ChatTypingIndicatorBubble: View {
         HStack(spacing: 10) {
             TypingDots()
             if self.style == .standard {
-                Text("Builderforce is thinking…")
+                Text(ChatStrings.thinking)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -511,7 +511,7 @@ struct ChatPendingToolsBubble: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Running tools…", systemImage: "hammer")
+            Label(ChatStrings.working, systemImage: "hammer")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

@@ -8,6 +8,9 @@ export const DEVICE_CLIENTS = {
   vscode: 'VS Code',
   synapse: 'Synapse',
   spawn: 'Spawn',
+  android: 'Builderforce for Android',
+  ios: 'Builderforce for iPhone',
+  macos: 'Builderforce for Mac',
 } as const;
 
 export type DeviceClient = keyof typeof DEVICE_CLIENTS;

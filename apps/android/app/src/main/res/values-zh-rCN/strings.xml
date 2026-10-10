@@ -1,0 +1,257 @@
+<resources>
+    <string name="app_name">Builderforce</string>
+
+    <!-- Common actions -->
+    <string name="action_cancel">取消</string>
+    <string name="action_continue">继续</string>
+    <string name="action_not_now">以后再说</string>
+    <string name="action_open_settings">打开设置</string>
+    <string name="action_connect">连接</string>
+    <string name="action_disconnect">断开连接</string>
+    <string name="action_expand">展开</string>
+    <string name="action_collapse">收起</string>
+
+    <!-- Node foreground service and system prompts -->
+    <string name="notification_title">Builderforce</string>
+    <string name="notification_title_connected">Builderforce · 已连接</string>
+    <string name="notification_starting">正在启动…</string>
+    <string name="notification_channel_name">连接</string>
+    <string name="notification_channel_description">Builderforce 节点连接状态</string>
+    <string name="notification_status_with_server">%1$s · %2$s</string>
+    <string name="notification_voice_wake_listening">" · 语音唤醒：正在聆听"</string>
+    <string name="notification_voice_wake_paused">" · 语音唤醒：已暂停"</string>
+    <string name="permission_rationale">Builderforce 需要%1$s权限才能继续。</string>
+    <string name="permission_required_title">需要权限</string>
+    <string name="permission_settings_title">请在设置中开启权限</string>
+    <string name="permission_settings_message">请在 Android 设置中开启%1$s权限以继续。</string>
+    <string name="permission_label_camera">相机</string>
+    <string name="permission_label_microphone">麦克风</string>
+    <string name="permission_label_sms">短信</string>
+    <string name="screen_capture_title">需要录制屏幕</string>
+    <string name="screen_capture_rationale">Builderforce 需要录制屏幕才能执行此命令。</string>
+
+    <!-- App update -->
+    <string name="update_notification_title">Builderforce 更新</string>
+    <string name="update_channel_name">应用更新</string>
+    <string name="update_connecting">正在连接…</string>
+    <string name="update_progress">%1$.1f / %2$.1f MB（%3$d%%）</string>
+    <string name="update_downloaded_mb">已下载 %1$.1f MB</string>
+    <string name="update_installing">正在安装更新…</string>
+    <string name="update_failed_title">更新失败</string>
+    <string name="update_failed_http">下载失败（HTTP %1$d）。</string>
+    <string name="update_failed_checksum">下载的文件与其 SHA-256 校验和不匹配。</string>
+    <string name="update_failed_invalid_apk">下载的文件不是有效的 APK。</string>
+    <string name="update_failed_unknown">未知错误</string>
+
+    <!-- Gateway status -->
+    <string name="gateway_status_offline">离线</string>
+    <string name="gateway_status_connected">已连接</string>
+    <string name="gateway_status_connected_node_offline">已连接（节点离线）</string>
+    <string name="gateway_status_connected_operator_offline">已连接（操作端离线）</string>
+    <string name="gateway_status_connecting">正在连接…</string>
+    <string name="gateway_status_reconnecting">正在重新连接…</string>
+    <string name="gateway_status_error">网关错误：%1$s</string>
+    <string name="gateway_status_closed">网关已关闭连接：%1$s</string>
+    <string name="gateway_status_verify_tls">请验证网关的 TLS 指纹…</string>
+    <string name="gateway_status_tls_unreadable">失败：无法读取 TLS 指纹</string>
+    <string name="gateway_status_invalid_manual">失败：手动主机或端口无效</string>
+    <string name="gateway_trust_title">信任此网关？</string>
+    <string name="gateway_trust_body">首次 TLS 连接。\n\n在信任之前，请通过其他渠道核对此 SHA-256 指纹：\n%1$s</string>
+    <string name="gateway_trust_confirm">信任并连接</string>
+
+    <!-- Gateway discovery -->
+    <string name="discovery_searching">正在搜索…</string>
+    <string name="discovery_searching_gateways">正在搜索网关…</string>
+    <string name="discovery_wide_area">广域：%1$s</string>
+    <string name="discovery_local_and_wide">本地：%1$d • %2$s</string>
+    <plurals name="discovery_found_gateways">
+        <item quantity="other">发现功能已开启 • 找到 %1$d 个网关</item>
+    </plurals>
+    <plurals name="discovery_found_other_gateways">
+        <item quantity="other">发现功能已开启 • 找到 %1$d 个其他网关</item>
+    </plurals>
+
+    <!-- Voice Wake and Talk Mode -->
+    <string name="voice_status_off">关闭</string>
+    <string name="voice_status_paused">已暂停</string>
+    <string name="voice_status_listening">正在聆听</string>
+    <string name="voice_status_triggered">已触发</string>
+    <string name="voice_status_mic_permission">需要麦克风权限</string>
+    <string name="voice_status_recognizer_unavailable">语音识别不可用</string>
+    <string name="voice_status_start_failed">启动失败：%1$s</string>
+    <string name="voice_error_audio">音频错误</string>
+    <string name="voice_error_client">客户端错误</string>
+    <string name="voice_error_network">网络错误</string>
+    <string name="voice_error_network_timeout">网络超时</string>
+    <string name="voice_error_busy">语音识别繁忙</string>
+    <string name="voice_error_server">服务器错误</string>
+    <string name="voice_error_other">语音错误（%1$d）</string>
+    <string name="talk_status_thinking">正在思考…</string>
+    <string name="talk_status_gateway_offline">网关未连接</string>
+    <string name="talk_status_no_reply">没有回复</string>
+    <string name="talk_status_failed">对话失败：%1$s</string>
+    <string name="talk_status_speaking">正在朗读…</string>
+    <string name="talk_status_speaking_system">正在朗读（系统语音）…</string>
+    <string name="talk_status_speak_failed">朗读失败：%1$s</string>
+    <string name="talk_phase_speaking">正在朗读</string>
+    <string name="talk_phase_listening">正在聆听</string>
+    <string name="talk_phase_thinking">正在思考</string>
+
+    <!-- Camera HUD -->
+    <string name="camera_hud_taking_photo">正在拍照…</string>
+    <string name="camera_hud_photo_captured">照片已拍摄</string>
+    <string name="camera_hud_recording">正在录制…</string>
+    <string name="camera_hud_clip_captured">视频片段已录制</string>
+
+    <!-- Overlay and status pill -->
+    <string name="overlay_chat">聊天</string>
+    <string name="overlay_talk_mode">对话模式</string>
+    <string name="overlay_settings">设置</string>
+    <string name="status_pill_connected">已连接</string>
+    <string name="status_pill_connecting">正在连接…</string>
+    <string name="status_pill_error">错误</string>
+    <string name="status_pill_offline">离线</string>
+    <string name="status_voice_enabled">语音已开启</string>
+    <string name="status_voice_disabled">语音已关闭</string>
+    <string name="activity_foreground_required">需要在前台运行</string>
+    <string name="activity_repairing">正在重新配对…</string>
+    <string name="activity_repairing_description">正在重新配对</string>
+    <string name="activity_approval_pending">等待批准</string>
+    <string name="activity_recording_screen">正在录制屏幕…</string>
+    <string name="activity_recording_screen_description">正在录制屏幕</string>
+    <string name="activity_taking_photo_description">正在拍照</string>
+    <string name="activity_recording_description">正在录制</string>
+    <string name="activity_capture_finished_description">拍摄完成</string>
+    <string name="activity_capture_failed_description">拍摄失败</string>
+    <string name="activity_mic_permission">麦克风权限</string>
+    <string name="activity_mic_permission_description">需要麦克风权限</string>
+    <string name="activity_voice_wake_paused">语音唤醒已暂停</string>
+
+    <!-- Settings -->
+    <string name="settings_section_node">节点</string>
+    <string name="settings_node_name">名称</string>
+    <string name="settings_node_instance_id">实例 ID：%1$s</string>
+    <string name="settings_node_device">设备：%1$s</string>
+    <string name="settings_node_version">版本：%1$s</string>
+    <string name="settings_section_gateway">网关</string>
+    <string name="settings_gateway_status">状态</string>
+    <string name="settings_gateway_server">服务器</string>
+    <string name="settings_gateway_address">地址</string>
+    <string name="settings_gateways_other">其他网关</string>
+    <string name="settings_gateways_discovered">已发现的网关</string>
+    <string name="settings_gateways_none">尚未找到网关。</string>
+    <string name="settings_gateway_ip">IP：%1$s:%2$d</string>
+    <string name="settings_gateway_lan">局域网：%1$s</string>
+    <string name="settings_gateway_tailnet">Tailnet：%1$s</string>
+    <string name="settings_gateway_ports">端口：网关 %1$s · 画布 %2$s</string>
+    <string name="settings_advanced">高级</string>
+    <string name="settings_advanced_summary">手动连接网关</string>
+    <string name="settings_manual_enable">使用手动网关</string>
+    <string name="settings_manual_enable_summary">当自动发现被阻止时使用此项。</string>
+    <string name="settings_manual_host">主机</string>
+    <string name="settings_manual_port">端口</string>
+    <string name="settings_manual_token">网关令牌</string>
+    <string name="settings_manual_tls">要求 TLS</string>
+    <string name="settings_manual_tls_summary">首次连接时固定网关证书。</string>
+    <string name="settings_manual_connect">连接（手动）</string>
+    <string name="settings_section_voice">语音</string>
+    <string name="settings_voice_wake">语音唤醒</string>
+    <string name="settings_voice_foreground">仅限前台</string>
+    <string name="settings_voice_foreground_only">仅在 Builderforce 打开时聆听。</string>
+    <string name="settings_always">始终</string>
+    <string name="settings_voice_always_summary">在后台持续聆听（会显示常驻通知）。</string>
+    <string name="settings_wake_words">唤醒词（用逗号分隔）</string>
+    <string name="settings_wake_words_reset">恢复默认</string>
+    <string name="settings_wake_words_sync_connected">任何节点都可以编辑唤醒词，更改会通过网关同步。</string>
+    <string name="settings_wake_words_sync_offline">连接到网关即可在所有设备间同步唤醒词。</string>
+    <string name="settings_section_camera">相机</string>
+    <string name="settings_camera_allow">允许使用相机</string>
+    <string name="settings_camera_allow_summary">允许网关请求照片或短视频片段（仅限前台）。</string>
+    <string name="settings_camera_tip">提示：授予麦克风权限即可录制带声音的视频片段。</string>
+    <string name="settings_section_messaging">短信</string>
+    <string name="settings_sms_permission">短信权限</string>
+    <string name="settings_sms_summary">允许网关从此设备发送短信。</string>
+    <string name="settings_sms_no_telephony">发送短信需要具备电话功能的设备。</string>
+    <string name="settings_sms_unavailable">不可用</string>
+    <string name="settings_sms_manage">管理</string>
+    <string name="settings_sms_grant">授予</string>
+    <string name="settings_section_location">位置</string>
+    <string name="settings_location_off">关闭</string>
+    <string name="settings_location_off_summary">停用位置共享。</string>
+    <string name="settings_location_while_using_title">使用期间</string>
+    <string name="settings_location_while_using">仅在 Builderforce 打开时。</string>
+    <string name="settings_location_always_summary">允许在后台获取位置（需要系统权限）。</string>
+    <string name="settings_location_precise">精确位置</string>
+    <string name="settings_location_precise_summary">在可用时使用精确 GPS。</string>
+    <string name="settings_location_always_note">选择“始终”可能需要在 Android 设置中允许后台位置。</string>
+    <string name="settings_section_screen">屏幕</string>
+    <string name="settings_prevent_sleep_title">防止休眠</string>
+    <string name="settings_prevent_sleep">在 Builderforce 打开时保持屏幕常亮。</string>
+    <string name="settings_section_debug">调试</string>
+    <string name="settings_debug_canvas_status">画布调试状态</string>
+    <string name="settings_debug_canvas_status_summary">启用调试时在画布中显示状态文本。</string>
+    <string name="settings_account_title">Builderforce 账号</string>
+    <string name="settings_account_signed_in">已登录</string>
+    <string name="settings_account_signed_out">未登录。打开聊天即可登录。</string>
+    <string name="settings_account_workspace">工作区</string>
+    <string name="settings_account_workspace_none">选择工作区</string>
+    <string name="settings_account_sign_out">退出登录</string>
+    <string name="settings_account_server">服务器（开发者）</string>
+    <string name="settings_account_server_note">留空则使用 builderforce.ai。</string>
+    <string name="settings_account_server_apply">应用</string>
+
+    <!-- Sign-in -->
+    <string name="signin_title">登录 Builderforce</string>
+    <string name="signin_body">与 Brain 和你的智能体聊天——与网页版相同的对话。</string>
+    <string name="signin_button">登录</string>
+    <string name="signin_starting">正在获取登录码…</string>
+    <string name="signin_enter_code">在浏览器中输入此代码以批准登录：</string>
+    <string name="signin_open_browser">打开浏览器</string>
+    <string name="signin_waiting">正在等待批准…</string>
+    <string name="signin_cancel">取消</string>
+    <string name="signin_failed_denied">登录已被拒绝。</string>
+    <string name="signin_failed_expired">登录码已过期，请重试。</string>
+    <string name="signin_failed_unreachable">无法连接到 Builderforce。请检查网络连接后重试。</string>
+    <string name="signin_expired">登录已过期，请重新登录。</string>
+    <string name="signin_no_browser">没有可用于打开登录页面的浏览器。</string>
+
+    <!-- Chat -->
+    <string name="chat_placeholder">给 Brain 发消息…</string>
+    <string name="chat_attach">添加图片</string>
+    <string name="chat_send">发送</string>
+    <string name="chat_stop">停止</string>
+    <string name="chat_dictate">听写</string>
+    <string name="chat_stop_dictation">停止听写</string>
+    <string name="chat_to">发给 %1$s</string>
+    <string name="chat_brain">Brain</string>
+    <string name="chat_you">你</string>
+    <string name="chat_remove_attachment">移除 %1$s</string>
+    <string name="chat_new">新聊天</string>
+    <string name="chat_untitled">未命名聊天</string>
+    <string name="chat_pick">选择聊天</string>
+    <string name="chat_thinking">正在思考…</string>
+    <string name="chat_using_tool">正在使用 %1$s…</string>
+    <string name="chat_waiting_agent">正在等待 %1$s…</string>
+    <string name="chat_queued">已排队——将在当前回复完成后发送</string>
+    <string name="chat_unqueue">不发送</string>
+    <string name="chat_tool_ask">Brain 想要：%1$s</string>
+    <string name="chat_tool_ask_body">这会更改你工作区中的内容。</string>
+    <string name="chat_tool_approve">批准</string>
+    <string name="chat_tool_deny">拒绝</string>
+    <string name="chat_empty">向 Brain 询问有关你工作区的任何问题。</string>
+    <string name="chat_starter_1">我今天应该做什么？</string>
+    <string name="chat_starter_2">总结我未关闭的工单</string>
+    <string name="chat_starter_3">规划我这一周</string>
+    <string name="chat_mic_denied">听写需要麦克风权限。</string>
+    <string name="chat_image_unreadable">无法读取该图片。</string>
+    <string name="chat_image">图片</string>
+    <string name="chat_image_unavailable">图片不可用</string>
+
+    <!-- Cloud errors -->
+    <string name="cloud_error_signed_out">你尚未登录 Builderforce。</string>
+    <string name="cloud_error_key_rejected">Builderforce 不再接受此登录，请重新登录。</string>
+    <string name="cloud_error_unreachable">无法连接到 Builderforce：%1$s</string>
+    <string name="cloud_error_server">Builderforce 返回：%1$s</string>
+    <string name="cloud_error_empty_answer">Brain 返回了空回答。</string>
+    <string name="cloud_error_unexpected">出了点问题：%1$s</string>
+</resources>

@@ -1147,6 +1147,77 @@ describe('runCreationCanvasAi', () => {
       }
     });
 
+    /**
+     * Measured 2026-10-10 (session `local-6d36899d`, ui 2026.10.31, "build a marketing site
+     * for phones"): a free model wrote `index.html`, stalled, and the turn reported "I added
+     * the requested content to the canvas" above a "Hello World!" preview. Three faults: the
+     * stall count never reset between non-adjacent stalls, an auto-routed turn never asked
+     * the gateway for another model, and an abandoned turn was reported as delivered.
+     */
+    describe('part-way through a build', () => {
+      const writeFile = { name: 'canvas_write_build_file', description: 'Write', parameters: { type: 'object' }, mutates: true, run: vi.fn(() => ({ ok: true, applied: true, path: 'index.html' })) };
+      const wroteIndex = { text: '', resolvedModel: 'free/model', finishReason: 'tool_calls', toolCalls: [{ id: 'w1', name: 'canvas_write_build_file', args: '{"objectId":"b1","path":"index.html","content":"<!doctype html>"}' }] };
+      const settle = async (turn: Promise<string>) => {
+        for (let attempt = 0; attempt < 8; attempt += 1) await vi.advanceTimersByTimeAsync(90_000);
+        return turn;
+      };
+
+      it('re-routes an auto turn away from a model that stalled with nothing proven to switch to', async () => {
+        vi.useFakeTimers();
+        try {
+          mocks.streamChatCompletion
+            .mockResolvedValueOnce(wroteIndex)
+            .mockImplementationOnce(silentUntilAborted)
+            .mockImplementationOnce(silentUntilAborted)
+            .mockResolvedValueOnce({ text: 'I built the marketing site.', resolvedModel: 'other/model', finishReason: 'stop', toolCalls: [] });
+
+          const answer = await settle(runTurn({ prompt: 'build a marketing site for phones', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [writeFile] }));
+
+          expect(answer).toBe('I built the marketing site.');
+          expect(mocks.streamChatCompletion.mock.calls[3][0]).toMatchObject({ model: undefined, excludeModels: ['free/model'] });
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('says the work stopped part-way — never "added to the canvas" — when no model is left', async () => {
+        vi.useFakeTimers();
+        try {
+          mocks.streamChatCompletion.mockResolvedValueOnce(wroteIndex).mockImplementation(silentUntilAborted);
+          const onUnanswered = vi.fn();
+
+          const answer = await settle(runTurn({ prompt: 'build a marketing site for phones', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [writeFile], onUnanswered }));
+
+          expect(answer).toBe(NOTICES.stoppedPartway);
+          expect(answer).not.toBe(NOTICES.addedToCanvas);
+          expect(onUnanswered).toHaveBeenCalledWith({ reason: 'no-answer', detail: 'provider-stalled' });
+          // One write, two stalls, one re-route, two stalls — then stop.
+          expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(5);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('counts stalls IN A ROW — a completion between two stalls resets the ladder', async () => {
+        vi.useFakeTimers();
+        try {
+          mocks.streamChatCompletion
+            .mockImplementationOnce(silentUntilAborted)
+            .mockResolvedValueOnce(wroteIndex)
+            .mockImplementationOnce(silentUntilAborted)
+            .mockResolvedValueOnce({ text: 'I built the marketing site.', resolvedModel: 'free/model', finishReason: 'stop', toolCalls: [] });
+
+          const answer = await settle(runTurn({ prompt: 'build a marketing site for phones', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [writeFile] }));
+
+          expect(answer).toBe('I built the marketing site.');
+          // Never re-routed: the second stall was the first in its run.
+          expect(mocks.streamChatCompletion.mock.calls[3][0]).toMatchObject({ model: 'free/model' });
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+    });
+
     it('leaves a streaming answer alone — length is never the thing that trips it', async () => {
       vi.useFakeTimers();
       try {

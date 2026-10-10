@@ -1,61 +1,21 @@
-.root { position:relative; width:100%; display:flex; flex-direction:column; align-items:center; color:var(--text-primary, var(--canvas-ink)); }
-.root[data-open='true'] { z-index:20; }
-.tab { display:inline-flex; align-items:center; gap:7px; min-height:27px; padding:4px 12px; border:1px solid var(--prompt-panel-border, var(--border-subtle)); background:var(--prompt-panel-bg, var(--bg-elevated)); color:inherit; font:600 11px/1.2 inherit; cursor:pointer; margin-top:-1px; border-radius:0 0 var(--radius-md) var(--radius-md); border-top-color:transparent; }
-.arrow { display:inline-block; font-size:var(--font-size-small); transform:rotate(180deg); transition:transform 160ms ease; }
-.tab[aria-expanded='true'] .arrow { transform:none; }
-.reveal { position:absolute; z-index:1; display:grid; width:100%; grid-template-rows:0fr; opacity:0; pointer-events:none; transition:grid-template-rows 180ms ease, opacity 140ms ease; }
-.reveal[data-variant='popover'] { top:100%; }
+/* The starting-points catalogue, in normal flow inside the composer box that hosts it
+   (`useComposerStarters`): it opens above the text and shares the box's ground instead
+   of floating off a tab. The same on every prompt. */
+.reveal { position:static; display:grid; width:auto; grid-template-rows:0fr; opacity:0; pointer-events:none; transition:grid-template-rows 180ms ease, opacity 140ms ease; }
 .reveal[data-open='true'] { grid-template-rows:1fr; opacity:1; pointer-events:auto; }
-.panel { min-height:0; overflow:hidden; box-sizing:border-box; border:0 solid var(--prompt-panel-border, var(--border-subtle)); background:var(--prompt-panel-bg, var(--bg-elevated)); text-align:left; }
-.reveal[data-open='true'] .panel { padding:10px; border-width:1px; border-radius:var(--radius-lg); box-shadow:0 16px 40px var(--shadow-coral-soft, rgba(0,0,0,.22)); }
-.panelHeader { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+.panel { min-height:0; overflow:hidden; box-sizing:border-box; border:0 solid var(--prompt-panel-border, var(--border-subtle)); background:transparent; text-align:left; }
+.reveal[data-open='true'] .panel { padding:10px 10px 8px; border-width:0 0 1px; }
+.panelHeader { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
 .heading { margin:0 2px; color:var(--text-muted, var(--canvas-muted)); font-size:var(--font-size-field-label); font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
-.search { width:min(210px,48%); min-height:30px; padding:5px 9px; border:1px solid var(--prompt-panel-border,var(--border-subtle)); border-radius:var(--radius-sm); background:var(--chat-input-bg,var(--surface-interactive)); color:inherit; font:500 11px/1.2 inherit; outline:none; }
+.search { flex:1 1 160px; min-height:36px; padding:5px 9px; border:1px solid var(--prompt-panel-border,var(--border-subtle)); border-radius:var(--radius-sm); background:var(--chat-input-bg,var(--surface-interactive)); color:inherit; font:500 var(--font-size-small)/1.2 inherit; outline:none; }
 .search:focus { border-color:var(--coral-bright,var(--canvas-accent)); }
-.catalog { display:grid; gap:11px; max-height:min(28vh,220px); overflow:auto; padding-right:2px; }
+.catalog { display:grid; gap:11px; max-height:min(40vh,320px); overflow:auto; padding-right:2px; }
 .group { display:grid; gap:5px; }
 .category { color:var(--text-muted,var(--canvas-muted)); font-size:var(--font-size-field-label); font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
-.grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; }
-.item { display:flex; min-width:0; align-items:center; gap:8px; padding:8px; border:1px solid transparent; border-radius:var(--radius-md); background:transparent; color:inherit; font:500 11px/1.25 inherit; text-align:left; cursor:pointer; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:6px; }
+.item { display:flex; min-width:0; min-height:40px; align-items:center; gap:8px; padding:8px; border:1px solid transparent; border-radius:var(--radius-md); background:transparent; color:inherit; font:500 var(--font-size-small)/1.25 inherit; text-align:left; cursor:pointer; }
 .item:hover,.item:focus-visible { border-color:var(--prompt-panel-border, var(--border-accent)); background:var(--surface-interactive, var(--canvas-hover)); outline:none; }
 .icon { display:grid; place-items:center; flex:none; width:25px; height:25px; border:1px solid var(--prompt-panel-border, var(--border-subtle)); border-radius:var(--radius-sm); color:var(--coral-bright, var(--canvas-accent)); font:600 13px/1 ui-sans-serif,system-ui,sans-serif; }
 .empty { padding:20px; color:var(--text-muted,var(--canvas-muted)); font-size:var(--font-size-eyebrow); text-align:center; }
-@media (max-width:700px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-/* INLINE: the catalogue in normal flow inside the box that hosts it — the canvas
-   composer card, where it opens above the card's top row and shares the card's border
-   instead of floating off a tab. The higher specificity also outranks the phone
-   media query below, which would otherwise turn it into a viewport sheet. */
-.reveal[data-variant='inline'] { position:static; width:auto; }
-.reveal[data-variant='inline'] .panel { border-radius:0; background:transparent; }
-.reveal[data-variant='inline'][data-open='true'] .panel { padding:10px 10px 8px; border-width:0 0 1px; border-radius:0; box-shadow:none; }
-.reveal[data-variant='inline'] .panelHeader { flex-wrap:wrap; }
-.reveal[data-variant='inline'] .search { flex:1 1 160px; width:auto; min-height:36px; font-size:var(--font-size-small); }
-.reveal[data-variant='inline'] .catalog { max-height:min(40vh,320px); }
-.reveal[data-variant='inline'] .grid { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
-.reveal[data-variant='inline'] .item { min-height:40px; font-size:var(--font-size-small); }
-/* On a phone the picker's host is often a height-capped, overflow-clipped
-   surface — the landing hero's board, where the prompt is a fixed band and the
-   options scroll. An absolutely-positioned sheet would be clipped by it, so
-   while open the sheet anchors to the VIEWPORT instead: a bottom sheet over
-   everything, scrolling inside, with the tab that opened it staying put. */
-@media (max-width:899px) {
-  /* Positioned whether open or not, so the open AND close transitions both run
-     at the viewport anchor — gating this on `data-open` would snap the sheet
-     back into the clipped host mid-fade. Closed it is opacity 0, 0fr-tall and
-     pointer-events none, so the anchor costs nothing. */
-  .reveal {
-    position: fixed;
-    top: auto;
-    right: 12px;
-    /* Clear the persistent mobile bottom nav when it is present — the token is
-       0px wherever the bar does not render, and already includes safe-area. */
-    bottom: calc(12px + var(--mobile-nav-height, 0px));
-    left: 12px;
-    width: auto;
-    /* Above the page chrome (header 60, mobile bottom nav 900) and below the
-       nav drawer (1001+) — a sheet over the app, under its drawers. */
-    z-index: 950;
-  }
-  .catalog { max-height: min(52vh, 420px); }
-}
-@media (prefers-reduced-motion:reduce) { .reveal,.arrow { transition:none; } }
+@media (max-width:420px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (prefers-reduced-motion:reduce) { .reveal { transition:none; } }

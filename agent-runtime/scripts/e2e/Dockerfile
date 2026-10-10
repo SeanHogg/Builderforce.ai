@@ -16,7 +16,10 @@ COPY patches ./patches
 COPY ui ./ui
 COPY extensions/memory-core ./extensions/memory-core
 COPY vendor/a2ui/renderers/lit ./vendor/a2ui/renderers/lit
-COPY apps/shared/OpenAgentNodeKit/Tools/CanvasA2UI ./apps/shared/OpenAgentNodeKit/Tools/CanvasA2UI
+# The Canvas A2UI app sources live at the monorepo root
+# (apps/shared/BuilderforceKit/Tools/CanvasA2UI), outside this build context, so
+# skip the bundle exactly like the main Dockerfile does.
+ENV BUILDERFORCE_AGENTS_A2UI_SKIP_MISSING=1
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm build

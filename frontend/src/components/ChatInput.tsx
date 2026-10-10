@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { PromptPanel, useMentionAutocomplete, useTicketAutocomplete } from '@seanhogg/builderforce-brain-ui';
@@ -10,13 +10,15 @@ import { ComposerOptionsMenu } from './chat-input/ComposerOptionsMenu';
 import { ComposerPrimaryAction } from './chat-input/ComposerPrimaryAction';
 import { AssessmentGateNotice, PendingAttachmentChips, QueuedTurnsReceipt } from './chat-input/ComposerNotices';
 import { ComposerSendOrVoice } from './chat-input/ComposerSendOrVoice';
+import { ComposerSuggestions } from './chat-input/ComposerSuggestions';
+import { useComposerStarters } from './chat-input/useComposerStarters';
 import { useAttachmentDropAndPaste } from './chat-input/useAttachmentDropAndPaste';
 import type { ChatInputAttachment, ChatInputProps } from './chat-input/types';
 // The shell's own sheet (the `/` trigger's quiet face) — imported here so the
 // composer renders right wherever it is dropped, not only beside a Brain panel.
 import '@seanhogg/builderforce-brain-ui/styles.css';
 export type { ChatModelOptions, ChatModelSelection } from '@seanhogg/builderforce-brain-ui';
-export type { ChatInputAttachment, ChatInputProps, ComposerAddMenuItem } from './chat-input/types';
+export type { ChatInputAttachment, ChatInputProps, ComposerAddMenuItem, ComposerStarters, ComposerSuggestion } from './chat-input/types';
 
 /** One stable empty list, so an omitted `pendingAttachments` never looks like a change. */
 const NO_ATTACHMENTS: ChatInputAttachment[] = [];
@@ -76,6 +78,8 @@ export function ChatInput({
   onTicketTag,
   contextControls,
   addMenuItems,
+  starters,
+  suggestions,
   menuStatus,
   modeVocabulary,
   className,
@@ -141,6 +145,26 @@ export function ChatInput({
 
   const attachHandlers = useAttachmentDropAndPaste(onAttach);
 
+  // Starting points and next steps: the same two affordances on every prompt. The
+  // catalogue opens from `+`; the chips stand down while it is open, while a turn runs,
+  // and the moment there is text in the box.
+  const starterControl = useComposerStarters(starters);
+  const menuItems = useMemo(
+    () => (starterControl.menuItem ? [starterControl.menuItem, ...(addMenuItems ?? [])] : addMenuItems),
+    [starterControl.menuItem, addMenuItems],
+  );
+  const showSuggestions = !!suggestions?.length && !value.trim() && !running && !starterControl.open;
+  const attachmentChips = pendingAttachments.length > 0 && onRemoveAttachment
+    ? <PendingAttachmentChips attachments={pendingAttachments} onRemove={onRemoveAttachment} />
+    : null;
+  const status = starterControl.catalog || showSuggestions || attachmentChips
+    ? <>
+      {starterControl.catalog}
+      {showSuggestions && <ComposerSuggestions items={suggestions!} />}
+      {attachmentChips}
+    </>
+    : undefined;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (canSubmit) onSubmit();
@@ -169,9 +193,7 @@ export function ChatInput({
         onDrop={attachHandlers.onDrop}
         onDragOver={attachHandlers.onDragOver}
         overlay={ticket.open ? ticket.popup : mention.popup}
-        status={pendingAttachments.length > 0 && onRemoveAttachment
-          ? <PendingAttachmentChips attachments={pendingAttachments} onRemove={onRemoveAttachment} />
-          : undefined}
+        status={status}
         input={(
           <textarea
             ref={textareaRef}
@@ -198,7 +220,7 @@ export function ChatInput({
             <ComposerAddMenu
               onAttach={onAttach}
               onAddContext={onAddContext}
-              items={addMenuItems}
+              items={menuItems}
               webBrowsing={webBrowsing}
               onWebBrowsingChange={onWebBrowsingChange}
               disabled={disabled}

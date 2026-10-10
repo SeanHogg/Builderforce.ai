@@ -20,6 +20,7 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import androidx.core.content.ContextCompat
+import ai.builderforce.android.R
 import ai.builderforce.android.gateway.GatewaySession
 import ai.builderforce.android.isCanonicalMainSessionKey
 import ai.builderforce.android.normalizeMainKey
@@ -68,7 +69,7 @@ class TalkModeManager(
   private val _isSpeaking = MutableStateFlow(false)
   val isSpeaking: StateFlow<Boolean> = _isSpeaking
 
-  private val _statusText = MutableStateFlow("Off")
+  private val _statusText = MutableStateFlow(context.getString(R.string.voice_status_off))
   val statusText: StateFlow<String> = _statusText
 
   private val _lastAssistantText = MutableStateFlow<String?>(null)
@@ -161,7 +162,7 @@ class TalkModeManager(
       Log.d(tag, "start")
 
       if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-        _statusText.value = "Speech recognizer unavailable"
+        _statusText.value = context.getString(R.string.voice_status_recognizer_unavailable)
         Log.w(tag, "speech recognizer unavailable")
         return@post
       }
@@ -170,7 +171,7 @@ class TalkModeManager(
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
           PackageManager.PERMISSION_GRANTED
       if (!micOk) {
-        _statusText.value = "Microphone permission required"
+        _statusText.value = context.getString(R.string.voice_status_mic_permission)
         Log.w(tag, "microphone permission required")
         return@post
       }
@@ -182,7 +183,7 @@ class TalkModeManager(
         startSilenceMonitor()
         Log.d(tag, "listening")
       } catch (err: Throwable) {
-        _statusText.value = "Start failed: ${err.message ?: err::class.simpleName}"
+        _statusText.value = context.getString(R.string.voice_status_start_failed, err.message ?: err::class.simpleName.orEmpty())
         Log.w(tag, "start failed: ${err.message ?: err::class.simpleName}")
       }
     }
@@ -198,7 +199,7 @@ class TalkModeManager(
     lastTranscript = ""
     lastHeardAtMs = null
     _isListening.value = false
-    _statusText.value = "Off"
+    _statusText.value = context.getString(R.string.voice_status_off)
     stopSpeaking()
     _usingFallbackTts.value = false
     chatSubscribedSessionKey = null
@@ -225,7 +226,7 @@ class TalkModeManager(
       }
 
     if (markListening) {
-      _statusText.value = "Listening"
+      _statusText.value = context.getString(R.string.voice_status_listening)
       _isListening.value = true
     }
     r.startListening(intent)
@@ -297,14 +298,14 @@ class TalkModeManager(
   private suspend fun finalizeTranscript(transcript: String) {
     listeningMode = false
     _isListening.value = false
-    _statusText.value = "Thinking…"
+    _statusText.value = context.getString(R.string.talk_status_thinking)
     lastTranscript = ""
     lastHeardAtMs = null
 
     reloadConfig()
     val prompt = buildPrompt(transcript)
     if (!isConnected()) {
-      _statusText.value = "Gateway not connected"
+      _statusText.value = context.getString(R.string.talk_status_gateway_offline)
       Log.w(tag, "finalize: gateway not connected")
       start()
       return
@@ -322,7 +323,7 @@ class TalkModeManager(
       }
       val assistant = waitForAssistantText(session, startedAt, if (ok) 12_000 else 25_000)
       if (assistant.isNullOrBlank()) {
-        _statusText.value = "No reply"
+        _statusText.value = context.getString(R.string.talk_status_no_reply)
         Log.w(tag, "assistant text timeout runId=$runId")
         start()
         return
@@ -330,7 +331,7 @@ class TalkModeManager(
       Log.d(tag, "assistant text ok chars=${assistant.length}")
       playAssistant(assistant)
     } catch (err: Throwable) {
-      _statusText.value = "Talk failed: ${err.message ?: err::class.simpleName}"
+      _statusText.value = context.getString(R.string.talk_status_failed, err.message ?: err::class.simpleName.orEmpty())
       Log.w(tag, "finalize failed: ${err.message ?: err::class.simpleName}")
     }
 
@@ -486,7 +487,7 @@ class TalkModeManager(
         null
       }
 
-    _statusText.value = "Speaking…"
+    _statusText.value = context.getString(R.string.talk_status_speaking)
     _isSpeaking.value = true
     lastSpokenText = cleaned
     ensureInterruptListener()
@@ -501,7 +502,7 @@ class TalkModeManager(
           Log.w(tag, "missing ELEVENLABS_API_KEY; falling back to system voice")
         }
         _usingFallbackTts.value = true
-        _statusText.value = "Speaking (System)…"
+        _statusText.value = context.getString(R.string.talk_status_speaking_system)
         speakWithSystemTts(cleaned)
       } else {
         _usingFallbackTts.value = false
@@ -530,10 +531,10 @@ class TalkModeManager(
       Log.w(tag, "speak failed: ${err.message ?: err::class.simpleName}; falling back to system voice")
       try {
         _usingFallbackTts.value = true
-        _statusText.value = "Speaking (System)…"
+        _statusText.value = context.getString(R.string.talk_status_speaking_system)
         speakWithSystemTts(cleaned)
       } catch (fallbackErr: Throwable) {
-        _statusText.value = "Speak failed: ${fallbackErr.message ?: fallbackErr::class.simpleName}"
+        _statusText.value = context.getString(R.string.talk_status_speak_failed, fallbackErr.message ?: fallbackErr::class.simpleName.orEmpty())
         Log.w(tag, "system voice failed: ${fallbackErr.message ?: fallbackErr::class.simpleName}")
       }
     }
@@ -1184,7 +1185,7 @@ class TalkModeManager(
     object : RecognitionListener {
       override fun onReadyForSpeech(params: Bundle?) {
         if (_isEnabled.value) {
-          _statusText.value = if (_isListening.value) "Listening" else _statusText.value
+          _statusText.value = if (_isListening.value) context.getString(R.string.voice_status_listening) else _statusText.value
         }
       }
 
@@ -1202,22 +1203,11 @@ class TalkModeManager(
         if (stopRequested) return
         _isListening.value = false
         if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
-          _statusText.value = "Microphone permission required"
+          _statusText.value = context.getString(R.string.voice_status_mic_permission)
           return
         }
 
-        _statusText.value =
-          when (error) {
-            SpeechRecognizer.ERROR_AUDIO -> "Audio error"
-            SpeechRecognizer.ERROR_CLIENT -> "Client error"
-            SpeechRecognizer.ERROR_NETWORK -> "Network error"
-            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
-            SpeechRecognizer.ERROR_NO_MATCH -> "Listening"
-            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognizer busy"
-            SpeechRecognizer.ERROR_SERVER -> "Server error"
-            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Listening"
-            else -> "Speech error ($error)"
-          }
+        _statusText.value = speechRecognizerErrorText(context, error)
         scheduleRestart(delayMs = 600)
       }
 

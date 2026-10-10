@@ -8,6 +8,7 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import ai.builderforce.android.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -25,7 +26,7 @@ class VoiceWakeManager(
   private val _isListening = MutableStateFlow(false)
   val isListening: StateFlow<Boolean> = _isListening
 
-  private val _statusText = MutableStateFlow("Off")
+  private val _statusText = MutableStateFlow(context.getString(R.string.voice_status_off))
   val statusText: StateFlow<String> = _statusText
 
   var triggerWords: List<String> = emptyList()
@@ -47,7 +48,7 @@ class VoiceWakeManager(
 
       if (!SpeechRecognizer.isRecognitionAvailable(context)) {
         _isListening.value = false
-        _statusText.value = "Speech recognizer unavailable"
+        _statusText.value = context.getString(R.string.voice_status_recognizer_unavailable)
         return@post
       }
 
@@ -57,12 +58,12 @@ class VoiceWakeManager(
         startListeningInternal()
       } catch (err: Throwable) {
         _isListening.value = false
-        _statusText.value = "Start failed: ${err.message ?: err::class.simpleName}"
+        _statusText.value = context.getString(R.string.voice_status_start_failed, err.message ?: err::class.simpleName.orEmpty())
       }
     }
   }
 
-  fun stop(statusText: String = "Off") {
+  fun stop(statusText: String = context.getString(R.string.voice_status_off)) {
     stopRequested = true
     restartJob?.cancel()
     restartJob = null
@@ -85,7 +86,7 @@ class VoiceWakeManager(
         putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
       }
 
-    _statusText.value = "Listening"
+    _statusText.value = context.getString(R.string.voice_status_listening)
     _isListening.value = true
     r.startListening(intent)
   }
@@ -114,14 +115,14 @@ class VoiceWakeManager(
     lastDispatched = command
 
     scope.launch { onCommand(command) }
-    _statusText.value = "Triggered"
+    _statusText.value = context.getString(R.string.voice_status_triggered)
     scheduleRestart(delayMs = 650)
   }
 
   private val listener =
     object : RecognitionListener {
       override fun onReadyForSpeech(params: Bundle?) {
-        _statusText.value = "Listening"
+        _statusText.value = context.getString(R.string.voice_status_listening)
       }
 
       override fun onBeginningOfSpeech() {}
@@ -138,22 +139,11 @@ class VoiceWakeManager(
         if (stopRequested) return
         _isListening.value = false
         if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
-          _statusText.value = "Microphone permission required"
+          _statusText.value = context.getString(R.string.voice_status_mic_permission)
           return
         }
 
-        _statusText.value =
-          when (error) {
-            SpeechRecognizer.ERROR_AUDIO -> "Audio error"
-            SpeechRecognizer.ERROR_CLIENT -> "Client error"
-            SpeechRecognizer.ERROR_NETWORK -> "Network error"
-            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
-            SpeechRecognizer.ERROR_NO_MATCH -> "Listening"
-            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognizer busy"
-            SpeechRecognizer.ERROR_SERVER -> "Server error"
-            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Listening"
-            else -> "Speech error ($error)"
-          }
+        _statusText.value = speechRecognizerErrorText(context, error)
         scheduleRestart(delayMs = 600)
       }
 

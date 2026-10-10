@@ -112,6 +112,11 @@ export function PreviewPane({ projectId, projectName, url, phase, step, runnable
         )}
       </div>
 
+      {edit.unresolved && (
+        <p role="status" style={{ margin: 0, padding: '6px 12px', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', background: 'var(--surface-interactive)', borderBottom: '1px solid var(--border-subtle)' }}>
+          {t('previewPick.unresolved')}
+        </p>
+      )}
       <div className={styles.previewStage}>
         {bezel ? (
           <DevicePreview url={url} onOpenDevicePanel={onOpenDevicePanel ?? (() => {})} />

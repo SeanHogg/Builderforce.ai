@@ -1,3 +1,4 @@
+import BuilderforceKit
 import Foundation
 import Testing
 @testable import Builderforce

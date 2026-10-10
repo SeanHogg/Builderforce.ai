@@ -34,12 +34,10 @@ tmp
 # build artifacts
 dist
 **/dist
-apps/macos/.build
-apps/ios/build
 **/*.trace
 
-# large app trees not needed for CLI build
-apps/
+# large trees not needed for CLI build (the native apps live at the monorepo
+# root, outside this build context)
 assets/
 Peekaboo/
 Swabble/
@@ -47,13 +45,8 @@ Core/
 Users/
 vendor/
 
-# Needed for building the Canvas A2UI bundle during Docker image builds.
-# Keep the rest of apps/ and vendor/ excluded to avoid a large build context.
-!apps/shared/
-!apps/shared/OpenAgentNodeKit/
-!apps/shared/OpenAgentNodeKit/Tools/
-!apps/shared/OpenAgentNodeKit/Tools/CanvasA2UI/
-!apps/shared/OpenAgentNodeKit/Tools/CanvasA2UI/**
+# Needed for building the Canvas A2UI renderer during Docker image builds.
+# Keep the rest of vendor/ excluded to avoid a large build context.
 !vendor/a2ui/
 !vendor/a2ui/renderers/
 !vendor/a2ui/renderers/lit/

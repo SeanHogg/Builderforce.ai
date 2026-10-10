@@ -316,7 +316,9 @@
     "assessmentAssisted": "辅助考核 — 助手的每一轮回复都会记录在诚信记录中。",
     "ticketTagTitle": "标记工单",
     "ticketTagStatus": "状态",
-    "ticketTagNoMatches": "没有匹配的工单"
+    "ticketTagNoMatches": "没有匹配的工单",
+    "startingPoints": "起点",
+    "suggestionsLabel": "建议的下一步"
   },
   "repoContext": {
     "title": "添加仓库上下文",
@@ -1499,7 +1501,8 @@
       "labelWithText": "{tag} · “{text}”",
       "where": "在预览中选中：{file}，第 {line} 行",
       "aria": "已选元素：",
-      "remove": "移除已选元素"
+      "remove": "移除已选元素",
+      "unresolved": "无法追溯到该元素的源代码。请改为在输入框中描述它。"
     },
     "releases": {
       "title": "历史版本",
@@ -9018,7 +9021,6 @@
     "arenaTabsLabel": "选择对比领域"
   },
   "promptUseCases": {
-    "tabLabel": "选择起点",
     "heading": "想要创建什么？",
     "searchPlaceholder": "搜索用例…",
     "searchLabel": "搜索创作用例",
@@ -24308,6 +24310,7 @@
       "addedToCanvas": "我已将所需内容添加到画布上。",
       "noAnswer": "我无法根据该请求准备任何画布改动。",
       "providerStalled": "模型提供方接受了该请求后便停止响应，因此我不再继续等待。你的请求本身没有问题——可以重新发送，或在 / 菜单中另选一个模型。",
+      "stoppedPartway": "模型在处理这个请求的中途停止了响应，所以任务尚未完成。已完成的部分都在画布上——说“继续”即可从中断处接着做，或在 / 菜单中另选一个模型。",
       "toolError": "我无法准备所请求的画布改动：{detail}",
       "stepsExhausted": "本轮允许的步骤我已全部用完，先停在这里；目前完成的内容都已在画布上。说“继续”，我会从停下的地方接着做。",
       "buildNotAuthored": "我已搭好应用的起始工作区，但还没有编写应用本身，所以预览中仍是模板页面。说“继续”，我会把你要的应用做出来。",
@@ -26202,7 +26205,6 @@
         }
       }
     },
-    "nextStepsLabel": "建议的下一步",
     "boardMenu": {
       "phaseFocus": "阶段聚焦",
       "phaseFocusOn": "阶段聚焦已开启——与当前阶段相关的卡片会突出显示",
@@ -32623,7 +32625,6 @@
       "subtitle": "描述一个应用。Studio 会编写代码、在你的浏览器中运行并发布。",
       "promptLabel": "描述要构建的内容",
       "placeholder": "我们来构建一个……",
-      "hint": "按 Enter 发送 · Shift+Enter 换行",
       "submit": "开始构建",
       "startFailed": "无法开始你的会话，请重试。",
       "recentTitle": "你的 Studio 项目",

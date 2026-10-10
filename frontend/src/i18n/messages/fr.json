@@ -316,7 +316,9 @@
     "assessmentAssisted": "Évaluation assistée — chaque réponse de l'assistant est consignée dans le registre d'intégrité.",
     "ticketTagTitle": "Associer un ticket",
     "ticketTagStatus": "Statut",
-    "ticketTagNoMatches": "Aucun ticket correspondant"
+    "ticketTagNoMatches": "Aucun ticket correspondant",
+    "startingPoints": "Points de départ",
+    "suggestionsLabel": "Prochaines étapes suggérées"
   },
   "repoContext": {
     "title": "Ajouter le contexte du dépôt",
@@ -1499,7 +1501,8 @@
       "labelWithText": "{tag} · « {text} »",
       "where": "Choisi dans l'aperçu : {file}, ligne {line}",
       "aria": "Élément choisi :",
-      "remove": "Retirer l'élément choisi"
+      "remove": "Retirer l'élément choisi",
+      "unresolved": "Impossible de retrouver le code de cet élément. Décris-le plutôt dans la zone de saisie."
     },
     "releases": {
       "title": "Versions précédentes",
@@ -9018,7 +9021,6 @@
     "arenaTabsLabel": "Choisissez une comparaison"
   },
   "promptUseCases": {
-    "tabLabel": "Choisir un point de départ",
     "heading": "Que souhaitez-vous créer ?",
     "searchPlaceholder": "Rechercher un cas d’usage…",
     "searchLabel": "Rechercher parmi les cas d’usage de création",
@@ -24308,6 +24310,7 @@
       "addedToCanvas": "J’ai ajouté le contenu demandé au canevas.",
       "noAnswer": "Je n’ai pas pu préparer de modification du canevas à partir de cette demande.",
       "providerStalled": "Le fournisseur du modèle a accepté cette demande puis a cessé de répondre ; j’ai donc arrêté d’attendre. Votre demande n’a rien d’incorrect : renvoyez-la, ou choisissez un autre modèle dans le menu /.",
+      "stoppedPartway": "Le modèle a cessé de répondre en cours de route, donc cette demande n’est pas terminée. Ce qu’il a achevé se trouve sur le canevas : dites « continuer » pour reprendre là où il s’est arrêté, ou choisissez un autre modèle dans le menu /.",
       "toolError": "Je n’ai pas pu préparer les modifications demandées du canevas : {detail}",
       "stepsExhausted": "J’ai utilisé toutes les étapes que ce tour autorise et je m’arrête ici ; tout ce que j’ai construit jusqu’à présent est sur le canevas. Dites « continuer » et je reprendrai là où je me suis arrêté.",
       "buildNotAuthored": "J’ai préparé l’espace de travail de départ de l’application, mais je n’ai pas encore écrit l’application elle-même : l’aperçu affiche donc toujours la page modèle. Dites « continuer » et je construirai ce que vous avez demandé.",
@@ -26202,7 +26205,6 @@
         }
       }
     },
-    "nextStepsLabel": "Prochaines étapes suggérées",
     "boardMenu": {
       "phaseFocus": "Focus de phase",
       "phaseFocusOn": "Le focus de phase est activé — les cartes de la phase passent au premier plan",
@@ -32623,7 +32625,6 @@
       "subtitle": "Décrivez une application. Studio l’écrit, l’exécute dans votre navigateur et la publie.",
       "promptLabel": "Décrivez ce qu’il faut créer",
       "placeholder": "Créons un…",
-      "hint": "Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne",
       "submit": "Créer",
       "startFailed": "Impossible de démarrer votre session. Réessayez.",
       "recentTitle": "Vos projets Studio",

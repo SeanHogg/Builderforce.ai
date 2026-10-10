@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "BuilderforceKit",
+    defaultLocalization: "en",
     platforms: [
         .iOS(.v18),
         .macOS(.v15),
@@ -47,6 +48,9 @@ let package = Package(
                     condition: .when(platforms: [.macOS, .iOS])),
             ],
             path: "Sources/BuilderforceChatUI",
+            resources: [
+                .process("Resources"),
+            ],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),
             ]),

@@ -47,11 +47,14 @@ class NodeForegroundService : Service() {
           val title = getString(if (connected) R.string.notification_title_connected else R.string.notification_title)
           val voiceSuffix =
             if (voiceMode == VoiceWakeMode.Always) {
-              if (voiceListening) " · Voice Wake: Listening" else " · Voice Wake: Paused"
+              getString(
+                if (voiceListening) R.string.notification_voice_wake_listening else R.string.notification_voice_wake_paused,
+              )
             } else {
               ""
             }
-          val text = (server?.let { "$status · $it" } ?: status) + voiceSuffix
+          val base = server?.let { getString(R.string.notification_status_with_server, status, it) } ?: status
+          val text = base + voiceSuffix
 
           val requiresMic =
             voiceMode == VoiceWakeMode.Always && hasRecordAudioPermission()
@@ -88,7 +91,7 @@ class NodeForegroundService : Service() {
     val channel =
       NotificationChannel(
         CHANNEL_ID,
-        "Connection",
+        getString(R.string.notification_channel_name),
         NotificationManager.IMPORTANCE_LOW,
       ).apply {
         description = getString(R.string.notification_channel_description)
@@ -126,7 +129,7 @@ class NodeForegroundService : Service() {
       .setOngoing(true)
       .setOnlyAlertOnce(true)
       .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-      .addAction(0, "Disconnect", stopPending)
+      .addAction(0, getString(R.string.action_disconnect), stopPending)
       .build()
   }
 

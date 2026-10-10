@@ -2,11 +2,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(here, "../../../../..");
+// The A2UI sources, lit and the bundle output live in agent-runtime/, not the monorepo root.
+const repoRoot = path.resolve(here, "../../../../../agent-runtime");
 const fromHere = (p) => path.resolve(here, p);
 const outputFile = path.resolve(
-  here,
-  "../../../../..",
+  repoRoot,
   "src",
   "canvas-host",
   "a2ui",

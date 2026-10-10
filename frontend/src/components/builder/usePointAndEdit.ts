@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { previewErrorFrom, recordBuildFailure } from '@/lib/buildDiagnostics';
-import { VISUAL_ARM_MESSAGE, visualSelectionFrom } from '@/lib/visualEditor';
+import { VISUAL_ARM_MESSAGE, isVisualUnresolved, visualSelectionFrom } from '@/lib/visualEditor';
 import { clearPreviewPick, setPreviewPick } from '@/lib/workspace/previewPick';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 
@@ -35,9 +35,13 @@ export function usePointAndEdit({ store, appName, previewUrl }: {
   // Cross-origin preview: postMessage through this window is the only channel.
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const [armed, setArmed] = useState(false);
+  // The last click landed on an element React gave no source for — said out loud, so
+  // the click does not look like it did nothing. Cleared when picking starts again.
+  const [unresolved, setUnresolved] = useState(false);
 
   const arm = useCallback((next: boolean) => {
     setArmed(next);
+    if (next) setUnresolved(false);
     frameRef.current?.contentWindow?.postMessage({ type: VISUAL_ARM_MESSAGE, armed: next }, '*');
   }, []);
 
@@ -46,8 +50,10 @@ export function usePointAndEdit({ store, appName, previewUrl }: {
     const onMessage = (event: MessageEvent) => {
       const failure = previewErrorFrom(event.data);
       if (failure) { recordBuildFailure(store.id, failure); return; }
+      if (isVisualUnresolved(event.data)) { setUnresolved(true); arm(false); return; }
       const selected = visualSelectionFrom(event.data);
       if (!selected) return;
+      setUnresolved(false);
       setPreviewPick({ ...selected, workspaceId: store.id, appName });
       arm(false);
     };
@@ -69,7 +75,7 @@ export function usePointAndEdit({ store, appName, previewUrl }: {
     return () => window.clearTimeout(id);
   }, [armed, previewUrl]);
 
-  return { frameRef, armed, arm };
+  return { frameRef, armed, arm, unresolved };
 }
 
 export type PointAndEdit = ReturnType<typeof usePointAndEdit>;

@@ -1,7 +1,7 @@
 ---
 summary: "Gateway runtime on macOS (external launchd service)"
 read_when:
-  - Packaging BuilderForce Agents.app
+  - Packaging Builderforce.app
   - Debugging the macOS gateway launchd service
   - Installing the gateway CLI for macOS
 title: "Gateway on macOS"
@@ -9,7 +9,7 @@ title: "Gateway on macOS"
 
 # Gateway on macOS (external launchd)
 
-BuilderForce Agents.app no longer bundles Node/Bun or the Gateway runtime. The macOS app
+Builderforce.app no longer bundles Node/Bun or the Gateway runtime. The macOS app
 expects an **external** `builderforce` CLI install, does not spawn the Gateway as a
 child process, and manages a per‑user launchd service to keep the Gateway
 running (or attaches to an existing local Gateway if one is already running).

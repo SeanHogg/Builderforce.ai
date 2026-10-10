@@ -156,18 +156,20 @@ describe('LandingCanvasHero', () => {
     expect(screen.getByText('canvas.sessionTitle')).toBeInTheDocument();
   });
 
-  it('expands supported use cases below the homepage prompt and seeds the selected prompt', async () => {
+  it('opens starting points from the prompt’s own `+`, inside the box, and seeds the selected prompt', async () => {
     render(<LandingCanvasHero />);
     await screen.findByText('Q3 pipeline.csv');
 
-    const tab = screen.getByRole('button', { name: /tabLabel/ });
-    expect(tab).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(tab);
-    expect(tab).toHaveAttribute('aria-expanded', 'true');
+    // The same way every prompt opens them — no tab hanging under the box.
+    expect(screen.queryByTestId('composer-starters')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'add' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /startingPoints/ }));
+    const catalog = screen.getByTestId('composer-starters');
+    expect(screen.getByLabelText('heroPromptPlaceholder').closest('form')).toContainElement(catalog);
 
     fireEvent.click(screen.getByRole('button', { name: 'Mobile app design' }));
     expect(screen.getByLabelText('heroPromptPlaceholder')).toHaveValue('Design a mobile app with its key screens and user flow.');
-    expect(tab).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('composer-starters')).toBeNull();
   });
 
   it('reveals the board from the prompt and resets interactions on an outside click', async () => {

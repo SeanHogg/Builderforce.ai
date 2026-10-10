@@ -111,6 +111,15 @@ export const MAX_INTERRUPTED_TURN_RECOVERIES = 2;
  *  in a row will swallow the third too. */
 export const MAX_STALLED_STREAMS = 2;
 
+/** Times one AUTO-routed turn may hand a stalled model back to the gateway with that
+ *  model excluded, when no model in the turn has proven itself to switch to. Measured
+ *  (session `local-6d36899d`, ui 2026.10.31, "build a marketing site for phones"): the
+ *  only model the turn ever reached was a free model that stalled twice, so the ladder
+ *  had nothing to switch to and abandoned the build after one file — while the gateway
+ *  had a whole pool it was never asked about. One: each stall costs the user a full
+ *  watchdog window, so a second reroute is not worth another two of them. */
+export const MAX_STALL_REROUTES = 1;
+
 /** A turn that provisioned a workspace (`canvas_create_build`) and then tried to end
  * without writing a file. The model reads the seeded template as the deliverable, so the
  * directive says what the template IS — a placeholder the user can see in the preview —

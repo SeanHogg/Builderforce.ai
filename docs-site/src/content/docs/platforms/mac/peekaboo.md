@@ -1,7 +1,7 @@
 ---
 summary: "PeekabooBridge integration for macOS UI automation"
 read_when:
-  - Hosting PeekabooBridge in BuilderForce Agents.app
+  - Hosting PeekabooBridge in Builderforce.app
   - Integrating Peekaboo via Swift Package Manager
   - Changing PeekabooBridge protocol/paths
 title: "Peekaboo Bridge"
@@ -15,7 +15,7 @@ macOS app’s TCC permissions.
 
 ## What this is (and isn’t)
 
-- **Host**: BuilderForce Agents.app can act as a PeekabooBridge host.
+- **Host**: Builderforce.app can act as a PeekabooBridge host.
 - **Client**: use the `peekaboo` CLI (no separate `builderforce ui ...` surface).
 - **UI**: visual overlays stay in Peekaboo.app; BuilderForce Agents is a thin broker host.
 
@@ -34,7 +34,7 @@ Peekaboo clients typically try hosts in this order:
 
 1. Peekaboo.app (full UX)
 2. Claude.app (if installed)
-3. BuilderForce Agents.app (thin broker)
+3. Builderforce.app (thin broker)
 
 Use `peekaboo bridge status --verbose` to see which host is active and which
 socket path is in use. You can override with:
@@ -61,5 +61,5 @@ If you need longer retention, re‑capture from the client.
 - If `peekaboo` reports “bridge client is not authorized”, ensure the client is
   properly signed or run the host with `PEEKABOO_ALLOW_UNSIGNED_SOCKET_CLIENTS=1`
   in **debug** mode only.
-- If no hosts are found, open one of the host apps (Peekaboo.app or BuilderForce Agents.app)
+- If no hosts are found, open one of the host apps (Peekaboo.app or Builderforce.app)
   and confirm permissions are granted.

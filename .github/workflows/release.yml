@@ -147,11 +147,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # vendor/ and apps/shared/BuilderforceKit are gitignored (Docker builds
-      # exclude them too), so a fresh checkout here has neither the A2UI renderer
-      # sources nor a prebuilt bundle. bundle-a2ui.sh's own documented escape hatch
-      # for exactly this environment: skip bundling and ship the CLI without the
-      # canvas feature rather than failing the whole package.
+      # agent-runtime/vendor/ is gitignored (Docker builds exclude it too), so a
+      # fresh checkout here has neither the A2UI renderer sources nor a prebuilt
+      # bundle (the A2UI app itself lives at apps/shared/BuilderforceKit/Tools/
+      # CanvasA2UI). bundle-a2ui.sh's own documented escape hatch for exactly this
+      # environment: skip bundling and ship the CLI without the canvas feature
+      # rather than failing the whole package.
       - run: pnpm build && pnpm ui:build
         env:
           BUILDERFORCE_AGENTS_A2UI_SKIP_MISSING: "1"

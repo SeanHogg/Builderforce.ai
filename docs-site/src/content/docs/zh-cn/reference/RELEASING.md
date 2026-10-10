@@ -81,7 +81,7 @@ x-i18n:
 
 ### 故障排除（来自 2.0.0-beta2 发布的笔记）
 
-- **npm pack/publish 挂起或产生巨大 tarball**：`dist/BuilderForce Agents.app` 中的 macOS 应用包（和发布 zip）被扫入包中。通过 `package.json` 的 `files` 白名单发布内容来修复（包含 dist 子目录、docs、skills；排除应用包）。用 `npm pack --dry-run` 确认 `dist/BuilderForce Agents.app` 未列出。
+- **npm pack/publish 挂起或产生巨大 tarball**：`dist/Builderforce.app` 中的 macOS 应用包（和发布 zip）被扫入包中。通过 `package.json` 的 `files` 白名单发布内容来修复（包含 dist 子目录、docs、skills；排除应用包）。用 `npm pack --dry-run` 确认 `dist/Builderforce.app` 未列出。
 - **npm auth dist-tags 的 Web 循环**：使用旧版认证以获取 OTP 提示：
   - `NPM_CONFIG_AUTH_TYPE=legacy npm dist-tag add @seanhogg/builderforce-agents@X.Y.Z latest`
 - **`npx` 验证失败并显示 `ECOMPROMISED: Lock compromised`**：使用新缓存重试：

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   VISUAL_SELECT_MESSAGE,
+  VISUAL_UNRESOLVED_MESSAGE,
+  isVisualUnresolved,
   visualSelectionFrom,
   withVisualEditor,
   workspaceRelativePath,
@@ -42,5 +44,18 @@ describe('visualSelectionFrom', () => {
     expect(visualSelectionFrom({ type: 'other' })).toBeNull();
     expect(visualSelectionFrom({ type: VISUAL_SELECT_MESSAGE, payload: { file: 'a.jsx' } })).toBeNull();
     expect(visualSelectionFrom({ type: VISUAL_SELECT_MESSAGE, payload: { file: '', line: 3 } })).toBeNull();
+  });
+});
+
+describe('isVisualUnresolved', () => {
+  it('recognises the overlay saying a click had no source anchor', () => {
+    expect(isVisualUnresolved({ type: VISUAL_UNRESOLVED_MESSAGE })).toBe(true);
+    expect(isVisualUnresolved({ type: VISUAL_SELECT_MESSAGE })).toBe(false);
+    expect(isVisualUnresolved(null)).toBe(false);
+  });
+
+  it('is posted by the overlay instead of the click doing nothing', () => {
+    const out = withVisualEditor({ 'index.html': '<html><head></head></html>' });
+    expect(out['index.html']).toContain(VISUAL_UNRESOLVED_MESSAGE);
   });
 });

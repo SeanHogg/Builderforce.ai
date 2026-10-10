@@ -52,12 +52,26 @@ data class GatewayConnectOptions(
   val userAgent: String? = null,
 )
 
+/**
+ * Why a gateway link is not (yet) connected. Typed so the node runtime can render it in the
+ * user's language and derive the status-pill phase without parsing English text.
+ */
+sealed interface GatewayLinkStatus {
+  data object Offline : GatewayLinkStatus
+  data object Connecting : GatewayLinkStatus
+  data object Reconnecting : GatewayLinkStatus
+  /** Connect or socket failure; [detail] is the raw (server/OS) message, not translated. */
+  data class Failed(val detail: String) : GatewayLinkStatus
+  /** The gateway closed the socket; [reason] is the raw close reason, not translated. */
+  data class Closed(val reason: String) : GatewayLinkStatus
+}
+
 class GatewaySession(
   private val scope: CoroutineScope,
   private val identityStore: DeviceIdentityStore,
   private val deviceAuthStore: DeviceAuthStore,
   private val onConnected: (serverName: String?, remoteAddress: String?, mainSessionKey: String?) -> Unit,
-  private val onDisconnected: (message: String) -> Unit,
+  private val onDisconnected: (status: GatewayLinkStatus) -> Unit,
   private val onEvent: (event: String, payloadJson: String?) -> Unit,
   private val onInvoke: (suspend (InvokeRequest) -> InvokeResult)? = null,
   private val onTlsFingerprint: ((stableId: String, fingerprint: String) -> Unit)? = null,
@@ -120,7 +134,7 @@ class GatewaySession(
       job = null
       canvasHostUrl = null
       mainSessionKey = null
-      onDisconnected("Offline")
+      onDisconnected(GatewayLinkStatus.Offline)
     }
   }
 
@@ -280,7 +294,7 @@ class GatewaySession(
         if (isClosed.compareAndSet(false, true)) {
           failPending()
           closedDeferred.complete(Unit)
-          onDisconnected("Gateway error: ${t.message ?: t::class.java.simpleName}")
+          onDisconnected(GatewayLinkStatus.Failed(t.message ?: t::class.java.simpleName))
         }
       }
 
@@ -291,7 +305,7 @@ class GatewaySession(
         if (isClosed.compareAndSet(false, true)) {
           failPending()
           closedDeferred.complete(Unit)
-          onDisconnected("Gateway closed: $reason")
+          onDisconnected(GatewayLinkStatus.Closed(reason))
         }
       }
     }
@@ -562,12 +576,12 @@ class GatewaySession(
       }
 
       try {
-        onDisconnected(if (attempt == 0) "Connecting…" else "Reconnecting…")
+        onDisconnected(if (attempt == 0) GatewayLinkStatus.Connecting else GatewayLinkStatus.Reconnecting)
         connectOnce(target)
         attempt = 0
       } catch (err: Throwable) {
         attempt += 1
-        onDisconnected("Gateway error: ${err.message ?: err::class.java.simpleName}")
+        onDisconnected(GatewayLinkStatus.Failed(err.message ?: err::class.java.simpleName))
         val sleepMs = minOf(8_000L, (350.0 * Math.pow(1.7, attempt.toDouble())).toLong())
         delay(sleepMs)
       }

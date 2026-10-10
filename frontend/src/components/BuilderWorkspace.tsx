@@ -19,6 +19,7 @@ import { useWorkspaceBrainActions } from '@/components/builder/useWorkspaceBrain
 import { useWorkspaceBrainContext } from '@/components/builder/useWorkspaceBrainContext';
 import styles from '@/components/builder/workspaceChrome.module.css';
 import { serverFileStore } from '@/lib/workspace/workspaceFileStore';
+import { useOnPreviewPick } from '@/lib/workspace/previewPick';
 import type { Project, FileEntry } from '@/lib/types';
 
 interface IDEProps {
@@ -81,6 +82,13 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const [chatHidden, setChatHidden] = useState(false);
   const showChat = hasDockedBrain && (narrow ? narrowPane === 'chat' : !chatHidden);
   const showWork = !narrow || !hasDockedBrain || narrowPane === 'work';
+  // An element picked in the preview lands as a chip in the Brain's prompt — so bring
+  // the Brain into view: unhide it, or on a phone switch to its pane.
+  useOnPreviewPick(() => {
+    if (!hasDockedBrain) return;
+    if (narrow) setNarrowPane('chat');
+    else setChatHidden(false);
+  });
 
   const workspace = (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', overflow: 'hidden' }}>

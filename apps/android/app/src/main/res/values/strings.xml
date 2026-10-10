@@ -1,19 +1,197 @@
 <resources>
     <string name="app_name">Builderforce</string>
 
+    <!-- Common actions -->
+    <string name="action_cancel">Cancel</string>
+    <string name="action_continue">Continue</string>
+    <string name="action_not_now">Not now</string>
+    <string name="action_open_settings">Open Settings</string>
+    <string name="action_connect">Connect</string>
+    <string name="action_disconnect">Disconnect</string>
+    <string name="action_expand">Expand</string>
+    <string name="action_collapse">Collapse</string>
+
     <!-- Node foreground service and system prompts -->
     <string name="notification_title">Builderforce</string>
     <string name="notification_title_connected">Builderforce · Connected</string>
     <string name="notification_starting">Starting…</string>
+    <string name="notification_channel_name">Connection</string>
     <string name="notification_channel_description">Builderforce node connection status</string>
-    <string name="update_notification_title">Builderforce update</string>
+    <string name="notification_status_with_server">%1$s · %2$s</string>
+    <string name="notification_voice_wake_listening">" · Voice Wake: Listening"</string>
+    <string name="notification_voice_wake_paused">" · Voice Wake: Paused"</string>
     <string name="permission_rationale">Builderforce needs %1$s permissions to continue.</string>
+    <string name="permission_required_title">Permission required</string>
+    <string name="permission_settings_title">Enable permission in Settings</string>
+    <string name="permission_settings_message">Please enable %1$s in Android Settings to continue.</string>
+    <string name="permission_label_camera">Camera</string>
+    <string name="permission_label_microphone">Microphone</string>
+    <string name="permission_label_sms">SMS</string>
+    <string name="screen_capture_title">Screen recording required</string>
     <string name="screen_capture_rationale">Builderforce needs to record the screen for this command.</string>
 
+    <!-- App update -->
+    <string name="update_notification_title">Builderforce update</string>
+    <string name="update_channel_name">App updates</string>
+    <string name="update_connecting">Connecting…</string>
+    <string name="update_progress">%1$.1f / %2$.1f MB (%3$d%%)</string>
+    <string name="update_downloaded_mb">%1$.1f MB downloaded</string>
+    <string name="update_installing">Installing update…</string>
+    <string name="update_failed_title">Update failed</string>
+    <string name="update_failed_http">The download failed (HTTP %1$d).</string>
+    <string name="update_failed_checksum">The download did not match its SHA-256 checksum.</string>
+    <string name="update_failed_invalid_apk">The downloaded file is not a valid APK.</string>
+    <string name="update_failed_unknown">Unknown error</string>
+
+    <!-- Gateway status -->
+    <string name="gateway_status_offline">Offline</string>
+    <string name="gateway_status_connected">Connected</string>
+    <string name="gateway_status_connected_node_offline">Connected (node offline)</string>
+    <string name="gateway_status_connected_operator_offline">Connected (operator offline)</string>
+    <string name="gateway_status_connecting">Connecting…</string>
+    <string name="gateway_status_reconnecting">Reconnecting…</string>
+    <string name="gateway_status_error">Gateway error: %1$s</string>
+    <string name="gateway_status_closed">Gateway closed: %1$s</string>
+    <string name="gateway_status_verify_tls">Verify the gateway TLS fingerprint…</string>
+    <string name="gateway_status_tls_unreadable">Failed: can\'t read the TLS fingerprint</string>
+    <string name="gateway_status_invalid_manual">Failed: invalid manual host or port</string>
+    <string name="gateway_trust_title">Trust this gateway?</string>
+    <string name="gateway_trust_body">First-time TLS connection.\n\nVerify this SHA-256 fingerprint out-of-band before trusting:\n%1$s</string>
+    <string name="gateway_trust_confirm">Trust and connect</string>
+
+    <!-- Gateway discovery -->
+    <string name="discovery_searching">Searching…</string>
+    <string name="discovery_searching_gateways">Searching for gateways…</string>
+    <string name="discovery_wide_area">Wide area: %1$s</string>
+    <string name="discovery_local_and_wide">Local: %1$d • %2$s</string>
+    <plurals name="discovery_found_gateways">
+        <item quantity="one">Discovery active • %1$d gateway found</item>
+        <item quantity="other">Discovery active • %1$d gateways found</item>
+    </plurals>
+    <plurals name="discovery_found_other_gateways">
+        <item quantity="one">Discovery active • %1$d other gateway found</item>
+        <item quantity="other">Discovery active • %1$d other gateways found</item>
+    </plurals>
+
+    <!-- Voice Wake and Talk Mode -->
+    <string name="voice_status_off">Off</string>
+    <string name="voice_status_paused">Paused</string>
+    <string name="voice_status_listening">Listening</string>
+    <string name="voice_status_triggered">Triggered</string>
+    <string name="voice_status_mic_permission">Microphone permission required</string>
+    <string name="voice_status_recognizer_unavailable">Speech recognizer unavailable</string>
+    <string name="voice_status_start_failed">Start failed: %1$s</string>
+    <string name="voice_error_audio">Audio error</string>
+    <string name="voice_error_client">Client error</string>
+    <string name="voice_error_network">Network error</string>
+    <string name="voice_error_network_timeout">Network timeout</string>
+    <string name="voice_error_busy">Recognizer busy</string>
+    <string name="voice_error_server">Server error</string>
+    <string name="voice_error_other">Speech error (%1$d)</string>
+    <string name="talk_status_thinking">Thinking…</string>
+    <string name="talk_status_gateway_offline">Gateway not connected</string>
+    <string name="talk_status_no_reply">No reply</string>
+    <string name="talk_status_failed">Talk failed: %1$s</string>
+    <string name="talk_status_speaking">Speaking…</string>
+    <string name="talk_status_speaking_system">Speaking (system voice)…</string>
+    <string name="talk_status_speak_failed">Speaking failed: %1$s</string>
+    <string name="talk_phase_speaking">Speaking</string>
+    <string name="talk_phase_listening">Listening</string>
+    <string name="talk_phase_thinking">Thinking</string>
+
+    <!-- Camera HUD -->
+    <string name="camera_hud_taking_photo">Taking photo…</string>
+    <string name="camera_hud_photo_captured">Photo captured</string>
+    <string name="camera_hud_recording">Recording…</string>
+    <string name="camera_hud_clip_captured">Clip captured</string>
+
+    <!-- Overlay and status pill -->
+    <string name="overlay_chat">Chat</string>
+    <string name="overlay_talk_mode">Talk Mode</string>
+    <string name="overlay_settings">Settings</string>
+    <string name="status_pill_connected">Connected</string>
+    <string name="status_pill_connecting">Connecting…</string>
+    <string name="status_pill_error">Error</string>
+    <string name="status_pill_offline">Offline</string>
+    <string name="status_voice_enabled">Voice enabled</string>
+    <string name="status_voice_disabled">Voice disabled</string>
+    <string name="activity_foreground_required">Foreground required</string>
+    <string name="activity_repairing">Repairing…</string>
+    <string name="activity_repairing_description">Repairing</string>
+    <string name="activity_approval_pending">Approval pending</string>
+    <string name="activity_recording_screen">Recording screen…</string>
+    <string name="activity_recording_screen_description">Recording screen</string>
+    <string name="activity_taking_photo_description">Taking photo</string>
+    <string name="activity_recording_description">Recording</string>
+    <string name="activity_capture_finished_description">Capture finished</string>
+    <string name="activity_capture_failed_description">Capture failed</string>
+    <string name="activity_mic_permission">Mic permission</string>
+    <string name="activity_mic_permission_description">Microphone permission required</string>
+    <string name="activity_voice_wake_paused">Voice Wake paused</string>
+
     <!-- Settings -->
+    <string name="settings_section_node">Node</string>
+    <string name="settings_node_name">Name</string>
+    <string name="settings_node_instance_id">Instance ID: %1$s</string>
+    <string name="settings_node_device">Device: %1$s</string>
+    <string name="settings_node_version">Version: %1$s</string>
+    <string name="settings_section_gateway">Gateway</string>
+    <string name="settings_gateway_status">Status</string>
+    <string name="settings_gateway_server">Server</string>
+    <string name="settings_gateway_address">Address</string>
+    <string name="settings_gateways_other">Other gateways</string>
+    <string name="settings_gateways_discovered">Discovered gateways</string>
+    <string name="settings_gateways_none">No gateways found yet.</string>
+    <string name="settings_gateway_ip">IP: %1$s:%2$d</string>
+    <string name="settings_gateway_lan">LAN: %1$s</string>
+    <string name="settings_gateway_tailnet">Tailnet: %1$s</string>
+    <string name="settings_gateway_ports">Ports: gateway %1$s · canvas %2$s</string>
+    <string name="settings_advanced">Advanced</string>
+    <string name="settings_advanced_summary">Manual gateway connection</string>
+    <string name="settings_manual_enable">Use manual gateway</string>
+    <string name="settings_manual_enable_summary">Use this when discovery is blocked.</string>
+    <string name="settings_manual_host">Host</string>
+    <string name="settings_manual_port">Port</string>
+    <string name="settings_manual_token">Gateway token</string>
+    <string name="settings_manual_tls">Require TLS</string>
+    <string name="settings_manual_tls_summary">Pin the gateway certificate on first connect.</string>
+    <string name="settings_manual_connect">Connect (manual)</string>
+    <string name="settings_section_voice">Voice</string>
+    <string name="settings_voice_wake">Voice Wake</string>
+    <string name="settings_voice_foreground">Foreground only</string>
     <string name="settings_voice_foreground_only">Listens only while Builderforce is open.</string>
+    <string name="settings_always">Always</string>
+    <string name="settings_voice_always_summary">Keeps listening in the background (shows a persistent notification).</string>
+    <string name="settings_wake_words">Wake words (comma-separated)</string>
+    <string name="settings_wake_words_reset">Reset defaults</string>
+    <string name="settings_wake_words_sync_connected">Any node can edit wake words. Changes sync via the gateway.</string>
+    <string name="settings_wake_words_sync_offline">Connect to a gateway to sync wake words globally.</string>
+    <string name="settings_section_camera">Camera</string>
+    <string name="settings_camera_allow">Allow camera</string>
+    <string name="settings_camera_allow_summary">Allows the gateway to request photos or short video clips (foreground only).</string>
+    <string name="settings_camera_tip">Tip: grant Microphone permission for video clips with audio.</string>
+    <string name="settings_section_messaging">Messaging</string>
+    <string name="settings_sms_permission">SMS permission</string>
+    <string name="settings_sms_summary">Allow the gateway to send SMS from this device.</string>
+    <string name="settings_sms_no_telephony">SMS requires a device with telephony hardware.</string>
+    <string name="settings_sms_unavailable">Unavailable</string>
+    <string name="settings_sms_manage">Manage</string>
+    <string name="settings_sms_grant">Grant</string>
+    <string name="settings_section_location">Location</string>
+    <string name="settings_location_off">Off</string>
+    <string name="settings_location_off_summary">Disable location sharing.</string>
+    <string name="settings_location_while_using_title">While using</string>
     <string name="settings_location_while_using">Only while Builderforce is open.</string>
+    <string name="settings_location_always_summary">Allow background location (requires system permission).</string>
+    <string name="settings_location_precise">Precise location</string>
+    <string name="settings_location_precise_summary">Use precise GPS when available.</string>
+    <string name="settings_location_always_note">Always may require Android Settings to allow background location.</string>
+    <string name="settings_section_screen">Screen</string>
+    <string name="settings_prevent_sleep_title">Prevent sleep</string>
     <string name="settings_prevent_sleep">Keeps the screen awake while Builderforce is open.</string>
+    <string name="settings_section_debug">Debug</string>
+    <string name="settings_debug_canvas_status">Debug canvas status</string>
+    <string name="settings_debug_canvas_status_summary">Show status text in the canvas when debug is enabled.</string>
     <string name="settings_account_title">Builderforce account</string>
     <string name="settings_account_signed_in">Signed in</string>
     <string name="settings_account_signed_out">Not signed in. Open Chat to sign in.</string>
@@ -68,6 +246,8 @@
     <string name="chat_starter_3">Plan my week</string>
     <string name="chat_mic_denied">Microphone permission is needed to dictate.</string>
     <string name="chat_image_unreadable">That image could not be read.</string>
+    <string name="chat_image">Image</string>
+    <string name="chat_image_unavailable">Image unavailable</string>
 
     <!-- Cloud errors -->
     <string name="cloud_error_signed_out">You\'re not signed in to Builderforce.</string>

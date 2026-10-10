@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { ChatModelOptions, ChatModelSelection, ModelIdentityContext } from '@seanhogg/builderforce-brain-ui';
 import type { DirectedRecipient, TicketTag } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainEffort, ChatMode } from '@/lib/brain';
+import type { TemplateEntry } from '@/lib/templates/contract';
 
 export interface ChatInputAttachment {
   key: string;
@@ -16,6 +17,30 @@ export interface ComposerAddMenuItem {
   icon: ReactNode;
   label: string;
   onSelect: () => void;
+}
+
+/** One fixed suggestion: a chip above an empty composer, or a row leading the starting points. */
+export interface ComposerSuggestion {
+  id: string;
+  label: string;
+  /** Seeds the composer (the host's `onChange`). A suggestion never sends. */
+  onSelect: () => void;
+}
+
+/**
+ * The composer's STARTING POINTS — the searchable catalogue (`PromptUseCaseCatalog`),
+ * opened from the `+` menu and drawn inside the box, above the text. The same on every
+ * prompt; the host only says what picking an entry does.
+ */
+export interface ComposerStarters {
+  /** The entry the person picked. The catalogue closes itself. */
+  onSelect: (entry: TemplateEntry) => void;
+  /** The `+` row's label, when the host words it (the canvas names its phase). */
+  label?: string;
+  /** A section leading the list (the canvas phase's own starters). */
+  lead?: { heading: string; items: readonly ComposerSuggestion[] };
+  /** Groups to draw first. */
+  preferCategory?: (category: string) => boolean;
 }
 
 export interface ChatInputProps {
@@ -137,6 +162,13 @@ export interface ChatInputProps {
   contextControls?: ReactNode;
   /** Extra rows for the `+` menu — host actions that belong with "add to this turn". */
   addMenuItems?: readonly ComposerAddMenuItem[];
+  /** Starting points: a `+` row that opens the catalogue inside the box. */
+  starters?: ComposerStarters;
+  /**
+   * Fixed next steps, drawn as chips above the text while the box is EMPTY and nothing is
+   * running. A fixed list on purpose — offering one costs no model call.
+   */
+  suggestions?: readonly ComposerSuggestion[];
   /** Standing facts (e.g. the memory status) shown inside the `/` menu, the way the editor composer shows them — never as a row under the box. */
   menuStatus?: ReactNode;
   className?: string;

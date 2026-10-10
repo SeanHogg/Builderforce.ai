@@ -121,15 +121,16 @@ export function brainActivityLine(live: BrainActivityLive | null): string | null
 }
 
 /**
- * The rendered signal. `strip` is the dock footer (full width, own top border);
- * `inline` is the compact card shown inside the Brain Object on the board.
+ * The rendered signal. `inline` is the compact card shown inside the Brain Object on the
+ * board; `composer` is the pill above the floating prompt. The Brain dock has none: its
+ * transcript's live node is the one reading of the run there.
  *
- * Only the canvas-global composer signal announces. The dock and Object repeat the
- * same visual state without making a screen reader narrate every phase twice.
+ * Only the canvas-global composer signal announces. The Object repeats the same visual
+ * state without making a screen reader narrate every phase twice.
  */
-export type BrainActivityVariant = 'strip' | 'inline' | 'composer';
+export type BrainActivityVariant = 'inline' | 'composer';
 
-export function BrainActivityBar({ state, variant = 'strip' }: { state: BrainActivityState; variant?: BrainActivityVariant }) {
+export function BrainActivityBar({ state, variant }: { state: BrainActivityState; variant: BrainActivityVariant }) {
   const live = state.live;
   const announce = variant === 'composer' ? { role: 'status', 'aria-live': 'polite' as const } : {};
   if (live) {
@@ -156,12 +157,12 @@ export function BrainActivityBar({ state, variant = 'strip' }: { state: BrainAct
 
 /** Convenience for a surface that owns no lifted activity state of its own. */
 export function BrainActivityIndicator({
-  running, trace, startedAt = null, variant = 'strip',
+  running, trace, startedAt = null, variant,
 }: {
   running: boolean;
   trace: readonly BrainTraceEvent[];
   startedAt?: number | null;
-  variant?: BrainActivityVariant;
+  variant: BrainActivityVariant;
 }) {
   const state = useBrainActivity(running, trace, startedAt);
   return <BrainActivityBar state={state} variant={variant} />;

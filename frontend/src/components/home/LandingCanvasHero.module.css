@@ -20,9 +20,10 @@
   text-align: center;
 }
 
-/* The catalog intentionally escapes the fixed-height board. Promote the whole
-   hero while it is open so the following homepage section cannot paint over it. */
-.hero:has(.promptWrap [aria-expanded='true']) {
+/* The starting-points catalogue opens inside the composer and can grow it past the
+   fixed-height board. Promote the whole hero while it is open so the following
+   homepage section cannot paint over it. */
+.hero:has(.promptWrap [data-open='true']) {
   z-index: 2;
 }
 
@@ -488,9 +489,8 @@
 
 /* On a phone the prompt STAYS FIXED at the bottom while the cards scroll above.
    The prompt band is the last flex child so it anchors the bottom edge; making
-   it sticky keeps it in view at every scroll position. The options panel (the
-   PromptUseCasePicker) escapes the board's overflow via its own 899px media
-   query — it becomes a viewport-anchored bottom sheet that scrolls inside. */
+   it sticky keeps it in view at every scroll position. The starting-points
+   catalogue opens inside the composer and scrolls within its own height cap. */
 @media (max-width: 899px) {
   .promptWrap {
     position: sticky;

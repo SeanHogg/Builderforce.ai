@@ -33,6 +33,13 @@ import { injectIntoHead } from '@/lib/previewInjection';
 /** postMessage type carrying a selection out of the preview. Namespaced. */
 export const VISUAL_SELECT_MESSAGE = 'builderforce:visual-select';
 
+/**
+ * postMessage type saying a click landed on an element with no source anchor — React
+ * did not report where it was rendered (a production build, or a React version without
+ * `_debugSource`). The host says so instead of the click doing nothing.
+ */
+export const VISUAL_UNRESOLVED_MESSAGE = 'builderforce:visual-unresolved';
+
 /** postMessage type telling the preview to arm or disarm selection. */
 export const VISUAL_ARM_MESSAGE = 'builderforce:visual-arm';
 
@@ -75,6 +82,7 @@ export const VISUAL_EDITOR_OVERLAY = `<script>
   var SELECT = ${JSON.stringify(VISUAL_SELECT_MESSAGE)};
   var ARM = ${JSON.stringify(VISUAL_ARM_MESSAGE)};
   var NAV = ${JSON.stringify(PREVIEW_NAV_MESSAGE)};
+  var UNRESOLVED = ${JSON.stringify(VISUAL_UNRESOLVED_MESSAGE)};
   var armed = false;
   var box = null;
 
@@ -119,10 +127,13 @@ export const VISUAL_EDITOR_OVERLAY = `<script>
     event.preventDefault();
     event.stopPropagation();
     var found = sourceOf(event.target);
-    if (!found) return;
+    if (!found) {
+      try { parent.postMessage({ type: UNRESOLVED }, '*'); } catch (e) {}
+      return;
+    }
     var el = found.el;
-    // Only a SINGLE text child is offered for editing: an element with mixed
-    // children has no one string that is safely replaceable in source.
+    // Only a SINGLE text child is reported as the element's text: an element with
+    // mixed children has no one string that names it.
     var text = (el.childNodes.length === 1 && el.firstChild.nodeType === 3)
       ? el.firstChild.nodeValue
       : null;
@@ -175,6 +186,11 @@ export function workspaceRelativePath(fileName: string): string {
   const marker = normalised.lastIndexOf('/src/');
   if (marker >= 0) return normalised.slice(marker + 1);
   return normalised;
+}
+
+/** True for the preview's "that element has no source anchor" message. */
+export function isVisualUnresolved(data: unknown): boolean {
+  return !!data && typeof data === 'object' && (data as { type?: unknown }).type === VISUAL_UNRESOLVED_MESSAGE;
 }
 
 /** Parse a selection message from the preview frame, or null when not ours. */

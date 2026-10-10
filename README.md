@@ -846,7 +846,7 @@ app.post("/api/agents/:id/chat", async (c) => {
 
 #### `POST /api/auth/cli-key` — Issue CLI API Key
 
-Issues a new CLI key scoped to inference. Requires a valid web token. The `rawKey` is returned once and stored only as a SHA-256 hash. The user saves it as `CODERCLAW_LINK_API_KEY`.
+Issues a new CLI key scoped to inference. Requires a valid web token. The `rawKey` is returned once and stored only as a SHA-256 hash. The user saves it as `BUILDERFORCE_AGENTS_LINK_API_KEY`.
 
 #### `DELETE /api/auth/cli-key/:keyId` — Revoke CLI Key
 
@@ -916,7 +916,7 @@ builderforce CLI
 ```
 1. builderforce init  →  link wizard
 2. POST /api/auth/cli-key  { label: machineName }
-3. rawKey saved to ~/.builderforce/.env as CODERCLAW_LINK_API_KEY
+3. rawKey saved to ~/.builderforce/.env as BUILDERFORCE_AGENTS_LINK_API_KEY
 4. Future requests: Authorization: Bearer <rawKey>
 ```
 

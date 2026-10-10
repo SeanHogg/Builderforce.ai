@@ -189,8 +189,6 @@ struct OnboardingView: View {
         self.permissionMonitor = permissionMonitor
         self._gatewayDiscovery = State(initialValue: discoveryModel)
         self._onboardingChatModel = State(
-            initialValue: BuilderforceChatViewModel(
-                sessionKey: "onboarding",
-                transport: MacGatewayChatTransport()))
+            initialValue: BuilderforceChatViewModel(transport: BuilderforceCloudChatTransport()))
     }
 }

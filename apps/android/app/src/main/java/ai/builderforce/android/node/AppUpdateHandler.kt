@@ -114,7 +114,7 @@ class AppUpdateHandler(
       val notifManager = appContext.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
 
       // Create notification channel (required for Android 8+)
-      val channel = android.app.NotificationChannel(channelId, "App Updates", android.app.NotificationManager.IMPORTANCE_LOW)
+      val channel = android.app.NotificationChannel(channelId, appContext.getString(ai.builderforce.android.R.string.update_channel_name), android.app.NotificationManager.IMPORTANCE_LOW)
       notifManager.createNotificationChannel(channel)
 
       // PendingIntent to open the app when notification is tapped
@@ -143,7 +143,7 @@ class AppUpdateHandler(
               .setOngoing(true)
               .build()
           }
-          notifManager.notify(notifId, buildProgressNotif(0, 0, "Connecting..."))
+          notifManager.notify(notifId, buildProgressNotif(0, 0, appContext.getString(ai.builderforce.android.R.string.update_connecting)))
 
           val client = okhttp3.OkHttpClient.Builder()
             .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
@@ -155,10 +155,10 @@ class AppUpdateHandler(
             notifManager.cancel(notifId)
             notifManager.notify(notifId, android.app.Notification.Builder(appContext, channelId)
               .setSmallIcon(android.R.drawable.stat_notify_error)
-              .setContentTitle("Update Failed")
+              .setContentTitle(appContext.getString(ai.builderforce.android.R.string.update_failed_title))
               
               .setContentIntent(launchPi)
-              .setContentText("HTTP ${response.code}")
+              .setContentText(appContext.getString(ai.builderforce.android.R.string.update_failed_http, response.code))
               .build())
             return@launch
           }
@@ -187,12 +187,11 @@ class AppUpdateHandler(
                   lastNotifUpdate = now
                   if (contentLength > 0) {
                     val pct = ((totalBytes * 100) / contentLength).toInt()
-                    val mb = String.format(Locale.US, "%.1f", totalBytes / 1048576.0)
-                    val totalMb = String.format(Locale.US, "%.1f", contentLength / 1048576.0)
-                    notifManager.notify(notifId, buildProgressNotif(pct, 100, "$mb / $totalMb MB ($pct%)"))
+                    val mb = totalBytes / 1048576.0
+                    val totalMb = contentLength / 1048576.0
+                    notifManager.notify(notifId, buildProgressNotif(pct, 100, appContext.getString(ai.builderforce.android.R.string.update_progress, mb, totalMb, pct)))
                   } else {
-                    val mb = String.format(Locale.US, "%.1f", totalBytes / 1048576.0)
-                    notifManager.notify(notifId, buildProgressNotif(0, 0, "${mb} MB downloaded"))
+                    notifManager.notify(notifId, buildProgressNotif(0, 0, appContext.getString(ai.builderforce.android.R.string.update_downloaded_mb, totalBytes / 1048576.0)))
                   }
                 }
               }
@@ -212,9 +211,9 @@ class AppUpdateHandler(
               notifId,
               android.app.Notification.Builder(appContext, channelId)
                 .setSmallIcon(android.R.drawable.stat_notify_error)
-                .setContentTitle("Update Failed")
+                .setContentTitle(appContext.getString(ai.builderforce.android.R.string.update_failed_title))
                 .setContentIntent(launchPi)
-                .setContentText("SHA-256 mismatch")
+                .setContentText(appContext.getString(ai.builderforce.android.R.string.update_failed_checksum))
                 .build(),
             )
             return@launch
@@ -228,10 +227,10 @@ class AppUpdateHandler(
             notifManager.cancel(notifId)
             notifManager.notify(notifId, android.app.Notification.Builder(appContext, channelId)
               .setSmallIcon(android.R.drawable.stat_notify_error)
-              .setContentTitle("Update Failed")
+              .setContentTitle(appContext.getString(ai.builderforce.android.R.string.update_failed_title))
               
               .setContentIntent(launchPi)
-              .setContentText("Downloaded file is not a valid APK")
+              .setContentText(appContext.getString(ai.builderforce.android.R.string.update_failed_invalid_apk))
               .build())
             return@launch
           }
@@ -243,9 +242,9 @@ class AppUpdateHandler(
             notifId,
             android.app.Notification.Builder(appContext, channelId)
               .setSmallIcon(android.R.drawable.stat_sys_download_done)
-              .setContentTitle("Installing Update...")
+              .setContentTitle(appContext.getString(ai.builderforce.android.R.string.update_installing))
               .setContentIntent(launchPi)
-              .setContentText("${String.format(Locale.US, "%.1f", totalBytes / 1048576.0)} MB downloaded")
+              .setContentText(appContext.getString(ai.builderforce.android.R.string.update_downloaded_mb, totalBytes / 1048576.0))
               .build(),
           )
 
@@ -273,10 +272,10 @@ class AppUpdateHandler(
           notifManager.cancel(notifId)
           notifManager.notify(notifId, android.app.Notification.Builder(appContext, channelId)
             .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle("Update Failed")
+            .setContentTitle(appContext.getString(ai.builderforce.android.R.string.update_failed_title))
             
               .setContentIntent(launchPi)
-              .setContentText(err.message ?: "Unknown error")
+              .setContentText(err.message ?: appContext.getString(ai.builderforce.android.R.string.update_failed_unknown))
             .build())
         }
       }

@@ -70,20 +70,15 @@
   resize: vertical;
 }
 
+/* Shape and length sit in the composer's tool row: sized to their content. */
+.select {
+  width: auto;
+  min-height: var(--chat-ctl-size, 32px);
+}
+
 .select option {
   background: var(--bg-base);
   color: var(--text-primary);
-}
-
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: end;
-}
-
-.row > .field {
-  flex: 1 1 110px;
 }
 
 .kindSwitch {

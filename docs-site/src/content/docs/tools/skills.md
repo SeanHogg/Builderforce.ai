@@ -14,7 +14,7 @@ BuilderForce Agents uses **[AgentSkills](https://agentskills.io)-compatible** sk
 
 Skills are loaded from **three** places:
 
-1. **Bundled skills**: shipped with the install (npm package or BuilderForce Agents.app)
+1. **Bundled skills**: shipped with the install (npm package or Builderforce.app)
 2. **Managed/local skills**: `~/.builderforce/skills`
 3. **Workspace skills**: `<workspace>/skills`
 
@@ -285,7 +285,7 @@ Notes:
 ## Managed skills lifecycle
 
 BuilderForce Agents ships a baseline set of skills as **bundled skills** as part of the
-install (npm package or BuilderForce Agents.app). `~/.builderforce/skills` exists for local
+install (npm package or Builderforce.app). `~/.builderforce/skills` exists for local
 overrides (for example, pinning/patching a skill without changing the bundled
 copy). Workspace skills are user-owned and override both on name conflicts.
 

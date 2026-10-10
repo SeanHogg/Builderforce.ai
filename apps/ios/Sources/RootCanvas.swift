@@ -96,12 +96,8 @@ struct RootCanvas: View {
                     .environment(self.appModel.voiceWake)
                     .environment(self.gatewayController)
             case .chat:
-                ChatSheet(
-                    // Chat RPCs run on the operator session (read/write scopes).
-                    gateway: self.appModel.operatorSession,
-                    sessionKey: self.appModel.mainSessionKey,
-                    agentName: self.appModel.activeAgentName,
-                    userAccent: self.appModel.seamColor)
+                // Chat is the Builderforce cloud Brain; node features stay on the gateway.
+                ChatSheet(userAccent: self.appModel.seamColor)
             case .quickSetup:
                 GatewayQuickSetupSheet()
                     .environment(self.appModel)

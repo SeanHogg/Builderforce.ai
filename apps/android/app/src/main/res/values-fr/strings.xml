@@ -1,0 +1,261 @@
+<resources>
+    <string name="app_name">Builderforce</string>
+
+    <!-- Common actions -->
+    <string name="action_cancel">Annuler</string>
+    <string name="action_continue">Continuer</string>
+    <string name="action_not_now">Pas maintenant</string>
+    <string name="action_open_settings">Ouvrir les paramètres</string>
+    <string name="action_connect">Se connecter</string>
+    <string name="action_disconnect">Se déconnecter</string>
+    <string name="action_expand">Développer</string>
+    <string name="action_collapse">Réduire</string>
+
+    <!-- Node foreground service and system prompts -->
+    <string name="notification_title">Builderforce</string>
+    <string name="notification_title_connected">Builderforce · Connecté</string>
+    <string name="notification_starting">Démarrage…</string>
+    <string name="notification_channel_name">Connexion</string>
+    <string name="notification_channel_description">État de la connexion du nœud Builderforce</string>
+    <string name="notification_status_with_server">%1$s · %2$s</string>
+    <string name="notification_voice_wake_listening">" · Activation vocale : à l\'écoute"</string>
+    <string name="notification_voice_wake_paused">" · Activation vocale : en pause"</string>
+    <string name="permission_rationale">Builderforce a besoin des autorisations %1$s pour continuer.</string>
+    <string name="permission_required_title">Autorisation requise</string>
+    <string name="permission_settings_title">Activer l\'autorisation dans les paramètres</string>
+    <string name="permission_settings_message">Veuillez activer %1$s dans les paramètres Android pour continuer.</string>
+    <string name="permission_label_camera">Appareil photo</string>
+    <string name="permission_label_microphone">Micro</string>
+    <string name="permission_label_sms">SMS</string>
+    <string name="screen_capture_title">Enregistrement de l\'écran requis</string>
+    <string name="screen_capture_rationale">Builderforce doit enregistrer l\'écran pour cette commande.</string>
+
+    <!-- App update -->
+    <string name="update_notification_title">Mise à jour de Builderforce</string>
+    <string name="update_channel_name">Mises à jour de l\'application</string>
+    <string name="update_connecting">Connexion…</string>
+    <string name="update_progress">%1$.1f / %2$.1f Mo (%3$d %%)</string>
+    <string name="update_downloaded_mb">%1$.1f Mo téléchargés</string>
+    <string name="update_installing">Installation de la mise à jour…</string>
+    <string name="update_failed_title">Échec de la mise à jour</string>
+    <string name="update_failed_http">Le téléchargement a échoué (HTTP %1$d).</string>
+    <string name="update_failed_checksum">Le téléchargement ne correspond pas à sa somme de contrôle SHA-256.</string>
+    <string name="update_failed_invalid_apk">Le fichier téléchargé n\'est pas un APK valide.</string>
+    <string name="update_failed_unknown">Erreur inconnue</string>
+
+    <!-- Gateway status -->
+    <string name="gateway_status_offline">Hors ligne</string>
+    <string name="gateway_status_connected">Connecté</string>
+    <string name="gateway_status_connected_node_offline">Connecté (nœud hors ligne)</string>
+    <string name="gateway_status_connected_operator_offline">Connecté (opérateur hors ligne)</string>
+    <string name="gateway_status_connecting">Connexion…</string>
+    <string name="gateway_status_reconnecting">Reconnexion…</string>
+    <string name="gateway_status_error">Erreur de la passerelle : %1$s</string>
+    <string name="gateway_status_closed">La passerelle a fermé la connexion : %1$s</string>
+    <string name="gateway_status_verify_tls">Vérifiez l\'empreinte TLS de la passerelle…</string>
+    <string name="gateway_status_tls_unreadable">Échec : impossible de lire l\'empreinte TLS</string>
+    <string name="gateway_status_invalid_manual">Échec : hôte ou port manuel non valide</string>
+    <string name="gateway_trust_title">Faire confiance à cette passerelle ?</string>
+    <string name="gateway_trust_body">Première connexion TLS.\n\nVérifiez cette empreinte SHA-256 par un autre canal avant de lui faire confiance :\n%1$s</string>
+    <string name="gateway_trust_confirm">Faire confiance et se connecter</string>
+
+    <!-- Gateway discovery -->
+    <string name="discovery_searching">Recherche…</string>
+    <string name="discovery_searching_gateways">Recherche de passerelles…</string>
+    <string name="discovery_wide_area">Réseau étendu : %1$s</string>
+    <string name="discovery_local_and_wide">Local : %1$d • %2$s</string>
+    <plurals name="discovery_found_gateways">
+        <item quantity="one">Recherche active • %1$d passerelle trouvée</item>
+        <item quantity="many">Recherche active • %1$d passerelles trouvées</item>
+        <item quantity="other">Recherche active • %1$d passerelles trouvées</item>
+    </plurals>
+    <plurals name="discovery_found_other_gateways">
+        <item quantity="one">Recherche active • %1$d autre passerelle trouvée</item>
+        <item quantity="many">Recherche active • %1$d autres passerelles trouvées</item>
+        <item quantity="other">Recherche active • %1$d autres passerelles trouvées</item>
+    </plurals>
+
+    <!-- Voice Wake and Talk Mode -->
+    <string name="voice_status_off">Désactivé</string>
+    <string name="voice_status_paused">En pause</string>
+    <string name="voice_status_listening">À l\'écoute</string>
+    <string name="voice_status_triggered">Déclenché</string>
+    <string name="voice_status_mic_permission">Autorisation du micro requise</string>
+    <string name="voice_status_recognizer_unavailable">Reconnaissance vocale indisponible</string>
+    <string name="voice_status_start_failed">Échec du démarrage : %1$s</string>
+    <string name="voice_error_audio">Erreur audio</string>
+    <string name="voice_error_client">Erreur du client</string>
+    <string name="voice_error_network">Erreur réseau</string>
+    <string name="voice_error_network_timeout">Délai réseau dépassé</string>
+    <string name="voice_error_busy">Reconnaissance vocale occupée</string>
+    <string name="voice_error_server">Erreur du serveur</string>
+    <string name="voice_error_other">Erreur vocale (%1$d)</string>
+    <string name="talk_status_thinking">Réflexion…</string>
+    <string name="talk_status_gateway_offline">Passerelle non connectée</string>
+    <string name="talk_status_no_reply">Aucune réponse</string>
+    <string name="talk_status_failed">Échec de la conversation : %1$s</string>
+    <string name="talk_status_speaking">Parle…</string>
+    <string name="talk_status_speaking_system">Parle (voix du système)…</string>
+    <string name="talk_status_speak_failed">Échec de la lecture vocale : %1$s</string>
+    <string name="talk_phase_speaking">Parle</string>
+    <string name="talk_phase_listening">À l\'écoute</string>
+    <string name="talk_phase_thinking">Réfléchit</string>
+
+    <!-- Camera HUD -->
+    <string name="camera_hud_taking_photo">Prise de photo…</string>
+    <string name="camera_hud_photo_captured">Photo prise</string>
+    <string name="camera_hud_recording">Enregistrement…</string>
+    <string name="camera_hud_clip_captured">Clip enregistré</string>
+
+    <!-- Overlay and status pill -->
+    <string name="overlay_chat">Chat</string>
+    <string name="overlay_talk_mode">Mode conversation</string>
+    <string name="overlay_settings">Paramètres</string>
+    <string name="status_pill_connected">Connecté</string>
+    <string name="status_pill_connecting">Connexion…</string>
+    <string name="status_pill_error">Erreur</string>
+    <string name="status_pill_offline">Hors ligne</string>
+    <string name="status_voice_enabled">Voix activée</string>
+    <string name="status_voice_disabled">Voix désactivée</string>
+    <string name="activity_foreground_required">Premier plan requis</string>
+    <string name="activity_repairing">Nouvel appairage…</string>
+    <string name="activity_repairing_description">Nouvel appairage</string>
+    <string name="activity_approval_pending">Approbation en attente</string>
+    <string name="activity_recording_screen">Enregistrement de l\'écran…</string>
+    <string name="activity_recording_screen_description">Enregistrement de l\'écran</string>
+    <string name="activity_taking_photo_description">Prise de photo</string>
+    <string name="activity_recording_description">Enregistrement</string>
+    <string name="activity_capture_finished_description">Capture terminée</string>
+    <string name="activity_capture_failed_description">Échec de la capture</string>
+    <string name="activity_mic_permission">Autorisation du micro</string>
+    <string name="activity_mic_permission_description">Autorisation du micro requise</string>
+    <string name="activity_voice_wake_paused">Activation vocale en pause</string>
+
+    <!-- Settings -->
+    <string name="settings_section_node">Nœud</string>
+    <string name="settings_node_name">Nom</string>
+    <string name="settings_node_instance_id">ID d\'instance : %1$s</string>
+    <string name="settings_node_device">Appareil : %1$s</string>
+    <string name="settings_node_version">Version : %1$s</string>
+    <string name="settings_section_gateway">Passerelle</string>
+    <string name="settings_gateway_status">État</string>
+    <string name="settings_gateway_server">Serveur</string>
+    <string name="settings_gateway_address">Adresse</string>
+    <string name="settings_gateways_other">Autres passerelles</string>
+    <string name="settings_gateways_discovered">Passerelles détectées</string>
+    <string name="settings_gateways_none">Aucune passerelle trouvée pour l\'instant.</string>
+    <string name="settings_gateway_ip">IP : %1$s:%2$d</string>
+    <string name="settings_gateway_lan">LAN : %1$s</string>
+    <string name="settings_gateway_tailnet">Tailnet : %1$s</string>
+    <string name="settings_gateway_ports">Ports : passerelle %1$s · canevas %2$s</string>
+    <string name="settings_advanced">Avancé</string>
+    <string name="settings_advanced_summary">Connexion manuelle à la passerelle</string>
+    <string name="settings_manual_enable">Utiliser une passerelle manuelle</string>
+    <string name="settings_manual_enable_summary">À utiliser lorsque la détection automatique est bloquée.</string>
+    <string name="settings_manual_host">Hôte</string>
+    <string name="settings_manual_port">Port</string>
+    <string name="settings_manual_token">Jeton de la passerelle</string>
+    <string name="settings_manual_tls">Exiger TLS</string>
+    <string name="settings_manual_tls_summary">Épingler le certificat de la passerelle à la première connexion.</string>
+    <string name="settings_manual_connect">Se connecter (manuel)</string>
+    <string name="settings_section_voice">Voix</string>
+    <string name="settings_voice_wake">Activation vocale</string>
+    <string name="settings_voice_foreground">Premier plan uniquement</string>
+    <string name="settings_voice_foreground_only">N\'écoute que lorsque Builderforce est ouvert.</string>
+    <string name="settings_always">Toujours</string>
+    <string name="settings_voice_always_summary">Continue d\'écouter en arrière-plan (affiche une notification permanente).</string>
+    <string name="settings_wake_words">Mots d\'activation (séparés par des virgules)</string>
+    <string name="settings_wake_words_reset">Rétablir les valeurs par défaut</string>
+    <string name="settings_wake_words_sync_connected">Tout nœud peut modifier les mots d\'activation. Les changements sont synchronisés via la passerelle.</string>
+    <string name="settings_wake_words_sync_offline">Connectez-vous à une passerelle pour synchroniser les mots d\'activation partout.</string>
+    <string name="settings_section_camera">Appareil photo</string>
+    <string name="settings_camera_allow">Autoriser l\'appareil photo</string>
+    <string name="settings_camera_allow_summary">Permet à la passerelle de demander des photos ou de courts clips vidéo (au premier plan uniquement).</string>
+    <string name="settings_camera_tip">Astuce : accordez l\'autorisation du micro pour des clips vidéo avec le son.</string>
+    <string name="settings_section_messaging">Messagerie</string>
+    <string name="settings_sms_permission">Autorisation SMS</string>
+    <string name="settings_sms_summary">Permet à la passerelle d\'envoyer des SMS depuis cet appareil.</string>
+    <string name="settings_sms_no_telephony">Les SMS nécessitent un appareil doté de la téléphonie.</string>
+    <string name="settings_sms_unavailable">Indisponible</string>
+    <string name="settings_sms_manage">Gérer</string>
+    <string name="settings_sms_grant">Accorder</string>
+    <string name="settings_section_location">Position</string>
+    <string name="settings_location_off">Désactivée</string>
+    <string name="settings_location_off_summary">Désactiver le partage de la position.</string>
+    <string name="settings_location_while_using_title">Pendant l\'utilisation</string>
+    <string name="settings_location_while_using">Uniquement lorsque Builderforce est ouvert.</string>
+    <string name="settings_location_always_summary">Autoriser la position en arrière-plan (nécessite une autorisation système).</string>
+    <string name="settings_location_precise">Position précise</string>
+    <string name="settings_location_precise_summary">Utiliser le GPS précis lorsqu\'il est disponible.</string>
+    <string name="settings_location_always_note">L\'option Toujours peut exiger d\'autoriser la position en arrière-plan dans les paramètres Android.</string>
+    <string name="settings_section_screen">Écran</string>
+    <string name="settings_prevent_sleep_title">Empêcher la mise en veille</string>
+    <string name="settings_prevent_sleep">Garde l\'écran allumé tant que Builderforce est ouvert.</string>
+    <string name="settings_section_debug">Débogage</string>
+    <string name="settings_debug_canvas_status">État de débogage du canevas</string>
+    <string name="settings_debug_canvas_status_summary">Afficher le texte d\'état dans le canevas lorsque le débogage est activé.</string>
+    <string name="settings_account_title">Compte Builderforce</string>
+    <string name="settings_account_signed_in">Connecté</string>
+    <string name="settings_account_signed_out">Non connecté. Ouvrez le chat pour vous connecter.</string>
+    <string name="settings_account_workspace">Espace de travail</string>
+    <string name="settings_account_workspace_none">Choisir un espace de travail</string>
+    <string name="settings_account_sign_out">Se déconnecter</string>
+    <string name="settings_account_server">Serveur (développeur)</string>
+    <string name="settings_account_server_note">Laissez vide pour builderforce.ai.</string>
+    <string name="settings_account_server_apply">Appliquer</string>
+
+    <!-- Sign-in -->
+    <string name="signin_title">Se connecter à Builderforce</string>
+    <string name="signin_body">Discutez avec le Brain et vos agents : les mêmes conversations que dans l\'application web.</string>
+    <string name="signin_button">Se connecter</string>
+    <string name="signin_starting">Obtention d\'un code de connexion…</string>
+    <string name="signin_enter_code">Saisissez ce code dans votre navigateur pour approuver la connexion :</string>
+    <string name="signin_open_browser">Ouvrir le navigateur</string>
+    <string name="signin_waiting">En attente d\'approbation…</string>
+    <string name="signin_cancel">Annuler</string>
+    <string name="signin_failed_denied">La connexion a été refusée.</string>
+    <string name="signin_failed_expired">Le code de connexion a expiré. Réessayez.</string>
+    <string name="signin_failed_unreachable">Impossible de joindre Builderforce. Vérifiez votre connexion et réessayez.</string>
+    <string name="signin_expired">Votre session a expiré. Reconnectez-vous.</string>
+    <string name="signin_no_browser">Aucun navigateur n\'est disponible pour ouvrir la page de connexion.</string>
+
+    <!-- Chat -->
+    <string name="chat_placeholder">Écrire au Brain…</string>
+    <string name="chat_attach">Ajouter des images</string>
+    <string name="chat_send">Envoyer</string>
+    <string name="chat_stop">Arrêter</string>
+    <string name="chat_dictate">Dicter</string>
+    <string name="chat_stop_dictation">Arrêter la dictée</string>
+    <string name="chat_to">À %1$s</string>
+    <string name="chat_brain">Brain</string>
+    <string name="chat_you">Vous</string>
+    <string name="chat_remove_attachment">Retirer %1$s</string>
+    <string name="chat_new">Nouveau chat</string>
+    <string name="chat_untitled">Chat sans titre</string>
+    <string name="chat_pick">Choisir un chat</string>
+    <string name="chat_thinking">Réflexion…</string>
+    <string name="chat_using_tool">Utilise %1$s…</string>
+    <string name="chat_waiting_agent">En attente de %1$s…</string>
+    <string name="chat_queued">En file d\'attente : envoyé après la réponse en cours</string>
+    <string name="chat_unqueue">Ne pas envoyer</string>
+    <string name="chat_tool_ask">Le Brain souhaite : %1$s</string>
+    <string name="chat_tool_ask_body">Cela modifie quelque chose dans votre espace de travail.</string>
+    <string name="chat_tool_approve">Approuver</string>
+    <string name="chat_tool_deny">Refuser</string>
+    <string name="chat_empty">Posez au Brain n\'importe quelle question sur votre espace de travail.</string>
+    <string name="chat_starter_1">Sur quoi devrais-je travailler aujourd\'hui ?</string>
+    <string name="chat_starter_2">Résume mes tickets ouverts</string>
+    <string name="chat_starter_3">Planifie ma semaine</string>
+    <string name="chat_mic_denied">L\'autorisation du micro est nécessaire pour dicter.</string>
+    <string name="chat_image_unreadable">Impossible de lire cette image.</string>
+    <string name="chat_image">Image</string>
+    <string name="chat_image_unavailable">Image indisponible</string>
+
+    <!-- Cloud errors -->
+    <string name="cloud_error_signed_out">Vous n\'êtes pas connecté à Builderforce.</string>
+    <string name="cloud_error_key_rejected">Builderforce n\'accepte plus cette connexion. Reconnectez-vous.</string>
+    <string name="cloud_error_unreachable">Impossible de joindre Builderforce : %1$s</string>
+    <string name="cloud_error_server">Réponse de Builderforce : %1$s</string>
+    <string name="cloud_error_empty_answer">Le Brain a renvoyé une réponse vide.</string>
+    <string name="cloud_error_unexpected">Une erreur s\'est produite : %1$s</string>
+</resources>

@@ -39,14 +39,6 @@ enum BuilderforceChatTheme {
         dynamicProvider: resolvedOnboardingAssistantBubbleColor(for:))
     #endif
 
-    static var surface: Color {
-        #if os(macOS)
-        Color(nsColor: .windowBackgroundColor)
-        #else
-        Color(uiColor: .systemBackground)
-        #endif
-    }
-
     @ViewBuilder
     static var background: some View {
         #if os(macOS)
@@ -84,14 +76,6 @@ enum BuilderforceChatTheme {
         #endif
     }
 
-    static var card: Color {
-        #if os(macOS)
-        Color(nsColor: .textBackgroundColor)
-        #else
-        Color(uiColor: .secondarySystemBackground)
-        #endif
-    }
-
     static var subtleCard: AnyShapeStyle {
         #if os(macOS)
         AnyShapeStyle(.ultraThinMaterial)
@@ -101,7 +85,7 @@ enum BuilderforceChatTheme {
     }
 
     static var userBubble: Color {
-        Color(red: 127 / 255.0, green: 184 / 255.0, blue: 212 / 255.0)
+        .accentColor
     }
 
     static var assistantBubble: Color {
@@ -138,28 +122,14 @@ enum BuilderforceChatTheme {
         #endif
     }
 
-    static var composerBackground: AnyShapeStyle {
+    /// The one-box composer's fill (and its chips'): the system's secondary fill, which
+    /// reads correctly in light and dark.
+    static var composerFill: AnyShapeStyle {
         #if os(macOS)
-        AnyShapeStyle(.ultraThinMaterial)
+        AnyShapeStyle(.quaternary)
         #else
-        AnyShapeStyle(Color(uiColor: .systemBackground))
+        AnyShapeStyle(Color(uiColor: .secondarySystemFill))
         #endif
-    }
-
-    static var composerField: AnyShapeStyle {
-        #if os(macOS)
-        AnyShapeStyle(.thinMaterial)
-        #else
-        AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
-        #endif
-    }
-
-    static var composerBorder: Color {
-        Color.white.opacity(0.12)
-    }
-
-    static var divider: Color {
-        Color.secondary.opacity(0.2)
     }
 }
 

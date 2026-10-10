@@ -2828,7 +2828,7 @@ BuilderForce Agents 可以为 BuilderForce Agents 启动一个**专用、隔离�
 - 控制服务：仅 local loopback（端口从 `gateway.port` 派生，默认 `18791`）
 - CDP URL：`http://127.0.0.1:18792`（控制服务 + 1，旧版单配置文件）
 - 配置文件颜色：`#FF4500`（强调橙）
-- 注意：控制服务器由运行中的 Gateway 网关（BuilderForce Agents.app 菜单栏或 `builderforce gateway`）启动。
+- 注意：控制服务器由运行中的 Gateway 网关（Builderforce.app 菜单栏或 `builderforce gateway`）启动。
 - 自动检测顺序：如果为 Chromium 内核则使用默认浏览器；否则 Chrome → Brave → Edge → Chromium → Chrome Canary。
 
 ```json5
@@ -2953,7 +2953,7 @@ BuilderForce Agents 可以为 BuilderForce Agents 启动一个**专用、隔离�
 
 macOS 应用行为：
 
-- BuilderForce Agents.app 监视 `~/.builderforce/builderforce.json`，当 `gateway.mode` 或 `gateway.remote.url` 变更时实时切换模式。
+- Builderforce.app 监视 `~/.builderforce/builderforce.json`，当 `gateway.mode` 或 `gateway.remote.url` 变更时实时切换模式。
 - 如果 `gateway.mode` 未设置但 `gateway.remote.url` 已设置，macOS 应用将其视为远程模式。
 - 当你在 macOS 应用中更改连接模式时，它会将 `gateway.mode`（以及远程模式下的 `gateway.remote.url` + `gateway.remote.transport`）写回配置文件。
 

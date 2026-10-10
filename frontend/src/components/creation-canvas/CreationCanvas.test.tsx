@@ -1056,17 +1056,14 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     // chat product works. Nesting the prompt in the side panel is what broke that.
     const prompt = screen.getByLabelText('Ask Brain about this canvas');
     expect(screen.getByRole('complementary', { name: 'Brain chat' })).not.toContainElement(prompt);
-    // Starting points live INSIDE the composer card, in its top row — not as a tab
-    // floating above it — and the catalogue opens inside the same card.
-    // The trigger names the phase it is offering for (an empty board stands at Idea).
-    const starter = screen.getByRole('button', { name: 'Starting points · Idea' });
-    expect(prompt.closest('[data-tour="creation-brain-dock"]')).toContainElement(starter);
-    expect(starter.closest('[data-tour="creation-prompt-starter"]')).not.toBeNull();
-    expect(starter).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(starter);
-    expect(starter).toHaveAttribute('aria-expanded', 'true');
-    const catalog = document.getElementById(starter.getAttribute('aria-controls')!)!;
-    expect(prompt.closest('[data-tour="creation-brain-dock"]')).toContainElement(catalog);
+    // Starting points open from the prompt's own `+`, the same as on every other
+    // prompt, and the catalogue opens INSIDE the composer card. The row names the
+    // phase it is offering for (an empty board stands at Idea).
+    const composer = prompt.closest('[data-tour="creation-brain-dock"]')!;
+    fireEvent.click(within(composer as HTMLElement).getByRole('button', { name: 'Add' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Starting points · Idea' }));
+    const catalog = screen.getByTestId('composer-starters');
+    expect(composer).toContainElement(catalog);
     expect(within(catalog).getByRole('searchbox')).toBeInTheDocument();
   });
 

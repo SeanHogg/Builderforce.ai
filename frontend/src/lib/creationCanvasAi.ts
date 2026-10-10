@@ -52,6 +52,7 @@ import {
   MAX_INTERRUPTED_TURN_RECOVERIES,
   MAX_MUTATION_RECOVERIES,
   MAX_NARROW_SEARCHES,
+  MAX_STALL_REROUTES,
   MAX_STALLED_STREAMS,
   RESERVED_AUTHORING_TURNS,
   TRUNCATED_ROUND_DIRECTIVE,
@@ -272,8 +273,20 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   let buildAuthoringRecoveries = 0;
   let degenerateAnswerRecoveryUsed = false;
   let interruptedTurnRecoveries = 0;
-  /** Round-trips this turn abandoned because the provider went silent. */
+  /** Round-trips this turn abandoned because the provider went silent — in total, for the
+   *  tail's "the provider stalled" verdict. */
   let stalledStreams = 0;
+  /** Silent round-trips IN A ROW on the current model — what the stall ladder counts. A
+   *  completion that returns resets it: two stalls minutes apart with a file written in
+   *  between are two bad connections, not a dead model. */
+  let consecutiveStalls = 0;
+  /** Models this AUTO-routed turn handed back to the gateway after they stalled with no
+   *  proven model to switch to (`MAX_STALL_REROUTES`). Turn-scoped and never reported as
+   *  disabled: a stall says nothing about the model's next turn. */
+  const stallReroutedModels = new Set<string>();
+  /** The loop stopped on a `failed` rung — the turn was ABANDONED, not finished — so a
+   *  board change it made is partial work, never "added to the canvas". */
+  let abandonedMidTurn = false;
   let authoringDirectiveIssued = false;
   let narrowSearches = 0;
   let lastToolError = '';
@@ -301,7 +314,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
    * Returns false when no proven model is left, which is the caller's signal to stop.
    */
   const switchToProvenModel = (failedModel: string | null | undefined, directive: string): boolean => {
-    const alreadyFailed = failedModel ? new Set([...commandFailedModels, failedModel]) : commandFailedModels;
+    // A model this turn already re-routed AWAY from after it stalled is never a fallback:
+    // the next stall has no model name to report (nothing resolved), and the "proven"
+    // model it would otherwise pick is the one that went silent.
+    const alreadyFailed = new Set([...commandFailedModels, ...stallReroutedModels, ...(failedModel ? [failedModel] : [])]);
     const fallback = [...toolCallingModels].reverse().find((model) => !alreadyFailed.has(model));
     if (!fallback || (fallback === activeModel && activeModelStrict === true)) {
       // NOTHING TO SWITCH TO. Do NOT record the failure in that case: the record's
@@ -431,8 +447,8 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             // command. Only meaningful while UNPINNED — with a pin the caller has made the
             // choice — and the gateway ignores it rather than emptying the cascade, so this
             // can steer routing without ever refusing to answer.
-            ...(!activeModel && (excludeModels.length || commandFailedModels.size)
-              ? { excludeModels: [...new Set([...excludeModels, ...commandFailedModels])] }
+            ...(!activeModel && (excludeModels.length || commandFailedModels.size || stallReroutedModels.size)
+              ? { excludeModels: [...new Set([...excludeModels, ...commandFailedModels, ...stallReroutedModels])] }
               : {}),
             metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
           }, (delta) => { finalText += delta; options.onText?.(finalText); }, options.signal);
@@ -450,7 +466,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             const switched = switchToProvenModel(error.model ?? activeModel, 'The prior model got stuck repeating the same sentence and has been disabled for this session.');
             finalText = switched ? '' : error.kept;
             options.onText?.(finalText);
-            return switched ? { skip: true } : { failed: 'model stuck repeating itself' };
+            if (switched) return { skip: true };
+            abandonedMidTurn = true;
+            return { failed: 'model stuck repeating itself' };
           }
           // A STALLED provider is a routing problem, not a content problem, so the ladder is
           // shorter than the interruption one: try again once (a stall is often a single bad
@@ -460,20 +478,37 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           if (!(error instanceof CanvasStreamStalledError)) throw error;
           throwIfStopped();
           stalledStreams += 1;
+          consecutiveStalls += 1;
+          const stalledModel = activeModel;
           options.onTrace?.({
             ts: new Date().toISOString(), category: 'error', label: 'provider stopped responding', isError: true,
-            result: { model: activeModel ?? null, seconds: Math.round(CANVAS_STREAM_STALL_MS / 1_000), attempt: stalledStreams },
+            result: { model: stalledModel ?? null, seconds: Math.round(CANVAS_STREAM_STALL_MS / 1_000), attempt: consecutiveStalls },
           });
           finalText = '';
-          if (stalledStreams < MAX_STALLED_STREAMS) return { skip: true };
-          if (switchToProvenModel(activeModel, 'The prior model stopped responding mid-request and has been disabled for this session.')) {
-            stalledStreams = 0;
+          if (consecutiveStalls < MAX_STALLED_STREAMS) return { skip: true };
+          if (switchToProvenModel(stalledModel, 'The prior model stopped responding mid-request and has been disabled for this session.')) {
+            consecutiveStalls = 0;
+            return { skip: true };
+          }
+          // No PROVEN model to hand over to — but on auto routing the gateway still has its
+          // pool. Ask it again with the stalled model excluded before giving up. Never with
+          // a model the caller picked: that choice is theirs, and the notice tells them so.
+          if (!options.model && stalledModel && !stallReroutedModels.has(stalledModel)
+            && stallReroutedModels.size < MAX_STALL_REROUTES) {
+            stallReroutedModels.add(stalledModel);
+            consecutiveStalls = 0;
+            activeModel = undefined;
+            activeModelStrict = options.modelStrict;
+            options.onTrace?.({ ts: new Date().toISOString(), category: 'llm', label: 'rerouted after stall', result: { excluded: stalledModel } });
+            messages.push({ role: 'system', content: 'The prior model stopped responding mid-request, so this turn now continues on a different model. Continue the user\'s request from where it left off, building on the work already done.' });
             return { skip: true };
           }
           // Out of providers: stop, and let the tail deliver whatever the turn already has.
+          abandonedMidTurn = true;
           return { failed: 'provider stopped responding' };
         }
         throwIfStopped();
+        consecutiveStalls = 0;
         options.onCompletion?.({
           at: new Date().toISOString(), iteration: turn + 1,
           requestedModel: activeModel ?? null,
@@ -760,6 +795,15 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // A build turn that only provisioned the workspace is neither: the board holds the
   // starter template, so "added to the canvas" would misreport it.
   if (canvasChanged) {
+    // ABANDONED, not finished: the provider went silent (or the model looped) with no
+    // model left to take over, part-way through work that had already touched the board.
+    // Measured (session `local-6d36899d`, ui 2026.10.31): a build wrote `index.html`, then
+    // stalled, and "I added the requested content" sat above a "Hello World!" preview.
+    // A runtime notice, so it stays out of the transcript like `providerStalled`.
+    if (abandonedMidTurn) {
+      options.onUnanswered?.({ reason: 'no-answer', detail: stalledStreams ? 'provider-stalled' : 'model-looped' });
+      return notices.stoppedPartway;
+    }
     if (loop.exhausted && buildTurn) return finish(notices.stepsExhausted);
     return finish(buildTurn && !buildAuthored ? notices.buildNotAuthored : notices.addedToCanvas);
   }

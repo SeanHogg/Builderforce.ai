@@ -10,7 +10,7 @@ private struct TimeoutError: Error, CustomStringConvertible {
 
 private func waitUntil(
     _ label: String,
-    timeoutSeconds: Double = 2.0,
+    timeoutSeconds: Double = 3.0,
     pollMs: UInt64 = 10,
     _ condition: @escaping @Sendable () async -> Bool) async throws
 {
@@ -24,626 +24,186 @@ private func waitUntil(
     throw TimeoutError(label: label)
 }
 
-private actor TestChatTransportState {
-    var historyCallCount: Int = 0
-    var sessionsCallCount: Int = 0
-    var sentRunIds: [String] = []
-    var abortedRunIds: [String] = []
-}
+/// The cloud as the view model sees it, in memory: one chat whose transcript grows as
+/// turns are sent and the Brain replies.
+private actor FakeCloud {
+    var signedIn: Bool
+    var chats: [BrainChat]
+    var stored: [Int: [BrainChatMessage]]
+    var agents: [BrainChatAgent]
+    var sent: [(content: String, to: String?)] = []
+    var replyDelay: UInt64 = 50_000_000
+    private var nextID = 100
 
-private final class TestChatTransport: @unchecked Sendable, BuilderforceChatTransport {
-    private let state = TestChatTransportState()
-    private let historyResponses: [BuilderforceChatHistoryPayload]
-    private let sessionsResponses: [BuilderforceChatSessionsListResponse]
-
-    private let stream: AsyncStream<BuilderforceChatTransportEvent>
-    private let continuation: AsyncStream<BuilderforceChatTransportEvent>.Continuation
-
-    init(
-        historyResponses: [BuilderforceChatHistoryPayload],
-        sessionsResponses: [BuilderforceChatSessionsListResponse] = [])
-    {
-        self.historyResponses = historyResponses
-        self.sessionsResponses = sessionsResponses
-        var cont: AsyncStream<BuilderforceChatTransportEvent>.Continuation!
-        self.stream = AsyncStream { c in
-            cont = c
-        }
-        self.continuation = cont
+    init(signedIn: Bool, chats: [BrainChat] = [], stored: [Int: [BrainChatMessage]] = [:], agents: [BrainChatAgent] = []) {
+        self.signedIn = signedIn
+        self.chats = chats
+        self.stored = stored
+        self.agents = agents
     }
 
-    func events() -> AsyncStream<BuilderforceChatTransportEvent> {
-        self.stream
+    func append(chatID: Int, role: String, content: String) {
+        self.nextID += 1
+        self.stored[chatID, default: []].append(
+            BrainChatMessage(id: self.nextID, role: role, content: content, seq: self.nextID))
     }
 
-    func setActiveSessionKey(_: String) async throws {}
-
-    func requestHistory(sessionKey: String) async throws -> BuilderforceChatHistoryPayload {
-        let idx = await self.state.historyCallCount
-        await self.state.setHistoryCallCount(idx + 1)
-        if idx < self.historyResponses.count {
-            return self.historyResponses[idx]
-        }
-        return self.historyResponses.last ?? BuilderforceChatHistoryPayload(
-            sessionKey: sessionKey,
-            sessionId: nil,
-            messages: [],
-            thinkingLevel: "off")
+    func record(content: String, to: String?) {
+        self.sent.append((content, to))
     }
 
-    func sendMessage(
-        sessionKey _: String,
-        message _: String,
-        thinking _: String,
-        idempotencyKey: String,
-        attachments _: [BuilderforceChatAttachmentPayload]) async throws -> BuilderforceChatSendResponse
-    {
-        await self.state.sentRunIdsAppend(idempotencyKey)
-        return BuilderforceChatSendResponse(runId: idempotencyKey, status: "ok")
-    }
-
-    func abortRun(sessionKey _: String, runId: String) async throws {
-        await self.state.abortedRunIdsAppend(runId)
-    }
-
-    func listSessions(limit _: Int?) async throws -> BuilderforceChatSessionsListResponse {
-        let idx = await self.state.sessionsCallCount
-        await self.state.setSessionsCallCount(idx + 1)
-        if idx < self.sessionsResponses.count {
-            return self.sessionsResponses[idx]
-        }
-        return self.sessionsResponses.last ?? BuilderforceChatSessionsListResponse(
-            ts: nil,
-            path: nil,
-            count: 0,
-            defaults: nil,
-            sessions: [])
-    }
-
-    func requestHealth(timeoutMs _: Int) async throws -> Bool {
-        true
-    }
-
-    func emit(_ evt: BuilderforceChatTransportEvent) {
-        self.continuation.yield(evt)
-    }
-
-    func lastSentRunId() async -> String? {
-        let ids = await self.state.sentRunIds
-        return ids.last
-    }
-
-    func abortedRunIds() async -> [String] {
-        await self.state.abortedRunIds
+    func sentContents() -> [String] {
+        self.sent.map(\.content)
     }
 }
 
-extension TestChatTransportState {
-    fileprivate func setHistoryCallCount(_ v: Int) {
-        self.historyCallCount = v
+private struct FakeTransport: BuilderforceChatTransport {
+    let cloud: FakeCloud
+
+    func isSignedIn() async -> Bool { await self.cloud.signedIn }
+    func startSignIn() async throws -> DeviceCode {
+        DeviceCode(deviceCode: "dev", userCode: "ABCD-EFGH", verificationURI: "https://example.test/activate", verificationURIComplete: "https://example.test/activate?code=ABCD-EFGH")
     }
 
-    fileprivate func setSessionsCallCount(_ v: Int) {
-        self.sessionsCallCount = v
+    func finishSignIn(_: DeviceCode) async throws { await self.cloud.setSignedIn() }
+    func signOut() async {}
+    func listChats() async throws -> [BrainChat] { await self.cloud.chats }
+    func createChat(title: String?) async throws -> BrainChat { BrainChat(id: 99, title: title) }
+    func messages(chatID: Int) async throws -> [BrainChatMessage] { await self.cloud.stored[chatID] ?? [] }
+    func agents(chatID _: Int) async throws -> [BrainChatAgent] { await self.cloud.agents }
+
+    func upload(_ upload: BuilderforceChatUpload) async throws -> (attachment: BrainChatAttachment, url: String) {
+        (BrainChatAttachment(key: "k/\(upload.fileName)", name: upload.fileName, type: upload.mimeType), "https://example.test/u")
     }
 
-    fileprivate func sentRunIdsAppend(_ v: String) {
-        self.sentRunIds.append(v)
+    func send(chatID: Int, content: String, to agent: BrainChatAgent?, attachments _: [BrainChatAttachment]) async throws {
+        await self.cloud.record(content: content, to: agent?.agentRef)
+        await self.cloud.append(chatID: chatID, role: "user", content: content)
     }
 
-    fileprivate func abortedRunIdsAppend(_ v: String) {
-        self.abortedRunIds.append(v)
+    func reply(
+        chatID: Int,
+        imageURLs _: [String],
+        approve _: @escaping @Sendable (BrainToolApproval) async -> Bool,
+        onEvent: @escaping @Sendable (BrainReplyEvent) async -> Void) async throws
+    {
+        await onEvent(.draft("Thinking out loud"))
+        try await Task.sleep(nanoseconds: self.cloud.replyDelay)
+        await self.cloud.append(chatID: chatID, role: "assistant", content: "Done")
     }
 }
 
 @Suite struct ChatViewModelTests {
-    @Test func streamsAssistantAndClearsOnFinal() async throws {
-        let sessionId = "sess-main"
-        let history1 = BuilderforceChatHistoryPayload(
-            sessionKey: "main",
-            sessionId: sessionId,
-            messages: [],
-            thinkingLevel: "off")
-        let history2 = BuilderforceChatHistoryPayload(
-            sessionKey: "main",
-            sessionId: sessionId,
-            messages: [
-                AnyCodable([
-                    "role": "assistant",
-                    "content": [["type": "text", "text": "final answer"]],
-                    "timestamp": Date().timeIntervalSince1970 * 1000,
-                ]),
-            ],
-            thinkingLevel: "off")
-
-        let transport = TestChatTransport(historyResponses: [history1, history2])
-        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
-
+    @Test func signedOutShowsSignIn() async throws {
+        let transport = FakeTransport(cloud: FakeCloud(signedIn: false))
+        let vm = await MainActor.run { BuilderforceChatViewModel(transport: transport) }
         await MainActor.run { vm.load() }
-        try await waitUntil("bootstrap") { await MainActor.run { vm.healthOK && vm.sessionId == sessionId } }
+        try await waitUntil("signed out") { await MainActor.run { vm.authState == .signedOut } }
+        await MainActor.run { vm.startSignIn() }
+        try await waitUntil("signed in") { await MainActor.run { vm.authState == .signedIn } }
+    }
+
+    @Test func loadsChatsAndOpensTheNewest() async throws {
+        let cloud = FakeCloud(
+            signedIn: true,
+            chats: [BrainChat(id: 7, title: "Launch"), BrainChat(id: 3, title: nil)],
+            stored: [7: [
+                BrainChatMessage(id: 1, role: "user", content: "Plan the launch", seq: 1),
+                BrainChatMessage(id: 2, role: "tool", content: "ignored", seq: 2),
+                BrainChatMessage(
+                    id: 3,
+                    role: "assistant",
+                    content: "On it",
+                    metadata: #"{"authoredBy":{"name":"Ada"}}"#,
+                    seq: 3),
+            ]],
+            agents: [BrainChatAgent(id: "a1", agentRef: "42", name: "Ada")])
+        let vm = await MainActor.run { BuilderforceChatViewModel(transport: FakeTransport(cloud: cloud)) }
+        await MainActor.run { vm.load() }
+        try await waitUntil("transcript") { await MainActor.run { vm.messages.count == 2 } }
 
         await MainActor.run {
-            vm.input = "hi"
-            vm.send()
+            #expect(vm.activeChatID == 7)
+            #expect(vm.chats.count == 2)
+            #expect(vm.agents.map(\.name) == ["Ada"])
+            #expect(vm.messages[1].plainText == "**Ada**\n\nOn it")
+            #expect(vm.messages[0].id == BuilderforceChatViewModel.stableID(1))
         }
-        try await waitUntil("pending run starts") { await MainActor.run { vm.pendingRunCount == 1 } }
-
-        transport.emit(
-            .agent(
-                BuilderforceAgentEventPayload(
-                    runId: sessionId,
-                    seq: 1,
-                    stream: "assistant",
-                    ts: Int(Date().timeIntervalSince1970 * 1000),
-                    data: ["text": AnyCodable("streaming…")])))
-
-        try await waitUntil("assistant stream visible") {
-            await MainActor.run { vm.streamingAssistantText == "streaming…" }
-        }
-
-        transport.emit(
-            .agent(
-                BuilderforceAgentEventPayload(
-                    runId: sessionId,
-                    seq: 2,
-                    stream: "tool",
-                    ts: Int(Date().timeIntervalSince1970 * 1000),
-                    data: [
-                        "phase": AnyCodable("start"),
-                        "name": AnyCodable("demo"),
-                        "toolCallId": AnyCodable("t1"),
-                        "args": AnyCodable(["x": 1]),
-                    ])))
-
-        try await waitUntil("tool call pending") { await MainActor.run { vm.pendingToolCalls.count == 1 } }
-
-        let runId = try #require(await transport.lastSentRunId())
-        transport.emit(
-            .chat(
-                BuilderforceChatEventPayload(
-                    runId: runId,
-                    sessionKey: "main",
-                    state: "final",
-                    message: nil,
-                    errorMessage: nil)))
-
-        try await waitUntil("pending run clears") { await MainActor.run { vm.pendingRunCount == 0 } }
-        try await waitUntil("history refresh") {
-            await MainActor.run { vm.messages.contains(where: { $0.role == "assistant" }) }
-        }
-        #expect(await MainActor.run { vm.streamingAssistantText } == nil)
-        #expect(await MainActor.run { vm.pendingToolCalls.isEmpty })
     }
 
-    @Test func acceptsCanonicalSessionKeyEventsForOwnPendingRun() async throws {
-        let history1 = BuilderforceChatHistoryPayload(
-            sessionKey: "main",
-            sessionId: "sess-main",
-            messages: [],
-            thinkingLevel: "off")
-        let history2 = BuilderforceChatHistoryPayload(
-            sessionKey: "main",
-            sessionId: "sess-main",
-            messages: [
-                AnyCodable([
-                    "role": "assistant",
-                    "content": [["type": "text", "text": "from history"]],
-                    "timestamp": Date().timeIntervalSince1970 * 1000,
-                ]),
-            ],
-            thinkingLevel: "off")
-
-        let transport = TestChatTransport(historyResponses: [history1, history2])
-        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
-
+    @Test func sendRunsTheBrainAndQueuesFollowUps() async throws {
+        let cloud = FakeCloud(signedIn: true, chats: [BrainChat(id: 5, title: "Ops")])
+        await cloud.setReplyDelay(300_000_000)
+        let vm = await MainActor.run { BuilderforceChatViewModel(transport: FakeTransport(cloud: cloud)) }
         await MainActor.run { vm.load() }
-        try await waitUntil("bootstrap") { await MainActor.run { vm.healthOK } }
+        try await waitUntil("opened") { await MainActor.run { vm.activeChatID == 5 && !vm.isLoading } }
 
         await MainActor.run {
-            vm.input = "hi"
+            vm.input = "What is left?"
             vm.send()
         }
-        try await waitUntil("pending run starts") { await MainActor.run { vm.pendingRunCount == 1 } }
-
-        let runId = try #require(await transport.lastSentRunId())
-        transport.emit(
-            .chat(
-                BuilderforceChatEventPayload(
-                    runId: runId,
-                    sessionKey: "agent:main:main",
-                    state: "final",
-                    message: nil,
-                    errorMessage: nil)))
-
-        try await waitUntil("pending run clears") { await MainActor.run { vm.pendingRunCount == 0 } }
-        try await waitUntil("history refresh") {
-            await MainActor.run { vm.messages.contains(where: { $0.role == "assistant" }) }
-        }
-    }
-
-    @Test func acceptsCanonicalSessionKeyEventsForExternalRuns() async throws {
-        let now = Date().timeIntervalSince1970 * 1000
-        let history1 = BuilderforceChatHistoryPayload(
-            sessionKey: "main",
-            sessionId: "sess-main",
-            messages: [
-                AnyCodable([
-                    "role": "user",
-                    "content": [["type": "text", "text": "first"]],
-                    "timestamp": now,
-                ]),
-            ],
-            thinkingLevel: "off")
-        let history2 = BuilderforceChatHistoryPayload(
-            sessionKey: "main",
-            sessionId: "sess-main",
-            messages: [
-                AnyCodable([
-                    "role": "user",
-                    "content": [["type": "text", "text": "first"]],
-                    "timestamp": now,
-                ]),
-                AnyCodable([
-                    "role": "assistant",
-                    "content": [["type": "text", "text": "from external run"]],
-                    "timestamp": now + 1,
-                ]),
-            ],
-            thinkingLevel: "off")
-
-        let transport = TestChatTransport(historyResponses: [history1, history2])
-        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
-
-        await MainActor.run { vm.load() }
-        try await waitUntil("bootstrap") { await MainActor.run { vm.messages.count == 1 } }
-
-        transport.emit(
-            .chat(
-                BuilderforceChatEventPayload(
-                    runId: "external-run",
-                    sessionKey: "agent:main:main",
-                    state: "final",
-                    message: nil,
-                    errorMessage: nil)))
-
-        try await waitUntil("history refresh after canonical external event") {
-            await MainActor.run { vm.messages.count == 2 }
-        }
-    }
-
-    @Test func preservesMessageIDsAcrossHistoryRefreshes() async throws {
-        let now = Date().timeIntervalSince1970 * 1000
-        let history1 = BuilderforceChatHistoryPayload(
-            sessionKey: "main",
-            sessionId: "sess-main",
-            messages: [
-                AnyCodable([
-                    "role": "user",
-                    "content": [["type": "text", "text": "hello"]],
-                    "timestamp": now,
-                ]),
-            ],
-            thinkingLevel: "off")
-        let history2 = BuilderforceChatHistoryPayload(
-            sessionKey: "main",
-            sessionId: "sess-main",
-            messages: [
-                AnyCodable([
-                    "role": "user",
-                    "content": [["type": "text", "text": "hello"]],
-                    "timestamp": now,
-                ]),
-                AnyCodable([
-                    "role": "assistant",
-                    "content": [["type": "text", "text": "world"]],
-                    "timestamp": now + 1,
-                ]),
-            ],
-            thinkingLevel: "off")
-
-        let transport = TestChatTransport(historyResponses: [history1, history2])
-        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
-
-        await MainActor.run { vm.load() }
-        try await waitUntil("bootstrap") { await MainActor.run { vm.messages.count == 1 } }
-        let firstIdBefore = try #require(await MainActor.run { vm.messages.first?.id })
-
-        transport.emit(
-            .chat(
-                BuilderforceChatEventPayload(
-                    runId: "other-run",
-                    sessionKey: "main",
-                    state: "final",
-                    message: nil,
-                    errorMessage: nil)))
-
-        try await waitUntil("history refresh") { await MainActor.run { vm.messages.count == 2 } }
-        let firstIdAfter = try #require(await MainActor.run { vm.messages.first?.id })
-        #expect(firstIdAfter == firstIdBefore)
-    }
-
-    @Test func clearsStreamingOnExternalFinalEvent() async throws {
-        let sessionId = "sess-main"
-        let history = BuilderforceChatHistoryPayload(
-            sessionKey: "main",
-            sessionId: sessionId,
-            messages: [],
-            thinkingLevel: "off")
-        let transport = TestChatTransport(historyResponses: [history, history])
-        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
-
-        await MainActor.run { vm.load() }
-        try await waitUntil("bootstrap") { await MainActor.run { vm.healthOK && vm.sessionId == sessionId } }
-
-        transport.emit(
-            .agent(
-                BuilderforceAgentEventPayload(
-                    runId: sessionId,
-                    seq: 1,
-                    stream: "assistant",
-                    ts: Int(Date().timeIntervalSince1970 * 1000),
-                    data: ["text": AnyCodable("external stream")])))
-
-        transport.emit(
-            .agent(
-                BuilderforceAgentEventPayload(
-                    runId: sessionId,
-                    seq: 2,
-                    stream: "tool",
-                    ts: Int(Date().timeIntervalSince1970 * 1000),
-                    data: [
-                        "phase": AnyCodable("start"),
-                        "name": AnyCodable("demo"),
-                        "toolCallId": AnyCodable("t1"),
-                        "args": AnyCodable(["x": 1]),
-                    ])))
-
-        try await waitUntil("streaming active") {
-            await MainActor.run { vm.streamingAssistantText == "external stream" }
-        }
-        try await waitUntil("tool call pending") { await MainActor.run { vm.pendingToolCalls.count == 1 } }
-
-        transport.emit(
-            .chat(
-                BuilderforceChatEventPayload(
-                    runId: "other-run",
-                    sessionKey: "main",
-                    state: "final",
-                    message: nil,
-                    errorMessage: nil)))
-
-        try await waitUntil("streaming cleared") { await MainActor.run { vm.streamingAssistantText == nil } }
-        #expect(await MainActor.run { vm.pendingToolCalls.isEmpty })
-    }
-
-    @Test func sessionChoicesPreferMainAndRecent() async throws {
-        let now = Date().timeIntervalSince1970 * 1000
-        let recent = now - (2 * 60 * 60 * 1000)
-        let recentOlder = now - (5 * 60 * 60 * 1000)
-        let stale = now - (26 * 60 * 60 * 1000)
-        let history = BuilderforceChatHistoryPayload(
-            sessionKey: "main",
-            sessionId: "sess-main",
-            messages: [],
-            thinkingLevel: "off")
-        let sessions = BuilderforceChatSessionsListResponse(
-            ts: now,
-            path: nil,
-            count: 4,
-            defaults: nil,
-            sessions: [
-                BuilderforceChatSessionEntry(
-                    key: "recent-1",
-                    kind: nil,
-                    displayName: nil,
-                    surface: nil,
-                    subject: nil,
-                    room: nil,
-                    space: nil,
-                    updatedAt: recent,
-                    sessionId: nil,
-                    systemSent: nil,
-                    abortedLastRun: nil,
-                    thinkingLevel: nil,
-                    verboseLevel: nil,
-                    inputTokens: nil,
-                    outputTokens: nil,
-                    totalTokens: nil,
-                    model: nil,
-                    contextTokens: nil),
-                BuilderforceChatSessionEntry(
-                    key: "main",
-                    kind: nil,
-                    displayName: nil,
-                    surface: nil,
-                    subject: nil,
-                    room: nil,
-                    space: nil,
-                    updatedAt: stale,
-                    sessionId: nil,
-                    systemSent: nil,
-                    abortedLastRun: nil,
-                    thinkingLevel: nil,
-                    verboseLevel: nil,
-                    inputTokens: nil,
-                    outputTokens: nil,
-                    totalTokens: nil,
-                    model: nil,
-                    contextTokens: nil),
-                BuilderforceChatSessionEntry(
-                    key: "recent-2",
-                    kind: nil,
-                    displayName: nil,
-                    surface: nil,
-                    subject: nil,
-                    room: nil,
-                    space: nil,
-                    updatedAt: recentOlder,
-                    sessionId: nil,
-                    systemSent: nil,
-                    abortedLastRun: nil,
-                    thinkingLevel: nil,
-                    verboseLevel: nil,
-                    inputTokens: nil,
-                    outputTokens: nil,
-                    totalTokens: nil,
-                    model: nil,
-                    contextTokens: nil),
-                BuilderforceChatSessionEntry(
-                    key: "old-1",
-                    kind: nil,
-                    displayName: nil,
-                    surface: nil,
-                    subject: nil,
-                    room: nil,
-                    space: nil,
-                    updatedAt: stale,
-                    sessionId: nil,
-                    systemSent: nil,
-                    abortedLastRun: nil,
-                    thinkingLevel: nil,
-                    verboseLevel: nil,
-                    inputTokens: nil,
-                    outputTokens: nil,
-                    totalTokens: nil,
-                    model: nil,
-                    contextTokens: nil),
-            ])
-
-        let transport = TestChatTransport(
-            historyResponses: [history],
-            sessionsResponses: [sessions])
-        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
-        await MainActor.run { vm.load() }
-        try await waitUntil("sessions loaded") { await MainActor.run { !vm.sessions.isEmpty } }
-
-        let keys = await MainActor.run { vm.sessionChoices.map(\.key) }
-        #expect(keys == ["main", "recent-1", "recent-2"])
-    }
-
-    @Test func sessionChoicesIncludeCurrentWhenMissing() async throws {
-        let now = Date().timeIntervalSince1970 * 1000
-        let recent = now - (30 * 60 * 1000)
-        let history = BuilderforceChatHistoryPayload(
-            sessionKey: "custom",
-            sessionId: "sess-custom",
-            messages: [],
-            thinkingLevel: "off")
-        let sessions = BuilderforceChatSessionsListResponse(
-            ts: now,
-            path: nil,
-            count: 1,
-            defaults: nil,
-            sessions: [
-                BuilderforceChatSessionEntry(
-                    key: "main",
-                    kind: nil,
-                    displayName: nil,
-                    surface: nil,
-                    subject: nil,
-                    room: nil,
-                    space: nil,
-                    updatedAt: recent,
-                    sessionId: nil,
-                    systemSent: nil,
-                    abortedLastRun: nil,
-                    thinkingLevel: nil,
-                    verboseLevel: nil,
-                    inputTokens: nil,
-                    outputTokens: nil,
-                    totalTokens: nil,
-                    model: nil,
-                    contextTokens: nil),
-            ])
-
-        let transport = TestChatTransport(
-            historyResponses: [history],
-            sessionsResponses: [sessions])
-        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "custom", transport: transport) }
-        await MainActor.run { vm.load() }
-        try await waitUntil("sessions loaded") { await MainActor.run { !vm.sessions.isEmpty } }
-
-        let keys = await MainActor.run { vm.sessionChoices.map(\.key) }
-        #expect(keys == ["main", "custom"])
-    }
-
-    @Test func clearsStreamingOnExternalErrorEvent() async throws {
-        let sessionId = "sess-main"
-        let history = BuilderforceChatHistoryPayload(
-            sessionKey: "main",
-            sessionId: sessionId,
-            messages: [],
-            thinkingLevel: "off")
-        let transport = TestChatTransport(historyResponses: [history, history])
-        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
-
-        await MainActor.run { vm.load() }
-        try await waitUntil("bootstrap") { await MainActor.run { vm.healthOK && vm.sessionId == sessionId } }
-
-        transport.emit(
-            .agent(
-                BuilderforceAgentEventPayload(
-                    runId: sessionId,
-                    seq: 1,
-                    stream: "assistant",
-                    ts: Int(Date().timeIntervalSince1970 * 1000),
-                    data: ["text": AnyCodable("external stream")])))
-
-        try await waitUntil("streaming active") {
-            await MainActor.run { vm.streamingAssistantText == "external stream" }
-        }
-
-        transport.emit(
-            .chat(
-                BuilderforceChatEventPayload(
-                    runId: "other-run",
-                    sessionKey: "main",
-                    state: "error",
-                    message: nil,
-                    errorMessage: "boom")))
-
-        try await waitUntil("streaming cleared") { await MainActor.run { vm.streamingAssistantText == nil } }
-    }
-
-    @Test func abortRequestsDoNotClearPendingUntilAbortedEvent() async throws {
-        let sessionId = "sess-main"
-        let history = BuilderforceChatHistoryPayload(
-            sessionKey: "main",
-            sessionId: sessionId,
-            messages: [],
-            thinkingLevel: "off")
-        let transport = TestChatTransport(historyResponses: [history, history])
-        let vm = await MainActor.run { BuilderforceChatViewModel(sessionKey: "main", transport: transport) }
-
-        await MainActor.run { vm.load() }
-        try await waitUntil("bootstrap") { await MainActor.run { vm.healthOK && vm.sessionId == sessionId } }
+        try await waitUntil("running") { await MainActor.run { vm.isRunning } }
+        try await waitUntil("draft") { await MainActor.run { vm.streamingAssistantText == "Thinking out loud" } }
 
         await MainActor.run {
-            vm.input = "hi"
+            vm.input = "And after that?"
+            vm.send()
+            #expect(vm.queued == ["And after that?"])
+            #expect(vm.input.isEmpty)
+        }
+
+        try await waitUntil("both sent", timeoutSeconds: 5) { await cloud.sentContents().count == 2 }
+        try await waitUntil("idle", timeoutSeconds: 5) { await MainActor.run { !vm.isRunning && vm.queued.isEmpty } }
+        #expect(await cloud.sentContents() == ["What is left?", "And after that?"])
+        await MainActor.run {
+            #expect(vm.streamingAssistantText == nil)
+            #expect(vm.messages.map(\.role) == ["user", "assistant", "user", "assistant"])
+        }
+    }
+
+    @Test func stopEndsTheRunAndDropsQueuedText() async throws {
+        let cloud = FakeCloud(signedIn: true, chats: [BrainChat(id: 5, title: nil)])
+        await cloud.setReplyDelay(5_000_000_000)
+        let vm = await MainActor.run { BuilderforceChatViewModel(transport: FakeTransport(cloud: cloud)) }
+        await MainActor.run { vm.load() }
+        try await waitUntil("opened") { await MainActor.run { vm.activeChatID == 5 && !vm.isLoading } }
+        await MainActor.run {
+            vm.input = "Long task"
             vm.send()
         }
-        try await waitUntil("pending run starts") { await MainActor.run { vm.pendingRunCount == 1 } }
-
-        let runId = try #require(await transport.lastSentRunId())
-        await MainActor.run { vm.abort() }
-
-        try await waitUntil("abortRun called") {
-            let ids = await transport.abortedRunIds()
-            return ids == [runId]
+        try await waitUntil("running") { await MainActor.run { vm.isRunning } }
+        await MainActor.run {
+            vm.input = "queued"
+            vm.send()
+            vm.stop()
+            #expect(!vm.isRunning)
+            #expect(vm.queued.isEmpty)
         }
+    }
 
-        // Pending remains until the gateway broadcasts an aborted/final chat event.
-        #expect(await MainActor.run { vm.pendingRunCount } == 1)
+    @Test func addressedAgentGetsMetadataNotABrainReply() async throws {
+        let agent = BrainChatAgent(id: "a1", agentRef: "42", name: "Ada")
+        let cloud = FakeCloud(signedIn: true, chats: [BrainChat(id: 5, title: nil)], agents: [agent])
+        let vm = await MainActor.run { BuilderforceChatViewModel(transport: FakeTransport(cloud: cloud)) }
+        await MainActor.run { vm.load() }
+        try await waitUntil("agents") { await MainActor.run { !vm.agents.isEmpty } }
+        await MainActor.run {
+            vm.recipient = vm.agents.first
+            vm.input = "Take the ticket"
+            vm.send()
+        }
+        try await waitUntil("sent") { await cloud.sentContents().count == 1 }
+        #expect(await cloud.sent.first?.to == "42")
+        await MainActor.run { vm.stop() }
+    }
+}
 
-        transport.emit(
-            .chat(
-                BuilderforceChatEventPayload(
-                    runId: runId,
-                    sessionKey: "main",
-                    state: "aborted",
-                    message: nil,
-                    errorMessage: nil)))
+extension FakeCloud {
+    fileprivate func setSignedIn() {
+        self.signedIn = true
+    }
 
-        try await waitUntil("pending run clears") { await MainActor.run { vm.pendingRunCount == 0 } }
+    fileprivate func setReplyDelay(_ nanoseconds: UInt64) {
+        self.replyDelay = nanoseconds
     }
 }

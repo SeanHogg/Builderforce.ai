@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { ChatInput } from '@/components/ChatInput';
-import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
+import { ChatInput, type ComposerStarters } from '@/components/ChatInput';
 import { applyTemplateEntry } from '@/lib/templates/apply';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { NEW_CHAT_MODE, type ChatMode } from '@/lib/brain';
@@ -337,6 +336,12 @@ function Composer({ value, onChange, onSubmit, chatMode, onChatModeChange, onEng
 }) {
   const t = useTranslations('home');
   const router = useRouter();
+  const starters = useMemo<ComposerStarters>(() => ({
+    onSelect: (entry) => applyTemplateEntry(entry, {
+      onPrompt: (prompt) => onChange(prompt),
+      onInstall: (key) => router.push(`/templates?open=${encodeURIComponent(key)}`),
+    }),
+  }), [onChange, router]);
   return (
     <div
       className={styles.promptWrap}
@@ -357,18 +362,12 @@ function Composer({ value, onChange, onSubmit, chatMode, onChatModeChange, onEng
         showVoice
         chatMode={chatMode}
         onChatModeChange={onChatModeChange}
+        // Starting points from `+`, inside the box — the same as every other prompt.
+        // The hero has a composer and nothing else (no board to place a pack on, no
+        // workspace to install into), so it declares only `onPrompt`; an installable
+        // entry goes to the templates gallery, where it can be set up properly.
+        starters={starters}
       />
-      {/* The hero has a composer and nothing else — no board to place a pack on
-          and no workspace to install into — so it declares only `onPrompt`.
-          `applyTemplateEntry` reports the entries it cannot run rather than
-          leaving a press with no effect, and the hero sends those to the
-          templates gallery, where they can be set up properly. */}
-      <PromptUseCasePicker onSelect={(entry) => {
-        applyTemplateEntry(entry, {
-          onPrompt: (prompt) => onChange(prompt),
-          onInstall: (key) => router.push(`/templates?open=${encodeURIComponent(key)}`),
-        });
-      }} />
     </div>
   );
 }

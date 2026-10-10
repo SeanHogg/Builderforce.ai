@@ -1,5 +1,6 @@
 package ai.builderforce.android.ui
 
+import ai.builderforce.android.R
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -48,13 +50,20 @@ fun TalkOrbOverlay(
     )
 
   val trimmed = statusText.trim()
-  val showStatus = trimmed.isNotEmpty() && trimmed != "Off"
+  val offStatus = stringResource(R.string.voice_status_off)
+  val showStatus = trimmed.isNotEmpty() && trimmed != offStatus
   val phase =
-    when {
-      isSpeaking -> "Speaking"
-      isListening -> "Listening"
-      else -> "Thinking"
-    }
+    stringResource(
+      when {
+        isSpeaking -> R.string.talk_phase_speaking
+        isListening -> R.string.talk_phase_listening
+        else -> R.string.talk_phase_thinking
+      },
+    )
+  // The orb floats over the canvas, so its label sits on an inverse-surface chip for contrast.
+  val chipColor = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.72f)
+  val chipText = MaterialTheme.colorScheme.inverseOnSurface
+  val orbShade = MaterialTheme.colorScheme.scrim.copy(alpha = 0.56f)
 
   Column(
     modifier = modifier.padding(24.dp),
@@ -91,7 +100,7 @@ fun TalkOrbOverlay(
                 listOf(
                   seamColor.copy(alpha = 0.92f),
                   seamColor.copy(alpha = 0.40f),
-                  Color.Black.copy(alpha = 0.56f),
+                  orbShade,
                 ),
               center = center,
               radius = baseRadius * 1.35f,
@@ -109,23 +118,14 @@ fun TalkOrbOverlay(
       }
     }
 
-    if (showStatus) {
-      Surface(
-        color = Color.Black.copy(alpha = 0.40f),
-        shape = CircleShape,
-      ) {
-        Text(
-          text = trimmed,
-          modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-          color = Color.White.copy(alpha = 0.92f),
-          style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.SemiBold,
-        )
-      }
-    } else {
+    Surface(
+      color = chipColor,
+      shape = CircleShape,
+    ) {
       Text(
-        text = phase,
-        color = Color.White.copy(alpha = 0.80f),
+        text = if (showStatus) trimmed else phase,
+        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+        color = chipText,
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.SemiBold,
       )

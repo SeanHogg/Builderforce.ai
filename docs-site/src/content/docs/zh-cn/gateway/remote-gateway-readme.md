@@ -1,6 +1,6 @@
 ---
 read_when: Connecting the macOS app to a remote gateway over SSH
-summary: BuilderForce Agents.app 连接远程 Gateway 网关的 SSH 隧道设置
+summary: Builderforce.app 连接远程 Gateway 网关的 SSH 隧道设置
 title: 远程 Gateway 网关设置
 x-i18n:
   generated_at: "2026-02-03T07:48:37Z"
@@ -11,9 +11,9 @@ x-i18n:
   workflow: 15
 ---
 
-# 使用远程 Gateway 网关运行 BuilderForce Agents.app
+# 使用远程 Gateway 网关运行 Builderforce.app
 
-BuilderForce Agents.app 使用 SSH 隧道连接到远程 Gateway 网关。本指南向你展示如何设置。
+Builderforce.app 使用 SSH 隧道连接到远程 Gateway 网关。本指南向你展示如何设置。
 
 ## 概述
 
@@ -21,7 +21,7 @@ BuilderForce Agents.app 使用 SSH 隧道连接到远程 Gateway 网关。本指
 ┌─────────────────────────────────────────────────────────────┐
 │                        Client Machine                          │
 │                                                              │
-│  BuilderForce Agents.app ──► ws://127.0.0.1:18789 (local port)           │
+│  Builderforce.app ──► ws://127.0.0.1:18789 (local port)           │
 │                     │                                        │
 │                     ▼                                        │
 │  SSH Tunnel ────────────────────────────────────────────────│
@@ -73,11 +73,11 @@ launchctl setenv BUILDERFORCE_AGENTS_GATEWAY_TOKEN "<your-token>"
 ssh -N remote-gateway &
 ```
 
-### 步骤 5：重启 BuilderForce Agents.app
+### 步骤 5：重启 Builderforce.app
 
 ```bash
-# Quit BuilderForce Agents.app (⌘Q), then reopen:
-open /path/to/BuilderForce Agents.app
+# Quit Builderforce.app (⌘Q), then reopen:
+open /path/to/Builderforce.app
 ```
 
 应用现在将通过 SSH 隧道连接到远程 Gateway 网关。
@@ -161,4 +161,4 @@ launchctl bootout gui/$UID/bot.molt.ssh-tunnel
 | `KeepAlive`                          | 隧道崩溃时自动重启                    |
 | `RunAtLoad`                          | 代理加载时启动隧道                    |
 
-BuilderForce Agents.app 连接到你的客户端机器上的 `ws://127.0.0.1:18789`。SSH 隧道将该连接转发到运行 Gateway 网关的远程机器的端口 18789。
+Builderforce.app 连接到你的客户端机器上的 `ws://127.0.0.1:18789`。SSH 隧道将该连接转发到运行 Gateway 网关的远程机器的端口 18789。

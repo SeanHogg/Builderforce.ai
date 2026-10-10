@@ -101,7 +101,7 @@ function enhanceBrowserFetchError(url: string, err: unknown, timeoutMs: number):
   const isLocal = !isAbsoluteHttp(url);
   // Human-facing hint for logs/diagnostics.
   const operatorHint = isLocal
-    ? `Restart the BuilderForceAgents gateway (BuilderForceAgents.app menubar, or \`${formatCliCommand("builderforce gateway")}\`).`
+    ? `Restart the BuilderForceAgents gateway (Builderforce.app menubar, or \`${formatCliCommand("builderforce gateway")}\`).`
     : "If this is a sandboxed session, ensure the sandbox browser is running.";
   // Model-facing suffix: explicitly tell the LLM NOT to retry.
   // Without this, models see "try again" and enter an infinite tool-call loop.

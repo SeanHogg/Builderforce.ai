@@ -819,26 +819,27 @@ apps/
     Icon.icon/
       Assets/
     Sources/
-      CoderClaw/
+      Builderforce/
         Logging/
         NodeMode/
         Resources/
           DeviceModels/
-      CoderClawDiscovery/
-      CoderClawIPC/
-      CoderClawMacCLI/
-      CoderClawProtocol/
+      BuilderforceDiscovery/
+      BuilderforceIPC/
+      BuilderforceMacCLI/
+      BuilderforceProtocol/
     Tests/
-      CoderClawIPCTests/
+      BuilderforceIPCTests/
   shared/
-    CoderClawKit/
+    BuilderforceKit/
       Sources/
-        OpenClawChatUI/
-        OpenClawKit/
+        BuilderforceChatUI/
+        BuilderforceKit/
+          Cloud/
           Resources/
-        OpenClawProtocol/
+        BuilderforceProtocol/
       Tests/
-        OpenClawKitTests/
+        BuilderforceKitTests/
       Tools/
         CanvasA2UI/
 brain-embedded/

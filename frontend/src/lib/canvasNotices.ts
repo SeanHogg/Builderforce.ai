@@ -43,6 +43,11 @@ export interface CanvasNotices {
    *  abandoned rather than left spinning. Distinct from `noAnswer`: nothing is wrong
    *  with what was asked, and retrying is the right next move. */
   providerStalled: string;
+  /** The turn CHANGED the board and was then abandoned mid-work — the provider went
+   *  silent, or the model looped — with no model left to finish it. Distinct from
+   *  `addedToCanvas`, which this used to fall through to: a build that wrote only
+   *  `index.html` was reported as delivered above a "Hello World!" preview. */
+  stoppedPartway: string;
   /** A tool failed, and its error is the most useful thing the turn can report. */
   toolError(detail: string): string;
   /** The model answered, but never executed the change the request asked for. Its answer
@@ -71,6 +76,7 @@ export function canvasNoticesFrom(t: CanvasNoticeTranslator): CanvasNotices {
     stepsExhausted: t('stepsExhausted'),
     buildNotAuthored: t('buildNotAuthored'),
     providerStalled: t('providerStalled'),
+    stoppedPartway: t('stoppedPartway'),
     toolError: (detail) => t('toolError', { detail }),
     answeredWithoutCanvasChange: (answer) => `${answer}\n\n${t('answeredWithoutChange')}`,
     unverifiedCreation: (hasTabularData) => t(hasTabularData ? 'unverifiedCreationTabular' : 'unverifiedCreationPlain'),

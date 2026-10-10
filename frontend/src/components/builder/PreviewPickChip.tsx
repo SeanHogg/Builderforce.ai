@@ -1,6 +1,6 @@
 // No `'use client'`: imported only by client components (the two composers), so it is already on the client side of the boundary.
 
-import { memo, type CSSProperties } from 'react';
+import { memo, useEffect, useRef, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { clearPreviewPick, previewPickExcerpt, usePreviewPick } from '@/lib/workspace/previewPick';
@@ -10,16 +10,27 @@ import { clearPreviewPick, previewPickExcerpt, usePreviewPick } from '@/lib/work
  * next request is about. × withdraws it, and the request goes back to meaning the whole
  * app. Renders nothing while nothing is picked, so every composer that hosts a preview
  * can carry it unconditionally (the canvas prompt and the Studio workspace's Brain).
+ *
+ * A new pick puts the caret in THIS chip's composer: the person just pointed at
+ * something, and the next thing they do is say what to change about it.
  */
 export const PreviewPickChip = memo(function PreviewPickChip() {
   const t = useTranslations('ide.previewPick');
   const pick = usePreviewPick();
+  const chipRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!pick) return;
+    const box = chipRef.current?.closest('form')?.querySelector('textarea');
+    if (!box) return;
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
+  }, [pick]);
   if (!pick) return null;
   const excerpt = previewPickExcerpt(pick.text, 28);
   const label = excerpt ? t('labelWithText', { tag: pick.tag, text: excerpt }) : t('label', { tag: pick.tag });
   const where = t('where', { file: pick.file, line: pick.line });
   return (
-    <span style={chipStyle} title={where} data-testid="preview-pick-chip">
+    <span ref={chipRef} style={chipStyle} title={where} data-testid="preview-pick-chip">
       <Icon name="cursor" size={13} />
       <span style={labelStyle}>
         <span className="sr-only">{t('aria')} </span>

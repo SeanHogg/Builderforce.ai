@@ -76,17 +76,18 @@ describe('Brain activity signal', () => {
     expect(screen.getByText('I created a new sales campaign.')).toBeInTheDocument();
   });
 
-  it('says the same words in the dock transcript and the dock footer', () => {
-    render(<BrainDock {...dockProps} trace={[toolEvent]} running runStartedAt={Date.now() - 5_000} />);
+  it('narrates the run once, in the dock transcript — no second strip above the composer', () => {
+    const { container } = render(<BrainDock {...dockProps} trace={[toolEvent]} running runStartedAt={Date.now() - 5_000} />);
 
-    // Once in the transcript's live node, once in the footer strip — never two
-    // different vocabularies for the same moment.
-    expect(screen.getAllByText(/Executing…/).length).toBeGreaterThan(1);
+    // The transcript's live node is the one reading of the run in the dock. A footer
+    // strip directly above the prompt used to say the same words a second time.
+    expect(screen.getAllByText(/Executing…/).length).toBeGreaterThan(0);
+    expect(container.querySelector('[data-state="running"][data-variant]')).toBeNull();
   });
 
   it('falls back to the rotating idle phrasing before any step is recorded', () => {
     render(<BrainDock {...dockProps} trace={[]} running runStartedAt={Date.now()} />);
 
-    expect(screen.getAllByText('Thinking…').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('Thinking…').length).toBeGreaterThan(0);
   });
 });

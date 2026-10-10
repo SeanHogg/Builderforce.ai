@@ -26,7 +26,7 @@ pnpm install
 
 ## 2. Build and Package the App
 
-To build the macOS app and package it into `dist/BuilderForce Agents.app`, run:
+To build the macOS app and package it into `dist/Builderforce.app`, run:
 
 ```bash
 ./scripts/package-mac-app.sh

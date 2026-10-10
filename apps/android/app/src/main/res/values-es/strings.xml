@@ -1,0 +1,261 @@
+<resources>
+    <string name="app_name">Builderforce</string>
+
+    <!-- Common actions -->
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_continue">Continuar</string>
+    <string name="action_not_now">Ahora no</string>
+    <string name="action_open_settings">Abrir ajustes</string>
+    <string name="action_connect">Conectar</string>
+    <string name="action_disconnect">Desconectar</string>
+    <string name="action_expand">Expandir</string>
+    <string name="action_collapse">Contraer</string>
+
+    <!-- Node foreground service and system prompts -->
+    <string name="notification_title">Builderforce</string>
+    <string name="notification_title_connected">Builderforce · Conectado</string>
+    <string name="notification_starting">Iniciando…</string>
+    <string name="notification_channel_name">Conexión</string>
+    <string name="notification_channel_description">Estado de la conexión del nodo de Builderforce</string>
+    <string name="notification_status_with_server">%1$s · %2$s</string>
+    <string name="notification_voice_wake_listening">" · Activación por voz: escuchando"</string>
+    <string name="notification_voice_wake_paused">" · Activación por voz: en pausa"</string>
+    <string name="permission_rationale">Builderforce necesita permisos de %1$s para continuar.</string>
+    <string name="permission_required_title">Se requiere un permiso</string>
+    <string name="permission_settings_title">Activa el permiso en Ajustes</string>
+    <string name="permission_settings_message">Activa %1$s en los ajustes de Android para continuar.</string>
+    <string name="permission_label_camera">Cámara</string>
+    <string name="permission_label_microphone">Micrófono</string>
+    <string name="permission_label_sms">SMS</string>
+    <string name="screen_capture_title">Se requiere grabar la pantalla</string>
+    <string name="screen_capture_rationale">Builderforce necesita grabar la pantalla para este comando.</string>
+
+    <!-- App update -->
+    <string name="update_notification_title">Actualización de Builderforce</string>
+    <string name="update_channel_name">Actualizaciones de la app</string>
+    <string name="update_connecting">Conectando…</string>
+    <string name="update_progress">%1$.1f / %2$.1f MB (%3$d %%)</string>
+    <string name="update_downloaded_mb">%1$.1f MB descargados</string>
+    <string name="update_installing">Instalando actualización…</string>
+    <string name="update_failed_title">Error al actualizar</string>
+    <string name="update_failed_http">La descarga falló (HTTP %1$d).</string>
+    <string name="update_failed_checksum">La descarga no coincide con su suma de comprobación SHA-256.</string>
+    <string name="update_failed_invalid_apk">El archivo descargado no es un APK válido.</string>
+    <string name="update_failed_unknown">Error desconocido</string>
+
+    <!-- Gateway status -->
+    <string name="gateway_status_offline">Sin conexión</string>
+    <string name="gateway_status_connected">Conectado</string>
+    <string name="gateway_status_connected_node_offline">Conectado (nodo sin conexión)</string>
+    <string name="gateway_status_connected_operator_offline">Conectado (operador sin conexión)</string>
+    <string name="gateway_status_connecting">Conectando…</string>
+    <string name="gateway_status_reconnecting">Reconectando…</string>
+    <string name="gateway_status_error">Error del gateway: %1$s</string>
+    <string name="gateway_status_closed">El gateway cerró la conexión: %1$s</string>
+    <string name="gateway_status_verify_tls">Verifica la huella TLS del gateway…</string>
+    <string name="gateway_status_tls_unreadable">Error: no se puede leer la huella TLS</string>
+    <string name="gateway_status_invalid_manual">Error: host o puerto manual no válido</string>
+    <string name="gateway_trust_title">¿Confiar en este gateway?</string>
+    <string name="gateway_trust_body">Primera conexión TLS.\n\nVerifica esta huella SHA-256 por un canal independiente antes de confiar:\n%1$s</string>
+    <string name="gateway_trust_confirm">Confiar y conectar</string>
+
+    <!-- Gateway discovery -->
+    <string name="discovery_searching">Buscando…</string>
+    <string name="discovery_searching_gateways">Buscando gateways…</string>
+    <string name="discovery_wide_area">Área amplia: %1$s</string>
+    <string name="discovery_local_and_wide">Local: %1$d • %2$s</string>
+    <plurals name="discovery_found_gateways">
+        <item quantity="one">Búsqueda activa • %1$d gateway encontrado</item>
+        <item quantity="many">Búsqueda activa • %1$d gateways encontrados</item>
+        <item quantity="other">Búsqueda activa • %1$d gateways encontrados</item>
+    </plurals>
+    <plurals name="discovery_found_other_gateways">
+        <item quantity="one">Búsqueda activa • %1$d gateway más encontrado</item>
+        <item quantity="many">Búsqueda activa • %1$d gateways más encontrados</item>
+        <item quantity="other">Búsqueda activa • %1$d gateways más encontrados</item>
+    </plurals>
+
+    <!-- Voice Wake and Talk Mode -->
+    <string name="voice_status_off">Desactivado</string>
+    <string name="voice_status_paused">En pausa</string>
+    <string name="voice_status_listening">Escuchando</string>
+    <string name="voice_status_triggered">Activado</string>
+    <string name="voice_status_mic_permission">Se requiere permiso de micrófono</string>
+    <string name="voice_status_recognizer_unavailable">Reconocimiento de voz no disponible</string>
+    <string name="voice_status_start_failed">No se pudo iniciar: %1$s</string>
+    <string name="voice_error_audio">Error de audio</string>
+    <string name="voice_error_client">Error del cliente</string>
+    <string name="voice_error_network">Error de red</string>
+    <string name="voice_error_network_timeout">Tiempo de espera de red agotado</string>
+    <string name="voice_error_busy">Reconocimiento de voz ocupado</string>
+    <string name="voice_error_server">Error del servidor</string>
+    <string name="voice_error_other">Error de voz (%1$d)</string>
+    <string name="talk_status_thinking">Pensando…</string>
+    <string name="talk_status_gateway_offline">Gateway no conectado</string>
+    <string name="talk_status_no_reply">Sin respuesta</string>
+    <string name="talk_status_failed">Error en la conversación: %1$s</string>
+    <string name="talk_status_speaking">Hablando…</string>
+    <string name="talk_status_speaking_system">Hablando (voz del sistema)…</string>
+    <string name="talk_status_speak_failed">No se pudo hablar: %1$s</string>
+    <string name="talk_phase_speaking">Hablando</string>
+    <string name="talk_phase_listening">Escuchando</string>
+    <string name="talk_phase_thinking">Pensando</string>
+
+    <!-- Camera HUD -->
+    <string name="camera_hud_taking_photo">Tomando foto…</string>
+    <string name="camera_hud_photo_captured">Foto tomada</string>
+    <string name="camera_hud_recording">Grabando…</string>
+    <string name="camera_hud_clip_captured">Clip grabado</string>
+
+    <!-- Overlay and status pill -->
+    <string name="overlay_chat">Chat</string>
+    <string name="overlay_talk_mode">Modo conversación</string>
+    <string name="overlay_settings">Ajustes</string>
+    <string name="status_pill_connected">Conectado</string>
+    <string name="status_pill_connecting">Conectando…</string>
+    <string name="status_pill_error">Error</string>
+    <string name="status_pill_offline">Sin conexión</string>
+    <string name="status_voice_enabled">Voz activada</string>
+    <string name="status_voice_disabled">Voz desactivada</string>
+    <string name="activity_foreground_required">Se requiere primer plano</string>
+    <string name="activity_repairing">Volviendo a emparejar…</string>
+    <string name="activity_repairing_description">Volviendo a emparejar</string>
+    <string name="activity_approval_pending">Aprobación pendiente</string>
+    <string name="activity_recording_screen">Grabando pantalla…</string>
+    <string name="activity_recording_screen_description">Grabando pantalla</string>
+    <string name="activity_taking_photo_description">Tomando foto</string>
+    <string name="activity_recording_description">Grabando</string>
+    <string name="activity_capture_finished_description">Captura terminada</string>
+    <string name="activity_capture_failed_description">Error en la captura</string>
+    <string name="activity_mic_permission">Permiso de micrófono</string>
+    <string name="activity_mic_permission_description">Se requiere permiso de micrófono</string>
+    <string name="activity_voice_wake_paused">Activación por voz en pausa</string>
+
+    <!-- Settings -->
+    <string name="settings_section_node">Nodo</string>
+    <string name="settings_node_name">Nombre</string>
+    <string name="settings_node_instance_id">ID de instancia: %1$s</string>
+    <string name="settings_node_device">Dispositivo: %1$s</string>
+    <string name="settings_node_version">Versión: %1$s</string>
+    <string name="settings_section_gateway">Gateway</string>
+    <string name="settings_gateway_status">Estado</string>
+    <string name="settings_gateway_server">Servidor</string>
+    <string name="settings_gateway_address">Dirección</string>
+    <string name="settings_gateways_other">Otros gateways</string>
+    <string name="settings_gateways_discovered">Gateways encontrados</string>
+    <string name="settings_gateways_none">Aún no se han encontrado gateways.</string>
+    <string name="settings_gateway_ip">IP: %1$s:%2$d</string>
+    <string name="settings_gateway_lan">LAN: %1$s</string>
+    <string name="settings_gateway_tailnet">Tailnet: %1$s</string>
+    <string name="settings_gateway_ports">Puertos: gateway %1$s · lienzo %2$s</string>
+    <string name="settings_advanced">Avanzado</string>
+    <string name="settings_advanced_summary">Conexión manual al gateway</string>
+    <string name="settings_manual_enable">Usar gateway manual</string>
+    <string name="settings_manual_enable_summary">Úsalo cuando la búsqueda automática esté bloqueada.</string>
+    <string name="settings_manual_host">Host</string>
+    <string name="settings_manual_port">Puerto</string>
+    <string name="settings_manual_token">Token del gateway</string>
+    <string name="settings_manual_tls">Requerir TLS</string>
+    <string name="settings_manual_tls_summary">Fijar el certificado del gateway en la primera conexión.</string>
+    <string name="settings_manual_connect">Conectar (manual)</string>
+    <string name="settings_section_voice">Voz</string>
+    <string name="settings_voice_wake">Activación por voz</string>
+    <string name="settings_voice_foreground">Solo en primer plano</string>
+    <string name="settings_voice_foreground_only">Escucha solo mientras Builderforce está abierto.</string>
+    <string name="settings_always">Siempre</string>
+    <string name="settings_voice_always_summary">Sigue escuchando en segundo plano (muestra una notificación persistente).</string>
+    <string name="settings_wake_words">Palabras de activación (separadas por comas)</string>
+    <string name="settings_wake_words_reset">Restablecer valores predeterminados</string>
+    <string name="settings_wake_words_sync_connected">Cualquier nodo puede editar las palabras de activación. Los cambios se sincronizan a través del gateway.</string>
+    <string name="settings_wake_words_sync_offline">Conéctate a un gateway para sincronizar las palabras de activación en todas partes.</string>
+    <string name="settings_section_camera">Cámara</string>
+    <string name="settings_camera_allow">Permitir cámara</string>
+    <string name="settings_camera_allow_summary">Permite que el gateway solicite fotos o videoclips cortos (solo en primer plano).</string>
+    <string name="settings_camera_tip">Consejo: concede el permiso de micrófono para grabar videoclips con audio.</string>
+    <string name="settings_section_messaging">Mensajes</string>
+    <string name="settings_sms_permission">Permiso de SMS</string>
+    <string name="settings_sms_summary">Permite que el gateway envíe SMS desde este dispositivo.</string>
+    <string name="settings_sms_no_telephony">Los SMS requieren un dispositivo con telefonía.</string>
+    <string name="settings_sms_unavailable">No disponible</string>
+    <string name="settings_sms_manage">Gestionar</string>
+    <string name="settings_sms_grant">Conceder</string>
+    <string name="settings_section_location">Ubicación</string>
+    <string name="settings_location_off">Desactivada</string>
+    <string name="settings_location_off_summary">Desactivar el uso compartido de la ubicación.</string>
+    <string name="settings_location_while_using_title">Mientras se usa</string>
+    <string name="settings_location_while_using">Solo mientras Builderforce está abierto.</string>
+    <string name="settings_location_always_summary">Permitir la ubicación en segundo plano (requiere permiso del sistema).</string>
+    <string name="settings_location_precise">Ubicación precisa</string>
+    <string name="settings_location_precise_summary">Usar GPS preciso cuando esté disponible.</string>
+    <string name="settings_location_always_note">La opción Siempre puede requerir que permitas la ubicación en segundo plano en los ajustes de Android.</string>
+    <string name="settings_section_screen">Pantalla</string>
+    <string name="settings_prevent_sleep_title">Evitar suspensión</string>
+    <string name="settings_prevent_sleep">Mantiene la pantalla encendida mientras Builderforce está abierto.</string>
+    <string name="settings_section_debug">Depuración</string>
+    <string name="settings_debug_canvas_status">Estado de depuración del lienzo</string>
+    <string name="settings_debug_canvas_status_summary">Mostrar el texto de estado en el lienzo cuando la depuración está activada.</string>
+    <string name="settings_account_title">Cuenta de Builderforce</string>
+    <string name="settings_account_signed_in">Sesión iniciada</string>
+    <string name="settings_account_signed_out">No has iniciado sesión. Abre el chat para iniciar sesión.</string>
+    <string name="settings_account_workspace">Espacio de trabajo</string>
+    <string name="settings_account_workspace_none">Elige un espacio de trabajo</string>
+    <string name="settings_account_sign_out">Cerrar sesión</string>
+    <string name="settings_account_server">Servidor (desarrolladores)</string>
+    <string name="settings_account_server_note">Déjalo vacío para usar builderforce.ai.</string>
+    <string name="settings_account_server_apply">Aplicar</string>
+
+    <!-- Sign-in -->
+    <string name="signin_title">Inicia sesión en Builderforce</string>
+    <string name="signin_body">Chatea con el Brain y tus agentes: las mismas conversaciones que en la app web.</string>
+    <string name="signin_button">Iniciar sesión</string>
+    <string name="signin_starting">Obteniendo un código de inicio de sesión…</string>
+    <string name="signin_enter_code">Introduce este código en tu navegador para aprobar el inicio de sesión:</string>
+    <string name="signin_open_browser">Abrir navegador</string>
+    <string name="signin_waiting">Esperando la aprobación…</string>
+    <string name="signin_cancel">Cancelar</string>
+    <string name="signin_failed_denied">Se rechazó el inicio de sesión.</string>
+    <string name="signin_failed_expired">El código de inicio de sesión caducó. Inténtalo de nuevo.</string>
+    <string name="signin_failed_unreachable">No se pudo conectar con Builderforce. Comprueba tu conexión e inténtalo de nuevo.</string>
+    <string name="signin_expired">Tu sesión caducó. Vuelve a iniciar sesión.</string>
+    <string name="signin_no_browser">No hay ningún navegador disponible para abrir la página de inicio de sesión.</string>
+
+    <!-- Chat -->
+    <string name="chat_placeholder">Escribe al Brain…</string>
+    <string name="chat_attach">Añadir imágenes</string>
+    <string name="chat_send">Enviar</string>
+    <string name="chat_stop">Detener</string>
+    <string name="chat_dictate">Dictar</string>
+    <string name="chat_stop_dictation">Detener dictado</string>
+    <string name="chat_to">Para %1$s</string>
+    <string name="chat_brain">Brain</string>
+    <string name="chat_you">Tú</string>
+    <string name="chat_remove_attachment">Quitar %1$s</string>
+    <string name="chat_new">Nuevo chat</string>
+    <string name="chat_untitled">Chat sin título</string>
+    <string name="chat_pick">Elige un chat</string>
+    <string name="chat_thinking">Pensando…</string>
+    <string name="chat_using_tool">Usando %1$s…</string>
+    <string name="chat_waiting_agent">Esperando a %1$s…</string>
+    <string name="chat_queued">En cola: se enviará después de la respuesta actual</string>
+    <string name="chat_unqueue">No enviar</string>
+    <string name="chat_tool_ask">El Brain quiere: %1$s</string>
+    <string name="chat_tool_ask_body">Esto cambia algo en tu espacio de trabajo.</string>
+    <string name="chat_tool_approve">Aprobar</string>
+    <string name="chat_tool_deny">Rechazar</string>
+    <string name="chat_empty">Pregúntale al Brain lo que quieras sobre tu espacio de trabajo.</string>
+    <string name="chat_starter_1">¿En qué debería trabajar hoy?</string>
+    <string name="chat_starter_2">Resume mis tickets abiertos</string>
+    <string name="chat_starter_3">Planifica mi semana</string>
+    <string name="chat_mic_denied">Se necesita el permiso de micrófono para dictar.</string>
+    <string name="chat_image_unreadable">No se pudo leer esa imagen.</string>
+    <string name="chat_image">Imagen</string>
+    <string name="chat_image_unavailable">Imagen no disponible</string>
+
+    <!-- Cloud errors -->
+    <string name="cloud_error_signed_out">No has iniciado sesión en Builderforce.</string>
+    <string name="cloud_error_key_rejected">Builderforce ya no acepta este inicio de sesión. Vuelve a iniciar sesión.</string>
+    <string name="cloud_error_unreachable">No se pudo conectar con Builderforce: %1$s</string>
+    <string name="cloud_error_server">Respuesta de Builderforce: %1$s</string>
+    <string name="cloud_error_empty_answer">El Brain devolvió una respuesta vacía.</string>
+    <string name="cloud_error_unexpected">Algo salió mal: %1$s</string>
+</resources>

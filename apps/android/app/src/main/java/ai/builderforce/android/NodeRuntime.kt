@@ -9,6 +9,7 @@ import ai.builderforce.android.gateway.DeviceAuthStore
 import ai.builderforce.android.gateway.DeviceIdentityStore
 import ai.builderforce.android.gateway.GatewayDiscovery
 import ai.builderforce.android.gateway.GatewayEndpoint
+import ai.builderforce.android.gateway.GatewayLinkStatus
 import ai.builderforce.android.gateway.GatewaySession
 import ai.builderforce.android.gateway.probeGatewayTlsFingerprint
 import ai.builderforce.android.node.*
@@ -170,8 +171,13 @@ class NodeRuntime(context: Context) {
   private val _isConnected = MutableStateFlow(false)
   val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
-  private val _statusText = MutableStateFlow("Offline")
+  private val _statusText = MutableStateFlow(appContext.getString(R.string.gateway_status_offline))
+  /** Localized, human-readable gateway status line. */
   val statusText: StateFlow<String> = _statusText.asStateFlow()
+
+  private val _gatewayIndicator = MutableStateFlow(GatewayIndicator(GatewayPhase.Offline))
+  /** Typed gateway status the UI derives its pill from (never parse [statusText]). */
+  val gatewayIndicator: StateFlow<GatewayIndicator> = _gatewayIndicator.asStateFlow()
 
   private val _pendingGatewayTrust = MutableStateFlow<GatewayTrustPrompt?>(null)
   val pendingGatewayTrust: StateFlow<GatewayTrustPrompt?> = _pendingGatewayTrust.asStateFlow()
@@ -203,8 +209,8 @@ class NodeRuntime(context: Context) {
   private var lastAutoA2uiUrl: String? = null
   private var operatorConnected = false
   private var nodeConnected = false
-  private var operatorStatusText: String = "Offline"
-  private var nodeStatusText: String = "Offline"
+  private var operatorLink: GatewayLinkStatus = GatewayLinkStatus.Offline
+  private var nodeLink: GatewayLinkStatus = GatewayLinkStatus.Offline
 
   private val operatorSession =
     GatewaySession(
@@ -213,7 +219,7 @@ class NodeRuntime(context: Context) {
       deviceAuthStore = deviceAuthStore,
       onConnected = { name, remote, mainSessionKey ->
         operatorConnected = true
-        operatorStatusText = "Connected"
+        operatorLink = GatewayLinkStatus.Offline
         _serverName.value = name
         _remoteAddress.value = remote
         _seamColorArgb.value = DEFAULT_SEAM_COLOR_ARGB
@@ -222,9 +228,9 @@ class NodeRuntime(context: Context) {
         scope.launch { refreshBrandingFromGateway() }
         scope.launch { gatewayEventHandler.refreshWakeWordsFromGateway() }
       },
-      onDisconnected = { message ->
+      onDisconnected = { link ->
         operatorConnected = false
-        operatorStatusText = message
+        operatorLink = link
         _serverName.value = null
         _remoteAddress.value = null
         _seamColorArgb.value = DEFAULT_SEAM_COLOR_ARGB
@@ -246,13 +252,13 @@ class NodeRuntime(context: Context) {
       deviceAuthStore = deviceAuthStore,
       onConnected = { _, _, _ ->
         nodeConnected = true
-        nodeStatusText = "Connected"
+        nodeLink = GatewayLinkStatus.Offline
         updateStatus()
         maybeNavigateToA2uiOnConnect()
       },
-      onDisconnected = { message ->
+      onDisconnected = { link ->
         nodeConnected = false
-        nodeStatusText = message
+        nodeLink = link
         updateStatus()
         showLocalCanvasOnDisconnect()
       },
@@ -285,14 +291,56 @@ class NodeRuntime(context: Context) {
 
   private fun updateStatus() {
     _isConnected.value = operatorConnected
-    _statusText.value =
-      when {
-        operatorConnected && nodeConnected -> "Connected"
-        operatorConnected && !nodeConnected -> "Connected (node offline)"
-        !operatorConnected && nodeConnected -> "Connected (operator offline)"
-        operatorStatusText.isNotBlank() && operatorStatusText != "Offline" -> operatorStatusText
-        else -> nodeStatusText
-      }
+    when {
+      operatorConnected && nodeConnected ->
+        setStatus(R.string.gateway_status_connected, GatewayIndicator(GatewayPhase.Connected))
+      operatorConnected ->
+        setStatus(R.string.gateway_status_connected_node_offline, GatewayIndicator(GatewayPhase.Connected))
+      nodeConnected ->
+        setStatus(R.string.gateway_status_connected_operator_offline, GatewayIndicator(GatewayPhase.Offline))
+      operatorLink != GatewayLinkStatus.Offline -> setLinkStatus(operatorLink)
+      else -> setLinkStatus(nodeLink)
+    }
+  }
+
+  private fun setStatus(text: String, indicator: GatewayIndicator) {
+    _statusText.value = text
+    _gatewayIndicator.value = indicator
+  }
+
+  private fun setStatus(textRes: Int, indicator: GatewayIndicator) {
+    setStatus(appContext.getString(textRes), indicator)
+  }
+
+  private fun setLinkStatus(link: GatewayLinkStatus) {
+    when (link) {
+      GatewayLinkStatus.Offline ->
+        setStatus(R.string.gateway_status_offline, GatewayIndicator(GatewayPhase.Offline))
+      GatewayLinkStatus.Connecting ->
+        setStatus(R.string.gateway_status_connecting, GatewayIndicator(GatewayPhase.Connecting))
+      GatewayLinkStatus.Reconnecting ->
+        setStatus(R.string.gateway_status_reconnecting, GatewayIndicator(GatewayPhase.Connecting))
+      is GatewayLinkStatus.Failed ->
+        setStatus(
+          appContext.getString(R.string.gateway_status_error, link.detail),
+          GatewayIndicator(GatewayPhase.Error, pairingHintOf(link.detail)),
+        )
+      is GatewayLinkStatus.Closed ->
+        setStatus(
+          appContext.getString(R.string.gateway_status_closed, link.reason),
+          GatewayIndicator(GatewayPhase.Offline, pairingHintOf(link.reason)),
+        )
+    }
+  }
+
+  /** The gateway reports pairing state in its raw (English, protocol-level) error detail. */
+  private fun pairingHintOf(detail: String): PairingHint? {
+    val lower = detail.lowercase()
+    return when {
+      lower.contains("repair") -> PairingHint.Repairing
+      lower.contains("pairing") || lower.contains("approval") -> PairingHint.ApprovalPending
+      else -> null
+    }
   }
 
   private fun resolveMainSessionKey(): String {
@@ -363,12 +411,17 @@ class NodeRuntime(context: Context) {
             } && !externalAudio
 
           if (!shouldListen) {
-            voiceWake.stop(statusText = if (mode == VoiceWakeMode.Off) "Off" else "Paused")
+            voiceWake.stop(
+              statusText =
+                appContext.getString(
+                  if (mode == VoiceWakeMode.Off) R.string.voice_status_off else R.string.voice_status_paused,
+                ),
+            )
             return@collect
           }
 
           if (!hasRecordAudioPermission()) {
-            voiceWake.stop(statusText = "Microphone permission required")
+            voiceWake.stop(statusText = appContext.getString(R.string.voice_status_mic_permission))
             return@collect
           }
 
@@ -518,10 +571,10 @@ class NodeRuntime(context: Context) {
     val tls = connectionManager.resolveTlsParams(endpoint)
     if (tls?.required == true && tls.expectedFingerprint.isNullOrBlank()) {
       // First-time TLS: capture fingerprint, ask user to verify out-of-band, then store and connect.
-      _statusText.value = "Verify gateway TLS fingerprint…"
+      setStatus(R.string.gateway_status_verify_tls, GatewayIndicator(GatewayPhase.Offline))
       scope.launch {
         val fp = probeGatewayTlsFingerprint(endpoint.host, endpoint.port) ?: run {
-          _statusText.value = "Failed: can't read TLS fingerprint"
+          setStatus(R.string.gateway_status_tls_unreadable, GatewayIndicator(GatewayPhase.Offline))
           return@launch
         }
         _pendingGatewayTrust.value = GatewayTrustPrompt(endpoint = endpoint, fingerprintSha256 = fp)
@@ -530,8 +583,8 @@ class NodeRuntime(context: Context) {
     }
 
     connectedEndpoint = endpoint
-    operatorStatusText = "Connecting…"
-    nodeStatusText = "Connecting…"
+    operatorLink = GatewayLinkStatus.Connecting
+    nodeLink = GatewayLinkStatus.Connecting
     updateStatus()
     val token = prefs.loadGatewayToken()
     val password = prefs.loadGatewayPassword()
@@ -548,7 +601,7 @@ class NodeRuntime(context: Context) {
 
   fun declineGatewayTrustPrompt() {
     _pendingGatewayTrust.value = null
-    _statusText.value = "Offline"
+    setStatus(R.string.gateway_status_offline, GatewayIndicator(GatewayPhase.Offline))
   }
 
   private fun hasRecordAudioPermission(): Boolean {
@@ -562,7 +615,7 @@ class NodeRuntime(context: Context) {
     val host = manualHost.value.trim()
     val port = manualPort.value
     if (host.isEmpty() || port <= 0 || port > 65535) {
-      _statusText.value = "Failed: invalid manual host/port"
+      setStatus(R.string.gateway_status_invalid_manual, GatewayIndicator(GatewayPhase.Offline))
       return
     }
     connect(GatewayEndpoint.manual(host = host, port = port))

@@ -1,5 +1,6 @@
 package ai.builderforce.android.gateway
 
+import ai.builderforce.android.R
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.DnsResolver
@@ -45,7 +46,7 @@ import kotlin.coroutines.resumeWithException
 
 @Suppress("DEPRECATION")
 class GatewayDiscovery(
-  context: Context,
+  private val context: Context,
   private val scope: CoroutineScope,
 ) {
   private val nsd = context.getSystemService(NsdManager::class.java)
@@ -59,7 +60,7 @@ class GatewayDiscovery(
   private val _gateways = MutableStateFlow<List<GatewayEndpoint>>(emptyList())
   val gateways: StateFlow<List<GatewayEndpoint>> = _gateways.asStateFlow()
 
-  private val _statusText = MutableStateFlow("Searching…")
+  private val _statusText = MutableStateFlow(context.getString(R.string.discovery_searching))
   val statusText: StateFlow<String> = _statusText.asStateFlow()
 
   private var unicastJob: Job? = null
@@ -186,16 +187,15 @@ class GatewayDiscovery(
 
     val wide =
       when (wideRcode) {
-        null -> "Wide: ?"
-        Rcode.NOERROR -> "Wide: $wideCount"
-        Rcode.NXDOMAIN -> "Wide: NXDOMAIN"
-        else -> "Wide: ${Rcode.string(wideRcode)}"
+        null -> context.getString(R.string.discovery_wide_area, "?")
+        Rcode.NOERROR -> context.getString(R.string.discovery_wide_area, wideCount.toString())
+        else -> context.getString(R.string.discovery_wide_area, Rcode.string(wideRcode))
       }
 
     return when {
-      localCount == 0 && wideRcode == null -> "Searching for gateways…"
-      localCount == 0 -> "$wide"
-      else -> "Local: $localCount • $wide"
+      localCount == 0 && wideRcode == null -> context.getString(R.string.discovery_searching_gateways)
+      localCount == 0 -> wide
+      else -> context.getString(R.string.discovery_local_and_wide, localCount, wide)
     }
   }
 

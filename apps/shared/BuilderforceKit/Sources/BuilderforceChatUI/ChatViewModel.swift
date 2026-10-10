@@ -12,70 +12,94 @@ import UIKit
 
 private let chatUILogger = Logger(subsystem: "ai.builderforce", category: "BuilderforceChatUI")
 
+/// The chat on the Builderforce cloud Brain: the signed-in state, the workspace's chats and
+/// the open one, its transcript, the Brain's reply as it streams, the agents assigned to
+/// the chat, and follow-ups typed while a reply is running (sent once it finishes).
 @MainActor
 @Observable
 public final class BuilderforceChatViewModel {
+    public enum AuthState: Equatable {
+        case unknown
+        case signedOut
+        /// A device-code sign-in in progress (`nil` code: asking the platform for one).
+        case signingIn(DeviceCode?)
+        case signedIn
+    }
+
+    /// How long an agent's reply is waited for, and how often the transcript is re-read.
+    static let agentReplyWait: TimeInterval = 180
+    static let agentReplyPoll: UInt64 = 3_000_000_000
+    /// How long a tool waits for the person's approval before it is declined.
+    static let approvalWait: UInt64 = 300_000_000_000
+
+    public private(set) var authState: AuthState = .unknown
+    public private(set) var chats: [BrainChat] = []
+    public private(set) var activeChatID: Int?
     public private(set) var messages: [BuilderforceChatMessage] = []
-    public var input: String = ""
-    public var thinkingLevel: String = "off"
+    public private(set) var agents: [BrainChatAgent] = []
+    /// The agent the next message goes to; `nil` = the Brain.
+    public var recipient: BrainChatAgent?
+    public private(set) var streamingAssistantText: String?
+    public private(set) var activity: String?
     public private(set) var isLoading = false
     public private(set) var isSending = false
-    public private(set) var isAborting = false
-    public var errorText: String?
+    /// A reply (the Brain's or an addressed agent's) is on its way.
+    public private(set) var isRunning = false
+    public private(set) var queued: [String] = []
+    public private(set) var pendingApproval: BrainToolApproval?
+    public var input: String = ""
     public var attachments: [BuilderforcePendingAttachment] = []
-    public private(set) var healthOK: Bool = false
-    public private(set) var pendingRunCount: Int = 0
+    public var errorText: String?
 
-    public private(set) var sessionKey: String
-    public private(set) var sessionId: String?
-    public private(set) var streamingAssistantText: String?
-    public private(set) var pendingToolCalls: [BuilderforceChatPendingToolCall] = []
-    public private(set) var sessions: [BuilderforceChatSessionEntry] = []
     private let transport: any BuilderforceChatTransport
+    @ObservationIgnored private var runTask: Task<Void, Never>?
+    @ObservationIgnored private var signInTask: Task<Void, Never>?
+    @ObservationIgnored private var approvalContinuation: CheckedContinuation<Bool, Never>?
+    @ObservationIgnored private var approvalTimeout: Task<Void, Never>?
+    @ObservationIgnored private var didLoad = false
+    /// The reply in flight; a stopped reply's late progress is ignored.
+    @ObservationIgnored private var runToken: UUID?
 
-    @ObservationIgnored
-    private nonisolated(unsafe) var eventTask: Task<Void, Never>?
-    private var pendingRuns = Set<String>() {
-        didSet { self.pendingRunCount = self.pendingRuns.count }
-    }
-
-    @ObservationIgnored
-    private nonisolated(unsafe) var pendingRunTimeoutTasks: [String: Task<Void, Never>] = [:]
-    private let pendingRunTimeoutMs: UInt64 = 120_000
-
-    private var pendingToolCallsById: [String: BuilderforceChatPendingToolCall] = [:] {
-        didSet {
-            self.pendingToolCalls = self.pendingToolCallsById.values
-                .sorted { ($0.startedAt ?? 0) < ($1.startedAt ?? 0) }
-        }
-    }
-
-    private var lastHealthPollAt: Date?
-
-    public init(sessionKey: String, transport: any BuilderforceChatTransport) {
-        self.sessionKey = sessionKey
+    public init(transport: any BuilderforceChatTransport) {
         self.transport = transport
-
-        self.eventTask = Task { [weak self] in
-            guard let self else { return }
-            let stream = self.transport.events()
-            for await evt in stream {
-                if Task.isCancelled { return }
-                await MainActor.run { [weak self] in
-                    self?.handleTransportEvent(evt)
-                }
-            }
-        }
     }
 
-    deinit {
-        self.eventTask?.cancel()
-        for (_, task) in self.pendingRunTimeoutTasks {
-            task.cancel()
-        }
+    // MARK: - Derived state
+
+    public var signedIn: Bool {
+        self.authState == .signedIn
     }
 
+    public var activeChat: BrainChat? {
+        self.chats.first { $0.id == self.activeChatID }
+    }
+
+    public var isEmptyChat: Bool {
+        self.messages.isEmpty && self.streamingAssistantText == nil && !self.isRunning
+    }
+
+    public var canSend: Bool {
+        let hasText = !self.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return self.signedIn && !self.isSending && (hasText || !self.attachments.isEmpty)
+    }
+
+    /// The Brain's tool in use, in the shape the transcript's tool bubble renders.
+    public var pendingToolCalls: [BuilderforceChatPendingToolCall] {
+        guard let activity else { return [] }
+        return [BuilderforceChatPendingToolCall(
+            toolCallId: "brain-activity",
+            name: activity,
+            args: nil,
+            startedAt: nil,
+            isError: nil)]
+    }
+
+    // MARK: - Lifecycle
+
+    /// Load once (a view appearing again does not reload).
     public func load() {
+        guard !self.didLoad else { return }
+        self.didLoad = true
         Task { await self.bootstrap() }
     }
 
@@ -83,557 +107,435 @@ public final class BuilderforceChatViewModel {
         Task { await self.bootstrap() }
     }
 
-    public func send() {
-        Task { await self.performSend() }
-    }
-
-    public func abort() {
-        Task { await self.performAbort() }
-    }
-
-    public func refreshSessions(limit: Int? = nil) {
-        Task { await self.fetchSessions(limit: limit) }
-    }
-
-    public func switchSession(to sessionKey: String) {
-        Task { await self.performSwitchSession(to: sessionKey) }
-    }
-
-    public var sessionChoices: [BuilderforceChatSessionEntry] {
-        let now = Date().timeIntervalSince1970 * 1000
-        let cutoff = now - (24 * 60 * 60 * 1000)
-        let sorted = self.sessions.sorted { ($0.updatedAt ?? 0) > ($1.updatedAt ?? 0) }
-
-        var result: [BuilderforceChatSessionEntry] = []
-        var included = Set<String>()
-
-        // Always show the main session first, even if it hasn't been updated recently.
-        if let main = sorted.first(where: { $0.key == "main" }) {
-            result.append(main)
-            included.insert(main.key)
-        } else {
-            result.append(self.placeholderSession(key: "main"))
-            included.insert("main")
+    private func bootstrap() async {
+        guard await self.transport.isSignedIn() else {
+            if case .signingIn = self.authState { return }
+            self.authState = .signedOut
+            return
         }
-
-        for entry in sorted {
-            guard !included.contains(entry.key) else { continue }
-            guard (entry.updatedAt ?? 0) >= cutoff else { continue }
-            result.append(entry)
-            included.insert(entry.key)
+        self.authState = .signedIn
+        self.isLoading = true
+        defer { self.isLoading = false }
+        do {
+            self.chats = try await self.transport.listChats()
+            let keep = self.activeChatID.flatMap { id in self.chats.contains { $0.id == id } ? id : nil }
+            if let chatID = keep ?? self.chats.first?.id {
+                await self.open(chatID: chatID)
+            }
+            self.errorText = nil
+        } catch {
+            self.fail(error)
         }
+    }
 
-        if !included.contains(self.sessionKey) {
-            if let current = sorted.first(where: { $0.key == self.sessionKey }) {
-                result.append(current)
-            } else {
-                result.append(self.placeholderSession(key: self.sessionKey))
+    // MARK: - Sign in
+
+    public func startSignIn() {
+        self.signInTask?.cancel()
+        self.authState = .signingIn(nil)
+        self.errorText = nil
+        self.signInTask = Task { [weak self] in
+            await self?.performSignIn()
+        }
+    }
+
+    public func cancelSignIn() {
+        self.signInTask?.cancel()
+        self.signInTask = nil
+        self.authState = .signedOut
+    }
+
+    public func signOut() {
+        self.stop()
+        Task {
+            await self.transport.signOut()
+            self.resetChats()
+            self.authState = .signedOut
+        }
+    }
+
+    private func performSignIn() async {
+        do {
+            let code = try await self.transport.startSignIn()
+            self.authState = .signingIn(code)
+            try await self.transport.finishSignIn(code)
+            self.authState = .signedIn
+            self.didLoad = true
+            await self.bootstrap()
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            self.authState = .signedOut
+            self.errorText = ChatStrings.describe(error)
+        }
+    }
+
+    // MARK: - Chats
+
+    public func selectChat(_ chatID: Int) {
+        guard chatID != self.activeChatID else { return }
+        self.stop()
+        Task { await self.open(chatID: chatID) }
+    }
+
+    public func newChat() {
+        self.stop()
+        Task {
+            do {
+                let chat = try await self.transport.createChat(title: nil)
+                self.chats.insert(chat, at: 0)
+                await self.open(chatID: chat.id)
+            } catch {
+                self.fail(error)
             }
         }
-
-        return result
     }
+
+    private func open(chatID: Int) async {
+        self.activeChatID = chatID
+        self.messages = []
+        self.agents = []
+        self.recipient = nil
+        self.streamingAssistantText = nil
+        self.isLoading = true
+        defer { self.isLoading = false }
+        do {
+            try await self.reloadMessages()
+            let agents = try await self.transport.agents(chatID: chatID)
+            guard self.activeChatID == chatID else { return }
+            self.agents = agents
+        } catch {
+            self.fail(error)
+        }
+    }
+
+    private func reloadMessages() async throws {
+        guard let chatID = self.activeChatID else { return }
+        let stored = try await self.transport.messages(chatID: chatID)
+        guard self.activeChatID == chatID else { return }
+        self.messages = Self.transcript(stored)
+    }
+
+    private func resetChats() {
+        self.chats = []
+        self.activeChatID = nil
+        self.messages = []
+        self.agents = []
+        self.recipient = nil
+        self.queued = []
+    }
+
+    // MARK: - Sending
+
+    /// Send what is in the box. While a reply is running, the text waits and is sent
+    /// once that reply finishes.
+    public func send() {
+        guard self.canSend else { return }
+        let text = self.input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if self.isRunning {
+            // Attachments stay in the box; the text goes once the reply finishes.
+            guard !text.isEmpty else { return }
+            self.queued.append(text)
+            self.input = ""
+            return
+        }
+        self.input = ""
+        Task { await self.performSend(text: text, takeAttachments: true) }
+    }
+
+    /// Send a starter suggestion as the first message.
+    public func sendSuggestion(_ text: String) {
+        self.input = text
+        self.send()
+    }
+
+    /// Stop the running reply (what it wrote so far is kept), and drop queued follow-ups.
+    public func stop() {
+        self.runTask?.cancel()
+        self.runTask = nil
+        self.runToken = nil
+        self.queued = []
+        self.resolveApproval(false)
+        self.isRunning = false
+        self.streamingAssistantText = nil
+        self.activity = nil
+    }
+
+    public func removeQueued(at index: Int) {
+        guard self.queued.indices.contains(index) else { return }
+        self.queued.remove(at: index)
+    }
+
+    public func decideApproval(_ approve: Bool) {
+        self.resolveApproval(approve)
+    }
+
+    private func performSend(text: String, takeAttachments: Bool) async {
+        let attachments = takeAttachments ? self.attachments : []
+        if takeAttachments {
+            self.attachments = []
+        }
+        self.isSending = true
+        self.errorText = nil
+        defer { self.isSending = false }
+        do {
+            let chatID = try await self.ensureChat()
+            var content = text
+            var stored: [BrainChatAttachment] = []
+            var imageURLs: [String] = []
+            for attachment in attachments {
+                let uploaded = try await self.transport.upload(BuilderforceChatUpload(
+                    fileName: attachment.fileName,
+                    mimeType: attachment.mimeType,
+                    data: attachment.data))
+                stored.append(uploaded.attachment)
+                content += "\n\n[Attached: \(uploaded.attachment.name)](\(uploaded.url))"
+                if let dataURL = Self.visionDataURL(attachment) {
+                    imageURLs.append(dataURL)
+                }
+            }
+            let to = self.recipient
+            let optimistic = Self.optimisticTurn(content.trimmingCharacters(in: .whitespacesAndNewlines))
+            self.messages.append(optimistic)
+            try await self.transport.send(chatID: chatID, content: optimistic.plainText, to: to, attachments: stored)
+            self.beginReply(chatID: chatID, to: to, imageURLs: imageURLs)
+        } catch {
+            self.input = self.input.isEmpty ? text : self.input
+            self.attachments = attachments + self.attachments
+            self.fail(error)
+        }
+    }
+
+    private func ensureChat() async throws -> Int {
+        if let chatID = self.activeChatID { return chatID }
+        let chat = try await self.transport.createChat(title: nil)
+        self.chats.insert(chat, at: 0)
+        self.activeChatID = chat.id
+        return chat.id
+    }
+
+    private func beginReply(chatID: Int, to agent: BrainChatAgent?, imageURLs: [String]) {
+        let token = UUID()
+        self.runToken = token
+        self.isRunning = true
+        self.streamingAssistantText = nil
+        self.runTask = Task { [weak self] in
+            guard let self else { return }
+            if let agent {
+                await self.awaitAgentReply(chatID: chatID, agent: agent)
+            } else {
+                await self.runBrainReply(chatID: chatID, imageURLs: imageURLs, token: token)
+            }
+            await self.finishReply(chatID: chatID, token: token)
+        }
+    }
+
+    private func runBrainReply(chatID: Int, imageURLs: [String], token: UUID) async {
+        do {
+            try await self.transport.reply(
+                chatID: chatID,
+                imageURLs: imageURLs,
+                approve: { [weak self] request in
+                    await self?.askApproval(request) ?? false
+                },
+                onEvent: { [weak self] event in
+                    await self?.apply(event, token: token)
+                })
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            self.fail(error)
+        }
+    }
+
+    /// An addressed agent answers on the platform; read the transcript until its reply lands.
+    private func awaitAgentReply(chatID: Int, agent: BrainChatAgent) async {
+        let before = self.messages.count
+        let deadline = Date().addingTimeInterval(Self.agentReplyWait)
+        while Date() < deadline, !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: Self.agentReplyPoll)
+            guard !Task.isCancelled, self.activeChatID == chatID else { return }
+            do {
+                let stored = try await self.transport.messages(chatID: chatID)
+                guard self.activeChatID == chatID else { return }
+                let transcript = Self.transcript(stored)
+                if transcript.count > before, transcript.last?.role.lowercased() == "assistant" {
+                    return
+                }
+            } catch {
+                self.fail(error)
+                return
+            }
+        }
+        if !Task.isCancelled {
+            self.errorText = ChatStrings.agentNoReply(agent.name)
+        }
+    }
+
+    private func finishReply(chatID: Int, token: UUID) async {
+        if self.activeChatID == chatID {
+            do {
+                try await self.reloadMessages()
+            } catch {
+                chatUILogger.error("reload after reply failed \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        // A stopped reply already handed the run state back.
+        guard self.runToken == token else { return }
+        self.runToken = nil
+        self.streamingAssistantText = nil
+        self.activity = nil
+        self.resolveApproval(false)
+        self.isRunning = false
+        self.runTask = nil
+        if !self.queued.isEmpty, self.activeChatID == chatID {
+            let next = self.queued.removeFirst()
+            await self.performSend(text: next, takeAttachments: false)
+        }
+    }
+
+    private func apply(_ event: BrainReplyEvent, token: UUID) {
+        guard self.runToken == token else { return }
+        switch event {
+        case let .draft(text):
+            self.streamingAssistantText = text
+        case let .activity(label):
+            self.activity = label
+        }
+    }
+
+    // MARK: - Approvals
+
+    private func askApproval(_ request: BrainToolApproval) async -> Bool {
+        self.resolveApproval(false)
+        return await withCheckedContinuation { continuation in
+            self.approvalContinuation = continuation
+            self.pendingApproval = request
+            self.approvalTimeout = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: Self.approvalWait)
+                guard !Task.isCancelled else { return }
+                self?.resolveApproval(false)
+            }
+        }
+    }
+
+    private func resolveApproval(_ approved: Bool) {
+        self.approvalTimeout?.cancel()
+        self.approvalTimeout = nil
+        self.pendingApproval = nil
+        let continuation = self.approvalContinuation
+        self.approvalContinuation = nil
+        continuation?.resume(returning: approved)
+    }
+
+    // MARK: - Attachments
 
     public func addAttachments(urls: [URL]) {
         Task { await self.loadAttachments(urls: urls) }
     }
 
     public func addImageAttachment(data: Data, fileName: String, mimeType: String) {
-        Task { await self.addImageAttachment(url: nil, data: data, fileName: fileName, mimeType: mimeType) }
+        self.appendAttachment(url: nil, data: data, fileName: fileName, mimeType: mimeType)
     }
 
     public func removeAttachment(_ id: BuilderforcePendingAttachment.ID) {
         self.attachments.removeAll { $0.id == id }
     }
 
-    public var canSend: Bool {
-        let trimmed = self.input.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !self.isSending && self.pendingRunCount == 0 && (!trimmed.isEmpty || !self.attachments.isEmpty)
-    }
-
-    // MARK: - Internals
-
-    private func bootstrap() async {
-        self.isLoading = true
-        self.errorText = nil
-        self.healthOK = false
-        self.clearPendingRuns(reason: nil)
-        self.pendingToolCallsById = [:]
-        self.streamingAssistantText = nil
-        self.sessionId = nil
-        defer { self.isLoading = false }
-        do {
-            do {
-                try await self.transport.setActiveSessionKey(self.sessionKey)
-            } catch {
-                // Best-effort only; history/send/health still work without push events.
-            }
-
-            let payload = try await self.transport.requestHistory(sessionKey: self.sessionKey)
-            self.messages = Self.reconcileMessageIDs(
-                previous: self.messages,
-                incoming: Self.decodeMessages(payload.messages ?? []))
-            self.sessionId = payload.sessionId
-            if let level = payload.thinkingLevel, !level.isEmpty {
-                self.thinkingLevel = level
-            }
-            await self.pollHealthIfNeeded(force: true)
-            await self.fetchSessions(limit: 50)
-            self.errorText = nil
-        } catch {
-            self.errorText = error.localizedDescription
-            chatUILogger.error("bootstrap failed \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    private static func decodeMessages(_ raw: [AnyCodable]) -> [BuilderforceChatMessage] {
-        let decoded = raw.compactMap { item in
-            (try? ChatPayloadDecoding.decode(item, as: BuilderforceChatMessage.self))
-        }
-        return Self.dedupeMessages(decoded)
-    }
-
-    private static func messageIdentityKey(for message: BuilderforceChatMessage) -> String? {
-        let role = message.role.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !role.isEmpty else { return nil }
-
-        let timestamp: String = {
-            guard let value = message.timestamp, value.isFinite else { return "" }
-            return String(format: "%.3f", value)
-        }()
-
-        let contentFingerprint = message.content.map { item in
-            let type = (item.type ?? "text").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let text = (item.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let id = (item.id ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let name = (item.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let fileName = (item.fileName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            return [type, text, id, name, fileName].joined(separator: "\\u{001F}")
-        }.joined(separator: "\\u{001E}")
-
-        let toolCallId = (message.toolCallId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let toolName = (message.toolName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if timestamp.isEmpty, contentFingerprint.isEmpty, toolCallId.isEmpty, toolName.isEmpty {
-            return nil
-        }
-        return [role, timestamp, toolCallId, toolName, contentFingerprint].joined(separator: "|")
-    }
-
-    private static func reconcileMessageIDs(
-        previous: [BuilderforceChatMessage],
-        incoming: [BuilderforceChatMessage]) -> [BuilderforceChatMessage]
-    {
-        guard !previous.isEmpty, !incoming.isEmpty else { return incoming }
-
-        var idsByKey: [String: [UUID]] = [:]
-        for message in previous {
-            guard let key = Self.messageIdentityKey(for: message) else { continue }
-            idsByKey[key, default: []].append(message.id)
-        }
-
-        return incoming.map { message in
-            guard let key = Self.messageIdentityKey(for: message),
-                  var ids = idsByKey[key],
-                  let reusedId = ids.first
-            else {
-                return message
-            }
-            ids.removeFirst()
-            if ids.isEmpty {
-                idsByKey.removeValue(forKey: key)
-            } else {
-                idsByKey[key] = ids
-            }
-            guard reusedId != message.id else { return message }
-            return BuilderforceChatMessage(
-                id: reusedId,
-                role: message.role,
-                content: message.content,
-                timestamp: message.timestamp,
-                toolCallId: message.toolCallId,
-                toolName: message.toolName,
-                usage: message.usage,
-                stopReason: message.stopReason)
-        }
-    }
-
-    private static func dedupeMessages(_ messages: [BuilderforceChatMessage]) -> [BuilderforceChatMessage] {
-        var result: [BuilderforceChatMessage] = []
-        result.reserveCapacity(messages.count)
-        var seen = Set<String>()
-
-        for message in messages {
-            guard let key = Self.dedupeKey(for: message) else {
-                result.append(message)
-                continue
-            }
-            if seen.contains(key) { continue }
-            seen.insert(key)
-            result.append(message)
-        }
-
-        return result
-    }
-
-    private static func dedupeKey(for message: BuilderforceChatMessage) -> String? {
-        guard let timestamp = message.timestamp else { return nil }
-        let text = message.content.compactMap(\.text).joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return nil }
-        return "\(message.role)|\(timestamp)|\(text)"
-    }
-
-    private func performSend() async {
-        guard !self.isSending else { return }
-        let trimmed = self.input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty || !self.attachments.isEmpty else { return }
-
-        guard self.healthOK else {
-            self.errorText = "Gateway health not OK; cannot send"
-            return
-        }
-
-        self.isSending = true
-        self.errorText = nil
-        let runId = UUID().uuidString
-        let messageText = trimmed.isEmpty && !self.attachments.isEmpty ? "See attached." : trimmed
-        self.pendingRuns.insert(runId)
-        self.armPendingRunTimeout(runId: runId)
-        self.pendingToolCallsById = [:]
-        self.streamingAssistantText = nil
-
-        // Optimistically append user message to UI.
-        var userContent: [BuilderforceChatMessageContent] = [
-            BuilderforceChatMessageContent(
-                type: "text",
-                text: messageText,
-                thinking: nil,
-                thinkingSignature: nil,
-                mimeType: nil,
-                fileName: nil,
-                content: nil,
-                id: nil,
-                name: nil,
-                arguments: nil),
-        ]
-        let encodedAttachments = self.attachments.map { att -> BuilderforceChatAttachmentPayload in
-            BuilderforceChatAttachmentPayload(
-                type: att.type,
-                mimeType: att.mimeType,
-                fileName: att.fileName,
-                content: att.data.base64EncodedString())
-        }
-        for att in encodedAttachments {
-            userContent.append(
-                BuilderforceChatMessageContent(
-                    type: att.type,
-                    text: nil,
-                    thinking: nil,
-                    thinkingSignature: nil,
-                    mimeType: att.mimeType,
-                    fileName: att.fileName,
-                    content: AnyCodable(att.content),
-                    id: nil,
-                    name: nil,
-                    arguments: nil))
-        }
-        self.messages.append(
-            BuilderforceChatMessage(
-                id: UUID(),
-                role: "user",
-                content: userContent,
-                timestamp: Date().timeIntervalSince1970 * 1000))
-
-        // Clear input immediately for responsive UX (before network await)
-        self.input = ""
-        self.attachments = []
-
-        do {
-            let response = try await self.transport.sendMessage(
-                sessionKey: self.sessionKey,
-                message: messageText,
-                thinking: self.thinkingLevel,
-                idempotencyKey: runId,
-                attachments: encodedAttachments)
-            if response.runId != runId {
-                self.clearPendingRun(runId)
-                self.pendingRuns.insert(response.runId)
-                self.armPendingRunTimeout(runId: response.runId)
-            }
-        } catch {
-            self.clearPendingRun(runId)
-            self.errorText = error.localizedDescription
-            chatUILogger.error("chat.send failed \(error.localizedDescription, privacy: .public)")
-        }
-
-        self.isSending = false
-    }
-
-    private func performAbort() async {
-        guard !self.pendingRuns.isEmpty else { return }
-        guard !self.isAborting else { return }
-        self.isAborting = true
-        defer { self.isAborting = false }
-
-        let runIds = Array(self.pendingRuns)
-        for runId in runIds {
-            do {
-                try await self.transport.abortRun(sessionKey: self.sessionKey, runId: runId)
-            } catch {
-                // Best-effort.
-            }
-        }
-    }
-
-    private func fetchSessions(limit: Int?) async {
-        do {
-            let res = try await self.transport.listSessions(limit: limit)
-            self.sessions = res.sessions
-        } catch {
-            // Best-effort.
-        }
-    }
-
-    private func performSwitchSession(to sessionKey: String) async {
-        let next = sessionKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !next.isEmpty else { return }
-        guard next != self.sessionKey else { return }
-        self.sessionKey = next
-        await self.bootstrap()
-    }
-
-    private func placeholderSession(key: String) -> BuilderforceChatSessionEntry {
-        BuilderforceChatSessionEntry(
-            key: key,
-            kind: nil,
-            displayName: nil,
-            surface: nil,
-            subject: nil,
-            room: nil,
-            space: nil,
-            updatedAt: nil,
-            sessionId: nil,
-            systemSent: nil,
-            abortedLastRun: nil,
-            thinkingLevel: nil,
-            verboseLevel: nil,
-            inputTokens: nil,
-            outputTokens: nil,
-            totalTokens: nil,
-            model: nil,
-            contextTokens: nil)
-    }
-
-    private func handleTransportEvent(_ evt: BuilderforceChatTransportEvent) {
-        switch evt {
-        case let .health(ok):
-            self.healthOK = ok
-        case .tick:
-            Task { await self.pollHealthIfNeeded(force: false) }
-        case let .chat(chat):
-            self.handleChatEvent(chat)
-        case let .agent(agent):
-            self.handleAgentEvent(agent)
-        case .seqGap:
-            self.errorText = "Event stream interrupted; try refreshing."
-            self.clearPendingRuns(reason: nil)
-        }
-    }
-
-    private func handleChatEvent(_ chat: BuilderforceChatEventPayload) {
-        let isOurRun = chat.runId.flatMap { self.pendingRuns.contains($0) } ?? false
-
-        // Gateway may publish canonical session keys (for example "agent:main:main")
-        // even when this view currently uses an alias key (for example "main").
-        // Never drop events for our own pending run on key mismatch, or the UI can stay
-        // stuck at "thinking" until the user reopens and forces a history reload.
-        if let sessionKey = chat.sessionKey,
-           !Self.matchesCurrentSessionKey(incoming: sessionKey, current: self.sessionKey),
-           !isOurRun
-        {
-            return
-        }
-        if !isOurRun {
-            // Keep multiple clients in sync: if another client finishes a run for our session, refresh history.
-            switch chat.state {
-            case "final", "aborted", "error":
-                self.streamingAssistantText = nil
-                self.pendingToolCallsById = [:]
-                Task { await self.refreshHistoryAfterRun() }
-            default:
-                break
-            }
-            return
-        }
-
-        switch chat.state {
-        case "final", "aborted", "error":
-            if chat.state == "error" {
-                self.errorText = chat.errorMessage ?? "Chat failed"
-            }
-            if let runId = chat.runId {
-                self.clearPendingRun(runId)
-            } else if self.pendingRuns.count <= 1 {
-                self.clearPendingRuns(reason: nil)
-            }
-            self.pendingToolCallsById = [:]
-            self.streamingAssistantText = nil
-            Task { await self.refreshHistoryAfterRun() }
-        default:
-            break
-        }
-    }
-
-    private static func matchesCurrentSessionKey(incoming: String, current: String) -> Bool {
-        let incomingNormalized = incoming.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let currentNormalized = current.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if incomingNormalized == currentNormalized {
-            return true
-        }
-        // Common alias pair in operator clients: UI uses "main" while gateway emits canonical.
-        if (incomingNormalized == "agent:main:main" && currentNormalized == "main") ||
-            (incomingNormalized == "main" && currentNormalized == "agent:main:main")
-        {
-            return true
-        }
-        return false
-    }
-
-    private func handleAgentEvent(_ evt: BuilderforceAgentEventPayload) {
-        if let sessionId, evt.runId != sessionId {
-            return
-        }
-
-        switch evt.stream {
-        case "assistant":
-            if let text = evt.data["text"]?.value as? String {
-                self.streamingAssistantText = text
-            }
-        case "tool":
-            guard let phase = evt.data["phase"]?.value as? String else { return }
-            guard let name = evt.data["name"]?.value as? String else { return }
-            guard let toolCallId = evt.data["toolCallId"]?.value as? String else { return }
-            if phase == "start" {
-                let args = evt.data["args"]
-                self.pendingToolCallsById[toolCallId] = BuilderforceChatPendingToolCall(
-                    toolCallId: toolCallId,
-                    name: name,
-                    args: args,
-                    startedAt: evt.ts.map(Double.init) ?? Date().timeIntervalSince1970 * 1000,
-                    isError: nil)
-            } else if phase == "result" {
-                self.pendingToolCallsById[toolCallId] = nil
-            }
-        default:
-            break
-        }
-    }
-
-    private func refreshHistoryAfterRun() async {
-        do {
-            let payload = try await self.transport.requestHistory(sessionKey: self.sessionKey)
-            self.messages = Self.reconcileMessageIDs(
-                previous: self.messages,
-                incoming: Self.decodeMessages(payload.messages ?? []))
-            self.sessionId = payload.sessionId
-            if let level = payload.thinkingLevel, !level.isEmpty {
-                self.thinkingLevel = level
-            }
-        } catch {
-            chatUILogger.error("refresh history failed \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    private func armPendingRunTimeout(runId: String) {
-        self.pendingRunTimeoutTasks[runId]?.cancel()
-        self.pendingRunTimeoutTasks[runId] = Task { [weak self] in
-            let timeoutMs = await MainActor.run { self?.pendingRunTimeoutMs ?? 0 }
-            try? await Task.sleep(nanoseconds: timeoutMs * 1_000_000)
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                guard self.pendingRuns.contains(runId) else { return }
-                self.clearPendingRun(runId)
-                self.errorText = "Timed out waiting for a reply; try again or refresh."
-            }
-        }
-    }
-
-    private func clearPendingRun(_ runId: String) {
-        self.pendingRuns.remove(runId)
-        self.pendingRunTimeoutTasks[runId]?.cancel()
-        self.pendingRunTimeoutTasks[runId] = nil
-    }
-
-    private func clearPendingRuns(reason: String?) {
-        for runId in self.pendingRuns {
-            self.pendingRunTimeoutTasks[runId]?.cancel()
-        }
-        self.pendingRunTimeoutTasks.removeAll()
-        self.pendingRuns.removeAll()
-        if let reason, !reason.isEmpty {
-            self.errorText = reason
-        }
-    }
-
-    private func pollHealthIfNeeded(force: Bool) async {
-        if !force, let last = self.lastHealthPollAt, Date().timeIntervalSince(last) < 10 {
-            return
-        }
-        self.lastHealthPollAt = Date()
-        do {
-            let ok = try await self.transport.requestHealth(timeoutMs: 5000)
-            self.healthOK = ok
-        } catch {
-            self.healthOK = false
-        }
-    }
-
     private func loadAttachments(urls: [URL]) async {
         for url in urls {
             do {
                 let data = try await Task.detached { try Data(contentsOf: url) }.value
-                await self.addImageAttachment(
-                    url: url,
-                    data: data,
-                    fileName: url.lastPathComponent,
-                    mimeType: Self.mimeType(for: url) ?? "application/octet-stream")
+                let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+                self.appendAttachment(url: url, data: data, fileName: url.lastPathComponent, mimeType: mime)
             } catch {
-                await MainActor.run { self.errorText = error.localizedDescription }
+                self.errorText = error.localizedDescription
             }
         }
     }
 
-    private static func mimeType(for url: URL) -> String? {
-        let ext = url.pathExtension
-        guard !ext.isEmpty else { return nil }
-        return (UTType(filenameExtension: ext) ?? .data).preferredMIMEType
-    }
-
-    private func addImageAttachment(url: URL?, data: Data, fileName: String, mimeType: String) async {
+    private func appendAttachment(url: URL?, data: Data, fileName: String, mimeType: String) {
         if data.count > 5_000_000 {
-            self.errorText = "Attachment \(fileName) exceeds 5 MB limit"
+            self.errorText = ChatStrings.attachmentTooLarge(fileName)
             return
         }
+        let isImage = (UTType(mimeType: mimeType) ?? .data).conforms(to: .image)
+        self.attachments.append(BuilderforcePendingAttachment(
+            url: url,
+            data: data,
+            fileName: fileName,
+            mimeType: mimeType,
+            preview: isImage ? Self.previewImage(data: data) : nil))
+    }
 
-        let uti: UTType = {
-            if let url {
-                return UTType(filenameExtension: url.pathExtension) ?? .data
-            }
-            return UTType(mimeType: mimeType) ?? .data
-        }()
-        guard uti.conforms(to: .image) else {
-            self.errorText = "Only image attachments are supported right now"
-            return
+    // MARK: - Helpers
+
+    private func fail(_ error: any Error) {
+        if let cloud = error as? CloudError, cloud == .keyRejected || cloud == .signedOut {
+            self.resetChats()
+            self.authState = .signedOut
         }
+        self.errorText = ChatStrings.describe(error)
+        chatUILogger.error("chat failed \(error.localizedDescription, privacy: .public)")
+    }
 
-        let preview = Self.previewImage(data: data)
-        self.attachments.append(
-            BuilderforcePendingAttachment(
-                url: url,
-                data: data,
-                fileName: fileName,
-                mimeType: mimeType,
-                preview: preview))
+    /// The stored turns as the transcript renders them: people and the Brain (or an
+    /// agent, named above its words); tool and system rows stay out.
+    static func transcript(_ stored: [BrainChatMessage]) -> [BuilderforceChatMessage] {
+        stored.compactMap { message -> BuilderforceChatMessage? in
+            let role = message.role.lowercased()
+            guard role == "user" || role == "assistant" else { return nil }
+            let body = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !body.isEmpty else { return nil }
+            let text = message.authorName.map { "**\($0)**\n\n\(body)" } ?? body
+            return BuilderforceChatMessage(
+                id: Self.stableID(message.id),
+                role: role,
+                content: [BuilderforceChatMessageContent(type: "text", text: text, mimeType: nil, fileName: nil, content: nil)],
+                timestamp: Self.timestamp(message.createdAt))
+        }
+    }
+
+    private static func optimisticTurn(_ text: String) -> BuilderforceChatMessage {
+        BuilderforceChatMessage(
+            role: "user",
+            content: [BuilderforceChatMessageContent(type: "text", text: text, mimeType: nil, fileName: nil, content: nil)],
+            timestamp: Date().timeIntervalSince1970 * 1000)
+    }
+
+    /// A UUID that stays the same for the same stored message, so a reload keeps rows.
+    static func stableID(_ id: Int) -> UUID {
+        let value = UInt64(bitPattern: Int64(id))
+        var bytes = [UInt8](repeating: 0, count: 16)
+        for index in 0..<8 {
+            bytes[8 + index] = UInt8((value >> (UInt64(7 - index) * 8)) & 0xFF)
+        }
+        bytes[6] = 0x40
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
+    }
+
+    private static func timestamp(_ iso: String?) -> Double? {
+        guard let iso else { return nil }
+        let withFraction = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+        let date = (try? withFraction.parse(iso)) ?? (try? Date.ISO8601FormatStyle().parse(iso))
+        return date.map { $0.timeIntervalSince1970 * 1000 }
+    }
+
+    /// A downscaled JPEG data URL the vision model sees, for an image attachment.
+    private static func visionDataURL(_ attachment: BuilderforcePendingAttachment) -> String? {
+        guard (UTType(mimeType: attachment.mimeType) ?? .data).conforms(to: .image),
+              let jpeg = try? JPEGTranscoder.transcodeToJPEG(
+                  imageData: attachment.data,
+                  maxWidthPx: 1568,
+                  quality: 0.8,
+                  maxBytes: 1_500_000)
+        else { return nil }
+        return "data:image/jpeg;base64,\(jpeg.data.base64EncodedString())"
     }
 
     private static func previewImage(data: Data) -> BuilderforcePlatformImage? {
@@ -644,5 +546,12 @@ public final class BuilderforceChatViewModel {
         #else
         nil
         #endif
+    }
+}
+
+extension BuilderforceChatMessage {
+    /// The message's text parts, joined.
+    var plainText: String {
+        self.content.compactMap(\.text).joined(separator: "\n")
     }
 }

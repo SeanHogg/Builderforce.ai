@@ -316,7 +316,9 @@
     "assessmentAssisted": "Assisted assessment — every assistant turn is recorded on the integrity ledger.",
     "ticketTagTitle": "Tag a ticket",
     "ticketTagStatus": "Status",
-    "ticketTagNoMatches": "No matching tickets"
+    "ticketTagNoMatches": "No matching tickets",
+    "startingPoints": "Starting points",
+    "suggestionsLabel": "Suggested next steps"
   },
   "repoContext": {
     "title": "Add repository context",
@@ -1499,7 +1501,8 @@
       "labelWithText": "{tag} · “{text}”",
       "where": "Picked in the preview: {file}, line {line}",
       "aria": "Picked element:",
-      "remove": "Remove the picked element"
+      "remove": "Remove the picked element",
+      "unresolved": "That element can't be traced to its source. Describe it in the prompt instead."
     },
     "releases": {
       "title": "Previous versions",
@@ -9018,7 +9021,6 @@
     "arenaTabsLabel": "Choose a comparison"
   },
   "promptUseCases": {
-    "tabLabel": "Choose a starting point",
     "heading": "What should we create?",
     "searchPlaceholder": "Search use cases…",
     "searchLabel": "Search creation use cases",
@@ -24308,6 +24310,7 @@
       "addedToCanvas": "I added the requested content to the canvas.",
       "noAnswer": "I couldn't prepare any canvas changes from that request.",
       "providerStalled": "The model provider accepted this request and then stopped responding, so I stopped waiting. Nothing is wrong with what you asked — send it again, or pick a different model from the / menu.",
+      "stoppedPartway": "The model stopped responding partway through this request, so it is not finished. What it completed is on the board — say \"continue\" to pick up where it left off, or pick a different model from the / menu.",
       "toolError": "I couldn't prepare the requested canvas changes: {detail}",
       "stepsExhausted": "I used every step this turn allows and stopped here; everything I built so far is on the board. Say \"continue\" and I will pick up where I left off.",
       "buildNotAuthored": "I set up the app's starter workspace but did not write the app itself, so the preview still shows the template page. Say \"continue\" and I will build what you asked for.",
@@ -26202,7 +26205,6 @@
         }
       }
     },
-    "nextStepsLabel": "Suggested next steps",
     "boardMenu": {
       "phaseFocus": "Phase focus",
       "phaseFocusOn": "Phase focus is on — cards the phase is about come forward",
@@ -32623,7 +32625,6 @@
       "subtitle": "Describe an app. Studio writes it, runs it in your browser and publishes it.",
       "promptLabel": "Describe what to build",
       "placeholder": "Let's build a…",
-      "hint": "Enter to send · Shift+Enter for a new line",
       "submit": "Build it",
       "startFailed": "Couldn't start your session. Try again.",
       "recentTitle": "Your Studio projects",

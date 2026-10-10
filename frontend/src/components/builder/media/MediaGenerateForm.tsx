@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Button } from '@/components/ui';
+import { ChatInput } from '@/components/ChatInput';
 import { CLOUD_SHOT_SECONDS } from '@/lib/sceneStoryboard';
 import { MEDIA_SHAPES, type MediaRequest, type MediaShape } from './mediaRequest';
 import styles from './MediaPanel.module.css';
@@ -9,6 +9,10 @@ import styles from './MediaPanel.module.css';
  * Generate without going through the chat: a prompt, image or video, a shape
  * (and a length for video). The result lands in the library below, the same
  * library the agent's own generations land in.
+ *
+ * The prompt is THE one composer every prompt uses (`ChatInput`) — the box, its tool
+ * row and its one trailing button — with shape and length as compact choices in that
+ * row, instead of a page-local textarea, labelled selects and a Generate button.
  */
 export function MediaGenerateForm({ onGenerate }: { onGenerate: (request: MediaRequest) => Promise<unknown> }) {
   const t = useTranslations('ide.media');
@@ -41,38 +45,27 @@ export function MediaGenerateForm({ onGenerate }: { onGenerate: (request: MediaR
         <button type="button" aria-pressed={kind === 'image'} onClick={() => setKind('image')}>{t('kindImage')}</button>
         <button type="button" aria-pressed={kind === 'video'} onClick={() => setKind('video')}>{t('kindVideo')}</button>
       </div>
-      <label className={styles.field}>
-        <span>{t('promptLabel')}</span>
-        <textarea
-          className={styles.textarea}
-          rows={3}
-          value={prompt}
-          placeholder={t(kind === 'image' ? 'promptPlaceholderImage' : 'promptPlaceholderVideo')}
-          onChange={(event) => setPrompt(event.target.value)}
-          disabled={busy}
-        />
-      </label>
-      <div className={styles.row}>
-        <label className={styles.field}>
-          <span>{t('shapeLabel')}</span>
-          <select className={styles.select} value={shape} disabled={busy} onChange={(event) => setShape(event.target.value as MediaShape)}>
+      <ChatInput
+        value={prompt}
+        onChange={setPrompt}
+        onSubmit={() => void submit()}
+        placeholder={t(kind === 'image' ? 'promptPlaceholderImage' : 'promptPlaceholderVideo')}
+        ariaLabel={t('promptLabel')}
+        submitLabel={busy ? t(kind === 'video' ? 'generatingVideo' : 'generatingImage') : t('generate')}
+        disabled={busy}
+        rows={2}
+        contextControls={<>
+          <select className={styles.select} value={shape} disabled={busy} aria-label={t('shapeLabel')} title={t('shapeLabel')} onChange={(event) => setShape(event.target.value as MediaShape)}>
             {MEDIA_SHAPES.map((option) => <option key={option} value={option}>{t(`shape.${option}`)}</option>)}
           </select>
-        </label>
-        {kind === 'video' && (
-          <label className={styles.field}>
-            <span>{t('lengthLabel')}</span>
-            <select className={styles.select} value={seconds} disabled={busy} onChange={(event) => setSeconds(Number(event.target.value))}>
+          {kind === 'video' && (
+            <select className={styles.select} value={seconds} disabled={busy} aria-label={t('lengthLabel')} title={t('lengthLabel')} onChange={(event) => setSeconds(Number(event.target.value))}>
               {CLOUD_SHOT_SECONDS.map((option) => <option key={option} value={option}>{t('seconds', { seconds: option })}</option>)}
             </select>
-          </label>
-        )}
-      </div>
-      <div className={styles.actions}>
-        <Button type="button" variant="primary" size="sm" loading={busy} disabled={!prompt.trim()} onClick={() => void submit()}>
-          {busy ? t(kind === 'video' ? 'generatingVideo' : 'generatingImage') : t('generate')}
-        </Button>
-      </div>
+          )}
+        </>}
+      />
+      {busy && <p className={styles.status} role="status">{t(kind === 'video' ? 'generatingVideo' : 'generatingImage')}</p>}
       {kind === 'video' && <p className={styles.status}>{t('videoHint')}</p>}
       {error && <p className={styles.error} role="alert">{error}</p>}
     </section>

@@ -29,6 +29,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
   val isConnected: StateFlow<Boolean> = runtime.isConnected
   val statusText: StateFlow<String> = runtime.statusText
+  val gatewayIndicator: StateFlow<GatewayIndicator> = runtime.gatewayIndicator
   val serverName: StateFlow<String?> = runtime.serverName
   val remoteAddress: StateFlow<String?> = runtime.remoteAddress
   val pendingGatewayTrust: StateFlow<NodeRuntime.GatewayTrustPrompt?> = runtime.pendingGatewayTrust

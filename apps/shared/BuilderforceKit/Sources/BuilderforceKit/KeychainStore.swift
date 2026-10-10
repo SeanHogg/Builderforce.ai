@@ -1,8 +1,10 @@
 import Foundation
 import Security
 
-enum KeychainStore {
-    static func loadString(service: String, account: String) -> String? {
+/// Generic-password Keychain access — the one helper the apps use for secrets (the iOS
+/// gateway credentials and the Builderforce cloud sign-in key).
+public enum KeychainStore {
+    public static func loadString(service: String, account: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -17,7 +19,8 @@ enum KeychainStore {
         return String(data: data, encoding: .utf8)
     }
 
-    static func saveString(_ value: String, service: String, account: String) -> Bool {
+    @discardableResult
+    public static func saveString(_ value: String, service: String, account: String) -> Bool {
         let data = Data(value.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -36,7 +39,8 @@ enum KeychainStore {
         return SecItemAdd(insert as CFDictionary, nil) == errSecSuccess
     }
 
-    static func delete(service: String, account: String) -> Bool {
+    @discardableResult
+    public static func delete(service: String, account: String) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

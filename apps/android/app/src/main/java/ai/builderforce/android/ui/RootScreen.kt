@@ -60,12 +60,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.ContextCompat
 import ai.builderforce.android.CameraHudKind
+import ai.builderforce.android.GatewayPhase
+import ai.builderforce.android.PairingHint
+import ai.builderforce.android.R
 import ai.builderforce.android.MainViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,7 +80,6 @@ fun RootScreen(viewModel: MainViewModel) {
   val safeOverlayInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
   val context = LocalContext.current
   val serverName by viewModel.serverName.collectAsState()
-  val statusText by viewModel.statusText.collectAsState()
   val cameraHud by viewModel.cameraHud.collectAsState()
   val cameraFlashToken by viewModel.cameraFlashToken.collectAsState()
   val screenRecordActive by viewModel.screenRecordActive.collectAsState()
@@ -92,40 +95,57 @@ fun RootScreen(viewModel: MainViewModel) {
     rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
       if (granted) viewModel.setTalkEnabled(true)
     }
+  val gatewayIndicator by viewModel.gatewayIndicator.collectAsState()
+  val errorTint = MaterialTheme.colorScheme.error
+  val micPermissionStatus = stringResource(R.string.voice_status_mic_permission)
+  val pausedStatus = stringResource(R.string.voice_status_paused)
+  val foregroundRequired = stringResource(R.string.activity_foreground_required)
+  val repairingTitle = stringResource(R.string.activity_repairing)
+  val repairingDesc = stringResource(R.string.activity_repairing_description)
+  val approvalPending = stringResource(R.string.activity_approval_pending)
+  val recordingScreenTitle = stringResource(R.string.activity_recording_screen)
+  val recordingScreenDesc = stringResource(R.string.activity_recording_screen_description)
+  val takingPhotoDesc = stringResource(R.string.activity_taking_photo_description)
+  val recordingDesc = stringResource(R.string.activity_recording_description)
+  val captureFinishedDesc = stringResource(R.string.activity_capture_finished_description)
+  val captureFailedDesc = stringResource(R.string.activity_capture_failed_description)
+  val micPermissionTitle = stringResource(R.string.activity_mic_permission)
+  val micPermissionDesc = stringResource(R.string.activity_mic_permission_description)
+  val voiceWakePausedTitle = stringResource(R.string.activity_voice_wake_paused)
   val activity =
-    remember(cameraHud, screenRecordActive, isForeground, statusText, voiceWakeStatusText) {
+    remember(cameraHud, screenRecordActive, isForeground, gatewayIndicator, voiceWakeStatusText, errorTint) {
       // Status pill owns transient activity state so it doesn't overlap the connection indicator.
       if (!isForeground) {
         return@remember StatusActivity(
-          title = "Foreground required",
+          title = foregroundRequired,
           icon = Icons.Default.Report,
-          contentDescription = "Foreground required",
+          contentDescription = foregroundRequired,
         )
       }
 
-      val lowerStatus = statusText.lowercase()
-      if (lowerStatus.contains("repair")) {
-        return@remember StatusActivity(
-          title = "Repairing…",
-          icon = Icons.Default.Refresh,
-          contentDescription = "Repairing",
-        )
-      }
-      if (lowerStatus.contains("pairing") || lowerStatus.contains("approval")) {
-        return@remember StatusActivity(
-          title = "Approval pending",
-          icon = Icons.Default.RecordVoiceOver,
-          contentDescription = "Approval pending",
-        )
+      when (gatewayIndicator.pairing) {
+        PairingHint.Repairing ->
+          return@remember StatusActivity(
+            title = repairingTitle,
+            icon = Icons.Default.Refresh,
+            contentDescription = repairingDesc,
+          )
+        PairingHint.ApprovalPending ->
+          return@remember StatusActivity(
+            title = approvalPending,
+            icon = Icons.Default.RecordVoiceOver,
+            contentDescription = approvalPending,
+          )
+        null -> Unit
       }
       // Avoid duplicating the primary gateway status ("Connecting…") in the activity slot.
 
       if (screenRecordActive) {
         return@remember StatusActivity(
-          title = "Recording screen…",
+          title = recordingScreenTitle,
           icon = Icons.AutoMirrored.Filled.ScreenShare,
-          contentDescription = "Recording screen",
-          tint = androidx.compose.ui.graphics.Color.Red,
+          contentDescription = recordingScreenDesc,
+          tint = errorTint,
         )
       }
 
@@ -135,59 +155,47 @@ fun RootScreen(viewModel: MainViewModel) {
             StatusActivity(
               title = hud.message,
               icon = Icons.Default.PhotoCamera,
-              contentDescription = "Taking photo",
+              contentDescription = takingPhotoDesc,
             )
           CameraHudKind.Recording ->
             StatusActivity(
               title = hud.message,
               icon = Icons.Default.FiberManualRecord,
-              contentDescription = "Recording",
-              tint = androidx.compose.ui.graphics.Color.Red,
+              contentDescription = recordingDesc,
+              tint = errorTint,
             )
           CameraHudKind.Success ->
             StatusActivity(
               title = hud.message,
               icon = Icons.Default.CheckCircle,
-              contentDescription = "Capture finished",
+              contentDescription = captureFinishedDesc,
             )
           CameraHudKind.Error ->
             StatusActivity(
               title = hud.message,
               icon = Icons.Default.Error,
-              contentDescription = "Capture failed",
-              tint = androidx.compose.ui.graphics.Color.Red,
+              contentDescription = captureFailedDesc,
+              tint = errorTint,
             )
         }
       }
 
-      if (voiceWakeStatusText.contains("Microphone permission", ignoreCase = true)) {
+      if (voiceWakeStatusText == micPermissionStatus) {
         return@remember StatusActivity(
-          title = "Mic permission",
+          title = micPermissionTitle,
           icon = Icons.Default.Error,
-          contentDescription = "Mic permission required",
+          contentDescription = micPermissionDesc,
         )
       }
-      if (voiceWakeStatusText == "Paused") {
-        val suffix = if (!isForeground) " (background)" else ""
+      if (voiceWakeStatusText == pausedStatus) {
         return@remember StatusActivity(
-          title = "Voice Wake paused$suffix",
+          title = voiceWakePausedTitle,
           icon = Icons.Default.RecordVoiceOver,
-          contentDescription = "Voice Wake paused",
+          contentDescription = voiceWakePausedTitle,
         )
       }
 
       null
-    }
-
-  val gatewayState =
-    remember(serverName, statusText) {
-      when {
-        serverName != null -> GatewayState.Connected
-        statusText.contains("connecting", ignoreCase = true) ||
-          statusText.contains("reconnecting", ignoreCase = true) -> GatewayState.Connecting
-        statusText.contains("error", ignoreCase = true) -> GatewayState.Error
-        else -> GatewayState.Disconnected
-      }
     }
 
   val voiceEnabled =
@@ -206,7 +214,7 @@ fun RootScreen(viewModel: MainViewModel) {
   // Keep the overlay buttons above the WebView canvas (AndroidView), otherwise they may not receive touches.
   Popup(alignment = Alignment.TopStart, properties = PopupProperties(focusable = false)) {
     StatusPill(
-      gateway = gatewayState,
+      gateway = if (serverName != null) GatewayPhase.Connected else gatewayIndicator.phase,
       voiceEnabled = voiceEnabled,
       activity = activity,
       onClick = { sheet = Sheet.Settings },
@@ -222,7 +230,7 @@ fun RootScreen(viewModel: MainViewModel) {
     ) {
       OverlayIconButton(
         onClick = { sheet = Sheet.Chat },
-        icon = { Icon(Icons.Default.ChatBubble, contentDescription = "Chat") },
+        icon = { Icon(Icons.Default.ChatBubble, contentDescription = stringResource(R.string.overlay_chat)) },
       )
 
       // Talk mode gets a dedicated side bubble instead of burying it in settings.
@@ -252,14 +260,14 @@ fun RootScreen(viewModel: MainViewModel) {
         icon = {
           Icon(
             Icons.Default.RecordVoiceOver,
-            contentDescription = "Talk Mode",
+            contentDescription = stringResource(R.string.overlay_talk_mode),
           )
         },
       )
 
       OverlayIconButton(
         onClick = { sheet = Sheet.Settings },
-        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+        icon = { Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.overlay_settings)) },
       )
     }
   }

@@ -88,10 +88,10 @@ class PermissionRequester(private val activity: ComponentActivity) {
     withContext(Dispatchers.Main) {
       suspendCancellableCoroutine { cont ->
         AlertDialog.Builder(activity)
-          .setTitle("Permission required")
+          .setTitle(R.string.permission_required_title)
           .setMessage(buildRationaleMessage(permissions))
-          .setPositiveButton("Continue") { _, _ -> cont.resume(true) }
-          .setNegativeButton("Not now") { _, _ -> cont.resume(false) }
+          .setPositiveButton(R.string.action_continue) { _, _ -> cont.resume(true) }
+          .setNegativeButton(R.string.action_not_now) { _, _ -> cont.resume(false) }
           .setOnCancelListener { cont.resume(false) }
           .show()
       }
@@ -99,9 +99,9 @@ class PermissionRequester(private val activity: ComponentActivity) {
 
   private fun showSettingsDialog(permissions: List<String>) {
     AlertDialog.Builder(activity)
-      .setTitle("Enable permission in Settings")
+      .setTitle(R.string.permission_settings_title)
       .setMessage(buildSettingsMessage(permissions))
-      .setPositiveButton("Open Settings") { _, _ ->
+      .setPositiveButton(R.string.action_open_settings) { _, _ ->
         val intent =
           Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -109,7 +109,7 @@ class PermissionRequester(private val activity: ComponentActivity) {
           )
         activity.startActivity(intent)
       }
-      .setNegativeButton("Cancel", null)
+      .setNegativeButton(R.string.action_cancel, null)
       .show()
   }
 
@@ -120,14 +120,14 @@ class PermissionRequester(private val activity: ComponentActivity) {
 
   private fun buildSettingsMessage(permissions: List<String>): String {
     val labels = permissions.map { permissionLabel(it) }
-    return "Please enable ${labels.joinToString(", ")} in Android Settings to continue."
+    return activity.getString(R.string.permission_settings_message, labels.joinToString(", "))
   }
 
   private fun permissionLabel(permission: String): String =
     when (permission) {
-      Manifest.permission.CAMERA -> "Camera"
-      Manifest.permission.RECORD_AUDIO -> "Microphone"
-      Manifest.permission.SEND_SMS -> "SMS"
+      Manifest.permission.CAMERA -> activity.getString(R.string.permission_label_camera)
+      Manifest.permission.RECORD_AUDIO -> activity.getString(R.string.permission_label_microphone)
+      Manifest.permission.SEND_SMS -> activity.getString(R.string.permission_label_sms)
       else -> permission
     }
 }

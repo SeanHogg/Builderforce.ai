@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { cancel, confirm, isCancel, multiselect } from "@clack/prompts";
 import { isNixMode } from "../config/config.js";
@@ -82,14 +83,19 @@ async function stopAndUninstallService(runtime: RuntimeEnv): Promise<boolean> {
   }
 }
 
+const MAC_APP_PATH = "/Applications/Builderforce.app";
+const LEGACY_MAC_APP_PATH = "/Applications/BuilderForceAgents.app";
+
 async function removeMacApp(runtime: RuntimeEnv, dryRun?: boolean) {
   if (process.platform !== "darwin") {
     return;
   }
-  await removePath("/Applications/BuilderForceAgents.app", runtime, {
-    dryRun,
-    label: "/Applications/BuilderForceAgents.app",
-  });
+  await removePath(MAC_APP_PATH, runtime, { dryRun, label: MAC_APP_PATH });
+  // Legacy-compat: installs from before the native-app rename shipped as
+  // BuilderForceAgents.app. Only touch it when it is actually present.
+  if (fs.existsSync(LEGACY_MAC_APP_PATH)) {
+    await removePath(LEGACY_MAC_APP_PATH, runtime, { dryRun, label: LEGACY_MAC_APP_PATH });
+  }
 }
 
 export async function uninstallCommand(runtime: RuntimeEnv, opts: UninstallOptions) {
@@ -120,7 +126,7 @@ export async function uninstallCommand(runtime: RuntimeEnv, opts: UninstallOptio
         {
           value: "app",
           label: "macOS app",
-          hint: "/Applications/BuilderForceAgents.app",
+          hint: MAC_APP_PATH,
         },
       ],
       initialValues: ["service", "state", "workspace"],

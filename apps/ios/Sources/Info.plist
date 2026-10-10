@@ -51,9 +51,9 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Builderforce uses your location when you allow location sharing.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Builderforce needs microphone access for voice wake.</string>
+	<string>Builderforce uses the microphone for voice wake and to dictate messages to the Brain.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Builderforce uses on-device speech recognition for voice wake.</string>
+	<string>Builderforce uses speech recognition for voice wake and to turn your dictation into chat messages.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

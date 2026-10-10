@@ -316,7 +316,9 @@
     "assessmentAssisted": "Evaluación asistida: cada turno del asistente queda registrado en el historial de integridad.",
     "ticketTagTitle": "Etiquetar un tique",
     "ticketTagStatus": "Estado",
-    "ticketTagNoMatches": "No hay tiques coincidentes"
+    "ticketTagNoMatches": "No hay tiques coincidentes",
+    "startingPoints": "Puntos de partida",
+    "suggestionsLabel": "Próximos pasos sugeridos"
   },
   "repoContext": {
     "title": "Añadir contexto del repositorio",
@@ -1499,7 +1501,8 @@
       "labelWithText": "{tag} · «{text}»",
       "where": "Elegido en la vista previa: {file}, línea {line}",
       "aria": "Elemento elegido:",
-      "remove": "Quitar el elemento elegido"
+      "remove": "Quitar el elemento elegido",
+      "unresolved": "No se puede localizar el código de ese elemento. Descríbelo en el cuadro de texto."
     },
     "releases": {
       "title": "Versiones anteriores",
@@ -9018,7 +9021,6 @@
     "arenaTabsLabel": "Elige una comparación"
   },
   "promptUseCases": {
-    "tabLabel": "Elegir un punto de partida",
     "heading": "¿Qué quieres crear?",
     "searchPlaceholder": "Buscar casos de uso…",
     "searchLabel": "Buscar casos de uso de creación",
@@ -24308,6 +24310,7 @@
       "addedToCanvas": "He añadido al lienzo el contenido solicitado.",
       "noAnswer": "No he podido preparar ningún cambio en el lienzo a partir de esa petición.",
       "providerStalled": "El proveedor del modelo aceptó esta petición y luego dejó de responder, así que he dejado de esperar. Tu petición no tiene ningún problema: vuelve a enviarla o elige otro modelo en el menú /.",
+      "stoppedPartway": "El modelo dejó de responder a mitad de esta petición, así que no está terminada. Lo que completó está en el lienzo: di \"continuar\" para retomarla donde se quedó, o elige otro modelo en el menú /.",
       "toolError": "No he podido preparar los cambios solicitados en el lienzo: {detail}",
       "stepsExhausted": "He agotado todos los pasos que permite este turno y me he detenido aquí; todo lo que he construido hasta ahora está en el lienzo. Di «continuar» y seguiré desde donde lo dejé.",
       "buildNotAuthored": "He preparado el espacio de trabajo inicial de la aplicación, pero no he escrito la aplicación en sí, así que la vista previa sigue mostrando la página de plantilla. Di «continuar» y construiré lo que pediste.",
@@ -26202,7 +26205,6 @@
         }
       }
     },
-    "nextStepsLabel": "Próximos pasos sugeridos",
     "boardMenu": {
       "phaseFocus": "Enfoque de fase",
       "phaseFocusOn": "El enfoque de fase está activado: las tarjetas de la fase pasan al frente",
@@ -32623,7 +32625,6 @@
       "subtitle": "Describe una app. Studio la escribe, la ejecuta en tu navegador y la publica.",
       "promptLabel": "Describe qué crear",
       "placeholder": "Creemos un…",
-      "hint": "Intro para enviar · Mayús+Intro para nueva línea",
       "submit": "Crear",
       "startFailed": "No se pudo iniciar tu sesión. Inténtalo de nuevo.",
       "recentTitle": "Tus proyectos de Studio",

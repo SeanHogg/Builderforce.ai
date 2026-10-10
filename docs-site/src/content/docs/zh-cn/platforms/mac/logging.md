@@ -21,7 +21,7 @@ BuilderForce Agents 通过 swift-log（默认使用统一日志）路由 macOS �
 
 - 详细级别：**Debug 面板 → Logs → App logging → Verbosity**
 - 启用：**Debug 面板 → Logs → App logging → "Write rolling diagnostics log (JSONL)"**
-- 位置：`~/Library/Logs/BuilderForce Agents/diagnostics.jsonl`（自动轮转；旧文件以 `.1`、`.2`、… 为后缀）
+- 位置：`~/Library/Logs/Builderforce/diagnostics.jsonl`（自动轮转；旧文件以 `.1`、`.2`、… 为后缀）
 - 清除：**Debug 面板 → Logs → App logging → "Clear"**
 
 注意事项：

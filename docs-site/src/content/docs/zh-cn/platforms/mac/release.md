@@ -48,10 +48,10 @@ SIGN_IDENTITY="Developer ID Application: <Developer Name> (<TEAMID>)" \
 scripts/package-mac-app.sh
 
 # 打包用于分发的 zip（包含资源分支以支持 Sparkle 增量更新）
-ditto -c -k --sequesterRsrc --keepParent dist/BuilderForce Agents.app dist/BuilderForce Agents-2026.1.27-beta.1.zip
+ditto -c -k --sequesterRsrc --keepParent dist/Builderforce.app dist/Builderforce-2026.1.27-beta.1.zip
 
 # 可选：同时构建适合用户使用的样式化 DMG（拖拽到 /Applications）
-scripts/create-dmg.sh dist/BuilderForce Agents.app dist/BuilderForce Agents-2026.1.27-beta.1.dmg
+scripts/create-dmg.sh dist/Builderforce.app dist/Builderforce-2026.1.27-beta.1.dmg
 
 # 推荐：构建 + 公证/装订 zip + DMG
 # 首先，创建一次钥匙串配置文件：
@@ -66,7 +66,7 @@ SIGN_IDENTITY="Developer ID Application: <Developer Name> (<TEAMID>)" \
 scripts/package-mac-dist.sh
 
 # 可选：随发布一起提供 dSYM
-ditto -c -k --keepParent apps/macos/.build/release/BuilderForce Agents.app.dSYM dist/BuilderForce Agents-2026.1.27-beta.1.dSYM.zip
+ditto -c -k --keepParent apps/macos/.build/release/Builderforce.app.dSYM dist/Builderforce-2026.1.27-beta.1.dSYM.zip
 ```
 
 ## Appcast 条目
@@ -74,7 +74,7 @@ ditto -c -k --keepParent apps/macos/.build/release/BuilderForce Agents.app.dSYM 
 使用发布说明生成器，以便 Sparkle 渲染格式化的 HTML 说明：
 
 ```bash
-SPARKLE_PRIVATE_KEY_FILE=/path/to/ed25519-private-key scripts/make_appcast.sh dist/BuilderForce Agents-2026.1.27-beta.1.zip https://raw.githubusercontent.com/SeanHogg/Builderforce.ai/main/appcast.xml
+SPARKLE_PRIVATE_KEY_FILE=/path/to/ed25519-private-key scripts/make_appcast.sh dist/Builderforce-2026.1.27-beta.1.zip https://raw.githubusercontent.com/SeanHogg/Builderforce.ai/main/appcast.xml
 ```
 
 从 `CHANGELOG.md`（通过 [`scripts/changelog-to-html.sh`](https://github.com/SeanHogg/Builderforce.ai/blob/main/scripts/changelog-to-html.sh)）生成 HTML 发布说明，并将其嵌入 appcast 条目。
@@ -82,7 +82,7 @@ SPARKLE_PRIVATE_KEY_FILE=/path/to/ed25519-private-key scripts/make_appcast.sh di
 
 ## 发布与验证
 
-- 将 `BuilderForce Agents-2026.1.27-beta.1.zip`（和 `BuilderForce Agents-2026.1.27-beta.1.dSYM.zip`）上传到标签 `v2026.1.27-beta.1` 对应的 GitHub 发布。
+- 将 `Builderforce-2026.1.27-beta.1.zip`（和 `Builderforce-2026.1.27-beta.1.dSYM.zip`）上传到标签 `v2026.1.27-beta.1` 对应的 GitHub 发布。
 - 确保原始 appcast URL 与内置的订阅源匹配：`https://raw.githubusercontent.com/SeanHogg/Builderforce.ai/main/appcast.xml`。
 - 完整性检查：
   - `curl -I https://raw.githubusercontent.com/SeanHogg/Builderforce.ai/main/appcast.xml` 返回 200。

@@ -1,13 +1,8 @@
 import AppKit
-import Foundation
 import BuilderforceChatUI
-import BuilderforceKit
-import BuilderforceProtocol
-import OSLog
+import Foundation
 import QuartzCore
 import SwiftUI
-
-private let webChatSwiftLogger = Logger(subsystem: "ai.builderforce", category: "WebChatSwiftUI")
 
 private enum WebChatSwiftUILayout {
     static let windowSize = NSSize(width: 500, height: 840)
@@ -16,131 +11,14 @@ private enum WebChatSwiftUILayout {
     static let anchorPadding: CGFloat = 8
 }
 
-struct MacGatewayChatTransport: BuilderforceChatTransport, Sendable {
-    func requestHistory(sessionKey: String) async throws -> BuilderforceChatHistoryPayload {
-        try await GatewayConnection.shared.chatHistory(sessionKey: sessionKey)
-    }
-
-    func abortRun(sessionKey: String, runId: String) async throws {
-        _ = try await GatewayConnection.shared.request(
-            method: "chat.abort",
-            params: [
-                "sessionKey": AnyCodable(sessionKey),
-                "runId": AnyCodable(runId),
-            ],
-            timeoutMs: 10000)
-    }
-
-    func listSessions(limit: Int?) async throws -> BuilderforceChatSessionsListResponse {
-        var params: [String: AnyCodable] = [
-            "includeGlobal": AnyCodable(true),
-            "includeUnknown": AnyCodable(false),
-        ]
-        if let limit {
-            params["limit"] = AnyCodable(limit)
-        }
-        let data = try await GatewayConnection.shared.request(
-            method: "sessions.list",
-            params: params,
-            timeoutMs: 15000)
-        return try JSONDecoder().decode(BuilderforceChatSessionsListResponse.self, from: data)
-    }
-
-    func sendMessage(
-        sessionKey: String,
-        message: String,
-        thinking: String,
-        idempotencyKey: String,
-        attachments: [BuilderforceChatAttachmentPayload]) async throws -> BuilderforceChatSendResponse
-    {
-        try await GatewayConnection.shared.chatSend(
-            sessionKey: sessionKey,
-            message: message,
-            thinking: thinking,
-            idempotencyKey: idempotencyKey,
-            attachments: attachments)
-    }
-
-    func requestHealth(timeoutMs: Int) async throws -> Bool {
-        try await GatewayConnection.shared.healthOK(timeoutMs: timeoutMs)
-    }
-
-    func events() -> AsyncStream<BuilderforceChatTransportEvent> {
-        AsyncStream { continuation in
-            let task = Task {
-                do {
-                    try await GatewayConnection.shared.refresh()
-                } catch {
-                    webChatSwiftLogger.error("gateway refresh failed \(error.localizedDescription, privacy: .public)")
-                }
-
-                let stream = await GatewayConnection.shared.subscribe()
-                for await push in stream {
-                    if Task.isCancelled { return }
-                    if let evt = Self.mapPushToTransportEvent(push) {
-                        continuation.yield(evt)
-                    }
-                }
-            }
-
-            continuation.onTermination = { @Sendable _ in
-                task.cancel()
-            }
-        }
-    }
-
-    static func mapPushToTransportEvent(_ push: GatewayPush) -> BuilderforceChatTransportEvent? {
-        switch push {
-        case let .snapshot(hello):
-            let ok = (try? JSONDecoder().decode(
-                BuilderforceGatewayHealthOK.self,
-                from: JSONEncoder().encode(hello.snapshot.health)))?.ok ?? true
-            return .health(ok: ok)
-
-        case let .event(evt):
-            switch evt.event {
-            case "health":
-                guard let payload = evt.payload else { return nil }
-                let ok = (try? JSONDecoder().decode(
-                    BuilderforceGatewayHealthOK.self,
-                    from: JSONEncoder().encode(payload)))?.ok ?? true
-                return .health(ok: ok)
-            case "tick":
-                return .tick
-            case "chat":
-                guard let payload = evt.payload else { return nil }
-                guard let chat = try? JSONDecoder().decode(
-                    BuilderforceChatEventPayload.self,
-                    from: JSONEncoder().encode(payload))
-                else {
-                    return nil
-                }
-                return .chat(chat)
-            case "agent":
-                guard let payload = evt.payload else { return nil }
-                guard let agent = try? JSONDecoder().decode(
-                    BuilderforceAgentEventPayload.self,
-                    from: JSONEncoder().encode(payload))
-                else {
-                    return nil
-                }
-                return .agent(agent)
-            default:
-                return nil
-            }
-
-        case .seqGap:
-            return .seqGap
-        }
-    }
-}
-
 // MARK: - Window controller
 
+/// The chat window and menu-bar panel: chat with the Builderforce cloud Brain (signed in
+/// with the device flow). The gateway session a window was opened for stays with
+/// `WebChatManager` for node features (exec approvals, talk); chat itself is the cloud's.
 @MainActor
 final class WebChatSwiftUIWindowController {
     private let presentation: WebChatPresentation
-    private let sessionKey: String
     private let hosting: NSHostingController<BuilderforceChatView>
     private let contentController: NSViewController
     private var window: NSWindow?
@@ -148,18 +26,15 @@ final class WebChatSwiftUIWindowController {
     var onClosed: (() -> Void)?
     var onVisibilityChanged: ((Bool) -> Void)?
 
-    convenience init(sessionKey: String, presentation: WebChatPresentation) {
-        self.init(sessionKey: sessionKey, presentation: presentation, transport: MacGatewayChatTransport())
-    }
-
-    init(sessionKey: String, presentation: WebChatPresentation, transport: any BuilderforceChatTransport) {
-        self.sessionKey = sessionKey
+    init(
+        presentation: WebChatPresentation,
+        transport: any BuilderforceChatTransport = BuilderforceCloudChatTransport())
+    {
         self.presentation = presentation
-        let vm = BuilderforceChatViewModel(sessionKey: sessionKey, transport: transport)
+        let vm = BuilderforceChatViewModel(transport: transport)
         let accent = Self.color(fromHex: AppStateStore.shared.seamColorHex)
         self.hosting = NSHostingController(rootView: BuilderforceChatView(
             viewModel: vm,
-            showsSessionSwitcher: true,
             userAccent: accent))
         self.contentController = Self.makeContentController(for: presentation, hosting: self.hosting)
         self.window = Self.makeWindow(for: presentation, contentViewController: self.contentController)
@@ -268,7 +143,7 @@ final class WebChatSwiftUIWindowController {
                 styleMask: [.titled, .closable, .resizable, .miniaturizable],
                 backing: .buffered,
                 defer: false)
-            window.title = "Builderforce Chat"
+            window.title = ChatStrings.windowTitle
             window.contentViewController = contentViewController
             window.isReleasedWhenClosed = false
             window.titleVisibility = .visible

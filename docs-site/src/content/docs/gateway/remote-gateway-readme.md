@@ -1,12 +1,12 @@
 ---
-summary: "SSH tunnel setup for BuilderForce Agents.app connecting to a remote gateway"
+summary: "SSH tunnel setup for Builderforce.app connecting to a remote gateway"
 read_when: "Connecting the macOS app to a remote gateway over SSH"
 title: "Remote Gateway Setup"
 ---
 
-# Running BuilderForce Agents.app with a Remote Gateway
+# Running Builderforce.app with a Remote Gateway
 
-BuilderForce Agents.app uses SSH tunneling to connect to a remote gateway. This guide shows you how to set it up.
+Builderforce.app uses SSH tunneling to connect to a remote gateway. This guide shows you how to set it up.
 
 ## Overview
 
@@ -14,7 +14,7 @@ BuilderForce Agents.app uses SSH tunneling to connect to a remote gateway. This 
 flowchart TB
     subgraph Client["Client Machine"]
         direction TB
-        A["BuilderForce Agents.app"]
+        A["Builderforce.app"]
         B["ws://127.0.0.1:18789\n(local port)"]
         T["SSH Tunnel"]
 
@@ -67,11 +67,11 @@ launchctl setenv BUILDERFORCE_AGENTS_GATEWAY_TOKEN "<your-token>"
 ssh -N remote-gateway &
 ```
 
-### Step 5: Restart BuilderForce Agents.app
+### Step 5: Restart Builderforce.app
 
 ```bash
-# Quit BuilderForce Agents.app (⌘Q), then reopen:
-open /path/to/BuilderForce Agents.app
+# Quit Builderforce.app (⌘Q), then reopen:
+open /path/to/Builderforce.app
 ```
 
 The app will now connect to the remote gateway through the SSH tunnel.
@@ -155,4 +155,4 @@ launchctl bootout gui/$UID/bot.molt.ssh-tunnel
 | `KeepAlive`                          | Automatically restarts tunnel if it crashes                  |
 | `RunAtLoad`                          | Starts tunnel when the agent loads                           |
 
-BuilderForce Agents.app connects to `ws://127.0.0.1:18789` on your client machine. The SSH tunnel forwards that connection to port 18789 on the remote machine where the Gateway is running.
+Builderforce.app connects to `ws://127.0.0.1:18789` on your client machine. The SSH tunnel forwards that connection to port 18789 on the remote machine where the Gateway is running.

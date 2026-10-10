@@ -86,6 +86,20 @@ export function usePreviewPick(): PreviewPick | null {
 }
 
 /**
+ * Run `reveal` whenever a NEW pick arrives — for a host whose prompt can be out of view
+ * (closed on the canvas, collapsed or on the other pane in the Studio workspace): a pick
+ * whose chip lands in a hidden prompt is a click that seemed to do nothing.
+ */
+export function useOnPreviewPick(reveal: () => void): void {
+  const pick = usePreviewPick();
+  const revealRef = useRef(reveal);
+  useEffect(() => { revealRef.current = reveal; }, [reveal]);
+  useEffect(() => {
+    if (pick) revealRef.current();
+  }, [pick]);
+}
+
+/**
  * For a composer whose context is read reactively (the workspace Brain's `extraSystem`):
  * the pick standing when a turn STARTS is the one that turn carried, so it is withdrawn
  * when that turn settles — unless the person has picked something else meanwhile.

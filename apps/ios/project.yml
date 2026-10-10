@@ -105,8 +105,8 @@ targets:
         NSCameraUsageDescription: Builderforce can capture photos or short video clips when requested via the gateway.
         NSLocationWhenInUseUsageDescription: Builderforce uses your location when you allow location sharing.
         NSLocationAlwaysAndWhenInUseUsageDescription: Builderforce can share your location in the background when you enable Always.
-        NSMicrophoneUsageDescription: Builderforce needs microphone access for voice wake.
-        NSSpeechRecognitionUsageDescription: Builderforce uses on-device speech recognition for voice wake.
+        NSMicrophoneUsageDescription: Builderforce uses the microphone for voice wake and to dictate messages to the Brain.
+        NSSpeechRecognitionUsageDescription: Builderforce uses speech recognition for voice wake and to turn your dictation into chat messages.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

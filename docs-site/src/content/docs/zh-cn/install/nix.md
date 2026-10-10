@@ -87,7 +87,7 @@ BuilderForce Agents 从 `BUILDERFORCE_AGENTS_CONFIG_PATH` 读取 JSON5 配置，
 macOS 打包流程期望在以下位置有一个稳定的 Info.plist 模板：
 
 ```
-apps/macos/Sources/BuilderForce Agents/Resources/Info.plist
+apps/macos/Sources/Builderforce/Resources/Info.plist
 ```
 
 [`scripts/package-mac-app.sh`](https://github.com/SeanHogg/Builderforce.ai/blob/main/scripts/package-mac-app.sh) 将此模板复制到应用包中并修补动态字段（bundle ID、版本/构建号、Git SHA、Sparkle 密钥）。这使 plist 对于 SwiftPM 打包和 Nix 构建保持确定性（它们不依赖完整的 Xcode 工具链）。

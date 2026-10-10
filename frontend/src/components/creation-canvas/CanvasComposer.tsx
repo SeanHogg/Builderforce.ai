@@ -81,6 +81,8 @@ export type CanvasComposerInputProps = Pick<ChatInputProps,
   | 'onMemoryChange'
   | 'memoryUnavailableReason'
   | 'addMenuItems'
+  | 'starters'
+  | 'suggestions'
 >;
 
 /** How the reader has placed the prompt. `closed` is the host's business: it draws nothing. */
@@ -114,11 +116,6 @@ export interface CanvasComposerProps {
    * field. CSS stands it down above the phone breakpoint.
    */
   leading?: ReactNode;
-  /**
-   * The starting points — trigger and catalogue — laid into the card's top row and the
-   * band above it. Host-built: it dispatches template entries, and the `+` menu opens it.
-   */
-  starter?: ReactNode;
   /** The run receipt. Host-built, and absent while docked — the panel narrates its own. */
   activity?: ReactNode;
   /**
@@ -146,7 +143,6 @@ export function CanvasComposer({
   onAsk,
   onCaptureIdea,
   leading,
-  starter,
   activity,
   dockControls,
   hostRef,
@@ -280,11 +276,10 @@ export function CanvasComposer({
           read object · 36s" eight pixels apart is one live turn reported twice. */}
       {!docked && activity && <div className={styles.composerUtilities}>{activity}</div>}
       {/* THE ONE CARD. Everything that changes what Enter does lives inside it: the
-          intent segment and the starting points in its top row, the starting-point
-          catalogue opening above that row, the field, and the field's own tool row
-          (scope, mode, model, send). Nothing floats above it any more — the starter
-          used to hang off its top edge as a half-bordered tab, and the segment sat
-          outside as a second pill. `.composerCard` places each by grid area. */}
+          intent segment in its top row, then the field with its own tool row (scope,
+          mode, model, send). Starting points and next-step chips are `ChatInput`'s own,
+          the same on every prompt — the catalogue opens from `+`, inside the box.
+          `.composerCard` places each by grid area. */}
       <div className={styles.composerCard} style={{ '--canvas-prompt-height': `${height}px` } as CSSProperties}>
         {/* The grip is a strip along the card's top edge rather than a knob sitting
             ON the border, where it covered the first line of text. */}
@@ -304,7 +299,6 @@ export function CanvasComposer({
           onLostPointerCapture={() => { resizeRef.current = null; }}
           onKeyDown={onResizeKeyDown}
         />
-        {starter}
         {/* WHAT ENTER MEANS, leading the card's top row. It draws nothing on a
             surface with one verb. */}
         <CanvasComposerIntent intents={offered} value={active} onChange={(id) => setChosen({ offer: offerKey, id })} />

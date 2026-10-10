@@ -110,8 +110,8 @@ suspend fun streamChat(session: CloudSession, body: JsonObject, onText: (String)
   val acc = TurnAccumulator()
   return withContext(Dispatchers.IO) {
     response.use { resp ->
-      val body: ResponseBody? = resp.body
-      val stream = body ?: return@use acc.finish()
+      val responseBody: ResponseBody? = resp.body
+      val stream = responseBody ?: return@use acc.finish()
       val closeOnCancel = coroutineContext.job.invokeOnCompletion { resp.close() }
       try {
         if (resp.header("Content-Type").orEmpty().startsWith("application/json")) {

@@ -73,7 +73,7 @@ When the operator says “release”, immediately do this preflight (no extra qu
 
 ### Troubleshooting (notes from 2.0.0-beta2 release)
 
-- **npm pack/publish hangs or produces huge tarball**: the macOS app bundle in `dist/BuilderForce Agents.app` (and release zips) get swept into the package. Fix by whitelisting publish contents via `package.json` `files` (include dist subdirs, docs, skills; exclude app bundles). Confirm with `npm pack --dry-run` that `dist/BuilderForce Agents.app` is not listed.
+- **npm pack/publish hangs or produces huge tarball**: the macOS app bundle in `dist/Builderforce.app` (and release zips) get swept into the package. Fix by whitelisting publish contents via `package.json` `files` (include dist subdirs, docs, skills; exclude app bundles). Confirm with `npm pack --dry-run` that `dist/Builderforce.app` is not listed.
 - **npm auth web loop for dist-tags**: use legacy auth to get an OTP prompt:
   - `NPM_CONFIG_AUTH_TYPE=legacy npm dist-tag add @seanhogg/builderforce-agents@X.Y.Z latest`
 - **`npx` verification fails with `ECOMPROMISED: Lock compromised`**: retry with a fresh cache:

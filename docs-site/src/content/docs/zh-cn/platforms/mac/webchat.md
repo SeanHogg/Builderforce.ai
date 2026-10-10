@@ -24,7 +24,7 @@ macOS 菜单栏应用将 WebChat UI 嵌入为原生 SwiftUI 视图。它连接�
 - 手动：菜单栏图标 → "Open Chat"。
 - 测试时自动打开：
   ```bash
-  dist/BuilderForce Agents.app/Contents/MacOS/BuilderForce Agents --webchat
+  dist/Builderforce.app/Contents/MacOS/Builderforce --webchat
   ```
 - 日志：`./scripts/agentlog.sh`（子系统 `bot.molt`，类别 `WebChatSwiftUI`）。
 

@@ -14,7 +14,7 @@ BuilderForce Agents routes macOS app logs through swift-log (unified logging by 
 
 - Verbosity: **Debug pane → Logs → App logging → Verbosity**
 - Enable: **Debug pane → Logs → App logging → “Write rolling diagnostics log (JSONL)”**
-- Location: `~/Library/Logs/BuilderForce Agents/diagnostics.jsonl` (rotates automatically; old files are suffixed with `.1`, `.2`, …)
+- Location: `~/Library/Logs/Builderforce/diagnostics.jsonl` (rotates automatically; old files are suffixed with `.1`, `.2`, …)
 - Clear: **Debug pane → Logs → App logging → “Clear”**
 
 Notes:

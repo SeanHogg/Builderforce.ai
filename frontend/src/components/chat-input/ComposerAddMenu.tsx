@@ -6,8 +6,8 @@ import type { ComposerAddMenuItem } from './types';
 
 /**
  * The composer's `+`: a hidden file picker plus a Claude-style menu (Upload, Add
- * context, Browse the web). Renders nothing for a host that cannot take a file —
- * Upload lives in this menu, so without `onAttach` there is no menu to open.
+ * context, the host's rows such as Starting points, Browse the web). Each row is
+ * offered only when its host wires it, and the menu renders nothing when no row is.
  */
 export const ComposerAddMenu = memo(function ComposerAddMenu({ onAttach, onAddContext, items, webBrowsing, onWebBrowsingChange, disabled }: {
   onAttach?: (file: File) => void | Promise<void>;
@@ -37,22 +37,22 @@ export const ComposerAddMenu = memo(function ComposerAddMenu({ onAttach, onAddCo
     [onAttach]
   );
 
-  if (!onAttach) return null;
+  if (!onAttach && !onAddContext && !items?.length && !onWebBrowsingChange) return null;
   return (
     <>
-      <input
+      {onAttach && <input
         ref={fileInputRef}
         type="file"
         multiple
         accept="image/*,.pdf,.txt,.md,.csv,.tsv,.json,.docx,.rtf,.xlsx,.pptx"
         onChange={handleFileChange}
         style={{ display: 'none' }}
-      />
+      />}
       {/* `+` becomes a Claude-style menu: Upload, Add context, Browse the web. */}
       <ComposerMenu title={t('add')} disabled={disabled} trigger={<Icon name="plus" size={19} />}>
         {(close) => (
           <>
-            <MenuRow icon="💻" label={t('upload')} onClick={() => { close(); handleAttachClick(); }} />
+            {onAttach && <MenuRow icon="💻" label={t('upload')} onClick={() => { close(); handleAttachClick(); }} />}
             {onAddContext && <MenuRow icon="◧" label={t('addContext')} onClick={() => { close(); onAddContext(); }} />}
             {items?.map((item) => (
               <MenuRow key={item.id} icon={item.icon} label={item.label} onClick={() => { close(); item.onSelect(); }} />

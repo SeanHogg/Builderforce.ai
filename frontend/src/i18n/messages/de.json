@@ -316,7 +316,9 @@
     "assessmentAssisted": "Unterstützte Prüfung – jede Antwort des Assistenten wird im Integritätsprotokoll festgehalten.",
     "ticketTagTitle": "Ticket verknüpfen",
     "ticketTagStatus": "Status",
-    "ticketTagNoMatches": "Keine passenden Tickets"
+    "ticketTagNoMatches": "Keine passenden Tickets",
+    "startingPoints": "Ausgangspunkte",
+    "suggestionsLabel": "Vorgeschlagene nächste Schritte"
   },
   "repoContext": {
     "title": "Repository-Kontext hinzufügen",
@@ -1499,7 +1501,8 @@
       "labelWithText": "{tag} · „{text}“",
       "where": "In der Vorschau ausgewählt: {file}, Zeile {line}",
       "aria": "Ausgewähltes Element:",
-      "remove": "Ausgewähltes Element entfernen"
+      "remove": "Ausgewähltes Element entfernen",
+      "unresolved": "Dieses Element lässt sich nicht im Quellcode finden. Beschreib es stattdessen im Eingabefeld."
     },
     "releases": {
       "title": "Frühere Versionen",
@@ -9018,7 +9021,6 @@
     "arenaTabsLabel": "Vergleich auswählen"
   },
   "promptUseCases": {
-    "tabLabel": "Ausgangspunkt wählen",
     "heading": "Was möchten Sie erstellen?",
     "searchPlaceholder": "Anwendungsfälle suchen…",
     "searchLabel": "Erstellungsfälle durchsuchen",
@@ -24308,6 +24310,7 @@
       "addedToCanvas": "Ich habe den gewünschten Inhalt auf der Arbeitsfläche ergänzt.",
       "noAnswer": "Aus dieser Anfrage konnte ich keine Änderung an der Arbeitsfläche vorbereiten.",
       "providerStalled": "Der Modellanbieter hat diese Anfrage angenommen und dann nicht mehr geantwortet, deshalb warte ich nicht länger. An deiner Anfrage ist nichts falsch – schicke sie erneut oder wähle im Menü / ein anderes Modell.",
+      "stoppedPartway": "Das Modell hat mitten in dieser Anfrage aufgehört zu antworten, sie ist also nicht fertig. Was es abgeschlossen hat, liegt auf der Arbeitsfläche – sag „weiter“, um dort fortzufahren, oder wähle im Menü / ein anderes Modell.",
       "toolError": "Die gewünschten Änderungen an der Arbeitsfläche konnte ich nicht vorbereiten: {detail}",
       "stepsExhausted": "Ich habe alle Schritte aufgebraucht, die dieser Durchgang erlaubt, und höre hier auf; alles bisher Gebaute liegt auf der Arbeitsfläche. Sag „weiter“, dann mache ich genau dort weiter.",
       "buildNotAuthored": "Ich habe den Start-Arbeitsbereich der App angelegt, die App selbst aber noch nicht geschrieben – die Vorschau zeigt daher weiterhin die Vorlagenseite. Sag „weiter“, dann baue ich, worum du gebeten hast.",
@@ -26202,7 +26205,6 @@
         }
       }
     },
-    "nextStepsLabel": "Vorgeschlagene nächste Schritte",
     "boardMenu": {
       "phaseFocus": "Phasenfokus",
       "phaseFocusOn": "Phasenfokus ist an – Karten der Phase treten hervor",
@@ -32623,7 +32625,6 @@
       "subtitle": "Beschreibe eine App. Studio schreibt sie, führt sie in deinem Browser aus und veröffentlicht sie.",
       "promptLabel": "Beschreibe, was gebaut werden soll",
       "placeholder": "Lass uns … bauen",
-      "hint": "Enter zum Senden · Umschalt+Enter für eine neue Zeile",
       "submit": "Bauen",
       "startFailed": "Deine Sitzung konnte nicht gestartet werden. Versuche es erneut.",
       "recentTitle": "Deine Studio-Projekte",

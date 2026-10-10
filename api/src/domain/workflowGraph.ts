@@ -77,7 +77,7 @@ function emptyDefinition(): WorkflowDefinition {
 
 // ---------------------------------------------------------------------------
 // YAML interchange — round-trip a definition to/from a human-authorable YAML
-// form, isomorphic to the on-disk `.coderClaw/workflows/*.yaml` convention.
+// form, isomorphic to the on-disk `.builderforce/workflows/*.yaml` convention.
 // ---------------------------------------------------------------------------
 
 /** Serialize a definition to YAML for export / hand-editing. */

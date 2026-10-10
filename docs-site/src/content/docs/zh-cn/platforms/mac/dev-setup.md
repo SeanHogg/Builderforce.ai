@@ -33,7 +33,7 @@ pnpm install
 
 ## 2. 构建和打包应用
 
-要构建 macOS 应用并将其打包到 `dist/BuilderForce Agents.app`，运行：
+要构建 macOS 应用并将其打包到 `dist/Builderforce.app`，运行：
 
 ```bash
 ./scripts/package-mac-app.sh

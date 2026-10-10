@@ -35,7 +35,7 @@ class CameraHandler(
       logFile?.writeText("") // clear
       camLog("starting, params=$paramsJson")
       camLog("calling showCameraHud")
-      showCameraHud("Taking photo…", CameraHudKind.Photo, null)
+      showCameraHud(appContext.getString(ai.builderforce.android.R.string.camera_hud_taking_photo), CameraHudKind.Photo, null)
       camLog("calling triggerCameraFlash")
       triggerCameraFlash()
       val res =
@@ -52,7 +52,7 @@ class CameraHandler(
           return GatewaySession.InvokeResult.error(code = code, message = message)
         }
       camLog("returning result")
-      showCameraHud("Photo captured", CameraHudKind.Success, 1600)
+      showCameraHud(appContext.getString(ai.builderforce.android.R.string.camera_hud_photo_captured), CameraHudKind.Success, 1600)
       return GatewaySession.InvokeResult.ok(res.payloadJson)
     } catch (err: Throwable) {
       camLog("outer error: ${err::class.java.simpleName}: ${err.message}")
@@ -75,7 +75,7 @@ class CameraHandler(
       clipLogFile?.writeText("") // clear
       clipLog("starting, params=$paramsJson includeAudio=$includeAudio")
       clipLog("calling showCameraHud")
-      showCameraHud("Recording…", CameraHudKind.Recording, null)
+      showCameraHud(appContext.getString(ai.builderforce.android.R.string.camera_hud_recording), CameraHudKind.Recording, null)
       val filePayload =
         try {
           clipLog("calling camera.clip()")
@@ -136,13 +136,13 @@ class CameraHandler(
           b
         }
         val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-        showCameraHud("Clip captured", CameraHudKind.Success, 1800)
+        showCameraHud(appContext.getString(ai.builderforce.android.R.string.camera_hud_clip_captured), CameraHudKind.Success, 1800)
         return GatewaySession.InvokeResult.ok(
           """{"format":"mp4","base64":"$base64","durationMs":${filePayload.durationMs},"hasAudio":${filePayload.hasAudio}}"""
         )
       }
       clipLog("returning URL result: $uploadUrl")
-      showCameraHud("Clip captured", CameraHudKind.Success, 1800)
+      showCameraHud(appContext.getString(ai.builderforce.android.R.string.camera_hud_clip_captured), CameraHudKind.Success, 1800)
       return GatewaySession.InvokeResult.ok(
         """{"format":"mp4","url":"$uploadUrl","durationMs":${filePayload.durationMs},"hasAudio":${filePayload.hasAudio}}"""
       )

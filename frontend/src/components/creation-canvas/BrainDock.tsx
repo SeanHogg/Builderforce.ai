@@ -15,7 +15,7 @@ import styles from './CreationCanvas.module.css';
 import { BrainMark } from '@/components/brain/BrainMark';
 import { creationObjectDefinition, creationObjectName } from './creationObjectRegistry';
 import type { CreationFlowNode } from './CreationNode';
-import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
+import { brainActivityLine, useBrainActivity } from './BrainActivityView';
 import type { BrainSurfaceCollaborator } from './brainSurfaceContext';
 import { BrainSurfaceActions } from './BrainSurfaceActions';
 import { BrainSurfaceViewProvider, useBrainSurfaceView } from './brainSurfaceView';
@@ -125,7 +125,7 @@ export interface BrainDockProps extends BrainSurfaceBodyProps {
 }
 
 /**
- * Presence, transcript (or its Context view), and the activity bar — everything below the title.
+ * Presence and the transcript (or its Context view) — everything below the title.
  * Shared verbatim by the edge dock and the Brain Object so the two placements can
  * never drift into two subtly different chats.
  */
@@ -235,10 +235,10 @@ export function BrainSurfaceBody({
       : <div className={styles.brainDockContext}>
         <BrainContextPanel node={node} nodes={nodes} edges={edges} transcript={messages} />
       </div>}
-    {/* LIVE only. Once the turn settles the transcript carries its own "Thought for…"
-        line and the tool steps, so a settled receipt strip under it — directly above
-        the composer — reported the same finished turn twice. */}
-    {activity.live && <BrainActivityBar state={activity} />}
+    {/* No activity strip under the transcript. The transcript's live node already says
+        what Brain is doing right now ("Executing… · list build files 14s") and, once the
+        turn settles, its own "Thought for…" line — a strip directly above the composer
+        reported the same moment a second time. */}
   </>;
 }
 

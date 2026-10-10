@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
-import { PromptUseCasePicker } from './PromptUseCasePicker';
+import { PromptUseCaseCatalog } from './PromptUseCasePicker';
 import { C_SUITE_CANVAS_OWNERS, C_SUITE_CANVAS_USE_CASES, C_SUITE_CANVAS_WORKFLOWS, cSuiteCanvasOwner, cSuiteCanvasWorkflow, executiveCanvasPrompt } from '@/lib/templates/promptUseCases';
 
 // The picker now renders the merged catalogue, whose workspace half comes from
@@ -20,7 +20,7 @@ vi.mock('@/lib/templates/api', () => ({
 vi.mock('next-intl', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next-intl')>()),
   useTranslations: () => Object.assign(
-    (key: string) => ({ tabLabel: 'Choose a starting point', heading: 'What should we create?' })[key] ?? key,
+    (key: string) => ({ heading: 'What should we create?' })[key] ?? key,
     { raw: () => [
       { id: 'wireframe', category: 'apps', label: 'Wireframe', prompt: 'Create a product wireframe.' },
       { category: 'creative', label: 'Animation', prompt: 'Create an animation concept.' },
@@ -28,7 +28,7 @@ vi.mock('next-intl', async (importOriginal) => ({
   ),
 }));
 
-describe('PromptUseCasePicker', () => {
+describe('PromptUseCaseCatalog', () => {
   it('maps every legacy C-suite contract into the Creation Canvas menu exactly once', () => {
     const ids = C_SUITE_CANVAS_USE_CASES.map((item) => item.id);
 
@@ -69,41 +69,27 @@ describe('PromptUseCasePicker', () => {
     }
   });
 
-  it('renders the tab ahead of its catalogue and returns the selected prescription', () => {
+  it('returns the selected prescription as the ENTRY, not a string', () => {
     const onSelect = vi.fn();
-    const { container } = render(<PromptUseCasePicker onSelect={onSelect} />);
-    const root = container.firstElementChild!;
-    const tab = screen.getByRole('button', { name: 'Choose a starting point' });
-
-    expect(root.firstElementChild).toBe(tab);
-    expect(root).toHaveAttribute('data-open', 'false');
-    expect(screen.getByText('Wireframe').closest('button')).toHaveAttribute('tabindex', '-1');
-
-    fireEvent.click(tab);
-    expect(root).toHaveAttribute('data-open', 'true');
+    render(<PromptUseCaseCatalog open id="catalog" onSelect={onSelect} />);
     fireEvent.click(screen.getByRole('button', { name: 'Wireframe' }));
 
-    // One argument now: the ENTRY. The caller decides what to do with it, which
-    // is what lets the same menu seed a prompt, drop a pack and open a setup.
+    // One argument: the ENTRY. The caller decides what to do with it, which is what
+    // lets the same list seed a prompt, drop a pack and open a setup.
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
       id: 'wireframe',
       name: 'Wireframe',
       action: { kind: 'prompt', prompt: 'Create a product wireframe.' },
     }));
-    expect(tab).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('closes an expanded list with Escape', () => {
-    render(<PromptUseCasePicker onSelect={vi.fn()} />);
-    const tab = screen.getByRole('button', { name: 'Choose a starting point' });
-    fireEvent.click(tab);
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(tab).toHaveAttribute('aria-expanded', 'false');
+  it('takes no focus while closed', () => {
+    render(<PromptUseCaseCatalog open={false} id="catalog" onSelect={vi.fn()} />);
+    expect(screen.getByText('Wireframe').closest('button')).toHaveAttribute('tabindex', '-1');
   });
 
   it('searches across the larger supported catalog', () => {
-    render(<PromptUseCasePicker onSelect={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Choose a starting point' }));
+    render(<PromptUseCaseCatalog open id="catalog" onSelect={vi.fn()} />);
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'animation' } });
     expect(screen.getByRole('button', { name: 'Animation' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Wireframe' })).not.toBeInTheDocument();
@@ -111,8 +97,7 @@ describe('PromptUseCasePicker', () => {
 
   it('finds a migrated feature by its legacy dotted contract and returns its Canvas prescription', () => {
     const onSelect = vi.fn();
-    render(<PromptUseCasePicker onSelect={onSelect} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Choose a starting point' }));
+    render(<PromptUseCaseCatalog open id="catalog" onSelect={onSelect} />);
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'finance.runway.snapshot' } });
     fireEvent.click(screen.getByRole('button', { name: 'Runway snapshot' }));
 

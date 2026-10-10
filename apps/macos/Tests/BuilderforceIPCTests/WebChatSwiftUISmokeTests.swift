@@ -1,5 +1,6 @@
 import AppKit
 import BuilderforceChatUI
+import BuilderforceKit
 import Foundation
 import Testing
 @testable import Builderforce
@@ -7,43 +8,34 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct WebChatSwiftUISmokeTests {
-    private struct TestTransport: BuilderforceChatTransport, Sendable {
-        func requestHistory(sessionKey: String) async throws -> BuilderforceChatHistoryPayload {
-            let json = """
-            {"sessionKey":"\(sessionKey)","sessionId":null,"messages":[],"thinkingLevel":"off"}
-            """
-            return try JSONDecoder().decode(BuilderforceChatHistoryPayload.self, from: Data(json.utf8))
+    /// A signed-out cloud: the window renders the sign-in view without a network.
+    private struct SignedOutTransport: BuilderforceChatTransport {
+        func isSignedIn() async -> Bool { false }
+        func startSignIn() async throws -> DeviceCode { throw CloudError.signedOut }
+        func finishSignIn(_: DeviceCode) async throws { throw CloudError.signedOut }
+        func signOut() async {}
+        func listChats() async throws -> [BrainChat] { [] }
+        func createChat(title _: String?) async throws -> BrainChat { BrainChat(id: 1, title: nil) }
+        func messages(chatID _: Int) async throws -> [BrainChatMessage] { [] }
+        func agents(chatID _: Int) async throws -> [BrainChatAgent] { [] }
+
+        func upload(_: BuilderforceChatUpload) async throws -> (attachment: BrainChatAttachment, url: String) {
+            throw CloudError.signedOut
         }
 
-        func sendMessage(
-            sessionKey _: String,
-            message _: String,
-            thinking _: String,
-            idempotencyKey _: String,
-            attachments _: [BuilderforceChatAttachmentPayload]) async throws -> BuilderforceChatSendResponse
-        {
-            let json = """
-            {"runId":"\(UUID().uuidString)","status":"ok"}
-            """
-            return try JSONDecoder().decode(BuilderforceChatSendResponse.self, from: Data(json.utf8))
-        }
+        func send(chatID _: Int, content _: String, to _: BrainChatAgent?, attachments _: [BrainChatAttachment]) async throws {}
 
-        func requestHealth(timeoutMs _: Int) async throws -> Bool { true }
-
-        func events() -> AsyncStream<BuilderforceChatTransportEvent> {
-            AsyncStream { continuation in
-                continuation.finish()
-            }
-        }
-
-        func setActiveSessionKey(_: String) async throws {}
+        func reply(
+            chatID _: Int,
+            imageURLs _: [String],
+            approve _: @escaping @Sendable (BrainToolApproval) async -> Bool,
+            onEvent _: @escaping @Sendable (BrainReplyEvent) async -> Void) async throws {}
     }
 
     @Test func windowControllerShowAndClose() {
         let controller = WebChatSwiftUIWindowController(
-            sessionKey: "main",
             presentation: .window,
-            transport: TestTransport())
+            transport: SignedOutTransport())
         controller.show()
         controller.close()
     }
@@ -51,9 +43,8 @@ struct WebChatSwiftUISmokeTests {
     @Test func panelControllerPresentAndClose() {
         let anchor = { NSRect(x: 200, y: 400, width: 40, height: 40) }
         let controller = WebChatSwiftUIWindowController(
-            sessionKey: "main",
             presentation: .panel(anchorProvider: anchor),
-            transport: TestTransport())
+            transport: SignedOutTransport())
         controller.presentAnchored(anchorProvider: anchor)
         controller.close()
     }

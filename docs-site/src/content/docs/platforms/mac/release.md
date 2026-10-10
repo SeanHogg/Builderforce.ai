@@ -41,10 +41,10 @@ SIGN_IDENTITY="Developer ID Application: <Developer Name> (<TEAMID>)" \
 scripts/package-mac-app.sh
 
 # Zip for distribution (includes resource forks for Sparkle delta support)
-ditto -c -k --sequesterRsrc --keepParent dist/BuilderForce Agents.app dist/BuilderForce Agents-2026.2.20.zip
+ditto -c -k --sequesterRsrc --keepParent dist/Builderforce.app dist/Builderforce-2026.2.20.zip
 
 # Optional: also build a styled DMG for humans (drag to /Applications)
-scripts/create-dmg.sh dist/BuilderForce Agents.app dist/BuilderForce Agents-2026.2.20.dmg
+scripts/create-dmg.sh dist/Builderforce.app dist/Builderforce-2026.2.20.dmg
 
 # Recommended: build + notarize/staple zip + DMG
 # First, create a keychain profile once:
@@ -59,7 +59,7 @@ SIGN_IDENTITY="Developer ID Application: <Developer Name> (<TEAMID>)" \
 scripts/package-mac-dist.sh
 
 # Optional: ship dSYM alongside the release
-ditto -c -k --keepParent apps/macos/.build/release/BuilderForce Agents.app.dSYM dist/BuilderForce Agents-2026.2.20.dSYM.zip
+ditto -c -k --keepParent apps/macos/.build/release/Builderforce.app.dSYM dist/Builderforce-2026.2.20.dSYM.zip
 ```
 
 ## Appcast entry
@@ -67,7 +67,7 @@ ditto -c -k --keepParent apps/macos/.build/release/BuilderForce Agents.app.dSYM 
 Use the release note generator so Sparkle renders formatted HTML notes:
 
 ```bash
-SPARKLE_PRIVATE_KEY_FILE=/path/to/ed25519-private-key scripts/make_appcast.sh dist/BuilderForce Agents-2026.2.20.zip https://raw.githubusercontent.com/SeanHogg/Builderforce.ai/main/appcast.xml
+SPARKLE_PRIVATE_KEY_FILE=/path/to/ed25519-private-key scripts/make_appcast.sh dist/Builderforce-2026.2.20.zip https://raw.githubusercontent.com/SeanHogg/Builderforce.ai/main/appcast.xml
 ```
 
 Generates HTML release notes from `CHANGELOG.md` (via [`scripts/changelog-to-html.sh`](https://github.com/SeanHogg/Builderforce.ai/blob/main/scripts/changelog-to-html.sh)) and embeds them in the appcast entry.
@@ -75,7 +75,7 @@ Commit the updated `appcast.xml` alongside the release assets (zip + dSYM) when 
 
 ## Publish & verify
 
-- Upload `BuilderForce Agents-2026.2.20.zip` (and `BuilderForce Agents-2026.2.20.dSYM.zip`) to the GitHub release for tag `v2026.2.20`.
+- Upload `Builderforce-2026.2.20.zip` (and `Builderforce-2026.2.20.dSYM.zip`) to the GitHub release for tag `v2026.2.20`.
 - Ensure the raw appcast URL matches the baked feed: `https://raw.githubusercontent.com/SeanHogg/Builderforce.ai/main/appcast.xml`.
 - Sanity checks:
   - `curl -I https://raw.githubusercontent.com/SeanHogg/Builderforce.ai/main/appcast.xml` returns 200.

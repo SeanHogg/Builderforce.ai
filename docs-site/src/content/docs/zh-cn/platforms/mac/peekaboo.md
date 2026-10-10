@@ -1,6 +1,6 @@
 ---
 read_when:
-  - 在 BuilderForce Agents.app 中托管 PeekabooBridge
+  - 在 Builderforce.app 中托管 PeekabooBridge
   - 通过 Swift Package Manager 集成 Peekaboo
   - 更改 PeekabooBridge 协议/路径
 summary: 用于 macOS UI 自动化的 PeekabooBridge 集成
@@ -20,7 +20,7 @@ BuilderForce Agents 可以将 **PeekabooBridge** 作为本地的、权限感知�
 
 ## 这是什么（以及不是什么）
 
-- **宿主**：BuilderForce Agents.app 可以作为 PeekabooBridge 宿主。
+- **宿主**：Builderforce.app 可以作为 PeekabooBridge 宿主。
 - **客户端**：使用 `peekaboo` CLI（无需单独的 `builderforce ui ...` 界面）。
 - **界面**：视觉叠加层保留在 Peekaboo.app 中；BuilderForce Agents 只是一个轻量代理宿主。
 
@@ -38,7 +38,7 @@ Peekaboo 客户端通常按以下顺序尝试宿主：
 
 1. Peekaboo.app（完整用户体验）
 2. Claude.app（如已安装）
-3. BuilderForce Agents.app（轻量代理）
+3. Builderforce.app（轻量代理）
 
 使用 `peekaboo bridge status --verbose` 查看当前活跃的宿主及使用的套接字路径。你可以通过以下方式覆盖：
 
@@ -59,4 +59,4 @@ export PEEKABOO_BRIDGE_SOCKET=/path/to/bridge.sock
 ## 故障排除
 
 - 如果 `peekaboo` 报告"bridge client is not authorized"，请确保客户端已正确签名，或仅在**调试**模式下使用 `PEEKABOO_ALLOW_UNSIGNED_SOCKET_CLIENTS=1` 运行宿主。
-- 如果未找到宿主，请打开其中一个宿主应用（Peekaboo.app 或 BuilderForce Agents.app）并确认已授予权限。
+- 如果未找到宿主，请打开其中一个宿主应用（Peekaboo.app 或 Builderforce.app）并确认已授予权限。

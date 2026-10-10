@@ -1,3 +1,16 @@
+## ✅ RESOLVED 2026-10-10 — A canvas build that stalls part-way says so, and an auto turn routes around the stalled model (frontend 2026.10.34)
+
+**Was** (session `local-6d36899d`, ui 2026.10.31, "build a marketing site for phones"): the free `nemotron-3-ultra-550b-a55b:free` wrote only `index.html`, stalled, hit the 8K output limit, then stalled again. The user got **"I added the requested content to the canvas."** above a "Hello World!" preview. Three faults in `creationCanvasAi.ts`:
+- **Stall count wasn't "in a row".** `stalledStreams` was never reset on a successful completion, so two stalls minutes apart, with a file written between them, counted as a dead model.
+- **No re-route on auto routing.** `switchToProvenModel` had nothing to switch to (the stalled model was the only one that had called tools), so the turn gave up. The gateway's pool was never asked again.
+- **Abandoned turn reported as delivered.** The tail treated `canvasChanged` as success even when the loop ended on a `failed` rung.
+
+**Now:**
+- `consecutiveStalls` drives the ladder and resets on every returned completion. `stalledStreams` stays as the turn total.
+- An unpinned turn with no proven fallback re-routes once (`MAX_STALL_REROUTES`): the stalled model is excluded via `excludeModels` and the gateway picks again. This is turn-scoped and never reported as session-disabled. A caller's explicit pick is never overridden.
+- A turn abandoned after changing the board returns the new `stoppedPartway` notice (all five catalogs) and reports `onUnanswered` (`provider-stalled` / `model-looped`), so it stays out of the transcript.
+- Tests: three cases in `creationCanvasAi.test.ts` → "part-way through a build".
+
 ## ✅ RESOLVED 2026-10-10 — Every prompt is the same one-box composer: web, VS Code, Synapse, Spawn (brain-ui 2026.10.4 · brain-embedded 2026.10.5 · frontend 2026.10.33 · VSIX 2026.10.6 · desktop 2026.10.3)
 
 **Was:** the 2026-10-09 simplification ("a chat box again") reached only the canvas/Studio dock. The rest still had the old shape:

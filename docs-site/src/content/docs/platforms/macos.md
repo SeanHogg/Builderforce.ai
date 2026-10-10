@@ -135,7 +135,7 @@ Safety:
 
 ## Onboarding flow (typical)
 
-1. Install and launch **BuilderForce Agents.app**.
+1. Install and launch **Builderforce.app**.
 2. Complete the permissions checklist (TCC prompts).
 3. Ensure **Local** mode is active and the Gateway is running.
 4. Install the CLI if you want terminal access.

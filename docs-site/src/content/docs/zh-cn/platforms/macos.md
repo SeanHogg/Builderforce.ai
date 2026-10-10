@@ -133,7 +133,7 @@ open 'builderforce://agent?message=Hello%20from%20deep%20link'
 
 ## 新手引导流程（典型）
 
-1. 安装并启动 **BuilderForce Agents.app**。
+1. 安装并启动 **Builderforce.app**。
 2. 完成权限清单（TCC 提示）。
 3. 确保**本地**模式处于活动状态且 Gateway 网关正在运行。
 4. 如果你想要终端访问，安装 CLI。

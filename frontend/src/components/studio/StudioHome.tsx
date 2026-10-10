@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { ChatInput, type ComposerStarters } from '@/components/ChatInput';
+import { applyTemplateEntry } from '@/lib/templates/apply';
 import { UpgradeModal } from '@/components/UpgradeModal';
-import { StudioPromptBox } from './StudioPromptBox';
 import { StudioApps } from './StudioApps';
 import { StudioRecentProjects } from './StudioRecentProjects';
 import { useStartStudioSession } from './useStartStudioSession';
@@ -25,6 +27,15 @@ export function StudioHome() {
   const t = useTranslations('studio.home');
   const { start, busy, error, planError, clearPlanError } = useStartStudioSession(t('startFailed'));
   const [prompt, setPrompt] = useState('');
+  const router = useRouter();
+  // Starting points from `+`, inside the box — the same as every other prompt. A prompt
+  // entry seeds the box; an installable one opens its setup in the templates gallery.
+  const starters = useMemo<ComposerStarters>(() => ({
+    onSelect: (entry) => applyTemplateEntry(entry, {
+      onPrompt: setPrompt,
+      onInstall: (key) => router.push(`/templates?open=${encodeURIComponent(key)}`),
+    }),
+  }), [router]);
 
   return (
     <section style={{ width: 'min(760px, 100%)', margin: '0 auto', padding: 'clamp(32px, 10vh, 120px) 16px 48px', boxSizing: 'border-box', display: 'grid', alignContent: 'start', gap: 28, color: 'var(--text-primary)' }}>
@@ -32,7 +43,19 @@ export function StudioHome() {
         <h1 className="ui-text-hero" style={{ margin: 0 }}>{t('title')}</h1>
         <p className="ui-text-lede" style={{ margin: 0, color: 'var(--text-secondary)' }}>{t('subtitle')}</p>
       </div>
-      <StudioPromptBox value={prompt} onChange={setPrompt} onSubmit={() => start(prompt)} busy={busy} />
+      {/* THE one composer every prompt uses — not a page-local textarea and button. */}
+      <ChatInput
+        value={prompt}
+        onChange={setPrompt}
+        onSubmit={() => start(prompt)}
+        placeholder={t('placeholder')}
+        ariaLabel={t('promptLabel')}
+        submitLabel={t('submit')}
+        disabled={busy}
+        rows={3}
+        showVoice
+        starters={starters}
+      />
       {error && <p role="alert" style={{ margin: 0, color: 'var(--error-text)' }}>{error}</p>}
       <StudioApps />
       <StudioRecentProjects />

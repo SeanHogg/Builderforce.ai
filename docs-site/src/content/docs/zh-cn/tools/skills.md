@@ -21,7 +21,7 @@ BuilderForce Agents 使用**兼容 [AgentSkills](https://agentskills.io)** 的 S
 
 Skills 从**三个**位置加载：
 
-1. **内置 Skills**：随安装包一起发布（npm 包或 BuilderForce Agents.app）
+1. **内置 Skills**：随安装包一起发布（npm 包或 Builderforce.app）
 2. **托管/本地 Skills**：`~/.builderforce/skills`
 3. **工作区 Skills**：`<workspace>/skills`
 
@@ -266,7 +266,7 @@ total = 195 + Σ (97 + len(name_escaped) + len(description_escaped) + len(locati
 
 ## 托管 Skills 生命周期
 
-BuilderForce Agents 作为安装的一部分（npm 包或 BuilderForce Agents.app）发布一组基线 Skills 作为**内置 Skills**。`~/.builderforce/skills` 用于本地覆盖（例如，在不更改内置副本的情况下固定/修补 Skills）。工作区 Skills 由用户拥有，在名称冲突时覆盖两者。
+BuilderForce Agents 作为安装的一部分（npm 包或 Builderforce.app）发布一组基线 Skills 作为**内置 Skills**。`~/.builderforce/skills` 用于本地覆盖（例如，在不更改内置副本的情况下固定/修补 Skills）。工作区 Skills 由用户拥有，在名称冲突时覆盖两者。
 
 ## 配置参考
 

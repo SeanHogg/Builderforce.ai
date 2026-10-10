@@ -571,7 +571,7 @@ export class TaskService {
   /**
    * Move a task to a different project ("board"). Validates that both the source
    * and destination projects belong to the caller's tenant, then re-keys the task
-   * from the destination project's prefix (e.g. CODERCLAW-041 → ACME-014).
+   * from the destination project's prefix (e.g. BUILDERFORCE-041 → ACME-014).
    */
   async moveTask(id: number, targetProjectId: number, callerTenantId: number): Promise<Task> {
     const task = await this.getTask(id);

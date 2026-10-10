@@ -21,7 +21,7 @@ agent (with a session switcher for other sessions).
 - Auto‑open for testing:
 
   ```bash
-  dist/BuilderForce Agents.app/Contents/MacOS/BuilderForce Agents --webchat
+  dist/Builderforce.app/Contents/MacOS/Builderforce --webchat
   ```
 
 - Logs: `./scripts/agentlog.sh` (subsystem `bot.molt`, category `WebChatSwiftUI`).

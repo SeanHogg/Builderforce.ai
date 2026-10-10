@@ -13,32 +13,25 @@
  * dispatched by `useTemplateApply` on the entry's own action — so an installable
  * template opens its guided setup from the same menu that seeds a prompt.
  *
- * ── TWO PIECES ───────────────────────────────────────────────────────────────
+ * ── ONE PLACE ────────────────────────────────────────────────────────────────
  * `PromptUseCaseCatalog` is the list itself (search, groups, entries) and holds no
- * open state. `PromptUseCasePicker` is the catalog plus its own tab and dismissal,
- * for a host that has nowhere better to put the trigger (the landing hero). The
- * canvas composer composes the catalog directly: its trigger sits in the composer
- * card's top row and the list opens INSIDE that card, so the two are siblings in a
- * shared container rather than a tab hanging off a floating popover.
+ * open state. Every prompt opens it the same way: the `+` menu's "Starting points"
+ * row, drawn inside the box (`components/chat-input/useComposerStarters.tsx`). The
+ * landing hero's floating "Choose a starting point" tab and the canvas composer's
+ * own trigger button were two other ways to reach the same list; both are gone.
  */
 
-import { useId, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from './PromptUseCasePicker.module.css';
 import { Icon } from '@/components/ui/Icon';
 import { groupTemplates, matchesTemplateQuery, type TemplateEntry } from '@/lib/templates/contract';
 import { useTemplateCatalog } from '@/lib/templates/useTemplateCatalog';
-import { useDismissOnOutsidePress } from '@/lib/useDismissable';
 
 export interface PromptUseCaseCatalogProps {
   open: boolean;
   /** The id the trigger's `aria-controls` names. */
   id: string;
-  /**
-   * `popover` floats off its tab (above or below it); `inline` is in normal flow inside
-   * whatever box the host gives it — the canvas composer card.
-   */
-  variant: 'popover' | 'inline';
   /** Placement class from the host — the composer card's grid area, for one. */
   className?: string;
   /** Called with the entry the person picked. The caller closes the list. */
@@ -54,7 +47,7 @@ export interface PromptUseCaseCatalogProps {
 }
 
 /** The searchable catalogue of starting points. Holds its query, never its open state. */
-export function PromptUseCaseCatalog({ open, id, variant, className, onSelect, lead, preferCategory }: PromptUseCaseCatalogProps) {
+export function PromptUseCaseCatalog({ open, id, className, onSelect, lead, preferCategory }: PromptUseCaseCatalogProps) {
   const t = useTranslations('promptUseCases');
   const [query, setQuery] = useState('');
 
@@ -72,7 +65,7 @@ export function PromptUseCaseCatalog({ open, id, variant, className, onSelect, l
   const showLead = !!lead && lead.items.length > 0 && !query.trim();
 
   return (
-    <div className={className ? `${styles.reveal} ${className}` : styles.reveal} data-open={open ? 'true' : 'false'} data-variant={variant}>
+    <div className={className ? `${styles.reveal} ${className}` : styles.reveal} data-open={open ? 'true' : 'false'}>
       <div id={id} className={styles.panel} aria-hidden={!open}>
         <div className={styles.panelHeader}>
           <div className={styles.heading}>{t('heading')}</div>
@@ -129,36 +122,4 @@ export function PromptUseCaseCatalog({ open, id, variant, className, onSelect, l
       </div>
     </div>
   );
-}
-
-/** The catalogue with its own tab, opening BELOW it — for a host whose prompt has
- *  nowhere better to put the trigger (the landing hero). */
-export function PromptUseCasePicker({ onSelect }: {
-  /** Called with the entry the person picked. The caller decides what to do
-   *  with it — the canvas applies packs in place, the landing hero only ever
-   *  seeds a prompt — which is why this hands over the ENTRY and not a string. */
-  onSelect: (entry: TemplateEntry) => void;
-}) {
-  const t = useTranslations('promptUseCases');
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const panelId = useId();
-  useDismissOnOutsidePress(rootRef, open, () => setOpen(false));
-
-  const tab = (
-    <button type="button" className={styles.tab} aria-expanded={open} aria-controls={panelId} onClick={() => setOpen((current) => !current)}>
-      <span>{t('tabLabel')}</span>
-      <span className={styles.arrow} aria-hidden="true">⌃</span>
-    </button>
-  );
-  const panel = (
-    <PromptUseCaseCatalog
-      open={open}
-      id={panelId}
-      variant="popover"
-      onSelect={(entry) => { onSelect(entry); setOpen(false); }}
-    />
-  );
-
-  return <div ref={rootRef} className={styles.root} data-open={open ? 'true' : 'false'}>{tab}{panel}</div>;
 }
