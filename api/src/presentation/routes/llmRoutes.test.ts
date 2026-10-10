@@ -1363,6 +1363,44 @@ describe('POST /v1/chat/completions trace-id leak boundary [1300]', () => {
     expect(text).not.toContain('responseBody');
     expect(text).not.toContain('RAW_UPSTREAM_SECRET_PAYLOAD');
   });
+
+  // Production api_error_log, 2026-10-03..10: ~80 "Cannot create property 'details' on
+  // string 'Strict-pin: …'" 500s — the strict-pin envelope's `error` is a string.
+  it('keeps a strict-pin 503 a 503 and stamps the trace id on the top-level details', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'pro', billingStatus: 'active', tokenDailyLimitOverride: null },
+      usageRow:  { used: 0 },
+    }));
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: async () => ({
+        response: new Response(JSON.stringify({
+          error: "Strict-pin: model 'claude-opus-5-5' is unavailable (cooldown).",
+          code: 'model_unavailable',
+          details: { requestedModel: 'claude-opus-5-5', reason: 'cooldown' },
+        }), { status: 503, headers: { 'content-type': 'application/json' } }),
+        resolvedModel: 'claude-opus-5-5',
+        resolvedVendor: 'anthropic',
+        retries: 0,
+        failovers: [],
+      }),
+    });
+
+    const req = new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_trace', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    const env = { ...(baseEnv as Record<string, unknown>), OPENROUTER_API_KEY: 'x' };
+    const res = await buildApp().request(req, {}, env, fakeExecutionCtx);
+
+    expect(res.status).toBe(503);
+    const body = await res.json() as { error?: unknown; details?: { reason?: string; traceId?: string } };
+    expect(body.error).toMatch(/^Strict-pin:/);
+    expect(body.details?.reason).toBe('cooldown');
+    expect(body.details?.traceId).toBeTruthy();
+  });
 });
 
 // ---------------------------------------------------------------------------

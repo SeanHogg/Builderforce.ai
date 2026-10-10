@@ -1,3 +1,26 @@
+## ✅ RESOLVED 2026-10-10 — A strict-pin "model unavailable" answers 503 again, not 500 (api)
+
+**Was:** `POST /llm/v1/chat/completions` stamped the trace id with `upstream.error.details = …`. The gateway's own strict-pin envelope (`LlmProxyService.ts`, `code: 'model_unavailable'`) carries `error` as a **string**, so the assignment threw `TypeError: Cannot create property 'details' on string 'Strict-pin: …'`. Every intended 503 "model unavailable (cooldown)" became a 500 from `errorHandler`. Production `api_error_log` held 80 of these in 2026-10-03 → 10-10 (`claude-opus-5-5` 54, `claude-sonnet-5-5` 22, free-pool pins 4), plus 66 more in `error_groups`.
+
+**Now:** `llmRoutes.ts` stamps the error object when `error` is an object, and the envelope's top-level `details` when it is a string. The status and body pass through unchanged. Regression test: `llmRoutes.test.ts` "keeps a strict-pin 503 a 503 and stamps the trace id on the top-level details". Verified by a Sonnet run: llmRoutes.test.ts 62/62, `type-check` (tsc + tsgo) 0 errors.
+
+## ✅ RESOLVED 2026-10-10 — Roadmap re-validated against production data
+
+Production was read (read-only) on the core, transactional and apps databases: `api_error_log`, `llm_failover_log`, `llm_health_probes`, `llm_usage_log`, `error_groups`, `activity_log`, `executions`, `pull_requests`, `projects`, `calendar_connections`, `release_notes` and `_migrations`. These entries closed:
+
+- **"One ticket carries three `pull_requests` rows for the same PR number."** The query the entry was blocked on found **0** groups of duplicate `(task_id, number)` rows and 0 NULL-`repo_id` duplicates. There is no uniqueness hole to backfill.
+- **"Retiring the legacy `video` project modality could not be checked against tenant data."** Exactly one project has `modality = 'video'`: #34 "Video Gen", tenant 1 (the operator's workspace), created 2026-07-18 and never updated. No data migration is needed.
+- **"Verify chat #55's actual `brainChats.projectId`."** Chat #55 ("Self Diagnostics") is on project 11, the same project as chats #71, #103, #104, #113 and #115.
+- **"⏸️ STATUS — the 2026-09-12 operator-decision pass was stopped mid-flight."** Migrations 1152–1157, 1160 and 1161 were all applied on 2026-09-12 21:49Z, so the "read 1160 before migrating" step is moot. `lib/content.ts` was split into `lib/content/*` and its oversized-file carve-out removed. Merge-driven closes go through `reviewGateAuthority` (`completeDeltaOnMerge.ts`, `mergeRecordedPr.ts`). What was left, partial blog translation and three operator items, moved onto the marketing-copy entry.
+- **"frontend `2026.9.33` — the fix making Ideas reachable is unverified and uncommitted."** `canvasPhases.test.ts` is committed (`94ef8e435`), and `'ideas'` is in every phase of `canvasPhases.ts`.
+- **"Run-visibility + ticket-parent changes are written but UNVERIFIED and unpackaged (PRD 29)."** Superseded. The packages have shipped since: brain-embedded 2026.10.4 (was staged at 2026.9.30), VSIX 2026.10.4 (2026.9.71), api 2026.10.18, frontend 2026.10.32.
+- **"`next build` fails: `@webdit/torch` cannot be resolved."** `webdit/runtime/node_modules/@webdit/torch` is now linked.
+- **"`CreationCanvas.tsx` is a 13,656-line god component."** It is 1,165 lines and out of the react-hooks baseline. The duplication that moved out with the code (68 role guards, 44 edge literals) stays open as its own entry.
+- **"The four new image vendors have not answered a live call."** The daily probe has now run six times. Cloudflare and Pollinations are proven `ok`. The entry was rewritten around the two that fail every sweep (Hugging Face, Gemini image).
+- **"A cloud-agent burst drove most of Sep 16's growth — confirm whether it was intended."** Merged into the role-slot re-open entry. `activity_log` shows the burst's mechanism: the business-analyst slot re-dispatched after each completion, interleaved with PRD-commit failures.
+
+**Re-measured, still open:** the run-telemetry copy has not run (core still holds 71,465 `tool_audit_events` and 3,107 `brain_chat_trace` rows). `builderforce-apps` holds 4 live sites, so the $0 plan's "delete builderforce-apps" was corrected. Blog translation stands at 8/162 catalog entries. The four run-path god modules and the three VS Code files have all grown. The ~40 entries that sat unsorted above the domain index were moved into their owning domain sections. New findings from the logs sit under "Production signals — 2026-10-10" in the roadmap.
+
 ## ✅ RESOLVED 2026-10-10 — Opened boards are released, and a board (or its App) can be closed (frontend 2026.10.32)
 
 **Was:**

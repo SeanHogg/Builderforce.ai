@@ -2521,10 +2521,19 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Surface the trace id inside the error envelope too, so a consumer hitting
     // a failure can quote `error.details.correlationId` straight back for a
     // superadmin lookup. Full diagnostics stay builder-side.
-    const upstreamErr = (upstream as { error?: { message?: unknown; details?: Record<string, unknown> } }).error;
-    const traceErrorMessage = upstreamErr ? String(upstreamErr.message ?? '') : null;
+    // `error` is an object for vendor envelopes but a STRING for our own strict-pin
+    // envelope (`model_unavailable`), whose details sit at the top level — assigning
+    // onto the string threw and turned every intended 503 into a 500.
+    const rawErr = (upstream as { error?: unknown }).error;
+    const upstreamErr = rawErr && typeof rawErr === 'object'
+      ? rawErr as { message?: unknown; details?: Record<string, unknown> }
+      : null;
+    const traceErrorMessage = upstreamErr ? String(upstreamErr.message ?? '') : typeof rawErr === 'string' ? rawErr : null;
     if (upstreamErr) {
       upstreamErr.details = { ...(upstreamErr.details ?? {}), correlationId: traceId, traceId };
+    } else if (typeof rawErr === 'string') {
+      const top = upstream as { details?: Record<string, unknown> };
+      top.details = { ...(top.details ?? {}), correlationId: traceId, traceId };
     }
 
     // Full diagnostic trace (builder-side only).
