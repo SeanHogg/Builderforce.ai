@@ -4,6 +4,7 @@ import { h, invoke, route, showError } from "../bridge.js";
 import { num, relTime, t } from "../i18n.js";
 import { refreshAgents, subscribeAgents } from "../agentStore.js";
 import { stepLine } from "../stepText.js";
+import { accountState } from "../cloud/accountStore.js";
 
 const STATUS_PILL = { running: "busy", succeeded: "ok", failed: "bad", stopped: "idle", denied: "idle" };
 const OUTCOME_PILL = { ok: "ok", fallback: "busy", failed: "bad", approved: "ok", denied: "idle" };
@@ -26,6 +27,21 @@ function liveRun(run) {
       h("button", { class: "ghost danger", text: t("runs.stop"), on: { click: stop } }),
     ),
     run.current != null && h("p", { class: "muted small", text: t("runs.atStep", { n: num(run.current + 1) }) }),
+  );
+}
+
+/** Answer approvals from the phone: opt-in, and only meaningful while signed in. */
+function phoneCard(state) {
+  const box = h("input", { type: "checkbox", checked: !!state.phoneApprovals, disabled: !accountState().signedIn });
+  box.addEventListener("change", async () => {
+    await invoke("agents_set_phone_approvals", { on: box.checked }).catch(showError);
+    await refreshAgents();
+  });
+  return h(
+    "section",
+    { class: "card stack" },
+    h("label", { class: "check" }, box, h("strong", { text: t("runs.phoneTitle") })),
+    h("p", { class: "muted small", text: accountState().signedIn ? t("runs.phoneBody") : t("runs.phoneSignIn") }),
   );
 }
 
@@ -72,9 +88,10 @@ function detail(host, id) {
 export function render(host, params) {
   if (params.get("run")) return detail(host, params.get("run"));
   const live = h("div");
+  const phone = h("div");
   const list = h("ul", { class: "card rows" });
   const empty = h("div", { class: "card empty-state", hidden: true }, h("p", { class: "muted", text: t("runs.empty") }));
-  host.append(h("header", { class: "page-head" }, h("div", {}, h("h1", { text: t("runs.title") }), h("p", { class: "muted", text: t("runs.intro") }))), live, empty, list);
+  host.append(h("header", { class: "page-head" }, h("div", {}, h("h1", { text: t("runs.title") }), h("p", { class: "muted", text: t("runs.intro") }))), live, phone, empty, list);
 
   let wasRunning = false;
   const load = () =>
@@ -88,6 +105,10 @@ export function render(host, params) {
   load();
   return subscribeAgents((s) => {
     live.replaceChildren(...[liveRun(s.run)].filter(Boolean));
+    if (!phone.firstChild || phone.dataset.on !== String(!!s.phoneApprovals)) {
+      phone.dataset.on = String(!!s.phoneApprovals);
+      phone.replaceChildren(phoneCard(s));
+    }
     // A run that just ended has a new status to show.
     if (wasRunning && !s.run) load();
     wasRunning = !!s.run;

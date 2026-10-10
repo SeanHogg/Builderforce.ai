@@ -40,6 +40,7 @@ pub async fn agents_state(agents: State<'_, Arc<Agents>>) -> Res<Value> {
             "enabled": s.enabled,
             "consentedAt": s.consented_at,
             "modelFile": s.model_file,
+            "phoneApprovals": s.phone_approvals,
             "takeoverKey": bf_teach::TAKEOVER_KEY,
             "recording": recording,
             "run": a.runs.active(),
@@ -69,6 +70,12 @@ pub async fn agents_set_enabled(agents: State<'_, Arc<Agents>>, on: bool) -> Res
             .map_err(e)
     })
     .await
+}
+
+/// Send steps waiting for approval to the person's account too, so the phone can answer them.
+#[tauri::command]
+pub async fn agents_set_phone_approvals(agents: State<'_, Arc<Agents>>, on: bool) -> Res<()> {
+    blocking(agents, move |a| a.settings.update(|s| s.phone_approvals = on).map(|_| ()).map_err(e)).await
 }
 
 /// Choose (or clear) the `.evermind` package the agents' experience trains.

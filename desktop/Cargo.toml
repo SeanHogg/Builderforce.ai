@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["crates/bf-index", "crates/bf-context", "crates/bf-memory", "crates/bf-teach", "crates/bf-vault", "crates/bf-cloud", "crates/bf-roblox", "app/src-tauri", "spawn/src-tauri"]
+members = ["crates/bf-index", "crates/bf-context", "crates/bf-memory", "crates/bf-mcp", "crates/bf-local", "crates/bf-teach", "crates/bf-vault", "crates/bf-cloud", "crates/bf-roblox", "app/src-tauri", "spawn/src-tauri"]
 
 [workspace.package]
-version = "2026.10.3"
+version = "2026.10.4"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/SeanHogg/Builderforce.ai"
@@ -30,6 +30,7 @@ ureq = { version = "2", features = ["json"] }
 dirs = "5"
 rand = "0.8"
 tempfile = "3"
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 
 [profile.release]
 lto = "thin"

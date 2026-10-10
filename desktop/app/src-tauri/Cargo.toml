@@ -1,6 +1,6 @@
 [package]
 name = "synapse"
-description = "Synapse — a private, local Evermind: code context for every AI tool, and Self-Directed Agents you teach once"
+description = "Synapse — a private, local Evermind: code context for every AI tool, Self-Directed Agents you teach once, local models and MCP connectors"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,6 +15,8 @@ bf-memory = { path = "../../crates/bf-memory" }
 bf-teach = { path = "../../crates/bf-teach" }
 bf-vault = { path = "../../crates/bf-vault" }
 bf-cloud = { path = "../../crates/bf-cloud" }
+bf-mcp = { path = "../../crates/bf-mcp" }
+bf-local = { path = "../../crates/bf-local" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

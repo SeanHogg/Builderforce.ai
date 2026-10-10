@@ -1,5 +1,20 @@
 [
   {
+    "slug": "your-private-evermind-on-your-machine",
+    "title": "Your private Evermind, on your machine — with local models, connectors and approvals from your phone",
+    "date": "2026-10-10",
+    "description": "Synapse now runs local models sized to your computer and serves them to Claude Code and your scripts, hosts MCP connectors the Brain can use, lets you approve an agent's step from your phone, and gives you a private model to start from. Everything it learns stays on your machine unless you publish it.",
+    "tags": [
+      "evermind",
+      "privacy",
+      "agents",
+      "local-models",
+      "mcp",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "build-roblox-games-by-talking",
     "title": "Spawn — build Roblox games by talking",
     "date": "2026-10-04",

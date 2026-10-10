@@ -9,6 +9,8 @@
 
 mod agents;
 mod cloud;
+mod connectors;
+mod local;
 mod pool;
 mod tray;
 mod update;
@@ -108,6 +110,7 @@ fn main() {
             agents::commands::run_get,
             agents::commands::skill_schedule,
             agents::commands::agents_set_model,
+            agents::commands::agents_set_phone_approvals,
             agents::evermind::facts_list,
             agents::evermind::evermind_overview,
             agents::evermind::fact_forget,
@@ -132,6 +135,20 @@ fn main() {
             cloud::chat::chat_send,
             cloud::chat::chat_tool_decide,
             cloud::request::cloud_request,
+            cloud::starter_model::evermind_fetch_model,
+            connectors::connectors_state,
+            connectors::connector_install,
+            connectors::connector_add,
+            connectors::connector_remove,
+            connectors::connector_set_enabled,
+            connectors::connector_refresh,
+            local::local_state,
+            local::local_pull,
+            local::local_delete,
+            local::local_set_chat_model,
+            local::local_set_api,
+            local::local_api_connect,
+            local::local_api_rotate_key,
         ])
         .setup(|app| {
             tray::install(app.handle())?;
@@ -144,9 +161,16 @@ fn main() {
                 tray::show_main(&handle);
                 let _ = handle.notification().builder().title("Synapse").body(tray::approval_body(skill)).show();
             });
-            app.manage(agents);
             // Signed in to builderforce.ai (or not) — resumed from the credential store.
-            app.manage(cloud::Cloud::open(&paths::data_dir()));
+            let cloud = cloud::Cloud::open(&paths::data_dir());
+            // A step waiting for approval can also be answered from the phone (opt-in).
+            agents.runs.set_relay(Arc::new(cloud::remote_approval::PhoneApprovals { cloud: cloud.clone(), agents: Arc::downgrade(&agents) }));
+            app.manage(agents);
+            app.manage(cloud);
+            // The MCP servers the person connected, for the Brain's tools.
+            app.manage(bf_mcp::Host::open(&paths::data_dir()));
+            // Local models: the managed runtime, and the compatible endpoint if switched on.
+            app.manage(bf_local::Local::open(&paths::data_dir()));
             Ok(())
         })
         .on_window_event(|window, event| {

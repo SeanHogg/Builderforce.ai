@@ -10,7 +10,40 @@ import { brainPanel } from "../brain/brainPanel.js";
 import { refreshBrain, setTraining } from "../brain/brainStore.js";
 import { sourcePicker } from "../brain/sourcePicker.js";
 import { workspaceConsole } from "../cloud/workspaceConsole.js";
-import { subscribeSource } from "../cloud/evermindSource.js";
+import { sourceState, subscribeSource } from "../cloud/evermindSource.js";
+
+/**
+ * Start from a workspace model: download one the person can already see as their private
+ * model. Renders nothing when there is none to offer (signed out, or no workspace models).
+ */
+function starter(result) {
+  const builds = sourceState().builds ?? [];
+  if (!builds.length) return null;
+  const select = h("select", { attrs: { "aria-label": t("evermind.starterPick") } }, ...builds.map((b) => h("option", { value: String(b.storageProjectId), text: b.name })));
+  const fetchIt = async (ev) => {
+    const btn = ev.currentTarget;
+    const build = builds.find((b) => String(b.storageProjectId) === select.value);
+    if (!build) return;
+    btn.disabled = true;
+    result.textContent = t("evermind.starterDownloading", { name: build.name });
+    try {
+      await invoke("evermind_fetch_model", { projectId: build.storageProjectId, name: build.name });
+      result.textContent = t("evermind.starterDone", { name: build.name });
+      await refreshAgents();
+    } catch (e) {
+      result.textContent = "";
+      showError(e);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+  return h(
+    "div",
+    { class: "stack-tight" },
+    h("span", { class: "muted small", text: t("evermind.starterBody") }),
+    h("div", { class: "row wrap" }, select, h("button", { class: "ghost", text: t("evermind.starterUse"), on: { click: fetchIt } })),
+  );
+}
 
 function learning(state) {
   const result = h("p", { class: "muted small", attrs: { "aria-live": "polite" } });
@@ -63,6 +96,7 @@ function learning(state) {
       h("div", { class: "min0" }, h("span", { class: "muted small", text: t("evermind.model") }), h("div", { class: "mono break", text: state.modelFile || t("evermind.noModel") })),
       h("div", { class: "row wrap" }, h("button", { class: "ghost", text: t("evermind.chooseModel"), on: { click: choose } }), state.modelFile && h("button", { class: "ghost", text: t("evermind.clearModel"), on: { click: clear } })),
     ),
+    starter(result),
     h("div", { class: "row wrap" }, trainBtn, pending),
     result,
   );
@@ -134,17 +168,27 @@ export function render(host) {
   const machine = h("div", { class: "stack" }, top, facts(), forgetAll());
   const intro = h("p", { class: "muted" });
   host.append(h("header", { class: "page-head" }, h("div", {}, h("h1", { text: t("evermind.title") }), intro), picker.el), brain.el, cloud.el, machine);
+  let model;
+  let agentState = null;
+  let buildCount = -1;
+  const paintLearning = () => agentState && top.replaceChildren(learning(agentState));
   const stopSource = subscribeSource((s) => {
     const local = s.selected === "local";
     machine.hidden = !local;
     intro.textContent = t(local ? "evermind.intro" : "evermind.introWorkspace");
+    // The starter offer depends on the workspace models, which arrive after sign-in.
+    const count = (s.builds ?? []).length;
+    if (count !== buildCount) {
+      buildCount = count;
+      paintLearning();
+    }
   });
-  let model;
   const stopAgents = subscribeAgents((s) => {
     // The learning card depends only on the chosen model; the poll must not reset it.
     if (s.modelFile === model && top.firstChild) return;
     model = s.modelFile;
-    top.replaceChildren(learning(s));
+    agentState = s;
+    paintLearning();
   });
   return () => {
     stopAgents();

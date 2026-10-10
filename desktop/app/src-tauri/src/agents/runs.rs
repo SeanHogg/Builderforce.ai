@@ -8,14 +8,28 @@ use bf_teach::model::{now_ms, RunStatus, Skill, SkillAction, StepOutcome};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::BTreeMap;
-use std::sync::{Arc, Condvar, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 /// Told `(skill name, run id)` when a step needs approval.
 type ApprovalHook = Box<dyn Fn(&str, &str) + Send + Sync>;
 
 /// An approval nobody answers is a no: a run never proceeds past a gate unattended.
-const APPROVAL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+pub const APPROVAL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+/// How often a relayed approval is checked for an answer given elsewhere.
+const RELAY_POLL: Duration = Duration::from_secs(3);
+
+/// Somewhere else a step's approval can be answered — the person's phone, through their
+/// Builderforce account. The window's Approve and the relay race; the first answer wins
+/// and the other side is told.
+pub trait ApprovalRelay: Send + Sync {
+    /// Open a request; `None` when nothing is relayed (switched off, signed out, offline).
+    fn open(&self, skill: &str, run_id: &str, step: usize, action: Option<&SkillAction>) -> Option<String>;
+    /// The answer given elsewhere, once there is one.
+    fn answer(&self, id: &str) -> Option<bool>;
+    /// Close the request with the decision taken here (a timeout is a no).
+    fn close(&self, id: &str, approved: bool);
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,11 +65,17 @@ pub struct Runs {
     cv: Condvar,
     /// Called when a step needs approval — the app brings the window forward and notifies.
     on_approval: ApprovalHook,
+    relay: OnceLock<Arc<dyn ApprovalRelay>>,
 }
 
 impl Runs {
     pub fn new(mem: Arc<MemoryClient>, on_approval: impl Fn(&str, &str) + Send + Sync + 'static) -> Arc<Self> {
-        Arc::new(Self { mem, inner: Mutex::new(Inner::default()), cv: Condvar::new(), on_approval: Box::new(on_approval) })
+        Arc::new(Self { mem, inner: Mutex::new(Inner::default()), cv: Condvar::new(), on_approval: Box::new(on_approval), relay: OnceLock::new() })
+    }
+
+    /// Let approvals also be answered through `relay` (set once, at start).
+    pub fn set_relay(&self, relay: Arc<dyn ApprovalRelay>) {
+        let _ = self.relay.set(relay);
     }
 
     pub fn active(&self) -> Option<ActiveRun> {
@@ -153,25 +173,47 @@ impl bf_teach::RunHooks for Hooks<'_> {
     }
 
     fn approve(&mut self, idx: usize) -> bool {
+        let action = self.skill.steps.get(idx).map(|s| s.action.clone());
         {
             let mut inner = self.runs.inner.lock().unwrap();
             inner.decision = None;
             if let Some(a) = inner.active.as_mut() {
                 a.pending_approval = Some(idx);
-                a.pending_action = self.skill.steps.get(idx).map(|s| s.action.clone());
+                a.pending_action = action.clone();
             }
         }
         (self.runs.on_approval)(&self.skill.name, self.run_id);
-        let inner = self.runs.inner.lock().unwrap();
-        let (mut inner, _) = self
-            .runs
-            .cv
-            .wait_timeout_while(inner, APPROVAL_TIMEOUT, |i| i.decision.is_none() && !i.stop)
-            .unwrap();
-        let approved = inner.decision.take().unwrap_or(false) && !inner.stop;
+        let relay = self.runs.relay.get().cloned();
+        let remote = relay.as_ref().and_then(|r| r.open(&self.skill.name, self.run_id, idx, action.as_ref()));
+        let deadline = Instant::now() + APPROVAL_TIMEOUT;
+        let mut answered_elsewhere = None;
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            let slice = if remote.is_some() { left.min(RELAY_POLL) } else { left };
+            let inner = self.runs.inner.lock().unwrap();
+            let (inner, _) = self.runs.cv.wait_timeout_while(inner, slice, |i| i.decision.is_none() && !i.stop).unwrap();
+            if inner.decision.is_some() || inner.stop || Instant::now() >= deadline {
+                break;
+            }
+            drop(inner);
+            // Never ask the network while holding the lock the window answers through.
+            if let (Some(r), Some(id)) = (&relay, &remote) {
+                if let Some(a) = r.answer(id) {
+                    answered_elsewhere = Some(a);
+                    break;
+                }
+            }
+        }
+        let mut inner = self.runs.inner.lock().unwrap();
+        let here = inner.decision.take();
+        let approved = answered_elsewhere.or(here).unwrap_or(false) && !inner.stop;
         if let Some(a) = inner.active.as_mut() {
             a.pending_approval = None;
             a.pending_action = None;
+        }
+        drop(inner);
+        if let (Some(r), Some(id), None) = (&relay, &remote, answered_elsewhere) {
+            r.close(id, approved);
         }
         approved
     }

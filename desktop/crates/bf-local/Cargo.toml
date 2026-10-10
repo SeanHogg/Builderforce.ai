@@ -1,0 +1,21 @@
+[package]
+name = "bf-local"
+description = "Synapse's local models: the Ollama runtime it manages, a hardware-aware model hub, and an OpenAI/Anthropic-compatible endpoint on this machine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ureq.workspace = true
+tiny_http.workspace = true
+rand.workspace = true
+sysinfo.workspace = true
+bf-vault = { path = "../bf-vault" }
+bf-cloud = { path = "../bf-cloud" }
+
+[dev-dependencies]
+tempfile.workspace = true

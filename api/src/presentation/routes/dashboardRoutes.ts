@@ -9,7 +9,8 @@
  */
 
 import { Hono } from 'hono';
-import { and, count, desc, eq, gte, inArray, sql, sum } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, notInArray, sql, sum } from 'drizzle-orm';
+import { SELF_OWNED_ACTION_TYPES } from '../../domain/approval/selfOwned';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   approvals,
@@ -322,7 +323,8 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
       db
         .select({ total: count() })
         .from(approvals)
-        .where(and(eq(approvals.tenantId, tenantId), eq(approvals.status, 'pending'))),
+        // Someone's own desktop steps (self-owned) are not the team's queue.
+        .where(and(eq(approvals.tenantId, tenantId), eq(approvals.status, 'pending'), notInArray(approvals.actionType, [...SELF_OWNED_ACTION_TYPES]))),
 
       // AgentHost counts: total and online
       db

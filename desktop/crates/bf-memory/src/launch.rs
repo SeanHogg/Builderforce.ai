@@ -9,6 +9,7 @@
 //! 3. The published package through `npx`, with the same arguments the memory installer
 //!    writes into every host (`buildServerSpec` in memory-mcp's `install/server-spec.ts`).
 
+use bf_mcp::LaunchSpec;
 use std::path::{Path, PathBuf};
 
 pub const LAUNCH_ENV: &str = "SYNAPSE_MEMORY_MCP";
@@ -19,33 +20,14 @@ const MCP_BIN: &str = "builderforce-memory-mcp";
 const RUNTIME_PEERS: [&str; 3] = ["@seanhogg/builderforce-memory", "@seanhogg/builderforce-memory-engine", "fake-indexeddb"];
 const CHECKOUT_BIN: [&str; 6] = ["builderforce-memory", "packages", "memory-mcp", "dist", "bin", "stdio.js"];
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LaunchSpec {
-    pub command: String,
-    pub args: Vec<String>,
-}
-
-impl LaunchSpec {
-    fn node(script: &Path) -> Self {
-        Self { command: "node".into(), args: vec![script.to_string_lossy().into_owned()] }
+fn npx(windows: bool) -> LaunchSpec {
+    let mut args = vec!["-p".to_string(), MCP_PACKAGE.into()];
+    for p in RUNTIME_PEERS {
+        args.push("-p".into());
+        args.push(p.into());
     }
-
-    fn npx(windows: bool) -> Self {
-        let mut args = vec!["-y".to_string(), "-p".into(), MCP_PACKAGE.into()];
-        for p in RUNTIME_PEERS {
-            args.push("-p".into());
-            args.push(p.into());
-        }
-        args.push(MCP_BIN.into());
-        if windows {
-            // `npx` is a `.cmd` shim on Windows; it has to go through `cmd`.
-            let mut with_shell = vec!["/c".to_string(), "npx".into()];
-            with_shell.extend(args);
-            Self { command: "cmd".into(), args: with_shell }
-        } else {
-            Self { command: "npx".into(), args }
-        }
-    }
+    args.push(MCP_BIN.into());
+    LaunchSpec::npx(args, windows)
 }
 
 /// The launch spec in effect for this process.
@@ -66,7 +48,7 @@ pub fn resolve_from(env_override: Option<&str>, exe: Option<&Path>, windows: boo
     if let Some(script) = exe.and_then(checkout_bin) {
         return LaunchSpec::node(&script);
     }
-    LaunchSpec::npx(windows)
+    npx(windows)
 }
 
 fn checkout_bin(exe: &Path) -> Option<PathBuf> {

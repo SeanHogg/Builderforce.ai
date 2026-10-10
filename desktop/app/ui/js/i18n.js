@@ -27,6 +27,10 @@ export function applyI18n(root = document) {
 const numberFmt = new Intl.NumberFormat(lang);
 export const num = (n) => numberFmt.format(n ?? 0);
 
+const gbFmt = new Intl.NumberFormat(lang, { maximumFractionDigits: 1 });
+/** A size in bytes, as gigabytes ("4.7 GB") or megabytes below one gigabyte. */
+export const bytes = (n) => (n >= 1e9 ? `${gbFmt.format(n / 1e9)} GB` : `${gbFmt.format((n ?? 0) / 1e6)} MB`);
+
 const relFmt = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
 const STEPS = [
   [60, "second"],

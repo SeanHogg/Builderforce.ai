@@ -1,4 +1,5 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { isSelfOwnedApproval } from '../../domain/approval/selfOwned';
 /**
  * runApprovalExpirySweep — expire pending approvals past their deadline and alert.
  *
@@ -63,7 +64,11 @@ export async function runApprovalExpirySweep(env: Env, db: Db): Promise<Approval
   }
 
   if (env.SLACK_APPROVAL_WEBHOOK_URL) {
-    for (const [, list] of byTenant) {
+    for (const [, all] of byTenant) {
+      // A self-owned request (a step on someone's own desktop) is theirs alone; the team
+      // channel never hears about it, expired or not.
+      const list = all.filter((a) => !isSelfOwnedApproval(a.actionType));
+      if (list.length === 0) continue;
       const lines = list.map((a) => `• *${a.actionType}* — ${a.description}`).join('\n');
       // Best-effort: a webhook outage must not abort the sweep or leave the rows
       // half-expired — the status change is already committed above.

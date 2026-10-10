@@ -6,7 +6,7 @@
 use crate::{CloudError, Session};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::time::Duration;
 
 /// One model turn, streamed: the longest a reasoning model with tools takes to finish.
@@ -116,33 +116,42 @@ fn mid_stream(message: String) -> CloudError {
     CloudError::Status { code: 502, message: format!("the model failed mid-answer: {message}"), reason: Some("stream_failed".into()) }
 }
 
+/// Read one turn from an OpenAI-shaped completion response — an event stream, or one
+/// JSON body when `whole_json` (a server that ignored `stream`). `on_text` gets each
+/// piece of the answer as it arrives. The gateway and a local runtime both answer this
+/// way, so every route a Brain turn takes reads its reply here.
+pub fn read_turn(whole_json: bool, reader: impl Read, mut on_text: impl FnMut(&str)) -> Result<Turn, String> {
+    let mut acc = Accumulator::default();
+    if whole_json {
+        let whole: Value = serde_json::from_reader(reader).map_err(|e| e.to_string())?;
+        acc.message(&whole);
+        if !acc.text.is_empty() {
+            on_text(&acc.text);
+        }
+        return Ok(acc.finish());
+    }
+    for line in BufReader::new(reader).lines() {
+        let line = line.map_err(|e| e.to_string())?;
+        if let Some(text) = acc.line(&line)? {
+            on_text(&text);
+        }
+        if acc.done {
+            break;
+        }
+    }
+    Ok(acc.finish())
+}
+
 impl Session {
     /// Run one model turn. `body` is the completion request (`messages`, and `tools` when
     /// the model may call them); the gateway routes the model unless `body.model` pins
     /// one. `on_text` gets each piece of the answer as it arrives.
-    pub fn stream_chat(&self, body: &Value, mut on_text: impl FnMut(&str)) -> Result<Turn, CloudError> {
+    pub fn stream_chat(&self, body: &Value, on_text: impl FnMut(&str)) -> Result<Turn, CloudError> {
         let mut body = body.clone();
         body["stream"] = json!(true);
         let resp = self.gateway("POST", "/chat/completions", Some(&body), TURN_TIMEOUT)?;
-        let mut acc = Accumulator::default();
-        if resp.content_type() == "application/json" {
-            let whole: Value = resp.into_json().map_err(|e| CloudError::Unreachable(e.to_string()))?;
-            acc.message(&whole);
-            if !acc.text.is_empty() {
-                on_text(&acc.text);
-            }
-            return Ok(acc.finish());
-        }
-        for line in BufReader::new(resp.into_reader()).lines() {
-            let line = line.map_err(|e| mid_stream(e.to_string()))?;
-            if let Some(text) = acc.line(&line).map_err(mid_stream)? {
-                on_text(&text);
-            }
-            if acc.done {
-                break;
-            }
-        }
-        Ok(acc.finish())
+        let whole_json = resp.content_type() == "application/json";
+        read_turn(whole_json, resp.into_reader(), on_text).map_err(mid_stream)
     }
 }
 

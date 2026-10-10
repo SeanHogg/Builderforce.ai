@@ -44,7 +44,8 @@ import { approvals, executions, tasks } from '../../infrastructure/database/sche
 import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import { checkAutoApprovalRules } from './approvalRuleRoutes';
 import { normalizeRequestKind, isAnswerableKind } from '../../domain/approval/requestKind';
-import { sendSlackNotification, notifyApprovalRequested } from '../../application/approval/approvalNotifier';
+import { sendSlackNotification, notifyApprovalRequested, notifyRequesterOfOwnApproval } from '../../application/approval/approvalNotifier';
+import { isSelfOwnedApproval, isApprovalVisibleTo } from '../../domain/approval/selfOwned';
 import { resumePausedExecution } from '../../application/runtime/executionResume';
 import { bumpExecutionState } from '../../application/runtime/executionStateVersion';
 import { dispatchCloudRunForTask, type CloudDispatchOutcome } from '../../application/runtime/dispatchCloudRun';
@@ -200,10 +201,19 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
 
     const kind = normalizeRequestKind(body.kind);
 
+    // A self-owned approval (a Synapse step on the caller's own desktop) belongs to the
+    // signed-in person who raised it: a machine key cannot raise one, the requester is
+    // the caller (never a body field), and no team rule may auto-approve it.
+    const selfOwned = isSelfOwnedApproval(body.actionType);
+    const callerUserId = c.get('userId') as string | undefined;
+    if (selfOwned && (resolvedAgentHostId != null || !callerUserId)) {
+      return c.json({ error: `'${body.actionType}' approvals are raised by a signed-in person` }, 403);
+    }
+
     // ── Auto-approval check ──────────────────────────────────────────────────
     // Only 'approval' kinds can auto-resolve; questions/feedback always need a
     // human to actually answer, so they never short-circuit to a status.
-    const autoApproved = kind === 'approval'
+    const autoApproved = kind === 'approval' && !selfOwned
       && await checkAutoApprovalRules(db, tenantId, body.actionType, body.metadata ?? null);
 
     const approvalId = crypto.randomUUID();
@@ -214,7 +224,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
       id:          approvalId,
       tenantId,
       agentHostId:      resolvedAgentHostId,
-      requestedBy: body.requestedBy ?? (resolvedAgentHostId ? String(resolvedAgentHostId) : null),
+      requestedBy: selfOwned ? callerUserId! : body.requestedBy ?? (resolvedAgentHostId ? String(resolvedAgentHostId) : null),
       kind,
       actionType:  body.actionType,
       description: body.description,
@@ -247,8 +257,11 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
       });
     }
 
-    // Slack + email fan-out for new pending requests (skip if auto-approved).
-    if (!autoApproved) {
+    // Slack + email fan-out for new pending requests (skip if auto-approved). A
+    // self-owned request tells its owner alone — never the team.
+    if (selfOwned) {
+      await notifyRequesterOfOwnApproval(env, db, { userId: callerUserId!, description: body.description });
+    } else if (!autoApproved) {
       await notifyApprovalRequested(env, db, {
         tenantId, approvalId, kind, actionType: body.actionType, description: body.description,
       });
@@ -280,6 +293,9 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
       .where(eq(approvals.tenantId, tenantId))
       .orderBy(desc(approvals.createdAt)).limit(LIST_ROW_CAP);
 
+    // Someone else's self-owned approvals (their desktop's steps) are not the tenant's queue.
+    const viewer = c.get('userId') as string | undefined;
+    rows = rows.filter((r) => isApprovalVisibleTo(r, viewer));
     if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
     if (agentHostFilter != null) rows = rows.filter((r) => r.agentHostId === agentHostFilter);
     if (projectFilter != null) rows = rows.filter((r) => r.projectId === projectFilter);
@@ -292,7 +308,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const [row] = await db.select().from(approvals).where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
-    if (!row) return c.json({ error: 'Approval not found' }, 404);
+    if (!row || !isApprovalVisibleTo(row, c.get('userId') as string | undefined)) return c.json({ error: 'Approval not found' }, 404);
     return c.json(row);
   });
 
@@ -320,13 +336,18 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
     if (body.status === 'answered' && !body.responseText?.trim()) {
       return c.json({ error: 'responseText is required when answering' }, 400);
     }
+    const [existing] = await db.select().from(approvals).where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
+    // A self-owned approval is invisible — and so unanswerable — to anyone but its owner.
+    if (!existing || !isApprovalVisibleTo(existing, userId)) return c.json({ error: 'Approval not found' }, 404);
+
     // Approving/rejecting is the governance action; ANSWERING a question merely
     // steers a run that is already approved, so it stays at the developer tier.
     // The split cannot be a route-level middleware because it depends on the
     // request BODY, so the permission is checked inline — same registry, same
     // resolution (role defaults → overrides → per-user grants/revocations) as
     // `requirePermission`, just applied where the branch actually is.
-    if (body.status !== 'answered') {
+    // A self-owned approval is not governance: its owner decides it, whatever their role.
+    if (body.status !== 'answered' && !isSelfOwnedApproval(existing.actionType)) {
       if (!isManager(c)) {
         return c.json({
           error: `Requires at least '${TenantRole.MANAGER}' role to approve or reject a request`,
@@ -340,8 +361,6 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
       }
     }
 
-    const [existing] = await db.select().from(approvals).where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
-    if (!existing) return c.json({ error: 'Approval not found' }, 404);
     if (existing.status !== 'pending') return c.json({ error: 'Request is not pending' }, 409);
 
     const kind = normalizeRequestKind(existing.kind);

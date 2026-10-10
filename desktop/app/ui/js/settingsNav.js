@@ -10,7 +10,8 @@ export const SETTINGS_GROUPS = [
   { key: "account", views: ["account"] },
   { key: "index", views: ["workspaces", "search", "activity"] },
   { key: "agents", views: ["teach", "skills", "runs"] },
-  { key: "tools", views: ["connect"] },
+  { key: "tools", views: ["connect", "connectors"] },
+  { key: "models", views: ["models"] },
 ];
 
 /** Pages that live under a settings page (a workspace under Workspaces, …). */

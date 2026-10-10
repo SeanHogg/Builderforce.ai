@@ -7,6 +7,7 @@
 use crate::{gateway_base, CloudError, TIMEOUT};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::io::Read;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -150,6 +151,32 @@ impl Session {
             Err(e) if e.is_unauthorized() => {
                 *self.token.lock().unwrap() = None;
                 self.send(method, path, body.as_ref(), timeout)
+            }
+            other => other,
+        }
+    }
+
+    /// Download a file the platform API serves (a model artifact), as the signed-in person,
+    /// up to `max_bytes`. A 401 re-exchanges the token once.
+    pub fn api_bytes(&self, path: &str, max_bytes: u64, timeout: Duration) -> Result<Vec<u8>, CloudError> {
+        let fetch = || -> Result<Vec<u8>, CloudError> {
+            let (token, _) = self.bearer()?;
+            let resp = ureq::get(&format!("{}{path}", self.base))
+                .timeout(timeout)
+                .set("authorization", &format!("Bearer {token}"))
+                .call()
+                .map_err(CloudError::from_ureq)?;
+            let mut buf = Vec::new();
+            resp.into_reader().take(max_bytes + 1).read_to_end(&mut buf).map_err(|e| CloudError::Unreachable(e.to_string()))?;
+            if buf.len() as u64 > max_bytes {
+                return Err(CloudError::Status { code: 413, message: format!("{path} is larger than {max_bytes} bytes"), reason: None });
+            }
+            Ok(buf)
+        };
+        match fetch() {
+            Err(e) if e.is_unauthorized() => {
+                *self.token.lock().unwrap() = None;
+                fetch()
             }
             other => other,
         }

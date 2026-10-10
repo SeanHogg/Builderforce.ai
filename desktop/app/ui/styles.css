@@ -331,3 +331,9 @@ ul.stack, ol.stack { list-style: none; margin: 0; padding: 0; }
   .act-meta { display: none; }
   .review-step .thumb { width: 100%; }
 }
+
+/* ---------- connectors & local models ---------- */
+.section-title { margin: 8px 0 0; }
+.chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.grid { grid-template-columns: repeat(auto-fill, minmax(min(290px, 100%), 1fr)); }
+textarea { font: 12px/1.5 var(--font-mono); color: var(--text); background: var(--sunken); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; resize: vertical; width: 100%; }

@@ -6,6 +6,7 @@ import RelatedArticles from '@/components/blog/RelatedArticles';
 import BrainBackdrop from '@/components/BrainBackdrop';
 import ModelApiSamples from '@/components/ModelApiSamples';
 import MarketingFaq from '@/components/marketing/MarketingFaq';
+import DesktopAppDownload from '@/components/marketing/DesktopAppDownload';
 import { evermindSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import { EVERMIND } from '@/lib/content/brand';
@@ -284,6 +285,9 @@ export default async function EvermindPage() {
               ))}
             </div>
           </section>
+
+          {/* ── Synapse: each person's private Evermind, on their own machine ── */}
+          <DesktopAppDownload />
 
           {/* ── Call it over the API ── */}
           <section className="ev-section">

@@ -5,9 +5,12 @@
 
 pub mod account;
 mod brain;
+mod brain_tools;
 pub mod chat;
 mod live;
+pub mod remote_approval;
 pub mod request;
+pub mod starter_model;
 
 use bf_cloud::{Account, CloudError, Session};
 use live::Replies;

@@ -27,6 +27,19 @@ pub fn approval_body(skill: &str) -> String {
     }
 }
 
+/// What a step waiting for approval says on the person's phone (the request is raised in
+/// the OS locale, which is the language they read Synapse in).
+pub fn phone_approval_text(skill: &str, step: usize) -> String {
+    let n = step + 1;
+    match lang().as_str() {
+        "de" => format!("Synapse: „{skill}“ möchte Schritt {n} auf Ihrem Computer ausführen."),
+        "es" => format!("Synapse: «{skill}» quiere ejecutar el paso {n} en tu ordenador."),
+        "fr" => format!("Synapse : « {skill} » veut exécuter l’étape {n} sur votre ordinateur."),
+        "zh" => format!("Synapse：“{skill}”想在你的电脑上执行第 {n} 步。"),
+        _ => format!("Synapse: “{skill}” wants to run step {n} on your computer."),
+    }
+}
+
 fn labels() -> Labels {
     match lang().as_str() {
         "de" => Labels { open: "Öffnen", quit: "Beenden", tooltip: "Synapse — indiziert lokal" },

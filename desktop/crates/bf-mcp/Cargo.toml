@@ -1,0 +1,16 @@
+[package]
+name = "bf-mcp"
+description = "Synapse's MCP client over stdio, and the host that runs the MCP servers a person connects (one-click catalog or their own)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+bf-vault = { path = "../bf-vault" }
+
+[dev-dependencies]
+tempfile.workspace = true

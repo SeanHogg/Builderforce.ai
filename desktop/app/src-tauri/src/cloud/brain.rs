@@ -10,23 +10,22 @@
 //! A tool that only reads runs at once; one that changes something waits for the person's
 //! Approve in the transcript ([`super::live`]).
 
+use super::brain_tools::Toolbox;
 use super::live::LiveReply;
 use super::Cloud;
 use crate::agents::Agents;
-use bf_cloud::llm::ToolCall;
-use bf_cloud::tools::PlatformTool;
+use bf_cloud::llm::{ToolCall, Turn};
 use bf_cloud::{CloudError, Session};
+use bf_local::Local;
+use bf_mcp::Host;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// How much of the conversation the Brain reads, and how much recall it is given.
 const HISTORY: usize = 24;
 const RECALL_CHARS: usize = 6000;
-/// The platform catalog the Brain is offered: projects, tickets, boards, specs and OKRs,
-/// the workspace's connectors and MCP servers — not the platform's own administration.
-const SURFACE: &str = "delivery";
 /// How much of one tool's result the model reads back.
 const RESULT_CHARS: usize = 16_000;
 /// Tool calls failing this many times in a row end the tools for this reply: the model
@@ -41,7 +40,8 @@ const SYSTEM: &str = "You are the Brain in Synapse, the person's Builderforce de
 Answer directly and concisely. You can see the conversation and, below, what the person's private \
 Evermind recalls about the question from their own tools on this machine — use it when it is relevant \
 and say so; never invent memories. You have the workspace's platform tools (`builtin_<domain>_<method>`: \
-projects, tickets, boards, specs, OKRs, and the workspace's connectors). Resolve names to ids with the \
+projects, tickets, boards, specs, OKRs, and the workspace's connectors) and the tools of the MCP servers \
+the person connected to Synapse on this machine (`mcp_<connector>_<tool>`). Resolve names to ids with the \
 list/get tools before acting. Read-only tools run at once; a tool that changes something is shown to the \
 person to approve, so call it directly when you have the details — if they decline you get `{\"cancelled\": true}`, \
 so adjust rather than retry. Never say you did something unless the tool returned success. Code work and \
@@ -92,11 +92,6 @@ fn text(v: &Value) -> String {
     }
 }
 
-/// A tool's name as a person reads it: `builtin_tasks_create` → `tasks create`.
-fn label(name: &str) -> String {
-    name.strip_prefix("builtin_").unwrap_or(name).replace('_', " ")
-}
-
 /// The conversation so far, as the model reads it; and the person's latest question.
 fn conversation(messages: &[Value]) -> (Vec<Value>, String) {
     let mut convo = Vec::new();
@@ -129,8 +124,8 @@ enum Outcome {
     Failed(String),
 }
 
-fn run_tool(s: &Session, tools: &[PlatformTool], call: &ToolCall, progress: &Progress) -> Result<Outcome, CloudError> {
-    let Some(tool) = tools.iter().find(|t| t.name == call.name) else {
+fn run_tool(s: &Session, host: &Host, tools: &Toolbox, call: &ToolCall, progress: &Progress) -> Result<Outcome, CloudError> {
+    let Some(tool) = tools.find(&call.name) else {
         return Ok(Outcome::Failed(format!("there is no tool named {}", call.name)));
     };
     let args = if call.arguments.trim().is_empty() { "{}" } else { call.arguments.as_str() };
@@ -138,16 +133,35 @@ fn run_tool(s: &Session, tools: &[PlatformTool], call: &ToolCall, progress: &Pro
         Ok(v @ Value::Object(_)) => v,
         _ => return Ok(Outcome::Failed(format!("the arguments for {} are not a JSON object", call.name))),
     };
-    if tool.writes() && !progress.approve(label(&tool.name), args.to_string()) {
+    if tool.writes() && !progress.approve(tool.label(), args.to_string()) {
         return Ok(Outcome::Declined);
     }
-    progress.update(|r| r.activity = Some(label(&tool.name)));
-    let result = s.call_platform_tool(tool, args);
+    progress.update(|r| r.activity = Some(tool.label()));
+    let result = tool.run(s, host, args);
     progress.update(|r| r.activity = None);
     match result {
         Ok(out) => Ok(Outcome::Ran(out.chars().take(RESULT_CHARS).collect())),
         Err(CloudError::KeyRejected) => Err(CloudError::KeyRejected),
         Err(e) => Ok(Outcome::Failed(e.to_string())),
+    }
+}
+
+/// One model turn on the route the person chose: an installed local model, or the gateway.
+/// Each round's text continues the same reply, a paragraph apart.
+fn model_turn(s: &Session, local: &Local, body: &Value, progress: &Progress) -> Result<Turn, String> {
+    let mut first = true;
+    let on_text = |piece: &str| {
+        progress.update(|r| {
+            if first && !r.draft.is_empty() {
+                r.draft.push_str("\n\n");
+            }
+            r.draft.push_str(piece);
+        });
+        first = false;
+    };
+    match local.chat_model() {
+        Some(model) => bf_local::chat::stream_chat(&local.base(), &model, body, on_text).map_err(|e| format!("{e:#}")),
+        None => s.stream_chat(body, on_text).map_err(|e| progress.cloud.fail(e)),
     }
 }
 
@@ -173,12 +187,10 @@ fn reply(progress: &Progress, agents: &Agents) -> Result<(), String> {
     prompt.extend(convo);
 
     // The tools, likewise: an unreachable catalog is an answer without them.
-    let tools = match s.platform_tools(SURFACE) {
-        Ok(t) => t,
-        Err(CloudError::KeyRejected) => return Err(cloud.fail(CloudError::KeyRejected)),
-        Err(_) => Vec::new(),
-    };
-    let mut offered: Vec<Value> = tools.iter().map(PlatformTool::as_function).collect();
+    let host = progress.app.state::<Arc<Host>>().inner().clone();
+    let local = progress.app.state::<Arc<Local>>().inner().clone();
+    let tools = Toolbox::gather(&s, &host).map_err(|e| cloud.fail(e))?;
+    let mut offered = tools.offered();
 
     let mut failures = 0;
     loop {
@@ -186,19 +198,7 @@ fn reply(progress: &Progress, agents: &Agents) -> Result<(), String> {
         if !offered.is_empty() {
             body["tools"] = Value::Array(offered.clone());
         }
-        // Each round's text continues the same reply, a paragraph apart.
-        let mut first = true;
-        let turn = s
-            .stream_chat(&body, |piece| {
-                progress.update(|r| {
-                    if first && !r.draft.is_empty() {
-                        r.draft.push_str("\n\n");
-                    }
-                    r.draft.push_str(piece);
-                });
-                first = false;
-            })
-            .map_err(|e| cloud.fail(e))?;
+        let turn = model_turn(&s, &local, &body, progress)?;
         if turn.tool_calls.is_empty() || offered.is_empty() {
             break;
         }
@@ -209,7 +209,7 @@ fn reply(progress: &Progress, agents: &Agents) -> Result<(), String> {
             .collect();
         prompt.push(json!({ "role": "assistant", "content": turn.text, "tool_calls": calls }));
         for call in &turn.tool_calls {
-            let content = match run_tool(&s, &tools, call, progress).map_err(|e| cloud.fail(e))? {
+            let content = match run_tool(&s, &host, &tools, call, progress).map_err(|e| cloud.fail(e))? {
                 Outcome::Ran(out) => {
                     failures = 0;
                     out
@@ -240,12 +240,6 @@ fn reply(progress: &Progress, agents: &Agents) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_tool_reads_as_what_it_does() {
-        assert_eq!(label("builtin_tasks_create"), "tasks create");
-        assert_eq!(label("acme_send_invoice"), "acme send invoice");
-    }
 
     #[test]
     fn the_conversation_names_other_authors_and_finds_the_question() {

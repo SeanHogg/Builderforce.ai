@@ -10,6 +10,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * the call site, since the transport differs.)
  */
 import { eq, and, or } from 'drizzle-orm';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import { tenantMembers, users } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -117,11 +118,34 @@ export async function notifyApprovalRequested(
       const subject = `[Builderforce] ${isQuestion ? 'An agent needs your input' : 'Approval required'}: ${args.actionType}`;
       const html = `<p>An agent ${verb}.</p>
 <ul>
-  <li><strong>${isQuestion ? 'Question' : 'Action'}:</strong> ${args.actionType}</li>
-  <li><strong>Detail:</strong> ${args.description}</li>
+  <li><strong>${isQuestion ? 'Question' : 'Action'}:</strong> ${escapeHtml(args.actionType)}</li>
+  <li><strong>Detail:</strong> ${escapeHtml(args.description)}</li>
 </ul>
 <p><a href="${link}">${isQuestion ? 'Answer the agent' : 'Review approval'}</a></p>`;
       await sendEmailNotification(env.RESEND_API_KEY, env.NOTIFICATION_EMAIL_FROM, emails, subject, html);
     }
   }
+}
+
+/**
+ * Tell the ONE person a self-owned approval belongs to (a Synapse step on their own
+ * desktop) that it is waiting — never the team: no Slack channel, no manager email.
+ * Best-effort and a no-op without email config, like the team fan-out.
+ */
+export async function notifyRequesterOfOwnApproval(
+  env: NotifierEnv,
+  db: Db,
+  args: { userId: string; description: string },
+): Promise<void> {
+  if (!env.RESEND_API_KEY || !env.NOTIFICATION_EMAIL_FROM) return;
+  const [row] = await db.select({ email: users.email }).from(users).where(eq(users.id, args.userId)).limit(1);
+  if (!row?.email) return;
+  const link = `${env.APP_URL ?? 'https://builderforce.ai'}/workforce?tab=approvals`;
+  await sendEmailNotification(
+    env.RESEND_API_KEY,
+    env.NOTIFICATION_EMAIL_FROM,
+    [row.email],
+    '[Builderforce] Synapse is waiting for your approval',
+    `<p>${escapeHtml(args.description)}</p><p><a href="${link}">Approve or decline</a></p>`,
+  );
 }

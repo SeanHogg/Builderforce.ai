@@ -16,6 +16,10 @@ pub struct AgentSettings {
     pub consented_at: Option<i64>,
     /// A `.evermind` package to train with what the agents learn. None = no training.
     pub model_file: Option<String>,
+    /// Also send a step waiting for approval to the person's Builderforce account, so it
+    /// can be answered from their phone. Off by default: the step's description leaves
+    /// the machine only when they choose this.
+    pub phone_approvals: bool,
 }
 
 pub struct Settings {

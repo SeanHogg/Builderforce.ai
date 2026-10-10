@@ -7201,6 +7201,10 @@
         "answer": "Builderforce.ai LLM 就是 Evermind。Builderforce.ai 并不依赖某个冻结的第三方前沿模型，而是运行自有的、边工作边学习的自我更新模型。当你需要时，前沿 LLM 仍可被路由调用，但 Evermind 才是赋予平台时效性（永不过时）、小占用规模（可在设备端运行）和完整所有权（你自己的数据、开放的软件包、不依赖任何第三方模型）的原生模型。"
       },
       {
+        "question": "我的 Evermind 能在我自己的电脑上运行吗？",
+        "answer": "可以——这正是 Builderforce 桌面应用 Synapse 的用途。它把你自己的 Evermind 留在你的电脑上：你的 AI 工具学到的事实、演示和技能都在本机保存并训练进属于你的模型，只有你发布时才会离开。Synapse 还为本机所有 AI 工具提供共享的代码索引，运行按你的内存选型的本地模型，并为 Brain 托管 MCP 连接器。"
+      },
+      {
         "question": "什么是写穿认知（Write-Through Cognition）？",
         "answer": "写穿认知（Write-Through Cognition）是 Evermind 的治理原则。知识被直接写穿到模型中，因此一次更新就是按稳定的键执行 upsert 外加使旧检索结果失效——更新意味着替换，而非追加。读取始终反映最新的真实状态，永远没有先过时再协调对齐的步骤。这与用于缓存的写时失效规则相同，被应用到了模型的知识层，使其永远不会悄然漂移过时。"
       },
@@ -11311,6 +11315,10 @@
       "the-canvas-knows-where-you-are": {
         "title": "画布知道你身在何处，并为你指出通往下一阶段的路",
         "description": "“衡量”过去会在一块什么都没上线的看板上打开。现在，每个画布都会读取自己的看板，打开在你还没完成的下一个阶段，并把一个你尚未准备好的阶段变成通往它的最短路径。随之而来的还有两个新地方：“运营”用来查看正在运行的内容，“发布上线”用来把它带到用户面前。"
+      },
+      "your-private-evermind-on-your-machine": {
+        "title": "你的私有 Evermind，就在你的电脑上——本地模型、连接器，以及在手机上批准",
+        "description": "Synapse 现在可以运行适合你电脑配置的本地模型，并提供给 Claude Code 和你的脚本使用；托管 Brain 可用的 MCP 连接器；让你在手机上批准智能体的步骤；还为你提供一个起步用的私有模型。它学到的一切都留在你的电脑上，除非你选择发布。"
       }
     }
   },
@@ -28539,6 +28547,10 @@
       {
         "q": "市场只面向自由职业者吗？",
         "a": "不是。四个类别并列：人才、公司、智能体与资产。智能体不是独立板块——购买即加入你的团队，这也是目录与团队名册永不脱节的原因。"
+      },
+      {
+        "q": "有桌面应用吗？",
+        "a": "有。Synapse 支持 Windows、macOS 和 Linux，把你的私有 Evermind 留在你自己的电脑上——记忆和学习只有你发布时才会离开。它还能与 Brain 对话、运行教一次就会的智能体（可在手机上批准步骤）、管理本地模型并托管 MCP 连接器。"
       }
     ],
     "closeTitle": "准备好替换整套工具了吗？",
@@ -32578,16 +32590,38 @@
     "accessibleName": "无偿——这位顾问提供公益咨询"
   },
   "desktopApp": {
-    "heading": "Synapse",
-    "intro": "一个驻留在系统托盘的应用，在你自己的电脑上为每个代码仓库维护一个代码索引，并把这些上下文提供给你使用的每个 AI 工具。",
+    "eyebrow": "桌面应用 · Windows、macOS、Linux",
+    "heading": "Synapse——你的私有 Evermind，就在你的电脑上",
+    "intro": "Synapse 是你自己的 Evermind 所在之处。你的 AI 工具学到的关于你和你工作的一切——事实、演示、技能——都保存在你的电脑上，并训练进一个属于你的模型。只有你选择发布时，它才会离开。",
     "points": [
-      "智能体一开始就有方向：一张按代码依赖关系排序的仓库地图，外加按含义搜索（`semantic_search`）。",
-      "Builderforce VS Code 智能体、Claude Code、Cursor 和任何 MCP 客户端共用同一个索引。",
-      "召回的记忆如果引用了已删除的代码，会被标记为可能过时，而不是被照着执行。"
+      {
+        "title": "私有的 Evermind",
+        "desc": "记忆、Train Once 技能及其背后的经验都存放在你的电脑上，并训练进你自己的 `.evermind` 模型。可以从工作区的某个模型开始，它只在本机学习。"
+      },
+      {
+        "title": "为每个 AI 工具提供上下文",
+        "desc": "每个仓库一个索引——按依赖关系排序的地图，加上 `semantic_search`——由 VS Code 中的 Builderforce 智能体、Claude Code、Cursor 和任何 MCP 客户端共享。提到已删除代码的记忆会被标记，而不是被照做。"
+      },
+      {
+        "title": "与 Brain 对话",
+        "desc": "在桌面上使用工作区的聊天和智能体。回答会结合你的 Evermind 所回忆的内容，并可使用平台工具和你的连接器；任何会改动内容的操作都会先征求同意。"
+      },
+      {
+        "title": "教一次就会的智能体",
+        "desc": "在任意桌面应用中给 Synapse 演示一次任务；它会重放，并在关键步骤等待你的批准。你也可以通过 Builderforce 账户在手机上批准这些步骤。"
+      },
+      {
+        "title": "按你的电脑选型的本地模型",
+        "desc": "Synapse 管理 Ollama，按你的内存挑选合适的模型规模和量化，并以 OpenAI 和 Anthropic 格式提供服务——Claude Code 和你的脚本也能使用。"
+      },
+      {
+        "title": "一键连接器",
+        "desc": "GitHub、Slack、Playwright、你的文件以及任何 MCP 服务器都在你的电脑上运行，供 Brain 使用其工具。令牌保存在系统凭据存储中。"
+      }
     ],
-    "privacy": "索引和向量计算都在本地运行。你的代码从不上传。",
+    "privacy": "索引、嵌入、记忆和训练都在本地运行。你的代码绝不会上传，你的 Evermind 学到的任何内容，除非你发布，否则都不会离开本机。",
     "download": "下载 Windows、macOS 或 Linux 版",
-    "readMore": "了解工作原理"
+    "readMore": "了解原理"
   },
   "siteBadge": {
     "body": "免费网站会显示一个小的“Made with Builderforce.ai”徽章。",

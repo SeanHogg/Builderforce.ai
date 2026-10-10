@@ -9,7 +9,7 @@
 
 pub mod commands;
 pub mod evermind;
-mod runs;
+pub mod runs;
 mod scheduler;
 mod secrets;
 mod settings;

@@ -7201,6 +7201,10 @@
         "answer": "The Builderforce.ai LLM is Evermind. Rather than relying on a frozen third-party frontier model, Builderforce.ai runs its own self-updating model that learns as it works. Frontier LLMs can still be routed to when you want them, but Evermind is the native model that gives the platform currency (never stale), a small footprint (runs on-device), and full ownership (your data, open packages, no third-party model dependency)."
       },
       {
+        "question": "Can my Evermind run on my own computer?",
+        "answer": "Yes — that is what Synapse, the Builderforce desktop app, is for. It keeps your own Evermind on your machine: the facts, demonstrations and skills your AI tools learn are stored and trained there, in a model you own, and leave only if you publish them. Synapse also gives every AI tool on the machine a shared code index, runs local models sized to your memory, and hosts MCP connectors for the Brain."
+      },
+      {
         "question": "What is Write-Through Cognition?",
         "answer": "Write-Through Cognition is the governing principle of Evermind. Knowledge is written straight through into the model, so an update is an upsert by a stable key plus an invalidation of the old recall — an update means replace, not append. Reads always reflect the latest truth and there is never a stale-then-reconcile step. It is the same invalidate-on-write rule used for caching, applied to a model's knowledge tier so it can never quietly drift out of date."
       },
@@ -11311,6 +11315,10 @@
       "the-canvas-knows-where-you-are": {
         "title": "The canvas knows where you are — and shows you the way to the next phase",
         "description": "Measure used to open on a board with nothing live. Now every canvas reads its own board, opens on the next phase you have not done, and turns a phase you are not ready for into the shortest path there. Two new places come with it, Operate for what is running and Launch for putting it in front of people."
+      },
+      "your-private-evermind-on-your-machine": {
+        "title": "Your private Evermind, on your machine — with local models, connectors and approvals from your phone",
+        "description": "Synapse now runs local models sized to your computer and serves them to Claude Code and your scripts, hosts MCP connectors the Brain can use, lets you approve an agent's step from your phone, and gives you a private model to start from. Everything it learns stays on your machine unless you publish it."
       }
     }
   },
@@ -28539,6 +28547,10 @@
       {
         "q": "Is the marketplace only for freelancers?",
         "a": "No. Four families list side by side: talent, companies, agents and assets. Agents are not a separate area — buying one adds it to your team, which is why the catalogue and your roster can never drift apart."
+      },
+      {
+        "q": "Is there a desktop app?",
+        "a": "Yes. Synapse runs on Windows, macOS and Linux and keeps your private Evermind on your own machine — memory and learning that never leave it unless you publish them. It also chats with the Brain, runs agents you teach once (with approvals you can answer from your phone), manages local models and hosts MCP connectors."
       }
     ],
     "closeTitle": "Ready to replace the stack?",
@@ -32578,14 +32590,36 @@
     "accessibleName": "Unpaid — this advisor offers volunteer sessions"
   },
   "desktopApp": {
-    "heading": "Synapse",
-    "intro": "A tray app that keeps one code index per repository on your own machine — and hands that context to every AI tool you use.",
+    "eyebrow": "Desktop app · Windows, macOS, Linux",
+    "heading": "Synapse — your private Evermind, on your machine",
+    "intro": "Synapse is where your own Evermind lives. Everything your AI tools learn about you and your work — facts, demonstrations, skills — is kept and trained on your computer, in a model you own. It leaves only if you choose to publish it.",
     "points": [
-      "Agents start oriented: a map of the repository ranked by what the code depends on, plus search by meaning (`semantic_search`).",
-      "One index for the Builderforce VS Code agent, Claude Code, Cursor and any MCP client.",
-      "Recalled memories that name code you have since deleted are flagged as possibly stale instead of obeyed."
+      {
+        "title": "A private Evermind",
+        "desc": "Memories, Train Once skills and the experience behind them are stored on your machine and trained into your own `.evermind` model. Start from one of your workspace's models and it learns here only."
+      },
+      {
+        "title": "Context for every AI tool",
+        "desc": "One index per repository — a map ranked by what the code depends on, plus `semantic_search` — shared by the Builderforce VS Code agent, Claude Code, Cursor and any MCP client. Memories that name deleted code are flagged, not obeyed."
+      },
+      {
+        "title": "Chat with the Brain",
+        "desc": "Your workspace's chats and agents on the desktop. Answers draw on what your Evermind recalls, and can use the platform's tools and your connectors — anything that changes something asks first."
+      },
+      {
+        "title": "Agents you teach once",
+        "desc": "Show Synapse a task in any desktop app; it replays it, pausing for your approval at the steps that matter. Approve those steps from your phone, through your Builderforce account."
+      },
+      {
+        "title": "Local models, sized for your machine",
+        "desc": "Synapse manages Ollama, picks the model size and quantization your memory can hold, and serves them in the OpenAI and Anthropic formats — so Claude Code and your scripts can run on them too."
+      },
+      {
+        "title": "One-click connectors",
+        "desc": "GitHub, Slack, Playwright, your files and any MCP server, run on your machine so the Brain can use their tools. Tokens stay in your system's credential store."
+      }
     ],
-    "privacy": "Indexing and embeddings run locally. Your code is never uploaded.",
+    "privacy": "Indexing, embeddings, memory and training run locally. Your code is never uploaded, and nothing your Evermind learns leaves the machine unless you publish it.",
     "download": "Download for Windows, macOS or Linux",
     "readMore": "How it works"
   },

@@ -18,6 +18,8 @@ import * as runs from "./views/runs.js";
 import * as evermind from "./views/evermind.js";
 import * as chat from "./views/chat.js";
 import * as account from "./views/account.js";
+import * as connectors from "./views/connectors.js";
+import * as models from "./views/models.js";
 import { mountApproval } from "./approval.js";
 import { refreshAgents } from "./agentStore.js";
 import { mountSidebarBrain } from "./brain/sidebarBrain.js";
@@ -27,7 +29,7 @@ import { accountState } from "./cloud/accountStore.js";
 import { settingsFrame, settingsPageOf } from "./settingsNav.js";
 import { icon } from "./icons.js";
 
-const VIEWS = { chat, account, workspaces, workspace, search, activity, connect, teach, review, skills, runs, evermind };
+const VIEWS = { chat, account, workspaces, workspace, search, activity, connect, connectors, models, teach, review, skills, runs, evermind };
 const $ = (id) => document.getElementById(id);
 
 let cleanup = null;

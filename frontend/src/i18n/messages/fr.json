@@ -7201,6 +7201,10 @@
         "answer": "Le LLM de Builderforce.ai est Evermind. Plutôt que de dépendre d'un modèle de pointe tiers figé, Builderforce.ai exécute son propre modèle auto-actualisé qui apprend en travaillant. Les LLM de pointe peuvent toujours être sollicités par routage quand vous le souhaitez, mais Evermind est le modèle natif qui donne à la plateforme son actualité (jamais périmé), sa faible empreinte (s'exécute sur l'appareil) et une propriété totale (vos données, packages ouverts, aucune dépendance à un modèle tiers)."
       },
       {
+        "question": "Mon Evermind peut-il tourner sur mon propre ordinateur ?",
+        "answer": "Oui — c’est le rôle de Synapse, l’application de bureau de Builderforce. Elle garde votre propre Evermind sur votre machine : les faits, démonstrations et savoir-faire qu’apprennent vos outils d’IA y sont conservés et entraînés, dans un modèle qui vous appartient, et n’en sortent que si vous les publiez. Synapse donne aussi à tous les outils d’IA de la machine un index de code commun, fait tourner des modèles locaux adaptés à votre mémoire et héberge des connecteurs MCP pour le Brain."
+      },
+      {
         "question": "Qu'est-ce que la Write-Through Cognition ?",
         "answer": "La Write-Through Cognition est le principe directeur d'Evermind. Les connaissances sont écrites directement dans le modèle, de sorte qu'une mise à jour est un upsert via une clé stable plus une invalidation de l'ancien rappel — une mise à jour signifie remplacer, et non ajouter. Les lectures reflètent toujours la dernière vérité et il n'y a jamais d'étape « périmé-puis-réconcilié ». C'est la même règle d'invalidation à l'écriture utilisée pour le cache, appliquée au palier de connaissances d'un modèle afin qu'il ne puisse jamais se périmer en silence."
       },
@@ -11311,6 +11315,10 @@
       "the-canvas-knows-where-you-are": {
         "title": "Le canevas sait où vous en êtes, et vous montre le chemin vers la phase suivante",
         "description": "Mesurer s’ouvrait sur un tableau où rien n’était en ligne. Désormais, chaque canevas lit son propre tableau, s’ouvre sur la prochaine phase que vous n’avez pas terminée et transforme une phase pour laquelle vous n’êtes pas prêt en chemin le plus court pour y arriver. Deux nouveaux lieux l’accompagnent : Exploiter pour ce qui tourne, et Lancer pour le présenter au public."
+      },
+      "your-private-evermind-on-your-machine": {
+        "title": "Votre Evermind privé, sur votre machine — avec des modèles locaux, des connecteurs et des approbations depuis votre téléphone",
+        "description": "Synapse fait désormais tourner des modèles locaux adaptés à votre ordinateur et les sert à Claude Code et à vos scripts, héberge des connecteurs MCP que le Brain peut utiliser, vous permet d’approuver l’étape d’un agent depuis votre téléphone et vous donne un modèle privé pour démarrer. Tout ce qu’il apprend reste sur votre machine, sauf si vous le publiez."
       }
     }
   },
@@ -28539,6 +28547,10 @@
       {
         "q": "La place de marché est-elle réservée aux indépendants ?",
         "a": "Non. Quatre familles cohabitent : talents, entreprises, agents et ressources. Les agents ne sont pas un espace à part : les acheter les ajoute à votre équipe, et c’est pourquoi le catalogue et votre équipe ne peuvent pas diverger."
+      },
+      {
+        "q": "Existe-t-il une application de bureau ?",
+        "a": "Oui. Synapse fonctionne sous Windows, macOS et Linux et garde votre Evermind privé sur votre propre machine — une mémoire et un apprentissage qui n’en sortent que si vous les publiez. Elle discute aussi avec le Brain, exécute des agents formés une fois (avec des approbations possibles depuis votre téléphone), gère des modèles locaux et héberge des connecteurs MCP."
       }
     ],
     "closeTitle": "Prêt à remplacer la pile ?",
@@ -32578,14 +32590,36 @@
     "accessibleName": "Gratuit — cette personne propose des sessions bénévoles"
   },
   "desktopApp": {
-    "heading": "Synapse",
-    "intro": "Une application de la barre système qui tient un index de code par dépôt sur votre propre machine — et fournit ce contexte à chaque outil d'IA que vous utilisez.",
+    "eyebrow": "Application de bureau · Windows, macOS, Linux",
+    "heading": "Synapse — votre Evermind privé, sur votre machine",
+    "intro": "Synapse est l’endroit où vit votre propre Evermind. Tout ce que vos outils d’IA apprennent sur vous et votre travail — faits, démonstrations, savoir-faire — est conservé et entraîné sur votre ordinateur, dans un modèle qui vous appartient. Il n’en sort que si vous choisissez de le publier.",
     "points": [
-      "Les agents démarrent orientés : une carte du dépôt classée selon ce dont le code dépend, plus une recherche par le sens (`semantic_search`).",
-      "Un seul index pour l'agent Builderforce dans VS Code, Claude Code, Cursor et tout client MCP.",
-      "Les souvenirs rappelés qui citent du code supprimé depuis sont signalés comme peut-être obsolètes au lieu d’être suivis."
+      {
+        "title": "Un Evermind privé",
+        "desc": "Souvenirs, savoir-faire Train Once et l’expérience qui les porte restent sur votre machine et sont entraînés dans votre propre modèle `.evermind`. Partez d’un modèle de votre espace : il n’apprend qu’ici."
+      },
+      {
+        "title": "Du contexte pour chaque outil d’IA",
+        "desc": "Un index par dépôt — une carte classée par dépendances, plus `semantic_search` — partagé par l’agent Builderforce dans VS Code, Claude Code, Cursor et tout client MCP. Les souvenirs qui citent du code supprimé sont signalés au lieu d’être suivis."
+      },
+      {
+        "title": "Discutez avec le Brain",
+        "desc": "Les conversations et agents de votre espace sur le bureau. Les réponses s’appuient sur ce dont se souvient votre Evermind et peuvent utiliser les outils de la plateforme et vos connecteurs ; ce qui modifie quelque chose demande d’abord."
+      },
+      {
+        "title": "Des agents que l’on forme une fois",
+        "desc": "Montrez une tâche à Synapse dans n’importe quelle application de bureau ; il la rejoue en attendant votre accord aux étapes importantes. Approuvez ces étapes depuis votre téléphone, via votre compte Builderforce."
+      },
+      {
+        "title": "Des modèles locaux à la taille de votre machine",
+        "desc": "Synapse gère Ollama, choisit la taille et la quantification que votre mémoire peut contenir et les sert aux formats OpenAI et Anthropic — pour que Claude Code et vos scripts en profitent aussi."
+      },
+      {
+        "title": "Des connecteurs en un clic",
+        "desc": "GitHub, Slack, Playwright, vos fichiers et tout serveur MCP tournent sur votre machine pour que le Brain utilise leurs outils. Les jetons restent dans le coffre d’identifiants du système."
+      }
     ],
-    "privacy": "L'indexation et les embeddings s'exécutent localement. Votre code n'est jamais envoyé.",
+    "privacy": "L’indexation, les embeddings, la mémoire et l’entraînement s’exécutent en local. Votre code n’est jamais envoyé, et rien de ce qu’apprend votre Evermind ne quitte la machine sans que vous le publiiez.",
     "download": "Télécharger pour Windows, macOS ou Linux",
     "readMore": "Comment ça marche"
   },

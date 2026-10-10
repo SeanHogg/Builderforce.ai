@@ -379,7 +379,7 @@ checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "bf-cloud"
-version = "2026.10.3"
+version = "2026.10.4"
 dependencies = [
  "anyhow",
  "bf-vault",
@@ -390,7 +390,7 @@ dependencies = [
 
 [[package]]
 name = "bf-context"
-version = "2026.10.3"
+version = "2026.10.4"
 dependencies = [
  "anyhow",
  "bf-index",
@@ -406,7 +406,7 @@ dependencies = [
 
 [[package]]
 name = "bf-index"
-version = "2026.10.3"
+version = "2026.10.4"
 dependencies = [
  "anyhow",
  "blake3",
@@ -428,17 +428,45 @@ dependencies = [
 ]
 
 [[package]]
-name = "bf-memory"
-version = "2026.10.3"
+name = "bf-local"
+version = "2026.10.4"
 dependencies = [
  "anyhow",
+ "bf-cloud",
+ "bf-vault",
+ "rand 0.8.8",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "tempfile",
+ "tiny_http",
+ "ureq",
+]
+
+[[package]]
+name = "bf-mcp"
+version = "2026.10.4"
+dependencies = [
+ "anyhow",
+ "bf-vault",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "bf-memory"
+version = "2026.10.4"
+dependencies = [
+ "anyhow",
+ "bf-mcp",
  "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "bf-roblox"
-version = "2026.10.3"
+version = "2026.10.4"
 dependencies = [
  "anyhow",
  "dirs 5.0.1",
@@ -452,7 +480,7 @@ dependencies = [
 
 [[package]]
 name = "bf-teach"
-version = "2026.10.3"
+version = "2026.10.4"
 dependencies = [
  "anyhow",
  "enigo",
@@ -468,7 +496,7 @@ dependencies = [
 
 [[package]]
 name = "bf-vault"
-version = "2026.10.3"
+version = "2026.10.4"
 dependencies = [
  "anyhow",
  "keyring",
@@ -5832,7 +5860,7 @@ dependencies = [
 
 [[package]]
 name = "spawn"
-version = "2026.10.3"
+version = "2026.10.4"
 dependencies = [
  "anyhow",
  "bf-cloud",
@@ -5957,12 +5985,14 @@ dependencies = [
 
 [[package]]
 name = "synapse"
-version = "2026.10.3"
+version = "2026.10.4"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
  "bf-cloud",
  "bf-context",
+ "bf-local",
+ "bf-mcp",
  "bf-memory",
  "bf-teach",
  "bf-vault",

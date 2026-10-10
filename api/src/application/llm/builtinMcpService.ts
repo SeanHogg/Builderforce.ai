@@ -1,4 +1,5 @@
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
+import { isApprovalVisibleTo, isSelfOwnedApproval } from '../../domain/approval/selfOwned';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * First-party (built-in) MCP server — exposes the platform's OWN capabilities
@@ -1864,13 +1865,18 @@ const CATALOG: BuiltinTool[] = [
 
   // ---- Approval requests (human-in-the-loop) — the `approvals` REQUEST table, distinct from the
   //       `approvalRules` table the approvals.list/create/delete tools above read. Segment-scoped. ----
-  { tool: 'approvals.get', mutates: false, description: 'Get a pending/decided approval request by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return (await ctx.db.select().from(approvals).where(and(eq(approvals.id, str(a.id)), eq(approvals.tenantId, ctx.tenantId), eq(approvals.segmentId, seg))).limit(1))[0] ?? null; } },
+  { tool: 'approvals.get', mutates: false, description: 'Get a pending/decided approval request by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const row = (await ctx.db.select().from(approvals).where(and(eq(approvals.id, str(a.id)), eq(approvals.tenantId, ctx.tenantId), eq(approvals.segmentId, seg))).limit(1))[0]; return row && isApprovalVisibleTo(row, ctx.userId) ? row : null; } },
   {
     tool: 'approvals.decide', mutates: true,
     description: 'Approve, reject, or answer an approval request. status: approved|rejected|answered. (Records the decision; does not itself start any downstream run.)',
     parameters: obj({ id: S, status: { type: 'string', enum: ['approved', 'rejected', 'answered'] }, reviewNote: S, responseText: S }, ['id', 'status']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      // A self-owned approval (a step on someone's own desktop) is answered by that person
+      // in the approvals queue — never by a tool call, which a model makes.
+      const [target] = await ctx.db.select({ actionType: approvals.actionType }).from(approvals).where(and(eq(approvals.id, str(a.id)), eq(approvals.tenantId, ctx.tenantId), eq(approvals.segmentId, seg))).limit(1);
+      if (!target) throw new Error('approval not found');
+      if (isSelfOwnedApproval(target.actionType)) throw new Error('this approval is answered by its owner in the approvals queue, not by a tool');
       const patch: Json = { status: str(a.status), updatedAt: new Date() };
       if (a.reviewNote != null) patch.reviewNote = str(a.reviewNote);
       if (a.responseText != null) patch.responseText = str(a.responseText);
