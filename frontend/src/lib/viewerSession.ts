@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useOptionalAuth } from './AuthContext';
 import { getStoredTenantToken } from './auth';
-import { tenantIdFromToken } from './tokenClaims';
+import { decodeTokenClaims, tenantIdFromToken } from './tokenClaims';
 
 /**
  * WHO IS LOOKING AT THIS BOARD — answerable on every surface the canvas renders on,
@@ -41,6 +41,18 @@ export interface ViewerSession {
   hasTenant: boolean;
   /** The workspace this surface is acting in, for workspace-scoped reads. */
   tenantId: string | null;
+  /**
+   * Who is looking — what a room or a seat names them by. From the web session when
+   * there is one; from the embedded token's `sub` otherwise, which carries an id and
+   * nothing else, so `name`/`email` are null there and the caller says "You".
+   */
+  user: ViewerUser | null;
+}
+
+export interface ViewerUser {
+  id: string;
+  name: string | null;
+  email: string | null;
 }
 
 export function useViewerSession(): ViewerSession {
@@ -57,7 +69,18 @@ export function useViewerSession(): ViewerSession {
   }, [auth]);
 
   if (auth) {
-    return { ready: auth.authReady, hasTenant: auth.hasTenant, tenantId: auth.tenant?.id == null ? null : String(auth.tenant.id) };
+    return {
+      ready: auth.authReady,
+      hasTenant: auth.hasTenant,
+      tenantId: auth.tenant?.id == null ? null : String(auth.tenant.id),
+      user: auth.user ? { id: String(auth.user.id), name: auth.user.name ?? null, email: auth.user.email ?? null } : null,
+    };
   }
-  return { ready: embedded.ready, hasTenant: !!embedded.token, tenantId: tenantIdFromToken(embedded.token) };
+  const sub = decodeTokenClaims(embedded.token).sub;
+  return {
+    ready: embedded.ready,
+    hasTenant: !!embedded.token,
+    tenantId: tenantIdFromToken(embedded.token),
+    user: sub ? { id: String(sub), name: null, email: null } : null,
+  };
 }

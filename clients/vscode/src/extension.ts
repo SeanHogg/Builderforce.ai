@@ -29,8 +29,8 @@ import { onModelChange, setSelectedModel, setSelectedModelPool } from "./modelSt
 import { modelChoiceLabels } from "./modelChoiceLabels";
 // The model list itself: one builder for the composer `/` menu AND this picker.
 import { buildModelItems, modelCategoryLabel, type ChatModelSelection, type ModelCategory, type ModelChoiceLabels } from "@seanhogg/builderforce-brain-embedded";
-import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject } from "./projectState";
-import { invalidateProjectNames } from "./projectNames";
+import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject, type SelectedProject } from "./projectState";
+import { getProjectNames, invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider, chatOfSessionNode, type SessionTreeNode } from "./sessionsTree";
 import { archive, unarchive } from "./sessionsArchive";
@@ -234,7 +234,12 @@ export function activate(context: vscode.ExtensionContext): void {
   };
   const runHost = createVsCodeRunHost(context, { onChatsChanged, onPlatformWrite });
   context.subscriptions.push({ dispose: () => runHost.dispose() });
-  BuilderForcePanel.configure({ runHost, onChatsChanged, onPlatformWrite });
+  BuilderForcePanel.configure({
+    runHost,
+    onChatsChanged,
+    onPlatformWrite,
+    onSelectProject: (projectId) => void selectProjectById(context, projects, projectId),
+  });
   // Restore the workspace the editor was last acting as (re-scopes the tenant JWT).
   const savedTenant = context.globalState.get<number>(SELECTED_TENANT_KEY);
   if (typeof savedTenant === "number") bfApi.setSelectedWorkspace(savedTenant);
@@ -699,9 +704,39 @@ async function selectProject(
     await createProject(context, projects);
     return;
   }
-  setSelectedProject({ id: pick.id, name: pick.name });
-  bfApi.invalidateTasks(pick.id);
+  applySelectedProject(projects, { id: pick.id, name: pick.name });
+}
+
+/**
+ * THE way the editor's active project changes — the QuickPick, a create, and a pick
+ * made on the canvas all land here, so the tasks cache and the tree cannot be
+ * refreshed by one path and forgotten by another.
+ */
+function applySelectedProject(projects: ProjectsTreeProvider, project: SelectedProject | undefined): void {
+  setSelectedProject(project);
+  if (project) bfApi.invalidateTasks(project.id);
   projects.refresh();
+}
+
+/** A pick from the canvas, which knows the id but not the name the sidebar shows. */
+async function selectProjectById(
+  context: vscode.ExtensionContext,
+  projects: ProjectsTreeProvider,
+  projectId: number | null,
+): Promise<void> {
+  if (projectId == null) {
+    if (getSelectedProject()) applySelectedProject(projects, undefined);
+    return;
+  }
+  if (getSelectedProject()?.id === projectId) return;
+  let name = (await getProjectNames(context.secrets)).get(projectId);
+  if (name == null) {
+    // Created since the names were cached — the canvas can adopt a project it just made.
+    invalidateProjectNames();
+    name = (await getProjectNames(context.secrets)).get(projectId);
+  }
+  if (name == null) return; // not a project in this workspace
+  applySelectedProject(projects, { id: projectId, name });
 }
 
 /** Create a project in the current workspace and select it (the onboarding step a
@@ -723,9 +758,7 @@ async function createProject(
   try {
     const project = await bfApi.createProject(context.secrets, name.trim());
     invalidateProjectNames(); // a new project must appear in the Sessions/Inbox labels
-    setSelectedProject({ id: project.id, name: project.name });
-    bfApi.invalidateTasks(project.id);
-    projects.refresh();
+    applySelectedProject(projects, { id: project.id, name: project.name });
     vscode.window.showInformationMessage(`BuilderForce: created project “${project.name}”.`);
   } catch (e) {
     const message = (e as Error).message;

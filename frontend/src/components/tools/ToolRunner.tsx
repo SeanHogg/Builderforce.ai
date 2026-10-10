@@ -21,7 +21,6 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { toolsApi } from '@/lib/builderforceApi';
@@ -32,7 +31,7 @@ import { MaturityFrameworkToggle } from '@/components/tools/MaturityFrameworkTog
 import { trackToolRun } from '@/lib/marketingApi';
 import { defaultInput, answersComplete, type ToolDefinition, type ToolResult } from '@/lib/tools';
 import { getStoredUser, getStoredTenantToken } from '@/lib/auth';
-import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
+import { useComponentProjectId } from '@/lib/components/scope';
 import { faultText } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
@@ -70,17 +69,10 @@ export default function ToolRunner({
 }: ToolRunnerProps) {
   const t = useTranslations('tools');
   const errorMessage = useErrorMessage();
-  const searchParams = useSearchParams();
-  // Attribute the run to a project: the global TopBar scope param `?project=` wins,
-  // the legacy `?projectId=` is still honoured for old links, and when neither is
-  // present we fall back to the global project scope (one picker for the whole
-  // app — see ProjectScopeContext). `useOptionalProjectScope` is null outside the
-  // app shell (the public tool page), where the run is simply tenant-attributed.
-  const scope = useOptionalProjectScope();
-  const projectIdParam = searchParams.get('project') ?? searchParams.get('projectId');
-  const projectId = projectIdParam != null && /^\d+$/.test(projectIdParam)
-    ? Number(projectIdParam)
-    : (scope?.currentProjectId ?? null);
+  // Attribute the run to a project through the one resolution (a `?project=` /
+  // legacy `?projectId=` link, the TopBar pick, or none on the public tool page,
+  // where the run is simply tenant-attributed).
+  const projectId = useComponentProjectId();
   const [def, setDef] = useState<ToolDefinition | null>(null);
   const [input, setInput] = useState<Record<string, number>>(initialInput ?? {});
   const [result, setResult] = useState<ToolResult | null>(initialResult);

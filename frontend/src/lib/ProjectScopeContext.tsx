@@ -9,8 +9,9 @@ import React, {
 import { usePathname, useRouter } from 'next/navigation';
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
-import { useAuth } from '@/lib/AuthContext';
+import { useViewerSession } from '@/lib/viewerSession';
 import { scopeChangeEffect, type ScopeChangeEffect } from '@/lib/canvasScopePolicy';
+import { readLocationProject, resolveProjectId, toProjectId } from '@/lib/projectScopeResolution';
 
 /**
  * Global project scope — the second scoping axis, sibling to {@link useAuth}'s
@@ -27,6 +28,15 @@ import { scopeChangeEffect, type ScopeChangeEffect } from '@/lib/canvasScopePoli
  * A `?project=<id>` deep-link in the initial URL wins on load (so links into a
  * specific project's board still work), and `setProject` reflects the choice
  * back into `?project=` on the current path so URLs stay shareable.
+ *
+ * The ORDER between those sources is not decided here — it is
+ * {@link resolveProjectId}, the one answer to "which project?" on every surface.
+ *
+ * A host that owns the selection itself (the VS Code editor's sidebar project)
+ * mounts this with a {@link ProjectScopeHost}: the host's choice is then the
+ * answer, a pick is handed back to the host instead of written to localStorage or
+ * the URL, and the stale-selection cleanup stands down because the host — not this
+ * page — decides what is selected.
  */
 export interface ProjectScopeValue {
   /** All projects in the active tenant (loaded once, refreshable). */
@@ -57,29 +67,42 @@ export interface ProjectScopeValue {
   adoptProject: (project: Project) => void;
 }
 
+/**
+ * The port a host supplies when IT owns the project selection (the editor sidebar).
+ * `projectId` is the host's current choice (null = all projects); `select` asks the
+ * host to change it, and the new choice comes back through `projectId`.
+ */
+export interface ProjectScopeHost {
+  projectId: number | null;
+  select: (id: number | null) => void;
+}
+
 const ProjectScopeContext = createContext<ProjectScopeValue | null>(null);
 
 function storageKey(tenantId: string | null | undefined): string {
   return `bf-project:${tenantId ?? 'none'}`;
 }
 
-/** Read `?project=<id>` from the live URL (client only). Positive int or null. */
-function readUrlProject(): number | null {
-  if (typeof window === 'undefined') return null;
-  const raw = new URLSearchParams(window.location.search).get('project');
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+/** The per-tenant persisted pick (client only). */
+function readStoredProject(tenantId: string | null): number | null {
+  try {
+    return toProjectId(localStorage.getItem(storageKey(tenantId)));
+  } catch {
+    return null;
+  }
 }
 
-export function ProjectScopeProvider({ children }: { children: React.ReactNode }) {
-  const { tenant, hasTenant } = useAuth();
+export function ProjectScopeProvider({ children, host }: { children: React.ReactNode; host?: ProjectScopeHost }) {
+  const { hasTenant, tenantId } = useViewerSession();
   const router = useRouter();
   const pathname = usePathname();
-  const tenantId = tenant?.id ?? null;
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
-  const [currentProjectId, setCurrentProjectId] = useState<number | null>(null);
+  // The pick made in THIS page; a host-owned selection outranks it in `currentProjectId`.
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const currentProjectId = resolveProjectId({ host: host?.projectId, selected: selectedProjectId });
+  const hostSelect = host?.select;
 
   const reload = useCallback(() => {
     if (!hasTenant) {
@@ -99,25 +122,16 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
     reload();
   }, [reload, tenantId]);
 
-  // Seed the current project when the tenant changes: a `?project=` deep-link in
-  // the URL wins, otherwise the per-tenant persisted choice, otherwise null.
+  // Seed the page's pick when the tenant changes, from the URL deep-link and the
+  // per-tenant persisted choice — ranked by `resolveProjectId`, not here. Skipped
+  // when a host owns the selection: there is nothing of the page's own to seed.
   useEffect(() => {
+    if (hostSelect) return;
     // Sync from external sources (URL deep-link / persisted choice) on tenant
     // change — an intentional state sync, not a derived-state cascade.
-    /* eslint-disable react-hooks/set-state-in-effect */
-    const fromUrl = readUrlProject();
-    if (fromUrl != null) {
-      setCurrentProjectId(fromUrl);
-      return;
-    }
-    try {
-      const stored = Number(localStorage.getItem(storageKey(tenantId)));
-      setCurrentProjectId(Number.isFinite(stored) && stored > 0 ? stored : null);
-    } catch {
-      setCurrentProjectId(null);
-    }
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [tenantId]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedProjectId(resolveProjectId({ location: readLocationProject(), selected: readStoredProject(tenantId) }));
+  }, [tenantId, hostSelect]);
 
   // Adopt an explicit `?project=` deep-link when navigating between pages
   // (e.g. a "View workflows" / "Open Builder" button on a project). We only ever
@@ -126,20 +140,28 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
   // pathname so it fires on cross-page navigation; same-page changes are driven
   // by setProject (router.replace below), which does not change the pathname.
   useEffect(() => {
-    const fromUrl = readUrlProject();
+    if (hostSelect) return;
+    const fromUrl = readLocationProject();
     if (fromUrl == null) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCurrentProjectId(fromUrl);
+    setSelectedProjectId(fromUrl);
     try {
       localStorage.setItem(storageKey(tenantId), String(fromUrl));
     } catch {
       /* storage unavailable — context state still holds the choice */
     }
-  }, [pathname, tenantId]);
+  }, [pathname, tenantId, hostSelect]);
 
   const setProject = useCallback(
     (id: number | null, effect: ScopeChangeEffect = scopeChangeEffect('project', false)) => {
-      setCurrentProjectId(id);
+      setSelectedProjectId(id);
+      // The host owns the selection: hand the pick back and let its answer return
+      // through `host.projectId`. Neither localStorage nor the URL is this page's to
+      // write — in the editor a router navigation would reveal another panel.
+      if (hostSelect) {
+        hostSelect(id);
+        return;
+      }
       try {
         if (id == null) localStorage.removeItem(storageKey(tenantId));
         else localStorage.setItem(storageKey(tenantId), String(id));
@@ -159,7 +181,7 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
-    [tenantId, router, pathname],
+    [tenantId, router, pathname, hostSelect],
   );
 
   const adoptProject = useCallback(
@@ -173,12 +195,14 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
 
   // Drop a stale selection (e.g. project deleted or belongs to another tenant)
   // once the list has loaded, so we never scope to a non-existent project.
+  // A host-owned selection is the host's to correct, never this page's.
   useEffect(() => {
+    if (hostSelect) return;
     if (currentProjectId != null && projects.length > 0 && !projects.some((p) => p.id === currentProjectId)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setProject(null);
     }
-  }, [projects, currentProjectId, setProject]);
+  }, [projects, currentProjectId, setProject, hostSelect]);
 
   const currentProject = useMemo(
     () => projects.find((p) => p.id === currentProjectId) ?? null,

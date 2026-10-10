@@ -1,7 +1,5 @@
 import type { ComponentDef, ComponentMount } from '@/lib/components/types';
 import type { Domain } from '@/lib/kernel/kernelApi';
-import { ComponentScopeProvider, useComponentProjectId } from '@/lib/components/scope';
-import { PmScopeProvider } from '@/lib/pm/scope';
 import dynamic from 'next/dynamic';
 
 // The task board is the single heaviest surface; loaded when the board is the
@@ -65,24 +63,13 @@ const GOVERNANCE = 'appGovernance';
 // Self-contained wrappers — each owns its own scope and providers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Put the PM surfaces under the project scope they read, resolved for whatever
- *  mount they landed on. One helper, so eight surfaces cannot disagree. */
-function WithPmScope({ children }: { children: React.ReactNode }) {
-  const projectId = useComponentProjectId();
-  return (
-    <ComponentScopeProvider projectId={projectId}>
-      <PmScopeProvider projectId={projectId}>{children}</PmScopeProvider>
-    </ComponentScopeProvider>
-  );
-}
-
 function IdeasSurface() { return <BrainPanel variant="page" />; }
 function PrdSurface() { return <EmbedPrdSurface />; }
 function TasksSurface() { return <TaskMgmtContent />; }
-function RoadmapSurface() { return <WithPmScope><PmVisualizersContent /></WithPmScope>; }
-function DependencyGraphSurface() { return <WithPmScope><DependencyGraph /></WithPmScope>; }
-function RiceMatrixSurface() { return <WithPmScope><RiceMatrix /></WithPmScope>; }
-function RoiDashboardSurface() { return <WithPmScope><RoiDashboard /></WithPmScope>; }
+function RoadmapSurface() { return <PmVisualizersContent />; }
+function DependencyGraphSurface() { return <DependencyGraph />; }
+function RiceMatrixSurface() { return <RiceMatrix />; }
+function RoiDashboardSurface() { return <RoiDashboard />; }
 function Soc2Surface() { return <Soc2Content />; }
 function PokerSessionSurface() { return <PokerSurface />; }
 function RetroSurface_() { return <RetroSurface />; }

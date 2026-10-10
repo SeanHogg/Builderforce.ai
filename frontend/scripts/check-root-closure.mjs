@@ -45,6 +45,11 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   +1 file (2026-10-10, one "which project?" resolution) — `lib/projectScopeResolution.ts`
+ *     (~70 lines, import-free). Not new first-paint work: it is the URL/storage parsing
+ *     that `ProjectScopeContext` (already here) did inline, moved out so the shell, the
+ *     embed routes, the PM widgets, the tool runner and the VS Code panel rank the same
+ *     sources through ONE `resolveProjectId` instead of five private copies.
  *   332 → 333 files (2026-10-08, the Studio lens) — `lib/canvasLens.ts` (~80 lines,
  *     type-only imports, so it brings nothing behind it). The shell's stage policy
  *     (`workbenchPolicy.isStageRoute`, already here) and `AppShell` ask it which lens a

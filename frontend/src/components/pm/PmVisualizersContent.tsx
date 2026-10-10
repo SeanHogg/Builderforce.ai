@@ -15,7 +15,7 @@ import { PmCard } from './pmShared';
  * Product Management visualizers container — the single switchboard behind the
  * `pm` tab. Owns the section selector (Epics / Roadmap / ROI) and each section's
  * sub-view toggle. Scope (project vs portfolio) comes from {@link usePmScope}, so
- * nothing here prop-drills a project id. Must be rendered inside a PmScopeProvider.
+ * nothing here prop-drills a project id and no provider is required.
  */
 type Section = 'spine' | 'epics' | 'roadmap' | 'roi';
 type EpicView = 'tree' | 'flow';

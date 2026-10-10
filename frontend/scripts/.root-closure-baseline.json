@@ -286,6 +286,7 @@
     "lib/pm/costClass.ts",
     "lib/pm/usePmData.ts",
     "lib/productUpdates.ts",
+    "lib/projectScopeResolution.ts",
     "lib/publicApi.ts",
     "lib/publicDestinations.ts",
     "lib/pulseApi.ts",

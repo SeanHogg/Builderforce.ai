@@ -39,6 +39,7 @@ import { createPersistence } from './persistence';
 import { createInMemoryPersistence } from './localPersistence';
 import { installHostRunDriver } from './hostRunDriver';
 import { CanvasBoundary } from './CanvasBoundary';
+import { HostScopeProviders } from './canvas/HostScopeProviders';
 import { buildIdeSystemPrompt } from './systemPrompt';
 import { rewriteToLocalUrl } from '../../src/localModels';
 import { onHostMessage } from './vscodeBridge';
@@ -211,19 +212,23 @@ function WorkspaceScreen({ init }: { init: InitData }) {
                 fallback={chat}
                 notice={init.labels['canvas.degraded'] ?? 'The board could not be drawn. The conversation is still here.'}
               >
-                <CreationCanvas
-                  sessionId={session!.id}
-                  // A board with no account behind it cannot be written to the
-                  // gateway — every read would 401 — so it persists in this panel,
-                  // exactly as the signed-out chat transcript already did.
-                  persistence={session!.durable === false ? 'local' : 'server'}
-                  initialSurface={sanitizeCanvasSurface(init.surface)}
-                  // WRAPPED, because where the conversation sits is the canvas's
-                  // business and not the chat's: the same component also renders
-                  // standalone when no board could be drawn, and it must not carry a
-                  // box positioned against a board that is not there.
-                  hostSurfaces={{ chat: <div className="bf-canvas-chat-surface">{chat}</div> }}
-                />
+                {/* Inside the boundary and the token gate: the scope providers read the
+                    workspace token on mount, and a failure in one still leaves the chat. */}
+                <HostScopeProviders projectId={init.project?.id ?? null}>
+                  <CreationCanvas
+                    sessionId={session!.id}
+                    // A board with no account behind it cannot be written to the
+                    // gateway — every read would 401 — so it persists in this panel,
+                    // exactly as the signed-out chat transcript already did.
+                    persistence={session!.durable === false ? 'local' : 'server'}
+                    initialSurface={sanitizeCanvasSurface(init.surface)}
+                    // WRAPPED, because where the conversation sits is the canvas's
+                    // business and not the chat's: the same component also renders
+                    // standalone when no board could be drawn, and it must not carry a
+                    // box positioned against a board that is not there.
+                    hostSurfaces={{ chat: <div className="bf-canvas-chat-surface">{chat}</div> }}
+                  />
+                </HostScopeProviders>
               </CanvasBoundary>
             ) : chat}
           </ConfirmProvider>

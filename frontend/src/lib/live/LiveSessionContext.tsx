@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { useAuth } from '@/lib/AuthContext';
+import { useViewerSession } from '@/lib/viewerSession';
 import { useMediaRoom, type MediaPathEvidence, type MediaRoomConnection, type MediaRoomTransport, type RemoteTile } from '@/lib/useMediaRoom';
 import { useDisplayCapture } from '@/lib/useDisplayCapture';
 import { useMediaRecorderSink, type SavedMediaRecording } from '@/lib/useMediaRecorder';
@@ -185,7 +185,9 @@ export function mergeRoster(
 }
 
 export function LiveSessionProvider({ children }: { children: React.ReactNode }) {
-  const { user, tenant } = useAuth();
+  // Through the viewer session, not `useAuth`: the room is mounted in the VS Code
+  // panel too, which has a workspace token and no web `AuthProvider`.
+  const { user, tenantId: activeTenantId } = useViewerSession();
   const canvas = useOptionalActiveCanvas();
   const scope = useOptionalProjectScope();
   const [room, setRoom] = useState<LiveRoomTarget | null>(null);
@@ -197,7 +199,7 @@ export function LiveSessionProvider({ children }: { children: React.ReactNode })
   const [anchor, setAnchor] = useState<LiveRoomTarget | null>(null);
 
   const authenticatedMe = useMemo(
-    () => ({ name: user?.name || user?.email || 'You', ref: user?.id != null ? String(user.id) : 'me' }),
+    () => ({ name: user?.name || user?.email || 'You', ref: user?.id ?? 'me' }),
     [user?.name, user?.email, user?.id],
   );
 
@@ -249,7 +251,6 @@ export function LiveSessionProvider({ children }: { children: React.ReactNode })
   // a switch by any other path (deep link, session expiry) still ends the call
   // rather than leaving a socket open on a workspace you left.
   const roomTenantId = room?.tenantId ?? null;
-  const activeTenantId = tenant?.id ?? null;
   useEffect(() => {
     if (room && roomTenantId != null && roomTenantId !== activeTenantId) leave();
   }, [activeTenantId, leave, room, roomTenantId]);

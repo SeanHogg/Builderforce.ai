@@ -8,7 +8,6 @@ import { useOptionalBrainContext } from '@/lib/brain';
 import { ProjectsContent } from '@/components/ProjectsContent';
 import PageContainer from '@/components/PageContainer';
 import { TaskMgmtContent } from '@/components/TaskMgmtContent';
-import { PmScopeProvider } from '@/lib/pm/scope';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmVisualizersContent } from '@/components/pm/PmVisualizersContent';
 import { PmoContent } from '@/components/pm/PmoContent';
@@ -80,11 +79,7 @@ export default function ProjectsTasksPage() {
       {activeTab === 'projects' && <ProjectsContent onCount={setProjectCount} />}
       {activeTab === 'tasks' && <TaskMgmtContent projectId={scopedProjectId} />}
       {activeTab === 'manager' && <ManagerContent projectId={scopedProjectId} />}
-      {activeTab === 'pm' && (
-        <PmScopeProvider projectId={scopedProjectId ?? null}>
-          <PmVisualizersContent />
-        </PmScopeProvider>
-      )}
+      {activeTab === 'pm' && <PmVisualizersContent />}
       {activeTab === 'portfolio' && (
         <RoleGate capability="insights.portfolio" variant="block">
           <PmoContent />

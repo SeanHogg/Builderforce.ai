@@ -1,14 +1,13 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
 import { WorkflowsContent } from '@/components/WorkflowsContent';
+import { useComponentProjectId } from '@/lib/components/scope';
 
 /**
- * The client leaf of `/workflows`: reads the `?projectId=` scope out of the URL
- * so switching project scope stays a client-side navigation.
+ * The client leaf of `/workflows`: scoped through the one project resolution, so a
+ * `/workflows?project=<id>` link, the TopBar pick and an older `?projectId=` link
+ * all land on the same filter.
  */
 export function WorkflowsPageBody() {
-  const projectIdParam = useSearchParams().get('projectId');
-  const projectId = projectIdParam ? Number(projectIdParam) : null;
-  return <WorkflowsContent projectId={Number.isFinite(projectId) ? projectId : null} />;
+  return <WorkflowsContent projectId={useComponentProjectId()} />;
 }

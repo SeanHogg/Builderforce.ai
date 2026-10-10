@@ -112,6 +112,12 @@ export interface BuilderForcePanelHooks {
    * ends a run; the panel starts runs, watches them, and re-attaches when reopened.
    */
   runHost?: BrainRunHost;
+  /**
+   * A project was picked on the canvas (null = all projects). The sidebar owns the
+   * selection, so the panel hands the pick to the host's ONE selection path rather
+   * than keeping a second copy; the change returns to every panel through `init`.
+   */
+  onSelectProject?: (projectId: number | null) => void;
 }
 
 /**
@@ -590,6 +596,9 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
         void vscode.window.showWarningMessage(
           vscode.l10n.t("BuilderForce: the board could not be drawn ({0}). The conversation is still available.", typeof msg.message === "string" ? msg.message : "unknown error"),
         );
+        break;
+      case "project.select":
+        BuilderForcePanel.hooks.onSelectProject?.(typeof msg.projectId === "number" ? msg.projectId : null);
         break;
       case "canvas.i18nError":
         // A missing key renders as the key rather than blanking the board; log it so

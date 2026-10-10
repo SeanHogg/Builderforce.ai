@@ -1,35 +1,25 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
-import { useEmbedProjectId } from '@/lib/embed/useEmbedProjectId';
+import { readLocationProject, resolveProjectId } from '@/lib/projectScopeResolution';
 
 /**
- * THE PROJECT A MOUNTED COMPONENT IS SCOPED TO — resolved once, for every mount.
+ * THE PROJECT A MOUNTED COMPONENT IS SCOPED TO — the React face of
+ * {@link resolveProjectId}, which owns the order.
  *
- * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────
- * A component that can render on a dashboard, on a board and inside somebody's
- * published app has to answer "which project?" in three different worlds, and
- * before this there were three different answers hard-coded at three call sites:
- * the app shell's `ProjectScopeContext`, the embed route's `useEmbedProjectId()`
- * deep-link, and — on a board — nothing at all. A component that reached for any
- * one of them directly could only ever render where that one existed, which is
- * precisely why the surfaces behind `/embed/*` were unusable anywhere else.
+ * A component that can render on a dashboard, on a board, in the editor and inside
+ * somebody's published app asks THIS, never a mount-specific hook. That is what makes
+ * it droppable into a second surface with zero edits. This hook only collects the
+ * sources the surface has:
  *
- * So the resolution order lives here, once, and every component asks the same
- * question regardless of where it was mounted:
+ *   - pinned   — a {@link ComponentScopeProvider} above it (a board card's own link).
+ *   - selected — the ambient {@link ProjectScopeProvider}, which has already folded
+ *                in the host's selection, the URL deep-link and the persisted pick.
+ *   - location — the URL deep-link, read here ONLY where no ambient provider exists
+ *                (a framed `/embed/*` page). Under a provider the URL is already
+ *                folded in and is rewritten on every pick, so reading it a second
+ *                time would let a stale link outrank a fresh choice.
  *
- *   1. An explicit {@link ComponentScopeProvider} above it. The mount KNOWS —
- *      a board card carries its own project link, and that must win over
- *      anything ambient.
- *   2. The embed deep-link (`?project=` / `#projectId=`). Present only when a
- *      host framed us and named a project.
- *   3. The app shell's global project scope. Null outside the shell rather than
- *      throwing, which is what lets the same component render on a public
- *      published page.
- *
- * Null means portfolio — every project the tenant owns — and that is a real
- * answer, not a missing one. Tenancy is NEVER resolved here: it comes from the
- * caller's token on every request, so a component cannot widen its own scope by
- * being mounted somewhere new.
+ * Null means portfolio. Tenancy is never resolved here.
  */
 
 const ComponentScopeContext = createContext<number | null | undefined>(undefined);
@@ -44,16 +34,34 @@ export function ComponentScopeProvider({ projectId, children }: { projectId: num
   return <ComponentScopeContext.Provider value={projectId}>{children}</ComponentScopeContext.Provider>;
 }
 
-/**
- * The project the surrounding component should read, or null for the portfolio.
- *
- * Every mountable component calls THIS rather than a mount-specific hook. Doing
- * so is what makes it droppable into a second surface with zero edits.
- */
+/** The project the surrounding component should read, or null for the portfolio. */
 export function useComponentProjectId(): number | null {
-  const explicit = useContext(ComponentScopeContext);
-  const fromEmbed = useEmbedProjectId();
-  const shell = useOptionalProjectScope();
-  if (explicit !== undefined) return explicit;
-  return fromEmbed ?? shell?.currentProjectId ?? null;
+  const pinned = useContext(ComponentScopeContext);
+  const ambient = useOptionalProjectScope();
+  const location = useLocationProjectId(ambient == null);
+  return resolveProjectId({
+    pinned,
+    selected: ambient?.currentProjectId,
+    location: ambient ? undefined : location,
+  });
+}
+
+/**
+ * The URL's deep-linked project, kept live. The hash is not part of the server
+ * render, so it is read after mount, and again whenever the host rewrites it.
+ */
+function useLocationProjectId(enabled: boolean): number | null {
+  const [projectId, setProjectId] = useState<number | null>(() => (enabled ? readLocationProject() : null));
+  useEffect(() => {
+    if (!enabled) return;
+    const sync = () => setProjectId(readLocationProject());
+    sync();
+    window.addEventListener('hashchange', sync);
+    window.addEventListener('popstate', sync);
+    return () => {
+      window.removeEventListener('hashchange', sync);
+      window.removeEventListener('popstate', sync);
+    };
+  }, [enabled]);
+  return enabled ? projectId : null;
 }

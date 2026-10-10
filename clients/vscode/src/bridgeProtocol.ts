@@ -82,6 +82,9 @@ export const CANVAS_HOST_MESSAGES = [
   // because a webview's console is not somewhere anyone looks, which is how a board
   // that fails to draw becomes a bug report reading only "it doesn't load".
   'canvas.error',
+  // A project picked on the canvas (`projectId`, or null for all projects). The editor
+  // owns the selection, so the pick is applied by the host and comes back in `init`.
+  'project.select',
 ] as const;
 
 /** Every message the webview may send to a host. */

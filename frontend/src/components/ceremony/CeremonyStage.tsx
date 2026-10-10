@@ -11,7 +11,7 @@ import {
   type Task, type Sprint, type CeremonySession, type CeremonySessionDetail, type CeremonyParticipant, type MemberProfile,
 } from '@/lib/builderforceApi';
 import { listTeamsByProject, getTeam, listWorkforceDirectory } from '@/lib/teams';
-import { useAuth } from '@/lib/AuthContext';
+import { useViewerSession } from '@/lib/viewerSession';
 import { useCeremonyRoom, type CeremonyRoomFrame } from '@/lib/ceremonyRoom';
 import { ViewToggle } from '@/components/ViewToggle';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
@@ -101,7 +101,9 @@ function CeremonyStageInner({
   onModeChange,
   onClose,
 }: CeremonyStageProps) {
-  const { user, tenant } = useAuth();
+  // The viewer session, not `useAuth`: the stage also renders on the editor's canvas,
+  // which has a workspace token and no web `AuthProvider`.
+  const { user, tenantId } = useViewerSession();
   const tMeet = useTranslations('meetings');
   const t = useTranslations('ceremony');
   const pick = useCeremonyPick();
@@ -187,13 +189,13 @@ function CeremonyStageInner({
     media.start({
       roomKey: mediaRoomKey,
       label: t(mode === 'standup' ? 'standup' : 'planning'),
-      tenantId: tenant?.id ?? null,
+      tenantId,
       href: '/projects?tab=ceremonies',
       participant: { name: me.name, ref: me.ref },
       privacyMode: 'direct-only',
       onLeave: onMediaLeft,
     });
-  }, [camerasOn, me.name, me.ref, media.start, mediaRoomKey, mode, onMediaLeft, t, tenant?.id]);
+  }, [camerasOn, me.name, me.ref, media.start, mediaRoomKey, mode, onMediaLeft, t, tenantId]);
 
   const leaveMedia = useCallback(() => {
     if (media.room?.roomKey === mediaRoomKey) media.leave();

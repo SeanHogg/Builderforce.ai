@@ -1,3 +1,16 @@
+## ✅ RESOLVED 2026-10-10 — The editor draws the whole board: one "which project?" resolution for every surface (VSIX 2026.10.5)
+
+**Was:** four canvas surfaces threw in the VS Code panel and dropped the board to chat: `usePins()` in `CanvasInsightsSurface`, `useProjectScope()` in the Insights lenses, `usePmScope()` in the PM widgets, and `useLiveSession()` in `CeremonyStage`. The roadmap held it for a product decision, because "which project?" had five private answers, each with its own order: `ProjectScopeProvider` (URL, then localStorage), `PmScopeProvider` (prop, then shell), `useComponentProjectId` (pin, then embed URL, then shell), `useEmbedProjectId` (`?project=`, then `#projectId=`), and `ToolRunner` (`?project=` / `?projectId=`, then shell). None of them knew that the editor owns a project selection of its own. Two bugs came with that: `/workflows` read `?projectId=` while every link into it wrote `?project=`, so the project was dropped; and a component under the shell let a stale deep-link outrank a fresh TopBar pick.
+
+**Now:**
+- `lib/projectScopeResolution.ts` holds `resolveProjectId` (pinned → host → location → selected → portfolio) and `projectFromLocation`, which accepts every URL spelling. Every surface goes through them.
+- `ProjectScopeProvider` takes an optional `ProjectScopeHost` port. When the host owns the selection, a pick goes to the host rather than to localStorage or the URL. The tenant comes from `useViewerSession`, not `useAuth`.
+- `useComponentProjectId` is the one hook. `usePmScope` is now a view over it, with no context and no throw. `PmScopeProvider`, `WithPmScope` and `useEmbedProjectId` are deleted. `ToolRunner` and `/workflows` use the hook.
+- `useViewerSession` now carries `user`. `LiveSessionProvider` and `CeremonyStage` use it in place of `useAuth`.
+- The editor mounts the same providers through `webview/src/canvas/HostScopeProviders.tsx`, fed by `init.project`. A pick made on the canvas posts `project.select`. The host applies it through `applySelectedProject`, the one path it now shares with the QuickPick and project creation.
+
+Verified by a Sonnet run: frontend type-check 0 errors; 9 targeted test files, 150 tests pass; VS Code type-check (tsgo + tsc, 4 projects) clean, 4 files, 39 tests pass; `builderforce-ai-2026.10.5.vsix` packaged and installed. `check:root-closure` re-baselined +1 file for `projectScopeResolution.ts`, with the reason in the guard header.
+
 ## ✅ RESOLVED 2026-10-10 — A strict-pin "model unavailable" answers 503 again, not 500 (api)
 
 **Was:** `POST /llm/v1/chat/completions` stamped the trace id with `upstream.error.details = …`. The gateway's own strict-pin envelope (`LlmProxyService.ts`, `code: 'model_unavailable'`) carries `error` as a **string**, so the assignment threw `TypeError: Cannot create property 'details' on string 'Strict-pin: …'`. Every intended 503 "model unavailable (cooldown)" became a 500 from `errorHandler`. Production `api_error_log` held 80 of these in 2026-10-03 → 10-10 (`claude-opus-5-5` 54, `claude-sonnet-5-5` 22, free-pool pins 4), plus 66 more in `error_groups`.
