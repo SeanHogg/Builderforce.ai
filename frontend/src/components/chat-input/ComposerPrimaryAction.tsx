@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { useTranslations } from 'next-intl';
+import { promptTrailingAction } from '@seanhogg/builderforce-brain-ui';
 import { Icon } from '@/components/ui/Icon';
 import { sendButtonStyle } from './composerStyles';
 
@@ -16,11 +17,10 @@ export interface ComposerPrimaryActionProps {
 
 export const ComposerPrimaryAction = memo(function ComposerPrimaryAction({ running, onStop, canSubmit, submitLabel }: ComposerPrimaryActionProps) {
   const t = useTranslations('chatInput');
-  if (running && onStop && !canSubmit) {
-    // Streaming with an empty composer → the button interrupts the run.
-    // When the composer HAS submittable text (e.g. the queue-while-thinking
-    // path where the host keeps the input editable), the Send button below
-    // renders instead so the typed turn can be queued.
+  // Streaming with an empty composer → the button interrupts the run. With text in
+  // the box (the queue-while-thinking path) Send renders instead, so the typed turn
+  // can be queued. The shared rule, without voice — `ComposerSendOrVoice` adds that.
+  if (promptTrailingAction({ canSubmit, running, canStop: !!onStop, voice: false, recording: false }) === 'stop') {
     return (
       <button
         type="button"

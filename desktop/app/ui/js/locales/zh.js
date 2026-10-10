@@ -311,6 +311,8 @@ export default {
   "chat.toLabel": "发给",
   "chat.placeholder": "给 Brain 发消息，或以 @ 开头来指定一个已指派的代理",
   "chat.send": "发送",
+  "chat.dictate": "语音输入消息",
+  "chat.stopDictation": "停止语音输入",
   "chat.thinking": "正在回忆并思考…",
   "chat.usingTool": "正在使用 {tool}…",
   "chat.toolAsk": "Brain 想要执行：{tool}",

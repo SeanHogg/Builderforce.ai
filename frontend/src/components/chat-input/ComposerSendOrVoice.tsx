@@ -1,17 +1,14 @@
 import { memo } from 'react';
+import { promptTrailingAction, useVoiceDictation } from '@seanhogg/builderforce-brain-ui';
 import { ComposerPrimaryAction, type ComposerPrimaryActionProps } from './ComposerPrimaryAction';
 import { VoiceDictationButton } from './VoiceDictationButton';
-import { useVoiceDictation } from './useVoiceDictation';
 
 /**
  * ONE trailing button for a composer that offers voice: the mic while there is nothing
- * to send or stop, Send once there is text, Stop while a run streams.
- *
- * Mic and Send used to be two controls on two different rows — the mic in the wrapping
- * tool row, Send pinned right — so an empty composer showed a greyed-out Send beside a
- * mic nobody could find. They are never both useful at once, so they share the slot.
- * A live recording keeps the mic (now Stop dictation) in place even as phrases land in
- * the box; otherwise the first phrase would swap it for Send and strand the recording.
+ * to send or stop, Send once there is text, Stop while a run streams. Which one is the
+ * shared `promptTrailingAction`, the same rule the editor panel follows; the dictation
+ * is the shared `useVoiceDictation`, and where the runtime cannot listen there is no
+ * mic at all.
  */
 export const ComposerSendOrVoice = memo(function ComposerSendOrVoice({ getValue, onChange, disabled, ...primary }: ComposerPrimaryActionProps & {
   /** Reads the composer's current text when a phrase lands — stable, so typing does not re-render the recognizer. */
@@ -19,8 +16,15 @@ export const ComposerSendOrVoice = memo(function ComposerSendOrVoice({ getValue,
   onChange: (value: string) => void;
   disabled: boolean;
 }) {
-  const { recording, startVoice, stopVoice } = useVoiceDictation(getValue, onChange);
-  if (recording || (!primary.canSubmit && !primary.running)) {
+  const { supported, recording, startVoice, stopVoice } = useVoiceDictation(getValue, onChange);
+  const action = promptTrailingAction({
+    canSubmit: primary.canSubmit,
+    running: primary.running,
+    canStop: !!primary.onStop,
+    voice: supported,
+    recording,
+  });
+  if (action === 'voice') {
     return <VoiceDictationButton recording={recording} onToggle={recording ? stopVoice : startVoice} disabled={disabled} />;
   }
   return <ComposerPrimaryAction {...primary} />;

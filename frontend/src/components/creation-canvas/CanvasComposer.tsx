@@ -326,7 +326,6 @@ export function CanvasComposer({
             // Two rows — the text, then one tool row. Scope joins that row (and only
             // shows when something is selected), the `/` trigger names just the mode,
             // and the plan chip row is not drawn: a chat box, not a form.
-            density="compact"
             rows={1}
             submitOnEnter
             showVoice

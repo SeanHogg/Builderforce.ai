@@ -133,20 +133,12 @@ export interface ChatInputProps {
   ticketables?: TicketTag[];
   /** Called when a ticket is picked from the #tag typeahead. */
   onTicketTag?: (ticket: TicketTag) => void;
-  /** Who answers / what is addressed ("Acting as", capability, "To", scope) — the composer's context row. */
+  /** Who answers / what is addressed ("Acting as", capability, "To", scope) — they ride in the tool row, after `+` and `/`. Each should self-hide until it has something to say. */
   contextControls?: ReactNode;
   /** Extra rows for the `+` menu — host actions that belong with "add to this turn". */
   addMenuItems?: readonly ComposerAddMenuItem[];
-  /** Host-specific standing facts (e.g. the memory status) shown beside the plan chip in the last row. */
-  meta?: ReactNode;
-  /**
-   * `compact` folds the composer to two rows — the text, then one tool row — for a
-   * docked Brain (a workspace's, or the canvas's Brain panel): the context controls
-   * join the tool row, the `/` trigger shows only the armed mode, and the
-   * standing-facts row (plan chip, `meta`) is not rendered. Defaults to
-   * `comfortable`, the four-row layout.
-   */
-  density?: 'comfortable' | 'compact';
+  /** Standing facts (e.g. the memory status) shown inside the `/` menu, the way the editor composer shows them — never as a row under the box. */
+  menuStatus?: ReactNode;
   className?: string;
   /**
    * Change this to any new value to focus the composer and put the caret at the

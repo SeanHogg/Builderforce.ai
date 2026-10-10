@@ -1,1 +1,0 @@
-import{h as n}from"./index.js";const t=new Set;function o(e){for(const i of t)try{i(e)}catch(r){n({message:`site-published listener failed: ${String(r)}`,level:"warning"})}}function l(e){return t.add(e),()=>{t.delete(e)}}export{o as notifySitePublished,l as subscribeSitePublished};

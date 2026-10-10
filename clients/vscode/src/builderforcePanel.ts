@@ -343,7 +343,6 @@ function buildLabels(): Record<string, string> {
     "app.resets": t("Resets"),
     "app.unlimited": t("Unlimited"),
     "app.managePlan": t("Manage plan"),
-    "app.autoMode": t("Auto"),
     "app.autoModeHint": t("Auto-approve tool actions without asking"),
     "app.pickModel": t("Change model"),
     "app.dictate": t("Dictate"),

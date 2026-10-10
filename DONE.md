@@ -1,3 +1,32 @@
+## ✅ RESOLVED 2026-10-10 — Every prompt is the same one-box composer: web, VS Code, Synapse, Spawn (brain-ui 2026.10.4 · brain-embedded 2026.10.5 · frontend 2026.10.33 · VSIX 2026.10.6 · desktop 2026.10.3)
+
+**Was:** the 2026-10-09 simplification ("a chat box again") reached only the canvas/Studio dock. The rest still had the old shape:
+- **VS Code:** the mic in the text row, a separate "Auto ⚡" chip duplicating the `/` menu's auto-approve row, and Queue + Stop as two buttons.
+- **Synapse desktop:** a "To" row shown even with no agents, and a text "Send" button outside the box.
+- **Spawn:** a textarea plus a "Build" pill, and a second build typed mid-run was dropped.
+- **Web:** the full-page Brain, dashboard and landing hero still used the four-row "comfortable" layout. The Guest Brain, Manager chat, Agent Host chat and agent-execution steer box were hand-rolled textarea + button pairs.
+- **Embeds:** the embeddable `PromptInput` was a bordered field with an outside button.
+
+**Now:**
+- **brain-ui:**
+  - `PromptPanel` has ONE layout: text on top, then one tool row with `context` riding after `+` and `/`. The `density` variant and the `meta` row are gone.
+  - The quiet "Work ▾" trigger face moved from a frontend CSS module into `styles.css`, so every host gets it.
+  - New shared `promptTrailingAction` (mic / Send / Stop, one slot) and `useVoiceDictation` (gated on runtime support, so no dead mic).
+  - `PersonaPicker` takes `quietAt` and hides "Acting as" until there is someone else to act as.
+- **frontend:**
+  - `ChatInput` uses the shared pieces. Enter sends by default.
+  - `meta` became `menuStatus`, so the web Brain's Evermind status now sits inside the `/` menu, as in the editor.
+  - `composerDensity` is removed from the Brain panel.
+  - GuestBrainPanel, ManagerChatPanel, AgentHostChatContent (now fully localized under `agentHostChat.*`) and the AgentExecutionPanel steer box all use `ChatInput`. Execution steers on Enter, and Stop on an empty box cancels the run.
+- **VSIX:**
+  - New `ComposerTrailingButton` draws the shared decision. The private dictation code and the "Auto" chip are deleted (auto-approve stays in the `/` menu).
+  - The box takes the theme's input border.
+  - `IconBolt`, `.bf-toggle`, `.bf-composer__entry/__mic` and the `app.autoMode` label are deleted.
+- **Synapse** (`desktop/app/ui/js/chat/composer.js` + `dictation.js`): one filled box. "To" shows only when the chat has agents, and one round mic↔Send button. The box clears on send and restores the text if the send fails.
+- **Spawn** (`desktop/spawn/ui/js/composer.js` + `dictation.js`): the same box. Starter chips scroll sideways instead of wrapping, and a prompt sent mid-build queues ("Builds next") and runs after.
+- **`brain-embedded` `PromptInput`:** one filled box with a round trailing button, plus optional `onStop`/`stopLabel`.
+
+**Not included:** `apps/android` and `apps/shared` (CoderClaw gateway clients) keep their own composers. They are a separate product line with a session picker and gateway health, not a Brain prompt.
 ## ✅ RESOLVED 2026-10-10 — Production log defects fixed (api, frontend, agent-runtime)
 
 All the code defects in the 2026-10-10 production log review ("Production signals" in ROADMAP.md) are fixed. The account actions left over stay on the roadmap.

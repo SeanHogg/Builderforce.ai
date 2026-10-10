@@ -10542,39 +10542,54 @@ function isManagerRole(role) {
 }
 
 // src/ui/PromptInput.tsx
+var import_react8 = require("react");
 var import_jsx_runtime4 = require("react/jsx-runtime");
-var rowStyle = { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end", width: "100%" };
-var fieldStyle = {
-  flex: "1 1 200px",
-  minWidth: 0,
-  minHeight: 42,
+var boxStyle = (active) => ({
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "flex-end",
+  gap: 8,
+  width: "100%",
   boxSizing: "border-box",
-  background: "var(--bg-base, #fff)",
+  padding: "6px 6px 6px 12px",
+  borderRadius: 18,
+  border: "none",
+  background: "var(--chat-input-bg, var(--bg-elevated, #f3f4f6))",
+  boxShadow: active ? "0 0 0 2px var(--accent, #2563eb)" : "none",
+  transition: "box-shadow 120ms ease"
+});
+var fieldRowStyle = { display: "flex", alignItems: "flex-end", gap: 8, flex: "1 1 180px", minWidth: 0 };
+var fieldStyle = {
+  flex: "1 1 auto",
+  minWidth: 0,
+  minHeight: 36,
+  boxSizing: "border-box",
+  background: "transparent",
   color: "var(--text-primary, #111)",
   fontSize: "0.875rem",
   fontFamily: "inherit",
   lineHeight: 1.4,
-  padding: "10px 12px",
-  borderRadius: "var(--radius-lg, 10px)",
-  border: "1px solid var(--border-subtle, #c8c8c8)",
+  padding: "8px 0",
+  border: "none",
+  outline: "none",
   resize: "none"
 };
-var buttonStyle = (enabled) => ({
+var roundButtonStyle = (enabled) => ({
   flex: "0 0 auto",
-  minWidth: 42,
-  height: 42,
-  padding: "0 16px",
+  width: 36,
+  height: 36,
+  padding: 0,
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  border: "1px solid var(--border-subtle, #c8c8c8)",
-  borderRadius: "var(--radius-lg, 10px)",
-  background: enabled ? "var(--accent, #2563eb)" : "var(--bg-elevated, #eee)",
-  color: enabled ? "var(--text-on-accent, #fff)" : "var(--text-muted, #666)",
-  cursor: enabled ? "pointer" : "not-allowed",
-  fontSize: "1rem",
-  fontWeight: 700
+  border: "none",
+  borderRadius: "50%",
+  background: enabled ? "var(--accent, #2563eb)" : "var(--surface-interactive, rgba(128, 128, 128, 0.18))",
+  color: enabled ? "var(--text-on-accent, #fff)" : "var(--text-muted, #6b7280)",
+  cursor: enabled ? "pointer" : "not-allowed"
 });
+var ArrowUpGlyph = () => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("svg", { width: "18", height: "18", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.5", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M12 19V5M5 12l7-7 7 7" }) });
+var StopGlyph = () => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("svg", { width: "12", height: "12", viewBox: "0 0 12 12", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("rect", { width: "12", height: "12", rx: "2", fill: "currentColor" }) });
 function PromptInput({
   value,
   onChange,
@@ -10584,13 +10599,18 @@ function PromptInput({
   ariaLabel,
   disabled = false,
   busy = false,
+  onStop,
+  stopLabel,
   leading,
   secondaryContent,
   rows = 1,
   className,
   submitOnEnter = true
 }) {
-  const canSubmit = value.trim().length > 0 && !disabled && !busy;
+  const [focused, setFocused] = (0, import_react8.useState)(false);
+  const empty = value.trim().length === 0;
+  const canSubmit = !empty && !disabled && !busy;
+  const showStop = busy && empty && !!onStop && !!stopLabel;
   const submit = () => {
     if (canSubmit) onSubmit();
   };
@@ -10613,10 +10633,12 @@ function PromptInput({
     style: fieldStyle
   };
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("form", { onSubmit: handleSubmit, className, style: { display: "flex", flexDirection: "column", gap: 6, width: "100%" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { style: rowStyle, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { style: boxStyle(focused || !empty), onFocus: () => setFocused(true), onBlur: () => setFocused(false), children: [
       leading,
-      rows <= 1 ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("input", { type: "text", ...shared }) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("textarea", { rows, ...shared }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "submit", disabled: !canSubmit, "aria-label": submitLabel, title: submitLabel, "aria-busy": busy || void 0, style: buttonStyle(canSubmit), children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { "aria-hidden": "true", children: busy ? "\u2026" : "\u2191" }) })
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { style: fieldRowStyle, children: [
+        rows <= 1 ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("input", { type: "text", ...shared }) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("textarea", { rows, ...shared }),
+        showStop ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", onClick: onStop, "aria-label": stopLabel, title: stopLabel, style: roundButtonStyle(true), children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(StopGlyph, {}) }) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "submit", disabled: !canSubmit, "aria-label": submitLabel, title: submitLabel, "aria-busy": busy || void 0, style: roundButtonStyle(canSubmit), children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ArrowUpGlyph, {}) })
+      ] })
     ] }),
     secondaryContent && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { style: { fontSize: "0.75rem", color: "var(--text-muted, #666)" }, children: secondaryContent })
   ] });

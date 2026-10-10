@@ -44,6 +44,23 @@ describe('PromptInput', () => {
     expect(onChange).toHaveBeenCalledWith('hello there');
   });
 
+  it('turns the trailing button into Stop while a turn streams with an empty field', () => {
+    const onStop = vi.fn();
+    const { onSubmit } = setup({ value: '', busy: true, onStop, stopLabel: 'Stop' });
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('keeps Send while busy when there is text, or when the host gave no Stop wording', () => {
+    setup({ busy: true, onStop: vi.fn(), stopLabel: 'Stop' });
+    expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+    setup({ value: '', busy: true, onStop: vi.fn() });
+    expect(screen.getAllByRole('button', { name: 'Send' })).toHaveLength(2);
+  });
+
   it('draws the host\'s leading control and secondary content in place', () => {
     setup({ leading: <select aria-label="Agent" />, secondaryContent: <span>Why it is off</span> });
     expect(screen.getByRole('combobox', { name: 'Agent' })).toBeTruthy();

@@ -48,8 +48,6 @@ export function BrainComposer() {
     ticketables,
     handleTicketTag,
     composerFocusToken,
-    composerDensity,
-    compactComposer,
     persona,
     capabilitySurface,
     capabilityId,
@@ -89,7 +87,6 @@ export function BrainComposer() {
       onStop={conv.stop}
       queuedCount={queuedCount}
       rows={2}
-      submitOnEnter={false}
       onAttach={conv.attach}
       onAddContext={repoContext.onAddContext}
       webBrowsing={prefs.webBrowsing}
@@ -130,22 +127,22 @@ export function BrainComposer() {
       ticketables={ticketables}
       onTicketTag={handleTicketTag}
       focusToken={composerFocusToken}
-      density={composerDensity}
       contextControls={<>
         {/* What the next request is about, when an element was picked in the preview. */}
         <PreviewPickChip />
         {/* "Acting as" and "To" are the shared brain-ui pickers — the SAME controls the
             editor's composer renders, so the two surfaces offer and word them alike.
-            Compact: "Acting as" only when there is someone else to act as, or the
-            person already moved off the project's own persona. */}
-        {(!compactComposer || persona.personaAgents.length > 0 || persona.personaSel !== persona.dockedPersona) && <PersonaPicker
+            "Acting as" hides itself until there is someone else to act as, or the
+            person already moved off the project's own persona (`quietAt`). */}
+        <PersonaPicker
           value={persona.personaSel}
           onChange={persona.choosePersona}
           modalities={localizedModalities}
           agents={persona.personaAgents}
           labels={personaLabels}
-        />}
-        {chats.activeChatId != null && (!compactComposer || capabilityId != null) && <BrainCapabilityPicker surface={capabilitySurface} value={capabilityId} onSelect={selectCapability} layout="compact" disabled={conv.sending} />}
+          quietAt={persona.dockedPersona}
+        />
+        {chats.activeChatId != null && capabilityId != null && <BrainCapabilityPicker surface={capabilitySurface} value={capabilityId} onSelect={selectCapability} layout="compact" disabled={conv.sending} />}
         {/* WHO YOU ARE ADDRESSING, with their personality. The shared hovercard showed
             on /settings, the Workforce card and task-assignee chips — everywhere except
             the surface where you actually choose which agent to talk to. It reads the
@@ -160,9 +157,9 @@ export function BrainComposer() {
           renderAvatar={renderRecipientAvatar}
         />
       </>}
-      // Memory status is a standing fact, not a mode: it sits beside the plan chip in
-      // the composer's last row, never in the tool row competing with Send.
-      meta={chats.activeChatId != null ? <EvermindStatusBadge projectId={ctxProjectId} /> : undefined}
+      // Memory status is a standing fact, not a mode: it lives inside the `/` menu, as
+      // it does in the editor composer, never as a row under the box.
+      menuStatus={chats.activeChatId != null ? <EvermindStatusBadge projectId={ctxProjectId} /> : undefined}
     />
   );
 }

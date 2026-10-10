@@ -29,6 +29,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useBrainChats, useBrainConversation, isStepMessage, getBrainCapability, guestMessageAuthor, GUEST_ROOM_CHAT_ID, type BrainCapabilityId } from '@/lib/brain';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
+import { ChatInput } from '@/components/ChatInput';
 import { GuestSignupCta } from '@/components/GuestSignupCta';
 import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
 import { GuestRoomBar } from '@/components/brain/GuestRoomBar';
@@ -216,8 +217,9 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conv, refreshUsage, room]);
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // A turn mid-run is not supported by the guest conversation: the box stays
+  // writable and the text stays put until the run ends (or is stopped).
+  const onSubmit = async () => {
     const text = input.trim();
     if (!text || conv.sending || capReached) return;
     setInput('');
@@ -371,37 +373,36 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
           {capReached ? (
             <GuestCapWall t={t} tRoom={tRoom} limit={limit} shared={inRoom} refusal={refusedWall} />
           ) : (
-            <form onSubmit={onSubmit} className="gb-composer">
-              <textarea
+            <div className="gb-composer">
+              <ChatInput
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSubmit(e as unknown as React.FormEvent); } }}
+                onChange={setInput}
+                onSubmit={() => { void onSubmit(); }}
+                submitOnEnter
                 placeholder={ready ? t('placeholder') : t('loading')}
-                disabled={!ready || conv.sending}
+                ariaLabel={t('placeholder')}
+                submitLabel={t('send')}
+                disabled={!ready}
+                running={conv.sending}
+                onStop={conv.stop}
+                showVoice
                 rows={isPage ? 3 : 2}
-                className="gb-textarea"
-                aria-label={t('placeholder')}
-              />
-              <div className="gb-composer-row">
-                <span className="gb-remaining">
-                  {remaining !== null
-                    ? (inRoom ? tRoom('sharedRemaining', { count: remaining, limit }) : t('remaining', { count: remaining }))
-                    : t('tagline')}
-                </span>
-                <div className="gb-composer-actions">
-                  {/* Inviting people is only offered when this deployment can host
-                      a shared room AND the visitor isn't already in one. */}
-                  {!inRoom && roomsEnabled && ready && (
-                    <button type="button" onClick={startRoom} disabled={joining} className="gb-invite">
-                      {joining ? tRoom('starting') : tRoom('invitePeople')}
-                    </button>
-                  )}
-                  <button type="submit" disabled={!ready || conv.sending || !input.trim()} className="gb-send">
-                    {conv.sending ? t('sending') : t('send')}
+                // Inviting people is only offered when this deployment can host a
+                // shared room AND the visitor isn't already in one.
+                contextControls={!inRoom && roomsEnabled && ready ? (
+                  <button type="button" onClick={startRoom} disabled={joining} className="gb-invite">
+                    {joining ? tRoom('starting') : tRoom('invitePeople')}
                   </button>
-                </div>
-              </div>
-            </form>
+                ) : undefined}
+                secondaryContent={(
+                  <span className="gb-remaining">
+                    {remaining !== null
+                      ? (inRoom ? tRoom('sharedRemaining', { count: remaining, limit }) : t('remaining', { count: remaining }))
+                      : t('tagline')}
+                  </span>
+                )}
+              />
+            </div>
           )}
         </>
       )}
@@ -434,21 +435,14 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
            so it reads as context rather than as the speaker. */
         .gb-author-muted { color: var(--text-muted); font-weight: 600; }
         .gb-error { font-size: var(--font-size-small); color: var(--danger); background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 12px; }
-        .gb-composer { flex-shrink: 0; border-top: 1px solid var(--border-subtle); padding: 10px 12px; background: var(--bg-elevated); }
-        .gb-textarea { width: 100%; resize: none; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-base); color: var(--text-primary); padding: 9px 11px; font-size: var(--font-size-small); font-family: inherit; box-sizing: border-box; }
-        .gb-textarea:disabled { opacity: 0.6; }
-        .gb-composer-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
-        .gb-composer-actions { display: flex; align-items: center; gap: 8px; }
+        .gb-composer { flex-shrink: 0; border-top: 1px solid var(--border-subtle); padding: 10px 12px; }
         .gb-remaining { font-size: var(--font-size-small); color: var(--text-muted); }
-        .gb-send { padding: 8px 18px; font-size: var(--font-size-small); font-weight: 600; border: none; border-radius: var(--radius-lg); background: var(--accent); color: var(--text-on-accent); cursor: pointer; min-height: 36px; }
-        .gb-send:disabled { opacity: 0.5; cursor: default; }
-        .gb-invite { padding: 8px 14px; font-size: var(--font-size-small); font-weight: 600; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-base); color: var(--text-primary); cursor: pointer; min-height: 36px; }
+        .gb-invite { padding: 0 12px; font-size: var(--font-size-small); font-weight: 600; border: none; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); cursor: pointer; min-height: 32px; white-space: nowrap; }
+        .gb-invite:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-interactive, var(--bg-elevated)); }
         .gb-invite:disabled { opacity: 0.5; cursor: default; }
         @media (max-width: 640px) {
           .gb-page { height: calc(100vh - 80px); border-radius: 0; border-left: none; border-right: none; }
           .gb-bubble { max-width: 92%; }
-          .gb-composer-actions { width: 100%; }
-          .gb-composer-actions .gb-send, .gb-composer-actions .gb-invite { flex: 1 1 auto; }
         }
       `}</style>
     </div>

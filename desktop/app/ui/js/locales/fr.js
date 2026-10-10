@@ -311,6 +311,8 @@ export default {
   "chat.toLabel": "À",
   "chat.placeholder": "Écrivez au Brain, ou commencez par @ pour vous adresser à un agent assigné",
   "chat.send": "Envoyer",
+  "chat.dictate": "Dicter votre message",
+  "chat.stopDictation": "Arrêter la dictée",
   "chat.thinking": "Se souvient et réfléchit…",
   "chat.usingTool": "Utilise {tool}…",
   "chat.toolAsk": "Le Brain veut : {tool}",

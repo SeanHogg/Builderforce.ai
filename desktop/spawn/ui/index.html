@@ -47,8 +47,13 @@
         <ol class="log" id="log" aria-live="polite"></ol>
         <div class="starters" id="starters"></div>
         <form class="composer" id="composer">
-          <textarea id="prompt" rows="2" data-i18n-placeholder="build.placeholder" data-i18n-aria="build.placeholder"></textarea>
-          <button class="cta" id="send" type="submit" data-i18n="build.send"></button>
+          <div class="composer-box" id="composer-box">
+            <textarea id="prompt" rows="2" data-i18n-placeholder="build.placeholder" data-i18n-aria="build.placeholder"></textarea>
+            <div class="composer-tools">
+              <span class="composer-spacer"></span>
+              <button class="composer-action is-send" id="send" type="button"></button>
+            </div>
+          </div>
         </form>
         <p class="small muted hint" data-i18n="build.hint"></p>
       </section>

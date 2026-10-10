@@ -77,7 +77,7 @@ import {
   BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, useChatParticipants, useChatActivitySignal,
   RecipientPicker, PersonaPicker, useRecipientChoice,
   useMentionAutocomplete, useTicketAutocomplete, ChatErrorBanner,
-  PromptPanel, PromptOptionsMenu,
+  PromptPanel, PromptOptionsMenu, promptTrailingAction, useVoiceDictation,
   PendingQuestionBanner, selectPendingAskUser, askUserAnchorId,
   chatSwitcherLabel, chatDiagnosticsReads,
   type ChatModelSelection,
@@ -113,7 +113,8 @@ import {
   effortDesc, makeT, personaModalityOptions, personaPickerLabels, promptMenuLabels, recipientPickerLabels, timelineLabels,
 } from './chatLabels';
 import { persistedToTraceEvent, type PersistedTraceRow } from './chatTrace';
-import { IconBolt, IconMic, IconPlus, IconRename, IconSend, IconStop, MenuItem, PopoverMenu } from './ChatMenu';
+import { IconPlus, IconRename, MenuItem, PopoverMenu } from './ChatMenu';
+import { ComposerTrailingButton } from './ComposerTrailingButton';
 import { useGlobalRunState } from './useGlobalRunState';
 
 
@@ -196,13 +197,13 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // layer as the native participant + cloud/on-prem agents. Lingers as the last computed
   // block until the next submit refreshes it; '' when neutral / offline (a no-op).
   const [turnLimbic, setTurnLimbic] = useState('');
-  // Speech-to-text (dictation) via the Web Speech API. Capability-gated: the mic
-  // button only renders where the runtime exposes SpeechRecognition, so it is
-  // never a dead control (see the gap register re: a universal transcription path).
-  const [listening, setListening] = useState(false);
-  const recognitionRef = useRef<{ stop: () => void } | null>(null);
-  const speechSupported = typeof window !== 'undefined'
-    && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+  // Speech-to-text, through the SHARED hook the web composer uses. `supported` gates
+  // the mic so it is never a dead control where the webview cannot listen. Phrases
+  // append to the text as it stands when they land, read through a stable getter.
+  const inputValueRef = useRef(input);
+  inputValueRef.current = input;
+  const getInput = useCallback(() => inputValueRef.current, []);
+  const voice = useVoiceDictation(getInput, setInput);
 
   // The webview reaches /api/brain directly (CORS allows the webview origin), the same
   // path persistence uses — a shared bearer fetch for the trace persist + rehydrate below.
@@ -875,35 +876,6 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     }
   }, [conv]);
 
-  // Dictation: stream interim + final transcripts into the composer, appended to
-  // whatever the user had already typed. Stopping (button or end-of-speech)
-  // clears the ref so the next click starts a fresh recognition.
-  const toggleMic = useCallback(() => {
-    const SR = (window as unknown as { SpeechRecognition?: new () => any; webkitSpeechRecognition?: new () => any }).SpeechRecognition
-      ?? (window as unknown as { webkitSpeechRecognition?: new () => any }).webkitSpeechRecognition;
-    if (!SR) return;
-    if (recognitionRef.current) { recognitionRef.current.stop(); return; }
-    const rec = new SR();
-    rec.lang = navigator.language || 'en-US';
-    rec.interimResults = true;
-    rec.continuous = false;
-    const base = input.trim() ? `${input.replace(/\s*$/, '')} ` : '';
-    rec.onresult = (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => {
-      let text = '';
-      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-      setInput(base + text);
-    };
-    const done = () => { setListening(false); recognitionRef.current = null; };
-    rec.onend = done;
-    rec.onerror = done;
-    recognitionRef.current = rec;
-    setListening(true);
-    try { rec.start(); } catch { done(); }
-  }, [input]);
-
-  // Stop any in-flight recognition if the panel unmounts.
-  useEffect(() => () => { try { recognitionRef.current?.stop(); } catch { /* noop */ } }, []);
-
   const onPaste = useCallback((e: React.ClipboardEvent) => {
     const imgs = Array.from(e.clipboardData.items)
       .filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
@@ -1519,7 +1491,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           </div>
         )}
         </> : undefined}
-        input={<div className="bf-composer__entry">
+        input={(
           <textarea
             ref={inputRef}
             className="bf-input"
@@ -1541,31 +1513,20 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
             }}
           />
-          {/* Mic lives in the input row (type XOR speak), not among the action chips. */}
-          {speechSupported && !conv.sending && (
-            <button
-              type="button"
-              className={`bf-iconbtn bf-composer__mic${listening ? ' is-listening' : ''}`}
-              title={listening ? t('app.stopDictation', 'Stop dictation') : t('app.dictate', 'Dictate')}
-              aria-label={listening ? t('app.stopDictation', 'Stop dictation') : t('app.dictate', 'Dictate')}
-              aria-pressed={listening}
-              onClick={toggleMic}
-            >
-              <IconMic />
-            </button>
-          )}
-        </div>}
-        // Who answers and who is addressed get the shell's context row; the tool row
-        // below holds only `+`, `/` and Auto, with Send pinned right.
+        )}
+        // Who answers and who is addressed. The shell carries them in the tool row
+        // after `+` and `/`, so the box keeps one row of controls.
         context={<>
           {/* Acting as — WHO the Brain answers as. The shared brain-ui control the web
-              composer renders too; see `personaOverlay` for how it shapes the turn. */}
+              composer renders too; see `personaOverlay` for how it shapes the turn.
+              Hidden until there is someone else to act as (`quietAt`), as on the web. */}
           <PersonaPicker
             value={persona}
             onChange={setPersona}
             modalities={personaModalities}
             agents={personaAgents}
             labels={personaLabels}
+            quietAt={DEFAULT_PERSONA}
           />
 
           {/* To — routes the next message to the BRAIN (executes) or a participant
@@ -1667,65 +1628,30 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
             </>}
             onAccountSettings={() => post('settings')}
           />
-
-          {/* Auto = auto-approve tool actions (same gate as the confirm dialog).
-              Label is "Auto", matching Claude's chrome; the longer "Auto mode"
-              copy lives in the `/` Mode tab. */}
-          <button
-            type="button"
-            className={`bf-toggle${autoApprove ? ' is-on' : ''}`}
-            title={t('app.autoModeHint', 'Auto-approve tool actions without asking')}
-            aria-pressed={autoApprove}
-            onClick={() => setAutoApproveMode(!autoApprove)}
-          >
-            <IconBolt />
-            <span>{t('app.autoMode', 'Auto')}</span>
-          </button>
-
+          {/* Auto-approve lives in the `/` menu above (its `autoMode` row) — the
+              separate "Auto" chip that used to sit here was a second switch for the
+              same gate. */}
         </>}
-        // While a run is in flight the primary action becomes Stop — it aborts the
-        // streaming LLM request and unwinds the agent loop (conv.stop). The user can
-        // still compose: with text typed, a Queue button (and Enter) adds the message
-        // to the drain queue instead of dropping it. Icon-only, like Send — the
-        // title/aria-label still name the action.
-        //
-        // It goes through `primaryAction` rather than the end of `actions` so the
-        // shared shell pins it to the far right edge of the row; trailing it after the
-        // chips left it wherever the chips happened to end.
-        primaryAction={conv.sending ? (
-          <>
-            {input.trim() && (
-              <button
-                type="button"
-                className="bf-iconbtn bf-iconbtn--send"
-                onClick={submit}
-                title={t('app.queueSend', 'Queue message — sends when the current run finishes')}
-                aria-label={t('app.queueSend', 'Queue message — sends when the current run finishes')}
-              >
-                <IconSend />
-              </button>
-            )}
-            <button
-              type="button"
-              className="bf-iconbtn bf-iconbtn--stop"
-              onClick={conv.stop}
-              title={t('app.stop', 'Stop')}
-              aria-label={t('app.stop', 'Stop')}
-            >
-              <IconStop />
-            </button>
-          </>
-        ) : (
-          <button
-            className="bf-iconbtn bf-iconbtn--send"
-            onClick={submit}
-            disabled={!input.trim()}
-            title={t('app.send', 'Send')}
-            aria-label={t('app.send', 'Send')}
-          >
-            <IconSend />
-          </button>
-        )}
+        // ONE trailing button, decided by the shared rule the web composer uses: the
+        // mic on an empty idle box, Send once there is text (mid-run it queues the
+        // message behind the run), Stop on an empty box while a run streams. The shell
+        // pins it to the far right edge of the tool row.
+        primaryAction={<ComposerTrailingButton
+          action={promptTrailingAction({
+            canSubmit: input.trim().length > 0,
+            running: conv.sending,
+            canStop: true,
+            voice: voice.supported,
+            recording: voice.recording,
+          })}
+          canSubmit={input.trim().length > 0}
+          running={conv.sending}
+          recording={voice.recording}
+          onSend={submit}
+          onStop={conv.stop}
+          onVoice={voice.recording ? voice.stopVoice : voice.startVoice}
+          t={t}
+        />}
       />
     </div>
   );

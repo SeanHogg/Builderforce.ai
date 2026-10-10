@@ -413,31 +413,36 @@ select option {
   color: var(--bf-text-muted);
 }
 
+/* The composer is the shared PromptPanel: one filled box, lit by the accent ring while
+   you type. Only the editor's fill, hairline (the theme's input border, which most dark
+   themes leave transparent) and accent are set here. */
 .bf-composer {
   flex: 0 0 auto;
   margin: 8px 10px;
   --prompt-panel-bg: var(--vscode-input-background);
-  --prompt-panel-border: var(--vscode-input-border, var(--bf-border));
+  --prompt-panel-border: var(--vscode-input-border, transparent);
   --prompt-panel-active-border: var(--bf-accent);
   --prompt-panel-active-ring: 0 0 0 1px var(--bf-accent);
-  --prompt-panel-shadow: none;
+  --prompt-panel-radius: 16px;
+  --prompt-panel-pad-x: 12px;
+  --chat-ctl-size: 30px;
   /* The editor's chips carry their own padding, so they need a wider gap than the
-     shell's 6px default. Set here (not in a second `.bf-composer__actions` rule)
-     because the shared PromptPanel owns the row's layout. */
-  --prompt-panel-action-gap: 8px;
+     shell's 6px default. Set here because the shared PromptPanel owns the row. */
+  --prompt-panel-action-gap: 6px;
 }
 
-.bf-composer--drag {
-  outline: 2px dashed var(--bf-accent);
-  outline-offset: -4px;
-}
-
-/* When the user is focused in / has typed into the composer, highlight the
-   whole section in BuilderForce blue. Clears back to the normal border when
-   the input is empty and unfocused. */
-.bf-composer--active .bf-input {
+/* The box is the one outline; the text field inside it draws none, focused or not. */
+.bf-composer .bf-input,
+.bf-composer .bf-input:focus {
   border-color: transparent;
   box-shadow: none;
+}
+
+/* The ONE trailing button (mic / Send / Stop) is round, like the web composer's. */
+.bf-composer .bf-prompt-panel__actions-primary .bf-iconbtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
 }
 
 .bf-attachments {
@@ -521,25 +526,6 @@ select option {
 .bf-input:focus {
   outline: none;
   border-color: var(--bf-accent);
-}
-
-/* Type XOR speak: the mic sits on the far right of the prompt, not in the chip row. */
-.bf-composer__entry {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  width: 100%;
-  min-width: 0;
-}
-.bf-composer__entry .bf-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  width: auto;
-}
-.bf-composer__mic {
-  flex: 0 0 auto;
-  align-self: flex-end;
-  margin-bottom: 2px;
 }
 
 .bf-acct {
@@ -631,6 +617,11 @@ select option {
   color: var(--bf-text-muted);
 }
 
+/* The mic standing in the Send slot on an empty box: a quiet filled circle. */
+.bf-iconbtn--voice {
+  background: var(--bf-surface-2, rgba(128, 128, 128, 0.18));
+}
+
 /* Mic actively listening — pulse in the editor's error colour so it reads as "recording". */
 .bf-iconbtn.is-listening {
   color: var(--bf-error);
@@ -641,41 +632,6 @@ select option {
 @keyframes bf-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
-}
-
-/* Auto-mode pill toggle. */
-.bf-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: inherit;
-  font-size: 11px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--bf-border);
-  background: transparent;
-  color: var(--bf-text-muted);
-  cursor: pointer;
-  flex: 0 0 auto;
-}
-
-.bf-toggle:hover {
-  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
-}
-
-.bf-toggle.is-on {
-  border-color: var(--bf-accent);
-  color: var(--bf-accent);
-  background: color-mix(in srgb, var(--bf-accent) 14%, transparent);
-}
-
-.bf-toggle:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.bf-toggle:disabled:hover {
-  background: transparent;
 }
 
 /* Popover menu (the + and / affordances). */

@@ -44,6 +44,13 @@ export interface PersonaPickerProps {
   agents: readonly BrainPersonaAgent[];
   labels?: Partial<PersonaPickerLabels>;
   disabled?: boolean;
+  /**
+   * The surface's own default choice. While no agent is assigned and the choice is
+   * still this one, the picker renders nothing: "Acting as: Brain" with nobody else
+   * to act as is a row of chrome that says nothing. It reappears once an agent is
+   * assigned or the person moves off the default (from a prior pick or a seed).
+   */
+  quietAt?: BrainPersonaChoice;
 }
 
 /**
@@ -52,7 +59,8 @@ export interface PersonaPickerProps {
  * composer and the VS Code webview; what a choice DOES to the run is the shared
  * persona domain's (`brainPersona.ts`), so this component only offers and names.
  */
-export function PersonaPicker({ value, onChange, modalities, agents, labels, disabled }: PersonaPickerProps) {
+export function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, quietAt }: PersonaPickerProps) {
+  if (quietAt !== undefined && agents.length === 0 && value === quietAt) return null;
   const l = { ...DEFAULT_PERSONA_PICKER_LABELS, ...labels };
   const modality = modalities.find((m) => modalityPersonaChoice(m.id) === value);
   const agent = personaAgentOf(value, agents);

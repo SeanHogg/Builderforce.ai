@@ -53,8 +53,6 @@ export function WorkspaceBrainColumn({ projectId, modality, extraSystem, activeF
         initialChatId={initialChatId}
         initialTicket={initialTicket}
         capabilitySurface="build"
-        // The workspace header already names the project, its type and the plan.
-        composerDensity="compact"
         headerActions={onCollapse && (
           <button type="button" className={styles.iconButton} onClick={onCollapse} aria-label={tw('hideChat')} title={tw('hideChat')} style={{ width: 32, height: 32 }}>
             <Icon name="collapse-horizontal" size={16} />

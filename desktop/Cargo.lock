@@ -379,7 +379,7 @@ checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "bf-cloud"
-version = "2026.10.2"
+version = "2026.10.3"
 dependencies = [
  "anyhow",
  "bf-vault",
@@ -390,7 +390,7 @@ dependencies = [
 
 [[package]]
 name = "bf-context"
-version = "2026.10.2"
+version = "2026.10.3"
 dependencies = [
  "anyhow",
  "bf-index",
@@ -406,7 +406,7 @@ dependencies = [
 
 [[package]]
 name = "bf-index"
-version = "2026.10.2"
+version = "2026.10.3"
 dependencies = [
  "anyhow",
  "blake3",
@@ -429,7 +429,7 @@ dependencies = [
 
 [[package]]
 name = "bf-memory"
-version = "2026.10.2"
+version = "2026.10.3"
 dependencies = [
  "anyhow",
  "serde",
@@ -438,7 +438,7 @@ dependencies = [
 
 [[package]]
 name = "bf-roblox"
-version = "2026.10.2"
+version = "2026.10.3"
 dependencies = [
  "anyhow",
  "dirs 5.0.1",
@@ -452,7 +452,7 @@ dependencies = [
 
 [[package]]
 name = "bf-teach"
-version = "2026.10.2"
+version = "2026.10.3"
 dependencies = [
  "anyhow",
  "enigo",
@@ -468,7 +468,7 @@ dependencies = [
 
 [[package]]
 name = "bf-vault"
-version = "2026.10.2"
+version = "2026.10.3"
 dependencies = [
  "anyhow",
  "keyring",
@@ -5832,7 +5832,7 @@ dependencies = [
 
 [[package]]
 name = "spawn"
-version = "2026.10.2"
+version = "2026.10.3"
 dependencies = [
  "anyhow",
  "bf-cloud",
@@ -5957,7 +5957,7 @@ dependencies = [
 
 [[package]]
 name = "synapse"
-version = "2026.10.2"
+version = "2026.10.3"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

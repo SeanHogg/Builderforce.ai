@@ -2,6 +2,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
+import { ChatInput } from '@/components/ChatInput';
 import { CopyButton } from '@/components/CopyButton';
 import { buildManagerChatDiagnosticsReport } from '@/lib/managerChatDiagnostics';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
@@ -340,38 +341,18 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
 
       <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {starterRow}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              // Enter sends, Shift+Enter breaks the line — the convention every other
-              // composer in the product uses.
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void ask(draft); }
-            }}
-            placeholder={t('placeholder')}
-            rows={2}
-            disabled={!handle?.agentRef}
-            style={{
-              flex: '1 1 240px', minWidth: 0, resize: 'vertical', fontFamily: 'inherit',
-              padding: '9px 11px', borderRadius: 'var(--radius-lg)', fontSize: '0.87rem',
-              border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)',
-            }}
-          />
-          <button
-            type="button"
-            disabled={thinking || !draft.trim() || !handle?.agentRef}
-            onClick={() => void ask(draft)}
-            style={{
-              padding: '10px 18px', borderRadius: 'var(--radius-lg)', border: 'none', fontWeight: 700, fontSize: '0.85rem',
-              background: 'var(--accent)', color: 'var(--text-on-accent)',
-              cursor: thinking || !draft.trim() ? 'default' : 'pointer',
-              opacity: thinking || !draft.trim() || !handle?.agentRef ? 0.6 : 1,
-            }}
-          >
-            {thinking ? t('sending') : t('send')}
-          </button>
-        </div>
+        {/* The shared composer. A run in flight never greys it out: `ask` holds the
+            text until the reply lands, and the transcript shows the progress. */}
+        <ChatInput
+          value={draft}
+          onChange={setDraft}
+          onSubmit={() => { void ask(draft); }}
+          submitOnEnter
+          placeholder={t('placeholder')}
+          submitLabel={t('send')}
+          disabled={!handle?.agentRef}
+          running={thinking}
+        />
       </div>
     </section>
   );

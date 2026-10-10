@@ -529,38 +529,23 @@ declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgr
 interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
     /** Text entry for the prompt. Always occupies the first, full-width row. */
     input: ReactNode;
-    /**
-     * WHO is answering and WHAT you are addressing — "Acting as", the capability,
-     * "To", a canvas scope. Its own row between the text entry and the tools.
-     *
-     * These used to ride in `actions`, interleaved with `+`, `/`, the plan chip and
-     * the mic in one wrapping row. In a ~320px side panel that row broke into four
-     * lines at whatever widths the chips happened to have, so "Acting as" landed
-     * between the model menu and the upgrade chip and the mic ended up alone on the
-     * last line. A row per kind of thing is the only layout that stays legible at
-     * every width: context wraps among context, tools among tools.
-     */
-    context?: ReactNode;
-    /** The tools: `+`, the `/` options menu, voice, host modes. They wrap. */
+    /** The tools: `+` and the `/` options menu. They wrap. */
     actions: ReactNode;
     /**
-     * The ONE primary control for the composer — Send, Stop, or Queue.
+     * WHO is answering and WHAT you are addressing — "Acting as", the capability,
+     * "To", a canvas scope. Each of these self-hides until it has something to say, and
+     * rides in the tool row after the tools: the box keeps ONE row of controls under the
+     * text, on a phone and in a 300px editor sidebar alike.
+     */
+    context?: ReactNode;
+    /**
+     * The ONE trailing control — the mic, Send or Stop (see `promptTrailingAction`).
      *
-     * It lives in its own trailing region rather than at the end of `actions`
-     * because "the thing that sends the message sits at the far right edge" is a
-     * property of the composer, not of each host: the web composer pinned it with
-     * an ad-hoc `marginLeft: 'auto'` on an unrelated chip, and the editor composer
-     * — which has no such chip — left Send/Stop floating in the middle of the row
-     * behind whatever chips happened to be rendered. Given here, neither host can
-     * place it differently again, and it never wraps onto a second line.
+     * It lives in its own trailing region rather than at the end of `actions` because
+     * "the thing that sends the message sits at the far right edge" is a property of the
+     * composer, not of each host. It never wraps onto a second line.
      */
     primaryAction?: ReactNode;
-    /**
-     * Standing facts about the composer — which plan funds it, whether memory is
-     * on. The last row, right-aligned and quiet: they are read, rarely clicked, and
-     * must not compete with Send for the tool row's width.
-     */
-    meta?: ReactNode;
     /** Chips, queued turns, or other state shown above the text entry. */
     status?: ReactNode;
     /** Popovers such as the shared @-mention picker. */
@@ -569,13 +554,64 @@ interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'childre
     dragging?: boolean;
 }
 /**
- * The single structural shell for every BuilderForce prompt surface.
+ * The single structural shell for every BuilderForce prompt surface — the web Brain,
+ * the canvas and Studio dock, the editor panel — and the model the desktop apps' boxes
+ * copy: one filled box, the text on top, one row of controls under it.
  *
  * Hosts own behavior and individual controls, but input/status/action placement,
- * focus treatment, spacing, and panel shape live here so web, Canvas, marketing,
- * and editor integrations cannot grow different composer markup again.
+ * focus treatment, spacing, and panel shape live here so no surface can grow a
+ * different composer again. The `/` trigger's quiet "Work ▾" face is this package's
+ * stylesheet, scoped to `.bf-prompt-panel`.
  */
-declare function PromptPanel({ input, context, actions, meta, primaryAction, status, overlay, active, dragging, className, style, ...rest }: PromptPanelProps): React.JSX.Element;
+declare function PromptPanel({ input, context, actions, primaryAction, status, overlay, active, dragging, className, style, ...rest }: PromptPanelProps): React.JSX.Element;
+
+/**
+ * What a composer's ONE trailing button is right now: the mic, Send, or Stop.
+ *
+ * Every prompt surface — the web composer, the editor panel, the desktop app — used
+ * to answer this on its own, so the editor showed a mic in the text row AND a Send
+ * button, and Stop beside a Queue button, while the web shared one slot. They are never
+ * useful at the same time, so one slot holds whichever applies:
+ *
+ * - a live recording keeps the mic (as Stop dictation) in place, even once phrases land
+ *   in the box — otherwise the first phrase would swap it for Send and strand the
+ *   recording;
+ * - text to send wins next, including mid-run, where Send queues the follow-up;
+ * - an empty box during a run interrupts it;
+ * - an empty idle box offers the mic, where the runtime can listen;
+ * - otherwise Send, disabled until there is text.
+ */
+type PromptTrailingAction = 'voice' | 'send' | 'stop';
+interface PromptTrailingState {
+    /** The box holds text the host would accept now. */
+    canSubmit: boolean;
+    /** A turn is streaming. */
+    running: boolean;
+    /** The host can interrupt the running turn. */
+    canStop: boolean;
+    /** The host offers dictation AND the runtime supports it. */
+    voice: boolean;
+    /** Dictation is live. */
+    recording: boolean;
+}
+declare function promptTrailingAction({ canSubmit, running, canStop, voice, recording }: PromptTrailingState): PromptTrailingAction;
+
+/**
+ * Dictation into a composer through the runtime's Speech Recognition — the one hook
+ * every React prompt surface uses (web composer, editor panel).
+ *
+ * Each final phrase is appended to the CURRENT text, read through `getValue` at the
+ * moment it lands rather than the text as it stood when recording began, so typing
+ * while dictating is never overwritten. `supported` is false where the runtime cannot
+ * listen (several embedded webviews), and a host then shows no mic at all rather than a
+ * button that does nothing.
+ */
+declare function useVoiceDictation(getValue: () => string, onChange: (value: string) => void): {
+    supported: boolean;
+    recording: boolean;
+    startVoice: () => void;
+    stopVoice: () => void;
+};
 
 /**
  * The contract for the composer's `/` control — the ONE place a prompt panel
@@ -895,6 +931,13 @@ interface PersonaPickerProps {
     agents: readonly BrainPersonaAgent[];
     labels?: Partial<PersonaPickerLabels>;
     disabled?: boolean;
+    /**
+     * The surface's own default choice. While no agent is assigned and the choice is
+     * still this one, the picker renders nothing: "Acting as: Brain" with nobody else
+     * to act as is a row of chrome that says nothing. It reappears once an agent is
+     * assigned or the person moves off the default (from a prior pick or a seed).
+     */
+    quietAt?: BrainPersonaChoice;
 }
 /**
  * The composer's "Acting as" control: WHO the Brain answers as — the default Brain,
@@ -902,7 +945,7 @@ interface PersonaPickerProps {
  * composer and the VS Code webview; what a choice DOES to the run is the shared
  * persona domain's (`brainPersona.ts`), so this component only offers and names.
  */
-declare function PersonaPicker({ value, onChange, modalities, agents, labels, disabled }: PersonaPickerProps): React.JSX.Element;
+declare function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, quietAt }: PersonaPickerProps): React.JSX.Element | null;
 
 /**
  * HealthRing — a compact "% done" donut for a work item's health, rendered
@@ -2878,4 +2921,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatRunHistoryVM, type ChatRunVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionAutocomplete, type MentionLabels, type MessageRating, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineImage, type TimelineNode, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, chatDiagnosticsReads, chatSwitcherLabel, commandOf, createChatTicketsRestAdapter, createEvermindRestAdapter, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, groupAbsorbed, healthRingColor, initialsOf, loadEvermindBuilds, pendingChangesSummary, planIsPaid, preferredEvermindBuild, promptOptionsLabels, publishedEvermindModels, resolvePendingChangesLabels, resolveTeacherOptions, shellOutcomeOf, strandedReplyKey, streamingNode, toolPreview, toolStepView, useChatActivitySignal, useChatParticipants, useMentionAutocomplete, usePopover, useRecipientChoice, useTicketAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatRunHistoryVM, type ChatRunVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionAutocomplete, type MentionLabels, type MessageRating, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, type PromptTrailingAction, type PromptTrailingState, QuestionCard, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, Sunburst, type SunburstProps, TICKET_KINDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineImage, type TimelineNode, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, chatDiagnosticsReads, chatSwitcherLabel, commandOf, createChatTicketsRestAdapter, createEvermindRestAdapter, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, formatDuration, formatElapsed, groupAbsorbed, healthRingColor, initialsOf, loadEvermindBuilds, pendingChangesSummary, planIsPaid, preferredEvermindBuild, promptOptionsLabels, promptTrailingAction, publishedEvermindModels, resolvePendingChangesLabels, resolveTeacherOptions, shellOutcomeOf, strandedReplyKey, streamingNode, toolPreview, toolStepView, useChatActivitySignal, useChatParticipants, useMentionAutocomplete, usePopover, useRecipientChoice, useTicketAutocomplete, useVoiceDictation };

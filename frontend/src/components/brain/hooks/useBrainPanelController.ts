@@ -65,10 +65,8 @@ export function useBrainPanelController({
   onClose,
   headerContext,
   headerActions,
-  composerDensity = 'comfortable',
 }: BrainPanelProps) {
   const isPage = variant === 'page';
-  const compactComposer = composerDensity === 'compact';
   // No close handler => the Brain is part of the page's own layout, not the drawer;
   // the floating launcher stands down rather than offer a second copy of this chat.
   useRegisterInlineBrain(!onClose);
@@ -354,8 +352,6 @@ export function useBrainPanelController({
   return {
     // Surface props
     isPage,
-    compactComposer,
-    composerDensity,
     capabilitySurface,
     pinnedProjectId,
     viewingProjectId,

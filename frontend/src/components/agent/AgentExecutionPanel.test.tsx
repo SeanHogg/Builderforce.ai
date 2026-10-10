@@ -71,14 +71,14 @@ describe('AgentExecutionPanel — steering echo', () => {
 
   it('renders a sent direction optimistically even when the stream never echoes it', async () => {
     const post = vi.spyOn(builderforceApi.runtimeApi, 'postMessage').mockResolvedValue({ ok: true });
-    const { getByPlaceholderText, getByText, findByText } = render(
+    const { getByPlaceholderText, getByTitle, findByText } = render(
       <AgentExecutionPanel task={task} agentHosts={[]} />,
     );
 
     // Wait for the running execution to load (chatbox becomes active).
     const box = await waitFor(() => getByPlaceholderText('agentExecution.steerPlaceholder'));
     fireEvent.change(box, { target: { value: 'focus on the pricing page' } });
-    fireEvent.click(getByText('agentExecution.send'));
+    fireEvent.click(getByTitle('agentExecution.steerTitle'));
 
     // The directive shows in the thread without waiting on a round-trip echo.
     expect(await findByText('focus on the pricing page')).toBeTruthy();
@@ -277,13 +277,14 @@ describe('AgentExecutionPanel — steering echo', () => {
 
   it('rolls the optimistic echo back when the post fails', async () => {
     vi.spyOn(builderforceApi.runtimeApi, 'postMessage').mockRejectedValue(new Error('offline'));
-    const { getByPlaceholderText, getByText, queryByText } = render(
+    const { getByPlaceholderText, queryByText } = render(
       <AgentExecutionPanel task={task} agentHosts={[]} />,
     );
 
     const box = (await waitFor(() => getByPlaceholderText('agentExecution.steerPlaceholder'))) as HTMLTextAreaElement;
     fireEvent.change(box, { target: { value: 'retry me' } });
-    fireEvent.click(getByText('agentExecution.send'));
+    // Enter sends, like every other composer (Shift+Enter is a newline).
+    fireEvent.keyDown(box, { key: 'Enter' });
 
     // After the failed post the thread echo (a "You" message) is removed and the
     // draft is restored for retry. ("You" only renders for a user thread message.)

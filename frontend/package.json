@@ -1,6 +1,6 @@
 {
   "name": "builderforce-frontend",
-  "version": "2026.10.32",
+  "version": "2026.10.33",
   "private": true,
   "scripts": {
     "postinstall": "node ../scripts/ensure-linked-deps.mjs",

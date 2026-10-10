@@ -44,13 +44,4 @@ export interface BrainPanelProps {
   headerContext?: ReactNode;
   /** Docked only: the host's own icon actions in the header (the workspace's "collapse panel"). */
   headerActions?: ReactNode;
-  /**
-   * `compact` — a composer beside a workspace that already names the project and
-   * its type, and whose header carries the plan: the context pickers ride in the
-   * tool row instead of a row of their own, the plan/memory row is dropped (memory
-   * is in the `/` menu), and "Acting as" / "Making" appear only when they are a
-   * real choice (there are agents to act as; a capability is set and can be
-   * cleared). Defaults to `comfortable`.
-   */
-  composerDensity?: 'comfortable' | 'compact';
 }

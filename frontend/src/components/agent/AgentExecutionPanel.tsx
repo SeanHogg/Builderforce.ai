@@ -27,6 +27,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { RunAgentControl } from '../task/RunAgentControl';
 import { ApprovalResolveControl } from '../humanRequests/ApprovalResolveControl';
 import { ChatMessageBubble } from '../ChatMessageBubble';
+import { ChatInput } from '../ChatInput';
 import { EXECUTION_STATUS_TONE, rerunAffordance } from '../board/AgentChip';
 import { statusColor } from '@/lib/statusTone';
 import { ExecutionChip } from './ExecutionChip';
@@ -919,29 +920,22 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   dispatch: POST /api/runtime/executions/:id/messages
                   is requireRole(DEVELOPER). Gated as a BLOCK so a viewer doesn't type a
                   directive into a composer that can never send. READING the thread above
-                  is untouched. */}
+                  is untouched.
+                  The shared composer: Enter sends, and typing while the run streams
+                  STEERS it, so the box never greys out. An empty box on a live run
+                  offers Stop — the same cancel as the header's button. */}
               <RoleGate capability="runtime.execute" variant="block" style={{ marginTop: 10 }}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <textarea
+                <ChatInput
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void send(); } }}
+                  onChange={setDraft}
+                  onSubmit={() => { void send(); }}
+                  submitOnEnter
                   placeholder={isPaused ? t('answerPlaceholder') : isRunning ? t('steerPlaceholder') : t('followUpPlaceholder')}
-                  rows={2}
-                  style={{ flex: 1, resize: 'vertical', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: 'inherit' }}
+                  submitLabel={isPaused ? t('answerTitle') : isRunning ? t('steerTitle') : t('startRunTitle')}
+                  disabled={selectedId == null}
+                  running={isRunning}
+                  onStop={() => { void cancel(); }}
                 />
-                <button
-                  type="button"
-                  onClick={send}
-                  disabled={!draft.trim() || sending || selectedId == null}
-                  style={{ alignSelf: 'flex-end', padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', border: 'none', background: !draft.trim() || sending ? 'var(--bg-elevated)' : 'var(--coral-bright)', color: !draft.trim() || sending ? 'var(--text-muted)' : 'var(--text-on-accent)', cursor: !draft.trim() || sending ? 'default' : 'pointer' }}
-                  title={isPaused ? t('answerTitle') : isRunning ? t('steerTitle') : t('startRunTitle')}
-                >
-                  {sending
-                    ? (isPaused ? t('resumingLabel') : isRunning ? t('sendingLabel') : t('startingLabel'))
-                    : isPaused ? t('answerAndResume') : isRunning ? t('send') : t('startRun')}
-                </button>
-              </div>
               </RoleGate>
 
               {/* This panel is a minimal per-execution view; the agent streams its

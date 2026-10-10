@@ -2,7 +2,6 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { PromptPanel, useMentionAutocomplete, useTicketAutocomplete } from '@seanhogg/builderforce-brain-ui';
-import { PlanBadge } from '@/components/PlanBadge';
 import { Icon } from '@/components/ui/Icon';
 import { useAssistantGate } from '@/lib/academic/useAssistantGate';
 import { iconButtonStyle, textareaStyle } from './chat-input/composerStyles';
@@ -13,7 +12,9 @@ import { AssessmentGateNotice, PendingAttachmentChips, QueuedTurnsReceipt } from
 import { ComposerSendOrVoice } from './chat-input/ComposerSendOrVoice';
 import { useAttachmentDropAndPaste } from './chat-input/useAttachmentDropAndPaste';
 import type { ChatInputAttachment, ChatInputProps } from './chat-input/types';
-import compactStyles from './chat-input/composerCompact.module.css';
+// The shell's own sheet (the `/` trigger's quiet face) — imported here so the
+// composer renders right wherever it is dropped, not only beside a Brain panel.
+import '@seanhogg/builderforce-brain-ui/styles.css';
 export type { ChatModelOptions, ChatModelSelection } from '@seanhogg/builderforce-brain-ui';
 export type { ChatInputAttachment, ChatInputProps, ComposerAddMenuItem } from './chat-input/types';
 
@@ -37,7 +38,7 @@ export function ChatInput({
   onStop,
   queuedCount = 0,
   rows = 2,
-  submitOnEnter = false,
+  submitOnEnter = true,
   onAttach,
   onAddContext,
   webBrowsing,
@@ -75,13 +76,11 @@ export function ChatInput({
   onTicketTag,
   contextControls,
   addMenuItems,
-  meta,
-  density = 'comfortable',
+  menuStatus,
   modeVocabulary,
   className,
   focusToken,
 }: ChatInputProps) {
-  const compact = density === 'compact';
   const t = useTranslations('chatInput');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const valueRef = useRef(value);
@@ -111,9 +110,9 @@ export function ChatInput({
   const active = focused || value.trim().length > 0;
 
   // Rows, top to bottom: the textarea (full width, so typed text is never crushed
-  // into a sliver), the context row (who answers, what is addressed), the tools
-  // with Send pinned right, and the standing facts (plan, memory). The shell owns
-  // the rows; this file only says which control is which kind.
+  // into a sliver), then one row of tools — `+`, `/`, who answers and what is
+  // addressed — with the one trailing button pinned right. The shell owns the rows;
+  // this file only says which control is which kind.
 
   // @-mention typeahead — active only when the host supplies participants. Picking
   // one routes the next turn (via onMention) and strips the "@query" from the text.
@@ -156,14 +155,14 @@ export function ChatInput({
       e.preventDefault();
       if (canSubmit) onSubmit();
     }
-    // When submitOnEnter is false, Enter adds a new line (default textarea behavior); only Up arrow submits
+    // Shift+Enter (or Enter when a host turns submitOnEnter off) adds a new line.
   };
 
   const handleFocus = useCallback(() => setFocused(true), []);
   const handleBlur = useCallback(() => setFocused(false), []);
 
   return (
-    <form onSubmit={handleSubmit} className={[className, compact && compactStyles.compact].filter(Boolean).join(' ') || undefined} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--chat-ctl-gap, 6px)' }}>
+    <form onSubmit={handleSubmit} className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--chat-ctl-gap, 6px)' }}>
       <AssessmentGateNotice gate={gate} />
       <PromptPanel
         active={active}
@@ -192,16 +191,8 @@ export function ChatInput({
         )}
         // A fragment, not the bare node: the shell's ReactNode comes from a second copy
         // of React's types, and only an element is assignable across the two.
-        context={contextControls && !compact ? <>{contextControls}</> : undefined}
-        // Which plan is funding this chat (and, when metered, what allowance is
-        // left), then the host's own standing facts. Self-gating: the chip renders
-        // nothing without a tenant session. Compact hosts show the plan themselves.
-        meta={compact ? undefined : (
-          <>
-            <PlanBadge />
-            {meta}
-          </>
-        )}
+        // The shell carries it in the tool row, after `+` and `/`.
+        context={contextControls ? <>{contextControls}</> : undefined}
         actions={(
           <>
             <ComposerAddMenu
@@ -237,6 +228,7 @@ export function ChatInput({
               onFork={onFork}
               autoMode={autoMode}
               onAutoModeChange={onAutoModeChange}
+              status={menuStatus}
             />
             {showBrainIcon && (
               <Link
@@ -247,7 +239,6 @@ export function ChatInput({
                 <Icon name="message" size={20} />
               </Link>
             )}
-            {compact && contextControls}
           </>
         )}
         // Send/Stop is handed to the shell's trailing slot, which pins it to the far

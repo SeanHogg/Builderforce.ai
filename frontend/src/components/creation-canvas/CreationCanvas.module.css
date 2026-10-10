@@ -2201,7 +2201,7 @@
   .composerNextSteps::-webkit-scrollbar { display:none; }
 }
 @media (pointer: coarse) { .composerNextStep { min-height:44px; } }
-/* Scope is a chip in the card's tool row (`density="compact"`). The palette's
+/* Scope is a chip in the card's tool row (the shell's `context`). The palette's
    generic surface rules paint `.scopeChip` as a panel tile; inside the card it is a pill
    on the card's own ground, in both themes. */
 .composerCard .scopeChip { border-color:var(--canvas-brain-border); background:transparent; color:var(--canvas-ink); }

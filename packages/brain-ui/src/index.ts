@@ -50,6 +50,10 @@ export type { ChatErrorBannerProps, ChatErrorBannerLabels } from './ChatErrorBan
 
 export { PromptPanel } from './PromptPanel';
 export type { PromptPanelProps } from './PromptPanel';
+// The composer's ONE trailing button (mic / Send / Stop) and the dictation behind it.
+export { promptTrailingAction } from './promptTrailingAction';
+export type { PromptTrailingAction, PromptTrailingState } from './promptTrailingAction';
+export { useVoiceDictation } from './useVoiceDictation';
 
 // The composer's `/` control — run shaping, the model in use, and the model
 // picker in ONE affordance, so no host grows a second "which model" chip beside it.

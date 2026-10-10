@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import { AgentHostGateway } from '@/lib/agentHostGateway';
 import { agentHosts, dispatchApi } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
+import { ChatInput } from '@/components/ChatInput';
 
 interface ChatEntry {
   id: string;
@@ -33,13 +35,14 @@ const STATUS_TONE: StatusToneMap<'connecting' | 'connected' | 'offline' | 'error
 
 export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostChatContentProps) {
   const fmt = useFormat();
+  const t = useTranslations('agentHostChat');
+  const hostName = agentHostName ?? t('fallbackName', { id: agentHostId });
   const [messages, setMessages] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState('');
   const [connStatus, setConnStatus] = useState<'connecting' | 'connected' | 'offline' | 'error'>('connecting');
   const [sending, setSending] = useState(false);
   const gatewayRef = useRef<AgentHostGateway | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -124,14 +127,6 @@ export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostCh
       // Non-fatal; message is already shown optimistically
     } finally {
       setSending(false);
-      inputRef.current?.focus();
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
     }
   };
 
@@ -160,12 +155,12 @@ export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostCh
         />
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           {connStatus === 'connected'
-            ? `Connected to ${agentHostName ?? `agentHost #${agentHostId}`}`
+            ? t('connectedTo', { name: hostName })
             : connStatus === 'connecting'
-              ? 'Connecting…'
+              ? t('connecting')
               : connStatus === 'offline'
-                ? 'AgentHost offline — waiting to reconnect'
-                : 'Connection error'}
+                ? t('offline')
+                : t('error')}
         </span>
         {messages.length > 0 && (
           <button
@@ -180,7 +175,7 @@ export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostCh
               cursor: 'pointer',
             }}
           >
-            Clear
+            {t('clear')}
           </button>
         )}
       </div>
@@ -189,10 +184,7 @@ export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostCh
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
         {messages.length === 0 && (
           <div style={{ ...cardStyle, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-            No messages yet.{' '}
-            {connStatus === 'connected'
-              ? 'Send a message below to chat with the agentHost.'
-              : 'Waiting for agentHost to connect.'}
+            {connStatus === 'connected' ? t('emptyConnected') : t('emptyWaiting')}
           </div>
         )}
         {messages.map((msg) => (
@@ -226,7 +218,7 @@ export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostCh
               {msg.content}
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3, paddingInline: 4 }}>
-              {msg.role === 'user' ? 'You' : agentHostName ?? 'AgentHost'} ·{' '}
+              {msg.role === 'user' ? t('you') : hostName} ·{' '}
               {fmt.time(msg.ts)}
             </div>
           </div>
@@ -234,65 +226,18 @@ export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostCh
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <div
-        style={{
-          flexShrink: 0,
-          paddingTop: 12,
-          borderTop: '1px solid var(--border-subtle)',
-          marginTop: 12,
-          display: 'flex',
-          gap: 8,
-          alignItems: 'flex-end',
-        }}
-      >
-        <textarea
-          ref={inputRef}
+      {/* Input — the shared composer. A dispatch in flight never greys it out;
+          `handleSend` holds a second turn until the first has gone. */}
+      <div style={{ flexShrink: 0, paddingTop: 12, marginTop: 12 }}>
+        <ChatInput
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={
-            connStatus === 'connected'
-              ? 'Send a message… (Enter to send, Shift+Enter for newline)'
-              : 'Waiting for agentHost connection…'
-          }
-          disabled={connStatus !== 'connected' || sending}
-          rows={2}
-          style={{
-            flex: 1,
-            padding: '10px 12px',
-            fontSize: 13,
-            lineHeight: 1.5,
-            background: 'var(--bg-base)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            resize: 'none',
-            outline: 'none',
-            fontFamily: 'inherit',
-            opacity: connStatus !== 'connected' ? 0.5 : 1,
-          }}
+          onChange={setInput}
+          onSubmit={() => { void handleSend(); }}
+          submitOnEnter
+          placeholder={connStatus === 'connected' ? t('placeholder', { name: hostName }) : t('placeholderWaiting')}
+          submitLabel={t('send')}
+          disabled={connStatus !== 'connected'}
         />
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={!input.trim() || connStatus !== 'connected' || sending}
-          style={{
-            padding: '10px 16px',
-            fontSize: 13,
-            fontWeight: 600,
-            borderRadius: 'var(--radius-md)',
-            border: 'none',
-            background: 'var(--coral-bright)',
-            color: 'var(--text-on-accent)',
-            cursor: !input.trim() || connStatus !== 'connected' || sending ? 'not-allowed' : 'pointer',
-            opacity: !input.trim() || connStatus !== 'connected' || sending ? 0.5 : 1,
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}
-        >
-          {sending ? '…' : 'Send'}
-        </button>
       </div>
     </div>
   );

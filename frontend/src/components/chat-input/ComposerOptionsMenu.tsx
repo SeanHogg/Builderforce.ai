@@ -14,7 +14,7 @@ export type ComposerOptionsMenuProps = Pick<ChatInputProps,
   | 'chatMode' | 'onChatModeChange' | 'memoryEnabled' | 'onMemoryChange' | 'memoryUnavailableReason'
   | 'canConsolidate' | 'consolidating' | 'forking' | 'onConsolidate' | 'onFork'
   | 'autoMode' | 'onAutoModeChange' | 'modeVocabulary'
-> & { disabled: boolean };
+> & { disabled: boolean; status?: ChatInputProps['menuStatus'] };
 
 /**
  * `/` : effort, thinking, WHICH MODEL IS RUNNING and how to change it,
@@ -49,6 +49,7 @@ export const ComposerOptionsMenu = memo(function ComposerOptionsMenu({
   autoMode,
   onAutoModeChange,
   modeVocabulary,
+  status,
 }: ComposerOptionsMenuProps) {
   const t = useTranslations('chatInput');
   const modeCopy = useChatModeCopy(modeVocabulary);
@@ -118,6 +119,9 @@ export const ComposerOptionsMenu = memo(function ComposerOptionsMenu({
       onThinkingChange={onThinkingChange}
       describeThinking={describeThinking}
       model={model}
+      // A fragment, not the bare node: the shared menu's ReactNode comes from a second
+      // copy of React's types, and only an element is assignable across the two.
+      status={status ? <>{status}</> : undefined}
       onAccountSettings={accountSettingsHref ? openAccountSettings : undefined}
     />
   );

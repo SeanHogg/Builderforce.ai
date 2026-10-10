@@ -3,38 +3,23 @@ import type { CSSProperties, HTMLAttributes, ReactNode } from 'react';
 export interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
   /** Text entry for the prompt. Always occupies the first, full-width row. */
   input: ReactNode;
-  /**
-   * WHO is answering and WHAT you are addressing — "Acting as", the capability,
-   * "To", a canvas scope. Its own row between the text entry and the tools.
-   *
-   * These used to ride in `actions`, interleaved with `+`, `/`, the plan chip and
-   * the mic in one wrapping row. In a ~320px side panel that row broke into four
-   * lines at whatever widths the chips happened to have, so "Acting as" landed
-   * between the model menu and the upgrade chip and the mic ended up alone on the
-   * last line. A row per kind of thing is the only layout that stays legible at
-   * every width: context wraps among context, tools among tools.
-   */
-  context?: ReactNode;
-  /** The tools: `+`, the `/` options menu, voice, host modes. They wrap. */
+  /** The tools: `+` and the `/` options menu. They wrap. */
   actions: ReactNode;
   /**
-   * The ONE primary control for the composer — Send, Stop, or Queue.
+   * WHO is answering and WHAT you are addressing — "Acting as", the capability,
+   * "To", a canvas scope. Each of these self-hides until it has something to say, and
+   * rides in the tool row after the tools: the box keeps ONE row of controls under the
+   * text, on a phone and in a 300px editor sidebar alike.
+   */
+  context?: ReactNode;
+  /**
+   * The ONE trailing control — the mic, Send or Stop (see `promptTrailingAction`).
    *
-   * It lives in its own trailing region rather than at the end of `actions`
-   * because "the thing that sends the message sits at the far right edge" is a
-   * property of the composer, not of each host: the web composer pinned it with
-   * an ad-hoc `marginLeft: 'auto'` on an unrelated chip, and the editor composer
-   * — which has no such chip — left Send/Stop floating in the middle of the row
-   * behind whatever chips happened to be rendered. Given here, neither host can
-   * place it differently again, and it never wraps onto a second line.
+   * It lives in its own trailing region rather than at the end of `actions` because
+   * "the thing that sends the message sits at the far right edge" is a property of the
+   * composer, not of each host. It never wraps onto a second line.
    */
   primaryAction?: ReactNode;
-  /**
-   * Standing facts about the composer — which plan funds it, whether memory is
-   * on. The last row, right-aligned and quiet: they are read, rarely clicked, and
-   * must not compete with Send for the tool row's width.
-   */
-  meta?: ReactNode;
   /** Chips, queued turns, or other state shown above the text entry. */
   status?: ReactNode;
   /** Popovers such as the shared @-mention picker. */
@@ -44,17 +29,19 @@ export interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, '
 }
 
 /**
- * The single structural shell for every BuilderForce prompt surface.
+ * The single structural shell for every BuilderForce prompt surface — the web Brain,
+ * the canvas and Studio dock, the editor panel — and the model the desktop apps' boxes
+ * copy: one filled box, the text on top, one row of controls under it.
  *
  * Hosts own behavior and individual controls, but input/status/action placement,
- * focus treatment, spacing, and panel shape live here so web, Canvas, marketing,
- * and editor integrations cannot grow different composer markup again.
+ * focus treatment, spacing, and panel shape live here so no surface can grow a
+ * different composer again. The `/` trigger's quiet "Work ▾" face is this package's
+ * stylesheet, scoped to `.bf-prompt-panel`.
  */
 export function PromptPanel({
   input,
   context,
   actions,
-  meta,
   primaryAction,
   status,
   overlay,
@@ -72,13 +59,13 @@ export function PromptPanel({
     gap: 'var(--prompt-panel-gap, var(--chat-ctl-gap, 6px))',
     width: '100%',
     boxSizing: 'border-box',
-    padding: 'var(--prompt-panel-pad-y, var(--chat-ctl-pad-y, 8px)) var(--prompt-panel-pad-x, var(--chat-ctl-pad-x, 10px))',
+    padding: 'var(--prompt-panel-pad-y, var(--chat-ctl-pad-y, 10px)) var(--prompt-panel-pad-x, var(--chat-ctl-pad-x, 12px))',
     borderRadius: 'var(--prompt-panel-radius, 18px)',
     border: `1px solid ${active ? 'var(--prompt-panel-active-border, var(--chat-input-active-border, #3b82f6))' : 'var(--prompt-panel-border, var(--chat-input-border, rgba(148,163,184,.35)))'}`,
     background: 'var(--prompt-panel-bg, var(--chat-input-bg, rgba(15,23,42,.96)))',
     boxShadow: active
-      ? 'var(--prompt-panel-active-ring, var(--chat-input-active-ring, 0 0 0 1px #3b82f6)), var(--prompt-panel-shadow, var(--chat-input-shadow, 0 8px 24px rgba(0,0,0,.16)))'
-      : 'var(--prompt-panel-shadow, var(--chat-input-shadow, 0 8px 24px rgba(0,0,0,.16)))',
+      ? 'var(--prompt-panel-active-ring, var(--chat-input-active-ring, 0 0 0 1px #3b82f6))'
+      : 'var(--prompt-panel-shadow, none)',
     transition: 'border-color 120ms ease, box-shadow 120ms ease, background 120ms ease',
     ...(dragging ? { borderStyle: 'dashed', background: 'var(--prompt-panel-drag-bg, var(--surface-interactive, rgba(59,130,246,.1)))' } : null),
     ...style,
@@ -93,14 +80,6 @@ export function PromptPanel({
       {overlay}
       {status ? <div className="bf-prompt-panel__status">{status}</div> : null}
       <div className="bf-prompt-panel__input" style={{ display: 'flex', width: '100%', minWidth: 0 }}>{input}</div>
-      {context ? (
-        <div
-          className="bf-prompt-panel__context"
-          style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: actionGap, minWidth: 0 }}
-        >
-          {context}
-        </div>
-      ) : null}
       <div
         className="bf-prompt-panel__actions"
         style={{ display: 'flex', alignItems: 'center', gap: actionGap, minWidth: 0 }}
@@ -112,6 +91,7 @@ export function PromptPanel({
           style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: actionGap, minWidth: 0, flex: '1 1 auto' }}
         >
           {actions}
+          {context}
         </div>
         {primaryAction ? (
           <div
@@ -122,14 +102,6 @@ export function PromptPanel({
           </div>
         ) : null}
       </div>
-      {meta ? (
-        <div
-          className="bf-prompt-panel__meta"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: actionGap, minWidth: 0 }}
-        >
-          {meta}
-        </div>
-      ) : null}
     </div>
   );
 }

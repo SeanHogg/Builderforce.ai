@@ -46,15 +46,41 @@
 
 .chat-empty { padding: 16px 8px; text-align: center; list-style: none; }
 
-.composer { flex: none; display: flex; flex-direction: column; gap: 6px; }
-.composer-to select { min-height: 32px; max-width: 240px; }
-.composer-main { align-items: stretch; }
-.composer textarea {
-  flex: 1; min-width: 0; resize: vertical; min-height: 44px; max-height: 200px;
-  padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
-  background: var(--surface); color: var(--text); font: inherit;
+/* The prompt: one filled box, no outline of its own, lit by the accent ring while you
+   type. Text on top; one row under it with "To" (only when there are agents) and the
+   ONE round trailing button — the mic on an empty box, Send once there is text. */
+.composer { flex: none; }
+.composer-box {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 10px 8px 14px; border-radius: 18px; background: var(--raised);
+  box-shadow: 0 0 0 1px var(--border); transition: box-shadow 120ms ease;
 }
-.composer textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.composer-box.is-active { box-shadow: 0 0 0 2px var(--accent); }
+.composer textarea {
+  width: 100%; min-width: 0; resize: none; min-height: 44px; max-height: 200px;
+  padding: 2px 0; border: 0; background: transparent; color: var(--text); font: inherit; line-height: 1.45;
+}
+.composer textarea:focus { outline: none; }
+.composer textarea::placeholder { color: var(--muted); }
+.composer-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.composer-spacer { flex: 1 1 auto; }
+.composer-to { display: inline-flex; align-items: center; gap: 4px; min-width: 0; font-size: 13px; color: var(--muted); }
+.composer-to[hidden] { display: none; }
+.composer-to select {
+  min-height: 32px; max-width: 200px; min-width: 0; padding: 0 8px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--text); font: inherit; font-weight: 600; cursor: pointer;
+}
+.composer-to select:hover { background: var(--hover); }
+.composer-action {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0; border: 0; border-radius: 999px; cursor: pointer;
+}
+.composer-action.is-send { background: var(--accent); color: var(--accent-text); }
+.composer-action.is-send:hover:not(:disabled) { background: var(--accent-hover); }
+.composer-action.is-voice { background: var(--hover); color: var(--text); }
+.composer-action.is-listening { background: var(--bad-soft); color: var(--bad); animation: composer-pulse 1.2s ease-in-out infinite; }
+.composer-action:disabled { background: var(--hover); color: var(--muted); cursor: default; }
+@keyframes composer-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
 @media (max-width: 760px) {
   .chat-main { height: auto; min-height: 60vh; }

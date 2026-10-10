@@ -4,6 +4,7 @@
 // (`account_state`) and the Spawn account (`spawn_account`: age, membership, tokens).
 // Studio's connection is polled on its own and shown in the bar; a build needs it.
 import { applyI18n, has, num, t } from "./i18n.js";
+import { mountComposer } from "./composer.js";
 
 const { invoke } = window.__TAURI__.core;
 const $ = (id) => document.getElementById(id);
@@ -17,6 +18,8 @@ const STARTERS = ["obby", "tycoon", "simulator", "racing", "towerDefense", "hide
 let current = "";
 let signInTimer = null;
 let building = false;
+/** Prompts sent while a build runs — each builds next, in order, as its own turn. */
+let queued = [];
 let studio = { connected: false, errors: 0, placeName: null, pluginInstalled: true };
 let log = loadLog();
 
@@ -139,16 +142,7 @@ function renderGate(kind, detail) {
 // ── Building ───────────────────────────────────────────────────────────────────────
 function renderBuild() {
   if (!show("build")) return;
-  $("composer").onsubmit = (event) => {
-    event.preventDefault();
-    send($("prompt").value);
-  };
-  $("prompt").onkeydown = (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      send($("prompt").value);
-    }
-  };
+  mountComposer(send);
   $("errors-fix").onclick = () => send(t("build.fixPrompt"));
   const starters = $("starters");
   for (const id of STARTERS) {
@@ -167,6 +161,11 @@ function paintLog() {
   list.replaceChildren(...log.map(renderMessage));
   if (building) {
     const li = Object.assign(document.createElement("li"), { className: "msg spawn thinking", textContent: t("build.thinking") });
+    list.append(li);
+  }
+  for (const text of queued) {
+    const li = renderMessage({ role: "me", text, meta: t("build.queued") });
+    li.classList.add("queued");
     list.append(li);
   }
   list.scrollTop = list.scrollHeight;
@@ -205,15 +204,19 @@ function metaFor(out) {
 
 async function send(text) {
   const prompt = (text || "").trim();
-  if (!prompt || building) return;
+  if (!prompt) return;
+  // A build is running: this one waits its turn instead of being dropped.
+  if (building) {
+    queued.push(prompt);
+    paintLog();
+    return;
+  }
   const history = log
     .filter((m) => m.role === "me" || m.role === "spawn")
     .slice(-HISTORY_TURNS)
     .map((m) => ({ role: m.role === "me" ? "player" : "spawn", text: m.text }));
   log.push({ role: "me", text: prompt });
-  if ($("prompt")) $("prompt").value = "";
   building = true;
-  $("send").disabled = true;
   paintLog();
   try {
     const out = await invoke("build", { prompt, history });
@@ -232,13 +235,17 @@ async function send(text) {
         ? { label: "action.openAccount", path: "/spawn/account" }
         : null;
     log.push({ role: "error", text: errorText(err), action });
-    if (code === "signed_out" || code === "membership_required" || code === "age_required") refresh();
+    // Nothing queued can build now either — signed out, or no membership.
+    if (code === "signed_out" || code === "membership_required" || code === "age_required") {
+      queued = [];
+      refresh();
+    }
   } finally {
     building = false;
     saveLog();
-    if ($("send")) $("send").disabled = false;
     paintLog();
   }
+  if (queued.length) send(queued.shift());
 }
 
 // ── Studio ─────────────────────────────────────────────────────────────────────────
