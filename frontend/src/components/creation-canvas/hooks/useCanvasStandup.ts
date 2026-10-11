@@ -2,7 +2,7 @@ import { type Dispatch, type SetStateAction, useCallback, useMemo } from 'react'
 import type { Edge } from '@xyflow/react';
 import type { useTranslations } from 'next-intl';
 import { parseResourceRef } from '@builderforce/creation-canvas-contract';
-import { ceremonySessionsApi } from '@/lib/builderforceApi';
+import { ceremonySessionsApi } from '@/lib/ceremonyApi';
 import { faultText } from '@/lib/apiClient';
 import { canvasProjectId, canvasProjectNodes } from '@/lib/canvasProjectRef';
 import { resolveStandupProject } from '@/lib/canvas/standupProject';

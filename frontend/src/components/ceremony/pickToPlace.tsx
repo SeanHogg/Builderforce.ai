@@ -110,7 +110,7 @@ export function CeremonyPickProvider({ children }: { children: React.ReactNode }
             border: '1px solid var(--coral-bright)',
             background: 'var(--surface-coral-soft)',
             color: 'var(--text-primary)',
-            fontSize: 13,
+            fontSize: 'var(--font-size-small)',
           }}
         >
           <span style={{ flex: '1 1 200px', minWidth: 0, overflowWrap: 'anywhere' }}>
@@ -122,7 +122,7 @@ export function CeremonyPickProvider({ children }: { children: React.ReactNode }
             style={{
               minHeight: 32,
               padding: '4px 12px',
-              fontSize: 12,
+              fontSize: 'var(--font-size-small)',
               fontWeight: 600,
               borderRadius: 'var(--radius-sm)',
               border: '1px solid var(--coral-bright)',

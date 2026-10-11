@@ -18,14 +18,13 @@ import {
   analyticsApi,
   qualityApi,
   integrationsApi,
-  ceremonySessionsApi,
   type Alert,
   type AlertEvent,
   type TenantActivityRollup,
   type QualityStats,
   type IntegrationCredential,
-  type CeremonyRollup,
 } from '@/lib/builderforceApi';
+import { ceremonySessionsApi, type CeremonyRollup } from '@/lib/ceremonyApi';
 import { knowledgeApi, type KnowledgeOverview } from '@/lib/knowledgeApi';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';

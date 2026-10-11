@@ -6,10 +6,8 @@ import { useIsMobile } from '@/lib/useIsMobile';
 import { useLiveSession } from '@/lib/live/LiveSessionContext';
 import { VideoGrid } from '@/components/video/VideoGrid';
 import { MediaControls } from '@/components/video/MediaControls';
-import {
-  tasksApi, sprintsApi, ceremonySessionsApi, membersApi,
-  type Task, type Sprint, type CeremonySession, type CeremonySessionDetail, type CeremonyParticipant, type MemberProfile,
-} from '@/lib/builderforceApi';
+import { tasksApi, sprintsApi, membersApi, type Task, type Sprint, type MemberProfile } from '@/lib/builderforceApi';
+import { ceremonySessionsApi, type CeremonySession, type CeremonySessionDetail, type CeremonyParticipant } from '@/lib/ceremonyApi';
 import { listTeamsByProject, getTeam, listWorkforceDirectory } from '@/lib/teams';
 import { useViewerSession } from '@/lib/viewerSession';
 import { useCeremonyRoom, type CeremonyRoomFrame } from '@/lib/ceremonyRoom';

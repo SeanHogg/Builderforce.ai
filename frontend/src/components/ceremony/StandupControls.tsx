@@ -1,7 +1,7 @@
 import { Icon } from '@/components/ui/Icon';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { CeremonySession, CeremonyParticipant } from '@/lib/builderforceApi';
+import type { CeremonySession, CeremonyParticipant } from '@/lib/ceremonyApi';
 import { formatDuration } from '@/lib/duration';
 
 const btn = (variant: 'primary' | 'tertiary'): React.CSSProperties => ({

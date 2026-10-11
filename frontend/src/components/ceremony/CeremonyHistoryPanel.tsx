@@ -5,15 +5,7 @@ import { MeetingMinutesPanel } from '@/components/meetings/MeetingMinutesPanel';
 import { ViewToggle } from '@/components/ViewToggle';
 import { Select } from '@/components/Select';
 import { usePermission } from '@/lib/rbac';
-import {
-  ceremonySessionsApi,
-  CEREMONY_CORRECTABLE,
-  type CeremonyKind,
-  type CeremonySession,
-  type CeremonyParticipant,
-  type CeremonyJournalEvent,
-  type CeremonyAttendance,
-} from '@/lib/builderforceApi';
+import { CEREMONY_CORRECTABLE, ceremonySessionsApi, type CeremonyKind, type CeremonySession, type CeremonyParticipant, type CeremonyJournalEvent, type CeremonyAttendance } from '@/lib/ceremonyApi';
 import { faultMessage } from '@/lib/apiClient';
 /**
  * CeremonyHistoryPanel — the ceremonies that have ALREADY run.
