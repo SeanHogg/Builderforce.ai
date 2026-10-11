@@ -94,7 +94,7 @@ It also feeds **Read** for next time. What a run teaches your Evermind stays in 
 - **Approve an agent's step from your phone** instead of coming back to the desk.
 - **Start your private Evermind** from a model your workspace already has.
 
-[Download Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) for Windows, macOS or Linux.
+[Download Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest) for Windows, macOS or Linux.
 
 ---
 

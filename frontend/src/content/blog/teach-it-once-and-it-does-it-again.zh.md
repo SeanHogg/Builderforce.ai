@@ -78,7 +78,7 @@ Builderforce 上的工作沿着一条弧线前进——**想法 → 制作 → �
 - **不可撤销的步骤由你掌控**：发送、付款和删除都会等你批准。
 - **让你自己的模型学会**你演示过的流程，就在你的电脑上，想忘掉什么随时都行。
 
-录制与回放首先支持 Windows，macOS 和 Linux 随后推出。[下载 Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true)，在“教学”页面开启自主代理。
+录制与回放首先支持 Windows，macOS 和 Linux 随后推出。[下载 Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest)，在“教学”页面开启自主代理。
 
 ---
 

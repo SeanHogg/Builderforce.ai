@@ -48,7 +48,7 @@ Enabling work is legitimate but never outranks a broken Idea→Real journey.
 | Rendered presentation export of the value brief | Revenue | P1 | Q3 2026 | 🔄 Partial |
 | Phase 6 — activity/integration engines, scheduled reporting, PRD orchestration, analytics UI | 6 | P0–P1 | Q3–Q4 2026 | 📋 Planned |
 | Phase 7 — policy packs, governance-auditor, BLOCKER-gates-merge, SOC2 evidence ([PRD 08](./specs/builderforce/08-prd-agentic-governance.md)) | 7 | P1–P2 | Q3 2026 | 📋 Planned |
-| Local LLM execution (llama.cpp/Ollama tools, hybrid routing) | 3 | P2–P3 | Q3 2026 | 📋 Planned |
+| Local LLM execution — native pure-Rust engine that replaces Ollama, in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) (`bfi`; Synapse supervises `bfi serve`), hybrid routing | 3 | P2–P3 | Q4 2026 | 🔄 In Progress |
 | Multi-agent orchestration at scale (DAG UI, memory mesh) | 4 | P1–P2 | Q3–Q4 2026 | 📋 Planned |
 | Production hardening (self-hosted, fleet failover, SIEM export) | 5 | P1–P3 | Q4 2026 | 📋 Planned |
 
@@ -176,7 +176,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Knowledge editor has no `drawing` block.** Add a `BlockType` opened through the canvas drawing runtime once ported.
 - **Real-time co-editing live smoke.** *Blocker: next api deploy + a 2-client smoke.*
 - **Generated `.rbxlx` never opened in Roblox Studio.** *Blocker: one human opening one place.*
-- **Spawn not run end to end** (install → device sign-in → age gate → Stripe membership → `SpawnPlugin.lua` → build as one undo → play-test `/log`), plus the `spawn.builderforce.ai` zone route. *Blocker: a desktop with Studio and a Stripe-enabled account.*
+- **Spawn not run end to end** (install → device sign-in → age gate → Stripe membership → `SpawnPlugin.lua` → build as one undo → play-test `/log`), plus the `spawn.builderforce.ai` zone route. Spawn's code lives in [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn). *Blocker: a desktop with Studio and a Stripe-enabled account.*
 - **Room:** no video/audio in the Room (needs a `video` prop surface, texture budget, distance gain); station faces and widget iframe untested in a real browser.
 - **Voice:** consent/provenance gate blocks GA; no in-IDE marketplace browse/checkout; embeddings localStorage-only; Studio video IndexedDB-only (mirror to R2).
 - **Video engine:** `advanceState()` is a CPU placeholder; no learned interpolation or motion module; img2img drifts; no ControlNet/inpainting; Safari needs a WebM fallback. Brain-created dataset files bypass registration.
@@ -367,11 +367,11 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ### Agent runtime, desktop (Synapse) and VS Code `[agents]` `[platform]`
 
-> Synapse goal (2026-09-27): Evermind is each person's private capability, stored and learned on their machine. Capability gaps G1–G12 are closed; what remains is verification and platform coverage.
+> Synapse goal (2026-09-27): Evermind is each person's private capability, stored and learned on their machine. Capability gaps G1–G12 are closed; what remains is verification and platform coverage. Since 2026-10-11 Synapse's code lives in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) and Spawn's in [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn); the entries below are tracked here but fixed there.
 
 - **Synapse chat, sign-in, brain, Evermind console, local models, connectors and phone approvals are build/unit-verified only.** *Blocker: an interactive desktop session with a Builderforce account.*
 - **Self-Directed Agents are Windows-only and not run on a real desktop.** macOS needs AX (*blocker: a Mac with Xcode*); Linux needs X11 XRecord (*blocker: an interactive X11 session*).
-- **Installers unsigned; no in-place updater.** Workflows are ready to sign. *Blocker: Azure Trusted Signing or a cert, Apple Developer ID + notarization, the Tauri updater key.* Delete Spawn's `firstRunWindows`/`firstRunMac` hints when done.
+- **Installers unsigned; no in-place updater.** Workflows are ready to sign (each new repo's `release.yml`; Spawn uses builderforce-inference's signing actions). *Blocker: the owner adding the Azure Trusted Signing (or .pfx), Apple Developer ID + notarization and Tauri updater-key secrets to both builderforce-inference and builderforce-spawn.* Delete Spawn's `firstRunWindows`/`firstRunMac` hints when done.
 - **No measured proof the index improves runs.** *Blocker: live VS Code runs on real tickets with and without the app* — gates phase 3.
 - **~3.3 GB memory after indexing one small package.** *Blocker: an idle-vs-embedding memory profile.*
 - **Phase 3 local browser/VM agent host.** *Blocker: content guardrails + prompt-injection defence first.*

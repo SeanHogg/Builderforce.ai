@@ -84,7 +84,7 @@ También alimenta la **Lectura** de la próxima vez. Lo que una ejecución ense�
 - **Aprobar el paso de un agente desde el teléfono** en lugar de volver a la mesa.
 - **Empezar tu Evermind privado** a partir de un modelo que ya tiene tu espacio de trabajo.
 
-[Descarga Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) para Windows, macOS o Linux.
+[Descarga Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest) para Windows, macOS o Linux.
 
 ---
 

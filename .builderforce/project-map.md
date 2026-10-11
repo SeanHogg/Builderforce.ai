@@ -46,15 +46,7 @@ Sub-projects (each directory below contains a manifest — this is where distinc
 - browser-sdk  [package.json]
 - builderforce-embedded  [package.json]
 - clients/vscode  [package.json]
-- desktop  [Cargo.toml]
-- desktop/app/console  [package.json]
-- desktop/app/src-tauri  [Cargo.toml]
-- desktop/crates/bf-cloud  [Cargo.toml]
-- desktop/crates/bf-context  [Cargo.toml]
-- desktop/crates/bf-index  [Cargo.toml]
-- desktop/crates/bf-memory  [Cargo.toml]
-- desktop/crates/bf-teach  [Cargo.toml]
-- desktop/crates/bf-vault  [Cargo.toml]
+- (desktop/ — Synapse and Spawn — moved to SeanHogg/builderforce-inference and SeanHogg/builderforce-spawn)
 - docs-site  [package.json]
 - docs-site  [wrangler.toml]
 - feedback-sdk  [package.json]
@@ -864,49 +856,6 @@ clients/
         canvas/
         chat/
         shims/
-desktop/
-  app/
-    console/
-      src/
-    src-tauri/
-      capabilities/
-      gen/
-        schemas/
-      icons/
-        android/
-          mipmap-anydpi-v26/
-          mipmap-hdpi/
-          mipmap-mdpi/
-          mipmap-xhdpi/
-          mipmap-xxhdpi/
-          mipmap-xxxhdpi/
-          values/
-        ios/
-      src/
-        agents/
-        cloud/
-    ui/
-      js/
-        brain/
-        chat/
-        cloud/
-        locales/
-        views/
-  crates/
-    bf-cloud/
-      src/
-    bf-context/
-      src/
-      tests/
-    bf-index/
-      src/
-    bf-memory/
-      src/
-    bf-teach/
-      src/
-        win/
-    bf-vault/
-      src/
 distribution/
   docker-mcp-registry/
     builderforce/

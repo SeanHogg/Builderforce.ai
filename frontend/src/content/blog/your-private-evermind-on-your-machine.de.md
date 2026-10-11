@@ -84,7 +84,7 @@ Außerdem speist es das **Lesen** beim nächsten Mal. Was ein Lauf Ihrem Evermin
 - **Den Schritt eines Agenten vom Telefon aus freigeben**, statt an den Schreibtisch zurückzukehren.
 - **Ihr privates Evermind starten** – mit einem Modell, das Ihr Arbeitsbereich bereits hat.
 
-[Synapse herunterladen](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) für Windows, macOS oder Linux.
+[Synapse herunterladen](https://github.com/SeanHogg/builderforce-inference/releases/latest) für Windows, macOS oder Linux.
 
 ---
 

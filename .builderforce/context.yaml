@@ -43,15 +43,7 @@ subProjects:
   - browser-sdk
   - builderforce-embedded
   - clients/vscode
-  - desktop
-  - desktop/app/console
-  - desktop/app/src-tauri
-  - desktop/crates/bf-cloud
-  - desktop/crates/bf-context
-  - desktop/crates/bf-index
-  - desktop/crates/bf-memory
-  - desktop/crates/bf-teach
-  - desktop/crates/bf-vault
+  # desktop/ (Synapse, Spawn) moved out: SeanHogg/builderforce-inference, SeanHogg/builderforce-spawn
   - docs-site
   - feedback-sdk
   - frontend

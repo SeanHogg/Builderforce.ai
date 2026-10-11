@@ -3,17 +3,17 @@
  * is one click to the file for the visitor's computer, not a trip through a list of
  * releases.
  *
- * Spawn's releases carry `spawn-v*` tags in the same repository as Synapse's
- * `desktop-v*` ones, so GitHub's `releases/latest` cannot name them; this picks the
- * newest published `spawn-v*` release and its installers. Cached for ten minutes:
+ * Spawn ships from its own repository (SeanHogg/builderforce-spawn) with `v*` tags;
+ * this picks the newest published, non-prerelease `v*` release and its installers
+ * (drafts and pre-releases never reach a visitor). Cached for ten minutes:
  * a release is published a few times a month, and the GitHub read is rate-limited.
  */
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { fetchPublicReleases, type PublicRelease } from '../../infrastructure/github/publicReleases';
 
-const SPAWN_REPO = 'SeanHogg/Builderforce.ai';
-const SPAWN_TAG_PREFIX = 'spawn-v';
+const SPAWN_REPO = 'SeanHogg/builderforce-spawn';
+const SPAWN_TAG_PREFIX = 'v';
 
 export interface SpawnInstallers {
   /** `2026.10.1`, or null before the first release. */

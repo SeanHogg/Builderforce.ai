@@ -87,7 +87,7 @@ Die Prüfung auf veraltetes Wissen schließt eine leisere Lücke im selben Schri
 - **Abgerufenen Erinnerungen mehr vertrauen**, weil eine veraltete Erinnerung es selbst sagt.
 - **An Code arbeiten, der das Haus nicht verlassen darf**, und dem Agenten trotzdem volles Wissen darüber geben.
 
-[Synapse herunterladen](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) für Windows, macOS oder Linux, dann einen Ordner in VS Code mit der Builderforce-Erweiterung öffnen.
+[Synapse herunterladen](https://github.com/SeanHogg/builderforce-inference/releases/latest) für Windows, macOS oder Linux, dann einen Ordner in VS Code mit der Builderforce-Erweiterung öffnen.
 
 ---
 

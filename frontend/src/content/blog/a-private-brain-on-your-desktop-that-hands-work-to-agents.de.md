@@ -82,7 +82,7 @@ Beim **Betreiben** sind die Agenten, und einen aus dem Chat anzusprechen ist die
 - **Agenten einem Chat zuweisen und sie mit @ ansprechen** – sie erledigen die Arbeit mit ihren eigenen Werkzeugen, in Ihrem Namen.
 - **Ihrem Evermind beim Lernen zusehen** in der Seitenleiste, und das Gesamtbild – Regionen, Trainingsverlust, dreißig Tage Aktivität – auf der Evermind-Seite sehen.
 
-[Laden Sie Synapse herunter](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true), öffnen Sie **Chat** und melden Sie sich mit Ihrem Browser an.
+[Laden Sie Synapse herunter](https://github.com/SeanHogg/builderforce-inference/releases/latest), öffnen Sie **Chat** und melden Sie sich mit Ihrem Browser an.
 
 ---
 

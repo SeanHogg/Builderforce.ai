@@ -78,7 +78,7 @@ In der Schleife ist das Prüfen der Schritt **Beweisen**: Vor dem teuren Akt –
 - **Die unumkehrbaren Schritte bei sich behalten**: Senden, Zahlungen und Löschen warten auf Ihre Freigabe.
 - **Ihrem eigenen Modell die gezeigten Abläufe beibringen**, auf Ihrem Rechner, und alles davon vergessen, wann immer Sie wollen.
 
-Aufzeichnen und Wiedergeben funktionieren zuerst unter Windows; macOS und Linux folgen. [Synapse herunterladen](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) und die selbstständigen Agenten auf der Seite „Beibringen“ einschalten.
+Aufzeichnen und Wiedergeben funktionieren zuerst unter Windows; macOS und Linux folgen. [Synapse herunterladen](https://github.com/SeanHogg/builderforce-inference/releases/latest) und die selbstständigen Agenten auf der Seite „Beibringen“ einschalten.
 
 ---
 

@@ -78,7 +78,7 @@ Dentro del bucle, la revisión es **Probar**: antes del acto caro —dejar que u
 - **Quedarte con los pasos irreversibles**: envíos, pagos y eliminaciones esperan tu aprobación.
 - **Enseñar a tu propio modelo** los procedimientos que le mostraste, en tu equipo, y olvidar cualquier parte cuando quieras.
 
-La grabación y la reproducción llegan primero a Windows; macOS y Linux vendrán después. [Descarga Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) y activa los agentes autónomos desde la página Enseñar.
+La grabación y la reproducción llegan primero a Windows; macOS y Linux vendrán después. [Descarga Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest) y activa los agentes autónomos desde la página Enseñar.
 
 ---
 

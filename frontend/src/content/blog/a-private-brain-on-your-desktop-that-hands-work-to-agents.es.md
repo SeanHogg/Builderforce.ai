@@ -82,7 +82,7 @@ El chat es donde empieza la **Idea**, y antes empezaba en frío. Ahora la primer
 - **Asignar agentes a un chat y dirigirte a ellos con @**: hacen el trabajo con sus propias herramientas, en tu nombre.
 - **Ver aprender a tu Evermind** en la barra lateral, y ver el panorama completo —regiones, pérdida de entrenamiento, treinta días de actividad— en la página de Evermind.
 
-[Descarga Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true), abre **Chat** e inicia sesión con tu navegador.
+[Descarga Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest), abre **Chat** e inicia sesión con tu navegador.
 
 ---
 

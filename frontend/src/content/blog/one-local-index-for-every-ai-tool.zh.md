@@ -87,7 +87,7 @@ Synapse 是一项**阅读**功能，而阅读恰恰是智能体最薄弱的地�
 - **更放心地使用召回的记忆**，因为过时的记忆会自己说出来。
 - **处理不能离开公司的代码**，同时仍让智能体完整了解这些代码。
 
-[下载 Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true)（支持 Windows、macOS 和 Linux），然后在装有 Builderforce 扩展的 VS Code 中打开一个文件夹。
+[下载 Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest)（支持 Windows、macOS 和 Linux），然后在装有 Builderforce 扩展的 VS Code 中打开一个文件夹。
 
 ---
 

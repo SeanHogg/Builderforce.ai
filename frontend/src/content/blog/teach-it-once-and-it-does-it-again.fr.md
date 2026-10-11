@@ -78,7 +78,7 @@ Dans la boucle, la vérification est l’étape **Prouver** : avant l’acte co�
 - **Garder la main sur les étapes irréversibles** : envois, paiements et suppressions attendent votre accord.
 - **Apprendre à votre propre modèle** les procédures montrées, sur votre machine, et en oublier ce que vous voulez, quand vous voulez.
 
-L’enregistrement et la relecture arrivent d’abord sur Windows ; macOS et Linux suivront. [Téléchargez Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) et activez les agents autonomes depuis la page Apprendre.
+L’enregistrement et la relecture arrivent d’abord sur Windows ; macOS et Linux suivront. [Téléchargez Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest) et activez les agents autonomes depuis la page Apprendre.
 
 ---
 

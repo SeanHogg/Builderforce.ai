@@ -84,7 +84,7 @@ Elle alimente aussi la **Lecture** de la prochaine fois. Ce qu'une exécution ap
 - **Approuver l'étape d'un agent depuis votre téléphone** au lieu de revenir au bureau.
 - **Démarrer votre Evermind privé** à partir d'un modèle que votre espace de travail possède déjà.
 
-[Téléchargez Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) pour Windows, macOS ou Linux.
+[Téléchargez Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest) pour Windows, macOS ou Linux.
 
 ---
 

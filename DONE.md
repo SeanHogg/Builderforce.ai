@@ -1,3 +1,15 @@
+## ✅ RESOLVED 2026-10-11 — Synapse and Spawn ship from their own repositories (api 2026.10.26 · frontend 2026.10.40)
+
+`desktop/` held two apps with their own release cadence, signing and toolchain (Rust/Tauri) inside a TypeScript monorepo, and Spawn's download use case had to filter `spawn-v*` tags out of a repository that also carried Synapse's `desktop-v*` ones. Both moved out with their history:
+
+- **Synapse → [SeanHogg/builderforce-inference](https://github.com/SeanHogg/builderforce-inference)** (`app/` + crates `bf-index`, `bf-context`, `bf-memory`, `bf-mcp`, `bf-local`, `bf-teach`, `bf-vault`, `bf-cloud`). It is also where the native Rust inference engine that replaces Ollama is being built (see the "Local LLM execution" row in ROADMAP.md).
+- **Spawn → [SeanHogg/builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn)** (`spawn/` + `bf-roblox`). Its account crate `bf-cloud` is a git dependency on builderforce-inference `main`, so there is one copy of it.
+- **CI moved with them.** `desktop-release.yml` and `spawn-release.yml` became each repo's `release.yml`, without the `desktop/` prefix, triggered by `v*` tags (one app per repo). The `windows-signing` / `macos-signing` composite actions live in builderforce-inference; Spawn uses them as `SeanHogg/builderforce-inference/.github/actions/<name>@main`. `bf-cloud` is tested in builderforce-inference.
+- **Releases carried over.** `spawn-v2026.10.2` was copied to builderforce-spawn as `v2026.10.2` with all five installers, so the download buttons never went empty. Synapse had no published `desktop-v*` release to copy; its first release is the first `v*` tag in builderforce-inference.
+- **Every link re-pointed.** `DesktopAppDownload` (`DESKTOP_RELEASES_URL`) and the Synapse download links in four blog posts × five locales → builderforce-inference `releases/latest`; `spawnDownloads.ts` reads `SeanHogg/builderforce-spawn` with tag prefix `v` (test updated: a non-version tag such as `nightly` is skipped); `spawnLinks.ts` `SPAWN_DOWNLOAD_URL` → builderforce-spawn `releases/latest`. Synapse's own in-app update check (`update.rs`) now reads builderforce-inference `v*` releases.
+- **Removed here:** `desktop/`, `.github/workflows/{desktop,spawn}-release.yml`, `.github/actions/{windows,macos}-signing`; the `desktop/*` entries in `.builderforce/context.yaml`, `project-map.md` and `architecture.md`.
+- Still open, tracked in ROADMAP.md: the signing secrets must be added to both new repositories by the owner.
+
 ## ✅ RESOLVED 2026-10-11 — One chat, one progress figure: the ticket rail, the conversation picker and the Sessions tree agree (agent-loop 2026.10.3 · brain-ui 2026.10.6 · VSIX 2026.10.15 · api 2026.10.25)
 
 In VS Code chat #133, the same chat showed three different completion figures at once: the Sessions tree read 23%, the ticket rail 60% · 2/10, and the conversation picker 18%. There were three causes:

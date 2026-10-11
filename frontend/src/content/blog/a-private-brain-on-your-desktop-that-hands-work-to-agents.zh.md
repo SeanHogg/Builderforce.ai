@@ -82,7 +82,7 @@ Builderforce 上的工作沿着一条弧线前进——**想法 → 制作 → �
 - **给聊天指派代理，并用 @ 指定它们**——它们以你的身份、用自己的工具完成工作。
 - **在侧边栏里看着你的 Evermind 学习**，并在 Evermind 页面上看到全貌——各个区域、训练损失、三十天的活动。
 
-[下载 Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true)，打开**聊天**，用浏览器登录。
+[下载 Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest)，打开**聊天**，用浏览器登录。
 
 ---
 

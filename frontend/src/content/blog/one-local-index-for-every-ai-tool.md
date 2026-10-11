@@ -97,7 +97,7 @@ The stale-memory check closes a quieter gap in the same act. Reading includes re
 - **Trust recalled memory more** because the memory that has gone stale says so.
 - **Work on code that cannot leave the building** and still give the agent full knowledge of it.
 
-[Download Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) for Windows, macOS or Linux, then open a folder in VS Code with the Builderforce extension.
+[Download Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest) for Windows, macOS or Linux, then open a folder in VS Code with the Builderforce extension.
 
 ---
 

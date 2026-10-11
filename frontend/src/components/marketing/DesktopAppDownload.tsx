@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { renderInlineCode } from './inlineCode';
 
-/** Releases of the desktop app carry `desktop-v*` tags; this lists exactly those. */
-const DESKTOP_RELEASES_URL = 'https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true';
+/** Synapse ships from its own repository (SeanHogg/builderforce-inference); this is its newest release. */
+const DESKTOP_RELEASES_URL = 'https://github.com/SeanHogg/builderforce-inference/releases/latest';
 const DESKTOP_POST_PATH = '/blog/your-private-evermind-on-your-machine';
 
 type Point = { title: string; desc: string };

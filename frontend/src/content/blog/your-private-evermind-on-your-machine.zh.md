@@ -84,7 +84,7 @@ Builderforce 让每个想法都沿着同一条弧线前进——[想法、制作
 - **在手机上批准代理的某一步**，不必回到桌前。
 - **启动你的私有 Evermind**，从你的工作区已有的模型起步。
 
-[下载 Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true)，支持 Windows、macOS 和 Linux。
+[下载 Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest)，支持 Windows、macOS 和 Linux。
 
 ---
 

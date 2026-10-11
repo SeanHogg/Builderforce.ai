@@ -92,7 +92,7 @@ Chat is where **Idea** starts, and it used to start cold. Now the first **Read**
 - **Assign agents to a chat and address them with @** — they do the work with their own tools, as you.
 - **Watch your Evermind learn** in the sidebar, and see the whole picture — regions, training loss, thirty days of activity — on the Evermind page.
 
-[Download Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true), open **Chat**, and sign in with your browser.
+[Download Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest), open **Chat**, and sign in with your browser.
 
 ---
 

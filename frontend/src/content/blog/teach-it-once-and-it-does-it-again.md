@@ -88,7 +88,7 @@ Inside the loop, the review step is **Prove**: before the expensive act — lett
 - **Keep the irreversible steps yours**: sends, payments and deletes wait for your approval.
 - **Teach your own model** the procedures you have shown it, on your machine, and forget any of it whenever you like.
 
-Recording and replay work on Windows first; macOS and Linux follow. [Download Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) and switch on Self-Directed Agents from the Teach page.
+Recording and replay work on Windows first; macOS and Linux follow. [Download Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest) and switch on Self-Directed Agents from the Teach page.
 
 ---
 

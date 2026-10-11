@@ -87,7 +87,7 @@ La vérification de la mémoire périmée comble un manque plus discret dans la 
 - **Faire davantage confiance à la mémoire rappelée**, parce que le souvenir devenu obsolète le signale lui-même.
 - **Travailler sur du code qui ne peut pas quitter l'entreprise** tout en donnant à l'agent une connaissance complète de ce code.
 
-[Téléchargez Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) pour Windows, macOS ou Linux, puis ouvrez un dossier dans VS Code avec l'extension Builderforce.
+[Téléchargez Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest) pour Windows, macOS ou Linux, puis ouvrez un dossier dans VS Code avec l'extension Builderforce.
 
 ---
 

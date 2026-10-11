@@ -82,7 +82,7 @@ La discussion est l’endroit où commence l’**Idée**, et elle commençait à
 - **Assigner des agents à une discussion et vous adresser à eux avec @** — ils font le travail avec leurs propres outils, en votre nom.
 - **Regarder votre Evermind apprendre** dans la barre latérale, et voir l’ensemble — régions, perte d’entraînement, trente jours d’activité — sur la page Evermind.
 
-[Téléchargez Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true), ouvrez **Discussion** et connectez-vous avec votre navigateur.
+[Téléchargez Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest), ouvrez **Discussion** et connectez-vous avec votre navigateur.
 
 ---
 

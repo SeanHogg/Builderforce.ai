@@ -87,7 +87,7 @@ La comprobación de memoria obsoleta cierra una brecha más silenciosa en el mis
 - **Confiar más en la memoria recuperada**, porque el recuerdo que se ha quedado obsoleto lo dice.
 - **Trabajar con código que no puede salir de la empresa** y aun así dar al agente pleno conocimiento de él.
 
-[Descarga Synapse](https://github.com/SeanHogg/Builderforce.ai/releases?q=desktop-v&expanded=true) para Windows, macOS o Linux y abre una carpeta en VS Code con la extensión de Builderforce.
+[Descarga Synapse](https://github.com/SeanHogg/builderforce-inference/releases/latest) para Windows, macOS o Linux y abre una carpeta en VS Code con la extensión de Builderforce.
 
 ---
 
