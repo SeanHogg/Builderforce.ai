@@ -377,6 +377,46 @@ describe('analysis first, then the strongest coder writes the code', () => {
     expect(reported[0]).toMatchObject({ model: 'claude-opus-5', role: 'code', source: 'ide', terminalStatus: 'completed', merged: false });
   });
 
+  it('hands the coder a brief naming the planned edit, so it acts instead of re-analysing (chat #133)', async () => {
+    const briefs: string[] = [];
+    let turn = 0;
+    await startRun(5104, {
+      resolvedSystemPrompt: 'sys',
+      tools: TOOLS,
+      runTool: async () => ({ ok: true, content: 'ok' }),
+      stream: async (opts) => {
+        turn += 1;
+        const last = opts.messages[opts.messages.length - 1];
+        if (opts.role === 'code' && last?.role === 'user' && String(last.content).startsWith('HAND-OFF')) briefs.push(String(last.content));
+        if (opts.tools === undefined || turn > 2) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+        return { text: 'The StatTile goes in adminShared.', toolCalls: [{ id: `c${turn}`, name: 'edit_file', args: JSON.stringify({ path: 'adminShared.tsx', old: 'x', new: 'StatTile' }) }], finishReason: 'tool_calls' };
+      },
+      persistence,
+      userTurn: 'add the StatTile',
+    });
+    expect(briefs).toHaveLength(1);
+    expect(briefs[0]).toContain('The StatTile goes in adminShared.');
+    expect(briefs[0]).toContain('edit_file');
+    expect(briefs[0]).toContain('adminShared.tsx');
+    // The brief rides the one re-ask; it never becomes part of the chat's transcript.
+    expect(getRunSnapshot(5104).appended.some((m) => String(m?.content ?? '').startsWith('HAND-OFF'))).toBe(false);
+  });
+
+  it('a follow-up run in a chat that already handed off starts on the coder, not a second analysis', async () => {
+    const roles: string[] = [];
+    let turn = 0;
+    const stream: BrainStreamFn = async (opts) => {
+      turn += 1;
+      roles.push(String(opts.role));
+      if (opts.tools === undefined || turn !== 1) return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+      return { text: '', toolCalls: [{ id: 'c1', name: 'edit_file', args: JSON.stringify({ path: 'a.ts', old: 'x', new: 'y' }) }], finishReason: 'tool_calls' };
+    };
+    await startRun(5105, { resolvedSystemPrompt: 'sys', tools: TOOLS, runTool: async () => ({ ok: true, content: 'ok' }), stream, persistence, userTurn: 'fix a.ts' });
+    roles.length = 0;
+    await startRun(5105, { resolvedSystemPrompt: 'sys', tools: TOOLS, runTool: async () => ({ ok: true, content: 'ok' }), stream, persistence, userTurn: 'continue' });
+    expect(roles[0]).toBe('code');
+  });
+
   it('a model pinned by the user writes its own code — no hand-off', async () => {
     const roles: string[] = [];
     let turn = 0;

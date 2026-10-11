@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-10-11 — The coding model picks up the plan instead of re-doing the analysis (brain-embedded 2026.10.9 · VSIX 2026.10.10)
+
+VS Code chat #133 (client 2026.10.9): MiniMax-M1 planned for 22 turns at one call per turn and reached its first edit. The re-ask then went to Grok 4.6, which started the investigation over at five and six reads a turn, re-reading files the planner had already read.
+
+- **Cause 1 — a bare hand-off.** The analysis→code hand-off threw the planner's edit away and re-asked the same turn of the coder "from the same transcript", on the theory that a coder handed the same transcript makes the same move. It doesn't: the transcript holds the evidence, but says neither that the analysis is finished nor what it concluded.
+  - Fix: `coderHandoffBrief` (`roleHandoff.ts`) rides that one re-ask as a user-role message and is never persisted. It carries the planner's findings, the exact tool call(s) it was about to make (args capped at 2,000 chars each, 6,000 overall), and the instruction to make the change rather than re-plan.
+- **Cause 2 — every follow-up re-plans.** The phase reset to `plan` at the start of every run, so each follow-up in the same chat ("Start S0", "continue") ran the analysis again on the planner and then handed off again.
+  - Fix: `codePhaseReached` on the run cell is not reset per run. Once a chat has handed off, its follow-up runs start on the coder.
+- Tests: two new in `brainRunStore.test.ts`. One checks the brief names the planned edit and stays out of the transcript; the other checks a follow-up run starts on `code`. 138/138 with `readCoverage`/`runActivity`. Typechecks are clean in brain-embedded and vscode (host + webview). VSIX 2026.10.10 is packaged and installed.
+
 ## ✅ RESOLVED 2026-10-11 — The agent reads one key of a 33,000-line catalog instead of paging it (agent-tools · brain-embedded 2026.10.8 · VSIX 2026.10.9 · api 2026.10.22 · agent-runtime 2026.10.2)
 
 From the second VS Code chat #133 run, diagnosed as "NO PROGRESS": 41% of targeted calls revisited ground already covered, worst `en.json` ×16 (33,278 lines) and `adminApi.ts` ×12. The agent knew exactly which keys it wanted (`admin.visitorFlow`, `admin.sessions`), but `read_file` only pages by line window, so it guessed offsets.

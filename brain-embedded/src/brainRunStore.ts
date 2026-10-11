@@ -49,6 +49,7 @@ import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel, withObservedModel, forgetResolvedModels } from './lastResolvedModel';
 import { isTicketRecordingTool, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, linkedTicketsReviewedComplete, isReadOnlyPlatformTool, type LinkedTicketToAdvance } from './chatWorkLinking';
 import { isCodeChangeTool, isRepoStateReadTool, canChangeCodeHere, canShipHere, canReviewInPreview, localToolsIn, memoryToolsIn, studioToolsIn } from './localWorkspaceTools';
+import { coderHandoffBrief } from './roleHandoff';
 import { codeChangesOf, isDelegationTool } from './codeChanges';
 import { delegationPlaceholders, placeholderAdvisory, placeholdersWritten, placeholderTraceEvent } from './placeholderGuard';
 import { canCompleteTicket, completionAdvisory, isTicketCompletion, notOnBaseBranchAdvisory, PlaceholderLedger } from './completionGuard';
@@ -456,6 +457,13 @@ interface RunCell {
   codeChanged: boolean;
   /** The model that made this run's code changes — what its outcome grades as a coder. */
   codeModel: string | null;
+  /**
+   * This chat has handed its analysis to the coding model. NOT reset per run: a follow-up
+   * ("Start S0", "continue") in the same chat is implementation of a plan already made,
+   * and starting it in the plan phase re-ran the analysis on the planner and then handed
+   * off again — chat #133 did both halves of the work twice.
+   */
+  codePhaseReached: boolean;
   /** This run's outcome idempotency key ({@link runOutcomeId}). */
   runId: string;
   ticketRecorded: boolean;
@@ -565,6 +573,7 @@ function makeCell(): RunCell {
     providerCap: [],
     codeChanged: false,
     codeModel: null,
+    codePhaseReached: false,
     runId: '',
     ticketRecorded: false,
     touchedFiles: [],
@@ -1791,7 +1800,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // analysis (`plan` — the tenant's own precedence decides who plans); from then on they
   // are `code`, which the gateway leads with the strongest connected model. A run that
   // already changed code (a resumed turn) starts as `code`.
-  let phase: 'plan' | 'code' = c.codeChanged ? 'code' : 'plan';
+  let phase: 'plan' | 'code' = c.codeChanged || c.codePhaseReached ? 'code' : 'plan';
   // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
   // One, not a budget: the second time the model stops short it has read the contract
   // twice, and its answer — including "I cannot ship this because…" — is the answer.
@@ -2493,9 +2502,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // Consume a one-shot forced tool_choice from stall recovery (if any).
       const turnToolChoice = forceToolChoice;
       forceToolChoice = undefined;
-      const request = (role: string, excludeModels: string[]): Promise<StreamChatResult> => asLiveTurn(c, () => stream(
+      // `extra` rides THIS request only (the hand-off brief); it never enters the transcript.
+      const request = (role: string, excludeModels: string[], extra: ChatCompletionMessage[] = []): Promise<StreamChatResult> => asLiveTurn(c, () => stream(
         {
-          messages: working, tools, tool_choice: tools ? (turnToolChoice ?? 'auto') : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict,
+          messages: extra.length > 0 ? [...working, ...extra] : working, tools, tool_choice: tools ? (turnToolChoice ?? 'auto') : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict,
           // Raised to the tool-turn floor when tools are on offer: a file write is
           // output, and the Effort ceiling cut every one of them off mid-JSON.
           routingMode, maxTokens: turnMaxTokens(maxTokens, !!tools), reasoning, metadata, role,
@@ -2573,12 +2583,15 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       }
       // ANALYSIS → CODE hand-off, at the exact turn it matters. The analysis model just
       // decided to change code; that edit is the first line of the deliverable, so it is
-      // re-asked of the coding model — from the same transcript — rather than written by
-      // the model that planned it. One discarded turn per run is the price of the coder
-      // writing every edit. A pinned model is the user's choice for the whole run.
+      // re-asked of the coding model rather than written by the model that planned it.
+      // The coder gets the transcript AND a brief naming the change the planner was
+      // about to make (`coderHandoffBrief`) — given the transcript alone, it started the
+      // analysis over. A pinned model is the user's choice for the whole run.
       if (turnRole === 'plan' && !activeModel && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))) {
         phase = 'code';
         turnRole = 'code';
+        c.codePhaseReached = true;
+        const brief = coderHandoffBrief(replayTextOf(result.text), result.toolCalls);
         pushTrace(c, {
           ts: nowIso(),
           category: 'message',
@@ -2588,7 +2601,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         });
         restartTurn();
         try {
-          result = await request('code', [...brokenModels]);
+          result = await request('code', [...brokenModels], [{ role: 'user', content: brief }]);
         } catch (e) {
           if (c.abort?.signal.aborted) throw e;
           throw turnError(e);
