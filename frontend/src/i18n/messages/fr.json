@@ -19969,6 +19969,7 @@
       "visibilityPublic": "Publique",
       "publishYouTube": "Publier sur YouTube",
       "publishingYouTube": "Téléversement vers YouTube…",
+      "youtubeUploading": "Téléversement vers YouTube — {percent} % confirmé. Vous pouvez fermer ceci ; le téléversement continue.",
       "uploadedYouTube": "Téléversée sur YouTube",
       "youtubePublishFailed": "YouTube n’a pas pu publier cette vidéo. Vérifiez la connexion et réessayez.",
       "viewOnYouTube": "Voir sur YouTube",
@@ -20468,6 +20469,7 @@
       "socialCopy": "Texte",
       "socialStatus": {
         "queued": "En file",
+        "uploading": "Téléversement · {percent} %",
         "published": "Publiée",
         "pending": "En traitement",
         "failed": "En échec",
@@ -22479,6 +22481,7 @@
       "publishPending": "Accepté — le réseau le traite encore.",
       "publishFailed": "Cette publication n’a pas pu être publiée.",
       "campaignPublished": "Publié sur {published} comptes sur {targets}.",
+      "campaignPublishedUploading": "Publié sur {published} comptes sur {targets}. {uploading} encore en téléversement vers YouTube — la progression s’affiche dans la campagne.",
       "campaignScheduled": "Programmé pour {count} comptes.",
       "campaignUpdateFailed": "Cette campagne n’a pas pu être mise à jour.",
       "boardMedia": "Joindre depuis ce canevas",

@@ -572,6 +572,9 @@ const BASE_MUTABLE_FIELDS = {
     // The server render still running for this movie — kept on the object so the
     // render outlives the tab that started it (`useServerMovieRender`).
     'serverRenderJobId',
+    // The resumable YouTube upload still going up — kept on the object for the same
+    // reason, so the link lands for whoever opens it next (`useYouTubeUpload`).
+    'youtubeUploadId',
     // A video with no captions cannot lawfully be distributed to a class (WCAG 1.2.2),
     // and until this field existed the board had nowhere to record that they exist.
     'captionsUrl',

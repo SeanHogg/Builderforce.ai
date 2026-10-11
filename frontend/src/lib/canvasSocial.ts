@@ -178,6 +178,8 @@ export function socialCampaignNodeData(campaign: SocialCampaign): Record<string,
       status: post.status,
       permalink: post.permalink,
       error: post.error,
+      // A YouTube post is a background upload; the tile shows how much has landed.
+      uploadPercent: post.uploadPercent ?? null,
     })),
   };
 }

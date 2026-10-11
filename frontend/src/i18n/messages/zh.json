@@ -19969,6 +19969,7 @@
       "visibilityPublic": "公开",
       "publishYouTube": "发布到 YouTube",
       "publishingYouTube": "正在上传到 YouTube…",
+      "youtubeUploading": "正在上传到 YouTube — 已确认 {percent}%。可以关闭此处，上传会继续进行。",
       "uploadedYouTube": "已上传到 YouTube",
       "youtubePublishFailed": "YouTube 无法发布此视频。请检查连接后重试。",
       "viewOnYouTube": "在 YouTube 上查看",
@@ -20468,6 +20469,7 @@
       "socialCopy": "文案",
       "socialStatus": {
         "queued": "排队中",
+        "uploading": "上传中 · {percent}%",
         "published": "已发布",
         "pending": "处理中",
         "failed": "失败",
@@ -22479,6 +22481,7 @@
       "publishPending": "已接收——平台仍在处理。",
       "publishFailed": "该帖子发布失败。",
       "campaignPublished": "已发布到 {targets} 个账号中的 {published} 个。",
+      "campaignPublishedUploading": "已发布到 {targets} 个账号中的 {published} 个。仍有 {uploading} 个正在上传到 YouTube — 进度显示在活动中。",
       "campaignScheduled": "已为 {count} 个账号排期。",
       "campaignUpdateFailed": "无法更新该活动。",
       "boardMedia": "从本画布附加",

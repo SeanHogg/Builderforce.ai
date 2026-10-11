@@ -19969,6 +19969,7 @@
       "visibilityPublic": "Öffentlich",
       "publishYouTube": "Auf YouTube veröffentlichen",
       "publishingYouTube": "Upload zu YouTube…",
+      "youtubeUploading": "Upload zu YouTube — {percent} % bestätigt. Das Fenster kann geschlossen werden; der Upload läuft weiter.",
       "uploadedYouTube": "Auf YouTube hochgeladen",
       "youtubePublishFailed": "YouTube konnte dieses Video nicht veröffentlichen. Verbindung prüfen und erneut versuchen.",
       "viewOnYouTube": "Auf YouTube ansehen",
@@ -20468,6 +20469,7 @@
       "socialCopy": "Text",
       "socialStatus": {
         "queued": "In Warteschlange",
+        "uploading": "Wird hochgeladen · {percent} %",
         "published": "Veröffentlicht",
         "pending": "Wird verarbeitet",
         "failed": "Fehlgeschlagen",
@@ -22479,6 +22481,7 @@
       "publishPending": "Angenommen — das Netzwerk verarbeitet den Beitrag noch.",
       "publishFailed": "Dieser Beitrag konnte nicht veröffentlicht werden.",
       "campaignPublished": "Auf {published} von {targets} Konten veröffentlicht.",
+      "campaignPublishedUploading": "Auf {published} von {targets} Konten veröffentlicht. {uploading} wird noch zu YouTube hochgeladen — der Fortschritt steht in der Kampagne.",
       "campaignScheduled": "Für {count} Konten geplant.",
       "campaignUpdateFailed": "Diese Kampagne konnte nicht aktualisiert werden.",
       "boardMedia": "Aus dieser Leinwand anhängen",

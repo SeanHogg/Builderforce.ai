@@ -74,22 +74,28 @@ export async function freshYouTubeToken(db: Db, env: Env, tenantId: number, user
   }
 }
 
-export interface PublishYouTubeInput { connectionId: number; storageKey: string; title: string; description?: string; privacyStatus: 'private' | 'unlisted' | 'public'; mimeType: string }
+/** The grant an upload spends: whose `connections` row, and which user owns it. */
+export interface YouTubeUploadGrant { connectionId: number; userId: string }
 
-export async function publishCanvasVideoToYouTube(db: Db, env: Env, tenantId: number, userId: string, input: PublishYouTubeInput): Promise<{ videoId: string; url: string; privacyStatus: string }> {
-  if (!input.storageKey.startsWith(`${tenantId}/`)) throw new Error('Video artifact not found.');
-  const object = await env.UPLOADS?.get(input.storageKey);
-  if (!object) throw new Error('Video artifact not found.');
-  const accessToken = await freshYouTubeToken(db, env, tenantId, userId, input.connectionId);
-  const metadata = JSON.stringify({ snippet: { title: input.title.slice(0, 100), description: (input.description ?? '').slice(0, 5_000), categoryId: '28' }, status: { privacyStatus: input.privacyStatus, selfDeclaredMadeForKids: false } });
-  const initiated = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-    method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8', 'Content-Length': String(new TextEncoder().encode(metadata).byteLength), 'X-Upload-Content-Length': String(object.size), 'X-Upload-Content-Type': input.mimeType }, body: metadata,
-  });
-  const uploadUrl = initiated.headers.get('Location');
-  if (!initiated.ok || !uploadUrl) throw new Error(`YouTube upload could not start (${initiated.status}).`);
-  const uploaded = await fetch(uploadUrl, { method: 'PUT', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': input.mimeType, 'Content-Length': String(object.size) }, body: object.body });
-  const result = await uploaded.json().catch(() => ({})) as { id?: string; status?: { privacyStatus?: string }; error?: { message?: string } };
-  if (!uploaded.ok || !result.id) throw new Error(result.error?.message || `YouTube upload failed (${uploaded.status}).`);
-  await db.update(credentials).set({ lastUsedAt: new Date(), updatedAt: new Date() }).where(and(eq(credentials.connectionId, input.connectionId), eq(credentials.tenantId, tenantId)));
-  return { videoId: result.id, url: `https://youtu.be/${result.id}`, privacyStatus: result.status?.privacyStatus ?? input.privacyStatus };
+/**
+ * Pick the YouTube upload grant for work that has no person attached — a campaign
+ * publishing on the sweep.
+ *
+ * The person who connected the campaign's YouTube account is preferred, because it is
+ * their channel the post is meant for. Otherwise the workspace's ONE connected grant
+ * is used, and more than one with no preference is a question, not a guess: posting a
+ * launch video to the wrong channel is not a recoverable mistake.
+ */
+export async function resolveYouTubeUploadGrant(
+  db: Db, tenantId: number, preferredUserId: string | null,
+): Promise<YouTubeUploadGrant | { error: string }> {
+  const grants = await db.select({ id: connections.id, userId: connections.userId }).from(connections)
+    .where(and(eq(connections.tenantId, tenantId), eq(connections.vendor, 'google'), eq(connections.capability, 'youtube'), eq(connections.status, 'connected')));
+  const usable = grants.filter((grant): grant is { id: number; userId: string } => !!grant.userId);
+  const preferred = preferredUserId ? usable.find((grant) => grant.userId === preferredUserId) : undefined;
+  const chosen = preferred ?? (usable.length === 1 ? usable[0] : undefined);
+  if (chosen) return { connectionId: chosen.id, userId: chosen.userId };
+  return usable.length === 0
+    ? { error: 'Uploading to YouTube needs a YouTube upload connection. Connect YouTube from a video on the canvas, then publish again.' }
+    : { error: 'More than one person in this workspace has connected YouTube. The person who connected this YouTube account should connect YouTube uploads too, so the video goes to their channel.' };
 }

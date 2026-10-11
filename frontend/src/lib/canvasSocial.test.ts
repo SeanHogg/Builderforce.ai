@@ -20,7 +20,7 @@ const read = (items: SocialFeedItem[]): SocialFeedRead => ({
   items,
   accounts: [{
     id: 'c1', network: 'x', networkLabel: 'X', name: 'Acme X', enabled: true, ready: true,
-    missingFields: [], publishMode: 'text', lastTestOk: true, lastUsedAt: null,
+    missingFields: [], publishMode: 'text', publishTransport: 'direct', lastTestOk: true, lastUsedAt: null,
   }],
   errors: [],
   fetchedAtISO: '2026-08-12T10:00:00.000Z',
@@ -79,8 +79,8 @@ describe('socialCampaignNodeData', () => {
     targets: 2, published: 1, failed: 0, projectId: null, sessionId: null,
     updatedAtISO: '2026-08-12T10:00:00.000Z',
     posts: [
-      { id: 1, connectionId: 'c1', network: 'x', accountName: 'Acme X', body: 'We shipped', status: 'published', externalId: '1', permalink: 'https://x.com/acme/status/1', error: null, attempts: 1, publishedAtISO: '2026-08-12T10:00:00.000Z' },
-      { id: 2, connectionId: 'c2', network: 'instagram', accountName: 'Acme IG', body: 'We shipped', status: 'skipped', externalId: null, permalink: null, error: 'needs media', attempts: 0, publishedAtISO: null },
+      { id: 1, connectionId: 'c1', network: 'x', accountName: 'Acme X', body: 'We shipped', status: 'published', externalId: '1', permalink: 'https://x.com/acme/status/1', error: null, attempts: 1, publishedAtISO: '2026-08-12T10:00:00.000Z', uploadPercent: null },
+      { id: 2, connectionId: 'c2', network: 'instagram', accountName: 'Acme IG', body: 'We shipped', status: 'skipped', externalId: null, permalink: null, error: 'needs media', attempts: 0, publishedAtISO: null, uploadPercent: null },
     ],
     blockers: [{ code: 'needsMedia', network: 'instagram', account: 'Instagram · Acme IG' }],
   };
@@ -89,8 +89,19 @@ describe('socialCampaignNodeData', () => {
     const data = socialCampaignNodeData(campaign);
     expect(data.publishedCount).toBe(1);
     expect(data.posts).toEqual([
-      { id: 1, network: 'x', accountName: 'Acme X', status: 'published', permalink: 'https://x.com/acme/status/1', error: null },
-      { id: 2, network: 'instagram', accountName: 'Acme IG', status: 'skipped', permalink: null, error: 'needs media' },
+      { id: 1, network: 'x', accountName: 'Acme X', status: 'published', permalink: 'https://x.com/acme/status/1', error: null, uploadPercent: null },
+      { id: 2, network: 'instagram', accountName: 'Acme IG', status: 'skipped', permalink: null, error: 'needs media', uploadPercent: null },
+    ]);
+  });
+
+  it('carries a YouTube post\'s confirmed upload percent while it is uploading', () => {
+    const uploading: SocialCampaign = {
+      ...campaign,
+      status: 'publishing',
+      posts: [{ id: 3, connectionId: 'c3', network: 'youtube', accountName: 'Acme YT', body: 'We shipped', status: 'uploading', externalId: null, permalink: null, error: null, attempts: 1, publishedAtISO: null, uploadPercent: 42 }],
+    };
+    expect(socialCampaignNodeData(uploading).posts).toEqual([
+      { id: 3, network: 'youtube', accountName: 'Acme YT', status: 'uploading', permalink: null, error: null, uploadPercent: 42 },
     ]);
   });
 

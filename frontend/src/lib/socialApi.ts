@@ -20,9 +20,9 @@ export type SocialNetwork =
 /**
  * What a network accepts from a publish.
  *
- * `media` REFUSES a text-only post; `none` is read-and-measure only (YouTube, whose
- * publishing is a resumable byte upload). One field rather than two booleans, because
- * "can it publish" and "does it need media" are the same question asked twice.
+ * `media` REFUSES a text-only post (Instagram, TikTok, Pinterest, YouTube); `none` is
+ * read-and-measure only. One field rather than two booleans, because "can it publish"
+ * and "does it need media" are the same question asked twice.
  */
 export type SocialPublishMode = 'text' | 'media' | 'none';
 
@@ -49,6 +49,9 @@ export interface SocialAccount {
   ready: boolean;
   missingFields: SocialAccountField[];
   publishMode: SocialPublishMode;
+  /** `upload` — publishing is a background upload (YouTube): it always goes out as a
+   *  campaign, whose post shows upload progress until the network has the video. */
+  publishTransport: 'direct' | 'upload';
   lastTestOk: boolean | null;
   lastUsedAt: string | null;
 }
@@ -92,7 +95,8 @@ export interface SocialFeedRead {
 }
 
 export type SocialCampaignStatus = 'draft' | 'scheduled' | 'publishing' | 'published' | 'failed';
-export type SocialPostStatus = 'queued' | 'published' | 'pending' | 'failed' | 'skipped';
+/** `uploading` — handed to the background upload job; see `uploadPercent`. */
+export type SocialPostStatus = 'queued' | 'uploading' | 'published' | 'pending' | 'failed' | 'skipped';
 
 export interface SocialCampaignPost {
   id: number;
@@ -106,6 +110,8 @@ export interface SocialCampaignPost {
   error: string | null;
   attempts: number;
   publishedAtISO: string | null;
+  /** While `uploading`: the share of the video the network has confirmed, 0–100. */
+  uploadPercent: number | null;
 }
 
 /**
@@ -166,6 +172,8 @@ export interface SocialPublishBatch {
   published: number;
   failed: number;
   skipped: number;
+  /** Posts handed to a background upload job (YouTube) in this batch. */
+  uploading: number;
   remaining: number;
   status: SocialCampaignStatus;
   results: Array<{ network: SocialNetwork; accountName: string; ok: boolean; permalink: string | null; error: string | null }>;

@@ -17,7 +17,8 @@ import type { CreationNodeData } from './types';
 import { storeCanvasMedia } from '@/lib/canvasMediaStore';
 import { useCanvasMediaCapture } from '@/hooks/useCanvasMediaCapture';
 import { renderCanvasVideo } from '@/lib/canvasVideoRender';
-import { youtubeApi, type YouTubeConnection } from '@/lib/youtubeApi';
+import { youtubeApi, type YouTubeConnection, type YouTubeUpload } from '@/lib/youtubeApi';
+import { useYouTubeUpload } from '@/hooks/useYouTubeUpload';
 import styles from './CanvasVideoEditor.module.css';
 import { ServerMovieRenderButton } from './ServerMovieRenderButton';
 import { VIDEO_RESUME_TEMPLATES, videoResumeTemplatePatch, type VideoResumeScene } from '@/lib/videoResumeTemplates';
@@ -173,9 +174,20 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
     setBusy(t('publishingYouTube')); setProblem(null);
     try {
       const published = await youtubeApi.publish({ connectionId: youtubeConnectionId, storageKey: data.renderedVideoStorageKey as string, title: youtubeTitle, description: youtubeDescription, privacyStatus: youtubePrivacy, mimeType: data.renderedVideoMimeType as string });
-      commit(timeline, sources, { youtubeVideoId: published.videoId, youtubeUrl: published.url, youtubePrivacyStatus: published.privacyStatus, status: t('uploadedYouTube') });
+      // A short render lands inside the call; a long one is persisted as a job id so
+      // the upload is picked back up by whoever opens this object next.
+      if (published.state === 'succeeded') landYouTubeUpload(published);
+      else onEdit?.({ youtubeUploadId: published.id });
     } catch { setProblem(t('youtubePublishFailed')); } finally { setBusy(null); }
   };
+
+  const landYouTubeUpload = (upload: YouTubeUpload) => commit(timeline, sources, { youtubeVideoId: upload.videoId, youtubeUrl: upload.url, youtubePrivacyStatus: upload.privacyStatus, youtubeUploadId: null, status: t('uploadedYouTube') });
+  const pendingUploadId = typeof data.youtubeUploadId === 'string' && !data.youtubeUrl ? data.youtubeUploadId : null;
+  const youtubeUpload = useYouTubeUpload(pendingUploadId, (upload) => {
+    if (upload.state === 'succeeded') { landYouTubeUpload(upload); return; }
+    setProblem(t('youtubePublishFailed'));
+    onEdit?.({ youtubeUploadId: null });
+  });
 
   const activeClips = timeline.clips.filter((clip) => playhead >= clip.startSeconds && playhead < clip.startSeconds + clip.durationSeconds);
   return <div className={`${styles.editor} nodrag nowheel`} onClick={stop}>
@@ -225,8 +237,9 @@ export function CanvasVideoEditor({ data, onEdit }: { data: CreationNodeData; on
         <label>{t('youtubeTitle')}<input value={youtubeTitle} maxLength={100} onChange={(event) => setYoutubeTitle(event.target.value)} /></label>
         <label>{t('youtubeDescription')}<textarea value={youtubeDescription} maxLength={5000} onChange={(event) => setYoutubeDescription(event.target.value)} /></label>
         <label>{t('youtubeVisibility')}<select value={youtubePrivacy} onChange={(event) => setYoutubePrivacy(event.target.value as typeof youtubePrivacy)}><option value="private">{t('visibilityPrivate')}</option><option value="unlisted">{t('visibilityUnlisted')}</option><option value="public">{t('visibilityPublic')}</option></select></label>
-        <button type="button" disabled={!!busy || !youtubeTitle.trim()} onClick={() => void publishYouTube()}>{t('publishYouTube')}</button>
+        <button type="button" disabled={!!busy || !youtubeTitle.trim() || youtubeUpload.percent !== null} onClick={() => void publishYouTube()}>{t('publishYouTube')}</button>
       </>}
+      {youtubeUpload.percent !== null && <p role="status" className={styles.status}>{t('youtubeUploading', { percent: youtubeUpload.percent })}</p>}
       {typeof data.youtubeUrl === 'string' && <a href={data.youtubeUrl} target="_blank" rel="noreferrer">{t('viewOnYouTube')}</a>}
     </section>}
 

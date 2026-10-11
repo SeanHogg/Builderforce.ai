@@ -49,7 +49,9 @@ import { processPendingCloudWorkflows } from './application/workflow/cloudExecut
 import { runCampaignSendSweep } from './application/marketing/campaignEngine';
 import { runAdInsightsSweep } from './application/advertising/adInsightsSync';
 import { runLedgerSyncSweep } from './application/finance/ledgerSync';
-import { runSocialCampaignSweep } from './application/social/socialCampaignService';
+import { runSocialCampaignSweep } from './application/social/socialCampaignSweep';
+import { runYouTubeUploadSweep } from './application/youtube/youtubeUploadJobs';
+import { settleYouTubeUploadBackReferences } from './application/youtube/youtubeUploadSettlement';
 import { runMailboxAutomationSweep } from './application/mailbox/mailboxAutomationService';
 import { runMailboxPushSweep } from './application/mailbox/mailboxWatch';
 import { reapStaleStageSandboxRuns } from './application/marketplace/stageSandboxRuns';
@@ -518,6 +520,21 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       const r = await runSocialCampaignSweep(env, db);
       return r.published > 0 || r.failed > 0
         ? `campaigns=${r.campaigns} published=${r.published} failed=${r.failed}`
+        : null;
+    },
+  },
+  {
+    key: 'youtube-upload',
+    cadence: 'frequent',
+    // The resumable YouTube upload (`youtube_uploads`): each tick sends a few 8 MiB
+    // chunks from the offset Google confirmed, so an upload outlives the request — or
+    // the evicted isolate — that started it. Settled uploads write back to their
+    // campaign post through the one settlement handler.
+    description: 'Advance resumable YouTube uploads chunk by chunk from the offset Google confirmed, and settle the campaign posts that queued them.',
+    run: async ({ env, db }) => {
+      const r = await runYouTubeUploadSweep(env, db, { onSettled: settleYouTubeUploadBackReferences });
+      return r.uploads > 0
+        ? `uploads=${r.uploads} progressed=${r.progressed} succeeded=${r.succeeded} failed=${r.failed}`
         : null;
     },
   },

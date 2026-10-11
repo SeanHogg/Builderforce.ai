@@ -6,10 +6,17 @@ import { buildProviderConsentUrl, completeProviderOAuthCallback } from '../../ap
 import {
   deleteYouTubeConnection,
   listYouTubeConnections,
-  publishCanvasVideoToYouTube,
   saveYouTubeConnection,
   YOUTUBE_PROVIDER,
 } from '../../application/youtube/youtubePublishing';
+import { publishCanvasVideoToYouTube } from '../../application/youtube/youtubeCanvasPublish';
+import {
+  advanceYouTubeUpload,
+  getYouTubeUpload,
+  YouTubeUploadError,
+  youtubeUploadView,
+} from '../../application/youtube/youtubeUploadJobs';
+import { settleYouTubeUploadBackReferences } from '../../application/youtube/youtubeUploadSettlement';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { parseBody, z } from './requestBody';
 
@@ -24,6 +31,8 @@ const PublishVideoBody = z.object({
 });
 
 const DEFAULT_RETURN_TO = '/create';
+/** `youtube_uploads.id` is a UUID; anything else is a 404, not a database error. */
+const UPLOAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function createYouTubeRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -82,14 +91,41 @@ export function createYouTubeRoutes(db: Db): Hono<HonoEnv> {
       if (!Number.isInteger(body.connectionId) || !body.storageKey || !body.title?.trim()) return c.json({ error: 'connectionId, storageKey, and title are required.' }, 400);
       if (!['private', 'unlisted', 'public'].includes(body.privacyStatus ?? '')) return c.json({ error: 'privacyStatus must be private, unlisted, or public.' }, 400);
       if (!body.mimeType?.startsWith('video/')) return c.json({ error: 'A rendered video is required.' }, 400);
-      const result = await publishCanvasVideoToYouTube(db, c.env as Env, c.get('tenantId') as number, c.get('userId') as string, {
+      const upload = await publishCanvasVideoToYouTube(db, c.env as Env, c.get('tenantId') as number, c.get('userId') as string, {
         connectionId: body.connectionId!, storageKey: body.storageKey, title: body.title.trim(), description: body.description,
         privacyStatus: body.privacyStatus as 'private' | 'unlisted' | 'public', mimeType: body.mimeType,
       });
-      return c.json(result, 201);
+      // 201 when a short render finished inside this request; 202 while the job carries
+      // on (the editor polls `/uploads/:id/advance`, and the sweep finishes it if not).
+      if (upload.state === 'failed') return c.json({ error: upload.error ?? 'YouTube publishing failed.', upload }, 502);
+      return c.json(upload, upload.state === 'succeeded' ? 201 : 202);
     } catch (error) {
+      if (error instanceof YouTubeUploadError) return c.json({ error: error.message }, error.status === 404 ? 404 : error.status === 500 ? 500 : 400);
       reportCaughtError(error, { source: 'presentation/routes/youtubeRoutes.ts', operation: 'publish' });
       return c.json({ error: error instanceof Error ? error.message : 'YouTube publishing failed.' }, 502);
+    }
+  });
+
+  router.get('/uploads/:id', async (c) => {
+    const id = c.req.param('id');
+    if (!UPLOAD_ID.test(id)) return c.json({ error: 'Upload not found.' }, 404);
+    const row = await getYouTubeUpload(db, c.get('tenantId') as number, c.get('userId') as string, id);
+    return row ? c.json({ upload: youtubeUploadView(row) }) : c.json({ error: 'Upload not found.' }, 404);
+  });
+
+  /** Run one tick now, if no other tick holds the upload — how an open editor drives
+   *  its own upload faster than the five-minute sweep. Same tick, same claim. */
+  router.post('/uploads/:id/advance', async (c) => {
+    const id = c.req.param('id');
+    if (!UPLOAD_ID.test(id)) return c.json({ error: 'Upload not found.' }, 404);
+    const row = await getYouTubeUpload(db, c.get('tenantId') as number, c.get('userId') as string, id);
+    if (!row) return c.json({ error: 'Upload not found.' }, 404);
+    try {
+      const next = await advanceYouTubeUpload(db, c.env as Env, row, { onSettled: settleYouTubeUploadBackReferences });
+      return c.json({ upload: youtubeUploadView(next) });
+    } catch (error) {
+      reportCaughtError(error, { source: 'presentation/routes/youtubeRoutes.ts', operation: 'advance' });
+      return c.json({ upload: youtubeUploadView(row) });
     }
   });
   return router;
