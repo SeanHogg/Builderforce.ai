@@ -43,6 +43,7 @@ import {
   startAgentCheckout,
 } from '../../application/marketplace/agentCommerce';
 import { demoTenantAgent, publicAgentScope } from '../../application/marketplace/publicAgentScope';
+import { BUILTIN_AGENT_CATALOGUE } from '../../application/agent/provisionBuiltinAgents';
 import {
   ensureAgentIdentity,
   provisionHiredAgent,
@@ -842,6 +843,15 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       { kvTtlSeconds: PUBLIC_LIST_CACHE_TTL_SECONDS },
     );
     return c.json(rows.map(mapPublicAgentRow));
+  });
+
+  // GET /api/workforce/builtin-agents — the built-in roster every workspace
+  // receives. Static module data with no DB read, so there is nothing for the
+  // read-through cache to hold; a public Cache-Control lets the edge and the
+  // browser keep it instead.
+  router.get('/builtin-agents', (c) => {
+    c.header('Cache-Control', 'public, max-age=3600');
+    return c.json(BUILTIN_AGENT_CATALOGUE);
   });
 
   // GET /api/workforce/agents/:id — public agent detail (with evalScore).

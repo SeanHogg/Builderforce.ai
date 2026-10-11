@@ -29,7 +29,7 @@ import { useErrorMessage } from '@/i18n/useErrorMessage';
  * listening to it. A section that renders a catalogue does not get its own copy
  * of the catalogue's filter.
  */
-export function CreationsSection({ search, kind }: { search: string; kind: string }) {
+export function CreationsSection({ search, kind, limit = 24 }: { search: string; kind: string; limit?: number }) {
   const errorMessage = useErrorMessage();
   const t = useTranslations('marketplaceCreations');
   const [listings, setListings] = useState<CreationListing[] | null>(null);
@@ -38,13 +38,13 @@ export function CreationsSection({ search, kind }: { search: string; kind: strin
   const load = useCallback(async () => {
     setError(null);
     try {
-      const result = await publicListingApi.browse({ q: search, kind, limit: 24 });
+      const result = await publicListingApi.browse({ q: search, kind, limit });
       setListings(result.listings);
     } catch (cause) {
       setError(errorMessage(cause));
       setListings([]);
     }
-  }, [search, kind, errorMessage]);
+  }, [search, kind, limit, errorMessage]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -70,7 +70,7 @@ export function CreationsSection({ search, kind }: { search: string; kind: strin
         }}>{error}</p>
       )}
 
-      {listings === null && <SkeletonGrid count={6} />}
+      {listings === null && <SkeletonGrid count={Math.min(limit, 6)} />}
 
       {listings?.length === 0 && !error && (
         <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>

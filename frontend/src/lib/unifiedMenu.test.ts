@@ -299,8 +299,8 @@ describe('the active destination is resolved against the visitor, not the builde
 });
 
 describe('marketplace families — one derivation for label, CTA and flow', () => {
-  it('exposes exactly four families', () => {
-    expect(FAMILY_IDS).toEqual(['talent', 'company', 'agent', 'asset']);
+  it('exposes the All view and exactly four families', () => {
+    expect(FAMILY_IDS).toEqual(['all', 'talent', 'company', 'agent', 'asset']);
   });
 
   it('derives a distinct publish CTA per family', () => {
@@ -329,8 +329,8 @@ describe('marketplace families — one derivation for label, CTA and flow', () =
     expect(resolveFamily('company', 'model', null)).toEqual({ family: 'company', kind: 'business' });
   });
 
-  it('opens the marketplace on Agents and Builtin by default', () => {
-    expect(resolveFamily(null, null, null)).toEqual({ family: 'agent', kind: 'builtin' });
+  it('opens the marketplace on the All view by default', () => {
+    expect(resolveFamily(null, null, null)).toEqual({ family: 'all', kind: '' });
   });
 
   it('gives each family its own hue so four filters are four colours', () => {

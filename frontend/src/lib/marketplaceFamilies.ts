@@ -6,7 +6,7 @@
  * sold* with *who is selling it* with *a verb*. Adding companies as a ninth is
  * how that list reaches fifteen.
  *
- * Four families, and ONE derivation for each family's label, its publish call
+ * Four families (plus the All view over them), and ONE derivation for each family's label, its publish call
  * to action and the FLOW that action runs. Four buttons written by hand drift
  * from the filter above them within a release; `FAMILIES[active].publishKey`
  * cannot. The `flow` matters as much as the label — **"Publish a company" runs
@@ -30,7 +30,7 @@
 import { LISTING_KIND_IDS, MARKETPLACE_LISTING_KINDS } from '@builderforce/creation-canvas-contract';
 
 /** The kinds the existing marketplace sections already render, keyed by family. */
-export type FamilyId = 'talent' | 'company' | 'agent' | 'asset';
+export type FamilyId = 'all' | 'talent' | 'company' | 'agent' | 'asset';
 
 export interface MarketplaceFamily {
   id: FamilyId;
@@ -42,7 +42,7 @@ export interface MarketplaceFamily {
    * What the CTA actually does. `claim` is not a listing form: it verifies
    * ownership of a business before anything is published.
    */
-  flow: 'listing' | 'claim' | 'agent' | 'asset';
+  flow: 'overview' | 'listing' | 'claim' | 'agent' | 'asset';
   /** The seat hue this family is tinted with, from `lib/seats.ts`. */
   hueVar: string;
   /** Sub-filters inside the family. The first is the default. */
@@ -167,6 +167,9 @@ const PUBLISH_CLOSED = new Set(['asset:model', 'company:storefront']);
 
 export function publishActionFor(family: FamilyId, kind: string): PublishAction {
   if (FAMILIES[family].flow === 'claim') return { via: 'disabled' };
+  // The All view sells nothing of its own, so its CTA is the one publish path
+  // every family shares: build it on the canvas, which is open to guests.
+  if (FAMILIES[family].flow === 'overview') return { via: 'route', href: '/create/new', requiresAuth: false };
   if (PUBLISH_CLOSED.has(`${family}:${kind}`)) return { via: 'disabled' };
   // A canvas creation is published from the board that made it. The canvas is
   // open to guests, so this is the one publish path with no sign-in gate.
@@ -176,6 +179,18 @@ export function publishActionFor(family: FamilyId, kind: string): PublishAction 
 }
 
 export const FAMILIES: Record<FamilyId, MarketplaceFamily> = {
+  // The All view: one strip per family, and what a bare `/marketplace` opens on.
+  // It has no kinds — its "filter" is the families themselves — so the kind row
+  // renders nothing and the kind resolves to ''.
+  all: {
+    id: 'all',
+    labelKey: 'all',
+    publishKey: 'publishAll',
+    flow: 'overview',
+    hueVar: '--seat-brain',
+    kinds: [],
+    noteKey: 'note.all',
+  },
   talent: {
     id: 'talent',
     labelKey: 'talent',
@@ -246,7 +261,7 @@ export function isFamilyId(value: string): value is FamilyId {
  * data table rather than a branch, so a fifth legacy value is a row.
  */
 const LEGACY_CATEGORY: Record<string, { family: FamilyId; kind?: string }> = {
-  all: { family: 'talent' },
+  all: { family: 'all' },
   talent: { family: 'talent', kind: 'person' },
   // The public advisors browse. `advisors` is an ALIAS onto the talent family's
   // advisor chip, not a family of its own: the inventory is the same person
@@ -278,13 +293,13 @@ export function resolveFamily(familyParam: string | null, kindParam: string | nu
 } {
   if (familyParam && isFamilyId(familyParam)) {
     const family = FAMILIES[familyParam];
-    const kind = kindParam && family.kinds.includes(kindParam) ? kindParam : family.kinds[0];
+    const kind = kindParam && family.kinds.includes(kindParam) ? kindParam : family.kinds[0] ?? '';
     return { family: familyParam, kind };
   }
   const legacy = familyFromLegacyCategory(categoryParam);
   if (legacy) {
     const family = FAMILIES[legacy.family];
-    return { family: legacy.family, kind: legacy.kind ?? family.kinds[0] };
+    return { family: legacy.family, kind: legacy.kind ?? family.kinds[0] ?? '' };
   }
-  return { family: 'agent', kind: FAMILIES.agent.kinds[0] };
+  return { family: 'all', kind: '' };
 }

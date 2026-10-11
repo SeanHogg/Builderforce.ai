@@ -212,6 +212,28 @@ export const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
   },
 ];
 
+/** One built-in seat as the public marketplace shows it — no id, because every
+ *  workspace holds its OWN copy (`${idPrefix}${tenantId}`), so there is no single
+ *  row a stranger could hire. */
+export interface BuiltinAgentCatalogueEntry {
+  kind: string;
+  name: string;
+  title: string;
+  bio: string;
+  skills: string[];
+}
+
+/**
+ * The built-in roster as a catalogue. Built-in agents are provisioned per
+ * workspace with `published: false`, so the public listing (`publicAgentScope`)
+ * can never return them — the marketplace's Built-in chip reads THIS instead.
+ * Projected from `BUILTIN_AGENTS`, so the catalogue and what a new workspace
+ * actually receives are the same list.
+ */
+export const BUILTIN_AGENT_CATALOGUE: readonly BuiltinAgentCatalogueEntry[] = BUILTIN_AGENTS.map(
+  ({ kind, name, title, bio, skills }) => ({ kind, name, title, bio, skills }),
+);
+
 /** Insert any missing built-in agents for a tenant. Best-effort, idempotent. */
 export async function provisionBuiltinAgents(db: Db, tenantId: number): Promise<void> {
   for (const seed of BUILTIN_AGENTS) {

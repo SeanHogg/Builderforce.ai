@@ -264,6 +264,15 @@ export interface AgentProfile {
   resumeMarkdown: string;
 }
 
+/** One seat of the built-in roster (`GET /api/workforce/builtin-agents`). */
+export interface BuiltinAgentEntry {
+  kind: string;
+  name: string;
+  title: string;
+  bio: string;
+  skills: string[];
+}
+
 export interface PublishedAgent {
   id: string;
   project_id: number | string | null;

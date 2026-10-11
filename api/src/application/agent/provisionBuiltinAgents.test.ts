@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
-import { BUILTIN_AGENTS } from './provisionBuiltinAgents';
+import { BUILTIN_AGENTS, BUILTIN_AGENT_CATALOGUE } from './provisionBuiltinAgents';
 import { listBuiltinTools } from '../llm/builtinMcpService';
 import { SEAT_AGENT_KIND } from '../kernel/TeamRoster';
 
@@ -141,5 +141,17 @@ describe('Compliance Audit persona · seed ⇄ migration parity', () => {
     const bio = BUILTIN_AGENTS.find((a) => a.kind === 'compliance_auditor')?.bio ?? '';
     expect(bio.length).toBeGreaterThan(100);
     expect(migration).toContain(bio.replace(/'/g, "''"));
+  });
+});
+
+describe('the public built-in catalogue (marketplace Agents ▸ Built-in)', () => {
+  it('is exactly the roster a new workspace receives, in the same order', () => {
+    expect(BUILTIN_AGENT_CATALOGUE.map((a) => a.kind)).toEqual(BUILTIN_AGENTS.map((a) => a.kind));
+  });
+
+  it('carries no per-workspace id material — there is no single row to hire', () => {
+    for (const entry of BUILTIN_AGENT_CATALOGUE) {
+      expect(Object.keys(entry).sort()).toEqual(['bio', 'kind', 'name', 'skills', 'title']);
+    }
   });
 });

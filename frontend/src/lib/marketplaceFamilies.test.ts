@@ -20,3 +20,19 @@ describe('the jobs kind', () => {
     expect(publishActionFor('talent', 'job')).toEqual(publishActionFor('talent', 'gig'));
   });
 });
+
+describe('the All view', () => {
+  it('is what a bare /marketplace and the legacy ?category=all open on', () => {
+    expect(resolveFamily(null, null, null)).toEqual({ family: 'all', kind: '' });
+    expect(resolveFamily(null, null, 'all')).toEqual({ family: 'all', kind: '' });
+    expect(resolveFamily('all', 'skill', null)).toEqual({ family: 'all', kind: '' });
+  });
+
+  it('has no kind chips of its own', () => {
+    expect(FAMILIES.all.kinds).toEqual([]);
+  });
+
+  it('publishes on the canvas, the path every family shares, with no sign-in gate', () => {
+    expect(publishActionFor('all', '')).toEqual({ via: 'route', href: '/create/new', requiresAuth: false });
+  });
+});

@@ -33,6 +33,8 @@ import { isAgentOwner } from '@/lib/agentPermissions';
 import { formatAgentPrice } from '@/lib/agentPresentation';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 import { CreationsSection } from './CreationsSection';
+import { BuiltinAgentsSection } from './BuiltinAgentsSection';
+import { MarketplaceOverview } from './MarketplaceOverview';
 import { SellerEarnings } from './SellerEarnings';
 import { type ViewMode } from '@/components/ViewToggle';
 import { CatalogToolbar } from '@/components/CatalogToolbar';
@@ -44,9 +46,7 @@ import { AgentOwnerActions } from '@/components/workforce/AgentOwnerActions';
 import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from '@/components/workforce/CloudAgentSlideOutPanel';
 import { SkillTags } from '@/components/SkillTags';
 import { listFreelancers, type FreelancerProfile } from '@/lib/freelance/talentProfile';
-import { RatingStars } from '@/components/freelance/RatingStars';
-import { TrustBadge } from '@/components/freelance/TrustBadge';
-import { ProBonoBadge } from '@/components/freelance/ProBonoBadge';
+import { TalentCard, TALENT_GRID_STYLE } from './TalentCard';
 import { FAMILIES, FAMILY_IDS, creationKindForChip, kindLabelKey, publishActionFor, resolveFamily, type FamilyId } from '@/lib/marketplaceFamilies';
 import { MARKETPLACE_LISTING_KINDS } from '@builderforce/creation-canvas-contract';
 import { SkeletonGrid } from './SkeletonGrid';
@@ -54,7 +54,6 @@ import { ModelsExplorer } from './ModelsExplorer';
 import { hasSearchSection, MarketplaceSearchSection } from './marketplaceSections';
 import { StartupDirectory } from '@/components/startups/StartupDirectory';
 import { signInHref } from '@/lib/auth';
-import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { faultMessage } from '@/lib/apiClient';
 // Human freelancers ("Talent"), the live model catalog ("Models"), and open work to
 // bid on ("Gigs") are categories of the marketplace rather than standalone
@@ -65,14 +64,16 @@ import { faultMessage } from '@/lib/apiClient';
 // verb that was never a category — became the primary button. This stays the
 // INTERNAL section discriminator; the families above it are the vocabulary a
 // person sees, and `SECTION_BY_KIND` is the one place the two meet.
-type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'workforce' | 'talent' | 'models' | 'gigs' | 'jobs' | 'publish' | 'company' | 'knowledge' | 'creations' | 'templates';
+type MarketplaceCategory = 'all' | 'overview' | 'builtin' | 'personas' | 'skills' | 'workforce' | 'talent' | 'models' | 'gigs' | 'jobs' | 'publish' | 'company' | 'knowledge' | 'creations' | 'templates';
 
 /** (family, kind) → which section renders. A table, so a new kind is a row. */
 const SECTION_BY_KIND: Record<string, MarketplaceCategory> = {
+  // The All family has no kinds, so its key carries the empty kind.
+  'all:': 'overview',
   'talent:person': 'talent',
   'talent:gig': 'gigs',
   'talent:job': 'jobs',
-  'agent:builtin': 'workforce',
+  'agent:builtin': 'builtin',
   'agent:community': 'workforce',
   'asset:model': 'models',
   'asset:skill': 'skills',
@@ -101,19 +102,10 @@ const TALENT_PAGE_SIZE = 24;
 /** Rows per page for the in-memory grids (listings, agents). */
 const GRID_PAGE_SIZE = 12;
 
-const talentCardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18,
-  display: 'flex', flexDirection: 'column', gap: 10, textDecoration: 'none',
-};
-
 const filterControlStyle: React.CSSProperties = {
   background: 'var(--bg-elevated)', color: 'var(--text)', border: '1px solid var(--border)',
   borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 13, outline: 'none',
 };
-
-function talentInitials(name: string | null): string {
-  return (name ?? '?').trim().split(/\s+/).slice(0, 2).map((s) => s[0]?.toUpperCase() ?? '').join('') || '?';
-}
 
 interface UserSkill {
   id: string;
@@ -207,7 +199,6 @@ function builtinSkillToListing(b: BuiltinSkill): MarketplaceListing {
 }
 
 export default function MarketplacePageClient() {
-  const { formatCents } = useMoneyFormat();
   const { tenant, user, webToken, isAuthenticated, hasTenant } = useAuth();
   const { addItem, hasItem } = useCart();
   const tenantId = tenant?.id ?? '';
@@ -429,7 +420,9 @@ export default function MarketplacePageClient() {
     params.delete('category');
     params.set('family', nextFamily);
     const resolvedKind = nextKind ?? FAMILIES[nextFamily].kinds[0];
-    params.set('kind', resolvedKind);
+    // The All view has no kinds, so it carries no `kind` param at all.
+    if (resolvedKind) params.set('kind', resolvedKind);
+    else params.delete('kind');
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
@@ -538,12 +531,12 @@ export default function MarketplacePageClient() {
     );
   }
 
-  // Built-in vs Community is `ide_agents.builtin_kind` and nothing else — the
-  // platform's own agents carry one, an agent somebody published does not. The
-  // two chips used to select the same unfiltered grid, which is the same defect
-  // as a kind filter that shows everything.
+  // This grid is Community only. Built-in agents are provisioned per workspace
+  // unpublished, so the public registry never returns them — the Built-in chip
+  // renders the roster itself (`BuiltinAgentsSection`). Any `builtin_kind` row
+  // that does arrive is a workspace's own copy republished, not a listing.
   const filteredAgents = agents
-    .filter((a) => (kind === 'builtin' ? !!a.builtin_kind : !a.builtin_kind))
+    .filter((a) => !a.builtin_kind)
     .filter(
       (a) =>
         !q ||
@@ -718,13 +711,13 @@ export default function MarketplacePageClient() {
             </button>
           ))}
         </div>
-        <div className="mp-kinds" role="group" aria-label={tf('kindLabel')} style={{ '--seat': `var(${activeFamily.hueVar})` } as React.CSSProperties}>
+        {activeFamily.kinds.length > 0 && <div className="mp-kinds" role="group" aria-label={tf('kindLabel')} style={{ '--seat': `var(${activeFamily.hueVar})` } as React.CSSProperties}>
           {activeFamily.kinds.map((k) => (
             <button key={k} type="button" className="mp-kind" aria-pressed={kind === k} onClick={() => selectFamily(family, k)}>
               {kindLabel(k)}
             </button>
           ))}
-        </div>
+        </div>}
       </div>
 
       {/* Your own sales, not a catalogue — it is the one panel that is about the
@@ -890,6 +883,13 @@ export default function MarketplacePageClient() {
             </div>
           )}
         </div>
+      ) : category === 'overview' ? (
+        // The All view — one strip per family, each with its own "See all".
+        <MarketplaceOverview search={search} onSeeAll={(f) => selectFamily(f)} />
+      ) : category === 'builtin' ? (
+        // The roster every workspace already holds — read from the roster, not
+        // the public registry, which never carries an unpublished built-in.
+        <BuiltinAgentsSection search={search} />
       ) : category === 'talent' ? (
         talentLoading && talentRows.length === 0 ? (
           <SkeletonGrid />
@@ -899,38 +899,8 @@ export default function MarketplacePageClient() {
           <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>{tt('empty')}</div>
         ) : (
           <>
-            <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))' }}>
-              {talentRows.map((f) => (
-                <Link key={f.userId} href={`/talent/${f.userId}`} style={talentCardStyle} className="hover-lift">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--surface-interactive)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--text-primary)', flexShrink: 0 }}>
-                      {talentInitials(f.displayName)}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.displayName ?? '—'}</div>
-                      <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{f.headline ?? f.discipline ?? ''}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
-                        <RatingStars rating={f.rating} count={f.ratingCount} />
-                        <TrustBadge badge={f.badge ?? null} jss={f.jss} size="sm" showJss={false} />
-                        <ProBonoBadge sessionPriceCents={f.sessionPriceCents} size="sm" />
-                      </div>
-                    </div>
-                  </div>
-                  {f.skills.length > 0 && (
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {f.skills.slice(0, 4).map((s) => (
-                        <span key={s} style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{s}</span>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
-                    <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--coral-bright)' }}>
-                      {f.hourlyRateCents != null ? `${formatCents(f.hourlyRateCents, { currency: f.currency, maximumFractionDigits: 0 })}${tt('perHour')}` : ''}
-                    </span>
-                    <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{f.bookable ? tt('book') : tt('viewProfile')} →</span>
-                  </div>
-                </Link>
-              ))}
+            <div style={TALENT_GRID_STYLE}>
+              {talentRows.map((f) => <TalentCard key={f.userId} profile={f} />)}
             </div>
             {/* Server-paged, so it takes the compact density — a numbered strip
                 would advertise pages this grid has not fetched. */}

@@ -24,6 +24,7 @@ import type {
   TrainingLog,
   EvaluationResult,
   PublishedAgent,
+  BuiltinAgentEntry,
   AgentPackage,
 } from './types';
 
@@ -806,6 +807,13 @@ export async function listAgents(): Promise<PublishedAgent[]> {
   // Public workforce registry — works for anonymous visitors on /marketplace.
   // Management endpoints (hire, update, etc.) still live under /api/ide/agents.
   return apiRequest<PublishedAgent[]>(`/api/workforce/agents`);
+}
+
+/** The built-in roster every workspace receives. Not hireable rows — each
+ *  workspace already holds its own copy — so the marketplace shows them as a
+ *  catalogue rather than as listings. */
+export async function listBuiltinAgents(): Promise<BuiltinAgentEntry[]> {
+  return apiRequest<BuiltinAgentEntry[]>(`/api/workforce/builtin-agents`);
 }
 
 export async function hireAgent(agentId: string): Promise<PublishedAgent> {

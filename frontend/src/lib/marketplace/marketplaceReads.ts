@@ -17,8 +17,8 @@ import {
   type ArtifactStats,
   type ArtifactType,
 } from '@/lib/builderforceApi';
-import { listAgents, listPurchasedAgents } from '@/lib/api';
-import type { PublishedAgent } from '@/lib/types';
+import { listAgents, listBuiltinAgents, listPurchasedAgents } from '@/lib/api';
+import type { BuiltinAgentEntry, PublishedAgent } from '@/lib/types';
 
 const TTL_MS = 5 * 60_000;
 const KEY = {
@@ -27,6 +27,7 @@ const KEY = {
   installed: (tenantId: number) => `marketplace:installed:${tenantId}`,
   stats: (type: ArtifactType, slugs: string[]) => `marketplace:stats:${type}:${[...slugs].sort().join(',')}`,
   agents: 'marketplace:agents',
+  builtinAgents: 'marketplace:builtin-agents',
   purchased: 'marketplace:purchased',
 };
 
@@ -43,6 +44,9 @@ export const marketplaceReads = {
       : getOrSetClientCached(KEY.stats(type, slugs), () => marketplaceStats.getStats(type, slugs), { ttlMs: TTL_MS, staleWhileRevalidate: true }),
   publishedAgents: (): Promise<PublishedAgent[]> =>
     getOrSetClientCached(KEY.agents, () => listAgents(), { ttlMs: TTL_MS, staleWhileRevalidate: true }),
+  // Static per deploy — no write on this page changes it, so nothing invalidates it.
+  builtinAgents: (): Promise<BuiltinAgentEntry[]> =>
+    getOrSetClientCached(KEY.builtinAgents, () => listBuiltinAgents(), { ttlMs: 60 * 60_000, staleWhileRevalidate: true }),
   purchasedAgents: () =>
     getOrSetClientCached(KEY.purchased, () => listPurchasedAgents(), { ttlMs: TTL_MS }),
 };

@@ -5887,6 +5887,91 @@ select.input option {
   font-size: var(--font-size-small);
 }
 
+/* Agents ▸ Built-in — the roster every workspace already holds. */
+.mp-builtin {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+}
+.mp-builtin__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 16px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+.mp-builtin__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; }
+.mp-builtin__name {
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-builtin__badge {
+  flex-shrink: 0;
+  font-size: var(--font-size-eyebrow);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+}
+.mp-builtin__title { margin: 0; font-size: var(--font-size-small); color: var(--text-secondary); }
+.mp-builtin__bio {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.mp-builtin__action {
+  margin-top: auto;
+  padding-top: var(--space-2);
+  align-self: flex-start;
+  min-height: var(--control-sm, 32px);
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--font-size-small);
+  font-weight: 650;
+  color: var(--coral-bright);
+  text-decoration: none;
+}
+.mp-builtin__empty { margin: 0; padding: var(--space-6) 0; text-align: center; color: var(--text-muted); font-size: var(--font-size-small); }
+
+/* The All view — one strip per family, each ending in its own "See all". */
+.mp-overview { display: grid; gap: var(--space-8); }
+.mp-overview__strip { display: grid; gap: var(--space-3); min-width: 0; }
+.mp-overview__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--seat, var(--border-subtle));
+}
+.mp-overview__title { margin: 0; font-size: var(--font-size-card-title); font-weight: 700; color: var(--text-primary); }
+.mp-overview__more {
+  min-height: var(--control-sm, 32px);
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-small);
+  font-weight: 650;
+  color: var(--seat, var(--coral-bright));
+}
+.mp-overview__more:hover { text-decoration: underline; }
+
 @media (max-width: 560px) {
   .mp-publish { margin-left: 0; width: 100%; justify-content: center; }
 }
