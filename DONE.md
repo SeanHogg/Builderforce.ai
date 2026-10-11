@@ -1,3 +1,7 @@
+## ✅ RESOLVED 2026-10-10 — Public marketplace listings are in the sitemap
+
+- **`/marketplace/listing/<slug>` pages were never submitted to search engines.** `listPublicListingSlugs()` in `frontend/src/lib/marketplaceSeo.ts` reads `/api/listings` (four pages of 48), de-dupes the slugs, and returns `[]` when the API can't be reached. `sitemap.ts` emits each slug as weekly, priority 0.6. Tests are in `marketplaceSeo.test.ts`. Shipped in `a31eea7b1`.
+
 ## ✅ RESOLVED 2026-10-10 — Make, Run and Reach: seven slices of the arc closed in one pass (frontend 2026.10.37 · api 2026.10.20)
 
 **Make — delivery and the board**
