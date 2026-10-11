@@ -7,9 +7,9 @@
  * finishes, so a fan-out reads in the chat the way a team does: one report per ticket,
  * as each lands.
  *
- * Pure, and here beside `runSubagent`, for the cloud's one-shot children. (The editor's
- * children are runs of their own and post into the chat as themselves — see
- * `runLineage.ts` in brain-embedded.)
+ * Pure, and here beside the sub-agent brief, for the cloud's children (posted from the
+ * runner's terminal chokepoint). The editor's children post into the chat as themselves
+ * — see `runLineage.ts` in brain-embedded.
  */
 
 /** The fields of a finished child's report this message reads. */

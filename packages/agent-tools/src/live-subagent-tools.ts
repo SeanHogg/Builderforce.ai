@@ -23,6 +23,10 @@ export const LIVE_FANOUT_NEXT =
 /** The owner's verbs, by name — ONE list every surface's catalog and pin guard read. */
 export const SUBAGENT_CONTROL_TOOL_NAMES = { wait: "wait_agents", message: "message_agent", stop: "stop_agent" } as const;
 
+/** How deep sub-agents nest — a child at this depth does its slice itself. ONE cap for
+ *  the editor's children and the cloud's. */
+export const MAX_SUBAGENT_DEPTH = 3;
+
 /** Longest a single wait may hold the owner — it can always wait again. */
 export const MAX_WAIT_SECONDS = 600;
 const DEFAULT_WAIT_SECONDS = 300;

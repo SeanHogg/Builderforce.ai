@@ -11,13 +11,14 @@
  * or, when nobody waits, to the owner's inbox (`deliver`). Never both.
  */
 
+import { MAX_SUBAGENT_DEPTH as MAX_CHILD_DEPTH } from "@builderforce/agent-tools";
 import type { RunLineage } from "@seanhogg/builderforce-brain-embedded";
 
 /** Live children a chat may hold at once — a runaway spawner stops here, not at the provider. */
 export const MAX_LIVE_CHILDREN = 12;
 
-/** How deep spawning nests: a grandchild's child is the last one that may spawn. */
-export const MAX_CHILD_DEPTH = 3;
+/** How deep spawning nests — the cap the cloud's children share. */
+export { MAX_CHILD_DEPTH };
 
 export type ChildState = "running" | "done" | "failed" | "stopped";
 

@@ -1,7 +1,6 @@
 export { runAgentLoop } from "./loop.js";
 export { DEFAULT_TOOL_FAILURE_STREAK } from "./types.js";
-export { runSubagent, subagentSystemPrompt, SUBAGENT_MAX_STEPS, SUBAGENT_OUTPUT_CHARS, type SubagentLiveOwner } from "./subagent.js";
-export type { SubagentPersona, SubagentRunArgs, SubagentRunResult } from "./subagent.js";
+export { subagentSystemPrompt, type SubagentLiveOwner, type SubagentPersona } from "./subagent.js";
 export { asToolArgs, parseToolArgs, parseToolCall } from "./parseToolCall.js";
 // The other half of the kernel's bad-JSON policy: `parseToolCall` sets the flag,
 // this decides what to do with it. Exported together so a consumer cannot take

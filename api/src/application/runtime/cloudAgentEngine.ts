@@ -97,8 +97,8 @@ import {
   type LimbicState, type LimbicEvent,
 } from '@seanhogg/builderforce-memory-engine/limbic';
 import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, type LoopHooks, type LoopPorts, type LoopResult } from '@builderforce/agent-loop';
-import { buildOrchestrationCapability, imageHostedChildCeiling } from './cloudSubagent';
-import { buildLiveOrchestration, delegationCaps, delegationProvider, meterExecutionIdOf, type CloudRunDelegation } from './cloudLiveOrchestration';
+import { buildLiveOrchestration } from './cloudLiveOrchestration';
+import { delegationCaps, delegationProvider, isChildDelegation, meterExecutionIdOf, type CloudRunDelegation } from './cloudRunDelegation';
 import { absorbChildWrites, liveChildrenFinishBlock } from './cloudChildRuns';
 import { resolveAgentPersonaBrief } from '../agent/agentPersonaBrief';
 import { imageAdvertisedTools, readToolManifest } from './imageToolHandshake';
@@ -140,7 +140,6 @@ import { inspectOutboundContent, recordContextContribution } from '../trust/trus
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { boards, executionLimits, executions, llmUsageLog, tasks, usageSnapshots, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
-import { subagentChatReport } from './subagentChatReport';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import { submittingUserId } from './dispatcherLabel';
@@ -529,7 +528,7 @@ export async function handleContainerOp(
   return handler({
     env, db, ctx, executionId, args, runtimeService,
     surface: opts?.surface ?? 'container',
-    engine: { imageRunTurn, runCloudToolLoop, finalizeCloudRun, buildCloudProvider },
+    engine: { imageRunTurn, finalizeCloudRun },
     tenantId, taskId, projectId, cloudAgentRef, agentLabel, model,
     taskRow: { id: taskId, title: ctx.taskTitle, description: ctx.taskDescription },
   });
@@ -1193,7 +1192,7 @@ async function runCloudToolLoop(
         actionStats: learned.actionStats,
         bias: opts?.routingBias,
         // The primary agentic loop IS the run's coding work; a delegated child gets
-        // its own role via `imageRunTurn`/`SubagentDeps.complete` instead.
+        // its own role on its own run (`CloudChildSpec.role`).
         role: 'code',
         arcStage: opts?.arcStage,
         // Context-aware seed: don't pick a small-window model for a big first turn.
@@ -1252,7 +1251,7 @@ async function runCloudToolLoop(
   // across DO ticks via resume state so the block isn't re-armed every tick.
   // A sub-agent delivers a slice (often an answer, not code); its OWNER is held to the
   // deliverable gate for the whole tree, so the child starts with it already spent.
-  let noDeliverableBlocked = opts?.resume?.noDeliverableBlocked ?? opts?.delegation?.kind === 'child';
+  let noDeliverableBlocked = opts?.resume?.noDeliverableBlocked ?? isChildDelegation(opts?.delegation);
   const requiredSignoff = opts?.resume?.requiredSignoff ?? opts?.requiredSignoff;
   let reviewVerdictRecorded = opts?.resume?.reviewVerdictRecorded ?? false;
 
@@ -1296,72 +1295,19 @@ async function runCloudToolLoop(
   // passes nothing and uses the provider as built.
   const scopedProvider = delegationProvider(builtProvider, opts?.delegation);
   const decoratedProvider = opts?.decorateProvider ? opts.decorateProvider(scopedProvider) : scopedProvider;
-  // Delegation (`orchestrate`). Attached AFTER decoration and built from the DECORATED
-  // provider, so a rehearsal's shadow wrapper covers a child's tool calls too — a
-  // sub-agent that wrote straight through the raw backing would be the one hole in a
-  // dry run. The child loop itself lives in `cloudSubagent.ts`; all this supplies is
-  // the surface's concretions (one metered model turn, the registry, the timeline).
+  // Delegation. A child is its OWN durable run (`cloudLiveOrchestration.ts`) — the same
+  // backing every cloud surface spawns through — so a run with no place in a tree (a
+  // rehearsal) gets no spawner: a dry run must not start real runs.
   const provider: CapabilityProvider = {
     ...decoratedProvider,
-    orchestration: opts?.delegation?.kind === 'owner' ? buildLiveOrchestration({
-      env, db, runtime: opts.delegation.runtime, parent: opts.delegation.parent,
-      personaBrief: (agent) => resolveAgentPersonaBrief(env, tenantId, agent),
-      heartbeat: () => heartbeatExecution(db, executionId),
-    }) : buildOrchestrationCapability({
-      parentCaps: surfaceCaps,
-      provider: decoratedProvider,
-      registry: cloudToolRegistry,
-      signal: abortController.signal,
-      // Delegating AS one of the workspace's agents (operator decision 2026-09-15).
-      // The child then runs under Ada's role, skills and personality instead of the
-      // surface's generic sub-agent instructions — compiled by the ONE persona
-      // compiler every other surface runs an agent on.
-      personaBrief: (agent) => resolveAgentPersonaBrief(env, tenantId, agent),
-      complete: async ({ messages: childMessages, tools, step, role }) => {
-        const tGen0 = Date.now();
-        // A CODE delegation rides the model the parent LOCKED onto: a delegation is a
-        // bounded side quest, so a model failure inside it ends the child and is
-        // reported to the parent as a failed tool call rather than spending the run's
-        // one pin-drop on a sub-task. Every OTHER role names itself instead of the
-        // parent's model, so the proxy seeds it from the tenant's connected accounts
-        // ordered for that role — a read-only lookup does not ride the parent's
-        // strongest (and priciest) coder.
-        const childRole = role ?? 'code';
-        const result = await proxy.complete(
-          {
-            messages: childMessages as unknown as ChatMessage[],
-            tools,
-            tool_choice: 'auto',
-            ...(childRole === 'code' ? (activeModel ? { model: activeModel } : {}) : { role: childRole }),
-            ...(genParams.temperature != null ? { temperature: genParams.temperature } : {}),
-            useCase: 'task_execution',
-          },
-          undefined,
-          undefined,
-          abortController.signal,
-        );
-        // Metered and attributed exactly like a parent turn — a sub-agent's tokens are
-        // the tenant's tokens, and a delegation that quietly billed to nobody would
-        // make the per-execution cost figure wrong.
-        const turn = await recordCloudLlmTurn(result, {
-          env, db, tenantId, cloudAgentRef, executionId, taskId: taskRow.id, projectId,
-          requestedModel: pick.model, fallbackModel: activeModel,
-          effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
-          role: childRole,
-        }, { tGen0, step, notify: false });
-        if (!turn.ok) return { failed: turn.error };
-        return { content: turn.content, toolCalls: readOpenAiToolCalls({ tool_calls: turn.toolCalls }) };
-      },
-      record: async (event) => {
-        await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef, executionId,
-          toolName: 'agent.subagent', category: 'tool', detail: event.detail, result: event.result,
-        });
-      },
-      // Each child — one, or each of a `spawn_agents` fan-out — reports into the chat
-      // that launched this run as it finishes.
-      ...subagentChatReport(db, tenantId, opts?.originatingChatId, cloudAgentRef),
-    }),
+    ...(opts?.delegation ? {
+      orchestration: buildLiveOrchestration({
+        env, db, runtime: opts.delegation.runtime, parent: opts.delegation.parent,
+        // Delegating AS one of the workspace's agents — the ONE persona compiler.
+        personaBrief: (agent) => resolveAgentPersonaBrief(env, tenantId, agent),
+        heartbeat: () => heartbeatExecution(db, executionId),
+      }),
+    } : {}),
   };
   const toolCtx: ToolContext = { caps: provider, signal: abortController.signal };
 
@@ -1436,7 +1382,7 @@ async function runCloudToolLoop(
 
     onNoToolCalls: async (_ctx, turn) => {
       // An owner never ends with children still working (their reports would strand).
-      const childBlock = opts?.delegation?.kind === 'owner' ? await liveChildrenFinishBlock(db, executionId) : null;
+      const childBlock = opts?.delegation ? await liveChildrenFinishBlock(db, executionId) : null;
       if (childBlock) {
         messages.push({ role: 'assistant', content: turn.content });
         messages.push({ role: 'user', content: childBlock });
@@ -1532,7 +1478,7 @@ async function runCloudToolLoop(
     },
 
     onFinish: async (ctx, summary) => {
-      if (opts?.delegation?.kind === 'owner') {
+      if (opts?.delegation) {
         const childBlock = await liveChildrenFinishBlock(db, executionId);
         if (childBlock) return childBlock;
         // The children committed from their own runs; the pull request is the whole tree's.
@@ -1747,7 +1693,7 @@ async function runCloudToolLoop(
         env, db, tenantId, cloudAgentRef, executionId: meterExecutionId, taskId: taskRow.id, projectId,
         requestedModel: pick.model, fallbackModel: activeModel,
         effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
-        role: opts?.delegation?.kind === 'child' ? (opts.delegation.spec.role ?? 'code') : 'code',
+        role: opts?.delegation?.spec?.role ?? 'code',
       }, { tGen0, step: ctx.step, notify: false });
       if (!turn.ok) return { failed: turn.error };
       return { content: turn.content, toolCalls: readOpenAiToolCalls({ tool_calls: turn.toolCalls }) };
@@ -2009,7 +1955,7 @@ export class CloudLimbicEngine implements AgentEngine {
         ...(input.resume ? { resume: input.resume as CloudLoopState } : {}),
         ...(surface.kind === 'durable' ? { maxSteps: surface.maxSteps, deferFinalize: true } : {}),
         // A child's parent opens the pull request for the whole tree.
-        ...(rc.delegation ? { delegation: rc.delegation, ...(rc.delegation.kind === 'child' ? { suppressFinalize: true } : {}) } : {}),
+        ...(rc.delegation ? { delegation: rc.delegation, ...(isChildDelegation(rc.delegation) ? { suppressFinalize: true } : {}) } : {}),
         ...(surface.kind === 'rehearsal'
           ? { maxSteps: surface.maxSteps, suppressFinalize: true, decorateProvider: surface.decorateProvider, ...(surface.frozenReadRef ? { frozenReadRef: surface.frozenReadRef } : {}) }
           : {}),

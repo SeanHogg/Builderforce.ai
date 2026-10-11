@@ -26,7 +26,7 @@ import { listBranchDiff } from '../repos/readRepoContents';
 import type { TicketRepoContext } from '../repos/commitFileAsPendingChange';
 import { enqueueExecutionMessage, releasePendingSteers } from './executionSteering';
 import { parseCloudAgentRef, parseOriginatingChatId } from './cloudDispatch';
-import { subagentChatReport } from './subagentChatReport';
+import { postSubagentChatReport } from './subagentChatReport';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { RuntimeService } from './RuntimeService';
 
@@ -36,6 +36,10 @@ const SPEC_KEY = 'subagent';
 /** Everything a child execution needs to know about itself, carried on its payload. */
 export interface CloudChildSpec {
   parentExecutionId: number;
+  /** The run at the top of its tree — the one its tokens bill to and that opens the PR. */
+  rootExecutionId: number;
+  /** 1 for a child, 2 for a grandchild … (spawning stops at `MAX_SUBAGENT_DEPTH`). */
+  depth: number;
   /** How its owner addresses it (`message_agent`, `stop_agent`, reports). */
   handle: string;
   label: string;
@@ -129,14 +133,13 @@ export async function liveChildrenFinishBlock(db: Db, parentExecutionId: number)
 }
 
 /**
- * The files a parent's WRITABLE children committed to its branch, added to the parent's
- * own written set — they committed from their own runs, so the parent never saw the
- * writes. Read from the branch itself, so it is exactly what the pull request will hold.
+ * The files a run's descendants committed to its branch, added to the run's own written
+ * set — they committed from their own runs, so it never saw the writes. Read from the
+ * branch itself, so it is exactly what the pull request will hold (grandchildren too).
  */
 export async function absorbChildWrites(db: Db, parentExecutionId: number, repoCtx: TicketRepoContext | null, writtenPaths: Set<string>): Promise<void> {
   if (!repoCtx) return;
-  const writers = (await childrenOf(db, parentExecutionId)).filter((c) => parseCloudChild(c.payload)?.readOnly === false);
-  if (!writers.length) return;
+  if (!(await childrenOf(db, parentExecutionId)).length) return;
   const diff = await listBranchDiff({ ...repoCtx, ref: repoCtx.branch }, repoCtx.base, repoCtx.branch);
   if (diff.ok) for (const f of diff.files) writtenPaths.add(f.path);
 }
@@ -174,14 +177,14 @@ export async function settleCloudChildLineage(db: Db, runtime: RuntimeService, e
     await releasePendingSteers(db, executionId);
     const report = reportOf(row, spec);
     // The chat hears every child, as it does in the editor.
-    await subagentChatReport(db, row.tenantId, parseOriginatingChatId(row.payload), parseCloudAgentRef(row.payload ?? undefined))
-      .report?.({ label: spec.label, task: spec.task, ...(spec.ticket ? { ticket: spec.ticket } : {}) }, {
-        ok: report.state === 'done',
-        output: report.output,
-        ...(report.state !== 'done' ? { error: report.output || `the sub-agent ${report.state}` } : {}),
-        ...(spec.ticket ? { ticket: spec.ticket } : {}),
-        ...(spec.asAgent ? { asAgent: spec.asAgent } : {}),
-      });
+    await postSubagentChatReport(db, row.tenantId, parseOriginatingChatId(row.payload), parseCloudAgentRef(row.payload ?? undefined), {
+      ok: report.state === 'done',
+      label: spec.label,
+      output: report.output,
+      ...(report.state !== 'done' ? { error: report.output || `the sub-agent ${report.state}` } : {}),
+      ...(spec.ticket ? { ticket: spec.ticket } : {}),
+      ...(spec.asAgent ? { asAgent: spec.asAgent } : {}),
+    });
     // The parent hears it once, before its next turn — unless it has already ended.
     const [parent] = await db.select({ status: executions.status }).from(executions).where(eq(executions.id, row.parentExecutionId)).limit(1);
     if (parent && !isTerminal(parent.status)) {

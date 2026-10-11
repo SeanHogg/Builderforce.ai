@@ -13,7 +13,6 @@
  */
 
 import {
-  LIVE_DELEGATION_NOTE,
   LIVE_FANOUT_NEXT,
   delegationRole,
   parseWorkstreams,
@@ -30,7 +29,7 @@ export function subagentFanOutToolDef(deps: SubagentToolDeps & Required<Pick<Sub
   const schema = spawnAgentsTool.schema.function;
   return {
     name: schema.name,
-    description: `${schema.description} ${LIVE_DELEGATION_NOTE}`,
+    description: schema.description,
     parameters: schema.parameters as Record<string, unknown>,
     // As with `spawn_agent`: every write a child makes raises its own prompt.
     mutating: false,

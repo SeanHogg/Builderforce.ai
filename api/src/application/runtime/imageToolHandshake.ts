@@ -38,7 +38,12 @@ import type { ToolSchema } from '@builderforce/agent-tools';
  * `skill_propose` / `skill_list` followed when `skill.author` joined the container set
  * on the `skill` op — an image from before the handshake has no arm for either.
  */
-export const HANDSHAKE_ONLY_TOOLS: readonly string[] = ['spawn_agent', 'skill_propose', 'skill_list'];
+export const HANDSHAKE_ONLY_TOOLS: readonly string[] = [
+  'spawn_agent', 'skill_propose', 'skill_list',
+  // Background delegation relays through the `subagent` op, which an image from before it
+  // has no arm for.
+  'spawn_agents', 'wait_agents', 'message_agent', 'stop_agent',
+];
 
 /**
  * Whether `name` is covered by a manifest entry. A trailing `*` is a PREFIX match, which

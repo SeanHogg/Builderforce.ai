@@ -45,11 +45,12 @@ import { commitAgentFile, resolveTicketRepoContext } from '../../repos/commitFil
 import { recordRepoWrite, resolveTaskRepoRouter } from '../../repos/taskRepoSet';
 import { recordContextContribution } from '../../trust/trustService';
 import { searchOwnedThenDiscover } from '../../webSearch/demandSearch';
-import { CONTAINER_AGENT_TOOLS, CONTAINER_SURFACE_CAPS, cloudToolRegistry } from '../cloudAgentTools';
+import { CONTAINER_AGENT_TOOLS, cloudToolRegistry } from '../cloudAgentTools';
 import { applyPendingSteering } from '../cloudLoopControl';
 import { handleCloudRunCrash } from '../cloudSelfHeal';
-import { buildOrchestrationCapability, imageHostedChildCeiling } from '../cloudSubagent';
-import { subagentChatReport } from '../subagentChatReport';
+import { buildLiveOrchestration } from '../cloudLiveOrchestration';
+import { absorbChildWrites, liveChildrenFinishBlock, settleCloudChildLineage } from '../cloudChildRuns';
+import { DELEGATION_CAPABILITIES } from '../cloudSubagent';
 import { resolveAgentPersonaBrief } from '../../agent/agentPersonaBrief';
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { notifyExecutionSubscribers } from '../executionEvents';
@@ -61,8 +62,7 @@ import { cloudCrashReason } from '../orphanReasons';
 import { teardownCrashedRunArtifacts } from '../runRollback';
 import { scoreRunOutcome } from '../scoreRunOutcome';
 import { agentCommitMessage, buildPrdCapability, recordTaskFileChange } from './prd';
-import { readOpenAiToolCalls } from '@builderforce/agent-loop';
-import { delegationRole } from '@builderforce/agent-tools';
+import { SUBAGENT_TOOLS, type Capability, type CapabilityProvider } from '@builderforce/agent-tools';
 import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { RuntimeService } from '../RuntimeService';
@@ -76,26 +76,20 @@ export interface ContainerOpResult {
 }
 
 /**
- * The three RUN-DRIVING primitives the engine owns, handed to the ops that need
- * them. Deliberately narrow: this is a port, not a window onto the engine.
+ * The RUN-DRIVING primitives the engine owns, handed to the ops that need them.
+ * Deliberately narrow: this is a port, not a window onto the engine.
  */
 export interface ContainerOpEngine {
-  /** ONE metered LLM turn on an image surface (`llm`, and the `spawn` op's child). */
+  /** ONE metered LLM turn on an image surface (`llm`). */
   imageRunTurn: ImageRunTurn;
-  /** The durable tool loop, for a child agent commissioned by `spawn`. */
-  runCloudToolLoop: RunCloudToolLoop;
   /** The shared terminal path: commit, PR, score, release leases (`finalize`). */
   finalizeCloudRun: FinalizeCloudRun;
-  /** The gateway provider a spawned child drives. */
-  buildCloudProvider: BuildCloudProvider;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the engine's own signatures;
    re-stating them here would be a second declaration to keep in step. */
 type ImageRunTurn = (...args: any[]) => Promise<any>;
-type RunCloudToolLoop = (...args: any[]) => Promise<any>;
 type FinalizeCloudRun = (...args: any[]) => Promise<any>;
-type BuildCloudProvider = (...args: any[]) => any;
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 /** Everything a handler is given. The identity fields are derived once, here, so
@@ -377,101 +371,18 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
   },
 
   /**
-   * `spawn` — delegation from an IMAGE surface (capability `orchestrate`).
+   * `subagent` — every delegation verb an IMAGE relays (`spawn_agent`, `spawn_agents`,
+   * `wait_agents`, `message_agent`, `stop_agent`).
    *
-   * The child RUN happens HERE, in the Worker, and that is deliberate. An image holds
-   * no gateway credential, no meter and no tool registry, so a nested loop inside the
-   * container process would have to reimplement all three — a third copy of exactly
-   * what the shared relay module exists to prevent. Relaying instead means a sub-agent
-   * spawned from a container is the SAME sub-agent the durable surface spawns:
-   * `runSubagent` from the shared kernel, the same budget, the same withheld
-   * capabilities, the same timeline event, the same tenant meter.
-   *
-   * The child's ceiling is NOT the parent's set verbatim — see `imageHostedChildCeiling`
-   * for why a Worker-hosted child cannot hold the image's `shell`.
-   *
-   * This op blocks for as long as the child runs, which is why it heartbeats the
-   * execution first: the image's own heartbeat timer keeps beating throughout, but the
-   * op can outlast an LLM turn, and a delegation must never look like a dead run.
+   * One path for every cloud surface: the shared tool definitions run here against the
+   * same backing the durable runner's parent uses (`cloudLiveOrchestration.ts`), with
+   * this image run as the owner. A child is therefore its own durable run — no step cap,
+   * steerable, stoppable — and its report reaches this image as a steer on the `llm` op,
+   * which the image already splices into its loop. `spawn` is the name an image that
+   * predates the generic op posts `spawn_agent`'s bare arguments under.
    */
-  spawn: async (deps) => {
-    const { env, db, ctx, executionId, args, surface, tenantId, taskId, projectId, cloudAgentRef, agentLabel, model, taskRow, engine } = deps;
-    const task = typeof args.task === 'string' ? args.task.trim() : '';
-    if (!task) return { status: 200, body: { ok: false, error: 'task is required — the child sees none of your conversation' } };
-    const label = typeof args.label === 'string' && args.label.trim() ? args.label.trim() : task.slice(0, 60);
-    const readOnly = args.read_only !== false;
-    const role = delegationRole(args.role, readOnly);
-    if (await isExecutionCancelled(db, executionId)) {
-      return { status: 200, body: { ok: false, error: 'this run was cancelled; do not delegate, just stop' } };
-    }
-    await heartbeatExecution(db, executionId);
-    const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), tenantId, taskId);
-    // The ceiling the CHILD is measured against, and the backing it runs on. The
-    // child's own writes go through the Worker's git-API provider — the same writer the
-    // durable surface uses — so a file a child commits lands on the ticket branch the
-    // image is cloned from, exactly like one the image wrote through the `write` op.
-    const parentCaps = imageHostedChildCeiling(CONTAINER_SURFACE_CAPS);
-    const spawnWrittenPaths = new Set<string>();
-    const provider = engine.buildCloudProvider({
-      env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef,
-      repoCtx: repo.ok ? repo.ctx : null,
-      repoMiss: repo.ok ? '' : repo.reason,
-      writtenPaths: spawnWrittenPaths,
-      capabilities: parentCaps,
-    });
-    const orchestration = buildOrchestrationCapability({
-      parentCaps,
-      provider,
-      registry: cloudToolRegistry,
-      // The child reports into the chat that launched the run, as the durable surface's do.
-      ...subagentChatReport(db, tenantId, ctx.originatingChatId, cloudAgentRef, agentLabel),
-      // Same roster, same compiler as the durable surface: an image-hosted parent that
-      // delegates to "Ada" must get the same Ada (operator decision 2026-09-15).
-      personaBrief: (agent) => resolveAgentPersonaBrief(env, tenantId, agent),
-      complete: async ({ messages: childMessages, tools, role: turnRole }) => {
-        // Cancel BEFORE the paid call, on every child turn. The image polls cancel from
-        // its own loop, but it is blocked on this op for the whole delegation — so
-        // without this, stopping a run would leave its sub-agent spending to the end of
-        // its budget. The kernel reads a failed turn as the end of the child.
-        if (await isExecutionCancelled(db, executionId)) {
-          return { failed: 'the run was cancelled while this sub-agent was working' };
-        }
-        // Only a CODE delegation inherits the parent's exact pin verbatim — every
-        // other role gets its own fresh soft-seed resolution (still scoped to this
-        // tenant's connected accounts), tier-ranked toward that role's objective, so
-        // e.g. an `explore` child does not ride the parent's Opus pin for a read-only
-        // search. `imageRunTurn` resolves credentials itself, so passing `undefined`
-        // here is enough to hand it back to the normal per-turn pick.
-        const childModel = (turnRole ?? role) === 'code' ? model : undefined;
-        const childTurn = await engine.imageRunTurn(
-          { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model: childModel, role: turnRole ?? role },
-          // `notify: false` — a child's turns are an implementation detail of one
-          // parent tool call, not messages the run's subscribers should see.
-          { messages: childMessages, tools, notify: false },
-        );
-        if (!childTurn.ok) return { failed: childTurn.error };
-        return { content: childTurn.content, toolCalls: readOpenAiToolCalls({ tool_calls: childTurn.toolCalls }) };
-      },
-      record: async (event) => {
-        await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef, executionId,
-          toolName: 'agent.subagent', category: 'tool', detail: event.detail, result: event.result,
-        });
-      },
-    });
-    // `as_agent` rides through from the image's own tool call — the persona is resolved
-    // HERE (the image has no roster), and an unknown name comes back as a failed
-    // delegation the parent can read.
-    const asAgent = typeof args.as_agent === 'string' ? args.as_agent.trim() : '';
-    const result = await orchestration.spawn({ task, label, readOnly, role, ...(asAgent ? { asAgent } : {}) });
-    await heartbeatExecution(db, executionId);
-    // A child's writes are the RUN's writes. The provider already did the Worker-side
-    // bookkeeping (the commit, the `task_file_changes` row, the subscriber notify), but
-    // the image owns the `writtenPaths` its own `finalize` reports — so hand them back
-    // and let it merge them, or the PR would list every file except the ones the
-    // sub-agent wrote.
-    return { status: 200, body: { ...result, label, writtenPaths: [...spawnWrittenPaths] } };
-  },
+  subagent: (deps) => delegationOp(deps),
+  spawn: (deps) => delegationOp({ ...deps, args: { name: 'spawn_agent', args: deps.args } }),
   llm: async (deps) => {
     const { env, db, ctx, executionId, args, surface, tenantId, taskId, projectId, cloudAgentRef, model, engine } = deps;
     const messages = Array.isArray(args.messages) ? (args.messages as unknown as Array<Record<string, unknown>>) : ([] as Array<Record<string, unknown>>);
@@ -521,9 +432,7 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       [...CONTAINER_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas(ctx.originatingChatId)],
       readToolManifest(args.supportedTools),
     );
-    // ONE metered turn, through the primitive the `spawn` op's child also uses — so a
-    // sub-agent commissioned from an image surface is routed, funded, metered and
-    // attributed exactly like the parent turn that commissioned it.
+    // ONE metered turn on the image's own transcript.
     const turn = await engine.imageRunTurn(
       // The parent's own turn is always the primary coding work this run exists for.
       { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model, role: 'code' as const },
@@ -532,6 +441,11 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     // Heartbeat: a live container keeps the run out of the orphan reaper.
     await heartbeatExecution(db, executionId);
     if (!turn.ok) return { status: 200, body: { error: turn.error, ...(turn.code ? { code: turn.code } : {}) } };
+    // An owner never ends with children still working. The image's loop treats a steer as
+    // overriding a finish in the same turn, so the gate needs nothing from the image.
+    const finishing = Array.isArray(turn.toolCalls) && (turn.toolCalls as Array<{ function?: { name?: string } }>).some((c) => c.function?.name === 'finish');
+    const childBlock = finishing ? await liveChildrenFinishBlock(db, executionId) : null;
+    if (childBlock) steering.push(childBlock);
     return { status: 200, body: {
       content: turn.content, toolCalls: turn.toolCalls, steering,
       // When the history was compacted, hand the container the compacted form so it
@@ -677,6 +591,8 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     // until its lease lapses (15 min), blocking a peer agent on the same ticket for no
     // reason. This is that surface's equivalent of the release in `runCloudToolLoop`.
     await releaseAllForExecution(env, db, tenantId, executionId, coordinationScopeKey(taskId));
+    // Its sub-agents committed from their own runs; the pull request is the whole tree's.
+    await absorbChildWrites(db, executionId, repoCtx, writtenPaths);
     const fin = await engine.finalizeCloudRun(env, db, { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, repoMiss, writtenPaths, finalOutput, cancelled });
     if (!cancelled) {
       await runtimeService.update(executionId, fin.ok ? { status: ExecutionStatus.COMPLETED, result: fin.output } : { status: ExecutionStatus.FAILED, errorMessage: fin.output })
@@ -684,6 +600,9 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       const updated = await runtimeService.getExecution(executionId).catch(() => null);
       if (updated) notifyExecutionSubscribers(executionId, { type: 'done', executionId, status: updated.status, execution: updated.toPlain(), ts: new Date().toISOString() });
     }
+    // A finished owner takes its live sub-agents with it — the same terminal rule the
+    // durable runner applies.
+    await settleCloudChildLineage(db, runtimeService, executionId);
     // The row is terminal now: a steer that arrived after the loop's last step is LATE
     // and starts a follow-up run (released when cancelled) — lateSteerFollowUp.ts. The
     // container and GitHub Actions surfaces share this op, so both settle here.
@@ -710,6 +629,7 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       // carrying commits this run did not author). Best-effort.
       await teardownCrashedRunArtifacts(env, db, { executionId, secret: integrationCredentialSecret(env) })
         .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgent/containerOps.ts", operation: "handleContainerOp", context: { logMessage: '[cloud-container] crashed-run artifact teardown failed', details: { tenantId, executionId, error } } }));
+      await settleCloudChildLineage(db, runtimeService, executionId);
       // Terminal with no requeue: an undelivered steer is late — it starts a follow-up.
       await settleLateSteersSafely({ env, db, runtimeService }, { executionId, tenantId });
       // Terminal (no self-heal requeue) — score the failed run. A requeue defers
@@ -719,3 +639,35 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     return { status: 200, body: { ok: true, recovered: outcome === 'requeued' } };
   },
 };
+
+/** The delegation tools an image may relay — by name, from the ONE shared list. */
+const DELEGATION_TOOL_NAMES = new Set(SUBAGENT_TOOLS.map((t) => t.name));
+
+/** Tell an image owner its clone does not read the branch live. */
+const IMAGE_AFTER_CHILD_COMMITS = "Its commits land on the ticket branch, not in your clone — run git_sync_latest before you build on them.";
+
+async function delegationOp(deps: ContainerOpDeps): Promise<ContainerOpResult> {
+  const { env, db, executionId, args, tenantId, taskId, projectId, cloudAgentRef, agentLabel, taskRow, runtimeService } = deps;
+  const name = typeof args.name === 'string' ? args.name : '';
+  if (!DELEGATION_TOOL_NAMES.has(name)) return { status: 400, body: { ok: false, error: `'${name}' is not a delegation tool` } };
+  if (await isExecutionCancelled(db, executionId)) {
+    return { status: 200, body: { ok: false, error: 'this run was cancelled; do not delegate, just stop' } };
+  }
+  await heartbeatExecution(db, executionId);
+  const [row] = await db.select({ payload: executions.payload }).from(executions).where(eq(executions.id, executionId)).limit(1);
+  const orchestration = buildLiveOrchestration({
+    env, db, runtime: runtimeService,
+    parent: {
+      executionId, tenantId, projectId, taskId, taskTitle: taskRow.title, taskDescription: taskRow.description,
+      ...(cloudAgentRef ? { cloudAgentRef } : {}), agentLabel, ...(row?.payload ? { payload: row.payload } : {}),
+    },
+    personaBrief: (agent) => resolveAgentPersonaBrief(env, tenantId, agent),
+    heartbeat: () => heartbeatExecution(db, executionId),
+    afterChildCommits: IMAGE_AFTER_CHILD_COMMITS,
+  });
+  // Only the delegation verbs are reachable through this op, whatever the image asks.
+  const caps = { capabilities: new Set<Capability>(DELEGATION_CAPABILITIES), orchestration } as unknown as CapabilityProvider;
+  const toolArgs = args.args && typeof args.args === 'object' ? (args.args as Record<string, unknown>) : {};
+  const out = await cloudToolRegistry.dispatch(name, toolArgs, { caps });
+  return { status: 200, body: out.data };
+}

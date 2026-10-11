@@ -54,6 +54,10 @@ export const RELAY_TOOL_NAMES = [
   'web_search',
   'ask_human',
   'spawn_agent',
+  'spawn_agents',
+  'wait_agents',
+  'message_agent',
+  'stop_agent',
   'skill_propose',
   'skill_list',
   'builtin_*',
@@ -94,6 +98,9 @@ export const IMAGE_LOCAL_TOOL_NAMES = [
  */
 export const SUPPORTED_TOOL_NAMES = [...IMAGE_LOCAL_TOOL_NAMES, ...RELAY_TOOL_NAMES];
 
+/** The delegation verbs, all answered by the Worker's `subagent` op. */
+const DELEGATION_TOOLS = new Set(['spawn_agent', 'spawn_agents', 'wait_agents', 'message_agent', 'stop_agent']);
+
 /** Trimmed string, or '' for anything that is not a non-empty string. */
 function text(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -105,12 +112,10 @@ function text(value) {
  * @param op     Post a container-op and return the parsed body: `(name, args) => Promise<object>`.
  * @param name   The tool the model called.
  * @param parsed The call's already-JSON-parsed arguments.
- * @param loop   The image's live loop state, needed only by the two tools that
- *               suspend or branch the run: `{ messages, step, toolCallId, toolCallIds,
- *               writtenPaths }`. `writtenPaths` is the image's own live `Set` — passed
- *               rather than copied because a delegated child's commits must land in it,
- *               and doing that merge HERE is what keeps it from being transcribed into
- *               both images.
+ * @param loop   The image's live loop state, needed only by `ask_human`, which
+ *               suspends the run: `{ messages, step, toolCallId, toolCallIds,
+ *               writtenPaths }`. (A delegated child's commits reach the pull request
+ *               from the branch itself, at the Worker's `finalize`.)
  * @returns      The tool result to push onto the transcript, or `null` when `name` is
  *               not a relayed tool — the image then tries its own local table and is
  *               the one that decides what an unknown tool means.
@@ -201,37 +206,14 @@ export async function execRelayTool(op, name, parsed, loop) {
   }
 
   // ── Delegation ──────────────────────────────────────────────────────────────
-  // The child RUN happens in the WORKER, not here, and that is the point: an image
-  // has no gateway credential, no metering and no tool registry, so a nested loop run
-  // in this process would have to reimplement all three. Relaying means a sub-agent
-  // spawned from a container is the same sub-agent the durable surface spawns —
-  // `runSubagent` from the shared kernel, the same budget, the same withheld
-  // capabilities (a child never gets `orchestrate`, so recursion is impossible by
-  // construction rather than by a depth counter), the same timeline event.
-  //
-  // The call is synchronous from the image's point of view: one op that returns when
-  // the child has finished. That is a long op, so the Worker heartbeats the run while
-  // the child works and the image's own heartbeat timer keeps beating throughout —
-  // a delegation is never mistaken for a dead run by the orphan reaper.
-  if (name === 'spawn_agent') {
-    const task = text(parsed.task);
-    if (!task) {
-      return { ok: false, error: 'task is required — the child sees none of your conversation' };
-    }
-    const spawned = await op('spawn', {
-      task,
-      label: text(parsed.label) || task.slice(0, 60),
-      // Default read-only, matching the tool's own contract on every other surface: a
-      // parent asking for a writable child must say so.
-      read_only: parsed.read_only !== false,
-    });
-    // A writable child commits through the Worker, so its files are on the ticket
-    // branch but not yet in THIS process's set — and `finalize` reports that set. Merge
-    // them or the PR lists every file except the ones the sub-agent wrote.
-    if (spawned && Array.isArray(spawned.writtenPaths) && state.writtenPaths) {
-      for (const path of spawned.writtenPaths) if (typeof path === 'string') state.writtenPaths.add(path);
-    }
-    return spawned;
+  // Every delegation verb relays to the Worker's ONE `subagent` op, which runs the
+  // shared tool definitions against the same backing a durable-runner parent uses: a
+  // child is its own durable run (no step cap, steerable, stoppable) and this process
+  // keeps working while it does. Its report comes back as a steer on the `llm` op, which
+  // the loop already splices in; a finish while children are still working is answered
+  // with a steer too, so the loop needs no delegation logic of its own.
+  if (DELEGATION_TOOLS.has(name)) {
+    return op('subagent', { name, args: parsed });
   }
 
   // ── Human-in-the-loop ───────────────────────────────────────────────────────

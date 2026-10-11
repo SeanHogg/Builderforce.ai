@@ -131,16 +131,12 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   // Safe to advertise because the proposal lands as a DRAFT: the tool cannot make
   // anything binding, and the backing service is the only writer that can.
   'skill.author',
-  // Delegation to a sub-agent. On the durable runner a child is its OWN execution
-  // (`cloudLiveOrchestration.ts`) and the run additionally holds `orchestrate.live`
-  // (granted per run by `delegationCaps`, not here); on the Worker path a child runs
-  // inside the tool call, bounded by SUBAGENT_MAX_STEPS.
-  'orchestrate',
-  // Several children side by side (`spawn_agents`). Backed here because the children's
-  // writers are scoped and their git-API commits queue on one chain
-  // (`guardedRepoWrite` in cloudSubagent.ts). NOT on the images: their relay has no arm
-  // for it, and their local clone would not see the children's commits.
-  'orchestrate.fanout',
+  // Delegation. A child is its OWN durable run (`cloudLiveOrchestration.ts`) — one
+  // backing for every cloud surface — so the owner keeps working and holds the verbs to
+  // wait for, redirect and stop it (`orchestrate.live`). `spawn_agents` starts several,
+  // each with scoped writers. A run with no place in a tree (a rehearsal) has all three
+  // withheld by `delegationCaps`.
+  'orchestrate', 'orchestrate.fanout', 'orchestrate.live',
 ]);
 
 /**
@@ -202,13 +198,11 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  */
 export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   'repo.read', 'repo.write', 'shell', 'memory', 'memory.forget', 'coordinate', 'prd.write', 'human',
-  // Delegation. The `spawn` container-op is the backing: the CHILD runs in the Worker
-  // (an image has no gateway credential, no meter and no registry), on the same
-  // `runSubagent` kernel and the same metered turn primitive as a parent turn, with a
-  // ceiling narrowed by `imageHostedChildCeiling` because a Worker-hosted child cannot
-  // hold the image's `shell`. Both images dispatch `spawn_agent` through the SHARED
-  // relay module, so this capability is backed on every surface it is advertised to.
-  'orchestrate',
+  // Delegation — the SAME backing as the durable runner. Every delegation verb relays
+  // to the `subagent` container-op, which runs the shared tool definitions against
+  // `cloudLiveOrchestration.ts` with this image run as the owner: each child is its own
+  // durable run, and its report reaches the image as a steer on the `llm` op.
+  'orchestrate', 'orchestrate.fanout', 'orchestrate.live',
   // `web.search` — PARITY with the durable surface, and only now safe to advertise.
   // It was absent because the container's capabilities come from the image's own tool
   // loop and there was no op behind them, so the tool would have 400'd mid-run. The

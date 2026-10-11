@@ -1,6 +1,8 @@
 /**
- * `orchestrate.live` on the durable cloud runner — spawn a sub-agent as its OWN run, and
- * the parent's verbs for children it is not blocked on.
+ * `orchestrate.live` in the cloud — spawn a sub-agent as its OWN durable run, and the
+ * owner's verbs for children it is not blocked on. ONE backing for every cloud surface:
+ * a parent on the durable runner and a parent in a Container or Actions image (whose
+ * delegation ops the Worker answers) start the same child the same way.
  *
  * Recursion, not a second loop: a child is a durable execution on the parent's ticket,
  * started on the same runner with the same engine, carrying a `subagent` spec and an
@@ -14,8 +16,7 @@ import {
   ownerDirectionText,
   type LiveChildControls,
   type OrchestrationCapability,
-  type Capability,
-  type CapabilityProvider,
+  MAX_SUBAGENT_DEPTH,
   type SubagentRequest,
   type SubagentResult,
 } from '@builderforce/agent-tools';
@@ -28,7 +29,7 @@ import { BrainService } from '../brain/BrainService';
 import { enqueueExecutionMessage } from './executionSteering';
 import { composeDispatcherLabel } from './dispatcherLabel';
 import { parseOriginatingChatId } from './cloudDispatch';
-import { childCapabilities, guardedRepoWrite, resolveDelegatePersona, type SubagentDeps } from './cloudSubagent';
+import { resolveDelegatePersona, type PersonaBriefPort } from './cloudSubagent';
 import {
   childHandle,
   childPayload,
@@ -41,7 +42,7 @@ import {
 } from './cloudChildRuns';
 import type { RuntimeService } from './RuntimeService';
 
-/** The parent run, as the durable runner started it — what a child inherits. */
+/** The owning run — what a child inherits (its ticket, agent, routing and assigned artifacts). */
 export interface LiveParentRun {
   executionId: number;
   tenantId: number;
@@ -55,14 +56,23 @@ export interface LiveParentRun {
   artifacts?: ResolvedArtifacts;
 }
 
+/** Where a run sits in its tree — the depth it spawns at and the run the tree bills to. */
+const treeOf = (parent: LiveParentRun): { depth: number; rootExecutionId: number } => {
+  const own = parseCloudChild(parent.payload);
+  return { depth: own?.depth ?? 0, rootExecutionId: own?.rootExecutionId ?? parent.executionId };
+};
+
 export interface LiveOrchestrationDeps {
   env: Env;
   db: Db;
   runtime: RuntimeService;
   parent: LiveParentRun;
-  personaBrief?: SubagentDeps['personaBrief'];
+  personaBrief?: PersonaBriefPort;
   /** Keep the parent visibly alive while it waits (the reaper reads its heartbeat). */
   heartbeat(): Promise<void>;
+  /** What this owner must do before building on a child's commits, when its working
+   *  copy does not read the branch live (an image's local clone). */
+  afterChildCommits?: string;
 }
 
 /** A wait never holds one durable tick longer than this — the parent can wait again. */
@@ -98,13 +108,18 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
     return res.ok ? null : `the cloud runner refused the sub-agent (${res.status})`;
   };
 
+  const tree = treeOf(parent);
+
   const spawn = async (input: SubagentRequest): Promise<SubagentResult> => {
+    if (tree.depth >= MAX_SUBAGENT_DEPTH) return { ok: false, error: `sub-agents nest at most ${MAX_SUBAGENT_DEPTH} deep — do this slice yourself` };
     const readOnly = input.readOnly !== false;
     const scope = !readOnly && input.scope?.length ? [...input.scope] : undefined;
     const who = await resolveDelegatePersona(deps.personaBrief, typeof input.asAgent === 'string' ? input.asAgent.trim() : '', input.role);
     if (!who.ok) return { ok: false, error: who.error };
     const spec = (handle: string): CloudChildSpec => ({
       parentExecutionId: parent.executionId,
+      rootExecutionId: tree.rootExecutionId,
+      depth: tree.depth + 1,
       handle,
       label: input.label,
       task: input.task,
@@ -134,7 +149,8 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
         await runtime.cancel(id, `execution:${parent.executionId}`).catch(() => undefined);
         return { ok: false, error: refused, ...who.echo };
       }
-      return { ok: true, running: true, handle, note: SPAWNED_NOTE, ...who.echo, ...(input.ticket ? { ticket: input.ticket } : {}) };
+      const note = !readOnly && deps.afterChildCommits ? `${SPAWNED_NOTE} ${deps.afterChildCommits}` : SPAWNED_NOTE;
+      return { ok: true, running: true, handle, note, ...who.echo, ...(input.ticket ? { ticket: input.ticket } : {}) };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e), ...who.echo };
     }
@@ -188,31 +204,3 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
   return { spawn, live };
 }
 
-/**
- * What a durable run is in a delegation tree — the ONE field the engine reads.
- *  - `owner`: it may spawn background children (`orchestrate.live`);
- *  - `child`: it IS one — narrowed capabilities, scoped writes, metered under its parent,
- *    and it never finalizes (its parent opens the pull request for the whole tree).
- */
-export type CloudRunDelegation =
-  | { kind: 'owner'; parent: LiveParentRun; runtime: RuntimeService }
-  | { kind: 'child'; spec: CloudChildSpec };
-
-/** The capability set a run holds, given its place in the tree. */
-export function delegationCaps(base: ReadonlySet<Capability>, delegation: CloudRunDelegation | undefined): ReadonlySet<Capability> {
-  if (delegation?.kind === 'child') return childCapabilities(base, delegation.spec.readOnly, !!delegation.spec.scope?.length);
-  if (delegation?.kind === 'owner') return new Set<Capability>([...base, 'orchestrate.live']);
-  return base;
-}
-
-/** A scoped child's writers refuse every path outside its scope before anything is sent. */
-export function delegationProvider(provider: CapabilityProvider, delegation: CloudRunDelegation | undefined): CapabilityProvider {
-  const scope = delegation?.kind === 'child' ? delegation.spec.scope : undefined;
-  if (!scope?.length || !provider.repoWrite) return provider;
-  // One child is one run, so its writes need no queue — only the scope check.
-  return { ...provider, repoWrite: guardedRepoWrite(provider.repoWrite, (fn) => fn(), scope, new Set()) };
-}
-
-/** The run its tokens bill to: a child's are its parent's, as an inline child's always were. */
-export const meterExecutionIdOf = (executionId: number, delegation: CloudRunDelegation | undefined): number =>
-  delegation?.kind === 'child' ? delegation.spec.parentExecutionId : executionId;

@@ -15,7 +15,6 @@
 import { spawnAgentTool, delegationRole } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
 import { resolveChildPersona, type SubagentToolDeps } from "./childRunPolicy";
-import { LIVE_DELEGATION_NOTE } from "./subagentControlTools";
 
 /** Message returned when a writable subagent was requested but this host cannot prompt. */
 export const WRITE_DECLINED =
@@ -25,7 +24,7 @@ export function subagentToolDef(deps: SubagentToolDeps & Required<Pick<SubagentT
   const schema = spawnAgentTool.schema.function;
   return {
     name: schema.name,
-    description: `${schema.description} ${LIVE_DELEGATION_NOTE}`,
+    description: schema.description,
     parameters: schema.parameters as Record<string, unknown>,
     // Starting a child changes nothing; its writes raise their OWN prompts, naming the file.
     mutating: false,

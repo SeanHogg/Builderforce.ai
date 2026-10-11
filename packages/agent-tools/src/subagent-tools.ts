@@ -7,18 +7,16 @@
  * task) and a surface advertises it separately — only where the provider actually
  * backs `orchestrate`.
  *
- * Two shapes behind one schema. Where the surface grants `orchestrate.live` (the
- * editor's run host, the durable cloud runner) a child is its own run: the call returns
- * its handle at once, the parent keeps working, and `live-subagent-tools.ts` gives it
- * the verbs to wait for, redirect and stop it. Elsewhere (the images) the child runs
- * inside the call and the call returns its answer.
+ * ONE shape on every surface — the editor's run host and every cloud surface alike: a
+ * child is its own run. The call returns its handle at once, the parent keeps working,
+ * and `live-subagent-tools.ts` gives it the verbs to wait for, redirect and stop it.
  */
 
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 import type { SubagentResult } from "./capabilities.js";
 import { delegationRole, MODEL_ROLES, MODEL_ROLE_DESCRIPTIONS } from "./modelRoles.js";
 import { normalizeScopePath, overlappingScopes } from "./workstreamScope.js";
-import { LIVE_FANOUT_NEXT, SUBAGENT_CONTROL_TOOLS } from "./live-subagent-tools.js";
+import { LIVE_DELEGATION_NOTE, LIVE_FANOUT_NEXT, SUBAGENT_CONTROL_TOOLS } from "./live-subagent-tools.js";
 
 const ROLE_ENUM_DESCRIPTION = MODEL_ROLES
   .map((role) => `${role} — ${MODEL_ROLE_DESCRIPTIONS[role]}`)
@@ -27,7 +25,7 @@ const ROLE_ENUM_DESCRIPTION = MODEL_ROLES
 export const spawnAgentTool: ToolDefinition = defineTool({
   name: "spawn_agent",
   description:
-    "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back a single answer. Use it when finding something out would take many turns you do not want to carry — locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose — it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two. A CHANGE may be delegated (read_only: false) when the user asked for sub-agents or the slice is a ticket of its own — you then verify what the child changed, because you are accountable for what ships.",
+    "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back when it is done. Use it when finding something out would take many turns you do not want to carry — locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose — it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two. A CHANGE may be delegated (read_only: false) when the user asked for sub-agents or the slice is a ticket of its own — you then verify what the child changed, because you are accountable for what ships. " + LIVE_DELEGATION_NOTE,
   parameters: {
     type: "object",
     properties: {
@@ -85,12 +83,10 @@ export const spawnAgentTool: ToolDefinition = defineTool({
 
 // ── Several children, side by side ──────────────────────────────────────────────
 //
-// `spawn_agent` runs one child per call, and a turn's calls are dispatched in sequence,
-// so three delegations in one turn ran one after another. `spawn_agents` starts up to
-// MAX_WORKSTREAMS children in ONE call and waits for all of them — what a planner's
+// `spawn_agents` starts up to MAX_WORKSTREAMS children in ONE call — what a planner's
 // hand-off fans its tasks out to. The schema, the parsing and the conflict policy are
-// here, once; each surface supplies only how a child RUNS (the editor in its own
-// process, the cloud through `orchestrate`).
+// here, once; each surface supplies only how a child STARTS (the editor as a run in its
+// own process, the cloud as a durable execution through `orchestrate`).
 //
 // The conflict policy is what makes concurrent writers in one tree safe:
 //   • a writable fan-out gives every workstream the `paths` it owns, and refuses to
@@ -163,18 +159,15 @@ export function workstreamScopeError(workstreams: readonly Workstream[]): string
     : null;
 }
 
-/** What the parent is told to do once a WRITABLE fan-out is back. */
-export const FANOUT_NEXT =
-  "The children had no shell and no git. Verify the combined change (build and test), fix what the slices broke between them, commit, and report per workstream and ticket.";
-
 export const spawnAgentsTool: ToolDefinition = defineTool({
   name: SPAWN_AGENTS_TOOL,
   description:
     `Run SEVERAL independent workstreams side by side — up to ${MAX_WORKSTREAMS} child agents at once, each in its own context, each reporting back to the chat. ` +
     "Use it when the request splits into slices that do not depend on each other: a PRD's workstreams, one change per package or feature. " +
     "For a CHANGE (read_only: false) give every workstream the `paths` it OWNS (files or directories). Paths must not overlap, and a child may write only inside its own. " +
-    "Children read anywhere but have no shell and no git: when they return, YOU verify (build and test), commit and report per workstream. " +
-    "File one ticket per workstream first and pass its id as `ticket`. Each child sees nothing of this conversation, so every `task` must stand alone: what to change, where, and how to know it is done.",
+    "Children read anywhere but have no shell and no git: once their reports are in, YOU verify (build and test), commit and report per workstream. " +
+    "File one ticket per workstream first and pass its id as `ticket`. Each child sees nothing of this conversation, so every `task` must stand alone: what to change, where, and how to know it is done. " +
+    LIVE_DELEGATION_NOTE,
   parameters: {
     type: "object",
     properties: {
@@ -208,10 +201,9 @@ export const spawnAgentsTool: ToolDefinition = defineTool({
     required: ["workstreams"],
   },
   requires: ["orchestrate.fanout"],
-  // The CLOUD form: each child is one `orchestrate` spawn, all started at once. The
-  // backing serializes their commits and holds each to its scope (`cloudSubagent.ts`).
-  // The editor runs its children in its own process (`subagentFanOutTool.ts`) on the
-  // same schema, parser and conflict policy.
+  // The CLOUD form: each child is one `orchestrate` spawn — its own durable run, held to
+  // its scope. The editor starts its children as runs in its own process
+  // (`subagentFanOutTool.ts`) on the same schema, parser and conflict policy.
   async execute(args, ctx): Promise<ToolResult> {
     const parsed = parseWorkstreams(args.workstreams);
     if (typeof parsed === "string") return { data: { ok: false, error: parsed } };
@@ -231,15 +223,12 @@ export const spawnAgentsTool: ToolDefinition = defineTool({
       ...(w.ticket ? { ticket: w.ticket } : {}),
       ...(w.asAgent ? { asAgent: w.asAgent } : {}),
     }).then((r) => ({ label: w.label, ...r }))));
-    const changedFiles = [...new Set(results.flatMap((r) => r.changedFiles ?? []))];
-    // Background children have only STARTED — the parent verifies once their reports are in.
-    const started = results.some((r) => r.running);
+    // The children have only STARTED — the parent verifies once their reports are in.
     return {
       data: {
         ok: results.every((r) => r.ok),
         workstreams: results,
-        ...(changedFiles.length ? { changedFiles } : {}),
-        ...(readOnly ? {} : { next: started ? LIVE_FANOUT_NEXT : FANOUT_NEXT }),
+        ...(readOnly ? {} : { next: LIVE_FANOUT_NEXT }),
       },
     };
   },

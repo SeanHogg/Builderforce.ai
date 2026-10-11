@@ -27,7 +27,7 @@ import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { isInfrastructureEviction } from '../../application/runtime/orphanReasons';
 import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollowUp';
 import { childBrief, parseCloudChild, settleCloudChildLineage } from '../../application/runtime/cloudChildRuns';
-import type { CloudRunDelegation } from '../../application/runtime/cloudLiveOrchestration';
+import type { CloudRunDelegation } from '../../application/runtime/cloudRunDelegation';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { ExecutionStatus } from '../../domain/shared/types';
@@ -199,11 +199,9 @@ export class CloudRunnerDO implements DurableObject {
       const routingBias = parseRoutingBias(cursor.payload);
       const arcStage = parseArcStage(cursor.payload);
       const policyGates = parsePolicyGates(cursor.payload);
-      // Its place in a delegation tree: a sub-agent, or an owner that may spawn them.
+      // Its place in a delegation tree: every run may spawn; a sub-agent also carries its spec.
       const child = parseCloudChild(cursor.payload);
-      const delegation: CloudRunDelegation = child
-        ? { kind: 'child', spec: child }
-        : { kind: 'owner', parent: cursor, runtime: this.runtimeService };
+      const delegation: CloudRunDelegation = { parent: cursor, runtime: this.runtimeService, ...(child ? { spec: child } : {}) };
       const engine = resolveAgentEngine({
         env: this.env, db: this.db, executionId: cursor.executionId, tenantId: cursor.tenantId,
         taskRow: { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },

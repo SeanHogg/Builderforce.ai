@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.21] — One way to run sub-agents, in the editor and the cloud
+
+- **Sub-agents behave the same wherever the work runs.** In the editor and in every cloud runtime, a sub-agent works in the background beside the agent that started it, with no step limit. You can redirect it, stop it or wait for it the same way everywhere.
+
 ## [2026.10.20] — Approve a sub-agent's edits from the built-in chat
 
 - **Sub-agents started from VS Code's own chat can now edit files.** When one wants to change a file, you get the same Apply / Skip prompt the chat uses for its own edits, naming the sub-agent that asked. Before, these sub-agents could only read unless edits were auto-approved.

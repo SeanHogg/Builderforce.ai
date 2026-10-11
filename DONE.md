@@ -1,3 +1,18 @@
+## ✅ RESOLVED 2026-10-11 — One sub-agent path on every cloud surface: Container and Actions parents spawn the same durable children (agent-loop 2026.10.5 · agent-tools 2026.10.6 · api 2026.10.31)
+
+User: "why would there be a separate scenario?" The earlier pass left image-run parents on the inline, 8-step child. There is now ONE delegation path:
+
+- **Images relay every delegation verb through one op.** `agentRelay.mjs` sends `spawn_agent`, `spawn_agents`, `wait_agents`, `message_agent` and `stop_agent` to the Worker's `subagent` op (`containerOps.ts` → `delegationOp`). That op runs the shared tool definitions against `buildLiveOrchestration`, with the image run as the owner. The old `spawn` op is an alias.
+  - The child is the same durable execution a runner parent starts. Its report reaches the image as a steer on the `llm` op, which the image loop already splices in.
+  - A finish with live children is answered by a steer from the `llm` op, which the loop treats as overriding the finish, so the gate needs nothing from the image.
+  - `finalize` absorbs the children's commits from the branch diff and stops a finished owner's live children.
+  - A writable child's spawn note tells an image owner to `git_sync_latest`.
+  - The handshake hides the new tools from images that predate the op.
+- **The inline child loop is deleted.** Removed: `runSubagent`, `SUBAGENT_MAX_STEPS`, `SUBAGENT_OUTPUT_CHARS`, `buildOrchestrationCapability`, `imageHostedChildCeiling`, `SubagentDeps`, the serialized write chain and the `FANOUT_NEXT` one-shot wording. `subagentSystemPrompt` always takes an owner.
+- **Cloud children recurse like the editor's.** A child may spawn while `depth < MAX_SUBAGENT_DEPTH` (3, now one constant in agent-tools that both surfaces read). A tree's tokens bill to its root (`rootExecutionId`). A rehearsal has no delegation capabilities, because a dry run must not start real runs.
+- **The engine reads one field,** `CloudRunDelegation {parent, runtime, spec?}` (`cloudRunDelegation.ts`).
+- Also closes the "Container / Actions images cannot fan out" Gap Register row: `spawn_agents` relays through the same op, and the clone-sync concern is covered by the branch-diff absorb and the sync note.
+
 ## ✅ RESOLVED 2026-10-11 — Cloud sub-agents run as their own durable runs; the editor's native chat approves a sub-agent's edits (agent-tools 2026.10.5 · api 2026.10.30 · VSIX 2026.10.20)
 
 Closes four Gap Register rows logged earlier the same day.
@@ -9,7 +24,6 @@ Closes four Gap Register rows logged earlier the same day.
 - **Native `@builderforce` chat approves a sub-agent's edits.** `childApprovalRelay.ts` asks the chat's approver (the same Apply/Skip modal the turn uses) when one of its children pauses on a confirm. Whichever surface answers first wins, and a late answer is dropped. Children from the native view are now writable.
 - **`replay-sdk` derives its source-package aliases** from `scripts/sourcePackages.mjs`, so `source-package-graph-guard` passes.
 - **Frontend catalog parity:** `admin.sub.visitors` was added to es/de/zh/fr and `admin.insights.*` to zh/fr.
-- **Still open:** image-run parents (Container, GitHub Actions) still run their children inline. This is logged in the Gap Register and blocked on the container image deploy.
 
 ## ✅ RESOLVED 2026-10-11 — A sub-agent is the same run with an owner, working in the background (agent-loop 2026.10.4 · brain-embedded 2026.10.16 · brain-ui 2026.10.7 · VSIX 2026.10.19 · frontend 2026.10.41)
 
