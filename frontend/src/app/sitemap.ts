@@ -9,6 +9,7 @@ import {
   builtinPersonaSlugs,
   builtinSkillSlugs,
   listPublicAgentIds,
+  listPublicListingSlugs,
   listPublicPersonaSlugs,
   listPublicPromptSlugs,
   listPublishedSkillSlugs,
@@ -177,10 +178,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   //    here: `catalogIndexPages` above submits each exactly once, from whichever
   //    of the static list, the marketed registry or the destination teasers
   //    already carries it.
-  const [personaSlugs, promptSlugs, agentIds] = await Promise.all([
+  const [personaSlugs, promptSlugs, agentIds, listingSlugs] = await Promise.all([
     listPublicPersonaSlugs(),
     listPublicPromptSlugs(),
     listPublicAgentIds(),
+    listPublicListingSlugs(),
   ]);
 
   // Built-ins first so a published persona that shadows a built-in slug does not
@@ -210,6 +212,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
     ...agentIds.map((id) => ({
       url: `${BASE}/marketplace/agent/${id}`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 0.6,
+    })),
+    // Creation listings (apps, templates, capabilities such as Insights) — each has a
+    // server-rendered detail page with its own metadata, and none was submitted before.
+    ...listingSlugs.map((slug) => ({
+      url: `${BASE}/marketplace/listing/${slug}`,
       lastModified: now,
       changeFrequency: 'weekly' as const,
       priority: 0.6,

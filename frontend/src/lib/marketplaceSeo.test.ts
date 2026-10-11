@@ -21,6 +21,7 @@ import {
   getPublicPrompt,
   getPublishedSkill,
   listPublicAgentIds,
+  listPublicListingSlugs,
   listPublicPersonaSlugs,
   listPublicPromptSlugs,
   listPublishedSkillSlugs,
@@ -212,5 +213,27 @@ describe('marketplaceSeo — degrading to null', () => {
   it.each(listers)('%s: a body that is not a list yields an empty array', async (_kind, list) => {
     publicApiGet.mockResolvedValue({ unexpected: 'shape' });
     await expect(list()).resolves.toEqual([]);
+  });
+});
+
+describe('marketplaceSeo — creation listings', () => {
+  it('reads four pages of the public feed and returns each slug once', async () => {
+    publicApiGet
+      .mockResolvedValueOnce({ listings: [{ slug: 'insights' }, { slug: 'crm-template' }], total: 3 })
+      .mockResolvedValueOnce({ listings: [{ slug: 'insights' }, { name: 'no slug' }], total: 3 })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ error: 'boom' });
+    await expect(listPublicListingSlugs()).resolves.toEqual(['insights', 'crm-template']);
+    expect(publicApiGet.mock.calls.map((c) => c[0])).toEqual([
+      '/api/listings?limit=48&page=1',
+      '/api/listings?limit=48&page=2',
+      '/api/listings?limit=48&page=3',
+      '/api/listings?limit=48&page=4',
+    ]);
+  });
+
+  it('is empty when the API is unreachable', async () => {
+    publicApiGet.mockResolvedValue(null);
+    await expect(listPublicListingSlugs()).resolves.toEqual([]);
   });
 });

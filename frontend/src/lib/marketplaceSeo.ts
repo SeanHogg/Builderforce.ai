@@ -364,6 +364,29 @@ export const getPublicAgent = agentReaders.get;
 /** Published agent ids for the sitemap. Best-effort; empty on error. */
 export const listPublicAgentIds = agentReaders.listKeys;
 
+/* ════════════════ Creation listings — /marketplace/listing/[slug] ════════════════ */
+
+/** Pages of the public listing feed the sitemap reads; the route caps a page at 48. */
+const LISTING_SITEMAP_PAGES = [1, 2, 3, 4];
+const LISTING_PAGE_MAX = 48;
+
+/**
+ * Public creation-listing slugs for the sitemap: the first four pages of the
+ * `/api/listings` shop window (published, public, sellable kinds only — the route
+ * owns that predicate). The detail page reads its own record, so there is no
+ * `get` here. Best-effort; a failed page contributes nothing.
+ */
+export async function listPublicListingSlugs(): Promise<string[]> {
+  const pages = await Promise.all(LISTING_SITEMAP_PAGES.map((page) =>
+    publicApiGet<unknown>(`/api/listings?limit=${LISTING_PAGE_MAX}&page=${page}`)));
+  const slugs = pages.flatMap((body) => {
+    const rows = asRecord(body)?.listings;
+    if (!Array.isArray(rows)) return [];
+    return rows.map((row) => asRecord(row)?.slug).filter((slug): slug is string => typeof slug === 'string' && slug.length > 0);
+  });
+  return [...new Set(slugs)];
+}
+
 /* ════════════════ Built-in catalogs the sitemap also lists ════════════════ */
 
 /**

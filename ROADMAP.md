@@ -277,6 +277,9 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Advisor platform specified, not built ([PRD 26](./specs/builderforce/26-prd-advisor-platform.md))** — no Book on talent profiles, `/api/meetings/*` all authed, minutes don't create follow-ups.
 - **[integrations] Publishers can't list a canvas pack or prompt** — need `canvas`/`prompt` output kinds. *Blocker: product decision on what a purchased pack becomes.*
 - **[integrations] Developer Portal:** no live card run (Stripe secrets); hyperscaler listings need seller accounts; design-partner work is human.
+- **A signed-out buyer loses their place.** "Get" on a listing sends them to `/login?next=` (`ListingLaunch.tsx` L184-195, `signInHref`); after sign-up, verification and `/tenants?next=` they land back on the listing and must click again. `registerHref(next, intent)` carries an intent that nothing reads. Fix: ONE `resumeIntent(intent)` in `lib/auth.ts`, used by every free listing and by the Insights set-up (PRD 33 §2.6, 33a S6.5). *Blocker: operator go-ahead to start the replay build (S6.5 owns it).*
+- **Installed marketplace apps have no home.** An acquired listing can only open as a canvas session (`/create/<sessionId>`); there is no `/apps/<slug>` and the workspace nav never lists what was acquired (`creationListingApi.acquired` exists, no caller). Fix: `/apps/[slug]` + `CAPABILITY_APPS` registry, nav from `GET /acquired` (33a S6.5). *Blocker: operator go-ahead (S6.5).*
+- **A listing can't carry a landing page.** `marketplace/listing/[slug]/page.tsx` is name, summary, tags and the launch island; `ListingBody` has no marketing fields and there is no per-slug landing mechanism. Fix: `LISTING_LANDINGS` (data by slug) rendering the existing marketing sections (`MarketingFaq`, `CompetitorMatrix`, `SocialProofBar`, `CreationCtaSection`) above `ListingLaunch` (33a S6.5). *Blocker: operator go-ahead (S6.5).*
 
 ### Marketing and campaigns `[growth]`
 
