@@ -562,6 +562,10 @@ export const executions = pgTable('executions', {
    * unknown can never halt autonomy. See `runProducedOutput`.
    */
   produced:     boolean('produced'),
+  /** The run that spawned this one when it is a cloud SUB-AGENT (1209); null otherwise.
+   *  A child is part of its parent's run: excluded by `liveExecution()`, metered under
+   *  the parent, never moves the ticket. Written only by `cloudChildRuns.ts`. */
+  parentExecutionId: integer('parent_execution_id').references((): AnyPgColumn => executions.id, { onDelete: 'cascade' }),
   /** Monotonic lifecycle transition number. Maintained by the database trigger
    * that appends execution_lifecycle_outbox rows. */
   lifecycleVersion: integer('lifecycle_version').notNull().default(1),

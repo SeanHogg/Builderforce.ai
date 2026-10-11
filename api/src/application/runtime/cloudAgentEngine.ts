@@ -98,6 +98,8 @@ import {
 } from '@seanhogg/builderforce-memory-engine/limbic';
 import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, type LoopHooks, type LoopPorts, type LoopResult } from '@builderforce/agent-loop';
 import { buildOrchestrationCapability, imageHostedChildCeiling } from './cloudSubagent';
+import { buildLiveOrchestration, delegationCaps, delegationProvider, meterExecutionIdOf, type CloudRunDelegation } from './cloudLiveOrchestration';
+import { absorbChildWrites, liveChildrenFinishBlock } from './cloudChildRuns';
 import { resolveAgentPersonaBrief } from '../agent/agentPersonaBrief';
 import { imageAdvertisedTools, readToolManifest } from './imageToolHandshake';
 import { renderRunContext, summarizeBlocks, type RunContextBlock } from '@builderforce/run-context';
@@ -667,6 +669,8 @@ export interface CloudLoopOpts {
    * relying on every branch inside finalize to no-op.
    */
   suppressFinalize?: boolean;
+  /** Its place in a delegation tree (durable surface only) — see {@link CloudRunDelegation}. */
+  delegation?: CloudRunDelegation;
 }
 export interface CloudLoopResult {
   ok: boolean;
@@ -1055,7 +1059,9 @@ async function runCloudToolLoop(
   // which is why it is part of CLOUD_SURFACE_CAPS rather than a per-run addition: the
   // advertised schemas and the wired backing come from the same constant and cannot
   // drift.
-  const surfaceCaps = CLOUD_SURFACE_CAPS;
+  const surfaceCaps = delegationCaps(CLOUD_SURFACE_CAPS, opts?.delegation);
+  /** Where this run's tokens bill — a child's are its parent's. */
+  const meterExecutionId = meterExecutionIdOf(executionId, opts?.delegation);
   const runIdentity = await ensureAgentRunIdentity(db, {
     tenantId, executionId, agentRef: cloudAgentRef, issuedBy: `execution:${executionId}`,
     capabilities: [...surfaceCaps],
@@ -1244,7 +1250,9 @@ async function runCloudToolLoop(
   // PRD requirements. A genuine "nothing to change" run finishes on the retry; a
   // premature one ("wrote a plan, shipped nothing") is forced to reconsider. Carried
   // across DO ticks via resume state so the block isn't re-armed every tick.
-  let noDeliverableBlocked = opts?.resume?.noDeliverableBlocked ?? false;
+  // A sub-agent delivers a slice (often an answer, not code); its OWNER is held to the
+  // deliverable gate for the whole tree, so the child starts with it already spent.
+  let noDeliverableBlocked = opts?.resume?.noDeliverableBlocked ?? opts?.delegation?.kind === 'child';
   const requiredSignoff = opts?.resume?.requiredSignoff ?? opts?.requiredSignoff;
   let reviewVerdictRecorded = opts?.resume?.reviewVerdictRecorded ?? false;
 
@@ -1286,7 +1294,8 @@ async function runCloudToolLoop(
   });
   // Rehearsal wraps the provider here (see CloudLoopOpts.decorateProvider). A live run
   // passes nothing and uses the provider as built.
-  const decoratedProvider = opts?.decorateProvider ? opts.decorateProvider(builtProvider) : builtProvider;
+  const scopedProvider = delegationProvider(builtProvider, opts?.delegation);
+  const decoratedProvider = opts?.decorateProvider ? opts.decorateProvider(scopedProvider) : scopedProvider;
   // Delegation (`orchestrate`). Attached AFTER decoration and built from the DECORATED
   // provider, so a rehearsal's shadow wrapper covers a child's tool calls too — a
   // sub-agent that wrote straight through the raw backing would be the one hole in a
@@ -1294,7 +1303,11 @@ async function runCloudToolLoop(
   // the surface's concretions (one metered model turn, the registry, the timeline).
   const provider: CapabilityProvider = {
     ...decoratedProvider,
-    orchestration: buildOrchestrationCapability({
+    orchestration: opts?.delegation?.kind === 'owner' ? buildLiveOrchestration({
+      env, db, runtime: opts.delegation.runtime, parent: opts.delegation.parent,
+      personaBrief: (agent) => resolveAgentPersonaBrief(env, tenantId, agent),
+      heartbeat: () => heartbeatExecution(db, executionId),
+    }) : buildOrchestrationCapability({
       parentCaps: surfaceCaps,
       provider: decoratedProvider,
       registry: cloudToolRegistry,
@@ -1385,7 +1398,7 @@ async function runCloudToolLoop(
         // copy it stayed at 0 and a declared spend limit could never trip.
         const [spend] = await usageDatabaseOf(db).select({ total: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
           .from(llmUsageLog)
-          .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.executionId, executionId)));
+          .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.executionId, meterExecutionId)));
         const limitReason = checkRunLimits(declaredLimits, {
           files: writtenPaths.size, repositories: repoCtx ? 1 : 0, spendMillicents: Number(spend?.total ?? 0),
         });
@@ -1422,6 +1435,13 @@ async function runCloudToolLoop(
     },
 
     onNoToolCalls: async (_ctx, turn) => {
+      // An owner never ends with children still working (their reports would strand).
+      const childBlock = opts?.delegation?.kind === 'owner' ? await liveChildrenFinishBlock(db, executionId) : null;
+      if (childBlock) {
+        messages.push({ role: 'assistant', content: turn.content });
+        messages.push({ role: 'user', content: childBlock });
+        return { action: 'continue' };
+      }
       if (requiredSignoff && !reviewVerdictRecorded) {
         const error = missingReviewVerdictMessage(requiredSignoff);
         messages.push({ role: 'assistant', content: turn.content });
@@ -1512,6 +1532,12 @@ async function runCloudToolLoop(
     },
 
     onFinish: async (ctx, summary) => {
+      if (opts?.delegation?.kind === 'owner') {
+        const childBlock = await liveChildrenFinishBlock(db, executionId);
+        if (childBlock) return childBlock;
+        // The children committed from their own runs; the pull request is the whole tree's.
+        await absorbChildWrites(db, executionId, repoCtx, writtenPaths);
+      }
       // Four finish gates, in order. Either yields a block message that forces the
       // agent to call finish again once it has corrected the run; null = ship.
       // Validation is AUTOMATIC here: `run_checks` remains useful for an early
@@ -1718,10 +1744,10 @@ async function runCloudToolLoop(
       // its own final turn. The degraded comparison is the seed/pin (`pick.model`), not the
       // just-locked `activeModel`.
       const turn = await recordCloudLlmTurn(result, {
-        env, db, tenantId, cloudAgentRef, executionId, taskId: taskRow.id, projectId,
+        env, db, tenantId, cloudAgentRef, executionId: meterExecutionId, taskId: taskRow.id, projectId,
         requestedModel: pick.model, fallbackModel: activeModel,
         effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
-        role: 'code',
+        role: opts?.delegation?.kind === 'child' ? (opts.delegation.spec.role ?? 'code') : 'code',
       }, { tGen0, step: ctx.step, notify: false });
       if (!turn.ok) return { failed: turn.error };
       return { content: turn.content, toolCalls: readOpenAiToolCalls({ tool_calls: turn.toolCalls }) };
@@ -1922,6 +1948,8 @@ export interface CloudEngineContext {
   requiredSignoff?: RequiredReviewSignoff;
   /** How this surface drives the engine. Absent ⇒ `worker` (whole loop, one call). */
   surface?: CloudEngineSurface;
+  /** Mirrors {@link CloudLoopOpts.delegation}. */
+  delegation?: CloudRunDelegation;
 }
 
 /**
@@ -1980,6 +2008,8 @@ export class CloudLimbicEngine implements AgentEngine {
         ...(input.genParams ? { genParams: { ...input.genParams } } : {}),
         ...(input.resume ? { resume: input.resume as CloudLoopState } : {}),
         ...(surface.kind === 'durable' ? { maxSteps: surface.maxSteps, deferFinalize: true } : {}),
+        // A child's parent opens the pull request for the whole tree.
+        ...(rc.delegation ? { delegation: rc.delegation, ...(rc.delegation.kind === 'child' ? { suppressFinalize: true } : {}) } : {}),
         ...(surface.kind === 'rehearsal'
           ? { maxSteps: surface.maxSteps, suppressFinalize: true, decorateProvider: surface.decorateProvider, ...(surface.frozenReadRef ? { frozenReadRef: surface.frozenReadRef } : {}) }
           : {}),

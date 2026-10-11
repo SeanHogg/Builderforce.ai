@@ -15,7 +15,7 @@ import {
 import type { ToolDef } from "./fileTools";
 import type { ChildControls } from "./childRunSpawner";
 
-export { LIVE_DELEGATION_NOTE, SUBAGENT_CONTROL_TOOL_NAMES } from "@builderforce/agent-tools";
+export { LIVE_DELEGATION_NOTE } from "@builderforce/agent-tools";
 
 /** The editor's registry, as the shared tools' `orchestrate.live` backing. */
 function liveBacking(children: ChildControls): LiveChildControls {

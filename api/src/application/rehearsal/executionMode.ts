@@ -9,11 +9,16 @@
  * exact failure the gap register logs for tenant isolation (1,127 hand-written
  * predicates, one omission = a bug you cannot see).
  *
+ * A cloud SUB-AGENT (1209, `parent_execution_id` set) is excluded for the same reason:
+ * it is a slice of its parent's run, not a run of its own. Counting it would make one
+ * delegated fan-out read as five runs on the ticket, five in-flight items, five
+ * strikes toward the autonomy cap.
+ *
  * Single-row reads BY ID deliberately do NOT filter: an operator opening a rehearsal's
  * execution should see it. It is the LIST and AGGREGATE reads that must exclude it.
  */
 
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { executions } from '../../infrastructure/database/schema';
 
 export const EXECUTION_MODES = ['live', 'rehearsal'] as const;
@@ -26,5 +31,5 @@ export type ExecutionMode = (typeof EXECUTION_MODES)[number];
  *   .where(and(eq(executions.tenantId, tenantId), liveExecution()))
  */
 export function liveExecution() {
-  return eq(executions.mode, 'live');
+  return and(eq(executions.mode, 'live'), isNull(executions.parentExecutionId))!;
 }

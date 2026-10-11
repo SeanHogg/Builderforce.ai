@@ -7,17 +7,18 @@
  * task) and a surface advertises it separately — only where the provider actually
  * backs `orchestrate`.
  *
- * The contract is deliberately one-shot. There is no handle, no polling, no
- * "check on the child later": the call returns when the child is done. A parent
- * that could hold live children would need a scheduler, and the surfaces that run
- * this (a per-tick durable object, a billed-by-the-second container) have nowhere
- * to keep one.
+ * Two shapes behind one schema. Where the surface grants `orchestrate.live` (the
+ * editor's run host, the durable cloud runner) a child is its own run: the call returns
+ * its handle at once, the parent keeps working, and `live-subagent-tools.ts` gives it
+ * the verbs to wait for, redirect and stop it. Elsewhere (the images) the child runs
+ * inside the call and the call returns its answer.
  */
 
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 import type { SubagentResult } from "./capabilities.js";
 import { delegationRole, MODEL_ROLES, MODEL_ROLE_DESCRIPTIONS } from "./modelRoles.js";
 import { normalizeScopePath, overlappingScopes } from "./workstreamScope.js";
+import { LIVE_FANOUT_NEXT, SUBAGENT_CONTROL_TOOLS } from "./live-subagent-tools.js";
 
 const ROLE_ENUM_DESCRIPTION = MODEL_ROLES
   .map((role) => `${role} — ${MODEL_ROLE_DESCRIPTIONS[role]}`)
@@ -231,16 +232,19 @@ export const spawnAgentsTool: ToolDefinition = defineTool({
       ...(w.asAgent ? { asAgent: w.asAgent } : {}),
     }).then((r) => ({ label: w.label, ...r }))));
     const changedFiles = [...new Set(results.flatMap((r) => r.changedFiles ?? []))];
+    // Background children have only STARTED — the parent verifies once their reports are in.
+    const started = results.some((r) => r.running);
     return {
       data: {
         ok: results.every((r) => r.ok),
         workstreams: results,
         ...(changedFiles.length ? { changedFiles } : {}),
-        ...(readOnly ? {} : { next: FANOUT_NEXT }),
+        ...(readOnly ? {} : { next: started ? LIVE_FANOUT_NEXT : FANOUT_NEXT }),
       },
     };
   },
 });
 
-/** The delegation tools, for a surface that backs `orchestrate`. */
-export const SUBAGENT_TOOLS: readonly ToolDefinition[] = [spawnAgentTool, spawnAgentsTool];
+/** The delegation tools, for a surface that backs `orchestrate`. The owner's verbs
+ *  require `orchestrate.live`, so they are offered only where children run live. */
+export const SUBAGENT_TOOLS: readonly ToolDefinition[] = [spawnAgentTool, spawnAgentsTool, ...SUBAGENT_CONTROL_TOOLS];

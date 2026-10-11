@@ -26,6 +26,8 @@ import { parseRoutingBias, parseArcStage, parsePolicyGates, parseModel, parseRev
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { isInfrastructureEviction } from '../../application/runtime/orphanReasons';
 import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollowUp';
+import { childBrief, parseCloudChild, settleCloudChildLineage } from '../../application/runtime/cloudChildRuns';
+import type { CloudRunDelegation } from '../../application/runtime/cloudLiveOrchestration';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { ExecutionStatus } from '../../domain/shared/types';
@@ -157,6 +159,10 @@ export class CloudRunnerDO implements DurableObject {
         );
         cursor.systemPrompt = systemPrompt;
         cursor.userContent = userContent;
+        // A sub-agent runs the same prompt as its owner with the sub-agent brief in front,
+        // and its task as the first turn.
+        const child = parseCloudChild(cursor.payload);
+        if (child) Object.assign(cursor, childBrief(child, systemPrompt));
         // Persona/agent personality exec levers — persisted so every loop tick applies
         // the same temperature (personality must hold across DO ticks, not just tick 1).
         cursor.execParams = execParams;
@@ -193,6 +199,11 @@ export class CloudRunnerDO implements DurableObject {
       const routingBias = parseRoutingBias(cursor.payload);
       const arcStage = parseArcStage(cursor.payload);
       const policyGates = parsePolicyGates(cursor.payload);
+      // Its place in a delegation tree: a sub-agent, or an owner that may spawn them.
+      const child = parseCloudChild(cursor.payload);
+      const delegation: CloudRunDelegation = child
+        ? { kind: 'child', spec: child }
+        : { kind: 'owner', parent: cursor, runtime: this.runtimeService };
       const engine = resolveAgentEngine({
         env: this.env, db: this.db, executionId: cursor.executionId, tenantId: cursor.tenantId,
         taskRow: { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },
@@ -204,6 +215,7 @@ export class CloudRunnerDO implements DurableObject {
         ...(requiredSignoff ? { requiredSignoff } : {}),
         ...(cursor.execParams ? { execParams: cursor.execParams } : {}),
         surface: { kind: 'durable', maxSteps: 1, ...(cursor.limbic && cursor.limbicState ? { limbicState: cursor.limbicState } : {}) },
+        delegation,
       });
       const result = await engine.run({
         systemPrompt: cursor.systemPrompt ?? '', userContent: cursor.userContent ?? '', model: cursor.model,
@@ -352,6 +364,8 @@ export class CloudRunnerDO implements DurableObject {
     // routes through here, and the row is already terminal, so the follow-up never
     // starts beside the run it follows. Idempotent: a claimed steer is never re-claimed.
     if (executionId != null) {
+      // A child's report goes to its chat and its parent; a parent's live children stop.
+      await settleCloudChildLineage(this.db, this.runtimeService, executionId);
       await settleLateSteersSafely({ env: this.env, db: this.db, runtimeService: this.runtimeService }, { executionId });
       // Learned Model Routing: the single durable-surface terminal chokepoint —
       // every DO terminal path (finish, cancel, error) routes through cleanup, so

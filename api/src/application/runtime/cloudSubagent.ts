@@ -42,7 +42,7 @@ import { CLOUD_SURFACE_CAPS } from './cloudAgentTools';
  * one is the run a person can ask about it — not an anonymous child the parent
  * commissioned and summarised in a sentence.
  */
-export const NON_DELEGABLE_CAPABILITIES: readonly Capability[] = ['orchestrate', 'orchestrate.fanout', 'human', 'skill.author'];
+export const NON_DELEGABLE_CAPABILITIES: readonly Capability[] = ['orchestrate', 'orchestrate.fanout', 'orchestrate.live', 'human', 'skill.author'];
 
 /**
  * Additionally withheld from a READ-ONLY child (the default). Anything that can change
@@ -138,6 +138,40 @@ export interface SubagentDeps {
   report?(input: SubagentRequest, result: SubagentResult): Promise<void>;
 }
 
+/** WHO a delegation runs as — see {@link resolveDelegatePersona}. */
+export type DelegatePersona =
+  | { ok: false; error: string }
+  | {
+    ok: true;
+    persona?: { name: string; brief: string };
+    /** Echoed on the result and the timeline so the answer is attributable to a REAL
+     *  teammate rather than to the string the parent guessed — or, for an on-demand role
+     *  persona, to nobody, with the note saying why. */
+    echo: { asAgent?: { ref: string; name: string }; staffing?: string };
+  };
+
+/**
+ * Resolve a delegation's `asAgent` — ONE rule for an inline child and a background one.
+ *
+ * A ref that resolves to nobody is a FAILED delegation, never an anonymous one: the parent
+ * asked for a named teammate, and quietly substituting a generic child would produce an
+ * answer attributed to expertise nobody applied. When the named agent lacks the slice's
+ * delivery role (Developer for code, QA for verify) the child runs as an on-demand role
+ * persona instead, and says so — the editor's children run the same rule.
+ */
+export async function resolveDelegatePersona(
+  personaBrief: SubagentDeps['personaBrief'],
+  asAgent: string,
+  role: ModelRole | undefined,
+): Promise<DelegatePersona> {
+  if (!asAgent) return { ok: true, echo: {} };
+  const resolved = await personaBrief?.(asAgent);
+  if (!resolved) return { ok: false, error: `no agent named "${asAgent}" in this workspace` };
+  const staffed = role ? staffDelegation(resolved, role) : { kind: 'as-agent' as const };
+  if (staffed.kind === 'on-demand') return { ok: true, persona: staffed.persona, echo: { staffing: staffed.note } };
+  return { ok: true, persona: { name: resolved.name, brief: resolved.brief }, echo: { asAgent: { ref: asAgent, name: resolved.name } } };
+}
+
 /**
  * The child's file writers, held to its scope and to ONE writer at a time.
  *
@@ -147,7 +181,7 @@ export interface SubagentDeps {
  * chain — the children still THINK in parallel; only their commits take turns. A scoped
  * child is refused a write outside its paths before anything is sent.
  */
-function guardedRepoWrite(
+export function guardedRepoWrite(
   write: RepoWriteCapability,
   serialize: <T>(fn: () => Promise<T>) => Promise<T>,
   scope: readonly string[] | undefined,
@@ -217,41 +251,18 @@ export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationC
       const maxSteps = deps.maxSteps ?? SUBAGENT_MAX_STEPS;
       const started = Date.now();
 
-      // Delegating AS one of the workspace's agents. A ref that resolves to nobody is
-      // returned as a failed delegation, NOT run anonymously: the parent asked for a
-      // named teammate, and quietly substituting a generic child would produce an answer
-      // attributed to expertise nobody applied. A delegation to nobody is information.
       const asAgent = typeof input.asAgent === 'string' ? input.asAgent.trim() : '';
-      let persona: { name: string; brief: string } | undefined;
-      // Set when the named agent lacks the slice's delivery role (Developer for code, QA
-      // for verify): the child runs as an on-demand role persona, NOT as that agent, and
-      // this says so — the editor's children run the same rule (`staffDelegation`).
-      let staffing: string | undefined;
-      if (asAgent) {
-        const resolved = await deps.personaBrief?.(asAgent);
-        if (!resolved) {
-          const result: SubagentResult = { ok: false, error: `no agent named "${asAgent}" in this workspace` };
-          await deps.record?.({
-            label: input.label,
-            detail: { readOnly, asAgent, ms: Date.now() - started },
-            result: `${input.label} → ${result.error}`,
-          });
-          return result;
-        }
-        const staffed = input.role ? staffDelegation(resolved, input.role) : { kind: 'as-agent' as const };
-        if (staffed.kind === 'on-demand') {
-          persona = staffed.persona;
-          staffing = staffed.note;
-        } else {
-          persona = { name: resolved.name, brief: resolved.brief };
-        }
+      const who = await resolveDelegatePersona(deps.personaBrief, asAgent, input.role);
+      if (!who.ok) {
+        const result: SubagentResult = { ok: false, error: who.error };
+        await deps.record?.({
+          label: input.label,
+          detail: { readOnly, asAgent, ms: Date.now() - started },
+          result: `${input.label} → ${result.error}`,
+        });
+        return result;
       }
-      /** Echoed on the result and the timeline so the answer is attributable to a REAL
-       *  teammate rather than to the string the parent guessed — or, for an on-demand
-       *  role persona, to nobody, with the note saying why. */
-      const asAgentEcho = staffing
-        ? { staffing }
-        : persona ? { asAgent: { ref: asAgent, name: persona.name } } : {};
+      const { persona, echo: asAgentEcho } = who;
 
       try {
         const run = await runSubagent<ToolSchema>({

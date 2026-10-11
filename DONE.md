@@ -1,3 +1,16 @@
+## ✅ RESOLVED 2026-10-11 — Cloud sub-agents run as their own durable runs; the editor's native chat approves a sub-agent's edits (agent-tools 2026.10.5 · api 2026.10.30 · VSIX 2026.10.20)
+
+Closes four Gap Register rows logged earlier the same day.
+
+- **Cloud sub-agents no longer block their parent, and have no step cap.** On the durable runner a child is its own execution on the parent's ticket. It carries a `subagent` spec on its payload and `parent_execution_id` (migration 1209). It runs through the same runner and engine as any run, with the live sub-agent brief in front of its owner's prompt (`cloudChildRuns.ts`). `spawn_agent` / `spawn_agents` return a handle at once (`cloudLiveOrchestration.ts`). The parent redirects a child with a steer (`message_agent`), stops it with a cancel (`stop_agent`), and waits only when it must (`wait_agents`, at most 5 minutes per call). A child's report goes to the chat and, exactly once, to the parent as a steer before its next turn. Delivery runs from the runner's one terminal chokepoint, which also stops a finished parent's live children.
+  - **Finishing waits for children.** A parent may not finish while children are live. At finish, the files its writable children committed are read from the branch diff into the parent's written set, so the pull request covers the whole tree.
+  - **A child is part of its parent's run.** `liveExecution()` excludes it from delivery aggregates, and its tokens meter under the parent, so a fan-out is still one cloud run against the cap. It is lifecycle-neutral (never moves the ticket) and posts no run milestones. The rerun breaker ignores it. It never finalizes; the deliverable gate is its owner's.
+  - **One definition of the owner's verbs.** `wait_agents`, `message_agent` and `stop_agent`, the report and direction wording, and `LIVE_DELEGATION_NOTE` / `LIVE_FANOUT_NEXT` now live in `@builderforce/agent-tools` (`live-subagent-tools.ts`, capability `orchestrate.live`). The editor's control tools are an adapter over them. `resolveDelegatePersona` is shared by the inline and background spawners.
+- **Native `@builderforce` chat approves a sub-agent's edits.** `childApprovalRelay.ts` asks the chat's approver (the same Apply/Skip modal the turn uses) when one of its children pauses on a confirm. Whichever surface answers first wins, and a late answer is dropped. Children from the native view are now writable.
+- **`replay-sdk` derives its source-package aliases** from `scripts/sourcePackages.mjs`, so `source-package-graph-guard` passes.
+- **Frontend catalog parity:** `admin.sub.visitors` was added to es/de/zh/fr and `admin.insights.*` to zh/fr.
+- **Still open:** image-run parents (Container, GitHub Actions) still run their children inline. This is logged in the Gap Register and blocked on the container image deploy.
+
 ## ✅ RESOLVED 2026-10-11 — A sub-agent is the same run with an owner, working in the background (agent-loop 2026.10.4 · brain-embedded 2026.10.16 · brain-ui 2026.10.7 · VSIX 2026.10.19 · frontend 2026.10.41)
 
 The editor's sub-agents were a SECOND loop (`runChild` in `subagentRun.ts`) running inside one blocking tool call:

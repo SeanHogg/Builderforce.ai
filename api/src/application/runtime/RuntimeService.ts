@@ -18,6 +18,7 @@ import {
 } from './orphanReasons';
 import { parseExecutor, parseActAsRole, parseCloudAgentRef, isRoleAttributedRun } from './cloudDispatch';
 import { isLifecycleNeutralRun } from './executionAuthority';
+import { isSubagentRun } from './cloudChildRuns';
 import { ticketKindForTaskType } from '../brain/ChatTicketService';
 import type { RuntimePorts, RuntimeServiceOptions } from './ports';
 import { notifyExecutionSubscribers } from './executionEvents';
@@ -188,6 +189,8 @@ export class RuntimeService {
     phase: 'paused' | 'resumed' | 'cancelled' | 'failed',
     opts?: { errorMessage?: string | null; questionText?: string | null; eventNonce?: string | null },
   ): Promise<void> {
+    // A sub-agent speaks to the chat through its own report, never as a run milestone.
+    if (isSubagentRun(execution.payload)) return;
     try {
       const task = await this.tasks.findById(asTaskId(execution.taskId));
       if (!task) return;
@@ -549,6 +552,9 @@ export class RuntimeService {
         // point that knows the board is managed (`markLifecycleNeutral`), so this hold
         // costs nothing on an unmanaged board — no run there is ever marked.
         const isNeutralRun = isLifecycleNeutralRun(execution.payload);
+        // A cloud sub-agent (also neutral, so it holds the lane) is a slice of its
+        // parent's run: no role attribution and no milestone of its own.
+        const isChildRun = isSubagentRun(execution.payload);
         // All four classes run against an already-open ticket and hold its lane.
         const holdsLane = isReviewRun || isIncidentTriageRun || isRoleRun || isNeutralRun;
         const effectContext = {
@@ -652,7 +658,7 @@ export class RuntimeService {
         // Manifest attribution (PRD §5.6): a terminal run records that the role it ran
         // AS participated on the ticket (linked to this execution), and — with producer
         // evidence — completes that role's manifest slot. Best-effort, never blocks.
-        if (terminal && !coordinatorOwnsTransition) {
+        if (terminal && !coordinatorOwnsTransition && !isChildRun) {
           if (this.ports.onRunFinalized) {
             await this.runEffect('run_finalized', effectContext, () => this.ports.onRunFinalized!({
               ...effectContext,
@@ -683,7 +689,7 @@ export class RuntimeService {
         // spawned it. Skipped for a Validator review run (internal). LAST side-effect so a
         // milestone failure can't block the lane sync/chaining above; the hook is itself
         // best-effort + per-execution+phase idempotent.
-        if (!isReviewRun) {
+        if (!isReviewRun && !isChildRun) {
           const taskType = (task.toPlain() as { taskType?: string }).taskType;
           // `started` fires on EVERY RUNNING transition, not only when the lane flips to
           // in_progress — a re-run on a ticket already in progress and a Coordinator-managed

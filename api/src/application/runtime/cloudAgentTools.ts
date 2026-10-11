@@ -131,13 +131,10 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   // Safe to advertise because the proposal lands as a DRAFT: the tool cannot make
   // anything binding, and the backing service is the only writer that can.
   'skill.author',
-  // Delegation to a sub-agent. Backed here because this surface CAN run a nested loop
-  // inside one tool call: the child's turns are gateway I/O, not CPU, and its budget
-  // (SUBAGENT_MAX_STEPS) is small and absolute. The durable surface takes one parent
-  // step per alarm tick, so a delegation is at most one long tick, and it heartbeats
-  // `executions.updated_at` on the step that contains it — the orphan reaper measures
-  // liveness from that heartbeat, so a tick spent inside a child is not mistaken for a
-  // dead run.
+  // Delegation to a sub-agent. On the durable runner a child is its OWN execution
+  // (`cloudLiveOrchestration.ts`) and the run additionally holds `orchestrate.live`
+  // (granted per run by `delegationCaps`, not here); on the Worker path a child runs
+  // inside the tool call, bounded by SUBAGENT_MAX_STEPS.
   'orchestrate',
   // Several children side by side (`spawn_agents`). Backed here because the children's
   // writers are scoped and their git-API commits queue on one chain

@@ -36,6 +36,7 @@ import type { RuntimeService } from '../runtime/RuntimeService';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
 import type { ExecutionReadMemo } from '../runtime/executionReadMemo';
 import { agentExecutionEnabledCached } from '../runtime/agentExecutionGate';
+import { isSubagentRun } from '../runtime/cloudChildRuns';
 
 /** Parse a swimlane assignment's `required_capabilities` JSON-text column. */
 export function parseRequiredCapabilities(raw: string | null | undefined): string[] {
@@ -310,6 +311,8 @@ export function autoRunCooldownMs(consecutiveFailures: number): number {
 
 /** The end of a run, for cooldown math: when it finished, else its last update. */
 export interface ExecTiming extends RunOutcomeRow {
+  /** Read only to set a cloud sub-agent's run aside — it is a slice of its parent's run. */
+  payload?: string | null;
   completedAt?: Date | null;
   updatedAt?: Date | null;
   createdAt?: Date | null;
@@ -385,7 +388,10 @@ export interface RerunBackoff {
   blockedBy: Extract<AutoRunReason, 'run_cap_exhausted' | 'cooldown_active'> | null;
 }
 
-export function assessRerunBackoff(execs: readonly ExecTiming[], nowMs: number): RerunBackoff {
+export function assessRerunBackoff(allExecs: readonly ExecTiming[], nowMs: number): RerunBackoff {
+  // A delegated fan-out is ONE run on the ticket: its children neither add to the
+  // lifetime cap nor count as strikes (the parent's own outcome does).
+  const execs = allExecs.filter((e) => !isSubagentRun(e.payload));
   const consecutiveFailures = trailingUnproductiveStreak(execs);
   const cooldownRemainingMs = autoRunCooldownRemainingMs(execs, nowMs);
   // Ceiling first, then breaker, then cooldown — strongest reason wins, and this is the
