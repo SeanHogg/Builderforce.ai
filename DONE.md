@@ -1,3 +1,40 @@
+## ✅ RESOLVED 2026-10-11 — Marketplace: Built-in agents show, an All view opens the storefront
+
+- **Agents ▸ Built-in was empty for every visitor.** `provisionBuiltinAgents` creates each workspace's own copy with `published: false`. `publicAgentScope` lists only published rows, so `GET /api/workforce/agents` never returned a built-in, and the chip filtered that list for `builtin_kind`. It was also the default chip of a bare `/marketplace`, so the storefront opened on an empty grid.
+  - Now `BUILTIN_AGENT_CATALOGUE` is projected from `BUILTIN_AGENTS` and served by `GET /api/workforce/builtin-agents`. The endpoint is static: there is no DB read, it sends `Cache-Control: public`, and the client caches it.
+  - `BuiltinAgentsSection` renders the roster with "Open in your workforce" for a member and sign-in for a guest, never "Hire". The Community grid now shows published rows only.
+- **There was no "All".** The four families replaced the old tabs and dropped the overview, and legacy `?category=all` went to Talent.
+  - A new `all` family (`flow: 'overview'`, no kinds) is the default for a bare `/marketplace` and for `?category=all`.
+  - `MarketplaceOverview` is one strip per family (`STRIPS` registry data), each with "See all". Its CTA builds on the canvas.
+- **DRY along the way.**
+  - `TalentCard` is extracted from the page client and shared with `TalentPreview`.
+  - `StartupPreview` is extracted from `StartupDirectoryTeaser`, which now composes it.
+  - `CreationsSection` takes a `limit`.
+- **Spec.** PRD 33 and 33a now use one slug, `session-replay` (`SESSION_REPLAY_SLUG`), for the listing, the landing URL and the `LISTING_LANDINGS` key, where they had disagreed (`insights` vs `session-replay`).
+- i18n ×5 (`marketplace.family.all|publishAll|seeAll|note.all`, `marketplace.builtinAgents.*`). Styles use theme tokens and grids that collapse to one column on a narrow screen.
+
+## ✅ RESOLVED 2026-10-11 — Session replay, heatmaps and live visitors — full S0–S8 launch (frontend 2026.10.42 · api 2026.10.34 · replay-sdk 2026.10.1)
+
+S0 consolidation merged `GuestSessionsPanel` and `VisitorFlowPanel` into Growth ▸ Insights with one `VisitorPanel` and one `StatTile`. S1 built the data plane (R2 chunks + transactional tables). S2 shipped the `replay-sdk` with a self-updating loader served from CDN at `cdn.builderforce.ai`. S3 dogfooded on builderforce.ai. S4 delivered heatmaps. S5 added live and flow links. S6 wired free capability install and prepaid recording packs (`ONE_OFF_SETTLERS` + `ledger_entries` denomination). S7 added buyer surfaces (loader injection into hosted apps, canvas Measure ▸ Visitors surface). S8 shipped:
+
+- **Release note 1211:** "Watch what visitors do — session replay & heatmaps" (frontend 2026.10.42).
+- **Blog post:** "See why visitors leave — not just that they left" in all five locales (en/de/es/fr/zh).
+- **Catalog entries:** `blog.posts.see-why-visitors-leave` in all five message catalogs.
+- **Methodology:** Added to `seo.ts` `methodology` set as the fifth close-the-loop article.
+- **Tests:** `check:blog-index` passes, i18n parity tests pass, message catalog parity tests pass.
+- **Live runbook:** Not executed — requires Stripe secrets, webhook registration, and an operator to run the real-payment verification steps per 33a §10.3.
+
+**Still requires operator action:**
+- Deploy api + frontend + publish-cdn (S8.1).
+- Dogfood customer #1 with legal disclosure + `replay.recordSignedIn=true` (S8.2).
+- Run the full purchase/refund flow with real Stripe keys (S8.3–S8.7).
+- Execute method smoke test with proof grading (S8.9).
+- Run prescriptions and page review on an external fixture (S8.10–S8.11).
+
+**Related tickets:** S0→S7 (2772, 2860, 2862, 2861, 2863, 2864, 2865, 2866).
+
+---
+
 ## ✅ RESOLVED 2026-10-11 — A message reaches an agent that is waiting on its sub-agents; the sub-agents strip collapses (VSIX 2026.10.23 · 2026.10.24)
 
 - **A message pressed with Enter queued behind a waiting agent.** While the chat's run sat in `wait_agents`, a typed message joined the queue and waited for the whole run to end. Now `sendOrQueue` steers it into the run when `isWaitingOnSubagents(conv.activity)`, the same as Steer now, and the host's `registry.interrupt` ends the wait. The user's capture was on 2026.10.21, which predates the interrupt (a reload was pending).

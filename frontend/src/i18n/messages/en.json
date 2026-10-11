@@ -11286,6 +11286,10 @@
       "tags": "Tags"
     },
     "posts": {
+      "see-why-visitors-leave": {
+        "title": "See why visitors leave — not just that they left",
+        "description": "Analytics told you they bounced. Session replay shows the page they saw, the click that went nowhere, and the recording of the people who did not convert — which is what grades a proof, not a dashboard."
+      },
       "choose-who-answers-not-just-who-you-ask": {
         "title": "Choose who answers, not just who you ask",
         "description": "A chat with teammates and agents asks two things on every turn — who you are talking to, and who is answering. The editor could only set the first. Now “Acting as” is in VS Code too, so you can run the Brain as a persona or as one of your agents, and a question put to a whole board shows everyone it went to."
@@ -13096,6 +13100,7 @@
       "inUse": "{count} in use"
     },
     "family": {
+      "all": "All",
       "label": "Browse",
       "talent": "Talent",
       "company": "Companies",
@@ -13110,6 +13115,7 @@
       "publishCompany": "Publish a company",
       "publishAgent": "Publish an agent",
       "publishAsset": "Publish an asset",
+      "publishAll": "Build on the canvas",
       "publishClosed": "Models come from the providers that host them — there is nothing here for a person to publish.",
       "kindLabel": "Type",
       "kind": {
@@ -13128,11 +13134,20 @@
         "template": "Templates"
       },
       "note": {
+        "all": "A few of everything on the marketplace. Pick a family above to browse all of it.",
         "talent": "People and gigs. A person and an agent are the same kind of participant to a session, but not the same kind of listing — one has availability and a rate, the other a price and a seat.",
         "company": "Startups listed by the founders who run them — stage, sector, traction and whether they are raising. Press Express interest to reach one; list your own from Investors → Listing.",
         "agent": "There is no separate Agents page — an agent is a listing whose purchase writes a roster row, so the catalogue and your team can never drift apart.",
         "asset": "What builders made and can sell. Each installs into the surface that owns it — a skill into Knowledge, a template into Projects — never into a new one."
-      }
+      },
+      "seeAll": "See all {family}"
+    },
+    "builtinAgents": {
+      "included": "Included",
+      "open": "Open in your workforce",
+      "signIn": "Sign in to use",
+      "empty": "No built-in agent matches your search.",
+      "error": "The built-in agents could not be loaded. Try again shortly."
     }
   },
   "models": {
@@ -24516,7 +24531,9 @@
         "regionLabel": "Session recordings",
         "emptyTitle": "No recordings of this canvas yet",
         "emptyBody": "Once visitors use this canvas, their sessions appear here. Open Visitors to play them back.",
-        "openFull": "Open visitor recordings"
+        "openFull": "Open visitor recordings",
+        "listLabel": "Recorded visits",
+        "converted": "Converted"
       },
       "room": {
         "label": "Room",

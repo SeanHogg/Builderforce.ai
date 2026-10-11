@@ -11286,6 +11286,10 @@
       "tags": "Etiquetas"
     },
     "posts": {
+      "see-why-visitors-leave": {
+        "title": "Vea por qué se van los visitantes — no solo que se fueron",
+        "description": "La analítica le dijo que rebotaron. La repetición de sesión muestra la página que vieron, el clic que no fue a ningún lado, y la grabación de quienes no convirtieron — eso es lo que califica una prueba, no un panel."
+      },
       "choose-who-answers-not-just-who-you-ask": {
         "title": "Elige quién responde, no solo a quién preguntas",
         "description": "Un chat con compañeros y agentes plantea dos cosas en cada turno: con quién hablas y quién responde. En el editor solo se podía fijar la primera. Ahora «Actuando como» también está en VS Code, así que puedes hacer que el Brain responda como una persona o como uno de tus agentes, y una pregunta a todo el tablero muestra a todos los que la recibieron."
@@ -13096,6 +13100,7 @@
       "inUse": "{count} en uso"
     },
     "family": {
+      "all": "Todo",
       "label": "Explorar",
       "talent": "Talento",
       "company": "Empresas",
@@ -13110,6 +13115,7 @@
       "publishCompany": "Publicar una empresa",
       "publishAgent": "Publicar un agente",
       "publishAsset": "Publicar un recurso",
+      "publishAll": "Crear en el lienzo",
       "publishClosed": "Los modelos vienen de los proveedores que los alojan: aquí no hay nada que una persona pueda publicar.",
       "kindLabel": "Tipo",
       "kind": {
@@ -13128,11 +13134,20 @@
         "template": "Plantillas"
       },
       "note": {
+        "all": "Un poco de todo lo que hay en el marketplace. Elige una familia arriba para verla completa.",
         "talent": "Personas y encargos. Para una sesión, una persona y un agente son el mismo tipo de participante, pero no el mismo tipo de anuncio: una tiene disponibilidad y tarifa; el otro, precio y puesto.",
         "company": "Startups publicadas por los fundadores que las dirigen: etapa, sector, tracción y si están levantando capital. Pulsa Expresar interés para contactar con una; publica la tuya desde Inversores → Ficha.",
         "agent": "No hay una página de Agentes aparte: un agente es un anuncio cuya compra escribe una fila en tu equipo, así que catálogo y equipo nunca se separan.",
         "asset": "Lo que crean los constructores y pueden vender. Cada recurso se instala en la superficie que lo posee —una habilidad en Conocimiento, una plantilla en Proyectos— nunca en una nueva."
-      }
+      },
+      "seeAll": "Ver todo: {family}"
+    },
+    "builtinAgents": {
+      "included": "Incluido",
+      "open": "Abrir en tu equipo",
+      "signIn": "Inicia sesión para usarlo",
+      "empty": "Ningún agente integrado coincide con tu búsqueda.",
+      "error": "No se pudieron cargar los agentes integrados. Inténtalo de nuevo en breve."
     }
   },
   "models": {
@@ -24516,7 +24531,9 @@
         "regionLabel": "Grabaciones de sesión",
         "emptyTitle": "Aún no hay grabaciones de este lienzo",
         "emptyBody": "Cuando los visitantes usen este lienzo, sus sesiones aparecerán aquí. Abre Visitantes para reproducirlas.",
-        "openFull": "Abrir grabaciones de visitantes"
+        "openFull": "Abrir grabaciones de visitantes",
+        "listLabel": "Visitas grabadas",
+        "converted": "Convertido"
       },
       "room": {
         "label": "Sala",

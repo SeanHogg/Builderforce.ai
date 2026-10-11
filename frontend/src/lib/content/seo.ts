@@ -224,6 +224,8 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     // The fifth: where the loop CLOSES. The other four describe the method; this
     // one describes what happens to the number it told you to write down.
     'grade-the-proof-and-close-the-loop',
+    // Measure's grade is a visit you can watch, not a dashboard.
+    'see-why-visitors-leave',
   ],
   // Per-competitor leaf pages — keyed by the competitor column key. Each points
   // at its dedicated head-to-head post first, then the roundup for context.

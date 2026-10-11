@@ -11286,6 +11286,10 @@
       "tags": "Étiquettes"
     },
     "posts": {
+      "see-why-visitors-leave": {
+        "title": "Voyez pourquoi les visiteurs partent — pas seulement qu’ils sont partis",
+        "description": "L’analytique vous a dit qu’ils ont rebondi. La relecture de session montre la page qu’ils ont vue, le clic qui n’est allé nulle part, et l’enregistrement de ceux qui n’ont pas converti — c’est cela qui note une preuve, pas un tableau de bord."
+      },
       "choose-who-answers-not-just-who-you-ask": {
         "title": "Choisissez qui répond, pas seulement à qui vous parlez",
         "description": "Une conversation avec des coéquipiers et des agents pose deux questions à chaque tour : à qui vous parlez, et qui vous répond. L’éditeur ne permettait de régler que la première. « En tant que » arrive maintenant dans VS Code : faites répondre le Brain en tant que persona ou en tant que l’un de vos agents, et une question posée à tout le tableau montre tous ceux à qui elle a été adressée."
@@ -13096,6 +13100,7 @@
       "inUse": "{count} en cours d'utilisation"
     },
     "family": {
+      "all": "Tout",
       "label": "Parcourir",
       "talent": "Talents",
       "company": "Entreprises",
@@ -13110,6 +13115,7 @@
       "publishCompany": "Publier une entreprise",
       "publishAgent": "Publier un agent",
       "publishAsset": "Publier une ressource",
+      "publishAll": "Créer sur le canevas",
       "publishClosed": "Les modèles proviennent des fournisseurs qui les hébergent — il n'y a rien à publier ici.",
       "kindLabel": "Type",
       "kind": {
@@ -13128,11 +13134,20 @@
         "template": "Modèles"
       },
       "note": {
+        "all": "Un aperçu de tout ce que propose la marketplace. Choisissez une famille ci-dessus pour tout parcourir.",
         "talent": "Des personnes et des missions. Pour une session, une personne et un agent sont le même type de participant, mais pas le même type d’annonce : l’une a des disponibilités et un tarif, l’autre un prix et un siège.",
         "company": "Startups répertoriées par les fondateurs qui les dirigent — stade, secteur, traction et si elles lèvent des fonds. Cliquez sur Exprimer un intérêt pour contacter l'une d'elles ; répertoriez la vôtre depuis Investisseurs → Fiche.",
         "agent": "Il n’y a pas de page Agents distincte : un agent est une annonce dont l’achat écrit une ligne dans votre équipe, donc le catalogue et l’équipe ne peuvent pas diverger.",
         "asset": "Ce que les créateurs fabriquent et peuvent vendre. Chaque ressource s’installe dans la surface qui la possède — une compétence dans Connaissances, un modèle dans Projets — jamais dans une nouvelle."
-      }
+      },
+      "seeAll": "Tout voir : {family}"
+    },
+    "builtinAgents": {
+      "included": "Inclus",
+      "open": "Ouvrir dans votre équipe",
+      "signIn": "Connectez-vous pour l’utiliser",
+      "empty": "Aucun agent intégré ne correspond à votre recherche.",
+      "error": "Impossible de charger les agents intégrés. Réessayez dans un instant."
     }
   },
   "models": {
@@ -24516,7 +24531,9 @@
         "regionLabel": "Enregistrements de session",
         "emptyTitle": "Pas encore d’enregistrements de ce canevas",
         "emptyBody": "Lorsque des visiteurs utiliseront ce canevas, leurs sessions apparaîtront ici. Ouvrez Visiteurs pour les lire.",
-        "openFull": "Ouvrir les enregistrements des visiteurs"
+        "openFull": "Ouvrir les enregistrements des visiteurs",
+        "listLabel": "Visites enregistrées",
+        "converted": "Converti"
       },
       "room": {
         "label": "Salle",

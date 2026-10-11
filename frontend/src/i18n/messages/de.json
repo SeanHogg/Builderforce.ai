@@ -11286,6 +11286,10 @@
       "tags": "Schlagwörter"
     },
     "posts": {
+      "see-why-visitors-leave": {
+        "title": "Sehen Sie, warum Besucher gehen — nicht nur, dass sie gegangen sind",
+        "description": "Die Analytik sagte Ihnen, dass sie abgesprungen sind. Session Replay zeigt die Seite, die sie sahen, den Klick, der ins Leere ging, und die Aufnahme der Leute, die nicht konvertiert sind — das benotet einen Beweis, kein Dashboard."
+      },
       "choose-who-answers-not-just-who-you-ask": {
         "title": "Wählen Sie, wer antwortet – nicht nur, wen Sie fragen",
         "description": "Ein Chat mit Teammitgliedern und Agenten stellt bei jedem Zug zwei Fragen – mit wem Sie sprechen und wer antwortet. Im Editor ließ sich bisher nur die erste festlegen. Jetzt gibt es „Handelt als“ auch in VS Code: Lassen Sie das Brain als Persona oder als einen Ihrer Agenten antworten, und eine Frage an das ganze Board zeigt alle, an die sie ging."
@@ -13096,6 +13100,7 @@
       "inUse": "{count} in Verwendung"
     },
     "family": {
+      "all": "Alle",
       "label": "Stöbern",
       "talent": "Talente",
       "company": "Unternehmen",
@@ -13110,6 +13115,7 @@
       "publishCompany": "Unternehmen veröffentlichen",
       "publishAgent": "Agent veröffentlichen",
       "publishAsset": "Ressource veröffentlichen",
+      "publishAll": "Auf der Arbeitsfläche erstellen",
       "publishClosed": "Modelle stammen von den Anbietern, die sie hosten — hier gibt es nichts, was eine Person veröffentlichen könnte.",
       "kindLabel": "Typ",
       "kind": {
@@ -13128,11 +13134,20 @@
         "template": "Vorlagen"
       },
       "note": {
+        "all": "Von allem etwas aus dem Marktplatz. Wähle oben eine Familie, um alles davon zu sehen.",
         "talent": "Menschen und Aufträge. Für eine Sitzung sind Mensch und Agent dieselbe Art Teilnehmer, aber nicht dieselbe Art Eintrag: der eine hat Verfügbarkeit und Stundensatz, der andere Preis und Sitz.",
         "company": "Startups, die von den Gründerinnen und Gründern selbst eingetragen wurden — Phase, Branche, Traktion und ob sie gerade Kapital aufnehmen. Klicke auf Interesse bekunden, um eines zu erreichen; trage dein eigenes über Investoren → Eintrag ein.",
         "agent": "Es gibt keine eigene Agenten-Seite: Ein Agent ist ein Eintrag, dessen Kauf eine Zeile in Ihrem Team schreibt — Katalog und Team können also nicht auseinanderlaufen.",
         "asset": "Was Bauende erstellen und verkaufen können. Jede Ressource wird in die Oberfläche installiert, der sie gehört — ein Skill in Wissen, eine Vorlage in Projekte — nie in eine neue."
-      }
+      },
+      "seeAll": "Alle anzeigen: {family}"
+    },
+    "builtinAgents": {
+      "included": "Inklusive",
+      "open": "In deinem Team öffnen",
+      "signIn": "Zum Nutzen anmelden",
+      "empty": "Kein integrierter Agent passt zu deiner Suche.",
+      "error": "Die integrierten Agenten konnten nicht geladen werden. Versuche es gleich noch einmal."
     }
   },
   "models": {
@@ -24516,7 +24531,9 @@
         "regionLabel": "Sitzungsaufzeichnungen",
         "emptyTitle": "Noch keine Aufzeichnungen dieser Leinwand",
         "emptyBody": "Sobald Besucher diese Leinwand nutzen, erscheinen ihre Sitzungen hier. Öffnen Sie Besucher, um sie abzuspielen.",
-        "openFull": "Besucheraufzeichnungen öffnen"
+        "openFull": "Besucheraufzeichnungen öffnen",
+        "listLabel": "Aufgezeichnete Besuche",
+        "converted": "Konvertiert"
       },
       "room": {
         "label": "Raum",
