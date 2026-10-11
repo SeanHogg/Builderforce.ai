@@ -15,7 +15,7 @@ import { StreamInterruptedError } from './streamChatCompletion';
 import { isCoderReask } from './roleHandoff';
 import { isStoppedTurn } from './stoppedTurn';
 import { parseMessageProvenance } from './provenance';
-import { DEFAULT_TOOL_FAILURE_STREAK, parseAskUser, selectPendingAskUser, answerTextOf, thoughtTextOf } from '@builderforce/agent-loop';
+import { DEFAULT_TOOL_FAILURE_STREAK, parseAskUser, selectPendingAskUser, answerTextOf, thoughtTextOf, isMidTurnMetadata } from '@builderforce/agent-loop';
 
 // These tests pin the memory-eviction contract. They assume MAX_CELLS = 50
 // (see brainRunStore.ts); update the literals if that cap changes.
@@ -1212,5 +1212,45 @@ describe('the reasoning channel a run persists', () => {
       userTurn: 'how do I strip reasoning',
     });
     expect(rec.sent).toEqual([text]);
+  });
+});
+
+describe('mid-turn text is marked, so the Evermind learn gate never trains on it', () => {
+  type Sent = { role: string; content: string; metadata?: string };
+  const READ_TOOL = [{ type: 'function' as const, function: { name: 'read_file', description: 'read', parameters: {} } }];
+
+  it('tags the block a turn says before its tool calls, and leaves the final answer untagged', async () => {
+    const sent: Sent[] = [];
+    const persistence = {
+      sendMessages: async (chatId: number, msgs: Sent[]) => {
+        sent.push(...msgs);
+        return msgs.map((m, i) => ({ id: 3000 + sent.length + i, chatId, createdAt: '', ...m }));
+      },
+    } as never;
+    let turn = 0;
+    const served = { resolvedModel: 'direct/minimax/MiniMax-M2.7', account: 'own' };
+    const stream: BrainStreamFn = async () => {
+      turn += 1;
+      if (turn === 1) {
+        return { text: 'Let me check whether the hook is already imported.', toolCalls: [{ id: 'c1', name: 'read_file', args: JSON.stringify({ path: 'a.ts' }) }], finishReason: 'tool_calls', ...served };
+      }
+      return { text: 'The hook was not imported; the import is now added and the file compiles.', toolCalls: [], finishReason: 'stop', ...served };
+    };
+    await startRun(4300, {
+      resolvedSystemPrompt: 'sys',
+      tools: READ_TOOL,
+      runTool: async () => ({ ok: true, content: 'body' }),
+      stream,
+      persistence,
+      userTurn: 'add the import',
+    });
+
+    const assistant = sent.filter((m) => m.role === 'assistant');
+    const midTurn = assistant.find((m) => m.content.includes('Let me check'));
+    const answer = assistant.find((m) => m.content.includes('import is now added'));
+    expect(midTurn && isMidTurnMetadata(midTurn.metadata)).toBe(true);
+    // The tag rides WITH the provenance, not instead of it.
+    expect(parseMessageProvenance(midTurn!)).toEqual({ model: 'direct/minimax/MiniMax-M2.7', account: 'own' });
+    expect(answer && isMidTurnMetadata(answer.metadata)).toBe(false);
   });
 });

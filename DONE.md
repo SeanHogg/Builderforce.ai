@@ -1,3 +1,17 @@
+## ✅ RESOLVED 2026-10-11 — The IDE agent stops teaching its Evermind its own play-by-play, and checks imports and verify commands before it guesses (brain-embedded 2026.10.6 · VSIX 2026.10.7)
+
+The project #30 Evermind diagnostics showed held-out loss REGRESSED 2.72 → 3.24, with 9 of the last 24 learned memories reading as mid-turn narration. One IDE run (2026-09-27, ticket #2754) minted six head versions in ten minutes, each learned from text like "Let me check if X is imported:".
+
+- **Root cause (structural):** `brainRunStore` saves every turn's pre-tool-call text as its own durable `assistant` message, so the user keeps what streamed in. That message went through the same persist path as the final answer, and `learnFromPersistedTurns` trained on every one of them.
+  - Fix: `persistMidTurnText` is now the one writer for both mid-turn sites (pre-tool-call narration, and the text kept on a stall re-prompt). It tags the row `midTurn: true` alongside its provenance, using `MID_TURN_META_KEY` from `@builderforce/agent-loop` (`turnPhase.ts`).
+  - The learn gate drops tagged rows before it judges the batch. A narration-only batch reads as `too-short`, which no surface renders.
+  - The text-based `stripRunNarration` (same day, separate commit a4257b943) remains the second line of defence.
+- **Agent behaviour:** the learned runs showed two avoidable failures: running a `.ts` file with `node` to "test" it, and importing `fetch` from a module that never exported it, which cost four turns to undo. The IDE persona now covers both:
+  - Verify commands come from the changed package's own `package.json` scripts. TypeScript is type-checked, never executed.
+  - Before importing a name, confirm the module exports it (`file_outline` / `find_symbol`). Never import a runtime global.
+- Tests: `packages/agent-loop/src/turnPhase.test.ts` and `brain-embedded/src/brainRunStore.test.ts` ("mid-turn text is marked…"). brain-embedded and VS Code typechecks are clean. VSIX 2026.10.7 is packaged and installed.
+- Still on the operator: the head stays quarantined (v813 coherence probe) and no teacher is pinned. Readiness → re-enable, or pinning a frontier teacher, is an operator action in the Evermind panel.
+
 ## ✅ RESOLVED 2026-10-10 — Public marketplace listings are in the sitemap
 
 - **`/marketplace/listing/<slug>` pages were never submitted to search engines.** `listPublicListingSlugs()` in `frontend/src/lib/marketplaceSeo.ts` reads `/api/listings` (four pages of 48), de-dupes the slugs, and returns `[]` when the API can't be reached. `sitemap.ts` emits each slug as weekly, priority 0.6. Tests are in `marketplaceSeo.test.ts`. Shipped in `a31eea7b1`.

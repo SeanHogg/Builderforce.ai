@@ -85,7 +85,7 @@ import {
 } from '@builderforce/agent-stall';
 import { resolveToolAlias } from '@builderforce/agent-tools';
 import { turnInterruption } from './finishReason.js';
-import { runAgentLoop, openAiChatCodec, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, splitVendorReasoning, canonicalReasoningText, replayTextOf, malformedCallOutcome, malformedCallLabel, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
+import { runAgentLoop, openAiChatCodec, MID_TURN_META_KEY, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, splitVendorReasoning, canonicalReasoningText, replayTextOf, malformedCallOutcome, malformedCallLabel, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
 import { formatEvermindMemoryBlock, countReconciledMemories, type EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import type { EvermindRunHooks, MemoryFirstAnswer } from './evermindMemory';
 import { windowed, buildWorkingTranscript, stillInWorkingContext, summarizeMiddle, type CompactMemo } from './workingTranscript';
@@ -102,9 +102,9 @@ import { windowed, buildWorkingTranscript, stillInWorkingContext, summarizeMiddl
  * Shared by both the mid-run narration and the final-answer persist so the chip
  * shows on every durable turn.
  */
-function provenanceMetadata(result: StreamChatResult, requested?: string): string | undefined {
+function provenanceMetadata(result: StreamChatResult, requested?: string, base?: Record<string, unknown>): string | undefined {
   const model = result.resolvedModel;
-  if (!model) return undefined;
+  if (!model) return withProvenanceMetadata(null, base);
   const account = asProvenanceAccount(result.account);
   // Persist requested≠actual so a copied transcript can stamp failover on the assistant
   // heading itself — not only in the aggregate diagnostics. Does not fix Grok tool
@@ -114,7 +114,32 @@ function provenanceMetadata(result: StreamChatResult, requested?: string): strin
     model,
     ...(account ? { account } : {}),
     ...(asked ? { requestedModel: asked } : {}),
-  });
+  }, base);
+}
+
+/**
+ * Commit what a turn SAID before its tool calls (or before a re-prompt) as its own
+ * durable assistant block, so the next turn's stream cannot erase what the user just
+ * read. Empty (pure tool-call) turns persist nothing.
+ *
+ * The block is marked mid-turn (`MID_TURN_META_KEY`): it is persisted through the same
+ * path as the final answer, and the server's learn-on-persist gate trained the project
+ * Evermind on every one of them — "Let me check if X is imported:" became a learned
+ * exemplar, one head version per step. The mark keeps it out of the learn batch; the
+ * run's final answer is the only assistant text it contributes.
+ */
+async function persistMidTurnText(
+  chatId: number,
+  c: RunCell,
+  persistence: BrainRunPersistence,
+  result: StreamChatResult,
+  requested?: string,
+): Promise<void> {
+  const text = canonicalTurnText(result.text);
+  if (!text) return;
+  const metadata = provenanceMetadata(result, requested, { [MID_TURN_META_KEY]: true });
+  const [msg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: text, ...(metadata ? { metadata } : {}) }]);
+  recordAppended(c, msg);
 }
 
 // Announced-but-untaken tool call detection lives in `@builderforce/agent-stall` —
@@ -1944,14 +1969,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // before we clear the streaming buffer for the next iteration. Without
       // this, the narration only lived in the transient `streamingText` bubble,
       // and the next turn's stream reused that same bubble — erasing what the
-      // user just read. Each turn that says something now gets a durable block;
-      // empty (pure tool-call) turns persist nothing.
-      const narration = canonicalTurnText(result.text);
-      if (narration) {
-        const meta = provenanceMetadata(result, requested);
-        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: narration, ...(meta ? { metadata: meta } : {}) }]);
-        recordAppended(c, narrationMsg);
-      }
+      // user just read.
+      await persistMidTurnText(chatId, c, persistence, result, requested);
       c.streamingText = '';
       emit(c);
       return undefined;
@@ -2195,12 +2214,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
        * by every re-prompt below so they cannot drift on what "re-prompted" leaves behind.
        */
       const requeueWithNudge = async (nudge: string): Promise<void> => {
-        const narration = canonicalTurnText(result.text);
-        if (narration) {
-          const meta = provenanceMetadata(result, requested);
-          const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: narration, ...(meta ? { metadata: meta } : {}) }]);
-          recordAppended(c, narrationMsg);
-        }
+        await persistMidTurnText(chatId, c, persistence, result, requested);
         convo.push({ role: 'assistant', content: replayTextOf(result.text) });
         convo.push({ role: 'user', content: nudge });
       };
