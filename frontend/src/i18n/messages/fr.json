@@ -14168,7 +14168,12 @@
       "metricReferrer": "Référent",
       "metricFirstSeen": "Première visite",
       "metricLastSeen": "Dernière visite",
-      "metricLastSurface": "Dernière surface"
+      "metricLastSurface": "Dernière surface",
+      "erase": "Effacer les prompts",
+      "eraseConfirm": "Effacer tout ce que ce visiteur a saisi ? Cette action est irréversible.",
+      "eraseDone": "{count} lignes effacées.",
+      "eraseFailed": "Impossible d'effacer les prompts de ce visiteur.",
+      "eraseAria": "Effacer les prompts du visiteur {visitor}"
     },
     "creationSessions": {
       "title": "Sessions de création",
@@ -24488,6 +24493,15 @@
         "openFull": "Ouvrir le tableau de bord complet",
         "thisCanvas": "Ce canevas",
         "noBoardMetric": "Aucune métrique sur ce tableau pour l’instant"
+      },
+      "sessions": {
+        "label": "Sessions",
+        "enter": "Voir qui a utilisé ceci",
+        "active": "Vous êtes dans Sessions",
+        "regionLabel": "Enregistrements de session",
+        "emptyTitle": "Pas encore d’enregistrements de ce canevas",
+        "emptyBody": "Lorsque des visiteurs utiliseront ce canevas, leurs sessions apparaîtront ici. Ouvrez Visiteurs pour les lire.",
+        "openFull": "Ouvrir les enregistrements des visiteurs"
       },
       "room": {
         "label": "Salle",

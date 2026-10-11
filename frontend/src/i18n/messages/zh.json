@@ -14168,7 +14168,12 @@
       "metricReferrer": "来源",
       "metricFirstSeen": "首次访问",
       "metricLastSeen": "最近访问",
-      "metricLastSurface": "最近界面"
+      "metricLastSurface": "最近界面",
+      "erase": "清除提示词",
+      "eraseConfirm": "清除该访客输入的全部内容？此操作无法撤销。",
+      "eraseDone": "已清除 {count} 条。",
+      "eraseFailed": "无法清除该访客的提示词。",
+      "eraseAria": "清除访客 {visitor} 的提示词"
     },
     "creationSessions": {
       "title": "创作会话",
@@ -24488,6 +24493,15 @@
         "openFull": "打开完整看板",
         "thisCanvas": "此画布",
         "noBoardMetric": "此看板上还没有指标"
+      },
+      "sessions": {
+        "label": "会话",
+        "enter": "查看谁用过这个画布",
+        "active": "你正在查看会话",
+        "regionLabel": "会话录像",
+        "emptyTitle": "还没有这个画布的录像",
+        "emptyBody": "访客使用这个画布后，他们的会话会出现在这里。打开访客即可回放。",
+        "openFull": "打开访客录像"
       },
       "room": {
         "label": "会议室",

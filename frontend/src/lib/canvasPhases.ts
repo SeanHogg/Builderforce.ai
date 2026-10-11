@@ -84,8 +84,8 @@ const PHASE_SURFACES: Readonly<Record<CanvasPhase, readonly CanvasSurfaceId[]>> 
   idea: ['chat', 'graph', 'ideas', 'room'],
   make: ['chat', 'graph', 'ideas', 'room', 'app'],
   run: ['chat', 'graph', 'ideas', 'room', 'app', 'operate'],
-  measure: ['chat', 'graph', 'ideas', 'room', 'app', 'operate', 'insights'],
-  reach: ['chat', 'graph', 'ideas', 'room', 'app', 'operate', 'insights', 'launch'],
+  measure: ['chat', 'graph', 'ideas', 'room', 'app', 'operate', 'insights', 'sessions'],
+  reach: ['chat', 'graph', 'ideas', 'room', 'app', 'operate', 'insights', 'sessions', 'launch'],
 };
 
 export function surfacesForPhase(phase: CanvasPhase): readonly CanvasSurfaceId[] {

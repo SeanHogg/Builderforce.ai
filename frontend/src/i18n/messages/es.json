@@ -14168,7 +14168,12 @@
       "metricReferrer": "Referente",
       "metricFirstSeen": "Primera visita",
       "metricLastSeen": "Última visita",
-      "metricLastSurface": "Última superficie"
+      "metricLastSurface": "Última superficie",
+      "erase": "Borrar prompts",
+      "eraseConfirm": "¿Borrar todo lo que escribió este visitante? Esta acción no se puede deshacer.",
+      "eraseDone": "Se borraron {count} filas.",
+      "eraseFailed": "No se pudieron borrar los prompts de este visitante.",
+      "eraseAria": "Borrar prompts del visitante {visitor}"
     },
     "creationSessions": {
       "title": "Sesiones de creación",
@@ -14966,6 +14971,13 @@
       "gradedColumn": "Calificadas",
       "gradedRateColumn": "Tasa calificada",
       "noData": "No hay sesiones en este periodo."
+    },
+    "insights": {
+      "title": "Visitantes",
+      "subtitle": "El embudo anónimo y las personas en él — flujo, leads, una grabación.",
+      "tabJourney": "Recorrido",
+      "tabLead": "Lead",
+      "crumb": "Visitantes"
     },
     "visitorFlow": {
       "title": "Flujo de visitantes",
@@ -24488,6 +24500,15 @@
         "openFull": "Abrir panel completo",
         "thisCanvas": "Este lienzo",
         "noBoardMetric": "Todavía no hay métricas en este tablero"
+      },
+      "sessions": {
+        "label": "Sesiones",
+        "enter": "Ver quién usó esto",
+        "active": "Estás en Sesiones",
+        "regionLabel": "Grabaciones de sesión",
+        "emptyTitle": "Aún no hay grabaciones de este lienzo",
+        "emptyBody": "Cuando los visitantes usen este lienzo, sus sesiones aparecerán aquí. Abre Visitantes para reproducirlas.",
+        "openFull": "Abrir grabaciones de visitantes"
       },
       "room": {
         "label": "Sala",

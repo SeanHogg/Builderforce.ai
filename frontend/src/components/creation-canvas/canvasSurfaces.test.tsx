@@ -93,7 +93,7 @@ describe('canvas surface registry', () => {
     // founder writes into before there is anything to meet about, run or measure.
     // `operate` (Run) and `launch` (Reach) are PRD 32's two compositions: each stands in
     // its phase's slot of the arc, so the switcher reads left to right as the method does.
-    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'ideas', 'room', 'app', 'operate', 'insights', 'launch']);
+    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'ideas', 'room', 'app', 'operate', 'insights', 'sessions', 'launch']);
   });
 
   /**
@@ -101,8 +101,8 @@ describe('canvas surface registry', () => {
    * so they are board surfaces like App: no card to enter them from, and a place a
    * builder chose to be, so coming back lands them in it.
    */
-  it('registers Operate and Launch as board-scoped places that persist', () => {
-    for (const id of ['operate', 'launch'] as const) {
+  it('registers Operate, Insights, Sessions and Launch as board-scoped places that persist', () => {
+    for (const id of ['operate', 'insights', 'sessions', 'launch'] as const) {
       const def = canvasSurfaceDefinition(id);
       expect(def.id, id).toBe(id);
       expect(def.scope, id).toBe('board');
@@ -119,6 +119,8 @@ describe('canvas surface registry', () => {
   it('offers Operate from Run onward and Launch only at Reach', () => {
     const offering = (id: CanvasSurfaceId) => CANVAS_PHASES.filter((phase) => surfacesForPhase(phase).includes(id));
     expect(offering('operate')).toEqual(['run', 'measure', 'reach']);
+    expect(offering('insights')).toEqual(['measure', 'reach']);
+    expect(offering('sessions')).toEqual(['measure', 'reach']);
     expect(offering('launch')).toEqual(['reach']);
     // And App, since PRD 32, from Make: in Idea it could only invite building untested.
     expect(offering('app')).toEqual(['make', 'run', 'measure', 'reach']);

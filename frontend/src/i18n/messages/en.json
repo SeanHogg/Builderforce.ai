@@ -13914,7 +13914,8 @@
       "cron": "Scheduled sweeps",
       "broadcasts": "Broadcasts",
       "llmRatings": "Ratings",
-      "visitorFlow": "Visitor flow"
+      "visitorFlow": "Visitor flow",
+      "visitors": "Visitors"
     },
     "common": {
       "loading": "Loading…",
@@ -14168,7 +14169,12 @@
       "metricReferrer": "Referrer",
       "metricFirstSeen": "First seen",
       "metricLastSeen": "Last seen",
-      "metricLastSurface": "Last surface"
+      "metricLastSurface": "Last surface",
+      "erase": "Erase prompts",
+      "eraseConfirm": "Erase everything this visitor typed? This cannot be undone.",
+      "eraseDone": "Erased {count} rows.",
+      "eraseFailed": "Could not erase this visitor's prompts.",
+      "eraseAria": "Erase prompts for visitor {visitor}"
     },
     "creationSessions": {
       "title": "Creation Sessions",
@@ -14966,6 +14972,13 @@
       "gradedColumn": "Graded",
       "gradedRateColumn": "Graded rate",
       "noData": "No sessions in this period."
+    },
+    "insights": {
+      "title": "Visitors",
+      "subtitle": "The anonymous funnel and the people in it — flow, leads, one recording.",
+      "tabJourney": "Journey",
+      "tabLead": "Lead",
+      "crumb": "Visitors"
     },
     "visitorFlow": {
       "title": "Visitor flow",
@@ -24488,6 +24501,15 @@
         "openFull": "Open full dashboard",
         "thisCanvas": "This canvas",
         "noBoardMetric": "No metric on this board yet"
+      },
+      "sessions": {
+        "label": "Sessions",
+        "enter": "See who used this",
+        "active": "You are in Sessions",
+        "regionLabel": "Session recordings",
+        "emptyTitle": "No recordings of this canvas yet",
+        "emptyBody": "Once visitors use this canvas, their sessions appear here. Open Visitors to play them back.",
+        "openFull": "Open visitor recordings"
       },
       "room": {
         "label": "Room",

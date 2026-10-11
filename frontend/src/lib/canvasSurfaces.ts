@@ -38,7 +38,7 @@
 
 import type { CanvasComposerIntentId } from './canvasComposerIntents';
 
-export type CanvasSurfaceId = 'chat' | 'graph' | 'ideas' | 'scene3d' | 'app' | 'operate' | 'insights' | 'launch' | 'room' | 'calendar' | 'form' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
+export type CanvasSurfaceId = 'chat' | 'graph' | 'ideas' | 'scene3d' | 'app' | 'operate' | 'insights' | 'sessions' | 'launch' | 'room' | 'calendar' | 'form' | 'page' | 'play' | 'site' | 'timeline' | 'world' | 'facilitate';
 
 /**
  * What a surface is ABOUT.
@@ -200,6 +200,11 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // lifecycle, the App surface's own status) rather than a second editor for either.
   { id: 'operate', scope: 'board', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true, composerIntents: ['ask'] },
   { id: 'insights', scope: 'board', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true, composerIntents: ['ask'] },
+  // Recordings of this canvas — the "watch how people used this" reading. Board-scoped
+  // like Insights: a visit is about the whole session, so there is no card to enter
+  // it from. Offered from Measure (`canvasPhases.ts`) because before anyone has used
+  // the canvas there is nothing to play back.
+  { id: 'sessions', scope: 'board', order: 6.5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true, composerIntents: ['ask'] },
   // The three medium runtimes. Each is a PROMOTION: the editor already existed, squeezed
   // into a node body where the medium's own axis had nowhere to go — a paged document in a
   // card, a playable build behind a bespoke `gameFocus` boolean, and a multi-track edit

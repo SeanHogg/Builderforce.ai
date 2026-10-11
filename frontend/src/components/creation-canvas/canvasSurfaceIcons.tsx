@@ -47,6 +47,7 @@ const SURFACE_ICON: Partial<Record<CanvasSurfaceId, () => React.JSX.Element>> = 
   app: AppSurfaceIcon,
   operate: OperateSurfaceIcon,
   insights: InsightsSurfaceIcon,
+  sessions: SessionsSurfaceIcon,
   launch: LaunchSurfaceIcon,
   room: RoomSurfaceIcon,
   calendar: CalendarSurfaceIcon,
@@ -96,6 +97,14 @@ export function InsightsSurfaceIcon() {
     <rect x="4" y="9.4" width="2.1" height="4.2" rx=".5" fill="currentColor" />
     <rect x="7.6" y="6.6" width="2.1" height="7" rx=".5" fill="currentColor" />
     <rect x="11.2" y="4.1" width="2.1" height="9.5" rx=".5" fill="currentColor" />
+  </svg>;
+}
+
+/** Watch how people used this — a play mark in a frame, small enough for a 16px tab. */
+export function SessionsSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="1.8" y="3.4" width="12.4" height="9.2" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M6.4 6.1v3.8l3.4-1.9z" fill="currentColor" />
   </svg>;
 }
 

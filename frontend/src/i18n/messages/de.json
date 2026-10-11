@@ -14168,7 +14168,12 @@
       "metricReferrer": "Verweis",
       "metricFirstSeen": "Erster Besuch",
       "metricLastSeen": "Letzter Besuch",
-      "metricLastSurface": "Letzte Oberfläche"
+      "metricLastSurface": "Letzte Oberfläche",
+      "erase": "Eingaben löschen",
+      "eraseConfirm": "Alles löschen, was dieser Besucher eingegeben hat? Das kann nicht rückgängig gemacht werden.",
+      "eraseDone": "{count} Zeilen gelöscht.",
+      "eraseFailed": "Die Eingaben dieses Besuchers konnten nicht gelöscht werden.",
+      "eraseAria": "Eingaben des Besuchers {visitor} löschen"
     },
     "creationSessions": {
       "title": "Erstellungssitzungen",
@@ -14966,6 +14971,13 @@
       "gradedColumn": "Bewertet",
       "gradedRateColumn": "Bewertungsquote",
       "noData": "Keine Sitzungen in diesem Zeitraum."
+    },
+    "insights": {
+      "title": "Besucher",
+      "subtitle": "Der anonyme Trichter und die Menschen darin — Fluss, Leads, eine Aufzeichnung.",
+      "tabJourney": "Weg",
+      "tabLead": "Lead",
+      "crumb": "Besucher"
     },
     "visitorFlow": {
       "title": "Besucherfluss",
@@ -24488,6 +24500,15 @@
         "openFull": "Vollständiges Dashboard öffnen",
         "thisCanvas": "Dieses Canvas",
         "noBoardMetric": "Noch keine Kennzahl auf diesem Board"
+      },
+      "sessions": {
+        "label": "Sitzungen",
+        "enter": "Sehen, wer das genutzt hat",
+        "active": "Du bist in Sitzungen",
+        "regionLabel": "Sitzungsaufzeichnungen",
+        "emptyTitle": "Noch keine Aufzeichnungen dieser Leinwand",
+        "emptyBody": "Sobald Besucher diese Leinwand nutzen, erscheinen ihre Sitzungen hier. Öffnen Sie Besucher, um sie abzuspielen.",
+        "openFull": "Besucheraufzeichnungen öffnen"
       },
       "room": {
         "label": "Raum",

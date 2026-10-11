@@ -51,6 +51,7 @@ describe('App starts at Make (PRD 32 · W0)', () => {
     const offeredFrom = (id: string) => CANVAS_PHASES.find((phase) => surfacesForPhase(phase).includes(id as never));
     expect(offeredFrom('operate')).toBe('run');
     expect(offeredFrom('insights')).toBe('measure');
+    expect(offeredFrom('sessions')).toBe('measure');
     expect(offeredFrom('launch')).toBe('reach');
   });
 
@@ -69,7 +70,7 @@ describe('surfacesAddedByPhase — the phone sheet’s "adds …" line', () => {
     expect(surfacesAddedByPhase('idea')).toEqual(['chat', 'graph', 'ideas', 'room']);
     expect(surfacesAddedByPhase('make')).toEqual(['app']);
     expect(surfacesAddedByPhase('run')).toEqual(['operate']);
-    expect(surfacesAddedByPhase('measure')).toEqual(['insights']);
+    expect(surfacesAddedByPhase('measure')).toEqual(['insights', 'sessions']);
     expect(surfacesAddedByPhase('reach')).toEqual(['launch']);
   });
 

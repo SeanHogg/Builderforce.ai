@@ -132,7 +132,7 @@ describe('CanvasSurfaceStrip under a phase', () => {
     rerenderWithPhase(<CanvasSurfaceStrip surface="graph" onChange={vi.fn()} />, { phase: 'run' });
     expect(offered()).toEqual(['Chat', 'Board', 'Ideas', 'Room', 'App', 'Operate']);
     rerenderWithPhase(<CanvasSurfaceStrip surface="graph" onChange={vi.fn()} />, { phase: 'reach' });
-    expect(offered()).toEqual(['Chat', 'Board', 'Ideas', 'Room', 'App', 'Operate', 'Insights', 'Launch']);
+    expect(offered()).toEqual(['Chat', 'Board', 'Ideas', 'Room', 'App', 'Operate', 'Insights', 'Sessions', 'Launch']);
   });
 
   it('draws an icon for every surface it offers, Operate and Launch included', () => {
