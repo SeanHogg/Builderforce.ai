@@ -44,7 +44,7 @@ import {
   type ToolResult,
   writeFileTool,
 } from "@builderforce/agent-tools";
-import { applyStringEdit, filterByGlob } from "@builderforce/agent-tools";
+import { applyStringEdit, editFacts, filterByGlob } from "@builderforce/agent-tools";
 import { buildNodeCapabilityProvider } from "./node-capability-provider.js";
 
 /** The file capabilities both surfaces claim to back. */
@@ -108,9 +108,9 @@ function buildMemoryProvider(files = new Map<string, string>()): CapabilityProvi
         const raw = files.get(norm(path));
         if (raw === undefined) return { ok: false, error: `file not found: ${path}` };
         const r = applyStringEdit(raw, oldString, newString, replaceAll === true);
-        if (!r.ok || r.content === undefined) return { ok: false, error: r.error ?? "edit failed" };
+        if (!r.ok || r.content === undefined) return { ok: false, ...editFacts(r), error: r.error ?? "edit failed" };
         files.set(norm(path), r.content);
-        return { ok: true, change: "modified", replaced: r.replaced };
+        return { ok: true, change: "modified", ...editFacts(r) };
       },
       async deleteFile(path): Promise<RepoDeleteResult> {
         if (outside(path)) return escaped(path);
