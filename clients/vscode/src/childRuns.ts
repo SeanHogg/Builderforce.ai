@@ -62,6 +62,8 @@ interface Waiter {
   /** Handles waited for; empty = every child of the owner live when the wait began. */
   handles: Set<string>;
   reports: ChildReport[];
+  /** The person spoke to the owner — the wait gave way before its children settled. */
+  interrupted?: boolean;
   done(): void;
 }
 
@@ -83,7 +85,10 @@ export interface ChildRuns {
   /** Live children anywhere in a chat, for the panel. */
   viewsIn(rootChatId: number): ChildView[];
   /** Resolve when the named (or all live) children of `ownerKey` settle, or at the timeout. */
-  wait(ownerKey: number, handles: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<{ reports: ChildReport[]; running: string[] }>;
+  wait(ownerKey: number, handles: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<{ reports: ChildReport[]; running: string[]; interrupted?: true }>;
+  /** The person spoke to `ownerKey`: end its waits now so its next turn answers them.
+   *  Its children keep running. Returns whether a wait was ended. */
+  interrupt(ownerKey: number): boolean;
 }
 
 export function createChildRuns(): ChildRuns {
@@ -169,13 +174,26 @@ export function createChildRuns(): ChildRuns {
           if (!waiters.delete(waiter)) return;
           if (timer) clearTimeout(timer);
           signal?.removeEventListener("abort", finish);
-          resolve({ reports: waiter.reports, running: [...waiter.handles] });
+          resolve({
+            reports: waiter.reports,
+            running: [...waiter.handles],
+            ...(waiter.interrupted ? { interrupted: true as const } : {}),
+          });
         };
         waiters.add(waiter);
         if (pending.size === 0) return finish();
         timer = setTimeout(finish, timeoutMs);
         signal?.addEventListener("abort", finish, { once: true });
       });
+    },
+
+    interrupt(ownerKey) {
+      const mine = [...waiters].filter((w) => w.ownerKey === ownerKey);
+      for (const w of mine) {
+        w.interrupted = true;
+        w.done();
+      }
+      return mine.length > 0;
     },
   };
 }

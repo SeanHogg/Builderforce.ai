@@ -14,18 +14,22 @@
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HealthRing } from '../HealthRing';
-import { nativeOptionStyle } from '../optionStyle';
 import { resolveRunGate } from './runGate';
 import { rollupChatTicketHealth } from '@builderforce/agent-loop';
 import { useChatProgressSync } from './useChatProgressSync';
-import { chatSwitcherLabel } from './chatSwitcherLabel';
 // The rail's ONE palette, shared with every part it composes (see tokens.ts).
 import { V } from './tokens';
 import { TicketParentLine } from './TicketParentLine';
+import { AgentsSection } from './AgentsSection';
+import { LinkForm } from './LinkForm';
+import { MergeSection } from './MergeSection';
+import { PeopleSection } from './PeopleSection';
+import { QuestionsSection } from './QuestionsSection';
+import { S } from './panelStyles';
 import {
-  RUNNABLE_KINDS, TICKET_KINDS,
+  RUNNABLE_KINDS,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind,
-  type TicketLinkVM, type ChatAgentVM, type ChatMemberVM, type AgentOptionVM, type LineageVM, type TicketOptionVM, type ChatOptionVM, type LinkType, type ChatQuestionVM, type ChatTicketsExtension,
+  type TicketLinkVM, type ChatAgentVM, type ChatSubagentVM, type ChatMemberVM, type AgentOptionVM, type LineageVM, type ChatOptionVM, type ChatQuestionVM, type ChatTicketsExtension,
 } from './types';
 
 export interface ChatTicketsPanelProps {
@@ -57,6 +61,10 @@ export interface ChatTicketsPanelProps {
    *  {@link ChatTicketsExtension}). Pass only the ones that currently have
    *  something to show; an empty/absent list adds nothing. */
   extensions?: ChatTicketsExtension[];
+  /** The chat's LIVE sub-agents — runs its agents spawned, listed beside the invited
+   *  agents so the roster names everyone working in the chat. The host knows them (the
+   *  editor's run registry); omit where there are none. */
+  subagents?: readonly ChatSubagentVM[];
 }
 
 /** The action-row drawers the panel ships with; extension keys must not collide. */
@@ -69,7 +77,9 @@ const RUNNABLE = new Set<TicketKind>(RUNNABLE_KINDS);
  *  expand/collapse manually; once they do, we stop auto-deciding for this chat. */
 const COLLAPSE_THRESHOLD = 8;
 
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions }: ChatTicketsPanelProps) {
+const NO_SUBAGENTS: readonly ChatSubagentVM[] = [];
+
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS }: ChatTicketsPanelProps) {
   const [tickets, setTickets] = useState<TicketLinkVM[]>([]);
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
   const [members, setMembers] = useState<ChatMemberVM[]>([]);
@@ -267,7 +277,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       {/* Action toggles */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <button type="button" onClick={() => togglePanel('link')} style={S.pill(panel === 'link')}>＋ {labels.link}</button>
-        <button type="button" onClick={() => togglePanel('agents')} style={S.pill(panel === 'agents')}>👥 {labels.agents}{agents.length ? ` (${agents.length})` : ''}</button>
+        <button type="button" onClick={() => togglePanel('agents')} style={S.pill(panel === 'agents')}>👥 {labels.agents}{agents.length + subagents.length ? ` (${agents.length + subagents.length})` : ''}</button>
         <button type="button" onClick={() => togglePanel('people')} style={S.pill(panel === 'people')}>👤 {labels.people}{members.length ? ` (${members.length})` : ''}</button>
         <button type="button" onClick={() => togglePanel('merge')} style={S.pill(panel === 'merge')}>⧉ {labels.merge}</button>
         {questions.length > 0 && <button type="button" onClick={() => togglePanel('questions')} style={S.pill(panel === 'questions')}>❓ {labels.questions} ({questions.length})</button>}
@@ -294,7 +304,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         catch (e) { flash(e instanceof Error ? e.message : labels.linkFailed); }
       }} />}
 
-      {panel === 'agents' && <AgentsSection agents={agents} pool={pool} labels={labels}
+      {panel === 'agents' && <AgentsSection agents={agents} subagents={subagents} pool={pool} labels={labels}
         onInvite={async (ref, kind) => { setBusy(true); try { await adapter.inviteAgent(chatId, { agentRef: ref, agentKind: kind }); await load(); onChanged?.(); } finally { setBusy(false); } }}
         onRemove={async (id) => { setBusy(true); try { await adapter.removeAgent(chatId, id); await load(); onChanged?.(); } finally { setBusy(false); } }}
         busy={busy} />}
@@ -318,219 +328,6 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
 const BUILTIN_PANELS: ReadonlySet<string> = new Set<BuiltinPanel>(['link', 'agents', 'people', 'merge', 'questions']);
 function isBuiltinPanel(key: string): key is BuiltinPanel { return BUILTIN_PANELS.has(key); }
 
-function QuestionsSection({ questions, labels, onAnswer }: {
-  questions: ChatQuestionVM[];
-  labels: ChatTicketsLabels;
-  onAnswer: (id: string, answer: string) => Promise<void>;
-}) {
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [sending, setSending] = useState<string | null>(null);
-  return (
-    <div style={S.drawer}>
-      {questions.length === 0 ? <span style={S.muted}>{labels.noQuestions}</span> : questions.map((q, index) => {
-        const value = answers[q.id] ?? '';
-        return <div key={q.id} style={{ padding: '10px 0', borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : undefined }}>
-          <div style={{ color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: 'pre-wrap', marginBottom: 8 }}>{q.description}</div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-            <textarea value={value} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
-              placeholder={labels.answerPlaceholder} rows={2} disabled={sending === q.id}
-              style={{ ...S.select, flex: 1, resize: 'vertical', minHeight: 54, fontFamily: 'inherit' }} />
-            <button type="button" disabled={!value.trim() || sending === q.id} style={S.pill(true)} onClick={() => {
-              setSending(q.id);
-              void onAnswer(q.id, value.trim()).finally(() => setSending(null));
-            }}>{sending === q.id ? labels.answering : labels.submitAnswer}</button>
-          </div>
-        </div>;
-      })}
-    </div>
-  );
-}
-
-// ── Link a ticket ────────────────────────────────────────────────────────────
-
-/** How many hits the server returns per tier. When a result set fills this, there
- *  are (probably) more — we nudge the user to type instead of silently truncating. */
-const SEARCH_LIMIT = 40;
-
-function LinkForm({ search, projectId, existing, labels, onLink }: {
-  /** Server-side typeahead — the adapter debounces nothing itself; we debounce here. */
-  search: (kind: TicketKind, query: string, projectId: number | null) => Promise<TicketOptionVM[]>;
-  projectId: number | null;
-  existing: TicketLinkVM[];
-  labels: ChatTicketsLabels;
-  onLink: (kind: TicketKind, ref: string, linkType: LinkType) => Promise<void>;
-}) {
-  const [kind, setKind] = useState<TicketKind>('task');
-  const [ref, setRef] = useState('');
-  const [query, setQuery] = useState('');
-  const [linkType, setLinkType] = useState<LinkType>('linked');
-  const [busy, setBusy] = useState(false);
-  const [results, setResults] = useState<TicketOptionVM[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  // Debounced server-side typeahead on (kind, query, project). The `live` flag drops
-  // a stale response so a slow earlier request can't overwrite a newer one, and the
-  // timer is cleared on every keystroke so only the settled query hits the network.
-  useEffect(() => {
-    let live = true;
-    setLoading(true);
-    const h = setTimeout(() => {
-      search(kind, query, projectId)
-        .then((r) => { if (live) setResults(r); })
-        .catch(() => { if (live) setResults([]); })
-        .finally(() => { if (live) setLoading(false); });
-    }, 250);
-    return () => { live = false; clearTimeout(h); };
-  }, [search, kind, query, projectId]);
-
-  // Hide tickets already linked to this chat (the server doesn't know the chat's links).
-  const shown = useMemo(
-    () => results.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref)),
-    [results, existing, kind],
-  );
-  const atCap = results.length >= SEARCH_LIMIT;
-
-  // Drop a chosen ref once it's no longer in the visible set (kind switch / new search).
-  useEffect(() => { if (ref && !shown.some((o) => o.ref === ref)) setRef(''); }, [shown, ref]);
-
-  const submit = async () => {
-    if (!ref) return;
-    setBusy(true);
-    try { await onLink(kind, ref, linkType); setRef(''); setQuery(''); } finally { setBusy(false); }
-  };
-
-  return (
-    <div style={S.section}>
-      <select aria-label={labels.kindLabel} value={kind} onChange={(e) => { setKind(e.target.value as TicketKind); setRef(''); setQuery(''); }} style={S.select}>
-        {TICKET_KINDS.map((k) => <option style={S.option} key={k} value={k}>{labels.kind[k]}</option>)}
-      </select>
-      <input
-        type="search"
-        aria-label={labels.searchTicket}
-        placeholder={labels.searchTicket}
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        style={{ ...S.select, minWidth: 150 }}
-      />
-      <select aria-label={labels.pickTicket} value={ref} onChange={(e) => setRef(e.target.value)} style={{ ...S.select, minWidth: 200 }}>
-        <option style={S.option} value="">{labels.pickTicket}</option>
-        {shown.map((o) => <option style={S.option} key={o.ref} value={o.ref}>{o.label}</option>)}
-      </select>
-      {loading ? <span style={S.muted}>{labels.searching}</span>
-        : shown.length === 0 ? <span style={S.muted}>{labels.noMatches}</span>
-        : atCap ? <span style={S.muted}>{labels.refine}</span>
-        : null}
-      <select aria-label={labels.linkTypeLabel} value={linkType} onChange={(e) => setLinkType(e.target.value as LinkType)} style={S.select}>
-        <option style={S.option} value="linked">{labels.linkTypeLinked}</option>
-        <option style={S.option} value="created">{labels.linkTypeCreated}</option>
-      </select>
-      <button type="button" onClick={() => void submit()} disabled={busy || !ref} style={S.pill(true)}>{busy ? '…' : labels.linkAction}</button>
-    </div>
-  );
-}
-
-// ── Agents in the chat ───────────────────────────────────────────────────────
-
-function AgentsSection({ agents, pool, labels, onInvite, onRemove, busy }: {
-  agents: ChatAgentVM[]; pool: AgentOptionVM[]; labels: ChatTicketsLabels;
-  onInvite: (ref: string, kind: string) => Promise<void>; onRemove: (id: string) => Promise<void>; busy: boolean;
-}) {
-  const poolName = (ref: string) => pool.find((p) => p.ref === ref)?.name ?? ref;
-  const uninvited = pool.filter((p) => !agents.some((a) => a.agentRef === p.ref));
-  return (
-    <div style={{ ...S.section, flexDirection: 'column', alignItems: 'stretch' }}>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {agents.length === 0 ? <span style={S.muted}>{labels.noAgents}</span> : agents.map((a) => (
-          <span key={a.id} style={S.agentChip}>
-            <span aria-hidden>🤖</span>{poolName(a.agentRef)}
-            <button type="button" title={labels.removeAgent} disabled={busy} onClick={() => void onRemove(a.id)} style={{ ...S.icon, fontSize: 11 }}>✕</button>
-          </span>
-        ))}
-      </div>
-      <select aria-label={labels.inviteAgent} value="" onChange={(e) => { const p = pool.find((x) => x.ref === e.target.value); if (p) void onInvite(p.ref, p.kind); }} style={{ ...S.select, maxWidth: 260 }}>
-        <option style={S.option} value="">{labels.inviteAgent}</option>
-        {uninvited.map((p) => <option style={S.option} key={p.ref} value={p.ref}>{p.name} — {p.meta}</option>)}
-      </select>
-      <span style={{ fontSize: 11, ...S.muted }}>{labels.agentsHint}</span>
-    </div>
-  );
-}
-
-// ── People in the chat (human members / audience) ────────────────────────────
-
-function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite, onRemove, busy }: {
-  members: ChatMemberVM[]; labels: ChatTicketsLabels;
-  visibility?: 'shared' | 'locked'; onSetVisibility?: (v: 'shared' | 'locked') => Promise<void>;
-  onInvite: (email: string) => Promise<void>; onRemove: (id: number) => Promise<void>; busy: boolean;
-}) {
-  const [email, setEmail] = useState('');
-  const submit = async () => {
-    const e = email.trim();
-    if (!e) return;
-    await onInvite(e);
-    setEmail('');
-  };
-  const locked = visibility === 'locked';
-  return (
-    <div style={{ ...S.section, flexDirection: 'column', alignItems: 'stretch' }}>
-      {visibility && onSetVisibility && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <button type="button" disabled={busy} onClick={() => void onSetVisibility(locked ? 'shared' : 'locked')} style={S.pill(locked)}>
-            {locked ? `🔒 ${labels.visibilityLocked}` : `🔓 ${labels.visibilityShared}`}
-          </button>
-          <span style={{ fontSize: 11, ...S.muted }}>{labels.lockHint}</span>
-        </div>
-      )}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {members.length === 0 ? <span style={S.muted}>{labels.noPeople}</span> : members.map((m) => (
-          <span key={m.id} style={S.agentChip}>
-            <span aria-hidden>{m.status === 'pending' ? '✉️' : '👤'}</span>{m.name}
-            <button type="button" title={labels.removePerson} disabled={busy} onClick={() => void onRemove(m.id)} style={{ ...S.icon, fontSize: 11 }}>✕</button>
-          </span>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <input
-          type="email" value={email} disabled={busy}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }}
-          placeholder={labels.invitePerson} aria-label={labels.invitePerson}
-          style={{ ...S.select, flex: 1, maxWidth: 260 }}
-        />
-        <button type="button" disabled={busy || !email.trim()} onClick={() => void submit()} style={S.pill(false)}>＋</button>
-      </div>
-      <span style={{ fontSize: 11, ...S.muted }}>{labels.invitePersonHint}</span>
-    </div>
-  );
-}
-
-// ── Merge (consolidate) chats ────────────────────────────────────────────────
-
-function MergeSection({ chatId, chatList, labels, onMerge, busy }: {
-  chatId: number; chatList: ChatOptionVM[]; labels: ChatTicketsLabels;
-  onMerge: (ids: number[]) => Promise<void>; busy: boolean;
-}) {
-  const [selected, setSelected] = useState<number[]>([]);
-  const candidates = chatList.filter((c) => c.id !== chatId);
-  const toggle = (id: number) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
-  return (
-    <div style={{ ...S.section, flexDirection: 'column', alignItems: 'stretch' }}>
-      <span style={{ fontSize: 12, color: V.text2 }}>{labels.mergeHint}</span>
-      <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {candidates.length === 0 ? <span style={S.muted}>{labels.mergeNoOthers}</span> : candidates.map((c) => (
-          <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '3px 4px', cursor: 'pointer' }}>
-            <input type="checkbox" checked={selected.includes(c.id)} onChange={() => toggle(c.id)} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chatSwitcherLabel({ title: c.title, id: c.id, ticketCount: c.ticketCount, ticketProgressPct: c.ticketProgressPct })}</span>
-          </label>
-        ))}
-      </div>
-      <button type="button" onClick={() => { if (selected.length) void onMerge(selected).then(() => setSelected([])); }} disabled={busy || selected.length === 0} style={S.pill(true)}>
-        {busy ? '…' : labels.mergeAction(selected.length)}
-      </button>
-    </div>
-  );
-}
-
 /**
  * Memoized: this panel sits directly under the composer, so it would otherwise
  * reconcile its whole subtree (health-ring SVGs, selects, link/merge/agents forms)
@@ -538,36 +335,3 @@ function MergeSection({ chatId, chatList, labels, onMerge, busy }: {
  * props (memoize `chatList` and `onChanged`) for the memo to take effect.
  */
 export const ChatTicketsPanel = memo(ChatTicketsPanelInner);
-
-const S = {
-  root: { margin: '4px 0 0', padding: '8px 10px', border: `1px solid ${V.border}`, borderRadius: 10, background: V.surface, display: 'flex', flexDirection: 'column', gap: 8 } as React.CSSProperties,
-  muted: { fontSize: 12, color: V.muted } as React.CSSProperties,
-  // Collapsible ticket-summary header — full-width, button-reset, subtle hover-less
-  // affordance that carries a caret, an overall health ring and the linked count.
-  ticketsHeader: { display: 'flex', alignItems: 'center', gap: 8, padding: '2px 4px', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', color: V.text } as React.CSSProperties,
-  caret: { display: 'inline-block', fontSize: 11, color: V.muted, transition: 'transform 120ms ease' } as React.CSSProperties,
-  ticketsCount: { fontSize: 12, fontWeight: 600, color: V.text } as React.CSSProperties,
-  ticketsAgg: { fontSize: 11, color: V.muted } as React.CSSProperties,
-  chip: { display: 'flex', alignItems: 'center', gap: 6, padding: '2px 6px', border: `1px solid ${V.border}`, borderRadius: 8 } as React.CSSProperties,
-  ticketLabel: { fontSize: 12, fontWeight: 600, color: V.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as React.CSSProperties,
-  // Clickable variant of the label — opens the artifact. Underlined-on-hover link
-  // affordance, theme-driven accent, left-aligned and truncating like the span.
-  ticketLink: { fontSize: 12, fontWeight: 600, color: V.accent, background: 'transparent', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'underline', textUnderlineOffset: 2 } as React.CSSProperties,
-  ticketMeta: { fontSize: 10, color: V.muted, textTransform: 'uppercase', letterSpacing: 0.4 } as React.CSSProperties,
-  drawer: { fontSize: 12, color: V.text2, borderTop: `1px dashed ${V.border}`, paddingTop: 6 } as React.CSSProperties,
-  section: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', borderTop: `1px dashed ${V.border}`, paddingTop: 8 } as React.CSSProperties,
-  agentChip: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 999, background: V.surface2, border: `1px solid ${V.border}`, fontSize: 12, color: V.text } as React.CSSProperties,
-  // `colorScheme` makes the browser draw the native <select> (and its OS/UA popup)
-  // in the editor's active scheme even where the token background doesn't reach.
-  select: { minWidth: 120, padding: '4px 8px', fontSize: 12, borderRadius: 8, border: `1px solid ${V.border}`, background: V.field, color: V.fieldText, colorScheme: 'inherit' } as React.CSSProperties,
-  // The option popup is drawn by the OS and does NOT inherit `select`'s background,
-  // so each option needs its own opaque pair — see nativeOptionStyle.
-  option: nativeOptionStyle,
-  icon: { fontSize: 12, lineHeight: 1, padding: '2px 4px', cursor: 'pointer', background: 'transparent', border: 'none', color: V.muted } as React.CSSProperties,
-  pill: (active: boolean): React.CSSProperties => ({
-    fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 999, cursor: 'pointer',
-    border: `1px solid ${active ? V.accent : V.border}`,
-    background: active ? V.accent : V.surface2,
-    color: active ? '#fff' : V.text2,
-  }),
-};

@@ -537,28 +537,6 @@ async function runAgentLoop(args) {
   };
 }
 
-// ../packages/agent-loop/src/openaiCodec.ts
-function toOpenAiToolCall(call2) {
-  return { id: call2.id, type: "function", function: { name: call2.name, arguments: call2.arguments?.trim() ? call2.arguments : "{}" } };
-}
-var defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
-function openAiChatCodec(serialize = defaultToolRowSerializer) {
-  return {
-    assistant(turn) {
-      const row = {
-        role: "assistant",
-        content: turn.content ?? "",
-        tool_calls: turn.toolCalls.map(toOpenAiToolCall)
-      };
-      return row;
-    },
-    tool(call2, result) {
-      const row = { role: "tool", tool_call_id: call2.id, content: serialize(result, call2) };
-      return row;
-    }
-  };
-}
-
 // ../packages/agent-loop/src/malformedCall.ts
 var MALFORMED_CALL_RESULT = "This tool call's arguments were not valid JSON, so it was NOT executed. Re-issue it with strictly valid JSON: no comments, no trailing commas, no unescaped newlines or quotes inside string values.";
 var TRUNCATED_CALL_RESULT = "This tool call was cut off by the output limit before its arguments were complete, so it was NOT executed. Re-issue it in your next response as ONE call with complete JSON \u2014 never several calls in one response. If the content is long, write it in parts: create it with its essential fields first, then extend it with follow-up calls.";
@@ -765,6 +743,28 @@ function canonicalReasoningText(content, reasoning) {
   return answer ? `<think>${thought}</think>
 
 ${answer}` : `<think>${thought}</think>`;
+}
+
+// ../packages/agent-loop/src/openaiCodec.ts
+function toOpenAiToolCall(call2) {
+  return { id: call2.id, type: "function", function: { name: call2.name, arguments: call2.arguments?.trim() ? call2.arguments : "{}" } };
+}
+var defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
+function openAiChatCodec(serialize = defaultToolRowSerializer) {
+  return {
+    assistant(turn) {
+      const row = {
+        role: "assistant",
+        content: turn.content ?? "",
+        tool_calls: turn.toolCalls.map(toOpenAiToolCall)
+      };
+      return row;
+    },
+    tool(call2, result) {
+      const row = { role: "tool", tool_call_id: call2.id, content: serialize(result, call2) };
+      return row;
+    }
+  };
 }
 
 // ../packages/agent-loop/src/index.ts
@@ -3138,11 +3138,91 @@ var skillListTool = defineTool({
   }
 });
 
+// ../packages/agent-tools/src/live-subagent-tools.ts
+var LIVE_DELEGATION_NOTE = "HERE the child runs IN THE BACKGROUND: the call returns its handle at once and you keep working \u2014 plan, code, or start more children \u2014 while it does its slice. Its messages appear in the chat under its own name, and its report reaches you on its own when it finishes (call wait_agents only when you cannot go on without it). Redirect it with message_agent; cancel it with stop_agent. Do not edit the files a writable child owns while it runs.";
+var LIVE_FANOUT_NEXT = "The children have no shell and no git. Keep working on anything not delegated; when their reports are in (they arrive on their own, or call wait_agents), verify the combined change (build and test), fix what the slices broke between them, commit, and report per workstream and ticket.";
+var SUBAGENT_CONTROL_TOOL_NAMES = { wait: "wait_agents", message: "message_agent", stop: "stop_agent" };
+var MAX_WAIT_SECONDS = 600;
+var DEFAULT_WAIT_SECONDS = 300;
+var handlesOf = (v) => Array.isArray(v) ? v.filter((h) => typeof h === "string" && h.trim() !== "").map((h) => h.trim()) : [];
+var live = (ctx) => ctx.caps.orchestration?.live ?? null;
+var unavailable = () => ({ data: { ok: false, error: "this surface runs no background sub-agents" } });
+var waitAgentsTool = defineTool({
+  name: SUBAGENT_CONTROL_TOOL_NAMES.wait,
+  description: "Wait for your running sub-agents and collect their reports. Use it only when your next step depends on their results (e.g. verifying and committing a fan-out). Pass `agents` to wait for specific handles; omit it to wait for all of yours. Returns the reports that came in and which are still running at the timeout.",
+  parameters: {
+    type: "object",
+    properties: {
+      agents: { type: "array", items: { type: "string" }, description: "Handles to wait for, e.g. ['a1','a3']. Omit for all of yours." },
+      timeout_seconds: { type: "number", description: `How long to wait (default ${DEFAULT_WAIT_SECONDS}, max ${MAX_WAIT_SECONDS}).` }
+    }
+  },
+  requires: ["orchestrate.live"],
+  async execute(args, ctx) {
+    const controls = live(ctx);
+    if (!controls) return unavailable();
+    const seconds = Math.min(MAX_WAIT_SECONDS, Math.max(1, Number(args.timeout_seconds) || DEFAULT_WAIT_SECONDS));
+    const { reports, running, note } = await controls.wait(handlesOf(args.agents), seconds * 1e3, ctx.signal);
+    const changedFiles = [...new Set(reports.flatMap((r) => r.changedFiles ?? []))];
+    return {
+      data: {
+        ok: true,
+        reports,
+        running,
+        // Read by the ticket backstop (`codeChangesOf`) like any delegation result.
+        ...changedFiles.length ? { changedFiles } : {},
+        ...note ? { note } : running.length ? { note: `${running.join(", ")} still running \u2014 their reports will reach you when they finish.` } : {}
+      }
+    };
+  }
+});
+var messageAgentTool = defineTool({
+  name: SUBAGENT_CONTROL_TOOL_NAMES.message,
+  description: "Redirect one of your running sub-agents mid-task: narrow its scope, correct a wrong assumption, hand it a fact it lacks. It reads the message before its next step. The message is shown in the chat.",
+  parameters: {
+    type: "object",
+    properties: {
+      agent: { type: "string", description: "The child's handle, e.g. 'a2'." },
+      message: { type: "string", description: "The direction, standalone \u2014 it has none of your conversation." }
+    },
+    required: ["agent", "message"]
+  },
+  requires: ["orchestrate.live"],
+  async execute(args, ctx) {
+    const controls = live(ctx);
+    if (!controls) return unavailable();
+    const handle = typeof args.agent === "string" ? args.agent.trim() : "";
+    const text = typeof args.message === "string" ? args.message.trim() : "";
+    if (!handle || !text) return { data: { ok: false, error: "agent and message are required" } };
+    const out = await controls.message(handle, text);
+    return { data: out };
+  }
+});
+var stopAgentTool = defineTool({
+  name: SUBAGENT_CONTROL_TOOL_NAMES.stop,
+  description: "Stop running sub-agents of yours \u2014 one or more by handle, or all of them. A stopped child reports what it had done.",
+  parameters: {
+    type: "object",
+    properties: {
+      agents: { type: "array", items: { type: "string" }, description: "Handles to stop. Omit to stop ALL of your running children." }
+    }
+  },
+  requires: ["orchestrate.live"],
+  async execute(args, ctx) {
+    const controls = live(ctx);
+    if (!controls) return unavailable();
+    const named = handlesOf(args.agents);
+    const stopped = await controls.stop(named.length ? named : "all");
+    return { data: { ok: true, stopped } };
+  }
+});
+var SUBAGENT_CONTROL_TOOLS = [waitAgentsTool, messageAgentTool, stopAgentTool];
+
 // ../packages/agent-tools/src/subagent-tools.ts
 var ROLE_ENUM_DESCRIPTION = MODEL_ROLES.map((role) => `${role} \u2014 ${MODEL_ROLE_DESCRIPTIONS[role]}`).join(" \xB7 ");
 var spawnAgentTool = defineTool({
   name: "spawn_agent",
-  description: "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back a single answer. Use it when finding something out would take many turns you do not want to carry \u2014 locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose \u2014 it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two. A CHANGE may be delegated (read_only: false) when the user asked for sub-agents or the slice is a ticket of its own \u2014 you then verify what the child changed, because you are accountable for what ships.",
+  description: "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back when it is done. Use it when finding something out would take many turns you do not want to carry \u2014 locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose \u2014 it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two. A CHANGE may be delegated (read_only: false) when the user asked for sub-agents or the slice is a ticket of its own \u2014 you then verify what the child changed, because you are accountable for what ships. " + LIVE_DELEGATION_NOTE,
   parameters: {
     type: "object",
     properties: {
@@ -3225,10 +3305,9 @@ function workstreamScopeError(workstreams) {
   const clash = overlappingScopes(workstreams.map((w) => ({ label: w.label, paths: w.paths })));
   return clash ? `workstreams '${clash.a}' and '${clash.b}' both claim '${clash.path}' \u2014 give each file to exactly one workstream, or run the dependent slices one after another with spawn_agent` : null;
 }
-var FANOUT_NEXT = "The children had no shell and no git. Verify the combined change (build and test), fix what the slices broke between them, commit, and report per workstream and ticket.";
 var spawnAgentsTool = defineTool({
   name: SPAWN_AGENTS_TOOL,
-  description: `Run SEVERAL independent workstreams side by side \u2014 up to ${MAX_WORKSTREAMS} child agents at once, each in its own context, each reporting back to the chat. Use it when the request splits into slices that do not depend on each other: a PRD's workstreams, one change per package or feature. For a CHANGE (read_only: false) give every workstream the \`paths\` it OWNS (files or directories). Paths must not overlap, and a child may write only inside its own. Children read anywhere but have no shell and no git: when they return, YOU verify (build and test), commit and report per workstream. File one ticket per workstream first and pass its id as \`ticket\`. Each child sees nothing of this conversation, so every \`task\` must stand alone: what to change, where, and how to know it is done.`,
+  description: `Run SEVERAL independent workstreams side by side \u2014 up to ${MAX_WORKSTREAMS} child agents at once, each in its own context, each reporting back to the chat. Use it when the request splits into slices that do not depend on each other: a PRD's workstreams, one change per package or feature. For a CHANGE (read_only: false) give every workstream the \`paths\` it OWNS (files or directories). Paths must not overlap, and a child may write only inside its own. Children read anywhere but have no shell and no git: once their reports are in, YOU verify (build and test), commit and report per workstream. File one ticket per workstream first and pass its id as \`ticket\`. Each child sees nothing of this conversation, so every \`task\` must stand alone: what to change, where, and how to know it is done. ` + LIVE_DELEGATION_NOTE,
   parameters: {
     type: "object",
     properties: {
@@ -3262,10 +3341,9 @@ var spawnAgentsTool = defineTool({
     required: ["workstreams"]
   },
   requires: ["orchestrate.fanout"],
-  // The CLOUD form: each child is one `orchestrate` spawn, all started at once. The
-  // backing serializes their commits and holds each to its scope (`cloudSubagent.ts`).
-  // The editor runs its children in its own process (`subagentFanOutTool.ts`) on the
-  // same schema, parser and conflict policy.
+  // The CLOUD form: each child is one `orchestrate` spawn — its own durable run, held to
+  // its scope. The editor starts its children as runs in its own process
+  // (`subagentFanOutTool.ts`) on the same schema, parser and conflict policy.
   async execute(args, ctx) {
     const parsed = parseWorkstreams(args.workstreams);
     if (typeof parsed === "string") return { data: { ok: false, error: parsed } };
@@ -3285,17 +3363,16 @@ var spawnAgentsTool = defineTool({
       ...w.ticket ? { ticket: w.ticket } : {},
       ...w.asAgent ? { asAgent: w.asAgent } : {}
     }).then((r) => ({ label: w.label, ...r }))));
-    const changedFiles = [...new Set(results.flatMap((r) => r.changedFiles ?? []))];
     return {
       data: {
         ok: results.every((r) => r.ok),
         workstreams: results,
-        ...changedFiles.length ? { changedFiles } : {},
-        ...readOnly ? {} : { next: FANOUT_NEXT }
+        ...readOnly ? {} : { next: LIVE_FANOUT_NEXT }
       }
     };
   }
 });
+var SUBAGENT_TOOLS = [spawnAgentTool, spawnAgentsTool, ...SUBAGENT_CONTROL_TOOLS];
 
 // ../packages/agent-tools/src/stableStringify.ts
 function stableStringify(value) {
@@ -4113,12 +4190,12 @@ function traceWithPersistedSteps(messages, trace) {
   if (fromMessages.length === 0) return trace;
   return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
 }
-function mergeRecoveredTrace(recovered, live) {
-  if (recovered.length === 0) return live;
-  if (live.length === 0) return recovered;
-  const liveSigs = new Set(live.map((e) => stepSig(e.category, e.label, e.ts)));
+function mergeRecoveredTrace(recovered, live2) {
+  if (recovered.length === 0) return live2;
+  if (live2.length === 0) return recovered;
+  const liveSigs = new Set(live2.map((e) => stepSig(e.category, e.label, e.ts)));
   const kept = recovered.filter((e) => !liveSigs.has(stepSig(e.category, e.label, e.ts)));
-  return kept.length === 0 ? live : [...kept, ...live];
+  return kept.length === 0 ? live2 : [...kept, ...live2];
 }
 
 // src/priorResearch.ts
@@ -7998,19 +8075,19 @@ function stopRun(chatId) {
   pushTrace(c, stopped.event);
 }
 function stoppedTurnOf(c) {
-  const live = c.liveTurn;
-  const text = live ? c.streamingText : "";
-  const model = live?.model;
-  const result = !live ? "Stopped by user." : model ? `Stopped by user while ${model} was streaming (${text.length} chars kept).` : `Stopped by user before the gateway named the model (${text.length} chars kept).`;
+  const live2 = c.liveTurn;
+  const text = live2 ? c.streamingText : "";
+  const model = live2?.model;
+  const result = !live2 ? "Stopped by user." : model ? `Stopped by user while ${model} was streaming (${text.length} chars kept).` : `Stopped by user before the gateway named the model (${text.length} chars kept).`;
   return {
     text,
-    source: { ...live },
+    source: { ...live2 },
     event: {
       ts: nowIso(),
       category: "message",
       label: STOPPED_TURN_STEP,
       ...model ? { args: { model } } : {},
-      ...live ? { textChars: text.length } : {},
+      ...live2 ? { textChars: text.length } : {},
       result
     }
   };
@@ -10723,6 +10800,52 @@ function formatChatDiagnostics(d) {
   return lines;
 }
 
+// src/subagentDiagnostics.ts
+var EXCERPT_CHARS = 280;
+var MAX_FAILURES = 3;
+var excerpt = (v) => {
+  const text = (typeof v === "string" ? v : JSON.stringify(v ?? "")).replace(/\s+/g, " ").trim();
+  return text.length > EXCERPT_CHARS ? `${text.slice(0, EXCERPT_CHARS)}\u2026` : text;
+};
+function stateOf(c) {
+  if (c.running) return "running";
+  if (c.error) return "failed";
+  return c.lastMessage?.trim() ? "done" : "ended without a report";
+}
+function spanOf(events) {
+  const times = events.map((e) => Date.parse(e.ts)).filter(Number.isFinite);
+  if (times.length < 2) return "";
+  const s = Math.round((Math.max(...times) - Math.min(...times)) / 1e3);
+  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+}
+function formatSubagentDiagnostics(children, capturedAtMs) {
+  if (children.length === 0) return [];
+  const running = children.filter((c) => c.running).length;
+  const lines = [`--- Sub-agents (${children.length}${running ? ` \xB7 ${running} running` : ""}) ---`];
+  for (const c of children) {
+    const tools = c.events.filter((e) => e.category === "tool");
+    const failures = tools.filter((e) => e.isError || isFailedToolResult(e.result));
+    const files = /* @__PURE__ */ new Set();
+    for (const e of tools) for (const f of codeChangesOf(e.label, e.args, e.result) ?? []) files.add(f);
+    const models = modelsUsedInTrace(c.events);
+    const span = spanOf(c.events);
+    lines.push(
+      `\u2022 ${c.handle} ${c.name} \u2014 "${c.label}" \xB7 sub-agent of ${c.owner}${c.depth > 1 ? ` (depth ${c.depth})` : ""}${c.ticket ? ` \xB7 ticket ${c.ticket}` : ""}${c.readOnly ? " \xB7 read-only" : ""}`
+    );
+    lines.push(
+      `  State: ${stateOf(c)} \xB7 Turns: ${c.events.filter((e) => e.category === "llm").length} \xB7 Tool calls: ${tools.length} \xB7 Failed: ${failures.length}${span ? ` \xB7 ${span}` : ""}`
+    );
+    if (models.length) lines.push(`  Models: ${models.join(", ")}`);
+    if (c.running && c.activity) lines.push(`  Now: ${describeLiveStep(c.activity, capturedAtMs)}`);
+    if (files.size) lines.push(`  Changed: ${[...files].join(", ")}`);
+    for (const f of failures.slice(0, MAX_FAILURES)) lines.push(`  Failed step: ${f.label} \u2014 ${excerpt(f.result)}`);
+    if (failures.length > MAX_FAILURES) lines.push(`  \u2026and ${failures.length - MAX_FAILURES} more failed step(s)`);
+    if (c.error) lines.push(`  Error: ${excerpt(c.error)}`);
+    if (c.lastMessage?.trim()) lines.push(`  ${c.running ? "Last message" : "Report"}: ${excerpt(c.lastMessage)}`);
+  }
+  return lines;
+}
+
 // src/gatherChatDiagnostics.ts
 function safely(read, fallback) {
   if (!read) return Promise.resolve(fallback);
@@ -11173,6 +11296,7 @@ export {
   formatModelTurnLog,
   formatRunProgress,
   formatStaffingSummary,
+  formatSubagentDiagnostics,
   gatherChatDiagnostics,
   getGlobalRunState,
   getLastResolvedModel,

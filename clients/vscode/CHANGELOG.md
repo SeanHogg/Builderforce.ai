@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.22] — Sub-agents in the roster, the report and out of your way
+
+- **Sub-agents are listed under Agents.** The chat's Agents list shows every working sub-agent beside the agents you invited, with its handle and who started it.
+- **A waiting agent answers you straight away.** When the main agent is waiting on its sub-agents and you send it a message, it stops waiting and replies. The sub-agents keep working, and their reports still reach it.
+- **Copied diagnostics include every sub-agent.** For each one the report shows who started it, its state, models, tool calls, failed steps, files changed and its report. Sub-agents that already finished are included.
+
 ## [2026.10.21] — One way to run sub-agents, in the editor and the cloud
 
 - **Sub-agents behave the same wherever the work runs.** In the editor and in every cloud runtime, a sub-agent works in the background beside the agent that started it, with no step limit. You can redirect it, stop it or wait for it the same way everywhere.

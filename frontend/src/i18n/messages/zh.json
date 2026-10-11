@@ -11433,6 +11433,7 @@
       "removeAgent": "移除",
       "inviteAgent": "邀请代理…",
       "agentsHint": "在消息框中输入 @ 即可标记受邀代理——它会在聊天中回复，并可处理团队的工作——也可让其执行上方关联的任务/史诗。",
+      "subagentOf": "{owner} 的子代理",
       "people": "成员",
       "noPeople": "尚未邀请任何成员。",
       "invitePerson": "通过邮箱邀请…",

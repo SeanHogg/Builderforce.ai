@@ -77,6 +77,19 @@ export interface LineageVM {
 }
 
 /** An agent invited into the chat. */
+/** A live sub-agent working in the chat — a run one of its agents spawned. */
+export interface ChatSubagentVM {
+  /** Stable while it runs (the host's run key). */
+  key: string;
+  /** How it is addressed, e.g. `a3`. */
+  handle: string;
+  name: string;
+  /** Its slice of the work. */
+  label: string;
+  /** Who spawned it. */
+  owner: string;
+}
+
 export interface ChatAgentVM {
   id: string;
   agentRef: string;
@@ -296,6 +309,8 @@ export interface ChatTicketsLabels {
   removeAgent: string;
   inviteAgent: string;
   agentsHint: string;
+  /** Beside a sub-agent's name; `{owner}` is the agent that spawned it. */
+  subagentOf: string;
   people: string;
   noPeople: string;
   invitePerson: string;
@@ -362,6 +377,7 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   noAgents: 'No agents in this chat yet.',
   removeAgent: 'Remove',
   inviteAgent: 'Invite an agent…',
+  subagentOf: 'sub-agent of {owner}',
   agentsHint: 'Type @ in the message box to tag an invited agent — it replies in the chat and can act on the team\'s work — or run it on a linked task/epic above.',
   people: 'People',
   noPeople: 'No people invited yet.',

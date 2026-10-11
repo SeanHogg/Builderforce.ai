@@ -23,6 +23,11 @@ export const LIVE_FANOUT_NEXT =
 /** The owner's verbs, by name — ONE list every surface's catalog and pin guard read. */
 export const SUBAGENT_CONTROL_TOOL_NAMES = { wait: "wait_agents", message: "message_agent", stop: "stop_agent" } as const;
 
+/** Why a wait ended before its children did: the person spoke to the owner. A wait
+ *  never stands between the person and the run they are talking to. */
+export const WAIT_INTERRUPTED_NOTE =
+  "The person sent you a message — answer it now. Your sub-agents keep running, and their reports still reach you when they finish.";
+
 /** Longest a single wait may hold the owner — it can always wait again. */
 export const MAX_WAIT_SECONDS = 600;
 const DEFAULT_WAIT_SECONDS = 300;

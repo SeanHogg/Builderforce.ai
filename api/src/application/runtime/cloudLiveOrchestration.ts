@@ -14,6 +14,7 @@
 
 import {
   ownerDirectionText,
+  WAIT_INTERRUPTED_NOTE,
   type LiveChildControls,
   type OrchestrationCapability,
   type SubagentRequest,
@@ -26,7 +27,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { BrainService } from '../brain/BrainService';
-import { enqueueExecutionMessage } from './executionSteering';
+import { enqueueExecutionMessage, hasPendingPersonSteer } from './executionSteering';
 import { composeDispatcherLabel } from './dispatcherLabel';
 import { parseOriginatingChatId } from './cloudDispatch';
 import { resolveDelegatePersona, type PersonaBriefPort } from './cloudSubagent';
@@ -162,16 +163,20 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
       const deadline = Date.now() + Math.min(timeoutMs, CLOUD_WAIT_CAP_MS);
       let running: string[] = [];
       let finished: string[] = [];
+      let interrupted = false;
       for (;;) {
         const rows = await childRowsByHandle(db, parent.executionId, targets);
         running = rows.filter((r) => !isTerminalExecutionStatus(r.status)).map((r) => childHandle(r.id));
         finished = rows.filter((r) => isTerminalExecutionStatus(r.status)).map((r) => childHandle(r.id));
         if (!running.length || Date.now() >= deadline || signal?.aborted) break;
+        // The person spoke to this run: the wait gives way so the next turn answers them.
+        if ((interrupted = await hasPendingPersonSteer(db, parent.executionId))) break;
         await deps.heartbeat();
         await sleep(WAIT_POLL_MS, signal);
       }
       const unknown = targets.filter((h) => !running.includes(h) && !finished.includes(h));
       const notes = [
+        interrupted ? WAIT_INTERRUPTED_NOTE : '',
         finished.length ? `${finished.join(', ')} finished — their reports arrive as your next message.` : '',
         running.length ? `${running.join(', ')} still running.` : '',
         unknown.length ? `No sub-agent of yours named ${unknown.join(', ')}.` : '',

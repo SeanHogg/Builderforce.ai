@@ -118,7 +118,7 @@ import { ComposerTrailingButton } from './ComposerTrailingButton';
 import { useGlobalRunState } from './useGlobalRunState';
 import { QueuedMessages, type QueuedMessage } from './QueuedMessages';
 import { SubagentStrip } from './SubagentStrip';
-import { childParticipants, childTarget, steerRun, useChatChildren } from './chatChildren';
+import { childParticipants, childTarget, steerRun, subagentDiagnosticsOf, useChatChildren, useChatSubagentRoster } from './chatChildren';
 
 
 export function VsCodeChatSurface({ init }: { init: InitData }) {
@@ -773,6 +773,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // The chat's live sub-agents are addressable too: `@Ada …` (or a `#ticket` one of them
   // is working) steers that child's run instead of starting a turn of the chat's own.
   const liveChildren = useChatChildren(chatId);
+  const subagentRoster = useChatSubagentRoster(chatId);
   const mentionable = useMemo(() => [...participants, ...childParticipants(liveChildren)], [participants, liveChildren]);
 
   // Keep the mirrored roster (declared above `conv`) in step with the live participants.
@@ -1165,6 +1166,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           // was doing at that instant — the single most useful fact when the complaint
           // is "it has been sitting there for a minute".
           activity: conv.activity,
+          subagents: subagentDiagnosticsOf(chatId),
         }),
       });
       setCopyState('copied');
@@ -1358,6 +1360,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
             // "Changes (N)" pill beside Link ticket / Agents / People. A clean tree
             // registers nothing, so the rail is exactly as it was.
             extensions={pendingChangesExtension ? [pendingChangesExtension] : undefined}
+            subagents={subagentRoster}
           />
         </div>
       )}

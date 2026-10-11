@@ -327,7 +327,8 @@ export interface LiveWaitResult {
   reports: ChildReportLike[];
   /** Handles still running at the timeout. */
   running: string[];
-  /** Set when a surface delivers reports as messages rather than returning them here. */
+  /** What the owner should know about this wait — that its reports arrive as messages
+   *  instead, or that the person interrupted it. */
   note?: string;
 }
 

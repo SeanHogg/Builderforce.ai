@@ -20,7 +20,7 @@ import {
   queueRunSteering,
   type RunLineage,
 } from "@seanhogg/builderforce-brain-embedded";
-import { childReportText as reportText, ownerDirectionText as directionText } from "@builderforce/agent-tools";
+import { WAIT_INTERRUPTED_NOTE, childReportText as reportText, ownerDirectionText as directionText } from "@builderforce/agent-tools";
 import { MAX_CHILD_DEPTH, type ChildReport, type ChildRuns } from "./childRuns";
 
 /** One delegation, as the spawn tools describe it. */
@@ -50,7 +50,7 @@ export interface ChildControls {
   /** Stop children by handle (`all` = every live child of this owner). Returns who was stopped. */
   stop(handles: readonly string[] | "all"): string[];
   /** Block until the named (or all live) children settle, or the timeout. */
-  wait(handles: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<{ reports: ChildReport[]; running: string[] }>;
+  wait(handles: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<{ reports: ChildReport[]; running: string[]; note?: string }>;
 }
 
 /** The run a set of controls acts for. */
@@ -145,7 +145,10 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
       return targets.map((t) => t.handle);
     },
 
-    wait: (handles, timeoutMs, signal) => host.registry.wait(owner.key, handles, timeoutMs, signal),
+    async wait(handles, timeoutMs, signal) {
+      const { reports, running, interrupted } = await host.registry.wait(owner.key, handles, timeoutMs, signal);
+      return { reports, running, ...(interrupted ? { note: WAIT_INTERRUPTED_NOTE } : {}) };
+    },
   };
 }
 

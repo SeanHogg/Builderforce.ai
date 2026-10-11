@@ -517,6 +517,7 @@ export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLe
 
 // "Copy diagnostics" — pure serializer for the chat's identity + Evermind wiring state
 export { formatChatDiagnostics, classifyModelFunding, allowanceState } from './chatDiagnostics';
+export { formatSubagentDiagnostics, type SubagentDiagnosticsInput } from './subagentDiagnostics';
 export { gatherChatDiagnostics } from './gatherChatDiagnostics';
 // The same capture as DATA — versioned, persisted with the chat, and appended to the
 // copied report so a paste carries both the prose and the machine-readable copy.

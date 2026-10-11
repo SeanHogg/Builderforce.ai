@@ -158,6 +158,7 @@ export type {
   TicketParentVM,
   LineageVM,
   ChatAgentVM,
+  ChatSubagentVM,
   ChatRunVM,
   ChatRunHistoryVM,
   AgentOptionVM,

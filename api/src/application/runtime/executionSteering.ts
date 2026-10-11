@@ -16,7 +16,7 @@
  * Every function is best-effort on write/read failure (telemetry-grade) so it can
  * never break a run, mirroring the recordCloud* helpers.
  */
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { executionMessages } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -89,6 +89,29 @@ export async function pullPendingSteering(db: Db, executionId: number): Promise<
     return rows.map((r) => r.text).filter((t) => t.trim().length > 0);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Whether a PERSON has a message waiting for this run — a steer someone sent (`sentBy`),
+ * as opposed to a sub-agent's report (which has no sender). A parent waiting on its
+ * children stops waiting for it. False on any error: the wait then simply runs on.
+ */
+export async function hasPendingPersonSteer(db: Db, executionId: number): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ id: executionMessages.id })
+      .from(executionMessages)
+      .where(and(
+        eq(executionMessages.executionId, executionId),
+        eq(executionMessages.role, 'user'),
+        isNull(executionMessages.consumedAt),
+        isNotNull(executionMessages.sentBy),
+      ))
+      .limit(1);
+    return !!row;
+  } catch {
+    return false;
   }
 }
 

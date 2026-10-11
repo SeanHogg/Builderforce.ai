@@ -11433,6 +11433,7 @@
       "removeAgent": "Entfernen",
       "inviteAgent": "Agent einladen…",
       "agentsHint": "Gib @ im Nachrichtenfeld ein, um einen eingeladenen Agenten zu markieren — er antwortet im Chat und kann an der Arbeit des Teams mitwirken — oder führe ihn oben an einer verknüpften Aufgabe/einem Epic aus.",
+      "subagentOf": "Sub-Agent von {owner}",
       "people": "Personen",
       "noPeople": "Noch niemand eingeladen.",
       "invitePerson": "Per E-Mail einladen…",

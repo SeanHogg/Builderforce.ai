@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-10-11 — Sub-agents: waits give way to the person, roster lists them, diagnostics read each one
+
+- **A parent in `wait_agents` held the person's message for up to 10 minutes.** The wait ran until every named child settled. Now a person's message ends it on both surfaces. In the editor, `brainRunHost.steer` calls `registry.interrupt`. In the cloud, the wait loop checks `hasPendingPersonSteer`: a pending steer with a `sentBy`, which a child's report never has. The owner reads the shared `WAIT_INTERRUPTED_NOTE`, and its children keep running.
+- **Sub-agents were missing from the chat's Agents list.** `ChatTicketsPanel` takes `subagents` (`ChatSubagentVM`) and shows each one beside the invited agents, with its handle and owner. The VSIX passes its live children (`useChatSubagentRoster`). The panel's sections moved into their own files (`AgentsSection`, `LinkForm`, `PeopleSection`, `MergeSection`, `QuestionsSection`, `panelStyles`), which takes it from 573 to about 330 lines. The label is translated in all five web catalogs (`brain.tickets.subagentOf`).
+- **Copied diagnostics said nothing about sub-agents.** A new `formatSubagentDiagnostics` in brain-embedded reads each child from its own run trace. For each it lists owner, depth, ticket, state, turns, tool calls, failed steps, models, files changed, current step and report. The VSIX remembers every child a chat has had this session, so finished and failed ones are included.
+- Versions: VSIX 2026.10.22 · api 2026.10.33 · agent-tools 2026.10.8 · brain-embedded 2026.10.17 · brain-ui 2026.10.8.
+
 ## ✅ RESOLVED 2026-10-11 — One sub-agent path on every cloud surface: Container and Actions parents spawn the same durable children (agent-loop 2026.10.5 · agent-tools 2026.10.6 · api 2026.10.31)
 
 User: "why would there be a separate scenario?" The earlier pass left image-run parents on the inline, 8-step child. There is now ONE delegation path:
@@ -12,6 +19,7 @@ User: "why would there be a separate scenario?" The earlier pass left image-run 
 - **Cloud children recurse like the editor's.** A child may spawn while `depth < MAX_SUBAGENT_DEPTH` (3, now one constant in agent-tools that both surfaces read). A tree's tokens bill to its root (`rootExecutionId`). A rehearsal has no delegation capabilities, because a dry run must not start real runs.
 - **The engine reads one field,** `CloudRunDelegation {parent, runtime, spec?}` (`cloudRunDelegation.ts`).
 - Also closes the "Container / Actions images cannot fan out" Gap Register row: `spawn_agents` relays through the same op, and the clone-sync concern is covered by the branch-diff absorb and the sync note.
+
 
 ## ✅ RESOLVED 2026-10-11 — Cloud sub-agents run as their own durable runs; the editor's native chat approves a sub-agent's edits (agent-tools 2026.10.5 · api 2026.10.30 · VSIX 2026.10.20)
 

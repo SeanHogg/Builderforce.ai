@@ -411,6 +411,9 @@ ${p.systemPrompt}` : p.systemPrompt,
       // A sub-agent hears it as direction from its owner; the chat's own run hears the
       // person directly. Either way it is in front of the run's NEXT turn, not after it.
       queueRunSteering(runKey, lineage ? directionText(lineage.ownerName, text) : text);
+      // A run sitting in `wait_agents` would otherwise hear this only once every child
+      // settled; the wait gives way and the next turn answers.
+      registry.interrupt(runKey);
       childHost.postDirection(lineage?.rootChatId ?? runKey, "person", lineage?.ownerName ?? OWNER_NAME, lineage?.agent ?? null, text);
     },
     childControls(owner, base, approve) {

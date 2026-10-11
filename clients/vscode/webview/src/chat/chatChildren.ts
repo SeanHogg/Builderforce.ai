@@ -6,20 +6,27 @@
  * activity, prompts and Stop are read and driven through the run store by key.
  */
 
-import { useSyncExternalStore } from 'react';
-import { getRunSnapshot, subscribeRun, type BrainRunSnapshot, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import { useMemo, useSyncExternalStore } from 'react';
+import { getRunSnapshot, getRunTrace, subscribeRun, type BrainRunSnapshot, type DirectedRecipient, type SubagentDiagnosticsInput } from '@seanhogg/builderforce-brain-embedded';
+import type { ChatSubagentVM } from '@seanhogg/builderforce-brain-ui';
 import type { ChildView } from '../../../src/childRuns';
 import { post } from '../vscodeBridge';
 
 export type { ChildView };
 
 const byChat = new Map<number, ChildView[]>();
+/** Every child a chat has had this session, live or settled — a settled child leaves the
+ *  live list, but its run (and why it failed) is still what a triage report needs. */
+const everByChat = new Map<number, Map<number, ChildView>>();
 const listeners = new Set<() => void>();
 const NONE: ChildView[] = [];
 
 /** The host announced a chat's live children. */
 export function setChatChildren(chatId: number, children: ChildView[]): void {
   byChat.set(chatId, children);
+  const ever = everByChat.get(chatId) ?? new Map<number, ChildView>();
+  for (const c of children) ever.set(c.key, c);
+  everByChat.set(chatId, ever);
   for (const listener of listeners) listener();
 }
 
@@ -32,6 +39,39 @@ export function useChatChildren(chatId: number | null): ChildView[] {
     },
     () => (chatId == null ? NONE : byChat.get(chatId) ?? NONE),
   );
+}
+
+/** A chat's live sub-agents as the Agents roster lists them, beside the invited agents. */
+export function useChatSubagentRoster(chatId: number | null): readonly ChatSubagentVM[] {
+  const children = useChatChildren(chatId);
+  return useMemo(
+    () => children.map((c) => ({ key: String(c.key), handle: c.handle, name: c.name, label: c.label, owner: c.owner })),
+    [children],
+  );
+}
+
+/** Every sub-agent of a chat this session, each read from its own run, for a report. */
+export function subagentDiagnosticsOf(chatId: number | null): SubagentDiagnosticsInput[] {
+  if (chatId == null) return [];
+  const live = new Set((byChat.get(chatId) ?? []).map((c) => c.key));
+  return [...(everByChat.get(chatId)?.values() ?? [])].map((c) => {
+    const snap = getRunSnapshot(c.key);
+    const last = [...snap.appended].reverse().find((m) => m.role === 'assistant')?.content ?? snap.streamingText;
+    return {
+      handle: c.handle,
+      name: c.name,
+      label: c.label,
+      owner: c.owner,
+      depth: c.depth,
+      readOnly: c.readOnly,
+      ...(c.ticket ? { ticket: c.ticket } : {}),
+      running: live.has(c.key),
+      events: getRunTrace(c.key),
+      activity: snap.activity,
+      ...(snap.error ? { error: snap.error } : {}),
+      ...(last ? { lastMessage: last } : {}),
+    };
+  });
 }
 
 /** One run's live snapshot, by run key — a child's own cell. */

@@ -24,6 +24,7 @@ import {
   traceWithPersistedSteps,
   createPayloadBudget,
   midRunNotice,
+  formatSubagentDiagnostics,
 } from '@seanhogg/builderforce-brain-embedded';
 import type {
   BrainMessage,
@@ -32,6 +33,7 @@ import type {
   ChatDiagnosticsData,
   ChatDiagnosticsReport,
   PayloadBudget,
+  SubagentDiagnosticsInput,
 } from '@seanhogg/builderforce-brain-embedded';
 
 export interface TranscriptInput {
@@ -68,6 +70,9 @@ export interface TranscriptInput {
    * and one the settled trace can never carry.
    */
   activity?: BrainRunActivity | null;
+  /** Every sub-agent this chat's runs spawned this session, each read from its OWN run —
+   *  the owner's trace shows only that it waited on them. */
+  subagents?: SubagentDiagnosticsInput[];
 }
 
 /** True when there is something worth copying (any turn, trace step, or error). */
@@ -161,6 +166,9 @@ export function buildTranscript(input: TranscriptInput): string {
   // "no ticket was linked") is premature rather than damning. Saying so once, up
   // front, is the difference between a useful mid-run capture and a misleading one.
   if (input.running) lines.push(midRunNotice(input.activity, Date.now()), '');
+
+  const subagentLines = formatSubagentDiagnostics(input.subagents ?? [], Date.now());
+  if (subagentLines.length) lines.push(...subagentLines, '');
 
   // Structural honesty flags — an assistant turn that CLAIMED a file write or a
   // filed/linked ticket while no such tool call succeeded. Web parity: these ran only

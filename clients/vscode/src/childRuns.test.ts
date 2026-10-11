@@ -69,6 +69,18 @@ describe("childRuns", () => {
     await expect(runs.wait(10, [], 5)).resolves.toEqual({ reports: [], running: ["a1"] });
   });
 
+  it("gives way the moment the person speaks to the owner — its children keep running", async () => {
+    const runs = createChildRuns();
+    runs.register(child());
+    const waiting = runs.wait(10, [], 60_000);
+    expect(runs.interrupt(11)).toBe(false);
+    expect(runs.interrupt(10)).toBe(true);
+    const out = await waiting;
+    expect(out.running).toEqual(["a1"]);
+    expect(out.interrupted).toBe(true);
+    expect(runs.liveOf(10)).toHaveLength(1);
+  });
+
   it("lets an owner address only its own children", () => {
     const runs = createChildRuns();
     const a = runs.register(child());

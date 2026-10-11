@@ -11433,6 +11433,7 @@
       "removeAgent": "Quitar",
       "inviteAgent": "Invitar a un agente…",
       "agentsHint": "Escribe @ en el cuadro de mensaje para etiquetar a un agente invitado — responde en el chat y puede actuar sobre el trabajo del equipo — o ejecútalo en una tarea o épica vinculada arriba.",
+      "subagentOf": "subagente de {owner}",
       "people": "Personas",
       "noPeople": "Aún no se ha invitado a nadie.",
       "invitePerson": "Invitar por correo…",
