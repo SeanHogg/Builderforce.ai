@@ -1,3 +1,17 @@
+## ✅ RESOLVED 2026-10-11 — Agent replies no longer vanish into the reasoning, and an edit shows its result (agent-loop · agent-tools · brain-embedded 2026.10.7 · VSIX 2026.10.8 · api 2026.10.21 · agent-runtime 2026.10.1)
+
+Taken from the VS Code chat #133 diagnostics: 77 turns, 314 tool calls, one file read 13× around 7 edits, and most turns rendered as "reasoning only — no reply text".
+
+- **Replies swallowed into reasoning.** MiniMax-M1 quoted a spec inside its `<think>` block using a ``` fence whose closing fence was indented. `findCodeRegions` ran that unclosed fence to the end of the text, so every later `</think>` read as code. Each turn's reply then stayed in the reasoning, with a literal `</think>` showing in it, and learned memories repeated "Let me check X:".
+  - Fix: an unclosed fence that opens inside a thought no longer hides that thought's closing tag, and the fence ends there.
+  - Inline code now follows CommonMark: it can cross a line break but never a blank line, so one stray backtick can't hide tags paragraphs away.
+  - Code-fence examples (all of `reasoningTags.test.ts`) are unchanged.
+- **Edits re-read to check them.** A successful `edit_file` returned only `{ ok, replaced }`.
+  - The shared `applyStringEdit` now returns `excerpt`: the edited lines plus 2 lines of context, numbered, capped at 40. `edit_file` returns it together with `region`, and its description tells the model not to re-read.
+- **Unwired hint.** The "not found" `nearest` hint (the closest line and its neighbours) was computed and then dropped by the VS Code and on-prem providers and by `edit_file` itself, so it reached no model. `editFacts()` is now the one mapping all three providers spread.
+- Tests: `reasoning.test.ts` (2 new; 81/81 together with `reasoningTags.test.ts`), `edit.test.ts` (4 new), plus `registry`/`toolAliases`, `brainRunStore` (51/51) and the api runtime tests. Typechecks are clean in agent-tools, agent-loop, brain-embedded, vscode (host + webview), agent-runtime and api. VSIX 2026.10.8 is packaged and installed.
+- Seen in the same run, needing operator action rather than code: the chat's connected Anthropic account had expired and its refresh failed, so the run fell back to the shared pool (MiniMax-M1, then Grok 4.6). Reconnect it under Settings ▸ API Keys.
+
 ## ✅ RESOLVED 2026-10-11 — The IDE agent stops teaching its Evermind its own play-by-play, and checks imports and verify commands before it guesses (brain-embedded 2026.10.6 · VSIX 2026.10.7)
 
 The project #30 Evermind diagnostics showed held-out loss REGRESSED 2.72 → 3.24, with 9 of the last 24 learned memories reading as mid-turn narration. One IDE run (2026-09-27, ticket #2754) minted six head versions in ten minutes, each learned from text like "Let me check if X is imported:".

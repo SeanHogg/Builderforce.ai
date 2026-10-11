@@ -17,7 +17,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { exec, execFile } from "child_process";
 import { promisify } from "util";
-import { filterByGlob, applyStringEdit, normalizeScopeDir } from "@builderforce/agent-tools";
+import { filterByGlob, applyStringEdit, editFacts, normalizeScopeDir } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the agent-runtime Node provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
@@ -248,10 +248,10 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
       // surgical edit on a Windows/CRLF working tree ("it tried to change code and
       // couldn't").
       const edit = applyStringEdit(current, oldString, newString, replaceAll);
-      if (!edit.ok || edit.content == null) return { ok: false, error: edit.error ?? "oldString not found in file" };
+      if (!edit.ok || edit.content == null) return { ok: false, ...editFacts(edit), error: edit.error ?? "oldString not found in file" };
       await fs.writeFile(abs, edit.content, "utf-8");
       symbols.markDirty(abs);
-      return { ok: true, change: "modified", replaced: edit.replaced };
+      return { ok: true, change: "modified", ...editFacts(edit) };
     },
   };
 

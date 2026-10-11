@@ -87,7 +87,7 @@ import {
   assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey, type RawToolCall,
 } from './cloudAgentTools';
 import {
-  CURRENT_ENGINE_ID, evaluatePolicyGate, filterByGlob, applyStringEdit,
+  CURRENT_ENGINE_ID, evaluatePolicyGate, filterByGlob, applyStringEdit, editFacts,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type PolicyGate, type AgentExecParams, type Capability,
   type PrdWriteCapability, type PrdUpdateResult, type ToolSchema,
 } from '@builderforce/agent-tools';
@@ -863,7 +863,7 @@ function buildCloudProvider(args: {
         // agent that emits LF against a CRLF-committed file still edits it instead of
         // failing with "old_string not found" and giving up.
         const edit = applyStringEdit(rf.content, oldString, newString, replaceAll);
-        if (!edit.ok || edit.content == null) return { ok: false, error: `cannot edit '${path}': ${edit.error ?? 'old_string not found'}`, ...(edit.nearest ? { nearest: edit.nearest } : {}) };
+        if (!edit.ok || edit.content == null) return { ok: false, ...editFacts(edit), error: `cannot edit '${path}': ${edit.error ?? 'old_string not found'}` };
         const updated = edit.content;
         const inspection = await inspectOutboundContent(db, { tenantId, executionId, seam: 'repository_write', target: path, content: updated });
         if (!inspection.ok) return { ok: false, error: `Outbound content blocked: ${inspection.reasons.join(', ')}. Remove credential material; never commit secrets.` };
@@ -874,7 +874,7 @@ function buildCloudProvider(args: {
         await recordRepoWrite(db, tenantId, taskRow.id, target);
         await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, 'modified', agentLabel);
         notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'modified', ts: new Date().toISOString() });
-        return { ok: true, branch: target.branch, commitUrl: commit.commitUrl, change: 'modified', replaced: edit.replaced, ...(edit.region ? { region: edit.region } : {}) };
+        return { ok: true, branch: target.branch, commitUrl: commit.commitUrl, change: 'modified', ...editFacts(edit) };
       },
       async deleteFile(path, reason) {
         if (!repoCtx) return { ok: false, error: noRepo() };

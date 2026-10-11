@@ -99,6 +99,23 @@ describe("splitReasoningSegments — the shared transcript's split", () => {
     expect(splitReasoningSegments(text)).toEqual([{ kind: "answer", content: text }]);
   });
 
+  it("ends a thought at its tag even when the thought quoted a fence it never closed (MiniMax-M1, chat #133)", () => {
+    // The closing fence is indented, so the ``` opened in the reasoning never closes.
+    const text =
+      "<think>From the spec:\n```\n### S0.1 `StatTile`\n  ```ts\n  export function StatTile()\n  ```\nI'll add it now.</think>\n\nAdding StatTile to adminShared.tsx.\n\n<think>Next, the panels.</think>\n\nUpdating GuestSessionsPanel.";
+    const segments = splitReasoningSegments(text);
+    expect(segments.map((s) => s.kind)).toEqual(["thought", "answer", "thought", "answer"]);
+    expect(segments[1]!.content).toBe("Adding StatTile to adminShared.tsx.");
+    expect(segments[3]!.content).toBe("Updating GuestSessionsPanel.");
+    expect(segments.some((s) => s.content.includes("</think>"))).toBe(false);
+  });
+
+  it("does not let a stray backtick pair across paragraphs and hide a closing tag", () => {
+    const text = "<think>The `label prop is missing.\n\nCheck the other one.</think>\n\nThe `label` prop is required.";
+    expect(answerTextOf(text)).toBe("The `label` prop is required.");
+    expect(thoughtTextOf(text)).not.toContain("</think>");
+  });
+
   it("re-joins a sentence the closing tag cut in two", () => {
     // Verbatim shape (MiniMax-M1, chat #103): the chat's first visible line was
     // "tickets linked to this chat…" with its subject hidden in the reasoning.

@@ -32,6 +32,10 @@ export interface StringEditResult {
   /** Only on success: the 1-based line span the FIRST replacement occupies in the new
    *  content, so the caller can point at (or re-read) exactly what changed. */
   region?: { startLine: number; endLine: number };
+  /** Only on success: that span plus {@link EDIT_EXCERPT_CONTEXT} lines either side,
+   *  from the NEW content, as `n: text` — capped at {@link EDIT_EXCERPT_MAX_LINES}.
+   *  The agent sees what the file now says, so it does not re-read it to check. */
+  excerpt?: string;
 }
 
 const toLF = (s: string): string => s.replace(/\r\n/g, "\n");
@@ -42,6 +46,31 @@ const countNewlines = (s: string): number => s.split("\n").length - 1;
  *  text (`}`, `return;`) matches everywhere and would point at noise. */
 const MIN_CONTAINS_NEEDLE = 8;
 const EXCERPT_RADIUS = 3;
+/** Context lines either side of an edited span in a success excerpt. */
+export const EDIT_EXCERPT_CONTEXT = 2;
+/** Longest success excerpt; a bigger edit shows its head and tail around a `…` line. */
+export const EDIT_EXCERPT_MAX_LINES = 40;
+
+/** `lines[from, to)` as `n: text`, numbered 1-based. */
+function numberedLines(lines: readonly string[], from: number, to: number): string {
+  return lines.slice(from, to).map((l, i) => `${from + i + 1}: ${l}`).join("\n");
+}
+
+/**
+ * What the file says around an edit, after it — see {@link StringEditResult.excerpt}.
+ *
+ * Observed (VS Code chat #133): seven edits to one file and thirteen reads of it, each
+ * read checking what the edit before it had done, because a success said only
+ * `{ ok: true, replaced: 1 }`.
+ */
+function excerptAfterEdit(content: string, region: { startLine: number; endLine: number }): string {
+  const lines = content.split(/\r?\n/);
+  const from = Math.max(0, region.startLine - 1 - EDIT_EXCERPT_CONTEXT);
+  const to = Math.min(lines.length, region.endLine + EDIT_EXCERPT_CONTEXT);
+  if (to - from <= EDIT_EXCERPT_MAX_LINES) return numberedLines(lines, from, to);
+  const half = Math.floor(EDIT_EXCERPT_MAX_LINES / 2);
+  return `${numberedLines(lines, from, from + half)}\n…\n${numberedLines(lines, to - half, to)}`;
+}
 
 /** The 1-based line span of a replacement at `offset` in `content`, `newS` being what was written there. */
 function regionAt(content: string, offset: number, newS: string): { startLine: number; endLine: number } {
@@ -59,8 +88,7 @@ function findNearest(content: string, oldString: string): { line: number; excerp
   if (index === -1) return undefined;
   const from = Math.max(0, index - EXCERPT_RADIUS);
   const to = Math.min(lines.length, index + EXCERPT_RADIUS + 1);
-  const excerpt = lines.slice(from, to).map((l, i) => `${from + i + 1}: ${l}`).join("\n");
-  return { line: index + 1, excerpt };
+  return { line: index + 1, excerpt: numberedLines(lines, from, to) };
 }
 
 /**
@@ -117,12 +145,40 @@ export function applyStringEdit(
     }
     const next = replaceAll ? content.split(oldS).join(newS) : content.replace(oldS, newS);
     const replaced = replaceAll ? content.split(oldS).length - 1 : 1;
-    return { ok: true, content: next, replaced, region: regionAt(content, first, newS) };
+    const region = regionAt(content, first, newS);
+    return { ok: true, content: next, replaced, region, excerpt: excerptAfterEdit(next, region) };
   }
   const nearest = findNearest(content, oldString);
   return {
     ok: false,
     error: "oldString not found in file — read_file and copy the exact text (including indentation)",
     ...(nearest ? { nearest } : {}),
+  };
+}
+
+/** The model-facing facts of an edit, without the file content. */
+export interface EditFacts {
+  replaced?: number;
+  region?: { startLine: number; endLine: number };
+  excerpt?: string;
+  error?: string;
+  nearest?: { line: number; excerpt: string };
+}
+
+/**
+ * The ONE mapping from {@link applyStringEdit}'s result to what a provider returns.
+ *
+ * The core computed `nearest` on a miss and `region` on a hit, and two of the three
+ * providers dropped both on the floor (`{ ok: false, error }` / `{ ok: true, replaced }`),
+ * so the hint built to stop an agent re-sending the same wrong `oldString` never reached
+ * one. Every provider spreads this instead of picking fields by hand.
+ */
+export function editFacts(edit: StringEditResult): EditFacts {
+  return {
+    ...(edit.replaced != null ? { replaced: edit.replaced } : {}),
+    ...(edit.region ? { region: edit.region } : {}),
+    ...(edit.excerpt ? { excerpt: edit.excerpt } : {}),
+    ...(edit.error ? { error: edit.error } : {}),
+    ...(edit.nearest ? { nearest: edit.nearest } : {}),
   };
 }

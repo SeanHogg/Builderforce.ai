@@ -222,7 +222,7 @@ export const deleteFileTool: ToolDefinition = defineTool({
 export const editFileTool: ToolDefinition = defineTool({
   name: "edit_file",
   description:
-    "Make a surgical in-place edit to an existing file on the ticket branch: replace an exact snippet with new text, without rewriting the whole file. Read the file first so `old_string` matches EXACTLY (including indentation). `old_string` must be unique in the file unless you set `replace_all`. Prefer this over write_file for small changes to large files.",
+    "Make a surgical in-place edit to an existing file on the ticket branch: replace an exact snippet with new text, without rewriting the whole file. Read the file first so `old_string` matches EXACTLY (including indentation). `old_string` must be unique in the file unless you set `replace_all`. Prefer this over write_file for small changes to large files. A success returns `excerpt` — the edited lines with line numbers and a little context — so do NOT re-read the file to check the edit. A miss returns `nearest` — the closest matching line and its neighbours — copy `old_string` from there.",
   parameters: {
     type: "object",
     properties: {
@@ -241,10 +241,20 @@ export const editFileTool: ToolDefinition = defineTool({
     const replaceAll = args.replace_all === true;
     if (!path || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
     const r = (await ctx.caps.repoWrite!.editFile(path, oldString, newString, replaceAll)) as RepoEditResult;
+    // The provider computes WHERE the edit landed (and, on a miss, where the text most
+    // likely is); forwarding only `replaced` / `error` left the model to re-read the
+    // file to find out either.
     return {
       data: r.ok
-        ? { ok: true, branch: r.branch, commitUrl: r.commitUrl, replaced: r.replaced }
-        : { ok: false, error: r.error },
+        ? {
+            ok: true,
+            ...(r.branch ? { branch: r.branch } : {}),
+            ...(r.commitUrl ? { commitUrl: r.commitUrl } : {}),
+            replaced: r.replaced,
+            ...(r.region ? { region: r.region } : {}),
+            ...(r.excerpt ? { excerpt: r.excerpt } : {}),
+          }
+        : { ok: false, error: r.error, ...(r.nearest ? { nearest: r.nearest } : {}) },
     };
   },
 });

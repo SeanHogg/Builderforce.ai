@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyStringEdit } from "./edit.js";
+import { applyStringEdit, editFacts, EDIT_EXCERPT_MAX_LINES } from "./edit.js";
 
 const LF = "const a = 1;\nconst b = 2;\nconst c = 3;\n";
 const CRLF = LF.replace(/\n/g, "\r\n");
@@ -95,5 +95,36 @@ describe("applyStringEdit", () => {
     const before = "line1\n\tindented\nline3\n";
     const r = applyStringEdit(before, "\tindented", "\tINDENTED");
     expect(r.content).toBe("line1\n\tINDENTED\nline3\n");
+  });
+});
+
+describe("applyStringEdit — what the agent sees after an edit", () => {
+  it("returns the edited lines with context, numbered, from the NEW content", () => {
+    const file = ["l1", "l2", "l3", "old", "l5", "l6", "l7"].join("\n");
+    const r = applyStringEdit(file, "old", "new");
+    expect(r.excerpt).toBe(["2: l2", "3: l3", "4: new", "5: l5", "6: l6"].join("\n"));
+  });
+
+  it("caps a large edit's excerpt at its head and tail", () => {
+    const body = Array.from({ length: 100 }, (_, i) => `n${i}`).join("\n");
+    const r = applyStringEdit("top\nOLD\nbottom", "OLD", body);
+    const lines = r.excerpt!.split("\n");
+    expect(lines.length).toBe(EDIT_EXCERPT_MAX_LINES + 1);
+    expect(lines).toContain("…");
+  });
+});
+
+describe("editFacts — one mapping for every provider", () => {
+  it("carries region and excerpt on a hit, and never the file content", () => {
+    const facts = editFacts(applyStringEdit(LF, "const b = 2;", "const b = 20;"));
+    expect(facts).toEqual({ replaced: 1, region: { startLine: 2, endLine: 2 }, excerpt: expect.stringContaining("2: const b = 20;") });
+    expect(facts).not.toHaveProperty("content");
+  });
+
+  it("carries the error and the nearest-line hint on a miss", () => {
+    // The agent's indentation is wrong, so the literal misses but the line is found.
+    const facts = editFacts(applyStringEdit(LF, "  const b = 2;\n  const c = 4;", "x"));
+    expect(facts.error).toMatch(/not found/);
+    expect(facts.nearest?.line).toBe(2);
   });
 });

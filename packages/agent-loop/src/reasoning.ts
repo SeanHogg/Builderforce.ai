@@ -52,6 +52,8 @@ export type ReasoningTagTrim = "none" | "start" | "both";
 interface CodeRegion {
   start: number;
   end: number;
+  /** A fence that never closed — it runs to the end of the text. */
+  unterminated?: boolean;
 }
 
 /**
@@ -63,14 +65,17 @@ interface CodeRegion {
 function findCodeRegions(text: string): CodeRegion[] {
   const regions: CodeRegion[] = [];
 
-  const fencedRe = /(^|\n)(```|~~~)[^\n]*\n[\s\S]*?(?:\n\2(?:\n|$)|$)/g;
+  const fencedRe = /(^|\n)(```|~~~)[^\n]*\n[\s\S]*?(?:(\n\2(?:\n|$))|$)/g;
   for (const match of text.matchAll(fencedRe)) {
     const lead = match[1] ?? "";
     const start = (match.index ?? 0) + lead.length;
-    regions.push({ start, end: start + match[0].length - lead.length });
+    regions.push({ start, end: start + match[0].length - lead.length, unterminated: match[3] === undefined });
   }
 
-  const inlineRe = /`+[^`]+`+/g;
+  // Inline code may cross a line break (a mid-line ``` "fence" is one) but never a
+  // blank line — the CommonMark rule — so a lone stray backtick cannot pair with
+  // another three paragraphs on and hide every tag between them.
+  const inlineRe = /`+(?:[^`\n]|\n(?![ \t]*\n))+`+/g;
   for (const match of text.matchAll(inlineRe)) {
     const start = match.index ?? 0;
     const end = start + match[0].length;
@@ -84,6 +89,10 @@ function findCodeRegions(text: string): CodeRegion[] {
 
 function isInsideCode(pos: number, regions: readonly CodeRegion[]): boolean {
   return regions.some((r) => pos >= r.start && pos < r.end);
+}
+
+function codeRegionAt(pos: number, regions: readonly CodeRegion[]): CodeRegion | undefined {
+  return regions.find((r) => pos >= r.start && pos < r.end);
 }
 
 /**
@@ -125,8 +134,18 @@ function scanReasoning(text: string): ReasoningSpan[] {
   REASONING_TAG_RE.lastIndex = 0;
   for (const match of text.matchAll(REASONING_TAG_RE)) {
     const idx = match.index ?? 0;
-    if (isInsideCode(idx, regions)) continue;
     const isClose = match[1] === "/";
+    const region = codeRegionAt(idx, regions);
+    if (region) {
+      // An UNCLOSED fence opened inside a thought does not own that thought's closing
+      // tag. Observed (MiniMax-M1, VS Code chat #133): the reasoning quoted a spec in a
+      // ``` block whose closing fence was indented, so the fence ran to the end of the
+      // text, every later `</think>` read as code, and each turn's reply was swallowed
+      // into the reasoning. The thought ends at its tag, and the runaway fence with it.
+      const releases = region.unterminated === true && kind === "thought" && isClose && region.start >= contentStart;
+      if (!releases) continue;
+      region.end = idx;
+    }
     if (kind === "thought" && !isClose) continue;
     const after = idx + match[0].length;
     spans.push({ kind, start, contentStart, contentEnd: idx, end: isClose ? after : idx, unterminated: false });

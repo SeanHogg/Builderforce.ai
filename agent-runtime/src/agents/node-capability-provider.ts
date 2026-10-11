@@ -29,7 +29,7 @@ import {
   writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { join, relative, resolve as resolvePath, sep } from "node:path";
-import { applyStringEdit, filterByGlob, normalizeScopeDir, isUnderScopeDir } from "@builderforce/agent-tools";
+import { applyStringEdit, editFacts, filterByGlob, normalizeScopeDir, isUnderScopeDir } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the VS Code local provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
@@ -299,12 +299,12 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         // failed edit on the cloud did not recover on-prem.
         const result = applyStringEdit(raw, oldString, newString, replaceAll === true);
         if (!result.ok || result.content === undefined) {
-          return { ok: false, error: result.error ?? "edit failed" };
+          return { ok: false, ...editFacts(result), error: result.error ?? "edit failed" };
         }
         try {
           await fsWriteFile(abs, result.content, "utf-8");
           symbols.markDirty(abs);
-          return { ok: true, change: "modified", replaced: result.replaced };
+          return { ok: true, change: "modified", ...editFacts(result) };
         } catch (err) {
           return { ok: false, error: err instanceof Error ? err.message : String(err) };
         }

@@ -543,6 +543,8 @@ export interface RepoEditResult {
   nearest?: { line: number; excerpt: string };
   /** On success: the 1-based line span of the first replacement (see `StringEditResult.region`). */
   region?: { startLine: number; endLine: number };
+  /** On success: the edited lines plus context, numbered (see `StringEditResult.excerpt`). */
+  excerpt?: string;
 }
 
 /** One semantic search hit — a function/class that matched the query by meaning. */
