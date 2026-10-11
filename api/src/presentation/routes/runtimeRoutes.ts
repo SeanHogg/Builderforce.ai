@@ -359,7 +359,7 @@ async function cancelTenantExecutions(
   await Promise.all(rows.map(async (row) => {
     try {
       const execution = await runtimeService.cancel(row.id, c.get('userId'));
-      await releasePendingSteers(db, row.id);
+      await releasePendingSteers(db, tenantId, row.id);
 
       if (row.agentHostId != null) {
         const stub = c.env.AGENT_HOST_RELAY?.get(
@@ -1002,7 +1002,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
     // The durable steering/chat thread (0109) — so a steer survives a reload and
     // the Output tab can render the real conversation, not just optimistic echoes.
-    const messages = await listExecutionMessages(db, id);
+    const messages = await listExecutionMessages(db, plain.tenantId, id);
 
     // The run's LLM turns as STRUCTURED rows (0949): resolved model, vendor, token
     // counts, duration, and the trace id each turn can be looked up by. Previously
@@ -1248,7 +1248,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const plain = execution.toPlain() as { agentHostId?: number | null };
 
     // Terminal now — drop any pending steer so it can't dangle unconsumed.
-    await releasePendingSteers(db, id);
+    await releasePendingSteers(db, c.get('tenantId'), id);
 
     if (plain.agentHostId != null) {
       const stub = c.env.AGENT_HOST_RELAY?.get(

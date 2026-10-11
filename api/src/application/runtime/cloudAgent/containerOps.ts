@@ -32,6 +32,7 @@ import { coordinationScopeKey } from '../../../domain/coordination/resourceKey';
 import { isMemoryScope } from '../../../domain/memory/memoryScope';
 import { ExecutionStatus, TenantRole } from '../../../domain/shared/types';
 import { executions, tasks } from '../../../infrastructure/database/schema';
+import { scopedToTenant } from '../../../infrastructure/database/tenantScope';
 import { buildCoordinationCapability, claimWriteLease } from '../../coordination/coordinationCapability';
 import { releaseAllForExecution } from '../../coordination/leaseService';
 import {
@@ -444,7 +445,7 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     // An owner never ends with children still working. The image's loop treats a steer as
     // overriding a finish in the same turn, so the gate needs nothing from the image.
     const finishing = Array.isArray(turn.toolCalls) && (turn.toolCalls as Array<{ function?: { name?: string } }>).some((c) => c.function?.name === 'finish');
-    const childBlock = finishing ? await liveChildrenFinishBlock(db, executionId) : null;
+    const childBlock = finishing ? await liveChildrenFinishBlock(db, tenantId, executionId) : null;
     if (childBlock) steering.push(childBlock);
     return { status: 200, body: {
       content: turn.content, toolCalls: turn.toolCalls, steering,
@@ -592,7 +593,7 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     // reason. This is that surface's equivalent of the release in `runCloudToolLoop`.
     await releaseAllForExecution(env, db, tenantId, executionId, coordinationScopeKey(taskId));
     // Its sub-agents committed from their own runs; the pull request is the whole tree's.
-    await absorbChildWrites(db, executionId, repoCtx, writtenPaths);
+    await absorbChildWrites(db, tenantId, executionId, repoCtx, writtenPaths);
     const fin = await engine.finalizeCloudRun(env, db, { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, repoMiss, writtenPaths, finalOutput, cancelled });
     if (!cancelled) {
       await runtimeService.update(executionId, fin.ok ? { status: ExecutionStatus.COMPLETED, result: fin.output } : { status: ExecutionStatus.FAILED, errorMessage: fin.output })
@@ -654,7 +655,7 @@ async function delegationOp(deps: ContainerOpDeps): Promise<ContainerOpResult> {
     return { status: 200, body: { ok: false, error: 'this run was cancelled; do not delegate, just stop' } };
   }
   await heartbeatExecution(db, executionId);
-  const [row] = await db.select({ payload: executions.payload }).from(executions).where(eq(executions.id, executionId)).limit(1);
+  const [row] = await db.select({ payload: executions.payload }).from(executions).where(scopedToTenant(executions, tenantId, eq(executions.id, executionId))).limit(1);
   const orchestration = buildLiveOrchestration({
     env, db, runtime: runtimeService,
     parent: {

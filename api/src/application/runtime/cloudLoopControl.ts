@@ -58,7 +58,7 @@ export async function applyPendingSteering(
     step?: number;
   },
 ): Promise<string[]> {
-  const steers = await pullPendingSteering(db, args.executionId);
+  const steers = await pullPendingSteering(db, args.tenantId, args.executionId);
   if (steers.length === 0) return [];
 
   const present = new Set(

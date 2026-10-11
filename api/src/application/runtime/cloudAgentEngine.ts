@@ -1382,7 +1382,7 @@ async function runCloudToolLoop(
 
     onNoToolCalls: async (_ctx, turn) => {
       // An owner never ends with children still working (their reports would strand).
-      const childBlock = opts?.delegation ? await liveChildrenFinishBlock(db, executionId) : null;
+      const childBlock = opts?.delegation ? await liveChildrenFinishBlock(db, tenantId, executionId) : null;
       if (childBlock) {
         messages.push({ role: 'assistant', content: turn.content });
         messages.push({ role: 'user', content: childBlock });
@@ -1479,10 +1479,10 @@ async function runCloudToolLoop(
 
     onFinish: async (ctx, summary) => {
       if (opts?.delegation) {
-        const childBlock = await liveChildrenFinishBlock(db, executionId);
+        const childBlock = await liveChildrenFinishBlock(db, tenantId, executionId);
         if (childBlock) return childBlock;
         // The children committed from their own runs; the pull request is the whole tree's.
-        await absorbChildWrites(db, executionId, repoCtx, writtenPaths);
+        await absorbChildWrites(db, tenantId, executionId, repoCtx, writtenPaths);
       }
       // Four finish gates, in order. Either yields a block message that forces the
       // agent to call finish again once it has corrected the run; null = ship.

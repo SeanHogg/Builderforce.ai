@@ -15,13 +15,15 @@
  * Spawning and the parent's verbs are `cloudLiveOrchestration.ts`.
  */
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { childReportText, type ChildReportLike, type ModelRole } from '@builderforce/agent-tools';
 import { subagentSystemPrompt } from '@builderforce/agent-loop';
 import { executions } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TERMINAL_EXECUTION_STATUSES } from '../../domain/execution/Execution';
 import type { ExecutionStatus } from '../../domain/shared/types';
+import { parseJsonObject } from '../../domain/shared/json';
 import { listBranchDiff } from '../repos/readRepoContents';
 import type { TicketRepoContext } from '../repos/commitFileAsPendingChange';
 import { enqueueExecutionMessage, releasePendingSteers } from './executionSteering';
@@ -79,12 +81,8 @@ export const isSubagentRun = (payload: string | null | undefined): boolean => pa
 
 /** The child's payload: its owner's routing (chat, agent, model, gates) and its own spec. */
 export function childPayload(parentPayload: string | undefined, spec: CloudChildSpec): string {
-  let parent: Record<string, unknown> = {};
-  try {
-    if (parentPayload) parent = JSON.parse(parentPayload) as Record<string, unknown>;
-  } catch {
-    /* an unreadable parent payload just carries nothing forward */
-  }
+  // An unreadable parent payload just carries nothing forward.
+  const parent = parseJsonObject(parentPayload);
   // Only what routes and governs the run is inherited. A parent's follow-up directive,
   // role instruction or review sign-off is ITS job, not the child's.
   const inherited = Object.fromEntries(
@@ -109,24 +107,24 @@ type ChildRow = { id: number; status: string; payload: string | null; result: st
 
 const isTerminal = (status: string): boolean => TERMINAL_EXECUTION_STATUSES.includes(status as ExecutionStatus);
 
-export async function childrenOf(db: Db, parentExecutionId: number): Promise<ChildRow[]> {
+export async function childrenOf(db: Db, tenantId: number, parentExecutionId: number): Promise<ChildRow[]> {
   return db
     .select({ id: executions.id, status: executions.status, payload: executions.payload, result: executions.result, errorMessage: executions.errorMessage })
     .from(executions)
-    .where(eq(executions.parentExecutionId, parentExecutionId));
+    .where(scopedToTenant(executions, tenantId, eq(executions.parentExecutionId, parentExecutionId)));
 }
 
 /** Handles of a run's children that are still working. */
-export async function liveChildHandles(db: Db, parentExecutionId: number): Promise<string[]> {
-  return (await childrenOf(db, parentExecutionId)).filter((c) => !isTerminal(c.status)).map((c) => childHandle(c.id));
+export async function liveChildHandles(db: Db, tenantId: number, parentExecutionId: number): Promise<string[]> {
+  return (await childrenOf(db, tenantId, parentExecutionId)).filter((c) => !isTerminal(c.status)).map((c) => childHandle(c.id));
 }
 
 /**
  * Why a parent may not finish yet, or null. A run that ends with children still working
  * would strand their reports — and it opens the pull request without their changes.
  */
-export async function liveChildrenFinishBlock(db: Db, parentExecutionId: number): Promise<string | null> {
-  const live = await liveChildHandles(db, parentExecutionId);
+export async function liveChildrenFinishBlock(db: Db, tenantId: number, parentExecutionId: number): Promise<string | null> {
+  const live = await liveChildHandles(db, tenantId, parentExecutionId);
   return live.length
     ? `Your sub-agents ${live.join(', ')} are still running. Call wait_agents (their reports arrive as messages) or stop_agent before you finish — the pull request must include their work.`
     : null;
@@ -137,9 +135,9 @@ export async function liveChildrenFinishBlock(db: Db, parentExecutionId: number)
  * set — they committed from their own runs, so it never saw the writes. Read from the
  * branch itself, so it is exactly what the pull request will hold (grandchildren too).
  */
-export async function absorbChildWrites(db: Db, parentExecutionId: number, repoCtx: TicketRepoContext | null, writtenPaths: Set<string>): Promise<void> {
+export async function absorbChildWrites(db: Db, tenantId: number, parentExecutionId: number, repoCtx: TicketRepoContext | null, writtenPaths: Set<string>): Promise<void> {
   if (!repoCtx) return;
-  if (!(await childrenOf(db, parentExecutionId)).length) return;
+  if (!(await childrenOf(db, tenantId, parentExecutionId)).length) return;
   const diff = await listBranchDiff({ ...repoCtx, ref: repoCtx.branch }, repoCtx.base, repoCtx.branch);
   if (diff.ok) for (const f of diff.files) writtenPaths.add(f.path);
 }
@@ -169,12 +167,12 @@ export async function settleCloudChildLineage(db: Db, runtime: RuntimeService, e
       .where(eq(executions.id, executionId))
       .limit(1);
     if (!row) return;
-    await stopLiveChildren(db, runtime, executionId, `execution:${executionId}`);
+    await stopLiveChildren(db, runtime, row.tenantId, executionId, `execution:${executionId}`);
     const spec = parseCloudChild(row.payload);
     if (!spec || row.parentExecutionId == null) return;
     // Direction that reached a child after its last turn has nobody left to act on it —
     // its owner, not a follow-up run, decides what happens next.
-    await releasePendingSteers(db, executionId);
+    await releasePendingSteers(db, row.tenantId, executionId);
     const report = reportOf(row, spec);
     // The chat hears every child, as it does in the editor.
     await postSubagentChatReport(db, row.tenantId, parseOriginatingChatId(row.payload), parseCloudAgentRef(row.payload ?? undefined), {
@@ -186,7 +184,7 @@ export async function settleCloudChildLineage(db: Db, runtime: RuntimeService, e
       ...(spec.asAgent ? { asAgent: spec.asAgent } : {}),
     });
     // The parent hears it once, before its next turn — unless it has already ended.
-    const [parent] = await db.select({ status: executions.status }).from(executions).where(eq(executions.id, row.parentExecutionId)).limit(1);
+    const [parent] = await db.select({ status: executions.status }).from(executions).where(scopedToTenant(executions, row.tenantId, eq(executions.id, row.parentExecutionId))).limit(1);
     if (parent && !isTerminal(parent.status)) {
       await enqueueExecutionMessage(db, { executionId: row.parentExecutionId, tenantId: row.tenantId, role: 'user', text: childReportText(report) });
     }
@@ -196,30 +194,31 @@ export async function settleCloudChildLineage(db: Db, runtime: RuntimeService, e
 }
 
 /** Stop a run's live children (all, or the named handles). Returns the handles stopped. */
-export async function stopLiveChildren(db: Db, runtime: RuntimeService, parentExecutionId: number, by: string, handles?: readonly string[]): Promise<string[]> {
+export async function stopLiveChildren(db: Db, runtime: RuntimeService, tenantId: number, parentExecutionId: number, by: string, handles?: readonly string[]): Promise<string[]> {
   const wanted = handles ? new Set(handles.map(childIdOf).filter((id): id is number => id != null)) : null;
-  const live = (await childrenOf(db, parentExecutionId)).filter((c) => !isTerminal(c.status) && (!wanted || wanted.has(c.id)));
+  const live = (await childrenOf(db, tenantId, parentExecutionId)).filter((c) => !isTerminal(c.status) && (!wanted || wanted.has(c.id)));
   const stopped: string[] = [];
   for (const child of live) {
     try {
       await runtime.cancel(child.id, by);
-      await releasePendingSteers(db, child.id);
-      stopped.push(childHandle(child.id));
     } catch {
-      /* it ended on its own between the read and the cancel */
+      // It ended on its own between the read and the cancel — nothing left to stop.
+      continue;
     }
+    await releasePendingSteers(db, tenantId, child.id);
+    stopped.push(childHandle(child.id));
   }
   return stopped;
 }
 
 /** The child rows of a parent, by handle — for a wait or a message addressed to them. */
-export async function childRowsByHandle(db: Db, parentExecutionId: number, handles: readonly string[]): Promise<ChildRow[]> {
+export async function childRowsByHandle(db: Db, tenantId: number, parentExecutionId: number, handles: readonly string[]): Promise<ChildRow[]> {
   const ids = handles.map(childIdOf).filter((id): id is number => id != null);
   if (!ids.length) return [];
   return db
     .select({ id: executions.id, status: executions.status, payload: executions.payload, result: executions.result, errorMessage: executions.errorMessage })
     .from(executions)
-    .where(and(eq(executions.parentExecutionId, parentExecutionId), inArray(executions.id, ids)));
+    .where(scopedToTenant(executions, tenantId, eq(executions.parentExecutionId, parentExecutionId), inArray(executions.id, ids)));
 }
 
 export { isTerminal as isTerminalExecutionStatus };

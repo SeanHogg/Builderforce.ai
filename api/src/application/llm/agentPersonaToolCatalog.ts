@@ -111,11 +111,12 @@ export const AGENT_PERSONA_TOOLS: BuiltinTool[] = [
       for (const id of ids) {
         try {
           await getTenantTask(ctx, id);
-          await ctx.tasks.updateTask(id, { assignedAgentRef: staffed.agentRef });
-          assigned.push(id);
         } catch {
           // A ticket outside this tenant, or gone, is skipped — the staffing still stands.
+          continue;
         }
+        await ctx.tasks.updateTask(id, { assignedAgentRef: staffed.agentRef });
+        assigned.push(id);
       }
       return { ok: true, ...staffed, ...(ids.length ? { assigned } : {}) };
     },

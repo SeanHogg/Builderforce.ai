@@ -130,7 +130,8 @@ export function resolveAdminRoute(tabParam: string, subParam: string): { group: 
     }
   }
   if (!group) group = ADMIN_GROUP_META[0];
-  const alias = ADMIN_SUB_ALIASES.find((entry) => entry.fromGroup === group.id && entry.fromSub === subId);
+  const fromGroup = group.id;
+  const alias = ADMIN_SUB_ALIASES.find((entry) => entry.fromGroup === fromGroup && entry.fromSub === subId);
   if (alias) {
     group = ADMIN_GROUP_META.find((g) => g.id === alias.toGroup) ?? group;
     subId = alias.toSub;

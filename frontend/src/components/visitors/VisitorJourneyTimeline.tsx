@@ -52,7 +52,7 @@ export function VisitorJourneyTimeline({ visitorId }: { visitorId: string }) {
 
       {data && (
         <>
-          <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>
+          <p className="ui-text-small text-muted" style={{ margin: 0 }}>
             {t('journeySummary', {
               visits: data.totals.visits,
               pageViews: data.totals.pageViews,
@@ -62,7 +62,7 @@ export function VisitorJourneyTimeline({ visitorId }: { visitorId: string }) {
           </p>
 
           {data.visits.length === 0 && (
-            <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>{t('journeyEmpty')}</p>
+            <p className="ui-text-small text-muted" style={{ margin: 0 }}>{t('journeyEmpty')}</p>
           )}
 
           {data.visits.map((visit, index) => (
@@ -76,13 +76,13 @@ export function VisitorJourneyTimeline({ visitorId }: { visitorId: string }) {
               }}
             >
               <header style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
-                <strong style={{ fontSize: 13, color: 'var(--text-strong)' }}>
+                <strong className="ui-text-small" style={{ fontWeight: 600, color: 'var(--text-strong)' }}>
                   {/* Visits arrive newest-first, so the LAST one in the list is
                       visit 1 — numbering them from the end is what makes "they
                       came back three times" readable at a glance. */}
                   {t('visitNumber', { number: data.visits.length - index })}
                 </strong>
-                <span className="text-muted" style={{ fontSize: 12 }}>
+                <span className="ui-text-small text-muted">
                   {fmtDateTime(visit.startedAt)}
                   {visit.durationMs !== null && ` · ${formatDuration(visit.durationMs)}`}
                 </span>
@@ -107,7 +107,7 @@ function JourneyStep({ step, at }: { step: AdminVisitorJourneyStep; at: string }
   const kindLabel = t.has(`kindLabel.${step.kind}`) ? t(`kindLabel.${step.kind}`) : step.kind;
 
   return (
-    <li style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, minWidth: 0 }}>
+    <li className="ui-text-small" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', minWidth: 0 }}>
       <span
         aria-hidden
         style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: color, marginTop: 5, flexShrink: 0 }}

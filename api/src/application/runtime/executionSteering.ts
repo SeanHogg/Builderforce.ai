@@ -16,7 +16,7 @@
  * Every function is best-effort on write/read failure (telemetry-grade) so it can
  * never break a run, mirroring the recordCloud* helpers.
  */
-import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { asc, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { executionMessages } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -74,18 +74,18 @@ export async function enqueueExecutionMessage(
  * the steer texts oldest-first (the order the user sent them). Empty on no pending
  * steers or any error — the loop simply proceeds without injecting a turn.
  */
-export async function pullPendingSteering(db: Db, executionId: number): Promise<string[]> {
+export async function pullPendingSteering(db: Db, tenantId: number, executionId: number): Promise<string[]> {
   try {
     const rows = await db
       .select({ text: executionMessages.text })
       .from(executionMessages)
-      .where(and(eq(executionMessages.executionId, executionId), eq(executionMessages.role, 'user'), isNull(executionMessages.consumedAt)))
+      .where(scopedToTenant(executionMessages, tenantId, eq(executionMessages.executionId, executionId), eq(executionMessages.role, 'user'), isNull(executionMessages.consumedAt)))
       .orderBy(asc(executionMessages.createdAt));
     if (rows.length === 0) return [];
     // Stamp consumed before returning so a later tick can't re-deliver the same steer.
     await db.update(executionMessages)
       .set({ consumedAt: new Date() })
-      .where(and(eq(executionMessages.executionId, executionId), isNull(executionMessages.consumedAt)));
+      .where(scopedToTenant(executionMessages, tenantId, eq(executionMessages.executionId, executionId), isNull(executionMessages.consumedAt)));
     return rows.map((r) => r.text).filter((t) => t.trim().length > 0);
   } catch {
     return [];
@@ -97,12 +97,14 @@ export async function pullPendingSteering(db: Db, executionId: number): Promise<
  * as opposed to a sub-agent's report (which has no sender). A parent waiting on its
  * children stops waiting for it. False on any error: the wait then simply runs on.
  */
-export async function hasPendingPersonSteer(db: Db, executionId: number): Promise<boolean> {
+export async function hasPendingPersonSteer(db: Db, tenantId: number, executionId: number): Promise<boolean> {
   try {
     const [row] = await db
       .select({ id: executionMessages.id })
       .from(executionMessages)
-      .where(and(
+      .where(scopedToTenant(
+        executionMessages,
+        tenantId,
         eq(executionMessages.executionId, executionId),
         eq(executionMessages.role, 'user'),
         isNull(executionMessages.consumedAt),
@@ -121,16 +123,16 @@ export async function hasPendingPersonSteer(db: Db, executionId: number): Promis
  * loop's last step and the status flip is never left dangling (it can no longer be
  * delivered to a stopped loop). Idempotent + best-effort. Returns how many it released.
  */
-export async function releasePendingSteers(db: Db, executionId: number): Promise<number> {
+export async function releasePendingSteers(db: Db, tenantId: number, executionId: number): Promise<number> {
   try {
     const pending = await db
       .select({ id: executionMessages.id })
       .from(executionMessages)
-      .where(and(eq(executionMessages.executionId, executionId), isNull(executionMessages.consumedAt)));
+      .where(scopedToTenant(executionMessages, tenantId, eq(executionMessages.executionId, executionId), isNull(executionMessages.consumedAt)));
     if (pending.length === 0) return 0;
     await db.update(executionMessages)
       .set({ consumedAt: new Date() })
-      .where(and(eq(executionMessages.executionId, executionId), isNull(executionMessages.consumedAt)));
+      .where(scopedToTenant(executionMessages, tenantId, eq(executionMessages.executionId, executionId), isNull(executionMessages.consumedAt)));
     return pending.length;
   } catch {
     return 0;
@@ -138,7 +140,7 @@ export async function releasePendingSteers(db: Db, executionId: number): Promise
 }
 
 /** The full persisted thread for an execution, oldest-first, for the trace view. */
-export async function listExecutionMessages(db: Db, executionId: number): Promise<ExecutionMessageRow[]> {
+export async function listExecutionMessages(db: Db, tenantId: number, executionId: number): Promise<ExecutionMessageRow[]> {
   try {
     const rows = await db
       .select({
@@ -150,7 +152,7 @@ export async function listExecutionMessages(db: Db, executionId: number): Promis
         lateDetail: executionMessages.lateDetail,
       })
       .from(executionMessages)
-      .where(eq(executionMessages.executionId, executionId))
+      .where(scopedToTenant(executionMessages, tenantId, eq(executionMessages.executionId, executionId)))
       .orderBy(asc(executionMessages.createdAt))
       .limit(500);
     return rows.map((r) => ({

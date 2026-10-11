@@ -23,6 +23,7 @@ import {
 import { MAX_SUBAGENT_DEPTH } from '@builderforce/agent-loop';
 import { eq } from 'drizzle-orm';
 import { executions } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
@@ -144,7 +145,7 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
       const handle = childHandle(id);
       const payload = childPayload(parent.payload, spec(handle));
       // The owner pointer, set before the child takes its first step.
-      await db.update(executions).set({ parentExecutionId: parent.executionId, payload }).where(eq(executions.id, id));
+      await db.update(executions).set({ parentExecutionId: parent.executionId, payload }).where(scopedToTenant(executions, parent.tenantId, eq(executions.id, id)));
       const refused = await startOnRunner(id, payload);
       if (refused) {
         await runtime.cancel(id, `execution:${parent.executionId}`).catch(() => undefined);
@@ -159,18 +160,18 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
 
   const live: LiveChildControls = {
     async wait(handles, timeoutMs, signal) {
-      const targets = handles.length ? [...handles] : await liveChildHandles(db, parent.executionId);
+      const targets = handles.length ? [...handles] : await liveChildHandles(db, parent.tenantId, parent.executionId);
       const deadline = Date.now() + Math.min(timeoutMs, CLOUD_WAIT_CAP_MS);
       let running: string[] = [];
       let finished: string[] = [];
       let interrupted = false;
       for (;;) {
-        const rows = await childRowsByHandle(db, parent.executionId, targets);
+        const rows = await childRowsByHandle(db, parent.tenantId, parent.executionId, targets);
         running = rows.filter((r) => !isTerminalExecutionStatus(r.status)).map((r) => childHandle(r.id));
         finished = rows.filter((r) => isTerminalExecutionStatus(r.status)).map((r) => childHandle(r.id));
         if (!running.length || Date.now() >= deadline || signal?.aborted) break;
         // The person spoke to this run: the wait gives way so the next turn answers them.
-        if ((interrupted = await hasPendingPersonSteer(db, parent.executionId))) break;
+        if ((interrupted = await hasPendingPersonSteer(db, parent.tenantId, parent.executionId))) break;
         await deps.heartbeat();
         await sleep(WAIT_POLL_MS, signal);
       }
@@ -186,7 +187,7 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
     },
 
     async message(handle, text) {
-      const [row] = await childRowsByHandle(db, parent.executionId, [handle]);
+      const [row] = await childRowsByHandle(db, parent.tenantId, parent.executionId, [handle]);
       if (!row) return { ok: false, error: `no sub-agent '${handle}' of yours` };
       if (isTerminalExecutionStatus(row.status)) return { ok: false, error: `${handle} already finished (${row.status}) — spawn a new one for more work` };
       await enqueueExecutionMessage(db, { executionId: row.id, tenantId: parent.tenantId, role: 'user', text: ownerDirectionText(owner, text) });
@@ -203,7 +204,7 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
       return { ok: true };
     },
 
-    stop: (handles) => stopLiveChildren(db, runtime, parent.executionId, `execution:${parent.executionId}`, handles === 'all' ? undefined : handles),
+    stop: (handles) => stopLiveChildren(db, runtime, parent.tenantId, parent.executionId, `execution:${parent.executionId}`, handles === 'all' ? undefined : handles),
   };
 
   return { spawn, live };
