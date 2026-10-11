@@ -11,11 +11,17 @@
  *   • the STUDENT port: `adaptAndDiff` over the project head, yielding the diff the
  *     coordinator merges (null when the text has no trainable window);
  *   • the mapping of the engine's outcome onto the coordinator's provenance fields, and
- *     the fault breaker for a teacher that failed at the gateway.
+ *     the fault breaker for a teacher that failed at the gateway;
+ *   • run-text hygiene: agent mid-turn NARRATION ("Let me check…", tool-call
+ *     play-by-play) is stripped before any RAW run text is adapted on — the
+ *     un-distilled path, the refine-mode teacher input and the teacher fallback. A run
+ *     whose text was nothing but narration teaches nothing. Unfiltered, that chatter
+ *     self-learned into the head, regressed held-out loss and kept it quarantined.
  */
 
 import { adaptAndDiff, type AdaptResult, type EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
 import { DistillationEngine, type DistillationStudent, type DistillationTeacher } from '@seanhogg/builderforce-memory/distillation';
+import { stripRunNarration } from '@builderforce/agent-loop';
 import type { Env } from '../../env';
 import {
   TEACHER_MIN_OUTPUT_CHARS,
@@ -52,6 +58,22 @@ export interface EvermindDistilledEntry {
   skipDetail?: string;
   /** Present when NOT distilled but a teacher WAS pinned: which model failed. */
   attemptedTeacherModel?: string;
+  /** What "Learned" should show: the exemplar when distilled, otherwise the run text
+   *  with its narration stripped. Absent when nothing was learned. */
+  learnedText?: string;
+  /** True when the raw run text was ALL narration, so it was not learned from. */
+  narrationOnly?: boolean;
+}
+
+/**
+ * The part of a raw run text worth learning from — narration stripped — or null when
+ * stripping left less than {@link TEACHER_MIN_OUTPUT_CHARS} (nothing but play-by-play).
+ * A text with no narration in it is returned as-is, whatever its length.
+ */
+export function learnableRunText(runText: string): string | null {
+  const { text, dropped } = stripRunNarration(runText);
+  if (dropped === 0) return runText;
+  return text.length >= TEACHER_MIN_OUTPUT_CHARS ? text : null;
 }
 
 /** The project head as a distillation student. */
@@ -84,10 +106,13 @@ function gatewayTeacher(env: Env, tenantId: number, model: string, mode: Teacher
 }
 
 /**
- * Learn one run entry. With no effective teacher the student learns the raw run text.
- * With one, a threaded task `prompt` is ANSWERED (`task → ideal answer`), otherwise the
- * run output is REFINED (`run context → ideal version`); a teacher that fails, or whose
- * exemplar is below {@link TEACHER_MIN_OUTPUT_CHARS}, falls back to the raw run text.
+ * Learn one run entry. With no effective teacher the student learns the run text,
+ * narration stripped. With one, a threaded task `prompt` is ANSWERED (`task → ideal
+ * answer`), otherwise the cleaned run output is REFINED (`run context → ideal
+ * version`); a teacher that fails, or whose exemplar is below
+ * {@link TEACHER_MIN_OUTPUT_CHARS}, falls back to the cleaned run text. A run text that
+ * is all narration is never adapted on: with no teacher prompt to answer, the entry
+ * learns nothing (`narrationOnly`), and a failed teacher has no fallback to learn.
  */
 export async function distillEvermindEntry(
   env: Env,
@@ -97,17 +122,26 @@ export async function distillEvermindEntry(
   runText: string,
   opts?: { prompt?: string | null; signal?: AbortSignal },
 ): Promise<EvermindDistilledEntry> {
-  if (teacher.model === null) {
-    return { adapted: await student.adapt(runText), distilled: false, skipReason: teacher.reason };
+  const learnable = learnableRunText(runText);
+  const prompt = (opts?.prompt ?? '').trim();
+  if (teacher.model === null || (!learnable && !prompt)) {
+    const skipReason = teacher.model === null ? teacher.reason : undefined;
+    if (!learnable) return { adapted: null, distilled: false, narrationOnly: true, ...(skipReason ? { skipReason } : {}) };
+    return { adapted: await student.adapt(learnable), distilled: false, learnedText: learnable, ...(skipReason ? { skipReason } : {}) };
   }
   const model = teacher.model;
-  const prompt = (opts?.prompt ?? '').trim();
-  const [input, mode] = prompt ? [prompt, 'answer' as const] : [runText, 'refine' as const];
+  const [input, mode] = prompt ? [prompt, 'answer' as const] : [learnable!, 'refine' as const];
 
+  // A narration-only run has no fallback worth learning: the student skips an empty
+  // fallback instead of fitting on it.
+  const guarded: DistillationStudent<EvermindAdaptation> = {
+    ...student,
+    adapt: async (text) => (text.trim() ? student.adapt(text) : student.skippedResult()),
+  };
   const port = gatewayTeacher(env, tenantId, model, mode, opts?.signal);
-  const result = await new DistillationEngine(student, port).distill(input, {
+  const result = await new DistillationEngine(guarded, port).distill(input, {
     qualityGate: { minLength: TEACHER_MIN_OUTPUT_CHARS },
-    fallbackText: runText,
+    fallbackText: learnable ?? '',
     contextChars: TEACHER_CONTEXT_CHARS,
   });
 
@@ -117,6 +151,7 @@ export async function distillEvermindEntry(
       distilled: true,
       teacherModel: port.answeredBy ?? model,
       exemplar: result.teacherOutput,
+      learnedText: result.teacherOutput,
     };
   }
 
@@ -135,6 +170,7 @@ export async function distillEvermindEntry(
     skipReason,
     attemptedTeacherModel: model,
     ...(skipDetail ? { skipDetail } : {}),
+    ...(learnable ? { learnedText: learnable } : { narrationOnly: true }),
   };
 }
 

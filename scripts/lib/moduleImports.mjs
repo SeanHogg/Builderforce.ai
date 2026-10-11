@@ -28,9 +28,8 @@ import { readFile } from 'node:fs/promises';
 import { builtinModules, createRequire } from 'node:module';
 import { join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { SKIP_DIRS } from './skipDirs.mjs';
 
-/** Directories that are never source: build output, dependencies, caches. */
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', 'build', '.next', '.git', '.vscode-test', 'coverage']);
 
 const SOURCE_FILE = /\.[cm]?[jt]sx?$/;
 

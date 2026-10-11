@@ -13,11 +13,10 @@
  * relying on a hand-kept list of three — a list that is itself the drift it was
  * written to prevent, and which had already fallen four projects behind.
  */
+import { SKIP_DIRS } from './skipDirs.mjs';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 
-/** Directories never worth walking for a tsconfig. */
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', 'build', '.next', '.git', '.vscode-test', 'coverage']);
 
 /**
  * Strip JSONC to JSON: line and block comments outside strings, then trailing

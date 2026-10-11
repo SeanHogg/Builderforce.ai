@@ -20,10 +20,11 @@ import type { Db } from '../../infrastructure/database/connection';
 import { brainChats, brainChatMessages } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveEvermindTargets, resolveEffectiveEvermindProjectId, isLiveLearnTarget, dispatchProjectEvermindLearnText, provisionDefaultProjectEvermind } from '../llm/projectEvermind';
-import { stripReasoningScratchpad } from '@builderforce/agent-loop';
+import { isMidTurnMetadata, stripReasoningScratchpad, stripRunNarration } from '@builderforce/agent-loop';
 import { EVERMIND_MIN_TEACH_CHARS } from '@seanhogg/builderforce-memory/evermind';
 
-interface TurnMessage { role: string; content: string }
+/** A persisted turn row; `metadata` is the stored JSON string (mid-turn rows carry `midTurn`). */
+interface TurnMessage { role: string; content: string; metadata?: string | null }
 
 /**
  * Why a turn was NOT contributed — a machine key the client maps to a localized,
@@ -134,8 +135,11 @@ export async function evaluateBrainLearnGate(
   // scratchpad and two words of answer clears a raw length check and is then refused
   // downstream — and the run step would have reported "learned" for a contribution that
   // never happened. Same primitive on both sides keeps the gate's answer honest.
+  // Mid-turn NARRATION ("Let me check…", the lead-in to a tool call) is stripped the
+  // same way: the coordinator never learns it, so a batch that is only play-by-play is
+  // not a teachable turn, and the reported "learned" stays true.
   const assistant = [...inserted].reverse()
-    .map((m) => (m.role === 'assistant' && typeof m.content === 'string' ? stripReasoningScratchpad(m.content) : ''))
+    .map((m) => (m.role === 'assistant' && typeof m.content === 'string' ? stripRunNarration(stripReasoningScratchpad(m.content)).text : ''))
     .find((answer) => answer.length >= EVERMIND_MIN_TEACH_CHARS) ?? null;
   if (!assistant) return { outcome: { learned: false, version: 0, reason: 'too-short' }, projectId: null, contributedProjectIds: [], assistant: null };
 
@@ -266,10 +270,14 @@ export async function learnFromPersistedTurns(
   schedule: (p: Promise<unknown>) => void,
   deps: BrainLearnGateDeps = DEFAULT_GATE_DEPS,
 ): Promise<BrainLearnOutcome> {
-  const gate: BrainLearnGate = await evaluateBrainLearnGate(env, db, chatId, tenantId, inserted, deps).catch(
+  // A run's mid-turn blocks (the text before its tool calls) are persisted through this
+  // same path and MARKED by their writer; they are never an answer to learn from. A
+  // batch of only those reads as `too-short`, which no surface renders.
+  const teachable = inserted.filter((m) => !isMidTurnMetadata(m.metadata));
+  const gate: BrainLearnGate = await evaluateBrainLearnGate(env, db, chatId, tenantId, teachable, deps).catch(
     () => ({ outcome: { learned: false, version: 0, reason: null }, projectId: null, contributedProjectIds: [], assistant: null }),
   );
-  schedule(dispatchBrainLearn(env, db, chatId, tenantId, inserted, gate).catch((error) => { /* never fail the write */ 
+  schedule(dispatchBrainLearn(env, db, chatId, tenantId, teachable, gate).catch((error) => { /* never fail the write */ 
     reportCaughtError(error, { source: "application/brain/brainEvermindLearning.ts", operation: "learnFromPersistedTurns" });
   }));
   return gate.outcome;

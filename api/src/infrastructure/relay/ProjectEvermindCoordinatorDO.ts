@@ -988,6 +988,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       const diffs: ArrayBuffer[] = [];
       const weights: number[] = [];
       let textFits = 0;
+      let narrationSkipped = 0;
       for (const e of usable) {
         if (e.diffB64) {
           processedIds.push(e.id); // consumed whether or not it proves usable
@@ -1037,6 +1038,11 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
             this.env, tenantId, effectiveTeacher, student, e.text, { prompt: e.prompt ?? null },
           );
           const adapted = training.adapted;
+          if (training.narrationOnly && !adapted) {
+            // All mid-turn narration ("Let me check…") — consumed, deliberately not learned.
+            narrationSkipped++;
+            continue;
+          }
           if (!adapted) continue;
           // Record the trainer's real final-epoch mean loss so the map's training
           // readout reflects measured convergence, not a stand-in.
@@ -1051,11 +1057,11 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           // (its ideal answer), so that is what "Learned" must show — recording the raw
           // input instead makes a teach-a-task echo the question back as its own answer
           // (e.text === the task the user typed). Undistilled entries fall back to the
-          // raw run text, which is the meaningful signal there — EXCEPT on a teach-a-task,
+          // run text (narration stripped), the meaningful signal there — EXCEPT on a teach-a-task,
           // where the raw text IS the question: producing no answer is a fault to report,
           // not an echo to display, so we record the reason and omit the text entirely.
           const isEcho = !training.distilled && !!e.prompt && e.text.trim() === e.prompt.trim();
-          const learnedText = training.distilled && training.exemplar ? training.exemplar : e.text;
+          const learnedText = training.learnedText ?? e.text;
           mergedMeta.push({
             id: e.id,
             kind: 'text',
@@ -1109,6 +1115,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
         }
       }
 
+      if (narrationSkipped > 0) {
+        console.warn(`[evermind] skipped ${narrationSkipped} narration-only run text(s) tenant=${tenantId} project=${projectId}`);
+      }
       if (diffs.length === 0) return { merged: 0, newVersion: null }; // nothing merged (finally drops what we consumed)
 
       const { checkpoint, contributors, mergedRows, deltaNorm } = mergeCheckpointDiffs(basePkg.checkpoint, diffs, weights);

@@ -97,6 +97,49 @@ describe('distillEvermindEntry', () => {
     expect(r).toMatchObject({ distilled: false, skipReason: 'empty_output', skipDetail: '2 chars', attemptedTeacherModel: 'claude-opus-4-8' });
   });
 
+  // Agent mid-turn narration, verbatim from project #30's diagnostics (2026-10-11).
+  const NARRATION = 'Now I need to modify the hook to accept a chatId parameter. Let me update the imports first:';
+
+  it('with no teacher, learns NOTHING from a narration-only run text', async () => {
+    const student = recordingStudent();
+    const r = await distillEvermindEntry(env, TENANT, { model: null, reason: 'not_pinned' }, student, NARRATION);
+    expect(student.taught).toEqual([]);
+    expect(r).toMatchObject({ adapted: null, distilled: false, narrationOnly: true, skipReason: 'not_pinned' });
+    expect(r.learnedText).toBeUndefined();
+  });
+
+  it('with no teacher, strips the narration and learns (and shows) only the rest', async () => {
+    const student = recordingStudent();
+    const r = await distillEvermindEntry(env, TENANT, { model: null, reason: 'not_pinned' }, student, `${NARRATION} ${RUN_TEXT}`);
+    expect(student.taught).toEqual([RUN_TEXT]);
+    expect(r.learnedText).toBe(RUN_TEXT);
+    expect(r.narrationOnly).toBeUndefined();
+  });
+
+  it('with a teacher but no prompt, never spends a teacher call refining pure narration', async () => {
+    const student = recordingStudent();
+    const r = await distillEvermindEntry(env, TENANT, { model: 'claude-opus-4-8' }, student, NARRATION);
+    expect(completeMock).not.toHaveBeenCalled();
+    expect(student.taught).toEqual([]);
+    expect(r).toMatchObject({ adapted: null, narrationOnly: true });
+  });
+
+  it('with a teacher + prompt over pure narration, a failed teacher has no fallback to learn', async () => {
+    completeMock.mockResolvedValue(gatewayResponse('nope', 500));
+    const student = recordingStudent();
+    const r = await distillEvermindEntry(env, TENANT, { model: 'claude-opus-4-8' }, student, NARRATION, { prompt: TASK_PROMPT });
+    expect(student.taught).toEqual([]);
+    expect(r).toMatchObject({ adapted: null, distilled: false, skipReason: 'gateway_error', narrationOnly: true });
+  });
+
+  it('with a teacher + prompt over pure narration, still learns the teacher answer', async () => {
+    completeMock.mockResolvedValue(gatewayResponse(EXEMPLAR));
+    const student = recordingStudent();
+    const r = await distillEvermindEntry(env, TENANT, { model: 'claude-opus-4-8' }, student, NARRATION, { prompt: TASK_PROMPT });
+    expect(student.taught).toEqual([`${TASK_PROMPT}\n${EXEMPLAR}`]);
+    expect(r).toMatchObject({ distilled: true, learnedText: EXEMPLAR });
+  });
+
   it('passes a null adaptation through (no trainable window)', async () => {
     const student = recordingStudent();
     student.adapt = async () => null;

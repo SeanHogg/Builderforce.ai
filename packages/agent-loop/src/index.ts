@@ -10,6 +10,12 @@ export { malformedCallOutcome, malformedCallLabel, MALFORMED_CALL_RESULT, TRUNCA
 // A model stuck repeating one block of prose. The kernel trims looped turns itself; the
 // Brain's stream client cuts a live stream with it; the api trims its tool-free replies.
 export { detectRepetitionLoop, trimRepetitionLoop } from "./repetitionLoop.js";
+// Agent mid-turn narration ("Let me check…") — stripped before a raw run text trains an
+// Evermind head, and flagged by the Evermind console on what it already learned.
+export { looksLikeRunNarration, stripRunNarration, NARRATION_MIN_CHARS } from "./runNarration.js";
+export type { StrippedNarration } from "./runNarration.js";
+// The structural half: a persisted mid-turn block is MARKED, and the learn gate skips it.
+export { isMidTurnMetadata, MID_TURN_META_KEY } from "./turnPhase.js";
 // The reasoning channel — one reading of what a turn SAID versus what it THOUGHT, and
 // the policies each surface applies to it. Written four times before this, disagreeing
 // on whether an unclosed block counts and whether a tag inside a code fence does; see

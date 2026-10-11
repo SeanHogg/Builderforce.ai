@@ -163,4 +163,12 @@ describe('learnFromPersistedTurns (consolidated learn-on-persist path)', () => {
     ], () => {});
     expect(outcome).toMatchObject({ learned: false, reason: 'too-short' });
   });
+
+  it('reports too-short for a batch that is only mid-turn narration (the coordinator would learn nothing)', async () => {
+    const db = gateDb([]);
+    const outcome = await learnFromPersistedTurns(env, db, 55, 7, [
+      { role: 'assistant', content: 'Now I need to modify the hook to accept a chatId parameter. Let me update the imports first:' },
+    ], () => {});
+    expect(outcome).toMatchObject({ learned: false, reason: 'too-short' });
+  });
 });

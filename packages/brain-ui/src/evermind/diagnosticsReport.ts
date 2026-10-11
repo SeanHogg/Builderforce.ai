@@ -26,6 +26,7 @@ import type {
   EvermindProbeResult,
   EvermindTarget,
 } from './types';
+import { looksLikeRunNarration } from '@builderforce/agent-loop';
 import { evermindLearnedStatus } from './learnedStatus';
 import { evermindNextAction } from './actionGuide';
 
@@ -218,28 +219,6 @@ function recentSection(d: EvermindConsoleData): string[] {
   return lines;
 }
 
-
-/** Narration / mid-fix chatter that should not train the head when teacher is none. */
-const NARRATION_HINTS = [
-  /\blet me\b/i,
-  /\bi('ll| will)\b/i,
-  /\bnow (let|i|the)\b/i,
-  /\blooking (back|at)\b/i,
-  /\btool calls?\b/i,
-  /\brun_command\b/i,
-  /\bgit_status\b/i,
-  /\bsettled\b/i,
-  /\brather than (just )?assert\b/i,
-  /\bmy (previous|last) turn\b/i,
-];
-
-function looksLikeRunNarration(text: string): boolean {
-  const t = text.trim();
-  if (t.length < 40) return false;
-  let hits = 0;
-  for (const re of NARRATION_HINTS) if (re.test(t)) hits += 1;
-  return hits >= 2;
-}
 
 /** Coding-eval gate — missing from older reports, required for "use as local IDE LLM". */
 function codingGateSection(d: EvermindConsoleData): string[] {
