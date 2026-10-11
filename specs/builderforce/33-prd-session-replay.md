@@ -34,7 +34,7 @@ Four things already exist and must be extended, not duplicated:
 ## 1. Outcome
 
 **The point of the feature is to tell people how to improve their website, render the improvement, hand it to an AI as a prompt, and measure the result** (operator direction 2026-10-10: "the fixes has to be the key aspect … all of the data and tracking isn't meaningful unless you can tell them how to improve their website").
-- **Fixes is the home** of every scope: the default view in Admin ▸ Growth ▸ Visitors, and the landing view of the canvas surface.
+- **Fixes is the home** of every scope: the default view in Admin ▸ Growth ▸ Insights, and the landing view of the canvas surface.
 - Everything else (recordings, heatmaps, funnels, flow, live, overview) is **evidence**, reached from a fix or browsed below it.
 - Each fix is built from four inputs about a page:
   - **the screen:** a captured screenshot per device and release, read by a vision model;
@@ -49,7 +49,7 @@ Four things already exist and must be extended, not duplicated:
 
 The rest of this section lists what each audience gets. The page review is D14 / §2.4 / S4f; prescriptions are D13 / §2.3 / S4e.
 
-1. **Superadmin, on builderforce.ai.** The superadmin opens Admin ▸ Growth ▸ Visitors and does five things:
+1. **Superadmin, on builderforce.ai.** The superadmin opens Admin ▸ Growth ▸ Insights and does five things:
    - Picks any visit and replays it, with:
      - the cursor;
      - clicks, rage clicks and dead clicks;
@@ -66,10 +66,10 @@ The rest of this section lists what each audience gets. The page review is D14 /
 2. **Any workspace, through the Marketplace.**
    - **Buy.** A workspace installs "Session Replay & Heatmaps" (5,000 recordings a month free). Above that, it buys prepaid recording packs with a real card. Every step is traced.
    - **Install once.** On a site hosted outside Builderforce, the buyer pastes one loader tag and never touches it again: recorder updates arrive by themselves and releases are detected automatically. A Builderforce-hosted app needs no tag, just a switch.
-   - **Review.** In the canvas, under Measure ▸ Sessions, the buyer reviews recordings in the same player and heatmaps the superadmin uses. Only that workspace's owners and admins can watch them.
+   - **Review.** In the canvas, under Measure ▸ Insights, the buyer reviews recordings in the same player and heatmaps the superadmin uses. Only that workspace's owners and admins can watch them.
 3. **At least Clarity's analysis, on every scope** (D11, slice S4c). Both the superadmin and every buyer get:
    - an **Overview** dashboard: sessions, pages per session, active time, scroll depth, frustration rates, and top pages, devices, countries and referrers;
-   - a **filter bar** with saved **segments** that apply to Fixes, Overview, Replays, Journeys and Live alike;
+   - a **filter bar** with saved **segments** that apply to the whole screen and every panel alike;
    - **frustration signals**: rage clicks, dead clicks, quick backs, excessive scrolling and JS errors, on the timeline, in filters and in the Overview;
    - **funnels** over pages, clicks and **smart events**: built-in events detected automatically, custom events from `BFReplay.event()`, and point-and-click definitions that apply retroactively;
    - **AI summaries**: one recording ("what happened, where it went wrong"), or a whole segment ("the three patterns behind these 40 drop-offs"), each with links to the exact moments. The canvas Brain can also answer questions over the same numbers.
@@ -121,7 +121,7 @@ Each decision below has a default. The operator can override a default before th
 | # | Decision | Default | Gates slice |
 |---|---|---|---|
 | D1 | Recorder engine | **rrweb** (MIT). Battle-tested DOM serialisation and replay. Writing our own is months of edge cases. Pin the exact version. | S2 |
-| D2 | Where recordings live | **R2 (`UPLOADS`) gzip NDJSON chunks** under `replay/`. Visit index and aggregates live in the **transactional** database (`buildTransactionalDatabase`), never in core (core is held under Neon Free; see ROADMAP). | S1 |
+| D2 | Where recordings live | **R2 (`UPLOADS`) gzip NDJSON chunks** under `replay/`. Visit index and aggregates live in the **transactional** database (`buildTransactionalDatabase`), never in core (core is held under Neon Free; see ROADMAP). *Amended by D15: only kept recordings are stored; events go to Analytics Engine and the event lake (§3.3).* | S1 |
 | D3 | Retention | **30 days** on every recording. builderforce.ai keeps **90 days**, matching `VISITOR_RETENTION_DAYS`. Data, not code: `REPLAY_RETENTION_DAYS` per scope. | S1 |
 | D4 | Pricing: usage-based, on data consumed (operator direction 2026-10-10) | **Billable unit: one recording.** A recording is one visit, up to **2 MB** of compressed data; each further 2 MB counts as another recording. Bytes are always metered, so a heavy session costs what it consumes. **Every workspace that installs the capability gets 5,000 recordings free each month**, which matches PostHog's free tier. Above that, the workspace spends **prepaid recording credits**, sold as packs at a step-down rate set about 20% under PostHog's web replay ladder. The pack prices below are the default; the operator can change the data before S6. | S6 |
 |  | Pack ladder (one-off payments; credits last 12 months) | 10k recordings **$40** ($0.0040 each) · 50k **$140** ($0.0028) · 150k **$240** ($0.0016) · 500k **$650** ($0.0013) · 1M **$1,200** ($0.0012). For comparison: PostHog is $0.0050 → $0.0015 per recording after 5k free; Hotjar Observe is $39/mo for 100 sessions a day (~3k/mo); LogRocket is $69/mo for 10k; Microsoft Clarity is free. Our cost is roughly $0.0002 per recording (R2 storage + writes + Worker requests), so even the largest pack keeps a healthy margin. | S6 |
@@ -138,6 +138,8 @@ Each decision below has a default. The operator can override a default before th
 | D12 | The method link (operator direction 2026-10-10: "connect this feature to the methodology") | **Replay is the measuring instrument of the Idea-to-Real method.** The details are in §2.2. Proof sites are recorded with no Marketplace install, and their recordings count toward the workspace's free allowance (D4). That puts replay in front of every founder at the one moment it decides something. The capability listing covers their other sites. | S4d |
 
 | D13 | Prescriptive guidance (operator direction 2026-10-10: "AI being able to provide prescriptive guidance to improve their funnel / fix UI/UX / fix the website / fix sales") | **Findings are deterministic, and the AI writes the prescription and the change.** A rule registry (`PRESCRIPTION_RULES`) detects findings from replay data and estimates their impact with a pure function. The AI only turns a detected, cited finding into a specific prescription and a drafted change. It never invents a finding, and an uncited sentence is dropped, as with summaries (S4c.5). Nothing reaches production on its own: Fix it produces a preview release, Test it needs a person to start the test, and Follow up obeys `salesPolicy.ts`. Every applied prescription is graded on a named metric. The details are in §2.3. *Amended by D14:* a finding may also be **observed by AI from the screen**, but it is shown only when it is anchored to an element in the page capture AND tied to a measured signal on that page (behaviour, SEO, performance or accessibility). It is labelled "observed from the screen". | S4e |
+| D15 | Scale: millions of sessions (operator direction 2026-10-10: "your designs won't handle millions of sessions") | **Count everything; keep recordings that matter; group into issues; never browse raw sessions.** The per-visit rows of §3.1 do not survive a million sessions a month on the transactional Postgres (Neon Free): a visit row plus up to 300 mark rows each is hundreds of millions of rows. D15 replaces them with four tiers (§3.3): (1) **Workers Analytics Engine** for hot counters, heat cells and issue counts; (2) **Cloudflare Pipelines → R2 Data Catalog (Iceberg), queried by R2 SQL** as the complete event lake for funnels, flows, segments and search; (3) **small Postgres tables** that grow with routes, issues and kept recordings, never with sessions; (4) **R2 chunks** only for kept recordings. The recorder keeps a recording when it is head-sampled or when a trigger fires (frustration, error, goal, custom tag); the analysis counts every session either way. The product reads as **issues grouped from all sessions, each with representative recordings**, and every number states whether it is exact or estimated. *Amends D2 and D4.* | S1, S2, S4, S4c |
+| D16 | One screen, one panel (operator direction 2026-10-10: "users do not scroll down the page … drill-into for more details with a slide out side panel") | **The product is ONE home screen that fits the viewport with nothing below the fold, plus ONE slide-out panel for every detail.** The six views of the earlier design (Fixes, Overview, Replays, Journeys, Live, Leads) are retired as destinations: their content becomes **panel kinds** (§2.5). The home never scrolls; only the panel body scrolls. Panels stack with a breadcrumb (Insights › issue › recording), so a person can go from a number to the recording behind it without leaving the screen. The same home and panel serve Admin ▸ Growth ▸ Insights (panel docked right) and the canvas Measure ▸ Insights surface (panel docked left, because the Brain is docked right). | S0, S3–S7 |
 | D14 | The page review: screen + metrics + SEO + content → visual improvement → prompt → measure (operator direction 2026-10-10) | **Every key page of every scope gets a page review per release.** The Agentic Tester container captures it (screenshots at desktop 1440 and phone 390, the DOM outline, SEO facts, content facts, lab performance and accessibility). Field Web Vitals come from the recorder. A vision model reads the screenshot together with the metrics. Each resulting prescription carries a **visual patch** (a narrow, validated vocabulary of DOM/CSS operations) that is rendered onto the captured page as a before/after, and an **improvement prompt** compiled from the prescription. Apply routes into the ONE composer for canvas apps, an agent task or PR for connected repos, or a copyable prompt for any other site. The site's next release is detected automatically and measured. The details are in §2.4. | S4f |
 
 ### 2.1 Competitive matrix (Clarity web feature → where we ship it)
@@ -298,6 +300,38 @@ The prompt goes out by one of three routes:
 
 The Fixes home shows the site's score trend across releases, with each release annotated by the fixes it shipped. That is the improvement ledger: *what we changed, and what it did*.
 
+### 2.5 The one screen and the panel (D16)
+
+The home is called **Insights**. It answers the three questions in one viewport (1440×900 is the design size; everything reflows down to 1024 wide, and at ≤900 px wide the columns stack and the page may scroll):
+
+| Band | Height | Content | Click → panel kind |
+|---|---|---|---|
+| Header | 48 px | breadcrumb, the query bar (the ONE `ReplayFilter`, shown as `route:* frustration:any device:any release:v13`), period, release compare, the **proof chip** ("Proof · Pro plan · day 9 of 14 · on track", shown while a proof is live), avatar | `proof` |
+| Goal + numbers | 76 px | goal selector (Activation · Revenue · Sign-ups · Retention) that re-ranks every list and sets the impact unit; six tiles: sessions (exact), the goal metric with its interval, frustrated sessions, JS errors per 1k sessions, p75 LCP, site score; each with a sparkline | `metric` |
+| Funnel | 56 px | the site's funnel as one row of segments (count + step conversion), and the behaviour-clusters bar | `funnel` |
+| Body, three columns | the rest | **Issues** (38%): the D15 issue groups ranked by goal impact, with status tabs, sessions + sparkline, share of route, impact interval, since-release, status; at most the rows that fit, then "View all". **Page stage** (34%): the selected issue's route rendered as the real page, scaled to fit, with lenses Heat (clicks \| scroll) · Stuck · Fixes · Live. **Do next** (28%): the prescribed fixes ranked for the goal, each as a before → after (page crop, search result, LCP gauge or contrast swatches by kind) with impact and who makes it; "Apply all AI fixes"; the site-score-by-release strip | `issue`, `issues`, `fix`, `route`, `release`, `live` |
+
+**The panel.** ONE `SlideOutPanel` (`width="wide"`, `widthStorageKey="insights-panel"`), holding a stack of levels. Each level is a registered **panel kind** with its own tabs:
+
+| Kind | Tabs | Content |
+|---|---|---|
+| `issue` | Overview · Recordings · Fix · History | where on the page (heat), who, daily trend with the release marker, three representative recordings; the kept recordings list; the fix (drag-compare, impact, prompt per audience, Apply / PR / Test / Ticket); status by release |
+| `recording` | Replay · Journey · Lead (platform only) | the player with timeline marks and the cited AI summary; the visit's route templates and marks; the lead (today's `VisitorPanel` tabs, so this kind IS `VisitorPanel`) |
+| `fix` | Change · Prompt · Measure | the before/after with callouts; the prompt for Composer / Coding agent / Site builder; expected vs measured after the next release, Undo |
+| `route` | — | the page review (D14): tick fixes, drag-compare, fact meters, score rings, one prompt, simulate the next deploy |
+| `metric` | — | the 30-day trend with release markers, breakdowns, segments (the earlier Overview) |
+| `funnel` | Steps · Clusters · Flow | the funnel editor and drop reasons, the behaviour clusters, the flow graph (the earlier Journeys) |
+| `live` | — | live count, by route, live tiles and the feed (the earlier Live) |
+| `proof` | — | the scoreboard: sample, success, threshold, day, verdict; call early; abandon (D12) |
+| `release` | — | the release report: verdicts per change, before → after, Undo, next up |
+| `issues` | — | the full issue list with the same filters |
+
+Rules:
+- A slice registers a panel kind (`INSIGHT_PANEL_KINDS`, data), never a route, a tab bar or a second overlay.
+- The panel is addressable: `?panel=issue:<id>` opens it on load, so links from email, Slack and the Brain land inside the screen.
+- Lists on the home are bounded to what fits; the panel's lists are paginated with cursors.
+- The six "views" of the earlier design do not exist as navigation. The legacy admin URLs alias to `growth/insights` with the matching `?panel=`.
+
 ## 3. Architecture
 
 ```
@@ -318,8 +352,8 @@ Browser (any site)                       API Worker (api.builderforce.ai)       
                                                                 ├─▶ replay_interactions_daily (transactional) buffered additive upsert
                                                                 └─▶ replay_releases (transactional) first-seen
 
-Admin ▸ Growth ▸ Visitors  ─▶ /api/admin/replay/*  (superAdminMiddleware, scope = platform)
-Canvas Measure ▸ Sessions  ─▶ /api/projects/:projectId/replay/* (membership + entitlement, scope = site)
+Admin ▸ Growth ▸ Insights  ─▶ /api/admin/replay/*  (superAdminMiddleware, scope = platform)
+Canvas Measure ▸ Insights  ─▶ /api/projects/:projectId/replay/* (membership + entitlement, scope = site)
 Both use ONE ReplayReadService and ONE set of React components.
 ```
 
@@ -397,6 +431,53 @@ Nothing in the visitor stream is copied:
 - the replay row and the journey join on `visit_id`;
 - errors are read from the existing visitor `error` rows (platform) or from the chunk events (buyer sites).
 
+### 3.3 Scale: millions of sessions (D15)
+
+Where §3.1 and this section disagree, this section wins. The target is **10 million sessions a month per site** on the same code path that serves a site with 1,000, with the home view loading in under a second from cache.
+
+**Principles**
+1. **Count everything, keep what matters.** Every session sends its lightweight events (page views, interaction marks, vitals, conversions). Only some sessions send the full recording.
+2. **Issues, not sessions.** Frustration, errors, slow pages, SEO and accessibility findings are folded into **issue groups** keyed by a fingerprint. People read and act on issues; a recording is evidence for an issue.
+3. **Routes, not URLs.** Every path is folded into a route template (`/invoices/8812` → `/invoices/:id`) at ingest, so aggregates stay bounded.
+4. **Nothing grows per session in Postgres.** Postgres rows grow with routes, issues, releases, prescriptions and kept recordings only.
+5. **Every number says what it is.** Exact counts are shown plainly. Estimates (sampled storage, recording-based figures, model impact) show "≈" and their interval.
+
+**The four tiers**
+
+| Tier | Store | Holds | Read by | Retention |
+|---|---|---|---|---|
+| Hot counters | **Workers Analytics Engine** dataset `replay_events` (index = site id; blobs: route template, release, device, kind, fingerprint, selector; doubles: count, grid x/y, value) | one data point per event for every session | KPI tiles, trends, heat cells, issue counts, live counts (SQL API, weighted by `_sample_interval`) | 3 months (platform limit) |
+| Event lake | **Cloudflare Pipelines → R2 Data Catalog (Iceberg) table `replay_events`**, partitioned by site and day; queried by **R2 SQL** | every event of every session, complete | funnels, flows, segments, the query bar, smart-event backfill, AI digests, behaviour clustering | 13 months (per-scope setting) |
+| Small tables | transactional Postgres | `replay_issues`, `replay_issue_daily`, `replay_route_daily`, `replay_recordings` (kept recordings only), `replay_releases`, plus the core definitions and `replay_prescriptions` | lists, detail panels, status, the improvement ledger | issues and daily rollups 13 months; recordings index per D3 |
+| Recordings | R2 chunks (D2) | the rrweb stream of **kept** recordings, plus one `marks.json` per recording for timeline markers | the player | D3 |
+
+**Which recordings are kept** (the recorder decides, in buffer mode):
+- The recorder always holds the last 60 s of the rrweb stream in memory and always sends events.
+- **Head sample:** at session start, keep with probability `keepRate` (per site; default auto-tuned so kept recordings fit the plan's allowance; 100% under 50k sessions a month).
+- **Triggers:** a rage click, dead click, quick back, JS error, goal conversion, `BFReplay.keep()` or a custom tag flushes the buffer and streams the rest of the session.
+- Every kept recording stores `keep_reason` (`sample|frustration|error|goal|tag`) and `sample_weight` (`1/keepRate` for head-sampled, 1 otherwise), so recording-based figures can be weighted back to the whole population.
+- Billing (D4) counts **kept recordings** only. Events are not billed; their cost (≈40 events a session, $0.25 per million Analytics Engine data points beyond the plan's included 10 million) is carried by the platform.
+
+**Issue groups**
+- `fingerprint = hash(siteId, routeTemplate, kind, selector | errorFingerprint | metric)`, computed by `issueFingerprint()` in `interaction-contract`, the same function on the recorder, ingest and rules.
+- `replay_issues`: `id`, `site_id`, `fingerprint` (unique per site), `kind`, `route_template`, `subject` (selector, error or metric), `title`, `first_release`, `last_release`, `status` (`new|ongoing|regressed|proposed|preview|measuring|verified|ignored`), `prescription_id null`. One writer: the nightly rollup (counts) and the action routes (status).
+- `replay_issue_daily`: `issue_id`, `day`, `release_key`, `device_class`, `sessions`, `users_est` (HyperLogLog-backed estimate from the lake), unique on the dimensions.
+- A regression is a fingerprint whose daily rate rises past its interval after a new release. That rule is a `PRESCRIPTION_RULES` entry, so it reuses S4e.
+
+**Representative recordings**
+For each issue, the nightly job clusters the issue's kept recordings by path shape (the sequence of route templates and marks, as n-gram vectors) and stores up to three medoids with the share of sessions each stands for (`replay_issue_representatives`: `issue_id`, `rank`, `recording_id`, `share`, `label`). The detail panel shows those three, never a random list.
+
+**Read budgets**
+- The home view issues at most six queries, each through `getOrSetCached` keyed by `replayVersionKey(siteId)`: one Analytics Engine query for KPIs and trends, one for issue counts, one Postgres read of issues, one of routes, one cached funnel and one cached clusters result.
+- Lake queries (funnels, flows, segments, search) run through `ReplayLakeService` with a 5-minute cache, a 10-second timeout and a row cap; a cold query shows its last cached result with an "updating" marker instead of a spinner.
+- Lists are paginated with cursors; no endpoint returns an unbounded set.
+
+**What changes in §3.1**
+- `replay_visits` becomes `replay_recordings` (kept recordings only) and gains `keep_reason` and `sample_weight`. Its counters stay; its `converted` read stays.
+- `replay_visit_marks` and `replay_visit_tags` move out of Postgres: they are lake columns, and the player reads `marks.json`. Filters compile to lake SQL (`compileReplayFilter` gains a lake target; the Postgres target remains for the kept-recordings list).
+- `replay_interactions_daily` and `replay_page_vitals_daily` are replaced by Analytics Engine queries plus `replay_route_daily` (`site_id`, `day`, `release_key`, `route_template`, `device_class`, `sessions`, `conversions`, `frustrated`, `errors`, `lcp_p75`, `cls_p75`, `inp_p75`), written by the nightly rollup from the lake.
+- Usage (D4) sums `replay_recordings.billable_units`, unchanged in meaning.
+
 ### 3.2 Contracts (new shared source package)
 
 The new package is `packages/interaction-contract`. It holds pure TypeScript with no DOM globals at module scope, and both the recorder, the frontend and the API import it:
@@ -436,7 +517,8 @@ Releases are labelled `R<n> · first seen <date>` until renamed. A customer neve
 - Every new component uses theme tokens only, with no hardcoded colours, and works in both themes.
 - The only fixed colours allowed are inside the replay iframe, which renders the recorded site's own styles.
 - Layouts are fluid. Tables scroll horizontally in their own box.
-- The visitor panel uses `SlideOutPanel` (`width="wide"`, `widthStorageKey`), which is full-bleed at ≤900 px.
+- The home never scrolls at ≥1024 px wide and ≥800 px tall; only the panel body scrolls. Below that the columns stack and the page may scroll.
+- The ONE panel uses `SlideOutPanel` (`width="wide"`, `widthStorageKey`), which is full-bleed at ≤900 px.
 - The player's controls are 44 px targets on phones. Timeline markers are real buttons with an `aria-label` (time + event).
 - The scrubber is a real `<input type="range">`.
 - The heatmap legend does not rely on hue alone: it also carries "cold/hot" text.
@@ -474,7 +556,7 @@ Releases are labelled `R<n> · first seen <date>` until renamed. A customer neve
 - No cross-domain visitor stitching.
 - No WebSocket push. Liveness is polling (D6).
 - No fingerprinting. Buyer sites identify a visitor only through tags they set themselves (`BFReplay.tag('user', id)`), which are never linked to Builderforce accounts. builderforce.ai links its own signed-in users (D9) through a platform-only `identify`.
-- No Leads view for buyer sites. Leads are the platform's composer prompts. Buyer sites get Fixes, Overview, Replays, Journeys and Live.
+- No Lead tab for buyer sites. Leads are the platform's composer prompts. Buyer sites get every other panel kind.
 - No Google Analytics or ad-platform integrations.
 
 ## 7. Risks
@@ -483,7 +565,9 @@ Releases are labelled `R<n> · first seen <date>` until renamed. A customer neve
 |---|---|
 | A buyer runs out of credits mid-month | Recording pauses only for NEW visits. Visits in progress finish, and recorded data stays readable. This is the consumption meter's graceful-backpressure rule. Auto-recharge is offered (D4). The Verify screen and the usage meter warn at 80%. |
 | Recording signed-in users exposes workspace content to the superadmin | Sensitive-region masking, an audit on every view, a per-workspace exclusion, and the legal-disclosure gate (D9). |
-| Ingest volume exhausts Neon Free on the transactional DB | Chunks go to R2. Only one visit row and additive daily aggregates go to the DB. Retention purge runs through `retentionPurge.ts`. The session cap applies per site. |
+| Ingest volume exhausts Neon Free on the transactional DB | D15: events go to Analytics Engine and the Iceberg lake, recordings to R2; Postgres holds rows per route, issue and kept recording only. Retention purge runs through `retentionPurge.ts`. |
+| A million-session site makes reads slow or costly | D15 read budgets: six cached queries for the home view, lake queries cached 5 minutes with a timeout and a row cap, cursor pagination everywhere. Analytics Engine sampling is weighted and shown as "≈". |
+| Buffer-mode keeping misses the start of a problem | The 60 s in-memory buffer is flushed on the trigger, so the lead-up is kept. The head sample covers sessions with no trigger. |
 | rrweb breaks on a customer's page (shadow DOM, canvas, iframes) | The recorder catches and self-disables per page, and reports through the quality SDK path. Record `recorder_version`, and keep a platform pin for rollback. |
 | Recording personal data | Masking is on by default and server-side masking is impossible by construction. A "mask all text" setting exists. A buyer must accept the processing terms at purchase (legal copy is an operator task: `[DPA LINK]`). |
 | Visit marks multiply rows in the transactional DB | Capped at 300 per visit, purged with the visit (D3), and written in one batched insert per chunk. Filters read marks only for the bounded candidate page, never for a full scan. |
@@ -505,7 +589,7 @@ The slices are specified in 33a §2–§10. In brief:
 - Then **S3 Dogfood on builderforce.ai** (replay player).
 - Then **S4 Heatmaps** ∥ **S5 Live + Flow links** ∥ **S4c Analysis parity** (Overview, filters and segments, frustration surfacing, funnels and smart events, AI summaries, Brain tool).
 - Then **S6 Commerce** (capability add-on, site keys, install + verify).
-- Then **S7 Buyer surfaces** (hosted injection, canvas Measure ▸ Sessions).
+- Then **S7 Buyer surfaces** (hosted injection, canvas Measure ▸ Insights).
 - Then **S4d The method link** (needs S4c's funnels and smart events and S7's hosted injection): proof measures, measured verdicts with evidence, read-again, ticket effect, journey signal, Method funnel.
 - Then **S4e Prescriptions** (needs S4d for the ticket effect and the proof reasons, and S6 for the Sales contact match): rules, impact model, AI prescriptions, Fix it / Test it / Follow up / Ticket, verification, the Fixes view and the Brain tool.
 - Then **S4f Page review** (needs S4e): page captures, SEO/content/performance/accessibility rules, the vision review, visual patches rendered before/after, improvement prompts into the ONE composer / agent / copy, page score per release, and Fixes as the home view.

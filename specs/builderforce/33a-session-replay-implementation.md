@@ -1,6 +1,6 @@
 # PRD 33a — Session replay: implementation hand-off
 
-> This is the brief an implementing agent works from. Read [PRD 33](./33-prd-session-replay.md) first; its decisions (D1–D14), the §2.1 competitive matrix, the §2.2 method link, the §2.3 prescriptions and the §2.4 page review are settled.
+> This is the brief an implementing agent works from. Read [PRD 33](./33-prd-session-replay.md) first; its decisions (D1–D16), the §2.1 competitive matrix, the §2.2 method link, the §2.3 prescriptions and the §2.4 page review are settled.
 > **Roles** (CLAUDE.md):
 > - **Implementation:** one Opus agent per slice.
 > - **Compile / typecheck / test:** a Sonnet agent running §11 verbatim.
@@ -73,7 +73,7 @@
 | Listing kinds | `packages/creation-canvas-contract/src/marketplaceListings.ts` `MARKETPLACE_LISTING_KINDS` L239 (no `capability` kind yet) | The `capability` kind |
 | Hosted HTML injection | `application/ide/siteAttribution.ts` `injectSiteBadge` / `withSiteBadge` (used by `siteServer.ts` and `siteStaticServe.ts`, which the sites Worker runs) | Loader injection into hosted apps |
 | Hosted releases | apps DB `site_releases.version_token`, `project_sites` | `release_key` for hosted apps |
-| Canvas surfaces | `lib/canvasSurfaces.ts` (`CANVAS_SURFACES` L129, `CanvasSurfaceId` L41), `lib/canvasPhases.ts` `PHASE_SURFACES` L83, `stage/CanvasSurfaceStage.tsx` L113, `canvasSurfaceIcons.tsx`, `CanvasSurfaceSwitcher.tsx` i18n `creationCanvas.surface.<id>.{label,enter,active,regionLabel}` | The `sessions` surface |
+| Canvas surfaces | `lib/canvasSurfaces.ts` (`CANVAS_SURFACES` L129, `CanvasSurfaceId` L41), `lib/canvasPhases.ts` `PHASE_SURFACES` L83, `stage/CanvasSurfaceStage.tsx` L113, `canvasSurfaceIcons.tsx`, `CanvasSurfaceSwitcher.tsx` i18n `creationCanvas.surface.<id>.{label,enter,active,regionLabel}` | The `insights` surface |
 | Canvas site facts | `useSiteAudience(projectId, days)`, `lib/siteAudienceApi.ts`, `useOperateReading` (primary app → `binding.ideProjectId`), `useCanvasSessionFacts().persistence` | Which project's recordings; numbers in the surface header |
 | Brain dock side | `brainDockPreferences.ts` (`BrainDockSide`, default `right`), `canvasLens.ts` L58 can force a side | Docking the replay panel on the opposite side |
 | Browser SDK build | `scripts/tsup.base.mjs` `browserSnippetConfig({entry, globalName})`; examples `browser-sdk/`, `feedback-sdk/`; `.github/workflows/release.yml` `package-npm` matrix L31–45, `npm-publish-if-new.sh` | The `replay-sdk/` package |
@@ -94,7 +94,7 @@ Facts already verified. Do not rediscover them:
 
 ## 2. Slice S0 — Consolidation (no new capability; ships alone)
 
-**Goal.** One Visitors destination, one visitor panel, one stat tile, one overlay primitive, and one selector and zone-ranking rule. S0 lands before any replay code exists.
+**Goal.** One Insights destination, one visitor panel, one stat tile, one overlay primitive, and one selector and zone-ranking rule. S0 lands before any replay code exists.
 
 ### S0.1 `StatTile`
 - In `components/admin/adminShared.tsx`, add:
@@ -154,7 +154,7 @@ Facts already verified. Do not rediscover them:
 - `QaHeatmapService.rankZones` calls it. Its output must be byte-identical; prove that with the existing tests plus one new test.
 - S4 uses the same function.
 
-### S0.5 Admin ▸ Growth ▸ Visitors
+### S0.5 Admin ▸ Growth ▸ Insights
 - `adminGroups.ts`:
   - Remove `{ id:'sessions', subKey:'sessions' }` from `users`.
   - Replace `{ id:'visitorFlow', subKey:'visitorFlow' }` in `growth` with `{ id:'visitors', subKey:'visitors', icon:'🧭' }`.
@@ -162,39 +162,42 @@ Facts already verified. Do not rediscover them:
     ```ts
     export const LEGACY_ADMIN_SUB: Record<string, { group: string; sub: string; view?: string }>
     ```
-    It maps `users/sessions` → `growth/visitors?view=leads` and `growth/visitorFlow` → `growth/visitors?view=journeys&mode=flow`. `resolveAdminRoute` returns the resolved sub plus an optional `view`.
+    It maps `users/sessions` → `growth/insights?panel=issues` (platform: the Leads table is the `recording`-kind list until S4c) and `growth/visitorFlow` → `growth/insights?panel=funnel::flow`. `resolveAdminRoute` returns the resolved sub plus an optional `panel`.
   - Extend `adminGroups.test.ts` with both legacy cases and an unknown sub.
-- `app/admin/page.tsx`: the `ADMIN_PANELS` key `visitors` → `VisitorsPanel`. Remove the `sessions` and `visitorFlow` keys.
-- New `components/admin/panels/VisitorsPanel.tsx` (container, ≤150 lines):
+- `app/admin/page.tsx`: the `ADMIN_PANELS` key `insights` → `InsightsPanelHost` (the admin container that mounts `InsightsHome` with `{kind:'platform'}`). Remove the `sessions` and `visitorFlow` keys.
+- New `components/admin/panels/InsightsPanelHost.tsx` (container, ≤120 lines):
   - Header: `AdminPanelHeader` + the 7/30/90 window buttons (keep `WINDOWS` as data) + refresh.
-  - A view switcher driven by `?view=` and `?mode=`. Six views, consolidated (operator direction 2026-10-10: "Recordings/Heatmaps can be combined … consolidate Flow/Events/Funnels"):
+  - **No view switcher.** D16: the panel is ONE home screen, `InsightsHome`, that fits the viewport, plus ONE `InsightsPanel` (a `SlideOutPanel`) for every detail. Views and modes do not exist. Instead there is a registry of **panel kinds**:
 
-    | View | Modes (`?mode=`) | Scopes | Registered by |
-    |---|---|---|---|
-    | **Fixes** (default) | — | platform, site | S4e (home in S4f) |
-    | **Overview** | — | platform, site | S4c |
-    | **Replays** | `recordings` (default) · `heatmap` | platform, site | S3 (`recordings`), S4 (`heatmap`) |
-    | **Journeys** | `funnels` (default) · `flow` · `events` | platform, site | S0 (`flow`), S4c (`funnels`, `events`) |
-    | **Live** | — | platform, site | S5 |
-    | **Leads** | — | platform only | S0 |
+    | Kind | Tabs | Registered by |
+    |---|---|---|
+    | `recording` | replay (S3) · journey · lead | S0 (journey, lead); S3 adds replay first |
+    | `issue` | overview · recordings · fix · history | S4c (overview, recordings), S4e (fix, history) |
+    | `fix` | change · prompt · measure | S4e (change, measure), S4f (prompt) |
+    | `route` | — | S4f |
+    | `metric` | — | S4c |
+    | `funnel` | steps · clusters · flow | S0 (flow), S4c (steps, clusters) |
+    | `live` | — | S5 |
+    | `proof` | — | S4d |
+    | `release` | — | S4e |
+    | `issues` | — | S4c |
 
     ```ts
-    const VISITOR_VIEWS: ReadonlyArray<{ id: VisitorViewId; labelKey: string; scopes: ReadonlyArray<'platform'|'site'>; modes?: ReadonlyArray<{ id: string; labelKey: string; Component: React.ComponentType<{ days: number }> }>; Component?: React.ComponentType<{ days: number }>; group: 'fix' | 'evidence' }>
+    export type InsightPanelKind = 'recording'|'issue'|'fix'|'route'|'metric'|'funnel'|'live'|'proof'|'release'|'issues';
+    export type InsightPanelLevel = { kind: InsightPanelKind; id: string; tab?: string };
+    export const INSIGHT_PANEL_KINDS: ReadonlyArray<{ kind: InsightPanelKind; labelKey: string; scopes: ReadonlyArray<'platform'|'site'>; tabs: ReadonlyArray<{ id: string; labelKey: string; Component: React.ComponentType<{ scope: ReplayScope; id: string; filter: ReplayFilter; push: (level: InsightPanelLevel) => void }> }> }>
     ```
-    A view with `modes` renders a segmented control from that list. A slice registers a MODE row on an existing view, never a new view, so the switcher stays at six. Each mode keeps the same filter, selected page and release, which is the point of combining them:
-    - **Replays:** switching from Recordings to Heatmap keeps the selected page, so "what did people do on /pricing" is one place, with both the list of visits and the heat over the page.
-    - **Journeys:** Funnels, Flow and Events share the step vocabulary (pages, clicks and smart events). A funnel step or flow node opens the same event definition, and "define from this click" lands there.
-    The registry lives in `components/replay/visitorViews.ts`, so the canvas `sessions` surface (S7) renders the same rows filtered to `scopes` including `'site'`. S4c widens the component props to `{ days; filter }`.
-    In S0 only `journeys` (mode `flow`) and `leads` are registered.
+    `InsightsPanel` owns the stack (`levels: InsightPanelLevel[]`), renders the breadcrumb from it, and reads `?panel=<kind>:<id>[:<tab>]` on mount. A slice registers a kind or a tab row: never a route, never a second overlay. The registry lives in `components/insights/panelKinds.ts`, so the canvas surface (S7) renders the same kinds filtered to `scopes` including `'site'`, docked on the opposite side.
+    In S0 the home shows the funnel band and the Leads table (platform) in the Issues column's place until S4c lands the issues table; `recording` (journey, lead) and `funnel` (flow) are the registered kinds. The home's bands are components in `components/insights/` (`GoalBar`, `KpiTiles`, `FunnelBand`, `IssuesTable`, `PageStage`, `DoNext`, `ScoreStrip`), each ≤150 lines, each taking `{ scope, filter, days }` and calling the panel through `usePanel().push`.
 - New `components/admin/visitors/FlowView.tsx`: the body of today's `VisitorFlowPanel` (headline `StatTile`s + `VisitorFlowGraph` + visitor-id lookup).
 - New `components/admin/visitors/LeadsView.tsx`: the table and funnel of today's `GuestSessionsPanel`, without its drawer.
-- New `components/visitors/VisitorPanel.tsx`: the ONE visitor panel, replacing both `VisitorJourneyDrawer` and `GuestSessionsPanel`'s drawer.
+- New `components/visitors/RecordingPanel.tsx`: the ONE visitor panel, replacing both `VisitorJourneyDrawer` and `GuestSessionsPanel`'s drawer.
   ```ts
-  export function VisitorPanel({ visitorId, visitId, initialTab, onClose }: {
-    visitorId: string | null; visitId?: string | null; initialTab?: VisitorPanelTabId; onClose: () => void;
+  export function RecordingPanel({ visitorId, visitId, initialTab, onClose }: {
+    visitorId: string | null; visitId?: string | null; initialTab?: RecordingPanelTabId; onClose: () => void;
   }): React.JSX.Element | null   // null when visitorId is null
   ```
-  - It is a `SlideOutPanel` with `width="wide"`, `widthStorageKey="visitor-panel"`, `crumb` = Growth · Visitors and `accentVar` = the growth seat variable.
+  - It is a `SlideOutPanel` with `width="wide"`, `widthStorageKey="insights-panel"`, `crumb` = Growth · Insights and `accentVar` = the growth seat variable.
   - Tabs come from the registry `VISITOR_PANEL_TABS` (`journey`, `lead`; S3 adds `replay` as the first entry).
   - Header actions: copy lead (the existing `GuestSessionCopyButton`) and message visitor (the existing `BroadcastComposer`).
 - New `components/visitors/VisitorJourneyTimeline.tsx`: the body of `VisitorJourneyDrawer` (owns its fetch through `adminApi.visitorJourney`). Each visit gets a "Watch this visit" action, rendered only when an `onWatchVisit` prop is given; S3 gives it.
@@ -208,8 +211,9 @@ Facts already verified. Do not rediscover them:
   - Delete the keys that are no longer used.
   - Add `admin.sub.visitors`.
 - Tests:
-  - `VisitorsPanel.test.tsx`: the view switch follows `?view=` and `?mode=`; Journeys ▸ Flow and Leads render with mocked `adminApi`; a view with one registered mode renders no segmented control.
-  - `VisitorPanel.test.tsx`: null id renders nothing; the tabs from the registry; Esc closes; the erase action confirms, then calls `forgetGuestPrompts`.
+  - `InsightsHome.test.tsx`: the home renders every band; `?panel=funnel::flow` opens the panel on the flow tab; the Leads table renders with mocked `adminApi`; nothing on the home overflows a 1440×900 container (assert `scrollHeight <= clientHeight` on the root in jsdom with explicit heights).
+  - `InsightsPanel.test.tsx`: push adds a level and a crumb, crumb click pops, close clears, Esc closes; a kind absent for the scope is never rendered.
+  - `RecordingPanel.test.tsx`: null id renders nothing; the tabs from the registry; Esc closes; the erase action confirms, then calls `forgetGuestPrompts`.
   - `adminGroups.test.ts`: the legacy aliases.
 
 **S0 is done when** all of these hold:
@@ -223,6 +227,18 @@ Facts already verified. Do not rediscover them:
 ---
 
 ## 3. Slice S1 — Data plane (API)
+
+### S1.0 Scale amendments (PRD 33 D15 and §3.3) — read before S1.1
+
+D15 changes S1, S2, S4 and S4c. Where this block and a later step disagree, this block wins; the auditor checks it first.
+- **Bindings (wrangler, API Worker):** an `analytics_engine_datasets` binding `REPLAY_EVENTS` (dataset `replay_events`) and a Pipelines binding `REPLAY_LAKE` whose sink is the R2 Data Catalog table `replay_events` (partition `site_id`, `day`). The operator creates the pipeline and the catalog table once; the brief lists the exact commands in the runbook.
+- **Contracts (`interaction-contract`):** `routeTemplate(path, learned?)` (numeric, uuid, hex and long-token segments become `:id`; per-site learned templates win) and `issueFingerprint({siteId, routeTemplate, kind, subject})`. Both are pure, both have unit tests, and the recorder, ingest and rules import them.
+- **Recorder (S2):** buffer mode. `keepRate` comes from the config response. Events stream always; rrweb chunks stream only when kept (head sample or trigger, PRD §3.3). `BFReplay.keep()` is public.
+- **Ingest (S1.3, replaces steps 7, 7b and 9):** for every chunk, write each event as one `REPLAY_EVENTS.writeDataPoint` (≤250 per invocation; overflow goes to the lake only) and send the chunk's events to `REPLAY_LAKE`. Only for kept recordings: store the chunk, fold `replay_recordings`, and append to `marks.json`. `replay_visit_marks`, `replay_visit_tags`, `replay_interactions_daily` and `replay_page_vitals_daily` are **not created**.
+- **Migrations (S1.1, transactional):** `replay_recordings` (the §3.1 visit columns plus `keep_reason`, `sample_weight`), `replay_releases`, `replay_issues`, `replay_issue_daily`, `replay_issue_representatives`, `replay_route_daily`, `replay_visit_summaries` (keyed by recording).
+- **Reads:** `ReplayMetricsService` (Analytics Engine SQL API through `getOrSetCached`), `ReplayLakeService` (R2 SQL, 5-minute cache, 10-second timeout, row cap), and `ReplayReadService` for the small tables. A route never queries a store directly.
+- **Nightly rollup (`replayRollup.ts`, cron):** lake → `replay_route_daily`, `replay_issue_daily`, `replay_issues` (new fingerprints, status `new`), regression detection, and behaviour clustering → `replay_issue_representatives`. It is idempotent per site and day.
+- **Load test (S1 done-when):** a synthetic site at 10 million sessions a month (≈330k a day, 40 events each) through ingest for one hour on staging, then the home view warm under 1 s at p95 and cold under 4 s, and the transactional database growth under 50 MB for the simulated month.
 
 ### S1.1 Migrations
 - **Core** (`api/migrations/`, the next free number; `check:migrations` fails on duplicates, so re-check just before committing): `replay_sites`, exactly as PRD 33 §3.1. Add the Drizzle schema in `schema/growth.ts`.
@@ -467,17 +483,17 @@ The live CDN kill check runs at the first deploy (S8 step 1).
   - Timeline markers (buttons with `aria-label`) come from the visit's marks (`GET /visits/:visitId` returns them): clicks, rage, dead, quick back, excessive scroll, custom events and errors, each with its own icon and label. Platform errors are the visitor `error` rows for this `visit_id`, read from the journey.
   - The event list is clickable and seeks the player.
   - The header shows the release chip (`UI <release_key> · API <api version at that time if known>`), device, location, referrer and duration.
-  - "Link at <time>" copies `?visit=<id>&t=<s>`. On `VisitorsPanel` mount, the URL opens the panel at that time.
+  - "Link at <time>" copies `?visit=<id>&t=<s>`. On `InsightsPanelHost` mount, the URL opens the panel at that time.
   - "Ticket from this moment" opens the existing task-creation flow with the prefilled title "Replay: <event label> at <time>" and a body linking the replay URL. Locate the existing create-task `SlideOutPanel` or client; do not build a new one. If none fits without growth, log it and render a copy-to-clipboard of the link instead.
-- `VisitorPanel`: add `{ id:'replay', … }` as the first row of `VISITOR_PANEL_TABS`. Its content is `ReplayPlayer`. `VisitorJourneyTimeline` gets `onWatchVisit`, which switches to the replay tab for that visit.
-- `VisitorsPanel`: register the **Replays** view with its `recordings` mode (`RecordingsList` with platform scope). `onOpen` opens `VisitorPanel` on the replay tab.
+- `RecordingPanel`: add `{ id:'replay', … }` as the first row of `VISITOR_PANEL_TABS`. Its content is `ReplayPlayer`. `VisitorJourneyTimeline` gets `onWatchVisit`, which switches to the replay tab for that visit.
+- Register the `replay` tab as the first tab of the `recording` panel kind, and the `recordings` tab of the `issue` kind (`RecordingsList`, cursor-paginated). The `recording` kind IS the old `RecordingPanel`; rename it `RecordingPanel` and keep its props.
 - Tests:
   - `RecordingsList.test.tsx`: renders rows; the platform-only column is hidden in project scope; filters update the query.
   - `ReplayPlayer.test.tsx`: mock rrweb; play/pause/seek; markers seek; inspect highlight follows the last interaction.
   - `ReplayLoader.test.tsx`: not rendered for signed-in users; consent wiring.
-  - Extend `VisitorPanel.test.tsx` with the replay tab first and the journey watch action switching tabs.
+  - Extend `RecordingPanel.test.tsx` with the replay tab first and the journey watch action switching tabs.
 
-**S3 is done when** a local anonymous visit to builderforce.ai produces a recording that the superadmin can replay in Admin ▸ Growth ▸ Visitors ▸ Recordings, with the release chip, markers and audit row present, and §11/§12 S3 pass.
+**S3 is done when** a local anonymous visit to builderforce.ai produces a recording that the superadmin can replay in Admin ▸ Growth ▸ Insights ▸ Recordings, with the release chip, markers and audit row present, and §11/§12 S3 pass.
 
 ---
 
@@ -542,7 +558,7 @@ The live CDN kill check runs at the first deploy (S8 step 1).
     - "Add filter" lists `FILTER_FIELDS` for the current scope; each field renders its editor from `valueKind` (a registry of editors, no branches per field).
     - Applied clauses show as removable chips.
     - A segment menu offers save, rename, delete and apply. Deleting uses `useConfirm`.
-  - The filter is lifted into `VisitorsPanel` (and the canvas `sessions` surface in S7) and passed to EVERY view as one `filter` prop. `VISITOR_VIEWS` entries change from `Component<{ days }>` to `Component<{ days; filter }>`. Fixes, Overview, Replays, Journeys and Live all honour it, in every mode.
+  - The filter is lifted into `InsightsHome` (and the canvas `insights` surface in S7) and passed to every band and every panel tab as one `filter` prop (the registry's component contract already carries it). Every band and kind honours it.
   - `RecordingsList`'s S3 chips are replaced by the bar, and its props are unchanged apart from `filter`.
 
 ### S4c.2 Overview (the dashboard)
@@ -561,7 +577,7 @@ The live CDN kill check runs at the first deploy (S8 step 1).
   - The trend chart uses the chart primitive the admin insight panels already use. Locate it; do not add a chart library.
   - Every frustration tile is a link: it adds that `frustration` clause and switches to Recordings.
   - Every breakdown row is a link: it adds its clause.
-  - Register `overview` as the first row of `VISITOR_VIEWS` for now. S4e inserts `fixes` ahead of it, so that **Fixes** becomes the default view on every scope (PRD 33 §1).
+  - Register the `metric` kind (the old Overview, opened from a KPI tile), the `issues` kind, the `issue` kind's overview and recordings tabs, and the `funnel` kind's steps and clusters tabs. Land `IssuesTable` in the home's first column (it replaces the S0 Leads placeholder; Leads moves to `?panel=issues` on platform scope as a tab of `issues`).
 
 ### S4c.3 Frustration signals, surfaced
 - The ReplayPlayer marker icons, the event list and the filter field from S3 already include quick back and excessive scroll. This sub-slice checks them end to end and adds:
@@ -612,7 +628,7 @@ The live CDN kill check runs at the first deploy (S8 step 1).
 - **Brain tool.** `application/llm/replayToolCatalog.ts` exports `REPLAY_TOOLS: BuiltinTool[]` and is spread into the catalog in `builtinMcpService.ts`, exactly as `CHAT_DIAGNOSTICS_TOOLS` is.
   - The tools are `replay.overview`, `replay.funnel_evaluate`, `replay.search_recordings` (filter → visit ids + one-line digests) and `replay.summarize_visit`. All are read-only.
   - Scope comes from the calling context's project. A tool is advertised only when the workspace holds the `sessionReplay` entitlement, and returns an error otherwise. Use the advertising gate the other entitled catalogs use.
-  - The canvas `sessions` surface's composer (`composerIntents: ['ask']`, S7) lets the buyer ask "why do people drop at checkout?". The Brain answers from these tools and links recordings.
+  - The canvas `insights` surface's composer (`composerIntents: ['ask']`, S7) lets the buyer ask "why do people drop at checkout?". The Brain answers from these tools and links recordings.
   - Follow the prompt tool-name contract (`advertisedName()`).
 - **Read API for buyers.** Document `GET /api/projects/:projectId/replay/{overview,visits,funnels/:id/evaluate}` for workspace API keys in the developer docs page that lists project APIs (locate it). The routes exist already; this only documents them and adds a `replay:read` scope to `TENANT_API_SCOPES`, checked on those three GETs.
 
@@ -637,7 +653,7 @@ The live CDN kill check runs at the first deploy (S8 step 1).
   - `FunnelsView.test.tsx` / `FunnelEditor.test.tsx` (preview count; watch drop-offs opens filtered Recordings);
   - `SmartEventsView.test.tsx`;
   - `ReplaySummary.test.tsx` (a citation seeks the player);
-  - `VisitorsPanel.test.tsx` extended (Overview is the default view; every view receives `filter`).
+  - `InsightsHome.test.tsx` extended (every band receives `filter`; a KPI tile opens the `metric` kind).
 
 **S4c is done when** every non-excepted row of PRD 33 §2.1 marked S4c works on both scopes in tests, the filter applies to every view, `condenseTranscript` has one home, and §11/§12 S4c pass.
 
@@ -695,7 +711,7 @@ S4d starts after the S4c and S7 audits. It owns no new storage engine: it reads 
   - "Why it missed" (the stored cited patterns);
   - "Call it early…" (a `SlideOutPanel` `sheet` that requires a reason).
 
-  The same component renders at the top of the canvas `sessions` surface when the app is a proof. i18n: `creationCanvas.proof.*` ×5.
+  The same component renders at the top of the canvas `insights` surface when the app is a proof. i18n: `creationCanvas.proof.*` ×5.
 
 ### S4d.3 Read again with what we learned
 - On a graded proof card, "Read again with what we learned" calls `realizationApi.plan(idea, sessionId, { priorRealizationId })`. The plan route loads that realization's grade and evidence, passes them to the Read step as context, and writes `idea.read started` with `metadata.priorGrade = { realizationId, verdict, value, threshold, patterns }`.
@@ -739,7 +755,7 @@ S4d starts after the S4c and S7 audits. It owns no new storage engine: it reads 
   - `ProofScoreboard.test.tsx` (each status; early call requires a reason; watch links carry the filter);
   - `useFounderJourney.test.ts` (make / measure / run precedence);
   - `methodEvents.test.ts` (emitted only from the `realizationApi` wrappers; `rg -n "emitMethodEvent" frontend/src` shows only `builderforceApi.ts` and the module itself);
-  - `VisitorsPanel` Overview Method row.
+  - `InsightsPanelHost` Overview Method row.
 
 **S4d is done when** a smoke test built in tests is graded from replay data (held before the sample, measured at window end, evidence on `proof.grade`), read-again carries `priorGrade` into the next read, a ticket shows its effect, the journey reports make/measure, the Method funnel exists on the platform, and §11/§12 S4d pass.
 
@@ -807,7 +823,7 @@ S4e starts after the S4d audit. It reuses the replay reads, `condenseTranscript`
 ### S4e.5 Surfaces
 - `components/replay/FixesView.tsx` (container) + `PrescriptionCard.tsx` + `PrescriptionActions.tsx` (actions rendered from `PRESCRIPTION_ACTIONS`, no branches).
   - Each card shows the area chip, the finding with cited replay links, the prescription, the drafted change (before/after), the impact range and confidence, the action buttons, and the status with measured numbers.
-  - Register `fixes` as the **first** row of `VISITOR_VIEWS`, with `scopes: ['platform','site']`. It is the default view. `?view=` without a value and the canvas `sessions` surface both land on it. Every other view sits under an "Evidence" label in the view switcher (one registry field, `group: 'fix' | 'evidence'`; no branch).
+  - Land `DoNext` (the ranked fixes) and `ScoreStrip` on the home, and register the `fix` kind (change, measure tabs), the `issue` kind's fix and history tabs, and the `release` kind. There is no Fixes view: the fixes are on the home, and their detail is the `fix` panel.
   - Filters come from `ReplayFilterBar`, plus an area chip row.
 - Inline entry points, each rendering `PrescriptionCard` for the matching `subject_key` (the same component, no copies):
   - the Overview's top 3;
@@ -901,7 +917,7 @@ S4f starts after the S4e audit. It extends S4e's table, rules, actions and verif
 - Every evidence view keeps its inline `PrescriptionCard`s (S4e.5), so a person browsing evidence is always one click from the fix.
 - The canvas surface `sessions` keeps its id; its label becomes **Fixes** (`creationCanvas.surface.sessions.label` ×5), and it lands on the Fixes home.
 - i18n: `replay.fixes.*`, `replay.page.*`, `replay.prompt.*` ×5.
-- Tests: `pageScore.test.ts`; `FixesView.test.tsx` extended (Fixes is the default view; page select shows callouts in patch order; the ledger lists releases with verdicts); `CanvasSessionsSurface.test.tsx` (lands on Fixes).
+- Tests: `pageScore.test.ts`; `FixesView.test.tsx` extended (Fixes is the default view; page select shows callouts in patch order; the ledger lists releases with verdicts); `CanvasInsightsSurface.test.tsx` (lands on Fixes).
 
 **S4f is done when** a hosted test site and an external fixture site each get page captures per release, rules plus vision produce anchored prescriptions in all eight areas, at least one before/after renders from a validated patch, the improvement prompt compiles for all three audiences, Apply works in the composer, as an agent task and as a copied prompt, the next release re-scores the page and verifies the fix, Fixes is the default view everywhere, and §11/§12 S4f pass.
 
@@ -917,7 +933,7 @@ S4f starts after the S4e audit. It extends S4e's table, rules, actions and verif
   Routes: `GET /live`, `GET /visits/:id/tail`.
 - Frontend `components/replay/LiveView.tsx`: the count, by-page bars, and live tiles.
   - Tiles show the latest cursor position from the newest chunk (cheap: the last pointer event). There is no full replay per tile.
-  - Clicking a tile opens `VisitorPanel` on the replay tab in follow mode. `useReplayPlayback` gains a `follow` mode that polls `tail` every 5 s and appends.
+  - Clicking a tile opens `RecordingPanel` on the replay tab in follow mode. `useReplayPlayback` gains a `follow` mode that polls `tail` every 5 s and appends.
   - Poll intervals pause while `document.hidden`.
 - Flow links: `VisitorFlowGraph` nodes get an `onNodeSelect`. `FlowView` shows a detail strip (the node's numbers plus "Watch recordings on this step") that switches to the recordings view with `path=<node.label>`. Do not redraw the graph; extend the existing component's props.
 - Register the `live` view row.
@@ -1026,7 +1042,7 @@ S4f starts after the S4e audit. It extends S4e's table, rules, actions and verif
 
 ---
 
-## 9. Slice S7 — Buyer surfaces (hosted injection, canvas Measure ▸ Sessions)
+## 9. Slice S7 — Buyer surfaces (hosted injection, canvas Measure ▸ Insights)
 
 ### S7.1 Hosted injection
 - Extract the shared helper `injectBeforeBodyClose(html, markerId, snippet)` from `siteAttribution.injectSiteBadge`, and make `injectSiteBadge` use it.
@@ -1047,22 +1063,22 @@ S4f starts after the S4e audit. It extends S4e's table, rules, actions and verif
   ```
   Renumber `launch` and the object surfaces as PRD 32 W11 did.
 - `lib/canvasPhases.ts` `PHASE_SURFACES`: add `'sessions'` to `measure` and `reach`. Keep the rule additive.
-- `stage/CanvasSurfaceStage.tsx`: `sessions: <CanvasSessionsSurface onExit={exitToBoard} />`.
+- `stage/CanvasSurfaceStage.tsx`: `sessions: <CanvasInsightsSurface onExit={exitToBoard} />`.
 - `canvasSurfaceIcons.tsx`: an icon. i18n: `creationCanvas.surface.sessions.{label,enter,active,regionLabel}` ×5.
-- New `components/creation-canvas/CanvasSessionsSurface.tsx` (≤200 lines):
+- New `components/creation-canvas/CanvasInsightsSurface.tsx` (≤200 lines):
   - It resolves the primary app's `ideProjectId` through `useOperateReading`'s existing selector (do not re-derive it).
   - It renders three states:
     - **not entitled:** a buy prompt linking to the listing, with no data fetch;
     - **entitled but recording off for this app:** a switch that calls `createHostedSite`;
-    - **otherwise:** the `ReplayFilterBar` plus the `VISITOR_VIEWS` rows whose `scopes` include `'site'` (Fixes, Overview, Replays, Journeys, Live), each with `{kind:'project', projectId}`. They are the same registry and components as Admin, with no surface-specific copies.
+    - **otherwise:** `InsightsHome` with `{kind:'project', projectId}` and `InsightsPanel` docked on the side opposite the Brain; the panel kinds come from `INSIGHT_PANEL_KINDS` filtered to `scopes` including `'site'`. They are the same registry and components as Admin, with no surface-specific copies.
 
     Entitlement is read through a `useCapability('session_replay')` hook (new; calls a cached `GET /api/capabilities/:kind/state`).
   - Numbers in the header come from `useSiteAudience` (the existing count). Do not count again.
   - Toolbar controls go through `useCanvasSurfaceActions`, as `CanvasInsightsSurface` does.
-  - Opening a recording opens `VisitorPanel`-equivalent content. The panel in project scope has only the `replay` tab: `VISITOR_PANEL_TABS` rows carry `scopes`. It is docked on the side opposite the Brain through a new `useCounterBrainDockSide(): 'left'|'right'` hook, which reads `brainDockPreferences` + the lens override.
+  - Opening a recording opens `RecordingPanel`-equivalent content. The panel in project scope has only the `replay` tab: `VISITOR_PANEL_TABS` rows carry `scopes`. It is docked on the side opposite the Brain through a new `useCounterBrainDockSide(): 'left'|'right'` hook, which reads `brainDockPreferences` + the lens override.
 - Tests:
   - `canvasSurfaces.test.tsx` (`sessions` registered and offered from `measure` only);
-  - `CanvasSessionsSurface.test.tsx` (three states; no fetch when not entitled; the panel side flips with the dock side; the site-scope views come from `VISITOR_VIEWS` and Leads is absent; a composer question reaches the Brain with the `replay.*` tools advertised);
+  - `CanvasInsightsSurface.test.tsx` (three states; no fetch when not entitled; the panel side flips with the dock side; the site-scope kinds come from `INSIGHT_PANEL_KINDS` and the lead tab is absent; a composer question reaches the Brain with the `replay.*` tools advertised);
   - `useCounterBrainDockSide.test.ts`.
 
 ---
@@ -1101,10 +1117,10 @@ Run `check:blog-index`.
 | # | Step | Evidence the step passed |
 |---|---|---|
 | 1 | Deploy api + frontend + the `publish-cdn` job. | `curl -sI https://cdn.builderforce.ai/replay/v1/loader.js` → 200, `cache-control: public, max-age=300`, no `cf-worker` header, and `cf-cache-status: HIT` on the second request. `/replay/manifest.json` names a hashed recorder that returns 200 with `immutable`. `cdn.builderforce.ai/embed/v1.js` resolves, or the snippet was changed in S2. |
-| 2 | Dogfood. Open builderforce.ai in a private window, accept analytics, click around, and rage-click something. Then sign in, open a canvas with the 3D Room, and visit Settings ▸ API keys. This step requires the operator to have published the legal disclosure and set `replay.recordSignedIn = true`. | In Admin ▸ Growth ▸ Visitors ▸ Recordings, ONE visit appears within ~10 s and runs across sign-in. It is tagged with the current UI version, and its `user_id` is set. The replay plays the Room (canvas frames). The API-key area is blocked and inputs are masked. The user's detail panel lists the recording. Logs ▸ Audit has `REPLAY_VIEWED`. |
+| 2 | Dogfood. Open builderforce.ai in a private window, accept analytics, click around, and rage-click something. Then sign in, open a canvas with the 3D Room, and visit Settings ▸ API keys. This step requires the operator to have published the legal disclosure and set `replay.recordSignedIn = true`. | In Admin ▸ Growth ▸ Insights ▸ Recordings, ONE visit appears within ~10 s and runs across sign-in. It is tagged with the current UI version, and its `user_id` is set. The replay plays the Room (canvas frames). The API-key area is blocked and inputs are masked. The user's detail panel lists the recording. Logs ▸ Audit has `REPLAY_VIEWED`. |
 | 3 | Install, then buy. As the test workspace owner, install the listing (free; trace `replay.entitlement.granted`). As superadmin, set its `replayFreeAllowanceOverride = 0`. Then buy the 10k pack ($40) with a real card. | Trace `replay.checkout.started` → `.session_created` → `.payment.completed` → `replay.credits.added` (10,000). `ledger_entries` has the sale rows plus a `replay_recordings` credit of 10,000. The Stripe dashboard shows the $40 payment. The usage meter shows 10,000 credits. |
 | 4 | Install. Create an external site with a test origin. Paste the snippet on a page served from that origin. Visit it. | `replay.site_key.issued`, then `replay.loader.hit`, then `replay.ingest.first_event`. Verify turns green. |
-| 5 | Hosted. Turn recording on for one published canvas app, then visit it. | The page source contains the injected loader with `data-release=<version_token>`. A recording appears in that canvas's Measure ▸ Sessions. |
+| 5 | Hosted. Turn recording on for one published canvas app, then visit it. | The page source contains the injected loader with `data-release=<version_token>`. A recording appears in that canvas's Measure ▸ Insights. |
 | 6 | Review, then compete. Open the recording as the buyer. Then, on the buyer site, call `BFReplay.event('signup')` and `BFReplay.tag('plan','pro')`, quick-back once, and scroll frantically once. Build a 3-step funnel, save a segment, summarize the recording, and ask the canvas Brain "where do visitors drop off?". | `replay.session.viewed`. A different workspace's user cannot list it (403). Overview shows the frustration tiles. The recording carries the quick-back and excessive-scroll markers, the `signup` event and the `plan=pro` tag. The funnel shows the drop and "Watch who dropped" opens the matching recordings. The saved segment filters every view. The summary cites moments that seek the player. The Brain answer links recordings. Then walk the PRD 33 §2.1 matrix row by row and record the evidence. |
 | 7 | Debit, then refund. After the step-4/5 visits, confirm credits were debited (`replay.credits.first_debit`; the balance below 10,000; one ledger row per unit crossed, no duplicates). Record one canvas-heavy visit and confirm it counted more than 1 unit. Export one replay as MP4 and confirm 10 units were debited and the file plays. Then refund the payment in Stripe. | `replay.payment.refunded`. The ledger debits the unused remainder only. With 0 credits and a 0 allowance, config for the site returns `enabled:false` for NEW visits (`replay.allowance.exhausted`). Already-recorded visits still play. Reset `replayFreeAllowanceOverride` afterwards. |
 | 8 | Erase. In Admin, erase the step-2 visitor. | Their `replay_visits` rows and R2 chunks are gone. The audit has `GUEST_PROMPTS_ERASED` with per-eraser counts. |
@@ -1130,27 +1146,27 @@ Record the trace output in the DONE.md entry.
 
 | Slice | Where | Files |
 |---|---|---|
-| S0 | frontend | `src/components/admin/adminShared.test.tsx`, `src/components/UserDetailDrawer.test.tsx`, `src/lib/adminGroups.test.ts`, `src/components/admin/panels/VisitorsPanel.test.tsx`, `src/components/visitors/VisitorPanel.test.tsx`, the QA telemetry tests under `src/lib/qa/` |
+| S0 | frontend | `src/components/admin/adminShared.test.tsx`, `src/components/UserDetailDrawer.test.tsx`, `src/lib/adminGroups.test.ts`, `src/components/admin/panels/InsightsPanelHost.test.tsx`, `src/components/visitors/RecordingPanel.test.tsx`, the QA telemetry tests under `src/lib/qa/` |
 | S0 | packages | `packages/interaction-contract` (all tests) |
 | S0 | api | `src/application/qa/QaHeatmapService*.test.ts`, `src/domain/qa/heatZones.test.ts` |
 | S1 | api | `src/domain/replay/*.test.ts`, `src/application/replay/*.test.ts`, `src/application/visitors/visitorDataErasers.test.ts`, `src/presentation/routes/replayIngestRoutes.test.ts`, `src/presentation/routes/replayAdminRoutes.test.ts`, the scope-rejection security test, `src/application/maintenance/retentionPurge*.test.ts` |
 | S2 | replay-sdk | `npm run type-check && npm test && npm run build && npm run size` |
 | S2 | scripts | `bash .github/scripts/cdn-ensure.sh --dry-run` and `bash .github/scripts/cdn-publish.sh replay-sdk/dist/assets --dry-run` (print the planned wrangler/API calls, exit 0); `shellcheck` on both if available |
-| S3 | frontend | `src/components/replay/RecordingsList.test.tsx`, `ReplayPlayer.test.tsx`, `src/components/ReplayLoader.test.tsx`, `src/components/visitors/VisitorPanel.test.tsx`, the sensitive-region attribute test, `UserDetailDrawer.test.tsx` (recordings section) |
+| S3 | frontend | `src/components/replay/RecordingsList.test.tsx`, `ReplayPlayer.test.tsx`, `src/components/ReplayLoader.test.tsx`, `src/components/visitors/RecordingPanel.test.tsx`, the sensitive-region attribute test, `UserDetailDrawer.test.tsx` (recordings section) |
 | S4 | api | `src/application/replay/ReplayHeatmapService.test.ts`, `replayVideoExport.test.ts` |
 | S4 | frontend | `src/components/replay/HeatmapView.test.tsx`, `HeatmapInsights.test.ts` |
 | S4c | interaction-contract | `filter.test.ts`, `smartEvents.test.ts`, the frustration detector tests |
 | S4c | api | `src/application/replay/{replayFilterCompiler,replaySegments,ReplayOverviewService,ReplayFunnelService,replaySmartEvents,replayFlow,replaySummaries}.test.ts`, `src/domain/replay/{funnelFold,visitDigest}.test.ts`, `src/application/llm/replayToolCatalog.test.ts`, `src/application/llm/builtinMcpService.test.ts`, the meetings intelligence tests, the `replay:read` scope test |
-| S4c | frontend | `src/components/replay/{ReplayFilterBar,OverviewView,FunnelsView,FunnelEditor,SmartEventsView,ReplaySummary}.test.tsx`, `VisitorsPanel.test.tsx` |
+| S4c | frontend | `src/components/replay/{ReplayFilterBar,OverviewView,FunnelsView,FunnelEditor,SmartEventsView,ReplaySummary}.test.tsx`, `InsightsPanelHost.test.tsx` |
 | S4d | interaction-contract | `proofMeasure.test.ts` |
 | S4d | api | `src/application/realization/{proofMeasure,realizationVerdict,proofOutcomes}.test.ts`, the per-target measure tests under `src/application/realization/targets/`, `src/application/replay/{replayEntitlement,ticketEffect}.test.ts`, `journeySignal.test.ts`, the recommender test, `src/application/outcomes/proofJourney.test.ts`, the maintenance-job registration test |
-| S4d | frontend | `ProofScoreboard.test.tsx`, `src/lib/useFounderJourney.test.ts`, `src/lib/methodEvents.test.ts`, the Journey Strip / TopBar pill / canvas chip tests, `VisitorsPanel.test.tsx` |
+| S4d | frontend | `ProofScoreboard.test.tsx`, `src/lib/useFounderJourney.test.ts`, `src/lib/methodEvents.test.ts`, the Journey Strip / TopBar pill / canvas chip tests, `InsightsPanelHost.test.tsx` |
 | S4e | api | `src/domain/replay/prescriptions/{rules,impact,rank}.test.ts`, `src/application/replay/{prescriptionSweep,prescriptionActions,prescriptionVerify,resolveKnownContacts}.test.ts`, the sites Worker split test, `src/application/marketing/experimentation*.test.ts`, the outcome contract test; plus `npm run check:sites-worker-graph` |
-| S4e | frontend | `src/components/replay/{FixesView,PrescriptionCard}.test.tsx`, `VisitorsPanel.test.tsx` |
+| S4e | frontend | `src/components/replay/{FixesView,PrescriptionCard}.test.tsx`, `InsightsPanelHost.test.tsx` |
 | S4f | interaction-contract | `visualPatch.test.ts`, `improvementPrompt.test.ts` |
 | S4f | api | `src/application/replay/{pageSelection,pageCapture,visionReview,prescriptionActions}.test.ts`, `src/domain/replay/pageScore.test.ts`, the new rule fixtures under `src/domain/replay/prescriptions/`, the vision request-shape test against the capability gate |
 | S4f | qa-container | the fact-extractor unit test (fixture HTML) |
-| S4f | frontend | `src/components/replay/{BeforeAfter,SerpPreview,FixesView}.test.tsx`, `CanvasSessionsSurface.test.tsx`, `VisitorsPanel.test.tsx` (Fixes is the default view) |
+| S4f | frontend | `src/components/replay/{BeforeAfter,SerpPreview}.test.tsx`, `src/components/insights/RoutePanel.test.tsx`, `CanvasInsightsSurface.test.tsx`, `InsightsHome.test.tsx` (the stage's "Page review" opens the `route` kind) |
 | S5 | api | `ReplayLiveService.test.ts` |
 | S5 | frontend | `LiveView.test.tsx`, `src/components/admin/visitors/FlowView.test.tsx` |
 | S6 | api | `src/application/replay/replayPacks.test.ts`, `src/application/billing/purchaseRegistry*.test.ts`, `src/presentation/middleware/featureGate*.test.ts`, `capabilityRoutes.test.ts`, `replaySiteAdmin.test.ts`, the consumption meters test (`application/consumption/*.test.ts`) |
@@ -1158,7 +1174,7 @@ Record the trace output in the DONE.md entry.
 | S6 | frontend | `CapabilityInstall.test.tsx`, `CapabilityVerify.test.tsx` |
 | S6 | interaction-contract | `replaySnippets.test.ts` |
 | S7 | api | `siteReplayInjection.test.ts`, `siteAttribution*.test.ts` |
-| S7 | frontend | `canvasSurfaces.test.tsx`, `CanvasSessionsSurface.test.tsx`, `useCounterBrainDockSide.test.ts`, `canvasPhases.test.ts` |
+| S7 | frontend | `canvasSurfaces.test.tsx`, `CanvasInsightsSurface.test.tsx`, `useCounterBrainDockSide.test.ts`, `canvasPhases.test.ts` |
 | S7 | clients/vscode | type-check only (it compiles the canvas source; do not package) |
 | S8 | frontend | `npm run check` (includes `check:blog-index`) plus `src/i18n/messages.test.ts` |
 
@@ -1173,19 +1189,19 @@ Hand-over package from each slice:
 - the implementer's deviation list.
 
 **Every slice:**
-- [ ] Decisions D1–D14 obeyed. No new decision taken silently.
+- [ ] Decisions D1–D16 obeyed. No new decision taken silently.
 - [ ] **No duplicates.** These all return only the canonical definition:
   - `rg -n "function (FunnelStat|Stat)\b" frontend/src` → 0
   - `rg -n "deriveSelector\s*\(" -g '!**/interaction-contract/**' --type ts | rg "function"` → 0
   - `rg -n "0\.97" api/src` → only `domain/qa/heatZones.ts`
-  - `rg -n "SlideOutPanel" frontend/src/components/replay frontend/src/components/visitors` → only `VisitorPanel.tsx`
+  - `rg -n "SlideOutPanel" frontend/src/components/replay frontend/src/components/visitors` → only `RecordingPanel.tsx`
   - `rg -n "user-drawer" frontend/src` → 0
 - [ ] **Layering.** These return 0:
   - `rg -n "infrastructure/database/schema" api/src/presentation/routes/replay*.ts api/src/presentation/routes/capabilityRoutes.ts`
   - `rg -n "fetch\(|apiRequest\(" frontend/src/components/replay frontend/src/components/visitors` (only `lib/replayApi.ts` / `adminApi.ts` call the network)
 - [ ] **Sizes.** `wc -l` on every new file is ≤ ~400. `git diff --stat` shows `adminRoutes.ts` and `adminApi.ts` not grown beyond a mount/import line. `CreationCanvas.tsx` net ≤ +10.
 - [ ] **Tables, not branches.** These return 0:
-  - `rg -n "view === '|tab === '|kind === 'capability'" frontend/src/components/admin/panels/VisitorsPanel.tsx frontend/src/components/visitors frontend/src/components/marketplace`
+  - `rg -n "view === '|tab === '|kind === 'capability'" frontend/src/components/admin/panels/InsightsPanelHost.tsx frontend/src/components/visitors frontend/src/components/marketplace`
   - Views, tabs, filters, insights, purchase actions and add-ons are registries.
 - [ ] **Caching.** Every new `router.get` in `replay*Routes.ts` resolves through a service method that uses `getOrSetCached`, or carries a one-line reason (chunk bytes: immutable R2 plus a `Cache-Control` header).
 - [ ] **i18n.** New keys exist in all five catalogs with non-English text in zh/es/fr/de (spot-check 5 keys per locale). `messages.test.ts` is green, and there are no hardcoded strings in new TSX (`rg -n ">[A-Z][a-z]+ [a-z]+<" <new files>` reviewed).
@@ -1206,7 +1222,7 @@ Hand-over package from each slice:
 | S4c | One filter contract and one compiler: `rg -n "ReplayFilter\b" frontend/src api/src` shows only imports from `interaction-contract`, and no view parses its own query string. The compiler parameterises every value (read it). The matcher/SQL parity test exists. `buildVisitorFlowGraph` is called by `replayFlow.ts` and not copied. `condenseTranscript` has exactly one definition (`rg -n "function condenseTranscript"` → `application/llm/condense.ts`). The digest carries no page text. Uncited summary sentences are dropped. Summaries are on demand, cached and limited. `REPLAY_TOOLS` is entitlement-gated and read-only. The funnel evaluation is bounded (batched, 20k ceiling, `truncated` flag). Overview uses `StatTile`. Every view takes `filter`. Every S4c row of the PRD 33 §2.1 matrix maps to working code. |
 | S4d | The verdict is synced in ONE place (`syncRealizationVerdict`), with the precedence exactly as specified. `met` is never written before the sample is reached without a reason. `REALIZATION_VERDICTS` and `OUTCOME_DEFINITION_VERSION` are unchanged. Every measure on a target matches its charter numbers, and a target that cannot be measured from behaviour says so rather than faking it. Entitlement is ONE function (`replayEntitledForSite`) used by injection and ingest. Method events have exactly one emitting seam. Read-again carries `priorGrade` into both the ledger and the recommender. The ticket effect is computed on read and never stored. The journey change updates its header comment and every consumer's test. The ROADMAP `useFounderJourney` gap moves to DONE.md. |
 | S4e | Findings come only from `PRESCRIPTION_RULES` (`rg -n "condenseTranscript" api/src/application/replay` shows the summaries and the sweep only, and the sweep calls it only for rows a rule produced). Uncited sentences are dropped. No page text reaches a prompt. Impact is pure and withheld at low confidence. Every action is a `PRESCRIPTION_ACTIONS` row, and the human gates hold: preview not live, the test in draft until started, follow-up through `salesPolicy`, contacts only via `resolveKnownContacts`. There is ONE A/B engine (`experimentation.ts`, no second results path) and ONE dispatch seam (`dispatchCloudRunForTask`). The sites Worker graph is green. The verifier reuses `effectFor` and `variantResults`. `PrescriptionCard` is the only card, rendered by every entry point. The ROADMAP `experiment` gap is updated with what the traffic split now covers. |
-| S4f | ONE runner (`dispatchQaRunner` with new job kinds; no new container or queue). ONE prescription table (no second store for page findings). Observed findings are anchored (the `acceptObserved` test exists and the rule in it matches D13's amendment). Visual patches pass `validateVisualPatch` and the after images come from applying them to the captured page (no generated images). The improvement prompt is pure, compiled on read, and contains no masked or secret text. Apply in the canvas goes through the ONE composer via `previewPick`: `rg -n "improvement.*form\|ApplyForm" frontend/src` → 0. Search Console data comes only through the analytics port. A new release triggers verification for `copy_prompt` fixes. Fixes is the first `VISITOR_VIEWS` row and the canvas landing view. The runner never submits forms or signs in on buyer sites. |
+| S4f | ONE runner (`dispatchQaRunner` with new job kinds; no new container or queue). ONE prescription table (no second store for page findings). Observed findings are anchored (the `acceptObserved` test exists and the rule in it matches D13's amendment). Visual patches pass `validateVisualPatch` and the after images come from applying them to the captured page (no generated images). The improvement prompt is pure, compiled on read, and contains no masked or secret text. Apply in the canvas goes through the ONE composer via `previewPick`: `rg -n "improvement.*form\|ApplyForm" frontend/src` → 0. Search Console data comes only through the analytics port. A new release triggers verification for `copy_prompt` fixes. Fixes is the first `INSIGHT_PANEL_KINDS` row and the canvas landing view. The runner never submits forms or signs in on buyer sites. |
 | S5 | Polling pauses while hidden. Live TTLs are ~5 s and cached. `VisitorFlowGraph` was extended, not copied. |
 | S6 | One install path (`acquireListing`) and one payment path (a `ONE_OFF_SETTLERS` row); no subscription code added. Credits and debits only in `ledger_entries` under `replay_recordings`, idempotent by reference (grep for a second balance store → 0). The pack ladder is data in the catalog item. The meter is registered in `meters.ts`, so displayed == enforced (the same `replayUsage` function feeds both). Auto-recharge is real, or logged with the missing provider method named. Trace verbs at each step. `requireRole(MANAGER)` + `BILLING_MANAGE` on checkout. |
 | S7 | `check:sites-worker-graph` green. Injection idempotent. The surface fetches nothing when not entitled. The panel docks opposite the Brain. `sessions` is offered from `measure` only. |
@@ -1218,7 +1234,7 @@ Hand-over package from each slice:
 
 | Slice | Done when |
 |---|---|
-| S0 | One Visitors destination (Flow, Leads), one `VisitorPanel`, one `StatTile`, `UserDetailDrawer` on `SlideOutPanel`, shared selector + ranking; legacy URLs alias; erase wired; §11 green; §12 passed |
+| S0 | One Insights destination (Flow, Leads), one `RecordingPanel`, one `StatTile`, `UserDetailDrawer` on `SlideOutPanel`, shared selector + ranking; legacy URLs alias; erase wired; §11 green; §12 passed |
 | S1 | Ingest → R2 → visits → aggregates proven in tests; scoped, cached reads; key scope security test; erasers + retention; §11/§12 |
 | S2 | Package builds within budgets; the CDN scripts are ready to provision and publish to `cdn.builderforce.ai`; `embed/v1.js` resolved; npm entry self-updates; §11/§12 |
 | S3 | Signed-out and (behind the gate) signed-in builderforce.ai visits are replayable by the superadmin as one continuous visit, with canvas frames, release chip, markers, sensitive regions blocked, audit, and the user's recordings on their detail panel; §11/§12 |
@@ -1229,7 +1245,7 @@ Hand-over package from each slice:
 | S4f | Page captures per release (screen, SEO, content, lab + field performance, accessibility), rules + anchored vision findings in 8 areas, visual before/after from validated patches, improvement prompts for composer / coding agent / site builder, Apply via the ONE composer / agent / copy, page score + improvement ledger, Fixes as the home; §11/§12 |
 | S5 | Live view (~5 s), follow mode, Flow → recordings; §11/§12 |
 | S6 | A buyer can install free, buy a pack (in tests against a mocked processor), see credits on the meter, get a site key, install the snippet, verify, and be debited past the free allowance; §11/§12 |
-| S7 | Hosted apps record with release tokens; canvas Measure ▸ Sessions works per entitlement state; §11/§12 |
+| S7 | Hosted apps record with release tokens; canvas Measure ▸ Insights works per entitlement state; §11/§12 |
 | S8 | Release note, blog ×5, versions, runbook executed with real payment + refund, ROADMAP → DONE.md |
 
 ## 14. Hand-off order (who starts when)
