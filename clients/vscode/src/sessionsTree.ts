@@ -1,13 +1,13 @@
 import * as vscode from "vscode";
 import { BfBrainChat, BfCreationSessionSummary, listBrainChats, listAgentPool, listCreationSessions } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
+import { displayChatProgressPct } from "@builderforce/agent-loop";
 import { getSelectedProject, onProjectChange } from "./projectState";
 import { getProjectNames, projectLabel } from "./projectNames";
 import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
 import { sessionsLibraryGroup, sessionsLibraryRowId, sessionsLibraryRows, type SessionsLibraryGroup, type SessionsLibraryRow } from "./sessionsLibrary";
 import {
   appendTicketProgress,
-  clampTicketProgressPct,
   conversationAccessibilityName,
   conversationTreeLabel,
   ticketProgressTooltipLine,
@@ -191,7 +191,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     // (`2h · 85%`). Title stays title-only so VS Code ellipsizes the label, not
     // the marker (#2442 / #2439). Absent/non-finite pct omits the suffix; a real
     // 0% still shows.
-    const ticketPct = clampTicketProgressPct(chat.ticketProgressPct);
+    const ticketPct = displayChatProgressPct(chat.ticketProgressPct);
     const timeAndPct = appendTicketProgress(time, ticketPct);
     // Filtered: the project is implied by the header, so just show the time. Unfiltered:
     // prefix the project name (or "No project") so a mixed history stays readable.

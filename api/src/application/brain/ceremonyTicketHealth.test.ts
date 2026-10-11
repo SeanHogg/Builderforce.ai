@@ -19,7 +19,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
  * link, however many ceremonies a chat references.
  */
 
-import { ChatTicketService, TICKET_KINDS, rollupChatTicketHealth } from './ChatTicketService';
+import { rollupChatTicketHealth } from '@builderforce/agent-loop';
+import { ChatTicketService, TICKET_KINDS } from './ChatTicketService';
 
 /** Results the fake hands back, in the order ChatTicketService asks for them. */
 let queue: unknown[][] = [];

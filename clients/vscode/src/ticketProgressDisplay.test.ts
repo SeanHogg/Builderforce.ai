@@ -3,36 +3,10 @@ import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   appendTicketProgress,
-  clampTicketProgressPct,
   conversationAccessibilityName,
   conversationTreeLabel,
   ticketProgressTooltipLine,
 } from "./ticketProgressDisplay";
-
-describe("clampTicketProgressPct", () => {
-  it("returns null for absent / non-finite values (never fakes 0%)", () => {
-    expect(clampTicketProgressPct(undefined)).toBeNull();
-    expect(clampTicketProgressPct(null)).toBeNull();
-    expect(clampTicketProgressPct(Number.NaN)).toBeNull();
-    expect(clampTicketProgressPct(Number.POSITIVE_INFINITY)).toBeNull();
-    expect(clampTicketProgressPct(Number.NEGATIVE_INFINITY)).toBeNull();
-    expect(clampTicketProgressPct("85")).toBeNull();
-  });
-
-  it("keeps a real 0%", () => {
-    expect(clampTicketProgressPct(0)).toBe(0);
-  });
-
-  it("floors and clamps to [0, 100]", () => {
-    expect(clampTicketProgressPct(85)).toBe(85);
-    expect(clampTicketProgressPct(99.9)).toBe(99);
-    expect(clampTicketProgressPct(100)).toBe(100);
-    expect(clampTicketProgressPct(100.4)).toBe(100);
-    expect(clampTicketProgressPct(101)).toBe(100);
-    expect(clampTicketProgressPct(-1)).toBe(0);
-    expect(clampTicketProgressPct(-0.4)).toBe(0);
-  });
-});
 
 describe("conversationTreeLabel", () => {
   it("returns the chat title only — never a percent prefix", () => {
@@ -100,6 +74,8 @@ describe("sessionsTree row contract", () => {
 
   it("feeds description through appendTicketProgress and sets a11y from the helper", () => {
     expect(source).toContain("appendTicketProgress");
+    // The percent goes through the ONE rounding rule the picker and the rail use.
+    expect(source).toContain("displayChatProgressPct");
     expect(source).toContain("conversationAccessibilityName");
     expect(source).toContain("ticketProgressTooltipLine");
     expect(source).toContain("accessibilityInformation");

@@ -16,7 +16,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HealthRing } from '../HealthRing';
 import { nativeOptionStyle } from '../optionStyle';
 import { resolveRunGate } from './runGate';
-import { aggregateTicketHealth } from './aggregateTicketHealth';
+import { rollupChatTicketHealth } from '@builderforce/agent-loop';
+import { useChatProgressSync } from './useChatProgressSync';
 import { chatSwitcherLabel } from './chatSwitcherLabel';
 // The rail's ONE palette, shared with every part it composes (see tokens.ts).
 import { V } from './tokens';
@@ -93,6 +94,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [collapsed, setCollapsed] = useState<boolean | null>(null);
   const userCollapsed = useRef(false);
 
+  // The picker and Sessions tree show a chat-list snapshot; when the tickets read here
+  // disagree with it, the host refetches so all three show one figure.
+  const syncChatProgress = useChatProgressSync(chatId, chatList, onChanged);
+
   const load = useCallback(async () => {
     const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => [] as TicketLinkVM[]),
@@ -101,12 +106,13 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       adapter.listQuestions(chatId).catch(() => [] as ChatQuestionVM[]),
     ]);
     setTickets(tk);
+    syncChatProgress(tk);
     setAgents(ag);
     setMembers(mem);
     setQuestions(qs);
     // Auto-collapse a long list on first load; never override a user's own choice.
     if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
-  }, [adapter, chatId]);
+  }, [adapter, chatId, syncChatProgress]);
 
   useEffect(() => { void load(); }, [load, refreshSignal]);
   useEffect(() => { adapter.loadAgentPool().then(setPool).catch(() => setPool([])); }, [adapter]);
@@ -151,10 +157,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     } finally { setBusy(false); }
   };
 
-  // Roll the linked tickets up into one overall % for the collapsed header ring.
-  // See aggregateTicketHealth for why this weights `progressPct` rather than
-  // counting Σdone/Σtotal (which rendered "0% · 0/3" beside rings of 75/50/75).
-  const agg = useMemo(() => aggregateTicketHealth(tickets), [tickets]);
+  // Roll the linked tickets up into one overall % for the collapsed header ring — the
+  // SAME rollup the server puts on the chat list (see rollupChatTicketHealth for why it
+  // weights `progressPct` rather than counting Σdone/Σtotal).
+  const agg = useMemo(() => rollupChatTicketHealth(tickets), [tickets]);
 
   const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
   const toggleCollapsed = () => { userCollapsed.current = true; setCollapsed(!isCollapsed); };

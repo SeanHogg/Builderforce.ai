@@ -1,3 +1,20 @@
+## ✅ RESOLVED 2026-10-11 — One chat, one progress figure: the ticket rail, the conversation picker and the Sessions tree agree (agent-loop 2026.10.3 · brain-ui 2026.10.6 · VSIX 2026.10.15 · api 2026.10.25)
+
+In VS Code chat #133, the same chat showed three different completion figures at once: the Sessions tree read 23%, the ticket rail 60% · 2/10, and the conversation picker 18%. There were three causes:
+
+- **Snapshots of different ages.** The rail refetches its tickets on every MCP write and on chat activity. The picker and the tree show the chat-list snapshot (`GET /api/brain/chats` → `ticketProgressPct`), which was refetched only on other events. Linking or unlinking a ticket, running one, or a ticket moving under a run updated the rail and left the other two behind.
+- **Two copies of one formula.** The server's `rollupChatTicketHealth` and brain-ui's `aggregateTicketHealth` were kept in sync by a "keep them in lockstep" comment.
+- **Floor versus round.** The tree floored the value; the picker and the rail rounded it.
+
+Fixes:
+- **ONE module**, `packages/agent-loop/src/chatTicketHealth.ts`, provides `rollupChatTicketHealth`, `displayChatProgressPct` (round, clamp 0–100, null when there is nothing to show) and `chatProgressIsStale`.
+  - The api's `ChatTicketService` imports the rollup from here.
+  - The rail (`ChatTicketsPanel`) uses the same rollup. brain-ui's copy was deleted and its tests moved over.
+  - `chatSwitcherLabel` and the tree's `sessionsTree` now share `displayChatProgressPct`. `clampTicketProgressPct` was removed.
+- **The rail resyncs the others.** `useChatProgressSync` (brain-ui) compares each fresh ticket list with this chat's row in the host's chat list. When they disagree, it calls the panel's `onChanged`, so the host refetches the list. In the VSIX, `reloadChats` then posts `chats.changed`, which repaints the tree. It reports once per distinct ticket state, so a server that briefly still reads the old value cannot start a refetch loop. A host whose list carries no ticket summary (e.g. the canvas dock) is never reported as stale.
+- **Dead field removed:** `ChatOptionVM.progressPct` claimed the API emitted it. Nothing emitted it and nothing read it.
+- Tests: `chatTicketHealth.test.ts` (the rollup, display rounding, staleness), `useChatProgressSync.test.tsx`, `ticketProgressDisplay.test.ts` (pins the shared rule), `ceremonyTicketHealth.test.ts`.
+
 ## ✅ RESOLVED 2026-10-11 — Questions asked in prose become the clickable card, and local delegation runs by role instead of dispatching to the cloud (agent-loop 2026.10.2 · agent-tools 2026.10.2 · brain-embedded 2026.10.12 · VSIX 2026.10.14 · api 2026.10.24)
 
 VS Code chat #133 had two problems:

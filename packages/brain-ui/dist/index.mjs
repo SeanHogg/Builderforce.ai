@@ -18,6 +18,96 @@ import React, { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+// ../agent-loop/src/runNarration.ts
+var NARRATION_MIN_CHARS = 40;
+var NARRATION_OPENER = new RegExp(
+  "^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)",
+  "i"
+);
+var NARRATION_ANYWHERE = [
+  /\btool calls?\b/i,
+  /\brun_command\b/i,
+  /\bgit_status\b/i,
+  /\bmy (?:previous|last) turn\b/i,
+  /\brather than (?:just )?assum/i
+];
+var FENCE = /```[\s\S]*?(?:```|$)/g;
+function isNarrationSentence(sentence, leadsIntoCode) {
+  const s = sentence.trim();
+  if (!s) return false;
+  if (NARRATION_OPENER.test(s)) return true;
+  if (NARRATION_ANYWHERE.some((re) => re.test(s))) return true;
+  return s.endsWith(":") && !leadsIntoCode;
+}
+function piecesOf(prose) {
+  return prose.split(/((?<=[.!?:])[ \t]+|\s*\n\s*)/);
+}
+function stripRunNarration(text) {
+  let out = "";
+  let dropped = 0;
+  const keepProse = (prose, leadsIntoCode) => {
+    const pieces = piecesOf(prose);
+    let lastIdx = pieces.length - 1;
+    while (lastIdx > 0 && !pieces[lastIdx].trim()) lastIdx -= 2;
+    for (let i = 0; i < pieces.length; i += 2) {
+      const piece = pieces[i];
+      const sep = pieces[i + 1] ?? "";
+      if (isNarrationSentence(piece, leadsIntoCode && i === lastIdx)) {
+        dropped += 1;
+        continue;
+      }
+      out += piece + sep;
+    }
+  };
+  let last = 0;
+  for (const m of text.matchAll(FENCE)) {
+    keepProse(text.slice(last, m.index), true);
+    out += m[0];
+    last = m.index + m[0].length;
+  }
+  keepProse(text.slice(last), false);
+  return { text: out.replace(/\n{3,}/g, "\n\n").trim(), dropped };
+}
+function looksLikeRunNarration(text) {
+  const t = text.trim();
+  if (t.length < NARRATION_MIN_CHARS) return false;
+  const { text: kept, dropped } = stripRunNarration(t);
+  return dropped > 0 && kept.length * 2 <= t.length;
+}
+
+// ../agent-loop/src/chatTicketHealth.ts
+function isExcludedFromChatHealth(status) {
+  const s = (status ?? "").trim().toLowerCase();
+  return s === "cancelled" || s === "canceled";
+}
+function rollupChatTicketHealth(tickets) {
+  let done = 0;
+  let total = 0;
+  let weightedPct = 0;
+  let counted = 0;
+  for (const tk of tickets) {
+    if (isExcludedFromChatHealth(tk.status)) continue;
+    const pct = Number.isFinite(tk.progressPct) ? tk.progressPct : 0;
+    const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 1;
+    done += Number.isFinite(tk.done) ? tk.done : 0;
+    total += weight;
+    weightedPct += pct * weight;
+    counted++;
+  }
+  if (counted === 0) return { pct: tickets.length ? 100 : 0, done: 0, total: 0 };
+  return { pct: Math.round(weightedPct / total), done, total };
+}
+function displayChatProgressPct(pct) {
+  if (typeof pct !== "number" || !Number.isFinite(pct)) return null;
+  return Math.min(100, Math.max(0, Math.round(pct)));
+}
+function chatProgressIsStale(row, tickets) {
+  if (!row || row.ticketCount == null) return false;
+  if (row.ticketCount !== tickets.length) return true;
+  if (tickets.length === 0) return false;
+  return displayChatProgressPct(row.ticketProgressPct) !== rollupChatTicketHealth(tickets).pct;
+}
+
 // ../agent-loop/src/reasoning.ts
 var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
 var QUICK_TAG_RE = new RegExp(`<\\s*/?\\s*(?:${REASONING_TAG}|final)\\b`, "i");
@@ -25,13 +115,13 @@ var FINAL_TAG_RE = /<\s*\/?\s*final\b[^<>]*>/gi;
 var REASONING_TAG_RE = new RegExp(`<\\s*(/?)\\s*(?:${REASONING_TAG})\\b[^<>]*>`, "gi");
 function findCodeRegions(text) {
   const regions = [];
-  const fencedRe = /(^|\n)(```|~~~)[^\n]*\n[\s\S]*?(?:\n\2(?:\n|$)|$)/g;
+  const fencedRe = /(^|\n)(```|~~~)[^\n]*\n[\s\S]*?(?:(\n\2(?:\n|$))|$)/g;
   for (const match of text.matchAll(fencedRe)) {
     const lead = match[1] ?? "";
     const start = (match.index ?? 0) + lead.length;
-    regions.push({ start, end: start + match[0].length - lead.length });
+    regions.push({ start, end: start + match[0].length - lead.length, unterminated: match[3] === void 0 });
   }
-  const inlineRe = /`+[^`]+`+/g;
+  const inlineRe = /`+(?:[^`\n]|\n(?![ \t]*\n))+`+/g;
   for (const match of text.matchAll(inlineRe)) {
     const start = match.index ?? 0;
     const end = start + match[0].length;
@@ -44,6 +134,9 @@ function findCodeRegions(text) {
 function isInsideCode(pos, regions) {
   return regions.some((r) => pos >= r.start && pos < r.end);
 }
+function codeRegionAt(pos, regions) {
+  return regions.find((r) => pos >= r.start && pos < r.end);
+}
 function scanReasoning(text) {
   const regions = findCodeRegions(text);
   const spans = [];
@@ -53,8 +146,13 @@ function scanReasoning(text) {
   REASONING_TAG_RE.lastIndex = 0;
   for (const match of text.matchAll(REASONING_TAG_RE)) {
     const idx = match.index ?? 0;
-    if (isInsideCode(idx, regions)) continue;
     const isClose = match[1] === "/";
+    const region = codeRegionAt(idx, regions);
+    if (region) {
+      const releases = region.unterminated === true && kind === "thought" && isClose && region.start >= contentStart;
+      if (!releases) continue;
+      region.end = idx;
+    }
     if (kind === "thought" && !isClose) continue;
     const after = idx + match[0].length;
     spans.push({ kind, start, contentStart, contentEnd: idx, end: isClose ? after : idx, unterminated: false });
@@ -329,7 +427,8 @@ var DEFAULT_ASK_USER_LABELS = {
   askSubmit: "Send",
   askAnswered: "Answered",
   askPending: "Answer needed",
-  askJumpTo: "Show in conversation"
+  askJumpTo: "Show in conversation",
+  askDismiss: "Dismiss"
 };
 function QuestionCard({
   payload,
@@ -402,12 +501,31 @@ function PendingQuestionBanner({
   onReveal
 }) {
   const lab = useMemo2(() => ({ ...DEFAULT_ASK_USER_LABELS, ...labels }), [labels]);
+  const [closed, setClosed] = useState2(false);
+  if (closed) return null;
+  const answer = (choice) => {
+    setClosed(true);
+    onAnswer(choice);
+  };
   return /* @__PURE__ */ jsxs3("div", { className: "bf-qpend", role: "region", "aria-label": lab.askPending, children: [
     /* @__PURE__ */ jsxs3("div", { className: "bf-qpend__bar", children: [
       /* @__PURE__ */ jsx3("span", { className: "bf-qpend__badge", children: lab.askPending }),
-      onReveal && /* @__PURE__ */ jsx3("button", { type: "button", className: "bf-qpend__jump", onClick: onReveal, children: lab.askJumpTo })
+      /* @__PURE__ */ jsxs3("span", { className: "bf-qpend__actions", children: [
+        onReveal && /* @__PURE__ */ jsx3("button", { type: "button", className: "bf-qpend__jump", onClick: onReveal, children: lab.askJumpTo }),
+        /* @__PURE__ */ jsx3(
+          "button",
+          {
+            type: "button",
+            className: "bf-qpend__close",
+            "aria-label": lab.askDismiss,
+            title: lab.askDismiss,
+            onClick: () => setClosed(true),
+            children: "\xD7"
+          }
+        )
+      ] })
     ] }),
-    /* @__PURE__ */ jsx3(QuestionCard, { payload, labels: lab, onAnswer })
+    /* @__PURE__ */ jsx3(QuestionCard, { payload, labels: lab, onAnswer: answer })
   ] });
 }
 
@@ -2408,7 +2526,7 @@ function PendingChangesList({
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-import { memo, useCallback as useCallback3, useEffect as useEffect6, useMemo as useMemo6, useRef as useRef4, useState as useState10 } from "react";
+import { memo, useCallback as useCallback4, useEffect as useEffect7, useMemo as useMemo6, useRef as useRef5, useState as useState10 } from "react";
 
 // src/optionStyle.ts
 var nativeOptionStyle = {
@@ -2423,27 +2541,24 @@ function resolveRunGate(adapter) {
   return { allowed: probe.allowed, reason: probe.reason };
 }
 
-// src/chatTickets/aggregateTicketHealth.ts
-function isExcludedFromChatHealth(status) {
-  const s = (status ?? "").trim().toLowerCase();
-  return s === "cancelled" || s === "canceled";
-}
-function aggregateTicketHealth(tickets) {
-  let done = 0;
-  let total = 0;
-  let weightedPct = 0;
-  let counted = 0;
-  for (const tk of tickets) {
-    if (isExcludedFromChatHealth(tk.status)) continue;
-    const pct = Number.isFinite(tk.progressPct) ? tk.progressPct : 0;
-    const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 1;
-    done += Number.isFinite(tk.done) ? tk.done : 0;
-    total += weight;
-    weightedPct += pct * weight;
-    counted++;
-  }
-  if (counted === 0) return { pct: tickets.length ? 100 : 0, done: 0, total: 0 };
-  return { pct: Math.round(weightedPct / total), done, total };
+// src/chatTickets/useChatProgressSync.ts
+import { useCallback as useCallback3, useEffect as useEffect6, useRef as useRef4 } from "react";
+function useChatProgressSync(chatId, chatList, onStale) {
+  const rowRef = useRef4(void 0);
+  const onStaleRef = useRef4(onStale);
+  const reported = useRef4(null);
+  useEffect6(() => {
+    rowRef.current = chatList.find((c) => c.id === chatId);
+    onStaleRef.current = onStale;
+  }, [chatList, chatId, onStale]);
+  return useCallback3((tickets) => {
+    const row = rowRef.current;
+    if (!onStaleRef.current || !chatProgressIsStale(row, tickets)) return;
+    const signature = `${chatId}:${tickets.length}:${tickets.map((t) => `${t.progressPct}/${t.status ?? ""}`).join(",")}`;
+    if (reported.current === signature) return;
+    reported.current = signature;
+    onStaleRef.current();
+  }, [chatId]);
 }
 
 // src/chatTickets/chatSwitcherLabel.ts
@@ -2451,10 +2566,8 @@ function chatSwitcherLabel(input) {
   const title = input.title.trim() || `Chat ${input.id}`;
   const glyph = input.runGlyph ?? "";
   const count = input.ticketCount ?? 0;
-  if (count <= 0 || input.ticketProgressPct == null || !Number.isFinite(input.ticketProgressPct)) {
-    return `${glyph}${title}`;
-  }
-  const pct = Math.max(0, Math.min(100, Math.round(input.ticketProgressPct)));
+  const pct = displayChatProgressPct(input.ticketProgressPct);
+  if (count <= 0 || pct == null) return `${glyph}${title}`;
   return `${glyph}${pct}% \xB7 ${title}`;
 }
 
@@ -2582,7 +2695,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [panel, setPanel] = useState10(null);
   const togglePanel = (key) => setPanel((open) => open === key ? null : key);
   const openExtension = extensions?.find((ext) => ext.key === panel) ?? null;
-  useEffect6(() => {
+  useEffect7(() => {
     if (panel && !isBuiltinPanel(panel) && !extensions?.some((ext) => ext.key === panel)) setPanel(null);
   }, [panel, extensions]);
   const [lineageKey, setLineageKey] = useState10(null);
@@ -2591,8 +2704,9 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [msg, setMsg] = useState10(null);
   const [busy, setBusy] = useState10(false);
   const [collapsed, setCollapsed] = useState10(null);
-  const userCollapsed = useRef4(false);
-  const load = useCallback3(async () => {
+  const userCollapsed = useRef5(false);
+  const syncChatProgress = useChatProgressSync(chatId, chatList, onChanged);
+  const load = useCallback4(async () => {
     const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
       adapter.listAgents(chatId).catch(() => []),
@@ -2600,23 +2714,24 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       adapter.listQuestions(chatId).catch(() => [])
     ]);
     setTickets(tk);
+    syncChatProgress(tk);
     setAgents(ag);
     setMembers(mem);
     setQuestions(qs);
     if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
-  }, [adapter, chatId]);
-  useEffect6(() => {
+  }, [adapter, chatId, syncChatProgress]);
+  useEffect7(() => {
     void load();
   }, [load, refreshSignal]);
-  useEffect6(() => {
+  useEffect7(() => {
     adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
   }, [adapter]);
   const flash = (m) => {
     setMsg(m);
     if (typeof window !== "undefined") window.setTimeout(() => setMsg(null), 3500);
   };
-  const poolName = useCallback3((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
-  const parentLink = useCallback3((tk) => tk.parent ? tickets.find((t) => t.kind === tk.parent.kind && t.ref === tk.parent.ref) : void 0, [tickets]);
+  const poolName = useCallback4((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
+  const parentLink = useCallback4((tk) => tk.parent ? tickets.find((t) => t.kind === tk.parent.kind && t.ref === tk.parent.ref) : void 0, [tickets]);
   const unlink = async (tk) => {
     setBusy(true);
     try {
@@ -2649,7 +2764,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       setBusy(false);
     }
   };
-  const agg = useMemo6(() => aggregateTicketHealth(tickets), [tickets]);
+  const agg = useMemo6(() => rollupChatTicketHealth(tickets), [tickets]);
   const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
   const toggleCollapsed = () => {
     userCollapsed.current = true;
@@ -2930,7 +3045,7 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
   const [busy, setBusy] = useState10(false);
   const [results, setResults] = useState10([]);
   const [loading, setLoading] = useState10(false);
-  useEffect6(() => {
+  useEffect7(() => {
     let live = true;
     setLoading(true);
     const h = setTimeout(() => {
@@ -2952,7 +3067,7 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
     [results, existing, kind]
   );
   const atCap = results.length >= SEARCH_LIMIT;
-  useEffect6(() => {
+  useEffect7(() => {
     if (ref && !shown.some((o) => o.ref === ref)) setRef("");
   }, [shown, ref]);
   const submit = async () => {
@@ -3230,12 +3345,12 @@ function createChatTicketsRestAdapter(opts) {
 }
 
 // src/chatTickets/useChatParticipants.ts
-import { useEffect as useEffect7, useMemo as useMemo7, useState as useState11 } from "react";
+import { useEffect as useEffect8, useMemo as useMemo7, useState as useState11 } from "react";
 function useChatParticipants(adapter, chatId, refreshSignal = 0) {
   const [pool, setPool] = useState11([]);
   const [invited, setInvited] = useState11([]);
   const [members, setMembers] = useState11([]);
-  useEffect7(() => {
+  useEffect8(() => {
     if (chatId == null) {
       setInvited([]);
       setMembers([]);
@@ -3257,7 +3372,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
     };
   }, [adapter, chatId, refreshSignal]);
   const needsPool = invited.some((a) => !a.name);
-  useEffect7(() => {
+  useEffect8(() => {
     if (!needsPool) return;
     let ok = true;
     adapter.loadAgentPool().then((p) => {
@@ -3297,7 +3412,7 @@ function useChatActivitySignal(messages) {
 }
 
 // src/mention/MentionAutocomplete.tsx
-import { useCallback as useCallback4, useEffect as useEffect8, useMemo as useMemo9, useState as useState12 } from "react";
+import { useCallback as useCallback5, useEffect as useEffect9, useMemo as useMemo9, useState as useState12 } from "react";
 import {
   activeMentionToken,
   filterMentionCandidates
@@ -3312,7 +3427,7 @@ function useMentionAutocomplete(opts) {
     [token, participants, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = useCallback4(() => {
+  const recompute = useCallback5(() => {
     const el = textareaRef.current;
     if (!el || disabled || participants.length === 0) {
       setToken(null);
@@ -3322,10 +3437,10 @@ function useMentionAutocomplete(opts) {
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
-  useEffect8(() => {
+  useEffect9(() => {
     recompute();
   }, [value, recompute]);
-  const choose = useCallback4((r) => {
+  const choose = useCallback5((r) => {
     const el = textareaRef.current;
     const tk = token ?? (el ? activeMentionToken(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
@@ -3347,7 +3462,7 @@ function useMentionAutocomplete(opts) {
     setToken(null);
     onPick(r);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = useCallback4((e) => {
+  const onKeyDown = useCallback5((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -3435,7 +3550,7 @@ var POP = {
 };
 
 // src/mention/TicketAutocomplete.tsx
-import { useCallback as useCallback5, useEffect as useEffect9, useMemo as useMemo10, useState as useState13 } from "react";
+import { useCallback as useCallback6, useEffect as useEffect10, useMemo as useMemo10, useState as useState13 } from "react";
 import {
   activeTicketToken,
   filterTicketCandidates
@@ -3450,7 +3565,7 @@ function useTicketAutocomplete(opts) {
     [token, tickets, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = useCallback5(() => {
+  const recompute = useCallback6(() => {
     const el = textareaRef.current;
     if (!el || disabled || tickets.length === 0) {
       setToken(null);
@@ -3460,10 +3575,10 @@ function useTicketAutocomplete(opts) {
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, tickets.length]);
-  useEffect9(() => {
+  useEffect10(() => {
     recompute();
   }, [value, recompute]);
-  const choose = useCallback5((t) => {
+  const choose = useCallback6((t) => {
     const el = textareaRef.current;
     const tk = token ?? (el ? activeTicketToken(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
@@ -3486,7 +3601,7 @@ function useTicketAutocomplete(opts) {
     setToken(null);
     onPick(t);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = useCallback5((e) => {
+  const onKeyDown = useCallback6((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -3606,7 +3721,7 @@ function chatDiagnosticsReads(adapter, chatId) {
 }
 
 // src/evermind/EvermindConsole.tsx
-import { useCallback as useCallback11, useEffect as useEffect12, useId, useMemo as useMemo12, useRef as useRef7, useState as useState18 } from "react";
+import { useCallback as useCallback12, useEffect as useEffect13, useId, useMemo as useMemo12, useRef as useRef8, useState as useState18 } from "react";
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -3831,7 +3946,7 @@ function evermindNextAction(input) {
 }
 
 // src/evermind/EvermindTestBench.tsx
-import { useCallback as useCallback6, useState as useState14 } from "react";
+import { useCallback as useCallback7, useState as useState14 } from "react";
 
 // src/evermind/consoleStyles.ts
 var C = {
@@ -3999,7 +4114,7 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
   const [prompt, setPrompt] = useState14("");
   const [running, setRunning] = useState14(false);
   const [error, setError] = useState14(null);
-  const run = useCallback6(async (withPrompt) => {
+  const run = useCallback7(async (withPrompt) => {
     setRunning(true);
     setError(null);
     try {
@@ -4052,7 +4167,7 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
 }
 
 // src/evermind/EvermindMaintenance.tsx
-import { useCallback as useCallback7, useState as useState15 } from "react";
+import { useCallback as useCallback8, useState as useState15 } from "react";
 import { jsx as jsx21, jsxs as jsxs20 } from "react/jsx-runtime";
 function EvermindMaintenance({
   t,
@@ -4064,11 +4179,11 @@ function EvermindMaintenance({
 }) {
   const [slug, setSlug] = useState15("");
   const [pending, setPending] = useState15(null);
-  const doReseed = useCallback7(async () => {
+  const doReseed = useCallback8(async () => {
     setPending(null);
     await onReseed?.(slug || void 0);
   }, [onReseed, slug]);
-  const doCleanup = useCallback7(async () => {
+  const doCleanup = useCallback8(async () => {
     setPending(null);
     await onCleanup?.();
   }, [onCleanup]);
@@ -4172,7 +4287,7 @@ function Confirm({
 }
 
 // src/evermind/EvermindAnalyzer.tsx
-import { useCallback as useCallback8, useEffect as useEffect10, useMemo as useMemo11, useState as useState16 } from "react";
+import { useCallback as useCallback9, useEffect as useEffect11, useMemo as useMemo11, useState as useState16 } from "react";
 import { Fragment as Fragment7, jsx as jsx22, jsxs as jsxs21 } from "react/jsx-runtime";
 var TONE = {
   ok: "ok",
@@ -4188,10 +4303,10 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
   const [applying, setApplying] = useState16(false);
   const [repair, setRepair] = useState16(null);
   const [error, setError] = useState16(null);
-  useEffect10(() => {
+  useEffect11(() => {
     setSelected(new Set(analysis?.findings.map((f) => f.id) ?? []));
   }, [analysis]);
-  const run = useCallback8(async () => {
+  const run = useCallback9(async () => {
     setRunning(true);
     setError(null);
     setRepair(null);
@@ -4204,7 +4319,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setRunning(false);
     }
   }, [onAnalyze, onAnalysis, t.errorGeneric]);
-  const apply = useCallback8(async () => {
+  const apply = useCallback9(async () => {
     if (!onApply || !analysis) return;
     const picked = analysis.findings.filter((f) => selected.has(f.id));
     if (picked.length === 0) return;
@@ -4223,7 +4338,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setApplying(false);
     }
   }, [analysis, onAnalysis, onApply, onRepaired, selected, t.errorGeneric]);
-  const toggle = useCallback8((id) => {
+  const toggle = useCallback9((id) => {
     setSelected((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
@@ -4335,13 +4450,13 @@ function FindingRow({
 }
 
 // src/evermind/EvermindDiagnostics.tsx
-import { useCallback as useCallback9, useEffect as useEffect11, useRef as useRef5, useState as useState17 } from "react";
+import { useCallback as useCallback10, useEffect as useEffect12, useRef as useRef6, useState as useState17 } from "react";
 import { Fragment as Fragment8, jsx as jsx23, jsxs as jsxs22 } from "react/jsx-runtime";
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
   const [report, setReport] = useState17(null);
   const [copied, setCopied] = useState17(false);
   const [revealed, setRevealed] = useState17(false);
-  const copy = useCallback9(async () => {
+  const copy = useCallback10(async () => {
     const text = buildReport();
     setReport(text);
     try {
@@ -4356,13 +4471,13 @@ function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
       onManualFallback?.();
     }
   }, [buildReport, onCopy, onManualFallback]);
-  const toggleReveal = useCallback9(() => setRevealed((v) => !v), []);
+  const toggleReveal = useCallback10(() => setRevealed((v) => !v), []);
   return { report, copied, revealed, copy, toggleReveal };
 }
 function EvermindDiagnostics({ t, disabled, copy }) {
   const { report, copied, revealed } = copy;
-  const areaRef = useRef5(null);
-  useEffect11(() => {
+  const areaRef = useRef6(null);
+  useEffect12(() => {
     if (!revealed) return;
     areaRef.current?.focus();
     areaRef.current?.select();
@@ -4393,11 +4508,11 @@ function EvermindDiagnostics({ t, disabled, copy }) {
 }
 
 // src/evermind/ConsoleTabs.tsx
-import { useCallback as useCallback10, useRef as useRef6 } from "react";
+import { useCallback as useCallback11, useRef as useRef7 } from "react";
 import { jsx as jsx24, jsxs as jsxs23 } from "react/jsx-runtime";
 function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
-  const stripRef = useRef6(null);
-  const onKeyDown = useCallback10((e) => {
+  const stripRef = useRef7(null);
+  const onKeyDown = useCallback11((e) => {
     const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
     if (!keys.includes(e.key)) return;
     e.preventDefault();
@@ -4664,25 +4779,6 @@ function recentSection(d) {
   lines.push("");
   return lines;
 }
-var NARRATION_HINTS = [
-  /\blet me\b/i,
-  /\bi('ll| will)\b/i,
-  /\bnow (let|i|the)\b/i,
-  /\blooking (back|at)\b/i,
-  /\btool calls?\b/i,
-  /\brun_command\b/i,
-  /\bgit_status\b/i,
-  /\bsettled\b/i,
-  /\brather than (just )?assert\b/i,
-  /\bmy (previous|last) turn\b/i
-];
-function looksLikeRunNarration(text) {
-  const t = text.trim();
-  if (t.length < 40) return false;
-  let hits = 0;
-  for (const re of NARRATION_HINTS) if (re.test(t)) hits += 1;
-  return hits >= 2;
-}
 function codingGateSection(d) {
   const g = d.codingGate;
   if (!g) {
@@ -4821,7 +4917,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
   const [probeResult, setProbeResult] = useState18(null);
   const [analysis, setAnalysis] = useState18(null);
   const [loadFailed, setLoadFailed] = useState18(false);
-  const reload = useCallback11(async () => {
+  const reload = useCallback12(async () => {
     const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
       const d = await adapter.loadData();
@@ -4838,11 +4934,11 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (tg) setTargets(tg);
     }
   }, [adapter]);
-  useEffect12(() => {
+  useEffect13(() => {
     setLoaded(false);
     void reload();
   }, [reload]);
-  useEffect12(() => {
+  useEffect13(() => {
     if (!canManage) return;
     let cancelled = false;
     void adapter.loadSeedModels().then((m) => {
@@ -4860,7 +4956,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       cancelled = true;
     };
   }, [adapter, canManage]);
-  useEffect12(() => {
+  useEffect13(() => {
     if (!refreshMs) return;
     const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
     const id = setInterval(() => {
@@ -4875,13 +4971,13 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [refreshMs, busy, reload]);
-  const lastRefreshSignal = useRef7(refreshSignal);
-  useEffect12(() => {
+  const lastRefreshSignal = useRef8(refreshSignal);
+  useEffect13(() => {
     if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
     lastRefreshSignal.current = refreshSignal;
     void reload();
   }, [refreshSignal, reload]);
-  const runValidate = useCallback11(async (prompt) => {
+  const runValidate = useCallback12(async (prompt) => {
     const task = prompt.trim();
     if (task.length < 3) return;
     setValidating(true);
@@ -4897,20 +4993,20 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setValidating(false);
     }
   }, [adapter, onValidate, t.errorGeneric]);
-  const clearValidate = useCallback11(() => {
+  const clearValidate = useCallback12(() => {
     setValidateResult(null);
     onValidate?.(null);
   }, [onValidate]);
-  const pollTimer = useRef7(null);
-  const mounted = useRef7(true);
-  useEffect12(() => {
+  const pollTimer = useRef8(null);
+  const mounted = useRef8(true);
+  useEffect13(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
   }, []);
-  const describeTeachOutcome = useCallback11((status) => {
+  const describeTeachOutcome = useCallback12((status) => {
     if (status.state === "dropped") return { text: t.taughtDropped, tone: "warn" };
     if (status.state !== "merged") return { text: t.taughtStillPending, tone: "warn" };
     const verdict = evermindLearnedStatus({
@@ -4926,7 +5022,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     if (verdict.state === "fault") return { text: t.taughtTeacherFault(verdict.teacherModel ?? "", verdict.reason), tone: "warn" };
     return { text: t.taughtSelf(version), tone: "good" };
   }, [t]);
-  const trackTeach = useCallback11((contributionId) => {
+  const trackTeach = useCallback12((contributionId) => {
     const readStatus = adapter.teachStatus;
     if (!readStatus || !Number.isInteger(contributionId) || contributionId <= 0) return;
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -4960,7 +5056,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       void tick();
     }, TEACH_POLL_INTERVAL_MS);
   }, [adapter, describeTeachOutcome, reload, t.taughtStillPending]);
-  const run = useCallback11(async (op, successNotice) => {
+  const run = useCallback12(async (op, successNotice) => {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -4976,7 +5072,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     }
   }, [reload, t.errorGeneric]);
   const panelId = useId();
-  const buildReport = useCallback11(() => buildEvermindDiagnostics({
+  const buildReport = useCallback12(() => buildEvermindDiagnostics({
     data,
     projectName,
     host,

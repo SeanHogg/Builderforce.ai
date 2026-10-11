@@ -439,6 +439,8 @@ interface AskUserLabels {
     askPending: string;
     /** <PendingQuestionBanner> link to scroll the question's card into view. */
     askJumpTo: string;
+    /** <PendingQuestionBanner> close button's accessible name. */
+    askDismiss: string;
 }
 declare const DEFAULT_ASK_USER_LABELS: AskUserLabels;
 /**
@@ -461,6 +463,13 @@ declare function QuestionCard({ payload, labels, onAnswer, anchorId, }: {
  * the very same <QuestionCard> (no second options UI to drift), so one click unblocks
  * the run. `onReveal` scrolls the original card into view for the surrounding context.
  *
+ * It closes itself once answered — and on its × — rather than waiting for the user's
+ * turn to come back through the transcript: the answer may be queued behind a run that
+ * is still settling, and a banner restating a question already answered reads as the
+ * click having failed (chat #133). The card in the transcript stays; dismissing only
+ * unpins it. Hosts key it by the question's message id so the NEXT question opens a
+ * fresh banner.
+ *
  * Pair with {@link selectPendingAskUser}; render nothing when it returns null.
  */
 declare function PendingQuestionBanner({ payload, labels, onAnswer, onReveal, }: {
@@ -468,7 +477,7 @@ declare function PendingQuestionBanner({ payload, labels, onAnswer, onReveal, }:
     labels?: Partial<AskUserLabels>;
     onAnswer: (answer: string) => void;
     onReveal?: () => void;
-}): React.JSX.Element;
+}): React.JSX.Element | null;
 
 /**
  * The chat's error banner — the message AND the fix.
@@ -1203,17 +1212,6 @@ interface ChatOptionVM {
     title: string;
     ticketCount?: number | null;
     ticketProgressPct?: number | null;
-    /**
-     * The chat's overall ticket completion, 0–100, as `GET /api/brain/chats` now emits
-     * it on every list item: the same weighted rollup as {@link ticketProgressPct}, but
-     * never null — a chat with no linked tickets reads `0` rather than "unknown".
-     *
-     * Optional HERE only because this view-model is also built by hosts that have not
-     * been moved onto the new list field yet; the API contract itself is required. It is
-     * carried so the list JSON and this VM do not drift. Nothing renders it yet — the
-     * Sessions tree and the chat switcher bind it separately.
-     */
-    progressPct?: number;
 }
 /** A pending human question associated with one of this chat's linked tasks. */
 interface ChatQuestionVM {

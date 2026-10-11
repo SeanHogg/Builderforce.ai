@@ -1,3 +1,5 @@
+import { displayChatProgressPct } from '@builderforce/agent-loop';
+
 /**
  * Label for a conversation in a picker (VSIX `<select>`, Sessions tree).
  *
@@ -15,9 +17,8 @@ export function chatSwitcherLabel(input: {
   const title = input.title.trim() || `Chat ${input.id}`;
   const glyph = input.runGlyph ?? '';
   const count = input.ticketCount ?? 0;
-  if (count <= 0 || input.ticketProgressPct == null || !Number.isFinite(input.ticketProgressPct)) {
-    return `${glyph}${title}`;
-  }
-  const pct = Math.max(0, Math.min(100, Math.round(input.ticketProgressPct)));
+  // The ONE display rule the Sessions tree and the ticket rail share.
+  const pct = displayChatProgressPct(input.ticketProgressPct);
+  if (count <= 0 || pct == null) return `${glyph}${title}`;
   return `${glyph}${pct}% · ${title}`;
 }
