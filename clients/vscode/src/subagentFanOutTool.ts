@@ -54,7 +54,10 @@ export function subagentFanOutToolDef(deps: SubagentToolDeps): ToolDef {
       }
 
       // Every persona resolves before any child starts, for the same reason.
-      const people = await Promise.all(parsed.map((w) => resolveChildPersona(deps, w.asAgent)));
+      // Each slice's role first: it decides which teammates may take it (Developer for
+      // code, QA for verify).
+      const roles = parsed.map((w) => delegationRole(w.role, !writable));
+      const people = await Promise.all(parsed.map((w, i) => resolveChildPersona(deps, w.asAgent, roles[i]!)));
       const refused = people.findIndex((p) => !p.ok);
       if (refused >= 0) {
         const who = people[refused] as { ok: false; error: string };
@@ -70,7 +73,7 @@ export function subagentFanOutToolDef(deps: SubagentToolDeps): ToolDef {
             label: who.asAgent ? `as ${who.asAgent.name}: ${w.label}` : w.label,
             task: w.task,
             writable,
-            role: delegationRole(w.role, !writable),
+            role: roles[i]!,
             tools,
             outputChars,
             ...(writable ? { scope: w.paths } : {}),

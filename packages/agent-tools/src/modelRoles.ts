@@ -41,3 +41,38 @@ export function isModelRole(value: unknown): value is ModelRole {
 export function delegationRole(raw: unknown, readOnly: boolean): ModelRole {
   return isModelRole(raw) ? raw : readOnly ? "explore" : "code";
 }
+
+/**
+ * The DELIVERY role (the board's role key) a named agent must hold to take a delegated
+ * slice of this kind. A code slice runs as a Developer and a verify slice as QA. The other
+ * call purposes (planning, reading, chat) are open to any teammate.
+ *
+ * WHY: `as_agent` used to accept any agent for any slice, so a run could hand a code
+ * change to the workspace's Product Manager. The work then reads as hers in the chat and
+ * on the ticket, which is the role-blind assignment the board's role capability exists to
+ * prevent. One table, read by every surface that backs `spawn_agent { as_agent }`.
+ */
+export const DELEGATION_DELIVERY_ROLES: Readonly<Partial<Record<ModelRole, string>>> = {
+  code: "developer",
+  verify: "qa-tester",
+};
+
+/** One agent as the persona check sees it: its name and the role keys it can act as.
+ *  `roleKeys` absent ⇒ the host cannot tell, and the check does not filter. */
+export interface DelegationPersonaRoles {
+  name: string;
+  roleKeys?: readonly string[];
+}
+
+/**
+ * Why `agent` may NOT take a slice of `role`, or null when it may. The refusal names the
+ * role it needs and the roles the agent does hold, so the parent picks a capable teammate
+ * instead of guessing again.
+ */
+export function delegationRoleRefusal(agent: DelegationPersonaRoles, role: ModelRole): string | null {
+  const needed = DELEGATION_DELIVERY_ROLES[role];
+  if (!needed || !agent.roleKeys) return null;
+  if (agent.roleKeys.includes(needed)) return null;
+  const holds = agent.roleKeys.length ? agent.roleKeys.join(", ") : "no delivery role";
+  return `${agent.name} cannot take a ${role} slice: it needs a ${needed} and ${agent.name} holds ${holds}. Run it AS a ${needed}-capable agent (builtin_cloud_agents_persona_brief with role=${needed} lists them), or omit as_agent.`;
+}

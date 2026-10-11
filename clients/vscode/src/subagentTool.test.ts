@@ -232,6 +232,36 @@ describe("subagentToolDef", () => {
       expect(stream).not.toHaveBeenCalled();
     });
 
+    it("refuses a verify slice for an agent with no QA role, naming the role it needs", async () => {
+      const stream = streamOf({ text: "should never run" });
+      const tool = subagentToolDef({
+        stream: async () => stream as never,
+        catalog: () => CATALOG,
+        personaBrief: async () => ({ ...ADA, roleKeys: ["developer"] }),
+      });
+      const out = JSON.parse(
+        await tool.execute({ label: "check it", task: "review the diff", as_agent: "Ada", role: "verify" }, "/repo"),
+      );
+      expect(out.ok).toBe(false);
+      expect(out.error).toContain("qa-tester");
+      expect(out.error).toContain("role=qa-tester");
+      expect(stream).not.toHaveBeenCalled();
+    });
+
+    it("runs the slice when the agent holds the role it needs", async () => {
+      const stream = streamOf({ text: "reviewed" });
+      const tool = subagentToolDef({
+        stream: async () => stream as never,
+        catalog: () => CATALOG,
+        personaBrief: async () => ({ ...ADA, roleKeys: ["qa-tester"] }),
+      });
+      const out = JSON.parse(
+        await tool.execute({ label: "check it", task: "review the diff", as_agent: "Ada", role: "verify" }, "/repo"),
+      );
+      expect(out.ok).toBe(true);
+      expect(out.asAgent).toEqual({ ref: "agent_12", name: "Ada" });
+    });
+
     it("leaves an ordinary delegation untouched", async () => {
       const personaBrief = vi.fn(async () => ADA);
       const stream = streamOf({ text: "found it" });

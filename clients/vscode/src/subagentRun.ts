@@ -9,7 +9,7 @@
  */
 
 import { runSubagent, subagentStepBudget, type ToolRowSerializer } from "@builderforce/agent-loop";
-import { spawnAgentTool, spawnAgentsTool } from "@builderforce/agent-tools";
+import { delegationRoleRefusal, spawnAgentTool, spawnAgentsTool, type ModelRole } from "@builderforce/agent-tools";
 import {
   codeChangesOf,
   isCodeChangeTool,
@@ -84,7 +84,7 @@ export interface SubagentToolDeps {
    * accountability the dispatch would have carried, in a session that already holds the
    * workspace. `null` from this reader means "no such agent", not "reader failed".
    */
-  personaBrief?(agent: string): Promise<{ ref: string; name: string; brief: string } | null>;
+  personaBrief?(agent: string): Promise<{ ref: string; name: string; brief: string; roleKeys?: readonly string[] } | null>;
   /** The spawning run. Absent ⇒ a child with no way to ask a human (read-only), no Stop
    *  and the transport's default route — the posture of a host that has no run to bind. */
   run?: SubagentRunBinding;
@@ -128,9 +128,11 @@ export type ChildPersona =
 /**
  * WHO does a slice. An unresolvable name is REFUSED rather than run anonymously: a
  * parent that believes Ada did the work will report that she did, and a silently
- * persona-less run makes that report false.
+ * persona-less run makes that report false. So is an agent without the slice's delivery
+ * role — a code slice runs as a Developer, a verify slice as QA
+ * (`delegationRoleRefusal`, the same check the cloud's children run).
  */
-export async function resolveChildPersona(deps: SubagentToolDeps, asAgentName: string): Promise<ChildPersona> {
+export async function resolveChildPersona(deps: SubagentToolDeps, asAgentName: string, role: ModelRole): Promise<ChildPersona> {
   if (!asAgentName) return { ok: true };
   const resolved = await deps.personaBrief?.(asAgentName).catch(() => null);
   if (!resolved) {
@@ -139,6 +141,8 @@ export async function resolveChildPersona(deps: SubagentToolDeps, asAgentName: s
       error: `no agent named '${asAgentName}' in this workspace — use builtin_chats_list_agents or builtin_cloud_agents_list_mine and pass its exact name or id`,
     };
   }
+  const refusal = delegationRoleRefusal(resolved, role);
+  if (refusal) return { ok: false, error: refusal };
   return { ok: true, persona: { name: resolved.name, brief: resolved.brief }, asAgent: { ref: resolved.ref, name: resolved.name } };
 }
 

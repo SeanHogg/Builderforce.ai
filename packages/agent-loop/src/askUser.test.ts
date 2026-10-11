@@ -3,6 +3,7 @@ import {
   askUserAnchorId,
   askUserBlock,
   coerceAskUserPayload,
+  liftProseAskUser,
   parseAskUser,
   selectPendingAskUser,
   serializeAskUser,
@@ -46,6 +47,63 @@ describe("askUserBlock — the producer half", () => {
   it("coerces on ONE threshold — what the producer emits is exactly what the reader accepts", () => {
     const args = { question: "Which?", options: ["a", "b"] };
     expect(parseAskUser(askUserBlock(args)!)).toEqual(coerceAskUserPayload(args));
+  });
+});
+
+describe("liftProseAskUser — a question asked in prose still becomes the card", () => {
+  // Chat #133: MiniMax-M1 ended the run on this instead of calling ask_user.
+  const MINIMAX = [
+    "2860 | S2 | CDN | 2861 | S3 | Canvas surface |",
+    "",
+    "**Blocker:** Agent execution is disabled in this workspace. When I tried to delegate, I got:",
+    "",
+    '> "No run: agent execution is switched off for this workspace."',
+    "",
+    "**Options:**",
+    "",
+    "- **Enable agent execution** — A manager needs to turn it on in Settings",
+    "- **Do the work directly** — I can work on one slice myself in this session",
+    "- **You assign manually** — You assign these tasks to agents/people through the board",
+    "",
+    "What would you like to do?",
+  ].join("\n");
+
+  it("lifts the trailing options + question into the block, keeping the lead-in prose", () => {
+    const lifted = liftProseAskUser(MINIMAX);
+    expect(parseAskUser(lifted)).toEqual({
+      question: "What would you like to do?",
+      options: [
+        { label: "Enable agent execution", description: "A manager needs to turn it on in Settings" },
+        { label: "Do the work directly", description: "I can work on one slice myself in this session" },
+        { label: "You assign manually", description: "You assign these tasks to agents/people through the board" },
+      ],
+      multiSelect: false,
+    });
+    const prose = stripAskUser(lifted);
+    expect(prose).toContain("**Blocker:**");
+    expect(prose).not.toContain("**Options:**");
+    expect(prose).not.toContain("What would you like to do?");
+  });
+
+  it("lifts a question that introduces a numbered list", () => {
+    const lifted = liftProseAskUser("Two ways to go.\n\nWhich approach should I take?\n1. Postgres: managed\n2. SQLite");
+    expect(parseAskUser(lifted)?.options).toEqual([{ label: "Postgres", description: "managed" }, { label: "SQLite" }]);
+    expect(stripAskUser(lifted)).toBe("Two ways to go.");
+  });
+
+  it("leaves a status list ending in a yes/no question as prose", () => {
+    const text = "Next steps:\n- Run tests\n- Deploy\n\nWant me to proceed?";
+    expect(liftProseAskUser(text)).toBe(text);
+  });
+
+  it("leaves prose without a trailing question, or with one option, untouched", () => {
+    expect(liftProseAskUser("Options:\n- A\n- B")).toBe("Options:\n- A\n- B");
+    expect(liftProseAskUser("Options:\n- A\n\nWhich one?")).toBe("Options:\n- A\n\nWhich one?");
+    expect(liftProseAskUser("Done.")).toBe("Done.");
+  });
+
+  it("never touches a reply that already carries a block", () => {
+    expect(liftProseAskUser(`Sure.\n\n${QUESTION}`)).toBe(`Sure.\n\n${QUESTION}`);
   });
 });
 

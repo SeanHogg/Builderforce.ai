@@ -20,6 +20,7 @@ import {
   type Capability,
   type CapabilityProvider,
   type ModelRole,
+  delegationRoleRefusal,
   inScope,
   type OrchestrationCapability,
   type RepoWriteCapability,
@@ -125,7 +126,7 @@ export interface SubagentDeps {
    * roster, in which case `asAgent` is refused rather than silently ignored — a parent
    * that asked for Ada and got an anonymous helper would never learn it did not get her.
    */
-  personaBrief?(agent: string): Promise<{ name: string; brief: string } | null>;
+  personaBrief?(agent: string): Promise<{ name: string; brief: string; roleKeys?: readonly string[] } | null>;
   /** Timeline recorder, so a delegation is visible in Observability rather than
    *  appearing as an unexplained gap in the parent's turns. */
   record?(event: { label: string; detail: Record<string, unknown>; result: string }): Promise<void>;
@@ -224,8 +225,11 @@ export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationC
       let persona: { name: string; brief: string } | undefined;
       if (asAgent) {
         const resolved = await deps.personaBrief?.(asAgent);
-        if (!resolved) {
-          const result: SubagentResult = { ok: false, error: `no agent named "${asAgent}" in this workspace` };
+        // An agent without the slice's delivery role (Developer for code, QA for verify)
+        // is refused like an unknown one — the editor's children run the same check.
+        const roleRefusal = resolved && input.role ? delegationRoleRefusal(resolved, input.role) : null;
+        if (!resolved || roleRefusal) {
+          const result: SubagentResult = { ok: false, error: roleRefusal ?? `no agent named "${asAgent}" in this workspace` };
           await deps.record?.({
             label: input.label,
             detail: { readOnly, asAgent, ms: Date.now() - started },
@@ -233,7 +237,7 @@ export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationC
           });
           return result;
         }
-        persona = resolved;
+        persona = { name: resolved.name, brief: resolved.brief };
       }
       /** Echoed on the result and the timeline so the answer is attributable to a REAL
        *  teammate rather than to the string the parent guessed. */

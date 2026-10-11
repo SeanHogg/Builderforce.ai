@@ -53,6 +53,8 @@ __export(src_exports, {
   FAILURE_NUDGE_AT: () => FAILURE_NUDGE_AT,
   FILE_DELIVERY_RULE: () => FILE_DELIVERY_RULE,
   FailureTally: () => FailureTally,
+  HAND_OFF_TOOL: () => HAND_OFF_TOOL,
+  HAND_OFF_TOOL_SPEC: () => HAND_OFF_TOOL_SPEC,
   HISTORY_TOKEN_BUDGET: () => HISTORY_TOKEN_BUDGET,
   LOCAL_WORKSPACE_TOOLS: () => LOCAL_WORKSPACE_TOOLS,
   MAX_TOOL_RESULT_CHARS: () => MAX_TOOL_RESULT_CHARS,
@@ -78,6 +80,7 @@ __export(src_exports, {
   STOPPED_TURN_STEP: () => STOPPED_TURN_STEP,
   STREAM_IDLE_MS: () => STREAM_IDLE_MS,
   STUDIO_WORKSPACE_TOOLS: () => STUDIO_WORKSPACE_TOOLS,
+  SUBAGENT_REPORT_META_KEY: () => SUBAGENT_REPORT_META_KEY,
   StreamIdleError: () => StreamIdleError,
   StreamInterruptedError: () => StreamInterruptedError,
   TICKET_RECORDING_TOOLS: () => TICKET_RECORDING_TOOLS,
@@ -103,6 +106,7 @@ __export(src_exports, {
   agentPersonaPrompt: () => agentPersonaPrompt,
   allowanceState: () => allowanceState,
   announcesUntakenAction: () => announcesUntakenAction,
+  appendRunMessage: () => appendRunMessage,
   applyRemoteRun: () => applyRemoteRun,
   artifactRoutePath: () => artifactRoutePath,
   asProvenanceAccount: () => asProvenanceAccount,
@@ -122,6 +126,7 @@ __export(src_exports, {
   byoVendorLabel: () => byoVendorLabel,
   canChangeCodeHere: () => canChangeCodeHere,
   canReviewInPreview: () => canReviewInPreview,
+  canRunInParallel: () => canRunInParallel,
   canShipHere: () => canShipHere,
   catalogToolNamesMentionedIn: () => catalogToolNamesMentionedIn,
   chatActivityText: () => chatActivityText,
@@ -131,6 +136,7 @@ __export(src_exports, {
   chatRosterFromParticipants: () => chatRosterFromParticipants,
   chatWorkDirective: () => chatWorkDirective,
   chatWorkLinkingDirective: () => chatWorkLinkingDirective,
+  childTaskBrief: () => childTaskBrief,
   claimsMissingToolData: () => claimsMissingToolData,
   classifyModelFunding: () => classifyModelFunding,
   clearRunError: () => clearRunError,
@@ -158,6 +164,7 @@ __export(src_exports, {
   dirtyPathsOf: () => dirtyPathsOf,
   displayModelName: () => displayModelName,
   effortProfile: () => effortProfile,
+  executeHandOff: () => executeHandOff,
   extractXmlToolCalls: () => extractXmlToolCalls,
   failureReason: () => failureReason,
   fetchApiVersionVia: () => fetchApiVersionVia,
@@ -244,6 +251,7 @@ __export(src_exports, {
   parseChatActivity: () => parseChatActivity,
   parseDirectedRecipients: () => parseDirectedRecipients,
   parseGitShortStatus: () => parseGitShortStatus,
+  parseHandOff: () => parseHandOff,
   parseMessageAuthor: () => parseMessageAuthor,
   parseMessageProvenance: () => parseMessageProvenance,
   parsePmoFocus: () => parsePmoFocus,
@@ -256,6 +264,7 @@ __export(src_exports, {
   personaSystemPrompt: () => personaSystemPrompt,
   placeholderAdvisory: () => placeholderAdvisory,
   placeholdersWritten: () => placeholdersWritten,
+  planMessage: () => planMessage,
   pmoFocusDomId: () => pmoFocusDomId,
   pmoFocusValue: () => pmoFocusValue,
   poolAgentsFrom: () => poolAgentsFrom,
@@ -280,6 +289,7 @@ __export(src_exports, {
   revisitAdvisory: () => revisitAdvisory,
   routerToolSpecs: () => routerToolSpecs,
   routingQueryForTurn: () => routingQueryForTurn,
+  runAbortSignal: () => runAbortSignal,
   runBrainLoop: () => startRun,
   runProgressVerdict: () => runProgressVerdict,
   savePendingPrompt: () => savePendingPrompt,
@@ -303,6 +313,8 @@ __export(src_exports, {
   streamChatCompletion: () => streamChatCompletion,
   stripAskUser: () => stripAskUser,
   studioToolsIn: () => studioToolsIn,
+  subagentReportMessage: () => subagentReportMessage,
+  subagentReportMetadata: () => subagentReportMetadata,
   subscribeRun: () => subscribeRun,
   subscribeRunStore: () => subscribeRunStore,
   subscribeToChatMessages: () => subscribeToChatMessages,
@@ -820,14 +832,14 @@ async function runAgentLoop(args) {
     }
     ctx.messages.push(codec.assistant(turn));
     for (let i = 0; i < calls.length; i++) {
-      let call = calls[i];
+      let call2 = calls[i];
       let result;
-      const pre = await hooks.beforeDispatch?.(call, ctx);
+      const pre = await hooks.beforeDispatch?.(call2, ctx);
       if (pre && "result" in pre) result = pre.result;
-      else if (pre && "rewrite" in pre) call = pre.rewrite;
-      if (!result) result = await ports.dispatch(call, ctx);
+      else if (pre && "rewrite" in pre) call2 = pre.rewrite;
+      if (!result) result = await ports.dispatch(call2, ctx);
       if (result.control?.kind === "finish") {
-        const block = await hooks.onFinish?.(ctx, result.control.summary, call);
+        const block = await hooks.onFinish?.(ctx, result.control.summary, call2);
         if (block) {
           result = { data: { ok: false, error: block }, isError: true };
         } else {
@@ -835,13 +847,13 @@ async function runAgentLoop(args) {
           if (result.control.summary) ctx.output = result.control.summary;
         }
       } else if (result.control?.kind === "ask_human") {
-        await hooks.onAskHuman?.(ctx, result.control, call);
-        awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call.id };
+        await hooks.onAskHuman?.(ctx, result.control, call2);
+        awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call2.id };
       }
       if (!result.control) ctx.failureStreak = result.isError ? ctx.failureStreak + 1 : 0;
-      const row = codec.tool(call, result);
+      const row = codec.tool(call2, result);
       ctx.messages.push(row);
-      const post = await hooks.afterDispatch?.(call, result, row, ctx);
+      const post = await hooks.afterDispatch?.(call2, result, row, ctx);
       if (post?.skipRemaining) {
         const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
         for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
@@ -873,8 +885,8 @@ async function runAgentLoop(args) {
 }
 
 // ../packages/agent-loop/src/openaiCodec.ts
-function toOpenAiToolCall(call) {
-  return { id: call.id, type: "function", function: { name: call.name, arguments: call.arguments?.trim() ? call.arguments : "{}" } };
+function toOpenAiToolCall(call2) {
+  return { id: call2.id, type: "function", function: { name: call2.name, arguments: call2.arguments?.trim() ? call2.arguments : "{}" } };
 }
 var defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
 function openAiChatCodec(serialize = defaultToolRowSerializer) {
@@ -887,8 +899,8 @@ function openAiChatCodec(serialize = defaultToolRowSerializer) {
       };
       return row;
     },
-    tool(call, result) {
-      const row = { role: "tool", tool_call_id: call.id, content: serialize(result, call) };
+    tool(call2, result) {
+      const row = { role: "tool", tool_call_id: call2.id, content: serialize(result, call2) };
       return row;
     }
   };
@@ -897,13 +909,48 @@ function openAiChatCodec(serialize = defaultToolRowSerializer) {
 // ../packages/agent-loop/src/malformedCall.ts
 var MALFORMED_CALL_RESULT = "This tool call's arguments were not valid JSON, so it was NOT executed. Re-issue it with strictly valid JSON: no comments, no trailing commas, no unescaped newlines or quotes inside string values.";
 var TRUNCATED_CALL_RESULT = "This tool call was cut off by the output limit before its arguments were complete, so it was NOT executed. Re-issue it in your next response as ONE call with complete JSON \u2014 never several calls in one response. If the content is long, write it in parts: create it with its essential fields first, then extend it with follow-up calls.";
-function malformedCallOutcome(call, truncated, retryHint) {
-  if (!call.malformed) return null;
+function malformedCallOutcome(call2, truncated, retryHint) {
+  if (!call2.malformed) return null;
   const base = truncated ? TRUNCATED_CALL_RESULT : MALFORMED_CALL_RESULT;
   return { error: retryHint ? `${base} ${retryHint}` : base };
 }
 function malformedCallLabel(name, truncated) {
   return truncated ? `${name} (cut off by the output limit)` : `${name} (unparseable arguments)`;
+}
+
+// ../packages/agent-loop/src/runNarration.ts
+var NARRATION_OPENER = new RegExp(
+  "^(?:(?:now|next|first|then|so|okay|ok|alright|actually|great|good|perfect|but|and|also|finally)[,!.]?\\s+)*(?:let me|let's|i(?:'ll| will| need to| should| want to| am going to|'m going to| think| see| can see| notice| ran)\\b|looking (?:at|back|for)\\b|checking\\b|now the\\b|that was expected\\b)",
+  "i"
+);
+
+// ../packages/agent-loop/src/turnPhase.ts
+var MID_TURN_META_KEY = "midTurn";
+
+// ../packages/agent-loop/src/subagentReport.ts
+var SUBAGENT_REPORT_META_KEY = "subagentReport";
+var MAX_OUTPUT_CHARS = 3e3;
+var MAX_FILES_LISTED = 12;
+function subagentReportMessage(report) {
+  const who = report.asAgent?.name ? `${report.asAgent.name} \u2014 ` : "";
+  const ticket = report.ticket && !report.label.startsWith(`#${report.ticket}`) ? `#${report.ticket} ` : "";
+  const status2 = report.ok ? report.truncated ? "partial" : "done" : "failed";
+  const head = `**${who}${ticket}${report.label}** \xB7 ${status2}`;
+  const body = report.ok ? (report.output ?? "").trim() : (report.error ?? "the sub-agent stopped without an answer").trim();
+  const quoted = body.length > MAX_OUTPUT_CHARS ? `${body.slice(0, MAX_OUTPUT_CHARS)}\u2026` : body;
+  const files = report.changedFiles?.length ? `Changed: ${report.changedFiles.slice(0, MAX_FILES_LISTED).map((f) => `\`${f}\``).join(", ")}${report.changedFiles.length > MAX_FILES_LISTED ? ` (+${report.changedFiles.length - MAX_FILES_LISTED} more)` : ""}` : "";
+  return [head, quoted, files, report.note ?? ""].filter(Boolean).join("\n\n");
+}
+function subagentReportMetadata(report) {
+  return JSON.stringify({
+    [MID_TURN_META_KEY]: true,
+    [SUBAGENT_REPORT_META_KEY]: {
+      label: report.label,
+      ok: report.ok,
+      ...report.ticket ? { ticket: report.ticket } : {},
+      ...report.asAgent ? { asAgent: report.asAgent.name } : {}
+    }
+  });
 }
 
 // ../packages/agent-loop/src/reasoning.ts
@@ -913,13 +960,13 @@ var FINAL_TAG_RE = /<\s*\/?\s*final\b[^<>]*>/gi;
 var REASONING_TAG_RE = new RegExp(`<\\s*(/?)\\s*(?:${REASONING_TAG})\\b[^<>]*>`, "gi");
 function findCodeRegions(text) {
   const regions = [];
-  const fencedRe = /(^|\n)(```|~~~)[^\n]*\n[\s\S]*?(?:\n\2(?:\n|$)|$)/g;
+  const fencedRe = /(^|\n)(```|~~~)[^\n]*\n[\s\S]*?(?:(\n\2(?:\n|$))|$)/g;
   for (const match of text.matchAll(fencedRe)) {
     const lead = match[1] ?? "";
     const start = (match.index ?? 0) + lead.length;
-    regions.push({ start, end: start + match[0].length - lead.length });
+    regions.push({ start, end: start + match[0].length - lead.length, unterminated: match[3] === void 0 });
   }
-  const inlineRe = /`+[^`]+`+/g;
+  const inlineRe = /`+(?:[^`\n]|\n(?![ \t]*\n))+`+/g;
   for (const match of text.matchAll(inlineRe)) {
     const start = match.index ?? 0;
     const end = start + match[0].length;
@@ -932,6 +979,9 @@ function findCodeRegions(text) {
 function isInsideCode(pos, regions) {
   return regions.some((r) => pos >= r.start && pos < r.end);
 }
+function codeRegionAt(pos, regions) {
+  return regions.find((r) => pos >= r.start && pos < r.end);
+}
 function scanReasoning(text) {
   const regions = findCodeRegions(text);
   const spans = [];
@@ -941,8 +991,13 @@ function scanReasoning(text) {
   REASONING_TAG_RE.lastIndex = 0;
   for (const match of text.matchAll(REASONING_TAG_RE)) {
     const idx = match.index ?? 0;
-    if (isInsideCode(idx, regions)) continue;
     const isClose = match[1] === "/";
+    const region = codeRegionAt(idx, regions);
+    if (region) {
+      const releases = region.unterminated === true && kind === "thought" && isClose && region.start >= contentStart;
+      if (!releases) continue;
+      region.end = idx;
+    }
     if (kind === "thought" && !isClose) continue;
     const after = idx + match[0].length;
     spans.push({ kind, start, contentStart, contentEnd: idx, end: isClose ? after : idx, unterminated: false });
@@ -1149,6 +1204,116 @@ function parseAskUser(text) {
   } catch {
     return null;
   }
+}
+var PROSE_LIST_ITEM = /^\s*(?:[-*•+]|\d{1,2}[.)])\s+(\S.*)$/;
+var PROSE_BOLD_LEAD = /^\s*(?:\*\*|__)([^*_\n]+?)(?:\*\*|__)\s*(.*)$/;
+var PROSE_CONTINUATION = /^\s{2,}\S/;
+var PROSE_CHOICE_CUE = /\b(?:options?|choices?|choose|pick|which|prefer|approach|alternatives?)\b|\bwhat (?:would|do|should) (?:you|we) (?:like to )?(?:do|want)\b|\bhow (?:would|do) you (?:like|want)\b/i;
+var PROSE_MAX_LABEL = 80;
+var PROSE_MAX_OPTIONS = 6;
+var plainLine = (line) => line.replace(/\*\*|__|`/g, "").trim();
+function proseItemKind(line) {
+  if (PROSE_LIST_ITEM.test(line)) return "marked";
+  const bold = line.match(PROSE_BOLD_LEAD);
+  if (!bold) return null;
+  return !(bold[2] ?? "").trim() && plainLine(line).endsWith(":") ? null : "bold";
+}
+var isProseItem = (line) => proseItemKind(line) !== null;
+function proseOption(line) {
+  const body = line.match(PROSE_LIST_ITEM)?.[1] ?? line.trim();
+  const bold = body.match(PROSE_BOLD_LEAD);
+  let label;
+  let rest;
+  if (bold) {
+    label = bold[1] ?? "";
+    rest = bold[2] ?? "";
+  } else {
+    const sep = body.match(/\s+[—–-]\s+|:\s+/);
+    label = sep?.index !== void 0 ? body.slice(0, sep.index) : body;
+    rest = sep?.index !== void 0 ? body.slice(sep.index + sep[0].length) : "";
+  }
+  label = plainLine(label).replace(/[:.]$/, "").trim();
+  const description = plainLine(rest).replace(/^[\s—–:-]+/, "").trim();
+  if (!label || label.length > PROSE_MAX_LABEL) return null;
+  return description ? { label, description } : { label };
+}
+function proseOptions(lines) {
+  const options = [];
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    if (isProseItem(line)) {
+      const option = proseOption(line);
+      if (!option) return null;
+      options.push(option);
+      continue;
+    }
+    const last = options[options.length - 1];
+    if (!last || !PROSE_CONTINUATION.test(line)) return null;
+    const more = plainLine(line);
+    last.description = last.description ? `${last.description} ${more}` : more;
+  }
+  return options.length >= 2 && options.length <= PROSE_MAX_OPTIONS ? options : null;
+}
+function itemBlockStart(lines, end) {
+  let kind = null;
+  let i = end;
+  while (i >= 0) {
+    const line = lines[i] ?? "";
+    const k = proseItemKind(line);
+    if (k) {
+      if (kind && k !== kind) break;
+      kind = k;
+      i--;
+    } else if (!line.trim() || PROSE_CONTINUATION.test(line)) i--;
+    else break;
+  }
+  let start = i + 1;
+  while (start <= end && !(lines[start] ?? "").trim()) start++;
+  return start;
+}
+function lineAbove(lines, index) {
+  let i = index - 1;
+  while (i >= 0 && !(lines[i] ?? "").trim()) i--;
+  return i;
+}
+var isQuestionLine = (line) => !!line && !isProseItem(line) && plainLine(line).endsWith("?");
+var isHeaderLine = (line) => !!line && !isProseItem(line) && plainLine(line).endsWith(":") && plainLine(line).length <= 60;
+function liftProseAskUser(text) {
+  if (!text || ASK_USER_FENCE.test(text)) return text;
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  let end = lines.length - 1;
+  while (end >= 0 && !(lines[end] ?? "").trim()) end--;
+  if (end < 1) return text;
+  let question;
+  let leadEnd;
+  let itemStart;
+  let itemEnd;
+  if (isQuestionLine(lines[end])) {
+    question = lines[end] ?? "";
+    itemEnd = end - 1;
+    itemStart = itemBlockStart(lines, itemEnd);
+    const above = lineAbove(lines, itemStart);
+    leadEnd = isHeaderLine(lines[above]) ? above : itemStart;
+  } else {
+    itemEnd = end;
+    itemStart = itemBlockStart(lines, itemEnd);
+    const above = lineAbove(lines, itemStart);
+    if (!isQuestionLine(lines[above])) return text;
+    question = lines[above] ?? "";
+    leadEnd = above;
+  }
+  if (itemStart > itemEnd) return text;
+  const cue = `${leadEnd < itemStart ? lines[leadEnd] ?? "" : ""} ${question}`;
+  if (!PROSE_CHOICE_CUE.test(cue)) return text;
+  const options = proseOptions(lines.slice(itemStart, itemEnd + 1));
+  if (!options) return text;
+  const payload = coerceAskUserPayload({ question: plainLine(question), options });
+  if (!payload) return text;
+  const lead = lines.slice(0, leadEnd).join("\n").trim();
+  const block = serializeAskUser(payload);
+  return lead ? `${lead}
+
+${block}` : block;
 }
 function stripAskUser(text) {
   if (!text) return text;
@@ -1953,6 +2118,64 @@ function isModelRole(value) {
 }
 function delegationRole(raw, readOnly) {
   return isModelRole(raw) ? raw : readOnly ? "explore" : "code";
+}
+
+// ../packages/agent-tools/src/workstreamScope.ts
+function normalizeScopePath(path) {
+  return path.trim().replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/\/+$/, "");
+}
+function inScope(path, scope) {
+  const p = normalizeScopePath(path);
+  return scope.some((entry) => {
+    const s = normalizeScopePath(entry);
+    return s === "" || p === s || p.startsWith(`${s}/`);
+  });
+}
+function overlappingScopes(scopes) {
+  for (let i = 0; i < scopes.length; i++) {
+    for (let j = i + 1; j < scopes.length; j++) {
+      for (const path of scopes[i].paths) {
+        if (inScope(path, scopes[j].paths) || scopes[j].paths.some((q) => inScope(q, [path]))) {
+          return { a: scopes[i].label, b: scopes[j].label, path: normalizeScopePath(path) };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// ../packages/agent-tools/src/jsonKeyRead.ts
+var JSON_KEY_READ_MAX_CHARS = 12e3;
+var MAX_LISTED_KEYS = 60;
+function keysOf(value) {
+  return value !== null && typeof value === "object" ? Object.keys(value) : [];
+}
+function readJsonKey(text, key) {
+  let root;
+  try {
+    root = JSON.parse(text.replace(/^﻿/, ""));
+  } catch {
+    return { ok: false, error: "the file is not valid JSON, so `key` cannot be used \u2014 read it by line window instead" };
+  }
+  const segments = key.split(".").filter((s) => s.length > 0);
+  if (segments.length === 0) return { ok: false, error: '`key` is empty \u2014 name a dot path such as "admin.visitorFlow"' };
+  let node = root;
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    const container = node !== null && typeof node === "object" ? node : null;
+    if (!container || !Object.prototype.hasOwnProperty.call(container, segment)) {
+      const at = segments.slice(0, i).join(".") || "(root)";
+      return {
+        ok: false,
+        error: `key "${segments.slice(0, i + 1).join(".")}" not found \u2014 ${at} has no "${segment}"`,
+        availableKeys: keysOf(node).slice(0, MAX_LISTED_KEYS)
+      };
+    }
+    node = container[segment];
+  }
+  const content = JSON.stringify(node, null, 2) ?? "null";
+  if (content.length <= JSON_KEY_READ_MAX_CHARS) return { ok: true, key: segments.join("."), content };
+  return { ok: true, key: segments.join("."), tooLarge: true, size: content.length, childKeys: keysOf(node).slice(0, MAX_LISTED_KEYS) };
 }
 
 // ../packages/agent-tools/src/tool.ts
@@ -2824,15 +3047,33 @@ function windowFileContent(content, opts) {
   const end = start - 1 + slice.length;
   return { content: slice.join("\n"), truncated: end < totalLines, totalLines, offset: start, returnedLines: slice.length };
 }
+function readFileKey(path, file, key) {
+  if (file.truncated === true) {
+    return { ok: false, path, key, error: "the file is too large to load whole, so `key` cannot be used \u2014 page it with offset/limit" };
+  }
+  const read = readJsonKey(file.content ?? "", key);
+  if (!read.ok) return { path, key, ...read };
+  if ("tooLarge" in read) {
+    return {
+      ok: true,
+      path,
+      key: read.key,
+      childKeys: read.childKeys,
+      note: `"${read.key}" is ${read.size} characters \u2014 too large to return whole. Read one of its childKeys, e.g. key "${read.key}.${read.childKeys[0] ?? "\u2026"}".`
+    };
+  }
+  return { ok: true, path, key: read.key, content: read.content };
+}
 var readFileTool = defineTool({
   name: "read_file",
-  description: "Read a repo file on the ticket branch. Returns up to " + READ_DEFAULT_LINE_LIMIT + " lines at a time: a large file comes back as a paginated line window (never a hard failure), and the result's `truncated`/`totalLines` tell you when more remains \u2014 read the next chunk by calling again with `offset`. Always read a file before editing it so you preserve existing code and only change what is needed.",
+  description: "Read a repo file on the ticket branch. Returns up to " + READ_DEFAULT_LINE_LIMIT + ' lines at a time: a large file comes back as a paginated line window (never a hard failure), and the result\'s `truncated`/`totalLines` tell you when more remains \u2014 read the next chunk by calling again with `offset`. For a large JSON file (an i18n catalog, a config) pass `key` with a dot path such as "admin.visitorFlow" to get just that subtree instead of paging line windows. Always read a file before editing it so you preserve existing code and only change what is needed.',
   parameters: {
     type: "object",
     properties: {
       path: { type: "string", description: 'Repo-relative path, e.g. "src/feature.ts".' },
       offset: { type: "number", description: "1-based line to start reading from (for paging through a large file). Default 1." },
-      limit: { type: "number", description: `Max lines to return. Default ${READ_DEFAULT_LINE_LIMIT}. Read the next window with offset = previous offset + returned lines.` }
+      limit: { type: "number", description: `Max lines to return. Default ${READ_DEFAULT_LINE_LIMIT}. Read the next window with offset = previous offset + returned lines.` },
+      key: { type: "string", description: 'JSON files only: a dot path (e.g. "admin.visitorFlow") \u2014 returns that subtree, or its child keys when it is too large. Ignores offset/limit.' }
     },
     required: ["path"]
   },
@@ -2842,8 +3083,10 @@ var readFileTool = defineTool({
     if (!path) return { data: { ok: false, error: "path is required" } };
     const offset = typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : void 0;
     const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : void 0;
+    const key = typeof args.key === "string" ? args.key.trim() : "";
     const r = await ctx.caps.repoRead.readFile(path);
     if (!r.ok) return { data: r };
+    if (key) return { data: readFileKey(r.path ?? path, r, key) };
     const win = windowFileContent(r.content ?? "", { offset, limit });
     const data = {
       ok: true,
@@ -2905,7 +3148,7 @@ var deleteFileTool = defineTool({
 });
 var editFileTool = defineTool({
   name: "edit_file",
-  description: "Make a surgical in-place edit to an existing file on the ticket branch: replace an exact snippet with new text, without rewriting the whole file. Read the file first so `old_string` matches EXACTLY (including indentation). `old_string` must be unique in the file unless you set `replace_all`. Prefer this over write_file for small changes to large files.",
+  description: "Make a surgical in-place edit to an existing file on the ticket branch: replace an exact snippet with new text, without rewriting the whole file. Read the file first so `old_string` matches EXACTLY (including indentation). `old_string` must be unique in the file unless you set `replace_all`. Prefer this over write_file for small changes to large files. A success returns `excerpt` \u2014 the edited lines with line numbers and a little context \u2014 so do NOT re-read the file to check the edit. A miss returns `nearest` \u2014 the closest matching line and its neighbours \u2014 copy `old_string` from there.",
   parameters: {
     type: "object",
     properties: {
@@ -2925,7 +3168,14 @@ var editFileTool = defineTool({
     if (!path || !oldString) return { data: { ok: false, error: "path and old_string are required" } };
     const r = await ctx.caps.repoWrite.editFile(path, oldString, newString, replaceAll);
     return {
-      data: r.ok ? { ok: true, branch: r.branch, commitUrl: r.commitUrl, replaced: r.replaced } : { ok: false, error: r.error }
+      data: r.ok ? {
+        ok: true,
+        ...r.branch ? { branch: r.branch } : {},
+        ...r.commitUrl ? { commitUrl: r.commitUrl } : {},
+        replaced: r.replaced,
+        ...r.region ? { region: r.region } : {},
+        ...r.excerpt ? { excerpt: r.excerpt } : {}
+      } : { ok: false, error: r.error, ...r.nearest ? { nearest: r.nearest } : {} }
     };
   }
 });
@@ -3290,15 +3540,15 @@ var skillProposeTool = defineTool({
   },
   requires: ["skill.author"],
   async execute(args, ctx) {
-    const str3 = (v) => typeof v === "string" ? v.trim() : "";
-    const slug = str3(args.slug);
-    const name = str3(args.name);
-    const description = str3(args.description);
-    const body = str3(args.body);
+    const str4 = (v) => typeof v === "string" ? v.trim() : "";
+    const slug = str4(args.slug);
+    const name = str4(args.name);
+    const description = str4(args.description);
+    const body = str4(args.body);
     if (!slug || !name || !description || !body) {
       return { data: { ok: false, error: "slug, name, description and body are all required" } };
     }
-    const evidence = str3(args.evidence);
+    const evidence = str4(args.evidence);
     const r = await ctx.caps.skillAuthor.propose({
       slug,
       name,
@@ -3354,13 +3604,13 @@ var spawnAgentTool = defineTool({
   },
   requires: ["orchestrate"],
   async execute(args, ctx) {
-    const str3 = (v) => typeof v === "string" ? v.trim() : "";
-    const label = str3(args.label);
-    const task = str3(args.task);
+    const str4 = (v) => typeof v === "string" ? v.trim() : "";
+    const label = str4(args.label);
+    const task = str4(args.task);
     if (!task) return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
     const readOnly = args.read_only !== false;
     const role = delegationRole(args.role, readOnly);
-    const asAgent = str3(args.as_agent);
+    const asAgent = str4(args.as_agent);
     const r = await ctx.caps.orchestration.spawn({
       label: label || task.slice(0, 60),
       task,
@@ -3369,6 +3619,113 @@ var spawnAgentTool = defineTool({
       ...asAgent ? { asAgent } : {}
     });
     return { data: r, ...r.ok ? {} : { isError: true } };
+  }
+});
+var MAX_WORKSTREAMS = 4;
+var FANOUT_OUTPUT_CHARS = 4800;
+var SPAWN_AGENTS_TOOL = "spawn_agents";
+function parseWorkstreams(raw) {
+  if (!Array.isArray(raw) || raw.length === 0) return "workstreams is required \u2014 one entry per independent slice";
+  if (raw.length > MAX_WORKSTREAMS) {
+    return `at most ${MAX_WORKSTREAMS} workstreams per call \u2014 run the rest in a second call once these are back`;
+  }
+  const str4 = (v) => typeof v === "string" ? v.trim() : "";
+  const out = [];
+  for (const [i, item] of raw.entries()) {
+    const w = item ?? {};
+    const task = str4(w.task);
+    if (!task) return `workstream ${i + 1} has no task \u2014 each child sees none of your conversation`;
+    const paths = Array.isArray(w.paths) ? w.paths.filter((p) => typeof p === "string" && normalizeScopePath(p) !== "") : [];
+    const ticket = str4(w.ticket);
+    const role = str4(w.role);
+    out.push({
+      label: str4(w.label) || task.slice(0, 60),
+      task,
+      paths,
+      ...ticket ? { ticket } : {},
+      ...role ? { role } : {},
+      asAgent: str4(w.as_agent)
+    });
+  }
+  return out;
+}
+function workstreamScopeError(workstreams) {
+  const unscoped = workstreams.find((w) => w.paths.length === 0);
+  if (unscoped) {
+    return `workstream '${unscoped.label}' has no paths \u2014 a change made side by side must name the files or directories it owns`;
+  }
+  const clash = overlappingScopes(workstreams.map((w) => ({ label: w.label, paths: w.paths })));
+  return clash ? `workstreams '${clash.a}' and '${clash.b}' both claim '${clash.path}' \u2014 give each file to exactly one workstream, or run the dependent slices one after another with spawn_agent` : null;
+}
+var FANOUT_NEXT = "The children had no shell and no git. Verify the combined change (build and test), fix what the slices broke between them, commit, and report per workstream and ticket.";
+var spawnAgentsTool = defineTool({
+  name: SPAWN_AGENTS_TOOL,
+  description: `Run SEVERAL independent workstreams side by side \u2014 up to ${MAX_WORKSTREAMS} child agents at once, each in its own context, each reporting back to the chat. Use it when the request splits into slices that do not depend on each other: a PRD's workstreams, one change per package or feature. For a CHANGE (read_only: false) give every workstream the \`paths\` it OWNS (files or directories). Paths must not overlap, and a child may write only inside its own. Children read anywhere but have no shell and no git: when they return, YOU verify (build and test), commit and report per workstream. File one ticket per workstream first and pass its id as \`ticket\`. Each child sees nothing of this conversation, so every \`task\` must stand alone: what to change, where, and how to know it is done.`,
+  parameters: {
+    type: "object",
+    properties: {
+      workstreams: {
+        type: "array",
+        minItems: 1,
+        maxItems: MAX_WORKSTREAMS,
+        description: "One entry per independent slice of the work.",
+        items: {
+          type: "object",
+          properties: {
+            label: { type: "string", description: "A few words naming the workstream, e.g. 'W8: company \u2192 project'." },
+            task: { type: "string", description: "The child's complete, standalone brief." },
+            paths: {
+              type: "array",
+              items: { type: "string" },
+              description: "Workspace-relative files or directories this workstream OWNS and may write. Required for a change; must not overlap another workstream's."
+            },
+            ticket: { type: "string", description: "The ticket this workstream delivers, echoed in the result." },
+            role: { type: "string", enum: [...MODEL_ROLES], description: "Model role for the child. Defaults to code for a change, explore otherwise." },
+            as_agent: { type: "string", description: "Run this workstream AS one of the workspace's agents (its name or id)." }
+          },
+          required: ["label", "task"]
+        }
+      },
+      read_only: {
+        type: "boolean",
+        description: "Default true \u2014 parallel investigations. Pass false to have the children MAKE their changes."
+      }
+    },
+    required: ["workstreams"]
+  },
+  requires: ["orchestrate.fanout"],
+  // The CLOUD form: each child is one `orchestrate` spawn, all started at once. The
+  // backing serializes their commits and holds each to its scope (`cloudSubagent.ts`).
+  // The editor runs its children in its own process (`subagentFanOutTool.ts`) on the
+  // same schema, parser and conflict policy.
+  async execute(args, ctx) {
+    const parsed = parseWorkstreams(args.workstreams);
+    if (typeof parsed === "string") return { data: { ok: false, error: parsed } };
+    const readOnly = args.read_only !== false;
+    if (!readOnly) {
+      const conflict = workstreamScopeError(parsed);
+      if (conflict) return { data: { ok: false, error: conflict } };
+    }
+    const outputChars = Math.floor(FANOUT_OUTPUT_CHARS / parsed.length);
+    const results = await Promise.all(parsed.map((w) => ctx.caps.orchestration.spawn({
+      label: w.label,
+      task: w.task,
+      readOnly,
+      role: delegationRole(w.role, readOnly),
+      outputChars,
+      ...readOnly ? {} : { scope: w.paths },
+      ...w.ticket ? { ticket: w.ticket } : {},
+      ...w.asAgent ? { asAgent: w.asAgent } : {}
+    }).then((r) => ({ label: w.label, ...r }))));
+    const changedFiles = [...new Set(results.flatMap((r) => r.changedFiles ?? []))];
+    return {
+      data: {
+        ok: results.every((r) => r.ok),
+        workstreams: results,
+        ...changedFiles.length ? { changedFiles } : {},
+        ...readOnly ? {} : { next: FANOUT_NEXT }
+      }
+    };
   }
 });
 
@@ -3753,17 +4110,24 @@ function chatWorkDirective(chatId, opts) {
   const throughThem = opts?.canDelegate ? " When you do a slice of the work here instead of dispatching it, do it THROUGH one of them: spawn_agent with as_agent=<that agent's name> so the slice is done in that agent's persona, and say which agent did what. Work that names no agent is work nobody owns." : "";
   const roster = opts?.roster ?? [];
   const staffed = roster.length > 0;
+  const delegatesLocally = !!(opts?.canFanOut || opts?.canDelegate);
+  const localSpawn = opts?.canFanOut ? "spawn_agents (several tickets whose files do not overlap, side by side \u2014 one workstream per ticket, with ticket=<id>, paths and as_agent) or spawn_agent (one slice)" : "spawn_agent (one slice at a time)";
+  const pickByRole = "as_agent = the agent whose role fits the slice: a Developer for a code slice, a QA agent for a test or verify slice (builtin_cloud_agents_persona_brief with role=developer or role=qa-tester says who holds it; an agent without the role is refused)";
   const whoIsHere = staffed ? `\u2022 THE AGENTS IN THIS CHAT are ${describeRoster(roster)}. A human put them here: that is this platform's way of saying these are the people this work belongs to.
 ` : "";
-  const ordering = staffed ? `\u2022 DISPATCH TO THEM. That is the DEFAULT in this chat, not a fallback. Work that falls inside one of their roles is THEIR work: assign the ticket and start the run with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the ref above>, taskId=<the ticket>), then say who picked it up. Do NOT make the change yourself merely because you could do it faster \u2014 the human staffed this conversation, and a session that quietly does its agents' work leaves them idle and leaves the user unable to see who did what.${opts?.canEditHere ? " You DO hold the workspace file tools; keep them for what dispatch cannot cover \u2014 reading and locating the code so the directive you hand an agent is specific, checking what a run came back with, and an edit the user asks YOU for in this message." : ""}
-` : opts?.canEditHere ? `\u2022 DO IT HERE WHEN YOU CAN. No agent has been invited into this chat, so there is nobody to hand it to. This session has the workspace file tools, so anything you could change yourself in a handful of tool calls \u2014 a bug fix, a small refactor, a CSS or copy change, anything you have already located in the code \u2014 you MAKE, now. Dispatching a cloud agent for work you are already holding costs a whole run to do less than you can, and leaves the user waiting for it. Then record the change against this chat. Dispatch is for work this session genuinely cannot do: a long-horizon or repetitive batch, or work that must run somewhere you are not.
+  const ordering = staffed ? delegatesLocally ? `\u2022 DELEGATE TO THEM, HERE. That is the DEFAULT in this chat, not a fallback. Work that falls inside one of their roles is THEIR work, and this session runs it on this machine: hand it to a local sub-agent with ${localSpawn}, ${pickByRole}. Then say which agent did what. A local sub-agent is NOT a cloud run \u2014 it needs no ticket assignment and no builtin_chats_dispatch_agent, and the workspace's execution kill-switch does not stop it. Do NOT make the change yourself merely because you could do it faster \u2014 the human staffed this conversation.
+` : `\u2022 DISPATCH TO THEM. That is the DEFAULT in this chat, not a fallback. Work that falls inside one of their roles is THEIR work: assign the ticket and start the run with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the ref above>, taskId=<the ticket>), then say who picked it up. Do NOT make the change yourself merely because you could do it faster \u2014 the human staffed this conversation, and a session that quietly does its agents' work leaves them idle and leaves the user unable to see who did what.${opts?.canEditHere ? " You DO hold the workspace file tools; keep them for what dispatch cannot cover \u2014 reading and locating the code so the directive you hand an agent is specific, checking what a run came back with, and an edit the user asks YOU for in this message." : ""}
+` : opts?.canEditHere ? `\u2022 DO IT HERE WHEN YOU CAN. No agent has been invited into this chat, so there is nobody to hand it to. This session has the workspace file tools, so anything you could change yourself in a handful of tool calls \u2014 a bug fix, a small refactor, a CSS or copy change, anything you have already located in the code \u2014 you MAKE, now. Dispatching a cloud agent for work you are already holding costs a whole run to do less than you can, and leaves the user waiting for it. Then record the change against this chat.${delegatesLocally ? ` Several independent slices go to local sub-agents with ${localSpawn}, ${pickByRole} \u2014 not to cloud agents.` : ""} Dispatch is for work this session genuinely cannot do: a long-horizon or repetitive batch, or work that must run somewhere you are not.
 ` : "";
+  const finish = delegatesLocally ? `\u2022 FINISH WHAT YOU FILED. A ticket nobody is working has not started: every ticket you filed is either done in this session or handed to a local sub-agent (${pickByRole}). builtin_chats_dispatch_agent starts a CLOUD run \u2014 use it only when the user asks for the work to run in the cloud, or it must run where this session is not. A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.
+` : `\u2022 FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict \u2014 read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (${staffed ? "one of the agents above, or " : ""}builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) \u2014 a Developer for code work, a QA agent for test work \u2014 and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.
+`;
+  const refused = delegatesLocally ? " An execution kill-switch or run cap stops CLOUD runs only \u2014 hand the slice to a local sub-agent instead." : " If the work is something you could do here, do it instead.";
   return `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.
 ${chatWorkLinkingDirective(chatId)}
-` + whoIsHere + ordering + `\u2022 FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict \u2014 read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (${staffed ? "one of the agents above, or " : ""}builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.
-\u2022 STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. When you file tickets, assign and dispatch the agent whose role fits each one \u2014 never leave a ticket with no agent on it.${throughThem}
+` + whoIsHere + ordering + finish + `\u2022 STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. Match each ticket to the agent whose role fits it \u2014 Developer work to a developer, QA work to a QA agent \u2014 and never leave a ticket with no agent on it.${throughThem}
 \u2022 builtin_chats_runs (chatId=${chatId}) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.
-\u2022 If dispatch is genuinely refused \u2014 no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role \u2014 the refusal names the reason and what would clear it. Report THAT reason, do not retry the same dispatch hoping for a different answer, and if the work is something you could do here, do it instead. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`;
+\u2022 If dispatch is genuinely refused \u2014 no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role \u2014 the refusal names the reason and what would clear it. Report THAT reason and do not retry the same dispatch hoping for a different answer.${refused} Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`;
 }
 function chatModeDirective(mode, chatId, opts) {
   return mode === "work" ? chatWorkDirective(chatId, opts) : chatConversationDirective();
@@ -4771,7 +5135,9 @@ var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
   // "delegate", so relevance drops the one tool that would answer it cheaply, and the
   // agent burns the turns delegation exists to save. Nothing is pinned that the host
   // did not advertise — the web Brain offers no `spawn_agent`, so this is inert there.
-  "spawn_agent"
+  "spawn_agent",
+  // Its side-by-side twin — what a planner's `hand_off` fans out to; editor-only.
+  "spawn_agents"
 ]);
 var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
   "write_file",
@@ -4816,6 +5182,10 @@ var REPO_PUBLISH_TOOLS = /* @__PURE__ */ new Set([
 ]);
 function isRepoPublishTool(name) {
   return REPO_PUBLISH_TOOLS.has(name);
+}
+var REPO_STATE_READ_TOOLS = /* @__PURE__ */ new Set(["review_ticket_branches"]);
+function isRepoStateReadTool(name) {
+  return REPO_STATE_READ_TOOLS.has(name);
 }
 function isLocalWorkspaceTool(name) {
   return LOCAL_WORKSPACE_TOOLS.has(name);
@@ -4867,7 +5237,7 @@ function activityTarget(args) {
   }
   return void 0;
 }
-var QUESTION_KEYS = ["query", "q", "search", "pattern", "glob"];
+var QUESTION_KEYS = ["query", "q", "search", "pattern", "glob", "key"];
 var VISIT_QUESTION_SEPARATOR = " \u220B ";
 function visitTarget(args) {
   const scope = activityTarget(args);
@@ -5722,6 +6092,8 @@ var ReadCoverage = class _ReadCoverage {
    *   branch / pull-request state returns, so it forgets the platform reads and keeps the
    *   file reads. See {@link isRepoPublishTool}: without this, a run that surveys the
    *   board, pushes the branches and surveys again is served its own pre-push answer.
+   *   The same sweep forgets host reads of REPOSITORY STATE (`review_ticket_branches`,
+   *   see {@link isRepoStateReadTool}) — a cached branch review must not outlive a push.
    * - The remaining local tools (`git_status`, `git_diff`, …) change nothing a read
    *   observes, so they forget nothing.
    * - Anything else is a platform or MCP call. It may have changed what a PLATFORM read
@@ -5747,7 +6119,7 @@ var ReadCoverage = class _ReadCoverage {
     }
     if (isLocalWorkspaceTool(tool) && !isRepoPublishTool(tool)) return;
     for (const [key, read] of [...this.exact.entries()]) {
-      if (!isLocalWorkspaceTool(read.tool)) this.exact.delete(key);
+      if (!isLocalWorkspaceTool(read.tool) || isRepoStateReadTool(read.tool)) this.exact.delete(key);
     }
   }
   /**
@@ -5766,9 +6138,11 @@ var ReadCoverage = class _ReadCoverage {
     const wanted = canonicalReadArgs(tool, args);
     const path = typeof wanted.path === "string" ? wanted.path : "";
     if (!path) return null;
+    if (typeof wanted.key === "string") return null;
     const want = requestedReadWindow(wanted);
     for (const read of this.exact.values()) {
       if (read.tool !== "read_file" || !read.cached) continue;
+      if (typeof read.args.key === "string") continue;
       const earlierPath = typeof read.args.path === "string" ? read.args.path : "";
       if (earlierPath !== path) continue;
       const got = servedReadWindow(read.cached.result);
@@ -6173,8 +6547,8 @@ function memoryAnswersInTrace(events) {
   return out;
 }
 function cap(s, n = 2e3) {
-  const str3 = typeof s === "string" ? s : JSON.stringify(s ?? "");
-  return str3.length > n ? str3.slice(0, n) + `\u2026 (+${str3.length - n} chars)` : str3;
+  const str4 = typeof s === "string" ? s : JSON.stringify(s ?? "");
+  return str4.length > n ? str4.slice(0, n) + `\u2026 (+${str4.length - n} chars)` : str4;
 }
 function isEvermindModel(model) {
   return /(^|\/)evermind\b|^project_evermind:|^tenant_model:/i.test(model);
@@ -6869,8 +7243,234 @@ function withObservedModel(chatId, tool, args) {
   return { ...supplied, model: observed };
 }
 
+// src/roleHandoff.ts
+function isCoderReask(role, previousRole) {
+  return role === "code" && previousRole === "plan";
+}
+var MAX_CALL_CHARS = 2e3;
+var MAX_BRIEF_CHARS = 6e3;
+function coderHandoffBrief(plannerText, calls) {
+  const findings = plannerText.trim();
+  const intended = calls.map((call2) => {
+    const args = call2.args.length > MAX_CALL_CHARS ? `${call2.args.slice(0, MAX_CALL_CHARS)}\u2026` : call2.args;
+    return `- ${call2.name} ${args}`;
+  });
+  const parts = [
+    "HAND-OFF: the analysis for this request is complete \u2014 you are the coding model taking it from here. Everything the planner read is in the conversation above; do not start the investigation over or re-read files already returned above.",
+    ...findings ? ["The planner concluded:", findings] : [],
+    "It was about to make this change:",
+    ...intended,
+    "Make that change now. Correct it if it is wrong \u2014 a file you have not seen, or text that does not match \u2014 but act on it rather than re-planning. Read only what the edit itself needs and is not already above."
+  ];
+  const brief = parts.join("\n");
+  return brief.length > MAX_BRIEF_CHARS ? `${brief.slice(0, MAX_BRIEF_CHARS)}\u2026` : brief;
+}
+
+// src/planHandoff.ts
+var HAND_OFF_TOOL = "hand_off";
+var FAN_OUT_TOOL = "spawn_agents";
+var FAN_OUT_BATCH = 4;
+var MAX_HAND_OFF_TASKS = 12;
+var TASK_CREATE_TOOL = "builtin_tasks_create";
+var HAND_OFF_TOOL_SPEC = {
+  type: "function",
+  function: {
+    name: HAND_OFF_TOOL,
+    description: "END THE ANALYSIS and hand the work to the coding model(s). You are the planning model: read what you need, then call this ONCE with the tasks \u2014 do NOT edit files yourself. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone \u2014 the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
+    parameters: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "What the analysis concluded, in a few sentences \u2014 the coders read this first." },
+        tasks: {
+          type: "array",
+          minItems: 1,
+          maxItems: MAX_HAND_OFF_TASKS,
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: 'Ticket title, e.g. "Rebuild UserDetailDrawer on SlideOutPanel".' },
+              brief: { type: "string", description: "The complete, standalone instruction: files, the change, the primitives to use." },
+              paths: {
+                type: "array",
+                items: { type: "string" },
+                description: "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
+              },
+              acceptance: { type: "string", description: "How to know it is done (tests, behaviour)." }
+            },
+            required: ["title", "brief"]
+          }
+        }
+      },
+      required: ["summary", "tasks"]
+    }
+  }
+};
+var str2 = (v) => typeof v === "string" ? v.trim() : "";
+function parseHandOff(args) {
+  const a = args ?? {};
+  const summary = str2(a.summary);
+  if (!Array.isArray(a.tasks) || a.tasks.length === 0) {
+    return "hand_off needs { summary, tasks:[{ title, brief, paths? }] } with at least one task";
+  }
+  if (a.tasks.length > MAX_HAND_OFF_TASKS) {
+    return `at most ${MAX_HAND_OFF_TASKS} tasks per hand-off \u2014 merge related slices`;
+  }
+  const tasks = [];
+  for (const [i, raw] of a.tasks.entries()) {
+    const t = raw ?? {};
+    const title = str2(t.title);
+    const brief = str2(t.brief);
+    if (!title || !brief) return `task ${i + 1} needs both a title and a brief`;
+    const paths = Array.isArray(t.paths) ? t.paths.map(str2).filter(Boolean) : [];
+    const acceptance = str2(t.acceptance);
+    tasks.push({ title, brief, paths, ...acceptance ? { acceptance } : {} });
+  }
+  return { summary, tasks };
+}
+function ticketDescription(task, summary) {
+  return [
+    task.brief,
+    task.paths.length ? `Paths: ${task.paths.join(", ")}` : "",
+    task.acceptance ? `Done when: ${task.acceptance}` : "",
+    summary ? `Context: ${summary}` : ""
+  ].filter(Boolean).join("\n\n");
+}
+function childTaskBrief(task, summary, ticketId) {
+  return [
+    ticketId != null ? `Ticket #${ticketId}: ${task.title}` : task.title,
+    task.brief,
+    task.paths.length ? `You own these paths and may change only them: ${task.paths.join(", ")}` : "",
+    task.acceptance ? `Done when: ${task.acceptance}` : "",
+    summary ? `Background (the analysis is finished \u2014 do not redo it): ${summary}` : "",
+    "Make the change now. Read only what the change itself needs. Finish with what you changed and anything outside your paths that must still change."
+  ].filter(Boolean).join("\n\n");
+}
+function canRunInParallel(tasks) {
+  if (tasks.length < 2 || tasks.some((t) => t.paths.length === 0)) return false;
+  return overlappingScopes(tasks.map((t) => ({ label: t.title, paths: t.paths }))) === null;
+}
+function planMessage(plan, ticketIds, parallel) {
+  const lines = plan.tasks.map((t, i) => {
+    const id = ticketIds[i];
+    return `${i + 1}. ${id != null ? `#${id} ` : ""}${t.title}${t.paths.length ? ` \u2014 ${t.paths.join(", ")}` : ""}`;
+  });
+  return [
+    `**Plan \u2014 ${plan.tasks.length} task${plan.tasks.length === 1 ? "" : "s"}**${parallel ? " (running side by side; each reports back here)" : ""}`,
+    plan.summary,
+    lines.join("\n")
+  ].filter(Boolean).join("\n\n");
+}
+function isFailed(out) {
+  if (out == null) return true;
+  if (typeof out !== "object") return false;
+  const o = out;
+  return o.ok === false || typeof o.error === "string" && o.error.length > 0;
+}
+async function call(ports, name, args) {
+  const now = ports.now ?? (() => Date.now());
+  const start = now();
+  let out;
+  try {
+    out = await ports.runTool(name, args);
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  ports.step?.(name, { ...args, auto: true, reason: "hand_off" }, out, now() - start);
+  return out;
+}
+async function fileTickets(plan, ports) {
+  if (ports.projectId == null || !ports.toolNames.has(TASK_CREATE_TOOL)) return plan.tasks.map(() => void 0);
+  const ids2 = [];
+  for (const task of plan.tasks) {
+    const out = await call(ports, TASK_CREATE_TOOL, {
+      projectId: ports.projectId,
+      title: task.title,
+      description: ticketDescription(task, plan.summary),
+      taskType: "task"
+    });
+    const id = !isFailed(out) ? out.id : void 0;
+    ids2.push(typeof id === "number" ? id : void 0);
+    if (!isFailed(out)) await ports.afterCreate?.(TASK_CREATE_TOOL, out).catch(() => void 0);
+  }
+  return ids2;
+}
+function asRecord(out) {
+  if (typeof out === "string") {
+    try {
+      const parsed = JSON.parse(out);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return out && typeof out === "object" ? out : null;
+}
+var INLINE_NEXT = "HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order \u2014 do not re-plan or re-read what the planner already read. After each task, verify it, then move to the next. When all are done, build and test, commit and push, and report per ticket.";
+var PARALLEL_NEXT = "HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. The children had no shell and no git. You are the coding model: verify the combined change (build and test), fix what the slices broke between them and anything they said was outside their paths, implement any task that failed, then commit, push and report per ticket.";
+async function executeHandOff(plan, ports) {
+  const ids2 = await fileTickets(plan, ports);
+  const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...ids2[i] != null ? { id: ids2[i] } : {} }));
+  const parallel = ports.toolNames.has(FAN_OUT_TOOL) && canRunInParallel(plan.tasks);
+  await ports.postPlan?.(planMessage(plan, ids2, parallel)).catch(() => void 0);
+  if (parallel) {
+    const workstreams = [];
+    const changed = /* @__PURE__ */ new Set();
+    const placeholders = [];
+    let fanOutOk = true;
+    for (let start = 0; start < plan.tasks.length; start += FAN_OUT_BATCH) {
+      const batch = plan.tasks.slice(start, start + FAN_OUT_BATCH);
+      const out = asRecord(await call(ports, FAN_OUT_TOOL, {
+        read_only: false,
+        workstreams: batch.map((t, k) => {
+          const id = ids2[start + k];
+          return {
+            label: id != null ? `#${id} ${t.title}` : t.title,
+            task: childTaskBrief(t, plan.summary, id),
+            paths: t.paths,
+            role: "code",
+            ...id != null ? { ticket: String(id) } : {}
+          };
+        })
+      }));
+      if (!out || out.ok === false && !Array.isArray(out.workstreams)) {
+        if (start === 0) {
+          fanOutOk = false;
+          break;
+        }
+        workstreams.push({ ok: false, error: typeof out?.error === "string" ? out.error : "fan-out failed", tasks: batch.map((t) => t.title) });
+        continue;
+      }
+      if (Array.isArray(out.workstreams)) workstreams.push(...out.workstreams);
+      if (Array.isArray(out.changedFiles)) {
+        for (const f of out.changedFiles) if (typeof f === "string") changed.add(f);
+      }
+      if (Array.isArray(out.placeholders)) placeholders.push(...out.placeholders);
+    }
+    if (fanOutOk) {
+      return {
+        ok: true,
+        mode: "parallel",
+        tickets,
+        workstreams,
+        ...changed.size ? { changedFiles: [...changed] } : {},
+        ...placeholders.length ? { placeholders } : {},
+        next: PARALLEL_NEXT
+      };
+    }
+  }
+  return {
+    ok: true,
+    mode: "inline",
+    tickets,
+    next: `${INLINE_NEXT}
+
+${plan.tasks.map((t, i) => `${i + 1}. ${ids2[i] != null ? `#${ids2[i]} ` : ""}${t.title}
+${childTaskBrief(t, plan.summary, ids2[i])}`).join("\n\n")}`
+  };
+}
+
 // src/codeChanges.ts
-var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents"]);
+var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents", HAND_OFF_TOOL]);
 function isDelegationTool(name) {
   return DELEGATION_TOOLS.has(name);
 }
@@ -7435,19 +8035,26 @@ function turnOptimizationDirective() {
 
 // src/brainRunStore.ts
 var import_evermind = require("@seanhogg/builderforce-memory/evermind");
-function provenanceMetadata(result, requested) {
+function provenanceMetadata(result, requested, base) {
   const model = result.resolvedModel;
-  if (!model) return void 0;
+  if (!model) return withProvenanceMetadata(null, base);
   const account = asProvenanceAccount(result.account);
   const asked = requested && requested !== "default" && requested !== model ? requested : void 0;
   return withProvenanceMetadata({
     model,
     ...account ? { account } : {},
     ...asked ? { requestedModel: asked } : {}
-  });
+  }, base);
+}
+async function persistMidTurnText(chatId, c, persistence, result, requested) {
+  const text = canonicalTurnText(result.text);
+  if (!text) return;
+  const metadata = provenanceMetadata(result, requested, { [MID_TURN_META_KEY]: true });
+  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...metadata ? { metadata } : {} }]);
+  recordAppended(c, msg);
 }
 var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map"]);
-var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
+var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
 function accrueByoUnresolved(c, raw) {
   if (!raw) return;
   const before = c.byoUnresolved.length;
@@ -7502,6 +8109,7 @@ function makeCell() {
     providerCap: [],
     codeChanged: false,
     codeModel: null,
+    codePhaseReached: false,
     runId: "",
     ticketRecorded: false,
     touchedFiles: [],
@@ -7691,6 +8299,15 @@ function subscribeRun(chatId, listener) {
   return () => {
     c.listeners.delete(listener);
   };
+}
+function runAbortSignal(chatId) {
+  return cells.get(chatId)?.abort?.signal;
+}
+function appendRunMessage(chatId, msg) {
+  const c = cells.get(chatId);
+  if (!c) return;
+  recordAppended(c, msg);
+  emit(c);
 }
 function getRunSnapshot(chatId) {
   if (chatId == null) return EMPTY_SNAPSHOT;
@@ -8035,7 +8652,7 @@ async function runLoop(chatId, c, req) {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, routingMode, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
   const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
-  const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC] : toolSpecs;
+  const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
   const allTools = catalog && catalog.length > 0 ? catalog : void 0;
   const usedTools = /* @__PURE__ */ new Set();
   const brokenModels = /* @__PURE__ */ new Set();
@@ -8171,7 +8788,7 @@ ${continuationDirective()}`;
   };
   let forceToolChoice;
   let announcementRecoveries = 0;
-  let phase = c.codeChanged ? "code" : "plan";
+  let phase = c.codeChanged || c.codePhaseReached ? "code" : "plan";
   let shipRecoveryUsed = false;
   let reviewRecoveryUsed = false;
   const priorReply = previousReplyText(convo);
@@ -8267,12 +8884,7 @@ ${block}` : block : lead;
           return { action: "stop", ok: true, output: reply };
         }
       }
-      const narration = canonicalTurnText(result.text);
-      if (narration) {
-        const meta = provenanceMetadata(result, requested);
-        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: narration, ...meta ? { metadata: meta } : {} }]);
-        recordAppended(c, narrationMsg);
-      }
+      await persistMidTurnText(chatId, c, persistence, result, requested);
       c.streamingText = "";
       emit(c);
       return void 0;
@@ -8281,62 +8893,108 @@ ${block}` : block : lead;
       const iter = ctx.step;
       pendingReplay = null;
       pendingRun = null;
-      let call = rawCall;
+      let call2 = rawCall;
       {
-        const aliased = resolveToolAlias(call.name);
-        if (aliased !== call.name) call = { ...call, name: aliased };
+        const aliased = resolveToolAlias(call2.name);
+        if (aliased !== call2.name) call2 = { ...call2, name: aliased };
       }
-      if (isRouterTool(call.name)) {
-        const routed = handleRouterCall(allTools ?? [], call.name, call.args);
+      if (isRouterTool(call2.name)) {
+        const routed = handleRouterCall(allTools ?? [], call2.name, call2.args);
         if ("result" in routed) {
           pushDurableStep(c, chatId, persistence, {
             ts: nowIso(),
             category: "tool",
-            label: call.name,
-            args: call.args,
+            label: call2.name,
+            args: call2.args,
             result: routed.result
           });
           return { result: { data: routed.result } };
         }
         const routedArgs = routed.dispatch.args ?? {};
-        call = { ...call, name: routed.dispatch.name, args: routedArgs, raw: { ...call.raw, name: routed.dispatch.name, arguments: JSON.stringify(routedArgs) } };
+        call2 = { ...call2, name: routed.dispatch.name, args: routedArgs, raw: { ...call2.raw, name: routed.dispatch.name, arguments: JSON.stringify(routedArgs) } };
         pushTrace(c, {
           ts: nowIso(),
           category: "message",
           label: "tools.routed",
           args: { step: iter, via: rawCall.name },
-          result: `Called ${call.name} through the tool router (it was not advertised directly this turn).`
+          result: `Called ${call2.name} through the tool router (it was not advertised directly this turn).`
         });
       }
-      if (call.name === ASK_USER_TOOL) {
+      if (call2.name === ASK_USER_TOOL) {
         return { result: { data: { error: "ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose." } } };
       }
-      const args = call.args;
-      attachDeltaToRunTicket(call.name, args, c.deltaTicketId);
-      if (needsConfirm && needsConfirm({ name: call.name, args })) {
-        const ok = await requestRunConfirm(chatId, { name: call.name, args }, { step: iter });
+      if (call2.name === HAND_OFF_TOOL) {
+        if (phase === "code") {
+          return { result: { data: { ok: false, error: "The plan was already handed off \u2014 you are the coding model now. Implement the tasks; do not re-plan." } } };
+        }
+        const plan = parseHandOff(call2.args);
+        if (typeof plan === "string") return { result: { data: { ok: false, error: plan } } };
+        phase = "code";
+        c.codePhaseReached = true;
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "message",
+          label: "llm.role_handoff",
+          args: { step: ctx.step, tasks: plan.tasks.length, via: HAND_OFF_TOOL },
+          result: `Planning handed off ${plan.tasks.length} task${plan.tasks.length === 1 ? "" : "s"} to the coding model.`
+        });
+        const outcome = await executeHandOff(plan, {
+          runTool: (name, args2) => runTool(name, args2),
+          toolNames: new Set(catalogToolNames),
+          ...req.projectId != null ? { projectId: req.projectId } : {},
+          afterCreate: (toolName, out) => autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, out),
+          step: (label, args2, out, durationMs) => pushDurableStep(c, chatId, persistence, {
+            ts: nowIso(),
+            category: "tool",
+            label,
+            durationMs,
+            args: args2,
+            result: out ?? null,
+            isError: isFailedToolResult(out)
+          }),
+          postPlan: async (text) => {
+            const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: JSON.stringify({ [MID_TURN_META_KEY]: true }) }]);
+            if (!msg) return;
+            recordAppended(c, msg);
+            emit(c);
+          },
+          now: nowMs2
+        });
+        const changed = codeChangesOf(HAND_OFF_TOOL, call2.args, outcome);
+        if (changed) {
+          c.codeChanged = true;
+          for (const f of changed) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+        }
+        usedTools.add(HAND_OFF_TOOL);
+        placeholderLedger.add(delegationPlaceholders(outcome));
+        return { result: { data: outcome } };
+      }
+      const args = call2.args;
+      attachDeltaToRunTicket(call2.name, args, c.deltaTicketId);
+      if (needsConfirm && needsConfirm({ name: call2.name, args })) {
+        const ok = await requestRunConfirm(chatId, { name: call2.name, args }, { step: iter });
         if (!ok) {
           const declined = { cancelled: true, reason: "User declined this action." };
-          pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: call.name, args, result: declined });
+          pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: call2.name, args, result: declined });
           return { result: { data: declined } };
         }
       }
-      if (isDedupableRead(call.name)) {
-        if (readCoverage.isRepeat(call.name, args)) {
-          const cached2 = readCoverage.cachedResult(call.name, args);
+      if (isDedupableRead(call2.name)) {
+        if (readCoverage.isRepeat(call2.name, args)) {
+          const cached2 = readCoverage.cachedResult(call2.name, args);
           if (cached2 && !stillInWorkingContext(c, cached2.anchor)) {
-            const replayNote = `Replayed from this run's read cache: this exact ${call.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
-            const visit = readCoverage.record(call.name, args);
+            const replayNote = `Replayed from this run's read cache: this exact ${call2.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
+            const visit = readCoverage.record(call2.name, args);
             const target = visit ? visitTarget(args) : void 0;
-            const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
-            const replayed = trimToolResult(call.name, cached2.result ?? null, { advisory: revisit ? `${replayNote}
+            const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+            const replayed = trimToolResult(call2.name, cached2.result ?? null, { advisory: revisit ? `${replayNote}
 
 ${revisit}` : replayNote });
-            pendingReplay = { name: call.name, args, result: cached2.result };
+            pendingReplay = { name: call2.name, args, result: cached2.result };
             pushTrace(c, {
               ts: nowIso(),
               category: "tool",
-              label: call.name,
+              label: call2.name,
               args,
               result: { replayed: true, note: replayNote },
               resultBytes: replayed.bytes,
@@ -8345,26 +9003,26 @@ ${revisit}` : replayNote });
             return { result: { data: replayed.content } };
           }
           const stub = {
-            note: `Duplicate ${call.name} call \u2014 identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`
+            note: `Duplicate ${call2.name} call \u2014 identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`
           };
-          pushTrace(c, { ts: nowIso(), category: "tool", label: call.name, args, result: stub });
+          pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: stub });
           return { result: { data: stub } };
         }
-        const covered = readCoverage.coveredRead(call.name, args);
+        const covered = readCoverage.coveredRead(call2.name, args);
         if (covered) {
-          const visit = readCoverage.record(call.name, args);
+          const visit = readCoverage.record(call2.name, args);
           const target = visit ? visitTarget(args) : void 0;
-          const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
+          const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
           const note = revisit ? `${covered.note}
 
 ${revisit}` : covered.note;
           if (covered.cached && !stillInWorkingContext(c, covered.cached.anchor)) {
-            const replayed = trimToolResult(call.name, covered.cached.result ?? null, { advisory: note });
-            pendingReplay = { name: call.name, args, result: covered.cached.result };
+            const replayed = trimToolResult(call2.name, covered.cached.result ?? null, { advisory: note });
+            pendingReplay = { name: call2.name, args, result: covered.cached.result };
             pushTrace(c, {
               ts: nowIso(),
               category: "tool",
-              label: call.name,
+              label: call2.name,
               args,
               result: { covered: true, replayed: true, note },
               resultBytes: replayed.bytes,
@@ -8373,20 +9031,20 @@ ${revisit}` : covered.note;
             return { result: { data: replayed.content } };
           }
           const stub = { note };
-          pushTrace(c, { ts: nowIso(), category: "tool", label: call.name, args, result: { covered: true, note } });
+          pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { covered: true, note } });
           return { result: { data: stub } };
         }
-        const derived = readCoverage.derivedSearch(call.name, args);
+        const derived = readCoverage.derivedSearch(call2.name, args);
         if (derived) {
-          const visit = readCoverage.record(call.name, args);
+          const visit = readCoverage.record(call2.name, args);
           const target = visit ? visitTarget(args) : void 0;
-          const revisit = visit && target ? revisitAdvisory(call.name, target, visit) : null;
-          const served = trimToolResult(call.name, derived, { advisory: revisit });
-          pendingReplay = { name: call.name, args, result: derived };
+          const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+          const served = trimToolResult(call2.name, derived, { advisory: revisit });
+          pendingReplay = { name: call2.name, args, result: derived };
           pushTrace(c, {
             ts: nowIso(),
             category: "tool",
-            label: call.name,
+            label: call2.name,
             args,
             result: { derived: true, note: derived.note },
             resultBytes: served.bytes,
@@ -8395,17 +9053,17 @@ ${revisit}` : covered.note;
           return { result: { data: served.content } };
         }
       } else {
-        if (writeLedger.isRepeat(call.name, args)) {
-          const note = repeatedWriteNote(call.name, String(args.path ?? "").trim());
-          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.repeat_write_guard", args: { step: iter, tool: call.name }, result: note });
-          pushTrace(c, { ts: nowIso(), category: "tool", label: call.name, args, result: { skipped: true, note } });
+        if (writeLedger.isRepeat(call2.name, args)) {
+          const note = repeatedWriteNote(call2.name, String(args.path ?? "").trim());
+          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.repeat_write_guard", args: { step: iter, tool: call2.name }, result: note });
+          pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { skipped: true, note } });
           return { result: { data: { ok: true, applied: false, unchanged: true, note } } };
         }
-        readCoverage.invalidate(call.name, args);
+        readCoverage.invalidate(call2.name, args);
       }
-      return call === rawCall ? void 0 : { rewrite: call };
+      return call2 === rawCall ? void 0 : { rewrite: call2 };
     },
-    afterDispatch: (call, _result, row) => {
+    afterDispatch: (call2, _result, row) => {
       if (pendingReplay) {
         readCoverage.cacheResult(pendingReplay.name, pendingReplay.args, { result: pendingReplay.result, anchor: row });
         pendingReplay = null;
@@ -8414,16 +9072,16 @@ ${revisit}` : covered.note;
       const run = pendingRun;
       pendingRun = null;
       if (!run) return void 0;
-      const args = call.args;
+      const args = call2.args;
       if (run.threw) {
-        pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: call.name, durationMs: nowMs2() - run.toolStart, args, result: run.out, isError: true });
+        pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: call2.name, durationMs: nowMs2() - run.toolStart, args, result: run.out, isError: true });
         return void 0;
       }
-      if (run.isReadTool && !isFailedToolResult(run.out)) readCoverage.cacheResult(call.name, args, { result: run.out ?? null, anchor: row });
+      if (run.isReadTool && !isFailedToolResult(run.out)) readCoverage.cacheResult(call2.name, args, { result: run.out ?? null, anchor: row });
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: "tool",
-        label: call.name,
+        label: call2.name,
         durationMs: nowMs2() - run.toolStart,
         args,
         result: run.out ?? null,
@@ -8431,7 +9089,7 @@ ${revisit}` : covered.note;
         resultBytes: run.bytes,
         truncated: run.truncated
       });
-      usedTools.add(call.name);
+      usedTools.add(call2.name);
       return void 0;
     },
     onNoToolCalls: async (ctx, turn) => {
@@ -8447,12 +9105,7 @@ ${revisit}` : covered.note;
       };
       const shape = stallShape(stallInput);
       const requeueWithNudge = async (nudge) => {
-        const narration = canonicalTurnText(result.text);
-        if (narration) {
-          const meta = provenanceMetadata(result, requested);
-          const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: narration, ...meta ? { metadata: meta } : {} }]);
-          recordAppended(c, narrationMsg);
-        }
+        await persistMidTurnText(chatId, c, persistence, result, requested);
         convo.push({ role: "assistant", content: replayTextOf(result.text) });
         convo.push({ role: "user", content: nudge });
       };
@@ -8524,7 +9177,8 @@ ${revisit}` : covered.note;
         emit(c);
         return { action: "continue" };
       }
-      const finalText = result.text.trim() || "No response.";
+      const settledText = result.text.trim();
+      const finalText = (canAskUser ? liftProseAskUser(settledText) : settledText) || "No response.";
       const assistantMsg = await settleReply(finalText, result, requested);
       if (runTool && isExhaustedStall(stallInput)) {
         const next = chooseStallFailover({
@@ -8610,9 +9264,11 @@ ${revisit}` : covered.note;
         // that produces a narrated call. Derived from the prompt text, so a directive
         // edit can never silently desync from this list — plus the local workspace
         // tools, which the prompt names in prose the pattern cannot see.
-        required: alwaysAdvertised
+        // While planning, the planner's deliverable is never off-topic either.
+        required: phase === "plan" && canAskUser ? [...alwaysAdvertised, HAND_OFF_TOOL] : alwaysAdvertised
       });
-      const advertised = selection.trimmed ? [...selection.tools, ...routerToolSpecs(allTools?.length ?? 0)] : selection.tools;
+      const selected = phase === "code" ? selection.tools.filter((t) => t.function.name !== HAND_OFF_TOOL) : selection.tools;
+      const advertised = selection.trimmed ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)] : selected;
       const tools = advertised.length > 0 ? advertised : void 0;
       const advertisedNames = new Set(advertised.map((t) => t.function.name));
       if (selection.trimmed) {
@@ -8621,7 +9277,7 @@ ${revisit}` : covered.note;
           category: "message",
           label: "tools.selected",
           args: { step: iter },
-          result: `${selection.tools.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`
+          result: `${selected.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`
         });
       }
       setActivity(c, { phase: "thinking", startedAt: Date.now(), step: iter });
@@ -8653,9 +9309,9 @@ ${revisit}` : covered.note;
       let turnRole = tools ? phase : "chat";
       const turnToolChoice = forceToolChoice;
       forceToolChoice = void 0;
-      const request = (role, excludeModels) => asLiveTurn(c, () => stream(
+      const request = (role, excludeModels, extra = []) => asLiveTurn(c, () => stream(
         {
-          messages: working,
+          messages: extra.length > 0 ? [...working, ...extra] : working,
           tools,
           tool_choice: tools ? turnToolChoice ?? "auto" : void 0,
           model: activeModel,
@@ -8726,6 +9382,8 @@ ${revisit}` : covered.note;
       if (turnRole === "plan" && !activeModel && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))) {
         phase = "code";
         turnRole = "code";
+        c.codePhaseReached = true;
+        const brief = coderHandoffBrief(replayTextOf(result.text), result.toolCalls);
         pushTrace(c, {
           ts: nowIso(),
           category: "message",
@@ -8735,7 +9393,7 @@ ${revisit}` : covered.note;
         });
         restartTurn();
         try {
-          result = await request("code", [...brokenModels]);
+          result = await request("code", [...brokenModels], [{ role: "user", content: brief }]);
         } catch (e) {
           if (c.abort?.signal.aborted) throw e;
           throw turnError(e);
@@ -8816,10 +9474,10 @@ ${revisit}` : covered.note;
       const toolCalls = runTool ? result.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.args })) : [];
       return { content: replayTextOf(result.text), toolCalls, meta };
     },
-    dispatch: async (call, ctx) => {
+    dispatch: async (call2, ctx) => {
       const iter = ctx.step;
-      const args = call.args;
-      const declined = malformedCallOutcome(call, lastTurnInterruption === "truncated");
+      const args = call2.args;
+      const declined = malformedCallOutcome(call2, lastTurnInterruption === "truncated");
       if (declined) {
         const truncated = lastTurnInterruption === "truncated";
         pushTrace(c, {
@@ -8827,28 +9485,28 @@ ${revisit}` : covered.note;
           category: "error",
           isError: true,
           durationMs: 0,
-          label: malformedCallLabel(call.name, truncated),
-          args: { arguments: String(call.raw?.arguments ?? "").slice(0, 200) },
+          label: malformedCallLabel(call2.name, truncated),
+          args: { arguments: String(call2.raw?.arguments ?? "").slice(0, 200) },
           result: declined
         });
         return { data: declined, isError: true };
       }
-      const isReadTool = isDedupableRead(call.name);
+      const isReadTool = isDedupableRead(call2.name);
       const toolStart = nowMs2();
-      setActivity(c, toolActivity(call.name, args, iter, Date.now()));
+      setActivity(c, toolActivity(call2.name, args, iter, Date.now()));
       if (!runTool) throw new Error("tool call without a tool runner");
       let out;
       try {
-        out = await runTool(call.name, withObservedModel(chatId, call.name, args));
+        out = await runTool(call2.name, withObservedModel(chatId, call2.name, args));
       } catch (e) {
         const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
         out = { ok: false, error: message };
-        const repeat = failureAdvisoryFor(call.name, args, out, iter);
-        if (!isReadTool) writeLedger.record(call.name, args, { ok: false, unscoped: isUnscopedMutation(call.name, args) });
+        const repeat = failureAdvisoryFor(call2.name, args, out, iter);
+        if (!isReadTool) writeLedger.record(call2.name, args, { ok: false, unscoped: isUnscopedMutation(call2.name, args) });
         pendingRun = { out, toolStart, isReadTool, threw: true };
         return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
       }
-      const changed = codeChangesOf(call.name, args, out);
+      const changed = codeChangesOf(call2.name, args, out);
       if (changed) {
         const first = !c.codeChanged;
         c.codeChanged = true;
@@ -8858,51 +9516,51 @@ ${revisit}` : covered.note;
           });
         }
       }
-      if (isTicketRecordingTool(call.name)) c.ticketRecorded = true;
-      await autoLinkCreatedItem(chatId, c, persistence, runTool, call.name, out);
+      if (isTicketRecordingTool(call2.name)) c.ticketRecorded = true;
+      await autoLinkCreatedItem(chatId, c, persistence, runTool, call2.name, out);
       let advisory = null;
-      if (!isReadTool) writeLedger.record(call.name, args, { ok: !isFailedToolResult(out), unscoped: isUnscopedMutation(call.name, args) });
+      if (!isReadTool) writeLedger.record(call2.name, args, { ok: !isFailedToolResult(out), unscoped: isUnscopedMutation(call2.name, args) });
       if (isFailedToolResult(out)) {
-        advisory = failureAdvisoryFor(call.name, args, out, iter);
+        advisory = failureAdvisoryFor(call2.name, args, out, iter);
       } else {
-        failures.clear(call.name, args);
-        const placeholders = placeholdersWritten(call.name, args);
+        failures.clear(call2.name, args);
+        const placeholders = placeholdersWritten(call2.name, args);
         if (placeholders.length) {
-          pushTrace(c, placeholderTraceEvent(call.name, placeholders, nowIso()));
+          pushTrace(c, placeholderTraceEvent(call2.name, placeholders, nowIso()));
           advisory = placeholderAdvisory(placeholders);
         }
-        if (isCodeChangeTool(call.name)) placeholderLedger.record(call.name, args, placeholders);
-        if (isDelegationTool(call.name)) placeholderLedger.add(delegationPlaceholders(out));
-        if (isTicketCompletion(call.name, args)) {
+        if (isCodeChangeTool(call2.name)) placeholderLedger.record(call2.name, args, placeholders);
+        if (isDelegationTool(call2.name)) placeholderLedger.add(delegationPlaceholders(out));
+        if (isTicketCompletion(call2.name, args)) {
           const placeholderWarning = completionAdvisory(placeholderLedger.outstanding());
           const events = c.trace;
           const isOnBaseBranch = shippedToBaseBranch(events);
           const canComplete = canCompleteTicket(isOnBaseBranch, false);
           if (!canComplete) {
             const said = notOnBaseBranchAdvisory();
-            pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call.name, isOnBaseBranch }, result: said });
+            pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, isOnBaseBranch }, result: said });
             advisory = said;
           } else if (placeholderWarning) {
-            pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call.name, open: placeholderLedger.outstanding() }, result: placeholderWarning });
+            pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, open: placeholderLedger.outstanding() }, result: placeholderWarning });
             advisory = placeholderWarning;
           }
         }
         if (isReadTool) {
-          const visit = readCoverage.record(call.name, args);
+          const visit = readCoverage.record(call2.name, args);
           const target = visit ? visitTarget(args) : void 0;
-          advisory = visit && target ? revisitAdvisory(call.name, target, visit) : null;
+          advisory = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
           if (advisory) {
             pushTrace(c, {
               ts: nowIso(),
               category: "message",
               label: "tools.revisit_guard",
-              args: { step: iter, tool: call.name, target, visits: visit.count },
+              args: { step: iter, tool: call2.name, target, visits: visit.count },
               result: advisory
             });
           }
         }
       }
-      const trimmedOut = trimToolResult(call.name, out ?? null, { advisory });
+      const trimmedOut = trimToolResult(call2.name, out ?? null, { advisory });
       pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated };
       return { data: trimmedOut.content, isError: isFailedToolResult(out) };
     }
@@ -9466,11 +10124,6 @@ function createBrainRestPersistence(opts) {
   };
 }
 
-// src/roleHandoff.ts
-function isCoderReask(role, previousRole) {
-  return role === "code" && previousRole === "plan";
-}
-
 // src/transcriptBudget.ts
 var DEFAULT_MIN_PAYLOAD = 240;
 function createPayloadBudget(opts) {
@@ -9545,7 +10198,7 @@ var PHASES = ["started", "completed", "failed", "paused", "resumed", "cancelled"
 function isPhase(v) {
   return typeof v === "string" && PHASES.includes(v);
 }
-function str2(v) {
+function str3(v) {
   return typeof v === "string" && v.trim() ? v : void 0;
 }
 function parseChatActivity(msg) {
@@ -9558,9 +10211,9 @@ function parseChatActivity(msg) {
   } catch {
     return null;
   }
-  const ticketKind = str2(meta.ticketKind) ?? "task";
-  const ticketRef = str2(meta.ticketRef) ?? "";
-  const agentName = str2(meta.agentName) ?? str2(meta.agentRef) ?? "";
+  const ticketKind = str3(meta.ticketKind) ?? "task";
+  const ticketRef = str3(meta.ticketRef) ?? "";
+  const agentName = str3(meta.agentName) ?? str3(meta.agentRef) ?? "";
   if (meta.runMilestone != null && isPhase(meta.phase)) {
     return {
       kind: "milestone",
@@ -9569,9 +10222,9 @@ function parseChatActivity(msg) {
       ticketKind,
       ticketRef,
       executionId: typeof meta.executionId === "number" ? meta.executionId : null,
-      ...str2(meta.toStatus) ? { toStatus: str2(meta.toStatus) } : {},
-      ...str2(meta.note) ? { note: str2(meta.note) } : {},
-      ...str2(meta.question) ? { question: str2(meta.question) } : {}
+      ...str3(meta.toStatus) ? { toStatus: str3(meta.toStatus) } : {},
+      ...str3(meta.note) ? { note: str3(meta.note) } : {},
+      ...str3(meta.question) ? { question: str3(meta.question) } : {}
     };
   }
   if (meta.agentDispatch === true) {
@@ -10678,6 +11331,8 @@ function PromptInput({
   FAILURE_NUDGE_AT,
   FILE_DELIVERY_RULE,
   FailureTally,
+  HAND_OFF_TOOL,
+  HAND_OFF_TOOL_SPEC,
   HISTORY_TOKEN_BUDGET,
   LOCAL_WORKSPACE_TOOLS,
   MAX_TOOL_RESULT_CHARS,
@@ -10703,6 +11358,7 @@ function PromptInput({
   STOPPED_TURN_STEP,
   STREAM_IDLE_MS,
   STUDIO_WORKSPACE_TOOLS,
+  SUBAGENT_REPORT_META_KEY,
   StreamIdleError,
   StreamInterruptedError,
   TICKET_RECORDING_TOOLS,
@@ -10728,6 +11384,7 @@ function PromptInput({
   agentPersonaPrompt,
   allowanceState,
   announcesUntakenAction,
+  appendRunMessage,
   applyRemoteRun,
   artifactRoutePath,
   asProvenanceAccount,
@@ -10747,6 +11404,7 @@ function PromptInput({
   byoVendorLabel,
   canChangeCodeHere,
   canReviewInPreview,
+  canRunInParallel,
   canShipHere,
   catalogToolNamesMentionedIn,
   chatActivityText,
@@ -10756,6 +11414,7 @@ function PromptInput({
   chatRosterFromParticipants,
   chatWorkDirective,
   chatWorkLinkingDirective,
+  childTaskBrief,
   claimsMissingToolData,
   classifyModelFunding,
   clearRunError,
@@ -10783,6 +11442,7 @@ function PromptInput({
   dirtyPathsOf,
   displayModelName,
   effortProfile,
+  executeHandOff,
   extractXmlToolCalls,
   failureReason,
   fetchApiVersionVia,
@@ -10869,6 +11529,7 @@ function PromptInput({
   parseChatActivity,
   parseDirectedRecipients,
   parseGitShortStatus,
+  parseHandOff,
   parseMessageAuthor,
   parseMessageProvenance,
   parsePmoFocus,
@@ -10881,6 +11542,7 @@ function PromptInput({
   personaSystemPrompt,
   placeholderAdvisory,
   placeholdersWritten,
+  planMessage,
   pmoFocusDomId,
   pmoFocusValue,
   poolAgentsFrom,
@@ -10905,6 +11567,7 @@ function PromptInput({
   revisitAdvisory,
   routerToolSpecs,
   routingQueryForTurn,
+  runAbortSignal,
   runBrainLoop,
   runProgressVerdict,
   savePendingPrompt,
@@ -10928,6 +11591,8 @@ function PromptInput({
   streamChatCompletion,
   stripAskUser,
   studioToolsIn,
+  subagentReportMessage,
+  subagentReportMetadata,
   subscribeRun,
   subscribeRunStore,
   subscribeToChatMessages,

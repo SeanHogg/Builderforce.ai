@@ -46,22 +46,23 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
       if (!task) {
         return JSON.stringify({ ok: false, error: "task is required — the child sees none of your conversation" });
       }
-      // WHO is doing this slice. An unresolvable name is REFUSED rather than run
-      // anonymously: a parent that believes Ada did the work will report that she did,
-      // and a silently persona-less run makes that report false.
-      const who = await resolveChildPersona(deps, str(args.as_agent));
-      if (!who.ok) return JSON.stringify({ ok: false, label, error: who.error });
       // Writable only when the parent asked AND this run can reach a human. Both halves
       // are required: the first is the tool's contract, the second is the reason a
       // surface without a prompt never writes.
       const asked = args.read_only === false;
       const writable = asked && !!deps.run?.confirmWrite;
+      const role = delegationRole(args.role, !writable);
+      // WHO is doing this slice. An unresolvable name — or an agent without the slice's
+      // delivery role (Developer for code, QA for verify) — is REFUSED rather than run
+      // anonymously: a parent that believes Ada did the work will report that she did.
+      const who = await resolveChildPersona(deps, str(args.as_agent), role);
+      if (!who.ok) return JSON.stringify({ ok: false, label, error: who.error });
       const report = await runLocalChild(deps, {
         // The timeline row says who, not just what — "as Ada: port the auth middleware".
         label: who.asAgent ? `as ${who.asAgent.name}: ${label}` : label,
         task,
         writable,
-        role: delegationRole(args.role, !writable),
+        role,
         tools: childToolDefs(deps.catalog(), writable),
         ...(who.persona ? { persona: who.persona } : {}),
         ...(who.asAgent ? { asAgent: who.asAgent } : {}),

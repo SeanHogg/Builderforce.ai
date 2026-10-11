@@ -87,7 +87,7 @@ import {
 } from '@builderforce/agent-stall';
 import { resolveToolAlias } from '@builderforce/agent-tools';
 import { turnInterruption } from './finishReason.js';
-import { runAgentLoop, openAiChatCodec, MID_TURN_META_KEY, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, splitVendorReasoning, canonicalReasoningText, replayTextOf, malformedCallOutcome, malformedCallLabel, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
+import { runAgentLoop, openAiChatCodec, MID_TURN_META_KEY, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, liftProseAskUser, splitVendorReasoning, canonicalReasoningText, replayTextOf, malformedCallOutcome, malformedCallLabel, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
 import { formatEvermindMemoryBlock, countReconciledMemories, type EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import type { EvermindRunHooks, MemoryFirstAnswer } from './evermindMemory';
 import { windowed, buildWorkingTranscript, stillInWorkingContext, summarizeMiddle, type CompactMemo } from './workingTranscript';
@@ -2390,8 +2390,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         return { action: 'continue' };
       }
 
-      // Final text — record in the transcript, persist, broadcast to mounted views.
-      const finalText = result.text.trim() || 'No response.';
+      // Final text — record in the transcript, persist, broadcast to mounted views. A
+      // model that asked its question in prose instead of calling `ask_user` still
+      // gets the clickable card (see liftProseAskUser).
+      const settledText = result.text.trim();
+      const finalText = (canAskUser ? liftProseAskUser(settledText) : settledText) || 'No response.';
       const assistantMsg = await settleReply(finalText, result, requested);
 
       // This model spent its whole recovery budget still DESCRIBING calls instead of

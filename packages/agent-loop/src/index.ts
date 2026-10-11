@@ -215,6 +215,159 @@ export function parseAskUser(text: string): AskUserPayload | null {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Prose-question recovery. Some models (MiniMax-M1, chat #133) never call
+// `ask_user` — they end the run on a markdown list of options and a trailing
+// question, which arrives as text the reader can only re-type. A settled reply of
+// that exact shape is lifted into the canonical block here, ONCE, so both loops
+// persist a real question and every transcript renders the card and the pinned
+// "Answer needed" banner exactly as if the tool had been called.
+//
+// Deliberately narrow — a false card is worse than prose: the question must be the
+// reply's last word (or directly introduce a list that is), the wording must cue a
+// choice, and there must be 2–6 short options.
+// ---------------------------------------------------------------------------
+
+const PROSE_LIST_ITEM = /^\s*(?:[-*•+]|\d{1,2}[.)])\s+(\S.*)$/;
+const PROSE_BOLD_LEAD = /^\s*(?:\*\*|__)([^*_\n]+?)(?:\*\*|__)\s*(.*)$/;
+const PROSE_CONTINUATION = /^\s{2,}\S/;
+// A choice AMONG the listed items — not "Want me to proceed?" under a list of next steps.
+const PROSE_CHOICE_CUE =
+  /\b(?:options?|choices?|choose|pick|which|prefer|approach|alternatives?)\b|\bwhat (?:would|do|should) (?:you|we) (?:like to )?(?:do|want)\b|\bhow (?:would|do) you (?:like|want)\b/i;
+const PROSE_MAX_LABEL = 80;
+const PROSE_MAX_OPTIONS = 6;
+
+const plainLine = (line: string): string => line.replace(/\*\*|__|`/g, "").trim();
+
+/** A bulleted/numbered line, or an unmarked line led by a bold label. A bare bold
+ *  `**Options:**` is a HEADER, not an option. */
+type ProseItemKind = "marked" | "bold";
+function proseItemKind(line: string): ProseItemKind | null {
+  if (PROSE_LIST_ITEM.test(line)) return "marked";
+  const bold = line.match(PROSE_BOLD_LEAD);
+  if (!bold) return null;
+  return !(bold[2] ?? "").trim() && plainLine(line).endsWith(":") ? null : "bold";
+}
+const isProseItem = (line: string): boolean => proseItemKind(line) !== null;
+
+/** One list line → an option, or null when it reads as a sentence rather than a choice. */
+function proseOption(line: string): AskUserOption | null {
+  const body = line.match(PROSE_LIST_ITEM)?.[1] ?? line.trim();
+  const bold = body.match(PROSE_BOLD_LEAD);
+  let label: string;
+  let rest: string;
+  if (bold) {
+    label = bold[1] ?? "";
+    rest = bold[2] ?? "";
+  } else {
+    const sep = body.match(/\s+[—–-]\s+|:\s+/);
+    label = sep?.index !== undefined ? body.slice(0, sep.index) : body;
+    rest = sep?.index !== undefined ? body.slice(sep.index + sep[0].length) : "";
+  }
+  label = plainLine(label).replace(/[:.]$/, "").trim();
+  const description = plainLine(rest).replace(/^[\s—–:-]+/, "").trim();
+  if (!label || label.length > PROSE_MAX_LABEL) return null;
+  return description ? { label, description } : { label };
+}
+
+/** Parse `lines` (items, indented continuations, blank gaps) into options; null on any other line. */
+function proseOptions(lines: readonly string[]): AskUserOption[] | null {
+  const options: AskUserOption[] = [];
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    if (isProseItem(line)) {
+      const option = proseOption(line);
+      if (!option) return null;
+      options.push(option);
+      continue;
+    }
+    const last = options[options.length - 1];
+    if (!last || !PROSE_CONTINUATION.test(line)) return null;
+    const more = plainLine(line);
+    last.description = last.description ? `${last.description} ${more}` : more;
+  }
+  return options.length >= 2 && options.length <= PROSE_MAX_OPTIONS ? options : null;
+}
+
+/**
+ * Index of the first line of the item block ending at `end` (inclusive). One block is
+ * ONE kind of item, so a bold-led prose paragraph ("**Blocker:** …") above a bulleted
+ * list never joins it.
+ */
+function itemBlockStart(lines: readonly string[], end: number): number {
+  let kind: ProseItemKind | null = null;
+  let i = end;
+  while (i >= 0) {
+    const line = lines[i] ?? "";
+    const k = proseItemKind(line);
+    if (k) {
+      if (kind && k !== kind) break;
+      kind = k;
+      i--;
+    } else if (!line.trim() || PROSE_CONTINUATION.test(line)) i--;
+    else break;
+  }
+  let start = i + 1;
+  while (start <= end && !(lines[start] ?? "").trim()) start++;
+  return start;
+}
+
+/** The nearest non-blank line above `index` (-1 when there is none). */
+function lineAbove(lines: readonly string[], index: number): number {
+  let i = index - 1;
+  while (i >= 0 && !(lines[i] ?? "").trim()) i--;
+  return i;
+}
+
+const isQuestionLine = (line: string | undefined): boolean =>
+  !!line && !isProseItem(line) && plainLine(line).endsWith("?");
+const isHeaderLine = (line: string | undefined): boolean =>
+  !!line && !isProseItem(line) && plainLine(line).endsWith(":") && plainLine(line).length <= 60;
+
+/**
+ * A settled reply that ends on a prose question with listed options → the same reply
+ * with that question as the canonical ```ask-user block (lead-in prose kept above it).
+ * Any other text is returned unchanged, as is a reply that already carries a block.
+ */
+export function liftProseAskUser(text: string): string {
+  if (!text || ASK_USER_FENCE.test(text)) return text;
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  let end = lines.length - 1;
+  while (end >= 0 && !(lines[end] ?? "").trim()) end--;
+  if (end < 1) return text;
+
+  let question: string;
+  let leadEnd: number; // exclusive
+  let itemStart: number;
+  let itemEnd: number;
+  if (isQuestionLine(lines[end])) {
+    // "…list…\n\nWhat would you like to do?"
+    question = lines[end] ?? "";
+    itemEnd = end - 1;
+    itemStart = itemBlockStart(lines, itemEnd);
+    const above = lineAbove(lines, itemStart);
+    leadEnd = isHeaderLine(lines[above]) ? above : itemStart;
+  } else {
+    // "Which approach should I take?\n- A\n- B"
+    itemEnd = end;
+    itemStart = itemBlockStart(lines, itemEnd);
+    const above = lineAbove(lines, itemStart);
+    if (!isQuestionLine(lines[above])) return text;
+    question = lines[above] ?? "";
+    leadEnd = above;
+  }
+  if (itemStart > itemEnd) return text;
+  const cue = `${leadEnd < itemStart ? lines[leadEnd] ?? "" : ""} ${question}`;
+  if (!PROSE_CHOICE_CUE.test(cue)) return text;
+  const options = proseOptions(lines.slice(itemStart, itemEnd + 1));
+  if (!options) return text;
+  const payload = coerceAskUserPayload({ question: plainLine(question), options });
+  if (!payload) return text;
+  const lead = lines.slice(0, leadEnd).join("\n").trim();
+  const block = serializeAskUser(payload);
+  return lead ? `${lead}\n\n${block}` : block;
+}
+
 /** Remove the raw block so the message's prose reads cleanly beside the rendered
  *  card. Collapses the whitespace the removed block leaves behind. */
 export function stripAskUser(text: string): string {

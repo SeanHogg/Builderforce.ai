@@ -38,7 +38,7 @@ import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
 import { shouldRecoverStalledTurn, isExhaustedStall, stallShape, stallRecoveryNudge, stallExhaustedNotice, modelFailoverNotice, chooseStallFailover, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS, stallRecoveryToolChoice, type ModelFallbackSurface } from '@builderforce/agent-stall';
-import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, trimRepetitionLoop, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock } from '@builderforce/agent-loop';
+import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, trimRepetitionLoop, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, liftProseAskUser } from '@builderforce/agent-loop';
 import {
   BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
@@ -1550,7 +1550,8 @@ export class BrainService {
             const notice = stallExhaustedNotice(lastModel, triedModels, shape);
             return { action: 'stop', ok: true, output: content ? `${content}\n\n${notice}` : notice };
           }
-          return { action: 'stop', ok: true, output: content };
+          // A question asked in prose instead of via `ask_user` still becomes the card.
+          return { action: 'stop', ok: true, output: liftProseAskUser(content) };
         },
         // The kernel already cut a looped turn back to its first copy; this leaves the
         // evidence in the reply's trace, as its own kind so it is never counted as a turn.

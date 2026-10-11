@@ -224,28 +224,50 @@ export function chatWorkDirective(chatId: number, opts?: ChatWorkDirectiveOption
     : '';
   const roster = opts?.roster ?? [];
   const staffed = roster.length > 0;
+  // This session spawns its OWN sub-agents on this machine. Delegation then means a local
+  // child run AS the teammate whose role fits — not a remote cloud run. A cloud dispatch
+  // needs a ticket assignment and passes the workspace's execution kill-switch; a local
+  // child needs neither, so sending a delegation to the cloud from here is how chat #133
+  // ended on "agent execution is switched off" with nothing run at all.
+  const delegatesLocally = !!(opts?.canFanOut || opts?.canDelegate);
+  const localSpawn = opts?.canFanOut
+    ? 'spawn_agents (several tickets whose files do not overlap, side by side — one workstream per ticket, with ticket=<id>, paths and as_agent) or spawn_agent (one slice)'
+    : 'spawn_agent (one slice at a time)';
+  const pickByRole =
+    'as_agent = the agent whose role fits the slice: a Developer for a code slice, a QA agent for a test or verify slice (builtin_cloud_agents_persona_brief with role=developer or role=qa-tester says who holds it; an agent without the role is refused)';
   // The roster VERBATIM, so the model never spends a discovery call to learn who it may
   // dispatch to — and never has to guess a ref from a name. `dispatch_agent` takes the
   // ref; a human reads the name; both are here so neither has to be inferred.
   const whoIsHere = staffed
     ? `• THE AGENTS IN THIS CHAT are ${describeRoster(roster)}. A human put them here: that is this platform's way of saying these are the people this work belongs to.\n`
     : '';
-  // Staffed ⇒ dispatch wins. Unstaffed ⇒ the do-it-here ordering, which was written for
+  // Staffed ⇒ their work, delegated locally where this session can spawn, dispatched to
+  // the cloud where it cannot. Unstaffed ⇒ the do-it-here ordering, which was written for
   // exactly that case — a session holding the workspace with nobody else to ask.
   const ordering = staffed
-    ? `• DISPATCH TO THEM. That is the DEFAULT in this chat, not a fallback. Work that falls inside one of their roles is THEIR work: assign the ticket and start the run with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the ref above>, taskId=<the ticket>), then say who picked it up. Do NOT make the change yourself merely because you could do it faster — the human staffed this conversation, and a session that quietly does its agents' work leaves them idle and leaves the user unable to see who did what.${opts?.canEditHere ? ' You DO hold the workspace file tools; keep them for what dispatch cannot cover — reading and locating the code so the directive you hand an agent is specific, checking what a run came back with, and an edit the user asks YOU for in this message.' : ''}\n`
+    ? delegatesLocally
+      ? `• DELEGATE TO THEM, HERE. That is the DEFAULT in this chat, not a fallback. Work that falls inside one of their roles is THEIR work, and this session runs it on this machine: hand it to a local sub-agent with ${localSpawn}, ${pickByRole}. Then say which agent did what. A local sub-agent is NOT a cloud run — it needs no ticket assignment and no builtin_chats_dispatch_agent, and the workspace's execution kill-switch does not stop it. Do NOT make the change yourself merely because you could do it faster — the human staffed this conversation.\n`
+      : `• DISPATCH TO THEM. That is the DEFAULT in this chat, not a fallback. Work that falls inside one of their roles is THEIR work: assign the ticket and start the run with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the ref above>, taskId=<the ticket>), then say who picked it up. Do NOT make the change yourself merely because you could do it faster — the human staffed this conversation, and a session that quietly does its agents' work leaves them idle and leaves the user unable to see who did what.${opts?.canEditHere ? ' You DO hold the workspace file tools; keep them for what dispatch cannot cover — reading and locating the code so the directive you hand an agent is specific, checking what a run came back with, and an edit the user asks YOU for in this message.' : ''}\n`
     : opts?.canEditHere
-      ? `• DO IT HERE WHEN YOU CAN. No agent has been invited into this chat, so there is nobody to hand it to. This session has the workspace file tools, so anything you could change yourself in a handful of tool calls — a bug fix, a small refactor, a CSS or copy change, anything you have already located in the code — you MAKE, now. Dispatching a cloud agent for work you are already holding costs a whole run to do less than you can, and leaves the user waiting for it. Then record the change against this chat. Dispatch is for work this session genuinely cannot do: a long-horizon or repetitive batch, or work that must run somewhere you are not.\n`
+      ? `• DO IT HERE WHEN YOU CAN. No agent has been invited into this chat, so there is nobody to hand it to. This session has the workspace file tools, so anything you could change yourself in a handful of tool calls — a bug fix, a small refactor, a CSS or copy change, anything you have already located in the code — you MAKE, now. Dispatching a cloud agent for work you are already holding costs a whole run to do less than you can, and leaves the user waiting for it. Then record the change against this chat.${delegatesLocally ? ` Several independent slices go to local sub-agents with ${localSpawn}, ${pickByRole} — not to cloud agents.` : ''} Dispatch is for work this session genuinely cannot do: a long-horizon or repetitive batch, or work that must run somewhere you are not.\n`
       : '';
+  // The closing obligation. Where this session can spawn, a filed ticket is finished here
+  // or by a local sub-agent; the cloud is for work the user asked to run there.
+  const finish = delegatesLocally
+    ? `• FINISH WHAT YOU FILED. A ticket nobody is working has not started: every ticket you filed is either done in this session or handed to a local sub-agent (${pickByRole}). builtin_chats_dispatch_agent starts a CLOUD run — use it only when the user asks for the work to run in the cloud, or it must run where this session is not. A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n`
+    : `• FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict — read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (${staffed ? 'one of the agents above, or ' : ''}builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) — a Developer for code work, a QA agent for test work — and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n`;
+  const refused = delegatesLocally
+    ? ' An execution kill-switch or run cap stops CLOUD runs only — hand the slice to a local sub-agent instead.'
+    : ' If the work is something you could do here, do it instead.';
   return (
     `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.\n` +
     `${chatWorkLinkingDirective(chatId)}\n` +
     whoIsHere +
     ordering +
-    `• FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict — read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (${staffed ? 'one of the agents above, or ' : ''}builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n` +
-    `• STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. When you file tickets, assign and dispatch the agent whose role fits each one — never leave a ticket with no agent on it.${throughThem}\n` +
+    finish +
+    `• STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. Match each ticket to the agent whose role fits it — Developer work to a developer, QA work to a QA agent — and never leave a ticket with no agent on it.${throughThem}\n` +
     `• builtin_chats_runs (chatId=${chatId}) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.\n` +
-    `• If dispatch is genuinely refused — no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role — the refusal names the reason and what would clear it. Report THAT reason, do not retry the same dispatch hoping for a different answer, and if the work is something you could do here, do it instead. Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`
+    `• If dispatch is genuinely refused — no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role — the refusal names the reason and what would clear it. Report THAT reason and do not retry the same dispatch hoping for a different answer.${refused} Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`
   );
 }
 

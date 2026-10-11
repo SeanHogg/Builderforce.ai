@@ -1,3 +1,19 @@
+## ✅ RESOLVED 2026-10-11 — Questions asked in prose become the clickable card, and local delegation runs by role instead of dispatching to the cloud (agent-loop 2026.10.2 · agent-tools 2026.10.2 · brain-embedded 2026.10.12 · VSIX 2026.10.14 · api 2026.10.24)
+
+VS Code chat #133 had two problems:
+- MiniMax-M1 ended the run on a bolded "Options:" list and "What would you like to do?" instead of calling `ask_user`, so the reader got text with nothing to click.
+- The run tried to delegate with `chats.dispatch_agent`, a remote cloud run. The workspace's execution kill switch refused it (402 `execution_disabled`), and nothing ran, even though the editor can spawn sub-agents locally.
+
+- **`liftProseAskUser`** (`packages/agent-loop/src/index.ts`, beside the rest of the ask-user contract). It turns a settled reply that ends on a prose question with 2–6 listed options into the canonical ```ask-user block, and keeps the lead-in prose above it. Both conversational loops apply it to their final reply: `brainRunStore` when `ask_user` is advertised, and `BrainService`'s addressed reply. The match is deliberately narrow:
+  - the question is the reply's last line, or it introduces the list;
+  - the wording cues a choice ("which", "options", "what would you like to do"), not a yes/no "want me to proceed?";
+  - one list kind per block, so a bold-led paragraph such as "**Blocker:** …" never joins the options;
+  - a bare `**Options:**` header is stripped as a header, not offered as an option.
+- **Local delegation by role.** The Work directive (`brain-embedded/src/chatMode.ts`) now checks whether the surface carries `spawn_agent` or `spawn_agents`. If it does, a staffed chat delegates to them HERE: `spawn_agents` per ticket, or `spawn_agent`, with `as_agent` set to the teammate whose role fits. The directive says that a local child needs no ticket assignment and no `dispatch_agent`, and that the kill switch stops cloud runs only. `dispatch_agent` remains for work the user asks to run in the cloud, and the web Brain, which has no sub-agent tools, still dispatches.
+- **Developer vs QA filter.** `delegationRoleRefusal` (`packages/agent-tools/src/modelRoles.ts`) maps a code slice to the `developer` role and a verify slice to `qa-tester`. Explore, plan, chat and utility slices are open to any teammate. The editor's `resolveChildPersona` (used by both spawn tools) and the cloud's `cloudSubagent` run the same check. An agent without the needed role is refused before any model turn, and the refusal names the role it needs.
+- **Role keys from the server.** `resolveAgentPersonaBrief` now returns `roleKeys` (`agentRoleKeys`: explicit role keys ∪ built-in kind ∪ title/skill match). `cloud_agents.persona_brief` takes an optional `role`. For an agent without that role it returns `{ ok: false, capable: [...] }`, read-through cached by `listTenantAgentsForRole`.
+- Tests: `askUser.test.ts` (the #133 reply, a question that introduces a list, a yes/no question kept as prose, existing blocks untouched), `modelRoles.test.ts`, `chatMode.test.ts` (local versus cloud ordering), `subagentTool.test.ts`, `cloudSubagent.test.ts`.
+
 ## ✅ RESOLVED 2026-10-11 — Planning ends in tasks: the hand-off to the coding model files tickets, and parallel coders report back to the chat (agent-tools 2026.10.1 · agent-loop 2026.10.1 · brain-embedded 2026.10.10 · VSIX 2026.10.12 · api 2026.10.23 · frontend 2026.10.39)
 
 VS Code chat #133: the planning model never produced a plan. It drifted into its first edit, the run discarded that edit and re-asked the coder inline, and nothing was filed or run in parallel. Delegated children reported only to their parent, never to the chat.

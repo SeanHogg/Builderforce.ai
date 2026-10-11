@@ -22,7 +22,7 @@
  * Adas who disagree.
  */
 import { requireEnv as requireToolEnv, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
-import { listTenantAgentNames, resolveAgentPersonaBrief } from '../agent/agentPersonaBrief';
+import { listTenantAgentNames, listTenantAgentsForRole, resolveAgentPersonaBrief } from '../agent/agentPersonaBrief';
 import type { Env } from '../../env';
 
 type Json = Record<string, unknown>;
@@ -52,14 +52,27 @@ export const AGENT_PERSONA_TOOLS: BuiltinTool[] = [
       'The persona of one of this workspace\'s agents — its name, title and the compiled brief (role, bio, skills, personality) it runs under. '
       + '`agent` accepts the agent id OR its name ("Ada"), matched case-insensitively. '
       + 'Read this to decide WHICH teammate should take a piece of work, or to see what a child would inherit before delegating with spawn_agent { as_agent }. '
+      + 'The result carries `roleKeys` — the board roles it can act as (developer, qa-tester, …). A code slice runs AS a developer and a verify slice AS a qa-tester. '
+      + 'Pass `role` (e.g. "developer") to require it: an agent without that role comes back as { ok: false } listing the agents that DO hold it. '
       + 'An unknown agent comes back as { ok: false } listing the agents that do exist — pick one of those rather than guessing again.',
-    parameters: obj({ agent: S }, ['agent']),
+    parameters: obj({ agent: S, role: S }, ['agent']),
     run: async (ctx: BuiltinCtx, a: Json) => {
       const env = requireEnv(ctx);
       const agent = str(a.agent).trim();
       if (!agent) return { ok: false, error: 'agent is required — pass an agent id or its name' };
 
+      const role = str(a.role).trim();
       const brief = await resolveAgentPersonaBrief(env, ctx.tenantId, agent);
+      if (brief && role && !brief.roleKeys.includes(role)) {
+        // The Developer-vs-QA filter: the agent exists but cannot act as the role this
+        // slice needs, so the refusal names the teammates who can.
+        return {
+          ok: false,
+          error: `${brief.name} cannot act as ${role} (holds ${brief.roleKeys.join(', ') || 'no delivery role'})`,
+          roleKeys: brief.roleKeys,
+          capable: await listTenantAgentsForRole(env, ctx.tenantId, role, MAX_SUGGESTED),
+        };
+      }
       if (brief) return { ok: true, ...brief };
 
       return {

@@ -84,12 +84,12 @@ async function resolvePersonaBrief(
   platformTools: readonly ToolDef[],
   agent: string,
   root: string,
-): Promise<{ ref: string; name: string; brief: string } | null> {
+): Promise<{ ref: string; name: string; brief: string; roleKeys?: string[] } | null> {
   const tool = platformTools.find((t) => t.name === PERSONA_BRIEF_TOOL);
   if (!tool) return null;
   try {
     const raw = await tool.execute({ agent }, root);
-    const parsed = JSON.parse(raw) as { ok?: boolean; agentRef?: unknown; name?: unknown; title?: unknown; brief?: unknown };
+    const parsed = JSON.parse(raw) as { ok?: boolean; agentRef?: unknown; name?: unknown; title?: unknown; brief?: unknown; roleKeys?: unknown };
     if (!parsed || parsed.ok === false) return null;
     const name = typeof parsed.name === "string" ? parsed.name.trim() : "";
     if (!name) return null;
@@ -101,6 +101,11 @@ async function resolvePersonaBrief(
       // The title is part of WHO the agent is; a brief that drops it makes a Security
       // Reviewer and a Frontend Engineer read as the same anonymous helper.
       brief: [title, brief].filter(Boolean).join(" — ") || name,
+      // What tells a Developer from a QA when a slice is handed to this agent. Absent
+      // (an older api) ⇒ the role check does not filter rather than refusing everyone.
+      ...(Array.isArray(parsed.roleKeys)
+        ? { roleKeys: parsed.roleKeys.filter((k): k is string => typeof k === "string") }
+        : {}),
     };
   } catch {
     return null;

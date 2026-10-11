@@ -162,6 +162,35 @@ describe('chatModeDirective', () => {
       expect(d).toMatch(/keep them for what dispatch cannot cover/i);
     });
 
+    /**
+     * Chat #133: an editor session that could spawn sub-agents was told to dispatch to
+     * its invited agent, called `chats.dispatch_agent`, hit the workspace's execution
+     * kill-switch and ran nothing. Where the session can spawn locally, delegation is a
+     * LOCAL child run as the teammate whose role fits — never a cloud run by default.
+     */
+    it('delegates LOCALLY, by role, when the surface can spawn sub-agents', () => {
+      const d = chatWorkDirective(7, { canEditHere: true, canDelegate: true, canFanOut: true, roster });
+      expect(d).toContain('DELEGATE TO THEM, HERE');
+      expect(d).not.toContain('DISPATCH TO THEM');
+      expect(d).toContain('spawn_agents');
+      // Developer vs QA: the slice's role picks the teammate.
+      expect(d).toMatch(/Developer for a code slice/);
+      expect(d).toMatch(/QA agent for a test or verify slice/);
+      // A local child is not a cloud run, and the kill-switch does not stop it.
+      expect(d).toMatch(/NOT a cloud run/);
+      expect(d).toMatch(/kill-switch does not stop it/);
+      expect(d).toMatch(/stops CLOUD runs only/);
+      expect(d).toContain('FINISH WHAT YOU FILED');
+      expect(d).not.toContain('FINISH BY DISPATCHING');
+    });
+
+    it('still dispatches to the cloud on a surface with no sub-agent tools (the web Brain)', () => {
+      const d = chatWorkDirective(7, { roster });
+      expect(d).toContain('DISPATCH TO THEM');
+      expect(d).toContain('FINISH BY DISPATCHING');
+      expect(d).not.toContain('spawn_agents');
+    });
+
     it('keeps do-it-here for an IDE chat nobody has staffed — the case it was written for', () => {
       const d = chatWorkDirective(7, { canEditHere: true, roster: [] });
       expect(d).toMatch(/DO IT HERE WHEN YOU CAN/);
