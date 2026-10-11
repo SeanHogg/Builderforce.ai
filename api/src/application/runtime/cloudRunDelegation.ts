@@ -9,7 +9,8 @@
  * holds no delegation capabilities at all: a dry run must not start real runs.
  */
 
-import { MAX_SUBAGENT_DEPTH, type Capability, type CapabilityProvider } from '@builderforce/agent-tools';
+import { MAX_SUBAGENT_DEPTH } from '@builderforce/agent-loop';
+import type { Capability, CapabilityProvider } from '@builderforce/agent-tools';
 import { childCapabilities, DELEGATION_CAPABILITIES, scopedRepoWrite } from './cloudSubagent';
 import type { CloudChildSpec } from './cloudChildRuns';
 import type { LiveParentRun } from './cloudLiveOrchestration';

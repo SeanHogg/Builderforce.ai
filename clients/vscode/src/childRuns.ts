@@ -11,7 +11,7 @@
  * or, when nobody waits, to the owner's inbox (`deliver`). Never both.
  */
 
-import { MAX_SUBAGENT_DEPTH as MAX_CHILD_DEPTH } from "@builderforce/agent-tools";
+import { MAX_SUBAGENT_DEPTH as MAX_CHILD_DEPTH } from "@builderforce/agent-loop";
 import type { RunLineage } from "@seanhogg/builderforce-brain-embedded";
 
 /** Live children a chat may hold at once — a runaway spawner stops here, not at the provider. */

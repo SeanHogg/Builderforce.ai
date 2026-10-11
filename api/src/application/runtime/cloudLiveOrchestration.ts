@@ -16,10 +16,10 @@ import {
   ownerDirectionText,
   type LiveChildControls,
   type OrchestrationCapability,
-  MAX_SUBAGENT_DEPTH,
   type SubagentRequest,
   type SubagentResult,
 } from '@builderforce/agent-tools';
+import { MAX_SUBAGENT_DEPTH } from '@builderforce/agent-loop';
 import { eq } from 'drizzle-orm';
 import { executions } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';

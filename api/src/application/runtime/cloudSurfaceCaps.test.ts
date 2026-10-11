@@ -23,35 +23,24 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
   it('advertises exactly the provider-backed tools (no shell)', () => {
     expect(names(CLOUD_AGENT_TOOLS)).toEqual([
       'ask_human', 'claim_resource', 'delete_file', 'edit_file', 'finish', 'list_files',
-      'memory_forget', 'memory_recall', 'memory_remember', 'read_file', 'release_resource',
-      'run_checks', 'search_code', 'skill_list', 'skill_propose', 'spawn_agent', 'spawn_agents', 'update_prd',
-      'web_fetch', 'web_search', 'workspace_note', 'workspace_read', 'write_file',
+      'memory_forget', 'memory_recall', 'memory_remember', 'message_agent', 'read_file', 'release_resource',
+      'run_checks', 'search_code', 'skill_list', 'skill_propose', 'spawn_agent', 'spawn_agents', 'stop_agent', 'update_prd',
+      'wait_agents', 'web_fetch', 'web_search', 'workspace_note', 'workspace_read', 'write_file',
     ]);
   });
 
-  it('backs `orchestrate` — this surface can run a nested loop inside one tool call', () => {
-    // A child's turns are gateway I/O, not CPU, and its budget is small and absolute,
-    // so a delegation is at most one long durable tick — which heartbeats, so the
-    // orphan reaper does not read it as a dead run.
-    expect(CLOUD_SURFACE_CAPS.has('orchestrate')).toBe(true);
-    expect(names(CLOUD_AGENT_TOOLS)).toContain('spawn_agent');
-  });
-
-  it('backs `orchestrate` on the container too — the child runs in the Worker', () => {
-    // This used to be withheld, and the reason was the deployed-image ordering rule
-    // rather than a missing backing: the image runs its own loop, so a tool it could
-    // not dispatch was a wasted step mid-run. Both halves are now closed — the `spawn`
-    // container-op runs the child HERE (same kernel, same metered turn), and every
-    // image dispatches `spawn_agent` through the shared relay module.
-    expect(CONTAINER_SURFACE_CAPS.has('orchestrate')).toBe(true);
-    expect(names(CONTAINER_AGENT_TOOLS)).toContain('spawn_agent');
-  });
-
-  it('fans out side by side on the durable surface only — the images have no arm for it', () => {
-    expect(CLOUD_SURFACE_CAPS.has('orchestrate.fanout')).toBe(true);
-    expect(names(CLOUD_AGENT_TOOLS)).toContain('spawn_agents');
-    expect(CONTAINER_SURFACE_CAPS.has('orchestrate.fanout')).toBe(false);
-    expect(names(CONTAINER_AGENT_TOOLS)).not.toContain('spawn_agents');
+  it('delegates the SAME way on both cloud surfaces — one sub-agent path, no image-only variant', () => {
+    // Every child is its own durable execution with an owner pointer, whichever surface
+    // its owner runs on: the images send all five tools through the one `subagent`
+    // container-op, so the two surfaces advertise the same delegation set.
+    for (const cap of ['orchestrate', 'orchestrate.fanout', 'orchestrate.live'] as const) {
+      expect(CLOUD_SURFACE_CAPS.has(cap)).toBe(true);
+      expect(CONTAINER_SURFACE_CAPS.has(cap)).toBe(true);
+    }
+    for (const t of ['spawn_agent', 'spawn_agents', 'wait_agents', 'message_agent', 'stop_agent']) {
+      expect(names(CLOUD_AGENT_TOOLS)).toContain(t);
+      expect(names(CONTAINER_AGENT_TOOLS)).toContain(t);
+    }
   });
 
   it('backs `coordinate` — several agents can be staffed onto one ticket at once', () => {
@@ -101,8 +90,9 @@ describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)',
     expect(names(CONTAINER_AGENT_TOOLS)).toEqual([
       'ask_human', 'claim_resource', 'finish', 'git_diff', 'git_history', 'git_redo', 'git_status',
       'git_sync_latest', 'git_undo', 'list_files', 'memory_forget', 'memory_recall', 'memory_remember',
-      'read_file', 'release_resource', 'run_command', 'skill_list', 'skill_propose', 'spawn_agent',
-      'update_prd', 'web_search', 'workspace_note', 'workspace_read', 'write_file',
+      'message_agent', 'read_file', 'release_resource', 'run_command', 'skill_list', 'skill_propose',
+      'spawn_agent', 'spawn_agents', 'stop_agent', 'update_prd', 'wait_agents', 'web_search',
+      'workspace_note', 'workspace_read', 'write_file',
     ]);
   });
 

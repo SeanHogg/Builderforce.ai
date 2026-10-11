@@ -31,7 +31,7 @@ describe("spawn_agents on a surface that backs orchestrate.fanout", () => {
   const ctxWith = (spawn: (r: SubagentRequest) => Promise<{ ok: boolean; output?: string; changedFiles?: string[] }>): ToolContext =>
     ({ caps: { capabilities: new Set(["orchestrate", "orchestrate.fanout"]), orchestration: { spawn } } }) as unknown as ToolContext;
 
-  it("starts every child at once, each scoped to its paths, and merges what they changed", async () => {
+  it("starts every child at once, each scoped to its paths, and leaves the merge to the owner", async () => {
     const started: SubagentRequest[] = [];
     let release!: () => void;
     const both = new Promise<void>((r) => { release = r; });
@@ -46,7 +46,10 @@ describe("spawn_agents on a surface that backs orchestrate.fanout", () => {
       ctxWith(spawn),
     );
     expect(started.map((r) => [r.label, r.scope, r.role, r.ticket])).toEqual([["a", ["a"], "code", "1"], ["b", ["b"], "code", undefined]]);
-    expect(out.data).toMatchObject({ ok: true, changedFiles: ["a.ts", "b.ts"] });
+    // Children commit their own slices; the owner verifies the combined branch, so the
+    // fan-out reports no merged file list of its own.
+    expect(out.data).toMatchObject({ ok: true });
+    expect(out.data.changedFiles).toBeUndefined();
     expect(String(out.data.next)).toContain("no shell and no git");
   });
 

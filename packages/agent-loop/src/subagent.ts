@@ -24,6 +24,10 @@ export interface SubagentPersona {
   brief: string;
 }
 
+/** How deep sub-agents nest — a child at this depth does its slice itself. ONE cap for
+ *  the editor's children and the cloud's. */
+export const MAX_SUBAGENT_DEPTH = 3;
+
 /** The agent a child reports to. */
 export interface SubagentLiveOwner {
   /** Display name of the owner, as the chat shows it. */
