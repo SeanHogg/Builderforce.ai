@@ -9,6 +9,7 @@ import {
   displayModelName,
   parseDirectedRecipients,
   parseMessageAuthor,
+  parseSubagentOrigin,
   parseMessageProvenance,
   isStoppedTurn,
   type BrainMessage,
@@ -55,6 +56,10 @@ export interface BrainTimelineLabels extends ToolStepLabels {
   stoppedReply: string;
   you: string;
   assistant: string;
+  /** Beside a SUB-AGENT's name: whose it is — must contain `{owner}`. */
+  subagentOf: string;
+  /** Beside the chat's own agent once sub-agents have spoken: it is their owner. */
+  ownerTag: string;
   error: string;
   loading: string;
   empty: string;
@@ -131,6 +136,8 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   stoppedReply: 'Stopped by you — this is what the model had written when you pressed Stop.',
   you: 'You',
   assistant: 'BuilderForce',
+  subagentOf: 'sub-agent of {owner}',
+  ownerTag: 'owner',
   input: 'Input',
   output: 'Output',
   error: 'Error',
@@ -520,6 +527,12 @@ function BrainTimelineInner({
     );
 
   const isEmpty = nodes.length === 0 && !loading;
+  // Once a sub-agent has spoken, the chat's own agent is named as their OWNER, so the
+  // transcript reads as Owner and Agent (name), never as one voice.
+  const hasSubagents = useMemo(
+    () => nodes.some((n) => n.kind === 'assistant' && parseSubagentOrigin(n.message) !== null),
+    [nodes],
+  );
   const focusedId = revealMessage?.id ?? null;
   const focusClass = (messageId: number) => (focusedId === messageId ? ' bf-tl__item--focus' : '');
 
@@ -610,7 +623,10 @@ function BrainTimelineInner({
                   <span className="bf-tl__dot">{author ? <Avatar name={author.name} kind={author.kind} size={16} /> : dotIcon('assistant')}</span>
                 </span>
                 <div className="bf-tl__body">
-                  <div className="bf-tl__role">{author ? author.name : assistant}</div>
+                  <div className="bf-tl__role">
+                    {author ? author.name : assistant}
+                    <OriginTag message={node.message} owner={!author && hasSubagents} labels={labels} />
+                  </div>
                   {rescued && <div className="bf-tl__rescued">{labels.replyFromThought}</div>}
                   {stopped && <div className="bf-tl__rescued">{labels.stoppedReply}</div>}
                   {bodyText && <div className="bf-tl__bubble">{renderMsg(node.message, 'assistant', rescued || bodyText)}</div>}
@@ -847,3 +863,13 @@ function BrainTimelineInner({
  * stable props (memoize `labels` and any `on*` callbacks) for this to take effect.
  */
 export const BrainTimeline = React.memo(BrainTimelineInner);
+
+/** Whose sub-agent wrote a reply (`sub-agent of BuilderForce · a1`), or that the chat's own
+ *  agent is the OWNER of the sub-agents in it. Nothing for an ordinary reply. */
+function OriginTag({ message, owner, labels }: { message: BrainMessage; owner: boolean; labels: BrainTimelineLabels }) {
+  const origin = parseSubagentOrigin(message);
+  if (origin) {
+    return <span className="bf-tl__origin">{`${labels.subagentOf.replace('{owner}', origin.owner)} · ${origin.handle}`}</span>;
+  }
+  return owner ? <span className="bf-tl__origin">{labels.ownerTag}</span> : null;
+}

@@ -219,6 +219,7 @@ export function SlideOutPanel({
         )}
         {tabs != null && tabs.length > 0 && (
           <div
+            role="tablist"
             style={{
               display: 'flex',
               borderBottom: '1px solid var(--border-subtle)',
@@ -230,6 +231,10 @@ export function SlideOutPanel({
               <button
                 key={t.id}
                 type="button"
+                role="tab"
+                id={`slide-tab-${t.id}`}
+                aria-selected={activeTabId === t.id}
+                tabIndex={activeTabId === t.id ? 0 : -1}
                 onClick={() => onTabChange?.(t.id)}
                 style={{
                   padding: '10px 16px',

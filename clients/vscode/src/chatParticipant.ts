@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { formatEvermindLearnStep, runAbortSignal, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
 import { resolveModelRoute, routeRequiresSignIn, routeStream } from "./modelRouting";
-import { createChildWriteGate } from "./childWriteGate";
+import { OWNER_NAME, type BrainRunHost } from "./brainRunHost";
 import { permissionMode as resolvePermissionMode } from "./permissionMode";
 import {
   getCurrentUserId,
@@ -72,7 +72,11 @@ function splitSystemPrompt(messages: readonly ChatMessage[]): {
  * ChatResponseStream. Used by BOTH the native @builderforce participant and the
  * dedicated chat-session tab (so there is one implementation).
  */
-export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.ChatRequestHandler {
+/**
+ * `runHost` is where this participant's sub-agents run: a child is an ordinary host run
+ * with this turn as its owner (`childRunHost.ts`) — there is no second child loop here.
+ */
+export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?: BrainRunHost): vscode.ChatRequestHandler {
   return async (request, context, stream, token) => {
     const key = await ctx.secrets.get(SECRET_KEY);
     // Resolve per turn so an explicit pick, the active project's Evermind, or the
@@ -187,28 +191,27 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     }
 
     const runChatId = brainChatId ?? unlinkedRunId();
-    // A delegated child runs on THIS turn's resolved route, so it can never land on a
-    // different model (or a stale credential) than the participant that spawned it —
-    // and its writes go through the SAME gate the webview run uses, raised on this
-    // chat's own modal below.
-    const tools: ToolDef[] = await brainToolCatalog(
-      ctx.secrets,
-      root,
-      activeProject?.id,
-      async () => routeStream(modelChoice, key),
-      {
-        confirmWrite: createChildWriteGate({
-          chatId: runChatId,
-          ...(policyGates.length ? { gates: policyGates } : {}),
-          autoApprove: () => permissionMode === "acceptEdits",
-          blockedByPolicy: (reason: string) => vscode.l10n.t("Blocked by a governance gate: {0}", reason),
-        }),
-        // Stop on this turn stops its children too.
-        signal: () => runAbortSignal(runChatId),
-      },
-    );
-
     const { systemPrompt, seed } = splitSystemPrompt(messages);
+    // Sub-agents run in the editor's run host as ordinary runs owned by THIS turn, and
+    // live in its Brain chat — so they need one. Their write prompts are raised in the
+    // Brain panel, which this view cannot show: here a child writes only when edits are
+    // already auto-approved, and otherwise runs read-only and says so.
+    const children = runHost && brainChatId != null
+      ? runHost.childControls(
+          { key: runChatId, rootChatId: brainChatId, name: OWNER_NAME, depth: 0, canWrite: permissionMode === "acceptEdits" },
+          {
+            systemPrompt,
+            ...(modelChoice.model ? { model: modelChoice.model } : {}),
+            modelStrict: modelChoice.modelStrict,
+            ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
+            projectId: activeProject?.id ?? null,
+            chatMode: "work",
+            autoApprove: permissionMode === "acceptEdits",
+            evermind: false,
+          },
+        )
+      : undefined;
+    const tools: ToolDef[] = await brainToolCatalog(ctx.secrets, root, activeProject?.id, children, () => runAbortSignal(runChatId));
 
     await runNativeBrain({
       // With no server chat (the platform was unreachable) the run still needs a cell
@@ -300,8 +303,8 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
  * Registers BuilderForce in VS Code's native Chat view as `@builderforce` (stable Chat
  * Participant API). Returns the participant so the dedicated session tab can reuse it.
  */
-export function registerChatParticipant(ctx: vscode.ExtensionContext): vscode.ChatParticipant {
-  const participant = vscode.chat.createChatParticipant(PARTICIPANT_ID, createBuilderForceHandler(ctx));
+export function registerChatParticipant(ctx: vscode.ExtensionContext, runHost?: BrainRunHost): vscode.ChatParticipant {
+  const participant = vscode.chat.createChatParticipant(PARTICIPANT_ID, createBuilderForceHandler(ctx, runHost));
   participant.iconPath = vscode.Uri.joinPath(ctx.extensionUri, "media", "icon.png");
   return participant;
 }

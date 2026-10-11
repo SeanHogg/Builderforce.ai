@@ -49,7 +49,7 @@ describe('undelegatedRequestNudge', () => {
     const nudge = undelegatedRequestNudge(EDITOR);
     expect(nudge).toContain('CLOUD runs only');
     expect(nudge).toContain('as_agent is optional');
-    expect(nudge).toContain('builtin_cloud_agents_create');
+    expect(nudge).toContain('staff the role on this project');
     expect(nudge).toContain('spawn_agents');
     expect(nudge).toContain('read_only:false');
   });

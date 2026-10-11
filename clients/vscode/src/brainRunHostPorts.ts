@@ -41,9 +41,9 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   const streamForRoute = async (): Promise<BrainStreamFn> =>
     routeStream(await resolveModelRoute(secrets), await getApiKey(secrets));
   return createBrainRunHost({
-    // The child's run binding comes from the RUN (it knows the chat, the live Auto switch,
-    // its Stop and its model), so it is passed straight through rather than rebuilt here.
-    tools: (projectId, run) => brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, streamForRoute, run),
+    // The run's sub-agent controls and Stop come from the RUN (only it knows its key, its
+    // chat and its depth), so they are passed straight through rather than rebuilt here.
+    tools: (projectId, children, signal) => brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal),
     workspaceRoot,
     // Resolved per run, not once: an explicit pick, the project's Evermind pin or an
     // on-device route can all change between turns, and a local credential can expire.

@@ -41,10 +41,11 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * a typo'd or free-text role), and idempotent per role — a second call for a role the
  * manager already hired for re-pins the existing agent instead of creating another.
  */
-import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { ideAgents, projectRoleAssignments } from '../../infrastructure/database/schema';
+import { ideAgents } from '../../infrastructure/database/schema';
+import { RoleAssignmentService } from '../kanban/roleAssignmentService';
+import { bumpAgentRosterVersion } from '../agent/agentPersonaBrief';
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 import { resolveRoleCapableAgents } from '../kanban/roleCapability';
 import { SIGNOFF_TOOL_NAME } from '../kanban/signoffRequest';
@@ -111,47 +112,40 @@ function hireSpecFor(roleKey: string, tenantId: number): {
   return {
     id: `${MANAGER_HIRED_PREFIX}-${roleKey}-t${tenantId}`,
     name,
-    title: `${name} — hired by the AI Manager to fill an unstaffed lifecycle role`,
+    title: `${name} — hired to fill an unstaffed role`,
     // The bio IS the persona (it is compiled into the agent's directives by
     // `resolveWorkforceModel`), so it states the role's remit rather than describing it
     // from outside. The catalog description is the canonical statement of that remit.
     bio: `${role?.description ?? `Performs the ${name} role on this workspace's tickets.`} `
-      + 'This role was required by a lifecycle stage that no existing teammate could perform, '
+      + 'This role was required by work that no existing teammate could perform, '
       // The ADVERTISED name, never the catalog id — this bio becomes the agent's persona
       // directive, so a hand-typed id names a tool it does not have. See `toolNaming.ts`.
-      + 'so the AI Manager staffed it. Work the ticket as this role, and record your verdict '
+      + 'so it was staffed automatically. Work the ticket as this role, and record your verdict '
       + `with the \`${SIGNOFF_TOOL_NAME}\` tool when the stage's deliverable is complete.`,
     skills: [roleKey, ...(role?.discipline ? [role.discipline] : [])],
   };
 }
 
-/** Pin an agent to a role for a project, so resolution is deterministic from now on. */
+/**
+ * Pin an agent to a role for a project, so resolution is deterministic from now on.
+ *
+ * Through `RoleAssignmentService.create`, the ONE role-assignment writer: idempotent per
+ * (project, role, agent), and it ATTACHES the agent to the project (`project_agents`). The
+ * inline insert this replaced pinned the role but never attached the agent, so a hired
+ * teammate filled the role yet was missing from the project's agent list.
+ */
 async function pinRole(
+  env: Env,
   db: Db,
   args: { tenantId: number; projectId: number; roleKey: string; agentRef: string; agentName: string },
 ): Promise<void> {
-  const [existing] = await db
-    .select({ id: projectRoleAssignments.id })
-    .from(projectRoleAssignments)
-    .where(and(
-      eq(projectRoleAssignments.tenantId, args.tenantId),
-      eq(projectRoleAssignments.projectId, args.projectId),
-      eq(projectRoleAssignments.roleKey, args.roleKey),
-      eq(projectRoleAssignments.assigneeKind, 'agent'),
-      eq(projectRoleAssignments.assigneeRef, args.agentRef),
-    ))
-    .limit(1);
-  if (existing) return;
-  await db.insert(projectRoleAssignments).values({
-    // `id` is a bare varchar primary key with no database default.
-    id: crypto.randomUUID(),
-    tenantId: args.tenantId,
-    projectId: args.projectId,
+  await new RoleAssignmentService(db).create(env, args.tenantId, null, {
     roleKey: args.roleKey,
     assigneeKind: 'agent',
     assigneeRef: args.agentRef,
     assigneeName: args.agentName,
-  }).onConflictDoNothing();
+    projectId: args.projectId,
+  });
 }
 
 /**
@@ -193,7 +187,7 @@ export async function staffUnfilledRole(
       // explicit pin first, then declared role_keys, then builtin_kind, then fuzzy — so
       // the head is the strongest claim to the role.
       const pick = capable[0]!;
-      await pinRole(db, {
+      await pinRole(env, db, {
         tenantId: args.tenantId, projectId: args.projectId, roleKey,
         agentRef: pick.ref, agentName: pick.name,
       });
@@ -231,7 +225,9 @@ export async function staffUnfilledRole(
       priceCents: 0,
     }).onConflictDoNothing();
 
-    await pinRole(db, {
+    // A role lookup (`listTenantAgentsForRole`) must find the new agent on its next read.
+    await bumpAgentRosterVersion(env, args.tenantId).catch(() => undefined);
+    await pinRole(env, db, {
       tenantId: args.tenantId, projectId: args.projectId, roleKey,
       agentRef: spec.id, agentName: spec.name,
     });

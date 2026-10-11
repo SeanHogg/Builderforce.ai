@@ -36,6 +36,9 @@
       "@builderforce/creation-canvas-contract": [
         "../../../packages/creation-canvas-contract/src/index.ts"
       ],
+      "@builderforce/interaction-contract": [
+        "../../../packages/interaction-contract/src/index.ts"
+      ],
       "@builderforce/creation-canvas-contract/objectKinds": [
         "../../../packages/creation-canvas-contract/src/objectKinds.ts"
       ],

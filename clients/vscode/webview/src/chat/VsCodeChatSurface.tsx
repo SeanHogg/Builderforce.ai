@@ -116,6 +116,9 @@ import { persistedToTraceEvent, type PersistedTraceRow } from './chatTrace';
 import { IconPlus, IconRename, MenuItem, PopoverMenu } from './ChatMenu';
 import { ComposerTrailingButton } from './ComposerTrailingButton';
 import { useGlobalRunState } from './useGlobalRunState';
+import { QueuedMessages, type QueuedMessage } from './QueuedMessages';
+import { SubagentStrip } from './SubagentStrip';
+import { childParticipants, childTarget, steerRun, useChatChildren } from './chatChildren';
 
 
 export function VsCodeChatSurface({ init }: { init: InitData }) {
@@ -767,6 +770,10 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   const activitySignal = useChatActivitySignal(conv.messages);
   const railRefresh = ticketRefresh + activitySignal;
   const participants = useChatParticipants(ticketAdapter, chatId, railRefresh);
+  // The chat's live sub-agents are addressable too: `@Ada …` (or a `#ticket` one of them
+  // is working) steers that child's run instead of starting a turn of the chat's own.
+  const liveChildren = useChatChildren(chatId);
+  const mentionable = useMemo(() => [...participants, ...childParticipants(liveChildren)], [participants, liveChildren]);
 
   // Keep the mirrored roster (declared above `conv`) in step with the live participants.
   useEffect(() => { setChatRoster(chatRosterFromParticipants(participants)); }, [participants]);
@@ -774,7 +781,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // The effective target (shared with the web composer): an explicit BRAIN pick wins;
   // else an explicit participant; else a leading @mention; else the BRAIN (null). The
   // pick resets on a chat switch and drops a participant who has since left.
-  const { recipient, choose: chooseRecipient } = useRecipientChoice({ participants, input, resetKey: chatId });
+  const { recipient, choose: chooseRecipient } = useRecipientChoice({ participants: mentionable, input, resetKey: chatId });
   const recipientLabels = useMemo(() => recipientPickerLabels(init.labels), [init.labels]);
 
   // @-mention typeahead: typing `@` in the composer opens a picker of the chat's
@@ -785,9 +792,10 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     textareaRef: inputRef,
     value: input,
     setValue: setInput,
-    participants,
+    participants: mentionable,
     onPick: chooseRecipient,
-    disabled: conv.sending,
+    // Open while sub-agents work, even mid-run: they are who a message may be for.
+    disabled: conv.sending && liveChildren.length === 0,
     labels: {
       title: t('app.mentionTitle', 'Direct to'),
       agent: t('app.mentionAgent', 'Agent'),
@@ -845,7 +853,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     setValue: setInput,
     tickets: chatTickets,
     onPick: handleTicketTag,
-    disabled: conv.sending,
+    disabled: conv.sending && liveChildren.length === 0,
     labels: {
       title: t('app.ticketTagTitle', 'Tag ticket'),
       status: t('app.ticketTagStatus', 'Status'),
@@ -922,7 +930,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // these (submit early-returned when sending); now they queue and drain FIFO — one
   // message per completed run — so follow-ups are never lost and each stays a distinct
   // steerable turn. Cleared when switching chats (a queue belongs to its conversation).
-  const [messageQueue, setMessageQueue] = useState<Array<{ id: number; text: string; recipient: DirectedRecipient | null }>>([]);
+  const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
   const queueIdRef = useRef(0);
   useEffect(() => { setMessageQueue([]); }, [chatId]);
   const removeQueued = useCallback((id: number) => {
@@ -954,12 +962,18 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // the host had marked the run settled showed "Answered", posted no user turn, and
   // left the "Answer needed" banner pinned over a chat that had moved on (chat #133).
   const sendOrQueue = useCallback((text: string, to: DirectedRecipient | null) => {
+    // For a live sub-agent: straight into its run, never queued behind the chat's own.
+    const child = childTarget(text, to, liveChildren);
+    if (child) {
+      steerRun(child.key, text);
+      return;
+    }
     if (conv.sending) {
       setMessageQueue((q) => [...q, { id: (queueIdRef.current += 1), text, recipient: to }]);
       return;
     }
     void dispatchSend(text, to);
-  }, [conv.sending, dispatchSend]);
+  }, [conv.sending, dispatchSend, liveChildren]);
 
   const submit = useCallback(() => {
     const text = input.trim();
@@ -1433,6 +1447,9 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
         }}
       />
 
+      {/* The chat's live sub-agents: who works for whom, and the owner's levers. */}
+      <SubagentStrip chatId={chatId} labels={init.labels} liveLabels={tlLabels.live} />
+
       {conv.pendingConfirm && (
         <div className="bf-confirm">
           <span>
@@ -1487,20 +1504,9 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
             ))}
           </div>
         )}
-        {/* Messages queued behind the in-flight run — each sends automatically, one
-            per completed run. Shown as removable chips so the user can see and cancel
-            what's pending before it goes out. */}
-        {messageQueue.length > 0 && (
-          <div className="bf-queued" role="list" aria-label={t('app.queuedLabel', 'Queued messages')}>
-            <span className="bf-queued__hint">{t('app.queuedHint', 'Queued — sends when the run finishes')}</span>
-            {messageQueue.map((m) => (
-              <span key={m.id} className="bf-chip bf-chip--queued" role="listitem" title={m.text}>
-                <span className="bf-chip__name">{m.text}</span>
-                <button className="bf-chip__x" onClick={() => removeQueued(m.id)} aria-label={t('app.remove', 'Remove')}>×</button>
-              </span>
-            ))}
-          </div>
-        )}
+        {/* Messages queued behind the in-flight run — each sends automatically, one per
+            completed run, or is steered into the running turn now. */}
+        <QueuedMessages queue={messageQueue} runningChatId={conv.sending ? chatId : null} labels={init.labels} onRemove={removeQueued} />
         </> : undefined}
         input={(
           <textarea

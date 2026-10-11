@@ -304,6 +304,14 @@
   margin-bottom: 3px;
 }
 
+.bf-tl__origin {
+  margin-left: 6px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.85;
+}
+
 .bf-tl__role--error {
   color: var(--bf-error, #e5534b);
 }

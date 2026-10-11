@@ -2,6 +2,21 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.19] — Sub-agents work alongside the chat, not instead of it
+
+- **Spawning a sub-agent no longer pauses the chat.** The main agent gets the sub-agent's handle (`a1`, `a2`, …) straight away and keeps planning, coding and starting other sub-agents while they work. When a sub-agent finishes, its report goes to the main agent automatically. If the main agent had already stopped, the report starts it up again so it can act on the result.
+- **You can tell who said what.** A sub-agent's messages appear in the chat under its own name, marked "sub-agent of BuilderForce", and BuilderForce's own replies are marked "owner".
+- **A live strip shows every working sub-agent.** For each one you see what it is doing right now and can approve its file changes, redirect it with a new instruction, or stop it. "Stop all" stops every sub-agent at once.
+- **You can talk to a sub-agent directly.** `@Ada only do the API half` goes to that sub-agent's next step. Tagging a ticket it is working on (`#2860 …`) reaches it too.
+- **"Steer now" on a queued message.** A message you typed while the chat was busy can go into the running turn straight away instead of waiting for it to finish.
+- **Sub-agents no longer run out of turns.** A sub-agent now runs the same way the main chat does, with no step limit. It stops only when it finishes, when you or the main agent stop it, or when its tool calls keep failing.
+
+## [2026.10.18] — The chat staffs its own sub-agents
+
+- **No developer on the team? The chat hires one.** When a coding slice has nobody who fits, the chat adds a Developer to your workspace and to the project you're working in, assigns the ticket to them, and runs the sub-agent as that Developer. If the project already has a capable teammate, it uses them instead of hiring.
+- **Assigning a ticket to a sub-agent doesn't start a cloud run.** The work happens on your machine, and the board shows who owns it.
+- **Sessions on the canvas.** The Measure stage has a Sessions surface that opens your Visitors view: visitor flow and leads together, with one panel for a visitor whichever view you open them from.
+
 ## [2026.10.17] — Sub-agents get a Developer even when your team has none
 
 - **A coding slice always has someone to do it.** When the chat hands a slice to a teammate who isn't a developer, a Developer sub-agent does it instead of the whole batch stopping, and the chat says who actually did the work.

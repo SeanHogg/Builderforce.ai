@@ -22,6 +22,16 @@ export const REPLAY_LIMITS = {
 } as const;
 
 /**
+ * Idle gap after which the next event starts a NEW visit. Same number as
+ * `maxVisitMs` — the recorder, the hosted `visitorJourney`, and ingest all
+ * pin this so "came back" means the same thing everywhere.
+ */
+export const VISIT_IDLE_MS = REPLAY_LIMITS.maxVisitMs;
+
+/** Visitor / visit id alphabet the recorder mints and ingest accepts. */
+export const VISITOR_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
+
+/**
  * A meaningful moment the recorder already derived. Ingest copies these;
  * it does not re-detect rage / dead / quick-back / error.
  *

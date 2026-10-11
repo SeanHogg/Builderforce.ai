@@ -87,6 +87,11 @@ export const LOCAL_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
   'spawn_agent',
   // Its side-by-side twin — what a planner's `hand_off` fans out to; editor-only.
   'spawn_agents',
+  // The owner's verbs for children running in the background (editor-only): a turn about
+  // "check on Ada" or "tell a2 to stop" shares no stem with the tool names either.
+  'wait_agents',
+  'message_agent',
+  'stop_agent',
 ]);
 
 /**

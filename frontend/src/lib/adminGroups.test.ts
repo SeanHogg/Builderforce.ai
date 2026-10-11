@@ -22,3 +22,30 @@ describe('Creation Sessions super-admin route', () => {
     expect(route.sub.id).toBe('creation-sessions');
   });
 });
+
+describe('Growth ▸ Visitors consolidation', () => {
+  it('resolves the canonical visitors subview', () => {
+    const route = resolveAdminRoute('growth', 'visitors');
+    expect(route.group.id).toBe('growth');
+    expect(route.sub.subKey).toBe('visitors');
+    expect(adminSubHref(route.group.id, route.sub.id)).toBe('/admin?tab=growth&sub=visitors');
+  });
+
+  it('aliases the old visitor-flow sub onto visitors', () => {
+    const route = resolveAdminRoute('growth', 'visitorFlow');
+    expect(route.group.id).toBe('growth');
+    expect(route.sub.id).toBe('visitors');
+  });
+
+  it('aliases Users ▸ Sessions onto Growth ▸ Visitors', () => {
+    const route = resolveAdminRoute('users', 'sessions');
+    expect(route.group.id).toBe('growth');
+    expect(route.sub.id).toBe('visitors');
+  });
+
+  it('keeps the legacy top-level visitorFlow and sessions tabs working', () => {
+    expect(resolveAdminRoute('visitorFlow', '').sub.id).toBe('visitors');
+    expect(resolveAdminRoute('sessions', '').group.id).toBe('growth');
+    expect(resolveAdminRoute('sessions', '').sub.id).toBe('visitors');
+  });
+});

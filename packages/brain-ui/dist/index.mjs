@@ -9,6 +9,7 @@ import {
   displayModelName,
   parseDirectedRecipients,
   parseMessageAuthor,
+  parseSubagentOrigin,
   parseMessageProvenance,
   isStoppedTurn
 } from "@seanhogg/builderforce-brain-embedded";
@@ -1047,6 +1048,8 @@ var DEFAULT_TIMELINE_LABELS = {
   stoppedReply: "Stopped by you \u2014 this is what the model had written when you pressed Stop.",
   you: "You",
   assistant: "BuilderForce",
+  subagentOf: "sub-agent of {owner}",
+  ownerTag: "owner",
   input: "Input",
   output: "Output",
   error: "Error",
@@ -1272,6 +1275,10 @@ function BrainTimelineInner({
     }
   );
   const isEmpty = nodes.length === 0 && !loading;
+  const hasSubagents = useMemo3(
+    () => nodes.some((n) => n.kind === "assistant" && parseSubagentOrigin(n.message) !== null),
+    [nodes]
+  );
   const focusedId = revealMessage?.id ?? null;
   const focusClass = (messageId) => focusedId === messageId ? " bf-tl__item--focus" : "";
   return /* @__PURE__ */ jsxs6("div", { className: "bf-tl-scroll", ref: scrollRef, onScroll, children: [
@@ -1315,7 +1322,10 @@ function BrainTimelineInner({
           return /* @__PURE__ */ jsxs6("li", { id: brainMessageAnchorId(node.message.id), className: `bf-tl__item bf-tl__item--assistant${focusClass(node.message.id)}`, children: [
             /* @__PURE__ */ jsx7("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx7("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ jsx7(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("assistant") }) }),
             /* @__PURE__ */ jsxs6("div", { className: "bf-tl__body", children: [
-              /* @__PURE__ */ jsx7("div", { className: "bf-tl__role", children: author ? author.name : assistant }),
+              /* @__PURE__ */ jsxs6("div", { className: "bf-tl__role", children: [
+                author ? author.name : assistant,
+                /* @__PURE__ */ jsx7(OriginTag, { message: node.message, owner: !author && hasSubagents, labels })
+              ] }),
               rescued && /* @__PURE__ */ jsx7("div", { className: "bf-tl__rescued", children: labels.replyFromThought }),
               stopped && /* @__PURE__ */ jsx7("div", { className: "bf-tl__rescued", children: labels.stoppedReply }),
               bodyText && /* @__PURE__ */ jsx7("div", { className: "bf-tl__bubble", children: renderMsg(node.message, "assistant", rescued || bodyText) }),
@@ -1450,6 +1460,13 @@ function BrainTimelineInner({
   ] });
 }
 var BrainTimeline = React4.memo(BrainTimelineInner);
+function OriginTag({ message, owner, labels }) {
+  const origin = parseSubagentOrigin(message);
+  if (origin) {
+    return /* @__PURE__ */ jsx7("span", { className: "bf-tl__origin", children: `${labels.subagentOf.replace("{owner}", origin.owner)} \xB7 ${origin.handle}` });
+  }
+  return owner ? /* @__PURE__ */ jsx7("span", { className: "bf-tl__origin", children: labels.ownerTag }) : null;
+}
 
 // src/ChatErrorBanner.tsx
 import { jsx as jsx8, jsxs as jsxs7 } from "react/jsx-runtime";

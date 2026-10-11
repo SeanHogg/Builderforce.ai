@@ -7,13 +7,10 @@
  * finishes, so a fan-out reads in the chat the way a team does: one report per ticket,
  * as each lands.
  *
- * Tagged mid-turn (`MID_TURN_META_KEY`): a child's report is progress inside a run, not
- * the run's answer, so Evermind does not learn it as one. Pure, and here beside
- * `runSubagent` so every surface that runs a child — the editor and the cloud — posts
- * the same report.
+ * Pure, and here beside `runSubagent`, for the cloud's one-shot children. (The editor's
+ * children are runs of their own and post into the chat as themselves — see
+ * `runLineage.ts` in brain-embedded.)
  */
-
-import { MID_TURN_META_KEY } from "./turnPhase.js";
 
 /** The fields of a finished child's report this message reads. */
 export interface SubagentReportLike {
@@ -27,9 +24,6 @@ export interface SubagentReportLike {
   truncated?: boolean;
   note?: string;
 }
-
-/** Key under which the report's identity rides in the message metadata. */
-export const SUBAGENT_REPORT_META_KEY = "subagentReport";
 
 /** Longest child answer quoted into the chat; the parent holds the full result. */
 const MAX_OUTPUT_CHARS = 3_000;
@@ -49,17 +43,4 @@ export function subagentReportMessage(report: SubagentReportLike): string {
     ? `Changed: ${report.changedFiles.slice(0, MAX_FILES_LISTED).map((f) => `\`${f}\``).join(", ")}${report.changedFiles.length > MAX_FILES_LISTED ? ` (+${report.changedFiles.length - MAX_FILES_LISTED} more)` : ""}`
     : "";
   return [head, quoted, files, report.note ?? ""].filter(Boolean).join("\n\n");
-}
-
-/** Metadata for the report message: mid-turn, plus who reported on which ticket. */
-export function subagentReportMetadata(report: SubagentReportLike): string {
-  return JSON.stringify({
-    [MID_TURN_META_KEY]: true,
-    [SUBAGENT_REPORT_META_KEY]: {
-      label: report.label,
-      ok: report.ok,
-      ...(report.ticket ? { ticket: report.ticket } : {}),
-      ...(report.asAgent ? { asAgent: report.asAgent.name } : {}),
-    },
-  });
 }

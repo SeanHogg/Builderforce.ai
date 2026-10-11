@@ -1,14 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { childToolDefs, subagentToolDef } from "./subagentTool";
+import { subagentToolDef } from "./subagentTool";
+import { childCatalog, scopeRefusal } from "./childRunPolicy";
 import type { ToolDef } from "./fileTools";
-import type { BrainToolSpec } from "@seanhogg/builderforce-brain-embedded";
+import type { ChildControls, ChildRequest } from "./childRunSpawner";
 
 /**
- * Delegation on the MACHINE. The child's tool set is the security boundary here, and it
- * turns on ONE thing: whether the host gave the child a way to ask a human. With a gate,
- * a child may write and every write is approved; without one, a mutating tool reaching a
- * child would be a write nobody approved, so it never gets one — and the result says so
- * rather than letting the parent believe an edit was made.
+ * Delegation on the MACHINE. A child is an ordinary run with an owner pointer, started
+ * in the background: `spawn_agent` resolves WHO does the slice, hands the owner's
+ * controls one request, and returns the child's handle at once — the owner keeps working.
  */
 
 const def = (name: string, over: Partial<ToolDef> = {}): ToolDef => ({
@@ -24,268 +23,159 @@ const CATALOG: ToolDef[] = [
   def("read_file"),
   def("search_code"),
   def("write_file", { mutating: true }),
+  def("edit_file", { mutating: true }),
   def("run_command", { mutating: true }),
   def("builtin_tasks_update", { remote: true }),
   def("spawn_agent"),
 ];
 
-describe("childToolDefs", () => {
-  it("gives a child the read-only local tools by default", () => {
-    expect(childToolDefs(CATALOG).map((t) => t.name)).toEqual(["read_file", "search_code"]);
+/** Controls that record what the owner asked for, and start nothing. */
+function fakeControls(over: Partial<ChildControls> = {}): ChildControls & { requests: ChildRequest[] } {
+  const requests: ChildRequest[] = [];
+  return {
+    requests,
+    canWrite: true,
+    canSpawn: true,
+    spawn: vi.fn((req: ChildRequest) => {
+      requests.push(req);
+      return { ok: true as const, handle: `a${requests.length}`, name: req.asAgent?.name ?? req.persona?.name ?? req.label, label: req.label };
+    }),
+    message: vi.fn(() => ({ ok: true as const })),
+    stop: vi.fn(() => []),
+    wait: vi.fn(async () => ({ reports: [], running: [] })),
+    ...over,
+  };
+}
+
+describe("childCatalog — the owner's tools, narrowed", () => {
+  it("withholds every mutating tool from a read-only child", () => {
+    expect(childCatalog(CATALOG, { readOnly: true }).map((t) => t.name)).toEqual(["read_file", "search_code", "builtin_tasks_update", "spawn_agent"]);
   });
 
-  it("withholds every mutating tool unless the delegation is writable", () => {
-    const names = childToolDefs(CATALOG).map((t) => t.name);
-    expect(names).not.toContain("write_file");
+  it("hands a writable child the whole catalog — it is the same run, one level down", () => {
+    expect(childCatalog(CATALOG, { readOnly: false })).toHaveLength(CATALOG.length);
+  });
+
+  it("gives a scoped child the file writers only — no shell a scope cannot contain", () => {
+    const names = childCatalog(CATALOG, { readOnly: false, scope: ["src/a"] }).map((t) => t.name);
+    expect(names).toContain("write_file");
     expect(names).not.toContain("run_command");
   });
+});
 
-  it("hands a WRITABLE child the mutating tools too", () => {
-    // The tools a child is handed ARE the boundary: a child that may write is shown the
-    // writing tools, and one that may not never sees them.
-    expect(childToolDefs(CATALOG, true).map((t) => t.name)).toEqual([
-      "read_file", "search_code", "write_file", "run_command",
-    ]);
+describe("scopeRefusal", () => {
+  const write = def("write_file", { mutating: true });
+  it("refuses a write outside the workstream's paths, before anyone is asked", () => {
+    expect(scopeRefusal(write, { path: "src/b/x.ts" }, ["src/a"])?.error).toContain("outside this workstream's paths");
   });
-
-  it("still withholds the platform catalog and delegation from a writable child", () => {
-    const names = childToolDefs(CATALOG, true).map((t) => t.name);
-    expect(names).not.toContain("builtin_tasks_update");
-    expect(names).not.toContain("spawn_agent");
-  });
-
-  it("withholds the platform catalog — a delegation is about this workspace", () => {
-    expect(childToolDefs(CATALOG).map((t) => t.name)).not.toContain("builtin_tasks_update");
-  });
-
-  it("withholds delegation itself, so a child cannot spawn", () => {
-    expect(childToolDefs(CATALOG).map((t) => t.name)).not.toContain("spawn_agent");
+  it("lets a write inside them through, and never touches an unscoped child", () => {
+    expect(scopeRefusal(write, { path: "src/a/x.ts" }, ["src/a"])).toBeNull();
+    expect(scopeRefusal(write, { path: "anywhere.ts" }, undefined)).toBeNull();
   });
 });
 
 describe("subagentToolDef", () => {
-  const streamOf = (...turns: Array<{ text: string; toolCalls?: Array<{ id: string; name: string; args: string }> }>) => {
-    let i = 0;
-    // The opts parameter is spelled out so a recorded call has a type to read.
-    return vi.fn(async (_opts: { tools?: BrainToolSpec[] }) => {
-      const t = turns[Math.min(i++, turns.length - 1)]!;
-      return { text: t.text, toolCalls: t.toolCalls ?? [], finishReason: "stop" } as never;
-    });
-  };
-
-  it("takes its name and schema from the shared definition, so both surfaces match", () => {
-    const tool = subagentToolDef({ stream: async () => streamOf({ text: "" }), catalog: () => CATALOG });
+  it("takes its schema from the shared definition and says the child runs in the background", () => {
+    const tool = subagentToolDef({ children: fakeControls() });
     expect(tool.name).toBe("spawn_agent");
-    expect(tool.mutating).toBe(false);
+    expect(tool.description).toContain("IN THE BACKGROUND");
   });
 
-  it("returns the child's answer and what it cost", async () => {
-    const stream = streamOf({ text: "the middleware is in src/auth.ts" });
-    const tool = subagentToolDef({ stream: async () => stream as never, catalog: () => CATALOG });
-    const out = JSON.parse(await tool.execute({ label: "find auth", task: "find the auth middleware" }, "/repo"));
-    // `steps` is the turn the child stopped on — it answered on its first.
-    expect(out).toMatchObject({ ok: true, output: "the middleware is in src/auth.ts", steps: 0, readOnly: true });
-  });
-
-  it("advertises only the read-only local tools to the child", async () => {
-    const stream = streamOf({ text: "done" });
-    const tool = subagentToolDef({ stream: async () => stream as never, catalog: () => CATALOG });
-    await tool.execute({ label: "look", task: "look" }, "/repo");
-    const advertised = stream.mock.calls[0]![0].tools ?? [];
-    expect(advertised.map((t) => t.function.name)).toEqual(["read_file", "search_code"]);
-  });
-
-  it("runs a child's tool call against the local executor", async () => {
-    const read = vi.fn(async () => JSON.stringify({ ok: true, content: "export const x = 1" }));
-    const catalog = [def("read_file", { execute: read }), ...CATALOG.slice(1)];
-    const stream = streamOf(
-      { text: "", toolCalls: [{ id: "c1", name: "read_file", args: JSON.stringify({ path: "src/x.ts" }) }] },
-      { text: "x is exported from src/x.ts" },
-    );
-    const tool = subagentToolDef({ stream: async () => stream as never, catalog: () => catalog });
-    const out = JSON.parse(await tool.execute({ label: "read", task: "what does src/x.ts export" }, "/repo"));
-
-    expect(read).toHaveBeenCalledWith({ path: "src/x.ts" }, "/repo");
-    expect(out.output).toBe("x is exported from src/x.ts");
-  });
-
-  it("falls back to read-only, and SAYS so, when the host cannot ask a human", async () => {
-    // The honesty rule: a parent that believes a child made an edit will not make it,
-    // and the change would be lost. A host with no `confirmWrite` is exactly that case.
-    const stream = streamOf({ text: "here is what I found" });
-    const tool = subagentToolDef({ stream: async () => stream as never, catalog: () => CATALOG });
-    const out = JSON.parse(
-      await tool.execute({ label: "edit", task: "rename the symbol", read_only: false }, "/repo"),
-    );
-    expect(out.readOnly).toBe(true);
-    expect(out.writeDeclined).toContain("cannot raise an approval prompt");
-    expect(out.writeDeclined).toContain("make any change yourself");
+  it("starts the child and returns its handle at once — the owner is not blocked", async () => {
+    const children = fakeControls();
+    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "look", task: "find the auth middleware" }, "/repo"));
+    expect(out).toMatchObject({ ok: true, handle: "a1", running: true, readOnly: true });
+    expect(children.requests[0]).toMatchObject({ task: "find the auth middleware", writable: false });
   });
 
   it("refuses an empty brief — the child sees nothing else", async () => {
-    const tool = subagentToolDef({ stream: async () => streamOf({ text: "" }) as never, catalog: () => CATALOG });
-    const out = JSON.parse(await tool.execute({ label: "x", task: "  " }, "/repo"));
-    expect(out).toMatchObject({ ok: false });
-    expect(out.error).toContain("task is required");
+    const children = fakeControls();
+    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "x", task: "  " }, "/repo"));
+    expect(out.ok).toBe(false);
+    expect(children.spawn).not.toHaveBeenCalled();
   });
 
-  it("reports a broken model route to the parent instead of throwing into its run", async () => {
-    const tool = subagentToolDef({
-      stream: async () => { throw new Error("not signed in"); },
-      catalog: () => CATALOG,
-    });
-    const out = JSON.parse(await tool.execute({ label: "look", task: "look" }, "/repo"));
-    expect(out).toMatchObject({ ok: false, error: "not signed in" });
+  it("starts a WRITABLE child only when asked and the host can raise a prompt", async () => {
+    const children = fakeControls();
+    await subagentToolDef({ children }).execute({ label: "fix", task: "fix it", read_only: false }, "/repo");
+    expect(children.requests[0]!.writable).toBe(true);
   });
 
-  it("runs a WRITABLE child when the host can ask, and asks before each write", async () => {
-    const confirmWrite = vi.fn(async () => ({ ok: true }) as const);
-    const wrote = vi.fn(async () => JSON.stringify({ ok: true }));
-    const catalog = [def("read_file"), def("write_file", { mutating: true, execute: wrote })];
-    const tool = subagentToolDef({
-      stream: async () => streamOf(
-        { text: "", toolCalls: [{ id: "c1", name: "write_file", args: JSON.stringify({ path: "a.ts" }) }] },
-        { text: "done" },
-      ) as never,
-      catalog: () => catalog,
-      run: { confirmWrite },
-    });
-    const out = JSON.parse(await tool.execute({ label: "edit", task: "rename it", read_only: false }, "/repo"));
-
-    expect(confirmWrite).toHaveBeenCalledWith({ name: "write_file", args: { path: "a.ts" } });
-    expect(wrote).toHaveBeenCalled();
-    expect(out).toMatchObject({ ok: true, readOnly: false });
-    // Nothing to warn the parent about: it asked for a writable child and got one.
-    expect(out.writeDeclined).toBeUndefined();
+  it("runs read-only, and SAYS so, when the host cannot ask a human", async () => {
+    const children = fakeControls({ canWrite: false });
+    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "fix", task: "fix it", read_only: false }, "/repo"));
+    expect(children.requests[0]!.writable).toBe(false);
+    expect(out.writeDeclined).toContain("read-only");
   });
 
-  it("does not execute a write the human declined, and tells the child why", async () => {
-    const wrote = vi.fn(async () => JSON.stringify({ ok: true }));
-    const catalog = [def("read_file"), def("write_file", { mutating: true, execute: wrote })];
-    const tool = subagentToolDef({
-      stream: async () => streamOf(
-        { text: "", toolCalls: [{ id: "c1", name: "write_file", args: JSON.stringify({ path: "a.ts" }) }] },
-        { text: "could not change it" },
-      ) as never,
-      catalog: () => catalog,
-      run: { confirmWrite: async () => ({ ok: false, reason: "declined by the user" }) },
-    });
-    const out = JSON.parse(await tool.execute({ label: "edit", task: "rename it", read_only: false }, "/repo"));
-
-    // A refusal is an ordinary tool result the child adapts to, not a dead delegation.
-    expect(wrote).not.toHaveBeenCalled();
-    expect(out).toMatchObject({ ok: true });
+  it("passes a refusal from the controls back to the owner", async () => {
+    const children = fakeControls({ spawn: vi.fn(() => ({ ok: false as const, error: "12 sub-agents are already working" })) });
+    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "x", task: "y" }, "/repo"));
+    expect(out).toMatchObject({ ok: false, error: "12 sub-agents are already working" });
   });
 
-  /**
-   * A slice the Brain does HERE instead of dispatching it is work nobody owns: no agent
-   * on the ticket, nothing in anyone's queue, and a user who cannot tell who did what.
-   * `as_agent` keeps the accountability a dispatch would have carried.
-   */
   describe("as_agent — running a slice in a team agent's persona", () => {
     const ADA = { ref: "agent_12", name: "Ada", brief: "Backend Engineer — owns the auth and billing services." };
 
-    it("resolves the persona, prefixes the label and names the agent in the result", async () => {
+    it("resolves the persona and starts the child AS that agent", async () => {
       const personaBrief = vi.fn(async () => ADA);
-      const stream = streamOf({ text: "ported it" });
-      const tool = subagentToolDef({
-        stream: async () => stream as never,
-        catalog: () => CATALOG,
-        personaBrief,
-      });
-      const out = JSON.parse(
-        await tool.execute({ label: "port the auth middleware", task: "port it", as_agent: "Ada" }, "/repo"),
-      );
-
+      const children = fakeControls();
+      const out = JSON.parse(await subagentToolDef({ children, personaBrief }).execute({ label: "port the auth middleware", task: "port it", as_agent: "Ada" }, "/repo"));
       expect(personaBrief).toHaveBeenCalledWith("Ada");
-      // The timeline row says WHO, not just what.
-      expect(out.label).toBe("as Ada: port the auth middleware");
-      expect(out.asAgent).toEqual({ ref: "agent_12", name: "Ada" });
-      expect(out.ok).toBe(true);
+      expect(children.requests[0]!.asAgent).toEqual({ ref: "agent_12", name: "Ada" });
+      expect(out.name).toBe("Ada");
     });
 
-    it("refuses an agent this workspace does not have, and runs no child", async () => {
-      // Running it anonymously would make the parent's "Ada did this" report false.
-      const stream = streamOf({ text: "should never run" });
-      const tool = subagentToolDef({
-        stream: async () => stream as never,
-        catalog: () => CATALOG,
-        personaBrief: async () => null,
-      });
-      const out = JSON.parse(
-        await tool.execute({ label: "port it", task: "port it", as_agent: "Nobody" }, "/repo"),
-      );
-
+    it("refuses an agent this workspace does not have, and starts no child", async () => {
+      const children = fakeControls();
+      const out = JSON.parse(await subagentToolDef({ children, personaBrief: async () => null }).execute({ label: "port it", task: "port it", as_agent: "Nobody" }, "/repo"));
       expect(out.ok).toBe(false);
       expect(out.error).toContain("no agent named 'Nobody' in this workspace");
-      // The refusal names the tools that list the REAL agents, so the next turn can fix it.
       expect(out.error).toContain("builtin_chats_list_agents");
-      expect(out.error).toContain("builtin_cloud_agents_list_mine");
-      expect(stream).not.toHaveBeenCalled();
+      expect(children.spawn).not.toHaveBeenCalled();
     });
 
     it("refuses when the host cannot name personas at all", async () => {
-      const stream = streamOf({ text: "should never run" });
-      const tool = subagentToolDef({ stream: async () => stream as never, catalog: () => CATALOG });
-      const out = JSON.parse(await tool.execute({ label: "port it", task: "port it", as_agent: "Ada" }, "/repo"));
+      const children = fakeControls();
+      const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "port it", task: "port it", as_agent: "Ada" }, "/repo"));
       expect(out.ok).toBe(false);
-      expect(stream).not.toHaveBeenCalled();
+      expect(children.spawn).not.toHaveBeenCalled();
     });
 
     it("runs a verify slice for an agent with no QA role as an on-demand QA Tester, unattributed", async () => {
-      // Chat #134: refusing a mismatched teammate stopped the work outright.
-      const stream = streamOf({ text: "reviewed" });
-      const tool = subagentToolDef({
-        stream: async () => stream as never,
-        catalog: () => CATALOG,
-        personaBrief: async () => ({ ...ADA, roleKeys: ["developer"] }),
-      });
-      const out = JSON.parse(
-        await tool.execute({ label: "check it", task: "review the diff", as_agent: "Ada", role: "verify" }, "/repo"),
-      );
+      const children = fakeControls();
+      const out = JSON.parse(await subagentToolDef({ children, personaBrief: async () => ({ ...ADA, roleKeys: ["developer"] }) })
+        .execute({ label: "check it", task: "review the diff", as_agent: "Ada", role: "verify" }, "/repo"));
       expect(out.ok).toBe(true);
-      expect(stream).toHaveBeenCalled();
-      expect(out.asAgent).toBeUndefined();
+      expect(children.requests[0]!.asAgent).toBeUndefined();
       expect(out.staffing).toContain("on-demand QA Tester");
       expect(out.staffing).toContain("not attributed to Ada");
     });
 
-    it("runs the slice when the agent holds the role it needs", async () => {
-      const stream = streamOf({ text: "reviewed" });
-      const tool = subagentToolDef({
-        stream: async () => stream as never,
-        catalog: () => CATALOG,
-        personaBrief: async () => ({ ...ADA, roleKeys: ["qa-tester"] }),
-      });
-      const out = JSON.parse(
-        await tool.execute({ label: "check it", task: "review the diff", as_agent: "Ada", role: "verify" }, "/repo"),
-      );
-      expect(out.ok).toBe(true);
-      expect(out.asAgent).toEqual({ ref: "agent_12", name: "Ada" });
+    it("staffs a Developer for a code slice nobody fitting was named for, and runs AS them", async () => {
+      const children = fakeControls();
+      const staffRole = vi.fn(async () => ({ ref: "agent_dev", name: "Developer", brief: "Developer", roleKeys: ["developer"], created: true }));
+      const out = JSON.parse(await subagentToolDef({ children, personaBrief: async () => ADA, staffRole }).execute({ label: "port it", task: "port the module", role: "code" }, "/repo"));
+      expect(staffRole).toHaveBeenCalledWith("developer", undefined);
+      expect(children.requests[0]!.asAgent).toEqual({ ref: "agent_dev", name: "Developer" });
+      expect(out.staffing).toContain("hired as developer");
+    });
+
+    it("staffs past a named teammate who lacks the role, instead of refusing", async () => {
+      const children = fakeControls();
+      const staffRole = vi.fn(async () => ({ ref: "agent_bob", name: "Bob", brief: "Bob", roleKeys: ["developer"], created: false }));
+      const out = JSON.parse(await subagentToolDef({ children, personaBrief: async () => ({ ...ADA, roleKeys: ["product-manager"] }), staffRole })
+        .execute({ label: "port it", task: "port it", as_agent: "Ada", role: "code" }, "/repo"));
+      expect(children.requests[0]!.asAgent).toEqual({ ref: "agent_bob", name: "Bob" });
+      expect(out.staffing).toContain("Ada does not hold developer");
     });
 
     it("leaves an ordinary delegation untouched", async () => {
       const personaBrief = vi.fn(async () => ADA);
-      const stream = streamOf({ text: "found it" });
-      const tool = subagentToolDef({ stream: async () => stream as never, catalog: () => CATALOG, personaBrief });
-      const out = JSON.parse(await tool.execute({ label: "look", task: "find it" }, "/repo"));
+      const children = fakeControls();
+      await subagentToolDef({ children, personaBrief }).execute({ label: "look", task: "find it" }, "/repo");
       expect(personaBrief).not.toHaveBeenCalled();
-      expect(out.label).toBe("look");
-      expect(out.asAgent).toBeUndefined();
+      expect(children.requests[0]!.asAgent).toBeUndefined();
     });
-  });
-
-  it("asks for nothing when the child only reads, even on a writable delegation", async () => {
-    const confirmWrite = vi.fn(async () => ({ ok: true }) as const);
-    const tool = subagentToolDef({
-      stream: async () => streamOf(
-        { text: "", toolCalls: [{ id: "c1", name: "read_file", args: JSON.stringify({ path: "a.ts" }) }] },
-        { text: "found it" },
-      ) as never,
-      catalog: () => CATALOG,
-      run: { confirmWrite },
-    });
-    await tool.execute({ label: "look", task: "find it", read_only: false }, "/repo");
-    expect(confirmWrite).not.toHaveBeenCalled();
   });
 });

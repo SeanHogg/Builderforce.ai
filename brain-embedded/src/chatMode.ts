@@ -237,9 +237,10 @@ export function chatWorkDirective(chatId: number, opts?: ChatWorkDirectiveOption
   // workspace with no Developer read as "nobody can do this" — chat #133 asked the user
   // how to proceed, chat #134 stalled on a refused fan-out. A slice handed to a teammate
   // without its role now runs as an on-demand role persona (`staffDelegation`), and the
-  // run can hire a real Developer with `builtin_cloud_agents_create`.
+  // spawn tools now STAFF the role themselves — the project's capable teammate, or a
+  // Developer hired into the workspace and project — and run the child AS that agent.
   const pickByRole =
-    'as_agent = the agent whose role fits the slice: a Developer for a code slice, a QA agent for a test or verify slice (builtin_cloud_agents_persona_brief with role=developer or role=qa-tester says who holds it). A teammate without the role runs the slice as an on-demand Developer/QA sub-agent, not as themselves. When nobody holds the role, OMIT as_agent, or hire one first with builtin_cloud_agents_create (name, title, roleKeys:["developer"]) and run AS them; a missing Developer is never a reason not to delegate';
+    'as_agent = the agent whose role fits the slice: a Developer for a code slice, a QA agent for a test or verify slice (builtin_cloud_agents_persona_brief with role=developer or role=qa-tester says who holds it). When nobody fitting is named — as_agent omitted, or a teammate without the role — the spawn tools STAFF the role on this project themselves: a capable teammate, or a Developer/QA HIRED into the workspace and project, with the ticket of the slice assigned to them, and the child runs AS that agent. So a missing Developer is never a reason not to delegate: omit as_agent and spawn';
   // The roster VERBATIM, so the model never spends a discovery call to learn who it may
   // dispatch to — and never has to guess a ref from a name. `dispatch_agent` takes the
   // ref; a human reads the name; both are here so neither has to be inferred.

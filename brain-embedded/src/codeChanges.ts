@@ -22,7 +22,9 @@ import { HAND_OFF_TOOL } from './planHandoff';
 /** The tools a run delegates through — one child, or several side by side. Each result
  *  carries the files its children changed. */
 // `hand_off` is one too: a plan handed to parallel coding children reports their files.
-export const DELEGATION_TOOLS: ReadonlySet<string> = new Set(['spawn_agent', 'spawn_agents', HAND_OFF_TOOL]);
+// `wait_agents` is where an editor owner COLLECTS its background children's reports,
+// so the files they changed reach the ticket backstop through it.
+export const DELEGATION_TOOLS: ReadonlySet<string> = new Set(['spawn_agent', 'spawn_agents', 'wait_agents', HAND_OFF_TOOL]);
 
 export function isDelegationTool(name: string): boolean {
   return DELEGATION_TOOLS.has(name);

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { CORE_TOOLS, SUBAGENT_TOOLS } from "@builderforce/agent-tools";
 import { LOCAL_WORKSPACE_TOOLS, localToolsIn } from "@seanhogg/builderforce-brain-embedded";
 import { ideSystemPromptBase } from "./idePersona";
+import { SUBAGENT_CONTROL_TOOL_NAMES } from "./subagentControlTools";
 
 /**
  * THE DRIFT GUARD BEHIND "the tool my prompt promised does not exist".
@@ -26,7 +27,12 @@ describe("the local workspace tools are always advertised", () => {
   // delegation (`spawn_agent`) is registered alongside the core tools rather than in
   // them, and a guard that only knew about `CORE_TOOLS` would read a correctly pinned
   // tool as a pin matching nothing.
-  const coreNames = new Set([...CORE_TOOLS, ...SUBAGENT_TOOLS].map((t) => t.name));
+  // The owner's verbs for background children are the editor's own tools (the cloud has
+  // no live children to address), so they come from the module that defines them.
+  const coreNames = new Set([
+    ...[...CORE_TOOLS, ...SUBAGENT_TOOLS].map((t) => t.name),
+    ...Object.values(SUBAGENT_CONTROL_TOOL_NAMES),
+  ]);
 
   it("pins only tools that really exist in the shared definitions", () => {
     for (const name of LOCAL_WORKSPACE_TOOLS) expect(coreNames.has(name)).toBe(true);

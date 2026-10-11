@@ -11,8 +11,9 @@
  *   2. posts the plan into the chat;
  *   3. switches the run to the coding role, and
  *      • where the host can fan out (`spawn_agents`, the editor) and the tasks own
- *        disjoint paths, starts one coding child per task, side by side — each child
- *        reports into the chat as it finishes (see `subagentReport.ts`);
+ *        disjoint paths, starts one coding child per task, side by side — in the editor
+ *        they run in the BACKGROUND (the coder keeps working; each child posts into the
+ *        chat under its own name and its report reaches the coder when it finishes);
  *      • otherwise hands the coder the task list to implement in order.
  *
  * Pure apart from the injected ports, so the run store only wires it.
@@ -245,6 +246,11 @@ const PARALLEL_NEXT =
   'You are the coding model: verify the combined change (build and test), fix what the slices broke between them and anything they said was outside their paths, ' +
   'implement any task that failed, then commit, push and report per ticket.';
 
+const BACKGROUND_NEXT =
+  'HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name; the children have no shell and no git. ' +
+  'You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives), ' +
+  'verify the combined change (build and test), fix what the slices broke between them, implement any task that failed, then commit, push and report per ticket.';
+
 /**
  * Carry the plan out. Never throws: a failed ticket or a refused fan-out degrades to the
  * inline path, which is always available — the coder is the run itself.
@@ -260,6 +266,9 @@ export async function executeHandOff(plan: HandOffPlan, ports: HandOffPorts): Pr
     const changed = new Set<string>();
     const placeholders: unknown[] = [];
     let fanOutOk = true;
+    // The editor's fan-out returns HANDLES (`agents`, `running: true`): the children work
+    // in the background and report later. A host that blocks returns `workstreams`.
+    let background = false;
     for (let start = 0; start < plan.tasks.length; start += FAN_OUT_BATCH) {
       const batch = plan.tasks.slice(start, start + FAN_OUT_BATCH);
       const out = asRecord(await call(ports, FAN_OUT_TOOL, {
@@ -277,7 +286,8 @@ export async function executeHandOff(plan: HandOffPlan, ports: HandOffPorts): Pr
       }));
       // A refusal BEFORE any child started (overlap, no write gate): nothing was written,
       // so the whole plan falls back to the inline path below.
-      if (!out || (out.ok === false && !Array.isArray(out.workstreams))) {
+      const started = Array.isArray(out?.agents) ? (out!.agents as unknown[]) : Array.isArray(out?.workstreams) ? (out!.workstreams as unknown[]) : null;
+      if (!out || (out.ok === false && !started)) {
         if (start === 0) {
           fanOutOk = false;
           break;
@@ -285,7 +295,8 @@ export async function executeHandOff(plan: HandOffPlan, ports: HandOffPorts): Pr
         workstreams.push({ ok: false, error: typeof out?.error === 'string' ? out.error : 'fan-out failed', tasks: batch.map((t) => t.title) });
         continue;
       }
-      if (Array.isArray(out.workstreams)) workstreams.push(...out.workstreams);
+      if (started) workstreams.push(...started);
+      if (out.running === true) background = true;
       if (Array.isArray(out.changedFiles)) for (const f of out.changedFiles) if (typeof f === 'string') changed.add(f);
       if (Array.isArray(out.placeholders)) placeholders.push(...out.placeholders);
     }
@@ -297,7 +308,7 @@ export async function executeHandOff(plan: HandOffPlan, ports: HandOffPorts): Pr
         workstreams,
         ...(changed.size ? { changedFiles: [...changed] } : {}),
         ...(placeholders.length ? { placeholders } : {}),
-        next: PARALLEL_NEXT,
+        next: background ? BACKGROUND_NEXT : PARALLEL_NEXT,
       };
     }
   }

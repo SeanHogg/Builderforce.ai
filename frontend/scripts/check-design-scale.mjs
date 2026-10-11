@@ -283,8 +283,13 @@ const BASELINE = {
    * had taken the tree to 3398 and turned the deploy red. All nine name roles now, on
    * the same mapping as above (12/13 = small, 0.9375rem = body, the 20/26 glyphs =
    * section); the stylesheet's shorthand `font:` sizes went onto roles with them.
+   *
+   * 3383 → 3372 (2026-10-10): `UserDetailDrawer` was rebuilt on `SlideOutPanel`
+   * (Insights S0.2) and split into the panel and `UserDetailSections`. All eleven of
+   * its literals named roles on the way: 10/11 = eyebrow, 12/13 = small, and the
+   * 16/18 title and close glyph are the panel header's own now.
    */
-  offScaleFontSizes: 3383,
+  offScaleFontSizes: 3372,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

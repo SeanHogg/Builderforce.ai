@@ -250,8 +250,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Native Chat participant (@builderforce) + dedicated session tab (proposed API,
   // feature-detected — no-ops unless launched with --enable-proposed-api).
-  const participant = registerChatParticipant(context);
-  const sessions = registerChatSessions(context, participant);
+  const participant = registerChatParticipant(context, runHost);
+  const sessions = registerChatSessions(context, participant, runHost);
   if (sessions) context.subscriptions.push(sessions);
 
   // Live builder-insights surface — status bar + tree fed by the gateway SSE

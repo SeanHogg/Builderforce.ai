@@ -1,6 +1,6 @@
 export { runAgentLoop } from "./loop.js";
 export { DEFAULT_TOOL_FAILURE_STREAK } from "./types.js";
-export { runSubagent, subagentSystemPrompt, SUBAGENT_MAX_STEPS, SUBAGENT_WRITE_MAX_STEPS, subagentStepBudget, SUBAGENT_OUTPUT_CHARS } from "./subagent.js";
+export { runSubagent, subagentSystemPrompt, SUBAGENT_MAX_STEPS, SUBAGENT_OUTPUT_CHARS, type SubagentLiveOwner } from "./subagent.js";
 export type { SubagentPersona, SubagentRunArgs, SubagentRunResult } from "./subagent.js";
 export { asToolArgs, parseToolArgs, parseToolCall } from "./parseToolCall.js";
 // The other half of the kernel's bad-JSON policy: `parseToolCall` sets the flag,
@@ -16,7 +16,7 @@ export { looksLikeRunNarration, stripRunNarration, NARRATION_MIN_CHARS } from ".
 export type { StrippedNarration } from "./runNarration.js";
 // The structural half: a persisted mid-turn block is MARKED, and the learn gate skips it.
 export { isMidTurnMetadata, MID_TURN_META_KEY } from "./turnPhase.js";
-export { subagentReportMessage, subagentReportMetadata, SUBAGENT_REPORT_META_KEY, type SubagentReportLike } from "./subagentReport.js";
+export { subagentReportMessage, type SubagentReportLike } from "./subagentReport.js";
 // A chat's linked-ticket progress — the ONE rollup the api, the ticket rail and the
 // Sessions tree share. Consumers import it from here directly; no published package
 // re-exports it, so the declaration-rollup one-hop rule does not apply.

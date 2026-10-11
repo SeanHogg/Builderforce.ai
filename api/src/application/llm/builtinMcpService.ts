@@ -149,7 +149,7 @@ type Json = Record<string, unknown>;
 // this file. Re-exported here so every existing importer is unaffected.
 export type { BuiltinCtx, BuiltinTool } from './builtinToolContext';
 export { replayRoute, resolveReplayAuth, ReplayRouteError } from './builtinToolContext';
-import { replayRoute, requireEnv, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
+import { getTenantTask, replayRoute, requireEnv, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
 import { assertMayRunBuiltinTool } from './builtinToolAuthority';
 import { maskSecurityTasks } from './builtinTaskVisibility';
 import { taskCreatedHook } from '../task/taskCreationHook';
@@ -2435,7 +2435,7 @@ const CATALOG: BuiltinTool[] = [
         bio: a.bio != null ? str(a.bio) : '',
         skills: JSON.stringify(Array.isArray(a.skills) ? a.skills : []),
         baseModel: a.baseModel != null ? str(a.baseModel) : 'builderforce-default',
-        ...(roleKeys ? { roleKeys } : {}),
+        ...(roleKeys?.length ? { roleKeys } : {}),
         ...(typeof a.published === 'boolean' ? { published: a.published } : {}),
       }).returning();
       if (ctx.env) await bumpAgentRosterVersion(ctx.env, ctx.tenantId).catch(() => undefined);
@@ -4159,14 +4159,6 @@ async function markTested(ctx: BuiltinCtx, credentialId: string, ok: boolean): P
  */
 async function assertProjectInTenant(ctx: BuiltinCtx, projectId: number): Promise<void> {
   await ctx.projects.getProject(projectId, ctx.tenantId); // throws Forbidden/NotFound on mismatch
-}
-
-/** Load a task and assert it belongs to the caller's tenant (services that take
- *  only a task id don't verify ownership — the project lookup throws if not). */
-async function getTenantTask(ctx: BuiltinCtx, id: number) {
-  const task = await ctx.tasks.getTask(id);
-  await ctx.projects.getProject(task.projectId, ctx.tenantId); // throws Forbidden/NotFound on mismatch
-  return task;
 }
 
 /**

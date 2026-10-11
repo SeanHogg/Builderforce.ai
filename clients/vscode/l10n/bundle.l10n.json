@@ -624,5 +624,17 @@
   "Select or create a project…": "Select or create a project…",
   "No tasks in this project": "No tasks in this project",
   "No tasks match the current filter": "No tasks match the current filter",
-  "Tasks unavailable — {0}": "Tasks unavailable — {0}"
+  "Tasks unavailable — {0}": "Tasks unavailable — {0}",
+  "sub-agent of {owner}": "sub-agent of {owner}",
+  "owner": "owner",
+  "Sub-agents working in this chat": "Sub-agents working in this chat",
+  "Sub-agents ({count})": "Sub-agents ({count})",
+  "Stop all": "Stop all",
+  "read-only": "read-only",
+  "{name} wants to run": "{name} wants to run",
+  "Redirect": "Redirect",
+  "Tell {name} what to do differently…": "Tell {name} what to do differently…",
+  "Direction for {name}": "Direction for {name}",
+  "Steer now": "Steer now",
+  "Send it into the running turn now instead of after it": "Send it into the running turn now instead of after it"
 }

@@ -17,7 +17,6 @@ import BillingPanel from '@/components/admin/panels/BillingPanel';
 import UsagePanel from '@/components/admin/panels/UsagePanel';
 import LlmRatingsPanel from '@/components/admin/panels/LlmRatingsPanel';
 import UsersPanel from '@/components/admin/panels/UsersPanel';
-import GuestSessionsPanel from '@/components/admin/panels/GuestSessionsPanel';
 import CreationSessionsPanel from '@/components/admin/panels/CreationSessionsPanel';
 import TenantsPanel from '@/components/admin/panels/TenantsPanel';
 import SecurityPanel from '@/components/admin/panels/SecurityPanel';
@@ -25,7 +24,7 @@ import SuspectAccountsPanel from '@/components/admin/panels/SuspectAccountsPanel
 import LegalPanel from '@/components/admin/panels/LegalPanel';
 import NewsletterPanel from '@/components/admin/panels/NewsletterPanel';
 import ReleaseNotesPanel from '@/components/admin/panels/ReleaseNotesPanel';
-import VisitorFlowPanel from '@/components/admin/panels/VisitorFlowPanel';
+import InsightsPanelHost from '@/components/admin/panels/InsightsPanelHost';
 import SalesLeadsPanel from '@/components/admin/panels/SalesLeadsPanel';
 import BroadcastsPanel from '@/components/admin/panels/BroadcastsPanel';
 import SalesCommissionsPanel from '@/components/admin/panels/SalesCommissionsPanel';
@@ -60,7 +59,6 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   cron: CronPanel,
   outcomes: OutcomeMetricsPanel,
   directory: UsersPanel,
-  sessions: GuestSessionsPanel,
   creationSessions: CreationSessionsPanel,
   security: SecurityPanel,
   suspectAccounts: SuspectAccountsPanel,
@@ -79,7 +77,7 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   pricing: PricingPanel,
   newsletter: NewsletterPanel,
   releaseNotes: ReleaseNotesPanel,
-  visitorFlow: VisitorFlowPanel,
+  visitors: InsightsPanelHost,
   salesLeads: SalesLeadsPanel,
   broadcasts: BroadcastsPanel,
   salesCommissions: SalesCommissionsPanel,

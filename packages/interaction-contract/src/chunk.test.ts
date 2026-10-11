@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { parseReplayChunk, parseReplayVisitMeta, REPLAY_LIMITS } from './chunk';
+import { parseReplayChunk, parseReplayVisitMeta, REPLAY_LIMITS, VISIT_IDLE_MS, VISITOR_ID_PATTERN } from './chunk';
+
+describe('visit idle + id alphabet', () => {
+  it('pins idle rotation at 30 minutes, same as maxVisitMs', () => {
+    expect(VISIT_IDLE_MS).toBe(30 * 60 * 1000);
+    expect(VISIT_IDLE_MS).toBe(REPLAY_LIMITS.maxVisitMs);
+  });
+
+  it('accepts minted visitor ids and rejects short or punctuated ones', () => {
+    expect(VISITOR_ID_PATTERN.test('abcdEFGH')).toBe(true);
+    expect(VISITOR_ID_PATTERN.test('short')).toBe(false);
+    expect(VISITOR_ID_PATTERN.test('bad id!!')).toBe(false);
+  });
+});
 
 describe('parseReplayChunk', () => {
   it('accepts a well-formed chunk', () => {

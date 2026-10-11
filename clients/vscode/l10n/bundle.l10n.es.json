@@ -624,5 +624,17 @@
   "Select or create a project…": "Selecciona o crea un proyecto…",
   "No tasks in this project": "No hay tareas en este proyecto",
   "No tasks match the current filter": "Ninguna tarea coincide con el filtro actual",
-  "Tasks unavailable — {0}": "Tareas no disponibles — {0}"
+  "Tasks unavailable — {0}": "Tareas no disponibles — {0}",
+  "sub-agent of {owner}": "subagente de {owner}",
+  "owner": "responsable",
+  "Sub-agents working in this chat": "Subagentes trabajando en este chat",
+  "Sub-agents ({count})": "Subagentes ({count})",
+  "Stop all": "Detener todos",
+  "read-only": "solo lectura",
+  "{name} wants to run": "{name} quiere ejecutar",
+  "Redirect": "Redirigir",
+  "Tell {name} what to do differently…": "Dile a {name} qué hacer de otra forma…",
+  "Direction for {name}": "Indicación para {name}",
+  "Steer now": "Dirigir ahora",
+  "Send it into the running turn now instead of after it": "Enviarlo al turno en curso ahora en lugar de después"
 }

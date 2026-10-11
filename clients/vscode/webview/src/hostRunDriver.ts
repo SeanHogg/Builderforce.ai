@@ -29,6 +29,7 @@ import {
   type ModelFallbackSurface,
 } from '@seanhogg/builderforce-brain-embedded';
 import { onHostMessage, post } from './vscodeBridge';
+import { setChatChildren, type ChildView } from './chat/chatChildren';
 
 /** What the panel knows that the host does not: its own switches and picker state. */
 export interface HostRunContext {
@@ -123,6 +124,12 @@ export function installHostRunDriver(): () => void {
     setMcpToolStatus({ count: m.count, error: null, loading: false });
   });
 
+  // Which runs are a chat's live sub-agents. Each child's own run is mirrored by `run.sync`
+  // under its run key, like any other run.
+  const offChildren = onHostMessage<{ chatId: number; children: ChildView[] }>('run.children', (m) => {
+    setChatChildren(m.chatId, m.children);
+  });
+
   installRunDriver({
     start(chatId, req) {
       return new Promise<void>((resolve, reject) => {
@@ -141,6 +148,7 @@ export function installHostRunDriver(): () => void {
     offSettled();
     offFailed();
     offTools();
+    offChildren();
     installRunDriver(null);
   };
 }

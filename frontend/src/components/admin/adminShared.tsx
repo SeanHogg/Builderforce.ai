@@ -326,3 +326,55 @@ export function composeMailto(email: string, subject: string, body: string): str
   const q = new URLSearchParams({ subject, body });
   return `mailto:${encodeURIComponent(email)}?${q.toString()}`;
 }
+
+/**
+ * One headline number. Shared by every admin panel that answers with a row of
+ * stats — the same tile at different scopes, so a funnel, a visitor drawer and
+ * a growth graph cannot drift on padding, type or colour.
+ *
+ * `tone` colours the value only. The label and hint stay muted so a warning
+ * number still reads as a number, not as a banner.
+ */
+export function StatTile({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: 'success' | 'error' | 'warning';
+}): React.JSX.Element {
+  const toneColor =
+    tone === 'success'
+      ? 'var(--success)'
+      : tone === 'error'
+        ? 'var(--error)'
+        : tone === 'warning'
+          ? 'var(--warning)'
+          : 'var(--text-strong)';
+  return (
+    <div
+      style={{
+        flex: '1 1 140px',
+        minWidth: 120,
+        padding: '12px 14px',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-lg)',
+        background: 'var(--surface-card)',
+      }}
+    >
+      <div
+        className="text-muted"
+        style={{ fontSize: 'var(--font-size-eyebrow)', textTransform: 'uppercase', letterSpacing: '.04em' }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: toneColor, marginTop: 2 }}>
+        {value}
+      </div>
+      {hint && <div className="text-muted" style={{ fontSize: 'var(--font-size-eyebrow)', marginTop: 2 }}>{hint}</div>}
+    </div>
+  );
+}

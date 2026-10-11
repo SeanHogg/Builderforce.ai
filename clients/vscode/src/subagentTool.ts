@@ -1,77 +1,59 @@
 /**
- * `spawn_agent` on the MACHINE — delegation for the editor-hosted Brain.
+ * `spawn_agent` on the MACHINE — start ONE sub-agent alongside this run.
  *
- * Same tool, same brief and same budget as the cloud's (both take the schema from
- * `@builderforce/agent-tools` and the run from `@builderforce/agent-loop`, so a model
- * that learned to delegate in one surface delegates identically in the other), and the
- * same answer to what a child may touch: a child can WRITE, and every write it makes is
- * approved by the same human, on the same prompt, under the same governance gates as a
- * write the parent makes.
+ * Same schema as the cloud's (`@builderforce/agent-tools`), so a model that learned to
+ * delegate in one surface delegates identically in the other. What differs here is that
+ * the child does not run inside this tool call: it is started as an ordinary run with an
+ * owner pointer (`childRunSpawner.ts`), the call returns its handle at once, and this run
+ * keeps working. The child's report arrives in this run's inbox when it settles.
  *
- * Read-only is the DEFAULT, because it is the right default: most delegation is
- * investigation, and a read-only child cannot cost anything but time. A parent gets a
- * writable child only by asking for one (`read_only: false`) — and only when the run
- * supplied a write gate, because a surface with no way to prompt must still never write.
- *
- * The child itself is `runLocalChild` (`subagentRun.ts`), the ONE child run this tool and
- * `spawn_agents` share: its Stop, its model route and role, the files it changed and its
- * report into the chat all come from the run binding there, not from a second copy here.
+ * Read-only is the DEFAULT: most delegation is investigation. A writable child is handed
+ * write tools only when the host can raise an approval prompt — a surface that cannot
+ * ask must never write.
  */
 
 import { spawnAgentTool, delegationRole } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
-import { childToolDefs, resolveChildPersona, runLocalChild, type SubagentToolDeps } from "./subagentRun";
-
-export { childToolDefs };
-export type { SubagentToolDeps };
+import { resolveChildPersona, type SubagentToolDeps } from "./childRunPolicy";
+import { LIVE_DELEGATION_NOTE } from "./subagentControlTools";
 
 /** Message returned when a writable subagent was requested but this host cannot prompt. */
 export const WRITE_DECLINED =
-  "This host cannot raise an approval prompt, so the sub-agent ran read-only. The findings below are an investigation — make any change yourself.";
+  "This host cannot raise an approval prompt, so the sub-agent runs read-only. Its findings are an investigation — make any change yourself.";
 
-export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
+export function subagentToolDef(deps: SubagentToolDeps & Required<Pick<SubagentToolDeps, "children">>): ToolDef {
   const schema = spawnAgentTool.schema.function;
   return {
     name: schema.name,
-    description: schema.description,
+    description: `${schema.description} ${LIVE_DELEGATION_NOTE}`,
     parameters: schema.parameters as Record<string, unknown>,
-    // The tool itself changes nothing, and a child's writes raise their OWN prompt at
-    // the moment they happen — naming the file being written, which "run spawn_agent?"
-    // never could. Marking it mutating would ask twice and ask worse.
+    // Starting a child changes nothing; its writes raise their OWN prompts, naming the file.
     mutating: false,
-    execute: async (args, root) => {
+    execute: async (args) => {
       const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
       const task = str(args.task);
       const label = str(args.label) || task.slice(0, 60);
       if (!task) {
         return JSON.stringify({ ok: false, error: "task is required — the child sees none of your conversation" });
       }
-      // Writable only when the parent asked AND this run can reach a human. Both halves
-      // are required: the first is the tool's contract, the second is the reason a
-      // surface without a prompt never writes.
+      // Writable only when the owner asked AND this run can reach a human.
       const asked = args.read_only === false;
-      const writable = asked && !!deps.run?.confirmWrite;
+      const writable = asked && deps.children.canWrite;
       const role = delegationRole(args.role, !writable);
-      // WHO is doing this slice. An unresolvable name is REFUSED rather than run
-      // anonymously: a parent that believes Ada did the work will report that she did. An
-      // agent without the slice's delivery role runs it as an on-demand Developer/QA
-      // persona instead, and the `staffing` note says so.
+      // WHO does this slice. An unresolvable name is REFUSED rather than run anonymously.
       const who = await resolveChildPersona(deps, str(args.as_agent), role);
       if (!who.ok) return JSON.stringify({ ok: false, label, error: who.error });
-      const report = await runLocalChild(deps, {
-        // The timeline row says who, not just what — "as Ada: port the auth middleware".
-        label: who.asAgent ? `as ${who.asAgent.name}: ${label}` : label,
+      const started = deps.children.spawn({
+        label,
         task,
         writable,
         role,
-        tools: childToolDefs(deps.catalog(), writable),
         ...(who.persona ? { persona: who.persona } : {}),
         ...(who.asAgent ? { asAgent: who.asAgent } : {}),
-      }, root);
-      // Say it plainly rather than silently narrowing: a parent that believes a child
-      // made an edit will not make it, and the change would be lost.
+      });
       return JSON.stringify({
-        ...report,
+        ...started,
+        ...(started.ok ? { running: true, readOnly: !writable } : {}),
         ...(who.note ? { staffing: who.note } : {}),
         ...(asked && !writable ? { writeDeclined: WRITE_DECLINED } : {}),
       });

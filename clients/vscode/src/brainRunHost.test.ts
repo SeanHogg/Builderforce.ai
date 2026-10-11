@@ -23,6 +23,8 @@ import { fakeGateway, type GatewayScript } from "../harness/fakeGateway";
 import type { ToolDef } from "./fileTools";
 import { createBrainRunHost, syncMessageFor, type BrainRunHostPorts, type RunHostMessage, type SinkEntry } from "./brainRunHost";
 import { transientRunPersistence } from "./nativeBrainRun";
+import { subagentToolDef } from "./subagentTool";
+import { subagentControlToolDefs } from "./subagentControlTools";
 
 function toolDef(name: string, opts: { mutating?: boolean; remote?: boolean; result?: unknown } = {}): ToolDef & { calls: unknown[] } {
   const calls: unknown[] = [];
@@ -44,12 +46,17 @@ let nextChatId = 5000;
 const freshChatId = (): number => (nextChatId += 1);
 
 function ports(
-  over: Partial<Omit<BrainRunHostPorts, "tools">> & { script: GatewayScript; tools?: ToolDef[] },
+  over: Partial<Omit<BrainRunHostPorts, "tools">> & { script: GatewayScript; tools?: ToolDef[]; delegation?: boolean },
 ): BrainRunHostPorts {
-  const { script, tools, ...rest } = over;
+  const { script, tools, delegation, ...rest } = over;
   const gateway = fakeGateway(script);
   return {
-    tools: async () => tools ?? [],
+    // `delegation` adds the spawn tools bound to the run's OWN children — what
+    // `brainToolCatalog` does for a real run.
+    tools: async (_projectId, children, signal) => [
+      ...(tools ?? []),
+      ...(delegation ? [subagentToolDef({ children }), ...subagentControlToolDefs(children, signal)] : []),
+    ],
     workspaceRoot: () => "/workspace",
     stream: async () => gateway.stream as unknown as BrainStreamFn,
     persistence: transientRunPersistence(),
@@ -527,5 +534,53 @@ describe("the host persists each run's trace", () => {
     expect(persistTrace.mock.calls.map((c) => c[0]).sort()).toEqual([a, b].sort());
     expect(getRunSnapshot(a).appended.map((m) => m.content)).toEqual(["done"]);
     expect(getRunSnapshot(b).appended.map((m) => m.content)).toEqual(["done"]);
+  });
+});
+
+describe("a sub-agent is a run of its own, in the background, owned by the run that spawned it", () => {
+  /** A persistence that remembers which chat each message landed in. */
+  function recordingPersistence() {
+    const base = transientRunPersistence();
+    const sent: Array<{ chatId: number; role: string; content: string; metadata?: string }> = [];
+    return {
+      sent,
+      persistence: {
+        async sendMessages(chatId: number, messages: Array<{ role: string; content: string; metadata?: string }>) {
+          sent.push(...messages.map((m) => ({ chatId, ...m })));
+          return base.sendMessages(chatId, messages);
+        },
+      },
+    };
+  }
+
+  it("returns the handle at once, posts the child's work into the owner chat as the child, and wakes the idle owner with its report", async () => {
+    const chatId = freshChatId();
+    const { sent, persistence } = recordingPersistence();
+    const ownerTurns: string[] = [];
+    const host = createBrainRunHost(
+      ports({
+        persistence,
+        delegation: true,
+        script: (ctx) => {
+          const system = String(ctx.messages[0]?.content ?? "");
+          if (system.includes("sub-agent spawned by")) return { text: "The auth middleware is in src/auth.ts:12." };
+          const users = ctx.messages.filter((m) => m.role === "user").map((m) => String(m.content));
+          ownerTurns.push(users[users.length - 1] ?? "");
+          if (ctx.turn === 0) return { toolCalls: [{ name: "spawn_agent", args: { label: "locate auth", task: "Find the auth middleware." } }] };
+          if (users.some((u) => u.startsWith("[Sub-agent a1"))) return { text: "Ada's slice says src/auth.ts:12." };
+          return { text: "Started a1; carrying on with the rest." };
+        },
+      }),
+    );
+    // The catalog port hands the run's OWN controls to spawn_agent, as the real port does.
+    await start(chatId, host, { userTurn: "find the auth middleware with a sub-agent" });
+
+    // The owner's turn ended without waiting for the child.
+    expect(ownerTurns.length).toBeGreaterThanOrEqual(2);
+    await vi.waitFor(() => {
+      expect(ownerTurns.some((t) => t.startsWith("[Sub-agent a1"))).toBe(true);
+    });
+    const childReply = sent.find((m) => m.content.includes("src/auth.ts:12") && m.role === "assistant" && m.metadata?.includes("subagentOf"));
+    expect(childReply?.chatId).toBe(chatId);
   });
 });

@@ -1,0 +1,63 @@
+{
+  "name": "@seanhogg/builderforce-replay",
+  "version": "2026.10.0",
+  "description": "Session-replay recorder for Builderforce.ai — CDN loader + hashed recorder, or the npm entry that self-updates from cdn.builderforce.ai.",
+  "license": "MIT",
+  "author": "Sean Hogg",
+  "homepage": "https://github.com/SeanHogg/Builderforce.ai/tree/main/replay-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/SeanHogg/Builderforce.ai/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SeanHogg/Builderforce.ai.git",
+    "directory": "replay-sdk"
+  },
+  "keywords": [
+    "builderforce",
+    "session-replay",
+    "rrweb",
+    "analytics",
+    "sdk",
+    "typescript"
+  ],
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "browser": "dist/index.global.js",
+  "unpkg": "dist/index.global.js",
+  "jsdelivr": "dist/index.global.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup --config tsup.config.ts && node scripts/emit-assets.mjs",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "rrweb": "1.19.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "tsup": "^8.5.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.0.3"
+  }
+}

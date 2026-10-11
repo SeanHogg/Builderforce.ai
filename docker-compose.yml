@@ -230,6 +230,7 @@ services:
       - ./voice:/repo/voice:ro
       # tsconfig path aliases (not npm deps) that frontend/src imports.
       - ./packages/creation-canvas-contract/src:/repo/packages/creation-canvas-contract/src:ro
+      - ./packages/interaction-contract/src:/repo/packages/interaction-contract/src:ro
       - ./packages/canvas-widget-protocol/src:/repo/packages/canvas-widget-protocol/src:ro
       - ./packages/ide-templates/src:/repo/packages/ide-templates/src:ro
       - ./packages/ide-file-contract/src:/repo/packages/ide-file-contract/src:ro

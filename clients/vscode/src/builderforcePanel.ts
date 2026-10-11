@@ -20,6 +20,7 @@ import { getProjectNames } from "./projectNames";
 import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";
 import { canvasLabels, captureFromEditor, isLightTheme, navigateFromCanvas, openCapturedFile } from "./canvasHostActions";
 import { authLabels } from "./authLabels";
+import { subagentLabels } from "./subagentLabels";
 import { workspaceCanvasSession, type WorkspaceCanvasSession } from "./workspaceSession";
 
 /** Inbound messages unique to the Brain panel (the shared cases live in the base). */
@@ -552,6 +553,9 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
       case "run.confirm":
         if (typeof msg.chatId === "number") BuilderForcePanel.hooks.runHost?.confirm(msg.chatId, msg.ok === true);
         break;
+      case "run.steer":
+        if (typeof msg.chatId === "number" && typeof msg.text === "string") BuilderForcePanel.hooks.runHost?.steer(msg.chatId, msg.text);
+        break;
       case "run.clearError":
         if (typeof msg.chatId === "number") BuilderForcePanel.hooks.runHost?.clearError(msg.chatId);
         break;
@@ -1041,7 +1045,7 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
       personalityBlock,
       // BOTH label sets: one panel renders the chat surface AND the board, so both
       // have to be present whichever surface it opens at.
-      labels: { ...authLabels(), ...buildLabels(), ...canvasLabels() },
+      labels: { ...authLabels(), ...buildLabels(), ...canvasLabels(), ...subagentLabels() },
       // The model rows' copy, shared verbatim with the host's `Change model` QuickPick.
       modelLabels: modelChoiceLabels(),
       // The board this panel is working in, and which of its surfaces the entry asked

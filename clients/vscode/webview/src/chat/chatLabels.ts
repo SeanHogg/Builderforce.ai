@@ -63,6 +63,8 @@ export function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels
     stoppedReply: t('tl.stoppedReply', 'Stopped by you — this is what the model had written when you pressed Stop.'),
     you: t('tl.you', 'You'),
     assistant: t('tl.assistant', 'BuilderForce'),
+    subagentOf: t('tl.subagentOf', 'sub-agent of {owner}'),
+    ownerTag: t('tl.ownerTag', 'owner'),
     input: t('tl.input', 'Input'),
     output: t('tl.output', 'Output'),
     // Shell steps: the terminal panel's non-zero exit chip and its "printed nothing"

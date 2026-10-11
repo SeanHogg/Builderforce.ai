@@ -15,6 +15,8 @@ import { StreamInterruptedError } from './streamChatCompletion';
 import { isCoderReask } from './roleHandoff';
 import { isStoppedTurn } from './stoppedTurn';
 import { parseMessageProvenance } from './provenance';
+import { queueRunSteering } from './runSteering';
+import { parseSubagentOrigin } from './runLineage';
 import { DEFAULT_TOOL_FAILURE_STREAK, parseAskUser, selectPendingAskUser, answerTextOf, thoughtTextOf, isMidTurnMetadata } from '@builderforce/agent-loop';
 
 // These tests pin the memory-eviction contract. They assume MAX_CELLS = 50
@@ -1464,5 +1466,68 @@ describe('planning ends in tasks, and the tasks are the hand-off (chat #133)', (
     expect(calls).not.toContain('spawn_agents');
     expect(handOffResult).toContain('"mode":"inline"');
     expect(handOffResult).toContain('Implement the tasks below in order');
+  });
+});
+
+describe('a run can be steered while it runs, and a sub-agent is just a run with an owner', () => {
+  type Sent = { role: string; content: string; metadata?: string };
+  const READ_TOOL = [{ type: 'function' as const, function: { name: 'read_file', description: 'read', parameters: {} } }];
+  const recording = (sent: Array<Sent & { chatId: number }>) =>
+    ({
+      sendMessages: async (chatId: number, msgs: Sent[]) => {
+        sent.push(...msgs.map((m) => ({ ...m, chatId })));
+        return msgs.map((m, i) => ({ id: 5000 + sent.length + i, chatId, createdAt: '', ...m }));
+      },
+    }) as never;
+
+  it('puts direction queued mid-run in front of the NEXT turn, not after the run', async () => {
+    const seen: string[][] = [];
+    let turn = 0;
+    const stream: BrainStreamFn = async (opts) => {
+      turn += 1;
+      seen.push((opts.messages as Array<{ role: string; content: unknown }>).filter((m) => m.role === 'user').map((m) => String(m.content)));
+      if (turn === 1) {
+        queueRunSteering(4400, 'only the API half');
+        return { text: '', toolCalls: [{ id: 'c1', name: 'read_file', args: JSON.stringify({ path: 'a.ts' }) }], finishReason: 'tool_calls' };
+      }
+      return { text: 'Done with the API half.', toolCalls: [], finishReason: 'stop' };
+    };
+    await startRun(4400, { resolvedSystemPrompt: 'sys', tools: READ_TOOL, runTool: async () => ({ ok: true }), stream, persistence: recording([]), userTurn: 'port it' });
+    expect(seen[1]).toContain('only the API half');
+  });
+
+  it('re-opens a run that was about to end when direction arrives with its last turn', async () => {
+    let turn = 0;
+    const stream: BrainStreamFn = async () => {
+      turn += 1;
+      if (turn === 1) {
+        queueRunSteering(4401, 'also cover the edge case');
+        return { text: 'All done.', toolCalls: [], finishReason: 'stop' };
+      }
+      return { text: 'Edge case covered too.', toolCalls: [], finishReason: 'stop' };
+    };
+    await startRun(4401, { resolvedSystemPrompt: 'sys', tools: READ_TOOL, runTool: async () => ({ ok: true }), stream, persistence: recording([]), userTurn: 'do it' });
+    expect(turn).toBe(2);
+  });
+
+  it('runs a child on its own key while everything it says lands in the owner chat, as the child', async () => {
+    const sent: Array<Sent & { chatId: number }> = [];
+    // The owner has run in this chat, so its live view exists to be spliced into.
+    await startRun(77, { resolvedSystemPrompt: 'sys', stream: async () => ({ text: 'Delegating.', toolCalls: [], finishReason: 'stop' }), persistence: recording([]), userTurn: 'find it' });
+    const stream: BrainStreamFn = async () => ({ text: 'Found it in src/auth.ts:12.', toolCalls: [], finishReason: 'stop' });
+    await startRun(-9001, {
+      resolvedSystemPrompt: 'sys',
+      stream,
+      persistence: recording(sent),
+      userTurn: 'where is the auth middleware?',
+      lineage: { rootChatId: 77, ownerKey: 77, ownerName: 'BuilderForce', handle: 'a1', label: 'locate auth', agent: { ref: 'agent_ada', name: 'Ada' }, depth: 1 },
+    });
+    const reply = sent.find((m) => m.role === 'assistant');
+    expect(reply?.chatId).toBe(77);
+    expect(parseSubagentOrigin(reply!)).toEqual({ handle: 'a1', owner: 'BuilderForce', label: 'locate auth' });
+    // Its own cell holds its answer — the owner reads its report from there.
+    expect(getRunSnapshot(-9001).appended.some((m) => m.content.includes('src/auth.ts'))).toBe(true);
+    // …and the owner's live view got it too.
+    expect(getRunSnapshot(77).appended.some((m) => m.content.includes('src/auth.ts'))).toBe(true);
   });
 });

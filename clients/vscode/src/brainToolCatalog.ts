@@ -1,25 +1,25 @@
 /**
  * The ONE tool catalog an editor-hosted Brain run advertises and executes: the local
  * workspace tools (file edits, search, shell, git), Evermind's write-through
- * cognition tools, delegation to a sub-agent, and the SHARED server-side platform
+ * cognition tools, delegation to sub-agents, and the SHARED server-side platform
  * catalog (projects, tasks, OKRs, specs, …) fetched from the gateway MCP relay.
  *
  * Shared by the native `@builderforce` chat participant and the host-owned webview
  * run (`brainRunHost.ts`), so the two chat surfaces cannot drift apart in what the
  * model may call. Each group is gated on what it actually requires: file tools need
  * a workspace, `remember_fact` needs only a project (works chat-only), delegation
- * needs a workspace and a model route, the platform catalog needs an account (the
+ * needs a workspace and a host that can run a child, the platform catalog needs an account (the
  * fetch returns nothing signed out).
  */
 
 import type * as vscode from "vscode";
-import type { BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
 import { TOOL_DEFS, type ToolDef } from "./fileTools";
 import { cognitionToolDefs } from "./cognition";
 import { listPlatformTools } from "./platformTools";
 import { subagentToolDef } from "./subagentTool";
 import { subagentFanOutToolDef } from "./subagentFanOutTool";
-import type { SubagentRunBinding } from "./subagentRun";
+import { subagentControlToolDefs } from "./subagentControlTools";
+import type { ChildControls } from "./childRunSpawner";
 import { ticketBranchReviewToolDef } from "./ticketBranchTool";
 import { desktopBackedTools } from "./desktopContext";
 
@@ -27,15 +27,12 @@ export async function brainToolCatalog(
   secrets: vscode.SecretStorage,
   root: string | undefined,
   projectId: number | undefined,
-  /** Model route for a delegated child run. Omitted ⇒ no `spawn_agent`: advertising a
-   *  tool whose only backing is a model we cannot reach would surface a call that is
-   *  certain to fail. */
-  stream?: () => Promise<BrainStreamFn>,
-  /** The run a delegated child belongs to — its write gate, Stop, model route, tool
-   *  bookkeeping and chat report (`SubagentRunBinding`). Omitted ⇒ children stay
-   *  read-only; delegation is still advertised, because a read-only child is the DEFAULT
-   *  and is most of what delegation is for. */
-  run?: SubagentRunBinding,
+  /** This run's handle on its sub-agents (`childRunSpawner.ts`). Omitted ⇒ no delegation
+   *  tools: a child is an ordinary run, and a surface that cannot start one must not
+   *  advertise a call that is certain to fail. */
+  children?: ChildControls,
+  /** This run's Stop, read when a `wait_agents` call starts. */
+  signal?: () => AbortSignal | undefined,
 ): Promise<ToolDef[]> {
   const cognitionTools = projectId != null ? cognitionToolDefs(secrets, projectId) : [];
   const platformTools = await listPlatformTools(secrets);
@@ -46,26 +43,57 @@ export async function brainToolCatalog(
   const localTools = root
     ? await desktopBackedTools([...TOOL_DEFS, ...(projectId != null ? [ticketBranchReviewToolDef(secrets, projectId)] : [])])
     : [];
-  // Delegation needs a workspace to explore AND a model to run the child on. Built
-  // last so its `catalog()` can hand the child the tools assembled above — the child's
-  // read-only subset is derived from the parent's catalog, never a second list that
-  // could drift from it.
-  // One child, and several side by side (`spawn_agents` — what a planner's hand-off fans
-  // out to), on the SAME deps: they differ only in how many children they start.
-  const deps = root && stream
+  // Delegation needs a workspace AND a host that can run the child. Spawning stops at the
+  // depth cap, but the collect / redirect / stop verbs stay while children may be live.
+  const deps = root && children
     ? {
-        stream,
-        catalog: () => [...localTools, ...cognitionTools, ...platformTools],
+        children,
         personaBrief: (agent: string) => resolvePersonaBrief(platformTools, agent, root),
-        ...(run ? { run } : {}),
+        ...(projectId != null
+          ? { staffRole: (role: string, ticket?: string) => staffRoleOnProject(platformTools, projectId, role, ticket, root) }
+          : {}),
       }
     : null;
-  const delegation: ToolDef[] = deps ? [subagentToolDef(deps), subagentFanOutToolDef(deps)] : [];
+  const delegation: ToolDef[] = deps
+    ? [
+        ...(children!.canSpawn ? [subagentToolDef(deps), subagentFanOutToolDef(deps)] : []),
+        ...subagentControlToolDefs(children!, signal ?? (() => undefined)),
+      ]
+    : [];
   return [...localTools, ...cognitionTools, ...platformTools, ...delegation];
 }
 
 /** The read-only platform tool that answers "who is this agent, and what are they for?". */
 const PERSONA_BRIEF_TOOL = "builtin_cloud_agents_persona_brief";
+/** The platform tool that staffs a role on a project — reusing a teammate or hiring one. */
+const STAFF_ROLE_TOOL = "builtin_cloud_agents_staff_role";
+
+/**
+ * Staff `role` on the run's project through the SAME relay as every platform call, and
+ * assign the slice's ticket to whoever takes it (`cloud_agents.staff_role` assigns without
+ * starting a cloud run — the local child is the run). Null when the gateway predates the
+ * tool or refuses: the caller falls back to an on-demand persona.
+ */
+async function staffRoleOnProject(
+  platformTools: readonly ToolDef[],
+  projectId: number,
+  role: string,
+  ticket: string | undefined,
+  root: string,
+): Promise<{ ref: string; name: string; brief: string; roleKeys?: string[]; created?: boolean } | null> {
+  const tool = platformTools.find((t) => t.name === STAFF_ROLE_TOOL);
+  if (!tool) return null;
+  const taskId = ticket != null ? Number(String(ticket).replace(/^#/, "")) : NaN;
+  try {
+    const raw = await tool.execute({ role, projectId, ...(Number.isInteger(taskId) ? { taskIds: [taskId] } : {}) }, root);
+    const persona = parsePersona(raw);
+    if (!persona) return null;
+    const created = (JSON.parse(raw) as { created?: unknown }).created === true;
+    return { ...persona, created };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Resolve one workspace agent to the brief a persona sub-agent runs as.
@@ -88,7 +116,18 @@ async function resolvePersonaBrief(
   const tool = platformTools.find((t) => t.name === PERSONA_BRIEF_TOOL);
   if (!tool) return null;
   try {
-    const raw = await tool.execute({ agent }, root);
+    return parsePersona(await tool.execute({ agent }, root));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One agent persona out of a platform tool's JSON — `persona_brief` and `staff_role` answer
+ * in the same shape, so they are read by the same parser.
+ */
+function parsePersona(raw: string): { ref: string; name: string; brief: string; roleKeys?: string[] } | null {
+  try {
     const parsed = JSON.parse(raw) as { ok?: boolean; agentRef?: unknown; name?: unknown; title?: unknown; brief?: unknown; roleKeys?: unknown };
     if (!parsed || parsed.ok === false) return null;
     const name = typeof parsed.name === "string" ? parsed.name.trim() : "";

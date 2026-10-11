@@ -11345,6 +11345,8 @@
       "thought": "Thought",
       "replyFromThought": "Recovered from the model's reasoning — the turn ended without a separate reply.",
       "stoppedReply": "Stopped by you — this is what the model had written when you pressed Stop.",
+      "subagentOf": "sub-agent of {owner}",
+      "ownerTag": "owner",
       "you": "You",
       "assistant": "BuilderForce",
       "input": "Input",

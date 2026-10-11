@@ -61,6 +61,8 @@ import { shippedToBaseBranch } from './shipVerification';
 import { selfReviewShipDirective, leftChangeUnshipped, unshippedChangeNudge } from './selfReviewShip';
 import { previewReviewDirective, leftChangeUnreviewed, unreviewedChangeNudge, ticketsReviewedInPreview } from './previewReview';
 import { leftDelegationUndone, undelegatedRequestNudge } from './delegationRequest';
+import { lineagePersistence, type RunLineage } from './runLineage';
+import { drainRunSteering } from './runSteering';
 import { toolActivity, visitTarget, type BrainRunActivity } from './runActivity';
 import { createComposingActivity, toolCallArgBytes } from './composingActivity';
 import { ReadCoverage, isUnscopedMutation, revisitAdvisory, withAdvisory } from './readCoverage';
@@ -336,6 +338,13 @@ export interface BrainRunRequest {
    * swallowed and never affects the run.
    */
   reportOutcome?: (outcome: BrainRunOutcome) => Promise<unknown>;
+  /**
+   * This run has an OWNER — it is a sub-agent another run spawned (`runLineage.ts`).
+   * Nothing about the loop changes: the run keeps its own key (its own transcript, Stop
+   * and approval prompt) while everything it persists or asks the server about goes to
+   * the root chat, attributed to the child. Absent for a top-level run.
+   */
+  lineage?: RunLineage;
 }
 
 /** Live, observable snapshot of a chat's run (what the hook renders). */
@@ -1174,13 +1183,22 @@ export function applyRemoteRun(chatId: number, snapshot: BrainRunSnapshot): void
  * Brain instance can never spawn a duplicate loop. The claim is synchronous
  * (set before any await), so two callers in the same tick can't both pass it.
  */
-export async function startRun(chatId: number, req: BrainRunRequest): Promise<void> {
+export async function startRun(runKey: number, request: BrainRunRequest): Promise<void> {
   // A host whose UI process cannot be trusted to outlive the run (see `runDriver.ts`)
   // executes it elsewhere; this store then only MIRRORS that run via applyRemoteRun.
   const driver = getRunDriver();
-  if (driver) return driver.start(chatId, req);
-  const c = getCell(chatId);
+  if (driver) return driver.start(runKey, request);
+  const c = getCell(runKey);
   if (c.running) return; // already running elsewhere — never double-fire
+  // The CELL is the run's own (`runKey`); the CHAT is where it lives on the server. They
+  // are the same number for a top-level run. A sub-agent has its own cell and lives in
+  // its owner's chat, so from here on `chatId` is the server chat, and every message it
+  // persists is attributed to the child and spliced into the owner's live view.
+  const lineage = request.lineage;
+  const chatId = lineage?.rootChatId ?? runKey;
+  const req: BrainRunRequest = lineage
+    ? { ...request, persistence: lineagePersistence(request.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) }
+    : request;
   c.running = true;
   c.error = '';
   c.errorAction = null;
@@ -1217,7 +1235,7 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   emit(c);
 
   try {
-    await runLoop(chatId, c, req);
+    await runLoop(chatId, c, req, runKey);
   } catch (e) {
     // A user-initiated Stop aborts the stream mid-flight; that's a clean exit,
     // not an error to surface. (runLoop already returns on an aborted signal, so
@@ -1549,7 +1567,7 @@ function canonicalTurnText(text: string): string {
   return canonicalReasoningText(content, reasoning);
 }
 
-async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
+async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey: number): Promise<void> {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, routingMode, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
   // The catalog the model is shown, PLUS the conversational `ask_user` tool.
@@ -2139,7 +2157,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // predicate says so. The resolver lives on the cell, so whichever Brain
       // instance is mounted (even after a navigation swapped it) can answer.
       if (needsConfirm && needsConfirm({ name: call.name, args })) {
-        const ok = await requestRunConfirm(chatId, { name: call.name, args }, { step: iter });
+        // The prompt belongs to THIS run's cell — a sub-agent asks on its own, named.
+        const ok = await requestRunConfirm(runKey, { name: call.name, args }, { step: iter });
         if (!ok) {
           const declined = { cancelled: true, reason: 'User declined this action.' };
           pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: 'tool', label: call.name, args, result: declined });
@@ -2321,6 +2340,16 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         convo.push({ role: 'assistant', content: replayTextOf(result.text) });
         convo.push({ role: 'user', content: nudge });
       };
+      // Direction arrived while this turn was being written (an owner redirecting its
+      // sub-agent, a child reporting to its owner): the run is not over — what the model
+      // said stays as its own block, and the next turn answers the new direction.
+      const steering = drainRunSteering(runKey);
+      if (steering.length > 0) {
+        await requeueWithNudge(steering.join('\n\n'));
+        c.streamingText = '';
+        emit(c);
+        return { action: 'continue' };
+      }
       if (runTool && shouldRecoverStalledTurn(stallInput)) {
         announcementRecoveries += 1;
         const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
@@ -2512,6 +2541,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       const iter = ctx.step;
       c.streamingText = '';
       emit(c);
+      // Direction that arrived while the run was working — an owner redirecting its
+      // sub-agent, or a child's report reaching its owner — goes in front of this turn.
+      for (const text of drainRunSteering(runKey)) convo.push({ role: 'user', content: text });
       // Auto-compact BEFORE the turn: summarize the older middle into a memory note
       // when the transcript exceeds the token budget (instead of silently dropping it
       // and making the model thrash into "LOOP EXHAUSTED"). Falls back to the

@@ -160,6 +160,10 @@ interface BrainTimelineLabels extends ToolStepLabels {
     stoppedReply: string;
     you: string;
     assistant: string;
+    /** Beside a SUB-AGENT's name: whose it is — must contain `{owner}`. */
+    subagentOf: string;
+    /** Beside the chat's own agent once sub-agents have spoken: it is their owner. */
+    ownerTag: string;
     error: string;
     loading: string;
     empty: string;

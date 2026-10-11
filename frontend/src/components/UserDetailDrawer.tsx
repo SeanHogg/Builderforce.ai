@@ -1,8 +1,7 @@
-import { Select } from '@/components/Select';
-import type { Formatter } from '@/i18n/format';
-
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
+import { Select } from '@/components/Select';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import {
   adminApi,
   type AdminUser,
@@ -13,10 +12,19 @@ import {
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
 import { InlineConfirmButton } from '@/components/InlineConfirmButton';
-import { useFormat } from "@/i18n/useFormat";
-import { formatElapsedBetween } from '@/lib/duration';
+import { useFormat } from '@/i18n/useFormat';
 import { useErrorText } from '@/i18n/useErrorMessage';
-type DrawerTab = 'profile' | 'permissions' | 'sessions' | 'security' | 'access';
+import {
+  AdminAccessSection,
+  MutedNote,
+  PermissionsSection,
+  ProfileSection,
+  SecuritySection,
+  SessionsSection,
+  USER_DETAIL_TABS,
+  isTenantScopedTab,
+  type UserDetailTab,
+} from '@/components/UserDetailSections';
 
 interface Props {
   user: AdminUser;
@@ -25,48 +33,52 @@ interface Props {
   onStartImpersonate: (user: AdminUser) => void;
 }
 
-function fmtDateTime(fmt: Formatter, d: string) {
-  return fmt.dateWith(d, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
+/**
+ * Admin ▸ Users ▸ one user — a detail view, so it is a `SlideOutPanel` (§0.7),
+ * not a hand-rolled overlay. This file owns the panel, the fetching and the
+ * actions that change the user; `UserDetailSections` renders each tab.
+ */
 export default function UserDetailDrawer({ user, tenants, onClose, onStartImpersonate }: Props) {
   const errorText = useErrorText();
   const fmt = useFormat();
   const t = useTranslations('admin');
   const confirm = useConfirm();
   const toast = useToast();
-  const [tab, setTab] = useState<DrawerTab>('profile');
+  const [tab, setTab] = useState<UserDetailTab>('profile');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Security details (sessions + tokens)
   const [selectedTenantId, setSelectedTenantId] = useState<number | null>(tenants[0]?.id ?? null);
   const [secDetails, setSecDetails] = useState<AdminSecurityDetails | null>(null);
-
-  // Effective permissions
   const [effectivePerms, setEffectivePerms] = useState<EffectivePermissions | null>(null);
-
-  // Admin access log
   const [adminAccess, setAdminAccess] = useState<ImpersonationSession[]>([]);
 
-  // Action states
   const [forceLogoutBusy, setForceLogoutBusy] = useState(false);
   const [resetPwBusy, setResetPwBusy] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
 
+  /**
+   * Switch to a tab and fetch what it shows. The workspace is a parameter rather
+   * than read from state so a workspace change loads the workspace just picked,
+   * not the one this callback closed over.
+   */
   const loadTab = useCallback(
-    async (t: DrawerTab) => {
-      setTab(t);
-      setLoading(true);
+    async (next: UserDetailTab, tenantId: number | null = selectedTenantId) => {
+      setTab(next);
       setErrorMsg('');
+      if (next === 'profile') return;
+      if (isTenantScopedTab(next) && !tenantId) return;
+      setLoading(true);
       try {
-        if ((t === 'security' || t === 'sessions') && selectedTenantId) {
-          setSecDetails(await adminApi.securityDetails(selectedTenantId, user.id));
-        } else if (t === 'permissions' && selectedTenantId) {
-          setEffectivePerms(await adminApi.effectivePermissions(user.id, selectedTenantId));
-        } else if (t === 'access') {
+        if (next === 'access') {
           const r = await adminApi.userAdminAccess(user.id);
           setAdminAccess(r.sessions);
+        } else if (tenantId) {
+          if (next === 'permissions') {
+            setEffectivePerms(await adminApi.effectivePermissions(user.id, tenantId));
+          } else {
+            setSecDetails(await adminApi.securityDetails(tenantId, user.id));
+          }
         }
       } catch (e) {
         setErrorMsg(errorText(e));
@@ -77,17 +89,12 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
     [user.id, selectedTenantId, errorText],
   );
 
-  useEffect(() => {
-    loadTab('profile');
-  }, []);// eslint-disable-line react-hooks/exhaustive-deps
-
   async function doForceLogout() {
     if (!(await confirm(t('users.drawer.confirmForceLogout', { email: user.email })))) return;
     setForceLogoutBusy(true);
     setErrorMsg('');
     try {
       await adminApi.forceLogout(user.id);
-      setErrorMsg('');
       toast.success(t('users.drawer.forceLogoutDone'));
     } catch (e) {
       setErrorMsg(errorText(e));
@@ -112,7 +119,10 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
   }
 
   async function doSuspend(suspend: boolean) {
-    if (!(await confirm(suspend ? t('users.drawer.confirmSuspend', { email: user.email }) : t('users.drawer.confirmUnsuspend', { email: user.email })))) return;
+    const question = suspend
+      ? t('users.drawer.confirmSuspend', { email: user.email })
+      : t('users.drawer.confirmUnsuspend', { email: user.email });
+    if (!(await confirm(question))) return;
     setStatusBusy(true);
     setErrorMsg('');
     try {
@@ -125,8 +135,20 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
     }
   }
 
-  const TABS: DrawerTab[] = ['profile', 'permissions', 'sessions', 'security', 'access'];
-  const TAB_LABELS: Record<DrawerTab, string> = {
+  async function doRevokeAllSessions(tenantId: number) {
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      await adminApi.securityRevokeAllSessions(tenantId, user.id);
+      setSecDetails(await adminApi.securityDetails(tenantId, user.id));
+    } catch (e) {
+      setErrorMsg(errorText(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const TAB_LABELS: Record<UserDetailTab, string> = {
     profile: t('users.drawer.tabProfile'),
     permissions: t('users.drawer.tabPermissions'),
     sessions: t('users.drawer.tabSessions'),
@@ -134,315 +156,137 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
     access: t('users.drawer.tabAccess'),
   };
 
-  return (
-    <div
-      className="user-drawer-overlay"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('users.drawer.dialogLabel', { email: user.email })}
-    >
-      <div className="user-drawer" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="user-drawer__header">
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>{user.displayName ?? user.username ?? user.email}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{user.email}</div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {!user.isSuperadmin && (
-              <button
-                type="button"
-                className="admin-tab active"
-                style={{ fontSize: 12 }}
-                onClick={() => { onClose(); onStartImpersonate(user); }}
-              >
-                {t('users.emulate')}
-              </button>
-            )}
-            <button type="button" className="admin-tab" style={{ fontSize: 18, padding: '2px 10px' }} onClick={onClose} aria-label={t('common.close')}>×</button>
-          </div>
-        </div>
+  const profileActions = (
+    <>
+      <button type="button" className="admin-tab" disabled={forceLogoutBusy} onClick={doForceLogout}>
+        {forceLogoutBusy ? t('users.drawer.forceLogoutBusy') : t('users.drawer.forceLogout')}
+      </button>
+      <InlineConfirmButton
+        className="admin-tab"
+        disabled={resetPwBusy}
+        onConfirm={doResetPassword}
+        hint={t('users.drawer.confirmResetPassword', { email: user.email })}
+      >
+        {resetPwBusy ? t('users.drawer.resetPasswordBusy') : t('users.drawer.resetPassword')}
+      </InlineConfirmButton>
+      <button
+        type="button"
+        className="admin-tab"
+        style={{ color: 'var(--error-text)' }}
+        disabled={statusBusy}
+        onClick={() => doSuspend(true)}
+      >
+        {statusBusy ? t('users.drawer.suspendBusy') : t('users.drawer.suspendAccount')}
+      </button>
+    </>
+  );
 
-        {/* Tenant selector (for permission/security tabs) */}
-        {(tab === 'permissions' || tab === 'sessions' || tab === 'security') && (
-          <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
-            <Select
-              className="admin-select"
-              value={selectedTenantId ?? ''}
-              onChange={(e) => {
-                const tid = Number(e.target.value) || null;
-                setSelectedTenantId(tid);
-                if (tid) loadTab(tab);
-              }}
-              style={{ width: '100%' }}
-            >
-              <option value="">{t('users.drawer.selectWorkspacePlaceholder')}</option>
-              {tenants.map((t) => (
-                <option key={t.id} value={t.id}>{t.name} ({t.slug})</option>
-              ))}
-            </Select>
-          </div>
-        )}
-
-        {/* Tab nav */}
-        <div className="user-drawer__tabs">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={`admin-tab${tab === t ? ' active' : ''}`}
-              style={{ fontSize: 12, padding: '4px 10px' }}
-              onClick={() => loadTab(t)}
-            >
-              {TAB_LABELS[t]}
-            </button>
-          ))}
-        </div>
-
-        {errorMsg && (
-          <div className="alert alert-error" role="alert" style={{ margin: '8px 16px 0' }}>
-            {errorMsg}
-          </div>
-        )}
-
-        <div className="user-drawer__body">
-          {loading ? (
-            <p style={{ color: 'var(--text-muted)', padding: 16 }}>{t('common.loading')}</p>
-          ) : (
-            <>
-              {/* Profile tab */}
-              {tab === 'profile' && (
-                <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div className="user-drawer__field">
-                    <span className="user-drawer__field-label">{t('users.drawer.fieldUserId')}</span>
-                    <code style={{ fontSize: 11 }}>{user.id}</code>
-                  </div>
-                  <div className="user-drawer__field">
-                    <span className="user-drawer__field-label">{t('users.drawer.fieldUsername')}</span>
-                    <span>{user.username ?? '—'}</span>
-                  </div>
-                  <div className="user-drawer__field">
-                    <span className="user-drawer__field-label">{t('users.drawer.fieldDisplayName')}</span>
-                    <span>{user.displayName ?? '—'}</span>
-                  </div>
-                  <div className="user-drawer__field">
-                    <span className="user-drawer__field-label">{t('users.drawer.fieldSuperadmin')}</span>
-                    <span style={{ color: user.isSuperadmin ? 'var(--success)' : 'var(--text-muted)' }}>
-                      {user.isSuperadmin ? t('users.drawer.yes') : t('users.drawer.no')}
-                    </span>
-                  </div>
-                  <div className="user-drawer__field">
-                    <span className="user-drawer__field-label">{t('users.drawer.fieldWorkspaces')}</span>
-                    <span>{user.tenantCount}</span>
-                  </div>
-                  <div className="user-drawer__field">
-                    <span className="user-drawer__field-label">{t('users.drawer.fieldMemberSince')}</span>
-                    <span>{fmtDateTime(fmt, user.createdAt)}</span>
-                  </div>
-
-                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    <button
-                      type="button"
-                      className="admin-tab"
-                      disabled={forceLogoutBusy}
-                      onClick={doForceLogout}
-                    >
-                      {forceLogoutBusy ? t('users.drawer.forceLogoutBusy') : t('users.drawer.forceLogout')}
-                    </button>
-                    <InlineConfirmButton
-                      className="admin-tab"
-                      disabled={resetPwBusy}
-                      onConfirm={doResetPassword}
-                      hint={t('users.drawer.confirmResetPassword', { email: user.email })}
-                    >
-                      {resetPwBusy ? t('users.drawer.resetPasswordBusy') : t('users.drawer.resetPassword')}
-                    </InlineConfirmButton>
-                    <button
-                      type="button"
-                      className="admin-tab"
-                      style={{ color: 'var(--error-text)' }}
-                      disabled={statusBusy}
-                      onClick={() => doSuspend(true)}
-                    >
-                      {statusBusy ? t('users.drawer.suspendBusy') : t('users.drawer.suspendAccount')}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Permissions tab */}
-              {tab === 'permissions' && (
-                <div style={{ padding: 16 }}>
-                  {!selectedTenantId ? (
-                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.selectWorkspaceAbove')}</p>
-                  ) : !effectivePerms ? (
-                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.noPermissionData')}</p>
-                  ) : (
-                    <>
-                      <div style={{ marginBottom: 12, fontSize: 13 }}>
-                        {t('users.drawer.roleLabel')} <strong>{effectivePerms.role}</strong>
-                        &nbsp;·&nbsp;
-                        <span style={{ color: 'var(--success-text)' }}>{t('users.drawer.effectivePermissionsCount', { count: effectivePerms.permissions.length })}</span>
-                        {effectivePerms.userGrants.length > 0 && (
-                          <span style={{ marginLeft: 8, color: 'var(--coral-bright)' }}>+{t('users.drawer.userGrantsCount', { count: effectivePerms.userGrants.length })}</span>
-                        )}
-                        {effectivePerms.userRevocations.length > 0 && (
-                          <span style={{ marginLeft: 8, color: 'var(--error-text)' }}>-{t('users.drawer.revocationsCount', { count: effectivePerms.userRevocations.length })}</span>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {effectivePerms.permissions.map((p) => (
-                          <span
-                            key={p}
-                            style={{
-                              background: 'var(--surface-card)',
-                              border: '1px solid var(--border)',
-                              borderRadius: 'var(--radius-sm)',
-                              padding: '2px 7px',
-                              fontSize: 11,
-                              fontFamily: 'monospace',
-                              color: effectivePerms.userRevocations.includes(p) ? 'var(--error)' : effectivePerms.userGrants.includes(p) ? 'var(--coral-bright)' : 'var(--text)',
-                            }}
-                          >
-                            {p}
-                          </span>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Sessions tab */}
-              {tab === 'sessions' && (
-                <div style={{ padding: 16 }}>
-                  {!selectedTenantId ? (
-                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.selectWorkspaceAbove')}</p>
-                  ) : !secDetails ? (
-                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.noSessionData')}</p>
-                  ) : (
-                    <table className="data-table" style={{ fontSize: 12 }}>
-                      <thead>
-                        <tr>
-                          <th>{t('users.drawer.colSession')}</th>
-                          <th>{t('users.drawer.colIp')}</th>
-                          <th>{t('users.drawer.colLastSeen')}</th>
-                          <th>{t('users.drawer.colStatus')}</th>
-                          <th>{t('users.drawer.colTokens')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {secDetails.sessions.map((s) => (
-                          <tr key={s.id}>
-                            <td style={{ fontFamily: 'monospace', fontSize: 10 }}>{s.id.slice(0, 8)}…</td>
-                            <td>{s.ipAddress ?? '—'}</td>
-                            <td>{fmtDateTime(fmt, s.lastSeenAt)}</td>
-                            <td>
-                              <span style={{ color: s.isActive ? 'var(--success)' : 'var(--text-muted)' }}>
-                                {s.isActive ? t('users.drawer.statusActive') : t('users.drawer.statusRevoked')}
-                              </span>
-                            </td>
-                            <td>{s.activeTokens}</td>
-                          </tr>
-                        ))}
-                        {secDetails.sessions.length === 0 && (
-                          <tr><td colSpan={5} style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 12 }}>{t('users.drawer.noSessions')}</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              )}
-
-              {/* Security tab */}
-              {tab === 'security' && (
-                <div style={{ padding: 16 }}>
-                  {!selectedTenantId ? (
-                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.selectWorkspaceAbove')}</p>
-                  ) : !secDetails ? (
-                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.noDataRefresh')}</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <div className="user-drawer__field">
-                        <span className="user-drawer__field-label">{t('users.drawer.fieldMfa')}</span>
-                        <span style={{ color: secDetails.mfa.enabled ? 'var(--success)' : 'var(--error)' }}>
-                          {secDetails.mfa.enabled ? t('users.drawer.mfaEnabled') : t('users.drawer.mfaDisabled')}
-                        </span>
-                      </div>
-                      {secDetails.mfa.enabledAt && (
-                        <div className="user-drawer__field">
-                          <span className="user-drawer__field-label">{t('users.drawer.fieldMfaEnabledAt')}</span>
-                          <span>{fmtDateTime(fmt, secDetails.mfa.enabledAt)}</span>
-                        </div>
-                      )}
-                      <div className="user-drawer__field">
-                        <span className="user-drawer__field-label">{t('users.drawer.fieldActiveSessions')}</span>
-                        <span>{secDetails.sessions.filter((s) => s.isActive).length}</span>
-                      </div>
-                      <div className="user-drawer__field">
-                        <span className="user-drawer__field-label">{t('users.drawer.fieldActiveTokens')}</span>
-                        <span>{secDetails.tokens.filter((t) => t.isActive).length}</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-                        <button
-                          type="button"
-                          className="admin-tab"
-                          onClick={() => {
-                            setLoading(true);
-                            adminApi
-                              .securityRevokeAllSessions(selectedTenantId, user.id)
-                              .then(() => adminApi.securityDetails(selectedTenantId, user.id))
-                              .then(setSecDetails)
-                              .catch((e) => setErrorMsg(errorText(e)))
-                              .finally(() => setLoading(false));
-                          }}
-                        >
-                          {t('users.drawer.revokeAllSessions')}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Admin Access tab */}
-              {tab === 'access' && (
-                <div style={{ padding: 16 }}>
-                  {adminAccess.length === 0 ? (
-                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.noAdminAccess')}</p>
-                  ) : (
-                    <table className="data-table" style={{ fontSize: 12 }}>
-                      <thead>
-                        <tr>
-                          <th>{t('users.drawer.colAdmin')}</th>
-                          <th>{t('users.drawer.colWorkspace')}</th>
-                          <th>{t('users.drawer.colRole')}</th>
-                          <th>{t('users.drawer.colWhen')}</th>
-                          <th>{t('users.drawer.colDuration')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {adminAccess.map((s) => {
-                          return (
-                            <tr key={s.id}>
-                              <td>{s.adminUserId.slice(0, 8)}…</td>
-                              <td>{s.tenantName}</td>
-                              <td>{s.roleOverride}</td>
-                              <td>{fmtDateTime(fmt, s.startedAt)}</td>
-                              <td>{formatElapsedBetween(s.startedAt, s.endedAt) ?? t('users.drawer.durationActive')}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+  const note = (text: string) => (
+    <div style={{ padding: 16 }}>
+      <MutedNote>{text}</MutedNote>
     </div>
+  );
+
+  /** A workspace-scoped tab: ask for a workspace first, then say so when it returned nothing. */
+  function tenantScoped(emptyText: string, section: ReactNode): ReactNode {
+    if (!selectedTenantId) return note(t('users.drawer.selectWorkspaceAbove'));
+    return section ?? note(emptyText);
+  }
+
+  function renderBody(): ReactNode {
+    if (loading) return note(t('common.loading'));
+    switch (tab) {
+      case 'profile':
+        return <ProfileSection user={user} fmt={fmt} actions={profileActions} />;
+      case 'permissions':
+        return tenantScoped(
+          t('users.drawer.noPermissionData'),
+          effectivePerms ? <PermissionsSection perms={effectivePerms} /> : null,
+        );
+      case 'sessions':
+        return tenantScoped(
+          t('users.drawer.noSessionData'),
+          secDetails ? <SessionsSection details={secDetails} fmt={fmt} /> : null,
+        );
+      case 'security':
+        return tenantScoped(
+          t('users.drawer.noDataRefresh'),
+          secDetails && selectedTenantId ? (
+            <SecuritySection
+              details={secDetails}
+              fmt={fmt}
+              actions={
+                <button type="button" className="admin-tab" onClick={() => doRevokeAllSessions(selectedTenantId)}>
+                  {t('users.drawer.revokeAllSessions')}
+                </button>
+              }
+            />
+          ) : null,
+        );
+      case 'access':
+        return <AdminAccessSection sessions={adminAccess} fmt={fmt} />;
+    }
+  }
+
+  return (
+    <SlideOutPanel
+      open
+      onClose={onClose}
+      title={user.displayName ?? user.username ?? user.email}
+      crumb={t('users.drawer.dialogLabel', { email: user.email })}
+      width="wide"
+      widthStorageKey="admin-user-detail"
+      tabs={USER_DETAIL_TABS.map((id) => ({ id, label: TAB_LABELS[id] }))}
+      activeTabId={tab}
+      onTabChange={(id) => {
+        const next = USER_DETAIL_TABS.find((candidate) => candidate === id);
+        if (next) void loadTab(next);
+      }}
+      headerActions={
+        user.isSuperadmin ? undefined : (
+          <button
+            type="button"
+            className="admin-tab active"
+            onClick={() => {
+              onClose();
+              onStartImpersonate(user);
+            }}
+          >
+            {t('users.emulate')}
+          </button>
+        )
+      }
+    >
+      {isTenantScopedTab(tab) && (
+        <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
+          <Select
+            className="admin-select"
+            value={selectedTenantId ?? ''}
+            aria-label={t('users.drawer.selectWorkspacePlaceholder')}
+            onChange={(e) => {
+              const tid = Number(e.target.value) || null;
+              setSelectedTenantId(tid);
+              if (tid) void loadTab(tab, tid);
+            }}
+            style={{ width: '100%' }}
+          >
+            <option value="">{t('users.drawer.selectWorkspacePlaceholder')}</option>
+            {tenants.map((tenant) => (
+              <option key={tenant.id} value={tenant.id}>
+                {tenant.name} ({tenant.slug})
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="alert alert-error" role="alert" style={{ margin: '8px 16px 0' }}>
+          {errorMsg}
+        </div>
+      )}
+
+      {renderBody()}
+    </SlideOutPanel>
   );
 }

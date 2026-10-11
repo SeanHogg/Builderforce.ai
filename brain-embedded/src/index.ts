@@ -149,11 +149,8 @@ export {
   getRunTrace,
   clearRunError,
   resolveRunConfirm,
-  // The other half of that channel: raise the question. Exported because a delegated
-  // sub-agent runs its own nested loop and must reach the SAME prompt the run cell owns.
-  requestRunConfirm,
-  // A delegated child reads its parent's Stop by chat, and posts its report into the
-  // parent's live view (`appendRunMessage`) as it finishes.
+  // A run's Stop, read by tools that wait (`wait_agents`) — and a message persisted
+  // OUTSIDE the loop (a direction to a sub-agent) spliced into a chat's live view.
   runAbortSignal,
   appendRunMessage,
   // Teardown only — a headless harness reuses one chat id across scenarios, and the
@@ -161,6 +158,11 @@ export {
   resetBrainRunStore,
 } from './brainRunStore';
 export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn } from './brainRunStore';
+// A sub-agent is an ordinary run with an OWNER pointer (`runLineage.ts`), redirected
+// mid-run through the same inbox any run has (`runSteering.ts`).
+export { parseSubagentOrigin, SUBAGENT_OF_META_KEY } from './runLineage';
+export type { RunLineage, SubagentOrigin } from './runLineage';
+export { queueRunSteering, drainRunSteering } from './runSteering';
 export type { BrainRunOutcome } from './runOutcomeReport';
 export { isCoderReask } from './roleHandoff';
 // Planning ends in tasks: the `hand_off` tool, its executor, and the per-child chat report.
@@ -174,8 +176,6 @@ export {
   planMessage,
 } from './planHandoff';
 export type { HandOffPlan, HandOffTask, HandOffPorts, HandOffOutcome } from './planHandoff';
-export { subagentReportMessage, subagentReportMetadata, SUBAGENT_REPORT_META_KEY } from '@builderforce/agent-loop';
-export type { SubagentReportLike } from '@builderforce/agent-loop';
 // The run-driver seam: a host whose UI process is disposable (the VS Code webview)
 // executes runs in a longer-lived process and mirrors them back with `applyRemoteRun`.
 export { applyRemoteRun } from './brainRunStore';

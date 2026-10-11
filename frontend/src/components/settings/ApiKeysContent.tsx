@@ -10,7 +10,7 @@ import { MintedTenantApiKeyDisplay } from '@/components/MintedTenantApiKeyDispla
 import { AllowedOriginsField } from '@/components/AllowedOriginsField';
 import { AllowedOriginsBadge } from '@/components/AllowedOriginsBadge';
 import { TenantApiKeyEditor } from '@/components/TenantApiKeyEditor';
-import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
+import { TenantApiKeyUsageRow } from '@/components/TenantApiKeyUsageRow';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { ProviderKeysSettings } from '@/components/ProviderKeysSettings';
 import PageContainer from '@/components/PageContainer';
@@ -320,7 +320,7 @@ export function ApiKeysContent({ embedded = false, showProviderKeys = true, sear
                       saving={savingEdit}
                     />
                   )}
-                  <TenantApiKeyUsageDrawer
+                  <TenantApiKeyUsageRow
                     expanded={expandedKeyId === k.id}
                     load={(params) => tenantApiKeysApi.usage(tenantId, k.id, params)}
                   />
@@ -410,7 +410,7 @@ export function ApiKeysContent({ embedded = false, showProviderKeys = true, sear
                                 saving={savingEdit}
                               />
                             )}
-                            <TenantApiKeyUsageDrawer
+                            <TenantApiKeyUsageRow
                               expanded={expandedKeyId === k.id}
                               load={(params) => tenantApiKeysApi.usage(tenantId, k.id, params)}
                             />

@@ -25,97 +25,41 @@
  */
 
 import {
-  appendRunMessage,
   clearRunError,
   getGlobalRunState,
-  getRunSnapshot,
   getRunTrace,
   isFailedToolResult,
   isRunning,
   nextFallbackModel,
+  queueRunSteering,
   resolveRunConfirm,
   runAbortSignal,
   startRun,
   stopRun,
   subscribeRun,
   subscribeRunStore,
-  subagentReportMessage,
-  subagentReportMetadata,
   traceEventToPersistInput,
   type PersistTraceEventInput,
   type BrainRunOutcome,
   type BrainRunPersistence,
-  type BrainRunSnapshot,
   type BrainStreamFn,
-  type BrainTraceEvent,
-  type ChatCompletionMessage,
-  type ChatMode,
-  type ContentPart,
   type EvermindRunHooks,
-  type ModelFallbackSurface,
-  type ReasoningIntent,
 } from "@seanhogg/builderforce-brain-embedded";
-import { createChildWriteGate } from "./childWriteGate";
 import type { ToolDef } from "./fileTools";
 import { createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs, type NativeRunLabels } from "./nativeBrainRun";
 import { renderPolicyDirectives, type PolicyGate } from "./policy";
 import { SessionNotes, type RunActivity } from "./sessionNotes";
-import type { ChildReport, SubagentRunBinding } from "./subagentRun";
+import { createChildRuns } from "./childRuns";
+import { syncMessageFor, type RunHostMessage, type RunSink, type SinkEntry, type WebviewRunStart } from "./brainRunHostProtocol";
+import { childControls, directionText, type ChildControls, type ChildOwner } from "./childRunSpawner";
+import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
+import { childCatalog, scopeRefusal } from "./childRunPolicy";
 
-/** The serializable half of a `BrainRunRequest`, as the webview posts it. */
-export interface WebviewRunStart {
-  chatId: number;
-  systemPrompt: string;
-  model?: string;
-  modelStrict?: boolean;
-  routingMode?: "auto" | "byo_pool";
-  maxTokens?: number;
-  reasoning?: ReasoningIntent;
-  seed?: ChatCompletionMessage[];
-  /** Earlier turns' tool work, as a system-prompt block — see `BrainRunRequest.priorResearch`. */
-  priorResearch?: string | null;
-  userTurn?: string | ContentPart[];
-  projectId?: number | null;
-  chatMode?: ChatMode;
-  /** The panel's Auto-mode switch at start; `setAutoApprove` follows it live. */
-  autoApprove: boolean;
-  /** Whether this chat's project memory is switched on (recall + learn). */
-  evermind: boolean;
-  /** The picker's model surface, so the stall failover keeps ONE ordering function. */
-  modelSurface?: ModelFallbackSurface | null;
-}
+export { syncMessageFor } from "./brainRunHostProtocol";
+export type { RunHostMessage, RunSink, RunSyncMessage, RunToolMessage, SinkEntry, WebviewRunStart } from "./brainRunHostProtocol";
 
-/** One relayed change of a run — the snapshot, plus only the trace events not yet sent. */
-export interface RunSyncMessage {
-  type: "run.sync";
-  chatId: number;
-  snapshot: Omit<BrainRunSnapshot, "trace">;
-  /** Index the delta continues from; 0 with a full trace when the sink must resync. */
-  traceFrom: number;
-  trace: BrainTraceEvent[];
-}
-
-export interface RunToolMessage {
-  type: "run.tool";
-  chatId: number;
-  name: string;
-  mutating: boolean;
-  remote: boolean;
-  ok: boolean;
-}
-
-export type RunHostMessage =
-  | RunSyncMessage
-  | RunToolMessage
-  | { type: "run.settled"; chatId: number }
-  | { type: "run.failed"; chatId: number; error: string }
-  /** How many tools this run's model may call — the diagnostics report's count. */
-  | { type: "run.tools"; chatId: number; count: number };
-
-/** A webview panel watching the runs — anything that can be posted to. */
-export interface RunSink {
-  post(message: RunHostMessage): void;
-}
+/** The top-level owner's name, as the chat shows it (a brand, not translated). */
+export const OWNER_NAME = "BuilderForce";
 
 export interface ToolRunInfo {
   chatId: number;
@@ -131,12 +75,10 @@ export interface BrainRunHostPorts {
   /**
    * Local file tools + cognition + the gateway's platform catalog, for a project.
    *
-   * `run` binds a DELEGATED sub-agent to the run that spawned it — its write gate, its
-   * Stop, its model route, its tool bookkeeping and its report into the chat. Built here
-   * (not by the port) because only the run knows the chat whose modal a write question
-   * appears on, the live Auto switch that may answer it, and the chat a report lands in.
+   * `children` is THIS run's handle on its sub-agents and `signal` its Stop — built here
+   * (not by the port) because only the run knows who it is: its key, its chat, its depth.
    */
-  tools(projectId: number | undefined, run: SubagentRunBinding): Promise<readonly ToolDef[]>;
+  tools(projectId: number | undefined, children: ChildControls, signal: () => AbortSignal | undefined): Promise<readonly ToolDef[]>;
   /** Workspace root the local tools resolve against; '' when no folder is open. */
   workspaceRoot(): string;
   /** The transport-bound streamer for the CURRENT route (gateway or on-device). */
@@ -203,36 +145,22 @@ export interface BrainRunHost {
    * per-chat scoping would strand exactly the run the user returned to unblock.
    */
   setAutoApprove(chatId: number, on: boolean): void;
+  /** Put the person's words in front of a RUNNING run's next turn — the chat's own run
+   *  (instead of queueing behind it) or one of its sub-agents. */
+  steer(runKey: number, text: string): void;
+  /**
+   * Sub-agent controls for a run this host did NOT start — the native chat participant.
+   * Its children run here, as ordinary runs; it cannot be woken (its turn belongs to the
+   * editor's chat view), so their reports wait in its inbox for its next turn.
+   */
+  childControls(owner: ChildOwner, base: Omit<WebviewRunStart, "chatId">): ChildControls;
   /** Watch the runs from a panel. The panel is brought up to date immediately. */
   attach(sink: RunSink): () => void;
   dispose(): void;
 }
 
-/** Per-sink bookkeeping for the trace delta: what was last sent for each chat. */
-export interface SinkEntry {
-  sink: RunSink;
-  sent: Map<number, { len: number; first: BrainTraceEvent | undefined }>;
-}
-
 function argsRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-}
-
-/**
- * The relay message for one chat, to one sink. The trace is shipped as a DELTA: the
- * store appends in place and trims from the head only past its bound, so the events
- * after the last sent index are new unless the head moved (or the sink is new) — in
- * which case the whole bounded trace is resent from 0.
- */
-export function syncMessageFor(entry: SinkEntry, chatId: number): RunSyncMessage {
-  const snapshot = getRunSnapshot(chatId);
-  const trace = snapshot.trace;
-  const last = entry.sent.get(chatId);
-  const continues = last !== undefined && last.len <= trace.length && (last.len === 0 || trace[0] === last.first);
-  const traceFrom = continues ? last.len : 0;
-  entry.sent.set(chatId, { len: trace.length, first: trace[0] });
-  const { trace: _omit, ...rest } = snapshot;
-  return { type: "run.sync", chatId, snapshot: rest, traceFrom, trace: trace.slice(traceFrom) };
 }
 
 export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
@@ -244,6 +172,11 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   /** Live per-run gate flags; `needsConfirm` reads them so a switch flipped mid-run
    *  takes effect on the NEXT call instead of after the run (the shared gate's rule). */
   const flags = new Map<number, { autoApprove: boolean }>();
+  /** The spec each run key was last started with — what a child derives from and what an
+   *  idle owner is woken with. */
+  const specs = new Map<number, RunSpec>();
+  /** Every live sub-agent, by the chat it lives in. */
+  const registry = createChildRuns();
 
   const broadcast = (message: RunHostMessage): void => {
     for (const entry of sinks) entry.sink.post(message);
@@ -267,10 +200,10 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     return n;
   };
 
-  const flushNote = async (chatId: number): Promise<void> => {
-    const n = notes.get(chatId);
+  const flushNote = async (runKey: number, chatId: number): Promise<void> => {
+    const n = notes.get(runKey);
     if (!n || n.isEmpty) return;
-    notes.delete(chatId);
+    notes.delete(runKey);
     try {
       await ports.sessionNote?.(chatId, n.activity);
     } catch {
@@ -284,9 +217,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const trace = getRunTrace(chatId);
     return { len: trace.length, first: trace[0], at: new Date().toISOString() };
   };
-  const persistRunTrace = async (chatId: number, mark: ReturnType<typeof traceMark>): Promise<void> => {
+  const persistRunTrace = async (runKey: number, chatId: number, mark: ReturnType<typeof traceMark>): Promise<void> => {
     if (!ports.persistTrace) return;
-    const trace = getRunTrace(chatId);
+    const trace = getRunTrace(runKey);
     // The store appends in place and trims from the head only past its bound (see
     // `syncMessageFor`); if the head moved, fall back to the run's own time window.
     const continues = mark.len <= trace.length && (mark.len === 0 || trace[0] === mark.first);
@@ -298,89 +231,69 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       /* best-effort — a lost trace is never a run failure */
     }
   };
+  /** The server chat a run lives in — its owner's, for a sub-agent. */
+  const chatOf = (p: RunSpec): number => p.child?.lineage.rootChatId ?? p.chatId;
+  const announce = (chatId: number): void => broadcast({ type: "run.children", chatId, children: registry.viewsIn(chatId) });
   /** Chats with a turn being set up or run by THIS host — claimed before the async setup. */
   const active = new Set<number>();
 
-  const run = async (p: WebviewRunStart): Promise<void> => {
-    const { chatId } = p;
-    known.add(chatId);
-    watch(chatId);
-    // Already running (a second tab, a double submit): the live run owns this chat.
+  /**
+   * ONE run entry for every run: a chat's turn, a sub-agent (its key is its own, its
+   * chat is its owner's), and an idle owner woken by a child's report.
+   */
+  const run = async (p: RunSpec): Promise<void> => {
+    const key = p.chatId;
+    known.add(key);
+    watch(key);
+    // Already running (a second tab, a double submit): the live run owns this key.
     // Returning before the setup keeps a no-op start from deleting the live run's Auto
     // flag and posting its half-finished trace on the way out.
-    if (active.has(chatId) || isRunning(chatId)) return;
-    active.add(chatId);
-    const mark = traceMark(chatId);
+    if (active.has(key) || isRunning(key)) return;
+    active.add(key);
+    specs.set(key, p);
+    const mark = traceMark(key);
     try {
       await runTurn(p);
     } finally {
-      active.delete(chatId);
+      active.delete(key);
       // Not awaited: `run.settled`, which frees the panel's composer, must not wait on it.
-      void persistRunTrace(chatId, mark);
+      void persistRunTrace(key, chatOf(p), mark);
+      // A child's report that arrived as this run was ending is heard now.
+      childHost.afterRun(key);
     }
   };
 
-  const runTurn = async (p: WebviewRunStart): Promise<void> => {
-    const { chatId } = p;
+  const runTurn = async (p: RunSpec): Promise<void> => {
+    const key = p.chatId;
+    const chatId = chatOf(p);
     const flag = { autoApprove: p.autoApprove };
-    flags.set(chatId, flag);
+    flags.set(key, flag);
     const root = ports.workspaceRoot();
     const projectId = p.projectId ?? undefined;
-    // Governance FIRST: an unreadable policy throws here and the run never starts — and
-    // the gates are also what a delegated child's write gate is built from, so they have
-    // to exist before the catalog that carries it.
+    // Governance FIRST: an unreadable policy throws here and the run never starts.
     const gates = (await ports.policyGates?.(projectId)) ?? [];
-    // The child asks on THIS chat's modal, under THIS run's live Auto switch — the same
-    // gate the native participant builds, so a delegated write means the same thing on
-    // both editor surfaces.
-    const confirmChildWrite = createChildWriteGate({
-      chatId,
-      ...(gates.length ? { gates } : {}),
-      autoApprove: () => flag.autoApprove,
-      blockedByPolicy: ports.labels.blockedByPolicy,
-    });
 
     // What a finished tool call means to this host — the knowledge loop, the Changes
-    // view and the panel's feed. ONE reading for the run's own calls and a delegated
-    // child's, so a child's write is as visible as the parent's.
+    // view and the panel's feed. A sub-agent's calls are its own run's, read the same way.
     const recordToolRun = (def: ToolDef, record: Record<string, unknown>, out: unknown): void => {
       const ok = !isFailedToolResult(out);
       const name = def.name;
       // Feed the knowledge loop on SUCCESS only — a note claiming a file was written
       // when the write threw would ground every later run on a lie.
-      if (ok && !def.remote) notesFor(chatId).record(name, record);
+      if (ok && !def.remote) notesFor(key).record(name, record);
       const info: ToolRunInfo = { chatId, name, args: record, mutating: def.mutating, remote: !!def.remote, ok };
       ports.onToolRun?.(info);
       broadcast({ type: "run.tool", chatId, name, mutating: def.mutating, remote: !!def.remote, ok });
     };
-    // A delegated child's report, posted into THIS chat as it finishes and spliced into
-    // the live view. Best-effort: the parent still reads the child's result either way.
-    const postChildReport = async (report: ChildReport): Promise<void> => {
-      try {
-        const [msg] = await ports.persistence.sendMessages(chatId, [
-          { role: "assistant", content: subagentReportMessage(report), metadata: subagentReportMetadata(report) },
-        ]);
-        if (msg) appendRunMessage(chatId, msg);
-      } catch {
-        /* a lost report is never a run failure */
-      }
-    };
-    // Everything a delegated child inherits from THIS run. Read at call time: the run's
-    // abort controller is created by `startRun`, after this catalog is assembled.
-    const binding: SubagentRunBinding = {
-      confirmWrite: confirmChildWrite,
-      signal: () => runAbortSignal(chatId),
-      route: {
-        ...(p.model ? { model: p.model } : {}),
-        ...(p.modelStrict != null ? { modelStrict: p.modelStrict } : {}),
-        ...(p.routingMode ? { routingMode: p.routingMode } : {}),
-      },
-      onToolRun: ({ def, args, out }) => recordToolRun(def, args, out),
-      onChildReport: (report) => void postChildReport(report),
-    };
 
-    const defs = await ports.tools(projectId, binding);
-    broadcast({ type: "run.tools", chatId, count: defs.length });
+    // THIS run's sub-agents — and, for a sub-agent, its own (the pointer nests). Read at
+    // call time: the run's abort controller is created by `startRun`, after this catalog.
+    const children = childControls(childHost, ownerOf(p, OWNER_NAME));
+    const catalog = await ports.tools(projectId, children, () => runAbortSignal(key));
+    const policy = p.child?.policy;
+    const defs = policy ? childCatalog(catalog, policy) : catalog;
+    // By run KEY: a sub-agent's narrower catalog must not overwrite its owner's count.
+    broadcast({ type: "run.tools", chatId: key, count: defs.length });
     const native = createNativeRunTool({
       defs,
       root,
@@ -389,8 +302,11 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       labels: ports.labels,
     });
     const runTool = async (name: string, args: unknown): Promise<unknown> => {
-      const out = await native(name, args);
       const def = defs.find((d) => d.name === name);
+      // A workstream writes only inside its own paths — refused before anyone is asked.
+      const refused = def ? scopeRefusal(def, args, policy?.scope) : null;
+      if (refused) return refused;
+      const out = await native(name, args);
       if (def) recordToolRun(def, argsRecord(args), out);
       return out;
     };
@@ -398,13 +314,16 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // host surface shares, re-bound per call so a mid-run switch is honoured.
     const needsConfirm = (req: { name: string; args: unknown }): boolean =>
       nativeNeedsConfirm(defs, flag.autoApprove ? "acceptEdits" : "ask", gates)(req);
-    const stream = await ports.stream();
+    // A sub-agent's turns are routed for ITS role (explore / code / verify), not its owner's.
+    const transport = await ports.stream();
+    const role = p.child?.role;
+    const stream: BrainStreamFn = role ? (opts, handlers) => transport({ ...opts, role }, handlers) : transport;
     const surface = p.modelSurface ?? null;
     try {
       // Gates render as binding directives ahead of the host prompt — the same
       // prepend the native participant and the cloud lowering apply.
       const governance = renderPolicyDirectives(gates);
-      await startRun(chatId, {
+      await startRun(key, {
         resolvedSystemPrompt: governance ? `${governance}
 
 ${p.systemPrompt}` : p.systemPrompt,
@@ -433,41 +352,78 @@ ${p.systemPrompt}` : p.systemPrompt,
         projectId: p.projectId ?? null,
         ...(p.chatMode ? { chatMode: p.chatMode } : {}),
         ...(ports.reportOutcome ? { reportOutcome: (o: BrainRunOutcome) => ports.reportOutcome!(o) } : {}),
+        ...(p.child ? { lineage: p.child.lineage } : {}),
       });
     } finally {
-      flags.delete(chatId);
-      await flushNote(chatId);
+      flags.delete(key);
+      await flushNote(key, chatId);
     }
   };
 
+  const start = async (payload: RunSpec): Promise<void> => {
+    try {
+      await run(payload);
+      broadcast({ type: "run.settled", chatId: payload.chatId });
+    } catch (e) {
+      // The loop reports its own failures on the run cell; this is the rarer case of
+      // the run never starting (the tool catalog or transport could not be built).
+      broadcast({ type: "run.failed", chatId: payload.chatId, error: e instanceof Error ? e.message : String(e) });
+    }
+  };
+
+  /** The Auto switch of a chat right now: its live run's, else the one it last ran with. */
+  const autoApproveOf = (chatId: number): boolean => flags.get(chatId)?.autoApprove ?? specs.get(chatId)?.autoApprove ?? false;
+
+  const childHost = createChildRunHost({
+    registry,
+    specOf: (key) => specs.get(key),
+    start,
+    isBusy: (key) => active.has(key) || isRunning(key),
+    autoApproveOf,
+    persistence: ports.persistence,
+    announce,
+  });
+
   return {
-    async start(payload) {
-      try {
-        await run(payload);
-        broadcast({ type: "run.settled", chatId: payload.chatId });
-      } catch (e) {
-        // The loop reports its own failures on the run cell; this is the rarer case of
-        // the run never starting (the tool catalog or transport could not be built).
-        broadcast({ type: "run.failed", chatId: payload.chatId, error: e instanceof Error ? e.message : String(e) });
-      }
+    start,
+    // A sub-agent's Stop is its own run's Stop, marked as on purpose so it reports
+    // "stopped" rather than "failed".
+    stop: (runKey) => childHost.stop(runKey),
+    confirm: (runKey, ok) => resolveRunConfirm(runKey, ok),
+    clearError: (runKey) => clearRunError(runKey),
+    steer(runKey, text) {
+      if (!isRunning(runKey) || !text.trim()) return;
+      const lineage = registry.lineageOf(runKey);
+      // A sub-agent hears it as direction from its owner; the chat's own run hears the
+      // person directly. Either way it is in front of the run's NEXT turn, not after it.
+      queueRunSteering(runKey, lineage ? directionText(lineage.ownerName, text) : text);
+      childHost.postDirection(lineage?.rootChatId ?? runKey, "person", lineage?.ownerName ?? OWNER_NAME, lineage?.agent ?? null, text);
     },
-    stop: (chatId) => stopRun(chatId),
-    confirm: (chatId, ok) => resolveRunConfirm(chatId, ok),
-    clearError: (chatId) => clearRunError(chatId),
+    childControls(owner, base) {
+      // Registered so a child can derive from it; never woken — its turns are the editor's.
+      specs.set(owner.key, { ...base, chatId: owner.key, wakeable: false });
+      return childControls(childHost, owner);
+    },
     setAutoApprove(chatId, on) {
-      const flag = flags.get(chatId);
-      // No live run for this chat: nothing to move. The NEXT run starts from the
-      // panel's own switch, which rides in on `WebviewRunStart.autoApprove`.
-      if (!flag) return;
-      flag.autoApprove = on;
-      // Flipping it ON answers the question THIS chat's loop is paused on — the same
-      // shortcut the panel's switch always took, now aimed at one conversation.
-      if (on) resolveRunConfirm(chatId, true);
+      // Remembered for the next run, a wake, and any child started later.
+      const last = specs.get(chatId);
+      if (last) specs.set(chatId, { ...last, autoApprove: on });
+      // The switch covers the whole conversation: the chat's run AND its live sub-agents.
+      for (const key of [chatId, ...registry.viewsIn(chatId).map((c) => c.key)]) {
+        const flag = flags.get(key);
+        // No live run for this key: nothing to move.
+        if (!flag) continue;
+        flag.autoApprove = on;
+        // Flipping it ON answers the question THIS run is paused on — the same shortcut
+        // the panel's switch always took, aimed at one conversation.
+        if (on) resolveRunConfirm(key, true);
+      }
     },
     attach(sink) {
       const entry: SinkEntry = { sink, sent: new Map() };
       sinks.add(entry);
       for (const chatId of known) sink.post(syncMessageFor(entry, chatId));
+      for (const chatId of known) if (chatId > 0) sink.post({ type: "run.children", chatId, children: registry.viewsIn(chatId) });
       return () => {
         sinks.delete(entry);
       };

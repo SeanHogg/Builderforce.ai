@@ -86,13 +86,13 @@ export function leftDelegationUndone(input: DelegationRequestInput): boolean {
 export function undelegatedRequestNudge(toolNames: readonly string[]): string {
   const fanOut = toolNames.includes('spawn_agents');
   const call = fanOut
-    ? 'Call spawn_agents NOW with read_only:false so the children make their changes: one workstream per open ticket whose files do not overlap — ticket=<id>, paths=<the files it owns>, a complete standalone task brief, role "code". It takes up to 4 at once; start the next batch when one returns. Use spawn_agent (read_only:false) for a slice that must run alone.'
+    ? 'Call spawn_agents NOW with read_only:false so the children make their changes: one workstream per open ticket whose files do not overlap — ticket=<id>, paths=<the files it owns>, a complete standalone task brief, role "code". It takes up to 4 per call and returns at once — the children run in the background, so start the next batch right away if there are more. Use spawn_agent (read_only:false) for a slice that must run alone.'
     : 'Call spawn_agent NOW with read_only:false, one slice at a time, with a complete standalone task brief and role "code".';
   return (
     'The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed — the user already said. ' +
     'A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. ' +
     'The workspace execution kill-switch and every `autoRun: execution_disabled` verdict stop CLOUD runs only — they do not apply to it. ' +
-    'as_agent is optional: a teammate without the role a slice needs runs it as an on-demand Developer sub-agent, and with nobody to name you OMIT it — or hire a Developer with builtin_cloud_agents_create (roleKeys:["developer"]) and run AS them. ' +
-    `${call} When they finish, verify their changes and report what each child delivered, per ticket.`
+    'as_agent is optional: with no fitting teammate, OMIT it — the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ' +
+    `${call} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`
   );
 }

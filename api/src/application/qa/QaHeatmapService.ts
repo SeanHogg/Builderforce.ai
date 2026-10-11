@@ -28,14 +28,12 @@ import type { Db } from '../../infrastructure/database/connection';
 import { qaJourneyEvents } from '../../infrastructure/database/schema';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
+import { rankHeatZones } from '../../domain/qa/heatZones';
 import type { QaHeatZone } from './qaTypes';
 import { DAY_MS } from '../../domain/shared/time';
 
 export const QA_HEAT_VERSION_KEY = (tenantId: number): string => `qa-heat-version:tenant:${tenantId}`;
 
-/** Recency decay applied per day since a zone's last interaction (0.97/day ≈ a
- *  ~23-day half-life): a zone hot last week outranks one equally hot last year. */
-const DECAY_PER_DAY = 0.97;
 interface RankOpts {
   sinceDays?: number;
   /** How many ranked zones to return. */
@@ -47,12 +45,10 @@ interface RankOpts {
   projectId?: number | null;
 }
 
-function score(heat: number, lastTs: string | Date | null, now: number): number {
-  if (!lastTs) return heat;
-  const last = lastTs instanceof Date ? lastTs.getTime() : new Date(lastTs).getTime();
-  if (!Number.isFinite(last)) return heat;
-  const ageDays = Math.max(0, (now - last) / DAY_MS);
-  return heat * Math.pow(DECAY_PER_DAY, ageDays);
+function lastSeenOf(lastTs: string | Date | null, now: Date): Date {
+  if (!lastTs) return now;
+  const last = lastTs instanceof Date ? lastTs : new Date(lastTs);
+  return Number.isFinite(last.getTime()) ? last : now;
 }
 
 export class QaHeatmapService {
@@ -92,7 +88,7 @@ export class QaHeatmapService {
     projectId: number | null,
   ): Promise<QaHeatZone[]> {
     const since = new Date(Date.now() - sinceDays * DAY_MS);
-    const now = Date.now();
+    const now = new Date();
     const scope = this.projectScope(projectId);
 
     // Element-level zones: a specific control, by its dominant interaction kind.
@@ -135,23 +131,40 @@ export class QaHeatmapService {
       .orderBy(desc(sql`count(*)`))
       .limit(limit);
 
-    const zones: QaHeatZone[] = [];
+    const rows: Array<{
+      route: string;
+      selector: string | null;
+      kind: string;
+      label: string | null;
+      count: number;
+      lastSeen: Date;
+    }> = [];
     for (const r of routeRows) {
       if (!r.route) continue;
-      zones.push({ route: r.route, selector: null, kind: 'pageview', label: null, heat: Number(r.heat), score: score(Number(r.heat), r.lastTs, now) });
+      rows.push({
+        route: r.route,
+        selector: null,
+        kind: 'pageview',
+        label: null,
+        count: Number(r.heat),
+        lastSeen: lastSeenOf(r.lastTs, now),
+      });
     }
     for (const e of elementRows) {
       if (!e.selector) continue;
-      zones.push({
+      rows.push({
         route: e.route ?? '/',
         selector: e.selector,
         kind: e.kind,
         label: e.label ?? null,
-        heat: Number(e.heat),
-        score: score(Number(e.heat), e.lastTs, now),
+        count: Number(e.heat),
+        lastSeen: lastSeenOf(e.lastTs, now),
       });
     }
 
-    return zones.sort((a, b) => b.score - a.score).slice(0, limit);
+    return rankHeatZones(rows, now, limit).map(({ count, lastSeen: _lastSeen, ...zone }) => ({
+      ...zone,
+      heat: count,
+    }));
   }
 }

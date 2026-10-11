@@ -248,6 +248,12 @@ export interface BuiltinTool {
  * thrown Error into the tool's error result, so the model reads the sentence verbatim
  * instead of a `TypeError` on `undefined.AUTH_CACHE_KV` three frames down.
  */
+export async function getTenantTask(ctx: BuiltinCtx, id: number) {
+  const task = await ctx.tasks.getTask(id);
+  await ctx.projects.getProject(task.projectId, ctx.tenantId); // throws Forbidden/NotFound on mismatch
+  return task;
+}
+
 export function requireEnv(ctx: BuiltinCtx, unavailableMessage?: string): Env {
   if (!ctx.env) {
     throw new Error(unavailableMessage

@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
- * Per-key usage drawer — shared between the owner self-service flow
- * (`/settings/api-keys`) and the superadmin mint-on-behalf tab. Both render
- * exactly the same drawer when a row is expanded; only the `load` callback
- * differs (owner-tenant scoped vs admin-can-see-any-tenant). The drawer
+ * Per-key usage, rendered inline under an expanded key row — not a drawer —
+ * shared between the owner self-service flow (`/settings/api-keys`) and the
+ * superadmin mint-on-behalf tab. Both render exactly the same block when a
+ * row is expanded; only the `load` callback differs (owner-tenant scoped vs
+ * admin-can-see-any-tenant). The row
  * decides its own visibility (caller passes `expanded` and `onClose`); no
  * prop-drilled state machine.
  */
@@ -42,7 +43,7 @@ export interface UsageResult {
 }
 
 interface Props {
-  /** When false, the drawer renders nothing — self-managed visibility. */
+  /** When false, the row renders nothing — self-managed visibility. */
   expanded: boolean;
   /** Caller's loader. Owner uses `tenantApiKeysApi.usage`, admin uses `adminApi.tenantApiKeyUsage`. */
   load: (params: { days: number; page: number; limit: number }) => Promise<UsageResult>;
@@ -71,7 +72,7 @@ const summaryCell: React.CSSProperties = {
 };
 
 
-export function TenantApiKeyUsageDrawer({ expanded, load }: Props) {
+export function TenantApiKeyUsageRow({ expanded, load }: Props) {
   const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const [days, setDays] = useState(30);

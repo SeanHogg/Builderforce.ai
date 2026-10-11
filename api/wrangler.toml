@@ -169,6 +169,29 @@ name = "builderforce-media-render"
 binding = "UPLOADS"
 bucket_name = "builderforce-uploads"
 
+# Public CDN (`https://cdn.builderforce.ai`) for session-replay assets (PRD 33 D5,
+# 33a S2.2). Bucket `builderforce-cdn` is served on the custom domain
+# `cdn.builderforce.ai` by R2 itself — Cloudflare's edge caches it, and serving
+# MUST NOT invoke a Worker (kill check: 200, cache-control as below, a
+# `cf-cache-status` header, and NO `cf-worker` header).
+#
+# Custom domain (idempotent; also run by `.github/scripts/cdn-ensure.sh`):
+#   wrangler r2 bucket domain add builderforce-cdn --domain cdn.builderforce.ai --zone-id $CLOUDFLARE_ZONE_ID
+#
+# No-Worker route for `cdn.builderforce.ai/*` — required so the sites Worker's
+# greedy `*.builderforce.ai/*` (wrangler.sites.toml) does not capture the host.
+# Created through the Cloudflare API, not as a [[routes]] entry here (a wrangler
+# route always binds THIS Worker and would set `cf-worker`):
+#   POST /zones/:zone/workers/routes  { "pattern": "cdn.builderforce.ai/*", "script": null }
+#
+# Object layout (Cache-Control set on each object at upload by cdn-publish.sh):
+#   /replay/v1/loader.js              public, max-age=300
+#   /replay/r/recorder.<hash>.js      public, max-age=31536000, immutable
+#   /replay/manifest.json             public, max-age=60
+[[r2_buckets]]
+binding = "CDN"
+bucket_name = "builderforce-cdn"
+
 # Auth-resolution cache. Caches `bfk_*` and `clk_*` lookups for ~60s so every
 # chat-completion call doesn't pay a Neon round-trip just to validate the key.
 # See api/src/infrastructure/auth/keyResolutionCache.ts.

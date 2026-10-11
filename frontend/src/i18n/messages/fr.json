@@ -11345,6 +11345,8 @@
       "thought": "Réflexion",
       "replyFromThought": "Récupéré du raisonnement du modèle — ce tour s'est terminé sans réponse distincte.",
       "stoppedReply": "Arrêté par vous — voici ce que le modèle avait écrit quand vous avez appuyé sur Arrêter.",
+      "subagentOf": "sous-agent de {owner}",
+      "ownerTag": "responsable",
       "you": "Vous",
       "assistant": "BuilderForce",
       "input": "Entrée",

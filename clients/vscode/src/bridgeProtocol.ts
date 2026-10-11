@@ -44,6 +44,8 @@ export const BRAIN_HOST_MESSAGES = [
   'run.start',
   'run.stop',
   'run.confirm',
+  /** Steer a RUNNING run (the chat's own, or a sub-agent by its run key) with the person's words now. */
+  'run.steer',
   'run.autoApprove',
   'run.clearError',
   'llm.fetch',

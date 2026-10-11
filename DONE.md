@@ -1,3 +1,44 @@
+## ✅ RESOLVED 2026-10-11 — A sub-agent is the same run with an owner, working in the background (agent-loop 2026.10.4 · brain-embedded 2026.10.16 · brain-ui 2026.10.7 · VSIX 2026.10.19 · frontend 2026.10.41)
+
+The editor's sub-agents were a SECOND loop (`runChild` in `subagentRun.ts`) running inside one blocking tool call:
+- the chat waited minutes for it;
+- its steps never reached the chat, only a final report did;
+- it had no Stop, no redirect and no owner shown;
+- it was capped at 8 or 40 steps, which is why chat #134 "kept running out of turns". That broke the no-step-limit rule.
+
+Fixes:
+- **One run, recursive.** A child is an ordinary host run (`brainRunHost.run` → `startRun`) with its own run key and a `RunLineage` pointer (`brain-embedded/src/runLineage.ts`). It has the same tools, gates, ticket backstop and failure-streak breaker, and no step cap.
+  - `startRun` separates the cell key from the server chat, so everything a child persists goes to the root chat. A lineage persistence adapter attributes those messages (`authoredBy` + `subagentOf`, marked mid-turn).
+  - A child can spawn its own children, up to depth 3, with at most 12 live per chat (`clients/vscode/src/childRuns.ts`).
+- **Non-blocking.** `spawn_agent` / `spawn_agents` return handles (`a1`, `a2`, …) at once (`childRunSpawner.ts`). The report reaches the owner exactly once:
+  - to a waiting `wait_agents` call, or
+  - otherwise into the owner's inbox. If the owner is idle, the inbox wakes it with a new turn (`childRunHost.ts`); a wake on a busy owner is replayed when its run settles.
+- **Run steering** (`brain-embedded/src/runSteering.ts`). Any live run has an inbox, drained before each model turn, and it re-opens a run that was about to end. This one path serves:
+  - `message_agent` (owner → child);
+  - the strip's Redirect (person → child);
+  - `@name` / `#ticket` in the composer (person → child);
+  - "Steer now" on a queued message (person → the chat's own run);
+  - a child's report (child → owner).
+- **Owner tools.** `wait_agents`, `message_agent` and `stop_agent` live in `subagentControlTools.ts`. The `hand_off` fan-out tells the coder its children run in the background.
+- **UI.**
+  - `SubagentStrip` above the composer shows each live child's activity and offers Approve, Redirect, Stop and Stop all, driven through the run store by child key.
+  - The transcript tags a child's messages "sub-agent of {owner} · aN" and the chat's own agent "owner".
+  - `QueuedMessages` adds "Steer now".
+  - All strings are localized in the VSIX l10n bundles (5 locales) and the web `brain.timeline` catalog.
+- **The native `@builderforce` participant** runs its children in the same host (`BrainRunHost.childControls`). It is not wakeable; its child reports wait in its inbox for its next turn.
+- **Deleted:**
+  - `clients/vscode/src/subagentRun.ts` (the second loop) and `childWriteGate.ts`, because a child's writes now go through its own run's confirm gate;
+  - `subagentStepBudget`, `SUBAGENT_WRITE_MAX_STEPS`, `subagentReportMetadata` and `SUBAGENT_REPORT_META_KEY`.
+
+  The cloud keeps `runSubagent`, bounded by `SUBAGENT_MAX_STEPS` because a child runs inside one durable alarm tick.
+- `brainRunHost.ts` was split: its wire protocol moved to `brainRunHostProtocol.ts`.
+- Tests:
+  - `runLineage.test.ts`, `runSteering.test.ts`, and `brainRunStore.test.ts` (steering, re-open, lineage);
+  - `planHandoff.test.ts` (background);
+  - `childRuns.test.ts`, `subagentTool.test.ts`, `subagentFanOutTool.test.ts`;
+  - `brainRunHost.test.ts` (end-to-end spawn → child posts as itself → idle owner woken with the report);
+  - `chatChildren.test.ts`, and `subagent.test.ts` (live-owner prompt).
+
 ## ✅ RESOLVED 2026-10-11 — "Use sub-agents" starts sub-agents, and a coding slice always has a Developer (agent-tools 2026.10.4 · brain-embedded 2026.10.14 · VSIX 2026.10.17 · api 2026.10.28)
 
 Two VS Code chats asked for sub-agents and got none:

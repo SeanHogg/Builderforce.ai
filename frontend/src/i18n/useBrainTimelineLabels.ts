@@ -47,6 +47,8 @@ export function useBrainTimelineLabels(overrides?: Partial<BrainTimelineLabels>)
     stoppedReply: t('stoppedReply'),
     you: t('you'),
     assistant: t('assistant'),
+    subagentOf: t('subagentOf', { owner: '{owner}' }),
+    ownerTag: t('ownerTag'),
     input: t('input'),
     output: t('output'),
     // Shell steps: the terminal panel's exit chip and its "printed nothing" note.

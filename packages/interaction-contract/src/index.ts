@@ -65,6 +65,8 @@ export { hashedAssetUrls, releaseKeyFromAssets } from './release';
 
 export {
   REPLAY_LIMITS,
+  VISIT_IDLE_MS,
+  VISITOR_ID_PATTERN,
   parseReplayChunk,
   parseReplayVisitMeta,
   type ReplayChunk,

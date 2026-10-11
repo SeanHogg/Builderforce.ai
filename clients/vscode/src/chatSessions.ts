@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { createBuilderForceHandler } from "./chatParticipant";
+import type { BrainRunHost } from "./brainRunHost";
 
 const SESSION_TYPE = "builderforce";
 
@@ -37,6 +38,7 @@ const SESSION_TYPE = "builderforce";
 export function registerChatSessions(
   ctx: vscode.ExtensionContext,
   participant: vscode.ChatParticipant,
+  runHost?: BrainRunHost,
 ): vscode.Disposable | undefined {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const chatApi = vscode.chat as any;
@@ -48,7 +50,7 @@ export function registerChatSessions(
     return undefined;
   }
 
-  const handler = createBuilderForceHandler(ctx);
+  const handler = createBuilderForceHandler(ctx, runHost);
   const disposables: vscode.Disposable[] = [];
 
   // 1) The session LIST (the "SESSIONS" panel). Two API shapes exist mid-migration —

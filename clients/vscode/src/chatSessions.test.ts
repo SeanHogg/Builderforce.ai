@@ -18,7 +18,7 @@ const SOURCE = fs.readFileSync(path.join(__dirname, "chatSessions.ts"), "utf8");
 describe("chatSessions stays a thin registration adapter", () => {
   it("serves every turn through the SHARED participant handler", () => {
     expect(SOURCE).toContain('import { createBuilderForceHandler } from "./chatParticipant"');
-    expect(SOURCE).toContain("createBuilderForceHandler(ctx)");
+    expect(SOURCE).toContain("createBuilderForceHandler(ctx, runHost)");
   });
 
   it("implements no chat logic of its own", () => {

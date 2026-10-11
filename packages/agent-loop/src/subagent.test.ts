@@ -196,3 +196,24 @@ describe("runSubagent with a persona", () => {
     expect(sent[1]).toMatchObject({ role: "user", content: "check the migration" });
   });
 });
+
+/**
+ * A LIVE child (the editor's) runs BESIDE its owner: the owner is not blocked, may
+ * redirect it, and reads its final message as the report — and it has no step budget.
+ */
+describe("subagentSystemPrompt for a live child", () => {
+  const prompt = subagentSystemPrompt(false, undefined, { owner: "BuilderForce" });
+
+  it("names the owner and says it keeps working", () => {
+    expect(prompt).toContain("spawned by BuilderForce");
+    expect(prompt).not.toContain("is blocked until you answer");
+  });
+
+  it("tells the child how its owner's redirection arrives", () => {
+    expect(prompt).toContain('"[BuilderForce]"');
+  });
+
+  it("promises no step budget it does not have", () => {
+    expect(prompt).not.toContain("step budget");
+  });
+});

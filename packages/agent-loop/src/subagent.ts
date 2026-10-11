@@ -25,20 +25,14 @@ import { openAiChatCodec } from "./openaiCodec.js";
 import type { LoopDispatchResult, LoopPorts, LoopTurnResult, ParsedToolCall } from "./types.js";
 import type { ToolRowSerializer } from "./openaiCodec.js";
 
-/** Steps a child may take before it is cut off and its last word returned as partial. */
-export const SUBAGENT_MAX_STEPS = 8;
-
-/** Steps a writable child may take — larger because it does real work, not just investigation. */
-export const SUBAGENT_WRITE_MAX_STEPS = 40;
-
 /**
- * Get the step budget for a subagent based on whether it is writable.
- * Read-only children are capped at SUBAGENT_MAX_STEPS (investigation only).
- * Writable children get SUBAGENT_WRITE_MAX_STEPS (real work).
+ * Steps a CLOUD child may take before it is cut off and its last word returned as
+ * partial. The cloud runs a child inside one durable alarm tick, which has a wall-clock
+ * ceiling, so its brief is bounded by design. The editor's children are not: there a
+ * child is an ordinary run of the same loop (with an owner pointer), stopped only by the
+ * failure-streak breaker, its owner or the person — never by a step count.
  */
-export function subagentStepBudget(writable: boolean): number {
-  return writable ? SUBAGENT_WRITE_MAX_STEPS : SUBAGENT_MAX_STEPS;
-}
+export const SUBAGENT_MAX_STEPS = 8;
 
 /**
  * How much of the child's answer reaches the parent. A child that rambles must not be
@@ -72,23 +66,43 @@ export interface SubagentPersona {
  * win on procedure: a persona changes the VOICE and the EXPERTISE, never the budget, the
  * read-only boundary or the requirement to finish with a standalone answer.
  */
-export function subagentSystemPrompt(readOnly: boolean, persona?: SubagentPersona): string {
+export function subagentSystemPrompt(readOnly: boolean, persona?: SubagentPersona, live?: SubagentLiveOwner): string {
   const identity = persona
     ? [
       `You are acting as ${persona.name}, one of this workspace's agents. Stay in that agent's role and voice.`,
       persona.brief,
     ]
     : [];
+  // A LIVE child runs beside the agent that spawned it rather than inside one of its tool
+  // calls: the owner keeps working, may redirect it mid-task, and hears its final message
+  // as the report. A one-shot child (the cloud's) blocks its parent and has a small budget.
+  const relation = live
+    ? [
+      `You are a sub-agent spawned by ${live.owner}, which owns this work and keeps working while you do your slice.`,
+      `It sees only what you post, and your FINAL message is your report to it — so that message must stand alone: what you did, what you found, and anything left undone.`,
+      `${live.owner} (or the person it works for) may redirect you mid-task: a message beginning "[${live.owner}]" is direction from your owner — follow it over your original brief.`,
+    ]
+    : [
+      "You are a sub-agent. Another agent delegated ONE self-contained question to you and is blocked until you answer.",
+      "You cannot see its conversation, its ticket or its plan, and it cannot see yours — it receives only your final answer, so that answer must stand alone.",
+    ];
   return [
     ...identity,
-    "You are a sub-agent. Another agent delegated ONE self-contained question to you and is blocked until you answer.",
-    "You cannot see its conversation, its ticket or its plan, and it cannot see yours — it receives only your final answer, so that answer must stand alone.",
+    ...relation,
     readOnly
       ? "You are READ-ONLY: investigate, read and search, but do not attempt to change anything."
       : "You may make the change you were asked to make, and nothing beyond it.",
-    "Work efficiently — your step budget is small. Answer with concrete findings: exact file paths, names and line references, and an explicit \"not found\" where that is the honest result.",
-    "Never end with a promise to continue; there is no next turn after your answer.",
+    live
+      ? "Answer with concrete findings: exact file paths, names and line references, and an explicit \"not found\" where that is the honest result."
+      : "Work efficiently — your step budget is small. Answer with concrete findings: exact file paths, names and line references, and an explicit \"not found\" where that is the honest result.",
+    "Never end with a promise to continue; finish the slice, then report.",
   ].join("\n");
+}
+
+/** The agent a LIVE child reports to — see {@link subagentSystemPrompt}. */
+export interface SubagentLiveOwner {
+  /** Display name of the owner, as the chat shows it. */
+  owner: string;
 }
 
 /** One chat row on the child's private transcript. */

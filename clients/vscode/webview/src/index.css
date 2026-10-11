@@ -772,3 +772,117 @@ select option {
   margin: 5px 6px;
   background: var(--bf-border);
 }
+
+/* "Steer now" on a queued chip: send it into the running turn instead of after it. */
+.bf-chip__steer {
+  border: 1px solid var(--bf-accent);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--bf-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 6px;
+}
+
+.bf-chip__steer:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+}
+
+/* The chat's live sub-agents: one row each, owner and name named, levers on the right.
+   Wraps on a narrow panel; every control stays a full tap target. */
+.bf-subagents {
+  flex: 0 0 auto;
+  margin: 0 10px 6px;
+  padding: 7px 9px;
+  font-size: 12px;
+  border-radius: 6px;
+  background: var(--bf-surface-2);
+  border: 1px solid var(--bf-border);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.bf-subagents__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bf-text-muted);
+}
+
+.bf-subagents__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.bf-subagents__row {
+  display: grid;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bf-border);
+}
+
+.bf-subagents__row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.bf-subagents__who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bf-subagents__handle {
+  font-family: var(--bf-font-mono);
+  font-size: 11px;
+  color: var(--bf-text-muted);
+}
+
+.bf-subagents__owner,
+.bf-subagents__tag {
+  font-size: 11px;
+  color: var(--bf-text-muted);
+}
+
+.bf-subagents__tag {
+  border: 1px solid var(--bf-border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.bf-subagents__label {
+  overflow-wrap: anywhere;
+}
+
+.bf-subagents__actions,
+.bf-subagents__steer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bf-subagents__steer input {
+  flex: 1 1 160px;
+  min-width: 0;
+  font: inherit;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--bf-border);
+  background: var(--vscode-input-background, transparent);
+  color: var(--vscode-input-foreground, inherit);
+}
+
+.bf-subagents__confirm {
+  margin: 0;
+}

@@ -1161,6 +1161,8 @@ var DEFAULT_TIMELINE_LABELS = {
   stoppedReply: "Stopped by you \u2014 this is what the model had written when you pressed Stop.",
   you: "You",
   assistant: "BuilderForce",
+  subagentOf: "sub-agent of {owner}",
+  ownerTag: "owner",
   input: "Input",
   output: "Output",
   error: "Error",
@@ -1386,6 +1388,10 @@ function BrainTimelineInner({
     }
   );
   const isEmpty = nodes.length === 0 && !loading;
+  const hasSubagents = (0, import_react6.useMemo)(
+    () => nodes.some((n) => n.kind === "assistant" && (0, import_builderforce_brain_embedded5.parseSubagentOrigin)(n.message) !== null),
+    [nodes]
+  );
   const focusedId = revealMessage?.id ?? null;
   const focusClass = (messageId) => focusedId === messageId ? " bf-tl__item--focus" : "";
   return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl-scroll", ref: scrollRef, onScroll, children: [
@@ -1429,7 +1435,10 @@ function BrainTimelineInner({
           return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("li", { id: brainMessageAnchorId(node.message.id), className: `bf-tl__item bf-tl__item--assistant${focusClass(node.message.id)}`, children: [
             /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("assistant") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__body", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__role", children: author ? author.name : assistant }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "bf-tl__role", children: [
+                author ? author.name : assistant,
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(OriginTag, { message: node.message, owner: !author && hasSubagents, labels })
+              ] }),
               rescued && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__rescued", children: labels.replyFromThought }),
               stopped && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__rescued", children: labels.stoppedReply }),
               bodyText && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bf-tl__bubble", children: renderMsg(node.message, "assistant", rescued || bodyText) }),
@@ -1564,6 +1573,13 @@ function BrainTimelineInner({
   ] });
 }
 var BrainTimeline = import_react6.default.memo(BrainTimelineInner);
+function OriginTag({ message, owner, labels }) {
+  const origin = (0, import_builderforce_brain_embedded5.parseSubagentOrigin)(message);
+  if (origin) {
+    return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__origin", children: `${labels.subagentOf.replace("{owner}", origin.owner)} \xB7 ${origin.handle}` });
+  }
+  return owner ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__origin", children: labels.ownerTag }) : null;
+}
 
 // src/ChatErrorBanner.tsx
 var import_jsx_runtime8 = require("react/jsx-runtime");

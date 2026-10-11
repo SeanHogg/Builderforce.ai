@@ -38,7 +38,6 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
   ] },
   { id: 'users', labelKey: 'tab.adminUsers', icon: '👤', subs: [
     { id: '', subKey: 'directory', icon: '👤' },
-    { id: 'sessions', subKey: 'sessions', icon: '🧠' },
     { id: 'security', subKey: 'security', icon: '🔒' },
     { id: 'suspect-accounts', subKey: 'suspectAccounts', icon: '🚩' },
     { id: 'emulation', subKey: 'emulation', icon: '🕵️' },
@@ -73,7 +72,7 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
     { id: 'newsletter', subKey: 'newsletter', icon: '✉️' },
     { id: 'releaseNotes', subKey: 'releaseNotes', icon: '📣' },
     { id: 'broadcasts', subKey: 'broadcasts', icon: '📢' },
-    { id: 'visitorFlow', subKey: 'visitorFlow', icon: '🧭' },
+    { id: 'visitors', subKey: 'visitors', icon: '🧭' },
     { id: 'salesLeads', subKey: 'salesLeads', icon: '📇' },
     { id: 'sales-commissions', subKey: 'salesCommissions', icon: '％' },
   ] },
@@ -111,6 +110,8 @@ export const LEGACY_ADMIN_TAB: Record<string, { group: string; sub: string }> = 
   privacy: { group: 'compliance', sub: 'privacy' },
   billing: { group: 'growth', sub: '' },
   newsletter: { group: 'growth', sub: 'newsletter' },
+  visitorFlow: { group: 'growth', sub: 'visitors' },
+  sessions: { group: 'growth', sub: 'visitors' },
   errors: { group: 'logs', sub: '' },
   auditlog: { group: 'logs', sub: 'audit' },
   apikeys: { group: 'developer', sub: '' },
@@ -129,9 +130,24 @@ export function resolveAdminRoute(tabParam: string, subParam: string): { group: 
     }
   }
   if (!group) group = ADMIN_GROUP_META[0];
+  const alias = ADMIN_SUB_ALIASES.find((entry) => entry.fromGroup === group.id && entry.fromSub === subId);
+  if (alias) {
+    group = ADMIN_GROUP_META.find((g) => g.id === alias.toGroup) ?? group;
+    subId = alias.toSub;
+  }
   const sub = group.subs.find((s) => s.id === subId) ?? group.subs[0];
   return { group, sub };
 }
+
+/**
+ * Old inner-sub ids that now live on another group/sub. Applied after the
+ * group is found so `?tab=users&sub=sessions` and `?tab=growth&sub=visitorFlow`
+ * still land on Visitors.
+ */
+const ADMIN_SUB_ALIASES: Array<{ fromGroup: string; fromSub: string; toGroup: string; toSub: string }> = [
+  { fromGroup: 'users', fromSub: 'sessions', toGroup: 'growth', toSub: 'visitors' },
+  { fromGroup: 'growth', fromSub: 'visitorFlow', toGroup: 'growth', toSub: 'visitors' },
+];
 
 /** Canonical href for a group's sub. Default group '' → /admin; default sub '' → no &sub. */
 export function adminSubHref(groupId: string, subId: string): string {

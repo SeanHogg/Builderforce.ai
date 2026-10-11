@@ -16,6 +16,7 @@
  * cancelled exactly when it matters most.
  */
 
+import { VISIT_IDLE_MS } from '@builderforce/interaction-contract';
 import { apiRequestStream } from './apiClient';
 import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import { getVisitorId } from './visitor';
@@ -45,13 +46,11 @@ const VISIT_COUNT_KEY = 'bf_visit_count';
 /**
  * How long a visitor can be idle before their next event starts a NEW visit.
  *
- * Thirty minutes is the web-analytics convention, and the reason to keep it is
- * that it makes "came back" mean the same thing here as everywhere else the
- * operator has ever read a funnel. A tab left open overnight is two visits, not
- * one eighteen-hour session, which is the only reading that makes time-on-site
- * a usable number.
+ * Pinned to `@builderforce/interaction-contract` `VISIT_IDLE_MS` (30 min) so
+ * the hosted journey, the replay recorder and ingest all rotate a visit on
+ * the same gap. A tab left open overnight is two visits, not one
+ * eighteen-hour session.
  */
-const VISIT_IDLE_MS = 30 * 60 * 1000;
 
 /** Flush at this depth rather than per event — a navigation-heavy visit should
  *  cost a handful of requests, not one per click. */

@@ -16,8 +16,11 @@
  *    otherwise start() is a no-op.
  */
 
+import { deriveSelector, redactInput } from '@builderforce/interaction-contract';
 import { getApiBaseUrl, getAuthHeaders, apiRequestStream } from '../apiClient';
 import { AMBIENT_REQUEST_ERRORS } from '../errors/transportFailure';
+
+export { deriveSelector };
 
 export type QaEventType = 'pageview' | 'click' | 'input' | 'submit' | 'nav';
 
@@ -52,79 +55,6 @@ function getSessionId(): string {
   } catch {
     return `s_${Date.now().toString(36)}`;
   }
-}
-
-/** Accessible name for an element: aria-label → trimmed text → title/placeholder. */
-function accessibleName(el: Element): string {
-  const aria = el.getAttribute('aria-label');
-  if (aria) return aria.trim().slice(0, 120);
-  const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
-  if (text) return text.slice(0, 120);
-  const title = el.getAttribute('title') ?? el.getAttribute('placeholder');
-  return (title ?? '').trim().slice(0, 120);
-}
-
-/** Short, mostly-stable css path as a last resort. */
-function cssPath(el: Element): string {
-  const parts: string[] = [];
-  let node: Element | null = el;
-  let depth = 0;
-  while (node && depth < 4 && node.nodeType === 1) {
-    let part = node.tagName.toLowerCase();
-    if (node.id) {
-      part += `#${node.id}`;
-      parts.unshift(part);
-      break;
-    }
-    const cls = (node.getAttribute('class') ?? '').split(/\s+/).filter(Boolean)[0];
-    if (cls) part += `.${cls}`;
-    parts.unshift(part);
-    node = node.parentElement;
-    depth++;
-  }
-  return parts.join(' > ').slice(0, 400);
-}
-
-/**
- * Derive a stable selector for an element, preferring locators Playwright can
- * reproduce. Returns a Playwright-style locator string.
- */
-export function deriveSelector(el: Element): { selector: string; label: string } {
-  const testId = el.getAttribute('data-testid') ?? el.getAttribute('data-test-id');
-  if (testId) return { selector: `getByTestId(${JSON.stringify(testId)})`, label: testId };
-
-  const role = el.getAttribute('role') ?? implicitRole(el);
-  const name = accessibleName(el);
-  if (role && name) return { selector: `getByRole(${JSON.stringify(role)}, { name: ${JSON.stringify(name)} })`, label: name };
-  if (name) return { selector: `getByText(${JSON.stringify(name)})`, label: name };
-
-  return { selector: cssPath(el), label: el.tagName.toLowerCase() };
-}
-
-function implicitRole(el: Element): string | null {
-  const tag = el.tagName.toLowerCase();
-  if (tag === 'a') return 'link';
-  if (tag === 'button') return 'button';
-  if (tag === 'input') {
-    const type = (el.getAttribute('type') ?? 'text').toLowerCase();
-    if (type === 'submit' || type === 'button') return 'button';
-    if (type === 'checkbox') return 'checkbox';
-    if (type === 'radio') return 'radio';
-    return 'textbox';
-  }
-  if (tag === 'select') return 'combobox';
-  if (tag === 'textarea') return 'textbox';
-  if (/^h[1-6]$/.test(tag)) return 'heading';
-  return null;
-}
-
-/** Redacted descriptor for an input — NEVER the raw value. */
-function redactInput(el: HTMLInputElement | HTMLTextAreaElement): string | null {
-  const type = (el.getAttribute('type') ?? 'text').toLowerCase();
-  if (type === 'password') return null; // never record password interactions
-  const name = el.getAttribute('name') ?? el.getAttribute('id') ?? type;
-  const len = (el.value ?? '').length;
-  return `${name}:${type}:len${len}`.slice(0, 120);
 }
 
 class QaCapture {

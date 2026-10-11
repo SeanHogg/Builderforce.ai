@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { canRunInParallel, executeHandOff, parseHandOff, planMessage, type HandOffPorts, type HandOffTask } from './planHandoff';
-import { isMidTurnMetadata, subagentReportMessage, subagentReportMetadata } from '@builderforce/agent-loop';
+import { subagentReportMessage } from '@builderforce/agent-loop';
 
 const task = (title: string, paths: string[] = []): HandOffTask => ({ title, brief: `do ${title}`, paths });
 
@@ -64,6 +64,22 @@ describe('executeHandOff', () => {
     expect(out.tickets.map((t) => t.id)).toEqual([101, 102, 103, 104, 105, 106]);
   });
 
+  it('tells the coder its children run in the BACKGROUND when the fan-out returns handles', async () => {
+    const out = await executeHandOff(
+      { summary: '', tasks: [task('A', ['a']), task('B', ['b'])] },
+      ports({
+        runTool: async (name, args) =>
+          name === 'spawn_agents'
+            ? { ok: true, running: true, agents: (args.workstreams as unknown[]).map((_, i) => ({ ok: true, handle: `a${i + 1}` })) }
+            : { id: 1 },
+      }),
+    );
+    expect(out.mode).toBe('parallel');
+    expect(out.workstreams).toEqual([{ ok: true, handle: 'a1' }, { ok: true, handle: 'a2' }]);
+    expect(out.next).toContain('IN THE BACKGROUND');
+    expect(out.next).toContain('wait_agents');
+  });
+
   it('falls back to the coder, in order, when the fan-out refuses before any child starts', async () => {
     const out = await executeHandOff(
       { summary: '', tasks: [task('A', ['a']), task('B', ['b'])] },
@@ -92,9 +108,5 @@ describe('subagentReportMessage', () => {
     const text = subagentReportMessage({ ok: false, label: '#901 One StatTile', ticket: '901', error: 'model unavailable' });
     expect(text).toContain('**#901 One StatTile** · failed');
     expect(text).toContain('model unavailable');
-  });
-
-  it('is tagged mid-turn, so Evermind never learns a progress report as an answer', () => {
-    expect(isMidTurnMetadata(subagentReportMetadata({ ok: true, label: 'x' }))).toBe(true);
   });
 });

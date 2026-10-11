@@ -80,7 +80,7 @@ __export(src_exports, {
   STOPPED_TURN_STEP: () => STOPPED_TURN_STEP,
   STREAM_IDLE_MS: () => STREAM_IDLE_MS,
   STUDIO_WORKSPACE_TOOLS: () => STUDIO_WORKSPACE_TOOLS,
-  SUBAGENT_REPORT_META_KEY: () => SUBAGENT_REPORT_META_KEY,
+  SUBAGENT_OF_META_KEY: () => SUBAGENT_OF_META_KEY,
   StreamIdleError: () => StreamIdleError,
   StreamInterruptedError: () => StreamInterruptedError,
   TICKET_RECORDING_TOOLS: () => TICKET_RECORDING_TOOLS,
@@ -163,6 +163,7 @@ __export(src_exports, {
   directedAgentRecipients: () => directedAgentRecipients,
   dirtyPathsOf: () => dirtyPathsOf,
   displayModelName: () => displayModelName,
+  drainRunSteering: () => drainRunSteering,
   effortProfile: () => effortProfile,
   executeHandOff: () => executeHandOff,
   extractXmlToolCalls: () => extractXmlToolCalls,
@@ -256,6 +257,7 @@ __export(src_exports, {
   parseMessageProvenance: () => parseMessageProvenance,
   parsePmoFocus: () => parsePmoFocus,
   parseStepMessage: () => parseStepMessage,
+  parseSubagentOrigin: () => parseSubagentOrigin,
   perMillionUsd: () => perMillionUsd,
   personaAgentOf: () => personaAgentOf,
   personaModalityOf: () => personaModalityOf,
@@ -275,12 +277,12 @@ __export(src_exports, {
   productModelName: () => productModelName,
   progressDuration: () => progressDuration,
   projectMemoryHooks: () => projectMemoryHooks,
+  queueRunSteering: () => queueRunSteering,
   ratedTurnContext: () => ratedTurnContext,
   ratedTurnTool: () => ratedTurnTool,
   readWithIdleWatchdog: () => readWithIdleWatchdog,
   reasoningForRun: () => reasoningForRun,
   repeatedFailureAdvisory: () => repeatedFailureAdvisory,
-  requestRunConfirm: () => requestRunConfirm,
   resetApiVersionCache: () => resetApiVersionCache,
   resetBrainRunStore: () => resetBrainRunStore,
   resolveRecipient: () => resolveRecipient,
@@ -313,8 +315,6 @@ __export(src_exports, {
   streamChatCompletion: () => streamChatCompletion,
   stripAskUser: () => stripAskUser,
   studioToolsIn: () => studioToolsIn,
-  subagentReportMessage: () => subagentReportMessage,
-  subagentReportMetadata: () => subagentReportMetadata,
   subscribeRun: () => subscribeRun,
   subscribeRunStore: () => subscribeRunStore,
   subscribeToChatMessages: () => subscribeToChatMessages,
@@ -926,32 +926,6 @@ var NARRATION_OPENER = new RegExp(
 
 // ../packages/agent-loop/src/turnPhase.ts
 var MID_TURN_META_KEY = "midTurn";
-
-// ../packages/agent-loop/src/subagentReport.ts
-var SUBAGENT_REPORT_META_KEY = "subagentReport";
-var MAX_OUTPUT_CHARS = 3e3;
-var MAX_FILES_LISTED = 12;
-function subagentReportMessage(report) {
-  const who = report.asAgent?.name ? `${report.asAgent.name} \u2014 ` : "";
-  const ticket = report.ticket && !report.label.startsWith(`#${report.ticket}`) ? `#${report.ticket} ` : "";
-  const status2 = report.ok ? report.truncated ? "partial" : "done" : "failed";
-  const head = `**${who}${ticket}${report.label}** \xB7 ${status2}`;
-  const body = report.ok ? (report.output ?? "").trim() : (report.error ?? "the sub-agent stopped without an answer").trim();
-  const quoted = body.length > MAX_OUTPUT_CHARS ? `${body.slice(0, MAX_OUTPUT_CHARS)}\u2026` : body;
-  const files = report.changedFiles?.length ? `Changed: ${report.changedFiles.slice(0, MAX_FILES_LISTED).map((f) => `\`${f}\``).join(", ")}${report.changedFiles.length > MAX_FILES_LISTED ? ` (+${report.changedFiles.length - MAX_FILES_LISTED} more)` : ""}` : "";
-  return [head, quoted, files, report.note ?? ""].filter(Boolean).join("\n\n");
-}
-function subagentReportMetadata(report) {
-  return JSON.stringify({
-    [MID_TURN_META_KEY]: true,
-    [SUBAGENT_REPORT_META_KEY]: {
-      label: report.label,
-      ok: report.ok,
-      ...report.ticket ? { ticket: report.ticket } : {},
-      ...report.asAgent ? { asAgent: report.asAgent.name } : {}
-    }
-  });
-}
 
 // ../packages/agent-loop/src/reasoning.ts
 var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
@@ -4112,7 +4086,7 @@ function chatWorkDirective(chatId, opts) {
   const staffed = roster.length > 0;
   const delegatesLocally = !!(opts?.canFanOut || opts?.canDelegate);
   const localSpawn = opts?.canFanOut ? "spawn_agents (several tickets whose files do not overlap, side by side \u2014 one workstream per ticket, with ticket=<id>, paths and as_agent) or spawn_agent (one slice)" : "spawn_agent (one slice at a time)";
-  const pickByRole = 'as_agent = the agent whose role fits the slice: a Developer for a code slice, a QA agent for a test or verify slice (builtin_cloud_agents_persona_brief with role=developer or role=qa-tester says who holds it). A teammate without the role runs the slice as an on-demand Developer/QA sub-agent, not as themselves. When nobody holds the role, OMIT as_agent, or hire one first with builtin_cloud_agents_create (name, title, roleKeys:["developer"]) and run AS them; a missing Developer is never a reason not to delegate';
+  const pickByRole = "as_agent = the agent whose role fits the slice: a Developer for a code slice, a QA agent for a test or verify slice (builtin_cloud_agents_persona_brief with role=developer or role=qa-tester says who holds it). When nobody fitting is named \u2014 as_agent omitted, or a teammate without the role \u2014 the spawn tools STAFF the role on this project themselves: a capable teammate, or a Developer/QA HIRED into the workspace and project, with the ticket of the slice assigned to them, and the child runs AS that agent. So a missing Developer is never a reason not to delegate: omit as_agent and spawn";
   const whoIsHere = staffed ? `\u2022 THE AGENTS IN THIS CHAT are ${describeRoster(roster)}. A human put them here: that is this platform's way of saying these are the people this work belongs to.
 ` : "";
   const ordering = staffed ? delegatesLocally ? `\u2022 DELEGATE TO THEM, HERE. That is the DEFAULT in this chat, not a fallback. Work that falls inside one of their roles is THEIR work, and this session runs it on this machine: hand it to a local sub-agent with ${localSpawn}, ${pickByRole}. Then say which agent did what. A local sub-agent is NOT a cloud run \u2014 it needs no ticket assignment and no builtin_chats_dispatch_agent, and the workspace's execution kill-switch does not stop it. Do NOT make the change yourself merely because you could do it faster \u2014 the human staffed this conversation.
@@ -5137,7 +5111,12 @@ var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
   // did not advertise — the web Brain offers no `spawn_agent`, so this is inert there.
   "spawn_agent",
   // Its side-by-side twin — what a planner's `hand_off` fans out to; editor-only.
-  "spawn_agents"
+  "spawn_agents",
+  // The owner's verbs for children running in the background (editor-only): a turn about
+  // "check on Ada" or "tell a2 to stop" shares no stem with the tool names either.
+  "wait_agents",
+  "message_agent",
+  "stop_agent"
 ]);
 var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
   "write_file",
@@ -7407,6 +7386,7 @@ function asRecord(out) {
 }
 var INLINE_NEXT = "HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order \u2014 do not re-plan or re-read what the planner already read. After each task, verify it, then move to the next. When all are done, build and test, commit and push, and report per ticket.";
 var PARALLEL_NEXT = "HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. The children had no shell and no git. You are the coding model: verify the combined change (build and test), fix what the slices broke between them and anything they said was outside their paths, implement any task that failed, then commit, push and report per ticket.";
+var BACKGROUND_NEXT = "HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name; the children have no shell and no git. You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives), verify the combined change (build and test), fix what the slices broke between them, implement any task that failed, then commit, push and report per ticket.";
 async function executeHandOff(plan, ports) {
   const ids2 = await fileTickets(plan, ports);
   const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...ids2[i] != null ? { id: ids2[i] } : {} }));
@@ -7417,6 +7397,7 @@ async function executeHandOff(plan, ports) {
     const changed = /* @__PURE__ */ new Set();
     const placeholders = [];
     let fanOutOk = true;
+    let background = false;
     for (let start = 0; start < plan.tasks.length; start += FAN_OUT_BATCH) {
       const batch = plan.tasks.slice(start, start + FAN_OUT_BATCH);
       const out = asRecord(await call(ports, FAN_OUT_TOOL, {
@@ -7432,7 +7413,8 @@ async function executeHandOff(plan, ports) {
           };
         })
       }));
-      if (!out || out.ok === false && !Array.isArray(out.workstreams)) {
+      const started = Array.isArray(out?.agents) ? out.agents : Array.isArray(out?.workstreams) ? out.workstreams : null;
+      if (!out || out.ok === false && !started) {
         if (start === 0) {
           fanOutOk = false;
           break;
@@ -7440,7 +7422,8 @@ async function executeHandOff(plan, ports) {
         workstreams.push({ ok: false, error: typeof out?.error === "string" ? out.error : "fan-out failed", tasks: batch.map((t) => t.title) });
         continue;
       }
-      if (Array.isArray(out.workstreams)) workstreams.push(...out.workstreams);
+      if (started) workstreams.push(...started);
+      if (out.running === true) background = true;
       if (Array.isArray(out.changedFiles)) {
         for (const f of out.changedFiles) if (typeof f === "string") changed.add(f);
       }
@@ -7454,7 +7437,7 @@ async function executeHandOff(plan, ports) {
         workstreams,
         ...changed.size ? { changedFiles: [...changed] } : {},
         ...placeholders.length ? { placeholders } : {},
-        next: PARALLEL_NEXT
+        next: background ? BACKGROUND_NEXT : PARALLEL_NEXT
       };
     }
   }
@@ -7470,7 +7453,7 @@ ${childTaskBrief(t, plan.summary, ids2[i])}`).join("\n\n")}`
 }
 
 // src/codeChanges.ts
-var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents", HAND_OFF_TOOL]);
+var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents", "wait_agents", HAND_OFF_TOOL]);
 function isDelegationTool(name) {
   return DELEGATION_TOOLS.has(name);
 }
@@ -7888,8 +7871,67 @@ function leftDelegationUndone(input) {
 }
 function undelegatedRequestNudge(toolNames) {
   const fanOut = toolNames.includes("spawn_agents");
-  const call2 = fanOut ? 'Call spawn_agents NOW with read_only:false so the children make their changes: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, paths=<the files it owns>, a complete standalone task brief, role "code". It takes up to 4 at once; start the next batch when one returns. Use spawn_agent (read_only:false) for a slice that must run alone.' : 'Call spawn_agent NOW with read_only:false, one slice at a time, with a complete standalone task brief and role "code".';
-  return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: a teammate without the role a slice needs runs it as an on-demand Developer sub-agent, and with nobody to name you OMIT it \u2014 or hire a Developer with builtin_cloud_agents_create (roleKeys:["developer"]) and run AS them. ${call2} When they finish, verify their changes and report what each child delivered, per ticket.`;
+  const call2 = fanOut ? 'Call spawn_agents NOW with read_only:false so the children make their changes: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, paths=<the files it owns>, a complete standalone task brief, role "code". It takes up to 4 per call and returns at once \u2014 the children run in the background, so start the next batch right away if there are more. Use spawn_agent (read_only:false) for a slice that must run alone.' : 'Call spawn_agent NOW with read_only:false, one slice at a time, with a complete standalone task brief and role "code".';
+  return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: with no fitting teammate, OMIT it \u2014 the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ${call2} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`;
+}
+
+// src/runLineage.ts
+var SUBAGENT_OF_META_KEY = "subagentOf";
+function lineageMetadata(lineage, metadata) {
+  let base = {};
+  if (metadata) {
+    try {
+      const parsed = JSON.parse(metadata);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) base = parsed;
+    } catch {
+    }
+  }
+  return JSON.stringify({
+    ...base,
+    [MID_TURN_META_KEY]: true,
+    [AUTHORED_BY_META_KEY]: { kind: "agent", ref: lineage.agent.ref, name: lineage.agent.name },
+    [SUBAGENT_OF_META_KEY]: { handle: lineage.handle, owner: lineage.ownerName, label: lineage.label }
+  });
+}
+function parseSubagentOrigin(msg) {
+  if (!msg.metadata) return null;
+  try {
+    const o = JSON.parse(msg.metadata)[SUBAGENT_OF_META_KEY];
+    if (o && typeof o.handle === "string" && typeof o.owner === "string") {
+      return { handle: o.handle, owner: o.owner, label: typeof o.label === "string" ? o.label : "" };
+    }
+  } catch {
+  }
+  return null;
+}
+function lineagePersistence(base, lineage, onPersisted) {
+  return {
+    ...base,
+    async sendMessages(chatId, messages) {
+      const saved = await base.sendMessages(
+        chatId,
+        messages.map((m) => ({ ...m, metadata: lineageMetadata(lineage, m.metadata) }))
+      );
+      for (const msg of saved) if (msg.role !== "tool") onPersisted(msg);
+      return saved;
+    }
+  };
+}
+
+// src/runSteering.ts
+var inboxes = /* @__PURE__ */ new Map();
+function queueRunSteering(runKey, text) {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  const queue = inboxes.get(runKey) ?? [];
+  queue.push(trimmed);
+  inboxes.set(runKey, queue);
+}
+function drainRunSteering(runKey) {
+  const queue = inboxes.get(runKey);
+  if (!queue?.length) return [];
+  inboxes.delete(runKey);
+  return queue;
 }
 
 // src/composingActivity.ts
@@ -8453,11 +8495,14 @@ function applyRemoteRun(chatId, snapshot) {
   c.providerCap = snapshot.providerCap;
   emit(c);
 }
-async function startRun(chatId, req) {
+async function startRun(runKey, request) {
   const driver = getRunDriver();
-  if (driver) return driver.start(chatId, req);
-  const c = getCell(chatId);
+  if (driver) return driver.start(runKey, request);
+  const c = getCell(runKey);
   if (c.running) return;
+  const lineage = request.lineage;
+  const chatId = lineage?.rootChatId ?? runKey;
+  const req = lineage ? { ...request, persistence: lineagePersistence(request.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) } : request;
   c.running = true;
   c.error = "";
   c.errorAction = null;
@@ -8483,7 +8528,7 @@ async function startRun(chatId, req) {
   if (req.userTurn !== void 0) c.transcript.push({ role: "user", content: req.userTurn });
   emit(c);
   try {
-    await runLoop(chatId, c, req);
+    await runLoop(chatId, c, req, runKey);
   } catch (e) {
     if (!c.abort?.signal.aborted) {
       c.error = e instanceof Error ? e.message : "Reply failed";
@@ -8671,7 +8716,7 @@ function canonicalTurnText(text) {
   const { content, reasoning } = splitVendorReasoning({ content: text });
   return canonicalReasoningText(content, reasoning);
 }
-async function runLoop(chatId, c, req) {
+async function runLoop(chatId, c, req, runKey) {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, routingMode, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
   const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
@@ -9015,7 +9060,7 @@ ${block}` : block : lead;
       const args = call2.args;
       attachDeltaToRunTicket(call2.name, args, c.deltaTicketId);
       if (needsConfirm && needsConfirm({ name: call2.name, args })) {
-        const ok = await requestRunConfirm(chatId, { name: call2.name, args }, { step: iter });
+        const ok = await requestRunConfirm(runKey, { name: call2.name, args }, { step: iter });
         if (!ok) {
           const declined = { cancelled: true, reason: "User declined this action." };
           pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: call2.name, args, result: declined });
@@ -9152,6 +9197,13 @@ ${revisit}` : covered.note;
         convo.push({ role: "assistant", content: replayTextOf(result.text) });
         convo.push({ role: "user", content: nudge });
       };
+      const steering = drainRunSteering(runKey);
+      if (steering.length > 0) {
+        await requeueWithNudge(steering.join("\n\n"));
+        c.streamingText = "";
+        emit(c);
+        return { action: "continue" };
+      }
       if (runTool && shouldRecoverStalledTurn(stallInput)) {
         announcementRecoveries += 1;
         const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
@@ -9288,6 +9340,7 @@ ${revisit}` : covered.note;
       const iter = ctx.step;
       c.streamingText = "";
       emit(c);
+      for (const text of drainRunSteering(runKey)) convo.push({ role: "user", content: text });
       const working = await buildWorkingTranscript(
         c,
         systemPrompt,
@@ -11419,7 +11472,7 @@ function PromptInput({
   STOPPED_TURN_STEP,
   STREAM_IDLE_MS,
   STUDIO_WORKSPACE_TOOLS,
-  SUBAGENT_REPORT_META_KEY,
+  SUBAGENT_OF_META_KEY,
   StreamIdleError,
   StreamInterruptedError,
   TICKET_RECORDING_TOOLS,
@@ -11502,6 +11555,7 @@ function PromptInput({
   directedAgentRecipients,
   dirtyPathsOf,
   displayModelName,
+  drainRunSteering,
   effortProfile,
   executeHandOff,
   extractXmlToolCalls,
@@ -11595,6 +11649,7 @@ function PromptInput({
   parseMessageProvenance,
   parsePmoFocus,
   parseStepMessage,
+  parseSubagentOrigin,
   perMillionUsd,
   personaAgentOf,
   personaModalityOf,
@@ -11614,12 +11669,12 @@ function PromptInput({
   productModelName,
   progressDuration,
   projectMemoryHooks,
+  queueRunSteering,
   ratedTurnContext,
   ratedTurnTool,
   readWithIdleWatchdog,
   reasoningForRun,
   repeatedFailureAdvisory,
-  requestRunConfirm,
   resetApiVersionCache,
   resetBrainRunStore,
   resolveRecipient,
@@ -11652,8 +11707,6 @@ function PromptInput({
   streamChatCompletion,
   stripAskUser,
   studioToolsIn,
-  subagentReportMessage,
-  subagentReportMetadata,
   subscribeRun,
   subscribeRunStore,
   subscribeToChatMessages,

@@ -21,8 +21,9 @@
  * string of its own — two descriptions of one agent is how a workspace ends up with two
  * Adas who disagree.
  */
-import { requireEnv as requireToolEnv, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
+import { getTenantTask, requireEnv as requireToolEnv, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
 import { listTenantAgentNames, listTenantAgentsForRole, resolveAgentPersonaBrief } from '../agent/agentPersonaBrief';
+import { staffUnfilledRole } from '../manager/staffUnfilledRole';
 import type { Env } from '../../env';
 
 type Json = Record<string, unknown>;
@@ -80,6 +81,43 @@ export const AGENT_PERSONA_TOOLS: BuiltinTool[] = [
         error: `no agent named/with id "${agent}" in this workspace`,
         available: await listTenantAgentNames(env, ctx.tenantId, MAX_SUGGESTED),
       };
+    },
+  },
+  {
+    tool: 'cloud_agents.staff_role',
+    mutates: true,
+    description:
+      'Staff `role` (e.g. "developer", "qa-tester") on `projectId`: the project\'s capable teammate when there is one, otherwise HIRE a new agent in this workspace holding the role. '
+      + 'Either way the agent is pinned to the role and attached to the project. Returns the same persona shape as cloud_agents.persona_brief plus `created`. '
+      + 'Pass `taskIds` to assign those tickets to the agent for a LOCAL sub-agent run: the assignment starts no cloud run. '
+      + 'spawn_agent / spawn_agents call this themselves for a code or verify slice that has no capable teammate.',
+    parameters: obj({ role: S, projectId: { type: 'number' }, taskIds: { type: 'array', items: { type: 'number' } } }, ['role', 'projectId']),
+    run: async (ctx: BuiltinCtx, a: Json) => {
+      const env = requireEnv(ctx);
+      const projectId = Number(a.projectId);
+      if (!Number.isInteger(projectId)) return { ok: false, error: 'projectId is required — the project the agent is staffed onto' };
+      // Tenant guard: a project outside the caller's workspace throws Forbidden/NotFound here.
+      await ctx.projects.getProject(projectId, ctx.tenantId);
+      const result = await staffUnfilledRole(env, ctx.db, { tenantId: ctx.tenantId, projectId, roleKey: str(a.role).trim() });
+      if (result.action === 'escalate' || !result.agentRef) return { ok: false, error: result.detail };
+      const brief = await resolveAgentPersonaBrief(env, ctx.tenantId, result.agentRef);
+      if (!brief) return { ok: false, error: `staffed ${result.agentName ?? result.agentRef} but could not load its persona` };
+      const staffed = { ...brief, created: result.action === 'hired', detail: result.detail };
+      // The slice's tickets are now this agent's work. Written through the task service
+      // directly, NOT `tasks.update`: that path treats a reassignment as a "go" and starts
+      // a cloud run, which would duplicate the local child about to do the work.
+      const ids = Array.isArray(a.taskIds) ? (a.taskIds as unknown[]).map(Number).filter(Number.isInteger) : [];
+      const assigned: number[] = [];
+      for (const id of ids) {
+        try {
+          await getTenantTask(ctx, id);
+          await ctx.tasks.updateTask(id, { assignedAgentRef: staffed.agentRef });
+          assigned.push(id);
+        } catch {
+          // A ticket outside this tenant, or gone, is skipped — the staffing still stands.
+        }
+      }
+      return { ok: true, ...staffed, ...(ids.length ? { assigned } : {}) };
     },
   },
 ];

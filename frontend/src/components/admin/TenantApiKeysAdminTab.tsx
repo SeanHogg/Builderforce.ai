@@ -12,7 +12,7 @@ import { MintedTenantApiKeyDisplay } from '@/components/MintedTenantApiKeyDispla
 import { AllowedOriginsField } from '@/components/AllowedOriginsField';
 import { AllowedOriginsBadge } from '@/components/AllowedOriginsBadge';
 import { TenantApiKeyEditor } from '@/components/TenantApiKeyEditor';
-import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
+import { TenantApiKeyUsageRow } from '@/components/TenantApiKeyUsageRow';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
@@ -287,7 +287,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
                 rows.push(
                   <tr key={`${k.id}-usage`}>
                     <td colSpan={7} style={{ background: 'var(--bg-base)' }}>
-                      <TenantApiKeyUsageDrawer
+                      <TenantApiKeyUsageRow
                         expanded
                         load={(params) => adminApi.tenantApiKeyUsage(tenantId, k.id, params)}
                       />
