@@ -409,6 +409,19 @@ describe('ReadCoverage · covered read windows', () => {
     expect(hit.note).toMatch(/offset 401/);
   });
 
+  it('keeps a JSON key read out of line-window coverage in both directions', () => {
+    const cov = new ReadCoverage();
+    cov.record('read_file', { path: CSS });
+    cov.cacheResult('read_file', { path: CSS }, { result: complete400, anchor: {} });
+    // A key read is not "lines 1–N" — the whole-file window above must not stub it…
+    expect(cov.coveredRead('read_file', { path: CSS, key: 'admin.visitorFlow' })).toBeNull();
+    // …and a key read's subtree must not stub a later line window.
+    const keyed = new ReadCoverage();
+    keyed.record('read_file', { path: CSS, key: 'admin' });
+    keyed.cacheResult('read_file', { path: CSS, key: 'admin' }, { result: { ok: true, path: CSS, key: 'admin', content: '{\n  "a": 1\n}' }, anchor: {} });
+    expect(keyed.coveredRead('read_file', { path: CSS, offset: 1, limit: 3 })).toBeNull();
+  });
+
   it('clips a default-size request to EOF of a complete shorter file', () => {
     const cov = new ReadCoverage();
     cov.record('read_file', { path: CSS });

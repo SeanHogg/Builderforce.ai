@@ -1,3 +1,16 @@
+## ✅ RESOLVED 2026-10-11 — The agent reads one key of a 33,000-line catalog instead of paging it (agent-tools · brain-embedded 2026.10.8 · VSIX 2026.10.9 · api 2026.10.22 · agent-runtime 2026.10.2)
+
+From the second VS Code chat #133 run, diagnosed as "NO PROGRESS": 41% of targeted calls revisited ground already covered, worst `en.json` ×16 (33,278 lines) and `adminApi.ts` ×12. The agent knew exactly which keys it wanted (`admin.visitorFlow`, `admin.sessions`), but `read_file` only pages by line window, so it guessed offsets.
+
+- `read_file` accepts `key`, a JSON dot path (`readJsonKey`, `packages/agent-tools/src/jsonKeyRead.ts`). It returns that subtree pretty-printed.
+  - When the subtree is over 12,000 characters, it returns the child keys instead, so the next read can name one.
+  - A missing segment lists the keys that do exist at that level.
+  - A file the provider truncated says so instead of failing to parse.
+  - The tool description points the model at `key` for catalogs and configs.
+- The read guard treats a key read as its own question (`QUESTION_KEYS` gains `key`), and keeps it out of line-window coverage in both directions, so a key read is never stubbed as "lines already returned", and vice versa.
+- Tests: `jsonKeyRead.test.ts` (5), `readCoverage.test.ts` (+1), with the agent-tools and brain-embedded suites listed in the verify brief (37 + 136 passing). Typechecks are clean in agent-tools, brain-embedded, vscode (host + webview), api and agent-runtime. VSIX 2026.10.9 is packaged and installed.
+- Note: both #133 runs were on client 2026.10.6, so none of today's agent fixes were live for them. The VS Code window has to be reloaded to pick up the installed build.
+
 ## ✅ RESOLVED 2026-10-11 — Agent replies no longer vanish into the reasoning, and an edit shows its result (agent-loop · agent-tools · brain-embedded 2026.10.7 · VSIX 2026.10.8 · api 2026.10.21 · agent-runtime 2026.10.1)
 
 Taken from the VS Code chat #133 diagnostics: 77 turns, 314 tool calls, one file read 13× around 7 edits, and most turns rendered as "reasoning only — no reply text".

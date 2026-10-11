@@ -421,9 +421,13 @@ export class ReadCoverage {
     const wanted = canonicalReadArgs(tool, args);
     const path = typeof wanted.path === 'string' ? wanted.path : '';
     if (!path) return null;
+    // A JSON `key` read is not a line window, in either direction: its subtree is not
+    // "lines 1–N" of the file, and a line window says nothing about a key.
+    if (typeof wanted.key === 'string') return null;
     const want = requestedReadWindow(wanted);
     for (const read of this.exact.values()) {
       if (read.tool !== 'read_file' || !read.cached) continue;
+      if (typeof read.args.key === 'string') continue;
       const earlierPath = typeof read.args.path === 'string' ? read.args.path : '';
       if (earlierPath !== path) continue;
       const got = servedReadWindow(read.cached.result);

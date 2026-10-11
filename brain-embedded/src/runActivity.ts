@@ -104,7 +104,9 @@ export function activityTarget(args: unknown): string | undefined {
 }
 
 /** Argument keys that name the QUESTION a call asks of its scope — a search's query, a listing's glob. */
-const QUESTION_KEYS = ['query', 'q', 'search', 'pattern', 'glob'] as const;
+// `key` is `read_file`'s JSON dot path: two keys of one catalog are two questions, not
+// one file circled twice.
+const QUESTION_KEYS = ['query', 'q', 'search', 'pattern', 'glob', 'key'] as const;
 
 /** Joins a scope to the question asked of it in a {@link visitTarget}. */
 export const VISIT_QUESTION_SEPARATOR = ' ∋ ';

@@ -35,6 +35,7 @@ import type {
 } from "./capabilities.js";
 import { ToolRegistry } from "./registry.js";
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
+import { readJsonKey } from "./jsonKeyRead.js";
 // The git/version-control subsystem lives in its own module (see `git-tools.ts`); it is
 // spliced into `CORE_TOOLS` here so the advertised catalog — name, order and all — is
 // exactly what it was before the split.
@@ -128,18 +129,38 @@ export function windowFileContent(
   return { content: slice.join("\n"), truncated: end < totalLines, totalLines, offset: start, returnedLines: slice.length };
 }
 
+/** `read_file` with `key`: one JSON subtree (see `jsonKeyRead.ts`). */
+function readFileKey(path: string, file: RepoReadResult, key: string): Record<string, unknown> {
+  if (file.truncated === true) {
+    return { ok: false, path, key, error: "the file is too large to load whole, so `key` cannot be used — page it with offset/limit" };
+  }
+  const read = readJsonKey(file.content ?? "", key);
+  if (!read.ok) return { path, key, ...read };
+  if ("tooLarge" in read) {
+    return {
+      ok: true,
+      path,
+      key: read.key,
+      childKeys: read.childKeys,
+      note: `"${read.key}" is ${read.size} characters — too large to return whole. Read one of its childKeys, e.g. key "${read.key}.${read.childKeys[0] ?? "…"}".`,
+    };
+  }
+  return { ok: true, path, key: read.key, content: read.content };
+}
+
 export const readFileTool: ToolDefinition = defineTool({
   name: "read_file",
   description:
     "Read a repo file on the ticket branch. Returns up to " +
     READ_DEFAULT_LINE_LIMIT +
-    " lines at a time: a large file comes back as a paginated line window (never a hard failure), and the result's `truncated`/`totalLines` tell you when more remains — read the next chunk by calling again with `offset`. Always read a file before editing it so you preserve existing code and only change what is needed.",
+    " lines at a time: a large file comes back as a paginated line window (never a hard failure), and the result's `truncated`/`totalLines` tell you when more remains — read the next chunk by calling again with `offset`. For a large JSON file (an i18n catalog, a config) pass `key` with a dot path such as \"admin.visitorFlow\" to get just that subtree instead of paging line windows. Always read a file before editing it so you preserve existing code and only change what is needed.",
   parameters: {
     type: "object",
     properties: {
       path: { type: "string", description: 'Repo-relative path, e.g. "src/feature.ts".' },
       offset: { type: "number", description: "1-based line to start reading from (for paging through a large file). Default 1." },
       limit: { type: "number", description: `Max lines to return. Default ${READ_DEFAULT_LINE_LIMIT}. Read the next window with offset = previous offset + returned lines.` },
+      key: { type: "string", description: 'JSON files only: a dot path (e.g. "admin.visitorFlow") — returns that subtree, or its child keys when it is too large. Ignores offset/limit.' },
     },
     required: ["path"],
   },
@@ -149,8 +170,10 @@ export const readFileTool: ToolDefinition = defineTool({
     if (!path) return { data: { ok: false, error: "path is required" } };
     const offset = typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : undefined;
     const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : undefined;
+    const key = typeof args.key === "string" ? args.key.trim() : "";
     const r = (await ctx.caps.repoRead!.readFile(path)) as RepoReadResult;
     if (!r.ok) return { data: r as unknown as Record<string, unknown> };
+    if (key) return { data: readFileKey(r.path ?? path, r, key) };
     const win = windowFileContent(r.content ?? "", { offset, limit });
     const data: RepoReadResult = {
       ok: true,
