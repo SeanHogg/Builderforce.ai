@@ -148,7 +148,7 @@ describe("subagentToolDef", () => {
         { text: "done" },
       ) as never,
       catalog: () => catalog,
-      confirmWrite,
+      run: { confirmWrite },
     });
     const out = JSON.parse(await tool.execute({ label: "edit", task: "rename it", read_only: false }, "/repo"));
 
@@ -168,7 +168,7 @@ describe("subagentToolDef", () => {
         { text: "could not change it" },
       ) as never,
       catalog: () => catalog,
-      confirmWrite: async () => ({ ok: false, reason: "declined by the user" }),
+      run: { confirmWrite: async () => ({ ok: false, reason: "declined by the user" }) },
     });
     const out = JSON.parse(await tool.execute({ label: "edit", task: "rename it", read_only: false }, "/repo"));
 
@@ -251,7 +251,7 @@ describe("subagentToolDef", () => {
         { text: "found it" },
       ) as never,
       catalog: () => CATALOG,
-      confirmWrite,
+      run: { confirmWrite },
     });
     await tool.execute({ label: "look", task: "find it", read_only: false }, "/repo");
     expect(confirmWrite).not.toHaveBeenCalled();

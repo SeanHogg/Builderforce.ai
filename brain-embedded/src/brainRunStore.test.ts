@@ -1294,3 +1294,94 @@ describe('mid-turn text is marked, so the Evermind learn gate never trains on it
     expect(answer && isMidTurnMetadata(answer.metadata)).toBe(false);
   });
 });
+
+describe('planning ends in tasks, and the tasks are the hand-off (chat #133)', () => {
+  type Sent = { role: string; content: string; metadata?: string };
+  const spec = (name: string) => ({ type: 'function' as const, function: { name, description: name, parameters: {} } });
+  const PLAN = {
+    summary: 'StatTile moves to adminShared; the drawer moves to SlideOutPanel.',
+    tasks: [
+      { title: 'One StatTile', brief: 'Move StatTile into adminShared.tsx.', paths: ['frontend/src/components/admin/adminShared.tsx'] },
+      { title: 'Drawer on SlideOutPanel', brief: 'Rebuild UserDetailDrawer on SlideOutPanel.', paths: ['frontend/src/components/UserDetailDrawer.tsx'] },
+    ],
+  };
+  const persistenceInto = (sent: Sent[]) => ({
+    sendMessages: async (chatId: number, msgs: Sent[]) => {
+      sent.push(...msgs);
+      return msgs.map((m, i) => ({ id: 7000 + sent.length + i, chatId, seq: 0, createdAt: '', ...m }));
+    },
+  }) as never;
+
+  it('files a ticket per task, fans the tasks out to parallel coders, and codes from then on', async () => {
+    const sent: Sent[] = [];
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const roles: string[] = [];
+    const advertised: string[][] = [];
+    let nextId = 900;
+    let turn = 0;
+    await startRun(5301, {
+      resolvedSystemPrompt: 'sys',
+      tools: [spec('read_file'), spec('edit_file'), spec('builtin_tasks_create'), spec('builtin_chats_link_ticket'), spec('spawn_agents')],
+      projectId: 11,
+      runTool: async (name, args) => {
+        calls.push({ name, args: args as Record<string, unknown> });
+        if (name === 'builtin_tasks_create') return { id: (nextId += 1), title: (args as { title: string }).title };
+        if (name === 'spawn_agents') return { ok: true, workstreams: [{ ok: true, label: 'a' }, { ok: true, label: 'b' }], changedFiles: ['frontend/src/components/UserDetailDrawer.tsx'] };
+        return { ok: true };
+      },
+      stream: async (opts) => {
+        turn += 1;
+        roles.push(String(opts.role));
+        advertised.push((opts.tools ?? []).map((t) => t.function.name));
+        if (turn === 1) return { text: 'The analysis is done.', toolCalls: [{ id: 'h1', name: 'hand_off', args: JSON.stringify(PLAN) }], finishReason: 'tool_calls' };
+        return { text: 'Verified, committed and pushed.', toolCalls: [], finishReason: 'stop' };
+      },
+      persistence: persistenceInto(sent),
+      userTurn: 'finish S0',
+    });
+
+    // One ticket per task, each linked to the chat.
+    expect(calls.filter((c) => c.name === 'builtin_tasks_create').map((c) => c.args.title)).toEqual(['One StatTile', 'Drawer on SlideOutPanel']);
+    expect(calls.filter((c) => c.name === 'builtin_chats_link_ticket')).toHaveLength(2);
+    // The tasks ran side by side, on the coding role, each owning its paths and its ticket.
+    const fan = calls.find((c) => c.name === 'spawn_agents');
+    const workstreams = fan?.args.workstreams as Array<{ role: string; ticket: string; paths: string[]; task: string }>;
+    expect(fan?.args.read_only).toBe(false);
+    expect(workstreams.map((w) => [w.role, w.ticket])).toEqual([['code', '901'], ['code', '902']]);
+    expect(workstreams[0]!.task).toContain('do not redo it');
+    // The plan is in the chat, naming the tickets.
+    expect(sent.some((m) => m.content.includes('Plan — 2 tasks') && m.content.includes('#901') && m.content.includes('#902'))).toBe(true);
+    // Planning offered hand_off; the coder that followed was not offered it again.
+    expect(roles).toEqual(['plan', 'code']);
+    expect(advertised[0]).toContain('hand_off');
+    expect(advertised[1]).not.toContain('hand_off');
+    expect(getRunTrace(5301).some((e) => e.label === 'llm.role_handoff')).toBe(true);
+  });
+
+  it('hands overlapping tasks to the coder in order instead of fanning them out', async () => {
+    const calls: string[] = [];
+    let handOffResult = '';
+    let turn = 0;
+    const overlapping = { summary: 's', tasks: [
+      { title: 'A', brief: 'a', paths: ['src/x'] },
+      { title: 'B', brief: 'b', paths: ['src/x/y.ts'] },
+    ] };
+    await startRun(5302, {
+      resolvedSystemPrompt: 'sys',
+      tools: [spec('read_file'), spec('spawn_agents')],
+      runTool: async (name) => { calls.push(name); return { ok: true }; },
+      stream: async (opts) => {
+        turn += 1;
+        if (turn === 1) return { text: '', toolCalls: [{ id: 'h1', name: 'hand_off', args: JSON.stringify(overlapping) }], finishReason: 'tool_calls' };
+        const tool = opts.messages.find((m) => m.role === 'tool');
+        handOffResult = String(tool?.content ?? '');
+        return { text: 'Done.', toolCalls: [], finishReason: 'stop' };
+      },
+      persistence: persistenceInto([]),
+      userTurn: 'do it',
+    });
+    expect(calls).not.toContain('spawn_agents');
+    expect(handOffResult).toContain('"mode":"inline"');
+    expect(handOffResult).toContain('Implement the tasks below in order');
+  });
+});

@@ -152,6 +152,10 @@ export {
   // The other half of that channel: raise the question. Exported because a delegated
   // sub-agent runs its own nested loop and must reach the SAME prompt the run cell owns.
   requestRunConfirm,
+  // A delegated child reads its parent's Stop by chat, and posts its report into the
+  // parent's live view (`appendRunMessage`) as it finishes.
+  runAbortSignal,
+  appendRunMessage,
   // Teardown only — a headless harness reuses one chat id across scenarios, and the
   // store is a module-level singleton keyed by it.
   resetBrainRunStore,
@@ -159,6 +163,19 @@ export {
 export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn } from './brainRunStore';
 export type { BrainRunOutcome } from './runOutcomeReport';
 export { isCoderReask } from './roleHandoff';
+// Planning ends in tasks: the `hand_off` tool, its executor, and the per-child chat report.
+export {
+  HAND_OFF_TOOL,
+  HAND_OFF_TOOL_SPEC,
+  parseHandOff,
+  executeHandOff,
+  canRunInParallel,
+  childTaskBrief,
+  planMessage,
+} from './planHandoff';
+export type { HandOffPlan, HandOffTask, HandOffPorts, HandOffOutcome } from './planHandoff';
+export { subagentReportMessage, subagentReportMetadata, SUBAGENT_REPORT_META_KEY } from '@builderforce/agent-loop';
+export type { SubagentReportLike } from '@builderforce/agent-loop';
 // The run-driver seam: a host whose UI process is disposable (the VS Code webview)
 // executes runs in a longer-lived process and mirrors them back with `applyRemoteRun`.
 export { applyRemoteRun } from './brainRunStore';

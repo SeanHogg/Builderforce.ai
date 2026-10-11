@@ -25,6 +25,7 @@
  */
 
 import {
+  appendRunMessage,
   clearRunError,
   getGlobalRunState,
   getRunSnapshot,
@@ -33,10 +34,13 @@ import {
   isRunning,
   nextFallbackModel,
   resolveRunConfirm,
+  runAbortSignal,
   startRun,
   stopRun,
   subscribeRun,
   subscribeRunStore,
+  subagentReportMessage,
+  subagentReportMetadata,
   traceEventToPersistInput,
   type PersistTraceEventInput,
   type BrainRunOutcome,
@@ -51,11 +55,12 @@ import {
   type ModelFallbackSurface,
   type ReasoningIntent,
 } from "@seanhogg/builderforce-brain-embedded";
-import { createChildWriteGate, type ChildWriteDecision } from "./childWriteGate";
+import { createChildWriteGate } from "./childWriteGate";
 import type { ToolDef } from "./fileTools";
 import { createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs, type NativeRunLabels } from "./nativeBrainRun";
 import { renderPolicyDirectives, type PolicyGate } from "./policy";
 import { SessionNotes, type RunActivity } from "./sessionNotes";
+import type { ChildReport, SubagentRunBinding } from "./subagentRun";
 
 /** The serializable half of a `BrainRunRequest`, as the webview posts it. */
 export interface WebviewRunStart {
@@ -126,22 +131,12 @@ export interface BrainRunHostPorts {
   /**
    * Local file tools + cognition + the gateway's platform catalog, for a project.
    *
-   * `confirmWrite` is how a DELEGATED sub-agent asks to write. It is built here (not by
-   * the port) because only the run knows the chat whose modal the question appears on
-   * and the live Auto switch that may answer it.
-   *
-   * `getSignal`, `getRunTool`, and `getModel` are called at subagent tool EXECUTION time
-   * (not catalog creation) to get the current parent run's context. This allows children
-   * to stop when the parent stops, have their writes tracked by the parent's ticket/notes
-   * system, and use the same model as the parent.
+   * `run` binds a DELEGATED sub-agent to the run that spawned it — its write gate, its
+   * Stop, its model route, its tool bookkeeping and its report into the chat. Built here
+   * (not by the port) because only the run knows the chat whose modal a write question
+   * appears on, the live Auto switch that may answer it, and the chat a report lands in.
    */
-  tools(
-    projectId: number | undefined,
-    confirmWrite: (req: { name: string; args: Record<string, unknown> }) => Promise<ChildWriteDecision>,
-    getSignal?: () => AbortSignal | undefined,
-    getRunTool?: () => ((name: string, args: Record<string, unknown>) => Promise<unknown>) | undefined,
-    getModel?: () => { model?: string; modelStrict?: boolean; routingMode?: "auto" | "byo_pool" } | undefined,
-  ): Promise<readonly ToolDef[]>;
+  tools(projectId: number | undefined, run: SubagentRunBinding): Promise<readonly ToolDef[]>;
   /** Workspace root the local tools resolve against; '' when no folder is open. */
   workspaceRoot(): string;
   /** The transport-bound streamer for the CURRENT route (gateway or on-device). */
@@ -345,30 +340,46 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       blockedByPolicy: ports.labels.blockedByPolicy,
     });
 
-    // Get the current run's abort signal - needed so children stop when the parent stops.
-    // This is accessed via the global run state, which the subagent can read.
-    const getSignal = (): AbortSignal | undefined => {
-      // The signal is stored in the run store when the run starts.
-      // For now, we'll let the subagent get it from the brain-embedded package.
-      // A proper implementation would store it in a way the subagent can access.
-      return undefined; // TODO: wire up the actual signal
+    // What a finished tool call means to this host — the knowledge loop, the Changes
+    // view and the panel's feed. ONE reading for the run's own calls and a delegated
+    // child's, so a child's write is as visible as the parent's.
+    const recordToolRun = (def: ToolDef, record: Record<string, unknown>, out: unknown): void => {
+      const ok = !isFailedToolResult(out);
+      const name = def.name;
+      // Feed the knowledge loop on SUCCESS only — a note claiming a file was written
+      // when the write threw would ground every later run on a lie.
+      if (ok && !def.remote) notesFor(chatId).record(name, record);
+      const info: ToolRunInfo = { chatId, name, args: record, mutating: def.mutating, remote: !!def.remote, ok };
+      ports.onToolRun?.(info);
+      broadcast({ type: "run.tool", chatId, name, mutating: def.mutating, remote: !!def.remote, ok });
+    };
+    // A delegated child's report, posted into THIS chat as it finishes and spliced into
+    // the live view. Best-effort: the parent still reads the child's result either way.
+    const postChildReport = async (report: ChildReport): Promise<void> => {
+      try {
+        const [msg] = await ports.persistence.sendMessages(chatId, [
+          { role: "assistant", content: subagentReportMessage(report), metadata: subagentReportMetadata(report) },
+        ]);
+        if (msg) appendRunMessage(chatId, msg);
+      } catch {
+        /* a lost report is never a run failure */
+      }
+    };
+    // Everything a delegated child inherits from THIS run. Read at call time: the run's
+    // abort controller is created by `startRun`, after this catalog is assembled.
+    const binding: SubagentRunBinding = {
+      confirmWrite: confirmChildWrite,
+      signal: () => runAbortSignal(chatId),
+      route: {
+        ...(p.model ? { model: p.model } : {}),
+        ...(p.modelStrict != null ? { modelStrict: p.modelStrict } : {}),
+        ...(p.routingMode ? { routingMode: p.routingMode } : {}),
+      },
+      onToolRun: ({ def, args, out }) => recordToolRun(def, args, out),
+      onChildReport: (report) => void postChildReport(report),
     };
 
-    // Get the parent's model settings for the child to use.
-    const getModel = (): { model?: string; modelStrict?: boolean; routingMode?: "auto" | "byo_pool" } | undefined => ({
-      model: p.model,
-      modelStrict: p.modelStrict,
-      routingMode: p.routingMode,
-    });
-
-    // Get the runTool - but it's created AFTER this call, so we use a different approach.
-    // We'll create a placeholder that gets filled in after runTool is created.
-    // Actually, the simplest solution is to have the subagent tool get runTool from a module-level
-    // variable that we set. Let me use that approach instead.
-    let currentRunTool: ((name: string, args: Record<string, unknown>) => Promise<unknown>) | undefined;
-    const getRunTool = (): typeof currentRunTool => currentRunTool;
-
-    const defs = await ports.tools(projectId, confirmChildWrite, getSignal, getRunTool, getModel);
+    const defs = await ports.tools(projectId, binding);
     broadcast({ type: "run.tools", chatId, count: defs.length });
     const native = createNativeRunTool({
       defs,
@@ -380,20 +391,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const runTool = async (name: string, args: unknown): Promise<unknown> => {
       const out = await native(name, args);
       const def = defs.find((d) => d.name === name);
-      if (def) {
-        const ok = !isFailedToolResult(out);
-        const record = argsRecord(args);
-        // Feed the knowledge loop on SUCCESS only — a note claiming a file was written
-        // when the write threw would ground every later run on a lie.
-        if (ok && !def.remote) notesFor(chatId).record(name, record);
-        const info: ToolRunInfo = { chatId, name, args: record, mutating: def.mutating, remote: !!def.remote, ok };
-        ports.onToolRun?.(info);
-        broadcast({ type: "run.tool", chatId, name, mutating: def.mutating, remote: !!def.remote, ok });
-      }
+      if (def) recordToolRun(def, argsRecord(args), out);
       return out;
     };
-    // Wire up the runTool getter so subagents can use it for their writes.
-    currentRunTool = runTool;
     // The gate reads the LIVE flag: `nativeNeedsConfirm` is the one predicate every
     // host surface shares, re-bound per call so a mid-run switch is honoured.
     const needsConfirm = (req: { name: string; args: unknown }): boolean =>

@@ -114,6 +114,11 @@ export type Capability =
    *  not answer that the same way), which is why this is a capability and not a
    *  tool everyone gets. */
   | "orchestrate"
+  /** Run SEVERAL sub-agents side by side (`spawn_agents`) on the `orchestrate` backing.
+   *  Its own capability because "can run a child" does not imply "can run four at
+   *  once in one tree": that also needs scoped writers and serialized commits, which a
+   *  surface backs or does not. The editor runs its own fan-out outside the registry. */
+  | "orchestrate.fanout"
   /** Send messages on a docked channel (Slack/Discord/Telegram/…). */
   | "message"
   /** Render / generate media (image, tts, canvas). */
@@ -319,6 +324,16 @@ export interface SubagentRequest {
    * model to read, never as a silently anonymous child wearing the wrong name.
    */
   asAgent?: string;
+  /**
+   * The paths this child may WRITE, when it runs beside siblings in one tree
+   * (`spawn_agents`). Present ⇒ every write outside them is refused, and the child gets
+   * no shell or git — those reach the whole tree whatever a scope says.
+   */
+  scope?: readonly string[];
+  /** The ticket this child delivers — echoed on the result and in its chat report. */
+  ticket?: string;
+  /** Cap on the child's answer — a fan-out shares one result between its children. */
+  outputChars?: number;
 }
 
 export interface SubagentResult {
@@ -334,6 +349,10 @@ export interface SubagentResult {
    *  "Ada" and this says which agent that turned out to be, so the answer can be
    *  attributed to a real teammate rather than to the string the parent guessed. */
   asAgent?: { ref: string; name: string };
+  /** Files the child wrote — its writes happen inside one call the parent cannot see. */
+  changedFiles?: string[];
+  /** The ticket the child delivered, echoed from the request. */
+  ticket?: string;
   error?: string;
 }
 

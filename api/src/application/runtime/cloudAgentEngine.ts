@@ -138,6 +138,7 @@ import { inspectOutboundContent, recordContextContribution } from '../trust/trus
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { boards, executionLimits, executions, llmUsageLog, tasks, usageSnapshots, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
+import { subagentChatReport } from './subagentChatReport';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import { submittingUserId } from './dispatcherLabel';
@@ -1344,6 +1345,9 @@ async function runCloudToolLoop(
           toolName: 'agent.subagent', category: 'tool', detail: event.detail, result: event.result,
         });
       },
+      // Each child — one, or each of a `spawn_agents` fan-out — reports into the chat
+      // that launched this run as it finishes.
+      ...subagentChatReport(db, tenantId, opts?.originatingChatId, cloudAgentRef),
     }),
   };
   const toolCtx: ToolContext = { caps: provider, signal: abortController.signal };

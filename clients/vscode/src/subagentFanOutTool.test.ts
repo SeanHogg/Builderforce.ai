@@ -141,4 +141,20 @@ describe("spawn_agents", () => {
     expect(out.writeDeclined).toContain("cannot raise an approval prompt");
     expect(out.workstreams[0].readOnly).toBe(true);
   });
+  it("posts every child's report to the chat as it finishes, ticket included", async () => {
+    // A fan-out of coders reads in the chat as one report per ticket, not one collapsed
+    // tool step at the end — failed children included.
+    const reports: Array<{ label: string; ok: boolean; ticket?: string }> = [];
+    const stream = scriptedStream({ "do a": [{ text: "a is done" }] });
+    const throwing = vi.fn(async () => { throw new Error("model unavailable"); });
+    const d = deps(stream, [def("read_file")], {
+      run: { confirmWrite: allow, onChildReport: (r) => reports.push({ label: r.label, ok: r.ok, ...(r.ticket ? { ticket: r.ticket } : {}) }) },
+    });
+    await run(d, { workstreams: [{ label: "A", task: "do a", ticket: "41" }] });
+    await run({ ...d, stream: async () => throwing as never }, { workstreams: [{ label: "B", task: "do b" }] });
+    expect(reports).toEqual([
+      { label: "A", ok: true, ticket: "41" },
+      { label: "B", ok: false },
+    ]);
+  });
 });

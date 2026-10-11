@@ -139,6 +139,11 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   // liveness from that heartbeat, so a tick spent inside a child is not mistaken for a
   // dead run.
   'orchestrate',
+  // Several children side by side (`spawn_agents`). Backed here because the children's
+  // writers are scoped and their git-API commits queue on one chain
+  // (`guardedRepoWrite` in cloudSubagent.ts). NOT on the images: their relay has no arm
+  // for it, and their local clone would not see the children's commits.
+  'orchestrate.fanout',
 ]);
 
 /**

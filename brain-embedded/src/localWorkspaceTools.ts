@@ -85,6 +85,8 @@ export const LOCAL_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
   // agent burns the turns delegation exists to save. Nothing is pinned that the host
   // did not advertise — the web Brain offers no `spawn_agent`, so this is inert there.
   'spawn_agent',
+  // Its side-by-side twin — what a planner's `hand_off` fans out to; editor-only.
+  'spawn_agents',
 ]);
 
 /**

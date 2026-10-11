@@ -288,3 +288,87 @@ describe('buildOrchestrationCapability · as_agent', () => {
     expect(record.mock.calls[0]![0].detail).toMatchObject({ asAgent: 'Ada', asAgentName: 'Ada' });
   });
 });
+
+describe('side-by-side children (spawn_agents) on the cloud', () => {
+  /** A write tool that really goes through the child's `repoWrite`. */
+  const committingWrite: ToolDefinition = {
+    name: 'write_file',
+    requires: ['repo.write'],
+    schema: { type: 'function', function: { name: 'write_file', description: 'write', parameters: { type: 'object' } } },
+    execute: async (args, ctx) => ({ data: { ...(await ctx.caps.repoWrite!.writeFile(String(args.path), 'x')) } }),
+  };
+  /** A child that writes `path` on its first turn and answers on its second. */
+  const writes = (path: string) => {
+    let turn = 0;
+    return async (): Promise<LoopTurnResult> => (turn++ === 0
+      ? { content: '', toolCalls: [{ id: `w-${path}`, name: 'write_file', arguments: JSON.stringify({ path }) }] }
+      : answer(`wrote ${path}`));
+  };
+
+  it('holds a scoped child to its paths, withholds the shell, and echoes what it wrote', async () => {
+    const writeFile = vi.fn(async () => ({ ok: true }));
+    const complete = vi.fn(async (_args: CompleteArgs) => answer('x'));
+    let turn = 0;
+    const orchestration = buildOrchestrationCapability({
+      parentCaps: ALL_CAPS,
+      provider: { capabilities: ALL_CAPS, repoWrite: { writeFile, editFile: vi.fn(), deleteFile: vi.fn() } as never },
+      registry: registryWith(readTool, committingWrite),
+      complete: async (a) => {
+        complete(a);
+        turn += 1;
+        if (turn === 1) return { content: '', toolCalls: [{ id: 'a', name: 'write_file', arguments: JSON.stringify({ path: 'src/mine/a.ts' }) }] };
+        if (turn === 2) return { content: '', toolCalls: [{ id: 'b', name: 'write_file', arguments: JSON.stringify({ path: 'src/theirs/b.ts' }) }] };
+        return answer('done');
+      },
+    });
+    const result = await orchestration.spawn({ label: 'mine', task: 'change mine', readOnly: false, scope: ['src/mine'], ticket: '41' });
+    expect(writeFile).toHaveBeenCalledTimes(1);
+    expect(writeFile).toHaveBeenCalledWith('src/mine/a.ts', 'x', undefined);
+    expect(result).toMatchObject({ ok: true, changedFiles: ['src/mine/a.ts'], ticket: '41' });
+    expect(childCapabilities(ALL_CAPS, false, true).has('shell')).toBe(false);
+  });
+
+  it("serializes concurrent children's commits — they think in parallel, commit in turn", async () => {
+    let active = 0;
+    let peak = 0;
+    const writeFile = vi.fn(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((r) => setTimeout(r, 5));
+      active -= 1;
+      return { ok: true };
+    });
+    const scripts = new Map([['do a', writes('a/1.ts')], ['do b', writes('b/1.ts')]]);
+    const orchestration = buildOrchestrationCapability({
+      parentCaps: ALL_CAPS,
+      provider: { capabilities: ALL_CAPS, repoWrite: { writeFile, editFile: vi.fn(), deleteFile: vi.fn() } as never },
+      registry: registryWith(readTool, committingWrite),
+      complete: async (a) => {
+        const task = String((a.messages.find((m) => m.role === 'user') as { content?: unknown } | undefined)?.content ?? '');
+        return scripts.get([...scripts.keys()].find((k) => task.includes(k)) ?? '')!();
+      },
+    });
+    await Promise.all([
+      orchestration.spawn({ label: 'a', task: 'do a', readOnly: false, scope: ['a'] }),
+      orchestration.spawn({ label: 'b', task: 'do b', readOnly: false, scope: ['b'] }),
+    ]);
+    expect(writeFile).toHaveBeenCalledTimes(2);
+    expect(peak).toBe(1);
+  });
+
+  it('reports every child into the chat as it finishes, failures included', async () => {
+    const report = vi.fn(async () => undefined);
+    const orchestration = buildOrchestrationCapability({
+      parentCaps: ALL_CAPS,
+      provider: provider(ALL_CAPS),
+      registry: registryWith(readTool),
+      complete: async () => { throw new Error('model unavailable'); },
+      report,
+    });
+    await orchestration.spawn({ label: 'look', task: 'find it', ticket: '7' });
+    expect(report).toHaveBeenCalledWith(
+      expect.objectContaining({ label: 'look', ticket: '7' }),
+      expect.objectContaining({ ok: false, error: 'model unavailable', ticket: '7' }),
+    );
+  });
+});

@@ -17,7 +17,9 @@ import type { BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
 import { TOOL_DEFS, type ToolDef } from "./fileTools";
 import { cognitionToolDefs } from "./cognition";
 import { listPlatformTools } from "./platformTools";
-import { subagentToolDef, type SubagentToolDeps } from "./subagentTool";
+import { subagentToolDef } from "./subagentTool";
+import { subagentFanOutToolDef } from "./subagentFanOutTool";
+import type { SubagentRunBinding } from "./subagentRun";
 import { ticketBranchReviewToolDef } from "./ticketBranchTool";
 import { desktopBackedTools } from "./desktopContext";
 
@@ -29,16 +31,11 @@ export async function brainToolCatalog(
    *  tool whose only backing is a model we cannot reach would surface a call that is
    *  certain to fail. */
   stream?: () => Promise<BrainStreamFn>,
-  /** How a delegated child asks permission to write. Omitted ⇒ children stay read-only;
-   *  `spawn_agent` is still advertised, because a read-only child is the DEFAULT and is
-   *  most of what delegation is for. */
-  confirmWrite?: SubagentToolDeps["confirmWrite"],
-  /** Get the parent's abort signal at tool execution time. */
-  getSignal?: SubagentToolDeps["getSignal"],
-  /** Get the parent's runTool at tool execution time for child write tracking. */
-  getRunTool?: SubagentToolDeps["getRunTool"],
-  /** Get the parent's model settings at tool execution time. */
-  getModel?: SubagentToolDeps["getModel"],
+  /** The run a delegated child belongs to — its write gate, Stop, model route, tool
+   *  bookkeeping and chat report (`SubagentRunBinding`). Omitted ⇒ children stay
+   *  read-only; delegation is still advertised, because a read-only child is the DEFAULT
+   *  and is most of what delegation is for. */
+  run?: SubagentRunBinding,
 ): Promise<ToolDef[]> {
   const cognitionTools = projectId != null ? cognitionToolDefs(secrets, projectId) : [];
   const platformTools = await listPlatformTools(secrets);
@@ -53,18 +50,17 @@ export async function brainToolCatalog(
   // last so its `catalog()` can hand the child the tools assembled above — the child's
   // read-only subset is derived from the parent's catalog, never a second list that
   // could drift from it.
-  const delegation: ToolDef[] =
-    root && stream
-      ? [subagentToolDef({
-          stream,
-          catalog: () => [...localTools, ...cognitionTools, ...platformTools],
-          ...(confirmWrite ? { confirmWrite } : {}),
-          personaBrief: (agent) => resolvePersonaBrief(platformTools, agent, root),
-          ...(getSignal ? { getSignal } : {}),
-          ...(getRunTool ? { getRunTool } : {}),
-          ...(getModel ? { getModel } : {}),
-        })]
-      : [];
+  // One child, and several side by side (`spawn_agents` — what a planner's hand-off fans
+  // out to), on the SAME deps: they differ only in how many children they start.
+  const deps = root && stream
+    ? {
+        stream,
+        catalog: () => [...localTools, ...cognitionTools, ...platformTools],
+        personaBrief: (agent: string) => resolvePersonaBrief(platformTools, agent, root),
+        ...(run ? { run } : {}),
+      }
+    : null;
+  const delegation: ToolDef[] = deps ? [subagentToolDef(deps), subagentFanOutToolDef(deps)] : [];
   return [...localTools, ...cognitionTools, ...platformTools, ...delegation];
 }
 

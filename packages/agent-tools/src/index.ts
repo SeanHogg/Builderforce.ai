@@ -10,6 +10,9 @@
 export * from "./capabilities.js";
 export * from "./modelRoles.js";
 export * from "./edit.js";
+// Write scopes for children that share one working tree — the ONE overlap rule a
+// planner's hand-off and every fan-out (editor and cloud) apply.
+export * from "./workstreamScope.js";
 export * from "./jsonKeyRead.js";
 export * from "./glob.js";
 export * from "./tool.js";

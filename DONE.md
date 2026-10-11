@@ -1,3 +1,35 @@
+## ✅ RESOLVED 2026-10-11 — Planning ends in tasks: the hand-off to the coding model files tickets, and parallel coders report back to the chat (agent-tools 2026.10.1 · agent-loop 2026.10.1 · brain-embedded 2026.10.10 · VSIX 2026.10.12 · api 2026.10.23 · frontend 2026.10.39)
+
+VS Code chat #133: the planning model never produced a plan. It drifted into its first edit, the run discarded that edit and re-asked the coder inline, and nothing was filed or run in parallel. Delegated children reported only to their parent, never to the chat.
+
+- **`hand_off` ends the analysis** (`brain-embedded/src/planHandoff.ts`). The planner calls it once with `{ summary, tasks: [{ title, brief, paths, acceptance }] }`; it is offered only while the run is planning. The run then does four things:
+  - files one ticket per task (`builtin_tasks_create`) and links each one to the chat (`autoLinkCreatedItem`);
+  - posts the plan into the chat;
+  - flips the run to the `code` role;
+  - hands the tasks over. Where the host can fan out and the tasks own disjoint paths (`canRunInParallel`, the same overlap rule `spawn_agents` enforces), each task becomes a coding child, in batches of 4. Otherwise the coder gets the tasks to implement in order.
+
+  The old first-edit re-ask stays as the fallback for a planner that edits without handing off.
+- **The editor's fan-out is live, and the half-finished sub-agent refactor is finished.** `spawn_agents` had never been registered: `be7d8fc20` moved `spawn_agent` onto getters, one of which, `getSignal`, returned `undefined`, so Stop never reached a child. `df80b03a7` then added `subagentRun.ts` and `subagentFanOutTool.ts` but wired neither. Now:
+  - both tools run through `runLocalChild` on ONE `SubagentRunBinding`, built per run in `brainRunHost.ts`, which carries the write gate, Stop (`runAbortSignal`), the model route, the tool bookkeeping and the chat report;
+  - `spawn_agent` now sends its `role` to the model and reports `changedFiles`;
+  - the native participant passes the same binding.
+- **Every child reports into the chat as it finishes**, failures included, with its ticket. The text is `subagentReportMessage` (agent-loop), and the message is tagged mid-turn so Evermind does not learn it as an answer.
+  - Editor: `onChildReport` persists the report and splices it into the live view with the new `appendRunMessage`.
+  - Cloud: `subagentChatReport` posts through the verified `postExecutionUpdate`, on both the durable surface and the image `spawn` op.
+- **The cloud can fan out.** `spawn_agents` now lives in `@builderforce/agent-tools` (schema, `parseWorkstreams`, `workstreamScopeError`), and the editor tool reuses it. The durable cloud loop starts every child at once through `orchestrate`:
+  - a scoped child loses `shell`, `process` and `git.write` (`TREE_WIDE_CAPABILITIES`);
+  - a write outside its paths is refused;
+  - every child's commit queues on one chain (`guardedRepoWrite`), so concurrent git-API commits cannot race the branch ref.
+
+  It needs its own capability, `orchestrate.fanout`, which only the durable surface holds, so the images, which have no relay arm for it, are never offered it. Their fan-out is a Gap Register entry, blocked on an image build and deploy.
+- **Path ownership has one home.** `workstreamScope.ts` moved from the VSIX to agent-tools; the planner, the editor and the cloud all import it.
+- Tests:
+  - `planHandoff.test.ts`: parsing, overlap, the plan message, batching, the fan-out-refused fallback, ticketless hand-off, and the report text and tag.
+  - Two run-store tests: tickets, linking, a parallel fan-out on `code` and `hand_off` dropping out of the menu; and the inline order for overlapping tasks.
+  - `subagent-tools.test.ts`: the shared parser, the scope error, and concurrent cloud children.
+  - Three cloud tests: scope plus withheld shell, serialized commits, and per-child reports.
+  - A VSIX fan-out test that each child reports to the chat.
+
 ## ✅ RESOLVED 2026-10-11 — An answered question stops pinning itself over the chat, and has a close button (brain-ui 2026.10.5 · VSIX 2026.10.11 · frontend 2026.10.38)
 
 VS Code chat #133: the agent asked "Which PRD do you want to finish?" and the user picked an option. The "Answer needed" banner stayed pinned above the composer, showing "Answered: PRD 33a" while the run carried on underneath it.

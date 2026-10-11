@@ -9,7 +9,7 @@
  */
 
 import { runSubagent, subagentStepBudget, type ToolRowSerializer } from "@builderforce/agent-loop";
-import { spawnAgentTool } from "@builderforce/agent-tools";
+import { spawnAgentTool, spawnAgentsTool } from "@builderforce/agent-tools";
 import {
   codeChangesOf,
   isCodeChangeTool,
@@ -24,7 +24,7 @@ import {
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ChildWriteDecision } from "./childWriteGate";
 import type { ToolDef } from "./fileTools";
-import { inScope } from "./workstreamScope";
+import { inScope } from "@builderforce/agent-tools";
 
 /** The model route a run is on — what a child must reuse so it cannot land elsewhere. */
 export interface SubagentModelRoute {
@@ -58,6 +58,12 @@ export interface SubagentRunBinding {
   /** One finished child tool call, reported to the parent's per-call bookkeeping
    *  (session notes, the Changes view, the panel's tool feed) exactly as its own are. */
   onToolRun?(call: { def: ToolDef; args: Record<string, unknown>; out: unknown }): void;
+  /**
+   * One child FINISHED — post its report into the chat. Called for every child, failed
+   * ones included, the moment it is back: a fan-out of four coders reads in the chat as
+   * four reports landing, one per ticket, not as one collapsed tool step at the end.
+   */
+  onChildReport?(report: ChildReport): void;
 }
 
 /** What the delegation tools need from the host: a model route and the catalog the
@@ -112,7 +118,7 @@ export function workstreamToolDefs(catalog: readonly ToolDef[], writable: boolea
 }
 
 /** The names a child must never be handed. `spawn_agents` is added by its own module. */
-const DELEGATION_TOOL_NAMES = new Set<string>([spawnAgentTool.name, "spawn_agents"]);
+const DELEGATION_TOOL_NAMES = new Set<string>([spawnAgentTool.name, spawnAgentsTool.name]);
 
 /** A resolved persona, or a refusal the parent can act on. */
 export type ChildPersona =
@@ -202,8 +208,19 @@ function toSpecs(defs: readonly ToolDef[]): BrainToolSpec[] {
 const childToolRow: ToolRowSerializer = (result) =>
   typeof result.data === "string" ? result.data : JSON.stringify(result.data ?? null);
 
-/** Run ONE child to completion. Never throws: a failed child is information for the parent. */
+/** Run ONE child to completion and report it to the chat. Never throws: a failed child is
+ *  information for the parent. */
 export async function runLocalChild(deps: SubagentToolDeps, spec: ChildRunSpec, root: string): Promise<ChildReport> {
+  const report = await runChild(deps, spec, root);
+  try {
+    deps.run?.onChildReport?.(report);
+  } catch {
+    /* the chat report is best-effort; the parent still gets the result */
+  }
+  return report;
+}
+
+async function runChild(deps: SubagentToolDeps, spec: ChildRunSpec, root: string): Promise<ChildReport> {
   const run = deps.run;
   const confirmWrite = spec.writable ? run?.confirmWrite : undefined;
   const byName = new Map(spec.tools.map((d) => [d.name, d]));

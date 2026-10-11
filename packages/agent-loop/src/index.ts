@@ -16,6 +16,7 @@ export { looksLikeRunNarration, stripRunNarration, NARRATION_MIN_CHARS } from ".
 export type { StrippedNarration } from "./runNarration.js";
 // The structural half: a persisted mid-turn block is MARKED, and the learn gate skips it.
 export { isMidTurnMetadata, MID_TURN_META_KEY } from "./turnPhase.js";
+export { subagentReportMessage, subagentReportMetadata, SUBAGENT_REPORT_META_KEY, type SubagentReportLike } from "./subagentReport.js";
 // The reasoning channel — one reading of what a turn SAID versus what it THOUGHT, and
 // the policies each surface applies to it. Written four times before this, disagreeing
 // on whether an unclosed block counts and whether a tag inside a code fence does; see

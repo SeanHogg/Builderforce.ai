@@ -3,110 +3,31 @@
  *
  * Same tool, same brief and same budget as the cloud's (both take the schema from
  * `@builderforce/agent-tools` and the run from `@builderforce/agent-loop`, so a model
- * that learned to delegate in one surface delegates identically in the other), and now
- * the same answer to what a child may touch: a child can WRITE, and every write it makes
- * is approved by the same human, on the same prompt, under the same governance gates as
- * a write the parent makes.
+ * that learned to delegate in one surface delegates identically in the other), and the
+ * same answer to what a child may touch: a child can WRITE, and every write it makes is
+ * approved by the same human, on the same prompt, under the same governance gates as a
+ * write the parent makes.
  *
- * That was the one thing this surface could not do. The approval prompt is raised by the
- * Brain run cell that owns the chat UI, and a nested loop had no way to reach it — so a
- * writable child would have been a disk write nobody approved, and the honest thing was
- * to run children read-only and say so. The cell's confirm channel is now callable from
- * outside it (`requestRunConfirm`), so the child asks the question rather than skipping
- * it, and `createChildWriteGate` is where the answer is decided.
- *
- * Read-only is still the DEFAULT, because it is the right default: most delegation is
+ * Read-only is the DEFAULT, because it is the right default: most delegation is
  * investigation, and a read-only child cannot cost anything but time. A parent gets a
- * writable child only by asking for one (`read_only: false`) — and only when the host
- * supplied a gate, because a surface with no way to prompt must still never write.
+ * writable child only by asking for one (`read_only: false`) — and only when the run
+ * supplied a write gate, because a surface with no way to prompt must still never write.
+ *
+ * The child itself is `runLocalChild` (`subagentRun.ts`), the ONE child run this tool and
+ * `spawn_agents` share: its Stop, its model route and role, the files it changed and its
+ * report into the chat all come from the run binding there, not from a second copy here.
  */
 
-import { runSubagent, SUBAGENT_MAX_STEPS } from "@builderforce/agent-loop";
-import { spawnAgentTool } from "@builderforce/agent-tools";
-import { trimToolResult } from "@seanhogg/builderforce-brain-embedded";
-import type { BrainStreamFn, BrainToolSpec, ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
-import type { ChildWriteDecision } from "./childWriteGate";
+import { spawnAgentTool, delegationRole } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
+import { childToolDefs, resolveChildPersona, runLocalChild, type SubagentToolDeps } from "./subagentRun";
+
+export { childToolDefs };
+export type { SubagentToolDeps };
 
 /** Message returned when a writable subagent was requested but this host cannot prompt. */
 export const WRITE_DECLINED =
   "This host cannot raise an approval prompt, so the sub-agent ran read-only. The findings below are an investigation — make any change yourself.";
-
-/** What the local `spawn_agent` needs from the host: a model route and the catalog the
- *  parent is running with. Both are resolved per call — a run can outlive a model
- *  switch, and the catalog depends on whether a workspace is open. */
-export interface SubagentToolDeps {
-  stream(): Promise<BrainStreamFn>;
-  /** The parent's full tool catalog; the child gets the local subset of it. */
-  catalog(): ToolDef[];
-  /**
-   * Decide one write the child wants to make — governance, then the run's Auto switch,
-   * then the human. ABSENT means this host cannot raise a prompt, and a child here is
-   * then read-only whatever the parent asked for: the alternative is writing to someone's
-   * disk with no way to ask them, which is the thing the gate exists to prevent.
-   */
-  confirmWrite?(req: { name: string; args: Record<string, unknown> }): Promise<ChildWriteDecision>;
-  /**
-   * Resolve one of the WORKSPACE's own agents (Ada, Kevin, Bob…) to the brief the child
-   * should run as. Absent ⇒ this host cannot name personas, and `as_agent` is refused
-   * rather than silently ignored.
-   *
-   * WHY: a Work-mode run that does a slice itself instead of dispatching it produces work
-   * nobody owns — no agent on the ticket, nothing in anyone's queue, and a user who
-   * cannot tell who did what. Running the slice AS the agent whose role fits it keeps the
-   * accountability the dispatch would have carried, in a session that already holds the
-   * workspace. `null` from this reader means "no such agent", not "reader failed".
-   */
-  personaBrief?(agent: string): Promise<{ ref: string; name: string; brief: string } | null>;
-  /** Get the parent's abort signal — called at tool execution time, not catalog creation.
-   *  When the user presses Stop, children must stop too. */
-  getSignal?(): AbortSignal | undefined;
-  /**
-   * Route child tool calls through the parent's tracking: ticket check, session notes,
-   * Changes refresh, timeline. Called at tool execution time. Absent ⇒ child calls go
-   * direct (the old buggy behavior).
-   */
-  getRunTool?(): ((name: string, args: Record<string, unknown>) => Promise<unknown>) | undefined;
-  /** Get parent's model to use for the child — prevents a child ending up on a different model.
-   *  Called at tool execution time. */
-  getModel?(): { model?: string; modelStrict?: boolean; routingMode?: "auto" | "byo_pool" } | undefined;
-}
-
-/**
- * The child's tools: local ones only (never the server-side platform catalog — a
- * delegated task is about THIS workspace, and the parent keeps the platform reach),
- * minus `spawn_agent` itself, which is what makes recursion impossible here in the same
- * way withholding the capability does in the cloud.
- *
- * `writable` keeps the mutating half. It is false by default and false whenever the host
- * gave no way to ask a human — the tools a child is HANDED are the boundary, so a child
- * that must not write is never shown a tool that writes, rather than being shown one and
- * refused at dispatch.
- */
-export function childToolDefs(catalog: readonly ToolDef[], writable = false): ToolDef[] {
-  return catalog.filter(
-    (t) => !t.remote && t.name !== spawnAgentTool.name && (writable || !t.mutating),
-  );
-}
-
-/** A local tool's serialized result, back as data. Not every executor returns JSON
- *  (a shell tool returns raw output), so an unparseable payload passes through as the
- *  string it is rather than becoming an error. */
-function parsePayload(raw: string): unknown {
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return raw;
-  }
-}
-
-/** OpenAI tool specs for the child's turn. */
-function toSpecs(defs: readonly ToolDef[]): BrainToolSpec[] {
-  return defs.map((d) => ({
-    type: "function" as const,
-    function: { name: d.name, description: d.description, parameters: d.parameters },
-  }));
-}
 
 export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
   const schema = spawnAgentTool.schema.function;
@@ -121,136 +42,33 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
     execute: async (args, root) => {
       const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
       const task = str(args.task);
-      let label = str(args.label) || task.slice(0, 60);
+      const label = str(args.label) || task.slice(0, 60);
       if (!task) {
         return JSON.stringify({ ok: false, error: "task is required — the child sees none of your conversation" });
       }
       // WHO is doing this slice. An unresolvable name is REFUSED rather than run
       // anonymously: a parent that believes Ada did the work will report that she did,
       // and a silently persona-less run makes that report false.
-      const asAgentName = str(args.as_agent);
-      let persona: { name: string; brief: string } | undefined;
-      let asAgent: { ref: string; name: string } | undefined;
-      if (asAgentName) {
-        const resolved = await deps.personaBrief?.(asAgentName).catch(() => null);
-        if (!resolved) {
-          return JSON.stringify({
-            ok: false,
-            label,
-            error: `no agent named '${asAgentName}' in this workspace — use builtin_chats_list_agents or builtin_cloud_agents_list_mine and pass its exact name or id`,
-          });
-        }
-        persona = { name: resolved.name, brief: resolved.brief };
-        asAgent = { ref: resolved.ref, name: resolved.name };
+      const who = await resolveChildPersona(deps, str(args.as_agent));
+      if (!who.ok) return JSON.stringify({ ok: false, label, error: who.error });
+      // Writable only when the parent asked AND this run can reach a human. Both halves
+      // are required: the first is the tool's contract, the second is the reason a
+      // surface without a prompt never writes.
+      const asked = args.read_only === false;
+      const writable = asked && !!deps.run?.confirmWrite;
+      const report = await runLocalChild(deps, {
         // The timeline row says who, not just what — "as Ada: port the auth middleware".
-        label = `as ${resolved.name}: ${label}`;
-      }
-      // Writable only when the parent asked AND this host can reach a human. Both
-      // halves are required: the first is the tool's contract, the second is the reason
-      // the contract was unavailable here until now.
-      const writable = args.read_only === false && !!deps.confirmWrite;
-      const defs = childToolDefs(deps.catalog(), writable);
-      const specs = toSpecs(defs);
-      const byName = new Map(defs.map((d) => [d.name, d]));
+        label: who.asAgent ? `as ${who.asAgent.name}: ${label}` : label,
+        task,
+        writable,
+        role: delegationRole(args.role, !writable),
+        tools: childToolDefs(deps.catalog(), writable),
+        ...(who.persona ? { persona: who.persona } : {}),
+        ...(who.asAgent ? { asAgent: who.asAgent } : {}),
+      }, root);
       // Say it plainly rather than silently narrowing: a parent that believes a child
       // made an edit will not make it, and the change would be lost.
-      const declinedWrite =
-        args.read_only === false && !writable
-          ? "This host cannot raise an approval prompt, so the sub-agent ran read-only. The findings below are an investigation — make any change yourself."
-          : undefined;
-
-      // The role parameter picks a model suited to the work. When provided, it informs
-      // the child's model selection. Default to 'explore' for read-only, 'code' for writable.
-      const role = str(args.role) || (writable ? "code" : "explore");
-
-      // Get dynamic values at execution time (not catalog creation time).
-      const signal = deps.getSignal?.();
-      const runTool = deps.getRunTool?.();
-      const modelInfo = deps.getModel?.() ?? {};
-
-      try {
-        const stream = await deps.stream();
-        const run = await runSubagent<BrainToolSpec>({
-          task,
-          readOnly: !writable,
-          tools: specs,
-          // The kernel owns what a persona DOES to the child's system prompt
-          // (`subagentSystemPrompt`), so both surfaces get one answer; this only names who.
-          ...(persona ? { persona } : {}),
-          // Thread the parent's abort signal so children stop when the user presses Stop.
-          ...(signal ? { signal } : {}),
-          complete: async ({ messages, tools }) => {
-            const result = await stream({
-              messages: messages as unknown as ChatCompletionMessage[],
-              ...(tools.length ? { tools, tool_choice: "auto" as const } : {}),
-              // Use the parent's model settings so the child doesn't end up on a different model.
-              ...(modelInfo.model ? { model: modelInfo.model } : {}),
-              ...(modelInfo.modelStrict != null ? { modelStrict: modelInfo.modelStrict } : {}),
-              ...(modelInfo.routingMode ? { routingMode: modelInfo.routingMode } : {}),
-            });
-            return {
-              content: result.text,
-              toolCalls: result.toolCalls.map((c) => ({ id: c.id, name: c.name, arguments: c.args })),
-            };
-          },
-          dispatch: async (call) => {
-            const def = byName.get(call.name);
-            if (!def) {
-              return {
-                data: { ok: false, error: `unknown tool '${call.name}' — available here: ${[...byName.keys()].join(", ")}` },
-                isError: true,
-              };
-            }
-            // A write asks the human FIRST, on the parent run's own modal, naming the
-            // file. A refusal comes back as an ordinary tool result with its reason, so
-            // the child adapts (or reports what it found) instead of failing the
-            // delegation — the same shape a blocked call takes in the parent's loop.
-            if (def.mutating && deps.confirmWrite) {
-              const decision = await deps.confirmWrite({ name: call.name, args: call.args });
-              if (!decision.ok) return { data: { ok: false, error: decision.reason }, isError: true };
-            }
-            try {
-              let raw: unknown;
-              // Route through parent's runTool when available: this ensures the child's
-              // writes are visible to ticket tracking, session notes, Changes refresh, and
-              // the timeline — exactly as if the parent had made the call itself.
-              if (runTool) {
-                raw = await runTool(call.name, call.args);
-              } else {
-                // Fallback to direct execution (the old buggy behavior, preserved for
-                // backward compatibility when runTool is not provided).
-                raw = await def.execute(call.args, root);
-              }
-              // Apply the same trimming the parent applies, so a large file read doesn't
-              // overwhelm the child's context window any more than it would the parent's.
-              const trimmed = trimToolResult(call.name, raw);
-              return { data: parsePayload(trimmed.content), truncated: trimmed.truncated };
-            } catch (e) {
-              return { data: { ok: false, error: e instanceof Error ? e.message : String(e) }, isError: true };
-            }
-          },
-        });
-        return JSON.stringify({
-          ok: run.ok,
-          label,
-          output: run.output,
-          steps: run.steps,
-          maxSteps: SUBAGENT_MAX_STEPS,
-          readOnly: !writable,
-          // Echoed back so the parent can SAY which agent did this slice — and so the
-          // staffing summary can count it as work somebody owns.
-          ...(asAgent ? { asAgent } : {}),
-          // The role that was used (either explicitly passed or defaulted).
-          role,
-          ...(run.truncated ? { truncated: true, note: "The sub-agent ran out of turns — treat this as partial." } : {}),
-          ...(declinedWrite ? { writeDeclined: declinedWrite } : {}),
-          ...(run.ok ? {} : { error: run.cancelled ? "the run was stopped while this sub-agent was working" : "the sub-agent stopped without an answer" }),
-        });
-      } catch (e) {
-        // A failed delegation is information for the parent, not a dead run: it can
-        // do the work itself on the next turn.
-        return JSON.stringify({ ok: false, label, error: e instanceof Error ? e.message : String(e) });
-      }
+      return JSON.stringify({ ...report, ...(asked && !writable ? { writeDeclined: WRITE_DECLINED } : {}) });
     },
   };
 }

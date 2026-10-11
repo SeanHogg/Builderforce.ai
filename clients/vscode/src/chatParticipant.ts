@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { formatEvermindLearnStep, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
+import { formatEvermindLearnStep, runAbortSignal, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
 import { resolveModelRoute, routeRequiresSignIn, routeStream } from "./modelRouting";
 import { createChildWriteGate } from "./childWriteGate";
@@ -196,12 +196,16 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
       root,
       activeProject?.id,
       async () => routeStream(modelChoice, key),
-      createChildWriteGate({
-        chatId: runChatId,
-        ...(policyGates.length ? { gates: policyGates } : {}),
-        autoApprove: () => permissionMode === "acceptEdits",
-        blockedByPolicy: (reason: string) => vscode.l10n.t("Blocked by a governance gate: {0}", reason),
-      }),
+      {
+        confirmWrite: createChildWriteGate({
+          chatId: runChatId,
+          ...(policyGates.length ? { gates: policyGates } : {}),
+          autoApprove: () => permissionMode === "acceptEdits",
+          blockedByPolicy: (reason: string) => vscode.l10n.t("Blocked by a governance gate: {0}", reason),
+        }),
+        // Stop on this turn stops its children too.
+        signal: () => runAbortSignal(runChatId),
+      },
     );
 
     const { systemPrompt, seed } = splitSystemPrompt(messages);

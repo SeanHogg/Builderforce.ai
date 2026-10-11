@@ -20,7 +20,9 @@ import {
   type Capability,
   type CapabilityProvider,
   type ModelRole,
+  inScope,
   type OrchestrationCapability,
+  type RepoWriteCapability,
   type SubagentRequest,
   type SubagentResult,
   type ToolContext,
@@ -39,7 +41,7 @@ import { CLOUD_SURFACE_CAPS } from './cloudAgentTools';
  * one is the run a person can ask about it — not an anonymous child the parent
  * commissioned and summarised in a sentence.
  */
-export const NON_DELEGABLE_CAPABILITIES: readonly Capability[] = ['orchestrate', 'human', 'skill.author'];
+export const NON_DELEGABLE_CAPABILITIES: readonly Capability[] = ['orchestrate', 'orchestrate.fanout', 'human', 'skill.author'];
 
 /**
  * Additionally withheld from a READ-ONLY child (the default). Anything that can change
@@ -51,13 +53,22 @@ export const MUTATING_CAPABILITIES: readonly Capability[] = [
   'prd.write', 'coordinate', 'memory.forget',
 ];
 
+/**
+ * Withheld from a SCOPED child — one writing beside siblings in the same tree
+ * (`spawn_agents`). A shell, a process or a git write reaches the whole tree whatever
+ * the child's paths say, so only the file writers a scope can check are left.
+ */
+export const TREE_WIDE_CAPABILITIES: readonly Capability[] = ['shell', 'process', 'git.write'];
+
 /** The child's capability set: the parent's, minus what is never delegable, minus the
- *  mutating half when the delegation is read-only. Pure — this is the security
- *  boundary, so it is tested directly rather than only through a run. */
-export function childCapabilities(parent: ReadonlySet<Capability>, readOnly: boolean): ReadonlySet<Capability> {
+ *  mutating half when the delegation is read-only, minus the tree-wide writers when it
+ *  is scoped. Pure — this is the security boundary, so it is tested directly rather than
+ *  only through a run. */
+export function childCapabilities(parent: ReadonlySet<Capability>, readOnly: boolean, scoped = false): ReadonlySet<Capability> {
   const withheld = new Set<Capability>([
     ...NON_DELEGABLE_CAPABILITIES,
     ...(readOnly ? MUTATING_CAPABILITIES : []),
+    ...(scoped ? TREE_WIDE_CAPABILITIES : []),
   ]);
   return new Set([...parent].filter((c) => !withheld.has(c)));
 }
@@ -118,6 +129,48 @@ export interface SubagentDeps {
   /** Timeline recorder, so a delegation is visible in Observability rather than
    *  appearing as an unexplained gap in the parent's turns. */
   record?(event: { label: string; detail: Record<string, unknown>; result: string }): Promise<void>;
+  /**
+   * One child FINISHED — post its report into the chat the run belongs to. Called for
+   * every child, failed ones included, the moment it is back, so a fan-out reads in the
+   * chat as one report per ticket rather than one summary at the end. Best-effort.
+   */
+  report?(input: SubagentRequest, result: SubagentResult): Promise<void>;
+}
+
+/**
+ * The child's file writers, held to its scope and to ONE writer at a time.
+ *
+ * Children of one fan-out run concurrently but commit to the same branch, and a commit
+ * over the git API reads the ref, writes a tree and moves the ref: two at once and the
+ * second loses the first. Every write therefore queues on the orchestration's single
+ * chain — the children still THINK in parallel; only their commits take turns. A scoped
+ * child is refused a write outside its paths before anything is sent.
+ */
+function guardedRepoWrite(
+  write: RepoWriteCapability,
+  serialize: <T>(fn: () => Promise<T>) => Promise<T>,
+  scope: readonly string[] | undefined,
+  changed: Set<string>,
+): RepoWriteCapability {
+  const outside = (path: string): { ok: false; error: string } | null =>
+    scope && !inScope(path, scope)
+      ? { ok: false, error: `'${path}' is outside this workstream's paths (${scope.join(', ')}) — another workstream may own it. Change only files inside your paths, and name anything else you believe must change in your answer.` }
+      : null;
+  const track = <R extends { ok: boolean }>(path: string, result: R): R => {
+    if (result.ok) changed.add(path);
+    return result;
+  };
+  return {
+    async writeFile(path, content, summary) {
+      return outside(path) ?? track(path, await serialize(() => write.writeFile(path, content, summary)));
+    },
+    async editFile(path, oldString, newString, replaceAll) {
+      return outside(path) ?? track(path, await serialize(() => write.editFile(path, oldString, newString, replaceAll)));
+    },
+    async deleteFile(path, reason) {
+      return outside(path) ?? track(path, await serialize(() => write.deleteFile(path, reason)));
+    },
+  };
 }
 
 /**
@@ -133,14 +186,31 @@ export interface SubagentDeps {
  * failure to report, so it goes back up.
  */
 export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationCapability {
-  return {
-    async spawn(input: SubagentRequest): Promise<SubagentResult> {
+  // ONE write chain for every child this run spawns (see `guardedRepoWrite`).
+  let chain: Promise<unknown> = Promise.resolve();
+  const serialize = <T>(fn: () => Promise<T>): Promise<T> => {
+    const next = chain.then(fn, fn);
+    chain = next.catch(() => undefined);
+    return next;
+  };
+  const spawn = async (input: SubagentRequest): Promise<SubagentResult> => {
       const readOnly = input.readOnly !== false;
-      const caps = childCapabilities(deps.parentCaps, readOnly);
+      const scope = !readOnly && input.scope?.length ? input.scope : undefined;
+      const caps = childCapabilities(deps.parentCaps, readOnly, !!scope);
       // Drop the parent's own orchestration backing rather than relying solely on the
       // capability gate: the child then holds no reference to a spawner at all.
       const { orchestration: _parentSpawner, ...backing } = deps.provider;
-      const childProvider: CapabilityProvider = { ...backing, capabilities: caps };
+      const changed = new Set<string>();
+      const childProvider: CapabilityProvider = {
+        ...backing,
+        capabilities: caps,
+        ...(!readOnly && backing.repoWrite ? { repoWrite: guardedRepoWrite(backing.repoWrite, serialize, scope, changed) } : {}),
+      };
+      /** What the child produced and owns, echoed on every result. */
+      const produced = () => ({
+        ...(changed.size ? { changedFiles: [...changed] } : {}),
+        ...(input.ticket ? { ticket: input.ticket } : {}),
+      });
       const ctx: ToolContext = { caps: childProvider, ...(deps.signal ? { signal: deps.signal } : {}) };
       const tools = deps.registry.schemasForCapabilities(caps);
       const maxSteps = deps.maxSteps ?? SUBAGENT_MAX_STEPS;
@@ -185,11 +255,12 @@ export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationC
             return { data: dispatched.data, ...(dispatched.control ? { control: dispatched.control } : {}) };
           },
           maxSteps,
+          ...(input.outputChars ? { outputChars: input.outputChars } : {}),
           ...(deps.signal ? { signal: deps.signal } : {}),
         });
         const result: SubagentResult = run.cancelled
-          ? { ok: false, error: 'the run was cancelled while this sub-agent was working', steps: run.steps, ...asAgentEcho }
-          : { ok: run.ok, output: run.output, steps: run.steps, truncated: run.truncated, ...asAgentEcho };
+          ? { ok: false, error: 'the run was cancelled while this sub-agent was working', steps: run.steps, ...asAgentEcho, ...produced() }
+          : { ok: run.ok, output: run.output, steps: run.steps, truncated: run.truncated, ...asAgentEcho, ...produced() };
         await deps.record?.({
           label: input.label,
           detail: { readOnly, steps: run.steps, maxSteps, truncated: run.truncated, ms: Date.now() - started, tools: tools.length, ...(persona ? { asAgent, asAgentName: persona.name } : {}) },
@@ -204,8 +275,16 @@ export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationC
         if (deps.signal?.aborted) throw error;
         const message = error instanceof Error ? error.message : String(error);
         await deps.record?.({ label: input.label, detail: { readOnly, ms: Date.now() - started, ...(persona ? { asAgent } : {}) }, result: `${input.label} → failed: ${message}` });
-        return { ok: false, error: message, ...asAgentEcho };
+        return { ok: false, error: message, ...asAgentEcho, ...produced() };
       }
+  };
+  return {
+    // Every child — one `spawn_agent`, or each of a `spawn_agents` fan-out — reports into
+    // the chat as it finishes. A report that fails to post never fails the delegation.
+    async spawn(input: SubagentRequest): Promise<SubagentResult> {
+      const result = await spawn(input);
+      await deps.report?.(input, result).catch(() => undefined);
+      return result;
     },
   };
 }

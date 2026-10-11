@@ -50,6 +50,7 @@ import { setLastResolvedModel, withObservedModel, forgetResolvedModels } from '.
 import { isTicketRecordingTool, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, linkedTicketsReviewedComplete, isReadOnlyPlatformTool, type LinkedTicketToAdvance } from './chatWorkLinking';
 import { isCodeChangeTool, isRepoStateReadTool, canChangeCodeHere, canShipHere, canReviewInPreview, localToolsIn, memoryToolsIn, studioToolsIn } from './localWorkspaceTools';
 import { coderHandoffBrief } from './roleHandoff';
+import { HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, executeHandOff, parseHandOff } from './planHandoff';
 import { codeChangesOf, isDelegationTool } from './codeChanges';
 import { delegationPlaceholders, placeholderAdvisory, placeholdersWritten, placeholderTraceEvent } from './placeholderGuard';
 import { canCompleteTicket, completionAdvisory, isTicketCompletion, notOnBaseBranchAdvisory, PlaceholderLedger } from './completionGuard';
@@ -945,6 +946,19 @@ export function runAbortSignal(chatId: number): AbortSignal | undefined {
   return cells.get(chatId)?.abort?.signal;
 }
 
+/**
+ * Splice a message persisted OUTSIDE the loop into a chat's live view — a delegated
+ * child's report, posted while its parent run is still going. Persisting alone put it in
+ * the chat store, but the panel showed it only after a reload: mounted views merge the
+ * run's `appended` buffer, and nothing had told the buffer.
+ */
+export function appendRunMessage(chatId: number, msg: BrainMessage): void {
+  const c = cells.get(chatId);
+  if (!c) return;
+  recordAppended(c, msg);
+  emit(c);
+}
+
 /** Current snapshot (referentially stable until something changes). */
 export function getRunSnapshot(chatId: number | null): BrainRunSnapshot {
   if (chatId == null) return EMPTY_SNAPSHOT;
@@ -1555,7 +1569,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // tool load is told apart from a model that simply declined to act — and injecting
   // one tool into it would report a broken catalog as a working one.
   const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
-  const catalog = canAskUser ? [...(toolSpecs ?? []), ASK_USER_TOOL_SPEC] : toolSpecs;
+  // `hand_off` rides the same gate: it is how PLANNING ends (see `planHandoff.ts`) — the
+  // planner names the tasks, the run files them and hands them to the coding model(s).
+  // Advertised only while the run is still planning; see `turnTools` below.
+  const catalog = canAskUser ? [...(toolSpecs ?? []), ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
   const allTools = catalog && catalog.length > 0 ? catalog : undefined;
   // Tools this run has actually called — pinned into every later turn's selection
   // so a multi-step task never loses a tool it is mid-way through using.
@@ -2032,6 +2049,53 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       if (call.name === ASK_USER_TOOL) {
         return { result: { data: { error: 'ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose.' } } };
       }
+      // PLANNING ENDS HERE. The planner's tasks become tickets linked to this chat and
+      // are handed to the coding model — side by side, one coding child per task, where
+      // the host can fan out and the tasks own disjoint paths; otherwise in order, by the
+      // coder this run becomes. The result tells the coder which (see `planHandoff.ts`).
+      if (call.name === HAND_OFF_TOOL) {
+        if (phase === 'code') {
+          return { result: { data: { ok: false, error: 'The plan was already handed off — you are the coding model now. Implement the tasks; do not re-plan.' } } };
+        }
+        const plan = parseHandOff(call.args);
+        if (typeof plan === 'string') return { result: { data: { ok: false, error: plan } } };
+        // The role flips BEFORE the children start: they and every later turn are code.
+        phase = 'code';
+        c.codePhaseReached = true;
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'llm.role_handoff',
+          args: { step: ctx.step, tasks: plan.tasks.length, via: HAND_OFF_TOOL },
+          result: `Planning handed off ${plan.tasks.length} task${plan.tasks.length === 1 ? '' : 's'} to the coding model.`,
+        });
+        const outcome = await executeHandOff(plan, {
+          runTool: (name, args) => runTool!(name, args),
+          toolNames: new Set(catalogToolNames),
+          ...(req.projectId != null ? { projectId: req.projectId } : {}),
+          afterCreate: (toolName, out) => autoLinkCreatedItem(chatId, c, persistence, runTool!, toolName, out),
+          step: (label, args, out, durationMs) => pushDurableStep(c, chatId, persistence, {
+            ts: nowIso(), category: 'tool', label, durationMs, args, result: out ?? null, isError: isFailedToolResult(out),
+          }),
+          postPlan: async (text) => {
+            const [msg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: text, metadata: JSON.stringify({ [MID_TURN_META_KEY]: true }) }]);
+            if (!msg) return;
+            recordAppended(c, msg);
+            emit(c);
+          },
+          now: nowMs,
+        });
+        // The children's writes happened inside their own loops; the code-change backstop
+        // reads them off the result, exactly as it does for `spawn_agents`.
+        const changed = codeChangesOf(HAND_OFF_TOOL, call.args, outcome);
+        if (changed) {
+          c.codeChanged = true;
+          for (const f of changed) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+        }
+        usedTools.add(HAND_OFF_TOOL);
+        placeholderLedger.add(delegationPlaceholders(outcome));
+        return { result: { data: outcome as unknown as Record<string, unknown> } };
+      }
       const args = call.args;
       // ONE ticket per run. The run opens its own delta ticket on the first edit
       // (see below), and the model — following the same directive, from the other
@@ -2442,14 +2506,18 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // that produces a narrated call. Derived from the prompt text, so a directive
         // edit can never silently desync from this list — plus the local workspace
         // tools, which the prompt names in prose the pattern cannot see.
-        required: alwaysAdvertised,
+        // While planning, the planner's deliverable is never off-topic either.
+        required: phase === 'plan' && canAskUser ? [...alwaysAdvertised, HAND_OFF_TOOL] : alwaysAdvertised,
       });
+      // Once the run is coding, the plan is handed off: `hand_off` is gone from the menu,
+      // so a coder can never re-plan the work it was just given.
+      const selected = phase === 'code' ? selection.tools.filter((t) => t.function.name !== HAND_OFF_TOOL) : selection.tools;
       // The ROUTER rides along whenever selection actually trimmed something, so the
       // tools that missed the cut stay REACHABLE instead of silently ceasing to exist.
       // Three fixed schemas buy back the whole catalog; see toolRouter.ts.
       const advertised = selection.trimmed
-        ? [...selection.tools, ...routerToolSpecs(allTools?.length ?? 0)]
-        : selection.tools;
+        ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)]
+        : selected;
       const tools = advertised.length > 0 ? advertised : undefined;
       // What the model could actually call THIS turn. Kept as a set so the turn can
       // answer, at the only point that knows both halves, "did it narrate a tool it was
@@ -2461,7 +2529,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           category: 'message',
           label: 'tools.selected',
           args: { step: iter },
-          result: `${selection.tools.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`,
+          result: `${selected.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`,
         });
       }
       // The completion is open and no token has arrived yet — the phase that used to

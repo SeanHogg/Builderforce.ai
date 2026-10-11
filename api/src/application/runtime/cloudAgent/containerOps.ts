@@ -49,6 +49,7 @@ import { CONTAINER_AGENT_TOOLS, CONTAINER_SURFACE_CAPS, cloudToolRegistry } from
 import { applyPendingSteering } from '../cloudLoopControl';
 import { handleCloudRunCrash } from '../cloudSelfHeal';
 import { buildOrchestrationCapability, imageHostedChildCeiling } from '../cloudSubagent';
+import { subagentChatReport } from '../subagentChatReport';
 import { resolveAgentPersonaBrief } from '../../agent/agentPersonaBrief';
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { notifyExecutionSubscribers } from '../executionEvents';
@@ -422,6 +423,8 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       parentCaps,
       provider,
       registry: cloudToolRegistry,
+      // The child reports into the chat that launched the run, as the durable surface's do.
+      ...subagentChatReport(db, tenantId, ctx.originatingChatId, cloudAgentRef, agentLabel),
       // Same roster, same compiler as the durable surface: an image-hosted parent that
       // delegates to "Ada" must get the same Ada (operator decision 2026-09-15).
       personaBrief: (agent) => resolveAgentPersonaBrief(env, tenantId, agent),

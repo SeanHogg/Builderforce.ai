@@ -17,10 +17,12 @@
 import { isFailedToolResult } from './brainTriage';
 import { codeChangeFile } from './chatWorkLinking';
 import { isCodeChangeTool } from './localWorkspaceTools';
+import { HAND_OFF_TOOL } from './planHandoff';
 
 /** The tools a run delegates through — one child, or several side by side. Each result
  *  carries the files its children changed. */
-export const DELEGATION_TOOLS: ReadonlySet<string> = new Set(['spawn_agent', 'spawn_agents']);
+// `hand_off` is one too: a plan handed to parallel coding children reports their files.
+export const DELEGATION_TOOLS: ReadonlySet<string> = new Set(['spawn_agent', 'spawn_agents', HAND_OFF_TOOL]);
 
 export function isDelegationTool(name: string): boolean {
   return DELEGATION_TOOLS.has(name);

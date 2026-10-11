@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inScope, normalizeScopePath, overlappingScopes } from "./workstreamScope";
+import { inScope, normalizeScopePath, overlappingScopes } from "./workstreamScope.js";
 
 /** Concurrent children share one checkout; these scopes are what keep two of them out of one file. */
 describe("workstreamScope", () => {

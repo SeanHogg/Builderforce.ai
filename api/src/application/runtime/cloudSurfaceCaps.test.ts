@@ -24,7 +24,7 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
     expect(names(CLOUD_AGENT_TOOLS)).toEqual([
       'ask_human', 'claim_resource', 'delete_file', 'edit_file', 'finish', 'list_files',
       'memory_forget', 'memory_recall', 'memory_remember', 'read_file', 'release_resource',
-      'run_checks', 'search_code', 'skill_list', 'skill_propose', 'spawn_agent', 'update_prd',
+      'run_checks', 'search_code', 'skill_list', 'skill_propose', 'spawn_agent', 'spawn_agents', 'update_prd',
       'web_fetch', 'web_search', 'workspace_note', 'workspace_read', 'write_file',
     ]);
   });
@@ -45,6 +45,13 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
     // image dispatches `spawn_agent` through the shared relay module.
     expect(CONTAINER_SURFACE_CAPS.has('orchestrate')).toBe(true);
     expect(names(CONTAINER_AGENT_TOOLS)).toContain('spawn_agent');
+  });
+
+  it('fans out side by side on the durable surface only — the images have no arm for it', () => {
+    expect(CLOUD_SURFACE_CAPS.has('orchestrate.fanout')).toBe(true);
+    expect(names(CLOUD_AGENT_TOOLS)).toContain('spawn_agents');
+    expect(CONTAINER_SURFACE_CAPS.has('orchestrate.fanout')).toBe(false);
+    expect(names(CONTAINER_AGENT_TOOLS)).not.toContain('spawn_agents');
   });
 
   it('backs `coordinate` — several agents can be staffed onto one ticket at once', () => {
