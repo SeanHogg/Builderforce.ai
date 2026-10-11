@@ -34,7 +34,7 @@ Four things already exist and must be extended, not duplicated:
 ## 1. Outcome
 
 **The point of the feature is to tell people how to improve their website, render the improvement, hand it to an AI as a prompt, and measure the result** (operator direction 2026-10-10: "the fixes has to be the key aspect … all of the data and tracking isn't meaningful unless you can tell them how to improve their website").
-- **Fixes is the home** of every scope: the default view in Admin ▸ Growth ▸ Insights, and the landing view of the canvas surface.
+- **Fixes lead the home** of the Insights app (D16) for every site, Builderforce's own included (D17).
 - Everything else (recordings, heatmaps, funnels, flow, live, overview) is **evidence**, reached from a fix or browsed below it.
 - Each fix is built from four inputs about a page:
   - **the screen:** a captured screenshot per device and release, read by a vision model;
@@ -105,7 +105,7 @@ The rest of this section lists what each audience gets. The page review is D14 /
    | **The website** | "TypeError reading 'planId' in PricingCta.tsx:42 on 2026.10.35 in 91% of the dropped visits." |
    | **Sales** | "14 visitors opened pricing 3+ times this week and left at the price. Enrol them in the 'pricing questions' sequence." "Add the shipping cost to the product page and to the sales FAQ." |
 
-   On builderforce.ai the superadmin gets the same for the platform's own funnels, including "The method".
+   Builderforce gets the same for builderforce.ai's funnels, including "The method", through its own install of the app (D17).
 6. **Privacy by default.**
    - Every input is masked in the browser before anything is sent.
    - Password and card fields are never captured.
@@ -133,13 +133,14 @@ Each decision below has a default. The operator can override a default before th
 | D10 | "Video replay of their screen" | **The replay is a pixel-faithful playback of the page as the user saw it**, rebuilt from the recorded page and DOM changes, which is how every competitor does it. It plays like a video: play, seek, speed, skip idle. It is not a camera capture of the operating system: a browser can only capture the real screen through a permission prompt (`getDisplayMedia`) on every visit, which no visitor would accept.<br>• **Canvas and WebGL content** (the 3D Room, drawings, games) is captured as frames: rrweb `recordCanvas` at 2 fps, JPEG quality 0.4. This is on by default for builderforce.ai and a per-site setting for buyers, and the extra bytes count under D4.<br>• **"Export as video"** turns any replay into an **MP4**. A render job plays the replay headlessly with Playwright's video capture, on the agent host or GitHub Actions (the $0 compute paths), and stores the MP4 in R2. The job is metered as 10 recordings per export. | S3, S4 |
 | D8 | The real-payment validation | A dedicated **non-superadmin** workspace owned by the operator buys the smallest pack (10k, $40) with a real card. The check covers three things: the credit appears in the ledger, a recording above the free 5,000 debits it, and the refund reverses both. Superadmins are entitled without paying (`evaluateFeatureEntitlement`), so they cannot prove the purchase path. To reach the paid tier without 5,000 real visits, the validation sets the workspace's free allowance to 0 through a superadmin override (`replayFreeAllowanceOverride`). | S8 |
 
-| D11 | The competitive bar (operator direction 2026-10-10: "make sure that we compete") | **Every analysis feature Microsoft Clarity offers on the web ships on both scopes, platform and buyer, before S8.** The exceptions are listed in §2.1 with their reason. On top of that we ship what Clarity structurally cannot. The full matrix is in §2.1, and the planning session's S8 audit checks every row. | S4c, S8 |
+| D11 | The competitive bar (operator direction 2026-10-10: "make sure that we compete") | **Every analysis feature Microsoft Clarity offers on the web ships for every site before S8.** The exceptions are listed in §2.1 with their reason. On top of that we ship what Clarity structurally cannot. The full matrix is in §2.1, and the planning session's S8 audit checks every row. | S4c, S8 |
 
 | D12 | The method link (operator direction 2026-10-10: "connect this feature to the methodology") | **Replay is the measuring instrument of the Idea-to-Real method.** The details are in §2.2. Proof sites are recorded with no Marketplace install, and their recordings count toward the workspace's free allowance (D4). That puts replay in front of every founder at the one moment it decides something. The capability listing covers their other sites. | S4d |
 
 | D13 | Prescriptive guidance (operator direction 2026-10-10: "AI being able to provide prescriptive guidance to improve their funnel / fix UI/UX / fix the website / fix sales") | **Findings are deterministic, and the AI writes the prescription and the change.** A rule registry (`PRESCRIPTION_RULES`) detects findings from replay data and estimates their impact with a pure function. The AI only turns a detected, cited finding into a specific prescription and a drafted change. It never invents a finding, and an uncited sentence is dropped, as with summaries (S4c.5). Nothing reaches production on its own: Fix it produces a preview release, Test it needs a person to start the test, and Follow up obeys `salesPolicy.ts`. Every applied prescription is graded on a named metric. The details are in §2.3. *Amended by D14:* a finding may also be **observed by AI from the screen**, but it is shown only when it is anchored to an element in the page capture AND tied to a measured signal on that page (behaviour, SEO, performance or accessibility). It is labelled "observed from the screen". | S4e |
 | D15 | Scale: millions of sessions (operator direction 2026-10-10: "your designs won't handle millions of sessions") | **Count everything; keep recordings that matter; group into issues; never browse raw sessions.** The per-visit rows of §3.1 do not survive a million sessions a month on the transactional Postgres (Neon Free): a visit row plus up to 300 mark rows each is hundreds of millions of rows. D15 replaces them with four tiers (§3.3): (1) **Workers Analytics Engine** for hot counters, heat cells and issue counts; (2) **Cloudflare Pipelines → R2 Data Catalog (Iceberg), queried by R2 SQL** as the complete event lake for funnels, flows, segments and search; (3) **small Postgres tables** that grow with routes, issues and kept recordings, never with sessions; (4) **R2 chunks** only for kept recordings. The recorder keeps a recording when it is head-sampled or when a trigger fires (frustration, error, goal, custom tag); the analysis counts every session either way. The product reads as **issues grouped from all sessions, each with representative recordings**, and every number states whether it is exact or estimated. *Amends D2 and D4.* | S1, S2, S4, S4c |
 | D16 | One screen, one panel (operator direction 2026-10-10: "users do not scroll down the page … drill-into for more details with a slide out side panel") | **The product is ONE home screen that fits the viewport with nothing below the fold, plus ONE slide-out panel for every detail.** The six views of the earlier design (Fixes, Overview, Replays, Journeys, Live, Leads) are retired as destinations: their content becomes **panel kinds** (§2.5). The home never scrolls; only the panel body scrolls. Panels stack with a breadcrumb (Insights › issue › recording), so a person can go from a number to the recording behind it without leaving the screen. The same home and panel serve Admin ▸ Growth ▸ Insights (panel docked right) and the canvas Measure ▸ Visitors surface (panel docked left, because the Brain is docked right). | S0, S3–S7 |
+| D17 | Dogfood = customer #1 (operator direction 2026-10-10: "it's an app that users buy from the marketplace and integrate with a JavaScript snippet … Builderforce itself will ingest the JavaScript") | **Insights is a Marketplace app, and Builderforce uses it exactly as a buyer does.** There is no platform scope, no superadmin-only data path and no unmetered back door. The Builderforce workspace finds Insights on the Marketplace, installs it, creates a site key for builderforce.ai, and builderforce.ai carries the same public snippet as every customer site. Its data goes through the same public ingest, into the same app at `/apps/insights`, under the same metering (the Builderforce workspace holds an audited superadmin credit grant instead of buying packs; the real-card path is proven by a separate workspace, D8). The buyer's whole path is part of the product (§2.6): the landing page, sign-up with the install intent kept, the free licence, site and key, snippet, live verify, plan and packs. Superadmins see Builderforce's own recordings by being members of the Builderforce workspace, like any customer's team; Admin gets only an aggregated **Insights operations** view (sites, ingest volume, errors, revenue), never another workspace's recordings. *Supersedes the platform scope in §3 and D9's platform-only `identify`.* | S0–S8 |
 | D14 | The page review: screen + metrics + SEO + content → visual improvement → prompt → measure (operator direction 2026-10-10) | **Every key page of every scope gets a page review per release.** The Agentic Tester container captures it (screenshots at desktop 1440 and phone 390, the DOM outline, SEO facts, content facts, lab performance and accessibility). Field Web Vitals come from the recorder. A vision model reads the screenshot together with the metrics. Each resulting prescription carries a **visual patch** (a narrow, validated vocabulary of DOM/CSS operations) that is rendered onto the captured page as a before/after, and an **improvement prompt** compiled from the prescription. Apply routes into the ONE composer for canvas apps, an agent task or PR for connected repos, or a copyable prompt for any other site. The site's next release is detected automatically and measured. The details are in §2.4. | S4f |
 
 ### 2.1 Competitive matrix (Clarity web feature → where we ship it)
@@ -176,7 +177,7 @@ Rows marked **beyond** are features Clarity does not have. Clarity facts were ta
 | **beyond:** MP4 export | No | Yes | S4b |
 | **beyond:** data stays with Builderforce and the buyer, never used for ads | No | Yes | — |
 | **beyond:** replay → ticket → fix in the canvas (Measure → Make) | No | Yes | S3, S7 |
-| **beyond:** journey and lead context next to the replay | No | Yes (platform) | S0, S3 |
+| **beyond:** journey and lead context next to the replay | No | Yes (traits from `identify`) | S0, S3 |
 
 ### 2.2 How replay plugs into the method (D12)
 
@@ -316,7 +317,7 @@ The home is called **Insights**. It answers the three questions in one viewport 
 | Kind | Tabs | Content |
 |---|---|---|
 | `issue` | Overview · Recordings · Fix · History | where on the page (heat), who, daily trend with the release marker, three representative recordings; the kept recordings list; the fix (drag-compare, impact, prompt per audience, Apply / PR / Test / Ticket); status by release |
-| `recording` | Replay · Journey · Lead (platform only) | the player with timeline marks and the cited AI summary; the visit's route templates and marks; the lead (today's `VisitorPanel` tabs, so this kind IS `VisitorPanel`) |
+| `recording` | Replay · Journey · Lead (identified visitors) | the player with timeline marks and the cited AI summary; the visit's route templates and marks; the lead (today's `VisitorPanel` tabs, so this kind IS `VisitorPanel`) |
 | `fix` | Change · Prompt · Measure | the before/after with callouts; the prompt for Composer / Coding agent / Site builder; expected vs measured after the next release, Undo |
 | `route` | — | the page review (D14): tick fixes, drag-compare, fact meters, score rings, one prompt, simulate the next deploy |
 | `metric` | — | the 30-day trend with release markers, breakdowns, segments (the earlier Overview) |
@@ -331,6 +332,21 @@ Rules:
 - The panel is addressable: `?panel=issue:<id>` opens it on load, so links from email, Slack and the Brain land inside the screen.
 - Lists on the home are bounded to what fits; the panel's lists are paginated with cursors.
 - The six "views" of the earlier design do not exist as navigation. The legacy admin URLs alias to `growth/insights` with the matching `?panel=`.
+
+### 2.6 The buyer's path, end to end (D17)
+
+Builderforce walks this path first, as customer #1, and the live validation (S8) walks it again with a paying workspace.
+
+| Step | What the buyer sees | Built on (exists today) | New |
+|---|---|---|---|
+| 1. Find | The Marketplace landing page for Insights at `/marketplace/listing/insights`: value, one-line install, see / fix / prove, comparison, a pricing calculator and the pack ladder, FAQ, "Builderforce runs on it" with our own live numbers | `marketplace/listing/[slug]/page.tsx` + `generateMetadata`; marketing sections `MarketingFaq`, `CompetitorMatrix`, `SocialProofBar`, `CreationCtaSection` | A **listing landing registry** (`LISTING_LANDINGS`, data keyed by slug, with sections as components) so a listing can carry a landing page without a per-slug branch; listing pages added to `sitemap.ts` (today they are missing) |
+| 2. Sign up | "Start free" → sign up or sign in; the install intent survives the round trip and the buyer lands back in set-up, not on the listing page | `registerHref(next, intent)`, `signInHref`, `safeRedirectPath`, `ensureStarterWorkspace` | **Intent resume**: `intent=install:insights` is honoured after sign-up, verification and workspace selection (today the buyer must click again) |
+| 3. Workspace + licence | Choose or create the workspace; installing writes a free licence | `acquireListing` → `grantListing` → `template_licenses` | — |
+| 4. Site | Name, allowed domains, privacy defaults (mask inputs, mask text, wait for consent, identify signed-in users, honour DNT/GPC) | `mintTenantApiKey`, `tenant_api_keys.allowed_origins` | `replay_sites` (§3.1, no platform row) |
+| 5. Snippet | Script tag · npm · Google Tag Manager · Builderforce app (toggle, no snippet); copy or email to a developer | `replaySnippets()` (S6.4) | GTM and npm variants |
+| 6. Verify | Live checks: loader requested, origin allowed, first event, first session kept, with the live session drawn on the page | trace verbs (S6.4) | — |
+| 7. Plan | Free 5,000 kept recordings a month; optional pack now | one-off checkout as the comms top-up does | — |
+| 8. Use | The Insights app (D16) at `/apps/insights`, with a site switcher (sites, snippet, privacy) and a usage chip (usage, packs with Stripe Checkout, receipts) as panel kinds `sites` and `plan` | — | **App home**: `/apps/[slug]` renders a capability's home from `CAPABILITY_APPS` (data: slug → component); today an installed listing can only open as a canvas session |
 
 ## 3. Architecture
 
@@ -352,14 +368,13 @@ Browser (any site)                       API Worker (api.builderforce.ai)       
                                                                 ├─▶ replay_interactions_daily (transactional) buffered additive upsert
                                                                 └─▶ replay_releases (transactional) first-seen
 
-Admin ▸ Growth ▸ Insights  ─▶ /api/admin/replay/*  (superAdminMiddleware, scope = platform)
-Canvas Measure ▸ Visitors  ─▶ /api/projects/:projectId/replay/* (membership + entitlement, scope = site)
+/apps/insights (any workspace)  ─▶ /api/replay/*  (membership + entitlement, scope = site)
+Canvas Measure ▸ Visitors       ─▶ the same reads for the canvas's hosted app's site
+Admin ▸ Insights operations     ─▶ /api/admin/replay-ops/* (superAdminMiddleware; aggregates only, no recordings)
 Both use ONE ReplayReadService and ONE set of React components.
 ```
 
-**Scope** is the one concept that separates superadmin data from a buyer's data. It is used in every read, and every read takes it as a parameter:
-- `{ kind: 'platform' }`: builderforce.ai's own site, `tenant_id IS NULL`.
-- `{ kind: 'site', tenantId, siteId }`: a buyer's site.
+**Scope** is `{ tenantId, siteId }` and nothing else (D17). It is used in every read, and every read takes it as a parameter. builderforce.ai is a site of the Builderforce workspace like any other.
 
 A read never infers scope from a row.
 
@@ -368,8 +383,8 @@ A read never infers scope from a row.
 **Core database** (tenant configuration; written rarely):
 - `replay_sites`:
   - `id uuid pk`
-  - `tenant_id int null` (NULL = platform)
-  - `kind varchar(16)` (`'platform'|'hosted'|'external'`)
+  - `tenant_id int not null` (D17: no platform row)
+  - `kind varchar(16)` (`'hosted'|'external'`)
   - `project_id int null` (set when kind = `hosted`; a bare id, since `project_sites` lives in the apps DB)
   - `label varchar(200)`
   - `api_key_id uuid null` → `tenant_api_keys.id`. The site key is a `tenant_api_keys` row; no second key table.
@@ -385,19 +400,19 @@ A read never infers scope from a row.
   - `visitor_id varchar`, `visit_id varchar`, unique `(site_id, visit_id)`
   - `started_at`, `last_event_at`, `ended_at null`, `duration_ms`
   - `entry_path`, `exit_path`, `page_count`
-  - `user_id int null` (set when the visitor signs in during or before the visit; platform scope only) and `seen_tenant_id int null` (the workspace the signed-in user was in). Both are bare ids.
+  - `user_id int null` (set when the site calls `BFReplay.identify(id, traits)`, with the site's identify setting on) and `seen_tenant_id int null` (the workspace the signed-in user was in). Both are bare ids.
   - `billable_units int`: the D4 unit, `ceil(bytes / 2 MB)` with a minimum of 1. One writer, the ingest fold.
   - `release_key varchar(64)`, `recorder_version varchar(32)`
   - `device_class varchar(8)` (`desktop|tablet|phone`), `viewport_w`, `viewport_h`, `browser`, `os`, `country char(2) null` (from `cf.country`), `referrer_host`
   - `click_count`, `rage_count`, `dead_count`, `error_count`, `quickback_count`, `excessive_scroll_count`
   - `active_ms` (time with input or scroll activity, idle gaps over 30 s excluded; the Overview's "active time")
-  - `converted boolean` (platform: joined from `marketing_sessions` at read time, NOT stored)
+  - `converted boolean` (a goal event was reached in the visit; written by the ingest fold)
   - `chunk_count`, `bytes`
   - Indexes: `(site_id, started_at desc)`, `(site_id, last_event_at desc)`, `(site_id, release_key)`, `(visitor_id)`.
 - `replay_releases`:
   - `site_id`, `release_key` (pk on the pair)
   - `label varchar(80) null` (the operator rename, or a GitHub tag)
-  - `source varchar(16)` (`explicit|hosted|fingerprint|platform`)
+  - `source varchar(16)` (`explicit|hosted|fingerprint`)
   - `first_seen_at`, `last_seen_at`
 - `replay_interactions_daily`: the heatmap and element read model, written additively like `site_traffic_daily`.
   - `site_id`, `day date`, `release_key`, `path varchar(512)`, `device_class`, `kind varchar(12)` (`click|rage|dead|scroll`), `selector varchar(400)`, `label varchar(120)`, `grid_x smallint`, `grid_y smallint`, `n int`
@@ -555,8 +570,8 @@ Releases are labelled `R<n> · first seen <date>` until renamed. A customer neve
 - No metered Stripe subscription; billing is prepaid packs (D4).
 - No cross-domain visitor stitching.
 - No WebSocket push. Liveness is polling (D6).
-- No fingerprinting. Buyer sites identify a visitor only through tags they set themselves (`BFReplay.tag('user', id)`), which are never linked to Builderforce accounts. builderforce.ai links its own signed-in users (D9) through a platform-only `identify`.
-- No Lead tab for buyer sites. Leads are the platform's composer prompts. Buyer sites get every other panel kind.
+- No fingerprinting. A site identifies a visitor only through `BFReplay.identify(id, traits)`, which it calls itself, with its identify setting on. builderforce.ai does the same for its signed-in users (D9), as any customer would.
+- No reading of another workspace's recordings by Builderforce staff. Admin sees aggregates only.
 - No Google Analytics or ad-platform integrations.
 
 ## 7. Risks

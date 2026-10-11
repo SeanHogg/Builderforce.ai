@@ -16,7 +16,7 @@
  */
 
 import dynamic from 'next/dynamic';
-import type { ComponentType } from 'react';
+import { createElement, type ComponentType } from 'react';
 import { SkeletonGrid } from './SkeletonGrid';
 
 /** What every section in this table is handed. */
@@ -80,7 +80,16 @@ export const SEARCH_SECTIONS: Readonly<Record<string, ComponentType<SearchSectio
   templates: TemplatesSection,
 };
 
-/** The section for an id, or `null` when the page renders it itself. */
-export function searchSectionFor(section: string): ComponentType<SearchSectionProps> | null {
-  return Object.prototype.hasOwnProperty.call(SEARCH_SECTIONS, section) ? SEARCH_SECTIONS[section]! : null;
+/** Whether the table owns this section id (own keys only — never `toString`). */
+export function hasSearchSection(section: string): boolean {
+  return Object.prototype.hasOwnProperty.call(SEARCH_SECTIONS, section);
+}
+
+/**
+ * Renders the table's row for `section`, or nothing when the page renders that
+ * section itself. ONE stable component, so the page never holds a component it
+ * looked up during render (which would remount the section on every render).
+ */
+export function MarketplaceSearchSection({ section, search }: SearchSectionProps & { section: string }) {
+  return hasSearchSection(section) ? createElement(SEARCH_SECTIONS[section]!, { search }) : null;
 }

@@ -1,6 +1,6 @@
 # PRD 33a — Session replay: implementation hand-off
 
-> This is the brief an implementing agent works from. Read [PRD 33](./33-prd-session-replay.md) first; its decisions (D1–D16), the §2.1 competitive matrix, the §2.2 method link, the §2.3 prescriptions and the §2.4 page review are settled.
+> This is the brief an implementing agent works from. Read [PRD 33](./33-prd-session-replay.md) first; its decisions (D1–D17), the §2.1 competitive matrix, the §2.2 method link, the §2.3 prescriptions and the §2.4 page review are settled.
 > **Roles** (CLAUDE.md):
 > - **Implementation:** one Opus agent per slice.
 > - **Compile / typecheck / test:** a Sonnet agent running §11 verbatim.
@@ -93,6 +93,26 @@ Facts already verified. Do not rediscover them:
 ---
 
 ## 2. Slice S0 — Consolidation (no new capability; ships alone)
+
+### S0.0 Customer #1 (PRD 33 D17) — read before any slice
+
+D17 overrides every mention of a **platform** scope, platform row, platform-only API, superadmin-only data route or unmetered platform in this brief. Where a step below still says "platform", apply this table:
+
+| Earlier instruction | Now |
+|---|---|
+| `ReplayScope = { kind:'platform' } \| { kind:'site'; … }` (S1.2) | `ReplayScope = { tenantId: number; siteId: string }`. No kind. |
+| Seed a platform `replay_sites` row, `tenant_id NULL` (S1.1) | No seed. `tenant_id` is NOT NULL. The Builderforce workspace creates builderforce.ai's site through the normal install path (S3). |
+| `resolveSiteForIngest` accepts `siteToken === 'platform'` (S1.3) | Only `bfr_` keys and `hosted:<siteId>`. |
+| `/api/admin/replay/*` behind `superAdminMiddleware`, scope platform (S1.4) | Reads are `/api/replay/*` with membership + `requireFeature('sessionReplay')`. Admin gets `/api/admin/replay-ops/*`: aggregates only (sites, ingest volume, errors, revenue), no recordings. |
+| Platform scope never metered (S1.3b, S4) | Every site is metered. The Builderforce workspace holds an audited superadmin credit grant (`ledger_entries`, reference `replay-grant:<audit id>`). |
+| `identify` only on the platform site (S2, S3) | `BFReplay.identify(id, traits)` is public, honoured only when the site's `identify` setting is on. Traits feed the recording kind's Lead tab. |
+| Leads = the platform's composer prompts | Leads = identified visitors and their traits. builderforce.ai sends its own traits (plan, workspace, last prompt intent) through `identify`. |
+| `InsightsPanelHost` in Admin ▸ Growth ▸ Insights (S0.5) | The app home is `/apps/insights`, rendered by `/apps/[slug]` from `CAPABILITY_APPS` (data: slug → component). `InsightsHome` is unchanged. Admin keeps a link to the Builderforce workspace's app and the operations view. |
+| `ReplayClientScope` platform → `/api/admin/replay` (S3) | `replayApi` takes `{ siteId }` (project scope resolves to its hosted site). |
+| `GuestSessionsPanel` / `VisitorFlowPanel` merged into one admin destination (S0.5) | S0 still merges them, because they read today's `activity_log`. **S3 retires them**, once builderforce.ai's own Insights install shows the same journeys and leads (wire-or-retire: Insights is the live twin). |
+
+The buyer's path (PRD 33 §2.6) is built in S6 (S6.5 below) and walked twice in S8: once by the Builderforce workspace (customer #1, before any buyer) and once by the paying validation workspace.
+
 
 **Goal.** One Insights destination, one visitor panel, one stat tile, one overlay primitive, and one selector and zone-ranking rule. S0 lands before any replay code exists.
 
@@ -251,7 +271,7 @@ D15 changes S1, S2, S4 and S4c. Where this block and a later step disagree, this
 ### S1.2 Domain (`api/src/domain/replay/`)
 - `replayScope.ts`:
   ```ts
-  export type ReplayScope = { kind: 'platform' } | { kind: 'site'; tenantId: number; siteId: string };
+  export type ReplayScope = { tenantId: number; siteId: string };   // D17: no platform scope
   export function scopeWhere(scope): { tenantId: number | null; siteId?: string }
   ```
 - `interactionAggregate.ts`:
@@ -282,7 +302,7 @@ D15 changes S1, S2, S4 and S4c. Where this block and a later step disagree, this
   Key format: `replay/<platform|t{tenantId}>/<siteId>/<YYYY-MM-DD>/<visitId>/<seq 6-digit>.ndjson.gz`.
 - `replaySites.ts`:
   - `resolveSiteForIngest(env, db, siteToken, origin)`, cached by key hash, 5 min.
-    - Platform: `siteToken === 'platform'` and the origin is in the platform origins (`CORS_ORIGINS`/`APP_ORIGIN` env).
+    - (D17) There is no platform token. builderforce.ai sends its own `bfr_` key like any site.
     - Otherwise: hash the `bfr_` key, find the `tenant_api_keys` row with scope `replay:ingest` that is not revoked, check `originAllowed`, then load the `replay_sites` row by `api_key_id`.
   - `getSite`, `listSitesForTenant`, `updateSiteSettings`.
 - `ReplayConfigService.ts`:
@@ -338,7 +358,7 @@ D15 changes S1, S2, S4 and S4c. Where this block and a later step disagree, this
 - `presentation/routes/replayIngestRoutes.ts`, mounted at `/api/replay-ingest`. Add the prefix to `PUBLIC_INGEST_PREFIXES`.
   - `GET /v1/config?site=…` returns `ReplayClientConfig`, or `{enabled:false}`.
   - `POST /v1/chunks?site=…` takes a gzip body and always answers 202 `{ok:true}`.
-- `presentation/routes/replayAdminRoutes.ts`, mounted at `/api/admin/replay` with `superAdminMiddleware`. Scope is platform.
+- `presentation/routes/replayRoutes.ts`, mounted at `/api/replay` with membership + `requireFeature('sessionReplay')`; the site comes from `?site=` and must belong to the caller's workspace (D17). `replayOpsRoutes.ts` at `/api/admin/replay-ops` (superadmin) returns aggregates only.
   - `GET /visits`
   - `GET /visits/:visitId`: writes the `REPLAY_VIEWED` audit (metadata visitId, visitorId).
   - `GET /visits/:visitId/chunks/:seq`
@@ -392,7 +412,7 @@ D15 changes S1, S2, S4 and S4c. Where this block and a later step disagree, this
   - Report field Web Vitals per page (LCP, CLS, INP via `PerformanceObserver`, about 1 KB of code, no dependency) as one `vital` mark per metric at `pagehide`. The ingest fold aggregates them into `replay_page_vitals_daily` (PRD 33 §3.1, D14).
   - Batch with `REPLAY_LIMITS`: flush every 5 s while visible, and on `pagehide`/`visibilitychange` via `fetch(…, {keepalive:true})`. Gzip with `CompressionStream` and fall back to uncompressed with a header.
   - Self-disable on any thrown error, and report it once through `console.warn` only. Never break the host page.
-  - Public API: `window.BFReplay = { consent(granted:boolean), event(name:string), tag(key:string, value:string), stop(), version }`, plus `identify` on the platform site only (S3).
+  - Public API: `window.BFReplay = { consent(granted:boolean), event(name:string), tag(key:string, value:string), stop(), version }`, plus `identify(id, traits)`, honoured only when the site's identify setting is on (D17).
     - `event(name)` adds an `event` mark. Names are limited to 80 characters and `[\w .:-]`.
     - `tag(key, value)` sets a visit tag, at most `maxTagsPerVisit`. Values are limited to 200 characters. A value that looks like an email or a card number is refused, and a `console.warn` names the tag.
     - Calls made before the recorder loads are queued by the loader's stub and replayed in order.
@@ -493,7 +513,7 @@ The live CDN kill check runs at the first deploy (S8 step 1).
   - `ReplayLoader.test.tsx`: not rendered for signed-in users; consent wiring.
   - Extend `RecordingPanel.test.tsx` with the replay tab first and the journey watch action switching tabs.
 
-**S3 is done when** a local anonymous visit to builderforce.ai produces a recording that the superadmin can replay in Admin ▸ Growth ▸ Insights ▸ Recordings, with the release chip, markers and audit row present, and §11/§12 S3 pass.
+**S3 is done when** the Builderforce workspace has installed Insights through the public path (S0.0), builderforce.ai carries its `bfr_` snippet, and a local anonymous visit produces a recording that a member of the Builderforce workspace can replay in `/apps/insights`, with the release chip, markers and audit row present, and §11/§12 S3 pass.
 
 ---
 
@@ -628,7 +648,7 @@ The live CDN kill check runs at the first deploy (S8 step 1).
 - **Brain tool.** `application/llm/replayToolCatalog.ts` exports `REPLAY_TOOLS: BuiltinTool[]` and is spread into the catalog in `builtinMcpService.ts`, exactly as `CHAT_DIAGNOSTICS_TOOLS` is.
   - The tools are `replay.overview`, `replay.funnel_evaluate`, `replay.search_recordings` (filter → visit ids + one-line digests) and `replay.summarize_visit`. All are read-only.
   - Scope comes from the calling context's project. A tool is advertised only when the workspace holds the `sessionReplay` entitlement, and returns an error otherwise. Use the advertising gate the other entitled catalogs use.
-  - The canvas `sessions` surface (labelled Visitors)'s composer (`composerIntents: ['ask']`, S7) lets the buyer ask "why do people drop at checkout?". The Brain answers from these tools and links recordings.
+  - The composer of the canvas `sessions` surface (labelled Visitors) (`composerIntents: ['ask']`, S7) lets the buyer ask "why do people drop at checkout?". The Brain answers from these tools and links recordings.
   - Follow the prompt tool-name contract (`advertisedName()`).
 - **Read API for buyers.** Document `GET /api/projects/:projectId/replay/{overview,visits,funnels/:id/evaluate}` for workspace API keys in the developer docs page that lists project APIs (locate it). The routes exist already; this only documents them and adds a `replay:read` scope to `TENANT_API_SCOPES`, checked on those three GETs.
 
@@ -915,7 +935,7 @@ S4f starts after the S4e audit. It extends S4e's table, rules, actions and verif
 
   It has an area filter: Funnel, UI/UX, Website, Content, SEO, Performance, Accessibility, Sales.
 - Every evidence view keeps its inline `PrescriptionCard`s (S4e.5), so a person browsing evidence is always one click from the fix.
-- The canvas surface `sessions` keeps its id; its label is **Visitors** (`creationCanvas.surface.sessions.label` ×5), because the canvas already has an `sessions` surface (labelled Visitors). It renders `InsightsHome`.
+- The canvas surface `sessions` keeps its id; its label is **Visitors** (`creationCanvas.surface.sessions.label` ×5), because the canvas already has an `insights` surface. It renders `InsightsHome`.
 - i18n: `replay.fixes.*`, `replay.page.*`, `replay.prompt.*` ×5.
 - Tests: `pageScore.test.ts`; `FixesView.test.tsx` extended (Fixes is the default view; page select shows callouts in patch order; the ledger lists releases with verdicts); `CanvasInsightsSurface.test.tsx` (lands on Fixes).
 
@@ -999,7 +1019,15 @@ S4f starts after the S4e audit. It extends S4e's table, rules, actions and verif
   All are entitlement-checked (`requireFeature(c,'sessionReplay')`) at the routes. There is no site limit: usage is metered per recording (D4), so a workspace can add as many sites as it likes.
 - Routes: `presentation/routes/replayProjectRoutes.ts` (`/api/projects/:projectId/replay/*`) for hosted sites and reads, plus `/api/replay/sites` (tenant-level) for external sites. Membership is checked with the project ownership helper the `check:project-ownership` guard expects.
 
-### S6.4 Install and Verify UI (marketplace)
+### S6.5 The buyer's path (PRD 33 §2.6, D17)
+- **Landing page.** `LISTING_LANDINGS` in `frontend/src/lib/marketplace/listingLandings.ts`: data keyed by listing slug → ordered section entries (`hero`, `install`, `pillars`, `compare`, `pricing`, `faq`, `proof`), each rendered by an existing marketing section where one exists (`MarketingFaq`, `CompetitorMatrix`, `SocialProofBar`, `CreationCtaSection`) and a new one only where none does (`ListingHero`, `PricingCalculator`, `InstallStrip`). `marketplace/listing/[slug]/page.tsx` renders the landing above `ListingLaunch` when the slug has an entry; no per-slug branch in the page. Copy lives in i18n under `marketplace.landing.insights.*` ×5. The "Builderforce runs on it" numbers come from the Builderforce workspace's own cached KPI read (public, aggregated, no recordings).
+- **SEO.** Add `/marketplace/listing/<slug>` for public listings to `app/sitemap.ts` (missing today), and `JsonLd` `SoftwareApplication` with the offer (free) on the landing.
+- **Intent resume.** `Start free` → `registerHref('/apps/insights/setup', 'install:insights')`. After sign-up, verification and `/tenants?next=` workspace choice, `/apps/insights/setup` reads the intent and continues at the workspace step. One helper, `resumeIntent(intent)`, in `lib/auth.ts`; it is used by the listing page too, so a signed-out "Get" on any free listing resumes the same way.
+- **Set-up flow** (`/apps/insights/setup`, ONE page, steps as registry data): workspace (→ `acquireListing`), site (→ `createExternalSite`, privacy switches → `replay_sites.settings`), snippet (`replaySnippets`: script, npm, GTM, Builderforce app), verify (`CapabilityVerify`, live), plan (pack buttons → `startPackCheckout`, return to `/apps/insights?panel=plan:packs&checkout={CHECKOUT_SESSION_ID}`). It replaces S6.4's separate install screen; `CapabilityInstall` and `CapabilityVerify` are its step bodies.
+- **App home.** `app/apps/[slug]/page.tsx` + `CAPABILITY_APPS` (`lib/marketplace/capabilityApps.ts`): `{ insights: { Component: InsightsApp, setupPath: '/apps/insights/setup' } }`. Not entitled → the listing; entitled with no site → set-up; otherwise `InsightsHome`. The header carries the site switcher (`sites` panel kind: sites, snippet, privacy) and the usage chip (`plan` panel kind: usage, packs, receipts). The workspace nav lists installed capability apps from `GET /acquired` (the existing client function, unused today).
+- Tests: `listingLandings.test.ts` (an entry renders its sections in order; a slug without an entry renders today's page), `sitemap.test.ts` (public listings present), `resumeIntent.test.ts` (sign-up → verify → workspace choice keeps the intent), `InsightsSetup.test.tsx` (steps advance only when their call succeeds; verify polls; the pack button starts checkout), `capabilityApps.test.tsx` (the three entitlement states).
+
+### S6.4 Install and Verify UI (set-up step bodies)
 - `components/marketplace/capability/CapabilityInstall.tsx` (container), with steps as registry data:
   - `SessionReplayInstallSteps.tsx`:
     - tabs Script tag / npm / Builderforce apps;
@@ -1117,7 +1145,7 @@ Run `check:blog-index`.
 | # | Step | Evidence the step passed |
 |---|---|---|
 | 1 | Deploy api + frontend + the `publish-cdn` job. | `curl -sI https://cdn.builderforce.ai/replay/v1/loader.js` → 200, `cache-control: public, max-age=300`, no `cf-worker` header, and `cf-cache-status: HIT` on the second request. `/replay/manifest.json` names a hashed recorder that returns 200 with `immutable`. `cdn.builderforce.ai/embed/v1.js` resolves, or the snippet was changed in S2. |
-| 2 | Dogfood. Open builderforce.ai in a private window, accept analytics, click around, and rage-click something. Then sign in, open a canvas with the 3D Room, and visit Settings ▸ API keys. This step requires the operator to have published the legal disclosure and set `replay.recordSignedIn = true`. | In Admin ▸ Growth ▸ Insights ▸ Recordings, ONE visit appears within ~10 s and runs across sign-in. It is tagged with the current UI version, and its `user_id` is set. The replay plays the Room (canvas frames). The API-key area is blocked and inputs are masked. The user's detail panel lists the recording. Logs ▸ Audit has `REPLAY_VIEWED`. |
+| 2 | Dogfood as customer #1. As a member of the Builderforce workspace, walk §2.6 from the landing page (install, site key for builderforce.ai, deploy the snippet). Then open builderforce.ai in a private window, accept analytics, click around, and rage-click something. Then sign in, open a canvas with the 3D Room, and visit Settings ▸ API keys. This step requires the operator to have published the legal disclosure and set `replay.recordSignedIn = true`. | In Admin ▸ Growth ▸ Insights ▸ Recordings, ONE visit appears within ~10 s and runs across sign-in. It is tagged with the current UI version, and its `user_id` is set. The replay plays the Room (canvas frames). The API-key area is blocked and inputs are masked. The user's detail panel lists the recording. Logs ▸ Audit has `REPLAY_VIEWED`. |
 | 3 | Install, then buy. As the test workspace owner, install the listing (free; trace `replay.entitlement.granted`). As superadmin, set its `replayFreeAllowanceOverride = 0`. Then buy the 10k pack ($40) with a real card. | Trace `replay.checkout.started` → `.session_created` → `.payment.completed` → `replay.credits.added` (10,000). `ledger_entries` has the sale rows plus a `replay_recordings` credit of 10,000. The Stripe dashboard shows the $40 payment. The usage meter shows 10,000 credits. |
 | 4 | Install. Create an external site with a test origin. Paste the snippet on a page served from that origin. Visit it. | `replay.site_key.issued`, then `replay.loader.hit`, then `replay.ingest.first_event`. Verify turns green. |
 | 5 | Hosted. Turn recording on for one published canvas app, then visit it. | The page source contains the injected loader with `data-release=<version_token>`. A recording appears in that canvas's Measure ▸ Visitors. |
@@ -1189,7 +1217,7 @@ Hand-over package from each slice:
 - the implementer's deviation list.
 
 **Every slice:**
-- [ ] Decisions D1–D16 obeyed. No new decision taken silently.
+- [ ] Decisions D1–D17 obeyed. No new decision taken silently.
 - [ ] **No duplicates.** These all return only the canonical definition:
   - `rg -n "function (FunnelStat|Stat)\b" frontend/src` → 0
   - `rg -n "deriveSelector\s*\(" -g '!**/interaction-contract/**' --type ts | rg "function"` → 0

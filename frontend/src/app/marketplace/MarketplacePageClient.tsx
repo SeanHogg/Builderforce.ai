@@ -51,7 +51,7 @@ import { FAMILIES, FAMILY_IDS, creationKindForChip, kindLabelKey, publishActionF
 import { MARKETPLACE_LISTING_KINDS } from '@builderforce/creation-canvas-contract';
 import { SkeletonGrid } from './SkeletonGrid';
 import { ModelsExplorer } from './ModelsExplorer';
-import { searchSectionFor } from './marketplaceSections';
+import { hasSearchSection, MarketplaceSearchSection } from './marketplaceSections';
 import { StartupDirectory } from '@/components/startups/StartupDirectory';
 import { signInHref } from '@/lib/auth';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
@@ -416,7 +416,6 @@ export default function MarketplacePageClient() {
   // its disabled state and its label, so the button cannot advertise a path the
   // storefront does not run.
   const publishAction = publishActionFor(family, kind);
-  const SearchSection = searchSectionFor(category);
 
   useEffect(() => {
     setCategory(SECTION_BY_KIND[`${family}:${kind}`] ?? 'all');
@@ -956,11 +955,11 @@ export default function MarketplacePageClient() {
         </div>
       ) : category === 'models' ? (
         <ModelsExplorer search={search} viewMode={viewMode} />
-      ) : SearchSection ? (
+      ) : hasSearchSection(category) ? (
         // Gigs, Jobs, Knowledge, Templates — the sections the search box alone
         // drives, looked up in ONE table (`marketplaceSections`) and loaded on
         // demand, so a new one is a row there rather than an arm here.
-        <SearchSection search={search} />
+        <MarketplaceSearchSection section={category} search={search} />
       ) : category === 'creations' ? (
         // What people BUILT on the canvas, on sale and runnable. One kind per
         // chip, filtered server-side by the same registry the seller published
