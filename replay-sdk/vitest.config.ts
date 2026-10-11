@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { sourcePackageAliases } from '../scripts/sourcePackages.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 
@@ -11,12 +12,9 @@ export default defineConfig({
     testTimeout: 10_000,
   },
   resolve: {
-    alias: {
-      '@builderforce/interaction-contract': path.resolve(
-        root,
-        '../packages/interaction-contract/src/index.ts',
-      ),
-      rrweb: path.resolve(root, 'src/rrweb.mock.ts'),
-    },
+    alias: [
+      ...sourcePackageAliases(path.resolve(root, '..')),
+      { find: /^rrweb$/, replacement: path.resolve(root, 'src/rrweb.mock.ts') },
+    ],
   },
 });

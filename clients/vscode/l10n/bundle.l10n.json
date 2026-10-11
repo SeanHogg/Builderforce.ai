@@ -67,6 +67,7 @@
   "BuilderForce Creation Canvas": "BuilderForce Creation Canvas",
   "BuilderForce MCP servers": "BuilderForce MCP servers",
   "BuilderForce wants to {0}.": "BuilderForce wants to {0}.",
+  "{0} (a BuilderForce sub-agent) wants to {1}.": "{0} (a BuilderForce sub-agent) wants to {1}.",
   "BuilderForce: could not change the item's type.": "BuilderForce: could not change the item's type.",
   "BuilderForce: could not load MCP servers ({0}).": "BuilderForce: could not load MCP servers ({0}).",
   "BuilderForce: could not register the MCP server ({0}).": "BuilderForce: could not register the MCP server ({0}).",

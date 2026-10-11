@@ -13916,7 +13916,8 @@
       "cron": "Tareas programadas",
       "broadcasts": "Comunicados",
       "llmRatings": "Valoraciones",
-      "visitorFlow": "Flujo de visitantes"
+      "visitorFlow": "Flujo de visitantes",
+      "visitors": "Visitantes"
     },
     "common": {
       "loading": "Cargando…",

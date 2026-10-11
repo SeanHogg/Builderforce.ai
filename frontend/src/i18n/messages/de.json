@@ -13916,7 +13916,8 @@
       "cron": "Geplante Läufe",
       "broadcasts": "Ankündigungen",
       "llmRatings": "Bewertungen",
-      "visitorFlow": "Besucherfluss"
+      "visitorFlow": "Besucherfluss",
+      "visitors": "Besucher"
     },
     "common": {
       "loading": "Wird geladen…",

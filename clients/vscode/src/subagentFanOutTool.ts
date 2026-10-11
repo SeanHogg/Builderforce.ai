@@ -13,6 +13,8 @@
  */
 
 import {
+  LIVE_DELEGATION_NOTE,
+  LIVE_FANOUT_NEXT,
   delegationRole,
   parseWorkstreams,
   spawnAgentsTool,
@@ -20,14 +22,9 @@ import {
 } from "@builderforce/agent-tools";
 import type { ToolDef } from "./fileTools";
 import { resolveChildPersona, type SubagentToolDeps } from "./childRunPolicy";
-import { LIVE_DELEGATION_NOTE } from "./subagentControlTools";
 import { WRITE_DECLINED } from "./subagentTool";
 
-export { MAX_WORKSTREAMS } from "@builderforce/agent-tools";
-
-/** What the owner does once a WRITABLE fan-out's children have all reported. */
-export const LIVE_FANOUT_NEXT =
-  "The children have no shell and no git. Keep working on anything not delegated; when their reports are in (they arrive on their own, or call wait_agents), verify the combined change (build and test), fix what the slices broke between them, commit, and report per workstream and ticket.";
+export { LIVE_FANOUT_NEXT, MAX_WORKSTREAMS } from "@builderforce/agent-tools";
 
 export function subagentFanOutToolDef(deps: SubagentToolDeps & Required<Pick<SubagentToolDeps, "children">>): ToolDef {
   const schema = spawnAgentsTool.schema.function;

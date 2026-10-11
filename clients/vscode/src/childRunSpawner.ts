@@ -20,6 +20,7 @@ import {
   queueRunSteering,
   type RunLineage,
 } from "@seanhogg/builderforce-brain-embedded";
+import { childReportText as reportText, ownerDirectionText as directionText } from "@builderforce/agent-tools";
 import { MAX_CHILD_DEPTH, type ChildReport, type ChildRuns } from "./childRuns";
 
 /** One delegation, as the spawn tools describe it. */
@@ -173,14 +174,5 @@ function reportOf(key: number, lineage: RunLineage, req: ChildRequest, stopped: 
   };
 }
 
-/** Direction for a child, as it reads it: prefixed with its owner, as its brief says. */
-export function directionText(ownerName: string, text: string): string {
-  return `[${ownerName}] ${text.trim()}`;
-}
-
-/** A child's report as its owner reads it in its inbox. */
-export function reportText(report: ChildReport): string {
-  const head = `[Sub-agent ${report.handle} · ${report.name} — ${report.state}] ${report.label}${report.ticket ? ` (ticket ${report.ticket})` : ""}`;
-  const files = report.changedFiles?.length ? `Changed: ${report.changedFiles.join(", ")}` : "";
-  return [head, report.output, files].filter(Boolean).join("\n\n");
-}
+/** The words an owner and a child read from each other — shared with the cloud runner. */
+export { ownerDirectionText as directionText } from "@builderforce/agent-tools";

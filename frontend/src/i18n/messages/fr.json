@@ -13916,7 +13916,8 @@
       "cron": "Tâches planifiées",
       "broadcasts": "Annonces",
       "llmRatings": "Évaluations",
-      "visitorFlow": "Parcours visiteurs"
+      "visitorFlow": "Parcours visiteurs",
+      "visitors": "Visiteurs"
     },
     "common": {
       "loading": "Chargement…",
@@ -14973,6 +14974,13 @@
       "gradedColumn": "Évaluées",
       "gradedRateColumn": "Taux d'évaluation",
       "noData": "Aucune session sur cette période."
+    },
+    "insights": {
+      "title": "Visiteurs",
+      "subtitle": "L'entonnoir anonyme et les personnes qui s'y trouvent — parcours, leads, un enregistrement.",
+      "tabJourney": "Parcours",
+      "tabLead": "Lead",
+      "crumb": "Visiteurs"
     },
     "visitorFlow": {
       "title": "Parcours visiteurs",

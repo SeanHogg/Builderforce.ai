@@ -26,6 +26,7 @@ export * from "./psychometrics.js";
 export * from "./knowledge-notes.js";
 export * from "./skill-tools.js";
 export * from "./subagent-tools.js";
+export * from "./live-subagent-tools.js";
 export * from "./git-tools.js";
 export * from "./symbols.js";
 export * from "./symbol-tools.js";

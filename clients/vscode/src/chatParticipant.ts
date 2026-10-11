@@ -193,12 +193,11 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     const runChatId = brainChatId ?? unlinkedRunId();
     const { systemPrompt, seed } = splitSystemPrompt(messages);
     // Sub-agents run in the editor's run host as ordinary runs owned by THIS turn, and
-    // live in its Brain chat — so they need one. Their write prompts are raised in the
-    // Brain panel, which this view cannot show: here a child writes only when edits are
-    // already auto-approved, and otherwise runs read-only and says so.
+    // live in its Brain chat — so they need one. This view cannot render a run cell's
+    // confirm, so a child's write prompt is asked through the same modal as this turn's.
     const children = runHost && brainChatId != null
       ? runHost.childControls(
-          { key: runChatId, rootChatId: brainChatId, name: OWNER_NAME, depth: 0, canWrite: permissionMode === "acceptEdits" },
+          { key: runChatId, rootChatId: brainChatId, name: OWNER_NAME, depth: 0, canWrite: true },
           {
             systemPrompt,
             ...(modelChoice.model ? { model: modelChoice.model } : {}),
@@ -209,6 +208,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
             autoApprove: permissionMode === "acceptEdits",
             evermind: false,
           },
+          (req) => confirmToolCall(req, req.agentName),
         )
       : undefined;
     const tools: ToolDef[] = await brainToolCatalog(ctx.secrets, root, activeProject?.id, children, () => runAbortSignal(runChatId));
@@ -240,14 +240,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
       // never here. The sign-in gate above guarantees a key on the gateway branch.
       stream: routeStream(modelChoice, key),
       signal: abort.signal,
-      approve: async (req: NativeApprovalRequest) => {
-        const prompt = req.gateReason
-          ? vscode.l10n.t('Governance: approve "{0}"? {1}', req.label, req.gateReason)
-          : vscode.l10n.t("BuilderForce wants to {0}.", req.label);
-        const apply = vscode.l10n.t("Apply");
-        const pick = await vscode.window.showWarningMessage(prompt, { modal: true }, apply, vscode.l10n.t("Skip"));
-        return pick === apply;
-      },
+      approve: (req: NativeApprovalRequest) => confirmToolCall(req),
       labels: {
         dispatchHint: vscode.l10n.t(
           "_This turn was stopped because its last few tool calls all failed. Read what they answered and reply with what they ask for, or hand the work to a cloud agent from the board so it continues in its own runtime._",
@@ -297,6 +290,21 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // resolves the same conversation (see priorBrainChatId).
     return brainChatId != null ? { metadata: { brainChatId } } : {};
   };
+}
+
+/**
+ * Ask the person about one paused tool call — this turn's own, or (with `agentName`)
+ * one of its sub-agents', which may pause after the turn's reply has finished.
+ */
+async function confirmToolCall(req: NativeApprovalRequest, agentName?: string): Promise<boolean> {
+  const prompt = req.gateReason
+    ? vscode.l10n.t('Governance: approve "{0}"? {1}', req.label, req.gateReason)
+    : agentName
+      ? vscode.l10n.t("{0} (a BuilderForce sub-agent) wants to {1}.", agentName, req.label)
+      : vscode.l10n.t("BuilderForce wants to {0}.", req.label);
+  const apply = vscode.l10n.t("Apply");
+  const pick = await vscode.window.showWarningMessage(prompt, { modal: true }, apply, vscode.l10n.t("Skip"));
+  return pick === apply;
 }
 
 /**

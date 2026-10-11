@@ -119,6 +119,12 @@ export type Capability =
    *  once in one tree": that also needs scoped writers and serialized commits, which a
    *  surface backs or does not. The editor runs its own fan-out outside the registry. */
   | "orchestrate.fanout"
+  /** The surface runs its children IN THE BACKGROUND: `spawn` returns a handle at once,
+   *  the parent keeps working, and it can wait for, redirect and stop its children
+   *  (`wait_agents` / `message_agent` / `stop_agent`). Backed by
+   *  {@link OrchestrationCapability.live}. A surface that runs a child inside the spawn
+   *  call (the images) does not grant it. */
+  | "orchestrate.live"
   /** Send messages on a docked channel (Slack/Discord/Telegram/…). */
   | "message"
   /** Render / generate media (image, tts, canvas). */
@@ -297,6 +303,44 @@ export interface SkillListResult {
  */
 export interface OrchestrationCapability {
   spawn(input: SubagentRequest): Promise<SubagentResult>;
+  /** Present when children run in the background (capability `orchestrate.live`). */
+  live?: LiveChildControls;
+}
+
+/**
+ * An owner's verbs for children it is NOT blocked on. A child's report reaches its owner
+ * exactly once — returned by a `wait` that is waiting for it, or else delivered to the
+ * owner as a message before its next turn — so `wait` is only for an owner that cannot
+ * go on without the result.
+ */
+export interface LiveChildControls {
+  /** Until the named (or all live) children settle, or the timeout. */
+  wait(handles: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<LiveWaitResult>;
+  /** Put direction in front of a running child's next turn. */
+  message(handle: string, text: string): Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Stop children by handle, or every live one. Returns the handles stopped. */
+  stop(handles: readonly string[] | "all"): Promise<string[]>;
+}
+
+export interface LiveWaitResult {
+  /** Reports collected by this wait (each reaches the owner only once). */
+  reports: ChildReportLike[];
+  /** Handles still running at the timeout. */
+  running: string[];
+  /** Set when a surface delivers reports as messages rather than returning them here. */
+  note?: string;
+}
+
+/** A finished child, as its owner reads it. */
+export interface ChildReportLike {
+  handle: string;
+  /** Who did the slice — the agent it ran as, or the plain sub-agent's label. */
+  name: string;
+  state: "done" | "failed" | "stopped";
+  label: string;
+  output: string;
+  ticket?: string;
+  changedFiles?: string[];
 }
 
 /** What the parent asks a sub-agent to do. */
@@ -356,6 +400,12 @@ export interface SubagentResult {
   changedFiles?: string[];
   /** The ticket the child delivered, echoed from the request. */
   ticket?: string;
+  /** A BACKGROUND child's handle (`orchestrate.live`) — the result then means "started". */
+  handle?: string;
+  /** True when the child is still working: its report comes later, not in `output`. */
+  running?: boolean;
+  /** What the parent should do next, when the surface has something to say. */
+  note?: string;
   error?: string;
 }
 

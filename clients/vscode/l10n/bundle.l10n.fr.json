@@ -67,6 +67,7 @@
   "BuilderForce Creation Canvas": "Canevas de création BuilderForce",
   "BuilderForce MCP servers": "Serveurs MCP BuilderForce",
   "BuilderForce wants to {0}.": "BuilderForce souhaite {0}.",
+  "{0} (a BuilderForce sub-agent) wants to {1}.": "{0} (un sous-agent BuilderForce) souhaite {1}.",
   "BuilderForce: could not change the item's type.": "BuilderForce : impossible de changer le type de l'élément.",
   "BuilderForce: could not load MCP servers ({0}).": "BuilderForce : impossible de charger les serveurs MCP ({0}).",
   "BuilderForce: could not register the MCP server ({0}).": "BuilderForce : impossible d'enregistrer le serveur MCP ({0}).",

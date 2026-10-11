@@ -67,6 +67,7 @@
   "BuilderForce Creation Canvas": "BuilderForce 创作画布",
   "BuilderForce MCP servers": "BuilderForce MCP 服务器",
   "BuilderForce wants to {0}.": "BuilderForce 想要{0}。",
+  "{0} (a BuilderForce sub-agent) wants to {1}.": "{0}（BuilderForce 子代理）想要{1}。",
   "BuilderForce: could not change the item's type.": "BuilderForce：无法更改该项的类型。",
   "BuilderForce: could not load MCP servers ({0}).": "BuilderForce：无法加载 MCP 服务器（{0}）。",
   "BuilderForce: could not register the MCP server ({0}).": "BuilderForce：无法注册 MCP 服务器（{0}）。",

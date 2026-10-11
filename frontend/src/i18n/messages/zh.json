@@ -13916,7 +13916,8 @@
       "cron": "定时任务",
       "broadcasts": "广播",
       "llmRatings": "评分",
-      "visitorFlow": "访客流向"
+      "visitorFlow": "访客流向",
+      "visitors": "访客"
     },
     "common": {
       "loading": "加载中…",
@@ -14973,6 +14974,13 @@
       "gradedColumn": "已评定",
       "gradedRateColumn": "评定率",
       "noData": "该周期内没有会话。"
+    },
+    "insights": {
+      "title": "访客",
+      "subtitle": "匿名漏斗及其中的人——流向、线索、一段录像。",
+      "tabJourney": "旅程",
+      "tabLead": "线索",
+      "crumb": "访客"
     },
     "visitorFlow": {
       "title": "访客流向",

@@ -27,6 +27,7 @@
 import {
   clearRunError,
   getGlobalRunState,
+  getRunSnapshot,
   getRunTrace,
   isFailedToolResult,
   isRunning,
@@ -46,7 +47,7 @@ import {
   type EvermindRunHooks,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ToolDef } from "./fileTools";
-import { createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs, type NativeRunLabels } from "./nativeBrainRun";
+import { approvalRequestFor, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs, type NativeRunLabels } from "./nativeBrainRun";
 import { renderPolicyDirectives, type PolicyGate } from "./policy";
 import { SessionNotes, type RunActivity } from "./sessionNotes";
 import { createChildRuns } from "./childRuns";
@@ -54,6 +55,7 @@ import { syncMessageFor, type RunHostMessage, type RunSink, type SinkEntry, type
 import { childControls, directionText, type ChildControls, type ChildOwner } from "./childRunSpawner";
 import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
 import { childCatalog, scopeRefusal } from "./childRunPolicy";
+import { createChildApprovalRelay, type ChildApprover } from "./childApprovalRelay";
 
 export { syncMessageFor } from "./brainRunHostProtocol";
 export type { RunHostMessage, RunSink, RunSyncMessage, RunToolMessage, SinkEntry, WebviewRunStart } from "./brainRunHostProtocol";
@@ -151,9 +153,11 @@ export interface BrainRunHost {
   /**
    * Sub-agent controls for a run this host did NOT start — the native chat participant.
    * Its children run here, as ordinary runs; it cannot be woken (its turn belongs to the
-   * editor's chat view), so their reports wait in its inbox for its next turn.
+   * editor's chat view), so their reports wait in its inbox for its next turn. With
+   * `approve`, its children's write prompts are asked through it (the native view cannot
+   * render a run cell's confirm).
    */
-  childControls(owner: ChildOwner, base: Omit<WebviewRunStart, "chatId">): ChildControls;
+  childControls(owner: ChildOwner, base: Omit<WebviewRunStart, "chatId">, approve?: ChildApprover): ChildControls;
   /** Watch the runs from a panel. The panel is brought up to date immediately. */
   attach(sink: RunSink): () => void;
   dispose(): void;
@@ -177,6 +181,11 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   const specs = new Map<number, RunSpec>();
   /** Every live sub-agent, by the chat it lives in. */
   const registry = createChildRuns();
+  const approvals = createChildApprovalRelay({
+    registry,
+    pendingOf: (key) => getRunSnapshot(key).pendingConfirm,
+    resolve: resolveRunConfirm,
+  });
 
   const broadcast = (message: RunHostMessage): void => {
     for (const entry of sinks) entry.sink.post(message);
@@ -187,7 +196,10 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   const watch = (chatId: number): void => {
     if (watched.has(chatId)) return;
     watched.add(chatId);
-    subscribeRun(chatId, () => broadcastSync(chatId));
+    subscribeRun(chatId, () => {
+      broadcastSync(chatId);
+      approvals.changed(chatId);
+    });
   };
   const offStore = subscribeRunStore(() => ports.onRunsChanged?.(getGlobalRunState()));
 
@@ -314,6 +326,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // host surface shares, re-bound per call so a mid-run switch is honoured.
     const needsConfirm = (req: { name: string; args: unknown }): boolean =>
       nativeNeedsConfirm(defs, flag.autoApprove ? "acceptEdits" : "ask", gates)(req);
+    approvals.describeWith(key, (name, args) => approvalRequestFor(defs, gates, name, args));
     // A sub-agent's turns are routed for ITS role (explore / code / verify), not its owner's.
     const transport = await ports.stream();
     const role = p.child?.role;
@@ -356,6 +369,7 @@ ${p.systemPrompt}` : p.systemPrompt,
       });
     } finally {
       flags.delete(key);
+      approvals.forget(key);
       await flushNote(key, chatId);
     }
   };
@@ -399,9 +413,10 @@ ${p.systemPrompt}` : p.systemPrompt,
       queueRunSteering(runKey, lineage ? directionText(lineage.ownerName, text) : text);
       childHost.postDirection(lineage?.rootChatId ?? runKey, "person", lineage?.ownerName ?? OWNER_NAME, lineage?.agent ?? null, text);
     },
-    childControls(owner, base) {
+    childControls(owner, base, approve) {
       // Registered so a child can derive from it; never woken — its turns are the editor's.
       specs.set(owner.key, { ...base, chatId: owner.key, wakeable: false });
+      if (approve) approvals.register(owner.rootChatId, approve);
       return childControls(childHost, owner);
     },
     setAutoApprove(chatId, on) {

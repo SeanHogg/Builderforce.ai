@@ -2,17 +2,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'tsup';
 import { browserSnippetConfig } from '../scripts/tsup.base.mjs';
+import { sourcePackageAliasMap } from '../scripts/sourcePackages.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const contract = path.resolve(root, '../packages/interaction-contract/src/index.ts');
+/** Source-only shared packages (`@builderforce/interaction-contract`), derived from their manifests. */
+const sourceAliases = sourcePackageAliasMap(path.resolve(root, '..'));
 
 function alias() {
   return {
     esbuildOptions(options: { alias?: Record<string, string> }) {
-      options.alias = {
-        ...(options.alias ?? {}),
-        '@builderforce/interaction-contract': contract,
-      };
+      options.alias = { ...(options.alias ?? {}), ...sourceAliases };
     },
   };
 }

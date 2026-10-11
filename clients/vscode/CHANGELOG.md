@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.20] — Approve a sub-agent's edits from the built-in chat
+
+- **Sub-agents started from VS Code's own chat can now edit files.** When one wants to change a file, you get the same Apply / Skip prompt the chat uses for its own edits, naming the sub-agent that asked. Before, these sub-agents could only read unless edits were auto-approved.
+
 ## [2026.10.19] — Sub-agents work alongside the chat, not instead of it
 
 - **Spawning a sub-agent no longer pauses the chat.** The main agent gets the sub-agent's handle (`a1`, `a2`, …) straight away and keeps planning, coding and starting other sub-agents while they work. When a sub-agent finishes, its report goes to the main agent automatically. If the main agent had already stopped, the report starts it up again so it can act on the result.
