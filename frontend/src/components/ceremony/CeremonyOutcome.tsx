@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { MeetingMinutesPanel } from '@/components/meetings/MeetingMinutesPanel';
-import { ceremonySessionsApi, type CeremonySession } from '@/lib/builderforceApi';
+import { ceremonySessionsApi, type CeremonySession } from '@/lib/ceremonyApi';
 
 /**
  * WHAT A CEREMONY PRODUCED — its attendance, what it changed, and its minutes.

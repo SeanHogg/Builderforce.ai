@@ -23,7 +23,7 @@
  * the automatic sync already ran, changes nothing.
  */
 
-import { ceremonySessionsApi, type CeremonyMinutesToCanvasResult } from '@/lib/builderforceApi';
+import { ceremonySessionsApi, type CeremonyMinutesToCanvasResult } from '@/lib/ceremonyApi';
 import { resourceIdOfType } from '@builderforce/creation-canvas-contract';
 import type { CardAct } from '@/domains/canvas/application/CardAct';
 import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';

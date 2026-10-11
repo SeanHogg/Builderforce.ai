@@ -4,7 +4,7 @@
  */
 import { useCallback, useState } from 'react';
 import { usePolledResource } from '@/hooks/usePolledResource';
-import { ceremonySessionsApi, type CeremonySession } from '@/lib/builderforceApi';
+import { ceremonySessionsApi, type CeremonySession } from '@/lib/ceremonyApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 /**

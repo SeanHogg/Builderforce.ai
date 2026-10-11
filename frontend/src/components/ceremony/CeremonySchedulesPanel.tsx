@@ -9,9 +9,7 @@ import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
-import {
-  ceremonySchedulesApi, type CeremonySchedule, type CeremonyScheduleInput,
-} from '@/lib/builderforceApi';
+import { ceremonySchedulesApi, type CeremonySchedule, type CeremonyScheduleInput } from '@/lib/ceremonyApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultText } from '@/lib/apiClient';
 /**

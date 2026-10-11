@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanvasObject, CreationObjectKind } from '@/domains/canvas/domain/canvasObject';
-import type { CeremonyMinutesToCanvasResult } from '@/lib/builderforceApi';
+import type { CeremonyMinutesToCanvasResult } from '@/lib/ceremonyApi';
 import { minutesSyncNotice, pullStandupMinutesAct } from './ceremonyActs';
 
 const { minutesToCanvas } = vi.hoisted(() => ({
   minutesToCanvas: vi.fn<(id: string) => Promise<CeremonyMinutesToCanvasResult>>(),
 }));
-vi.mock('@/lib/builderforceApi', () => ({ ceremonySessionsApi: { minutesToCanvas } }));
+vi.mock('@/lib/ceremonyApi', () => ({ ceremonySessionsApi: { minutesToCanvas } }));
 
 const t = (key: string, values?: Record<string, string | number>) => (values ? `${key}:${JSON.stringify(values)}` : key);
 
