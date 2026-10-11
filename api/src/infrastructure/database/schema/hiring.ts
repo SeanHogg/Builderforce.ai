@@ -769,7 +769,7 @@ export const jobWebsites = pgTable('job_websites', {
 ]);
 
 /**
- * Where a posting was PUBLISHED, as the board confirmed it (FO-B4, migration 1205).
+ * Where a posting was PUBLISHED, as the board confirmed it (FO-B4, migration 1206).
  *
  * One row per (posting, job board), written ONLY by `hiring/distributePosting.ts` from
  * the board's own answer read through the manifest's `response` mapping. `status` is

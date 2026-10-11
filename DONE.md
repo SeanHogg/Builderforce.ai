@@ -1,3 +1,35 @@
+## ✅ RESOLVED 2026-10-10 — Make, Run and Reach: seven slices of the arc closed in one pass (frontend 2026.10.37 · api 2026.10.20)
+
+**Make — delivery and the board**
+- **Spec tickets no longer bounce back to implementation.** `specShapedTicket.ts` reads the title as well as `taskType`/`actionType`; `expectsCodeDeliverable(taskType, actionType, title?)` is the one predicate `decideTicketReadiness` and `autonomyWiringAudit` share.
+- **A cross-board move re-points `tasks.segment_id` in the same write.** `moveTask` sets it in the update itself, and the separate `repointSegment` is gone.
+- **`review_ticket_branches` is deduped like any read** and invalidated by `REPO_STATE_READ_TOOLS` when a push, commit or branch tool changes repo state, so a cached review cannot outlive the push.
+- **0-byte scaffold writes, widget host GET, room speech bubble** were already fixed on main (`@builderforce/ide-file-contract`, `validateScaffoldNotEmptied`, 422 from `writeWorkspaceFile`, the bubble's anchor jump). This pass adds what was missing: route tests (`ideRoutes.files.test.ts`, `canvasWidgetHostRoutes.test.ts`, `PeerSpeechBubble.test.tsx`).
+- **A finished meeting's minutes reach the canvas.** Concluding a ceremony writes minutes the way `POST /meetings/:id/end` always did (`concludeCeremonyMinutes`). `ceremonyMinutesToCanvas` puts them on the stand-up card and places each action item as a task object (`rewriteBoardGraph`, `ceremonyMinutesBoard`). Manual sync is `POST /api/agile/ceremonies/sessions/:id/minutes/canvas`. `meetingMinutes.ts` moved to `domain/meetings/`.
+- **Tap-to-assign on touch and keyboard.** `CeremonyDropZone` (`pickToPlace.tsx`) makes tap, keyboard and drag one path, so a ceremony can be staffed from a phone.
+
+**Run**
+- **Finance ▸ Reports.** `ReportSchedulesPanel`, `ReportScheduleForm` and `BoardPackFramePicker` (board first, then frame) create and manage report schedules and board packs. `ValidationEngagementsCard` shows the experiments behind the numbers. Gated by `reports.manageSchedules`. Release note 1205, blog `schedule-your-board-pack-from-finance`.
+- **FO-B4 — a job posting is published to connected job boards.**
+  - `job_posting_distributions` (1206) holds one row per board. A row reads posted only with the board's own id (CHECK-enforced); otherwise it holds the board's reason.
+  - Connector manifests gain a `response` mapping, read by one `mapConnectorResponse`.
+  - Code: `distributePosting` + `postingDistributionStore`, `GET/POST /api/ats/postings/:id/distributions`, the `canvas_distribute_job_posting` tool and `CanvasJobDistribution` on the card. Sources attribute applicants to each board.
+  - Release note 1207, blog `publish-a-job-posting-to-your-job-boards`.
+
+**Reach**
+- **Copying a listing that needs a workspace** asks for one (`SessionGate action="takeCopy"`) instead of failing at the buy control.
+- **Marketplace `jobs` category.** It comes from `marketplaceFamilies.ts`, and `marketplaceSections.tsx` loads every section lazily through one typed `SearchSectionProps` contract.
+- **Guest fixtures for `/api/pmo/*`, `/api/insights/funnel` and marketplace lists.** These load lazily (`LAZY_FIXTURE_MODULES`, `resolveGuestReadLoaded`), so they stay out of the root closure and a signed-in request never fetches them.
+- **The marketing header's dropdowns are driven by JavaScript**, not CSS hover: `aria-controls`, `useDismissOnOutsidePress`, `[data-open]`.
+- **YouTube posting from a social campaign.**
+  - The upload is resumable and runs in the background (`youtubeResumableUpload`, `youtubeUploadJobs`, the `youtube-upload` cron sweep, `POST /uploads/:id/advance`). It is settled back onto the campaign post by `youtubeUploadSettlement`.
+  - YouTube moves to `publishMode: 'media'` / `publishTransport: 'upload'`.
+  - Release note 1208, blog `post-your-launch-video-to-youtube-from-a-campaign`.
+
+**Fixed at integration:** the slices had picked overlapping migration numbers, renumbered to 1205–1208. The YouTube and report-schedule release notes also shared the row id `…001205`, and `ON CONFLICT DO NOTHING` would have silently dropped the YouTube note; each id now matches its migration. Seven blog OG cards missing from main were generated, and the methodology card was refreshed for the five-stage arc.
+
+**Left open (in the roadmap):** follow-up cards that someone deletes come back on the next sync (no tombstone). LinkedIn gets no `company_id`. Greenhouse, Indeed and LinkedIn give no public URL. Attribution matches exactly and no applicants are imported. There is no Workable connector. A report schedule's report and frame cannot be edited. YouTube processing status is not polled. `autonomyWiringAudit` has no test.
+
 ## ✅ RESOLVED 2026-10-10 — A Studio app built under the old starter finally shows, and "continue" has the steps to finish (frontend 2026.10.36)
 
 **Was (session `local-148925cf`, ui 2026.10.35):** the Brain wrote an 18-file app (`App.jsx` with routes, pages, layout) and then made it responsive, yet the preview still read "Hello World! — Edit src/main.jsx to get started". Saying "continue" re-read eight files and answered "I couldn't prepare any canvas changes from that request."

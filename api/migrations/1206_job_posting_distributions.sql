@@ -1,4 +1,4 @@
--- 1205 · Where a job posting was published, as the board confirmed it (FO-B4).
+-- 1206 · Where a job posting was published, as the board confirmed it (FO-B4).
 --
 -- WHY A TABLE. The canvas `jobPosting` documented `distribution` as `{board, status,
 -- postedAt, url}` "written by the distribute action against a connected job board",
