@@ -25,7 +25,7 @@
    - `CreationCanvas.tsx` (net ≤ +10 lines).
 4. **Caching.** Every new read goes through `getOrSetCached` (`infrastructure/cache/readThroughCache.ts`). Keys carry a version token from `getCacheVersion` / `bumpCacheVersion`. Key builders live in `application/replay/replayCacheKeys.ts`.
 5. **i18n.** Every visible string goes in all five catalogs (`frontend/src/i18n/messages/{en,zh,es,fr,de}.json`) with real translations. Namespaces:
-   - `admin.visitors.*` for the admin destination;
+   - `admin.insights.*` for the admin destination;
    - `replay.*` for the shared components;
    - `creationCanvas.surface.sessions.*` for the canvas surface;
    - `marketplace.capability.*` for purchase and install.
@@ -73,7 +73,7 @@
 | Listing kinds | `packages/creation-canvas-contract/src/marketplaceListings.ts` `MARKETPLACE_LISTING_KINDS` L239 (no `capability` kind yet) | The `capability` kind |
 | Hosted HTML injection | `application/ide/siteAttribution.ts` `injectSiteBadge` / `withSiteBadge` (used by `siteServer.ts` and `siteStaticServe.ts`, which the sites Worker runs) | Loader injection into hosted apps |
 | Hosted releases | apps DB `site_releases.version_token`, `project_sites` | `release_key` for hosted apps |
-| Canvas surfaces | `lib/canvasSurfaces.ts` (`CANVAS_SURFACES` L129, `CanvasSurfaceId` L41), `lib/canvasPhases.ts` `PHASE_SURFACES` L83, `stage/CanvasSurfaceStage.tsx` L113, `canvasSurfaceIcons.tsx`, `CanvasSurfaceSwitcher.tsx` i18n `creationCanvas.surface.<id>.{label,enter,active,regionLabel}` | The `insights` surface |
+| Canvas surfaces | `lib/canvasSurfaces.ts` (`CANVAS_SURFACES` L129, `CanvasSurfaceId` L41), `lib/canvasPhases.ts` `PHASE_SURFACES` L83, `stage/CanvasSurfaceStage.tsx` L113, `canvasSurfaceIcons.tsx`, `CanvasSurfaceSwitcher.tsx` i18n `creationCanvas.surface.<id>.{label,enter,active,regionLabel}` | The `sessions` surface (labelled Visitors) |
 | Canvas site facts | `useSiteAudience(projectId, days)`, `lib/siteAudienceApi.ts`, `useOperateReading` (primary app → `binding.ideProjectId`), `useCanvasSessionFacts().persistence` | Which project's recordings; numbers in the surface header |
 | Brain dock side | `brainDockPreferences.ts` (`BrainDockSide`, default `right`), `canvasLens.ts` L58 can force a side | Docking the replay panel on the opposite side |
 | Browser SDK build | `scripts/tsup.base.mjs` `browserSnippetConfig({entry, globalName})`; examples `browser-sdk/`, `feedback-sdk/`; `.github/workflows/release.yml` `package-npm` matrix L31–45, `npm-publish-if-new.sh` | The `replay-sdk/` package |
@@ -207,7 +207,7 @@ Facts already verified. Do not rediscover them:
   - This wires the dead seam.
 - Delete `VisitorJourneyDrawer.tsx`, `VisitorFlowPanel.tsx` and `GuestSessionsPanel.tsx`. Grep for zero references, and move any helper still used.
 - i18n:
-  - Reuse the existing `admin.visitorFlow.*` and guest-session keys by moving them under `admin.visitors.*` in all five catalogs.
+  - Reuse the existing `admin.visitorFlow.*` and guest-session keys by moving them under `admin.insights.*` in all five catalogs.
   - Delete the keys that are no longer used.
   - Add `admin.sub.visitors`.
 - Tests:
@@ -558,7 +558,7 @@ The live CDN kill check runs at the first deploy (S8 step 1).
     - "Add filter" lists `FILTER_FIELDS` for the current scope; each field renders its editor from `valueKind` (a registry of editors, no branches per field).
     - Applied clauses show as removable chips.
     - A segment menu offers save, rename, delete and apply. Deleting uses `useConfirm`.
-  - The filter is lifted into `InsightsHome` (and the canvas `insights` surface in S7) and passed to every band and every panel tab as one `filter` prop (the registry's component contract already carries it). Every band and kind honours it.
+  - The filter is lifted into `InsightsHome` (and the canvas `sessions` surface (labelled Visitors) in S7) and passed to every band and every panel tab as one `filter` prop (the registry's component contract already carries it). Every band and kind honours it.
   - `RecordingsList`'s S3 chips are replaced by the bar, and its props are unchanged apart from `filter`.
 
 ### S4c.2 Overview (the dashboard)
@@ -628,7 +628,7 @@ The live CDN kill check runs at the first deploy (S8 step 1).
 - **Brain tool.** `application/llm/replayToolCatalog.ts` exports `REPLAY_TOOLS: BuiltinTool[]` and is spread into the catalog in `builtinMcpService.ts`, exactly as `CHAT_DIAGNOSTICS_TOOLS` is.
   - The tools are `replay.overview`, `replay.funnel_evaluate`, `replay.search_recordings` (filter → visit ids + one-line digests) and `replay.summarize_visit`. All are read-only.
   - Scope comes from the calling context's project. A tool is advertised only when the workspace holds the `sessionReplay` entitlement, and returns an error otherwise. Use the advertising gate the other entitled catalogs use.
-  - The canvas `insights` surface's composer (`composerIntents: ['ask']`, S7) lets the buyer ask "why do people drop at checkout?". The Brain answers from these tools and links recordings.
+  - The canvas `sessions` surface (labelled Visitors)'s composer (`composerIntents: ['ask']`, S7) lets the buyer ask "why do people drop at checkout?". The Brain answers from these tools and links recordings.
   - Follow the prompt tool-name contract (`advertisedName()`).
 - **Read API for buyers.** Document `GET /api/projects/:projectId/replay/{overview,visits,funnels/:id/evaluate}` for workspace API keys in the developer docs page that lists project APIs (locate it). The routes exist already; this only documents them and adds a `replay:read` scope to `TENANT_API_SCOPES`, checked on those three GETs.
 
@@ -711,7 +711,7 @@ S4d starts after the S4c and S7 audits. It owns no new storage engine: it reads 
   - "Why it missed" (the stored cited patterns);
   - "Call it early…" (a `SlideOutPanel` `sheet` that requires a reason).
 
-  The same component renders at the top of the canvas `insights` surface when the app is a proof. i18n: `creationCanvas.proof.*` ×5.
+  The same component renders at the top of the canvas `sessions` surface (labelled Visitors) when the app is a proof. i18n: `creationCanvas.proof.*` ×5.
 
 ### S4d.3 Read again with what we learned
 - On a graded proof card, "Read again with what we learned" calls `realizationApi.plan(idea, sessionId, { priorRealizationId })`. The plan route loads that realization's grade and evidence, passes them to the Read step as context, and writes `idea.read started` with `metadata.priorGrade = { realizationId, verdict, value, threshold, patterns }`.
@@ -915,7 +915,7 @@ S4f starts after the S4e audit. It extends S4e's table, rules, actions and verif
 
   It has an area filter: Funnel, UI/UX, Website, Content, SEO, Performance, Accessibility, Sales.
 - Every evidence view keeps its inline `PrescriptionCard`s (S4e.5), so a person browsing evidence is always one click from the fix.
-- The canvas surface `sessions` keeps its id; its label becomes **Fixes** (`creationCanvas.surface.sessions.label` ×5), and it lands on the Fixes home.
+- The canvas surface `sessions` keeps its id; its label is **Visitors** (`creationCanvas.surface.sessions.label` ×5), because the canvas already has an `sessions` surface (labelled Visitors). It renders `InsightsHome`.
 - i18n: `replay.fixes.*`, `replay.page.*`, `replay.prompt.*` ×5.
 - Tests: `pageScore.test.ts`; `FixesView.test.tsx` extended (Fixes is the default view; page select shows callouts in patch order; the ledger lists releases with verdicts); `CanvasInsightsSurface.test.tsx` (lands on Fixes).
 
@@ -1042,7 +1042,7 @@ S4f starts after the S4e audit. It extends S4e's table, rules, actions and verif
 
 ---
 
-## 9. Slice S7 — Buyer surfaces (hosted injection, canvas Measure ▸ Insights)
+## 9. Slice S7 — Buyer surfaces (hosted injection, canvas Measure ▸ Visitors)
 
 ### S7.1 Hosted injection
 - Extract the shared helper `injectBeforeBodyClose(html, markerId, snippet)` from `siteAttribution.injectSiteBadge`, and make `injectSiteBadge` use it.
@@ -1120,7 +1120,7 @@ Run `check:blog-index`.
 | 2 | Dogfood. Open builderforce.ai in a private window, accept analytics, click around, and rage-click something. Then sign in, open a canvas with the 3D Room, and visit Settings ▸ API keys. This step requires the operator to have published the legal disclosure and set `replay.recordSignedIn = true`. | In Admin ▸ Growth ▸ Insights ▸ Recordings, ONE visit appears within ~10 s and runs across sign-in. It is tagged with the current UI version, and its `user_id` is set. The replay plays the Room (canvas frames). The API-key area is blocked and inputs are masked. The user's detail panel lists the recording. Logs ▸ Audit has `REPLAY_VIEWED`. |
 | 3 | Install, then buy. As the test workspace owner, install the listing (free; trace `replay.entitlement.granted`). As superadmin, set its `replayFreeAllowanceOverride = 0`. Then buy the 10k pack ($40) with a real card. | Trace `replay.checkout.started` → `.session_created` → `.payment.completed` → `replay.credits.added` (10,000). `ledger_entries` has the sale rows plus a `replay_recordings` credit of 10,000. The Stripe dashboard shows the $40 payment. The usage meter shows 10,000 credits. |
 | 4 | Install. Create an external site with a test origin. Paste the snippet on a page served from that origin. Visit it. | `replay.site_key.issued`, then `replay.loader.hit`, then `replay.ingest.first_event`. Verify turns green. |
-| 5 | Hosted. Turn recording on for one published canvas app, then visit it. | The page source contains the injected loader with `data-release=<version_token>`. A recording appears in that canvas's Measure ▸ Insights. |
+| 5 | Hosted. Turn recording on for one published canvas app, then visit it. | The page source contains the injected loader with `data-release=<version_token>`. A recording appears in that canvas's Measure ▸ Visitors. |
 | 6 | Review, then compete. Open the recording as the buyer. Then, on the buyer site, call `BFReplay.event('signup')` and `BFReplay.tag('plan','pro')`, quick-back once, and scroll frantically once. Build a 3-step funnel, save a segment, summarize the recording, and ask the canvas Brain "where do visitors drop off?". | `replay.session.viewed`. A different workspace's user cannot list it (403). Overview shows the frustration tiles. The recording carries the quick-back and excessive-scroll markers, the `signup` event and the `plan=pro` tag. The funnel shows the drop and "Watch who dropped" opens the matching recordings. The saved segment filters every view. The summary cites moments that seek the player. The Brain answer links recordings. Then walk the PRD 33 §2.1 matrix row by row and record the evidence. |
 | 7 | Debit, then refund. After the step-4/5 visits, confirm credits were debited (`replay.credits.first_debit`; the balance below 10,000; one ledger row per unit crossed, no duplicates). Record one canvas-heavy visit and confirm it counted more than 1 unit. Export one replay as MP4 and confirm 10 units were debited and the file plays. Then refund the payment in Stripe. | `replay.payment.refunded`. The ledger debits the unused remainder only. With 0 credits and a 0 allowance, config for the site returns `enabled:false` for NEW visits (`replay.allowance.exhausted`). Already-recorded visits still play. Reset `replayFreeAllowanceOverride` afterwards. |
 | 8 | Erase. In Admin, erase the step-2 visitor. | Their `replay_visits` rows and R2 chunks are gone. The audit has `GUEST_PROMPTS_ERASED` with per-eraser counts. |
@@ -1245,7 +1245,7 @@ Hand-over package from each slice:
 | S4f | Page captures per release (screen, SEO, content, lab + field performance, accessibility), rules + anchored vision findings in 8 areas, visual before/after from validated patches, improvement prompts for composer / coding agent / site builder, Apply via the ONE composer / agent / copy, page score + improvement ledger, Fixes as the home; §11/§12 |
 | S5 | Live view (~5 s), follow mode, Flow → recordings; §11/§12 |
 | S6 | A buyer can install free, buy a pack (in tests against a mocked processor), see credits on the meter, get a site key, install the snippet, verify, and be debited past the free allowance; §11/§12 |
-| S7 | Hosted apps record with release tokens; canvas Measure ▸ Insights works per entitlement state; §11/§12 |
+| S7 | Hosted apps record with release tokens; canvas Measure ▸ Visitors works per entitlement state; §11/§12 |
 | S8 | Release note, blog ×5, versions, runbook executed with real payment + refund, ROADMAP → DONE.md |
 
 ## 14. Hand-off order (who starts when)

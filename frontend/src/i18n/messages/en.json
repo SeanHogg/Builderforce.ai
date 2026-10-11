@@ -1579,7 +1579,7 @@
       "versionsHint": "Versions — go back to any earlier state",
       "versions": "Versions",
       "fixForMe": "Fix it for me",
-      "fixPrompt": "The preview stopped with this error. Find the cause and fix it.",
+      "fixPrompt": "The app reported this error. Find the cause and fix it.",
       "failedHintFix": "A recent change broke the build. Your earlier versions are safe.",
       "suggestion": {
         "landing": {
@@ -32834,7 +32834,8 @@
     "clearProblems": "Clear",
     "sourceBuild": "Build",
     "sourceRuntime": "Runtime",
-    "noProblemsShort": "No problems"
+    "noProblemsShort": "No problems",
+    "fixWithBrain": "Ask Brain to fix this"
   },
   "builderVersions": {
     "loading": "Loading versions…",

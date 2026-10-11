@@ -6,8 +6,8 @@ import { Button } from '@/components/ui';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { useDockedBrain } from '@/lib/brain/dockedBrain';
 import { sendWorkspaceCommand } from '@/lib/workspace/workspaceCommands';
-import type { BuildFailure } from '@/lib/buildDiagnostics';
 import { useBuildFailures } from './useBuildFailures';
+import { useFixWithBrain } from './useFixWithBrain';
 import type { RunStep } from './useWorkspaceRun';
 import styles from './workspaceChrome.module.css';
 import type { WorkspaceId } from '@/lib/workspace/workspaceId';
@@ -18,9 +18,6 @@ const STEPS: readonly RunStep[] = ['preparing', 'installing', 'starting'];
 
 /** Starting points offered on an empty project — each fills the chat for the person to finish. */
 const SUGGESTIONS = ['landing', 'portfolio', 'menu'] as const;
-
-/** How much of a failure's output rides along in the "fix it" message. */
-const FIX_DETAIL_CHARS = 1500;
 
 /**
  * What the preview says when there is no app to show. It never asks anyone to
@@ -73,12 +70,12 @@ function StoppedStatus({ blocked, projectId, onRetry, onOpenVersions }: {
   onOpenVersions?: () => void;
 }) {
   const t = useTranslations('ide.workspace');
-  const docked = useDockedBrain();
+  const fixWithBrain = useFixWithBrain();
   // The run's FIRST failure: failures are cleared when a run starts, so the first
   // one recorded since is the cause and anything after it is usually fallout.
   const failure = useBuildFailures(projectId)[0];
   const showTerminal = () => sendWorkspaceCommand(projectId, { type: 'showPanel', panel: 'terminal' });
-  const fix = docked && failure ? () => docked.ask(fixPrompt(t('fixPrompt'), failure)) : null;
+  const fix = fixWithBrain && failure ? () => fixWithBrain(failure) : null;
 
   return (
     <StatusCard
@@ -131,13 +128,6 @@ function EmptyStatus() {
       )}
     </StatusCard>
   );
-}
-
-/** The message "Fix it for me" sends: the instruction, then the error as the preview recorded it. */
-function fixPrompt(instruction: string, failure: BuildFailure): string {
-  const detail = failure.detail ? `\n\n${failure.detail.slice(-FIX_DETAIL_CHARS)}` : '';
-  const where = failure.at ? `\n${failure.at}` : '';
-  return `${instruction}\n\n\`\`\`\n${failure.message}${where}${detail}\n\`\`\``;
 }
 
 function StatusCard({ icon, title, hint, live, dashed, children }: {

@@ -2,18 +2,22 @@
 
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { clearBuildFailures, type BuildFailure } from '@/lib/buildDiagnostics';
 import { useFormat } from '@/i18n/useFormat';
 import type { WorkspaceId } from '@/lib/workspace/workspaceId';
+import { useFixWithBrain } from './useFixWithBrain';
 
 /**
  * What went wrong on the last run: build failures (a command and its output) and
  * runtime errors raised inside the preview. The same record the agent repairs
- * from, so what the person reads here is what the agent is told.
+ * from, so what the person reads here is what the agent is told — and each row
+ * can be handed to the docked Brain to fix as it stands.
  */
 export function ProblemsPanel({ projectId, failures }: { projectId: WorkspaceId; failures: BuildFailure[] }) {
   const t = useTranslations('builderPanels');
   const fmt = useFormat();
+  const fixWithBrain = useFixWithBrain();
 
   if (failures.length === 0) {
     return <p style={{ margin: 0, padding: 12, color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('noProblems')}</p>;
@@ -33,6 +37,20 @@ export function ProblemsPanel({ projectId, failures }: { projectId: WorkspaceId;
                 <span style={{ color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{failure.message}</span>
                 {failure.count > 1 && <span style={{ color: 'var(--text-muted)' }}>×{failure.count}</span>}
                 <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>{fmt.dateTime(failure.lastSeen)}</span>
+                {fixWithBrain && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={t('fixWithBrain')}
+                    title={t('fixWithBrain')}
+                    // Inside <summary>: fix, don't also toggle the row open.
+                    onClick={(event) => { event.preventDefault(); fixWithBrain(failure); }}
+                    style={{ alignSelf: 'center', minWidth: 28, minHeight: 28, padding: '2px 6px', color: 'var(--accent)' }}
+                  >
+                    <Icon name="sparkles" size={14} />
+                  </Button>
+                )}
               </summary>
               {(failure.command || failure.at || failure.detail) && (
                 <pre style={{ margin: 0, padding: '6px 10px', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-subtle)' }}>

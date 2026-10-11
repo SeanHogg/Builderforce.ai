@@ -1579,7 +1579,7 @@
       "versionsHint": "Versionen — zu einem früheren Stand zurückkehren",
       "versions": "Versionen",
       "fixForMe": "Für mich beheben",
-      "fixPrompt": "Die Vorschau ist mit diesem Fehler stehen geblieben. Finde die Ursache und behebe sie.",
+      "fixPrompt": "Die App hat diesen Fehler gemeldet. Finde die Ursache und behebe sie.",
       "failedHintFix": "Eine kürzliche Änderung hat den Build gebrochen. Deine früheren Versionen sind sicher.",
       "suggestion": {
         "landing": {
@@ -32834,7 +32834,8 @@
     "clearProblems": "Leeren",
     "sourceBuild": "Build",
     "sourceRuntime": "Laufzeit",
-    "noProblemsShort": "Keine Probleme"
+    "noProblemsShort": "Keine Probleme",
+    "fixWithBrain": "Brain um Behebung bitten"
   },
   "builderVersions": {
     "loading": "Versionen werden geladen …",

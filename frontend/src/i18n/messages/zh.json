@@ -1579,7 +1579,7 @@
       "versionsHint": "版本——回到任意之前的状态",
       "versions": "版本",
       "fixForMe": "帮我修复",
-      "fixPrompt": "预览因以下错误停止。请找出原因并修复。",
+      "fixPrompt": "应用报告了以下错误。请找出原因并修复。",
       "failedHintFix": "最近的一次更改导致构建失败。你之前的版本都安全保存着。",
       "suggestion": {
         "landing": {
@@ -32834,7 +32834,8 @@
     "clearProblems": "清除",
     "sourceBuild": "构建",
     "sourceRuntime": "运行时",
-    "noProblemsShort": "没有问题"
+    "noProblemsShort": "没有问题",
+    "fixWithBrain": "让 Brain 修复此问题"
   },
   "builderVersions": {
     "loading": "正在加载版本……",

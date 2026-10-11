@@ -228,7 +228,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **[platform] 14 of 17 seats write no domain metric.** `DOMAIN_MANIFEST` declares 45 keys; only `kernel/rollups/{finance,operations,legal}.ts` write `metric_facts`. Also missing: `channel_performance`, `site_traffic_daily`, `arr_projections`, `quota_attainment`, `rd_financials_quarterly`. Follows the PRD 20 data move. This is the open half of Measure.
 - **[finance] Vertical KPI Dashboards — Slice B next ([PRD 25](./specs/builderforce/25-prd-vertical-kpi-dashboards.md), build hand-off [25a](./specs/builderforce/25a-vertical-kpi-dashboards-implementation.md)).** Slice A shipped 2026-09-16. B: `growth.*` keys, LTV tranches, benchmark seeds for `saas`/`ai_ml` (kill: tiles read "Not measured"). C: `exitWaterfall.ts`, `exitScenario`/`marketSize` kinds (kill: disagrees with a hand spreadsheet). D: remaining eight verticals (kill per vertical: no design partner). No new tables.
 - **[growth] Session replay, heatmaps and live visitors — planned, not built ([PRD 33](./specs/builderforce/33-prd-session-replay.md), build hand-off [33a](./specs/builderforce/33a-session-replay-implementation.md), [design](https://claude.ai/artifact/ThFJoMFxQ8hguwVJWV82Ea)).**
-  - **Scope.** Superadmin first, on builderforce.ai. Then a Marketplace capability, which a buyer reviews in their canvas under Measure ▸ Insights.
+  - **Scope.** Superadmin first, on builderforce.ai. Then a Marketplace capability, which a buyer reviews in their canvas under Measure ▸ Visitors.
   - **Slices:**
     - S0: consolidation, which merges `GuestSessionsPanel` and `VisitorFlowPanel` into Growth ▸ Insights, builds one `VisitorPanel` and one `StatTile`, rebuilds `UserDetailDrawer` on `SlideOutPanel`, and adds the shared `interaction-contract` package and `heatZones`.
     - S1: data plane (R2 chunks plus transactional tables).
@@ -242,7 +242,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
     - **D16 (2026-10-10, supersedes the six views):** ONE home screen, Insights, that fits the viewport with nothing below the fold (goal + six KPI tiles, funnel band, Issues table · page stage with lenses · Do next), plus ONE slide-out panel with stacked levels for every detail (kinds: issue, recording, fix, route, metric, funnel, live, proof, release, issues). A slice registers a panel kind, never a view. Mockup: the "Insights" board (v19).
     - S5: live and flow links.
     - S6: free capability install, prepaid recording packs (one `ONE_OFF_SETTLERS` row plus a `ledger_entries` denomination), site keys and install/verify.
-    - S7: buyer surfaces, which inject the loader into hosted apps and add the canvas Measure ▸ Insights surface.
+    - S7: buyer surfaces, which inject the loader into hosted apps and add the canvas Measure ▸ Visitors surface.
     - S8: release note, blog and the real-payment runbook.
   - Each slice has its own verification brief (33a §11), audit checklist (33a §12) and done-when (33a §13).
   - **Scale (D15, PRD 33 §3.3):** built for millions of sessions. Events go to Workers Analytics Engine (hot counters) and a Pipelines → R2 Data Catalog (Iceberg) lake queried by R2 SQL; recordings are kept by head sample or trigger; Postgres holds rows per route, issue and kept recording only; the product reads as grouped issues with representative recordings. Blocker for the lake: the operator creates the pipeline and catalog table (runbook in 33a S1.0).

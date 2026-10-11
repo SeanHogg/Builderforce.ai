@@ -1579,7 +1579,7 @@
       "versionsHint": "Versiones: vuelve a cualquier estado anterior",
       "versions": "Versiones",
       "fixForMe": "Arréglalo por mí",
-      "fixPrompt": "La vista previa se detuvo con este error. Encuentra la causa y corrígela.",
+      "fixPrompt": "La aplicación informó este error. Encuentra la causa y corrígela.",
       "failedHintFix": "Un cambio reciente rompió la compilación. Tus versiones anteriores están a salvo.",
       "suggestion": {
         "landing": {
@@ -32834,7 +32834,8 @@
     "clearProblems": "Borrar",
     "sourceBuild": "Compilación",
     "sourceRuntime": "Ejecución",
-    "noProblemsShort": "Sin problemas"
+    "noProblemsShort": "Sin problemas",
+    "fixWithBrain": "Pedir a Brain que lo corrija"
   },
   "builderVersions": {
     "loading": "Cargando versiones…",

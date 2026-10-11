@@ -1579,7 +1579,7 @@
       "versionsHint": "Versions — revenir à un état antérieur",
       "versions": "Versions",
       "fixForMe": "Corrige-le pour moi",
-      "fixPrompt": "L'aperçu s'est arrêté avec cette erreur. Trouve la cause et corrige-la.",
+      "fixPrompt": "L'application a signalé cette erreur. Trouve la cause et corrige-la.",
       "failedHintFix": "Une modification récente a cassé le build. Vos versions précédentes sont en sécurité.",
       "suggestion": {
         "landing": {
@@ -32834,7 +32834,8 @@
     "clearProblems": "Effacer",
     "sourceBuild": "Build",
     "sourceRuntime": "Exécution",
-    "noProblemsShort": "Aucun problème"
+    "noProblemsShort": "Aucun problème",
+    "fixWithBrain": "Demander à Brain de corriger"
   },
   "builderVersions": {
     "loading": "Chargement des versions…",

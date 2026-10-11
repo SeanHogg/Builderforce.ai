@@ -304,7 +304,8 @@ export interface BuildFailureReport {
   stale: { count: number; report: string | null };
 }
 
-function formatFailure(failure: BuildFailure): string {
+/** One failure as the agent reads it: what ran, the message, where, and its output. */
+export function formatBuildFailure(failure: BuildFailure): string {
   const head = [
     failure.source === 'build' ? 'BUILD' : 'RUNTIME',
     failure.command ? `\`${failure.command}\`` : null,
@@ -317,7 +318,7 @@ function formatFailure(failure: BuildFailure): string {
 }
 
 function formatList(list: BuildFailure[]): { count: number; report: string | null } {
-  return { count: list.length, report: list.length ? list.map(formatFailure).join('\n\n---\n\n') : null };
+  return { count: list.length, report: list.length ? list.map(formatBuildFailure).join('\n\n---\n\n') : null };
 }
 
 export function formatBuildFailures(storageProjectId: WorkspaceId): BuildFailureReport {
