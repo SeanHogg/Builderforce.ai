@@ -11298,6 +11298,10 @@
         "title": "Un cerebro privado en tu escritorio que pasa el trabajo a tus agentes",
         "description": "Synapse ahora inicia sesión en Builderforce y lleva tus chats al escritorio. Pregunta al Brain y responde con lo que tu Evermind privado ha aprendido en tu equipo; asigna un agente, dirígete a él con @ y hará el trabajo con sus propias herramientas. Un cerebro en vivo en la barra lateral muestra lo que sabes, lo que has hecho y lo que está aprendiendo ahora mismo."
       },
+      "one-chat-a-whole-team-working": {
+        "title": "Un chat, todo un equipo trabajando",
+        "description": "El agente de tu chat ahora puede entregar partes del trabajo a subagentes que trabajan en paralelo, en el editor o en la nube. Ves a cada uno por su nombre, puedes redirigir o detener a cualquiera, y el agente con el que hablas sigue libre para responderte."
+      },
       "teach-it-once-and-it-does-it-again": {
         "title": "Enséñalo una vez y lo repetirá",
         "description": "Synapse ya puede aprender una tarea viéndote hacerla una vez en cualquier programa de Windows, convertirla en una habilidad que pide valores nuevos cada vez, ejecutarla cuando la pidas o según un horario, detenerse para tu visto bueno antes de algo irreversible y enseñar el procedimiento a tu Evermind privado. Opcional, local y olvidable."

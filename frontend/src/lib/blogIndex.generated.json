@@ -1,5 +1,17 @@
 [
   {
+    "slug": "one-chat-a-whole-team-working",
+    "title": "One chat, a whole team working",
+    "date": "2026-10-11",
+    "description": "The agent in your chat can now hand slices of the work to sub-agents that run side by side, in the editor or in the cloud. You see each one by name, can redirect or stop any of them, and the agent you are talking to stays free to answer you.",
+    "tags": [
+      "agents",
+      "product",
+      "vscode"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "post-your-launch-video-to-youtube-from-a-campaign",
     "title": "Post your launch video to YouTube — from the same campaign as everything else",
     "date": "2026-10-10",
