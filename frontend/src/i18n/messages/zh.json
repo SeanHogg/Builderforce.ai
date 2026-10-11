@@ -23611,6 +23611,7 @@
         "board": "发布平台",
         "postedAt": "发布时间",
         "url": "链接",
+        "applicants": "申请数",
         "step": "步骤",
         "channel": "渠道",
         "delayDays": "间隔（天）",
@@ -24321,6 +24322,23 @@
       "tooLarge": "该文件超过了 25MB 的法律文件上限。",
       "uploadFailed": "上传失败,请重试。",
       "statusDraft": "草稿"
+    },
+    "jobDistribution": {
+      "title": "发布到招聘平台",
+      "needsPosting": "请先创建真实的职位发布——此卡片还没有职位 ID。请让 Brain 同步该职位发布。",
+      "loading": "正在读取已连接的招聘平台…",
+      "noneYet": "尚未发布到任何招聘平台。",
+      "noBoards": "此工作区尚未连接任何招聘平台。",
+      "connectBoards": "在“集成”中连接",
+      "chooseBoards": "发布到",
+      "distribute": "{count, plural, =0 {发布} other {发布到 # 个平台}}",
+      "distributing": "正在发布…",
+      "statusPosted": "已上线",
+      "statusFailed": "失败",
+      "postedOn": "自 {date} 起",
+      "view": "查看职位",
+      "readFailed": "无法读取此职位的发布位置。",
+      "distributeFailed": "职位未能发布，请重试。"
     },
     "notice": {
       "addedToCanvas": "我已将所需内容添加到画布上。",

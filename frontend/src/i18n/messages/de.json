@@ -23611,6 +23611,7 @@
         "board": "Portal",
         "postedAt": "Veröffentlicht",
         "url": "URL",
+        "applicants": "Bewerbungen",
         "step": "Schritt",
         "channel": "Kanal",
         "delayDays": "Abstand (Tage)",
@@ -24321,6 +24322,23 @@
       "tooLarge": "Diese Datei überschreitet das 25-MB-Limit für Rechtsdokumente.",
       "uploadFailed": "Der Upload ist fehlgeschlagen. Bitte erneut versuchen.",
       "statusDraft": "Entwurf"
+    },
+    "jobDistribution": {
+      "title": "Auf Jobportalen veröffentlichen",
+      "needsPosting": "Legen Sie zuerst die echte Stellenausschreibung an – diese Karte hat noch keine Ausschreibungs-ID. Bitten Sie Brain, die Stellenausschreibung zu synchronisieren.",
+      "loading": "Verbundene Jobportale werden gelesen…",
+      "noneYet": "Noch auf keinem Jobportal veröffentlicht.",
+      "noBoards": "Mit diesem Workspace ist kein Jobportal verbunden.",
+      "connectBoards": "Unter Integrationen verbinden",
+      "chooseBoards": "Veröffentlichen auf",
+      "distribute": "{count, plural, =0 {Veröffentlichen} one {Auf # Portal veröffentlichen} other {Auf # Portalen veröffentlichen}}",
+      "distributing": "Wird veröffentlicht…",
+      "statusPosted": "Live",
+      "statusFailed": "Fehlgeschlagen",
+      "postedOn": "Seit {date}",
+      "view": "Ausschreibung ansehen",
+      "readFailed": "Es konnte nicht gelesen werden, wo diese Ausschreibung veröffentlicht ist.",
+      "distributeFailed": "Die Ausschreibung konnte nicht veröffentlicht werden. Versuchen Sie es erneut."
     },
     "notice": {
       "addedToCanvas": "Ich habe den gewünschten Inhalt auf der Arbeitsfläche ergänzt.",

@@ -111,6 +111,8 @@ export const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readon
   assignment: ['distribute'], gradebook: ['compute'], submission: ['mark'],
   cohort: ['import'], curriculumMap: ['validate'], bibliography: ['import'],
   // FO-B3's five consumers are NOT here, deliberately — see `DEDICATED_ACTION_TOOLS`.
+  // Nor is `jobPosting.distribute` (FO-B4), for the same reason: it is connected, but
+  // through `canvas_distribute_job_posting`, which carries the board list.
   // Each is performed by a tool that takes arguments this generic seam cannot
   // carry, and listing them here made `canvas_invoke_object_action` stage a proposal
   // the pending-action dispatcher had no branch for: an approved `contract.sign` ended

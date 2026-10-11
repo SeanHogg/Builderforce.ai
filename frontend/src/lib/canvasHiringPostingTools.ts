@@ -38,9 +38,17 @@
  * It never resolves a card to a posting BY TITLE, in either direction. A card whose
  * `postingId` does not resolve reports that and stops; it does not fall back to a
  * search, because a fallback that is right most of the time is the failure this whole
- * family exists to remove. It also never writes `distribution` or `postingUrl` — those
- * belong to the distribute action and a connected job board, and a URL nobody
- * confirmed does not resolve.
+ * family exists to remove. It never writes `postingUrl` — that is the careers site's —
+ * and `distribution` is only ever the PROJECTION of `job_posting_distributions`: the
+ * rows the boards confirmed, read back, never authored here.
+ *
+ * ── DISTRIBUTE (FO-B4) ──────────────────────────────────────────────────────────
+ * `canvas_distribute_job_posting` publishes the card's posting to connected job boards
+ * through `POST /api/ats/postings/:id/distributions`, the same endpoint the card's own
+ * Distribute control calls. A dedicated tool rather than `canvas_invoke_object_action`
+ * because it carries arguments — WHICH boards — that the generic seam cannot, and it
+ * re-evaluates the `jobPosting.distribute` approval gate itself, as every dedicated
+ * outbound tool does: publishing puts the workspace's name on a public board.
  *
  * ── WHY A MODULE AND NOT MORE OF CreationCanvas.tsx ─────────────────────────────
  * The same argument `canvasFounderOpsTools.ts` makes: these are pure functions over an
@@ -48,7 +56,14 @@
  */
 
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
-import { atsApi, type CanvasPosting, type CanvasPostingDraft } from '@/lib/hiringApi';
+import {
+  atsApi,
+  type CanvasPosting,
+  type CanvasPostingDraft,
+  type DistributionListing,
+  type PostingDistribution,
+} from '@/lib/hiringApi';
+import { evaluateGate, readProvenance, type ApprovalMode } from '@/lib/canvasApprovalGate';
 import type { CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 
@@ -162,8 +177,10 @@ export function postingSummary(posting: CanvasPosting, at: string): string {
   const unreviewed = posting.unreviewedCount > 0
     ? `${posting.unreviewedCount} of them not yet looked at. `
     : '';
+  // A distributed board appears in `sources` with its real count even at zero, so the
+  // leader is only named when somebody actually came from it.
   const top = posting.sources[0];
-  const source = top ? `Most came from ${top.source} (${top.count}). ` : '';
+  const source = top && top.count > 0 ? `Most came from ${top.board ?? top.source} (${top.count}). ` : '';
   return `${posting.applicantCount} ${people}, ${posting.activeApplicantCount} still in play, `
     + `${posting.rejectedCount} rejected. ${unreviewed}${source}`
     + `Read from the hiring domain at ${when} — this card is a handle on the requisition, not a copy of it, `
@@ -184,11 +201,54 @@ export function jobPostingFieldsFrom(posting: CanvasPosting, at: string): Record
     postingId: posting.postingId,
     status: posting.status,
     applicantCount: posting.applicantCount,
+    // The record's publication list, whole. An empty list CLEARS the field, which is
+    // right: a distribution row on the card that the table does not hold is a claim no
+    // board confirmed.
+    distribution: distributionRowsFrom(posting.distributions ?? []),
     ...(employmentType ? { employmentType } : {}),
     // The posting's OWN seniority word, not a translation of the card's. Absent where
     // the row never stated one, which reads as unknown rather than as "entry".
     ...(posting.experienceLevel ? { level: posting.experienceLevel } : {}),
     summary: postingSummary(posting, at),
+  };
+}
+
+/**
+ * The card's `distribution` rows — `{board, status, postedAt, url, applicants}` —
+ * projected from the table, applicant count included (the server counts it per board).
+ * One function for the Brain tool, the sync tool and the card control, so the three
+ * can never draw the same publication differently.
+ */
+export function distributionRowsFrom(distributions: readonly PostingDistribution[]): Array<Record<string, unknown>> {
+  return distributions.map((row) => ({
+    board: row.board,
+    status: row.status,
+    postedAt: row.postedAt ? row.postedAt.slice(0, 10) : '',
+    url: row.status === 'posted' ? row.url ?? '' : '',
+    applicants: row.applicantCount ?? 0,
+  }));
+}
+
+const HTTP_URL = /^https?:\/\/\S+$/i;
+
+/**
+ * What a board listing needs from the CARD — the facts `job_postings` has no column
+ * for. Only what the recruiter actually wrote is sent; an empty field is absent, never
+ * a plausible default, because a board publishes whatever it is given.
+ */
+export function distributionListingFromCard(data: Record<string, unknown>): DistributionListing {
+  const location = text(data.location, 200);
+  const employmentType = text(data.employmentType, 32).toLowerCase();
+  const seniority = text(data.level, 60);
+  const applyUrl = text(data.postingUrl, 1000);
+  return {
+    ...(location ? { location } : {}),
+    // Only the positive reading: "Remote (EU timezones)" says remote; a city does not
+    // say NOT remote, so nothing is sent for it.
+    ...(/\bremote\b/i.test(location) ? { remote: true } : {}),
+    ...(employmentType ? { employmentType } : {}),
+    ...(seniority ? { seniority } : {}),
+    ...(HTTP_URL.test(applyUrl) ? { applyUrl } : {}),
   };
 }
 
@@ -324,6 +384,87 @@ export function canvasHiringPostingActions(ctx: CanvasFounderOpsContext): BrainA
           postings: synced,
           ...(postings.length > limit ? { moreAvailable: postings.length - limit } : {}),
           instruction: 'Every count here was read from the hiring domain just now. Use each card\'s `postingId` — never its title — as the `postingRef` on a shortlist or the posting named when recording an application, so the funnel, the board and this card are all one requisition.',
+        };
+      },
+    },
+    {
+      name: 'canvas_distribute_job_posting',
+      description:
+        'Publish a `jobPosting` card\'s requisition to the workspace\'s CONNECTED job boards (Greenhouse, Lever, Ashby, Indeed, LinkedIn Jobs, the careers-site feed) and write where it went onto the card\'s `distribution`. Call it with only `objectId` first: that READS where the posting is already live and which boards are connected, and publishes nothing — then ask the user which boards to use and call again with `boards`. A board is recorded as posted only when it answered with its own id for the posting; anything else is recorded as failed with the board\'s reason. A board that already has the posting is not posted to again. The card must carry a `postingId` — call canvas_sync_job_posting with the card first if it does not.',
+      parameters: {
+        type: 'object', required: ['objectId'], additionalProperties: false,
+        properties: {
+          objectId: { type: 'string', description: 'The `jobPosting` card on this board.' },
+          boards: {
+            type: 'array', items: { type: 'string' }, maxItems: 10,
+            description: 'The `connectorKey`s of the boards to publish to, exactly as the read call returned them. Omit to read only.',
+          },
+        },
+      },
+      mutates: () => true,
+      run: async (raw: unknown) => {
+        const blocked = guard();
+        if (blocked) return blocked;
+        const args = raw as { objectId?: string; boards?: string[] };
+        const card = ctx.objects().find((object) => object.id === args.objectId);
+        if (!card || card.kind !== 'jobPosting') return { error: 'objectId must name a `jobPosting` object on this canvas.' };
+        const postingId = text(card.data.postingId, 64);
+        if (!postingId) {
+          return {
+            error: 'This requisition has no `postingId` yet, so there is nothing a job board can be given. Call canvas_sync_job_posting with this objectId to create the real posting first — never distribute a card that has no record behind it.',
+          };
+        }
+        const boards = Array.isArray(args.boards) ? args.boards.filter((key) => typeof key === 'string' && key.trim()) : [];
+
+        // ── Read: where it is, and where it could go ──────────────────────────────
+        if (!boards.length) {
+          let read: Awaited<ReturnType<typeof atsApi.postings.distributions>>;
+          try {
+            read = await atsApi.postings.distributions(postingId);
+          } catch (error) {
+            return { error: toolErrorMessage(error, 'Where this posting is published could not be read.') };
+          }
+          ctx.updateObject(card.id, { distribution: distributionRowsFrom(read.distributions) }, `Read where ${card.title} is published`);
+          return {
+            ok: true, proposed: true,
+            distributions: read.distributions.map(({ board, connectorKey, status, url, postedAt, lastError }) => ({ board, connectorKey, status, url, postedAt, lastError })),
+            connectedBoards: read.boards.map(({ connectorKey, name }) => ({ connectorKey, name })),
+            instruction: read.boards.length
+              ? 'Nothing was published. Tell the user where the posting is already live (if anywhere), list the connected boards by name, and ask which to publish to — then call this tool again with their `connectorKey`s as `boards`.'
+              : 'No job board is connected to this workspace. Say so, and that they can connect Greenhouse, Lever, Ashby, Indeed, LinkedIn Jobs or a careers-site feed under Integrations. Do not claim the posting was published anywhere.',
+          };
+        }
+
+        // ── Publish: gated, like every outbound act ──────────────────────────────
+        const gate = evaluateGate({
+          kind: 'jobPosting',
+          action: 'distribute',
+          ...(typeof card.data.approvalMode === 'string' ? { mode: card.data.approvalMode as ApprovalMode } : {}),
+          actor: { kind: 'brain', ref: 'brain', name: 'Brain' },
+          provenance: readProvenance(card.data),
+        });
+        if (!gate.allowed) {
+          return {
+            error: gate.message, objectId: card.id, awaitingApproval: true,
+            instruction: 'Nothing was published. The person can press Distribute on the card themselves, or set its approval mode if this act is delegated.',
+          };
+        }
+
+        let result: Awaited<ReturnType<typeof atsApi.postings.distribute>>;
+        try {
+          result = await atsApi.postings.distribute(postingId, { connectorKeys: boards, listing: distributionListingFromCard(card.data) });
+        } catch (error) {
+          return { distributed: false, error: toolErrorMessage(error, 'The posting could not be distributed.') };
+        }
+        ctx.updateObject(card.id, { distribution: distributionRowsFrom(result.distributions) }, `Distributed ${card.title}`);
+        const failed = result.outcomes.filter((entry) => entry.outcome === 'failed' || entry.outcome === 'unavailable');
+        return {
+          ok: true, proposed: true,
+          outcomes: result.outcomes,
+          approval: gate.reason,
+          instruction: failed.length
+            ? 'Report each board plainly: where it is now live (with its link when one came back) and, for every board that failed, the reason it gave. Never describe a failed board as published.'
+            : 'Say where the posting is now live, with each board\'s link when one came back. Applications those boards produce are counted against this posting by canvas_sync_job_posting.',
         };
       },
     },

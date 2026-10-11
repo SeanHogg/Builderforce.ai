@@ -49,8 +49,9 @@ export const DEDICATED_ACTION_TOOLS: Readonly<Record<string, Readonly<Record<str
   fundingRound: { track: 'canvas_sync_funding_round' },
   // FO-B3. `refresh` on a requisition means "re-count the applications", which needs
   // the card's `postingId` and a real join — an argument the generic action seam cannot
-  // carry, and a number the generic seam must never let a model assert. `distribute` is
-  // deliberately absent: it needs a connected job board, and naming a tool that does not
-  // exist yet would be worse than the honest "no delivery adapter" answer.
-  jobPosting: { refresh: 'canvas_sync_job_posting' },
+  // carry, and a number the generic seam must never let a model assert.
+  // FO-B4. `distribute` publishes to connected job boards and needs WHICH boards — the
+  // argument this seam cannot carry — so it is performed by its own tool, which also
+  // re-evaluates the `jobPosting.distribute` approval gate.
+  jobPosting: { refresh: 'canvas_sync_job_posting', distribute: 'canvas_distribute_job_posting' },
 };

@@ -18,6 +18,7 @@ import {
   jobApplications,
   jobItems,
   jobPipelineEntries,
+  jobPostingDistributions,
   jobWebsites,
   offerLetters,
   outplacementPackages,
@@ -68,6 +69,13 @@ export const HIRING_ENTITIES = defineDomainEntities('hiring', [
   recruiterAgentFollowups,
   jobItems,
   jobWebsites,
+  /**
+   * Read-only through the generic reader. A row is the board's own confirmation that a
+   * posting went out — written by `hiring/distributePosting.ts` from the vendor's
+   * response and nothing else. A generic PATCH that flipped `failed` to `posted` would
+   * be a publication nobody made.
+   */
+  entity(jobPostingDistributions, { readOnly: true }),
   rampTimes,
   cohortRetention,
 ]);
