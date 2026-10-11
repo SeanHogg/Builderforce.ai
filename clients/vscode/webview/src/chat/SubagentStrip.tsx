@@ -4,7 +4,8 @@
  *
  * Every row is a run of its own (mirrored by run key), so its activity, its approval
  * prompt and its Stop are the run store's, exactly as for the chat's own run — this strip
- * only lays them out. Renders nothing while the chat has no live child.
+ * only lays them out. Renders nothing while the chat has no live child. The header folds
+ * the list away (remembered for the panel) so a long-running team does not crowd the chat.
  */
 
 import { useState } from 'react';
@@ -20,25 +21,49 @@ interface Props {
   liveLabels?: Partial<LiveActivityLabels>;
 }
 
+/** Remembered across chats and reloads for this panel; storage may be unavailable. */
+const COLLAPSED_KEY = 'bf.subagents.collapsed';
+const readCollapsed = (): boolean => {
+  try { return localStorage.getItem(COLLAPSED_KEY) === '1'; } catch { return false; }
+};
+const writeCollapsed = (on: boolean): void => {
+  try { localStorage.setItem(COLLAPSED_KEY, on ? '1' : '0'); } catch { /* not persisted */ }
+};
+
 export function SubagentStrip({ chatId, labels, liveLabels }: Props) {
   const children = useChatChildren(chatId);
+  const [collapsed, setCollapsed] = useState(readCollapsed);
   const t = makeT(labels);
   if (children.length === 0) return null;
+  const toggle = () => setCollapsed((c) => { writeCollapsed(!c); return !c; });
   return (
-    <section className="bf-subagents" aria-label={t('sub.region', 'Sub-agents working in this chat')}>
+    <section className={`bf-subagents${collapsed ? ' bf-subagents--collapsed' : ''}`} aria-label={t('sub.region', 'Sub-agents working in this chat')}>
       <header className="bf-subagents__head">
-        <span>{t('sub.title', 'Sub-agents ({count})').replace('{count}', String(children.length))}</span>
+        <button
+          type="button"
+          className="bf-subagents__toggle"
+          aria-expanded={!collapsed}
+          title={collapsed ? t('sub.expand', 'Show sub-agents') : t('sub.collapse', 'Hide sub-agents')}
+          onClick={toggle}
+        >
+          <span className="bf-subagents__caret" aria-hidden>▸</span>
+          {t('sub.title', 'Sub-agents ({count})').replace('{count}', String(children.length))}
+          {/* Folded, the names still say who is working. */}
+          {collapsed && <span className="bf-subagents__names">{children.map((c) => `${c.handle} ${c.name}`).join(' · ')}</span>}
+        </button>
         {children.length > 1 && (
           <button className="bf-btn" onClick={() => children.forEach((c) => stopRun(c.key))}>
             {t('sub.stopAll', 'Stop all')}
           </button>
         )}
       </header>
-      <ul className="bf-subagents__list">
-        {children.map((child) => (
-          <SubagentRow key={child.key} child={child} t={t} liveLabels={liveLabels} />
-        ))}
-      </ul>
+      {!collapsed && (
+        <ul className="bf-subagents__list">
+          {children.map((child) => (
+            <SubagentRow key={child.key} child={child} t={t} liveLabels={liveLabels} />
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

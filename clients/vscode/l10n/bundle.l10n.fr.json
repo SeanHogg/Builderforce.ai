@@ -631,6 +631,8 @@
   "Sub-agents working in this chat": "Sous-agents au travail dans ce chat",
   "Sub-agents ({count})": "Sous-agents ({count})",
   "Stop all": "Tout arrêter",
+  "Hide sub-agents": "Masquer les sous-agents",
+  "Show sub-agents": "Afficher les sous-agents",
   "read-only": "lecture seule",
   "{name} wants to run": "{name} veut exécuter",
   "Redirect": "Réorienter",

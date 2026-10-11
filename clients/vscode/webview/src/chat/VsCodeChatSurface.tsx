@@ -118,7 +118,7 @@ import { ComposerTrailingButton } from './ComposerTrailingButton';
 import { useGlobalRunState } from './useGlobalRunState';
 import { QueuedMessages, type QueuedMessage } from './QueuedMessages';
 import { SubagentStrip } from './SubagentStrip';
-import { childParticipants, childTarget, steerRun, subagentDiagnosticsOf, useChatChildren, useChatSubagentRoster } from './chatChildren';
+import { childParticipants, childTarget, isWaitingOnSubagents, steerRun, subagentDiagnosticsOf, useChatChildren, useChatSubagentRoster } from './chatChildren';
 
 
 export function VsCodeChatSurface({ init }: { init: InitData }) {
@@ -969,12 +969,18 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
       steerRun(child.key, text);
       return;
     }
+    // The chat's own run is waiting on its sub-agents: speak to it now (the wait gives
+    // way and its next turn answers) rather than queue behind a run that may hold for minutes.
+    if (conv.sending && !to && chatId != null && isWaitingOnSubagents(conv.activity)) {
+      steerRun(chatId, text);
+      return;
+    }
     if (conv.sending) {
       setMessageQueue((q) => [...q, { id: (queueIdRef.current += 1), text, recipient: to }]);
       return;
     }
     void dispatchSend(text, to);
-  }, [conv.sending, dispatchSend, liveChildren]);
+  }, [conv.sending, conv.activity, chatId, dispatchSend, liveChildren]);
 
   const submit = useCallback(() => {
     const text = input.trim();

@@ -631,6 +631,8 @@
   "Sub-agents working in this chat": "正在此聊天中工作的子代理",
   "Sub-agents ({count})": "子代理（{count}）",
   "Stop all": "全部停止",
+  "Hide sub-agents": "隐藏子代理",
+  "Show sub-agents": "显示子代理",
   "read-only": "只读",
   "{name} wants to run": "{name} 想要运行",
   "Redirect": "改变方向",

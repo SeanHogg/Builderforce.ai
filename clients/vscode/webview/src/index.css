@@ -815,6 +815,50 @@ select option {
   color: var(--bf-text-muted);
 }
 
+.bf-subagents--collapsed .bf-subagents__head {
+  margin-bottom: 0;
+}
+
+.bf-subagents__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 2px 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bf-subagents__caret {
+  display: inline-block;
+  transition: transform 120ms ease;
+}
+
+.bf-subagents__toggle[aria-expanded='true'] .bf-subagents__caret {
+  transform: rotate(90deg);
+}
+
+.bf-subagents__names {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--bf-text-muted);
+}
+
+.bf-subagents__toggle:focus-visible {
+  outline: 1px solid var(--bf-border-strong);
+  outline-offset: 2px;
+}
+
 .bf-subagents__list {
   list-style: none;
   margin: 0;

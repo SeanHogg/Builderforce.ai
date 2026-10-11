@@ -1,3 +1,8 @@
+## ✅ RESOLVED 2026-10-11 — A message reaches an agent that is waiting on its sub-agents; the sub-agents strip collapses (VSIX 2026.10.23 · 2026.10.24)
+
+- **A message pressed with Enter queued behind a waiting agent.** While the chat's run sat in `wait_agents`, a typed message joined the queue and waited for the whole run to end. Now `sendOrQueue` steers it into the run when `isWaitingOnSubagents(conv.activity)`, the same as Steer now, and the host's `registry.interrupt` ends the wait. The user's capture was on 2026.10.21, which predates the interrupt (a reload was pending).
+- **The sub-agents strip could not be folded.** Its header is now a toggle (`aria-expanded`, caret). Folded, it shows one line naming each worker (`a1 Name · a2 Name`). The choice is remembered in `localStorage`, with try/catch. "Hide sub-agents" / "Show sub-agents" are in all five l10n bundles, and the styling uses the panel's tokens.
+
 ## ✅ RESOLVED 2026-10-11 — Sub-agents: waits give way to the person, roster lists them, diagnostics read each one
 
 - **A parent in `wait_agents` held the person's message for up to 10 minutes.** The wait ran until every named child settled. Now a person's message ends it on both surfaces. In the editor, `brainRunHost.steer` calls `registry.interrupt`. In the cloud, the wait loop checks `hasPendingPersonSteer`: a pending steer with a `sentBy`, which a child's report never has. The owner reads the shared `WAIT_INTERRUPTED_NOTE`, and its children keep running.

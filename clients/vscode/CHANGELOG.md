@@ -2,6 +2,14 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.24] — Fold the sub-agents strip away
+
+- **The sub-agents strip can be collapsed.** Click its header to fold it down to one line that still names who is working. Click again to see each sub-agent's activity and controls. The panel remembers your choice.
+
+## [2026.10.23] — Talk to an agent that is waiting on its sub-agents
+
+- **A message no longer queues behind a waiting agent.** When the main agent is waiting for its sub-agents, pressing Enter sends your message straight to it, the same as Steer now. It stops waiting and answers you, and the sub-agents keep working.
+
 ## [2026.10.22] — Sub-agents in the roster, the report and out of your way
 
 - **Sub-agents are listed under Agents.** The chat's Agents list shows every working sub-agent beside the agents you invited, with its handle and who started it.
