@@ -2034,3 +2034,42 @@ export const hostedListingLifecycle = pgTable('hosted_listing_lifecycle', {
   index('idx_hosted_lifecycle_dark').on(t.unreachableSince).where(sql`${t.unreachableSince} IS NOT NULL`),
   index('idx_hosted_lifecycle_tenant').on(t.tenantId, t.updatedAt),
 ]);
+
+// ---------------------------------------------------------------------------
+// Session replay
+// ---------------------------------------------------------------------------
+
+/**
+ * One recorded visit's summary — the foldVisit() row the Sessions canvas lists.
+ *
+ * Counters, paths and active time are the incremental fold in
+ * `domain/replay/visitSummary.ts`. Ingest that writes this table is a later
+ * slice; S4 only needs the read. `site_id` is an opaque recorder key, not
+ * `project_sites.id` (serial integer) — `replay_sites` does not exist yet.
+ * `tenant_id` is nullable because a visit can land before the visitor has an
+ * account.
+ */
+export const replayVisits = pgTable('replay_visits', {
+  visitId:               varchar('visit_id', { length: 64 }).primaryKey(),
+  siteId:                varchar('site_id', { length: 64 }).notNull(),
+  tenantId:              integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  startedAt:             timestamp('started_at').notNull(),
+  lastEventAt:           timestamp('last_event_at').notNull(),
+  endedAt:               timestamp('ended_at'),
+  durationMs:            integer('duration_ms').notNull().default(0),
+  activeMs:              integer('active_ms').notNull().default(0),
+  entryPath:             varchar('entry_path', { length: 512 }).notNull().default(''),
+  exitPath:              varchar('exit_path', { length: 512 }).notNull().default(''),
+  pageCount:             integer('page_count').notNull().default(0),
+  clickCount:            integer('click_count').notNull().default(0),
+  rageCount:             integer('rage_count').notNull().default(0),
+  deadCount:             integer('dead_count').notNull().default(0),
+  errorCount:            integer('error_count').notNull().default(0),
+  quickbackCount:        integer('quickback_count').notNull().default(0),
+  excessiveScrollCount:  integer('excessive_scroll_count').notNull().default(0),
+  converted:             boolean('converted').notNull().default(false),
+  chunkCount:            integer('chunk_count').notNull().default(0),
+}, (t) => [
+  index('idx_replay_visits_site_last').on(t.siteId, t.lastEventAt),
+  index('idx_replay_visits_site_started').on(t.siteId, t.startedAt),
+]);

@@ -42,6 +42,11 @@ zone_name = "builderforce.ai"
 CORS_ORIGINS = "*"
 ENVIRONMENT  = "production"
 APP_URL      = "https://builderforce.ai"
+# Public CDN origin. ReplayConfigService fetches REPLAY_MANIFEST_URL (10 min
+# in-process cache) to learn the latest hashed recorder. The hostname has NO
+# Worker route — see infra/cdn/README.md.
+REPLAY_CDN_ORIGIN   = "https://cdn.builderforce.ai"
+REPLAY_MANIFEST_URL = "https://cdn.builderforce.ai/replay/manifest.json"
 NOTIFICATION_EMAIL_FROM = "Builderforce <notifications@builderforce.ai>"
 # CLOUDFLARE_ACCOUNT_ID must be set via: wrangler secret put CLOUDFLARE_ACCOUNT_ID
 #   The Cloudflare Workers AI `/accounts/<id>/ai/run/<model>` path needs it ALONGSIDE
@@ -188,6 +193,8 @@ bucket_name = "builderforce-uploads"
 #   /replay/v1/loader.js              public, max-age=300
 #   /replay/r/recorder.<hash>.js      public, max-age=31536000, immutable
 #   /replay/manifest.json             public, max-age=60
+#   /embed/v1.js                      public, max-age=300
+# ReplayConfigService (S4) reads REPLAY_MANIFEST_URL — see [vars] above.
 [[r2_buckets]]
 binding = "CDN"
 bucket_name = "builderforce-cdn"

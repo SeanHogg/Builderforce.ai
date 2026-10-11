@@ -1,21 +1,34 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { gzipSync } from 'node:zlib';
+import { createGzip } from 'node:zlib';
+import { createReadStream, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { pipeline } from 'node:stream/promises';
+import { Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 
-function gzipBytes(file: string): number | null {
+const dist = join(import.meta.dirname, '..', 'dist');
+
+async function gzipBytes(file: string): Promise<number | null> {
   if (!existsSync(file)) return null;
-  return gzipSync(readFileSync(file)).length;
+  let n = 0;
+  const sink = new Writable({
+    write(chunk, _enc, cb) {
+      n += chunk.length;
+      cb();
+    },
+  });
+  await pipeline(createReadStream(file), createGzip(), sink);
+  return n;
 }
 
 describe('CDN payload budgets', () => {
-  it('loader is ≤ 8 KB gzip', () => {
-    const n = gzipBytes('dist/loader.js');
-    if (n === null) return; // `npm test` without `npm run build`
-    expect(n).toBeLessThanOrEqual(8 * 1024);
+  it('loader is ≤ 2 KB gzip', async () => {
+    const n = await gzipBytes(join(dist, 'loader.js'));
+    if (n === null) return;
+    expect(n).toBeLessThanOrEqual(2 * 1024);
   });
 
-  it('recorder is ≤ 80 KB gzip (rrweb record included when built)', () => {
-    const n = gzipBytes('dist/recorder.js');
+  it('recorder is ≤ 80 KB gzip', async () => {
+    const n = await gzipBytes(join(dist, 'recorder.js'));
     if (n === null) return;
     expect(n).toBeLessThanOrEqual(80 * 1024);
   });

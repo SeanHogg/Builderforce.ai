@@ -40,4 +40,29 @@ hide, retry with backoff on 5xx, split on 413, honour 429 `Retry-After`.
 Visitor/visit ids match `VISITOR_ID_PATTERN`; a visit rotates after
 `VISIT_IDLE_MS` (30 min).
 
-Budgets (gzip): loader ≤ 8 KB, recorder ≤ 80 KB including rrweb `record`.
+The same CDN also serves `https://cdn.builderforce.ai/embed/v1.js` (the
+`unifiedEmbedSnippet` URL). That file boots this recorder from
+`data-builderforce-key` and installs `window.BuilderForce.session`.
+
+`GET /replay/manifest.json` is the contract `ReplayConfigService` reads:
+
+```json
+{
+  "version": 1,
+  "hash": "<8 hex>",
+  "loader": "/replay/v1/loader.js",
+  "recorder": "/replay/r/recorder.<hash>.js",
+  "embed": "/embed/v1.js",
+  "builtAt": "<ISO-8601>",
+  "latest": {
+    "version": "2026.10.0",
+    "url": "https://cdn.builderforce.ai/replay/r/recorder.<hash>.js",
+    "hash": "<8 hex>",
+    "builtAt": "<ISO-8601>"
+  }
+}
+```
+
+`npm run build` writes that layout to `dist/assets/` (and a `dist/cdn/`
+alias). `npm run size` asserts gzip budgets after a build: loader ≤ 2 KB,
+recorder ≤ 80 KB including rrweb `record`.

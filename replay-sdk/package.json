@@ -45,6 +45,7 @@
     "build": "tsup --config tsup.config.ts && node scripts/emit-assets.mjs",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
+    "size": "node scripts/check-cdn-layout.mjs",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },

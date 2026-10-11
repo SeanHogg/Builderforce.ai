@@ -20,6 +20,31 @@ import { AdminError, AdminLoading, SortableTh, StatTile, useAdminFormat, useTabl
 
 type SessionSortKey = 'visitor' | 'intent' | 'engagement' | 'lastSeen' | 'conversion';
 
+/**
+ * Extra fields the S5 list derives on the API (`GuestSessionWithIntent`).
+ * `adminApi.ts` is owned by another workstream, so they are optional here:
+ * a payload without them still renders; a payload with them ranks and chips.
+ */
+type LeadSession = AdminGuestSession & {
+  score?: number;
+  visitCount?: number;
+  lastVisitId?: string | null;
+};
+
+function asLead(session: AdminGuestSession): LeadSession {
+  return session as LeadSession;
+}
+
+function scoreOf(session: AdminGuestSession): number {
+  const score = asLead(session).score;
+  return typeof score === 'number' && Number.isFinite(score) ? score : 0;
+}
+
+function visitCountOf(session: AdminGuestSession): number {
+  const n = asLead(session).visitCount;
+  return typeof n === 'number' && Number.isFinite(n) ? n : 0;
+}
+
 /** Where a visitor got to, as a rank — so "Conversion" sorts along the funnel
  *  rather than alphabetically by badge text. */
 function outcomeRank(session: AdminGuestSession): number {
@@ -37,7 +62,9 @@ const SESSION_COMPARATORS: Record<SessionSortKey, (a: AdminGuestSession, b: Admi
   visitor: (a, b) => a.visitorId.localeCompare(b.visitorId),
   intent: (a, b) => (a.promptCount - b.promptCount) || (stampValue(a.lastSeenAt) - stampValue(b.lastSeenAt)),
   engagement: (a, b) =>
-    (a.guestChatCount - b.guestChatCount)
+    (scoreOf(a) - scoreOf(b))
+    || (visitCountOf(a) - visitCountOf(b))
+    || (a.guestChatCount - b.guestChatCount)
     || (a.guestChatTokens - b.guestChatTokens)
     || (stampValue(a.lastSeenAt) - stampValue(b.lastSeenAt)),
   lastSeen: (a, b) => stampValue(a.lastSeenAt) - stampValue(b.lastSeenAt),
@@ -122,6 +149,15 @@ export function LeadsView({
                       {session.visitorId}
                     </button>
                     <div className="text-muted" style={{ fontSize: 'var(--font-size-small)' }}>{session.landingPath ?? '—'}</div>
+                    {asLead(session).lastVisitId && (
+                      <div
+                        className="text-muted"
+                        style={{ fontFamily: 'monospace', fontSize: 'var(--font-size-small)' }}
+                        title={asLead(session).lastVisitId ?? undefined}
+                      >
+                        {asLead(session).lastVisitId}
+                      </div>
+                    )}
                   </td>
                   <td style={{ maxWidth: 380, minWidth: 220 }}>
                     {session.firstPrompt ? (
@@ -138,6 +174,9 @@ export function LeadsView({
                     )}
                   </td>
                   <td>
+                    <div>
+                      <span className="badge badge-neutral" title={t('engagement')}>{fmtNum(scoreOf(session))}</span>
+                    </div>
                     <div>{t('brainMessages', { count: session.guestChatCount })}</div>
                     <div className="text-muted" style={{ fontSize: 'var(--font-size-small)' }}>
                       {t('tokensAndTools', { tokens: fmtNum(session.guestChatTokens), tools: fmtNum(session.toolRuns) })}
@@ -157,6 +196,11 @@ export function LeadsView({
                     )}
                     {session.convertedEmail && (
                       <div className="text-muted" style={{ fontSize: 'var(--font-size-small)', marginTop: 4 }}>{session.convertedEmail}</div>
+                    )}
+                    {session.converted && session.convertedAt && (
+                      <div className="text-muted" style={{ fontSize: 'var(--font-size-small)', marginTop: 4 }}>
+                        {t('metricSignedUpAt')} {fmtDateTime(session.convertedAt)}
+                      </div>
                     )}
                   </td>
                   <td>

@@ -52,6 +52,7 @@ import {
  *
  * GET  /api/admin/users                — all platform users + tenant counts
  * GET  /api/admin/guest-sessions       — anonymous leads + the prompts they typed
+ * GET  /api/admin/replay-visits        — session-replay visit summaries (optional ?site_id=)
  * GET  /api/admin/visitor-flow         — the anonymous funnel as a directed graph
  * GET  /api/admin/visitor-flow/:visitorId — one visitor's journey, visit by visit
  * GET  /api/admin/broadcasts          — platform messages to logged-out visitors
@@ -97,6 +98,7 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { computePlatformRollup } from '../../application/admin/platformRollup';
 import { getOutcomeValueRollup } from '../../application/admin/outcomeValueRollup';
 import { GuestPromptService } from '../../application/marketing/GuestPromptService';
+import { parseReplaySiteId, ReplayVisitService } from '../../application/replay/ReplayVisitService';
 import { VisitorJourneyService, VISITOR_FLOW_WINDOWS } from '../../application/marketing/VisitorJourneyService';
 import {
   broadcastVocabulary,
@@ -1377,6 +1379,19 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.get('/guest-sessions', async (c) => {
     const service = new GuestPromptService(requestDb(c));
     return c.json(await service.listSessionsWithIntent(c.env as Env));
+  });
+
+  // GET /api/admin/replay-visits — session-replay visit summaries (optional ?site_id=)
+  router.get('/replay-visits', async (c) => {
+    const raw = c.req.query('site_id');
+    let siteId: string | undefined;
+    if (raw != null && raw !== '') {
+      const parsed = parseReplaySiteId(raw);
+      if (!parsed) return c.json({ error: 'Invalid site_id' }, 400);
+      siteId = parsed;
+    }
+    const visits = await new ReplayVisitService(requestDb(c)).listVisits(siteId);
+    return c.json({ visits });
   });
 
   router.get('/guest-sessions/:visitorId', async (c) => {

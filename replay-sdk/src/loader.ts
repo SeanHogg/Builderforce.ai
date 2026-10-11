@@ -3,7 +3,7 @@
  *
  * Reads `data-builderforce-key` (or `data-key`) on the script tag, fetches
  * `/replay/manifest.json`, injects the hashed recorder. Kept tiny on purpose
- * (gzip ≤ 8 KB). Fail closed: a missing key or a failed fetch is silence.
+ * (gzip ≤ 2 KB). Fail closed: a missing key or a failed fetch is silence.
  */
 
 const CDN = 'https://cdn.builderforce.ai';

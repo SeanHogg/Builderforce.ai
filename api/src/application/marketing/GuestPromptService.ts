@@ -11,6 +11,7 @@ import {
 import { consumeGuestAllowance } from '../guest/guestDailyCounter';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { GUEST_SESSIONS_CACHE_KEY, visitorStandingCacheKey } from './marketingCacheKeys';
+import { scoreLead } from './leadScore';
 
 /**
  * What anonymous visitors ASKED FOR — the write side and the read side.
@@ -61,6 +62,12 @@ export interface GuestSessionWithIntent {
   lastPrompt: string | null;
   lastPromptAt: string | null;
   lastSurface: string | null;
+  /** Distinct visits that recorded a prompt. Derived, never stored. */
+  visitCount: number;
+  /** The visit the last prompt was typed in — session context for replay. */
+  lastVisitId: string | null;
+  /** 0–100 rank from `scoreLead`. Derived on read, never a column. */
+  score: number;
 }
 
 /** The headline numbers above the list — the funnel in five figures. */
@@ -85,6 +92,7 @@ export interface GuestPromptRecord {
   prompt: string;
   surface: string;
   sessionRef: string | null;
+  visitId: string | null;
   mode: string | null;
   createdAt: string;
 }
@@ -98,6 +106,41 @@ export type GuestPromptRecordResult =
 const SESSIONS_LIMIT = 500;
 const PROMPTS_LIMIT = 200;
 
+/**
+ * Stamp a list row with the derived score and numeric visit fields.
+ *
+ * Drivers return COUNT as a string more often than not; coercing here is what
+ * keeps `scoreLead` from ranking a 12-prompt visitor as silent. Exported so the
+ * mapping is the unit the tests can call without a database.
+ */
+export function withLeadScore(
+  row: Omit<GuestSessionWithIntent, 'score'> & Partial<Pick<GuestSessionWithIntent, 'score'>>,
+  nowMs?: number,
+): GuestSessionWithIntent {
+  const visitCount = Number(row.visitCount ?? 0);
+  const promptCount = Number(row.promptCount ?? 0);
+  const guestChatCount = Number(row.guestChatCount ?? 0);
+  const toolRuns = Number(row.toolRuns ?? 0);
+  return {
+    ...row,
+    promptCount,
+    visitCount,
+    guestChatCount,
+    toolRuns,
+    lastVisitId: row.lastVisitId ?? null,
+    score: scoreLead({
+      promptCount,
+      lastPrompt: row.lastPrompt,
+      guestChatCount,
+      toolRuns,
+      visitCount,
+      converted: Boolean(row.converted),
+      isPaid: Boolean(row.isPaid),
+      lastSeenAt: row.lastSeenAt,
+      nowMs,
+    }).total,
+  };
+}
 
 export class GuestPromptService {
   constructor(private readonly db: Db) {}
@@ -126,6 +169,21 @@ export class GuestPromptService {
     );
     if (!allowance.allowed) return { status: 'rate_limited' };
 
+    // A prompt without a lead row is an orphan the console cannot list
+    // (`listSessionsWithIntent` reads FROM marketing_sessions). The landing
+    // route awaits GuestChatService.ensureLead first so first-touch wins;
+    // this upsert is the backstop for the harvest path and for an ensureLead
+    // that failed — insert-if-absent, last-seen on conflict, never overwriting
+    // attribution. We do not call GuestChatService here: guest already imports
+    // marketing, and a cycle would be worse than eight lines of insert.
+    await this.db
+      .insert(marketingSessions)
+      .values({ visitorId: parsed.value.visitorId })
+      .onConflictDoUpdate({
+        target: marketingSessions.visitorId,
+        set: { lastSeenAt: sql`now()` },
+      });
+
     await this.db.insert(marketingSessionPrompts).values({
       visitorId: parsed.value.visitorId,
       sessionRef: parsed.value.sessionRef,
@@ -134,13 +192,6 @@ export class GuestPromptService {
       mode: parsed.value.mode,
       prompt: parsed.value.prompt,
     });
-
-    // The lead row's activity clock has to move with the prompt, or a visitor who
-    // types for ten minutes without triggering a model call looks dormant.
-    await this.db
-      .update(marketingSessions)
-      .set({ lastSeenAt: sql`now()` })
-      .where(eq(marketingSessions.visitorId, parsed.value.visitorId));
 
     await Promise.all([
       invalidateCached(env, GUEST_SESSIONS_CACHE_KEY),
@@ -178,7 +229,9 @@ export class GuestPromptService {
           MAX(p.created_at)                                     AS last_prompt_at,
           (ARRAY_AGG(p.prompt ORDER BY p.created_at ASC))[1]    AS first_prompt,
           (ARRAY_AGG(p.prompt ORDER BY p.created_at DESC))[1]   AS last_prompt,
-          (ARRAY_AGG(p.surface ORDER BY p.created_at DESC))[1]  AS last_surface
+          (ARRAY_AGG(p.surface ORDER BY p.created_at DESC))[1]  AS last_surface,
+          COUNT(DISTINCT p.visit_id)::int                       AS visit_count,
+          (ARRAY_AGG(p.visit_id ORDER BY p.created_at DESC) FILTER (WHERE p.visit_id IS NOT NULL))[1] AS last_visit_id
         FROM marketing_session_prompts p
         GROUP BY p.visitor_id
       )
@@ -201,17 +254,21 @@ export class GuestPromptService {
         i.first_prompt       AS "firstPrompt",
         i.last_prompt        AS "lastPrompt",
         i.last_prompt_at     AS "lastPromptAt",
-        i.last_surface       AS "lastSurface"
+        i.last_surface       AS "lastSurface",
+        COALESCE(i.visit_count, 0) AS "visitCount",
+        i.last_visit_id      AS "lastVisitId"
       FROM marketing_sessions ms
       LEFT JOIN intent i ON i.visitor_id = ms.visitor_id
       LEFT JOIN users u ON u.id = ms.converted_user_id
       LEFT JOIN tenant_members tm ON tm.user_id = u.id AND tm.is_active = true
       LEFT JOIN tenants t ON t.id = tm.tenant_id
-      GROUP BY ms.id, u.email, i.prompt_count, i.first_prompt, i.last_prompt, i.last_prompt_at, i.last_surface
+      GROUP BY ms.id, u.email, i.prompt_count, i.first_prompt, i.last_prompt, i.last_prompt_at, i.last_surface, i.visit_count, i.last_visit_id
       ORDER BY ms.last_seen_at DESC
       LIMIT ${SESSIONS_LIMIT}
     `);
-    return rows.rows as unknown as GuestSessionWithIntent[];
+    return (rows.rows as unknown as Array<Omit<GuestSessionWithIntent, 'score'>>).map((row) =>
+      withLeadScore(row),
+    );
   }
 
   private async loadSummary(): Promise<GuestFunnelSummary> {
@@ -253,6 +310,7 @@ export class GuestPromptService {
         prompt: marketingSessionPrompts.prompt,
         surface: marketingSessionPrompts.surface,
         sessionRef: marketingSessionPrompts.sessionRef,
+        visitId: marketingSessionPrompts.visitId,
         mode: marketingSessionPrompts.mode,
         createdAt: marketingSessionPrompts.createdAt,
       })

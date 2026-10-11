@@ -599,7 +599,15 @@ export const carts = pgTable('carts', {
   index('idx_carts_guest').on(t.guestToken),
 ]);
 
-/** An order. The money movement is `ledger_entries`; this is the agreement. */
+/** An order. The money movement is `ledger_entries`; this is the agreement.
+ *
+ * Session-replay recording packs settle here too (PRD 33a §8 / D4): one row
+ * per paid pack (`status` paid, `provider_ref` the checkout session), a line
+ * item describing the units, and a `ledger_entries` grant in denomination
+ * `replay_recordings`. There is no parallel replay-balance table —
+ * `inbox_seat_addons` is the quantity-addon pattern for seats; extra replay
+ * usage is ledger units whose 12-month life lives on the grant's metadata.
+ */
 export const orders = pgTable('orders', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull(),
