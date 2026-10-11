@@ -1,20 +1,5 @@
 [
   {
-    "slug": "publish-a-job-posting-to-your-job-boards",
-    "title": "Publish a job posting to your job boards — and know where it is actually live",
-    "date": "2026-10-10",
-    "description": "A job posting on the canvas could be written, counted and shortlisted against, and could not be put in front of a single candidate. It now goes out to your connected job boards from the card, and the card only says \"live\" where a board confirmed it.",
-    "tags": [
-      "hiring",
-      "recruiting",
-      "job-boards",
-      "connectors",
-      "creation-canvas",
-      "run"
-    ],
-    "author": "Sean Hogg"
-  },
-  {
     "slug": "post-your-launch-video-to-youtube-from-a-campaign",
     "title": "Post your launch video to YouTube — from the same campaign as everything else",
     "date": "2026-10-10",
@@ -26,6 +11,21 @@
       "video",
       "launch",
       "reach"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "publish-a-job-posting-to-your-job-boards",
+    "title": "Publish a job posting to your job boards — and know where it is actually live",
+    "date": "2026-10-10",
+    "description": "A job posting on the canvas could be written, counted and shortlisted against, and could not be put in front of a single candidate. It now goes out to your connected job boards from the card, and the card only says \"live\" where a board confirmed it.",
+    "tags": [
+      "hiring",
+      "recruiting",
+      "job-boards",
+      "connectors",
+      "creation-canvas",
+      "run"
     ],
     "author": "Sean Hogg"
   },
