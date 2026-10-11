@@ -13109,6 +13109,7 @@
         "person": "Personen",
         "advisor": "Berater",
         "gig": "Aufträge",
+        "job": "Stellen",
         "business": "Betriebe",
         "storefront": "Shops",
         "builtin": "Integriert",
@@ -31343,7 +31344,8 @@
         "pay": "Melde dich an, um eine Zahlung abzuschließen.",
         "save": "Melde dich an, um diese Arbeit zu speichern.",
         "account": "Erstelle ein Konto, um dies freizuschalten.",
-        "installTemplate": "Melde dich an, um diese Vorlage in einem Workspace einzurichten."
+        "installTemplate": "Melde dich an, um diese Vorlage in einem Workspace einzurichten.",
+        "takeCopy": "Eine Kopie landet auf einem Board in deinem Workspace – melde dich an oder erstelle ein Konto, um sie zu übernehmen."
       }
     },
     "wall": {

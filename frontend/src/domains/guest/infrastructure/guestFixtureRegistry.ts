@@ -30,9 +30,42 @@ const FIXTURES: GuestFixture[] = [
   ...founderJourneyFixtures,
 ];
 
-/** Exported for the ratchet that asserts ids are unique. */
+/**
+ * Fixture modules loaded on the FIRST guest read rather than with the page.
+ *
+ * The transport (`apiClient`) sits under the root layout, so every module the
+ * registry imports statically is parsed on the first paint of every route — for
+ * signed-in people too, who can never be served one (`check-root-closure`
+ * ratchets that set by name). New coverage therefore arrives here, as an
+ * `import()` that cuts the edge, and `loadLazyGuestFixtures` is awaited by
+ * `resolveGuestReadLoaded` only once a read has already qualified as a guest's.
+ * Still entries, still first-match-wins: they rank after the eager modules.
+ */
+const LAZY_FIXTURE_MODULES: ReadonlyArray<() => Promise<GuestFixture[]>> = [
+  () => import('./fixtures/pmoFixtures').then((m) => m.pmoFixtures),
+  () => import('./fixtures/innovationFixtures').then((m) => m.innovationFixtures),
+  () => import('./fixtures/marketplaceFixtures').then((m) => m.marketplaceFixtures),
+];
+
+let lazyFixtures: GuestFixture[] = [];
+let lazyLoad: Promise<void> | null = null;
+
+/**
+ * Load the lazy modules once. A chunk that fails to load (a deploy swapped it,
+ * the network dropped) leaves the eager coverage answering and is retried on the
+ * next guest read — an uncovered read still falls through to the wire honestly.
+ */
+export function loadLazyGuestFixtures(): Promise<void> {
+  lazyLoad ??= Promise.all(LAZY_FIXTURE_MODULES.map((load) => load()))
+    .then((lists) => { lazyFixtures = lists.flat(); })
+    .catch(() => { lazyLoad = null; });
+  return lazyLoad;
+}
+
+/** Exported for the ratchet that asserts ids are unique. Includes the lazy
+ *  modules once {@link loadLazyGuestFixtures} has resolved. */
 export function allGuestFixtures(): GuestFixture[] {
-  return FIXTURES;
+  return lazyFixtures.length === 0 ? FIXTURES : [...FIXTURES, ...lazyFixtures];
 }
 
 /**
@@ -47,7 +80,7 @@ export function allGuestFixtures(): GuestFixture[] {
  * point in between being broken.
  */
 export function resolveGuestFixture(pathname: string): GuestFixture | null {
-  return FIXTURES.find((fixture) => fixture.match(pathname)) ?? null;
+  return allGuestFixtures().find((fixture) => fixture.match(pathname)) ?? null;
 }
 
 /** Run a fixture. Split from resolution so a caller can ask "is this covered?"

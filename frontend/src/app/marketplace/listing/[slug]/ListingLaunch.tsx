@@ -37,6 +37,9 @@ import {
   type LaunchPayload,
 } from '@/lib/creationListings';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { requiresWorkspace, resolveDelivery } from '@builderforce/creation-canvas-contract';
+import { SessionGate } from '@/components/guest/SessionGate';
+
 export function ListingLaunch({ listing }: { listing: CreationListing }) {
   const errorMessage = useErrorMessage();
   const t = useTranslations('marketplaceListing');
@@ -48,6 +51,11 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
   const [busy, setBusy] = useState(false);
   const [owned, setOwned] = useState(false);
   const free = listing.priceCents === 0;
+  // A COPY lands on a board, so taking one needs a workspace. Asked of the
+  // contract — the SAME rule the server applies at purchase — rather than
+  // re-derived here, and through `resolveDelivery` so a listing cached before
+  // `delivery` was on the wire degrades to its kind's default.
+  const needsWorkspace = requiresWorkspace(listing.delivery ?? resolveDelivery(listing.kind));
 
   const load = useCallback(async () => {
     setError(null);
@@ -138,6 +146,12 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
 
   const entitled = launch?.entitled ?? false;
 
+  const takeButton = (
+    <button type="button" className="mpl-btn" onClick={acquire} disabled={busy}>
+      {busy ? t('working') : free ? t('install') : t('buy')}
+    </button>
+  );
+
   return (
     <section className="mpl-launch" aria-label={t('launchSection')}>
       <style>{`
@@ -165,16 +179,20 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
         <span className="mpl-price">
           {free ? t('free') : formatListingPrice(listing.priceCents, listing.currency)}
         </span>
-        {!signedIn ? (
+        {/* A copy-delivery listing shows its refusal BEFORE the click: the buy
+            control renders, inert, with "sign in / create a workspace" under it.
+            `SessionGate` decides its own state, so a signed-in buyer with a
+            workspace gets the live button through the same branch. */}
+        {needsWorkspace && !(signedIn && (owned || entitled)) ? (
+          <SessionGate action="takeCopy" variant="stacked">{takeButton}</SessionGate>
+        ) : !signedIn ? (
           <Link className="mpl-btn" href={signInHref(`/marketplace/listing/${listing.slug}`)}>
             {free ? t('signInToInstall') : t('signInToBuy')}
           </Link>
         ) : owned || entitled ? (
           <span className="mpl-note">{t('youOwnIt')}</span>
         ) : (
-          <button type="button" className="mpl-btn" onClick={acquire} disabled={busy}>
-            {busy ? t('working') : free ? t('install') : t('buy')}
-          </button>
+          takeButton
         )}
         {(owned || entitled) && signedIn && (
           <button type="button" className="mpl-btn mpl-btn-ghost" onClick={install} disabled={busy}>

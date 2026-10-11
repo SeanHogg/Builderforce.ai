@@ -6,8 +6,8 @@
  * consequence, and the test says which.
  */
 import { describe, it, expect } from 'vitest';
-import { resolveGuestRead, guestReadResponse, SAMPLE_DATA_HEADER } from './guestRead';
-import { allGuestFixtures } from '../infrastructure/guestFixtureRegistry';
+import { resolveGuestRead, resolveGuestReadLoaded, guestReadResponse, SAMPLE_DATA_HEADER } from './guestRead';
+import { allGuestFixtures, loadLazyGuestFixtures } from '../infrastructure/guestFixtureRegistry';
 
 const read = (path: string, over: Partial<{ method: string; hadToken: boolean }> = {}) =>
   resolveGuestRead({ path, method: 'GET', hadToken: false, ...over });
@@ -64,9 +64,19 @@ describe('resolveGuestRead', () => {
 });
 
 describe('the fixture registry', () => {
-  it('has no duplicate ids, so first-match-wins is deterministic', () => {
+  it('has no duplicate ids, so first-match-wins is deterministic', async () => {
+    // The lazy modules too — an id they reuse would shadow nothing and be found by nobody.
+    await loadLazyGuestFixtures();
     const ids = allGuestFixtures().map((f) => f.id);
+    expect(ids).toContain('pmo.valueStream');
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('loads the lazy fixture modules only for a read that qualifies as a guest’s', async () => {
+    expect(await resolveGuestReadLoaded({ path: '/api/pmo/value-stream', method: 'GET', hadToken: true })).toBeNull();
+    expect(await resolveGuestReadLoaded({ path: '/api/pmo/value-stream', method: 'POST', hadToken: false })).toBeNull();
+    const result = await resolveGuestReadLoaded({ path: '/api/pmo/value-stream', method: 'GET', hadToken: false });
+    expect(result?.fixtureId).toBe('pmo.valueStream');
   });
 
   it('resolves dates against the READ, never a literal in the fixture', () => {

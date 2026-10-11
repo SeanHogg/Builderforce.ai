@@ -242,6 +242,17 @@ export function sampleTasks(): Array<SampleTask & { projectId: number; projectKe
   );
 }
 
+/**
+ * The numeric id a sample ticket answers to on the wire.
+ *
+ * ONE derivation, because the board, the planning spine and every lens that
+ * links back to a ticket must agree on it — a spine row pointing at `task:90012`
+ * while the board calls the same ticket `90013` is a broken link in a demo.
+ */
+export function sampleTaskId(project: Pick<SampleProject, 'id'>, task: Pick<SampleTask, 'key'>): number {
+  return Number(`${project.id}${task.key.split('-')[1]}`);
+}
+
 /** The statuses that count as finished, shared by every roll-up below so a
  *  "completed" total cannot mean two things on two surfaces. */
 const COMPLETED: ReadonlySet<SampleTaskStatus> = new Set<SampleTaskStatus>(['done']);

@@ -41,7 +41,7 @@
  * `typeof window` itself so a server import is inert rather than an error.
  */
 
-import { resolveGuestFixture, runGuestFixture } from '../infrastructure/guestFixtureRegistry';
+import { loadLazyGuestFixtures, resolveGuestFixture, runGuestFixture } from '../infrastructure/guestFixtureRegistry';
 
 /** What a guest read produced, or `null` when the request must go to the wire. */
 export interface GuestReadResult {
@@ -64,10 +64,28 @@ export interface GuestReadRequest {
   hadToken: boolean;
 }
 
-export function resolveGuestRead({ path, method, hadToken }: GuestReadRequest): GuestReadResult | null {
-  if (typeof window === 'undefined') return null;
-  if (hadToken) return null;
-  if ((method || 'GET').toUpperCase() !== 'GET') return null;
+/** Conditions 1, 2 and 4 — everything but "a fixture exists". */
+function qualifiesAsGuestRead({ method, hadToken }: GuestReadRequest): boolean {
+  if (typeof window === 'undefined') return false;
+  if (hadToken) return false;
+  return (method || 'GET').toUpperCase() === 'GET';
+}
+
+/**
+ * The transport's entry point: {@link resolveGuestRead} after the registry's
+ * lazily-loaded fixture modules are in. The load is awaited only for a read that
+ * already qualifies as a guest's, so a signed-in request never pays for — or
+ * waits on — a fixture chunk.
+ */
+export async function resolveGuestReadLoaded(request: GuestReadRequest): Promise<GuestReadResult | null> {
+  if (!qualifiesAsGuestRead(request)) return null;
+  await loadLazyGuestFixtures();
+  return resolveGuestRead(request);
+}
+
+export function resolveGuestRead(request: GuestReadRequest): GuestReadResult | null {
+  if (!qualifiesAsGuestRead(request)) return null;
+  const { path } = request;
 
   const [pathname, search = ''] = path.split('?');
   const fixture = resolveGuestFixture(pathname);
