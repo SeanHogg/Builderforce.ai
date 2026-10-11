@@ -946,30 +946,39 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     prevSendingForQueue.current = { chatId, sending: conv.sending };
   }, [chatId, conv.sending, messageQueue, dispatchSend]);
 
+  // The ONE way a turn leaves this panel — typed, an answered question, or "Send again".
+  // A run is already in flight (or still settling in the host): queue it instead of
+  // dropping it; the drain effect above sends it via the same limbic → nonce path when
+  // the run finishes. Calling `conv.send` directly is what lost answers: it refuses
+  // while the chat is running and says nothing, so an ask_user card answered before
+  // the host had marked the run settled showed "Answered", posted no user turn, and
+  // left the "Answer needed" banner pinned over a chat that had moved on (chat #133).
+  const sendOrQueue = useCallback((text: string, to: DirectedRecipient | null) => {
+    if (conv.sending) {
+      setMessageQueue((q) => [...q, { id: (queueIdRef.current += 1), text, recipient: to }]);
+      return;
+    }
+    void dispatchSend(text, to);
+  }, [conv.sending, dispatchSend]);
+
   const submit = useCallback(() => {
     const text = input.trim();
     if (!text) return;
     setInput('');
-    // A run is already streaming: queue this message instead of dropping it. The drain
-    // effect above sends it (via the same limbic → nonce path) when the run finishes.
-    if (conv.sending) {
-      setMessageQueue((q) => [...q, { id: (queueIdRef.current += 1), text, recipient }]);
-      return;
-    }
-    void dispatchSend(text, recipient);
-  }, [input, conv.sending, recipient, dispatchSend]);
+    sendOrQueue(text, recipient);
+  }, [input, recipient, sendOrQueue]);
 
   // Answering an agent's ask_user card posts the chosen option(s) as the user's next
   // turn — same send path as the composer, so the question and answer stay in order.
   const answerQuestion = useCallback((answer: string) => {
-    void conv.send(answer, { addressedTo: recipient });
-  }, [conv, recipient]);
+    sendOrQueue(answer, recipient);
+  }, [recipient, sendOrQueue]);
 
   // "Send again" on any transcript message — the same send path, so a replay queues
   // behind a running turn exactly like a typed one would.
   const replayMessage = useCallback((message: BrainMessage) => {
-    void conv.send(message.content, { addressedTo: recipient });
-  }, [conv, recipient]);
+    sendOrQueue(message.content, recipient);
+  }, [recipient, sendOrQueue]);
 
   // The question this chat is BLOCKED on, if any. A long transcript buries the
   // agent's card, so it is restated at the composer (and the session shows ❓ on its
@@ -984,6 +993,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
       askAnswered: t('tl.askAnswered', 'Answered'),
       askPending: t('app.askPending', 'Answer needed'),
       askJumpTo: t('app.askJumpTo', 'Show in conversation'),
+      askDismiss: t('app.dismiss', 'Dismiss'),
     }),
     [init.labels],
   );
@@ -1449,6 +1459,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
 
       {pendingQuestion && (
         <PendingQuestionBanner
+          key={pendingQuestion.messageId}
           payload={pendingQuestion.payload}
           labels={askLabels}
           onAnswer={answerQuestion}

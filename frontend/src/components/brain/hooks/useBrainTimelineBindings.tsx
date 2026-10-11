@@ -15,7 +15,7 @@ import type { BrainMessage } from '@/lib/builderforceApi';
  * otherwise the memo never skips and the transcript re-parses markdown on
  * every keystroke/streaming token (mirrors the VS Code webview App.tsx).
  */
-export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, runTool, bumpParticipants }: {
+export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, runTool, bumpParticipants, submitQueued }: {
   conv: ReturnType<typeof useBrainConversation>;
   chats: ReturnType<typeof useBrainChats>;
   recipient: ReturnType<typeof useRecipientChoice>['recipient'];
@@ -23,8 +23,15 @@ export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, ru
   runTool: ReturnType<typeof useBrainActions>['runTool'];
   /** Re-reads the chat's participant roster (after an invite/remove). */
   bumpParticipants: () => void;
+  /**
+   * The composer's queue (`useQueuedTurns().submit`): holds the turn and returns true
+   * while a run is in flight. An answer or replay goes through it like a typed turn —
+   * `conv.send` alone refuses a busy chat silently, which lost answered questions.
+   */
+  submitQueued: (text: string) => boolean;
 }) {
   const tTimeline = useTranslations('brain.timeline');
+  const tCommon = useTranslations('common');
 
   const hasTool = useCallback(
     (name: string) => toolSpecs.some((t) => t.function.name === name),
@@ -59,16 +66,18 @@ export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, ru
     timelineCtxRef.current = { conv, chats, recipient };
   });
   const onAnswerTimelineQuestion = useCallback((answer: string) => {
+    if (submitQueued(answer)) return;
     const { conv: c, recipient: r } = timelineCtxRef.current;
     void c.send(answer, { addressedTo: r });
-  }, []);
+  }, [submitQueued]);
   /** "Send again" on any message: re-ask with the same text. Addressed to the same
    *  recipient as a freshly typed turn, so replaying in a multi-party chat reaches
    *  whoever the composer is currently pointed at rather than silently the Brain. */
   const onReplayTimelineMessage = useCallback((msg: BrainMessage) => {
+    if (submitQueued(msg.content)) return;
     const { conv: c, recipient: r } = timelineCtxRef.current;
     void c.send(msg.content, { addressedTo: r });
-  }, []);
+  }, [submitQueued]);
   // The question this chat is BLOCKED on, if any. A long transcript buries the agent's
   // ask_user card, so the chat reads as merely idle when it is actually waiting on the
   // user — the VSIX has pinned it at the composer since the session-tabs pass, and this
@@ -83,7 +92,8 @@ export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, ru
     askAnswered: timelineLabels.askAnswered,
     askPending: tTimeline('askPending'),
     askJumpTo: tTimeline('askJumpTo'),
-  }), [timelineLabels, tTimeline]);
+    askDismiss: tCommon('dismiss'),
+  }), [timelineLabels, tTimeline, tCommon]);
   const revealPendingQuestion = useCallback(() => {
     if (!pendingQuestion) return;
     document.getElementById(askUserAnchorId(pendingQuestion.messageId))

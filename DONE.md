@@ -1,3 +1,15 @@
+## ✅ RESOLVED 2026-10-11 — An answered question stops pinning itself over the chat, and has a close button (brain-ui 2026.10.5 · VSIX 2026.10.11 · frontend 2026.10.38)
+
+VS Code chat #133: the agent asked "Which PRD do you want to finish?" and the user picked an option. The "Answer needed" banner stayed pinned above the composer, showing "Answered: PRD 33a" while the run carried on underneath it.
+
+- **Cause 1: an answer could be dropped.** Both hosts answered a question with a bare `conv.send`, which returns `false` without a word while the chat is running, including while the host is still settling a run that has ended. The card marked itself "Answered", but no user turn was posted, so `selectPendingAskUser` still found the question open.
+  - Fix (VSIX): `sendOrQueue` in `VsCodeChatSurface.tsx` is the one path for a typed turn, an answer and "Send again". A busy chat queues the turn, and the queue sends it when the run finishes.
+  - Fix (web): `useBrainTimelineBindings` takes the composer's `useQueuedTurns().submit`, so answers and replays queue in the same way.
+- **Cause 2: the banner waited on the transcript.** It disappeared only once a user turn came back after the question, which never happened for a dropped or queued answer.
+  - Fix: `<PendingQuestionBanner>` closes itself when answered, and has a × button (accessible name "Dismiss": `app.dismiss` in the VSIX, `common.dismiss` on the web). Both hosts key the banner by the question's message id, so a new question opens a new banner. The card in the transcript stays.
+- **CI fix in the same pass:** `cross-provider-smoke.test.ts` (agent-runtime) failed two tests because its stand-in cloud provider still copied edit fields by hand. The real providers now spread `editFacts`, which adds `excerpt` and `region`. The stand-in now spreads `editFacts` too.
+- Tests: `packages/brain-ui/src/askUser.test.tsx` checks that the banner closes when answered and closes on × without answering.
+
 ## ✅ RESOLVED 2026-10-11 — The coding model picks up the plan instead of re-doing the analysis (brain-embedded 2026.10.9 · VSIX 2026.10.10)
 
 VS Code chat #133 (client 2026.10.9): MiniMax-M1 planned for 22 turns at one call per turn and reached its first edit. The re-ask then went to Grok 4.6, which started the investigation over at five and six reads a turn, re-reading files the planner had already read.

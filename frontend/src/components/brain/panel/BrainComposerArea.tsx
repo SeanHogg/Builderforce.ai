@@ -21,6 +21,7 @@ export function BrainComposerArea() {
       {pendingConfirm && <BrainToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
       {pendingQuestion && (
         <PendingQuestionBanner
+          key={pendingQuestion.messageId}
           payload={pendingQuestion.payload}
           labels={timeline.askLabels}
           onAnswer={timeline.onAnswerTimelineQuestion}

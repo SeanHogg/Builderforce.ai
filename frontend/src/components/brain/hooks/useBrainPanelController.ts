@@ -276,10 +276,6 @@ export function useBrainPanelController({
 
   const rows = useBrainChatRowActions({ chats, isPage, showChatTab });
   const newProject = useBrainNewProject({ chats, setProjects });
-  const timeline = useBrainTimelineBindings({
-    conv, chats, recipient, toolSpecs, runTool, bumpParticipants,
-  });
-
   // Messages the user typed while a run was still streaming. Held by the shared
   // queueing primitive and flushed one at a time as each run completes, so the
   // composer NEVER blocks typing while the AI is thinking — the same rule, and
@@ -288,6 +284,11 @@ export function useBrainPanelController({
     running: conv.sending,
     send: (text) => { void conv.send(text, { addressedTo: recipient }); },
     resetKey: chats.activeChat?.id ?? null,
+  });
+  // After the queue: an answered question or a replay is a turn like a typed one, and
+  // queues behind a running turn the same way.
+  const timeline = useBrainTimelineBindings({
+    conv, chats, recipient, toolSpecs, runTool, bumpParticipants, submitQueued: queuedTurns.submit,
   });
 
   // The exam gate — the composer already refuses, and so must every other path into a

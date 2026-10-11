@@ -726,6 +726,29 @@
 .bf-qpend__jump:hover {
   color: var(--bf-text, #e6e6e6);
 }
+.bf-qpend__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.bf-qpend__close {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--bf-text-muted, #8a8a8a);
+  cursor: pointer;
+  /* Tap-friendly on a narrow panel without inflating the row. */
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 4px;
+}
+.bf-qpend__close:hover {
+  color: var(--bf-text, #e6e6e6);
+  background: var(--bf-surface-2, rgba(127, 127, 127, 0.15));
+}
 /* The card supplies the options; the banner owns the frame around it. */
 .bf-qpend .bf-qcard {
   margin-top: 0;

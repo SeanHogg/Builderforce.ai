@@ -51,6 +51,8 @@ export interface AskUserLabels {
   askPending: string;
   /** <PendingQuestionBanner> link to scroll the question's card into view. */
   askJumpTo: string;
+  /** <PendingQuestionBanner> close button's accessible name. */
+  askDismiss: string;
 }
 
 export const DEFAULT_ASK_USER_LABELS: AskUserLabels = {
@@ -58,6 +60,7 @@ export const DEFAULT_ASK_USER_LABELS: AskUserLabels = {
   askAnswered: 'Answered',
   askPending: 'Answer needed',
   askJumpTo: 'Show in conversation',
+  askDismiss: 'Dismiss',
 };
 
 /**
@@ -150,6 +153,13 @@ export function QuestionCard({
  * the very same <QuestionCard> (no second options UI to drift), so one click unblocks
  * the run. `onReveal` scrolls the original card into view for the surrounding context.
  *
+ * It closes itself once answered — and on its × — rather than waiting for the user's
+ * turn to come back through the transcript: the answer may be queued behind a run that
+ * is still settling, and a banner restating a question already answered reads as the
+ * click having failed (chat #133). The card in the transcript stays; dismissing only
+ * unpins it. Hosts key it by the question's message id so the NEXT question opens a
+ * fresh banner.
+ *
  * Pair with {@link selectPendingAskUser}; render nothing when it returns null.
  */
 export function PendingQuestionBanner({
@@ -164,17 +174,34 @@ export function PendingQuestionBanner({
   onReveal?: () => void;
 }) {
   const lab = useMemo(() => ({ ...DEFAULT_ASK_USER_LABELS, ...labels }), [labels]);
+  const [closed, setClosed] = useState(false);
+  if (closed) return null;
+  const answer = (choice: string) => {
+    setClosed(true);
+    onAnswer(choice);
+  };
   return (
     <div className="bf-qpend" role="region" aria-label={lab.askPending}>
       <div className="bf-qpend__bar">
         <span className="bf-qpend__badge">{lab.askPending}</span>
-        {onReveal && (
-          <button type="button" className="bf-qpend__jump" onClick={onReveal}>
-            {lab.askJumpTo}
+        <span className="bf-qpend__actions">
+          {onReveal && (
+            <button type="button" className="bf-qpend__jump" onClick={onReveal}>
+              {lab.askJumpTo}
+            </button>
+          )}
+          <button
+            type="button"
+            className="bf-qpend__close"
+            aria-label={lab.askDismiss}
+            title={lab.askDismiss}
+            onClick={() => setClosed(true)}
+          >
+            ×
           </button>
-        )}
+        </span>
       </div>
-      <QuestionCard payload={payload} labels={lab} onAnswer={onAnswer} />
+      <QuestionCard payload={payload} labels={lab} onAnswer={answer} />
     </div>
   );
 }
