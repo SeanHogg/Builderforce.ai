@@ -3,13 +3,30 @@
  * scaffolding. Copied from knowledgeCommerce.test.ts for the replay purchase
  * flow. One set per test file keeps the tests readable.
  */
-import { vi, describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { vi, describe, expect, it } from 'vitest';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { buildPaymentProvider } from '../../infrastructure/payment';
 import { SYSTEM_ACTOR } from '../activity/activityLog';
 import { REPLAY_PACKS } from './replayCatalog';
-import { replayAccess, replayUpgradePrompt } from './replayPacks';
+import { replayUpgradePrompt } from './replayPacks';
+
+/**
+ * First recorded argument of a spy. Throws instead of `!` so
+ * `noUncheckedIndexedAccess` does not make `mock.calls[0][0]` a
+ * possibly-undefined read.
+ */
+function firstCallArg<T>(spy: { mock: { calls: unknown[][] } }): T {
+  const call = spy.mock.calls[0];
+  if (!call) {
+    throw new Error('expected mock to have been called');
+  }
+  const arg = call[0];
+  if (arg === undefined) {
+    throw new Error('expected mock call argument');
+  }
+  return arg as T;
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Mocked payment provider — same pattern as knowledgeCommerce.test.ts
@@ -118,9 +135,10 @@ describe('replay pack checkout flow', () => {
     expect(result.checkoutUrl).toBe('https://checkout.stripe.com/pay/cs_test_123');
 
     const provider = await buildPaymentProvider(fakeEnv);
-    const calls = (provider.createOneTimeCheckoutSession as ReturnType<typeof vi.fn>).mock.calls;
-    expect(calls[0]).toBeDefined();
-    const call = calls[0]![0];
+    const call = firstCallArg<{
+      metadata: Record<string, string>;
+      idempotencyKey: string;
+    }>(provider.createOneTimeCheckoutSession as ReturnType<typeof vi.fn>);
     expect(call.metadata).toEqual({
       purchaseKind: 'replay_pack',
       tenantId: '7',

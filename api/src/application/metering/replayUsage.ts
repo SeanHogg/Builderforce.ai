@@ -159,20 +159,19 @@ export async function enforceReplayCap(
 }
 
 /**
- * Pre-recording check: whether a new visit is allowed, plus month-to-date usage.
- * When the tenant is under the cap (or unlimited), `limit`/`remaining` are null —
- * {@link MonthlyTenantCapResult} only exposes the numeric limit on the denied path.
+ * Pre-recording check. Mirrors {@link MonthlyTenantCapResult}: the allowed
+ * (or unlimited / fail-open) path has no numeric `limit`; the denied path
+ * carries `used` as `currentUsage` plus `limit`/`remaining`.
  */
+export type ReplayAllowanceResult =
+  | { allowed: true; currentUsage: number; limit: null; remaining: null }
+  | { allowed: false; currentUsage: number; limit: number; remaining: number };
+
 export async function checkReplayAllowance(
   db: Db,
   tenantId: number,
   env?: Env,
-): Promise<{
-  allowed: boolean;
-  currentUsage: number;
-  limit: number | null;
-  remaining: number | null;
-}> {
+): Promise<ReplayAllowanceResult> {
   const monthStart = utcMonthStart();
   const currentUsage = await sumTenantReplayRecordings(db, tenantId, monthStart);
   const capResult = await enforceReplayCap(db, tenantId, env);
