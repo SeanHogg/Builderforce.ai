@@ -121,17 +121,7 @@ export class TaskRepository implements ITaskRepository {
     return toDomain(inserted);
   }
 
-  async repointSegment(id: TaskId, segmentId: string | null): Promise<boolean> {
-    if (segmentId == null) return false;
-    const rows = await this.db
-      .update(tasksTable)
-      .set({ segmentId })
-      .where(eq(tasksTable.id, id as unknown as number))
-      .returning({ id: tasksTable.id });
-    return rows.length > 0;
-  }
-
-  async update(task: Task): Promise<Task> {
+  async update(task: Task, isolation?: { segmentId: string | null }): Promise<Task> {
     const plain = task.toPlain();
     const [updated] = await this.db
       .update(tasksTable)
@@ -181,6 +171,9 @@ export class TaskRepository implements ITaskRepository {
         persona:           plain.persona ?? undefined,
         archived:          plain.archived,
         updatedAt:         plain.updatedAt,
+        // Isolation column, not a domain field — written only when a caller (a move)
+        // names the segment, in this same statement (see ITaskRepository.update).
+        ...(isolation?.segmentId != null ? { segmentId: isolation.segmentId } : {}),
       })
       .where(eq(tasksTable.id, plain.id))
       .returning();

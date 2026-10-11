@@ -775,7 +775,8 @@
       "inquiries": "Interest",
       "runway": "Runway",
       "cashflow": "Cashflow",
-      "dashboard": "Dashboard"
+      "dashboard": "Dashboard",
+      "reports": "Reports"
     },
     "primaryAria": "Primary",
     "destination": {
@@ -13108,6 +13109,7 @@
         "person": "People",
         "advisor": "Advisors",
         "gig": "Gigs",
+        "job": "Jobs",
         "business": "Businesses",
         "storefront": "Storefronts",
         "builtin": "Built-in",
@@ -15871,6 +15873,9 @@
     "sprintScheduled": "{count} scheduled · drop a ticket to add",
     "newSprint": "+ New sprint",
     "dropToDone": "Drop a ticket here to mark Done",
+    "placeToDone": "Pick a ticket with Move, then tap here to mark it Done",
+    "pickBanner": "Moving “{title}”. Tap a highlighted destination, or press Esc to cancel.",
+    "cancelPick": "Cancel move",
     "inBacklog": "{count} in backlog",
     "noMembers": "No team members — add a team to this project, or invite teammates.",
     "scorecardTitle": "Scorecard · {name}",
@@ -19965,6 +19970,7 @@
       "visibilityPublic": "Public",
       "publishYouTube": "Publish to YouTube",
       "publishingYouTube": "Uploading to YouTube…",
+      "youtubeUploading": "Uploading to YouTube — {percent}% confirmed. You can close this; the upload keeps going.",
       "uploadedYouTube": "Uploaded to YouTube",
       "youtubePublishFailed": "YouTube could not publish this video. Check the connection and try again.",
       "viewOnYouTube": "View on YouTube",
@@ -20464,6 +20470,7 @@
       "socialCopy": "Copy",
       "socialStatus": {
         "queued": "Queued",
+        "uploading": "Uploading · {percent}%",
         "published": "Published",
         "pending": "Processing",
         "failed": "Failed",
@@ -22475,6 +22482,7 @@
       "publishPending": "Accepted — the network is still processing it.",
       "publishFailed": "That post could not be published.",
       "campaignPublished": "Published to {published} of {targets} accounts.",
+      "campaignPublishedUploading": "Published to {published} of {targets} accounts. {uploading} still uploading to YouTube — progress shows on the campaign.",
       "campaignScheduled": "Scheduled for {count} accounts.",
       "campaignUpdateFailed": "That campaign could not be updated.",
       "boardMedia": "Attach from this board",
@@ -23604,6 +23612,7 @@
         "board": "Board",
         "postedAt": "Posted",
         "url": "URL",
+        "applicants": "Applicants",
         "step": "Step",
         "channel": "Channel",
         "delayDays": "Delay (days)",
@@ -24314,6 +24323,23 @@
       "tooLarge": "That file is larger than the 25MB legal-file limit.",
       "uploadFailed": "The upload failed. Try again.",
       "statusDraft": "Draft"
+    },
+    "jobDistribution": {
+      "title": "Distribute to job boards",
+      "needsPosting": "Create the real posting first — this card has no posting id yet. Ask Brain to sync the job posting.",
+      "loading": "Reading connected job boards…",
+      "noneYet": "Not published to any job board yet.",
+      "noBoards": "No job board is connected to this workspace.",
+      "connectBoards": "Connect one under Integrations",
+      "chooseBoards": "Publish to",
+      "distribute": "{count, plural, =0 {Distribute} one {Distribute to # board} other {Distribute to # boards}}",
+      "distributing": "Distributing…",
+      "statusPosted": "Live",
+      "statusFailed": "Failed",
+      "postedOn": "Since {date}",
+      "view": "View posting",
+      "readFailed": "Where this posting is published could not be read.",
+      "distributeFailed": "The posting could not be distributed. Try again."
     },
     "notice": {
       "addedToCanvas": "I added the requested content to the canvas.",
@@ -25754,6 +25780,7 @@
     "noticeStandupNotSummarized": "No minutes yet. Generate them from the meeting record first.",
     "noticeStandupNothingCaptured": "Nothing was captured at this stand-up, so there are no minutes.",
     "noticeStandupNoActionItems": "The minutes recorded no open action items.",
+    "noticeStandupNotOnSavedBoard": "This stand-up card is not on a saved board yet. Save the board, then pull the minutes.",
     "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, one {The action item is already on the board} other {All # action items are already on the board}}",
     "noticeStandupActionItemsPlaced": "{count, plural, one {Placed # action item on the board} other {Placed # action items on the board}}",
     "noticeStandupMinutesNeedsAccount": "Sign in to read a stand-up’s minutes",
@@ -31317,7 +31344,8 @@
         "pay": "Sign in to complete a payment.",
         "save": "Sign in to save this work.",
         "account": "Create an account to unlock this.",
-        "installTemplate": "Sign in to set this template up in a workspace."
+        "installTemplate": "Sign in to set this template up in a workspace.",
+        "takeCopy": "A copy lands on a board in your workspace — sign in or create an account to take it."
       }
     },
     "wall": {
@@ -32585,6 +32613,96 @@
       "loading": "Loading your dashboard…",
       "installPrompt": "No KPI dashboard installed yet. Install the one built for your vertical to see the metrics your peers track.",
       "installCta": "Install from Marketplace"
+    },
+    "reports": {
+      "title": "Scheduled reports",
+      "blurb": "Reports this workspace emails on a cadence — standups, executive summaries, rollups, and board packs built from a canvas frame.",
+      "new": "New schedule",
+      "loading": "Loading…",
+      "empty": "No reports are scheduled yet. Create one to have it emailed daily, weekly or monthly.",
+      "crumb": "Finance · Reports",
+      "createTitle": "New report schedule",
+      "editTitle": "Edit report schedule",
+      "cancel": "Cancel",
+      "save": "Save changes",
+      "create": "Create schedule",
+      "edit": "Edit",
+      "pause": "Pause",
+      "resume": "Resume",
+      "delete": "Delete",
+      "deleteTitle": "Delete this schedule?",
+      "deleteMessage": "The {type} report will stop being sent. Reports already delivered are not affected.",
+      "statusOn": "Active",
+      "statusPaused": "Paused",
+      "cadenceSummary": "{cadence} at {hour}:00 UTC",
+      "recipientsCount": "{count, plural, one {# recipient} other {# recipients}}",
+      "subjectFrame": "Canvas frame",
+      "nextRun": "Next: {when}",
+      "nextRunPending": "Next run is set when the scheduler next runs",
+      "fixedOnEdit": "Report type, cadence and frame are fixed once a schedule exists. To change them, create a new schedule.",
+      "needRecipients": "Add at least one recipient.",
+      "fixRecipients": "Fix the entries that are not email addresses.",
+      "needFrame": "Choose the frame this board pack should send.",
+      "recipientsInvalid": "Not an email address: {entries}",
+      "recipientsHint": "One address per line, or separated by commas.",
+      "recipientsPlaceholder": "cfo@example.com\nboard@example.com",
+      "hourOption": "{hour}:00 UTC",
+      "boardPlaceholder": "Choose a board",
+      "framePlaceholder": "Choose a frame",
+      "frameOption": "{title} ({count, plural, one {# tile} other {# tiles}})",
+      "noBoards": "You have no active boards yet. A board pack sends a frame from one.",
+      "noFrames": "This board has no frames. Add a frame around the tiles you want to send, then pick it here.",
+      "field": {
+        "type": "Report",
+        "cadence": "Cadence",
+        "hour": "Delivery time",
+        "recipients": "Recipients",
+        "enabled": "Send this report",
+        "board": "Board",
+        "frame": "Frame"
+      },
+      "type": {
+        "standup": "Daily standup",
+        "code_review": "Code review",
+        "project_status": "Project status",
+        "executive_summary": "Executive summary",
+        "portfolio_rollup": "Portfolio rollup",
+        "board_pack": "Board pack"
+      },
+      "cadence": {
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "monthly": "Monthly"
+      }
+    },
+    "validation": {
+      "title": "Validation engagements",
+      "blurb": "The experiments, validation dashboards and feedback collectors running in this workspace.",
+      "loading": "Loading engagements…",
+      "empty": "Nothing is being validated yet. Experiments, validation dashboards and feedback collectors appear here once you start one.",
+      "untitled": "Untitled",
+      "more": "{count, plural, one {and # more} other {and # more}}",
+      "responses": "{count, plural, one {# response} other {# responses}}",
+      "count": {
+        "validation": "{count, plural, one {# experiment} other {# experiments}}",
+        "dashboard": "{count, plural, one {# dashboard} other {# dashboards}}",
+        "feedback_collector": "{count, plural, one {# collector} other {# collectors}}"
+      },
+      "kind": {
+        "validation": "Experiment",
+        "dashboard": "Dashboard",
+        "feedback_collector": "Feedback collector"
+      },
+      "status": {
+        "in_progress": "In progress",
+        "validated": "Validated",
+        "invalidated": "Invalidated",
+        "inconclusive": "Inconclusive",
+        "running": "Running",
+        "active": "Active",
+        "completed": "Completed",
+        "disabled": "Off"
+      }
     }
   },
   "proBonoBadge": {

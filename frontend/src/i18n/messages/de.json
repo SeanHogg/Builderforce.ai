@@ -775,7 +775,8 @@
       "inquiries": "Interesse",
       "runway": "Runway",
       "cashflow": "Cashflow",
-      "dashboard": "Dashboard"
+      "dashboard": "Dashboard",
+      "reports": "Berichte"
     },
     "primaryAria": "Primär",
     "destination": {
@@ -13108,6 +13109,7 @@
         "person": "Personen",
         "advisor": "Berater",
         "gig": "Aufträge",
+        "job": "Stellen",
         "business": "Betriebe",
         "storefront": "Shops",
         "builtin": "Integriert",
@@ -15871,6 +15873,9 @@
     "sprintScheduled": "{count} geplant · Ticket hierher ziehen zum Hinzufügen",
     "newSprint": "+ Neuer Sprint",
     "dropToDone": "Ticket hierher ziehen, um es als erledigt zu markieren",
+    "placeToDone": "Ticket mit „Verschieben“ aufnehmen und hier tippen, um es als erledigt zu markieren",
+    "pickBanner": "„{title}“ wird verschoben. Tippe auf ein hervorgehobenes Ziel oder drücke Esc zum Abbrechen.",
+    "cancelPick": "Verschieben abbrechen",
     "inBacklog": "{count} im Backlog",
     "noMembers": "Keine Teammitglieder — füge diesem Projekt ein Team hinzu oder lade Kollegen ein.",
     "scorecardTitle": "Scorecard · {name}",
@@ -19965,6 +19970,7 @@
       "visibilityPublic": "Öffentlich",
       "publishYouTube": "Auf YouTube veröffentlichen",
       "publishingYouTube": "Upload zu YouTube…",
+      "youtubeUploading": "Upload zu YouTube — {percent} % bestätigt. Das Fenster kann geschlossen werden; der Upload läuft weiter.",
       "uploadedYouTube": "Auf YouTube hochgeladen",
       "youtubePublishFailed": "YouTube konnte dieses Video nicht veröffentlichen. Verbindung prüfen und erneut versuchen.",
       "viewOnYouTube": "Auf YouTube ansehen",
@@ -20464,6 +20470,7 @@
       "socialCopy": "Text",
       "socialStatus": {
         "queued": "In Warteschlange",
+        "uploading": "Wird hochgeladen · {percent} %",
         "published": "Veröffentlicht",
         "pending": "Wird verarbeitet",
         "failed": "Fehlgeschlagen",
@@ -22475,6 +22482,7 @@
       "publishPending": "Angenommen — das Netzwerk verarbeitet den Beitrag noch.",
       "publishFailed": "Dieser Beitrag konnte nicht veröffentlicht werden.",
       "campaignPublished": "Auf {published} von {targets} Konten veröffentlicht.",
+      "campaignPublishedUploading": "Auf {published} von {targets} Konten veröffentlicht. {uploading} wird noch zu YouTube hochgeladen — der Fortschritt steht in der Kampagne.",
       "campaignScheduled": "Für {count} Konten geplant.",
       "campaignUpdateFailed": "Diese Kampagne konnte nicht aktualisiert werden.",
       "boardMedia": "Aus dieser Leinwand anhängen",
@@ -23604,6 +23612,7 @@
         "board": "Portal",
         "postedAt": "Veröffentlicht",
         "url": "URL",
+        "applicants": "Bewerbungen",
         "step": "Schritt",
         "channel": "Kanal",
         "delayDays": "Abstand (Tage)",
@@ -24314,6 +24323,23 @@
       "tooLarge": "Diese Datei überschreitet das 25-MB-Limit für Rechtsdokumente.",
       "uploadFailed": "Der Upload ist fehlgeschlagen. Bitte erneut versuchen.",
       "statusDraft": "Entwurf"
+    },
+    "jobDistribution": {
+      "title": "Auf Jobportalen veröffentlichen",
+      "needsPosting": "Legen Sie zuerst die echte Stellenausschreibung an – diese Karte hat noch keine Ausschreibungs-ID. Bitten Sie Brain, die Stellenausschreibung zu synchronisieren.",
+      "loading": "Verbundene Jobportale werden gelesen…",
+      "noneYet": "Noch auf keinem Jobportal veröffentlicht.",
+      "noBoards": "Mit diesem Workspace ist kein Jobportal verbunden.",
+      "connectBoards": "Unter Integrationen verbinden",
+      "chooseBoards": "Veröffentlichen auf",
+      "distribute": "{count, plural, =0 {Veröffentlichen} one {Auf # Portal veröffentlichen} other {Auf # Portalen veröffentlichen}}",
+      "distributing": "Wird veröffentlicht…",
+      "statusPosted": "Live",
+      "statusFailed": "Fehlgeschlagen",
+      "postedOn": "Seit {date}",
+      "view": "Ausschreibung ansehen",
+      "readFailed": "Es konnte nicht gelesen werden, wo diese Ausschreibung veröffentlicht ist.",
+      "distributeFailed": "Die Ausschreibung konnte nicht veröffentlicht werden. Versuchen Sie es erneut."
     },
     "notice": {
       "addedToCanvas": "Ich habe den gewünschten Inhalt auf der Arbeitsfläche ergänzt.",
@@ -25754,6 +25780,7 @@
     "noticeStandupNotSummarized": "Noch kein Protokoll. Erzeuge es zuerst aus der Meeting-Aufzeichnung.",
     "noticeStandupNothingCaptured": "In diesem Stand-up wurde nichts erfasst, daher gibt es kein Protokoll.",
     "noticeStandupNoActionItems": "Das Protokoll enthält keine offenen Aufgaben.",
+    "noticeStandupNotOnSavedBoard": "Diese Stand-up-Karte liegt noch auf keinem gespeicherten Board. Speichere das Board und hole dann das Protokoll.",
     "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, one {Die Aufgabe ist bereits auf dem Board} other {Alle # Aufgaben sind bereits auf dem Board}}",
     "noticeStandupActionItemsPlaced": "{count, plural, one {# Aufgabe auf dem Board platziert} other {# Aufgaben auf dem Board platziert}}",
     "noticeStandupMinutesNeedsAccount": "Melde dich an, um das Protokoll eines Stand-ups zu lesen",
@@ -31317,7 +31344,8 @@
         "pay": "Melde dich an, um eine Zahlung abzuschließen.",
         "save": "Melde dich an, um diese Arbeit zu speichern.",
         "account": "Erstelle ein Konto, um dies freizuschalten.",
-        "installTemplate": "Melde dich an, um diese Vorlage in einem Workspace einzurichten."
+        "installTemplate": "Melde dich an, um diese Vorlage in einem Workspace einzurichten.",
+        "takeCopy": "Eine Kopie landet auf einem Board in deinem Workspace – melde dich an oder erstelle ein Konto, um sie zu übernehmen."
       }
     },
     "wall": {
@@ -32585,6 +32613,96 @@
       "loading": "Dashboard wird geladen…",
       "installPrompt": "Noch kein KPI-Dashboard installiert. Installieren Sie das Dashboard für Ihre Branche, um die Kennzahlen Ihrer Vergleichsgruppe zu sehen.",
       "installCta": "Aus dem Marktplatz installieren"
+    },
+    "reports": {
+      "title": "Geplante Berichte",
+      "blurb": "Berichte, die dieser Workspace regelmäßig per E-Mail versendet – Standups, Management-Zusammenfassungen, Rollups und Board-Packs aus einem Canvas-Rahmen.",
+      "new": "Neuer Zeitplan",
+      "loading": "Wird geladen…",
+      "empty": "Noch keine Berichte geplant. Lege einen an, um ihn täglich, wöchentlich oder monatlich per E-Mail zu erhalten.",
+      "crumb": "Finanzen · Berichte",
+      "createTitle": "Neuer Berichtszeitplan",
+      "editTitle": "Berichtszeitplan bearbeiten",
+      "cancel": "Abbrechen",
+      "save": "Änderungen speichern",
+      "create": "Zeitplan anlegen",
+      "edit": "Bearbeiten",
+      "pause": "Pausieren",
+      "resume": "Fortsetzen",
+      "delete": "Löschen",
+      "deleteTitle": "Diesen Zeitplan löschen?",
+      "deleteMessage": "Der Bericht „{type}“ wird nicht mehr versendet. Bereits zugestellte Berichte bleiben unberührt.",
+      "statusOn": "Aktiv",
+      "statusPaused": "Pausiert",
+      "cadenceSummary": "{cadence} um {hour}:00 UTC",
+      "recipientsCount": "{count, plural, one {# Empfänger} other {# Empfänger}}",
+      "subjectFrame": "Canvas-Rahmen",
+      "nextRun": "Nächster Versand: {when}",
+      "nextRunPending": "Der nächste Versand wird beim nächsten Lauf des Planers festgelegt",
+      "fixedOnEdit": "Berichtstyp, Rhythmus und Rahmen stehen fest, sobald ein Zeitplan existiert. Um sie zu ändern, lege einen neuen Zeitplan an.",
+      "needRecipients": "Füge mindestens einen Empfänger hinzu.",
+      "fixRecipients": "Korrigiere die Einträge, die keine E-Mail-Adressen sind.",
+      "needFrame": "Wähle den Rahmen, den dieses Board-Pack senden soll.",
+      "recipientsInvalid": "Keine E-Mail-Adresse: {entries}",
+      "recipientsHint": "Eine Adresse pro Zeile oder durch Kommas getrennt.",
+      "recipientsPlaceholder": "cfo@example.com\nboard@example.com",
+      "hourOption": "{hour}:00 UTC",
+      "boardPlaceholder": "Board wählen",
+      "framePlaceholder": "Rahmen wählen",
+      "frameOption": "{title} ({count, plural, one {# Kachel} other {# Kacheln}})",
+      "noBoards": "Du hast noch keine aktiven Boards. Ein Board-Pack versendet einen Rahmen aus einem davon.",
+      "noFrames": "Dieses Board hat keine Rahmen. Lege einen Rahmen um die Kacheln, die du senden willst, und wähle ihn dann hier.",
+      "field": {
+        "type": "Bericht",
+        "cadence": "Rhythmus",
+        "hour": "Versandzeit",
+        "recipients": "Empfänger",
+        "enabled": "Diesen Bericht senden",
+        "board": "Board",
+        "frame": "Rahmen"
+      },
+      "type": {
+        "standup": "Daily Standup",
+        "code_review": "Code-Review",
+        "project_status": "Projektstatus",
+        "executive_summary": "Management-Zusammenfassung",
+        "portfolio_rollup": "Portfolio-Rollup",
+        "board_pack": "Board-Pack"
+      },
+      "cadence": {
+        "daily": "Täglich",
+        "weekly": "Wöchentlich",
+        "monthly": "Monatlich"
+      }
+    },
+    "validation": {
+      "title": "Validierungen",
+      "blurb": "Die Experimente, Validierungs-Dashboards und Feedback-Sammler, die in diesem Workspace laufen.",
+      "loading": "Validierungen werden geladen…",
+      "empty": "Noch wird nichts validiert. Experimente, Validierungs-Dashboards und Feedback-Sammler erscheinen hier, sobald du eines startest.",
+      "untitled": "Ohne Titel",
+      "more": "{count, plural, one {und # weiteres} other {und # weitere}}",
+      "responses": "{count, plural, one {# Antwort} other {# Antworten}}",
+      "count": {
+        "validation": "{count, plural, one {# Experiment} other {# Experimente}}",
+        "dashboard": "{count, plural, one {# Dashboard} other {# Dashboards}}",
+        "feedback_collector": "{count, plural, one {# Sammler} other {# Sammler}}"
+      },
+      "kind": {
+        "validation": "Experiment",
+        "dashboard": "Dashboard",
+        "feedback_collector": "Feedback-Sammler"
+      },
+      "status": {
+        "in_progress": "In Arbeit",
+        "validated": "Bestätigt",
+        "invalidated": "Widerlegt",
+        "inconclusive": "Ohne Ergebnis",
+        "running": "Läuft",
+        "active": "Aktiv",
+        "completed": "Abgeschlossen",
+        "disabled": "Aus"
+      }
     }
   },
   "proBonoBadge": {

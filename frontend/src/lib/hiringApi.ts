@@ -193,10 +193,61 @@ export interface CanvasPosting {
   activeApplicantCount: number;
   unreviewedCount: number;
   rejectedCount: number;
-  sources: Array<{ source: string; count: number }>;
+  /** Applications by `job_applications.source`. A board the posting was distributed to
+   *  carries its `board` name, and appears with its real count even when that is zero. */
+  sources: Array<{ source: string; count: number; board?: string }>;
+  /** Where the posting is published, as each board confirmed it (FO-B4). */
+  distributions: PostingDistribution[];
   lastApplicationAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * One publication of a posting, as the board confirmed it — a `job_posting_distributions`
+ * row. `posted` only when the board's answer carried its id for the posting; a `failed`
+ * row carries the board's reason in `lastError`.
+ */
+export interface PostingDistribution {
+  postingId: string;
+  connectorKey: string;
+  board: string;
+  connectionId: string | null;
+  externalId: string | null;
+  url: string | null;
+  status: 'posted' | 'failed';
+  postedAt: string | null;
+  lastError: string | null;
+  updatedAt: string;
+  /** Applications against the posting attributed to this board. Zero is a real answer. */
+  applicantCount: number;
+}
+
+/** A connected job board a posting can be distributed to. */
+export interface DistributionBoard {
+  connectorKey: string;
+  name: string;
+  icon: string;
+  connectionId: string;
+  connectionName: string;
+}
+
+/** What one board did with one press of Distribute. */
+export interface DistributionOutcome {
+  connectorKey: string;
+  outcome: 'posted' | 'failed' | 'already-posted' | 'unavailable';
+  externalId: string | null;
+  url: string | null;
+  error: string | null;
+}
+
+/** The card-held facts a board listing needs that the posting row has no column for. */
+export interface DistributionListing {
+  location?: string | null;
+  employmentType?: string | null;
+  seniority?: string | null;
+  remote?: boolean | null;
+  applyUrl?: string | null;
 }
 
 /** What a canvas card contributes when it mints its posting. Deliberately the small
@@ -400,6 +451,17 @@ export const atsApi = {
     },
     sync: (body: { postingId?: string | null; draft?: CanvasPostingDraft }): Promise<{ posting: CanvasPosting; created: boolean }> =>
       post('/api/ats/postings', body),
+    /** Where the posting is published, and the connected boards it could go to next.
+     *  Uncached, like the server read: it is asked straight after a publish. */
+    distributions: (postingId: string): Promise<{ distributions: PostingDistribution[]; boards: DistributionBoard[] }> =>
+      apiRequest(`/api/ats/postings/${encodeURIComponent(postingId)}/distributions`),
+    /** Publish to the chosen boards. Answers with each board's verdict AND the posting's
+     *  whole publication list, so the caller redraws from the response that wrote it. */
+    distribute: (
+      postingId: string,
+      body: { connectorKeys: string[]; listing?: DistributionListing },
+    ): Promise<{ outcomes: DistributionOutcome[]; distributions: PostingDistribution[] }> =>
+      post(`/api/ats/postings/${encodeURIComponent(postingId)}/distributions`, body),
   },
 
   pipelines: (): Promise<AtsPipelineSummary[]> =>

@@ -359,51 +359,6 @@ export const financeFixtures: GuestFixture[] = [
   },
 
   {
-    id: 'pmo.tree',
-    match: exact('/api/pmo/tree'),
-    // The planning spine. One portfolio holding one initiative per sample
-    // project, so the tree has real edges rather than a flat list — a
-    // hierarchy view with no hierarchy in it demonstrates nothing.
-    respond: (context) => ({
-      portfolios: [
-        {
-          id: 'sample-portfolio-1',
-          name: 'FY Commerce Platform',
-          description: 'Everything the storefront and the platform teams are accountable for this year.',
-          status: 'active',
-          targetDate: dayOffsetToIso(context.now, 120).slice(0, 10),
-        },
-      ],
-      initiatives: SAMPLE_PROJECTS.map((project, index) => ({
-        id: `sample-initiative-${project.id}`,
-        name: project.name,
-        description: project.description,
-        status: project.status,
-        portfolioId: 'sample-portfolio-1',
-        targetDate: dayOffsetToIso(context.now, 45 + index * 30).slice(0, 10),
-        projectCount: 1,
-      })),
-      projects: SAMPLE_PROJECTS.map((project) => ({
-        id: project.id,
-        name: project.name,
-        key: project.key,
-        status: project.status,
-        initiativeId: `sample-initiative-${project.id}`,
-      })),
-      // A dependency between the first two initiatives, so the graph draws an
-      // edge. With one project there is nothing to depend on and the list is
-      // correctly empty rather than self-referential.
-      dependencies: SAMPLE_PROJECTS.length >= 2
-        ? [{
-            id: 'sample-dependency-1',
-            fromInitiativeId: `sample-initiative-${SAMPLE_PROJECTS[1].id}`,
-            toInitiativeId: `sample-initiative-${SAMPLE_PROJECTS[0].id}`,
-          }]
-        : [],
-    }),
-  },
-
-  {
     id: 'pmo.rollup',
     match: exact('/api/pmo/rollup'),
     respond: (context) => {
@@ -423,6 +378,9 @@ export const financeFixtures: GuestFixture[] = [
       return {
         scope: { kind: 'workspace', id: 'sample', name: SAMPLE_WORKSPACE_NAME },
         projectCount: SAMPLE_PROJECTS.length,
+        // One initiative per sample project (`domain/samplePlanning`). Counted
+        // from the projects rather than imported, so this eagerly-loaded module
+        // does not pull the lazily-loaded planning tier into the root closure.
         initiativeCount: SAMPLE_PROJECTS.length,
         delivery: {
           totalTasks: tasks.length,

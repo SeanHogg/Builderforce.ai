@@ -21,8 +21,8 @@ import { EpicRail } from './EpicRail';
 import { StandupControls } from './StandupControls';
 import { ScorecardPanel } from './ScorecardPanel';
 import { AssignedWorkPanel } from './AssignedWorkPanel';
-import { DRAG_TASK, memberAssigneePatch, memberKey, taskBelongsToMember, type CeremonyMember } from './types';
-import { CeremonyPickProvider, placeTargetProps, useCeremonyPick } from './pickToPlace';
+import { memberAssigneePatch, memberKey, taskBelongsToMember, type CeremonyMember } from './types';
+import { CeremonyDropZone, CeremonyPickProvider } from './pickToPlace';
 import { InlineNameForm } from '@/components/ui/InlineNameForm';
 import { faultMessage } from '@/lib/apiClient';
 export type CeremonyMode = 'standup' | 'planning';
@@ -106,7 +106,6 @@ function CeremonyStageInner({
   const { user, tenantId } = useViewerSession();
   const tMeet = useTranslations('meetings');
   const t = useTranslations('ceremony');
-  const pick = useCeremonyPick();
   // Narrow viewports can't fit the two 240px rails + the absolute round table side
   // by side, so on mobile the stage stacks vertically and the seats render as a
   // centered wrap-grid instead of the (overlapping) circle.
@@ -551,15 +550,11 @@ function CeremonyStageInner({
           {/* Round table */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
             {mode === 'planning' && (
-              // Sprint bar — drop a task here to schedule it into the active sprint.
-              <div
-                onDragOver={activeSprintId ? (e) => e.preventDefault() : undefined}
-                onDrop={activeSprintId ? (e) => {
-                  e.preventDefault();
-                  const id = Number(e.dataTransfer.getData(DRAG_TASK));
-                  if (id) scheduleIntoSprint(id, activeSprintId);
-                } : undefined}
-                {...(activeSprintId ? placeTargetProps(pick, t('scheduleIntoSprint'), (taskId) => scheduleIntoSprint(taskId, activeSprintId)) : {})}
+              // Sprint bar — drop (or place) a task here to schedule it into the active sprint.
+              <CeremonyDropZone
+                label={t('scheduleIntoSprint')}
+                enabled={!!activeSprintId}
+                onPlace={(taskId) => scheduleIntoSprint(taskId, activeSprintId)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -609,7 +604,7 @@ function CeremonyStageInner({
                     {t('newSprint')}
                   </button>
                 )}
-              </div>
+              </CeremonyDropZone>
             )}
 
             <div
@@ -631,14 +626,10 @@ function CeremonyStageInner({
             >
               {/* Center disc (desktop) / full-width banner (mobile). On standup it's a
                   drop target that marks a dropped ticket Done. */}
-              <div
-                onDragOver={mode === 'standup' ? (e) => e.preventDefault() : undefined}
-                onDrop={mode === 'standup' ? (e) => {
-                  e.preventDefault();
-                  const id = Number(e.dataTransfer.getData(DRAG_TASK));
-                  if (id) setStatus(id, 'done');
-                } : undefined}
-                {...(mode === 'standup' ? placeTargetProps(pick, t('markDone'), (taskId) => setStatus(taskId, 'done')) : {})}
+              <CeremonyDropZone
+                label={t('markDone')}
+                enabled={mode === 'standup'}
+                onPlace={(taskId) => setStatus(taskId, 'done')}
                 style={isMobile ? {
                   flexBasis: '100%',
                   display: 'flex',
@@ -673,13 +664,13 @@ function CeremonyStageInner({
                   {t(mode)}
                 </span>
                 {mode === 'standup' ? (
-                  // Drag-to-Done is a desktop-only affordance (HTML5 DnD doesn't fire
-                  // on touch), so the hint is hidden on mobile.
-                  isMobile ? null : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('dropToDone')}</span>
+                  // Dragging does not exist on touch, so a phone is told the gesture it
+                  // DOES have: pick a task with Move, then tap here.
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{isMobile ? t('placeToDone') : t('dropToDone')}</span>
                 ) : (
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('inBacklog', { count: backlogTasks.length })}</span>
                 )}
-              </div>
+              </CeremonyDropZone>
 
               {/* Seats: absolute around the ellipse on desktop, wrap-grid on mobile. */}
               {members.map((m, i) => {

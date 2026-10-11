@@ -28,7 +28,7 @@
 import React from 'react';
 import { useTranslations } from 'next-intl';
 import { useSampleWorkspace } from '@/domains/guest/presentation/useSampleWorkspace';
-import { GuestGateNotice } from '@/components/guest/GuestGateNotice';
+import { GuestGateNotice, type GuestGateVariant } from '@/components/guest/GuestGateNotice';
 
 /**
  * What the visitor was trying to do. A closed union rather than free text: the
@@ -58,13 +58,18 @@ export type GatedAction =
   | 'save'
   /** Set a template up: it creates workflows and arms triggers in a workspace,
    *  which is why reading the catalogue is open and this is not. */
-  | 'installTemplate';
+  | 'installTemplate'
+  /** Take a COPY of a marketplace listing. A copy lands on a board, so it needs
+   *  a workspace to land in — the contract's `requiresWorkspace(delivery)`
+   *  decides when a buy control is wrapped in this. */
+  | 'takeCopy';
 
 export interface SessionGateProps {
   action: GatedAction;
   children: React.ReactNode;
-  /** 'inline' (default) wraps one control; 'block' dims a whole panel. */
-  variant?: 'inline' | 'block';
+  /** 'inline' (default) wraps one control; 'block' dims a whole panel;
+   *  'stacked' wraps a primary control with the reason and CTA beneath it. */
+  variant?: GuestGateVariant;
   className?: string;
   style?: React.CSSProperties;
 }

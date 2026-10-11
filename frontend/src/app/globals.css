@@ -4778,8 +4778,6 @@ select.input option {
    `.mh-inner`; the hover bridge below follows it and becomes column-wide,
    which is what the wide panel wants anyway. */
 .mh-item.has-menu:has(> .mh-panel-wide) { position: static; }
-.mh-item.has-menu:hover .mh-caret,
-.mh-item.has-menu:focus-within .mh-caret { transform: rotate(180deg); }
 
 /* Dropdown panels */
 .mh-panel {
@@ -4813,7 +4811,6 @@ select.input option {
   height: var(--space-3);
   display: none;
 }
-.mh-item.has-menu:hover::after,
 .mh-item.has-menu[data-open]::after { display: block; }
 
 .mh-panel-wide {
@@ -4822,17 +4819,16 @@ select.input option {
   width: auto;
   transform: translateY(8px);
 }
-/* Three ways in, one open state: hover for a pointer, focus for a keyboard, and
-   `data-open` for the click that a touchscreen has and hover does not. */
-.mh-item.has-menu:hover .mh-panel:not(.mh-panel-wide),
-.mh-item.has-menu:focus-within .mh-panel:not(.mh-panel-wide),
+/* Three ways in — a mouse hover, a click or tap, a keyboard Enter — and ONE open
+   state: `data-open`, set by `MegaTrigger`. The stylesheet used to open on
+   `:hover` and `:focus-within` as well, so a tap left `:hover` stuck on and
+   Escape left `:focus-within` holding the menu open while `aria-expanded` said
+   it was shut. Hover is detected in JS now, for a mouse only. */
 .mh-item.has-menu[data-open] .mh-panel:not(.mh-panel-wide) {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
 }
-.mh-item.has-menu:hover .mh-panel-wide,
-.mh-item.has-menu:focus-within .mh-panel-wide,
 .mh-item.has-menu[data-open] .mh-panel-wide {
   opacity: 1;
   visibility: visible;

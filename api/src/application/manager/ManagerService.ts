@@ -1907,6 +1907,7 @@ async function coordinatePullRequests(
         const readiness = decideTicketReadiness({
           taskType: t.taskType,
           actionType: t.actionType,
+          title: t.title,
           hasBranch: !!t.gitBranch,
           // The RECORDED pull request decides this, not `tasks.github_pr_url`: that column
           // is stamped when a PR opens and never cleared, so it cannot tell an open PR

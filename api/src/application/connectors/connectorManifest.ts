@@ -207,7 +207,50 @@ export interface ConnectorAction {
   responseFormat?: 'json' | 'binary';
   /** Dot path into the JSON response to return instead of the whole body. */
   resultPath?: string;
+  /**
+   * What a WRITE's answer means, read by generic code — the mirror of `params`.
+   *
+   * `params` says where each input goes on the request; this says where the facts a
+   * caller has to record come back on the response. A job board answers "posting
+   * created" with its id in `data.id` (Lever), `results.id` (Ashby), `elements.0.id`
+   * (LinkedIn) or a header — and without a declaration, every consumer that needs
+   * the id grows a `switch (connectorKey)`, which is exactly the per-vendor code a
+   * manifest exists to replace. See {@link ConnectorResponseMapping}.
+   */
+  response?: ConnectorResponseMapping;
 }
+
+/**
+ * Field selectors into an action's response, each a list tried IN ORDER — the first
+ * one that yields a non-empty scalar wins.
+ *
+ * A selector is either a dotted path into the parsed body (after `resultPath`), with
+ * numeric segments indexing arrays (`elements.0.id`), or `header:<name>` for a
+ * response header (LinkedIn answers some creates with an empty body and the new id in
+ * `x-restli-id`). A list rather than one path because vendors drift between API
+ * versions, and a fallback declared in data beats a fallback written in code.
+ *
+ * Every field is optional and NOTHING is inferred from an absent one: a mapping with
+ * no `externalId` selector, or one whose selectors all come back empty, yields no id —
+ * and a caller recording a publication must then record a failure, never a success it
+ * cannot prove. `error` names where a vendor reports a refusal inside a 2xx body
+ * (Ashby answers `200 { success: false, errors: [...] }`), so a refused write is read
+ * as one rather than as a success with no id.
+ */
+export interface ConnectorResponseMapping {
+  externalId?: string[];
+  url?: string[];
+  error?: string[];
+}
+
+/** The fields a {@link ConnectorResponseMapping} may declare — the closed list. */
+export const CONNECTOR_RESPONSE_FIELDS = ['externalId', 'url', 'error'] as const;
+
+/** A body path (`a.b.0.c`) or a `header:<name>` selector. Deliberately narrow: no
+ *  wildcards, no filters — a selector is a location, never a query language. */
+const RESPONSE_SELECTOR_RE = /^(?:header:[A-Za-z0-9-]{1,64}|[A-Za-z0-9_$-]{1,64}(?:\.[A-Za-z0-9_$-]{1,64}){0,11})$/;
+/** Fallbacks per field. More than this is a manifest guessing, not declaring. */
+const MAX_RESPONSE_SELECTORS = 6;
 
 export interface ConnectorManifest {
   /** Catalog key, `[a-z0-9-]`. Unique per tenant; built-in keys are reserved. */
@@ -416,6 +459,8 @@ function validateAction(raw: unknown, index: number, errors: string[]): Connecto
     errors.push(`${where}.resultPath: cannot be used with responseFormat "binary"`);
   }
 
+  const response = validateResponseMapping(raw.response, where, errors);
+
   const soap = validateSoap(raw.soap, where, errors);
   // A SOAP operation is a POST of a document. Declaring it on a GET would produce a
   // request with an envelope no service ever sees, which fails as an unhelpful 404.
@@ -439,7 +484,42 @@ function validateAction(raw: unknown, index: number, errors: string[]): Connecto
     ...(responseFormat === 'binary' ? { responseFormat } : {}),
     ...(soap ? { soap } : {}),
     ...(typeof raw.resultPath === 'string' ? { resultPath: raw.resultPath } : {}),
+    ...(response ? { response } : {}),
   };
+}
+
+/**
+ * Validate a response mapping on an untrusted action.
+ *
+ * A single string is accepted and normalised to a one-entry list, because that is how
+ * a hand-authored manifest will most often say it. A malformed declaration is an ERROR
+ * rather than a silent drop: dropping it would turn "the board confirmed this id" into
+ * "no id", which the distribute use case records as a failure the author cannot
+ * explain.
+ */
+function validateResponseMapping(raw: unknown, where: string, errors: string[]): ConnectorResponseMapping | null {
+  if (raw === undefined || raw === null) return null;
+  if (!isPlainObject(raw)) { errors.push(`${where}.response: must be an object`); return null; }
+  const out: ConnectorResponseMapping = {};
+  for (const [field, value] of Object.entries(raw)) {
+    if (!(CONNECTOR_RESPONSE_FIELDS as readonly string[]).includes(field)) {
+      errors.push(`${where}.response.${field}: unknown field — use one of ${CONNECTOR_RESPONSE_FIELDS.join(', ')}`);
+      continue;
+    }
+    const list = typeof value === 'string' ? [value] : Array.isArray(value) ? value : null;
+    if (!list || list.length === 0 || list.length > MAX_RESPONSE_SELECTORS) {
+      errors.push(`${where}.response.${field}: must be a selector or a list of 1–${MAX_RESPONSE_SELECTORS} selectors`);
+      continue;
+    }
+    const selectors = list.map(String);
+    const bad = selectors.filter((selector) => !RESPONSE_SELECTOR_RE.test(selector));
+    if (bad.length) {
+      errors.push(`${where}.response.${field}: "${bad[0]}" is not a dotted body path or a header:<name> selector`);
+      continue;
+    }
+    out[field as keyof ConnectorResponseMapping] = selectors;
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /**

@@ -1,10 +1,8 @@
-import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { CeremonyTaskCard } from './CeremonyTaskCard';
-import { placeTargetProps, useCeremonyPick } from './pickToPlace';
-import { DRAG_TASK } from './types';
+import { CeremonyDropZone } from './pickToPlace';
 
 /**
  * The backlog rail — the pool of unscheduled/unassigned work a ceremony pulls
@@ -25,22 +23,14 @@ export function BacklogRail({
   /** Drop a task here to return it to the backlog (unassign / unschedule). */
   onReturn?: (taskId: number) => void;
 }) {
-  const [over, setOver] = useState(false);
   const isMobile = useIsMobile();
   const t = useTranslations('ceremony');
-  const pick = useCeremonyPick();
   return (
-    <div
-      onDragOver={onReturn ? (e) => { e.preventDefault(); setOver(true); } : undefined}
-      onDragLeave={onReturn ? () => setOver(false) : undefined}
-      onDrop={onReturn ? (e) => {
-        e.preventDefault();
-        setOver(false);
-        const id = Number(e.dataTransfer.getData(DRAG_TASK));
-        if (id) onReturn(id);
-      } : undefined}
-      {...(onReturn ? placeTargetProps(pick, t('returnToBacklog'), onReturn) : {})}
-      style={{
+    <CeremonyDropZone
+      label={t('returnToBacklog')}
+      onPlace={(taskId) => onReturn?.(taskId)}
+      enabled={!!onReturn}
+      style={({ over }) => ({
         width: isMobile ? '100%' : 240,
         flexShrink: 0,
         display: 'flex',
@@ -52,7 +42,7 @@ export function BacklogRail({
         border: `1px ${over ? 'dashed var(--coral-bright)' : 'solid var(--border-subtle)'}`,
         maxHeight: isMobile ? 260 : '100%',
         overflowY: 'auto',
-      }}
+      })}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
@@ -67,6 +57,6 @@ export function BacklogRail({
       ) : (
         tasks.map((t) => <CeremonyTaskCard key={t.id} task={t} onOpen={onOpen} />)
       )}
-    </div>
+    </CeremonyDropZone>
   );
 }

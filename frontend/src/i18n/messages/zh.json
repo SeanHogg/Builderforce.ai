@@ -775,7 +775,8 @@
       "inquiries": "意向",
       "runway": "现金跑道",
       "cashflow": "现金流",
-      "dashboard": "仪表板"
+      "dashboard": "仪表板",
+      "reports": "报告"
     },
     "primaryAria": "主导航",
     "destination": {
@@ -13108,6 +13109,7 @@
         "person": "个人",
         "advisor": "顾问",
         "gig": "零工",
+        "job": "职位",
         "business": "企业",
         "storefront": "店铺",
         "builtin": "内置",
@@ -15871,6 +15873,9 @@
     "sprintScheduled": "已安排 {count} 项 · 拖入工单以添加",
     "newSprint": "+ 新建冲刺",
     "dropToDone": "将工单拖到此处标记为完成",
+    "placeToDone": "先用“移动”选中工单，再点此处标记为完成",
+    "pickBanner": "正在移动“{title}”。点按高亮的目标位置，或按 Esc 取消。",
+    "cancelPick": "取消移动",
     "inBacklog": "待办中 {count} 项",
     "noMembers": "暂无团队成员 — 为此项目添加团队，或邀请队友。",
     "scorecardTitle": "记分卡 · {name}",
@@ -19965,6 +19970,7 @@
       "visibilityPublic": "公开",
       "publishYouTube": "发布到 YouTube",
       "publishingYouTube": "正在上传到 YouTube…",
+      "youtubeUploading": "正在上传到 YouTube — 已确认 {percent}%。可以关闭此处，上传会继续进行。",
       "uploadedYouTube": "已上传到 YouTube",
       "youtubePublishFailed": "YouTube 无法发布此视频。请检查连接后重试。",
       "viewOnYouTube": "在 YouTube 上查看",
@@ -20464,6 +20470,7 @@
       "socialCopy": "文案",
       "socialStatus": {
         "queued": "排队中",
+        "uploading": "上传中 · {percent}%",
         "published": "已发布",
         "pending": "处理中",
         "failed": "失败",
@@ -22475,6 +22482,7 @@
       "publishPending": "已接收——平台仍在处理。",
       "publishFailed": "该帖子发布失败。",
       "campaignPublished": "已发布到 {targets} 个账号中的 {published} 个。",
+      "campaignPublishedUploading": "已发布到 {targets} 个账号中的 {published} 个。仍有 {uploading} 个正在上传到 YouTube — 进度显示在活动中。",
       "campaignScheduled": "已为 {count} 个账号排期。",
       "campaignUpdateFailed": "无法更新该活动。",
       "boardMedia": "从本画布附加",
@@ -23604,6 +23612,7 @@
         "board": "发布平台",
         "postedAt": "发布时间",
         "url": "链接",
+        "applicants": "申请数",
         "step": "步骤",
         "channel": "渠道",
         "delayDays": "间隔（天）",
@@ -24314,6 +24323,23 @@
       "tooLarge": "该文件超过了 25MB 的法律文件上限。",
       "uploadFailed": "上传失败,请重试。",
       "statusDraft": "草稿"
+    },
+    "jobDistribution": {
+      "title": "发布到招聘平台",
+      "needsPosting": "请先创建真实的职位发布——此卡片还没有职位 ID。请让 Brain 同步该职位发布。",
+      "loading": "正在读取已连接的招聘平台…",
+      "noneYet": "尚未发布到任何招聘平台。",
+      "noBoards": "此工作区尚未连接任何招聘平台。",
+      "connectBoards": "在“集成”中连接",
+      "chooseBoards": "发布到",
+      "distribute": "{count, plural, =0 {发布} other {发布到 # 个平台}}",
+      "distributing": "正在发布…",
+      "statusPosted": "已上线",
+      "statusFailed": "失败",
+      "postedOn": "自 {date} 起",
+      "view": "查看职位",
+      "readFailed": "无法读取此职位的发布位置。",
+      "distributeFailed": "职位未能发布，请重试。"
     },
     "notice": {
       "addedToCanvas": "我已将所需内容添加到画布上。",
@@ -25754,6 +25780,7 @@
     "noticeStandupNotSummarized": "尚无纪要。请先从会议记录生成。",
     "noticeStandupNothingCaptured": "此站会未记录任何内容，因此没有纪要。",
     "noticeStandupNoActionItems": "纪要中没有未完成的行动项。",
+    "noticeStandupNotOnSavedBoard": "此站会卡片尚未保存在画布上。请先保存画布，再拉取纪要。",
     "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, other {全部 # 项行动项已在画布上}}",
     "noticeStandupActionItemsPlaced": "{count, plural, other {已将 # 项行动项放入画布}}",
     "noticeStandupMinutesNeedsAccount": "登录后可查看站会纪要",
@@ -31317,7 +31344,8 @@
         "pay": "登录后才能完成支付。",
         "save": "登录后才能保存这项工作。",
         "account": "创建账户即可解锁此功能。",
-        "installTemplate": "登录后即可在工作区中配置此模板。"
+        "installTemplate": "登录后即可在工作区中配置此模板。",
+        "takeCopy": "副本会放到你工作区的看板上——请登录或创建账户后再获取。"
       }
     },
     "wall": {
@@ -32585,6 +32613,96 @@
       "loading": "正在加载仪表板…",
       "installPrompt": "尚未安装 KPI 仪表板。安装适合你所在行业的仪表板，查看同行关注的指标。",
       "installCta": "从应用市场安装"
+    },
+    "reports": {
+      "title": "定时报告",
+      "blurb": "此工作区按计划通过邮件发送的报告——站会、高管摘要、汇总报告，以及由画布框架生成的董事会材料。",
+      "new": "新建计划",
+      "loading": "加载中…",
+      "empty": "尚未安排任何报告。创建一个，即可按天、按周或按月通过邮件发送。",
+      "crumb": "财务 · 报告",
+      "createTitle": "新建报告计划",
+      "editTitle": "编辑报告计划",
+      "cancel": "取消",
+      "save": "保存更改",
+      "create": "创建计划",
+      "edit": "编辑",
+      "pause": "暂停",
+      "resume": "恢复",
+      "delete": "删除",
+      "deleteTitle": "删除此计划？",
+      "deleteMessage": "将停止发送{type}报告。已发送的报告不受影响。",
+      "statusOn": "启用中",
+      "statusPaused": "已暂停",
+      "cadenceSummary": "{cadence}，UTC {hour}:00",
+      "recipientsCount": "{count, plural, other {# 位收件人}}",
+      "subjectFrame": "画布框架",
+      "nextRun": "下次：{when}",
+      "nextRunPending": "下次运行时间将在调度器下次运行时确定",
+      "fixedOnEdit": "计划创建后，报告类型、频率和框架即固定。如需更改，请新建一个计划。",
+      "needRecipients": "请至少添加一位收件人。",
+      "fixRecipients": "请修正不是电子邮件地址的条目。",
+      "needFrame": "请选择此董事会材料要发送的框架。",
+      "recipientsInvalid": "不是电子邮件地址：{entries}",
+      "recipientsHint": "每行一个地址，或用逗号分隔。",
+      "recipientsPlaceholder": "cfo@example.com\nboard@example.com",
+      "hourOption": "UTC {hour}:00",
+      "boardPlaceholder": "选择画板",
+      "framePlaceholder": "选择框架",
+      "frameOption": "{title}（{count, plural, other {# 个卡片}}）",
+      "noBoards": "你还没有活跃的画板。董事会材料会发送画板中的一个框架。",
+      "noFrames": "此画板没有框架。请在要发送的卡片周围添加一个框架，然后在这里选择它。",
+      "field": {
+        "type": "报告",
+        "cadence": "频率",
+        "hour": "发送时间",
+        "recipients": "收件人",
+        "enabled": "发送此报告",
+        "board": "画板",
+        "frame": "框架"
+      },
+      "type": {
+        "standup": "每日站会",
+        "code_review": "代码评审",
+        "project_status": "项目状态",
+        "executive_summary": "高管摘要",
+        "portfolio_rollup": "项目组合汇总",
+        "board_pack": "董事会材料"
+      },
+      "cadence": {
+        "daily": "每天",
+        "weekly": "每周",
+        "monthly": "每月"
+      }
+    },
+    "validation": {
+      "title": "验证活动",
+      "blurb": "此工作区中正在进行的实验、验证仪表板和反馈收集器。",
+      "loading": "正在加载验证活动…",
+      "empty": "尚未进行任何验证。开始实验、验证仪表板或反馈收集器后，它们会显示在这里。",
+      "untitled": "未命名",
+      "more": "{count, plural, other {还有 # 项}}",
+      "responses": "{count, plural, other {# 条回复}}",
+      "count": {
+        "validation": "{count, plural, other {# 个实验}}",
+        "dashboard": "{count, plural, other {# 个仪表板}}",
+        "feedback_collector": "{count, plural, other {# 个收集器}}"
+      },
+      "kind": {
+        "validation": "实验",
+        "dashboard": "仪表板",
+        "feedback_collector": "反馈收集器"
+      },
+      "status": {
+        "in_progress": "进行中",
+        "validated": "已验证",
+        "invalidated": "已否定",
+        "inconclusive": "无定论",
+        "running": "运行中",
+        "active": "启用中",
+        "completed": "已完成",
+        "disabled": "已关闭"
+      }
     }
   },
   "proBonoBadge": {

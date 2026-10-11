@@ -181,10 +181,13 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
       }
       if (resolved.problems.length) setNotice(mediaProblemText(resolved.problems[0]!));
       const media = resolved.urls;
-      if (selected.length === 1 && !scheduledAt) {
+      // An `upload`-transport account (YouTube) is never one immediate request — its
+      // post is a background upload with progress, which only a campaign carries.
+      const single = selected.length === 1 ? accounts.find((a) => a.id === selected[0]) : undefined;
+      if (single && single.publishTransport !== 'upload' && !scheduledAt) {
         const result = await socialApi.publish({
           text: copy,
-          connectionId: selected[0]!,
+          connectionId: single.id,
           ...(linkUrl.trim() ? { linkUrl: linkUrl.trim() } : {}),
           ...(media.length ? { mediaUrls: media } : {}),
         });
@@ -202,7 +205,9 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
       if (scheduledAt) return t('campaignScheduled', { count: campaign.targets });
       const batch = await socialApi.publishCampaign(campaign.id);
       if (batch.campaign) onAddCampaign(batch.campaign);
-      return t('campaignPublished', { published: batch.published, targets: campaign.targets });
+      return batch.uploading > 0
+        ? t('campaignPublishedUploading', { published: batch.published, targets: campaign.targets, uploading: batch.uploading })
+        : t('campaignPublished', { published: batch.published, targets: campaign.targets });
     }, { failure: t('publishFailed') });
     if (outcome === undefined) return;
     setNotice(outcome);
@@ -211,7 +216,7 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
     setMediaUrl('');
     setMediaObjectIds([]);
     setScheduledAt('');
-  }, [boardMedia, failTask, linkUrl, mediaObjectIds, mediaProblemText, mediaUrl, onAddCampaign, runTask, scheduledAt, selected, t, text]);
+  }, [accounts, boardMedia, failTask, linkUrl, mediaObjectIds, mediaProblemText, mediaUrl, onAddCampaign, runTask, scheduledAt, selected, t, text]);
 
   const toggleAccount = useCallback((id: string) => {
     setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);

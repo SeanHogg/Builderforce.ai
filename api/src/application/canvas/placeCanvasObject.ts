@@ -44,23 +44,10 @@
  * points at: one board shows one project once.
  */
 
-import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import {
-  creationSessionConnections,
-  creationSessionObjects,
-  creationSessions,
-} from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { broadcastRoom, creationSessionRoomName } from '../../infrastructure/relay/broadcastRoom';
-import {
-  creationGraphStatements,
-  isCreationEventWriteConflict,
-  type GraphConnectionInput,
-  type GraphObjectInput,
-} from '../creation/creationGraphWriter';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
+import type { GraphObjectInput } from '../creation/creationGraphWriter';
+import { rewriteBoardGraph } from './rewriteBoardGraph';
 
 /** How far left of the board's own content a new container card is dropped. */
 const CONTAINER_GUTTER = 380;
@@ -127,92 +114,36 @@ export async function placeCanvasObject(
   env: Env,
   input: PlaceCanvasObjectInput,
 ): Promise<PlacedCanvasObject | null> {
-  const [session] = await db
-    .select({
-      id: creationSessions.id,
-      revision: creationSessions.canvasRevision,
-      viewport: creationSessions.viewport,
-    })
-    .from(creationSessions)
-    .where(scopedToTenant(creationSessions, input.tenantId, eq(creationSessions.id, input.sessionId)))
-    .limit(1);
-  if (!session) return null;
+  // The read / write / lost-race / broadcast is `rewriteBoardGraph`'s; what is decided
+  // HERE is only whether the card is already on the board and, if not, where it goes.
+  const outcome = await rewriteBoardGraph<string>(db, env, {
+    sessionId: input.sessionId,
+    tenantId: input.tenantId,
+    actor: { type: 'user', ref: input.userId, userId: input.userId },
+    eventType: input.eventType,
+    operation: `place:${input.kind}:${input.resourceType}:${input.resourceId}`,
+    edit: (graph) => {
+      const existing = graph.objects.find((object) =>
+        object.resourceType === input.resourceType && object.resourceId === input.resourceId);
+      if (existing) return { unchanged: existing.id };
 
-  // The whole graph, because `creationGraphStatements` replaces it — the price of
-  // having ONE writer instead of an append that drifts from it. Paid once in a
-  // board's life, on an action a person is already waiting on.
-  const [storedObjects, storedConnections] = await Promise.all([
-    db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, session.id)),
-    db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, session.id)),
-  ]);
+      const objectId = crypto.randomUUID();
+      const placed: GraphObjectInput = {
+        id: objectId,
+        kind: input.kind,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+        canvasData: { ...containerCardPosition(graph.objects), ...CARD_SIZE },
+        content: input.content,
+      };
+      return {
+        graph: { objects: [...graph.objects, placed], connections: graph.connections },
+        eventPayload: { ...(input.eventPayload ?? {}), objectId },
+        result: objectId,
+      };
+    },
+  });
 
-  const existing = storedObjects.find((object) =>
-    object.resourceType === input.resourceType && object.resourceId === input.resourceId);
-  if (existing) return { objectId: existing.id, revision: session.revision, placed: false };
-
-  const objectId = crypto.randomUUID();
-  const placed: GraphObjectInput = {
-    id: objectId,
-    kind: input.kind,
-    resourceType: input.resourceType,
-    resourceId: input.resourceId,
-    canvasData: { ...containerCardPosition(storedObjects), ...CARD_SIZE },
-    content: input.content,
-  };
-  const objects: GraphObjectInput[] = [
-    ...storedObjects.map((object) => ({
-      id: object.id, kind: object.kind, resourceType: object.resourceType, resourceId: object.resourceId,
-      resourceRevision: object.resourceRevision, canvasData: object.canvasData, content: object.content,
-    })),
-    placed,
-  ];
-  const connections: GraphConnectionInput[] = storedConnections.map((edge) => ({
-    id: edge.id, sourceObjectId: edge.sourceObjectId, targetObjectId: edge.targetObjectId,
-    kind: edge.kind, label: edge.label, metadata: edge.metadata,
-  }));
-
-  const revision = session.revision + 1;
-  try {
-    await db.batch(creationGraphStatements(db, {
-      sessionId: session.id,
-      tenantId: input.tenantId,
-      objects,
-      connections,
-      revision,
-      actorType: 'user',
-      actorRef: input.userId,
-      authorUserId: input.userId,
-      eventType: input.eventType,
-      eventPayload: { ...(input.eventPayload ?? {}), objectId },
-      // No key: this is not a client retry, it is a consequence written once. The
-      // revision constraint is the guard, and losing it is a correct outcome.
-      idempotencyKey: null,
-      viewport: session.viewport,
-      // The loss must SURFACE here so it can be reported as "not placed" rather
-      // than silently recorded as a success that never happened.
-      snapshotOnConflictDoNothing: false,
-    }) as unknown as Parameters<typeof db.batch>[0]);
-  } catch (error) {
-    // A concurrent writer took this revision. The caller's primary work already
-    // committed and the person is waiting on it, so this reports rather than
-    // raises — and says so, because a card that silently never appeared is
-    // indistinguishable from one that was never meant to.
-    if (!isCreationEventWriteConflict(error)) {
-      reportCaughtError(error, {
-        source: 'application/canvas/placeCanvasObject.ts',
-        operation: `place:${input.kind}:${input.resourceType}:${input.resourceId}`,
-      });
-    }
-    return { objectId, revision: session.revision, placed: false };
-  }
-
-  // The open board hears about it through the same door a collaborator's edit
-  // arrives by, so nobody has to reload to see what their own action produced.
-  await broadcastRoom(
-    env.SESSION_ROOM,
-    creationSessionRoomName(input.tenantId, session.id),
-    JSON.stringify({ type: 'canvas.changed', revision }),
-  );
-
-  return { objectId, revision, placed: true };
+  if (outcome.status === 'missing') return null;
+  return { objectId: outcome.result, revision: outcome.revision, placed: outcome.status === 'written' };
 }

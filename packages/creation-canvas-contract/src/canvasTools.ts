@@ -516,6 +516,10 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   // board: the card carries `postingId`, and every application read joins on it instead
   // of on a title two requisitions can share.
   'canvas_sync_job_posting',
+  // FO-B4: publish that requisition to the workspace's CONNECTED job boards. Account-
+  // required twice over — it needs the real posting and a connector credential, and it
+  // puts the workspace's name on a public board.
+  'canvas_distribute_job_posting',
   // ── The build vocabulary's undo (`lib/canvasBuildTools.ts`) ──────────────────
   // File history is kept by a durable project's storage (`ide/projects/<id>/` in R2,
   // behind a tenant JWT). A guest's app is held in the browser and keeps none, so

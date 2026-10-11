@@ -14,7 +14,6 @@ import {
 // "hide archived by default" contract that the board / brain list_tasks rely on.
 // ---------------------------------------------------------------------------
 class ArchiveAwareTaskRepo implements ITaskRepository {
-  async repointSegment(): Promise<boolean> { return false; }
   constructor(private readonly tasks: Task[]) {}
   private visible(rows: Task[], opts?: TaskListOptions): Task[] {
     return opts?.includeArchived ? rows : rows.filter(t => !t.toPlain().archived);

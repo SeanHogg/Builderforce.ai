@@ -9,6 +9,7 @@ import { CanvasClockBody } from '../CanvasClockBody';
 import { CanvasComponentBody } from '../CanvasComponentBody';
 import { CalendarObjectBody } from '../CalendarObjectBody';
 import { CanvasLegalDocumentUpload } from '../CanvasLegalDocumentUpload';
+import { CanvasJobDistribution } from '../CanvasJobDistribution';
 import type { CreationBodyProps } from './types';
 import { useCreationNodeActions } from './nodeActions';
 import { useCalendarBoardObjects, useFrameMemberCount } from './boardSubscriptions';
@@ -112,6 +113,16 @@ export function CalendarBody({ data }: CreationBodyProps) {
 export function LegalDocumentBody({ id, data }: CreationBodyProps) {
   const { edit } = useCreationNodeActions();
   return <CanvasLegalDocumentUpload objectId={id} data={data} {...(edit ? { onEdit: edit } : {})} />;
+}
+
+/**
+ * The `jobPosting` card's Distribute control — the one real affordance the kind needs
+ * beyond the fields SpecObjectBody draws. It reads where the posting is live from the
+ * hiring domain, not from the card. See the component's header.
+ */
+export function JobPostingBody({ data }: CreationBodyProps) {
+  const { edit } = useCreationNodeActions();
+  return <CanvasJobDistribution data={data} {...(edit ? { onEdit: edit } : {})} />;
 }
 
 /** The tool runner is a whole product surface of its own; a board only pays for it

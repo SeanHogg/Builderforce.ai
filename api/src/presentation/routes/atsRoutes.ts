@@ -5,6 +5,8 @@
  *                                              application counts (FO-B3)
  *   POST   /postings                         — resolve a canvas `jobPosting` card to its
  *                                              `job_postings` row, minting it once
+ *   GET · POST /postings/:id/distributions   — publish to connected job boards (FO-B4);
+ *                                              `postingDistributionRoutes.ts`
  *   POST   /applications                     — admit a candidate AND record the application
  *   GET    /applications?jobPostingId=&status= — the applications for a posting
  *   GET    /applications/:id                 — one application, with the résumé projection,
@@ -58,6 +60,7 @@ import {
   recordApplication,
 } from '../../application/hiring/applications';
 import { listCanvasPostings, syncCanvasPosting } from '../../application/hiring/postings';
+import { createPostingDistributionRoutes } from './postingDistributionRoutes';
 import { listPipelines, pipelineBoard, moveCandidate } from '../../application/hiring/pipeline';
 import {
   createInterviewKit,
@@ -264,6 +267,9 @@ export function createAtsRoutes(db: Db): Hono<HonoEnv> {
     });
     return c.json(result, result.created ? 201 : 200);
   });
+
+  // Where the posting is published — its own resource and module (FO-B4).
+  r.route('/postings', createPostingDistributionRoutes(db));
 
   // ── Applications ───────────────────────────────────────────────────────────────
 

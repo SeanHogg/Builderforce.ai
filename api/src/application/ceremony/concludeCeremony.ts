@@ -46,6 +46,7 @@ import {
 import { notifyReassignedAway } from './ceremonyNotifier';
 import { dispatchCeremonyCompletion } from './dispatchCeremonyCompletion';
 import { endCeremonyMeeting } from './ceremonyMeeting';
+import { concludeCeremonyMinutes } from './concludeCeremonyMinutes';
 import { readMemberProfiles } from '../member/memberProfiles';
 import { isOnPtoAt, parsePtoBlocks } from '../member/ptoWindows';
 
@@ -378,6 +379,11 @@ export async function concludeCeremonySession(
   await endCeremonyMeeting(db, session.meetingId, now).catch((err) => {
     reportCaughtError(err, { source: "application/ceremony/concludeCeremony.ts", operation: "concludeCeremonySession", context: { logMessage: `[ceremony:conclude] could not end companion meeting session=${session.id}`, details: err } });
   });
+
+  // Minutes, and the stand-up card that convened this ceremony: a
+  // concluded ceremony's minutes are written if they were not already, and land on every
+  // board holding its card. Best-effort and self-reporting — never blocks the close.
+  await concludeCeremonyMinutes(db, env, { id: session.id, tenantId: session.tenantId, meetingId: session.meetingId ?? null, status });
 
   // The close itself is journalled last so the history detail reads in causal order.
   const [project] = await db

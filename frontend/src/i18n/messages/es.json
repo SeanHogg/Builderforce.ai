@@ -775,7 +775,8 @@
       "inquiries": "Interés",
       "runway": "Runway",
       "cashflow": "Flujo de caja",
-      "dashboard": "Panel"
+      "dashboard": "Panel",
+      "reports": "Informes"
     },
     "primaryAria": "Principal",
     "destination": {
@@ -13108,6 +13109,7 @@
         "person": "Personas",
         "advisor": "Asesores",
         "gig": "Encargos",
+        "job": "Empleos",
         "business": "Negocios",
         "storefront": "Tiendas",
         "builtin": "Integrados",
@@ -15871,6 +15873,9 @@
     "sprintScheduled": "{count} programado(s) · arrastra un ticket para añadir",
     "newSprint": "+ Nuevo sprint",
     "dropToDone": "Arrastra un ticket aquí para marcar como Hecho",
+    "placeToDone": "Elige un ticket con Mover y toca aquí para marcarlo como Hecho",
+    "pickBanner": "Moviendo «{title}». Toca un destino resaltado o pulsa Esc para cancelar.",
+    "cancelPick": "Cancelar movimiento",
     "inBacklog": "{count} pendientes",
     "noMembers": "No hay miembros del equipo — añade un equipo a este proyecto o invita a compañeros.",
     "scorecardTitle": "Marcador · {name}",
@@ -19965,6 +19970,7 @@
       "visibilityPublic": "Público",
       "publishYouTube": "Publicar en YouTube",
       "publishingYouTube": "Subiendo a YouTube…",
+      "youtubeUploading": "Subiendo a YouTube: {percent} % confirmado. Puedes cerrar esto; la subida continúa.",
       "uploadedYouTube": "Subido a YouTube",
       "youtubePublishFailed": "YouTube no pudo publicar este video. Revisa la conexión e inténtalo de nuevo.",
       "viewOnYouTube": "Ver en YouTube",
@@ -20464,6 +20470,7 @@
       "socialCopy": "Texto",
       "socialStatus": {
         "queued": "En cola",
+        "uploading": "Subiendo · {percent} %",
         "published": "Publicada",
         "pending": "Procesando",
         "failed": "Con error",
@@ -22475,6 +22482,7 @@
       "publishPending": "Aceptado: la red todavía lo está procesando.",
       "publishFailed": "No se pudo publicar esa publicación.",
       "campaignPublished": "Publicado en {published} de {targets} cuentas.",
+      "campaignPublishedUploading": "Publicado en {published} de {targets} cuentas. {uploading} aún se está subiendo a YouTube; el progreso aparece en la campaña.",
       "campaignScheduled": "Programado para {count} cuentas.",
       "campaignUpdateFailed": "No se pudo actualizar esa campaña.",
       "boardMedia": "Adjuntar desde este lienzo",
@@ -23604,6 +23612,7 @@
         "board": "Portal",
         "postedAt": "Publicado",
         "url": "URL",
+        "applicants": "Candidaturas",
         "step": "Paso",
         "channel": "Canal",
         "delayDays": "Espera (días)",
@@ -24314,6 +24323,23 @@
       "tooLarge": "Ese archivo supera el límite de 25 MB para documentos legales.",
       "uploadFailed": "No se pudo subir el archivo. Inténtalo de nuevo.",
       "statusDraft": "Borrador"
+    },
+    "jobDistribution": {
+      "title": "Publicar en portales de empleo",
+      "needsPosting": "Crea primero la oferta real: esta tarjeta aún no tiene ID de oferta. Pide a Brain que sincronice la oferta de empleo.",
+      "loading": "Leyendo los portales de empleo conectados…",
+      "noneYet": "Aún no se ha publicado en ningún portal de empleo.",
+      "noBoards": "No hay ningún portal de empleo conectado a este espacio de trabajo.",
+      "connectBoards": "Conéctalo en Integraciones",
+      "chooseBoards": "Publicar en",
+      "distribute": "{count, plural, =0 {Publicar} one {Publicar en # portal} other {Publicar en # portales}}",
+      "distributing": "Publicando…",
+      "statusPosted": "Publicada",
+      "statusFailed": "Fallida",
+      "postedOn": "Desde el {date}",
+      "view": "Ver oferta",
+      "readFailed": "No se pudo leer dónde está publicada esta oferta.",
+      "distributeFailed": "No se pudo publicar la oferta. Inténtalo de nuevo."
     },
     "notice": {
       "addedToCanvas": "He añadido al lienzo el contenido solicitado.",
@@ -25754,6 +25780,7 @@
     "noticeStandupNotSummarized": "Aún no hay acta. Genérala primero desde el registro de la reunión.",
     "noticeStandupNothingCaptured": "No se capturó nada en esta daily, así que no hay acta.",
     "noticeStandupNoActionItems": "El acta no registró ninguna acción pendiente.",
+    "noticeStandupNotOnSavedBoard": "Esta tarjeta de daily aún no está en un lienzo guardado. Guarda el lienzo y vuelve a traer el acta.",
     "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, one {La acción ya está en el lienzo} other {Las # acciones ya están en el lienzo}}",
     "noticeStandupActionItemsPlaced": "{count, plural, one {# acción añadida al lienzo} other {# acciones añadidas al lienzo}}",
     "noticeStandupMinutesNeedsAccount": "Inicia sesión para leer el acta de una daily",
@@ -31317,7 +31344,8 @@
         "pay": "Inicia sesión para completar un pago.",
         "save": "Inicia sesión para guardar este trabajo.",
         "account": "Crea una cuenta para desbloquear esto.",
-        "installTemplate": "Inicia sesión para configurar esta plantilla en un espacio de trabajo."
+        "installTemplate": "Inicia sesión para configurar esta plantilla en un espacio de trabajo.",
+        "takeCopy": "Una copia se coloca en un tablero de tu espacio de trabajo: inicia sesión o crea una cuenta para obtenerla."
       }
     },
     "wall": {
@@ -32585,6 +32613,96 @@
       "loading": "Cargando tu panel…",
       "installPrompt": "Aún no hay ningún panel de KPI instalado. Instala el panel de tu sector para ver las métricas que siguen tus pares.",
       "installCta": "Instalar desde el Marketplace"
+    },
+    "reports": {
+      "title": "Informes programados",
+      "blurb": "Informes que este espacio de trabajo envía por correo de forma periódica: reuniones diarias, resúmenes ejecutivos, consolidados y dosieres para el consejo creados a partir de un marco del lienzo.",
+      "new": "Nueva programación",
+      "loading": "Cargando…",
+      "empty": "Todavía no hay informes programados. Crea uno para recibirlo por correo a diario, cada semana o cada mes.",
+      "crumb": "Finanzas · Informes",
+      "createTitle": "Nueva programación de informe",
+      "editTitle": "Editar programación de informe",
+      "cancel": "Cancelar",
+      "save": "Guardar cambios",
+      "create": "Crear programación",
+      "edit": "Editar",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "delete": "Eliminar",
+      "deleteTitle": "¿Eliminar esta programación?",
+      "deleteMessage": "El informe {type} dejará de enviarse. Los informes ya entregados no se ven afectados.",
+      "statusOn": "Activo",
+      "statusPaused": "En pausa",
+      "cadenceSummary": "{cadence} a las {hour}:00 UTC",
+      "recipientsCount": "{count, plural, one {# destinatario} other {# destinatarios}}",
+      "subjectFrame": "Marco del lienzo",
+      "nextRun": "Próximo: {when}",
+      "nextRunPending": "El próximo envío se fija cuando se ejecute el programador",
+      "fixedOnEdit": "El tipo de informe, la frecuencia y el marco quedan fijos una vez creada la programación. Para cambiarlos, crea una nueva.",
+      "needRecipients": "Añade al menos un destinatario.",
+      "fixRecipients": "Corrige las entradas que no son direcciones de correo.",
+      "needFrame": "Elige el marco que debe enviar este dosier.",
+      "recipientsInvalid": "No es una dirección de correo: {entries}",
+      "recipientsHint": "Una dirección por línea o separadas por comas.",
+      "recipientsPlaceholder": "cfo@example.com\nconsejo@example.com",
+      "hourOption": "{hour}:00 UTC",
+      "boardPlaceholder": "Elige un tablero",
+      "framePlaceholder": "Elige un marco",
+      "frameOption": "{title} ({count, plural, one {# tarjeta} other {# tarjetas}})",
+      "noBoards": "Aún no tienes tableros activos. Un dosier para el consejo envía un marco de uno de ellos.",
+      "noFrames": "Este tablero no tiene marcos. Añade un marco alrededor de las tarjetas que quieres enviar y elígelo aquí.",
+      "field": {
+        "type": "Informe",
+        "cadence": "Frecuencia",
+        "hour": "Hora de envío",
+        "recipients": "Destinatarios",
+        "enabled": "Enviar este informe",
+        "board": "Tablero",
+        "frame": "Marco"
+      },
+      "type": {
+        "standup": "Reunión diaria",
+        "code_review": "Revisión de código",
+        "project_status": "Estado del proyecto",
+        "executive_summary": "Resumen ejecutivo",
+        "portfolio_rollup": "Consolidado de cartera",
+        "board_pack": "Dosier para el consejo"
+      },
+      "cadence": {
+        "daily": "Diario",
+        "weekly": "Semanal",
+        "monthly": "Mensual"
+      }
+    },
+    "validation": {
+      "title": "Validaciones en curso",
+      "blurb": "Los experimentos, paneles de validación y recopiladores de opiniones activos en este espacio de trabajo.",
+      "loading": "Cargando validaciones…",
+      "empty": "Todavía no se está validando nada. Los experimentos, paneles de validación y recopiladores de opiniones aparecen aquí en cuanto inicias uno.",
+      "untitled": "Sin título",
+      "more": "{count, plural, one {y # más} other {y # más}}",
+      "responses": "{count, plural, one {# respuesta} other {# respuestas}}",
+      "count": {
+        "validation": "{count, plural, one {# experimento} other {# experimentos}}",
+        "dashboard": "{count, plural, one {# panel} other {# paneles}}",
+        "feedback_collector": "{count, plural, one {# recopilador} other {# recopiladores}}"
+      },
+      "kind": {
+        "validation": "Experimento",
+        "dashboard": "Panel",
+        "feedback_collector": "Recopilador de opiniones"
+      },
+      "status": {
+        "in_progress": "En curso",
+        "validated": "Validado",
+        "invalidated": "Refutado",
+        "inconclusive": "No concluyente",
+        "running": "En ejecución",
+        "active": "Activo",
+        "completed": "Completado",
+        "disabled": "Desactivado"
+      }
     }
   },
   "proBonoBadge": {

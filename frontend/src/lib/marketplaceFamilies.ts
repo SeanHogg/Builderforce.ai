@@ -148,6 +148,9 @@ const PUBLISH_ROUTE: Record<string, { href: string; requiresAuth: boolean }> = {
   // a gig" form to point at and never was. The honest CTA is a board picker, and
   // that is what this route is — see `marketplace/publish-gig`.
   'talent:gig': { href: '/marketplace/publish-gig', requiresAuth: true },
+  // A full-time role is a posting with the `fte` shape, published through the
+  // SAME ticket-backed board picker — the posting-type control is on that form.
+  'talent:job': { href: '/marketplace/publish-gig', requiresAuth: true },
   'asset:persona': { href: '/personas', requiresAuth: true },
   'asset:knowledge': { href: '/knowledge/new', requiresAuth: true },
   // A template is published from the gallery that owns it — the skill form's
@@ -185,7 +188,11 @@ export const FAMILIES: Record<FamilyId, MarketplaceFamily> = {
     // beside `person` rather than under it because a visitor looking to book an
     // hour and a visitor looking to hire a contractor are asking different
     // questions of the same rows, and one chip cannot answer both.
-    kinds: ['person', 'advisor', 'gig'],
+    // `job` is the find-work board narrowed to full-time roles (`fte`). Same
+    // postings, same apply flow as `gig` — a separate chip because somebody
+    // looking for a job and somebody looking for a contract are asking different
+    // questions of the same rows, exactly as with `advisor` over `person`.
+    kinds: ['person', 'advisor', 'gig', 'job'],
     noteKey: 'note.talent',
   },
   company: {
@@ -248,6 +255,7 @@ const LEGACY_CATEGORY: Record<string, { family: FamilyId; kind?: string }> = {
   // through `resolveFamily` to Agents, which is the wrong grid entirely.
   advisors: { family: 'talent', kind: 'advisor' },
   gigs: { family: 'talent', kind: 'gig' },
+  jobs: { family: 'talent', kind: 'job' },
   workforce: { family: 'agent', kind: 'community' },
   agents: { family: 'agent', kind: 'community' },
   models: { family: 'asset', kind: 'model' },

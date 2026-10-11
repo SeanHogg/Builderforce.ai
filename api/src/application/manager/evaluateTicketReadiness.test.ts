@@ -60,6 +60,22 @@ describe('expectsCodeDeliverable', () => {
   it('does NOT expect an Epic to produce code itself — it delegates to children', () => {
     expect(expectsCodeDeliverable('epic', 'backend_api')).toBe(false);
   });
+
+  it.each(['product', 'design'])('does NOT expect a %s brief to produce code, whatever its action type', (taskType) => {
+    expect(expectsCodeDeliverable(taskType, 'frontend_ui')).toBe(false);
+  });
+
+  it('does NOT expect code from a spec-titled ticket the classifier labelled as code work', () => {
+    // The residual mis-classification: action type taken from the SUBJECT of the spec.
+    expect(expectsCodeDeliverable('task', 'backend_api', 'Write the PRD for the billing API')).toBe(false);
+    expect(expectsCodeDeliverable('task', 'frontend_ui', 'Spec: onboarding wizard')).toBe(false);
+  });
+
+  it('still expects code when the title only references a spec', () => {
+    expect(expectsCodeDeliverable('task', 'backend_api', 'Implement the billing API per the spec')).toBe(true);
+    expect(expectsCodeDeliverable('task', 'tests', 'Write tests for the spec parser')).toBe(true);
+    expect(expectsCodeDeliverable('task', 'backend_api', 'Add a /billing endpoint')).toBe(true);
+  });
 });
 
 describe('decideTicketReadiness', () => {
@@ -95,6 +111,32 @@ describe('decideTicketReadiness', () => {
   it('does NOT return a non-code ticket for having no branch', () => {
     const r = decideTicketReadiness(input({ actionType: 'other', hasBranch: false, prState: 'none', deliverableEvidence: 'none' }));
     expect(r.action).toBe('complete');
+  });
+
+  it('does NOT bounce a spec ticket with no branch back to implementation', () => {
+    // The loop this guards: a PRD ticket mis-labelled `backend_api` reached review with
+    // its document and no branch, was returned, re-ran, and was returned again.
+    const r = decideTicketReadiness(input({
+      title: 'Draft the technical spec for webhook retries', actionType: 'backend_api',
+      hasBranch: false, prState: 'none', deliverableEvidence: 'none',
+    }));
+    expect(r.expectsCode).toBe(false);
+    expect(r.action).toBe('complete');
+    expect(r.completion).toBe('no_deliverable');
+  });
+
+  it.each(['analysis', 'docs', 'decision'])('does NOT bounce a branchless %s ticket', (actionType) => {
+    const r = decideTicketReadiness(input({ actionType, hasBranch: false, prState: 'none', deliverableEvidence: 'none' }));
+    expect(r.action).toBe('complete');
+  });
+
+  it('DOES bounce a code ticket with no branch back to implementation', () => {
+    const r = decideTicketReadiness(input({
+      title: 'Add retry backoff to the webhook dispatcher', actionType: 'backend_api',
+      hasBranch: false, prState: 'none', deliverableEvidence: 'none',
+    }));
+    expect(r.expectsCode).toBe(true);
+    expect(r.action).toBe('return_to_implementation');
   });
 
   it('RETURNS a ticket whose PR build is failing, ahead of asking for sign-off', () => {

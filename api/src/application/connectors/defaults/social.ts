@@ -120,10 +120,11 @@ const website: ConnectorManifest = {
 // ---------------------------------------------------------------------------
 
 /**
- * READ AND MEASURE ONLY. Publishing to YouTube is a resumable multipart upload of the
- * video bytes, which a declarative HTTP manifest cannot express and a Worker should not
- * proxy. Declaring the actions that DO work — and letting the port say `publishMode:
- * 'none'` — is honest; a `create_video` action that always failed would not be.
+ * READ AND MEASURE through this manifest. Publishing to YouTube is a resumable upload
+ * of the video bytes across many requests, which a declarative HTTP manifest cannot
+ * express — so the social port declares `publishTransport: 'upload'` and a campaign
+ * hands the post to the durable `youtube_uploads` job instead of an action here. A
+ * `create_video` action that always failed would not be honest.
  */
 const youtube: ConnectorManifest = {
   key: 'youtube', name: 'YouTube', category: 'marketing', icon: '▶',

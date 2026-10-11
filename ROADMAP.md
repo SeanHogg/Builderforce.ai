@@ -137,7 +137,6 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Cloud loop can't build/type-check/test in-run (no shell).** Falls to CI-on-PR + webhook auto-fix, or Container/on-prem. No pre-`finish` self-review. V1 auto-merges unverified code when `CLOUD_AUTOMERGE_REQUIRE_GREEN` is off — make green the default once webhooks are everywhere.
 - **Cloud execution doesn't clone/analyze the repo or write `PRD.md`.** Hoist the PRD-first step into `dispatchAndQueue`; PRD commit is GitHub-only; no agent task-mutation tool or agent identity; Auto runs carry no `cloudAgentRef`.
 - **IDE agent calls tools one at a time.** Chat #115: 63 turns for 82 calls (8m41s model vs 5m45s tools); it can batch (turns 47–52) but nothing asks. *Blocker: an A/B over real runs.* Unblocks ~halving survey-run wall-clock.
-- **`review_ticket_branches` excluded from read-dedupe** — `ReadCoverage` needs repo-state-aware invalidation (a cached review would survive `git_push`). Not blocked; repeats cost 21–31s.
 - **Staffed-chat dispatch and chat run-history not run end to end.** *Blocker: one deliberate cloud run on a staffed chat with a bound repo.*
 - **Grok (`xai-oauth/grok-4.6`) tool calling has no live verdict** (chat #104: 0 tool calls). *Blocker: an xAI credential in a shell* — then `node api/scripts/xai-tool-call-smoke.mjs --tools 2`, `5`, `67`, `67 --stream`, and `xaiOAuth.live.test.ts`.
 - **Cloud observability is poll-only.** Needs a per-execution SSE/WS tail; auto-run creation isn't pushed; container hard-death can't push a live event (needs a cross-isolate notifier).
@@ -153,9 +152,9 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Lane chaining is single-hop** (`RUNNING→in_progress`, `COMPLETED→in_review`); unify with `SwimlaneCoordinator` for BA→Dev→QA. Bypassed status writers (`staleExecutionReaper`, DO `db.update`) surface only via the backstop poll — funnel through one notifier or an outbox.
 - **Board columns are hardcoded `TASK_STATUSES`, not the board's swimlanes** — custom lanes show no column; needs lane merge/reassign and per-lane automation flags.
 - **Teams/assignee scoping:** lane picker not team-scoped; all-projects board can't scope per-task; agent chips are a load-time snapshot; no epic parent/child tree; three "assign an agent" notions (`assignedAgentHostId`, `project_agents`, `project_agent_id`) want unifying; template sales are free grants.
-- **Capability guardrail** only enforces an explicit `required_capabilities` (no capability-aware routing or lane default); cross-board moves don't re-point `tasks.segment_id`.
+- **Capability guardrail** only enforces an explicit `required_capabilities` (no capability-aware routing or lane default).
+- **`autonomyWiringAudit.ts` has no test** — it now counts spec-shaped tickets as non-code deliverables, and nothing pins that. Not blocked.
 - **A reviewer's `changes_requested` doesn't reopen the producer slot itself** — the manager return path does (`reopenProducerSlots.ts`). Design call: should a verdict alone spend a run (needs a loop-safe "asked since" marker)?
-- **`decideTicketReadiness` may bounce mis-classified spec tickets** back to implementation (bounded by 3-attempt escalation). Verify `expectsCode` against `taskType`/`actionType`.
 - **Role participation:** PRD per-role sections aren't audit-verified; outbound stakeholder notifications aren't all routed through the Coordinator identity ([PRD](./PRD-coordinated-role-participation.md)).
 - **Manager pass still carries the mechanical PR loop** — move it to its own registry sweep; if `notReached` stays near `projects`, use a per-project DO alarm, not a bigger pool. Sequenced behind one `notReached` capture.
 - **Delta→ticket capture:** marketplace-hired Validator unverified; chat deltas off the PR branch won't auto-complete.
@@ -163,8 +162,8 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ### Ceremonies and meetings `[delivery]`
 
-- **A finished meeting's minutes never reach the canvas.** The `standup` node launches `ceremony_sessions`, but nothing writes minutes or action items back to it.
-- **Ceremonies:** presence not re-verified per frame; client-driven `changed` and auto-dispatch; no session history or retro/poker integration; drag has no ghost or keyboard a11y and doesn't work on touch (mobile is view-only — add tap-to-assign); no turn pause/resume.
+- **Deleted follow-up cards come back** — minutes write-back re-places action-item task objects on every sync over the same minutes; there is no tombstone for a card someone removed. Not blocked.
+- **Ceremonies:** presence not re-verified per frame; client-driven `changed` and auto-dispatch; no session history or retro/poker integration; drag has no ghost; no turn pause/resume.
 - **Mesh WebRTC caps at ~4–5 cameras.** *Blocker: a Cloudflare Calls app + server-side track push/pull.*
 - **TURN relay not provisioned** (~10–15% of symmetric-NAT pairs fail). *Blocker: create the TURN key and `wrangler secret put CLOUDFLARE_TURN_KEY_ID` / `CLOUDFLARE_TURN_API_TOKEN`.*
 - **Meeting agent voice is browser `speechSynthesis`.** *Blocker: product decision on each agent's voice.*
@@ -177,7 +176,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Real-time co-editing live smoke.** *Blocker: next api deploy + a 2-client smoke.*
 - **Generated `.rbxlx` never opened in Roblox Studio.** *Blocker: one human opening one place.*
 - **Spawn not run end to end** (install → device sign-in → age gate → Stripe membership → `SpawnPlugin.lua` → build as one undo → play-test `/log`), plus the `spawn.builderforce.ai` zone route. *Blocker: a desktop with Studio and a Stripe-enabled account.*
-- **Room:** speech bubble doesn't scroll to its `brainMessageAnchorId` (not blocked); no video/audio in the Room (needs a `video` prop surface, texture budget, distance gain); station faces and widget iframe untested in a real browser; `GET …/widgets/:widgetId` has no route test.
+- **Room:** no video/audio in the Room (needs a `video` prop surface, texture budget, distance gain); station faces and widget iframe untested in a real browser.
 - **Voice:** consent/provenance gate blocks GA; no in-IDE marketplace browse/checkout; embeddings localStorage-only; Studio video IndexedDB-only (mirror to R2).
 - **Video engine:** `advanceState()` is a CPU placeholder; no learned interpolation or motion module; img2img drifts; no ControlNet/inpainting; Safari needs a WebM fallback. Brain-created dataset files bypass registration.
 - **4 WebDiT models registered `available: false`.** *Blocker: diffusers→ONNX export per architecture uploaded to R2.*
@@ -188,7 +187,6 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 - **Device simulator is react-native-web**, not native (camera/push/navigation differ). Needs Metro or an Expo build service.
 - **Scan-to-phone QR points at a built deploy**, not a live dev server.
-- **The 0-byte-scaffold writer is unidentified.** Audit every empty `put` under `ide/projects/` and reject 0-byte writes to scaffold paths at the route.
 
 ### Previews, repos and hosting `[canvas]` `[integrations]`
 
@@ -213,8 +211,11 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ## ⚙️ Run — operate the company
 
-- **[finance] Report schedules have no frontend** — `POST /api/reports/schedules` accepts a `board_pack` subject and the frame picker endpoint exists; build `ReportSchedulesPanel`. `biApi.getValidationEngagements` has no card.
-- **[hiring] FO-B4 `jobPosting.distribute` has no adapter.** Connectors exist (Greenhouse, Lever, Workable, Indeed, LinkedIn, `job-feed`); missing: a `job_posting_distributions` table and a `response` mapping on manifest actions. Then add it to `CONNECTED_CANVAS_ACTIONS`. Unblocks source attribution.
+- **[finance] A report schedule's report, subject and board-pack frame can't be edited** — `PATCH /api/reports/schedules/:id` sets delivery hour, recipients and enabled only, so a change means delete and re-create. Not blocked.
+- **[hiring] LinkedIn publishes without a `company_id`** — the manifest declares the organisation URN as a param, but the connection stores none and `distributePosting` never supplies one. Add it as a connection field and pass it. Not blocked.
+- **[hiring] Greenhouse, Indeed and LinkedIn confirm a posting with no public URL** — their `response` mappings carry an id only, so the card shows it live with nothing to open. Indeed returns none for a sourced posting; the others can be built from the id. Not blocked.
+- **[hiring] Source attribution is exact-match on connector key, and no applicants are imported** from the boards a posting went to. Not blocked.
+- **[hiring] No Workable connector** — `defaults/hiring.ts` has Greenhouse, Lever, Ashby, Indeed, LinkedIn and `job-feed`. Not blocked.
 - **[integrations] Business Phone is a Twilio CPaaS number, not a carrier** (no port-in, SIM, call-forward). *Blocker: business decision.*
 - **[integrations] Phone numbers have no A2P 10DLC registration** (`phoneNumbers.ts` `purchaseNumber`), so outbound SMS can degrade. *Blocker: operator decision on Trust Hub/Messaging Service resources and fees.*
 - **[integrations] Google Drive / OneDrive can't complete consent.** *Blocker: enable Drive API + `drive.readonly` on the consent screen, delegated `Files.Read` in Azure, register both `/api/drive/callback/*` URIs.*
@@ -269,8 +270,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Monetization partial:** `'agent'` isn't an `artifactTypeEnum` value (no purchase/payout); "Hire" only bumps `hire_count`; template/skill/persona installs are free; hosted-card one-off settlement for knowledge listings isn't wired (`{ requiresConfig: true }`) — settle once, landing on the `ledger_entries` unique reference. *Blocker for the live leg: Stripe secrets (see OTHER · billing).*
 - **Affiliates = the Associate program** — reconcile six tables onto `sales_*` with commissions as `ledger_entries`; retire `growth.affiliate_referrals`.
 - **Company directory family is inert** — `companies` is tenant-scoped with no owner/verification column. Level 2 nav waits on PRD 19 tracks; `earnedRung()` vs `RosterNav.earned()` want reconciling. *Blocker: PRD 19 B0 company graph + an answer to PRD 21 §7 decision 4 (list non-opted-in businesses?).*
-- **Marketplace categories:** add `jobs` (reuse `listJobs()`); `projects` needs a decision on visibility.
-- **`requiresWorkspace(delivery)` has no frontend seam** — wire a `SessionGate`-shaped refusal into the buy control.
+- **Marketplace categories:** `projects` needs a decision on visibility.
 - **Gigs:** fixed bids have no escrow/milestones; two publish paths could converge; eval scores aren't on an insights lens.
 - **Upwork parity:** escrow books are correct but money out rides the env-gated `PAYOUT_WEBHOOK_URL` stub; no 1099/W-8BEN/W-9; no payment-verified badge, bid economy, packages or agency accounts.
 - **Freelance/talent:** avatars full-size; payout and notify-email webhooks unset; `available_for_hire` schema drift needs a migration or allowlist.
@@ -285,7 +285,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **No ad adapter has run against a live account** (eight, all recorded-payload tested). *Blocker: a sandbox/live account + developer app per network.*
 - **Ad and social accounts connect by pasted token, not OAuth.** Code side is a registry entry + callback per network. *Blocker: a developer app and publishing/spend review per network.*
 - **LinkedIn rows retired by 1102 (`retired:li-*`)** — needs a reconciler to re-point them, or an operator call to drop.
-- **YouTube publishes from the canvas, not from a social campaign** (`publishMode: 'none'`); `youtube_uploads` (1095) has no writer. Build the chunk sweep, then flip to `'media'`.
+- **YouTube processing status is read once, at upload completion** — nothing polls `videos.list` afterwards, so a campaign post reads posted while YouTube may still be processing or later reject it. Not blocked.
 
 ### Public surfaces, copy and SEO `[growth]`
 
@@ -299,8 +299,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **`/compare`: six arenas, leaf pages for one.** *Blocker: operator picks which of 23 markets get a "vs" page.*
 - **Related-article cards gone from 34 app routes** after guest preview. *Blocker: placement decision.*
 - **Tenant web surface has no renderer** for `GET /api/public/web/:owner/p/*` or the impression POST. Hoist `structured-data.ts` server-side in the same pass. Not blocked.
-- **Guest fixtures cover 16 endpoints** — add `/api/pmo/*`, `/api/insights/funnel`, marketplace lists.
-- **Docs/marketing residuals:** verify `/docs/*` proxies not redirects; `.page-inner` vs `PageContainer`; client-set teaser heads; per-article OG images; three unconnected feature lists; CSS-only header dropdowns; hero pacing in light mode.
+- **Docs/marketing residuals:** verify `/docs/*` proxies not redirects; `.page-inner` vs `PageContainer`; client-set teaser heads; per-article OG images; three unconnected feature lists; hero pacing in light mode.
 - **Distribution:** Hugging Face (account + write token), a reviewer test tenant (gate for Anthropic/Slack/Atlassian/AWS/Microsoft review), cloud marketplaces (legal entity + partner programs); `VSCE_PAT`, `OVSX_PAT`, `ACTION_MIRROR_*` unset.
 - **[integrations] Miro connector uses a personal token.** *Blocker: a registered Miro app + `MIRO_CLIENT_ID`/`MIRO_CLIENT_SECRET`.*
 

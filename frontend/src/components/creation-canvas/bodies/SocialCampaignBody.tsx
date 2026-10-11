@@ -42,12 +42,15 @@ export function SocialCampaignBody({ data }: CreationBodyProps) {
       {posts.slice(0, 8).map((raw, index) => {
         const post = asRecord(raw, {});
         const status = String(post.status ?? 'queued');
+        // `percent` only reads in `uploading` (a YouTube video going up in chunks);
+        // every other status ignores it.
+        const label = t(`socialStatus.${status}` as never, { percent: fmt.number(Number(post.uploadPercent) || 0) } as never);
         return <li key={String(post.id ?? index)} data-status={status}>
           <span aria-hidden>{networkGlyph(post.network)}</span>
           <b>{String(post.accountName || post.network || '')}</b>
           {post.permalink
-            ? <a href={String(post.permalink)} target="_blank" rel="noreferrer noopener">{t(`socialStatus.${status}`)}</a>
-            : <small>{t(`socialStatus.${status}`)}</small>}
+            ? <a href={String(post.permalink)} target="_blank" rel="noreferrer noopener">{label}</a>
+            : <small>{label}</small>}
         </li>;
       })}
     </ul>}

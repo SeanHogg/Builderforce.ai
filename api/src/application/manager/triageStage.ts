@@ -741,6 +741,7 @@ export async function runStallTriage(
         readiness = decideTicketReadiness({
           taskType: task.taskType,
           actionType: task.actionType,
+          title: task.title,
           hasBranch: !!task.gitBranch,
           // The recorded PR row, not `tasks.github_pr_url` — that column is stamped when a
           // PR opens and never cleared, so it cannot tell an open pull request from one
@@ -1112,7 +1113,7 @@ export async function applyRemedy(
       // re-dispatched into an infrastructure failure no run can fix.
       const returned = await returnToImplementation(env, db, {
         tenantId, taskId: task.id, fromStatus: task.status,
-        expectsCode: expectsCodeDeliverable(task.taskType, task.actionType),
+        expectsCode: expectsCodeDeliverable(task.taskType, task.actionType, task.title),
         reason: 'stall triage returned it to implementation — it reached review missing its expected deliverable, or with a failing build',
         actor: { kind: 'agent', ref: policy.managerRef ?? null, name: 'AI Manager' },
       });

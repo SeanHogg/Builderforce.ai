@@ -278,7 +278,7 @@ export async function auditAutonomyWiring(db: Db, args: { tenantId: number }): P
   const reviewRows = projectIds.length
     ? await db
       .select({
-        id: tasks.id, taskType: tasks.taskType, actionType: tasks.actionType,
+        id: tasks.id, title: tasks.title, taskType: tasks.taskType, actionType: tasks.actionType,
         gitBranch: tasks.gitBranch, githubPrUrl: tasks.githubPrUrl,
       })
       .from(tasks)
@@ -289,7 +289,7 @@ export async function auditAutonomyWiring(db: Db, args: { tenantId: number }): P
       ))
     : [];
   const noDeliverable = reviewRows.filter((t) =>
-    expectsCodeDeliverable(t.taskType, t.actionType) && !t.gitBranch && !t.githubPrUrl);
+    expectsCodeDeliverable(t.taskType, t.actionType, t.title) && !t.gitBranch && !t.githubPrUrl);
 
   checks.push(check({
     id: 'review_has_deliverable',

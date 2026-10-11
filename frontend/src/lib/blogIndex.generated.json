@@ -1,5 +1,49 @@
 [
   {
+    "slug": "post-your-launch-video-to-youtube-from-a-campaign",
+    "title": "Post your launch video to YouTube — from the same campaign as everything else",
+    "date": "2026-10-10",
+    "description": "YouTube was the one network a campaign could read but never post to, because a video does not fit in one request. It now goes up in the background, a confirmed piece at a time, with progress on the campaign beside every other network.",
+    "tags": [
+      "social",
+      "campaigns",
+      "youtube",
+      "video",
+      "launch",
+      "reach"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "publish-a-job-posting-to-your-job-boards",
+    "title": "Publish a job posting to your job boards — and know where it is actually live",
+    "date": "2026-10-10",
+    "description": "A job posting on the canvas could be written, counted and shortlisted against, and could not be put in front of a single candidate. It now goes out to your connected job boards from the card, and the card only says \"live\" where a board confirmed it.",
+    "tags": [
+      "hiring",
+      "recruiting",
+      "job-boards",
+      "connectors",
+      "creation-canvas",
+      "run"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "schedule-your-board-pack-from-finance",
+    "title": "Schedule the board pack once, and stop rebuilding it every month",
+    "date": "2026-10-10",
+    "description": "Report schedules have run on a cron for a while, but you couldn't see them, change them or make one from a page. Finance now has a Reports tab. Pick a report, a cadence and the people it goes to. A board pack sends a frame from one of your boards, picked board first and then frame. The experiments behind your numbers sit on the same page.",
+    "tags": [
+      "finance",
+      "reporting",
+      "board-pack",
+      "scheduling",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "your-private-evermind-on-your-machine",
     "title": "Your private Evermind, on your machine — with local models, connectors and approvals from your phone",
     "date": "2026-10-10",

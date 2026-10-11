@@ -49,6 +49,7 @@
 import { producerRoleForActionType } from '../kanban/roleCapability';
 import type { SignoffGateResult } from '../kanban/signoffGate';
 import type { DeliverableEvidence } from '../delivery/deliverableEvidence';
+import { isSpecShapedTitle } from './specShapedTicket';
 
 /** What the manager should do with a ticket sitting in review. */
 export type ReadinessAction =
@@ -98,6 +99,8 @@ export interface ReadinessInput {
   taskType: string | null;
   /** Learned/derived technical shape ('backend_api', 'frontend_ui', 'docs', …). */
   actionType: string | null;
+  /** The ticket title — the third, narrowest non-code signal (see `isSpecShapedTitle`). */
+  title?: string | null;
   hasBranch: boolean;
   /** Whether a pull request exists and whether it still has to land — see {@link TicketPrState}. */
   prState: TicketPrState;
@@ -166,11 +169,22 @@ const NON_CODE_ACTION_TYPES: ReadonlySet<string> = new Set(['docs', 'analysis', 
  * inherits its action type from the work it describes) was judged code-bearing and
  * bounced out of review with nothing to fix. The ticket KIND is the stronger signal
  * about what the deliverable IS, so it decides first.
+ *
+ * The TITLE is the last word, and only ever a "no": a plain `task` whose action type the
+ * classifier took from the work it describes ("Write the PRD for the billing API" →
+ * `backend_api`) is still a document ticket. The matcher is deliberately narrow — waving
+ * a code ticket through as a spec loses the work, which is worse than the bounded
+ * bounce it prevents (see `specShapedTicket.ts`).
  */
-export function expectsCodeDeliverable(taskType: string | null, actionType: string | null): boolean {
+export function expectsCodeDeliverable(
+  taskType: string | null,
+  actionType: string | null,
+  title?: string | null,
+): boolean {
   if (taskType && NON_CODE_TASK_TYPES.has(taskType)) return false;
   if (actionType && NON_CODE_ACTION_TYPES.has(actionType)) return false;
-  return producerRoleForActionType(actionType) != null;
+  if (producerRoleForActionType(actionType) == null) return false;
+  return !isSpecShapedTitle(title);
 }
 
 /**
@@ -182,7 +196,7 @@ export function expectsCodeDeliverable(taskType: string | null, actionType: stri
  * only delays the merge.
  */
 export function decideTicketReadiness(input: ReadinessInput): TicketReadiness {
-  const expectsCode = expectsCodeDeliverable(input.taskType, input.actionType);
+  const expectsCode = expectsCodeDeliverable(input.taskType, input.actionType, input.title);
   const hasPr = input.prState !== 'none';
   const at = (action: ReadinessAction, detail: string): TicketReadiness =>
     ({ action, expectsCode, detail, completion: null });

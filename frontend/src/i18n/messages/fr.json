@@ -775,7 +775,8 @@
       "inquiries": "Intérêt",
       "runway": "Runway",
       "cashflow": "Trésorerie",
-      "dashboard": "Tableau de bord"
+      "dashboard": "Tableau de bord",
+      "reports": "Rapports"
     },
     "primaryAria": "Principale",
     "destination": {
@@ -13108,6 +13109,7 @@
         "person": "Personnes",
         "advisor": "Conseillers",
         "gig": "Missions",
+        "job": "Emplois",
         "business": "Entreprises",
         "storefront": "Boutiques",
         "builtin": "Intégrés",
@@ -15871,6 +15873,9 @@
     "sprintScheduled": "{count} planifié(s) · déposez un ticket pour ajouter",
     "newSprint": "+ Nouveau sprint",
     "dropToDone": "Déposez un ticket ici pour marquer comme Terminé",
+    "placeToDone": "Prenez un ticket avec Déplacer, puis touchez ici pour le marquer Terminé",
+    "pickBanner": "Déplacement de « {title} ». Touchez une destination en surbrillance, ou appuyez sur Échap pour annuler.",
+    "cancelPick": "Annuler le déplacement",
     "inBacklog": "{count} en attente",
     "noMembers": "Aucun membre d'équipe — ajoutez une équipe à ce projet ou invitez des collègues.",
     "scorecardTitle": "Fiche de score · {name}",
@@ -19965,6 +19970,7 @@
       "visibilityPublic": "Publique",
       "publishYouTube": "Publier sur YouTube",
       "publishingYouTube": "Téléversement vers YouTube…",
+      "youtubeUploading": "Téléversement vers YouTube — {percent} % confirmé. Vous pouvez fermer ceci ; le téléversement continue.",
       "uploadedYouTube": "Téléversée sur YouTube",
       "youtubePublishFailed": "YouTube n’a pas pu publier cette vidéo. Vérifiez la connexion et réessayez.",
       "viewOnYouTube": "Voir sur YouTube",
@@ -20464,6 +20470,7 @@
       "socialCopy": "Texte",
       "socialStatus": {
         "queued": "En file",
+        "uploading": "Téléversement · {percent} %",
         "published": "Publiée",
         "pending": "En traitement",
         "failed": "En échec",
@@ -22475,6 +22482,7 @@
       "publishPending": "Accepté — le réseau le traite encore.",
       "publishFailed": "Cette publication n’a pas pu être publiée.",
       "campaignPublished": "Publié sur {published} comptes sur {targets}.",
+      "campaignPublishedUploading": "Publié sur {published} comptes sur {targets}. {uploading} encore en téléversement vers YouTube — la progression s’affiche dans la campagne.",
       "campaignScheduled": "Programmé pour {count} comptes.",
       "campaignUpdateFailed": "Cette campagne n’a pas pu être mise à jour.",
       "boardMedia": "Joindre depuis ce canevas",
@@ -23604,6 +23612,7 @@
         "board": "Plateforme",
         "postedAt": "Publiée le",
         "url": "URL",
+        "applicants": "Candidatures",
         "step": "Étape",
         "channel": "Canal",
         "delayDays": "Délai (jours)",
@@ -24314,6 +24323,23 @@
       "tooLarge": "Ce fichier dépasse la limite de 25 Mo pour les documents juridiques.",
       "uploadFailed": "Le téléversement a échoué. Réessayez.",
       "statusDraft": "Brouillon"
+    },
+    "jobDistribution": {
+      "title": "Diffuser sur les sites d'emploi",
+      "needsPosting": "Créez d'abord la véritable offre : cette carte n'a pas encore d'identifiant d'offre. Demandez à Brain de synchroniser l'offre d'emploi.",
+      "loading": "Lecture des sites d'emploi connectés…",
+      "noneYet": "Pas encore diffusée sur un site d'emploi.",
+      "noBoards": "Aucun site d'emploi n'est connecté à cet espace de travail.",
+      "connectBoards": "Connectez-en un dans Intégrations",
+      "chooseBoards": "Diffuser sur",
+      "distribute": "{count, plural, =0 {Diffuser} one {Diffuser sur # site} other {Diffuser sur # sites}}",
+      "distributing": "Diffusion…",
+      "statusPosted": "En ligne",
+      "statusFailed": "Échec",
+      "postedOn": "Depuis le {date}",
+      "view": "Voir l'offre",
+      "readFailed": "Impossible de lire où cette offre est diffusée.",
+      "distributeFailed": "L'offre n'a pas pu être diffusée. Réessayez."
     },
     "notice": {
       "addedToCanvas": "J’ai ajouté le contenu demandé au canevas.",
@@ -25754,6 +25780,7 @@
     "noticeStandupNotSummarized": "Pas encore de compte rendu. Générez-le d’abord depuis l’enregistrement de la réunion.",
     "noticeStandupNothingCaptured": "Rien n’a été capturé pendant cette mêlée, il n’y a donc pas de compte rendu.",
     "noticeStandupNoActionItems": "Le compte rendu ne mentionne aucune action ouverte.",
+    "noticeStandupNotOnSavedBoard": "Cette carte de mêlée n’est pas encore sur un tableau enregistré. Enregistrez le tableau, puis récupérez le compte rendu.",
     "noticeStandupActionItemsAlreadyOnBoard": "{count, plural, one {L’action est déjà sur le tableau} other {Les # actions sont déjà sur le tableau}}",
     "noticeStandupActionItemsPlaced": "{count, plural, one {# action placée sur le tableau} other {# actions placées sur le tableau}}",
     "noticeStandupMinutesNeedsAccount": "Connectez-vous pour lire le compte rendu d’une mêlée",
@@ -31317,7 +31344,8 @@
         "pay": "Connectez-vous pour effectuer un paiement.",
         "save": "Connectez-vous pour enregistrer ce travail.",
         "account": "Créez un compte pour débloquer ceci.",
-        "installTemplate": "Connectez-vous pour configurer ce modèle dans un espace de travail."
+        "installTemplate": "Connectez-vous pour configurer ce modèle dans un espace de travail.",
+        "takeCopy": "Une copie arrive sur un tableau de votre espace de travail : connectez-vous ou créez un compte pour l’obtenir."
       }
     },
     "wall": {
@@ -32585,6 +32613,96 @@
       "loading": "Chargement de votre tableau de bord…",
       "installPrompt": "Aucun tableau de bord KPI installé. Installez celui conçu pour votre secteur pour voir les indicateurs suivis par vos pairs.",
       "installCta": "Installer depuis la Marketplace"
+    },
+    "reports": {
+      "title": "Rapports planifiés",
+      "blurb": "Les rapports que cet espace de travail envoie par e-mail à intervalle régulier : points quotidiens, synthèses de direction, consolidations et dossiers de conseil construits à partir d’un cadre du canevas.",
+      "new": "Nouvelle planification",
+      "loading": "Chargement…",
+      "empty": "Aucun rapport n’est encore planifié. Créez-en un pour le recevoir par e-mail chaque jour, chaque semaine ou chaque mois.",
+      "crumb": "Finance · Rapports",
+      "createTitle": "Nouvelle planification de rapport",
+      "editTitle": "Modifier la planification",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "create": "Créer la planification",
+      "edit": "Modifier",
+      "pause": "Suspendre",
+      "resume": "Reprendre",
+      "delete": "Supprimer",
+      "deleteTitle": "Supprimer cette planification ?",
+      "deleteMessage": "Le rapport {type} ne sera plus envoyé. Les rapports déjà livrés ne sont pas concernés.",
+      "statusOn": "Actif",
+      "statusPaused": "Suspendu",
+      "cadenceSummary": "{cadence} à {hour}:00 UTC",
+      "recipientsCount": "{count, plural, one {# destinataire} other {# destinataires}}",
+      "subjectFrame": "Cadre du canevas",
+      "nextRun": "Prochain : {when}",
+      "nextRunPending": "Le prochain envoi sera fixé au prochain passage du planificateur",
+      "fixedOnEdit": "Le type de rapport, la fréquence et le cadre sont fixés une fois la planification créée. Pour les changer, créez-en une nouvelle.",
+      "needRecipients": "Ajoutez au moins un destinataire.",
+      "fixRecipients": "Corrigez les entrées qui ne sont pas des adresses e-mail.",
+      "needFrame": "Choisissez le cadre que ce dossier de conseil doit envoyer.",
+      "recipientsInvalid": "Adresse e-mail non valide : {entries}",
+      "recipientsHint": "Une adresse par ligne, ou séparées par des virgules.",
+      "recipientsPlaceholder": "cfo@example.com\nconseil@example.com",
+      "hourOption": "{hour}:00 UTC",
+      "boardPlaceholder": "Choisir un tableau",
+      "framePlaceholder": "Choisir un cadre",
+      "frameOption": "{title} ({count, plural, one {# tuile} other {# tuiles}})",
+      "noBoards": "Vous n’avez pas encore de tableau actif. Un dossier de conseil envoie un cadre de l’un d’eux.",
+      "noFrames": "Ce tableau n’a aucun cadre. Ajoutez un cadre autour des tuiles à envoyer, puis choisissez-le ici.",
+      "field": {
+        "type": "Rapport",
+        "cadence": "Fréquence",
+        "hour": "Heure d’envoi",
+        "recipients": "Destinataires",
+        "enabled": "Envoyer ce rapport",
+        "board": "Tableau",
+        "frame": "Cadre"
+      },
+      "type": {
+        "standup": "Point quotidien",
+        "code_review": "Revue de code",
+        "project_status": "État du projet",
+        "executive_summary": "Synthèse de direction",
+        "portfolio_rollup": "Consolidation du portefeuille",
+        "board_pack": "Dossier de conseil"
+      },
+      "cadence": {
+        "daily": "Quotidien",
+        "weekly": "Hebdomadaire",
+        "monthly": "Mensuel"
+      }
+    },
+    "validation": {
+      "title": "Démarches de validation",
+      "blurb": "Les expériences, tableaux de bord de validation et collecteurs de retours en cours dans cet espace de travail.",
+      "loading": "Chargement des validations…",
+      "empty": "Rien n’est encore en cours de validation. Les expériences, tableaux de bord de validation et collecteurs de retours apparaissent ici dès que vous en lancez un.",
+      "untitled": "Sans titre",
+      "more": "{count, plural, one {et # autre} other {et # autres}}",
+      "responses": "{count, plural, one {# réponse} other {# réponses}}",
+      "count": {
+        "validation": "{count, plural, one {# expérience} other {# expériences}}",
+        "dashboard": "{count, plural, one {# tableau de bord} other {# tableaux de bord}}",
+        "feedback_collector": "{count, plural, one {# collecteur} other {# collecteurs}}"
+      },
+      "kind": {
+        "validation": "Expérience",
+        "dashboard": "Tableau de bord",
+        "feedback_collector": "Collecteur de retours"
+      },
+      "status": {
+        "in_progress": "En cours",
+        "validated": "Validé",
+        "invalidated": "Invalidé",
+        "inconclusive": "Non concluant",
+        "running": "En cours d’exécution",
+        "active": "Actif",
+        "completed": "Terminé",
+        "disabled": "Désactivé"
+      }
     }
   },
   "proBonoBadge": {

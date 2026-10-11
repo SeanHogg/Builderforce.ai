@@ -105,6 +105,9 @@ export const GATED_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   // human to approve the consequence of an approval they have already given, and the
   // records it writes are two cards on a board — deletable, unlike a send.
   offer: ['send'],
+  // FO-B4. Distributing a requisition publishes it on public job boards in the
+  // workspace's name — the `socialCampaign.publish` shape. `refresh` stays open.
+  jobPosting: ['distribute'],
   // A `legalDocument`'s `share` mints a link an external party can read the real
   // file through with no Builderforce account, and `request-signature` emails a
   // counterparty — the same outbound shape as `dataRoom.share` and `contract.sign`.

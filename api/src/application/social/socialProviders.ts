@@ -38,6 +38,14 @@ export type SocialNetwork = typeof SOCIAL_NETWORKS[number];
 /** @see SocialProvider.publishMode */
 export type SocialPublishMode = 'text' | 'media' | 'none';
 
+/** @see SocialProvider.publishTransport */
+export type SocialPublishTransport = 'direct' | 'upload';
+
+/** A provider's transport, with the default applied in ONE place. */
+export function publishTransportOf(provider: Pick<SocialProvider, 'publishTransport'>): SocialPublishTransport {
+  return provider.publishTransport ?? 'direct';
+}
+
 export function isSocialNetwork(value: unknown): value is SocialNetwork {
   return typeof value === 'string' && (SOCIAL_NETWORKS as readonly string[]).includes(value);
 }
@@ -127,15 +135,27 @@ export interface SocialProvider {
    * rather than discovered one failed post at a time.
    *
    *   `text`  — a text-only post is fine; media is optional.
-   *   `media` — the network REFUSES a text-only post (Instagram, TikTok, Pinterest).
-   *   `none`  — read and measure only. YouTube is the honest case: publishing is a
-   *             resumable upload of the video bytes, which a declarative HTTP manifest
-   *             cannot express and a Worker should not proxy.
+   *   `media` — the network REFUSES a text-only post (Instagram, TikTok, Pinterest,
+   *             and YouTube, where the media is the post).
+   *   `none`  — read and measure only.
    *
    * One field rather than two booleans, because "can it publish" and "does it need
    * media" are the same question asked twice and could otherwise disagree.
    */
   publishMode: SocialPublishMode;
+  /**
+   * How a publish reaches the network. Absent means `direct`.
+   *
+   *   `direct` — {@link SocialProvider.publish} is one request through the connector.
+   *   `upload` — the post is a durable upload JOB: the bytes are sent in chunks across
+   *              many Worker invocations (YouTube's resumable upload, `youtube_uploads`).
+   *              A campaign ENQUEUES the job and the post settles when the job does;
+   *              `publish()` is never called for it.
+   *
+   * Declared here, as data, so the campaign engine asks the registry rather than
+   * naming a network — a second network that needs an upload job is a line here.
+   */
+  publishTransport?: SocialPublishTransport;
   identity(call: SocialCall, fields: Record<string, string>): Promise<SocialIdentity>;
   listPosts(
     call: SocialCall,
@@ -521,11 +541,11 @@ const tiktok: SocialProvider = {
 };
 
 // ---------------------------------------------------------------------------
-// YouTube — read and measure only
+// YouTube — read and measure through the connector, publish through an upload job
 // ---------------------------------------------------------------------------
 
 const youtube: SocialProvider = {
-  network: 'youtube', label: 'YouTube', connectorKey: 'youtube', publishMode: 'none',
+  network: 'youtube', label: 'YouTube', connectorKey: 'youtube', publishMode: 'media', publishTransport: 'upload',
   accountFields: [],
   async identity(call) {
     const channel = asJsonRecord(list((await ask(call, 'get_my_channel')).data)[0]);
@@ -563,9 +583,10 @@ const youtube: SocialProvider = {
     });
   },
   async publish() {
-    // Backstop only — `publishMode: 'none'` is what callers check. Reaching this means
-    // a caller skipped that check, and silently doing nothing would be worse.
-    throw new SocialProviderError('YouTube cannot be published to from here — uploading a video needs a resumable upload. Publish in YouTube Studio and the feed will pick it up.', 400, false);
+    // Backstop only — `publishTransport: 'upload'` is what callers check, and a campaign
+    // queues the resumable upload job instead of calling this. Reaching it means a
+    // caller skipped that check, and silently doing nothing would be worse.
+    throw new SocialProviderError('YouTube videos go out as an upload — publish a video to YouTube as a campaign (or from the video on the canvas), and the upload carries on in the background.', 400, false);
   },
 };
 

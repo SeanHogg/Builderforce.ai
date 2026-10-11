@@ -33,7 +33,7 @@ import { FlowStepBody } from '../FlowStepBody';
 import { CanvasTransclusionBody } from '../CanvasTransclusionBody';
 import type { CreationBodyProps } from './types';
 import {
-  CalendarBody, ClockBody, ComponentBody, DiagnosticsObjectBody, FrameObjectBody, LegalDocumentBody,
+  CalendarBody, ClockBody, ComponentBody, DiagnosticsObjectBody, FrameObjectBody, JobPostingBody, LegalDocumentBody,
   ResumeBody, VideoBody, WebPageBody, WebsiteBody,
 } from './adapters';
 import { FeatureSummaryBody, MockupSetBody, NoteBody, RoadmapBody, StaffBody, VoiceBody } from './SimpleBodies';
@@ -163,6 +163,7 @@ const ROWS: ReadonlyArray<readonly [Iterable<CreationObjectKind>, CreationBody]>
   [['release'], ReleaseBody],
   [['calendar'], CalendarBody],
   [['legalDocument'], LegalDocumentBody],
+  [['jobPosting'], JobPostingBody],
 ];
 
 function bodyTable(rows: typeof ROWS): Partial<Record<CreationObjectKind, CreationBody>> {

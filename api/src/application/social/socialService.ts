@@ -37,9 +37,11 @@ import {
   clampFeedLimit,
   isSocialNetwork,
   MAX_FEED_LIMIT,
+  publishTransportOf,
   socialProviderForConnector,
   SOCIAL_CONNECTOR_KEYS,
   type SocialPublishMode,
+  type SocialPublishTransport,
   SocialProviderError,
   type SocialAccountField,
   type SocialFeedItem,
@@ -64,6 +66,9 @@ export interface SocialAccountView {
   missingFields: SocialAccountField[];
   /** What this network accepts from a publish — `none` means read and measure only. */
   publishMode: SocialPublishMode;
+  /** `upload` — publishing is a background upload job (YouTube), so it goes out as a
+   *  campaign with per-post progress rather than as one immediate request. */
+  publishTransport: SocialPublishTransport;
   lastTestOk: boolean | null;
   lastUsedAt: string | null;
 }
@@ -127,6 +132,7 @@ export function socialAccountView(account: ResolvedAccount_): SocialAccountView 
     network: account.provider.network,
     networkLabel: account.provider.label,
     publishMode: account.provider.publishMode,
+    publishTransport: publishTransportOf(account.provider),
   };
 }
 

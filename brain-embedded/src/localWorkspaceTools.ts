@@ -205,6 +205,28 @@ export function isRepoPublishTool(name: string): boolean {
   return REPO_PUBLISH_TOOLS.has(name);
 }
 
+/**
+ * HOST reads whose answer is REPOSITORY STATE — branches, ahead/behind counts, merge
+ * checks, PR state — rather than file bytes. `review_ticket_branches` (the VS Code
+ * host's one-call branch review) is the one today: read-only, and 21–31s a call, so an
+ * identical repeat inside one run is worth answering from the read cache.
+ *
+ * It was kept OUT of the read-dedupe because nothing said which mutations stale it: a
+ * cached review that survived a `git_push` would present the pre-push branch picture as
+ * current. Naming the class here is what lets `ReadCoverage.invalidate` forget these on
+ * exactly the calls that move repository state — every {@link REPO_PUBLISH_TOOLS} entry,
+ * every {@link UNSCOPED_MUTATION_TOOLS} entry (sync, undo/redo, a non-read-only shell
+ * command), and any platform call (a PR merge, a ticket update — the review composes the
+ * ticket list) — and keep them across a file edit, `git_status` or `git_diff`, which
+ * change no branch.
+ */
+export const REPO_STATE_READ_TOOLS: ReadonlySet<string> = new Set(['review_ticket_branches']);
+
+/** Is this a host read of repository state? See {@link REPO_STATE_READ_TOOLS}. */
+export function isRepoStateReadTool(name: string): boolean {
+  return REPO_STATE_READ_TOOLS.has(name);
+}
+
 export function isLocalWorkspaceTool(name: string): boolean {
   return LOCAL_WORKSPACE_TOOLS.has(name);
 }

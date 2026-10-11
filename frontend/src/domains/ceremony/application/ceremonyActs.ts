@@ -7,23 +7,26 @@
  * every seat — and there the relationship ended. The minutes, the decisions and the
  * follow-up work all landed on the companion meeting, on a different surface, and the
  * card that convened the meeting went on displaying the sentence it was created with.
- * The board held the meeting's TRIGGER and never its OUTPUT.
  *
- * `standup.minutes` is the other half: it reads the ceremony's companion meeting, takes
- * the action items out of the minutes, and places each one on the board as a task beside
- * the card that called the meeting — where the rest of the work already is.
+ * ── ONE WRITER, AND IT IS ON THE SERVER ─────────────────────────────────────
+ * The write-back now happens BY ITSELF: when a ceremony's minutes are written, or a
+ * ceremony concludes over minutes that exist, the API replaces the card's summary and
+ * places each open action item beside it as a task
+ * (`api/src/application/ceremony/ceremonyMinutesToCanvas.ts`). This act used to parse
+ * the minutes in the browser and place the cards itself, keyed by title — a second
+ * writer with a second idempotency key, so the two together put one meeting's action
+ * items on the board twice.
  *
- * ── IDEMPOTENT, BECAUSE IT WILL BE PRESSED TWICE ────────────────────────────
- * Minutes get regenerated and stand-ups get reopened, so the act matches what is already
- * on the board by title and places only what is missing. Pressing it again after a
- * re-summarize adds the new items and duplicates none of the old ones, which is the
- * behaviour `assignment.distribute` settled on for the same reason.
+ * So `standup.minutes` is now the on-demand door to the same use case: it asks the
+ * server to sync and says what happened. The placed cards arrive through
+ * `canvas.changed`, the way any collaborator's edit does. Pressing it twice, or after
+ * the automatic sync already ran, changes nothing.
  */
 
-import { meetingsApi, ceremonySessionsApi } from '@/lib/builderforceApi';
-import { actionItemTitle, parseMeetingMinutes } from '@/lib/meetings/meetingMinutes';
+import { ceremonySessionsApi, type CeremonyMinutesToCanvasResult } from '@/lib/builderforceApi';
 import { resourceIdOfType } from '@builderforce/creation-canvas-contract';
-import { actEdge, type CardAct } from '@/domains/canvas/application/CardAct';
+import type { CardAct } from '@/domains/canvas/application/CardAct';
+import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
 import type { CanvasObject, CreationObjectKind } from '@/domains/canvas/domain/canvasObject';
 
 /** The ceremony a stand-up card stands for, or null when it has never been convened. */
@@ -31,80 +34,38 @@ export function ceremonyIdOf(object: Pick<CanvasObject, 'data'>): string | null 
   return resourceIdOfType(object.data.resourceId, 'ceremony');
 }
 
-/** Compare titles the way a person would: case and surrounding space are not a
- *  difference, so a re-summarize that recapitalises an owner does not re-place the task. */
-function titleKey(text: unknown): string {
-  return String(text ?? '').trim().toLowerCase();
+/**
+ * The sentence for a sync outcome. Every refusal is NAMED — "never convened", "still
+ * running", "nobody has generated minutes" and "nothing was said" are different things
+ * for the person pressing the button, and exactly one of them is fixed by pressing it
+ * again later.
+ */
+export function minutesSyncNotice(result: CeremonyMinutesToCanvasResult, t: CanvasTextTranslator): string {
+  switch (result.status) {
+    case 'not_found': return t('noticeStandupNeverConvened');
+    case 'still_running': return t('noticeStandupStillRunning');
+    case 'no_meeting': return t('noticeStandupNoMeeting');
+    case 'not_summarized': return t('noticeStandupNotSummarized');
+    case 'nothing_captured': return t('noticeStandupNothingCaptured');
+    case 'synced':
+      // The card is on no SAVED board yet — the server can only write to what it holds.
+      if (result.boards === 0) return t('noticeStandupNotOnSavedBoard');
+      if (result.placed > 0) return t('noticeStandupActionItemsPlaced', { count: result.placed });
+      if (result.actionItems === 0) return t('noticeStandupNoActionItems');
+      return t('noticeStandupActionItemsAlreadyOnBoard', { count: result.actionItems });
+  }
 }
 
-/**
- * `standup.minutes` — pull the meeting's action items onto the board as tasks.
- *
- * Every refusal is NAMED. "This stand-up was never convened", "it is still running",
- * "nobody has generated minutes" and "the minutes listed no action items" are four
- * different things for the person pressing the button, and exactly one of them is
- * something they can act on by pressing it again later.
- */
+/** `standup.minutes` — bring the meeting's minutes and action items onto the board. */
 export const pullStandupMinutesAct: CardAct = {
   kind: 'standup' as CreationObjectKind,
   actions: ['minutes'],
   accountRequired: 'noticeStandupMinutesNeedsAccount',
   failureNotice: 'noticeStandupMinutesFailed',
-  async run({ object, board, t }) {
+  async run({ object, t }) {
     const ceremonyId = ceremonyIdOf(object);
     if (!ceremonyId) return { notice: t('noticeStandupNeverConvened') };
-
-    const detail = await ceremonySessionsApi.detail(ceremonyId);
-    const session = detail.session;
-    if (!session) return { notice: t('noticeStandupNeverConvened') };
-    // A live ceremony has no minutes by construction — the transcript is still being
-    // written. Saying so beats "no action items", which reads as a finished meeting
-    // that produced nothing.
-    if (session.status === 'active') return { notice: t('noticeStandupStillRunning') };
-    if (!session.meetingId) return { notice: t('noticeStandupNoMeeting') };
-
-    const record = await meetingsApi.transcript(session.meetingId);
-    if (!record.summary) {
-      return {
-        notice: record.segments.length
-          ? t('noticeStandupNotSummarized')
-          : t('noticeStandupNothingCaptured'),
-      };
-    }
-
-    const { actionItems } = parseMeetingMinutes(record.summary);
-    // A ticked item was already dealt with in the room; placing it would be handing the
-    // team work they have just reported as finished.
-    const open = actionItems.filter((item) => !item.done);
-    if (!open.length) return { notice: t('noticeStandupNoActionItems') };
-
-    const already = new Set(board.objects.filter((node) => node.data.kind === 'task').map((node) => titleKey(node.data.title)));
-    const toPlace = open.filter((item) => !already.has(titleKey(actionItemTitle(item))));
-    if (!toPlace.length) return { notice: t('noticeStandupActionItemsAlreadyOnBoard', { count: open.length }) };
-
-    const created = toPlace.map((item, index) => {
-      const node = board.create('task' as CreationObjectKind, {
-        x: object.position.x + 420,
-        y: object.position.y + index * 170,
-      });
-      node.data = {
-        ...node.data,
-        title: actionItemTitle(item),
-        // The owner is the name the minutes used, kept as written. Resolving it to a
-        // member here would be a guess made silently on somebody's behalf; the task
-        // drawer's assignee picker is where a person makes it, seeing who they picked.
-        subtitle: item.owner ?? undefined,
-        // Where it came from, so a task nobody remembers agreeing to can be traced back
-        // to the meeting that agreed it.
-        sourceCeremonyId: ceremonyId,
-      };
-      return node;
-    });
-
-    return {
-      add: { nodes: created, edges: created.map((node) => actEdge(object, node, 'action item', 'derivation')) },
-      notice: t('noticeStandupActionItemsPlaced', { count: created.length }),
-    };
+    return { notice: minutesSyncNotice(await ceremonySessionsApi.minutesToCanvas(ceremonyId), t) };
   },
 };
 
