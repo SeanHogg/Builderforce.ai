@@ -7,7 +7,7 @@ import {
   retryArchitectureAnalysis,
   runArchitectureAnalysis,
   type ArchitectureRunSummary,
-} from '@/lib/api';
+} from '@/lib/architectureApi';
 import { ApiRequestError, faultMessage, faultText } from '@/lib/apiClient';
 import { DiagnosticsResultsPanel } from '@/components/DiagnosticsResultsPanel';
 import {
