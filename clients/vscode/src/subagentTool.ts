@@ -52,9 +52,10 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
       const asked = args.read_only === false;
       const writable = asked && !!deps.run?.confirmWrite;
       const role = delegationRole(args.role, !writable);
-      // WHO is doing this slice. An unresolvable name — or an agent without the slice's
-      // delivery role (Developer for code, QA for verify) — is REFUSED rather than run
-      // anonymously: a parent that believes Ada did the work will report that she did.
+      // WHO is doing this slice. An unresolvable name is REFUSED rather than run
+      // anonymously: a parent that believes Ada did the work will report that she did. An
+      // agent without the slice's delivery role runs it as an on-demand Developer/QA
+      // persona instead, and the `staffing` note says so.
       const who = await resolveChildPersona(deps, str(args.as_agent), role);
       if (!who.ok) return JSON.stringify({ ok: false, label, error: who.error });
       const report = await runLocalChild(deps, {
@@ -69,7 +70,11 @@ export function subagentToolDef(deps: SubagentToolDeps): ToolDef {
       }, root);
       // Say it plainly rather than silently narrowing: a parent that believes a child
       // made an edit will not make it, and the change would be lost.
-      return JSON.stringify({ ...report, ...(asked && !writable ? { writeDeclined: WRITE_DECLINED } : {}) });
+      return JSON.stringify({
+        ...report,
+        ...(who.note ? { staffing: who.note } : {}),
+        ...(asked && !writable ? { writeDeclined: WRITE_DECLINED } : {}),
+      });
     },
   };
 }

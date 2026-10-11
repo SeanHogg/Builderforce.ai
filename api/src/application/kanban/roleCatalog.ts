@@ -93,3 +93,13 @@ export function isReviewRole(key: string): boolean {
 export function isBuiltinRoleKey(key: string): boolean {
   return BY_KEY.has(key);
 }
+
+/**
+ * The delivery role keys a caller asked an agent to hold, kept to the catalog's keys and
+ * de-duplicated. `undefined` when the caller sent none (leave the agent's roles alone);
+ * an unknown key is dropped rather than stored, so a typo never becomes a role nobody fills.
+ */
+export function parseDeliveryRoleKeys(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return [...new Set(raw.filter((k): k is string => typeof k === 'string').map((k) => k.trim()).filter(isBuiltinRoleKey))];
+}

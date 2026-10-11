@@ -100,7 +100,7 @@ export const AUTO_RUN_REASON_TEXT: Record<AutoRunReason, string> = {
   cooldown_active: 'No run yet: the ticket\'s last run failed or finished with nothing to show for it, so it is in its back-off window before the next autonomous attempt.',
   not_executable: 'No run: this is a system/coordination chore, never dispatched to an agent.',
   pending_approval: 'No run: this is an external feedback request awaiting human acceptance in triage.',
-  execution_disabled: 'No run: agent execution is switched off for this workspace, so nothing runs — Run now included — until a manager re-enables it in Settings.',
+  execution_disabled: 'No cloud run: agent execution is switched off for this workspace, so no cloud or autonomous run starts — Run now included — until a manager re-enables it in Settings. Local sub-agents in an editor session are not affected.',
   lane_requirement_gate: 'No run by the lane\'s normal agent: this lane requires a role sign-off that is still outstanding, so the requirement gate dispatched that reviewer/producer instead and suppressed the normal agent until the review clears.',
 };
 

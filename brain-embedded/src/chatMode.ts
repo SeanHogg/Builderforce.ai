@@ -233,8 +233,13 @@ export function chatWorkDirective(chatId: number, opts?: ChatWorkDirectiveOption
   const localSpawn = opts?.canFanOut
     ? 'spawn_agents (several tickets whose files do not overlap, side by side — one workstream per ticket, with ticket=<id>, paths and as_agent) or spawn_agent (one slice)'
     : 'spawn_agent (one slice at a time)';
+  // `as_agent` is OPTIONAL, and saying so is load-bearing: worded as a requirement, a
+  // workspace with no Developer read as "nobody can do this" — chat #133 asked the user
+  // how to proceed, chat #134 stalled on a refused fan-out. A slice handed to a teammate
+  // without its role now runs as an on-demand role persona (`staffDelegation`), and the
+  // run can hire a real Developer with `builtin_cloud_agents_create`.
   const pickByRole =
-    'as_agent = the agent whose role fits the slice: a Developer for a code slice, a QA agent for a test or verify slice (builtin_cloud_agents_persona_brief with role=developer or role=qa-tester says who holds it; an agent without the role is refused)';
+    'as_agent = the agent whose role fits the slice: a Developer for a code slice, a QA agent for a test or verify slice (builtin_cloud_agents_persona_brief with role=developer or role=qa-tester says who holds it). A teammate without the role runs the slice as an on-demand Developer/QA sub-agent, not as themselves. When nobody holds the role, OMIT as_agent, or hire one first with builtin_cloud_agents_create (name, title, roleKeys:["developer"]) and run AS them; a missing Developer is never a reason not to delegate';
   // The roster VERBATIM, so the model never spends a discovery call to learn who it may
   // dispatch to — and never has to guess a ref from a name. `dispatch_agent` takes the
   // ref; a human reads the name; both are here so neither has to be inferred.
@@ -257,7 +262,7 @@ export function chatWorkDirective(chatId: number, opts?: ChatWorkDirectiveOption
     ? `• FINISH WHAT YOU FILED. A ticket nobody is working has not started: every ticket you filed is either done in this session or handed to a local sub-agent (${pickByRole}). builtin_chats_dispatch_agent starts a CLOUD run — use it only when the user asks for the work to run in the cloud, or it must run where this session is not. A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n`
     : `• FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict — read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (${staffed ? 'one of the agents above, or ' : ''}builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) — a Developer for code work, a QA agent for test work — and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.\n`;
   const refused = delegatesLocally
-    ? ' An execution kill-switch or run cap stops CLOUD runs only — hand the slice to a local sub-agent instead.'
+    ? ' An execution kill-switch or run cap stops CLOUD runs only — an `autoRun: execution_disabled` verdict on a ticket is about the cloud — so hand the slice to a local sub-agent instead. When the user asks for sub-agents, start them; do not ask how to proceed.'
     : ' If the work is something you could do here, do it instead.';
   return (
     `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.\n` +

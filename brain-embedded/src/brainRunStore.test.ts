@@ -1182,6 +1182,87 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
     expect(toolResults.join('\n')).toContain('ask_user needs');
     expect(rec.sent.at(-1)).toBe('Closing them, then.');
   });
+
+  // Chat #133: "complete the remaining tickets using subagents" — the run held
+  // spawn_agents and asked "execution is disabled… no developer agents" instead.
+  describe('an explicit sub-agent request is started, not asked about', () => {
+    const SPAWN_TOOLS = ['read_file', 'spawn_agent', 'spawn_agents'].map((name) => ({
+      type: 'function' as const,
+      function: { name, description: name, parameters: {} },
+    }));
+    const SPAWN = { id: 's1', name: 'spawn_agents', args: JSON.stringify({ read_only: false, workstreams: [{ label: 'S2', task: 'do S2', ticket: '2861', paths: ['a'] }] }) };
+
+    it('answers the question with the delegation contract, and the next turn spawns', async () => {
+      const rec = recorder();
+      const toolResults: string[] = [];
+      const ran: string[] = [];
+      let turn = 0;
+      await startRun(4406, {
+        resolvedSystemPrompt: 'sys',
+        tools: SPAWN_TOOLS,
+        runTool: async (name) => { ran.push(name); return { ok: true }; },
+        stream: async (opts) => {
+          for (const m of opts.messages) if (m.role === 'tool') toolResults.push(String(m.content));
+          turn += 1;
+          if (turn === 1) {
+            return {
+              text: '',
+              toolCalls: [{ id: 'q1', name: 'ask_user', args: JSON.stringify({ question: 'Execution is disabled. How would you like to proceed?', options: [{ label: 'Dispatch to cloud' }, { label: 'Wait' }] }) }],
+              finishReason: 'tool_calls',
+            };
+          }
+          if (turn === 2) return { text: '', toolCalls: [SPAWN], finishReason: 'tool_calls' };
+          return { text: 'S2 delivered by a sub-agent.', toolCalls: [], finishReason: 'stop' };
+        },
+        persistence: rec.persistence,
+        userTurn: 'complete the remaining tickets using subagents',
+      });
+      expect(getRunTrace(4406).some((e) => e.label === 'loop.recover_undelegated_request')).toBe(true);
+      expect(toolResults.join('\n')).toContain('SUB-AGENTS');
+      expect(ran).toContain('spawn_agents');
+      // The question was never settled as the reply — no card for the user to answer.
+      expect(rec.sent.some((m) => parseAskUser(m) !== null)).toBe(false);
+    });
+
+    it('re-prompts a prose ending once, and the next turn spawns', async () => {
+      const rec = recorder();
+      const ran: string[] = [];
+      let turn = 0;
+      await startRun(4407, {
+        resolvedSystemPrompt: 'sys',
+        tools: SPAWN_TOOLS,
+        runTool: async (name) => { ran.push(name); return { ok: true }; },
+        stream: async () => {
+          turn += 1;
+          if (turn === 1) return { text: 'Agent execution is disabled in this workspace and there are no developer agents.', toolCalls: [], finishReason: 'stop' };
+          if (turn === 2) return { text: '', toolCalls: [SPAWN], finishReason: 'tool_calls' };
+          return { text: 'S2 delivered by a sub-agent.', toolCalls: [], finishReason: 'stop' };
+        },
+        persistence: rec.persistence,
+        userTurn: 'complete the remaining tickets using subagents',
+      });
+      expect(getRunTrace(4407).some((e) => e.label === 'loop.recover_undelegated_request')).toBe(true);
+      expect(ran).toContain('spawn_agents');
+    });
+
+    it('still settles on the question when the user did not ask for sub-agents', async () => {
+      const rec = recorder();
+      await startRun(4408, {
+        resolvedSystemPrompt: 'sys',
+        tools: SPAWN_TOOLS,
+        runTool: async () => ({ ok: true }),
+        stream: async () => ({
+          text: '',
+          toolCalls: [{ id: 'q1', name: 'ask_user', args: JSON.stringify({ question: 'Which slice first?', options: [{ label: 'S2' }, { label: 'S3' }] }) }],
+          finishReason: 'tool_calls',
+        }),
+        persistence: rec.persistence,
+        userTurn: 'complete the remaining tickets',
+      });
+      expect(getRunTrace(4408).some((e) => e.label === 'loop.recover_undelegated_request')).toBe(false);
+      expect(parseAskUser(rec.sent[0] ?? '')?.question).toBe('Which slice first?');
+    });
+  });
 });
 
 describe('the reasoning channel a run persists', () => {

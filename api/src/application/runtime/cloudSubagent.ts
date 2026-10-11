@@ -20,7 +20,7 @@ import {
   type Capability,
   type CapabilityProvider,
   type ModelRole,
-  delegationRoleRefusal,
+  staffDelegation,
   inScope,
   type OrchestrationCapability,
   type RepoWriteCapability,
@@ -223,13 +223,14 @@ export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationC
       // attributed to expertise nobody applied. A delegation to nobody is information.
       const asAgent = typeof input.asAgent === 'string' ? input.asAgent.trim() : '';
       let persona: { name: string; brief: string } | undefined;
+      // Set when the named agent lacks the slice's delivery role (Developer for code, QA
+      // for verify): the child runs as an on-demand role persona, NOT as that agent, and
+      // this says so — the editor's children run the same rule (`staffDelegation`).
+      let staffing: string | undefined;
       if (asAgent) {
         const resolved = await deps.personaBrief?.(asAgent);
-        // An agent without the slice's delivery role (Developer for code, QA for verify)
-        // is refused like an unknown one — the editor's children run the same check.
-        const roleRefusal = resolved && input.role ? delegationRoleRefusal(resolved, input.role) : null;
-        if (!resolved || roleRefusal) {
-          const result: SubagentResult = { ok: false, error: roleRefusal ?? `no agent named "${asAgent}" in this workspace` };
+        if (!resolved) {
+          const result: SubagentResult = { ok: false, error: `no agent named "${asAgent}" in this workspace` };
           await deps.record?.({
             label: input.label,
             detail: { readOnly, asAgent, ms: Date.now() - started },
@@ -237,11 +238,20 @@ export function buildOrchestrationCapability(deps: SubagentDeps): OrchestrationC
           });
           return result;
         }
-        persona = { name: resolved.name, brief: resolved.brief };
+        const staffed = input.role ? staffDelegation(resolved, input.role) : { kind: 'as-agent' as const };
+        if (staffed.kind === 'on-demand') {
+          persona = staffed.persona;
+          staffing = staffed.note;
+        } else {
+          persona = { name: resolved.name, brief: resolved.brief };
+        }
       }
       /** Echoed on the result and the timeline so the answer is attributable to a REAL
-       *  teammate rather than to the string the parent guessed. */
-      const asAgentEcho = persona ? { asAgent: { ref: asAgent, name: persona.name } } : {};
+       *  teammate rather than to the string the parent guessed — or, for an on-demand
+       *  role persona, to nobody, with the note saying why. */
+      const asAgentEcho = staffing
+        ? { staffing }
+        : persona ? { asAgent: { ref: asAgent, name: persona.name } } : {};
 
       try {
         const run = await runSubagent<ToolSchema>({

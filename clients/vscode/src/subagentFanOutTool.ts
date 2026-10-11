@@ -90,7 +90,12 @@ export function subagentFanOutToolDef(deps: SubagentToolDeps): ToolDef {
       const placeholders = reports.flatMap((r) => r.placeholders ?? []);
       return JSON.stringify({
         ok: reports.every((r) => r.ok),
-        workstreams: reports,
+        // A slice whose named agent lacked its delivery role ran as an on-demand persona;
+        // its note rides on that workstream so the parent reports who really did it.
+        workstreams: reports.map((r, i) => {
+          const note = (people[i] as { note?: string }).note;
+          return note ? { ...r, staffing: note } : r;
+        }),
         ...(changedFiles.length ? { changedFiles } : {}),
         ...(placeholders.length ? { placeholders } : {}),
         ...(asked && !writable ? { writeDeclined: WRITE_DECLINED } : {}),

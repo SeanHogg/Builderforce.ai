@@ -349,6 +349,9 @@ export interface SubagentResult {
    *  "Ada" and this says which agent that turned out to be, so the answer can be
    *  attributed to a real teammate rather than to the string the parent guessed. */
   asAgent?: { ref: string; name: string };
+  /** Set when the named agent lacked the slice's delivery role and the child ran as an
+   *  on-demand role persona instead (`staffDelegation`) — says who really did the work. */
+  staffing?: string;
   /** Files the child wrote — its writes happen inside one call the parent cannot see. */
   changedFiles?: string[];
   /** The ticket the child delivered, echoed from the request. */

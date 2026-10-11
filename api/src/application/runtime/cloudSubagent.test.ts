@@ -268,16 +268,19 @@ describe('buildOrchestrationCapability · as_agent', () => {
     expect(complete).not.toHaveBeenCalled();
   });
 
-  it('refuses a code slice for an agent with no developer role, and spends nothing', async () => {
+  it('runs a code slice for an agent with no developer role as an on-demand Developer, unattributed', async () => {
+    // Chat #134: refusing here stopped the work with no Developer to retry with.
     const complete = vi.fn(async (_args: CompleteArgs) => answer('done'));
     const result = await withPersona({
       complete,
       personaBrief: async () => ({ ...ada, roleKeys: ['qa-tester'] }),
     }).spawn({ label: 'port', task: 'port it', asAgent: 'Ada', role: 'code' });
 
-    expect(result).toMatchObject({ ok: false });
-    expect((result as { error: string }).error).toContain('needs a developer');
-    expect(complete).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true });
+    expect(complete).toHaveBeenCalled();
+    // Never attributed to Ada — the note says who really did it.
+    expect((result as { asAgent?: unknown }).asAgent).toBeUndefined();
+    expect((result as { staffing?: string }).staffing).toContain('on-demand Developer');
   });
 
   it('refuses when the surface has no roster at all, rather than ignoring as_agent', async () => {

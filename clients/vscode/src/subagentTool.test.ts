@@ -232,8 +232,9 @@ describe("subagentToolDef", () => {
       expect(stream).not.toHaveBeenCalled();
     });
 
-    it("refuses a verify slice for an agent with no QA role, naming the role it needs", async () => {
-      const stream = streamOf({ text: "should never run" });
+    it("runs a verify slice for an agent with no QA role as an on-demand QA Tester, unattributed", async () => {
+      // Chat #134: refusing a mismatched teammate stopped the work outright.
+      const stream = streamOf({ text: "reviewed" });
       const tool = subagentToolDef({
         stream: async () => stream as never,
         catalog: () => CATALOG,
@@ -242,10 +243,11 @@ describe("subagentToolDef", () => {
       const out = JSON.parse(
         await tool.execute({ label: "check it", task: "review the diff", as_agent: "Ada", role: "verify" }, "/repo"),
       );
-      expect(out.ok).toBe(false);
-      expect(out.error).toContain("qa-tester");
-      expect(out.error).toContain("role=qa-tester");
-      expect(stream).not.toHaveBeenCalled();
+      expect(out.ok).toBe(true);
+      expect(stream).toHaveBeenCalled();
+      expect(out.asAgent).toBeUndefined();
+      expect(out.staffing).toContain("on-demand QA Tester");
+      expect(out.staffing).toContain("not attributed to Ada");
     });
 
     it("runs the slice when the agent holds the role it needs", async () => {

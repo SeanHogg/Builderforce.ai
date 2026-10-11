@@ -1,3 +1,24 @@
+## ✅ RESOLVED 2026-10-11 — "Use sub-agents" starts sub-agents, and a coding slice always has a Developer (agent-tools 2026.10.4 · brain-embedded 2026.10.14 · VSIX 2026.10.17 · api 2026.10.28)
+
+Two VS Code chats asked for sub-agents and got none:
+- **Chat #133**, "complete the remaining tickets using subagents". MiniMax-M1 had `spawn_agents` advertised and named it in its own reasoning. It still called `ask_user` ("execution is disabled… no developer agents"). Both reasons were about the cloud: every ticket's `autoRun` verdict read "No run… nothing runs", and the Work directive worded `as_agent` as a requirement.
+- **Chat #134.** `spawn_agents` handed a code slice to "John Coder" (title "Coder Agent", no role keys). `delegationRoleRefusal` refused the whole fan-out. The workspace had no Developer to retry with, and the brain had no way to create one.
+
+Fixes:
+- **The loop enforces an explicit request** (`brain-embedded/src/delegationRequest.ts`, the twin of `selfReviewShip`). The gate fires when the user asked for sub-agents, the host can spawn, and the run has made no spawn attempt. Then:
+  - an `ask_user` call is answered with the local-delegation contract instead of settling as the reply;
+  - a prose ending is re-prompted once.
+
+  Both are logged as `loop.recover_undelegated_request`.
+- **No refusal on a role mismatch** (`staffDelegation` in agent-tools; `delegationRoleRefusal` deleted). A teammate without the slice's delivery role does not take the slice; it runs as an on-demand Developer or QA Tester persona. It is never attributed to that teammate, and the result carries a `staffing` note. The editor's `resolveChildPersona` and the cloud's `cloudSubagent` read the same rule. An unknown name is still refused.
+- **The brain can hire a Developer.** `cloud_agents.create` and `cloud_agents.update` take `roleKeys`, limited to catalog keys by `parseDeliveryRoleKeys`. Both bump a tenant agent-roster version, and `listTenantAgentsForRole` is keyed on that version, so a newly hired Developer is found on the next read. The Work directive names `builtin_cloud_agents_create (roleKeys:["developer"])`.
+- **"Coder" is a developer.** `agentMatchesRole` adds whole-word synonyms for `developer` (coder, programmer, software engineer, …) and `qa-tester` (qa, tester, quality assurance).
+- **Truthful copy:**
+  - The `execution_disabled` autoRun detail now says it blocks cloud runs only and that local sub-agents are not affected.
+  - `spawn_agent` no longer says "do NOT delegate the actual writing".
+  - `as_agent` is documented as optional.
+- Tests: `delegationRequest.test.ts`, `brainRunStore.test.ts` (ask redirected, prose re-prompted, no-request case untouched), `chatMode.test.ts`, `modelRoles.test.ts`, `roleMatch.test.ts`, `cloudSubagent.test.ts`, `subagentTool.test.ts`.
+
 ## ✅ RESOLVED 2026-10-11 — Synapse and Spawn ship from their own repositories (api 2026.10.26 · frontend 2026.10.40)
 
 `desktop/` held two apps with their own release cadence, signing and toolchain (Rust/Tauri) inside a TypeScript monorepo, and Spawn's download use case had to filter `spawn-v*` tags out of a repository that also carried Synapse's `desktop-v*` ones. Both moved out with their history:

@@ -55,6 +55,8 @@ import { salesRevenueForecast } from '../sales/salesPolicy';
 import { resolveManagerAssignee } from '../manager/managerPolicy';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { isLifecycleManagedTask } from '../kanban/managedExecutionGuard';
+import { BUILTIN_ROLES, parseDeliveryRoleKeys } from '../kanban/roleCatalog';
+import { bumpAgentRosterVersion } from '../agent/agentPersonaBrief';
 import { executeAsAddressedAgent } from '../brain/addressedAgentRun';
 import { DEP_TYPES } from '../task/taskDependencies';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
@@ -233,6 +235,8 @@ const S = { type: 'string' } as const;
 const N = { type: 'number' } as const;
 const B = { type: 'boolean' } as const;
 const obj = (properties: Json, required: string[] = []): Json => ({ type: 'object', properties, required });
+/** An agent's delivery roles, as the board's role catalog names them. */
+const ROLE_KEYS_PARAM = { type: 'array', items: { type: 'string', enum: BUILTIN_ROLES.map((r) => r.key) } } as const;
 const num = (v: unknown): number => Number(v);
 
 /**
@@ -2420,27 +2424,32 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'cloud_agents.list_purchased', mutates: false, description: 'Cloud agents this workspace acquired from the marketplace.', parameters: obj({}), run: async (ctx) => (await ctx.db.execute(sql`SELECT a.* FROM ide_agents a JOIN agent_purchases p ON p.agent_id = a.id WHERE p.tenant_id = ${ctx.tenantId} AND p.unhired_at IS NULL AND a.status = 'active' ORDER BY p.created_at DESC LIMIT 200`)).rows },
   {
     tool: 'cloud_agents.create', mutates: true,
-    description: 'Create a cloud agent. The engine is always the current agent version (no selection).',
-    parameters: obj({ name: S, title: S, bio: S, skills: { type: 'array', items: S }, baseModel: S, published: B }, ['name']),
+    description: 'Create (hire) a workspace agent. Give it the delivery roles it should fill with roleKeys (e.g. ["developer"] for a Developer who takes code slices, ["qa-tester"] for QA) — that is what lets spawn_agent/spawn_agents run a slice AS it. The engine is always the current agent version (no selection).',
+    parameters: obj({ name: S, title: S, bio: S, skills: { type: 'array', items: S }, roleKeys: ROLE_KEYS_PARAM, baseModel: S, published: B }, ['name']),
     run: async (ctx, a) => {
       const name = str(a.name).trim(); if (!name) throw new Error('name is required');
+      const roleKeys = parseDeliveryRoleKeys(a.roleKeys);
       const [row] = await ctx.db.insert(ideAgents).values({
         id: crypto.randomUUID(), tenantId: ctx.tenantId, projectId: null, name,
         title: a.title != null ? str(a.title) : name,
         bio: a.bio != null ? str(a.bio) : '',
         skills: JSON.stringify(Array.isArray(a.skills) ? a.skills : []),
         baseModel: a.baseModel != null ? str(a.baseModel) : 'builderforce-default',
+        ...(roleKeys ? { roleKeys } : {}),
         ...(typeof a.published === 'boolean' ? { published: a.published } : {}),
       }).returning();
+      if (ctx.env) await bumpAgentRosterVersion(ctx.env, ctx.tenantId).catch(() => undefined);
       return row;
     },
   },
   {
     tool: 'cloud_agents.update', mutates: true,
-    description: 'Update a cloud agent (metadata or publish status).',
-    parameters: obj({ agentId: S, name: S, title: S, bio: S, published: B, status: S }, ['agentId']),
+    description: 'Update a cloud agent (metadata, delivery roleKeys, or publish status).',
+    parameters: obj({ agentId: S, name: S, title: S, bio: S, roleKeys: ROLE_KEYS_PARAM, published: B, status: S }, ['agentId']),
     run: async (ctx, a) => {
       const patch: Json = { updatedAt: new Date() };
+      const roleKeys = parseDeliveryRoleKeys(a.roleKeys);
+      if (roleKeys) patch.roleKeys = roleKeys;
       if (a.name != null) patch.name = str(a.name);
       if (a.title != null) patch.title = str(a.title);
       if (a.bio != null) patch.bio = str(a.bio);
@@ -2448,6 +2457,7 @@ const CATALOG: BuiltinTool[] = [
       if (a.status != null) patch.status = str(a.status);
       const [row] = await ctx.db.update(ideAgents).set(patch).where(and(eq(ideAgents.id, str(a.agentId)), eq(ideAgents.tenantId, ctx.tenantId))).returning();
       if (!row) throw new Error('agent not found');
+      if (ctx.env) await bumpAgentRosterVersion(ctx.env, ctx.tenantId).catch(() => undefined);
       return row;
     },
   },

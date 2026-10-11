@@ -1,31 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { delegationRoleRefusal } from "./modelRoles.js";
+import { staffDelegation } from "./modelRoles.js";
 
-/** The Developer-vs-QA filter every `spawn_agent { as_agent }` backing runs. */
-describe("delegationRoleRefusal", () => {
-  it("lets a developer take a code slice and a QA agent take a verify slice", () => {
-    expect(delegationRoleRefusal({ name: "Ada", roleKeys: ["developer"] }, "code")).toBeNull();
-    expect(delegationRoleRefusal({ name: "Quinn", roleKeys: ["qa-tester"] }, "verify")).toBeNull();
+describe("staffDelegation", () => {
+  it("runs the slice as the named agent when it holds the delivery role", () => {
+    expect(staffDelegation({ name: "Ada", roleKeys: ["developer"] }, "code")).toEqual({ kind: "as-agent" });
+    expect(staffDelegation({ name: "Quinn", roleKeys: ["qa-tester"] }, "verify")).toEqual({ kind: "as-agent" });
   });
 
-  it("refuses a code slice for a non-developer, naming what it needs and what it holds", () => {
-    const refusal = delegationRoleRefusal({ name: "Pam", roleKeys: ["product-manager"] }, "code");
-    expect(refusal).toContain("needs a developer");
-    expect(refusal).toContain("product-manager");
-    expect(refusal).toContain("role=developer");
+  it("runs a mismatched slice as an on-demand role persona instead of refusing it", () => {
+    // Chat #134: "John Coder" held no developer key, the fan-out was refused, nothing ran.
+    const s = staffDelegation({ name: "John Coder", roleKeys: [] }, "code");
+    expect(s.kind).toBe("on-demand");
+    if (s.kind !== "on-demand") return;
+    expect(s.persona.name).toBe("Developer");
+    expect(s.note).toContain("not attributed to John Coder");
+    expect(s.note).toContain("builtin_cloud_agents_create");
+    const qa = staffDelegation({ name: "Ada", roleKeys: ["developer"] }, "verify");
+    expect(qa.kind === "on-demand" && qa.persona.name).toBe("QA Tester");
   });
 
-  it("refuses a verify slice for a developer with no QA role", () => {
-    expect(delegationRoleRefusal({ name: "Ada", roleKeys: ["developer"] }, "verify")).toContain("qa-tester");
-  });
-
-  it("leaves reading, planning and chat open to any teammate", () => {
-    for (const role of ["explore", "plan", "chat", "utility"] as const) {
-      expect(delegationRoleRefusal({ name: "Pam", roleKeys: ["product-manager"] }, role)).toBeNull();
+  it("leaves open slices (explore, plan, chat) to any teammate", () => {
+    for (const role of ["explore", "plan", "chat"] as const) {
+      expect(staffDelegation({ name: "Pam", roleKeys: ["product-manager"] }, role)).toEqual({ kind: "as-agent" });
     }
   });
 
-  it("does not filter when the host cannot tell an agent's roles", () => {
-    expect(delegationRoleRefusal({ name: "Ada" }, "code")).toBeNull();
+  it("does not filter when the host cannot tell the agent's roles", () => {
+    expect(staffDelegation({ name: "Ada" }, "code")).toEqual({ kind: "as-agent" });
   });
 });

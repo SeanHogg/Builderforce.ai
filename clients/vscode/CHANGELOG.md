@@ -2,6 +2,17 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.17] — Sub-agents get a Developer even when your team has none
+
+- **A coding slice always has someone to do it.** When the chat hands a slice to a teammate who isn't a developer, a Developer sub-agent does it instead of the whole batch stopping, and the chat says who actually did the work.
+- **The chat can hire a Developer.** If your workspace has no developer agent, the chat can create one, give it the Developer role, and hand it work right away.
+- **"Coder" counts as a developer.** An agent titled "Coder" or "Software Engineer" can now take coding work.
+
+## [2026.10.16] — "Use sub-agents" starts sub-agents
+
+- **Ask for sub-agents and you get them.** Asking the chat to "complete the remaining tickets using subagents" now starts them on your machine, one per ticket and up to four at a time. Before, it could stop and ask how you wanted to proceed.
+- **The cloud switch doesn't stop local work.** Sub-agents in the editor run whether or not agent execution is turned off for your workspace, and whether or not a Developer is on your team. A teammate whose role fits is still used when there is one.
+
 ## [2026.10.4] — The BuilderForce sidebar is five sections, not eight
 
 - **Work** puts your workspace and project at the top, then Sessions and Tasks as two groups underneath. The header shows which workspace and project you are in, and Sessions and Tasks each have their own buttons on the group heading (new session, show archived, filter, hide done, flat or hierarchy).

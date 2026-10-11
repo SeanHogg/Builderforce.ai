@@ -26,7 +26,7 @@ const ROLE_ENUM_DESCRIPTION = MODEL_ROLES
 export const spawnAgentTool: ToolDefinition = defineTool({
   name: "spawn_agent",
   description:
-    "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back a single answer. Use it when finding something out would take many turns you do not want to carry — locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose — it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two, and do NOT delegate the actual writing of the deliverable: you are accountable for what ships.",
+    "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back a single answer. Use it when finding something out would take many turns you do not want to carry — locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose — it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two. A CHANGE may be delegated (read_only: false) when the user asked for sub-agents or the slice is a ticket of its own — you then verify what the child changed, because you are accountable for what ships.",
   parameters: {
     type: "object",
     properties: {
@@ -53,7 +53,7 @@ export const spawnAgentTool: ToolDefinition = defineTool({
       as_agent: {
         type: "string",
         description:
-          "Run the child AS one of the workspace's agents — its id or name (e.g. 'Ada'). The child adopts that agent's role, bio, skills and personality so the delegated slice is done in that agent's voice and expertise. Prefer an agent already in this chat (builtin_chats_list_agents) or from builtin_cloud_agents_list_mine.",
+          "Run the child AS one of the workspace's agents — its id or name (e.g. 'Ada'). The child adopts that agent's role, bio, skills and personality so the delegated slice is done in that agent's voice and expertise. Prefer an agent already in this chat (builtin_chats_list_agents) or from builtin_cloud_agents_list_mine. Optional: when no teammate's role fits the slice, omit it and the child runs as a plain sub-agent.",
       },
     },
     required: ["label", "task"],
@@ -194,7 +194,7 @@ export const spawnAgentsTool: ToolDefinition = defineTool({
             },
             ticket: { type: "string", description: "The ticket this workstream delivers, echoed in the result." },
             role: { type: "string", enum: [...MODEL_ROLES], description: "Model role for the child. Defaults to code for a change, explore otherwise." },
-            as_agent: { type: "string", description: "Run this workstream AS one of the workspace's agents (its name or id)." },
+            as_agent: { type: "string", description: "Run this workstream AS one of the workspace's agents (its name or id). Optional: omit it when no teammate's role fits, and the child runs as a plain sub-agent." },
           },
           required: ["label", "task"],
         },

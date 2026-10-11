@@ -182,6 +182,13 @@ describe('chatModeDirective', () => {
       expect(d).toMatch(/stops CLOUD runs only/);
       expect(d).toContain('FINISH WHAT YOU FILED');
       expect(d).not.toContain('FINISH BY DISPATCHING');
+      // Chat #133: no Developer on the roster read as "nobody can do this". as_agent is
+      // optional, and an explicit sub-agent request is started, not asked about.
+      expect(d).toContain('OMIT as_agent');
+      expect(d).toMatch(/missing Developer is never a reason not to delegate/);
+      // Chat #134: the run can hire a Developer when the workspace has none.
+      expect(d).toContain('builtin_cloud_agents_create');
+      expect(d).toMatch(/When the user asks for sub-agents, start them/);
     });
 
     it('still dispatches to the cloud on a surface with no sub-agent tools (the web Brain)', () => {

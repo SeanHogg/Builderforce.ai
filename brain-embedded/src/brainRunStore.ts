@@ -60,6 +60,7 @@ import { codeRunOutcome, runOutcomeId, type BrainRunOutcome } from './runOutcome
 import { shippedToBaseBranch } from './shipVerification';
 import { selfReviewShipDirective, leftChangeUnshipped, unshippedChangeNudge } from './selfReviewShip';
 import { previewReviewDirective, leftChangeUnreviewed, unreviewedChangeNudge, ticketsReviewedInPreview } from './previewReview';
+import { leftDelegationUndone, undelegatedRequestNudge } from './delegationRequest';
 import { toolActivity, visitTarget, type BrainRunActivity } from './runActivity';
 import { createComposingActivity, toolCallArgBytes } from './composingActivity';
 import { ReadCoverage, isUnscopedMutation, revisitAdvisory, withAdvisory } from './readCoverage';
@@ -1823,6 +1824,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // twice, and its answer — including "I cannot ship this because…" — is the answer.
   let shipRecoveryUsed = false;
   let reviewRecoveryUsed = false;
+  // One redirect per run for an explicit sub-agent request the run neither started nor
+  // refused on a real result (see `delegationRequest.ts`). `redirectAskToDelegation`
+  // carries the decision from `beforeToolCalls` to the `ask_user` dispatch it answers.
+  let delegationRecoveryUsed = false;
+  let redirectAskToDelegation = false;
   // One re-prompt per run for a final reply that repeats the previous turn's answer
   // (see `restatedReply.ts`). Captured before the loop: the transcript grows as it runs.
   const priorReply = previousReplyText(convo);
@@ -1965,7 +1971,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   };
 
   const hooks: LoopHooks<ChatCompletionMessage> = {
-    beforeToolCalls: async (_ctx, turn, calls) => {
+    beforeToolCalls: async (ctx, turn, calls) => {
       const { result, requested } = metaOf(turn);
       // `ask_user` is TERMINAL: the agent is blocked on the user's decision, so the run
       // settles here and the reply carries any lead-in prose plus the canonical
@@ -1976,7 +1982,27 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // Malformed args fall through to the prose path below, so a question is never
       // swallowed by its own formatting.
       const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
-      if (askCall) {
+      // The user asked for SUB-AGENTS and the run is asking how to proceed instead of
+      // starting one (chat #133: "execution is disabled… no developer agents" — both
+      // about the cloud, neither about a local child). The question is not settled as
+      // the reply: the call dispatches and `beforeDispatch` answers it with the
+      // delegation contract, so the model's next turn spawns. Once per run — asked
+      // again after that, the question is the answer.
+      if (askCall && runTool && !delegationRecoveryUsed && leftDelegationUndone({
+        toolNames: catalogToolNames,
+        requestText: userRequest,
+        events: runTrace(c),
+      })) {
+        delegationRecoveryUsed = true;
+        redirectAskToDelegation = true;
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'loop.recover_undelegated_request',
+          args: { step: ctx.step, via: 'ask_user' },
+          result: 'The user asked for sub-agents and the run asked how to proceed without starting one — answered with the local delegation contract instead of settling the question.',
+        });
+      } else if (askCall) {
         let block: string | null = null;
         try { block = askCall.malformed ? null : askUserBlock(askCall.args); } catch { block = null; }
         const lead = result.text.trim();
@@ -2047,6 +2073,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // prose to fall back on, so the answer is a corrective result: the call is not
       // left unanswered, and the model is told exactly how to retry.
       if (call.name === ASK_USER_TOOL) {
+        if (redirectAskToDelegation) {
+          redirectAskToDelegation = false;
+          return { result: { data: { ok: false, error: undelegatedRequestNudge(catalogToolNames) } } };
+        }
         return { result: { data: { error: 'ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose.' } } };
       }
       // PLANNING ENDS HERE. The planner's tasks become tickets linked to this chat and
@@ -2366,6 +2396,29 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           label: 'loop.recover_unreviewed_change',
           args: { step: iter, files: c.touchedFiles.slice(0, 20) },
           result: 'Run changed the app and ended without inspecting the preview and recording a review — re-prompted to verify and review (this Studio session is the change\'s only reviewer).',
+        });
+        c.streamingText = '';
+        emit(c);
+        return { action: 'continue' };
+      }
+
+      // The user asked for SUB-AGENTS and the run is ending in prose without having
+      // started one. Sent back once with the delegation contract; quiet once a spawn was
+      // attempted (a refused or failed child is a result to report) and on any host that
+      // cannot spawn. The `ask_user` twin of this gate is in `beforeToolCalls`.
+      if (runTool && !delegationRecoveryUsed && leftDelegationUndone({
+        toolNames: catalogToolNames,
+        requestText: userRequest,
+        events: runTrace(c),
+      })) {
+        delegationRecoveryUsed = true;
+        await requeueWithNudge(undelegatedRequestNudge(catalogToolNames));
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'loop.recover_undelegated_request',
+          args: { step: iter, via: 'reply' },
+          result: 'The user asked for sub-agents and the run ended without starting one — re-prompted to spawn them locally.',
         });
         c.streamingText = '';
         emit(c);

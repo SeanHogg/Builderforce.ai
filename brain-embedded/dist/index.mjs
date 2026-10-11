@@ -3168,7 +3168,7 @@ var skillListTool = defineTool({
 var ROLE_ENUM_DESCRIPTION = MODEL_ROLES.map((role) => `${role} \u2014 ${MODEL_ROLE_DESCRIPTIONS[role]}`).join(" \xB7 ");
 var spawnAgentTool = defineTool({
   name: "spawn_agent",
-  description: "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back a single answer. Use it when finding something out would take many turns you do not want to carry \u2014 locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose \u2014 it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two, and do NOT delegate the actual writing of the deliverable: you are accountable for what ships.",
+  description: "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back a single answer. Use it when finding something out would take many turns you do not want to carry \u2014 locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose \u2014 it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two. A CHANGE may be delegated (read_only: false) when the user asked for sub-agents or the slice is a ticket of its own \u2014 you then verify what the child changed, because you are accountable for what ships.",
   parameters: {
     type: "object",
     properties: {
@@ -3191,7 +3191,7 @@ var spawnAgentTool = defineTool({
       },
       as_agent: {
         type: "string",
-        description: "Run the child AS one of the workspace's agents \u2014 its id or name (e.g. 'Ada'). The child adopts that agent's role, bio, skills and personality so the delegated slice is done in that agent's voice and expertise. Prefer an agent already in this chat (builtin_chats_list_agents) or from builtin_cloud_agents_list_mine."
+        description: "Run the child AS one of the workspace's agents \u2014 its id or name (e.g. 'Ada'). The child adopts that agent's role, bio, skills and personality so the delegated slice is done in that agent's voice and expertise. Prefer an agent already in this chat (builtin_chats_list_agents) or from builtin_cloud_agents_list_mine. Optional: when no teammate's role fits the slice, omit it and the child runs as a plain sub-agent."
       }
     },
     required: ["label", "task"]
@@ -3275,7 +3275,7 @@ var spawnAgentsTool = defineTool({
             },
             ticket: { type: "string", description: "The ticket this workstream delivers, echoed in the result." },
             role: { type: "string", enum: [...MODEL_ROLES], description: "Model role for the child. Defaults to code for a change, explore otherwise." },
-            as_agent: { type: "string", description: "Run this workstream AS one of the workspace's agents (its name or id)." }
+            as_agent: { type: "string", description: "Run this workstream AS one of the workspace's agents (its name or id). Optional: omit it when no teammate's role fits, and the child runs as a plain sub-agent." }
           },
           required: ["label", "task"]
         }
@@ -3706,7 +3706,7 @@ function chatWorkDirective(chatId, opts) {
   const staffed = roster.length > 0;
   const delegatesLocally = !!(opts?.canFanOut || opts?.canDelegate);
   const localSpawn = opts?.canFanOut ? "spawn_agents (several tickets whose files do not overlap, side by side \u2014 one workstream per ticket, with ticket=<id>, paths and as_agent) or spawn_agent (one slice)" : "spawn_agent (one slice at a time)";
-  const pickByRole = "as_agent = the agent whose role fits the slice: a Developer for a code slice, a QA agent for a test or verify slice (builtin_cloud_agents_persona_brief with role=developer or role=qa-tester says who holds it; an agent without the role is refused)";
+  const pickByRole = 'as_agent = the agent whose role fits the slice: a Developer for a code slice, a QA agent for a test or verify slice (builtin_cloud_agents_persona_brief with role=developer or role=qa-tester says who holds it). A teammate without the role runs the slice as an on-demand Developer/QA sub-agent, not as themselves. When nobody holds the role, OMIT as_agent, or hire one first with builtin_cloud_agents_create (name, title, roleKeys:["developer"]) and run AS them; a missing Developer is never a reason not to delegate';
   const whoIsHere = staffed ? `\u2022 THE AGENTS IN THIS CHAT are ${describeRoster(roster)}. A human put them here: that is this platform's way of saying these are the people this work belongs to.
 ` : "";
   const ordering = staffed ? delegatesLocally ? `\u2022 DELEGATE TO THEM, HERE. That is the DEFAULT in this chat, not a fallback. Work that falls inside one of their roles is THEIR work, and this session runs it on this machine: hand it to a local sub-agent with ${localSpawn}, ${pickByRole}. Then say which agent did what. A local sub-agent is NOT a cloud run \u2014 it needs no ticket assignment and no builtin_chats_dispatch_agent, and the workspace's execution kill-switch does not stop it. Do NOT make the change yourself merely because you could do it faster \u2014 the human staffed this conversation.
@@ -3716,7 +3716,7 @@ function chatWorkDirective(chatId, opts) {
   const finish = delegatesLocally ? `\u2022 FINISH WHAT YOU FILED. A ticket nobody is working has not started: every ticket you filed is either done in this session or handed to a local sub-agent (${pickByRole}). builtin_chats_dispatch_agent starts a CLOUD run \u2014 use it only when the user asks for the work to run in the cloud, or it must run where this session is not. A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.
 ` : `\u2022 FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict \u2014 read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (${staffed ? "one of the agents above, or " : ""}builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) \u2014 a Developer for code work, a QA agent for test work \u2014 and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.
 `;
-  const refused = delegatesLocally ? " An execution kill-switch or run cap stops CLOUD runs only \u2014 hand the slice to a local sub-agent instead." : " If the work is something you could do here, do it instead.";
+  const refused = delegatesLocally ? " An execution kill-switch or run cap stops CLOUD runs only \u2014 an `autoRun: execution_disabled` verdict on a ticket is about the cloud \u2014 so hand the slice to a local sub-agent instead. When the user asks for sub-agents, start them; do not ask how to proceed." : " If the work is something you could do here, do it instead.";
   return `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.
 ${chatWorkLinkingDirective(chatId)}
 ` + whoIsHere + ordering + finish + `\u2022 STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. Match each ticket to the agent whose role fits it \u2014 Developer work to a developer, QA work to a QA agent \u2014 and never leave a ticket with no agent on it.${throughThem}
@@ -7463,6 +7463,29 @@ function unreviewedChangeNudge() {
   return 'You changed the app in this run and ended the turn without reviewing it. In the Studio you are the reviewer \u2014 nobody else can see this preview, so an unreviewed change parks its ticket in review forever. Finish it now: call `canvas_inspect_preview` with the selectors your change targets and the widths the request is about, check the measurements against what was asked (fix and re-inspect if they fail), then record builtin_reviews_record on each ticket the change delivers \u2014 verdict "complete" quoting the measurements, or "gaps" naming what is missing. A complete review after a passing inspection closes the ticket when your turn ends. If you genuinely cannot verify \u2014 the preview is not running, or the change is unfinished \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
 }
 
+// src/delegationRequest.ts
+var SPAWN_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents"]);
+var ASKS_FOR_SUBAGENTS = /\bsub[- ]?agents?\b|\bspawn(?:_agents?|\s+(?:agents?|workers?|children))\b|\b(?:parallel|concurrent)\s+(?:agents?|workers?)\b|\bfan[- ]?out\b/i;
+var DECLINES_SUBAGENTS = /\b(?:no|without|don'?t\s+use|do\s+not\s+use|never\s+use|skip(?:\s+the)?)\s+(?:any\s+)?sub[- ]?agents?\b/i;
+function asksForSubagents(text) {
+  const t = text ?? "";
+  return ASKS_FOR_SUBAGENTS.test(t) && !DECLINES_SUBAGENTS.test(t);
+}
+function canSpawnHere(toolNames) {
+  return toolNames.some((n) => SPAWN_TOOLS.has(n));
+}
+function attemptedDelegation(events) {
+  return events.some((e) => e.category === "tool" && SPAWN_TOOLS.has(e.label));
+}
+function leftDelegationUndone(input) {
+  return canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
+}
+function undelegatedRequestNudge(toolNames) {
+  const fanOut = toolNames.includes("spawn_agents");
+  const call2 = fanOut ? 'Call spawn_agents NOW with read_only:false so the children make their changes: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, paths=<the files it owns>, a complete standalone task brief, role "code". It takes up to 4 at once; start the next batch when one returns. Use spawn_agent (read_only:false) for a slice that must run alone.' : 'Call spawn_agent NOW with read_only:false, one slice at a time, with a complete standalone task brief and role "code".';
+  return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: a teammate without the role a slice needs runs it as an on-demand Developer sub-agent, and with nobody to name you OMIT it \u2014 or hire a Developer with builtin_cloud_agents_create (roleKeys:["developer"]) and run AS them. ${call2} When they finish, verify their changes and report what each child delivered, per ticket.`;
+}
+
 // src/composingActivity.ts
 function utf8ByteLength(text) {
   if (!text) return 0;
@@ -8385,6 +8408,8 @@ ${continuationDirective()}`;
   let phase = c.codeChanged || c.codePhaseReached ? "code" : "plan";
   let shipRecoveryUsed = false;
   let reviewRecoveryUsed = false;
+  let delegationRecoveryUsed = false;
+  let redirectAskToDelegation = false;
   const priorReply = previousReplyText(convo);
   let restateRecoveryUsed = false;
   let activeModel = model;
@@ -8456,10 +8481,24 @@ ${continuationDirective()}`;
     return assistantMsg;
   };
   const hooks = {
-    beforeToolCalls: async (_ctx, turn, calls) => {
+    beforeToolCalls: async (ctx, turn, calls) => {
       const { result, requested } = metaOf(turn);
       const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
-      if (askCall) {
+      if (askCall && runTool && !delegationRecoveryUsed && leftDelegationUndone({
+        toolNames: catalogToolNames,
+        requestText: userRequest,
+        events: runTrace(c)
+      })) {
+        delegationRecoveryUsed = true;
+        redirectAskToDelegation = true;
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "message",
+          label: "loop.recover_undelegated_request",
+          args: { step: ctx.step, via: "ask_user" },
+          result: "The user asked for sub-agents and the run asked how to proceed without starting one \u2014 answered with the local delegation contract instead of settling the question."
+        });
+      } else if (askCall) {
         let block = null;
         try {
           block = askCall.malformed ? null : askUserBlock(askCall.args);
@@ -8515,6 +8554,10 @@ ${block}` : block : lead;
         });
       }
       if (call2.name === ASK_USER_TOOL) {
+        if (redirectAskToDelegation) {
+          redirectAskToDelegation = false;
+          return { result: { data: { ok: false, error: undelegatedRequestNudge(catalogToolNames) } } };
+        }
         return { result: { data: { error: "ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose." } } };
       }
       if (call2.name === HAND_OFF_TOOL) {
@@ -8752,6 +8795,24 @@ ${revisit}` : covered.note;
           label: "loop.recover_unreviewed_change",
           args: { step: iter, files: c.touchedFiles.slice(0, 20) },
           result: "Run changed the app and ended without inspecting the preview and recording a review \u2014 re-prompted to verify and review (this Studio session is the change's only reviewer)."
+        });
+        c.streamingText = "";
+        emit(c);
+        return { action: "continue" };
+      }
+      if (runTool && !delegationRecoveryUsed && leftDelegationUndone({
+        toolNames: catalogToolNames,
+        requestText: userRequest,
+        events: runTrace(c)
+      })) {
+        delegationRecoveryUsed = true;
+        await requeueWithNudge(undelegatedRequestNudge(catalogToolNames));
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "message",
+          label: "loop.recover_undelegated_request",
+          args: { step: iter, via: "reply" },
+          result: "The user asked for sub-agents and the run ended without starting one \u2014 re-prompted to spawn them locally."
         });
         c.streamingText = "";
         emit(c);

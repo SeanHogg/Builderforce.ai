@@ -65,14 +65,44 @@ export interface DelegationPersonaRoles {
 }
 
 /**
- * Why `agent` may NOT take a slice of `role`, or null when it may. The refusal names the
- * role it needs and the roles the agent does hold, so the parent picks a capable teammate
- * instead of guessing again.
+ * The on-demand teammate a slice runs as when no named agent holds its delivery role. A
+ * Developer for a code slice, a QA Tester for a verify slice — the role, not a person, so
+ * the work is never attributed to an agent who did not do it.
  */
-export function delegationRoleRefusal(agent: DelegationPersonaRoles, role: ModelRole): string | null {
+export const DELEGATION_ROLE_PERSONAS: Readonly<Record<string, { name: string; brief: string }>> = {
+  developer: {
+    name: "Developer",
+    brief: "Developer — implements the slice it is handed: reads the code it touches, makes the change within its scope, follows the repository's existing patterns, and reports exactly which files it changed and what is left.",
+  },
+  "qa-tester": {
+    name: "QA Tester",
+    brief: "QA Tester — verifies the slice it is handed: exercises the change against its acceptance criteria, reports what passed and what failed with the evidence, and never fixes what it is testing.",
+  },
+};
+
+/**
+ * Who a delegated slice runs as. The named agent when it holds the slice's delivery role
+ * (or the host cannot tell); otherwise an ON-DEMAND role persona, with a note saying why.
+ *
+ * WHY NOT REFUSE: refusing a mismatched `as_agent` stopped the work outright. VS Code chat
+ * #134 handed a code slice to "John Coder" (no `developer` role key), the whole fan-out was
+ * refused, no Developer existed to retry with, and nothing ran. The rule this protects is
+ * attribution — a code change must never read as a Product Manager's — and an on-demand
+ * Developer keeps it: the slice runs as the role and is NOT attributed to the named agent.
+ * ONE rule, read by the editor's children and the cloud's.
+ */
+export type DelegationStaffing =
+  | { kind: "as-agent" }
+  | { kind: "on-demand"; persona: { name: string; brief: string }; note: string };
+
+export function staffDelegation(agent: DelegationPersonaRoles, role: ModelRole): DelegationStaffing {
   const needed = DELEGATION_DELIVERY_ROLES[role];
-  if (!needed || !agent.roleKeys) return null;
-  if (agent.roleKeys.includes(needed)) return null;
+  if (!needed || !agent.roleKeys || agent.roleKeys.includes(needed)) return { kind: "as-agent" };
+  const persona = DELEGATION_ROLE_PERSONAS[needed] ?? { name: needed, brief: needed };
   const holds = agent.roleKeys.length ? agent.roleKeys.join(", ") : "no delivery role";
-  return `${agent.name} cannot take a ${role} slice: it needs a ${needed} and ${agent.name} holds ${holds}. Run it AS a ${needed}-capable agent (builtin_cloud_agents_persona_brief with role=${needed} lists them), or omit as_agent.`;
+  return {
+    kind: "on-demand",
+    persona,
+    note: `${agent.name} holds ${holds}, not ${needed}, so this ${role} slice ran as an on-demand ${persona.name} sub-agent and is not attributed to ${agent.name}. To staff it as a teammate, give that agent the ${needed} role or create one with builtin_cloud_agents_create (roleKeys: ["${needed}"]).`,
+  };
 }

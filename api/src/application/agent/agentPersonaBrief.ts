@@ -30,7 +30,7 @@ import { and, eq, sql as dsql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { ideAgents } from '../../infrastructure/database/schema';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { buildAgentSystemPrompt, loadWorkforceAgentBase } from './agentPrompt';
 import { agentRoleKeys, type RoleCapableAgentRow } from '../kanban/roleCapability';
 
@@ -142,15 +142,18 @@ export async function listTenantAgentNames(env: Env, tenantId: number, limit = 2
  * The tenant's active agents that can act as `roleKey` — the refusal path when a slice was
  * handed to an agent without that role ("Ada is not a developer; these are").
  *
- * Read-through cached on a short TTL like the resolver above: a delegation loop that picks
- * the wrong teammate asks this once per wrong guess, and the roster changes rarely.
+ * Read-through cached: a delegation loop that picks the wrong teammate asks this once per
+ * wrong guess, and the roster changes rarely. Keyed on the tenant's agent-roster VERSION,
+ * so an agent created or re-roled through `cloud_agents.create/update` is listed on the
+ * very next read — a run that just hired a Developer must be able to find them.
  */
 export async function listTenantAgentsForRole(env: Env, tenantId: number, roleKey: string, limit = 20): Promise<string[]> {
   const key = roleKey.trim();
   if (!key) return [];
+  const ver = await getCacheVersion(env, agentRosterVersionKey(tenantId));
   return getOrSetCached(
     env,
-    `agent_persona:role:${tenantId}:${key}:${limit}`,
+    `agent_persona:role:${tenantId}:v${ver}:${key}:${limit}`,
     async (): Promise<string[]> => {
       const rows = await buildDatabase(env)
         .select(ROLE_ROW_COLUMNS)
@@ -161,4 +164,12 @@ export async function listTenantAgentsForRole(env: Env, tenantId: number, roleKe
     },
     { kvTtlSeconds: 300, l1TtlMs: 60_000 },
   );
+}
+
+/** Version token for the tenant's agent roster as role lookups read it. */
+export const agentRosterVersionKey = (tenantId: number): string => `agent_roster:v:${tenantId}`;
+
+/** An agent was created or its roles changed: role lookups must re-read the roster. */
+export async function bumpAgentRosterVersion(env: Env, tenantId: number): Promise<void> {
+  await bumpCacheVersion(env, agentRosterVersionKey(tenantId));
 }

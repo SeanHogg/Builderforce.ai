@@ -9,7 +9,7 @@
  */
 
 import { runSubagent, subagentStepBudget, type ToolRowSerializer } from "@builderforce/agent-loop";
-import { delegationRoleRefusal, spawnAgentTool, spawnAgentsTool, type ModelRole } from "@builderforce/agent-tools";
+import { staffDelegation, spawnAgentTool, spawnAgentsTool, type ModelRole } from "@builderforce/agent-tools";
 import {
   codeChangesOf,
   isCodeChangeTool,
@@ -122,15 +122,16 @@ const DELEGATION_TOOL_NAMES = new Set<string>([spawnAgentTool.name, spawnAgentsT
 
 /** A resolved persona, or a refusal the parent can act on. */
 export type ChildPersona =
-  | { ok: true; persona?: { name: string; brief: string }; asAgent?: { ref: string; name: string } }
+  | { ok: true; persona?: { name: string; brief: string }; asAgent?: { ref: string; name: string }; note?: string }
   | { ok: false; error: string };
 
 /**
  * WHO does a slice. An unresolvable name is REFUSED rather than run anonymously: a
  * parent that believes Ada did the work will report that she did, and a silently
- * persona-less run makes that report false. So is an agent without the slice's delivery
- * role — a code slice runs as a Developer, a verify slice as QA
- * (`delegationRoleRefusal`, the same check the cloud's children run).
+ * persona-less run makes that report false. An agent WITHOUT the slice's delivery role
+ * (Developer for code, QA for verify) is not refused: the slice runs as an on-demand
+ * role persona, unattributed to that agent, with a `note` saying why
+ * (`staffDelegation`, the same rule the cloud's children run).
  */
 export async function resolveChildPersona(deps: SubagentToolDeps, asAgentName: string, role: ModelRole): Promise<ChildPersona> {
   if (!asAgentName) return { ok: true };
@@ -141,8 +142,8 @@ export async function resolveChildPersona(deps: SubagentToolDeps, asAgentName: s
       error: `no agent named '${asAgentName}' in this workspace — use builtin_chats_list_agents or builtin_cloud_agents_list_mine and pass its exact name or id`,
     };
   }
-  const refusal = delegationRoleRefusal(resolved, role);
-  if (refusal) return { ok: false, error: refusal };
+  const staffing = staffDelegation(resolved, role);
+  if (staffing.kind === "on-demand") return { ok: true, persona: staffing.persona, note: staffing.note };
   return { ok: true, persona: { name: resolved.name, brief: resolved.brief }, asAgent: { ref: resolved.ref, name: resolved.name } };
 }
 
