@@ -7,6 +7,8 @@ import { useAppToastSlot } from './appToastStack';
 
 /** Seconds before an available update auto-applies if the user doesn't act. */
 const AUTORELOAD_SECONDS = 60;
+/** How long "Update now" waits for the new worker to take control before reloading anyway. */
+const ACTIVATION_FALLBACK_MS = 3000;
 
 /**
  * Registers the service worker and shows an update toast whenever a new version
@@ -19,8 +21,10 @@ const AUTORELOAD_SECONDS = 60;
  *   2. Checks for updates every 60 s AND on tab focus / regained visibility /
  *      reconnect — so a returning user is notified promptly, not up to 60 s later.
  *   3. Detects waiting SW → shows banner with a 60 s auto-reload countdown.
- *   4. "Update now" (or countdown hitting 0) → posts SKIP_WAITING → reloads once
- *      controllerchange fires.
+ *   4. "Update now" (or countdown hitting 0) → posts SKIP_WAITING to the
+ *      registration's current waiting worker → reloads once controllerchange
+ *      fires, or straight away / after a short fallback when there is nothing
+ *      left to activate (another tab already did it).
  *   5. "×" cancels the countdown and dismisses the banner for the session.
  */
 export function PwaUpdateBanner() {
@@ -28,6 +32,7 @@ export function PwaUpdateBanner() {
   const [waitingSw, setWaitingSw] = useState<ServiceWorker | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(AUTORELOAD_SECONDS);
   const reloadingRef = useRef(false);
+  const registrationRef = useRef<ServiceWorkerRegistration | null>(null);
 
   // --- Register + detect updates ------------------------------------------
   useEffect(() => {
@@ -71,6 +76,7 @@ export function PwaUpdateBanner() {
       .register('/sw.js', { updateViaCache: 'none' })
       .then((reg) => {
         registration = reg;
+        registrationRef.current = reg;
         if (reg.waiting) trackWaiting(reg.waiting);
         reg.addEventListener('updatefound', () => {
           if (reg.installing) trackWaiting(reg.installing);
@@ -95,15 +101,26 @@ export function PwaUpdateBanner() {
     };
   }, []);
 
+  // The click must ALWAYS end in a reload. Waiting on controllerchange alone left
+  // the button dead whenever the worker held in state had already moved on: another
+  // tab (or its countdown) activated it, or a newer deploy superseded it. Then
+  // SKIP_WAITING went to a worker with nothing to skip, controllerchange never
+  // fired again, and the latched reloadingRef also disarmed the countdown. So:
+  // message the registration's CURRENT waiting worker, reload outright when there
+  // is none, and reload on a timer if activation never reports back. A reload is
+  // always safe here — navigations are network-first and chunks are content-hashed.
   const applyUpdate = () => {
-    if (reloadingRef.current || !waitingSw) return;
+    if (reloadingRef.current) return;
     reloadingRef.current = true;
-    waitingSw.postMessage('SKIP_WAITING');
-    navigator.serviceWorker.addEventListener(
-      'controllerchange',
-      () => { window.location.reload(); },
-      { once: true },
-    );
+    const reload = () => { window.location.reload(); };
+    const waiting = registrationRef.current?.waiting ?? null;
+    if (!waiting) {
+      reload();
+      return;
+    }
+    navigator.serviceWorker.addEventListener('controllerchange', reload, { once: true });
+    window.setTimeout(reload, ACTIVATION_FALLBACK_MS);
+    waiting.postMessage('SKIP_WAITING');
   };
 
   // --- Auto-reload countdown ----------------------------------------------
