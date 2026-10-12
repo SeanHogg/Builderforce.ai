@@ -1,3 +1,25 @@
+## ✅ RESOLVED 2026-10-12 — VSIX Work view stops dropping and reloading the Sessions list during agent runs (VSIX 2026.10.31)
+
+- **The gap:** every platform write from a run (`builtin_tasks_create`, `builtin_chats_link_ticket`, …) caused 6–10 API calls and two or more full rebuilds of the Sessions list. A ticket-heavy run therefore kept the Work panel blanking and reloading.
+  - The chain: `bf:mcp-write` → ticket rail reload → progress change → `reloadChats` → `chats.changed` → `tree.refresh()` (cache dropped) plus a fresh `attention.refresh()` → `attention.onDidChange` → a second `tree.refresh()`.
+  - On top of that, `platform.write` ran another fresh attention fetch.
+- **`refreshCoalescer.ts` (new):** a leading-plus-trailing throttle. An isolated refresh runs immediately; a burst inside the 2s window becomes one trailing run. Its owner holds it, so every caller is throttled without knowing.
+- **`sessionsSnapshotStore.ts` (new):** the Sessions data moved out of `sessionsTree.ts`, which is back under 400 lines.
+  - It keeps one snapshot and revalidates in the background (stale-while-revalidate). The snapshot is never dropped: a refresh fetches first and swaps the result in when it arrives.
+  - A fetch already in flight is shared. A response older than the latest reload is discarded.
+  - An identical answer fires nothing; `onDidChange` fires only when the list moved.
+  - The agent pool is fetched only when a participant's name is unknown.
+- **`SessionsTreeProvider` rows are derived on paint.** `repaint()` handles local state (attention icons, editor-local runs, archive, project filter) with no request.
+  - Archive toggles now repaint instead of refetching.
+  - Archive pruning now runs against the unscoped list. Previously a chat in another project lost its archive entry whenever a project was selected.
+- **`AttentionPoller.refresh()` is coalesced**, so `onChatsChanged` and `onPlatformWrite` together cost one fresh attention fetch per window.
+- **`extension.ts`:**
+  - Attention changes call `repaint()`, plus a throttled `refresh()`.
+  - Local-run changes call `repaint()` only.
+  - The archive/unarchive commands call `tree.archiveSession` / `unarchiveSession`. The duplicated archive-state wrangling and the public `archiveState` setter are gone.
+- **Webview (`VsCodeChatSurface.reloadChats`):** posts `chats.changed` only when the chat list actually differs.
+- Test: `src/refreshCoalescer.test.ts`.
+
 ## ✅ RESOLVED 2026-10-12 — Sequential batching in bfi-runtime (builderforce-inference e4c07ee)
 
 - **What:** Added sequential batching to the local inference runtime so one Engine can run multiple prompts without reloading the model.

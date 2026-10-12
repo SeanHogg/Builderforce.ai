@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
-import { BfBrainChat, BfCreationSessionSummary, listBrainChats, listAgentPool, listCreationSessions } from "./bfApi";
+import type { BfBrainChat } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { displayChatProgressPct } from "@builderforce/agent-loop";
 import { getSelectedProject, onProjectChange } from "./projectState";
-import { getProjectNames, projectLabel } from "./projectNames";
+import { projectLabel } from "./projectNames";
 import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
 import { sessionsLibraryGroup, sessionsLibraryRowId, sessionsLibraryRows, type SessionsLibraryGroup, type SessionsLibraryRow } from "./sessionsLibrary";
 import {
@@ -13,6 +13,7 @@ import {
   ticketProgressTooltipLine,
 } from "./ticketProgressDisplay";
 import { archive as archiveRows, unarchive, partitionArchived, pruneArchive, sweepArchivable, type ArchiveState } from "./sessionsArchive";
+import { SessionsSnapshotStore, type SessionsSnapshot } from "./sessionsSnapshotStore";
 
 /** globalState keys for archive state and view toggle. */
 const ARCHIVE_STATE_KEY = "builderforce.sessions.archive";
@@ -69,30 +70,32 @@ export function chatOfSessionNode(node: unknown): BfBrainChat | undefined {
   return candidate.row.source.kind === "chat" ? candidate.row.source.chat : undefined;
 }
 
+const NO_NAMES: ReadonlyMap<number, string> = new Map();
+
 export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTreeNode> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-  // ONE short-lived cache for ONE list, so expanding all four groups is two requests
-  // rather than eight — and so the four groups cannot disagree about what is newest.
-  private rowCache: { ts: number; rows: SessionsLibraryRow[] } | undefined;
-  private static readonly TTL = 5_000;
+  // ONE snapshot for ONE list, read by every group — so expanding all four costs no
+  // extra request and the groups cannot disagree about what is newest. The ROWS are
+  // derived from it on every paint, so live state (attention, archive) repaints
+  // without another request.
+  private readonly store: SessionsSnapshotStore;
 
   // Set during getChildren so getTreeItem can decide how to label each row: when the
   // list is unfiltered we show each chat's project; when scoped to one it's implied.
   private filtered = false;
-  private projectNameById = new Map<number, string>();
-  // Participant ref → display name, resolved from the (stable) tenant agent pool.
-  // Loaded once per refresh, and only when some chat actually has participants.
-  private agentNames = new Map<string, string>();
-  private poolLoaded = false;
 
   constructor(
     private readonly secrets: vscode.SecretStorage,
     private readonly ctx: vscode.ExtensionContext,
   ) {
-    // The active project scopes this list — repaint when it changes.
-    onProjectChange(() => this.refresh());
+    this.store = new SessionsSnapshotStore(secrets);
+    // The server's list moved: keep the archive in step with it, then repaint.
+    this.store.onDidChange(() => { this.pruneArchive(); this.repaint(); });
+    // The active project scopes this list: re-derive the rows now (the filter is local),
+    // then revalidate — unscoped rows label each chat with its project name.
+    onProjectChange(() => { this.repaint(); this.refresh(); });
     // Load archive state from globalState.
     this._archiveState = this.ctx.globalState.get<ArchiveState>(ARCHIVE_STATE_KEY, {});
     this._showArchived = this.ctx.globalState.get<boolean>(SHOW_ARCHIVED_KEY, false);
@@ -101,12 +104,10 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     // Schedule the archive sweep: run once now (on activation) and then daily.
     this.runSweep();
     const sweepInterval = setInterval(() => this.runSweep(), SWEEP_INTERVAL_MS);
-    ctx.subscriptions.push({ dispose: () => clearInterval(sweepInterval) });
+    ctx.subscriptions.push({ dispose: () => clearInterval(sweepInterval) }, this.store);
   }
 
   private _archiveState: ArchiveState = {};
-  get archiveState(): ArchiveState { return this._archiveState; }
-  set archiveState(v: ArchiveState) { this._archiveState = v; }
 
   get showArchived(): boolean { return this._showArchived; }
   private _showArchived = false;
@@ -116,26 +117,26 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     this._showArchived = show;
     void this.ctx.globalState.update(SHOW_ARCHIVED_KEY, show);
     void vscode.commands.executeCommand("setContext", SHOW_ARCHIVED_KEY, show);
-    this.refresh();
+    this.repaint();
   }
 
-  /** Archive one session by key. */
+  /** Archive one session by key. Archive state is local — a repaint, not a refetch. */
   archiveSession(key: string): void {
     this._archiveState = archiveRows(this._archiveState, [key], Date.now(), true);
     this.persistArchive();
-    this.refresh();
+    this.repaint();
   }
 
   /** Unarchive one session by key. */
   unarchiveSession(key: string): void {
     this._archiveState = unarchive(this._archiveState, key);
     this.persistArchive();
-    this.refresh();
+    this.repaint();
   }
 
   /** Run the archive sweep: auto-archive finished sessions older than 5 days. */
   private runSweep(): void {
-    const rows = this.rowCache?.rows;
+    const rows = this.unscopedRows();
     if (!rows) return;
     const now = Date.now();
     const due = sweepArchivable(rows, this._archiveState, now);
@@ -145,20 +146,31 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     }
   }
 
-  /** Persist archive state to global storage (exposed for extension commands). */
-  persistArchive(): void {
+  /** Drop archive entries for rows the server no longer returns. Against the UNSCOPED
+   *  list — a chat in another project is filtered out of view, not gone. */
+  private pruneArchive(): void {
+    const rows = this.unscopedRows();
+    if (!rows) return;
+    this._archiveState = pruneArchive(this._archiveState, rows);
+    this.persistArchive();
+  }
+
+  private persistArchive(): void {
     void this.ctx.globalState.update(ARCHIVE_STATE_KEY, this._archiveState);
   }
 
-  /** Drop the cache and repaint (call after create / rename / delete / invite / sign-in). */
+  /**
+   * Revalidate (call after create / rename / delete / invite / sign-in, or any signal
+   * the server's list moved). Throttled: a burst collapses to one request, the painted
+   * list stays up while it is in flight, and an unchanged answer repaints nothing.
+   */
   refresh(): void {
-    // Prune the archive: drop entries for rows the server no longer returns.
-    if (this.rowCache?.rows) {
-      this._archiveState = pruneArchive(this._archiveState, this.rowCache.rows);
-      this.persistArchive();
-    }
-    this.rowCache = undefined;
-    this.poolLoaded = false;
+    this.store.refresh();
+  }
+
+  /** Repaint from the snapshot already held — for LOCAL state the rows are derived
+   *  from (live attention, editor-local runs, archive) that costs no request. */
+  repaint(): void {
     this._onDidChangeTreeData.fire();
   }
 
@@ -197,7 +209,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     // prefix the project name (or "No project") so a mixed history stays readable.
     let description = timeAndPct;
     if (!this.filtered) {
-      const project = projectLabel(this.projectNameById, chat.projectId);
+      const project = projectLabel(this.store.current?.projectNameById ?? NO_NAMES, chat.projectId);
       description = project ? (timeAndPct ? `${project} · ${timeAndPct}` : project) : timeAndPct;
     }
     // Multi-party chat: show the participants as coloured initial avatars. The row
@@ -207,7 +219,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     // Agents resolve via the loaded agent-name pool; humans carry their display
     // name inline (kind='human', `name` set server-side) so they never show a raw id.
     const names = (chat.participants ?? [])
-      .map((p) => this.agentNames.get(p.ref) || (p as { name?: string }).name || p.ref)
+      .map((p) => this.store.current?.agentNames.get(p.ref) || (p as { name?: string }).name || p.ref)
       .filter(Boolean);
     if (names.length > 0) {
       const badge = names.slice(0, 3).map(initials).join(" ");
@@ -274,9 +286,9 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     }
     if (element.nodeType !== "group") return [];
 
-    const rows = await this.rows();
+    const rows = this.scopedRows(await this.store.get());
     // Partition into active and archived, then show the right slice per group.
-    const { active, archived } = partitionArchived(rows, this.archiveState);
+    const { active, archived } = partitionArchived(rows, this._archiveState);
     const pool = element.kind === "archived" ? archived : active;
     return sessionsLibraryGroup(pool, element.kind === "archived" ? "all" : element.kind).map((row) => ({
       nodeType: "item" as const,
@@ -286,71 +298,31 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
   }
 
   /**
-   * The whole list, built once per refresh and shared by all four groups.
-   *
-   * Built ONCE on purpose: the groups are four readings of one list, so fetching per
-   * group would be the same two requests four times over — and worse, four lists that
-   * could disagree about what is newest if a write landed between them.
+   * The rows the tree shows, derived from the snapshot on every paint — cheap, and it
+   * is what lets live state (a run starting, an archive) repaint without a request.
    */
-  private async rows(): Promise<SessionsLibraryRow[]> {
-    if (this.rowCache && Date.now() - this.rowCache.ts < SessionsTreeProvider.TTL) return this.rowCache.rows;
-
-    let sessions: BfCreationSessionSummary[];
-    let chats: BfBrainChat[];
-    try {
-      [sessions, chats] = await Promise.all([
-        listCreationSessions(this.secrets),
-        listBrainChats(this.secrets),
-      ]);
-    } catch (error) {
-      // Offline, or the gateway blinked. Keep showing the last good list rather than
-      // rejecting: a rejected `getChildren` drops the children in the extension host
-      // while the rows stay painted, so the next click lands on a row the host no
-      // longer knows about. Re-stamp the cache so the other three groups in the same
-      // paint reuse it instead of each retrying the same failing pair of requests.
-      if (!this.rowCache) throw error;
-      this.rowCache = { ts: Date.now(), rows: this.rowCache.rows };
-      return this.rowCache.rows;
-    }
-
-    // Resolve participant names ONCE (and only when a chat has any) — a single stable
-    // pool fetch, not a per-row call, so the roster costs no N+1. Best-effort: a row
-    // with a raw participant ref still opens, a list that failed to draw does not.
-    if (!this.poolLoaded && chats.some((c) => (c.participants?.length ?? 0) > 0)) {
-      this.poolLoaded = true;
-      try {
-        const pool = await listAgentPool(this.secrets);
-        this.agentNames = new Map(pool.map((a) => [a.ref, a.name]));
-      } catch {
-        this.poolLoaded = false;
-      }
-    }
-
+  private scopedRows(snapshot: SessionsSnapshot): SessionsLibraryRow[] {
     // The active project scopes the CONVERSATIONS, as it always has. Boards are not
     // scoped by it: a canvas carries its project links on its cards rather than in one
     // column, so filtering them on a single id would hide boards that do belong.
     const project = getSelectedProject();
     this.filtered = !!project;
-    const scopedChats = project ? chats.filter((c) => c.projectId === project.id) : chats;
-    // Unfiltered: resolve project names for the per-row labels (best-effort, cached).
-    if (!project) {
-      try {
-        this.projectNameById = await getProjectNames(this.secrets);
-      } catch {
-        // Keep whatever names we already resolved; the row falls back to the time alone.
-      }
-    }
-
-    const rows = sessionsLibraryRows({
-      sessions,
+    const scopedChats = project ? snapshot.chats.filter((c) => c.projectId === project.id) : snapshot.chats;
+    return sessionsLibraryRows({
+      sessions: snapshot.sessions,
       chats: scopedChats,
       // "Running" means the same thing for a conversation as for a board. The host
       // already polls this (`attentionFor`); passing it in is what keeps the list
       // builder pure.
       runningChatIds: new Set(scopedChats.filter((c) => attentionFor("chat", c.id) === "running").map((c) => c.id)),
     });
-    this.rowCache = { ts: Date.now(), rows };
-    return rows;
+  }
+
+  /** Every row the account has, regardless of project — what archive upkeep reads. */
+  private unscopedRows(): SessionsLibraryRow[] | undefined {
+    const snapshot = this.store.current;
+    if (!snapshot) return undefined;
+    return sessionsLibraryRows({ sessions: snapshot.sessions, chats: snapshot.chats });
   }
 }
 

@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { BfAttention, BfAttentionManager, BfAttentionState, getAttention } from "./bfApi";
 import { getSelectedProject } from "./projectState";
+import { createRefreshCoalescer } from "./refreshCoalescer";
 
 /**
  * The extension's single source of truth for cross-surface "what's live / what
@@ -159,6 +160,11 @@ export class AttentionPoller implements vscode.Disposable {
   private static readonly ERROR_MIN_MS = 15_000;
   private static readonly ERROR_MAX_MS = 5 * 60_000;
 
+  /** Fresh refetches collapse: an agent run's burst of platform writes each asks for
+   *  one, and every one of them skips the server cache. */
+  private static readonly REFRESH_WINDOW_MS = 2_000;
+  private readonly fresh = createRefreshCoalescer(() => this.tick(true), AttentionPoller.REFRESH_WINDOW_MS);
+
   constructor(private readonly secrets: vscode.SecretStorage) {}
 
   start(): void {
@@ -172,10 +178,11 @@ export class AttentionPoller implements vscode.Disposable {
     void this.tick(false);
   }
 
-  /** Force an immediate FRESH refetch (e.g. after a platform write or sign-in) —
-   *  the one read that skips the server cache, because the caller knows state moved. */
+  /** Force a FRESH refetch (e.g. after a platform write or sign-in) — the one read
+   *  that skips the server cache, because the caller knows state moved. Immediate when
+   *  isolated; a burst inside the window becomes one trailing fetch. */
   refresh(): void {
-    void this.tick(true);
+    this.fresh.request();
   }
 
   private async tick(fresh = false): Promise<void> {
@@ -224,6 +231,7 @@ export class AttentionPoller implements vscode.Disposable {
 
   dispose(): void {
     this.disposed = true;
+    this.fresh.dispose();
     if (this.timer) clearTimeout(this.timer);
     this.focusSub?.dispose();
     this._onDidChange.dispose();

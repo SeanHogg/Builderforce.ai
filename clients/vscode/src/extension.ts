@@ -33,7 +33,6 @@ import { getSelectedProject, initProjectState, onProjectChange, setSelectedProje
 import { getProjectNames, invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider, chatOfSessionNode, type SessionTreeNode } from "./sessionsTree";
-import { archive, unarchive } from "./sessionsArchive";
 import { InboxQuickActionsProvider, InboxTreeProvider } from "./inboxTree";
 import { AttentionPoller, onLocalRunsChange, managerAttention, attentionFor } from "./attention";
 import { confirmDestructiveDelete } from "./confirmDeletion";
@@ -206,14 +205,17 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.openCreationSessionItem", (session: bfApi.BfCreationSessionSummary) =>
       BuilderForcePanel.open(context, undefined, { surface: "graph", sessionId: session.id })),
     attention.onDidChange(() => {
-      tree.refresh(); projects.refresh(); inbox.refresh(); updateManagerStatus();
+      // Live state moved: repaint the Sessions icons/"Running" from the held list at
+      // once, and revalidate it (throttled — it repaints again only if the list moved).
+      tree.repaint(); tree.refresh(); projects.refresh(); inbox.refresh(); updateManagerStatus();
       // Per-session chat tabs show the same live status as the Sessions rows, off the
       // same map — repaint them on the same signal (no second poller).
       BuilderForcePanel.refreshTabStatus();
     }),
     // The host-owned Brain loop reports its running / awaiting chats (the server can't
-    // see them) — repaint the Sessions tree so they light up in lockstep.
-    onLocalRunsChange(() => { tree.refresh(); BuilderForcePanel.refreshTabStatus(); }),
+    // see them) — repaint the Sessions tree so they light up in lockstep. Local state,
+    // so a repaint from the held list, never a refetch.
+    onLocalRunsChange(() => { tree.repaint(); BuilderForcePanel.refreshTabStatus(); }),
     // Switching the active project re-scopes the attention query.
     onProjectChange(() => attention.refresh()),
   );
@@ -518,19 +520,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.archiveSession", async (item: bfApi.BfBrainChat | string | SessionTreeNode) => {
       const chat = chatOfSessionNode(item);
       if (!chat) return;
-      const key = `chat:${chat.id}`;
-      const now = Date.now();
-      tree.archiveState = archive(tree.archiveState, [key], now, true);
-      tree.persistArchive();
-      tree.refresh();
+      tree.archiveSession(`chat:${chat.id}`);
     }),
     vscode.commands.registerCommand("builderforce.unarchiveSession", async (item: bfApi.BfBrainChat | string | SessionTreeNode) => {
       const chat = chatOfSessionNode(item);
       if (!chat) return;
-      const key = `chat:${chat.id}`;
-      tree.archiveState = unarchive(tree.archiveState, key);
-      tree.persistArchive();
-      tree.refresh();
+      tree.unarchiveSession(`chat:${chat.id}`);
     }),
     vscode.commands.registerCommand("builderforce.toggleShowArchived", () => {
       tree.setShowArchived(!tree.showArchived);

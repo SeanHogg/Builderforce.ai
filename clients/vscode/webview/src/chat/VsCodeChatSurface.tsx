@@ -213,10 +213,20 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // MATCHES the Sessions tree (which filters by project). With no project selected
   // both show every chat. Server-side filter via ?projectId (same rows the sidebar
   // filters client-side). Re-runs when the project switches (init.project?.id dep).
+  // `chats.changed` makes the host refetch the Sessions tree. Tell it only when the list
+  // actually moved: every ticket write in a run re-reads this list, and most re-reads
+  // come back identical.
+  const lastChatsSig = useRef<string | null>(null);
   const reloadChats = useCallback(() => {
     const projectId = init.project?.id != null ? String(init.project.id) : undefined;
     persistence.listChats({ limit: 50, projectId })
-      .then((list) => { setChats(list); post('chats.changed'); })
+      .then((list) => {
+        setChats(list);
+        const sig = JSON.stringify(list);
+        if (sig === lastChatsSig.current) return;
+        lastChatsSig.current = sig;
+        post('chats.changed');
+      })
       .catch(() => {});
   }, [persistence, init.project?.id]);
   useEffect(() => { reloadChats(); }, [reloadChats]);

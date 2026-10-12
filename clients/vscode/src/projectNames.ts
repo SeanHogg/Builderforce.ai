@@ -29,7 +29,7 @@ export async function getProjectNames(secrets: vscode.SecretStorage): Promise<Ma
  * or a localized "No project" for rows with no project association. Returns undefined
  * when the id is set but its name hasn't resolved (the row then shows no label).
  */
-export function projectLabel(byId: Map<number, string>, projectId: number | null | undefined): string | undefined {
+export function projectLabel(byId: ReadonlyMap<number, string>, projectId: number | null | undefined): string | undefined {
   if (projectId == null) return vscode.l10n.t("No project");
   return byId.get(projectId);
 }
