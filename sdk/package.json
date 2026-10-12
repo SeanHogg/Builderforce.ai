@@ -62,5 +62,10 @@
     "typescript": "^6.0.3",
     "vitest": "^4.0.3",
     "@typescript/native-preview": "7.0.0-dev.20260627.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "^0.28.2"
+    }
   }
 }

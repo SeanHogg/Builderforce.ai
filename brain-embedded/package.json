@@ -83,5 +83,10 @@
     "@builderforce/agent-stall": "link:../packages/agent-stall",
     "@builderforce/agent-tools": "link:../packages/agent-tools",
     "@builderforce/write-outbox": "link:../packages/write-outbox"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "^0.28.2"
+    }
   }
 }
