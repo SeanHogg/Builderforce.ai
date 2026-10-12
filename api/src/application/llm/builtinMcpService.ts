@@ -107,7 +107,7 @@ import { OnCallService } from '../incident/OnCallService';
 import { EscalationService } from '../incident/EscalationService';
 import { recallSops } from '../knowledge/recallSops';
 import { publishKnowledgeDoc } from '../knowledge/publishKnowledgeDoc';
-import { importSpecFromBoard, SpecImportError } from '../prd/importSpec';
+import { importSpecFromBoard, publicSpecImportResult, SpecImportError } from '../prd/importSpec';
 import { SecurityTicketAccessService } from '../security/SecurityTicketAccessService';
 import { recallProjectFacts, upsertProjectFact } from './projectFacts';
 import type { Task } from '../../domain/task/Task';
@@ -1476,7 +1476,7 @@ const CATALOG: BuiltinTool[] = [
           taskId: a.taskId != null ? num(a.taskId) : null,
         });
         if (ctx.env) await bumpTicketSearchVersion(ctx.env, ctx.tenantId);
-        return { ...result.spec, created: result.created, linkedTaskId: result.linkedTaskId };
+        return publicSpecImportResult(result.spec, { created: result.created, linkedTaskId: result.linkedTaskId });
       } catch (err) {
         if (err instanceof SpecImportError) throw new Error(err.message);
         throw err;

@@ -22,7 +22,7 @@ import { specs, workflows, projects, tasks } from '../../infrastructure/database
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hostOrTenantAuth, requestAgentHostId } from '../middleware/hostOrTenantAuth';
 import { linkSpecToTask } from '../../application/prd/taskPrd';
-import { importSpecFromBoard, SpecImportError } from '../../application/prd/importSpec';
+import { importSpecFromBoard, publicSpecImportResult, SpecImportError } from '../../application/prd/importSpec';
 import { bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -156,7 +156,7 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
         taskId: body.taskId,
       });
       await bumpTicketSearchVersion(c.env as Env, tenantId);
-      return c.json({ ...result.spec, created: result.created, linkedTaskId: result.linkedTaskId }, result.created ? 201 : 200);
+      return c.json(publicSpecImportResult(result.spec, { created: result.created, linkedTaskId: result.linkedTaskId }), result.created ? 201 : 200);
     } catch (err) {
       if (err instanceof SpecImportError) return c.json({ error: err.message }, err.status);
       throw err;

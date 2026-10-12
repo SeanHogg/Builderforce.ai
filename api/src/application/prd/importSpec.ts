@@ -15,12 +15,14 @@ import {
   specs,
   tasks,
 } from '../../infrastructure/database/schema';
-import { loadProjectInTenant } from '../project/loadProject';
-import { integrationCredentialSecret } from '../credentials/integrationCredentialSecret';
+import { projectInTenant } from '../project/projectOwnership';
+import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
+import { loadConnectionCredentials } from '../boardsync/drizzleStore';
 import {
   createBoardProvider,
   PermanentBoardProviderError,
-  type BoardProviderId,
+  type BoardProvider,
+  type FetchLike,
   type NormalizedTicket,
 } from '../boardsync/providers';
 import { linkSpecToTask } from './taskPrd';
@@ -142,17 +144,27 @@ export function specFieldsFromTicket(ticket: NormalizedTicket): {
 }
 
 export type ImportSpecDeps = {
-  loadProject: typeof loadProjectInTenant;
-  loadCredentials: (env: Env, tenantId: number, credentialId: string) => Promise<Record<string, unknown>>;
-  createProvider: typeof createBoardProvider;
+  projectExists: (db: Db, tenantId: number, projectId: number) => Promise<boolean>;
+  loadCredentials: (
+    db: Db,
+    tenantId: number,
+    credentialId: string | null,
+    secret: string,
+  ) => Promise<{ credentials: Record<string, unknown>; baseUrl: string | null } | null>;
+  createProvider: (
+    provider: string,
+    cfg: { credentials: Record<string, unknown>; baseUrl?: string | null; externalBoardId?: string | null },
+    fetchFn: FetchLike,
+  ) => BoardProvider;
+  fetchFn: FetchLike;
   linkSpecToTask: typeof linkSpecToTask;
 };
 
 const defaultDeps: ImportSpecDeps = {
-  loadProject: loadProjectInTenant,
-  loadCredentials: (env, tenantId, credentialId) =>
-    integrationCredentialSecret(env, tenantId, credentialId),
+  projectExists: projectInTenant,
+  loadCredentials: loadConnectionCredentials,
   createProvider: createBoardProvider,
+  fetchFn: fetch,
   linkSpecToTask,
 };
 
@@ -191,8 +203,9 @@ export async function importSpecFromBoard(
   },
   deps: ImportSpecDeps = defaultDeps,
 ): Promise<SpecImportResult> {
-  const project = await deps.loadProject(db, args.tenantId, args.projectId);
-  if (!project) throw new SpecImportError('Project not found', 404);
+  if (!await deps.projectExists(db, args.tenantId, args.projectId)) {
+    throw new SpecImportError('Project not found', 404);
+  }
 
   const connections = await db
     .select({
@@ -219,15 +232,25 @@ export async function importSpecFromBoard(
     throw new SpecImportError('Board connection has no credential', 400);
   }
 
-  const credentials = await deps.loadCredentials(env, args.tenantId, connection.credentialId);
-  const provider = deps.createProvider({
-    id: connection.provider as BoardProviderId,
-    tenantId: args.tenantId,
-    projectId: args.projectId,
-    credentials,
-    baseUrl: typeof credentials.baseUrl === 'string' ? credentials.baseUrl : undefined,
-    externalBoardId: connection.externalBoardId,
-  });
+  const loaded = await deps.loadCredentials(
+    db,
+    args.tenantId,
+    connection.credentialId,
+    integrationCredentialSecret(env),
+  );
+  if (!loaded) {
+    throw new SpecImportError('Board connection has no credential', 400);
+  }
+
+  const provider = deps.createProvider(
+    connection.provider,
+    {
+      credentials: loaded.credentials,
+      baseUrl: loaded.baseUrl,
+      externalBoardId: connection.externalBoardId,
+    },
+    deps.fetchFn,
+  );
 
   if (typeof provider.fetchTicket !== 'function') {
     throw new SpecImportError(
@@ -240,7 +263,7 @@ export async function importSpecFromBoard(
   try {
     ticket = await provider.fetchTicket(args.externalId.trim());
   } catch (err) {
-    if (err instanceof PermanentBoardProviderError && err.reason === 'not_found') {
+    if (err instanceof PermanentBoardProviderError && err.code === 'not_found') {
       throw new SpecImportError(err.message, 404);
     }
     const msg = err instanceof Error ? err.message : String(err);

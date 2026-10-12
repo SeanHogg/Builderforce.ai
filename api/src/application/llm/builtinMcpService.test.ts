@@ -223,6 +223,7 @@ describe('listBuiltinTools', () => {
     // Additional domains wired server-side (read) [1296].
     expect(names).toContain('builtin_workflows_list');
     expect(names).toContain('builtin_specs_list');
+    expect(names).toContain('builtin_specs_import');
     expect(names).toContain('builtin_prompts_list');
     expect(names).toContain('builtin_approvals_list');
     expect(names).toContain('builtin_agents_list');
