@@ -1,18 +1,19 @@
 import * as vscode from "vscode";
-import {
-  BfObjective,
-  BfTask,
-  DEFAULT_HIDE_DONE,
-  getCurrentUserId,
-  isDoneStatus,
-  listProjectObjectives,
-  listTasks,
-} from "./bfApi";
+import { isClosedTask } from "@builderforce/agent-loop";
+import { BfObjective, BfTask, getCurrentUserId, listProjectObjectives, listTasks } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
 import { attentionApprovalId, attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
+import {
+  PRIORITY_ORDER,
+  STATUS_ORDER,
+  humanLabel,
+  rank,
+  taskNeedsAttention,
+  taskRowLabel,
+  taskStatusIcon,
+} from "./taskTreeShared";
 
-const HIDE_DONE_KEY = "builderforce.hideDoneTasks";
 const CONFIG_KEY = "builderforce.projectTreeConfig";
 // When-clause context key so the view/title shows the right Flat⇄Hierarchy icon.
 const HIERARCHY_CTX = "builderforce.projectHierarchy";
@@ -20,29 +21,6 @@ const HIERARCHY_CTX = "builderforce.projectHierarchy";
 const ATTENTION_CTX = "builderforce.projectNeedsAttention";
 // When-clause context key for the "Assigned to me" filter toggle icon.
 const MINE_CTX = "builderforce.projectAssignedToMe";
-// A ticket is "stale" (needs attention) once it hasn't moved in this many days.
-const STALE_DAYS = 14;
-const STALE_MS = STALE_DAYS * 24 * 60 * 60 * 1000;
-
-/**
- * "Needs attention" predicate — shared by the filter and the row badge so both
- * agree on what's at risk: blocked, past its due date, or gone stale (not touched
- * in {@link STALE_DAYS} days). Done work never needs attention.
- */
-export function taskNeedsAttention(task: BfTask, nowMs: number): boolean {
-  if (isDoneStatus(task.status)) return false;
-  if ((task.status ?? "").toLowerCase() === "blocked") return true;
-  if (task.dueDate) {
-    const due = Date.parse(task.dueDate);
-    if (Number.isFinite(due) && due < nowMs) return true;
-  }
-  if (task.updatedAt) {
-    const touched = Date.parse(task.updatedAt);
-    if (Number.isFinite(touched) && nowMs - touched > STALE_MS) return true;
-  }
-  return false;
-}
-
 export type ProjectGroupBy = "none" | "status" | "priority";
 export type ProjectSortBy = "status" | "priority" | "title" | "key";
 
@@ -53,7 +31,7 @@ interface TreeConfig {
   /** Flat-mode grouping (Hierarchy IS a grouping by parent, so it's ignored there). */
   groupBy: ProjectGroupBy;
   sortBy: ProjectSortBy;
-  /** Show only these statuses; null = show all. Composes with the hide-done toggle. */
+  /** Show only these statuses; null = show all. Applies within open work. */
   statusFilter: string[] | null;
   /** Show only tickets that need attention (blocked / overdue / stale). */
   needsAttention: boolean;
@@ -69,50 +47,20 @@ type Node =
   | { kind: "task"; task: BfTask; hasChildren: boolean }
   | { kind: "info"; label: string; command?: string };
 
-// Canonical ordering for status/priority sorts + grouping (unknown values sort last,
-// alphabetically). Shared by the sort comparator and the group ordering (DRY).
-const STATUS_ORDER = ["in_progress", "in_review", "todo", "backlog", "open", "blocked", "done"];
-const PRIORITY_ORDER = ["urgent", "high", "medium", "low"];
-
-const rank = (order: string[], v: string | undefined): number => {
-  const i = order.indexOf((v ?? "").toLowerCase());
-  return i === -1 ? order.length : i;
-};
-
-/** Humanize a raw status/priority key for display; localize the well-known ones. */
-function humanLabel(raw: string | undefined, kind: "status" | "priority"): string {
-  const v = (raw ?? "").toLowerCase();
-  const t = vscode.l10n.t;
-  const known: Record<string, string> =
-    kind === "status"
-      ? {
-          in_progress: t("In progress"),
-          in_review: t("In review"),
-          todo: t("To do"),
-          backlog: t("Backlog"),
-          open: t("Open"),
-          blocked: t("Blocked"),
-          done: t("Done"),
-        }
-      : { urgent: t("Urgent"), high: t("High"), medium: t("Medium"), low: t("Low") };
-  if (known[v]) return known[v];
-  if (!v) return kind === "status" ? t("No status") : t("No priority");
-  return v.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 /**
  * The Tasks section of the Work view: the selected project's tasks (the workspace and
  * project rows above it are `ProjectContextTreeProvider`). The list is arrangeable (the toolbar drives this
  * provider): a **Flat** or **Hierarchy** (epic → child tasks) view, optional **group by**
  * status/priority (flat mode), a **sort**, and a **status filter** ("show In progress").
- * Clicking a task starts a chat session; right-click sets status. Every other panel keys
+ * It lists OPEN work only — done, cancelled and archived tickets live in the Closed
+ * section below (`ClosedTasksTreeProvider`). Clicking a task starts a chat session;
+ * the row actions set status, archive or delete. Every other panel keys
  * off the same selection. Degrades to a hint when signed out or the APIs aren't reachable.
  */
 export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<Node | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-  private hideDone: boolean;
   private config: TreeConfig;
   /** Child-task lookup for the Hierarchy view, rebuilt on each root fetch (no N+1:
    *  listTasks is read-through cached in bfApi, so child lookups hit the cache). */
@@ -125,10 +73,8 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
   private currentUserId: string | null = null;
 
   constructor(private readonly ctx: vscode.ExtensionContext) {
-    this.hideDone = ctx.globalState.get<boolean>(HIDE_DONE_KEY, DEFAULT_HIDE_DONE);
     this.config = { ...DEFAULT_CONFIG, ...(ctx.globalState.get<Partial<TreeConfig>>(CONFIG_KEY) ?? {}) };
     // Seed the menu when-clause contexts so the right toggle icons show on load.
-    void vscode.commands.executeCommand("setContext", HIDE_DONE_KEY, this.hideDone);
     void vscode.commands.executeCommand("setContext", HIERARCHY_CTX, this.config.hierarchy);
     void vscode.commands.executeCommand("setContext", ATTENTION_CTX, this.config.needsAttention);
     void vscode.commands.executeCommand("setContext", MINE_CTX, this.config.assignedToMe);
@@ -137,14 +83,6 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
 
   refresh(): void {
     this._onDidChangeTreeData.fire();
-  }
-
-  /** Toggle showing/hiding done tasks (persisted; drives the view-title icon). */
-  setHideDone(hide: boolean): void {
-    this.hideDone = hide;
-    void this.ctx.globalState.update(HIDE_DONE_KEY, hide);
-    void vscode.commands.executeCommand("setContext", HIDE_DONE_KEY, hide);
-    this.refresh();
   }
 
   private saveConfig(patch: Partial<TreeConfig>): void {
@@ -198,7 +136,7 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
     if (pick) this.saveConfig({ sortBy: pick.value });
   }
 
-  /** Multi-select the statuses to show (built from the project's actual lane keys). */
+  /** Multi-select the statuses to show (built from the open tickets' actual lane keys). */
   async pickStatusFilter(): Promise<void> {
     const project = getSelectedProject();
     if (!project) return;
@@ -208,7 +146,7 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
     } catch {
       /* fall through to an empty picker */
     }
-    const statuses = Array.from(new Set(tasks.map((t) => (t.status ?? "").toLowerCase())))
+    const statuses = Array.from(new Set(tasks.filter((t) => !isClosedTask(t)).map((t) => (t.status ?? "").toLowerCase())))
       .sort((a, b) => rank(STATUS_ORDER, a) - rank(STATUS_ORDER, b) || a.localeCompare(b));
     if (statuses.length === 0) {
       void vscode.window.showInformationMessage(vscode.l10n.t("No tasks to filter yet."));
@@ -258,7 +196,7 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
     const collapsible = node.hasChildren
       ? vscode.TreeItemCollapsibleState.Collapsed
       : vscode.TreeItemCollapsibleState.None;
-    const item = new vscode.TreeItem(`${t.key ? `${t.key} ` : ""}${t.title}`, collapsible);
+    const item = new vscode.TreeItem(taskRowLabel(t), collapsible);
     const attention = taskNeedsAttention(t, Date.now());
     // Live execution state (running / awaiting a human answer), layered over the
     // stale/blocked "⚠" risk badge and the status label. A pending question ("❓")
@@ -267,13 +205,7 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
     const livePrefix = live ? attentionDescriptionPrefix(live) : "";
     item.description = `${livePrefix}${attention ? "⚠ " : ""}${t.status ?? ""}`;
     item.tooltip = t.description ?? t.title;
-    item.iconPath = live
-      ? attentionIcon(live)
-      : t.taskType === "epic"
-        ? new vscode.ThemeIcon("type-hierarchy")
-        : isDoneStatus(t.status)
-          ? new vscode.ThemeIcon("pass-filled", new vscode.ThemeColor("testing.iconPassed"))
-          : new vscode.ThemeIcon(iconForStatus(t.status));
+    item.iconPath = live ? attentionIcon(live) : taskStatusIcon(t);
     item.contextValue = "builderforceTask";
     // A ticket whose agent is waiting on a human answer deep-links straight to that
     // question (the same review flow the Inbox and the palette use) instead of
@@ -325,6 +257,10 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
       this.currentUserId = userId;
       if (tasks.length === 0 && objectives.length === 0) {
         nodes.push({ kind: "info", label: vscode.l10n.t("No tasks in this project") });
+        return nodes;
+      }
+      if (objectives.length === 0 && tasks.every(isClosedTask)) {
+        nodes.push({ kind: "info", label: vscode.l10n.t("No open tasks — finished work is under Closed") });
         return nodes;
       }
       const visible = this.applyFilters(tasks);
@@ -382,7 +318,7 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
     return { kind: "task", task, hasChildren };
   }
 
-  /** Hide-done toggle + status filter + "needs attention" + "assigned to me", composed. */
+  /** Open work only, then the status filter + "needs attention" + "assigned to me", composed. */
   private applyFilters(tasks: BfTask[]): BfTask[] {
     const f = this.config.statusFilter;
     const now = Date.now();
@@ -390,7 +326,7 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
     // it degrades to a no-op instead of hiding the whole list.
     const mine = this.config.assignedToMe && this.currentUserId ? this.currentUserId : null;
     return tasks.filter((t) => {
-      if (this.hideDone && isDoneStatus(t.status)) return false;
+      if (isClosedTask(t)) return false;
       if (f && !f.includes((t.status ?? "").toLowerCase())) return false;
       if (this.config.needsAttention && !taskNeedsAttention(t, now)) return false;
       if (mine && t.assignedUserId !== mine) return false;
@@ -434,20 +370,5 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
         label: humanLabel(key, kind),
         tasks: this.sort(groupTasks),
       }));
-  }
-}
-
-function iconForStatus(status?: string): string {
-  switch (status) {
-    case "done":
-      return "pass-filled";
-    case "in_progress":
-      return "loading~spin";
-    case "in_review":
-      return "git-pull-request";
-    case "blocked":
-      return "error";
-    default:
-      return "circle-outline";
   }
 }

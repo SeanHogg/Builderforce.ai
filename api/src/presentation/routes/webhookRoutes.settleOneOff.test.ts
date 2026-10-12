@@ -19,6 +19,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
   completeListingCheckout: vi.fn(),
   completeKnowledgeCheckout: vi.fn(),
+  completeSkillCheckout: vi.fn(),
   settleInvoiceCheckout: vi.fn(),
   reportCaughtError: vi.fn(),
   parseWebhook: vi.fn(),
@@ -29,6 +30,10 @@ vi.mock('../../application/marketplace/listingCommerce', () => ({
 }));
 vi.mock('../../application/knowledge/knowledgeCommerce', () => ({
   completeKnowledgeCheckout: mocks.completeKnowledgeCheckout,
+}));
+vi.mock('../../application/marketplace/skillCommerce', () => ({
+  completeSkillCheckout: mocks.completeSkillCheckout,
+  SKILL_PURCHASE_KIND: 'marketplace_skill',
 }));
 vi.mock('../../application/finance/receivables', () => ({
   settleInvoiceCheckout: mocks.settleInvoiceCheckout,
@@ -73,6 +78,7 @@ const KNOWLEDGE = {
 beforeEach(() => {
   mocks.completeListingCheckout.mockReset();
   mocks.completeKnowledgeCheckout.mockReset();
+  mocks.completeSkillCheckout.mockReset();
   mocks.settleInvoiceCheckout.mockReset();
   mocks.reportCaughtError.mockReset();
 });
@@ -128,5 +134,49 @@ describe('the other two flows keep the same contract', () => {
       externalCustomerId: 'cus_1', externalSubscriptionId: '', raw: {},
     });
     expect(body).toEqual({ received: true, processed: false });
+  });
+});
+
+const SKILL = {
+  type: 'checkout.completed',
+  purchaseKind: 'marketplace_skill',
+  checkoutSessionId: 'cs_skill',
+  metadata: {
+    purchaseKind: 'marketplace_skill',
+    artifactType: 'skill',
+    artifactSlug: 'code-review',
+    buyerUserId: 'u-buyer',
+  },
+  externalCustomerId: 'cus_1',
+  externalSubscriptionId: '',
+  raw: {},
+};
+
+describe('checkout.completed marketplace_skill — the close-the-tab path', () => {
+  it('settles a skill purchase without requiring a workspace', async () => {
+    mocks.completeSkillCheckout.mockResolvedValue({ purchaseId: 9 });
+    const { status, body } = await deliver(SKILL);
+    expect(status).toBe(200);
+    expect(body).toEqual({ received: true, processed: true });
+    expect(mocks.completeSkillCheckout).toHaveBeenCalledWith(expect.anything(), expect.anything(), {
+      buyerUserId: 'u-buyer', checkoutSessionId: 'cs_skill',
+    });
+  });
+
+  it('acknowledges without settling when the metadata names no buyer', async () => {
+    const { body } = await deliver({
+      ...SKILL,
+      metadata: { purchaseKind: 'marketplace_skill', artifactType: 'skill', artifactSlug: 'code-review' },
+    });
+    expect(body).toEqual({ received: true, processed: false });
+    expect(mocks.completeSkillCheckout).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges a refusal rather than asking for a redelivery loop', async () => {
+    mocks.completeSkillCheckout.mockRejectedValue(new Error('You already own this'));
+    const { status, body } = await deliver(SKILL);
+    expect(status).toBe(200);
+    expect(body).toEqual({ received: true, processed: false });
+    expect(mocks.reportCaughtError).toHaveBeenCalled();
   });
 });

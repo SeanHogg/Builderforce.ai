@@ -20,6 +20,8 @@ export interface IdeaLogRowProps {
   onStage?: (stage: IdeaStage) => void;
   /** Absent when the viewer cannot edit. */
   onPlanInterview?: () => void;
+  /** Absent when the viewer cannot edit. Authors a form from the idea (PRD 27 Ask people). */
+  onAskPeople?: () => void;
   onOpen: () => void;
 }
 
@@ -32,7 +34,7 @@ const text = (value: unknown): string => (typeof value === 'string' ? value.trim
  * derivation, formatted through the same `formatSpecVerdict` the card on the board uses,
  * so the list and the card cannot disagree about whether an idea was tested.
  */
-export function IdeaLogRow({ entry, board, onStage, onPlanInterview, onOpen }: IdeaLogRowProps) {
+export function IdeaLogRow({ entry, board, onStage, onPlanInterview, onAskPeople, onOpen }: IdeaLogRowProps) {
   const t = useTranslations('creationCanvas.surface.ideas');
   const tRoot = useTranslations();
   const fmt = useFormat();
@@ -74,6 +76,9 @@ export function IdeaLogRow({ entry, board, onStage, onPlanInterview, onOpen }: I
       <div className={styles.rowActions}>
         <button type="button" className={styles.rowAction} disabled={!onPlanInterview} onClick={onPlanInterview}>
           {t('row.planInterview')}
+        </button>
+        <button type="button" className={styles.rowAction} disabled={!onAskPeople} onClick={onAskPeople}>
+          {t('row.askPeople')}
         </button>
         <button type="button" className={styles.rowAction} onClick={onOpen}>{t('row.openOnBoard')}</button>
       </div>

@@ -66,7 +66,7 @@ import {
   type SpecObjectSpec,
 } from './specObjects';
 import { specVerdict, type SpecVerdict, type SpecVerdictResult } from './specVerdict';
-import { ideaTestedBy } from './ideaLog';
+import { IDEA_EVIDENCE_KINDS, ideaTestedBy } from './ideaLog';
 
 /** i18n namespace for every founder label, status, field, column and verdict. Named
  *  because `boardRefField` resolves its sentences here even when a legal or hiring kind
@@ -617,8 +617,9 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     // Written in seconds and tracked for months. Everything below `stage` is optional on
     // purpose: a scratchpad that demands a problem statement before it will take a note
     // is a form, and the note is lost. What the kind DOES insist on is honesty about
-    // evidence — `evidence` is computed from the interviews and experiments the idea
-    // names, so a card cannot claim to be tested by a conversation nobody had.
+    // evidence — `evidence` is computed from the interviews, experiments and forms the
+    // idea names (`IDEA_EVIDENCE_KINDS`), so a card cannot claim to be tested by a
+    // conversation nobody had.
     kind: 'idea',
     icon: '✎',
     group: 'Insights',
@@ -634,23 +635,30 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       { name: 'segment', render: 'stat', label: 'segment', hint: 'Title of the customerSegment this idea is for, verbatim, where one is on the board.' },
       { name: 'riskiestAssumptions', render: 'chips', label: 'riskiestAssumptions', hint: 'What must be true for this to work, riskiest first. Each one should be something a customer interview or an experiment could prove wrong.' },
       { name: 'nextStep', render: 'stat', label: 'nextStep', hint: 'The ONE cheapest thing that would teach the most next, e.g. "Interview 5 ops directors about scheduling". Never "build an MVP" — building is what the evidence earns.' },
-      { name: 'testedBy', render: 'chips', label: 'testedBy', hint: 'Titles of the `customerInterview` and `experiment` objects on this board that tested this idea, verbatim. This is what `evidence` counts — an interview not named here does not count for this idea.' },
+      { name: 'testedBy', render: 'chips', label: 'testedBy', hint: 'Titles of the `customerInterview`, `experiment` and `form` objects on this board that tested this idea, verbatim. This is what `evidence` counts — an interview not named here does not count for this idea.' },
       {
         name: 'evidence', render: 'verdict', label: 'evidence',
-        hint: 'COMPUTED. How many of the `testedBy` refs resolve to a `customerInterview` or `experiment` on this board, and which do not. "Untested" is a real and common answer — it is the reason to plan an interview, not a reason to invent one.',
+        hint: 'COMPUTED. How many of the `testedBy` refs resolve to a `customerInterview`, `experiment` or `form` on this board, and which do not. "Untested" is a real and common answer — it is the reason to plan an interview or ask people, not a reason to invent one.',
         derive: (data, board) => {
           const refs = ideaTestedBy(data);
           if (!refs.length) return specVerdict('idea.untested');
-          let interviews = 0;
-          let experiments = 0;
+          const counts: Record<(typeof IDEA_EVIDENCE_KINDS)[number], number> = {
+            customerInterview: 0, experiment: 0, form: 0,
+          };
           const missing: string[] = [];
           for (const ref of refs) {
-            if (board.byRef('customerInterview', ref)) interviews += 1;
-            else if (board.byRef('experiment', ref)) experiments += 1;
+            const kind = IDEA_EVIDENCE_KINDS.find((candidate) => board.byRef(candidate, ref));
+            if (kind) counts[kind] += 1;
             else missing.push(ref);
           }
           const parts: SpecVerdict[] = [];
-          if (interviews + experiments > 0) parts.push(specVerdict('idea.tested', { interviews, experiments }));
+          if (counts.customerInterview + counts.experiment > 0) {
+            parts.push(specVerdict('idea.tested', {
+              interviews: counts.customerInterview,
+              experiments: counts.experiment,
+            }));
+          }
+          if (counts.form > 0) parts.push(specVerdict('idea.testedForms', { forms: counts.form }));
           if (missing.length) parts.push(specVerdict('idea.missing', { refs: missing }));
           return parts.length === 1 ? parts[0] : parts;
         },

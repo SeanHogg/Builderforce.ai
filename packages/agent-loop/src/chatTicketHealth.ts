@@ -19,11 +19,15 @@
  *
  * - A ticket with `total: 0` (legacy spec/roadmap/retro, a deleted item) still weighs
  *   1, so a 0% ring cannot vanish from the headline.
- * - Cancelled is terminal but not done-class (`progressPct: 0`). Averaging it in made
- *   "3 done + 1 cancelled" read as 75%, so cancelled tickets are skipped. US `canceled`
- *   too. An all-cancelled list is 100% (nothing owed). An empty list is 0%.
+ * - Cancelled is closed: the server reports its own ring at 100%. It is still skipped
+ *   here (US `canceled` too) so an older row still carrying `progressPct: 0` cannot
+ *   drag "3 done + 1 cancelled" down to 75%, and so the "4/6" counter counts only
+ *   work that was delivered. An all-cancelled list is 100% (nothing owed). An empty
+ *   list is 0%.
  * - `done`/`total` are still returned for the "4/6" counter beside the percent.
  */
+
+import { isCancelledTaskStatus } from "./taskClosedState";
 
 export interface ChatTicketHealthInput {
   /** Authoritative progress for this ticket, 0–100. */
@@ -47,8 +51,7 @@ export interface ChatTicketHealth {
 
 /** True when this lane must not sit in the chat-health denominator. */
 export function isExcludedFromChatHealth(status?: string | null): boolean {
-  const s = (status ?? "").trim().toLowerCase();
-  return s === "cancelled" || s === "canceled";
+  return isCancelledTaskStatus(status);
 }
 
 /** Roll a chat's linked tickets up into its one progress figure. */

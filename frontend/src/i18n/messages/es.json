@@ -22948,8 +22948,9 @@
           "unreferenced": "{count, plural, one {# obligación no tiene `reference`, así que nunca podrá demostrarse que se ha cumplido.} other {# obligaciones no tienen `reference`, así que nunca podrá demostrarse que se han cumplido.}}"
         },
         "idea": {
-          "untested": "Sin probar: todavía no hay ninguna entrevista con clientes ni ningún experimento vinculado. Habla con alguien antes de construir.",
+          "untested": "Sin probar: todavía no hay ninguna entrevista con clientes, ningún experimento ni ningún formulario vinculado. Habla con alguien antes de construir.",
           "tested": "Probada con {interviews, plural, =0 {ninguna entrevista} one {# entrevista} other {# entrevistas}} y {experiments, plural, =0 {ningún experimento} one {# experimento} other {# experimentos}}.",
+          "testedForms": "Probada con {forms, plural, =0 {ningún formulario} one {# formulario} other {# formularios}}.",
           "missing": "Aún no están en este tablero: {refs}."
         }
       }
@@ -24458,6 +24459,12 @@
     "noticeFormClosed": "El formulario está cerrado. No se registrarán más respuestas.",
     "noticeFormUnpublished": "Publica el formulario antes de recoger o cerrarlo.",
     "noticeFormFailed": "No se pudo completar esa acción del formulario.",
+    "noticeIdeaUntitled": "Ponle un título a la idea antes de preguntar a la gente.",
+    "noticeIdeaInterviewTitle": "Ponle un título a la idea para poder nombrar la entrevista.",
+        "noticeIdeaInterviewPlanned": "Entrevista planificada. Ábrela en el tablero para elegir una hora.",
+        "noticeIdeaFormTitle": "Ponle un título a la idea para poder nombrar el formulario.",
+        "noticeIdeaFormCreated": "Formulario creado. Publícalo para obtener un enlace que puedas enviar.",
+        "noticeIdeaActFailed": "No se pudo completar esa acción de la idea.",
     "surface": {
       "chat": {
         "label": "Chat",
@@ -24844,12 +24851,14 @@
           "captured": "Anotada {when}",
           "nextStep": "Siguiente: {step}",
           "planInterview": "Planificar una entrevista",
+          "askPeople": "Preguntar a la gente",
           "openOnBoard": "Abrir en el tablero",
-          "interviewTitle": "Entrevista: {idea}"
+          "interviewTitle": "Entrevista: {idea}",
+          "formTitle": "Formulario: {idea}"
         },
         "bar": {
           "label": "Ideas por etapa",
-          "untested": "{count, plural, =0 {Todas las ideas abiertas tienen una entrevista o un experimento.} one {# idea abierta aún no se ha probado con un cliente.} other {# ideas abiertas aún no se han probado con un cliente.}}",
+          "untested": "{count, plural, =0 {Todas las ideas abiertas tienen una entrevista, un experimento o un formulario.} one {# idea abierta aún no se ha probado con un cliente.} other {# ideas abiertas aún no se han probado con un cliente.}}",
           "segment": "{stage}: {count}"
         }
       },

@@ -248,7 +248,7 @@ export async function scanCodebase(
   );
   await fs.writeFile(
     path.join(bfDir, "README.md"),
-    "# .builderforce\n\nWorkspace knowledge the BuilderForce agent uses for grounding:\n\n- `context.yaml` — detected languages + sub-projects\n- `project-map.md` — full directory map\n- `architecture.md` — overview summary\n- `memory/` — session knowledge appended over time\n- `scan.json` — scan cache (version-token keyed)\n\nSafe to commit or gitignore.\n",
+    "# .builderforce\n\nWorkspace knowledge the BuilderForce agent uses for grounding:\n\n- `context.yaml` — detected languages + sub-projects\n- `project-map.md` — full directory map\n- `architecture.md` — overview summary\n- `memory/` — session knowledge appended over time\n- `scan.json` — scan cache (version-token keyed)\n\nSafe to commit or gitignore.\n\n## Team directives — commit these\n\nWritten by you, not the scan, and shared with everyone who opens the repository:\n\n- `rules.md` — standing instructions the agent follows on every task here\n- `hooks.json` — actions at lifecycle points of every run (`stop`, `preTool`, `postTool`, `runEnd`), e.g. `{ \"hooks\": [{ \"on\": \"stop\", \"prompt\": \"Update README.md and DONE.md with the work completed.\" }] }`. Commands need a one-time approval on each machine. Run **BuilderForce: Edit Workspace Hooks** to start one.\n",
     "utf-8",
   );
   await fs.writeFile(path.join(bfDir, "memory", ".gitkeep"), "", "utf-8");

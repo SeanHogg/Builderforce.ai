@@ -44,11 +44,13 @@ import {
   type ErrorLogFilters,
 } from '../observability/errorLogQuery';
 import { ProjectService } from '../project/ProjectService';
+import { afterBrainProjectCreate, ensureProjectCodingTarget } from '../project/ensureProjectCodingTarget';
 import { listCompanies, companyDetail, unassignedProjects } from '../investor/companyWorkspace';
 import { r2ProjectStoragePurge } from '../ide/projectStorage';
 import { TaskService } from '../task/TaskService';
 import { summarizeTaskActivity } from '../task/taskActivity';
 import { buildTaskProgressBreakdown, normalizeTaskPrState } from '../task/taskProgressBreakdown';
+import { parseTaskListScope, scopeNeedsArchived, taskInScope, TASK_LIST_SCOPES } from '@builderforce/agent-loop';
 import { addManagerDirective } from '../manager/managerDirectives';
 import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
 import { salesRevenueForecast } from '../sales/salesPolicy';
@@ -774,6 +776,19 @@ const CATALOG: BuiltinTool[] = [
         template: a.template != null ? str(a.template) : null,
         modality: a.modality != null ? str(a.modality) : null,
       });
+      // Ticket 3089: Brain/MCP create used to mint a bare `projects` row. The
+      // board-dispatched coder then had neither a git repo nor an IDE workspace
+      // and returned prose. Provision + IDE bind is best-effort so a workspace
+      // hiccup never undoes a project the caller has already been told about.
+      try {
+        if (ctx.env) {
+          await afterBrainProjectCreate(ctx.env, ctx.db, ctx.tenantId, p);
+        } else {
+          await ensureProjectCodingTarget(ctx.db, ctx.tenantId, p);
+        }
+      } catch (error) {
+        reportCaughtError(error, { source: 'application/llm/builtinMcpService.ts', operation: 'afterBrainProjectCreate' });
+      }
       return p.toPlain();
     },
   },
@@ -927,12 +942,16 @@ const CATALOG: BuiltinTool[] = [
   // ---- Tasks ----
   {
     tool: 'tasks.list', mutates: false,
-    description: 'List tasks as a COMPACT projection (id/key/title/status/priority/type/parent/assignee/points/dueDate + a short description snippet). Filter by projectId and/or status; capped by limit (default 50, max 200). The result is { tasks, total, returned, truncated } — when truncated, narrow with projectId/status/limit. Use tasks.get for one task\'s full description and detail.',
-    parameters: obj({ projectId: N, status: S, limit: N }),
+    description: 'List tasks as a COMPACT projection (id/key/title/status/priority/type/parent/assignee/points/dueDate/archived + a short description snippet + progress). scope picks which tickets: "open" (default — work still owed), "closed" (done, cancelled or archived — a cancelled ticket counts as done and reads 100%), or "all". Filter further by projectId and/or status; capped by limit (default 50, max 200). The result is { tasks, total, returned, truncated, scope } — when truncated, narrow with projectId/status/limit. Use tasks.get for one task\'s full detail; change status or archive with tasks.update; tasks.delete is permanent.',
+    parameters: obj({ projectId: N, status: S, scope: { type: 'string', enum: [...TASK_LIST_SCOPES] }, limit: N }),
     run: async (ctx, a) => {
-      const all = await ctx.tasks.listTasks(ctx.tenantId, a.projectId != null ? num(a.projectId) : undefined);
       const status = a.status != null ? str(a.status) : undefined;
-      let rows = all.map((t) => t.toPlain() as unknown as Record<string, unknown>);
+      // An explicit status ("done") is its own scope — defaulting to open would empty it.
+      const scope = parseTaskListScope(a.scope, status ? 'all' : 'open');
+      const all = await ctx.tasks.listTasks(ctx.tenantId, a.projectId != null ? num(a.projectId) : undefined, scopeNeedsArchived(scope));
+      let rows = all
+        .map((t) => t.toPlain() as unknown as Record<string, unknown>)
+        .filter((r) => taskInScope({ status: r.status as string | undefined, archived: r.archived as boolean | undefined }, scope));
       if (status) rows = rows.filter((r) => r.status === status);
       // SECURITY tickets are included but MASKED for a caller without clearance
       // (surfaced-not-hidden; governed by security_ticket_access).
@@ -941,7 +960,7 @@ const CATALOG: BuiltinTool[] = [
       const page = rows.slice(0, limit);
       const progress = await loadTaskProgress(ctx, page.filter((row) => row.restricted !== true));
       const projected = page.map((row) => ({ ...compactTask(row), ...(row.restricted === true ? {} : { progress: progress.get(Number(row.id)) }) }));
-      return { tasks: projected, total: rows.length, returned: projected.length, truncated: rows.length > projected.length };
+      return { tasks: projected, total: rows.length, returned: projected.length, truncated: rows.length > projected.length, scope };
     },
   },
   { tool: 'tasks.get', mutates: false, description: 'Get a task by id, including implementer activity and stale-delivery evidence.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {
@@ -1109,7 +1128,7 @@ const CATALOG: BuiltinTool[] = [
   },
   {
     tool: 'tasks.update', mutates: true,
-    description: 'Update a task (title, description, status/lane, priority, startDate, dueDate, archived). startDate/dueDate are ISO dates that place the ticket on the planning spine, Gantt and calendar; pass null to UN-schedule. Reclassify with taskType, re-parent under an Epic with parentTaskId (null to detach), or (re)assign via exactly one of assignedUserId/assignedAgentRef/assignedAgentHostId (null unassigns). Omitted fields are left untouched. When a lane move or a (re)assignment could start work, the result carries `autoRun: { dispatched, reason, detail, agentRef, runNowCandidate? }` — the autonomy verdict. ALWAYS read it: `dispatched:false` means NO agent started, so report `detail` to the user instead of claiming work has begun.',
+    description: 'Update a task (title, description, status/lane, priority, startDate, dueDate, archived). Close a ticket by moving it to "done" or "cancelled"; archive it (archived: true) to take it off the board while keeping it recoverable (archived: false restores it) — prefer archiving over tasks.delete.startDate/dueDate are ISO dates that place the ticket on the planning spine, Gantt and calendar; pass null to UN-schedule. Reclassify with taskType, re-parent under an Epic with parentTaskId (null to detach), or (re)assign via exactly one of assignedUserId/assignedAgentRef/assignedAgentHostId (null unassigns). Omitted fields are left untouched. When a lane move or a (re)assignment could start work, the result carries `autoRun: { dispatched, reason, detail, agentRef, runNowCandidate? }` — the autonomy verdict. ALWAYS read it: `dispatched:false` means NO agent started, so report `detail` to the user instead of claiming work has begun.',
     parameters: obj({ id: N, title: S, description: S, status: S, priority: S, startDate: { type: ['string', 'null'] }, dueDate: { type: ['string', 'null'] }, archived: B, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: { type: ['number', 'null'] }, assignedUserId: { type: ['string', 'null'] }, assignedAgentRef: { type: ['string', 'null'] }, assignedAgentHostId: { type: ['number', 'null'] } }, ['id']),
     run: async (ctx, a) => {
       // tenant-scope guard (service.updateTask doesn't check) + capture the prior
@@ -1152,7 +1171,7 @@ const CATALOG: BuiltinTool[] = [
       return { ...(updated.toPlain() as object), ...(autoRun ? { autoRun } : {}) };
     },
   },
-  { tool: 'tasks.delete', mutates: true, description: 'Delete a task.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { await getTenantTask(ctx, num(a.id)); await ctx.tasks.deleteTask(num(a.id)); return { deleted: num(a.id) }; } },
+  { tool: 'tasks.delete', mutates: true, description: 'Permanently delete a task — it cannot be recovered. Only when the user explicitly asked to delete; otherwise archive it with tasks.update { archived: true }.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { await getTenantTask(ctx, num(a.id)); await ctx.tasks.deleteTask(num(a.id)); return { deleted: num(a.id) }; } },
   { tool: 'tasks.move', mutates: true, description: 'Move a task to another project board (re-keys it).', parameters: obj({ id: N, projectId: N }, ['id', 'projectId']), run: (ctx, a) => ctx.tasks.moveTask(num(a.id), num(a.projectId), ctx.tenantId).then((t) => t.toPlain()) },
 
   // ---- Work-delta capture + Validator review (0270) ----

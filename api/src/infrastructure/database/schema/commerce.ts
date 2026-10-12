@@ -48,7 +48,10 @@ import { projects, tasks } from './delivery';
  *
  * TWO BUYER SHAPES, ONE TABLE (migration 0982). A skill or persona is bought by a
  * PERSON from the marketing marketplace, where no workspace need exist — those
- * rows carry `userId` and a null `tenantId`. A marketplace AGENT is bought by a
+ * rows carry `userId` and a null `tenantId`, and the partial unique index on
+ * `(user_id, artifact_type, artifact_slug) WHERE tenant_id IS NULL` (migration
+ * 1213) is what makes a replayed skill checkout redirect land on the row that is
+ * already there instead of a second charge. A marketplace AGENT is bought by a
  * WORKSPACE, because the entitlement it grants (the hire, and the runtime binding
  * behind it) is workspace-wide — those rows carry both, and the partial unique
  * index on `(tenant_id, artifact_type, artifact_slug)` is what makes a replayed
@@ -74,6 +77,9 @@ export const marketplacePurchases = pgTable('marketplace_purchases', {
   uniqueIndex('uq_marketplace_purchases_tenant_artifact')
     .on(t.tenantId, t.artifactType, t.artifactSlug)
     .where(sql`${t.tenantId} IS NOT NULL`),
+  uniqueIndex('uq_marketplace_purchases_user_artifact')
+    .on(t.userId, t.artifactType, t.artifactSlug)
+    .where(sql`${t.tenantId} IS NULL`),
   index('idx_marketplace_purchases_tenant').on(t.tenantId),
 ]);
 

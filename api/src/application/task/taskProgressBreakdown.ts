@@ -1,4 +1,4 @@
-import { isDoneStatus } from '../../domain/shared/doneClass';
+import { isClosedTaskStatus } from '@builderforce/agent-loop';
 
 export type TaskProgressBasis = 'subtasks' | 'pr' | 'status' | 'manual';
 export type TaskProgressPrState = 'none' | 'draft' | 'open' | 'merged' | 'closed';
@@ -36,17 +36,19 @@ export function buildTaskProgressBreakdown(input: {
   buildStatus?: string | null;
 }): TaskProgressBreakdown {
   const children = input.childStatuses ?? [];
-  const subtasksDone = children.filter(isDoneStatus).length;
+  // A cancelled subtask is owed nothing, so it counts toward done like a finished one.
+  const subtasksDone = children.filter(isClosedTaskStatus).length;
   const subtasksTotal = children.length;
   const codeDelivered = input.codeDelivered === true;
   const prState = normalizeTaskPrState(input.prStatus);
   const testsPassing = input.buildStatus === 'success' ? true : input.buildStatus === 'failure' ? false : null;
   const shared = { subtasksDone, subtasksTotal, codeDelivered, testsPassing, prState };
 
+  // A closed ticket (done OR cancelled) is complete whatever its children say.
+  if (isClosedTaskStatus(input.status)) return { basis: 'status', progressPct: 100, ...shared };
   if (subtasksTotal > 0) {
     return { basis: 'subtasks', progressPct: Math.round((subtasksDone / subtasksTotal) * 100), ...shared };
   }
-  if (isDoneStatus(input.status)) return { basis: 'status', progressPct: 100, ...shared };
   if (codeDelivered && (prState === 'merged' || prState === 'closed')) {
     return { basis: 'pr', progressPct: 100, ...shared };
   }

@@ -60,6 +60,7 @@ import { hasCallMarkup } from './xmlToolCalls';
 import { codeRunOutcome, runOutcomeId, type BrainRunOutcome } from './runOutcomeReport';
 import { shippedToBaseBranch } from './shipVerification';
 import { selfReviewShipDirective, leftChangeUnshipped, unshippedChangeNudge } from './selfReviewShip';
+import { askStopHook, type RunStopHook } from './stopHooks';
 import { previewReviewDirective, leftChangeUnreviewed, unreviewedChangeNudge, ticketsReviewedInPreview } from './previewReview';
 import { leftDelegationUndone, undelegatedRequestNudge } from './delegationRequest';
 import { lineagePersistence, type RunLineage } from './runLineage';
@@ -339,6 +340,12 @@ export interface BrainRunRequest {
    * swallowed and never affects the run.
    */
   reportOutcome?: (outcome: BrainRunOutcome) => Promise<unknown>;
+  /**
+   * The host's STOP HOOK (`stopHooks.ts`) — asked each time the run is about to end; a
+   * returned instruction holds it for another turn (bounded per run). The VS Code host
+   * feeds it from the workspace's committed `.builderforce/hooks.json`. Omit for none.
+   */
+  onStop?: RunStopHook;
   /**
    * This run has an OWNER — it is a sub-agent another run spawned (`runLineage.ts`).
    * Nothing about the loop changes: the run keeps its own key (its own transcript, Stop
@@ -1835,6 +1842,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
   // twice, and its answer — including "I cannot ship this because…" — is the answer.
   let shipRecoveryUsed = false;
   let reviewRecoveryUsed = false;
+  // Re-prompts this run has had from the host's stop hook (bounded in `stopHooks.ts`).
+  let stopHookRounds = 0;
   // One redirect per run for an explicit sub-agent request the run neither started nor
   // refused on a real result (see `delegationRequest.ts`). `redirectAskToDelegation`
   // carries the decision from `beforeToolCalls` to the `ask_user` dispatch it answers.
@@ -2367,6 +2376,27 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
           result: shape === 'handed-off'
             ? `Model ended by telling the user to run the commands itself holds tools for — re-prompted to run them (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
             : `Model announced a tool call without making one — re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`,
+        });
+        c.streamingText = '';
+        emit(c);
+        return { action: 'continue' };
+      }
+
+      // The WORKSPACE's end-of-run directives (`stopHooks.ts`): asked before the ship gate
+      // so whatever they make the run do (docs, a changelog line, a lint fix) is part of
+      // the change that ships, not a dirty tree left after the push.
+      const stopNudge = runTool
+        ? await askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: stopHookRounds })
+        : null;
+      if (stopNudge) {
+        stopHookRounds += 1;
+        await requeueWithNudge(stopNudge);
+        pushTrace(c, {
+          ts: nowIso(),
+          category: 'message',
+          label: 'loop.stop_hook',
+          args: { step: iter, round: stopHookRounds },
+          result: `A workspace stop hook held the run for another turn: ${stopNudge.slice(0, 200)}`,
         });
         c.streamingText = '';
         emit(c);

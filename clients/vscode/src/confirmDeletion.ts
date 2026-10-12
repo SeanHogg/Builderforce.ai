@@ -1,7 +1,8 @@
 /**
- * Destructive-delete gate used by `builderforce.deleteSession`.
+ * Destructive-delete gate used by `builderforce.deleteSession` and
+ * `builderforce.deleteTask` (bound to the editor in `confirmDeletionUi.ts`).
  *
- * Two paths, both modal so a stray Enter/click cannot wipe a chat:
+ * Two paths, both modal so a stray Enter/click cannot wipe a chat or a ticket:
  *   - the conversation is executing → warn "Stop the execution to delete."
  *     and refuse. The run must be stopped first; we never delete under it.
  *   - otherwise → confirm "Delete “{title}”? This cannot be undone."

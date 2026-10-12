@@ -1,7 +1,7 @@
 # PRD 27 — Validating an idea: ask the market from the scratchpad
 
-**Status:** Proposed — implementation spec, not yet started. Tracks B0–B5 (§7) are the survey loop; §11 hands over eight adjacent gaps found while mapping it, each independently implementable · **Owner:** platform (Canvas + Growth, CEO/CMO seats as buyer) · **Created:** 2026-09-15
-**Board:** unassigned — no epic/spec/roadmap row exists yet (see §9.5)
+**Status:** Partial — B0 form loop is on main (`CanvasFormSurface` + connected form acts). B1 Ask people is uncommitted working-tree work as of 2026-10-12, not landed. B3 send (form → campaign) remains the missing product seam. Tracks B0–B5 (§7) are the survey loop; §11 hands over eight adjacent gaps found while mapping it, each independently implementable · **Owner:** platform (Canvas + Growth, CEO/CMO seats as buyer) · **Created:** 2026-09-15
+**Board:** Epic #3083
 **Companion to:** [PRD 19](./19-prd-burnrateos-consolidation.md) (BurnRateOS consolidation), [PRD 25](./25-prd-vertical-kpi-dashboards.md) (measurement as a product), [PRD 26](./26-prd-advisor-platform.md) (compose existing primitives, do not add a family)
 **Depends on:** the idea scratchpad (frontend `2026.9.32`–`2026.9.33`; `idea` kind + `ideas` surface)
 **Research source:** BurnRateOS `/ideas` feature set, captured 2026-09-15 — idea capture, customer interviews, and validating an idea by asking a distribution list. Used as a **capability checklist**, not a product to reproduce.

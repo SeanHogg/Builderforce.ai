@@ -48,6 +48,12 @@
     "onStartupFinished"
   ],
   "contributes": {
+    "jsonValidation": [
+      {
+        "fileMatch": "**/.builderforce/hooks.json",
+        "url": "./schemas/hooks.schema.json"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -220,16 +226,6 @@
         "icon": "$(sync)"
       },
       {
-        "command": "builderforce.hideDoneTasks",
-        "title": "%command.hideDoneTasks%",
-        "icon": "$(eye)"
-      },
-      {
-        "command": "builderforce.showDoneTasks",
-        "title": "%command.showDoneTasks%",
-        "icon": "$(eye-closed)"
-      },
-      {
         "command": "builderforce.projectViewHierarchy",
         "title": "%command.projectViewHierarchy%",
         "icon": "$(list-tree)"
@@ -290,6 +286,21 @@
         "icon": "$(checklist)"
       },
       {
+        "command": "builderforce.archiveTask",
+        "title": "%command.archiveTask%",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "builderforce.unarchiveTask",
+        "title": "%command.unarchiveTask%",
+        "icon": "$(unarchive)"
+      },
+      {
+        "command": "builderforce.deleteTask",
+        "title": "%command.deleteTask%",
+        "icon": "$(trash)"
+      },
+      {
         "command": "builderforce.runTask",
         "title": "%command.runTask%",
         "icon": "$(play)"
@@ -323,6 +334,11 @@
         "command": "builderforce.rescanCodebase",
         "title": "%command.rescanCodebase%",
         "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.editWorkspaceHooks",
+        "title": "%command.editWorkspaceHooks%",
+        "icon": "$(symbol-event)"
       },
       {
         "command": "builderforce.pickModel",
@@ -584,16 +600,6 @@
           "group": "inline@1"
         },
         {
-          "command": "builderforce.hideDoneTasks",
-          "when": "view == builderforce.work && viewItem == bfSection.tasks && !builderforce.hideDoneTasks",
-          "group": "inline@2"
-        },
-        {
-          "command": "builderforce.showDoneTasks",
-          "when": "view == builderforce.work && viewItem == bfSection.tasks && builderforce.hideDoneTasks",
-          "group": "inline@2"
-        },
-        {
           "command": "builderforce.projectViewHierarchy",
           "when": "view == builderforce.work && viewItem == bfSection.tasks && !builderforce.projectHierarchy",
           "group": "inline@3"
@@ -645,13 +651,28 @@
         },
         {
           "command": "builderforce.startTaskSession",
-          "when": "view == builderforce.work && viewItem == builderforceTask",
+          "when": "view == builderforce.work && viewItem =~ /^builderforce(Closed|Archived)?Task$/",
           "group": "inline@2"
         },
         {
           "command": "builderforce.setTaskStatus",
-          "when": "view == builderforce.work && viewItem == builderforceTask",
+          "when": "view == builderforce.work && viewItem =~ /^builderforce(Closed)?Task$/",
           "group": "inline@3"
+        },
+        {
+          "command": "builderforce.archiveTask",
+          "when": "view == builderforce.work && viewItem =~ /^builderforce(Closed)?Task$/",
+          "group": "inline@4"
+        },
+        {
+          "command": "builderforce.unarchiveTask",
+          "when": "view == builderforce.work && viewItem == builderforceArchivedTask",
+          "group": "inline@4"
+        },
+        {
+          "command": "builderforce.deleteTask",
+          "when": "view == builderforce.work && viewItem =~ /^builderforce(Closed|Archived)?Task$/",
+          "group": "inline@5"
         },
         {
           "command": "builderforce.convertTaskType",
@@ -688,6 +709,18 @@
         },
         {
           "command": "builderforce.setTaskStatus",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.archiveTask",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.unarchiveTask",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.deleteTask",
           "when": "false"
         },
         {

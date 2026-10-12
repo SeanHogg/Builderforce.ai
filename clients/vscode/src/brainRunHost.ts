@@ -45,7 +45,9 @@ import {
 } from "@seanhogg/builderforce-brain-embedded";
 import type { ToolDef } from "./fileTools";
 import { approvalRequestFor, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs, type NativeRunLabels } from "./nativeBrainRun";
-import { renderPolicyDirectives, type PolicyGate } from "./policy";
+import type { PolicyGate } from "./policy";
+import { withRunPreamble } from "./runPreamble";
+import type { RunDirectives } from "./hooks/runHooks";
 import { SessionNotes, type RunActivity } from "./sessionNotes";
 import { createChildRuns } from "./childRuns";
 import { syncMessageFor, type RunHostMessage, type RunSink, type SinkEntry, type WebviewRunStart } from "./brainRunHostProtocol";
@@ -100,6 +102,12 @@ export interface BrainRunHostPorts {
    * refuses the run (fail-closed, as the server is). Omitted ⇒ no gates.
    */
   policyGates?(projectId: number | undefined): Promise<readonly PolicyGate[]>;
+  /**
+   * The workspace's committed rules + hooks (`.builderforce/rules.md`, `hooks.json`) for
+   * ONE run — fresh per run, since the hooks hold the run's state. A sub-agent asks with
+   * `subagent` and gets the tool hooks only. Omitted ⇒ none.
+   */
+  directives?(scope: "run" | "subagent"): Promise<RunDirectives | undefined>;
   labels: Pick<NativeRunLabels, "blockedByPolicy">;
   /** A chat gained a turn — refresh the Sessions tree. */
   onChatsChanged?(): void;
@@ -250,6 +258,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const projectId = p.projectId ?? undefined;
     // Governance FIRST: an unreadable policy throws here and the run never starts.
     const gates = (await ports.policyGates?.(projectId)) ?? [];
+    const directives = await ports.directives?.(p.child ? "subagent" : "run");
 
     // What a finished tool call means to this host — the knowledge loop, the Changes
     // view and the panel's feed. A sub-agent's calls are its own run's, read the same way.
@@ -274,6 +283,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       defs,
       root,
       ...(gates.length ? { gates } : {}),
+      ...(directives ? { hooks: directives.hooks } : {}),
       events: { onToolStart: () => undefined, onToolResult: () => undefined },
       labels: ports.labels,
     });
@@ -294,13 +304,10 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const stream: BrainStreamFn = role ? (opts, handlers) => transport({ ...opts, role }, handlers) : transport;
     const surface = p.modelSurface ?? null;
     try {
-      // Gates render as binding directives ahead of the host prompt — the same
-      // prepend the native participant and the cloud lowering apply.
-      const governance = renderPolicyDirectives(gates);
+      // Gates render as binding directives ahead of the host prompt, then the workspace's
+      // rules — the one preamble the native participant shares.
       await startRun(key, {
-        resolvedSystemPrompt: governance ? `${governance}
-
-${p.systemPrompt}` : p.systemPrompt,
+        resolvedSystemPrompt: withRunPreamble(p.systemPrompt, { gates, rules: directives?.rules }),
         tools: nativeToolSpecs(defs),
         ...(p.model ? { model: p.model } : {}),
         ...(p.modelStrict != null ? { modelStrict: p.modelStrict } : {}),
@@ -327,11 +334,14 @@ ${p.systemPrompt}` : p.systemPrompt,
         ...(p.chatMode ? { chatMode: p.chatMode } : {}),
         ...(ports.reportOutcome ? { reportOutcome: (o: BrainRunOutcome) => ports.reportOutcome!(o) } : {}),
         ...(p.child ? { lineage: p.child.lineage } : {}),
+        ...(directives ? { onStop: directives.hooks.onStop } : {}),
       });
     } finally {
       flags.delete(key);
       approvals.forget(key);
       await flushNote(key, chatId);
+      // The workspace's runEnd hooks — after the run, never holding its settle.
+      void directives?.hooks.onRunEnd();
     }
   };
 

@@ -35,7 +35,9 @@ import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider, chatOfSessionNode, type SessionTreeNode } from "./sessionsTree";
 import { InboxQuickActionsProvider, InboxTreeProvider } from "./inboxTree";
 import { AttentionPoller, onLocalRunsChange, managerAttention, attentionFor } from "./attention";
-import { confirmDestructiveDelete } from "./confirmDeletion";
+import { confirmDeleteInEditor } from "./confirmDeletionUi";
+import { registerTaskActions } from "./taskActions";
+import { ClosedTasksTreeProvider } from "./closedTasksTree";
 import { createVsCodeRunHost } from "./brainRunHostPorts";
 import { appUrl } from "./auth";
 import { MeetingsTreeProvider, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
@@ -43,6 +45,7 @@ import { ProjectContextTreeProvider } from "./projectContextTree";
 import { registerSidebarViews } from "./sidebarViews";
 import { PendingChangesController } from "./pendingChangesTree";
 import { posixShellReport } from "./posixShell";
+import { editWorkspaceHooks } from "./hooks/editorDirectives";
 import { buildIdentityReport } from "./buildIdentityReport";
 import { initErrorReporter, reportExtensionError, surfaceError } from "./errorReporter";
 
@@ -131,6 +134,8 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   const tree = new SessionsTreeProvider(context.secrets, context);
   const projects = new ProjectsTreeProvider(context);
+  const closedTasks = new ClosedTasksTreeProvider(context, projects);
+  context.subscriptions.push(closedTasks);
   const inbox = new InboxTreeProvider(context.secrets);
   projectContext = new ProjectContextTreeProvider(context.secrets);
 
@@ -297,6 +302,7 @@ export function activate(context: vscode.ExtensionContext): void {
     projectContext,
     sessions: tree,
     tasks: projects,
+    closedTasks,
     approvals: inbox,
     meetings,
     quickActions: new InboxQuickActionsProvider(),
@@ -366,8 +372,6 @@ export function activate(context: vscode.ExtensionContext): void {
       projects.refresh();
       projectContext?.refresh();
     }),
-    vscode.commands.registerCommand("builderforce.hideDoneTasks", () => projects.setHideDone(true)),
-    vscode.commands.registerCommand("builderforce.showDoneTasks", () => projects.setHideDone(false)),
     // Project & Tasks view arrangement: Flat ⇄ Hierarchy (epic → child tasks),
     // plus group-by / sort / status-filter quick-picks.
     vscode.commands.registerCommand("builderforce.projectViewHierarchy", () => projects.setHierarchy(true)),
@@ -414,9 +418,9 @@ export function activate(context: vscode.ExtensionContext): void {
         ticket: { kind: ticketKind, ref: String(t.id), title: t.title, projectId },
       });
     }),
-    vscode.commands.registerCommand("builderforce.setTaskStatus", (node: TaskNode) =>
-      setTaskStatus(context, projects, node?.task),
-    ),
+    // Ticket row actions (set status / archive / restore / delete) for the Tasks and
+    // Closed sections — owned by taskActions.ts.
+    registerTaskActions(context, () => projects.refresh()),
     // Dispatch a PLATFORM run for the task (its assigned AgentHost / cloud agent) —
     // distinct from the local in-editor agent loop. Surfaces the run via a task session.
     vscode.commands.registerCommand("builderforce.runTask", (node: TaskNode) => {
@@ -480,16 +484,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const title = chatTitleOf(item) || vscode.l10n.t("New chat");
       // Any live attention on this chat (running, awaiting input, local run) means
       // an execution is in flight — deleting it would orphan that run.
-      const executing = attentionFor("chat", id) != null;
-      const ok = await confirmDestructiveDelete({
-        subject: title,
-        executing,
-        ui: {
-          showWarningMessage: (message, options, ...items) =>
-            vscode.window.showWarningMessage(message, options, ...items),
-        },
-        t: (message, ...args) => vscode.l10n.t(message, ...args),
-      });
+      const ok = await confirmDeleteInEditor(title, attentionFor("chat", id) != null);
       if (!ok) return;
       try {
         await bfApi.deleteBrainChat(context.secrets, id);
@@ -549,6 +544,10 @@ export function activate(context: vscode.ExtensionContext): void {
     watchRejectedEditorKey(context.secrets, () => signOut(context, auth, { quiet: true })),
     vscode.commands.registerCommand("builderforce.pickModel", () => pickModel(context)),
     vscode.commands.registerCommand("builderforce.rescanCodebase", () => maybeScan(context, true)),
+    // The committed `.builderforce/hooks.json` every run in this repository follows.
+    vscode.commands.registerCommand("builderforce.editWorkspaceHooks", () =>
+      editWorkspaceHooks(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ""),
+    ),
     vscode.commands.registerCommand("builderforce.openSettings", () =>
       vscode.commands.executeCommand("workbench.action.openSettings", "builderforce"),
     ),
@@ -909,28 +908,6 @@ async function convertTaskType(
   bfApi.invalidateObjectives(getSelectedProject()?.id);
   projects.refresh();
   vscode.window.showInformationMessage(vscode.l10n.t("BuilderForce: {0} → {1}", task.key ?? "item", pick.target));
-}
-
-async function setTaskStatus(
-  context: vscode.ExtensionContext,
-  projects: ProjectsTreeProvider,
-  task?: bfApi.BfTask,
-): Promise<void> {
-  if (!task) return;
-  const statuses = ["backlog", "todo", "ready", "in_progress", "in_review", "done", "blocked"];
-  const pick = await vscode.window.showQuickPick(statuses, {
-    title: `Set status for ${task.key ?? task.title}`,
-    placeHolder: task.status,
-  });
-  if (!pick) return;
-  try {
-    await bfApi.updateTaskStatus(context.secrets, task.id, pick);
-    bfApi.invalidateTasks(getSelectedProject()?.id);
-    projects.refresh();
-    vscode.window.showInformationMessage(`BuilderForce: ${task.key ?? "task"} → ${pick}`);
-  } catch (e) {
-    surfaceError(e, "task:update", `BuilderForce: could not update task (${(e as Error).message}).`);
-  }
 }
 
 /**

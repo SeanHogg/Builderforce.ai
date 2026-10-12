@@ -454,7 +454,7 @@ export const PEOPLE_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       { name: 'closesAt', render: 'stat', label: 'closesAt', hint: 'ISO date submissions close. A form with no close date is one nobody ever chases, because there is no moment at which it is late.' },
       { name: 'recipients', render: 'chips', label: 'recipients', hint: 'Who is expected to respond, when `audience` is namedRecipients. THE field that makes chasing possible: without the expected list, a response count cannot become "these six have not answered".' },
       { name: 'confirmationMessage', render: 'text', label: 'confirmationMessage', hint: 'Shown after a successful submit. Say what happens NEXT and by when — "thanks" is the least useful thing a respondent can be told.' },
-      { name: 'shareUrl', render: 'stat', label: 'shareUrl', hint: 'The public URL, written by canvas_publish_form.', derived: true },
+      { name: 'shareUrl', render: 'stat', label: 'shareUrl', hint: 'The public URL, written when the form is published (`form.publish`).', derived: true },
       { name: 'responseCount', render: 'stat', label: 'responseCount', hint: 'Submissions received.', derived: true },
       { name: 'completionRate', render: 'meter', label: 'completionRate', hint: 'Responses as a percentage of `recipients`. Absent when the audience is open, because a rate with no denominator is a number pretending to be one.', derived: true },
       { name: 'distribution', render: 'bars', label: 'distribution', hint: 'Answer counts for the summarised question: [{label, value}].', derived: true },

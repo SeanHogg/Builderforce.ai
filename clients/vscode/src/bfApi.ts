@@ -11,6 +11,7 @@ import { isManagerRole } from "@seanhogg/builderforce-brain-embedded";
 import { renderPlatformContextSection, type RunContextEnvelope } from "@builderforce/run-context";
 import { getApiKey, getBaseUrl } from "./gateway";
 import { ttlCache } from "./ttlCache";
+import { isClosedTask } from "@builderforce/agent-loop";
 
 export interface BfProject {
   id: number;
@@ -58,12 +59,9 @@ export interface BfObjective {
   linkedTaskIds: number[];
 }
 
-/** The terminal task status. Single source of truth for "done" across surfaces
- *  (the board column + the sidebar hide-done filter). */
-export const DONE_STATUS = "done";
-export const isDoneStatus = (status?: string): boolean => status === DONE_STATUS;
-/** Default for the hide-done view filter (board + sidebar): show only active work,
- *  hiding done by default. An explicit user toggle overrides + persists. */
+/** Default for the board's hide-closed filter: show only active work, hiding the done
+ *  and cancelled columns by default. An explicit user toggle overrides + persists.
+ *  (The sidebar needs no toggle: closed tickets live in their own Closed section.) */
 export const DEFAULT_HIDE_DONE = true;
 
 export interface BfExecution {
@@ -341,6 +339,8 @@ async function authed<T>(
     // unaffected) because "is this worth retrying?" cannot be answered from prose.
     throw Object.assign(new Error(`${path} → HTTP ${res.status} ${body.slice(0, 160)}`), { status: res.status });
   }
+  // 204 No Content (e.g. DELETE /api/tasks/:id) has no body to parse.
+  if (res.status === 204) return undefined;
   return (await res.json()) as T;
 }
 
@@ -709,8 +709,42 @@ export async function listTasksForReview(
   return r?.tasks ?? [];
 }
 
+const closedTaskCache = ttlCache<number, BfTask[]>(TASKS_TTL);
+
+/**
+ * A project's CLOSED tickets — done, cancelled or archived — for the Work view's Closed
+ * section. The default list omits archived rows, so this asks for them; it is cached
+ * beside the open list and dropped with it by {@link invalidateTasks}.
+ */
+export async function listClosedTasks(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+): Promise<BfTask[]> {
+  const cached = closedTaskCache.get(projectId);
+  if (cached) return cached.value;
+  const r = await authed<{ tasks: BfTask[] }>(secrets, `/api/tasks?project_id=${projectId}&include_archived=true`);
+  const tasks = (r?.tasks ?? []).filter(isClosedTask);
+  closedTaskCache.set(projectId, tasks);
+  return tasks;
+}
+
 export function invalidateTasks(projectId?: number): void {
   taskCache.invalidate(projectId);
+  closedTaskCache.invalidate(projectId);
+}
+
+/** Archive (or restore) a ticket — off the board but recoverable (PATCH archived). */
+export async function setTaskArchived(
+  secrets: vscode.SecretStorage,
+  id: number,
+  archived: boolean,
+): Promise<void> {
+  await authed(secrets, `/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ archived }) });
+}
+
+/** Permanently delete a ticket (DELETE /api/tasks/:id). Callers confirm first. */
+export async function deleteTask(secrets: vscode.SecretStorage, id: number): Promise<void> {
+  await authed(secrets, `/api/tasks/${id}`, { method: "DELETE" });
 }
 
 /** An OPEN work item assigned to the signed-in user, delivered by the API's

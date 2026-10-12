@@ -22948,8 +22948,9 @@
           "unreferenced": "{count, plural, other {# 项义务}}没有 `reference`，因此永远无法证明它们已被履行。"
         },
         "idea": {
-          "untested": "尚未验证——还没有关联任何客户访谈或实验。先和客户聊聊，再动手构建。",
+          "untested": "尚未验证——还没有关联任何客户访谈、实验或表单。先和客户聊聊，再动手构建。",
           "tested": "已通过{interviews, plural, =0 {0 次访谈} other {# 次访谈}}和{experiments, plural, =0 {0 个实验} other {# 个实验}}验证。",
+          "testedForms": "已通过{forms, plural, =0 {0 份表单} other {# 份表单}}验证。",
           "missing": "此看板上尚不存在：{refs}。"
         }
       }
@@ -24458,6 +24459,12 @@
     "noticeFormClosed": "表单已关闭。不会再记录新回复。",
     "noticeFormUnpublished": "请先发布表单，再收集或关闭。",
     "noticeFormFailed": "该表单操作未能完成。",
+    "noticeIdeaUntitled": "先给想法起个标题，再去问市场。",
+    "noticeIdeaInterviewTitle": "先给想法起个标题，才能给访谈命名。",
+        "noticeIdeaInterviewPlanned": "访谈已安排。在看板上打开它以选择时间。",
+        "noticeIdeaFormTitle": "先给想法起个标题，才能给表单命名。",
+        "noticeIdeaFormCreated": "表单已创建。发布后即可获得可发送的链接。",
+        "noticeIdeaActFailed": "该想法操作未能完成。",
     "surface": {
       "chat": {
         "label": "对话",
@@ -24844,12 +24851,14 @@
           "captured": "{when}记录",
           "nextStep": "下一步：{step}",
           "planInterview": "安排一次访谈",
+          "askPeople": "问市场",
           "openOnBoard": "在看板上打开",
-          "interviewTitle": "访谈：{idea}"
+          "interviewTitle": "访谈：{idea}",
+          "formTitle": "表单：{idea}"
         },
         "bar": {
           "label": "各阶段的想法",
-          "untested": "{count, plural, =0 {每个进行中的想法都关联了访谈或实验。} other {# 个进行中的想法尚未经过客户验证。}}",
+          "untested": "{count, plural, =0 {每个进行中的想法都关联了访谈、实验或表单。} other {# 个进行中的想法尚未经过客户验证。}}",
           "segment": "{stage}：{count}"
         }
       },

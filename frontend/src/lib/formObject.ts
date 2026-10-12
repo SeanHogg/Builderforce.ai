@@ -147,6 +147,34 @@ export function questionsFromIdea(data: Readonly<Record<string, unknown>>, anony
   return questions;
 }
 
+/**
+ * The form card "Ask people" / `idea.test` authors from an idea.
+ *
+ * Lives here so the Ideas surface row and Brain's `idea.test` act cannot disagree
+ * about audience, anonymity, or the question set. A shareable link is the default
+ * because the founder has not picked a list yet — sending is a later act on the form.
+ */
+export function formFromIdea(
+  data: Readonly<Record<string, unknown>>,
+  title: string,
+): {
+  title: string;
+  purpose: string;
+  questions: FormQuestion[];
+  audience: 'anyoneWithLink';
+  anonymous: false;
+} {
+  const problem = typeof data.problem === 'string' ? data.problem.trim() : '';
+  const ideaTitle = typeof data.title === 'string' ? data.title.trim() : '';
+  return {
+    title,
+    purpose: problem || ideaTitle || title,
+    questions: questionsFromIdea(data),
+    audience: 'anyoneWithLink',
+    anonymous: false,
+  };
+}
+
 /** The body `publishForm` wants, read once from the card. */
 export function formPublishBody(data: FormCardData, objectId: string): PublishFormBody {
   const questions = readFormQuestions(data.questions);

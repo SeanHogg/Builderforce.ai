@@ -22948,8 +22948,9 @@
           "unreferenced": "{count, plural, one {# Verpflichtung hat keine `reference`, daher lässt sich nie zeigen, dass sie erfüllt wurde.} other {# Verpflichtungen haben keine `reference`, daher lässt sich nie zeigen, dass sie erfüllt wurden.}}"
         },
         "idea": {
-          "untested": "Ungetestet – noch kein Kundeninterview und kein Experiment verknüpft. Sprechen Sie mit jemandem, bevor Sie bauen.",
+          "untested": "Ungetestet – noch kein Kundeninterview, kein Experiment und kein Formular verknüpft. Sprechen Sie mit jemandem, bevor Sie bauen.",
           "tested": "Getestet durch {interviews, plural, =0 {kein Interview} one {# Interview} other {# Interviews}} und {experiments, plural, =0 {kein Experiment} one {# Experiment} other {# Experimente}}.",
+          "testedForms": "Getestet durch {forms, plural, =0 {kein Formular} one {# Formular} other {# Formulare}}.",
           "missing": "Noch nicht auf diesem Board: {refs}."
         }
       }
@@ -24458,6 +24459,12 @@
     "noticeFormClosed": "Das Formular ist geschlossen. Es werden keine neuen Antworten mehr erfasst.",
     "noticeFormUnpublished": "Veröffentliche das Formular, bevor du Antworten einsammelst oder es schließt.",
     "noticeFormFailed": "Diese Formularaktion konnte nicht abgeschlossen werden.",
+    "noticeIdeaUntitled": "Geben Sie der Idee einen Titel, bevor Sie Leute fragen.",
+    "noticeIdeaInterviewTitle": "Geben Sie der Idee einen Titel, damit das Interview benannt werden kann.",
+        "noticeIdeaInterviewPlanned": "Interview geplant. Öffnen Sie es auf dem Board, um einen Termin zu wählen.",
+        "noticeIdeaFormTitle": "Geben Sie der Idee einen Titel, damit das Formular benannt werden kann.",
+        "noticeIdeaFormCreated": "Formular erstellt. Veröffentlichen Sie es, um einen Link zu erhalten, den Sie versenden können.",
+        "noticeIdeaActFailed": "Diese Ideenaktion konnte nicht abgeschlossen werden.",
     "surface": {
       "chat": {
         "label": "Chat",
@@ -24844,12 +24851,14 @@
           "captured": "Notiert {when}",
           "nextStep": "Als Nächstes: {step}",
           "planInterview": "Interview planen",
+          "askPeople": "Leute fragen",
           "openOnBoard": "Auf dem Board öffnen",
-          "interviewTitle": "Interview: {idea}"
+          "interviewTitle": "Interview: {idea}",
+          "formTitle": "Formular: {idea}"
         },
         "bar": {
           "label": "Ideen nach Phase",
-          "untested": "{count, plural, =0 {Jede offene Idee hat ein Interview oder Experiment.} one {# offene Idee wurde noch nicht mit einem Kunden getestet.} other {# offene Ideen wurden noch nicht mit einem Kunden getestet.}}",
+          "untested": "{count, plural, =0 {Jede offene Idee hat ein Interview, Experiment oder Formular.} one {# offene Idee wurde noch nicht mit einem Kunden getestet.} other {# offene Ideen wurden noch nicht mit einem Kunden getestet.}}",
           "segment": "{stage}: {count}"
         }
       },

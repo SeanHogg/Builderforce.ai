@@ -22948,8 +22948,9 @@
           "unreferenced": "{count, plural, one {# obligation carries no `reference`, so nothing can ever be shown to discharge it.} other {# obligations carry no `reference`, so nothing can ever be shown to discharge them.}}"
         },
         "idea": {
-          "untested": "Untested — no customer interview or experiment is linked yet. Talk to someone before you build.",
+          "untested": "Untested — no customer interview, experiment, or form is linked yet. Talk to someone before you build.",
           "tested": "Tested by {interviews, plural, =0 {no interviews} one {# interview} other {# interviews}} and {experiments, plural, =0 {no experiments} one {# experiment} other {# experiments}}.",
+          "testedForms": "Tested by {forms, plural, one {# form} other {# forms}}.",
           "missing": "Not on this board yet: {refs}."
         }
       }
@@ -24458,6 +24459,12 @@
     "noticeFormClosed": "The form is closed. No new responses will be recorded.",
     "noticeFormUnpublished": "Publish the form before collecting or closing it.",
     "noticeFormFailed": "That form action could not be completed.",
+    "noticeIdeaUntitled": "Untitled idea",
+    "noticeIdeaInterviewTitle": "Interview: {idea}",
+    "noticeIdeaInterviewPlanned": "Interview planned for {idea}.",
+    "noticeIdeaFormTitle": "Ask: {idea}",
+    "noticeIdeaFormCreated": "A form is ready to ask people about {idea}.",
+    "noticeIdeaActFailed": "That idea action could not be completed.",
     "surface": {
       "chat": {
         "label": "Chat",
@@ -24844,12 +24851,14 @@
           "captured": "Captured {when}",
           "nextStep": "Next: {step}",
           "planInterview": "Plan an interview",
+          "askPeople": "Ask people",
           "openOnBoard": "Open on board",
-          "interviewTitle": "Interview: {idea}"
+          "interviewTitle": "Interview: {idea}",
+          "formTitle": "Ask: {idea}"
         },
         "bar": {
           "label": "Ideas by stage",
-          "untested": "{count, plural, =0 {Every open idea names an interview or experiment.} one {# open idea has not been tested with a customer yet.} other {# open ideas have not been tested with a customer yet.}}",
+          "untested": "{count, plural, =0 {Every open idea names an interview, experiment, or form.} one {# open idea has not been tested with a customer yet.} other {# open ideas have not been tested with a customer yet.}}",
           "segment": "{stage}: {count}"
         }
       },

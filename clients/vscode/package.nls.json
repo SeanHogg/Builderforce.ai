@@ -22,8 +22,6 @@
   "command.registerMcpServer": "BuilderForce: Register MCP Server",
   "command.manageByoConnections": "BuilderForce: Manage Model Provider Connections",
   "command.refreshProjects": "BuilderForce: Refresh Tasks",
-  "command.hideDoneTasks": "BuilderForce: Hide Done Tasks",
-  "command.showDoneTasks": "BuilderForce: Show Done Tasks",
   "command.projectViewHierarchy": "BuilderForce: Show Tasks as Hierarchy",
   "command.projectViewFlat": "BuilderForce: Show Tasks as Flat List",
   "command.projectGroupBy": "BuilderForce: Group Tasks By…",
@@ -43,6 +41,7 @@
   "command.openPage": "BuilderForce: Open Page…",
   "command.diagnose": "BuilderForce: Diagnose Connection",
   "command.rescanCodebase": "BuilderForce: Rescan Codebase",
+  "command.editWorkspaceHooks": "BuilderForce: Edit Workspace Hooks",
   "command.pickModel": "BuilderForce: Pick Model",
   "command.openSettings": "BuilderForce: Open Settings",
   "command.editorChat": "BuilderForce: Chat",
@@ -81,5 +80,8 @@
   "view.work": "Work",
   "view.health": "Health",
   "command.refreshWork": "Refresh Work",
-  "command.refreshHealth": "Refresh Health"
+  "command.refreshHealth": "Refresh Health",
+  "command.archiveTask": "BuilderForce: Archive Task",
+  "command.unarchiveTask": "BuilderForce: Restore Archived Task",
+  "command.deleteTask": "BuilderForce: Delete Task"
 }

@@ -6,9 +6,11 @@ import { useAuth } from '@/lib/AuthContext';
 import { Icon } from '@/components/ui/Icon';
 import { useLocale, useTranslations } from 'next-intl';
 import { ApiRequestError, apiRequest, faultMessage } from '@/lib/apiClient';
+import { isPurchaseRequiredError } from '@/lib/planLimitError';
 import { subscriptionCheckoutPayload } from '@/lib/subscriptionCart';
 import {
   marketplacePurchaseApi,
+  skillCheckoutApi,
   setMarketplaceToken,
   type MarketplacePurchase,
 } from '@/lib/builderforceApi';
@@ -55,7 +57,7 @@ function TypeBadge({ type }: { type: CartItem['type'] }) {
 
 export default function ShoppingCart() {
   const { formatCents } = useMoneyFormat();
-  const { items, count, subtotal, removeItem, clearCart, isOpen, closeCart } = useCart();
+  const { items, count, subtotal, removeItem, clearCart, isOpen, closeCart, openCart } = useCart();
   const { isAuthenticated, tenant, user, webToken } = useAuth();
   const t = useTranslations('shoppingCart');
   const phoneT = useTranslations('pricing.phone');
@@ -67,6 +69,9 @@ export default function ShoppingCart() {
   const [checkoutSuccess, setCheckoutSuccess] = useState<string | null>(null);
   const [purchases, setPurchases] = useState<MarketplacePurchase[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const settlingRef = useRef(false);
 
   // Portal to <body> so the fixed drawer escapes ancestor stacking contexts.
   // ShoppingCart renders inside `.topbar`, which has both `z-index: 40` AND
@@ -100,6 +105,73 @@ export default function ShoppingCart() {
     document.body.style.overflow = isOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
+
+  // Return-leg: the processor redirects here with ?checkout=<session>&skill=<slug>
+  // (or persona). Grant that item, then continue the cart. A remaining paid item
+  // starts its own hosted session rather than claiming purchaseComplete unpaid.
+  useEffect(() => {
+    if (!mounted || !webToken || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('checkout');
+    const skill = params.get('skill');
+    const persona = params.get('persona');
+    if (!sessionId || sessionId === 'cancelled' || (!skill && !persona)) return;
+    if (settlingRef.current) return;
+    settlingRef.current = true;
+
+    let cancelled = false;
+    (async () => {
+      openCart();
+      setCheckingOut(true);
+      setCheckoutError(null);
+      setCheckoutSuccess(null);
+      try {
+        await skillCheckoutApi.completeCheckout(sessionId);
+        if (cancelled) return;
+        const url = new URL(window.location.href);
+        url.searchParams.delete('checkout');
+        url.searchParams.delete('skill');
+        url.searchParams.delete('persona');
+        const nextSearch = url.searchParams.toString();
+        window.history.replaceState({}, '', `${url.pathname}${nextSearch ? `?${nextSearch}` : ''}${url.hash}`);
+
+        const marketplaceItems = itemsRef.current.filter((item): item is CartItem & { type: 'skill' | 'persona' } =>
+          item.type === 'skill' || item.type === 'persona');
+        let granted = 1;
+        for (const item of marketplaceItems) {
+          const justPaid = (skill && item.type === 'skill' && item.slug === skill)
+            || (persona && item.type === 'persona' && item.slug === persona);
+          if (justPaid) continue;
+          try {
+            await marketplacePurchaseApi.purchase({ artifactType: item.type, artifactSlug: item.slug });
+            granted += 1;
+          } catch (cause) {
+            if (isPurchaseRequiredError(cause)) {
+              const started = await skillCheckoutApi.startCheckout({
+                artifactType: item.type,
+                artifactSlug: item.slug,
+                returnUrl: window.location.href,
+                buyerEmail: user?.email,
+              });
+              if (!started.checkoutUrl) throw new Error(t('checkoutFailed'));
+              window.location.href = started.checkoutUrl;
+              return;
+            }
+            throw cause;
+          }
+        }
+        const nextPurchases = await marketplacePurchaseApi.list();
+        setPurchases(nextPurchases);
+        clearCart();
+        setCheckoutSuccess(t('purchaseComplete', { count: granted }));
+      } catch (error) {
+        setCheckoutError(faultMessage(error, t('checkoutFailed')));
+      } finally {
+        setCheckingOut(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mounted, webToken, openCart, clearCart, t, user?.email]);
 
   if (!isOpen || !mounted) return null;
 
@@ -160,10 +232,26 @@ export default function ShoppingCart() {
       }
       // Ask the server about paid items first. Until their provider payment has
       // been verified it returns 402, and no free item in the same cart is
-      // accidentally recorded as a partial checkout.
+      // accidentally recorded as a partial checkout. A 402 starts a hosted
+      // session rather than claiming purchaseComplete for an unpaid item.
       const checkoutItems = [...marketplaceItems].sort((a, b) => b.price - a.price);
       for (const item of checkoutItems) {
-        await marketplacePurchaseApi.purchase({ artifactType: item.type, artifactSlug: item.slug });
+        try {
+          await marketplacePurchaseApi.purchase({ artifactType: item.type, artifactSlug: item.slug });
+        } catch (cause) {
+          if (isPurchaseRequiredError(cause)) {
+            const started = await skillCheckoutApi.startCheckout({
+              artifactType: item.type,
+              artifactSlug: item.slug,
+              returnUrl: window.location.href,
+              buyerEmail: user?.email,
+            });
+            if (!started.checkoutUrl) throw new Error(t('checkoutFailed'));
+            window.location.href = started.checkoutUrl;
+            return;
+          }
+          throw cause;
+        }
       }
       const nextPurchases = await marketplacePurchaseApi.list();
       setPurchases(nextPurchases);

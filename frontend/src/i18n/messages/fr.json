@@ -22948,8 +22948,9 @@
           "unreferenced": "{count, plural, one {# obligation n’a pas de `reference` : rien ne pourra donc jamais montrer qu’elle a été acquittée.} other {# obligations n’ont pas de `reference` : rien ne pourra donc jamais montrer qu’elles ont été acquittées.}}"
         },
         "idea": {
-          "untested": "Non testée — aucun entretien client ni aucune expérience n’est encore lié. Parlez à quelqu’un avant de construire.",
+          "untested": "Non testée — aucun entretien client, aucune expérience ni aucun formulaire n’est encore lié. Parlez à quelqu’un avant de construire.",
           "tested": "Testée par {interviews, plural, =0 {aucun entretien} one {# entretien} other {# entretiens}} et {experiments, plural, =0 {aucune expérience} one {# expérience} other {# expériences}}.",
+          "testedForms": "Testée par {forms, plural, =0 {aucun formulaire} one {# formulaire} other {# formulaires}}.",
           "missing": "Pas encore sur ce tableau : {refs}."
         }
       }
@@ -24458,6 +24459,12 @@
     "noticeFormClosed": "Le formulaire est fermé. Aucune nouvelle réponse ne sera enregistrée.",
     "noticeFormUnpublished": "Publiez le formulaire avant de collecter ou de le fermer.",
     "noticeFormFailed": "Cette action du formulaire n’a pas pu aboutir.",
+    "noticeIdeaUntitled": "Donnez un titre à l’idée avant de demander aux gens.",
+    "noticeIdeaInterviewTitle": "Donnez un titre à l’idée pour nommer l’entretien.",
+        "noticeIdeaInterviewPlanned": "Entretien planifié. Ouvrez-le sur le tableau pour choisir un horaire.",
+        "noticeIdeaFormTitle": "Donnez un titre à l’idée pour nommer le formulaire.",
+        "noticeIdeaFormCreated": "Formulaire créé. Publiez-le pour obtenir un lien à envoyer.",
+        "noticeIdeaActFailed": "Cette action sur l’idée n’a pas pu aboutir.",
     "surface": {
       "chat": {
         "label": "Discussion",
@@ -24844,12 +24851,14 @@
           "captured": "Notée {when}",
           "nextStep": "Ensuite : {step}",
           "planInterview": "Planifier un entretien",
+          "askPeople": "Demander aux gens",
           "openOnBoard": "Ouvrir sur le tableau",
-          "interviewTitle": "Entretien : {idea}"
+          "interviewTitle": "Entretien : {idea}",
+          "formTitle": "Formulaire : {idea}"
         },
         "bar": {
           "label": "Idées par étape",
-          "untested": "{count, plural, =0 {Chaque idée ouverte a un entretien ou une expérience.} one {# idée ouverte n’a pas encore été testée auprès d’un client.} other {# idées ouvertes n’ont pas encore été testées auprès d’un client.}}",
+          "untested": "{count, plural, =0 {Chaque idée ouverte a un entretien, une expérience ou un formulaire.} one {# idée ouverte n’a pas encore été testée auprès d’un client.} other {# idées ouvertes n’ont pas encore été testées auprès d’un client.}}",
           "segment": "{stage} : {count}"
         }
       },

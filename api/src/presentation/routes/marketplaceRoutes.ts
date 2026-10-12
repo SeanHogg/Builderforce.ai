@@ -11,7 +11,7 @@
 import { InternalError } from '../../domain/shared/errors';
 import { failResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, sql, desc, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
 import { signWebJwt } from '../../infrastructure/auth/JwtService';
@@ -27,7 +27,8 @@ import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { headerHints } from '../../application/email/emailLocaleResolver';
 import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
-import { parseBody, z, zNumberLike } from './requestBody';
+import { parseBody, z, zNumberLike, zNonEmptyString } from './requestBody';
+import { startSkillCheckout, completeSkillCheckout, ListingError } from '../../application/marketplace/skillCommerce';
 
 // ---------------------------------------------------------------------------
 // Request bodies. Fields a handler answers "X is required" for stay optional so
@@ -93,6 +94,14 @@ const PurchaseBody = z.object({
   artifactSlug: z.string().optional(),
   stripePaymentIntentId: z.string().nullish(),
 });
+
+const CheckoutStartBody = z.object({
+  artifactType: z.enum(['skill', 'persona']),
+  artifactSlug: zNonEmptyString,
+  returnUrl: z.string().optional(),
+  buyerEmail: z.string().optional(),
+});
+const CheckoutCompleteBody = z.object({ checkoutSessionId: zNonEmptyString });
 
 /** Read-through cache key for a single published skill's SEO/SSR payload. */
 const skillSeoCacheKey = (slug: string): string => `mp:skill:seo:${slug}`;
@@ -647,9 +656,14 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
   });
 
   /**
-   * POST /marketplace/purchase – record a marketplace purchase (auth required)
-   * Body: { artifactType, artifactSlug, stripePaymentIntentId? }
-   * For free items (priceCents = 0) the purchase is recorded immediately without payment.
+   * POST /marketplace/purchase – record a FREE marketplace purchase (auth required)
+   * Body: { artifactType, artifactSlug }
+   *
+   * Paid skills are NOT granted here. A client-supplied payment-intent id used
+   * to be enough to INSERT a purchase row without the processor ever seeing it;
+   * that door is closed. A priced skill answers 402 `{ checkoutRequired, priceCents }`
+   * and the buyer goes through POST /marketplace/checkout, which re-reads the
+   * session FROM the processor before anything is written.
    *
    * 'agent' IS A VALID artifact_type (migration 0982) AND IS REFUSED HERE. This
    * handler prices only 'skill' and records everything else at zero, so admitting
@@ -666,6 +680,12 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
     }
     if (String(body.artifactType) === 'agent') {
       return c.json({ error: 'Agents are purchased through the workforce checkout, not this route' }, 400);
+    }
+    // A payment-intent id in the body used to grant a paid skill without Stripe
+    // ever seeing it. That is not a door: the only paid grant is a hosted session
+    // that completeSkillCheckout re-reads from the processor.
+    if (body.stripePaymentIntentId) {
+      return c.json({ error: 'Payment intent ids are not accepted; complete a hosted checkout instead' }, 400);
     }
 
     // Look up price for skills (a persona has no price column — it records at 0).
@@ -687,21 +707,73 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
       }
     }
 
-    // For paid items a Stripe payment intent is required
-    if (priceCents > 0 && !body.stripePaymentIntentId) {
-      return c.json({ error: 'stripePaymentIntentId is required for paid items' }, 402);
+    const [existing] = await db
+      .select({ id: schema.marketplacePurchases.id })
+      .from(schema.marketplacePurchases)
+      .where(and(
+        eq(schema.marketplacePurchases.userId, userId),
+        eq(schema.marketplacePurchases.artifactType, body.artifactType),
+        eq(schema.marketplacePurchases.artifactSlug, body.artifactSlug),
+        isNull(schema.marketplacePurchases.tenantId),
+      ))
+      .limit(1);
+    if (existing) return c.json({ ok: true, priceCents, pricingModel }, 200);
+
+    if (priceCents > 0) {
+      return c.json({ error: 'Purchase required', checkoutRequired: true, priceCents }, 402);
     }
 
     await db.insert(schema.marketplacePurchases).values({
       userId,
-      artifactType:          body.artifactType,
-      artifactSlug:          body.artifactSlug,
+      artifactType: body.artifactType,
+      artifactSlug: body.artifactSlug,
       priceCents,
       pricingModel,
-      stripePaymentIntentId: body.stripePaymentIntentId ?? null,
-    });
+    }).onConflictDoNothing();
 
     return c.json({ ok: true, priceCents, pricingModel }, 201);
+  });
+
+  /**
+   * POST /marketplace/checkout — start a hosted payment for a PRICED skill.
+   * Mirrors the workforce-agent checkout: records nothing. The return url is
+   * the caller's; only its origin and path survive.
+   */
+  router.post('/checkout', webAuthMiddleware, async (c) => {
+    const body = await parseBody(c, CheckoutStartBody);
+    const returnUrl = body.returnUrl ?? `${new URL(c.req.url).origin}/marketplace`;
+    try {
+      const { checkoutUrl } = await startSkillCheckout(db, c.env as Env, {
+        buyerUserId: c.get('userId') as string,
+        buyerEmail: body.buyerEmail ?? null,
+        artifactType: body.artifactType,
+        artifactSlug: body.artifactSlug,
+        returnUrl,
+      });
+      return c.json({ checkoutUrl });
+    } catch (error) {
+      if (error instanceof ListingError) return c.json({ error: error.message }, error.status);
+      throw error;
+    }
+  });
+
+  /**
+   * POST /marketplace/checkout/complete — the processor's redirect lands here.
+   * The session is re-read FROM the processor before the purchase is recorded;
+   * the id in the body is untrusted until skillCommerce has verified it.
+   */
+  router.post('/checkout/complete', webAuthMiddleware, async (c) => {
+    const body = await parseBody(c, CheckoutCompleteBody);
+    try {
+      const purchase = await completeSkillCheckout(db, c.env as Env, {
+        buyerUserId: c.get('userId') as string,
+        checkoutSessionId: body.checkoutSessionId,
+      });
+      return c.json({ purchased: true, purchase });
+    } catch (error) {
+      if (error instanceof ListingError) return c.json({ error: error.message }, error.status);
+      throw error;
+    }
   });
 
   /**

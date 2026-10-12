@@ -17,6 +17,7 @@ import { appendSessionNote } from "./sessionNotes";
 import { setLocalChatRuns } from "./attention";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
 import { resolveRunPolicyGates } from "./policyGates";
+import { editorRunDirectives } from "./hooks/editorDirectives";
 import { withWorkspaceStaleness } from "./memoryStaleness";
 
 /** The Sessions-tree overlay source for host-owned runs (one bucket, not per panel). */
@@ -77,6 +78,9 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     // The tenant's effective governance gates — the one resolver both editor
     // surfaces share, so a gate holds in the panel exactly as in the participant.
     policyGates: (projectId) => resolveRunPolicyGates(secrets, projectId),
+    // The workspace's committed `.builderforce/` rules + hooks — the same assembly the
+    // native participant uses.
+    directives: (scope) => editorRunDirectives(ctx.workspaceState, workspaceRoot(), scope),
     labels: {
       blockedByPolicy: (reason: string) => vscode.l10n.t("Blocked by a governance gate: {0}", reason),
     },

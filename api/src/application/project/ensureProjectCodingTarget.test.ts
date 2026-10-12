@@ -1,21 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Db } from '../infrastructure/database/connection';
-import type { Env } from '../env';
-import type { Project } from '../domain/project/Project';
+import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+import type { Project } from '../../domain/project/Project';
 
-vi.mock('../application/project/ideProjectBinding', () => ({
+vi.mock('./ideProjectBinding', () => ({
   ensureIdeProjectForStorage: vi.fn(),
 }));
-vi.mock('../application/project/provisionProject', () => ({
+vi.mock('./provisionProject', () => ({
   provisionProject: vi.fn(),
 }));
-vi.mock('../application/observability/caughtErrorReporter', () => ({
+vi.mock('../observability/caughtErrorReporter', () => ({
   reportCaughtError: vi.fn(),
 }));
 
-import { ensureIdeProjectForStorage } from '../application/project/ideProjectBinding';
-import { provisionProject } from '../application/project/provisionProject';
-import { reportCaughtError } from '../application/observability/caughtErrorReporter';
+import { ensureIdeProjectForStorage } from './ideProjectBinding';
+import { provisionProject } from './provisionProject';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
   afterBrainProjectCreate,
   ensureProjectCodingTarget,
@@ -98,7 +98,7 @@ describe('ensureProjectCodingTarget', () => {
     });
   });
 
-  it('returns none when the project is not the tenant\'s', async () => {
+  it("returns none when the project is not the tenant's", async () => {
     bind.mockResolvedValue(null);
     const result = await ensureProjectCodingTarget(db, 1, { id: 99 });
     expect(result).toEqual({
@@ -116,7 +116,7 @@ describe('ensureProjectCodingTarget', () => {
     const result = await ensureProjectCodingTarget(db, 1, { id: 34 }, { provision: provisionFn });
     expect(provisionFn).toHaveBeenCalled();
     expect(report).toHaveBeenCalledWith(boom, expect.objectContaining({
-      source: 'services/ensureProjectCodingTarget.ts',
+      source: 'application/project/ensureProjectCodingTarget.ts',
       operation: 'provision',
     }));
     expect(result).toEqual({

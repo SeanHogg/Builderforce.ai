@@ -28,6 +28,20 @@ export {
   type ChatTicketHealth,
   type ChatTicketHealthInput,
 } from "./chatTicketHealth.js";
+// Open vs closed tickets (done, cancelled, archived) — ONE rule for the api's progress
+// and list scope and the VSIX Tasks / Closed sections. Imported directly, like the above.
+export {
+  TASK_CLOSED_STATUSES,
+  TASK_LIST_SCOPES,
+  isClosedTaskStatus,
+  isCancelledTaskStatus,
+  isClosedTask,
+  parseTaskListScope,
+  taskInScope,
+  scopeNeedsArchived,
+  type TaskClosedFacts,
+  type TaskListScope,
+} from "./taskClosedState.js";
 // The reasoning channel — one reading of what a turn SAID versus what it THOUGHT, and
 // the policies each surface applies to it. Written four times before this, disagreeing
 // on whether an unclosed block counts and whether a tag inside a code fence does; see

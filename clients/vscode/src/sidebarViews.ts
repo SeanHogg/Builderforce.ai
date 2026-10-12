@@ -5,6 +5,7 @@ import type { InsightsController } from "./insights";
 import type { MeetingsTreeProvider } from "./meetings";
 import type { ProjectContextTreeProvider } from "./projectContextTree";
 import type { ProjectsTreeProvider } from "./projectsTree";
+import type { ClosedTasksTreeProvider } from "./closedTasksTree";
 import { getSelectedProject } from "./projectState";
 import { createSectionedTreeView } from "./sectionedTreeView";
 import type { SessionsTreeProvider } from "./sessionsTree";
@@ -14,6 +15,8 @@ export interface SidebarSources {
   readonly projectContext: ProjectContextTreeProvider;
   readonly sessions: SessionsTreeProvider;
   readonly tasks: ProjectsTreeProvider;
+  /** Done, cancelled and archived tickets — kept out of the open Tasks list. */
+  readonly closedTasks: ClosedTasksTreeProvider;
   readonly approvals: InboxTreeProvider;
   readonly meetings: MeetingsTreeProvider;
   readonly quickActions: InboxQuickActionsProvider;
@@ -30,7 +33,7 @@ function scopeLine(...parts: Array<string | undefined>): string | undefined {
 /**
  * The BuilderForce sidebar's merged views. Each one composes providers that used
  * to own a view of their own, as collapsible groups:
- *   • Work   — workspace/project context, Sessions, Tasks
+ *   • Work   — workspace/project context, Sessions, Tasks (open), Closed (collapsed)
  *   • Inbox  — Needs you, Meetings, Quick actions (badge = requests + live meetings)
  *   • Health — Spend today, Audits
  * The view-level refresh commands live here because they belong to these views.
@@ -44,6 +47,7 @@ export function registerSidebarViews(src: SidebarSources): vscode.Disposable {
         { id: "context", provider: src.projectContext },
         { id: "sessions", label: t("Sessions"), icon: "comment-discussion", provider: src.sessions },
         { id: "tasks", label: t("Tasks"), icon: "checklist", provider: src.tasks },
+        { id: "closedTasks", label: t("Closed"), icon: "archive", collapsed: true, provider: src.closedTasks },
       ],
       { describe: () => scopeLine(src.projectContext.workspaceName, getSelectedProject()?.name) },
     ),

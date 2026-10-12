@@ -15,6 +15,8 @@ import { DEFAULT_TOOL_FAILURE_STREAK, resetBrainRunStore, type EvermindRunHooks 
 import { fakeGateway, type GatewayScript } from "../harness/fakeGateway";
 import type { ToolDef } from "./fileTools";
 import type { PolicyGate } from "./policy";
+import { parseHooksFile } from "./hooks/hookConfig";
+import { createRunHooks, type RunDirectives } from "./hooks/runHooks";
 import {
   createNativeStream,
   createStreamRelay,
@@ -90,6 +92,7 @@ async function runTurn(opts: {
   approve?: (req: NativeApprovalRequest) => Promise<boolean>;
   permissionMode?: "ask" | "acceptEdits";
   policyGates?: PolicyGate[];
+  directives?: RunDirectives;
   projectId?: number;
   evermind?: EvermindRunHooks;
   chatId?: number;
@@ -109,6 +112,7 @@ async function runTurn(opts: {
     ...(opts.projectId != null ? { projectId: opts.projectId } : {}),
     ...(opts.evermind ? { evermind: opts.evermind } : {}),
     ...(opts.policyGates ? { policyGates: opts.policyGates } : {}),
+    ...(opts.directives ? { directives: opts.directives } : {}),
     permissionMode: opts.permissionMode ?? "ask",
     approve: async (req) => {
       approvals.push(req);
@@ -380,6 +384,55 @@ describe("a governance gate", () => {
 
     expect(approvals).toHaveLength(1);
     expect(approvals[0]?.gateReason).toBe("writes need a reviewer");
+  });
+});
+
+// The workspace's committed `.builderforce/` directives, end-to-end through the real loop.
+describe("workspace directives", () => {
+  const directives = (hooks: unknown[], rules = "", shell = async () => ({ ok: true, exitCode: 0, stdout: "" })): RunDirectives => ({
+    rules,
+    hooks: createRunHooks({ hooks: parseHooksFile(JSON.stringify({ hooks })).hooks, scope: "run", commandsAllowed: true, shell }),
+  });
+
+  it("puts the rules into the system prompt the model reads", async () => {
+    let systemPrompt = "";
+    await runTurn({
+      directives: directives([], "Always use pnpm."),
+      script: (ctx) => {
+        systemPrompt = String(ctx.messages.find((m) => m.role === "system")?.content ?? "");
+        return { text: "ok" };
+      },
+    });
+    expect(systemPrompt).toContain("Always use pnpm.");
+    expect(systemPrompt).toContain("You are the BuilderForce IDE agent.");
+  });
+
+  it("a stop prompt holds the run for one more turn with the instruction", async () => {
+    let nudge = "";
+    const { requests, log } = await runTurn({
+      directives: directives([{ on: "stop", when: "always", prompt: "Update README.md and DONE.md with the completed work." }]),
+      script: (ctx) => {
+        if (ctx.turn === 0) return { text: "All done." };
+        nudge = String(ctx.messages[ctx.messages.length - 1]?.content ?? "");
+        return { text: "Updated README.md and DONE.md." };
+      },
+    });
+    expect(requests).toHaveLength(2);
+    expect(nudge).toContain("Update README.md and DONE.md with the completed work.");
+    expect(log.text).toContain("Updated README.md and DONE.md.");
+  });
+
+  it("a failing preTool command refuses the call before it runs", async () => {
+    const push = toolDef("git_push", { mutating: true });
+    const { log } = await runTurn({
+      tools: [push],
+      permissionMode: "acceptEdits",
+      directives: directives([{ on: "preTool", tool: "git_push", command: "npm test" }], "", async () => ({ ok: false, exitCode: 1, stdout: "1 test failed" })),
+      script: (ctx) => (ctx.turn === 0 ? { toolCalls: [{ name: "git_push", args: {} }] } : { text: "Tests fail; not pushing." }),
+    });
+    expect(push.calls).toHaveLength(0);
+    expect(log.toolResults.some((r) => !r.ok)).toBe(true);
+    expect(log.text).toContain("Tests fail; not pushing.");
   });
 });
 

@@ -14,7 +14,7 @@
 import { cardText, type CardAct } from '@/domains/canvas/application/CardAct';
 import type { CreationObjectKind } from '@/domains/canvas/domain/canvasObject';
 import { withTestedBy } from '@/lib/ideaLog';
-import { questionsFromIdea } from '@/lib/formObject';
+import { formFromIdea } from '@/lib/formObject';
 
 export const ideaActs: CardAct = {
   kind: 'idea' as CardAct['kind'],
@@ -54,11 +54,7 @@ export const ideaActs: CardAct = {
     });
     created.data = {
       ...created.data,
-      title,
-      purpose: cardText(data, 'problem') || ideaTitle,
-      questions: questionsFromIdea(data),
-      audience: 'anyoneWithLink',
-      anonymous: false,
+      ...formFromIdea({ ...data, title: ideaTitle }, title),
     };
     return {
       patch: { testedBy: withTestedBy(data, title), ...validating },

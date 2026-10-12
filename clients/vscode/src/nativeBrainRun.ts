@@ -43,7 +43,9 @@ import {
 } from "@seanhogg/builderforce-brain-embedded";
 import { resolveToolAlias } from "@builderforce/agent-tools";
 import { describeTool, type ToolDef } from "./fileTools";
-import { evaluatePolicyGate, renderPolicyDirectives, type PolicyGate } from "./policy";
+import { evaluatePolicyGate, type PolicyGate } from "./policy";
+import { withRunPreamble } from "./runPreamble";
+import type { RunDirectives, RunHooks } from "./hooks/runHooks";
 
 /**
  * The native surface renders MARKDOWN, not the webview's `<BrainTimeline>`, so the
@@ -115,6 +117,8 @@ export interface NativeBrainRunOptions {
   permissionMode: "ask" | "acceptEdits";
   /** Compiled governance gates, enforced at the tool seam exactly as the cloud does. */
   policyGates?: PolicyGate[];
+  /** The workspace's committed rules + hooks (`.builderforce/`), when it has any. */
+  directives?: RunDirectives;
   /** Ask the human. Resolves true to run the call, false to skip it. */
   approve(request: NativeApprovalRequest): Promise<boolean>;
   /** Transport-bound streaming completion fn. */
@@ -287,6 +291,8 @@ export function createNativeRunTool(opts: {
   defs: readonly ToolDef[];
   root: string;
   gates?: readonly PolicyGate[];
+  /** The workspace's tool hooks (`.builderforce/hooks.json`): a preTool refusal, postTool feedback. */
+  hooks?: Pick<RunHooks, "beforeTool" | "afterTool">;
   events: Pick<NativeRunEvents, "onToolStart" | "onToolResult">;
   labels: Pick<NativeRunLabels, "blockedByPolicy">;
 }): (name: string, args: unknown) => Promise<unknown> {
@@ -302,11 +308,19 @@ export function createNativeRunTool(opts: {
     }
     const def = opts.defs.find((candidate) => candidate.name === resolved);
     if (!def) return { ok: false, error: `Unknown tool: ${name}` };
+    // A workspace preTool hook is a gate the repository set for itself — refused the same
+    // recoverable way a governance block is.
+    const refused = await opts.hooks?.beforeTool(resolved, record);
+    if (refused) {
+      opts.events.onToolResult(label, false);
+      return { ok: false, error: refused };
+    }
     opts.events.onToolStart(label);
     try {
       const out = await def.execute(record, opts.root);
       opts.events.onToolResult(label, true);
-      return parseToolOutput(out);
+      const parsed = parseToolOutput(out);
+      return opts.hooks ? opts.hooks.afterTool(resolved, record, parsed) : parsed;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       opts.events.onToolResult(`${label} — ${message}`, false);
@@ -425,19 +439,27 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
     tools,
     root,
     policyGates,
+    directives,
     permissionMode,
     events,
     labels,
     signal,
   } = opts;
 
-  const runTool = createNativeRunTool({ defs: tools, root, ...(policyGates ? { gates: policyGates } : {}), events, labels });
+  const runTool = createNativeRunTool({
+    defs: tools,
+    root,
+    ...(policyGates ? { gates: policyGates } : {}),
+    ...(directives ? { hooks: directives.hooks } : {}),
+    events,
+    labels,
+  });
   // Governance rides in TWO places, both of them here: the gates are rendered as binding
   // system-prompt lines so the model is bound by the same policy on every surface, and
   // they are HARD-enforced at the tool seam above. Rendering it here (rather than in the
-  // caller) keeps the two halves of one capability from drifting apart.
-  const governance = renderPolicyDirectives(policyGates);
-  const systemPrompt = governance ? `${governance}\n\n${opts.systemPrompt}` : opts.systemPrompt;
+  // caller) keeps the two halves of one capability from drifting apart. The workspace's
+  // rules follow, in the one preamble both surfaces share.
+  const systemPrompt = withRunPreamble(opts.systemPrompt, { gates: policyGates, rules: directives?.rules });
   const relayText = createStreamRelay(events);
   const persistence = opts.persistence ?? transientRunPersistence();
 
@@ -485,12 +507,15 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
       persistence,
       seed: opts.seed,
       userTurn: opts.userTurn,
+      ...(directives ? { onStop: directives.hooks.onStop } : {}),
     });
   } finally {
     // Deliver anything the last emit carried before we stop listening.
     relayText(getRunSnapshot(chatId));
     unsubscribe();
     signal.removeEventListener("abort", onAbort);
+    // The workspace's runEnd hooks — after the turn, never holding it.
+    void directives?.hooks.onRunEnd();
   }
 
   if (signal.aborted) return;

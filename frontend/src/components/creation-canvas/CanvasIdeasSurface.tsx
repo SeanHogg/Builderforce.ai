@@ -5,6 +5,7 @@
  */
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { formFromIdea } from '@/lib/formObject';
 import {
   IDEA_KIND, ideaLogEntries, ideaStageCounts, untestedIdeaCount, withTestedBy,
   type IdeaLogEntry,
@@ -16,8 +17,9 @@ import { IdeaStageBar, type IdeaStageFilter } from './IdeaStageBar';
 import canvasStyles from './CreationCanvas.module.css';
 import styles from './CanvasIdeasSurface.module.css';
 
-/** The two kinds this surface ever creates: the idea itself, and the interview that
- *  tests it. Narrow on purpose — a scratchpad is not a second object palette. */
+/** The kinds this surface ever creates: the idea itself, the interview that tests
+ *  it, and the form that asks the market. Narrow on purpose — a scratchpad is not
+ *  a second object palette. */
 export type IdeaSurfaceCreatableKind = typeof IDEA_KIND | 'customerInterview' | 'form';
 
 export interface CanvasIdeasSurfaceProps {
@@ -26,8 +28,9 @@ export interface CanvasIdeasSurfaceProps {
    * Appends an object to the board. ABSENT when the viewer cannot edit this canvas.
    *
    * It no longer carries the idea itself — the composer's `captureIdea` intent does
-   * that, through the host. What is left is the OTHER card this surface creates: the
-   * `customerInterview` that "Plan an interview" puts on the board beside an idea.
+   * that, through the host. What is left are the OTHER cards this surface creates:
+   * the `customerInterview` that "Plan an interview" puts beside an idea, and the
+   * `form` that "Ask people" seeds from the idea's problem and riskiest assumptions.
    */
   onCreate?: (kind: IdeaSurfaceCreatableKind, data: Partial<CreationNodeData>) => void;
   /** Patches an object on the board. ABSENT when the viewer cannot edit this canvas. */
@@ -62,11 +65,12 @@ const text = (value: unknown): string => (typeof value === 'string' ? value.trim
  * this list, and dragging a card on the board never desynchronises a second store. The
  * list, the stage counts and the "untested" number are `lib/ideaLog.ts` over those cards.
  *
- * ── WHERE CUSTOMER INTERVIEWS COME IN ────────────────────────────────────────────
+ * ── WHERE INTERVIEWS AND ASKING PEOPLE COME IN ───────────────────────────────────
  * "Plan an interview" puts a `customerInterview` card on the board titled after the
  * idea, names it in the idea's `testedBy`, and moves a still-early idea to `validating`.
- * The idea's `evidence` then counts it — which is the whole loop BurnRateOS's scratch pad
- * ran through meetings, expressed as the objects the canvas already had.
+ * "Ask people" is the same shape with a `form` on the other end, seeded by
+ * `formFromIdea` so Brain's `idea.test` act cannot disagree. The idea's `evidence`
+ * then counts both — interviews, experiments, and forms via `IDEA_EVIDENCE_KINDS`.
  */
 export function CanvasIdeasSurface({ nodes, onCreate, onUpdate, onOpenObject, onExit }: CanvasIdeasSurfaceProps) {
   const t = useTranslations('creationCanvas.surface.ideas');
@@ -108,6 +112,17 @@ export function CanvasIdeasSurface({ nodes, onCreate, onUpdate, onOpenObject, on
     } as Partial<CreationNodeData>);
   };
 
+  const askPeople = (entry: IdeaLogEntry) => {
+    if (!onCreate || !onUpdate) return;
+    const ideaTitle = text(entry.data.title) || t('row.untitled');
+    const title = t('row.formTitle', { idea: ideaTitle });
+    onCreate('form', formFromIdea({ ...entry.data, title: ideaTitle }, title) as Partial<CreationNodeData>);
+    onUpdate(entry.id, {
+      testedBy: withTestedBy(entry.data, title),
+      ...(entry.stage === 'captured' || entry.stage === 'exploring' ? { stage: 'validating' } : {}),
+    } as Partial<CreationNodeData>);
+  };
+
   return (
     <section
       className={canvasStyles.ideasSurface}
@@ -139,7 +154,10 @@ export function CanvasIdeasSurface({ nodes, onCreate, onUpdate, onOpenObject, on
                   board={board}
                   onOpen={() => onOpenObject(entry.id)}
                   {...(onUpdate ? { onStage: (stage) => onUpdate(entry.id, { stage } as Partial<CreationNodeData>) } : {})}
-                  {...(onCreate && onUpdate ? { onPlanInterview: () => planInterview(entry) } : {})}
+                  {...(onCreate && onUpdate ? {
+                    onPlanInterview: () => planInterview(entry),
+                    onAskPeople: () => askPeople(entry),
+                  } : {})}
                 />
               ))}
             </div>

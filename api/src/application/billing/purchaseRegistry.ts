@@ -20,6 +20,7 @@ import type { Env } from '../../env';
 import type { WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
 import { completeCommsTopUp, COMMS_TOPUP_KIND } from '../phone/commsTopUp';
 import { AGENT_PURCHASE_KIND, completeAgentCheckout } from '../marketplace/agentCommerce';
+import { SKILL_PURCHASE_KIND, completeSkillCheckout } from '../marketplace/skillCommerce';
 import { recordBusinessPhoneEvent } from '../tenant/businessPhoneSubscription';
 import { completeSpawnTopUp, SPAWN_TOKENS_KIND } from '../spawn/spawnTopUp';
 import { recordSpawnPlanEvent, SPAWN_PLAN_KIND } from '../spawn/spawnMembership';
@@ -47,6 +48,15 @@ const ONE_OFF_SETTLERS: Readonly<Record<string, OneOffSettler>> = {
     const buyerUserId = metadata.buyerUserId;
     if (!Number.isInteger(tenantId) || tenantId <= 0 || !buyerUserId) return null;
     await completeAgentCheckout(db, env, { tenantId, buyerUserId, checkoutSessionId });
+    return true;
+  },
+  // USER-scoped: a skill/persona is bought by a person from the marketing
+  // marketplace, where no workspace need exist. The settler reads buyerUserId
+  // from signed metadata rather than requiring a tenant id.
+  [SKILL_PURCHASE_KIND]: async (db, env, { checkoutSessionId, metadata }) => {
+    const buyerUserId = metadata.buyerUserId;
+    if (!buyerUserId) return null;
+    await completeSkillCheckout(db, env, { buyerUserId, checkoutSessionId });
     return true;
   },
 };

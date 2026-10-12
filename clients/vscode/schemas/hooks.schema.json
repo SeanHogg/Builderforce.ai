@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BuilderForce workspace hooks",
+  "description": "Directives the BuilderForce agent runs at lifecycle points of every run in this repository. Commit this file so everyone gets the same actions.",
+  "type": "object",
+  "required": ["hooks"],
+  "properties": {
+    "hooks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["on"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable name for the hook; shown to the agent when it fires."
+          },
+          "on": {
+            "enum": ["stop", "preTool", "postTool", "runEnd"],
+            "markdownEnumDescriptions": [
+              "The run is about to end. A `prompt` is handed to the agent once; a failing `command` holds the run until it passes (bounded).",
+              "Before a tool call. A failing `command` refuses the call and the agent sees why.",
+              "After a successful tool call. A failing `command`'s output is handed back to the agent with the tool result.",
+              "After the run has settled. `command` only; its result is ignored."
+            ]
+          },
+          "prompt": {
+            "type": "string",
+            "description": "An instruction for the agent (stop hooks only), e.g. \"Update README.md and DONE.md with the work completed in this session.\""
+          },
+          "command": {
+            "type": "string",
+            "description": "A shell command run in the workspace root. Needs your one-time approval per machine. Env: BUILDERFORCE_HOOK_EVENT, BUILDERFORCE_HOOK_ID, BUILDERFORCE_TOOL_NAME, BUILDERFORCE_TOOL_ARGS, BUILDERFORCE_CODE_CHANGED, BUILDERFORCE_TOUCHED_FILES."
+          },
+          "tool": {
+            "type": "string",
+            "default": "*",
+            "description": "preTool / postTool only: \"*\", a tool name (e.g. \"git_push\"), or names joined with \"|\" (e.g. \"write_file|edit_file\")."
+          },
+          "when": {
+            "enum": ["codeChanged", "always"],
+            "default": "codeChanged",
+            "description": "stop / runEnd only: fire only on runs that changed code (default), or on every run."
+          },
+          "blockOnFailure": {
+            "type": "boolean",
+            "default": true,
+            "description": "False makes a command advisory: it runs and its result is ignored."
+          },
+          "timeoutSeconds": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 600,
+            "default": 120
+          }
+        },
+        "oneOf": [
+          { "required": ["prompt"], "not": { "required": ["command"] } },
+          { "required": ["command"], "not": { "required": ["prompt"] } }
+        ]
+      }
+    }
+  }
+}

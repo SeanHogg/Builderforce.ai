@@ -66,6 +66,7 @@ describe('the idea scratchpad', () => {
     expect(screen.getAllByTestId('idea-log-row')).toHaveLength(3);
     expect(screen.queryByRole('textbox')).toBeNull();
     for (const button of screen.getAllByRole('button', { name: 'Plan an interview' })) expect(button).toBeDisabled();
+    for (const button of screen.getAllByRole('button', { name: 'Ask people' })) expect(button).toBeDisabled();
   });
 
   it('lists ideas newest first and says which ones nobody has tested', () => {
@@ -97,6 +98,31 @@ describe('the idea scratchpad', () => {
       testedBy: ['Interview: Dog walking for towers'],
       stage: 'validating',
     });
+  });
+
+  it('asks people: a linked form card seeded from the idea, and the idea moves to validating', () => {
+    const { onCreate, onUpdate } = renderSurface();
+    const first = screen.getAllByTestId('idea-log-row')[0]!;
+    fireEvent.click(within(first).getByRole('button', { name: 'Ask people' }));
+    expect(onCreate).toHaveBeenCalledWith('form', expect.objectContaining({
+      title: 'Ask: Dog walking for towers',
+      audience: 'anyoneWithLink',
+      anonymous: false,
+    }));
+    expect(onUpdate).toHaveBeenCalledWith('Dog walking for towers', {
+      testedBy: ['Ask: Dog walking for towers'],
+      stage: 'validating',
+    });
+  });
+
+  it('counts a linked form as evidence, the same way it counts an interview', () => {
+    renderSurface({
+      nodes: [
+        idea('Surveyed thing', { stage: 'validating', testedBy: ['Ask: Surveyed thing'] }),
+        { id: 'form', data: { kind: 'form', title: 'Ask: Surveyed thing' } as CreationNodeData },
+      ],
+    });
+    expect(screen.getByText('Tested by 1 form.')).toBeTruthy();
   });
 
   it('moves an idea through its stages from the list', () => {

@@ -1,6 +1,6 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { ProjectService } from '../project/ProjectService';
-import { provisionProject } from '../project/provisionProject';
+import { afterBrainProjectCreate } from '../project/ensureProjectCodingTarget';
 import { TenantService } from './TenantService';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TenantRepository } from '../../infrastructure/repositories/TenantRepository';
@@ -148,7 +148,7 @@ async function provisionOwnedWorkspace(
           tenantId,
           name: STARTER_PROJECT_NAME,
         });
-        await provisionProject(env, db, tenantId, project);
+        await afterBrainProjectCreate(env, db, tenantId, project);
         projectCreated = true;
       } catch (error) {
         reportCaughtError(error, {

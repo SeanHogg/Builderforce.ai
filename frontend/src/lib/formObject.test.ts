@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  formAudienceOf, formJoinUrl, formPublishBody, questionsFromIdea,
+  formAudienceOf, formFromIdea, formJoinUrl, formPublishBody, questionsFromIdea,
   readFormQuestions, readFormRecipients,
 } from './formObject';
 
@@ -51,6 +51,23 @@ describe('questionsFromIdea', () => {
     ]);
     expect(named[0]!.label).toContain('Ops directors');
     expect(questionsFromIdea({ title: 'Scheduler' }, true).some((q) => q.type === 'email')).toBe(false);
+  });
+});
+
+describe('formFromIdea', () => {
+  it('seeds a shareable form from the idea so the surface and the act cannot disagree', () => {
+    const idea = {
+      title: 'Scheduler',
+      problem: 'Ops directors lose Fridays to dispatch',
+      riskiestAssumptions: ['They will pay $40/seat'],
+    };
+    expect(formFromIdea(idea, 'Ask: Scheduler')).toEqual({
+      title: 'Ask: Scheduler',
+      purpose: 'Ops directors lose Fridays to dispatch',
+      questions: questionsFromIdea(idea),
+      audience: 'anyoneWithLink',
+      anonymous: false,
+    });
   });
 });
 

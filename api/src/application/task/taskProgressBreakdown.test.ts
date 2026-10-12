@@ -7,6 +7,17 @@ describe('buildTaskProgressBreakdown', () => {
       .toMatchObject({ basis: 'subtasks', progressPct: 67, subtasksDone: 2, subtasksTotal: 3 });
   });
 
+  it('reads a cancelled ticket as complete, not 0%', () => {
+    expect(buildTaskProgressBreakdown({ status: 'cancelled' }))
+      .toMatchObject({ basis: 'status', progressPct: 100 });
+    expect(buildTaskProgressBreakdown({ status: 'cancelled', childStatuses: ['todo', 'todo'] }).progressPct).toBe(100);
+  });
+
+  it('counts cancelled subtasks toward done', () => {
+    expect(buildTaskProgressBreakdown({ status: 'in_progress', childStatuses: ['done', 'cancelled', 'todo', 'todo'] }))
+      .toMatchObject({ basis: 'subtasks', progressPct: 50, subtasksDone: 2, subtasksTotal: 4 });
+  });
+
   it('never emits 100 merely because a PR exists', () => {
     expect(buildTaskProgressBreakdown({ status: 'in_review', prStatus: 'merged', codeDelivered: false }))
       .toMatchObject({ basis: 'status', progressPct: 75, codeDelivered: false, prState: 'merged' });

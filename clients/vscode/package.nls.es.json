@@ -21,8 +21,6 @@
   "command.createWorkspace": "BuilderForce: Crear / cambiar de espacio de trabajo",
   "command.registerMcpServer": "BuilderForce: registrar servidor MCP",
   "command.refreshProjects": "BuilderForce: Actualizar tareas",
-  "command.hideDoneTasks": "BuilderForce: Ocultar tareas terminadas",
-  "command.showDoneTasks": "BuilderForce: Mostrar tareas terminadas",
   "command.projectViewHierarchy": "BuilderForce: Mostrar tareas como jerarquía",
   "command.projectViewFlat": "BuilderForce: Mostrar tareas como lista plana",
   "command.projectGroupBy": "BuilderForce: Agrupar tareas por…",
@@ -42,6 +40,7 @@
   "command.openPage": "BuilderForce: Abrir página…",
   "command.diagnose": "BuilderForce: Diagnosticar conexión",
   "command.rescanCodebase": "BuilderForce: Reescanear base de código",
+  "command.editWorkspaceHooks": "BuilderForce: Editar hooks del espacio de trabajo",
   "command.pickModel": "BuilderForce: Elegir modelo",
   "command.openSettings": "BuilderForce: Abrir ajustes",
   "command.editorChat": "BuilderForce: Chat",
@@ -81,5 +80,8 @@
   "view.work": "Trabajo",
   "view.health": "Estado",
   "command.refreshWork": "Actualizar trabajo",
-  "command.refreshHealth": "Actualizar estado"
+  "command.refreshHealth": "Actualizar estado",
+  "command.archiveTask": "BuilderForce: Archivar tarea",
+  "command.unarchiveTask": "BuilderForce: Restaurar tarea archivada",
+  "command.deleteTask": "BuilderForce: Eliminar tarea"
 }

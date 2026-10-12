@@ -5346,12 +5346,13 @@ export interface MarketplacePurchase {
 
 export const marketplacePurchaseApi = {
   /**
-   * Records a skill/persona acquisition. NOT a door for `'agent'`: this route
-   * prices only skills and records everything else at zero, so an agent bought
-   * here would be a free entitlement for a priced agent. Agents go through
-   * {@link agentCheckoutApi}, which settles with the processor first.
+   * Records a FREE skill/persona acquisition. Paid skills answer 402
+   * `{ checkoutRequired, priceCents }` and go through {@link skillCheckoutApi}.
+   * NOT a door for `'agent'`: this route prices only skills and records
+   * everything else at zero, so an agent bought here would be a free entitlement
+   * for a priced agent. Agents go through {@link agentCheckoutApi}.
    */
-  purchase: (item: { artifactType: 'skill' | 'persona'; artifactSlug: string; stripePaymentIntentId?: string }) =>
+  purchase: (item: { artifactType: 'skill' | 'persona'; artifactSlug: string }) =>
     mpRequest<{ ok: true; priceCents: number; pricingModel: 'flat_fee' | 'consumption' }>('/marketplace/purchase', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -5359,6 +5360,36 @@ export const marketplacePurchaseApi = {
     }),
   list: () => mpRequest<{ purchases: MarketplacePurchase[] }>('/marketplace/purchases')
     .then((result) => result.purchases ?? []),
+};
+
+/**
+ * Hosted checkout for a PRICED marketplace skill (and, if they ever gain a
+ * price, a persona). Mirrors {@link agentCheckoutApi}: start records nothing,
+ * complete re-reads the processor session before the purchase is written.
+ */
+export const skillCheckoutApi = {
+  startCheckout: (input: {
+    artifactType: 'skill' | 'persona';
+    artifactSlug: string;
+    returnUrl: string;
+    buyerEmail?: string;
+  }): Promise<{ checkoutUrl: string }> =>
+    mpRequest('/marketplace/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        artifactType: input.artifactType,
+        artifactSlug: input.artifactSlug,
+        returnUrl: input.returnUrl,
+        ...(input.buyerEmail ? { buyerEmail: input.buyerEmail } : {}),
+      }),
+    }),
+  completeCheckout: (checkoutSessionId: string): Promise<{ purchased: true }> =>
+    mpRequest('/marketplace/checkout/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checkoutSessionId }),
+    }),
 };
 
 export interface CustomerEmbedConsentEvent {

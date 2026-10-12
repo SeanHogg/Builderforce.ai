@@ -4,6 +4,7 @@ import { and, count, desc, eq, gte, inArray, max, min, sql } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
 import { notSystemTask } from '../../application/task/taskScope';
 import { provisionProject } from '../../application/project/provisionProject';
+import { ensureProjectCodingTarget } from '../../application/project/ensureProjectCodingTarget';
 import { invalidateProjectsList, projectsListVersionKey } from '../../application/project/projectsListCache';
 import type { HonoEnv } from '../../env';
 import type { Env } from '../../env';
@@ -48,6 +49,17 @@ type ResolvedSourceControlAssignment = {
 type AssignmentResolveResult =
   | { ok: true; value: ResolvedSourceControlAssignment }
   | { ok: false; status: 400; message: string };
+
+/** IDE bind after REST provision — skip is internal when a git repo is already the coding target. */
+async function bindIdeWorkspace(
+  db: Db,
+  tenantId: number,
+  project: { id: number; sourceControlRepoFullName?: string | null; githubRepoUrl?: string | null },
+): Promise<void> {
+  await ensureProjectCodingTarget(db, tenantId, project).catch((error) => {
+    reportCaughtError(error, { source: 'presentation/routes/projectRoutes.ts', operation: 'ensureProjectCodingTarget' });
+  });
+}
 
 type ProjectRecommendation = {
   name: string;
@@ -746,6 +758,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     await provisionProject(c.env as Env, db, tenantId, project, {
       kanbanTemplateId: body.kanbanTemplateId,
     });
+    await bindIdeWorkspace(db, tenantId, project);
     return c.json(project.toPlain(), 201);
   });
 
@@ -813,6 +826,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     });
 
     await provisionProject(c.env as Env, db, tenantId, created);
+    await bindIdeWorkspace(db, tenantId, created);
     return c.json({ action: 'created', project: created.toPlain() }, 201);
   });
 
@@ -910,7 +924,10 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     // Newly scaffolded (non-repo, default designer) projects get the full starter
     // provisioning (files + board + Evermind) so the IDE opens runnable — updates
     // of an existing project keep whatever files and board it already has.
-    if (!existing) await provisionProject(c.env as Env, db, tenantId, project);
+    if (!existing) {
+      await provisionProject(c.env as Env, db, tenantId, project);
+      await bindIdeWorkspace(db, tenantId, project);
+    }
 
     let selectedAgentHostId: number | null = null;
 

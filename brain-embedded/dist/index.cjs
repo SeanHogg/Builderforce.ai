@@ -58,6 +58,7 @@ __export(src_exports, {
   HAND_OFF_TOOL_SPEC: () => HAND_OFF_TOOL_SPEC,
   HISTORY_TOKEN_BUDGET: () => HISTORY_TOKEN_BUDGET,
   LOCAL_WORKSPACE_TOOLS: () => LOCAL_WORKSPACE_TOOLS,
+  MAX_STOP_HOOK_ROUNDS: () => MAX_STOP_HOOK_ROUNDS,
   MAX_TOOL_RESULT_CHARS: () => MAX_TOOL_RESULT_CHARS,
   MODALITY_PERSONAS: () => MODALITY_PERSONAS,
   MODEL_CATEGORIES: () => MODEL_CATEGORIES,
@@ -111,6 +112,7 @@ __export(src_exports, {
   applyRemoteRun: () => applyRemoteRun,
   artifactRoutePath: () => artifactRoutePath,
   asProvenanceAccount: () => asProvenanceAccount,
+  askStopHook: () => askStopHook,
   askUserAnchorId: () => askUserAnchorId,
   askUserBlock: () => askUserBlock,
   attachEvermindLearn: () => attachEvermindLearn,
@@ -941,6 +943,10 @@ function stepRow(step) {
   });
   return { role: "tool", content: "", metadata };
 }
+
+// ../packages/agent-loop/src/taskClosedState.ts
+var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", "archived"];
+var CLOSED = new Set(TASK_CLOSED_STATUSES);
 
 // ../packages/agent-loop/src/reasoning.ts
 var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
@@ -8030,6 +8036,18 @@ function unshippedChangeNudge() {
   return 'You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer \u2014 no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now: verify it (`run_command` for the type-check / tests that cover it), self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it, then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true). If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead. If you genuinely cannot ship \u2014 the change is unfinished, or verification fails and you cannot fix it \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
 }
 
+// src/stopHooks.ts
+var MAX_STOP_HOOK_ROUNDS = 4;
+async function askStopHook(hook, input) {
+  if (!hook || input.round >= MAX_STOP_HOOK_ROUNDS) return null;
+  try {
+    const nudge = (await hook(input))?.trim();
+    return nudge ? nudge : null;
+  } catch {
+    return null;
+  }
+}
+
 // src/previewReview.ts
 var REVIEW_RECORD_TOOL = "builtin_reviews_record";
 function previewReviewDirective(chatId) {
@@ -9094,6 +9112,7 @@ ${continuationDirective()}`;
   let phase = c.codeChanged || c.codePhaseReached ? "code" : "plan";
   let shipRecoveryUsed = false;
   let reviewRecoveryUsed = false;
+  let stopHookRounds = 0;
   let delegationRecoveryUsed = false;
   let redirectAskToDelegation = false;
   const priorReply = previousReplyText(convo);
@@ -9450,6 +9469,21 @@ ${revisit}` : covered.note;
           label: shape === "handed-off" ? "loop.recover_handed_off_work" : "loop.recover_announced_tool_call",
           args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised, shape },
           result: shape === "handed-off" ? `Model ended by telling the user to run the commands itself holds tools for \u2014 re-prompted to run them (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).` : `Model announced a tool call without making one \u2014 re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
+        });
+        c.streamingText = "";
+        emit(c);
+        return { action: "continue" };
+      }
+      const stopNudge = runTool ? await askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: stopHookRounds }) : null;
+      if (stopNudge) {
+        stopHookRounds += 1;
+        await requeueWithNudge(stopNudge);
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "message",
+          label: "loop.stop_hook",
+          args: { step: iter, round: stopHookRounds },
+          result: `A workspace stop hook held the run for another turn: ${stopNudge.slice(0, 200)}`
         });
         c.streamingText = "";
         emit(c);
@@ -11732,6 +11766,7 @@ function PromptInput({
   HAND_OFF_TOOL_SPEC,
   HISTORY_TOKEN_BUDGET,
   LOCAL_WORKSPACE_TOOLS,
+  MAX_STOP_HOOK_ROUNDS,
   MAX_TOOL_RESULT_CHARS,
   MODALITY_PERSONAS,
   MODEL_CATEGORIES,
@@ -11785,6 +11820,7 @@ function PromptInput({
   applyRemoteRun,
   artifactRoutePath,
   asProvenanceAccount,
+  askStopHook,
   askUserAnchorId,
   askUserBlock,
   attachEvermindLearn,

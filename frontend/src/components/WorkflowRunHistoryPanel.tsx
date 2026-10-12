@@ -26,6 +26,7 @@ import { WorkflowDagView } from './WorkflowDagView';
 import { TrendChart } from './charts/TrendChart';
 import { StatusPill, WORKFLOW_STATUS_TONE, cardStyle, subtleBtn, isLiveWorkflowStatus, LIVE_WORKFLOW_POLL_MS } from './workflowRunUi';
 import { statusColor } from '@/lib/statusTone';
+import { reportBackgroundFailure } from '@/lib/reportError';
 import { useFormat } from "@/i18n/useFormat";
 
 interface Props {
@@ -160,6 +161,9 @@ export function WorkflowRunHistoryPanel({ definitionId, definitionName, initialR
     const workflowId = selectedDetail.id;
     const tab = detailTab;
     let cancelled = false;
+    // A failed poll keeps the last snapshot on screen. Report the first failure of
+    // this live run only — every tick reporting would turn one outage into a storm.
+    let reported = false;
 
     const tick = async () => {
       try {
@@ -171,8 +175,14 @@ export function WorkflowRunHistoryPanel({ definitionId, definitionName, initialR
           if (cancelled) return;
           setGraph(g);
         }
-      } catch {
-        /* keep last snapshot */
+      } catch (error) {
+        if (reported) return;
+        reported = true;
+        void reportBackgroundFailure({
+          message: error instanceof Error ? error.message : String(error),
+          level: 'warning',
+          context: { operation: 'workflowRunHistory.livePoll', workflowId, tab },
+        });
       }
     };
 

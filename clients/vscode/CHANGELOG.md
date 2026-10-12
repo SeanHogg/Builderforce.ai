@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.31] — Workspace hooks and rules your team commits
+
+- **Tell the agent what to do at the end of every run.** Add `.builderforce/hooks.json` to your repository, for example `{ "hooks": [{ "on": "stop", "prompt": "Update README.md and DONE.md with the work completed." }] }`. Before a run that changed code finishes, the agent does that too, and the result ships in the same commit.
+- **Gate and check with commands.** A `stop` command, such as a lint, must pass before the run ends. A `preTool` command can refuse a call, for example no `git_push` until `npm test` passes. A failing `postTool` command, such as a formatter after `edit_file`, sends its output back to the agent. `runEnd` runs after the run has finished. Each machine approves a workspace's commands once, and approves again when they change.
+- **Standing rules.** `.builderforce/rules.md` is added to every run's instructions in that workspace.
+- **Shared through git.** Both files live in `.builderforce/`, so everyone who opens the repository gets the same directives. Run **BuilderForce: Edit Workspace Hooks** to start one. The editor checks `hooks.json` as you type.
+
 ## [2026.10.24] — Fold the sub-agents strip away
 
 - **The sub-agents strip can be collapsed.** Click its header to fold it down to one line that still names who is working. Click again to see each sub-agent's activity and controls. The panel remembers your choice.

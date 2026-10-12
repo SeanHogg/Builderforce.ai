@@ -18,6 +18,7 @@ import { getEditorContextLive } from "./editorContext";
 import { editorContextDirective } from "./idePersona";
 import { getSelectedProject } from "./projectState";
 import { PolicyGatesUnavailableError, resolveRunPolicyGates } from "./policyGates";
+import { editorRunDirectives } from "./hooks/editorDirectives";
 import { buildSystemMessages } from "./prompt";
 import type { ToolDef } from "./fileTools";
 import type { PolicyGate } from "./policy";
@@ -212,6 +213,9 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
         )
       : undefined;
     const tools: ToolDef[] = await brainToolCatalog(ctx.secrets, root, activeProject?.id, children, () => runAbortSignal(runChatId));
+    // The workspace's committed `.builderforce/` rules + hooks — the same assembly the
+    // panel's run host uses.
+    const directives = await editorRunDirectives(ctx.workspaceState, root ?? "", "run");
 
     await runNativeBrain({
       // With no server chat (the platform was unreachable) the run still needs a cell
@@ -236,6 +240,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
       ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
       permissionMode,
       ...(policyGates.length ? { policyGates } : {}),
+      ...(directives ? { directives } : {}),
       // The transport for this route — gateway or on-device — decided in `modelRouting`,
       // never here. The sign-in gate above guarantees a key on the gateway branch.
       stream: routeStream(modelChoice, key),

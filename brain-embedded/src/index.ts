@@ -383,6 +383,10 @@ export {
 } from './selfReviewShip';
 export type { UnshippedChangeInput } from './selfReviewShip';
 
+// STOP HOOKS — the host's (workspace's) say over whether a run may end; bounded per run.
+export { askStopHook, MAX_STOP_HOOK_ROUNDS } from './stopHooks';
+export type { RunStopHook, RunStopInput } from './stopHooks';
+
 // PREVIEW REVIEW — the Studio's twin: the agent verifies its change in the live preview,
 // records a review quoting the measurements, and the reviewed tickets close.
 export {

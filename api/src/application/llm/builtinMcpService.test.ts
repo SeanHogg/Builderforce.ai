@@ -19,10 +19,19 @@ const taskSvc = vi.hoisted(() => ({
 }));
 
 // Constructable mocks: a `function` returning an object yields it from `new`.
+const codingTarget = vi.hoisted(() => ({
+  afterBrainProjectCreate: vi.fn(async () => ({ kind: 'workspace' })),
+  ensureProjectCodingTarget: vi.fn(async () => ({ kind: 'workspace' })),
+}));
+
 vi.mock('../project/ProjectService', () => ({ ProjectService: function () { return projectSvc; } }));
 vi.mock('../task/TaskService', () => ({ TaskService: function () { return taskSvc; } }));
 vi.mock('../../infrastructure/repositories/ProjectRepository', () => ({ ProjectRepository: function () { /* stub */ } }));
 vi.mock('../../infrastructure/repositories/TaskRepository', () => ({ TaskRepository: function () { /* stub */ } }));
+vi.mock('../project/ensureProjectCodingTarget', () => ({
+  afterBrainProjectCreate: codingTarget.afterBrainProjectCreate,
+  ensureProjectCodingTarget: codingTarget.ensureProjectCodingTarget,
+}));
 
 import {
   listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID,
@@ -325,6 +334,31 @@ describe('callBuiltinTool', () => {
     );
   });
 
+  it('provisions an IDE workspace after Brain projects.create so a coder has a working tree', async () => {
+    const project = { id: 2, toPlain: () => ({ id: 2 }) };
+    projectSvc.createProjectWithGeneratedKey.mockResolvedValue(project);
+    const env = { UPLOADS: {} } as never;
+    await callBuiltinTool(db, { tenantId: TENANT, tool: 'projects.create', arguments: { name: 'Acme App' }, env });
+    expect(codingTarget.afterBrainProjectCreate).toHaveBeenCalledWith(env, db, TENANT, project);
+    expect(codingTarget.ensureProjectCodingTarget).not.toHaveBeenCalled();
+  });
+
+  it('still binds the IDE workspace when env is missing (no starter-file provision)', async () => {
+    const project = { id: 2, toPlain: () => ({ id: 2 }) };
+    projectSvc.createProjectWithGeneratedKey.mockResolvedValue(project);
+    await callBuiltinTool(db, { tenantId: TENANT, tool: 'projects.create', arguments: { name: 'Acme App' } });
+    expect(codingTarget.ensureProjectCodingTarget).toHaveBeenCalledWith(db, TENANT, project);
+    expect(codingTarget.afterBrainProjectCreate).not.toHaveBeenCalled();
+  });
+
+  it('projects.create still returns the project if workspace provision fails', async () => {
+    const project = { id: 2, toPlain: () => ({ id: 2 }) };
+    projectSvc.createProjectWithGeneratedKey.mockResolvedValue(project);
+    codingTarget.afterBrainProjectCreate.mockRejectedValueOnce(new Error('r2 down'));
+    const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'projects.create', arguments: { name: 'Acme App' }, env: { UPLOADS: {} } as never });
+    expect(res).toEqual({ id: 2 });
+  });
+
   it('rejects create without a name', async () => {
     await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'projects.create', arguments: {} })).rejects.toThrow(/name is required/);
   });
@@ -362,6 +396,44 @@ describe('callBuiltinTool', () => {
     const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', arguments: { projectId: 3, title: '  ship   okrs ', assignedUserId: 'coordinator-1' } });
     expect(taskSvc.createTask).not.toHaveBeenCalled();
     expect(res).toMatchObject({ deduped: true, id: 42, title: 'Ship OKRs' });
+  });
+
+  it('tasks.list returns open work by default and closed (done, cancelled, archived) on request', async () => {
+    const rows = [
+      { id: 1, title: 'Open', status: 'todo' },
+      { id: 2, title: 'Cancelled', status: 'cancelled' },
+      { id: 3, title: 'Done', status: 'done' },
+      { id: 4, title: 'Archived', status: 'in_progress', archived: true },
+    ];
+    taskSvc.listTasks.mockResolvedValue(rows.map((r) => ({ toPlain: () => r })));
+    const emptyDb = {
+      select: vi.fn(() => {
+        const chain: Record<string, unknown> = {};
+        const self = () => chain;
+        chain.from = self;
+        chain.innerJoin = self;
+        chain.leftJoin = self;
+        chain.where = self;
+        chain.orderBy = self;
+        chain.groupBy = self;
+        chain.limit = async () => [];
+        chain.then = (resolve: (value: unknown) => unknown) => Promise.resolve([]).then(resolve);
+        return chain;
+      }),
+    } as never;
+    const ids = (res: unknown) => (res as { tasks: Array<{ id: number }> }).tasks.map((t) => t.id);
+
+    const open = await callBuiltinTool(emptyDb, { tenantId: TENANT, tool: 'tasks.list', arguments: { projectId: 3 } });
+    expect(ids(open)).toEqual([1]);
+    expect(taskSvc.listTasks).toHaveBeenLastCalledWith(TENANT, 3, false);
+
+    const closed = await callBuiltinTool(emptyDb, { tenantId: TENANT, tool: 'tasks.list', arguments: { projectId: 3, scope: 'closed' } });
+    expect(ids(closed)).toEqual([2, 3, 4]);
+    expect(taskSvc.listTasks).toHaveBeenLastCalledWith(TENANT, 3, true);
+
+    // An explicit status is its own scope, so "done" is not emptied by the open default.
+    const done = await callBuiltinTool(emptyDb, { tenantId: TENANT, tool: 'tasks.list', arguments: { projectId: 3, status: 'done' } });
+    expect(ids(done)).toEqual([3]);
   });
 
   it('enforces tenant ownership on tasks.update (via the project lookup)', async () => {

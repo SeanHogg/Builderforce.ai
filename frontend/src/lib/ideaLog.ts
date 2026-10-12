@@ -24,7 +24,8 @@ import { specRefKey } from './specObjects';
 export const IDEA_KIND = 'idea';
 
 /** The kinds whose objects count as evidence for an idea, in the order a founder
- *  usually gathers them: talk to someone, then run something. */
+ *  usually gathers them: talk to someone, run something, then ask a crowd.
+ *  Consumed by `idea.evidence` in founderObjects — do not hardcode the same list there. */
 export const IDEA_EVIDENCE_KINDS = ['customerInterview', 'experiment', 'form'] as const;
 
 /** Stages in which an idea is still being worked on — the ones "untested" is about. An
@@ -55,7 +56,7 @@ export function ideaStage(data: Readonly<Record<string, unknown>>): IdeaStage {
 }
 
 /**
- * The `customerInterview` / `experiment` titles an idea says tested it.
+ * The `customerInterview` / `experiment` / `form` titles an idea says tested it.
  *
  * `testedBy` is a `chips` field, so the stored shape is `string[]` — but a model
  * occasionally writes one comma-separated string, and silently counting that as ONE

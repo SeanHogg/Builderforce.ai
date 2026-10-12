@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { BfTask, DEFAULT_HIDE_DONE, invalidateTasks, listTasks, updateTaskStatus } from "./bfApi";
+import { TASK_LANES, TASK_LANE_KEYS } from "./taskLanes";
 import { makeNonce, WebviewPanelBase, type WebviewInbound } from "./webviewShared";
 
 /**
@@ -12,19 +13,8 @@ import { makeNonce, WebviewPanelBase, type WebviewInbound } from "./webviewShare
  * server-side); click a card to start a task-scoped chat session.
  */
 
-/** Board columns, in flow order. Keep the status keys in sync with `setTaskStatus`
- *  in extension.ts and the web app's task statuses (the one runtime boundary we
- *  can't share a component across — same model, separate render). */
-const COLUMNS: { key: string; label: string }[] = [
-  { key: "backlog", label: "Backlog" },
-  { key: "todo", label: "To Do" },
-  { key: "ready", label: "Ready" },
-  { key: "in_progress", label: "In Progress" },
-  { key: "in_review", label: "In Review" },
-  { key: "done", label: "Done" },
-  { key: "blocked", label: "Blocked" },
-];
-const KNOWN = new Set(COLUMNS.map((c) => c.key));
+/** Board columns, in flow order — the shared lane list (also the "Set status" picker). */
+const KNOWN = TASK_LANE_KEYS;
 /** Tasks with an unknown/empty status bucket into Backlog so nothing is hidden. */
 const FALLBACK_STATUS = "backlog";
 
@@ -83,7 +73,8 @@ export class BoardPanel extends WebviewPanelBase<BoardInbound> {
     try {
       const tasks = await listTasks(this.ctx.secrets, this.projectId, force);
       this.lastTasks = tasks;
-      this.post({ type: "data", projectName: this.projectName, columns: COLUMNS, tasks: tasks.map(toCard) });
+      const columns = TASK_LANES.map((l) => ({ key: l.key, label: vscode.l10n.t(l.label), closed: l.closed }));
+      this.post({ type: "data", projectName: this.projectName, columns, tasks: tasks.map(toCard) });
     } catch (e) {
       this.post({ type: "error", message: (e as Error).message });
     }
@@ -125,6 +116,13 @@ export class BoardPanel extends WebviewPanelBase<BoardInbound> {
 
   protected renderHtml(webview: vscode.Webview): string {
     const nonce = makeNonce();
+    // The closed-columns toggle's wording, localized host-side; `<` escaped so the
+    // JSON cannot close the inline <script>.
+    const labels = JSON.stringify({
+      hideClosed: vscode.l10n.t("Hide closed"),
+      showClosed: vscode.l10n.t("Show closed"),
+      closedHidden: vscode.l10n.t("({0} closed hidden)"),
+    }).replace(/</g, "\\u003c");
     const csp = [
       `default-src 'none'`,
       `img-src ${webview.cspSource}`,
@@ -180,7 +178,7 @@ export class BoardPanel extends WebviewPanelBase<BoardInbound> {
   <h1 id="proj">BuilderForce Board</h1>
   <span id="summary" class="muted"></span>
   <span class="spacer"></span>
-  <button id="toggle-done" class="secondary" aria-pressed="false">Hide done</button>
+  <button id="toggle-done" class="secondary" aria-pressed="false"></button>
   <button id="refresh" class="secondary">Refresh</button>
 </div>
 <div id="board"></div>
@@ -198,14 +196,15 @@ export class BoardPanel extends WebviewPanelBase<BoardInbound> {
   const toggleDoneBtn = document.getElementById('toggle-done');
   document.getElementById('refresh').addEventListener('click', () => vscode.postMessage({ type: 'refresh' }));
 
-  // "Hide done" is a pure view filter (no refetch); persist it across reloads via
+  const L = ${labels};
+  // "Hide closed" (done + cancelled columns) is a pure view filter (no refetch); persist it across reloads via
   // the webview state so the board reopens the way the user left it. Defaults to
   // hiding done (show only active work) until the user explicitly toggles.
   const savedState = vscode.getState();
   let hideDone = savedState ? !!savedState.hideDone : ${DEFAULT_HIDE_DONE};
   let lastTasks = [];
   function syncToggle() {
-    toggleDoneBtn.textContent = hideDone ? 'Show done' : 'Hide done';
+    toggleDoneBtn.textContent = hideDone ? L.showClosed : L.hideClosed;
     toggleDoneBtn.setAttribute('aria-pressed', String(hideDone));
   }
   toggleDoneBtn.addEventListener('click', () => {
@@ -223,14 +222,14 @@ export class BoardPanel extends WebviewPanelBase<BoardInbound> {
   let columns = [];
   function render(tasks) {
     boardEl.innerHTML = '';
-    const cols = hideDone ? columns.filter(c => c.key !== 'done') : columns;
+    const cols = hideDone ? columns.filter(c => !c.closed) : columns;
     const byStatus = {};
     cols.forEach(c => byStatus[c.key] = []);
     // toCard() already normalised every task to a known status, so a task with no
-    // bucket here means its column is filtered out (done, when hidden) → drop it.
+    // bucket here means its column is filtered out (closed, when hidden) → drop it.
     let shown = 0;
     tasks.forEach(t => { const b = byStatus[t.status]; if (b) { b.push(t); shown++; } });
-    summaryEl.textContent = shown + ' task' + (shown === 1 ? '' : 's') + (hideDone && shown < tasks.length ? ' (' + (tasks.length - shown) + ' done hidden)' : '');
+    summaryEl.textContent = shown + ' task' + (shown === 1 ? '' : 's') + (hideDone && shown < tasks.length ? ' ' + L.closedHidden.replace('{0}', String(tasks.length - shown)) : '');
 
     cols.forEach(col => {
       const items = byStatus[col.key] || [];

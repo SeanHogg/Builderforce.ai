@@ -21,8 +21,6 @@
   "command.createWorkspace": "BuilderForce：创建 / 切换工作区",
   "command.registerMcpServer": "BuilderForce：注册 MCP 服务器",
   "command.refreshProjects": "BuilderForce：刷新任务",
-  "command.hideDoneTasks": "BuilderForce：隐藏已完成任务",
-  "command.showDoneTasks": "BuilderForce：显示已完成任务",
   "command.projectViewHierarchy": "BuilderForce：以层级显示任务",
   "command.projectViewFlat": "BuilderForce：以平铺列表显示任务",
   "command.projectGroupBy": "BuilderForce：任务分组方式…",
@@ -42,6 +40,7 @@
   "command.openPage": "BuilderForce：打开页面…",
   "command.diagnose": "BuilderForce：诊断连接",
   "command.rescanCodebase": "BuilderForce：重新扫描代码库",
+  "command.editWorkspaceHooks": "BuilderForce：编辑工作区钩子",
   "command.pickModel": "BuilderForce：选择模型",
   "command.openSettings": "BuilderForce：打开设置",
   "command.editorChat": "BuilderForce：对话",
@@ -81,5 +80,8 @@
   "view.work": "工作",
   "view.health": "健康",
   "command.refreshWork": "刷新工作",
-  "command.refreshHealth": "刷新健康状况"
+  "command.refreshHealth": "刷新健康状况",
+  "command.archiveTask": "BuilderForce：归档任务",
+  "command.unarchiveTask": "BuilderForce：恢复已归档任务",
+  "command.deleteTask": "BuilderForce：删除任务"
 }

@@ -15,8 +15,6 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
-import { exec, execFile } from "child_process";
-import { promisify } from "util";
 import { filterByGlob, applyStringEdit, editFacts, normalizeScopeDir } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the agent-runtime Node provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
@@ -31,30 +29,18 @@ import type {
   RepoReadResult,
   RepoSearchResult,
   RepoWriteResult,
-  ShellResult,
 } from "@builderforce/agent-tools";
 
 import type { RepoSemanticCapability, RepoSymbolsCapability } from "@builderforce/agent-tools";
 import { desktopSemanticCapability } from "./desktopContext";
-import { needsPosixShell, findBash, posixShellOption, cmdCannotRun } from "./posixShell";
+import { createLocalShell } from "./localShell";
 import { SKIP_DIRS, searchWorkspace } from "./workspaceSearch";
 import { workspaceSymbolIndex } from "./workspaceSymbols";
-
-const execAsync = promisify(exec);
-const execFileAsync = promisify(execFile);
 
 // Bound the bytes pulled off disk per read. The shared `read_file` tool paginates the
 // returned content into line windows, and an oversized file returns a truncated PREFIX
 // (never a hard failure), so this only caps how much a single read loads into memory.
 const MAX_READ_BYTES = 2 * 1024 * 1024;
-// run_command: bound a command's wall-clock + the output handed back to the model.
-// Matches the cloud Container's COMMAND_TIMEOUT_MS (api/container/server.mjs) — a
-// build/type-check/test step may legitimately take minutes (e.g. `tsc --noEmit` or
-// `npm test` on a large monorepo), and the old 120s ceiling was killing those runs
-// mid-compile well before they could finish.
-const RUN_TIMEOUT_MS = 10 * 60 * 1000;
-const RUN_MAX_BUFFER = 4 * 1024 * 1024;
-const RUN_MAX_OUTPUT = 60_000;
 // Walks (list_files / search_code): keep bounded so a huge repo can't hang the host.
 const LIST_MAX_FILES = 5_000;
 // list_files also bounds what it hands BACK to the model: a raw dump of a big monorepo
@@ -86,10 +72,6 @@ export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   // a surface may push to a remote is a different question from whether it has a shell.
   "git.write",
 ]);
-
-function clamp(text: string, max: number): string {
-  return text.length <= max ? text : `${text.slice(0, max)}\n…(${text.length - max} more chars truncated)`;
-}
 
 /**
  * Collapse a large file listing to the deduped set of directory prefixes just below the
@@ -255,68 +237,8 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
     },
   };
 
-  /** Execute once, in a named interpreter. `bash` null ⇒ the platform default shell. */
-  async function execOnce(command: string, bash: string | null): Promise<ShellResult> {
-    try {
-      // A POSIX script goes to bash EXPLICITLY (`bash -c <script>`), not through the
-      // platform shell with an override: the one thing that must not vary between
-      // machines is which interpreter parses `set -e`. A one-liner keeps the default.
-      const { stdout, stderr } = bash
-        ? await execFileAsync(bash, ["-c", command], {
-            cwd: rootResolved,
-            timeout: RUN_TIMEOUT_MS,
-            maxBuffer: RUN_MAX_BUFFER,
-            windowsHide: true,
-          })
-        : await execAsync(command, {
-            cwd: rootResolved,
-            timeout: RUN_TIMEOUT_MS,
-            maxBuffer: RUN_MAX_BUFFER,
-            windowsHide: true,
-          });
-      const out = [stdout, stderr].filter((s) => s && s.trim()).join("\n").trim();
-      return { ok: true, exitCode: 0, stdout: clamp(out || "(no output)", RUN_MAX_OUTPUT) };
-    } catch (e) {
-      const err = e as { code?: number | string; killed?: boolean; signal?: string; stdout?: string; stderr?: string; message?: string };
-      const out = [err.stdout, err.stderr].filter((s) => s && String(s).trim()).join("\n").trim();
-      if (err.killed || err.signal === "SIGTERM") {
-        return { ok: false, error: `timed out after ${RUN_TIMEOUT_MS / 1000}s`, stdout: clamp(out, RUN_MAX_OUTPUT) };
-      }
-      const code = typeof err.code === "number" ? err.code : 1;
-      return { ok: false, exitCode: code, stdout: clamp(out || err.message || "(no output)", RUN_MAX_OUTPUT) };
-    }
-  }
-
-  const shell = {
-    async run(command: string): Promise<ShellResult> {
-      // A POSIX script with no POSIX shell to run it must say so. Letting it through
-      // hands the script to `cmd.exe`, which parses `set -e` as its own builtin and
-      // fails with "Environment variable -e not defined" — a message that names
-      // neither the cause nor anything the agent could do about it.
-      if (needsPosixShell(command) && !findBash()) {
-        return {
-          ok: false,
-          error:
-            "this command needs a POSIX shell (it uses set -e / $(…) / [ … ], or a unix utility such as head/grep/sed that cmd.exe does not have) "
-            + "and no POSIX shell was found on this Windows machine. "
-            + "Install Git for Windows (which ships bash), or re-run the work as plain single-line commands instead.",
-        };
-      }
-      const bash = posixShellOption(command).shell ?? null;
-      const first = await execOnce(command, bash);
-      if (first.ok || bash) return first;
-      // cmd.exe could not even ATTEMPT the command — an unlisted unix utility, a
-      // single-quoted argument, a `$VAR`. `needsPosixShell` is a whitelist and will
-      // always be incomplete, so the failure that reaches the agent must not be
-      // `'head' is not recognized as an internal or external command`: retry once in
-      // bash, which is what the command was written for. A genuine non-zero exit from
-      // a program that DID run (a failing build) does not match, so nothing that
-      // legitimately failed is run twice.
-      const retryBash = findBash();
-      if (!retryBash || !cmdCannotRun(first.stdout ?? "")) return first;
-      return execOnce(command, retryBash);
-    },
-  };
+  // The ONE local shell runner (`localShell.ts`) — shared with the workspace hooks.
+  const shell = createLocalShell(rootResolved);
 
   const semantic = options.semantic ?? desktopSemanticCapability(rootResolved);
   return { capabilities: LOCAL_SURFACE_CAPS, repoRead, repoWrite, symbols, semantic, shell };

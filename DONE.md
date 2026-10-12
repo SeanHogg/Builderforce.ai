@@ -20,6 +20,66 @@
 - **Webview (`VsCodeChatSurface.reloadChats`):** posts `chats.changed` only when the chat list actually differs.
 - Test: `src/refreshCoalescer.test.ts`.
 
+## ✅ RESOLVED 2026-10-12 — Workspace hooks + rules the team commits (`.builderforce/hooks.json`, `rules.md`) (VSIX 2026.10.31 · brain-embedded 2026.10.22)
+
+- **The gap:** the VS Code agent took no user-defined directives. Every end-of-run step was hard-coded (`selfReviewShip`), no rules file was read into the prompt, and policy gates are admin- and server-side only. There was no way to say "after a session, update README and DONE".
+- **Loop seam:** `brain-embedded/src/stopHooks.ts` adds `BrainRunRequest.onStop`. In `onNoToolCalls` the host is asked whether the run may end, and a returned instruction re-prompts the run. This runs BEFORE the ship gate, so a hook's work lands in the same commit. It is bounded to `MAX_STOP_HOOK_ROUNDS` (4), recorded as a `loop.stop_hook` trace, and a throwing hook never fails the run.
+- **Extension, `src/hooks/`:**
+  - `hookConfig.ts` is the pure schema, validation, matcher and command digest. Events are `stop` (prompt or command), `preTool` / `postTool` (command, `tool` matcher with `|` lists) and `runEnd` (command). `when` takes `codeChanged` (the default) or `always`. Also `blockOnFailure` and `timeoutSeconds`.
+  - `workspaceDirectives.ts` loads both files, cached by mtime+size version token.
+  - `runHooks.ts` is a per-run, vscode-free state machine. Each stop prompt is handed over once, then blocking checks re-run until they pass. A failing preTool refuses the call. A failing postTool adds `hookFeedback` to the result. runEnd is fire-and-forget. Sub-agents get the tool hooks only.
+  - `hookTrust.ts`: commands need a one-time per-machine approval keyed by command digest (workspaceState), and never run in an untrusted workspace.
+  - `editorDirectives.ts` is the one assembly both chat surfaces call.
+- **Shared seams, duplicates migrated:**
+  - `createNativeRunTool` takes `hooks`, so the panel run host and the native participant use one tool seam.
+  - `runPreamble.ts` `withRunPreamble` (governance → workspace rules → host prompt) replaces the two copies of the governance prepend in `brainRunHost.ts` and `nativeBrainRun.ts`.
+  - `localShell.ts` `createLocalShell` is extracted from `localCapabilities.ts`. `run_command` and hook commands share one runner, and it now takes `env` and `timeoutMs`.
+- **Authoring:**
+  - New command `builderforce.editWorkspaceHooks` writes a starter file. Localized in all 5 nls catalogs and l10n bundles.
+  - `jsonValidation` points at `schemas/hooks.schema.json`.
+  - The scan's `.builderforce/README.md` now documents both team files as "commit these".
+- **Ship:** release note migration `1214_release_note_workspace_hooks.sql`; blog `frontend/src/content/blog/workspace-hooks-your-team-commits.md`; CHANGELOG entry 2026.10.31.
+- **Tests:** `stopHooks.test.ts`, `hooks/hookConfig.test.ts`, `hooks/runHooks.test.ts`, `runPreamble.test.ts`, and three end-to-end cases in `nativeBrainRun.test.ts` (rules in prompt, stop prompt holds the run a turn, preTool refusal).
+
+## ✅ RESOLVED 2026-10-12 — VSIX Work view: open-only Tasks, a Closed section, archive/delete, and cancelled = done (VSIX 2026.10.29 · api 2026.10.37 · agent-loop 2026.10.9)
+
+- **The gap:** the Work view loaded every ticket, and you could not archive or delete one from the editor. A cancelled ticket's own ring showed **0%** while its chat header showed 100%.
+- **One open/closed rule:** `packages/agent-loop/src/taskClosedState.ts` defines it once. Closed means a done-class or cancelled lane (including tracker spellings), or archived. It also defines the `open | closed | all` list scope. The api, the VSIX trees and the chat health rollup all use it, and `isExcludedFromChatHealth` now delegates to it.
+- **Cancelled counts as done:**
+  - `buildTaskProgressBreakdown` scores a closed lane at 100%, ahead of the subtask math, and counts cancelled subtasks as done.
+  - `ChatTicketService`'s local `DONE_STATUS` set and its SQL literal both now read `TASK_CLOSED_STATUSES`, so a cancelled ticket chip reads 100%.
+- **Tasks shows open work only:** done, cancelled and archived tickets are filtered out of it, and the hide-done toggle (`builderforce.hideDoneTasks` / `showDoneTasks` and their NLS keys) is gone.
+- **New Closed section:** `closedTasksTree.ts` is collapsed by default and loads only when opened, through a cached `listClosedTasks` (`include_archived=true`) that `invalidateTasks` also clears. It shows newest first and follows the Tasks list's refresh signal.
+- **Row actions (`taskActions.ts`):**
+  - Set status: `setTaskStatus` moved here from `extension.ts`. It reopens a closed ticket and now offers `cancelled`.
+  - Archive / Restore: `PATCH archived`.
+  - Delete: `DELETE /api/tasks/:id`, behind the shared modal confirm. Deleting is refused while the ticket has a live run.
+  - The confirm's editor binding is extracted to `confirmDeletionUi.ts`, and `deleteSession` was migrated to it.
+  - `authed()` no longer calls `res.json()` on a 204 response.
+- **Shared lanes:** `taskLanes.ts` is one lane list for the board columns and the status picker.
+  - The board previously had no `cancelled` column, so cancelled cards fell into Backlog.
+  - The board's toggle now hides every closed column and is localized.
+  - Row vocabulary (ordering, labels, icons, needs-attention) moved to `taskTreeShared.ts`. That takes `projectsTree.ts` from 453 lines to about 370.
+- **Agent tools:**
+  - `tasks.list` takes `scope` (default `open`; an explicit `status` defaults to `all` so `status:"done"` still works). It reads archived rows for `closed` and `all`, and returns `scope`.
+  - `tasks.update` describes closing (done/cancelled) and archiving.
+  - `tasks.delete` says it is permanent and to prefer archiving. The VSIX agent gets these through the same `/llm/v1/mcp/tools` catalog.
+- **Deleted tickets:** deletion is a hard delete on the server, so deleted tickets do not appear in Closed. That is why the confirm exists.
+- **Guard fix found on the way:** `check:silent-catches` was failing (frontend empty-catch 189 vs. baseline 188). The cause was the live-poll `catch {}` in `WorkflowRunHistoryPanel.tsx` (a5f462b29). It now reports the first failure of each live run via `reportBackgroundFailure` (level warning) and keeps the last snapshot.
+- **Verified:** api and VSIX type-checks are clean, the api runs 37/37 guards, and the targeted tests pass (api 85, agent-loop 17, VSIX 19, frontend 10). VSIX 2026.10.29 is installed.
+
+---
+
+## ✅ RESOLVED 2026-10-12 — Brain-created project with no repo no longer returns coder prose (ticket 3089)
+
+- **What:** A Brain `projects.create` minted a bare `projects` row. The board-dispatched coder then had neither a git repo nor an IDE workspace and returned prose ("No repo bound"). Scratch-repo-at-create is rejected (Brain tenants typically have no git provider). Designer projects now go through the IDE workspace (`ide/projects/{id}/`).
+- **Create door:** MCP `projects.create` calls `afterBrainProjectCreate` (provision starter files + board + Evermind, then bind `ide_projects`). REST POST `/api/projects`, `/upsert`, `/scaffold` bind the IDE workspace after `provisionProject`. Zero-setup starter-workspace uses the same Brain helper.
+- **Runtime (already on main):** coding-dispatch uses `DispatchDetail.workspace` when `repo` is null; agent-host `GET /:id/dispatch/:dispatchId` attaches `workspace.filesPath`; GET/POST `/:id/workspace/:projectId/files` is the R2 analogue of git-proxy. Reasoning-only is last resort and names the reason.
+- **Tests:** `builtinMcpService.test.ts` (env → afterBrain, no-env → bind, provision failure still returns the project); existing `ensureProjectCodingTarget.test.ts` + `builderforce-coding-dispatch.test.ts` workspace path.
+- **Files:** `api/src/application/llm/builtinMcpService.ts`, `api/src/presentation/routes/projectRoutes.ts`, `api/src/application/tenant/starterWorkspace.ts`, `api/src/services/ensureProjectCodingTarget.ts`.
+
+---
+
 ## ✅ RESOLVED 2026-10-12 — Sequential batching in bfi-runtime (builderforce-inference e4c07ee)
 
 - **What:** Added sequential batching to the local inference runtime so one Engine can run multiple prompts without reloading the model.

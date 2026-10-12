@@ -1,5 +1,5 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { rollupChatTicketHealth } from '@builderforce/agent-loop';
+import { rollupChatTicketHealth, TASK_CLOSED_STATUSES } from '@builderforce/agent-loop';
 /**
  * ChatTicketService — the single source of logic for tying Brain chats to work
  * items, computing a chat's ticket health, tracing chat↔ticket lineage, and
@@ -167,8 +167,9 @@ function isTicketKind(v: string): v is TicketKind {
   return (TICKET_KINDS as readonly string[]).includes(v);
 }
 
-/** Task/epic statuses that count as complete when a ticket has no completed_at. */
-const DONE_STATUS = new Set(['done', 'completed', 'archived']);
+/** Task/epic statuses that count as complete when a ticket has no completed_at —
+ *  the shared closed class, so a cancelled ticket reads done (100%), never 0%. */
+const DONE_STATUS: ReadonlySet<string> = new Set(TASK_CLOSED_STATUSES);
 
 /**
  * Container rollup: count a child as done the same way a leaf chip does
@@ -176,7 +177,7 @@ const DONE_STATUS = new Set(['done', 'completed', 'archived']);
  * alone reported 0/N for children that were Done by status only — the epic-close
  * chip that stayed at 0/5 after the parent shipped.
  */
-const SQL_COUNT_DONE = sql<number>`coalesce(sum(CASE WHEN ${tasks.completedAt} IS NOT NULL OR ${tasks.status} IN ('done', 'completed', 'archived') THEN 1 ELSE 0 END), 0)`;
+const SQL_COUNT_DONE = sql<number>`coalesce(sum(CASE WHEN ${tasks.completedAt} IS NOT NULL OR ${inArray(tasks.status, [...TASK_CLOSED_STATUSES])} THEN 1 ELSE 0 END), 0)`;
 
 /** Roadmap-item statuses that count as delivered ('shipped' is the publish marker). */
 const ROADMAP_DONE = new Set(['shipped', 'done', 'complete', 'completed', 'released']);
