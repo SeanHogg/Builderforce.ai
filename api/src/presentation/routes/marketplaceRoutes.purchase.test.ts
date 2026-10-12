@@ -41,12 +41,20 @@ vi.mock('../../application/marketplace/skillCommerce', () => ({
 
 import { createMarketplaceRoutes } from './marketplaceRoutes';
 
+/** Hono's third argument is the Worker env (`c.env`). Without it, checkout
+ *  forwards `undefined` into skillCommerce and `expect.anything()` rejects it. */
+const TEST_ENV = { STRIPE_SECRET_KEY: 'sk_test' };
+
 const post = (path: string, body: unknown) =>
-  createMarketplaceRoutes(fakeDb() as never).request(path, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  createMarketplaceRoutes(fakeDb() as never).request(
+    path,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+    TEST_ENV,
+  );
 
 beforeEach(() => {
   mocks.startSkillCheckout.mockReset();
