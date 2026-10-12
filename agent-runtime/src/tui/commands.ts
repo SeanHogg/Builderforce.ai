@@ -157,6 +157,14 @@ export function getSlashCommands(options: SlashCommandOptions = {}): SlashComman
       description: "Show status of the latest (or a specific) workflow",
     },
     {
+      name: "stage",
+      description: "Toggle staged-edit mode (buffer write/edit for /diff /accept /reject)",
+      getArgumentCompletions: (prefix) =>
+        ["on", "off", "status"]
+          .filter((v) => v.startsWith(prefix.toLowerCase()))
+          .map((value) => ({ value, label: value })),
+    },
+    {
       name: "diff",
       description: "Show staged file changes (or a specific file). Use after agent edits.",
     },
@@ -218,6 +226,7 @@ export function helpText(options: SlashCommandOptions = {}): string {
     "/sync",
     "/spec <goal>",
     "/workflow [id]",
+    "/stage [on|off|status]",
     "/diff [file]",
     "/accept [file|all]",
     "/reject [file|all]",

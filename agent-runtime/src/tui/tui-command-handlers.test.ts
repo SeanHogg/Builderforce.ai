@@ -2,7 +2,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { SettingItem } from "@mariozechner/pi-tui";
-import { describe, expect, it, vi, type Mock } from "vitest";
+import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
+import { resetStagingForTests, stageEdit } from "../builderforce/staged-edits.js";
 import { loadConfig, writeConfigFile } from "../config/config.js";
 import * as selectors from "./components/selectors.js";
 import { createCommandHandlers } from "./tui-command-handlers.js";
@@ -608,5 +609,81 @@ describe("tui command handlers", () => {
     const calls = addSystem.mock.calls.map((c: string[]) => c[0]);
     expect(calls.some((msg: string) => msg.includes("/handoff"))).toBe(false);
     expect(resetSession).toHaveBeenCalledWith("agent:main:main", "new");
+  });
+});
+
+describe("tui staged-edit commands", () => {
+  afterEach(() => {
+    resetStagingForTests();
+    delete process.env.BUILDERFORCE_AGENTS_STAGED;
+  });
+
+  function handlers() {
+    const addSystem = vi.fn();
+    const { handleCommand } = createCommandHandlers({
+      client: {} as never,
+      chatLog: { addSystem, hasUserMessages: () => false } as never,
+      tui: { requestRender: vi.fn() } as never,
+      opts: {},
+      state: {
+        currentSessionKey: "agent:main:main",
+        activeChatRunId: null,
+        sessionInfo: {},
+        isConnected: true,
+      } as never,
+      deliverDefault: false,
+      openOverlay: vi.fn(),
+      closeOverlay: vi.fn(),
+      refreshSessionInfo: vi.fn(),
+      loadHistory: vi.fn(),
+      setSession: vi.fn(),
+      refreshAgents: vi.fn(),
+      abortActive: vi.fn(),
+      setActivityStatus: vi.fn(),
+      formatSessionKey: vi.fn(),
+      applySessionInfoFromPatch: vi.fn(),
+      noteLocalRunId: vi.fn(),
+    });
+    return { handleCommand, addSystem };
+  }
+
+  it("/stage on then /diff /accept /reject round-trip a mixed-case path", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "tui-stage-"));
+    const file = path.join(dir, "MixedCase.ts");
+    await fs.writeFile(file, "old\n", "utf-8");
+
+    const { handleCommand, addSystem } = handlers();
+    await handleCommand("/stage on");
+    expect(addSystem).toHaveBeenCalledWith(expect.stringContaining("Staged mode on"));
+
+    stageEdit({ filePath: file, proposedContent: "new\n", toolCallId: "t", label: "edit" });
+
+    addSystem.mockClear();
+    await handleCommand("/diff MixedCase.ts");
+    expect(addSystem.mock.calls[0][0]).toContain("+new");
+    expect(addSystem.mock.calls[0][0]).toContain("-old");
+
+    addSystem.mockClear();
+    await handleCommand("/accept MixedCase.ts");
+    expect(addSystem.mock.calls[0][0]).toContain("Applied");
+    expect(await fs.readFile(file, "utf-8")).toBe("new\n");
+  });
+
+  it("/diff with an empty buffer points at /stage on", async () => {
+    const { handleCommand, addSystem } = handlers();
+    await handleCommand("/diff");
+    expect(addSystem).toHaveBeenCalledWith(expect.stringContaining("/stage on"));
+  });
+
+  it("/reject MixedCase.ts discards without writing", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "tui-stage-"));
+    const file = path.join(dir, "MixedCase.ts");
+    await fs.writeFile(file, "old\n", "utf-8");
+    stageEdit({ filePath: file, proposedContent: "new\n", toolCallId: "t" });
+
+    const { handleCommand, addSystem } = handlers();
+    await handleCommand("/reject MixedCase.ts");
+    expect(addSystem.mock.calls[0][0]).toContain("Discarded");
+    expect(await fs.readFile(file, "utf-8")).toBe("old\n");
   });
 });

@@ -15,13 +15,16 @@ import {
   saveSessionHandoff,
 } from "../builderforce/project-context.js";
 import {
+  activateStaging,
   buildStagedSummary,
   buildUnifiedDiff,
   acceptEdit,
   acceptAllEdits,
+  deactivateStaging,
+  isStagingActive,
   rejectEdit,
   rejectAllEdits,
-  getStagedEdit,
+  resolveStagedTarget,
   getStagedEdits,
   hasStagedEdits,
 } from "../builderforce/staged-edits.js";
@@ -1051,16 +1054,41 @@ export function createCommandHandlers(context: CommandHandlerContext) {
         );
         break;
       }
+      case "stage": {
+        const action = args.trim().toLowerCase();
+        if (!action || action === "status") {
+          const pending = hasStagedEdits() ? `\n${buildStagedSummary()}` : "";
+          chatLog.addSystem(`Staged mode: ${isStagingActive() ? "on" : "off"}${pending}`);
+          break;
+        }
+        if (action === "on") {
+          activateStaging();
+          chatLog.addSystem(
+            "Staged mode on. Agent write/edit tools will buffer changes. Use /diff to review, /accept or /reject to apply or discard.",
+          );
+          break;
+        }
+        if (action === "off") {
+          deactivateStaging();
+          const pending = hasStagedEdits()
+            ? " Pending staged changes remain; /accept or /reject them. New edits write immediately."
+            : " New edits write immediately.";
+          chatLog.addSystem(`Staged mode off.${pending}`);
+          break;
+        }
+        chatLog.addSystem("usage: /stage [on|off|status]");
+        break;
+      }
       case "diff": {
         const target = args.trim();
         if (!hasStagedEdits()) {
           chatLog.addSystem(
-            "No staged changes. Agent edits are applied immediately by default.\nRun BUILDERFORCE_AGENTS_STAGED=true or set staged mode to buffer edits for review.",
+            "No staged changes. Agent edits are applied immediately by default.\nRun /stage on (or BUILDERFORCE_AGENTS_STAGED=true) to buffer edits for review.",
           );
           break;
         }
         if (target) {
-          const edit = getStagedEdit(target);
+          const edit = resolveStagedTarget(target);
           if (!edit) {
             chatLog.addSystem(`No staged edit found for: ${target}\n\n${buildStagedSummary()}`);
             break;
@@ -1078,12 +1106,12 @@ export function createCommandHandlers(context: CommandHandlerContext) {
         break;
       }
       case "accept": {
-        const target = args.trim().toLowerCase();
+        const target = args.trim();
         if (!hasStagedEdits()) {
           chatLog.addSystem("No staged changes to accept.");
           break;
         }
-        if (!target || target === "all") {
+        if (!target || target.toLowerCase() === "all") {
           const { accepted, failed } = await acceptAllEdits();
           const lines: string[] = [];
           if (accepted.length > 0) {
@@ -1108,12 +1136,12 @@ export function createCommandHandlers(context: CommandHandlerContext) {
         break;
       }
       case "reject": {
-        const target = args.trim().toLowerCase();
+        const target = args.trim();
         if (!hasStagedEdits()) {
           chatLog.addSystem("No staged changes to reject.");
           break;
         }
-        if (!target || target === "all") {
+        if (!target || target.toLowerCase() === "all") {
           const { rejected } = rejectAllEdits();
           chatLog.addSystem(`🗑️ Discarded ${rejected.length} staged change(s).`);
         } else {

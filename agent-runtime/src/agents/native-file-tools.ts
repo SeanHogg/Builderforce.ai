@@ -17,6 +17,7 @@ import {
 import { dirname, extname, isAbsolute, resolve as resolvePath } from "node:path";
 import { Type } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "../builderforce/model/agent-types.js";
+import { getStagedEdit, isStagingActive, stageEdit } from "../builderforce/staged-edits.js";
 
 export const DEFAULT_MAX_LINES = 2000;
 export const DEFAULT_MAX_BYTES = 50 * 1024;
@@ -163,6 +164,12 @@ export function createReadTool(
       const { path, offset, limit } = params as { path: string; offset?: number; limit?: number };
       const abs = resolveToCwd(path, cwd);
       return abortable(signal, async () => {
+        if (isStagingActive()) {
+          const staged = getStagedEdit(abs);
+          if (staged) {
+            return readTextResult(path, staged.proposedContent, offset, limit);
+          }
+        }
         await ops.access(abs);
         const mime =
           (await ops.detectImageMimeType?.(abs)) ?? IMAGE_MIME[extname(abs).toLowerCase()];
@@ -176,29 +183,36 @@ export function createReadTool(
             details: {},
           };
         }
-        const allLines = buffer.toString("utf-8").split("\n");
-        const startLine = offset ? Math.max(0, offset - 1) : 0;
-        if (startLine >= allLines.length) {
-          throw new Error(
-            `Offset ${offset} is beyond end of file (${allLines.length} lines total)`,
-          );
-        }
-        const selected =
-          limit !== undefined
-            ? allLines.slice(startLine, Math.min(startLine + limit, allLines.length)).join("\n")
-            : allLines.slice(startLine).join("\n");
-        const truncation = truncateHead(selected);
-        let text = truncation.content;
-        if (truncation.firstLineExceedsLimit) {
-          text = `[Line ${startLine + 1} exceeds ${DEFAULT_MAX_BYTES / 1024}KB limit. Use bash: sed -n '${startLine + 1}p' ${path}]`;
-        } else if (truncation.truncated) {
-          const endLine = startLine + truncation.outputLines;
-          text += `\n\n[Showing lines ${startLine + 1}-${endLine} of ${truncation.totalLines}. Use offset=${endLine + 1} to continue.]`;
-        }
-        return { content: [{ type: "text", text }], details: { truncation } };
+        return readTextResult(path, buffer.toString("utf-8"), offset, limit);
       });
     },
   };
+}
+
+function readTextResult(
+  path: string,
+  raw: string,
+  offset: number | undefined,
+  limit: number | undefined,
+): AgentToolResult<{ truncation?: TruncationResult }> {
+  const allLines = raw.split("\n");
+  const startLine = offset ? Math.max(0, offset - 1) : 0;
+  if (startLine >= allLines.length) {
+    throw new Error(`Offset ${offset} is beyond end of file (${allLines.length} lines total)`);
+  }
+  const selected =
+    limit !== undefined
+      ? allLines.slice(startLine, Math.min(startLine + limit, allLines.length)).join("\n")
+      : allLines.slice(startLine).join("\n");
+  const truncation = truncateHead(selected);
+  let text = truncation.content;
+  if (truncation.firstLineExceedsLimit) {
+    text = `[Line ${startLine + 1} exceeds ${DEFAULT_MAX_BYTES / 1024}KB limit. Use bash: sed -n '${startLine + 1}p' ${path}]`;
+  } else if (truncation.truncated) {
+    const endLine = startLine + truncation.outputLines;
+    text += `\n\n[Showing lines ${startLine + 1}-${endLine} of ${truncation.totalLines}. Use offset=${endLine + 1} to continue.]`;
+  }
+  return { content: [{ type: "text", text }], details: { truncation } };
 }
 
 export function createWriteTool(
@@ -212,10 +226,19 @@ export function createWriteTool(
     description:
       "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.",
     parameters: writeSchema,
-    execute: async (_id, params, signal): Promise<AgentToolResult<undefined>> => {
+    execute: async (toolCallId, params, signal): Promise<AgentToolResult<undefined>> => {
       const { path, content } = params as { path: string; content: string };
       const abs = resolveToCwd(path, cwd);
       return abortable(signal, async () => {
+        if (isStagingActive()) {
+          const staged = stageEdit({
+            filePath: abs,
+            proposedContent: content,
+            toolCallId,
+            label: "write",
+          });
+          return { content: [{ type: "text", text: staged.message }], details: undefined };
+        }
         await ops.mkdir(dirname(abs));
         await ops.writeFile(abs, content);
         return {
@@ -240,7 +263,7 @@ export function createEditTool(
     description:
       "Replace an exact, unique span of text in a file. `oldText` must match exactly (including whitespace/newlines) and occur exactly once.",
     parameters: editSchema,
-    execute: async (_id, params, signal): Promise<AgentToolResult<undefined>> => {
+    execute: async (toolCallId, params, signal): Promise<AgentToolResult<undefined>> => {
       const { path, oldText, newText } = params as {
         path: string;
         oldText: string;
@@ -248,12 +271,18 @@ export function createEditTool(
       };
       const abs = resolveToCwd(path, cwd);
       return abortable(signal, async () => {
-        try {
-          await ops.access(abs);
-        } catch {
-          throw new Error(`File not found: ${path}`);
+        const stagedExisting = isStagingActive() ? getStagedEdit(abs) : undefined;
+        let raw: string;
+        if (stagedExisting) {
+          raw = stagedExisting.proposedContent;
+        } else {
+          try {
+            await ops.access(abs);
+          } catch {
+            throw new Error(`File not found: ${path}`);
+          }
+          raw = (await ops.readFile(abs)).toString("utf-8");
         }
-        const raw = (await ops.readFile(abs)).toString("utf-8");
         // BOM/CRLF tolerant exact match.
         const stripBom = (s: string) => (s.charCodeAt(0) === 0xfeff ? s.slice(1) : s);
         const lf = (s: string) => s.replace(/\r\n/g, "\n");
@@ -272,6 +301,15 @@ export function createEditTool(
         }
         const updated =
           content.slice(0, first) + lf(newText) + content.slice(first + needle.length);
+        if (isStagingActive()) {
+          const staged = stageEdit({
+            filePath: abs,
+            proposedContent: updated,
+            toolCallId,
+            label: "edit",
+          });
+          return { content: [{ type: "text", text: staged.message }], details: undefined };
+        }
         await ops.writeFile(abs, updated);
         return {
           content: [{ type: "text", text: `Successfully edited ${path}` }],
