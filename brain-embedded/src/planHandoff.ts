@@ -126,18 +126,18 @@ export function childTaskBrief(task: HandOffTask, summary: string, ticketId?: nu
   return [
     ticketId != null ? `Ticket #${ticketId}: ${task.title}` : task.title,
     task.brief,
-    task.paths.length ? `You own these paths and may change only them: ${task.paths.join(', ')}` : '',
+    task.paths.length ? `Your slice covers: ${task.paths.join(', ')}. Sibling slices are working beside you on other paths.` : '',
     task.acceptance ? `Done when: ${task.acceptance}` : '',
     summary ? `Background (the analysis is finished — do not redo it): ${summary}` : '',
-    'Make the change now. Read only what the change itself needs. Finish with what you changed and anything outside your paths that must still change.',
+    'Make the change now. Read only what the change itself needs. Finish with what you changed and anything outside your slice that must still change.',
   ].filter(Boolean).join('\n\n');
 }
 
 /**
  * Whether the plan can run side by side: two or more tasks, every one owning paths, and
  * no two owning the same file. A plan that fails this runs inline, in order — the safe
- * reading of a breakdown whose slices touch each other. The same overlap rule
- * `spawn_agents` enforces (`workstreamScope.ts`), so the two never disagree.
+ * reading of a breakdown whose slices touch each other. This is where slices are kept
+ * apart: every child is a clone of its owner, and nothing downstream restricts it.
  */
 export function canRunInParallel(tasks: readonly HandOffTask[]): boolean {
   if (tasks.length < 2 || tasks.some((t) => t.paths.length === 0)) return false;
@@ -272,19 +272,17 @@ export async function executeHandOff(plan: HandOffPlan, ports: HandOffPorts): Pr
     for (let start = 0; start < plan.tasks.length; start += FAN_OUT_BATCH) {
       const batch = plan.tasks.slice(start, start + FAN_OUT_BATCH);
       const out = asRecord(await call(ports, FAN_OUT_TOOL, {
-        read_only: false,
         workstreams: batch.map((t, k) => {
           const id = ids[start + k];
           return {
             label: id != null ? `#${id} ${t.title}` : t.title,
             task: childTaskBrief(t, plan.summary, id),
-            paths: t.paths,
             role: 'code',
             ...(id != null ? { ticket: String(id) } : {}),
           };
         }),
       }));
-      // A refusal BEFORE any child started (overlap, no write gate): nothing was written,
+      // A refusal BEFORE any child started (a persona that does not resolve): nothing was written,
       // so the whole plan falls back to the inline path below.
       const started = Array.isArray(out?.agents) ? (out!.agents as unknown[]) : Array.isArray(out?.workstreams) ? (out!.workstreams as unknown[]) : null;
       if (!out || (out.ok === false && !started)) {

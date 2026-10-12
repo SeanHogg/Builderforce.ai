@@ -961,6 +961,32 @@ function selectPendingAskUser(messages) {
   return null;
 }
 
+// src/networkErrorDetail.ts
+var MAX_DEPTH = 4;
+function describeOne(e) {
+  if (!(e instanceof Error)) return String(e);
+  const code = e.code;
+  const message = e.message.trim();
+  if (!message) return typeof code === "string" && code ? code : e.name;
+  return typeof code === "string" && code && !message.includes(code) ? `${code}: ${message}` : message;
+}
+function describeNetworkError(e) {
+  const parts = [];
+  const push = (part) => {
+    if (part && !parts.includes(part)) parts.push(part);
+  };
+  let current = e;
+  for (let depth = 0; current !== void 0 && current !== null && depth < MAX_DEPTH; depth++) {
+    if (current instanceof AggregateError && current.errors.length > 0) {
+      push(current.errors.map(describeOne).filter((s, i, all) => all.indexOf(s) === i).join(" | "));
+    } else {
+      push(describeOne(current));
+    }
+    current = current instanceof Error ? current.cause : void 0;
+  }
+  return parts.join(" \u2190 ");
+}
+
 // src/streamIdleWatchdog.ts
 var STREAM_IDLE_MS = 24e4;
 var StreamIdleError = class extends Error {
@@ -1020,8 +1046,8 @@ var StreamInterruptedError = class extends Error {
 };
 var TransportError = class extends Error {
   model;
-  constructor(message, model = void 0) {
-    super(message);
+  constructor(message, model = void 0, options) {
+    super(message, options);
     this.name = "TransportError";
     this.model = model;
   }
@@ -1091,7 +1117,7 @@ async function streamChatCompletion(opts, handlers = {}) {
     });
   } catch (e) {
     if (e instanceof TypeError) {
-      throw new TransportError(`fetch failed: ${e.message}`);
+      throw new TransportError(describeNetworkError(e), void 0, { cause: e });
     }
     throw e;
   }
@@ -1186,7 +1212,7 @@ async function streamChatCompletion(opts, handlers = {}) {
       if (e instanceof StreamIdleError) {
         throw new StreamInterruptedError(`the stream went silent for ${Math.round(e.idleMs / 1e3)}s`, resolvedModel());
       }
-      throw new StreamInterruptedError(`the stream dropped mid-answer: ${e instanceof Error ? e.message : String(e)}`, resolvedModel());
+      throw new StreamInterruptedError(`the stream dropped mid-answer: ${describeNetworkError(e)}`, resolvedModel());
     }
     const { done, value } = chunkRead;
     if (done) break;
@@ -1284,6 +1310,259 @@ function useBrainConfig() {
   const ctx = useContext(BrainConfigContext);
   if (!ctx) throw new Error("useBrainConfig must be used within a BrainProvider");
   return ctx;
+}
+
+// src/readOnlyShell.ts
+var READ_ONLY_PROGRAMS = /* @__PURE__ */ new Set([
+  "cat",
+  "head",
+  "tail",
+  "wc",
+  "ls",
+  "dir",
+  "pwd",
+  "echo",
+  "printf",
+  "grep",
+  "egrep",
+  "fgrep",
+  "rg",
+  "find",
+  "tree",
+  "stat",
+  "file",
+  "du",
+  "df",
+  "which",
+  "where",
+  "type",
+  "sort",
+  "uniq",
+  "cut",
+  "tr",
+  "jq",
+  "basename",
+  "dirname",
+  "realpath",
+  "readlink",
+  "date",
+  "true",
+  "false",
+  "test",
+  "[",
+  "diff",
+  "cmp",
+  "comm",
+  "nl",
+  "column",
+  "less",
+  "more",
+  "sed",
+  "cd",
+  "read",
+  "whoami",
+  "hostname",
+  "uname",
+  "node",
+  "npm",
+  "pnpm",
+  "yarn",
+  "python",
+  "python3"
+]);
+var INFO_ONLY_PROGRAMS = /* @__PURE__ */ new Set(["node", "npm", "pnpm", "yarn", "python", "python3"]);
+var INFO_FLAGS = /* @__PURE__ */ new Set(["--version", "-v", "-V", "version", "--help", "-h"]);
+var READ_ONLY_GIT = /* @__PURE__ */ new Set([
+  "status",
+  "log",
+  "show",
+  "diff",
+  "rev-list",
+  "rev-parse",
+  "ls-files",
+  "ls-tree",
+  "ls-remote",
+  "cat-file",
+  "merge-base",
+  "for-each-ref",
+  "describe",
+  "blame",
+  "shortlog",
+  "grep",
+  "name-rev",
+  "count-objects",
+  "whatchanged",
+  "cherry",
+  "show-ref",
+  "show-branch",
+  "range-diff",
+  "var",
+  "check-ignore",
+  "check-attr"
+]);
+var CONSTRUCT_WORDS = /* @__PURE__ */ new Set(["then", "else", "fi", "do", "done", "esac", "{", "}", "(", ")"]);
+function splitSegments(command) {
+  const out = [];
+  let current = "";
+  let quote = null;
+  let depth = 0;
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i];
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === "$" && command[i + 1] === "(") {
+      depth += 1;
+      current += "$(";
+      i += 1;
+      continue;
+    }
+    if (ch === ")" && depth > 0) {
+      depth -= 1;
+      current += ch;
+      continue;
+    }
+    if (ch === "&" && (command[i - 1] === ">" || command[i - 1] === "<" || command[i + 1] === ">")) {
+      current += ch;
+      continue;
+    }
+    if (depth === 0 && (ch === ";" || ch === "\n" || ch === "|" || ch === "&")) {
+      if ((ch === "&" || ch === "|") && command[i + 1] === ch) i += 1;
+      if (current.trim()) out.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (quote || depth !== 0) return null;
+  if (current.trim()) out.push(current.trim());
+  return out;
+}
+function substitutions(segment) {
+  const out = [];
+  let i = segment.indexOf("$(");
+  while (i >= 0) {
+    let depth = 1;
+    let j = i + 2;
+    for (; j < segment.length && depth > 0; j += 1) {
+      if (segment[j] === "(") depth += 1;
+      else if (segment[j] === ")") depth -= 1;
+    }
+    out.push(segment.slice(i + 2, j - 1));
+    i = segment.indexOf("$(", j);
+  }
+  return out;
+}
+function tokens(segment) {
+  const out = [];
+  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  let m = re.exec(segment);
+  while (m) {
+    out.push(m[1] ?? m[2] ?? m[3]);
+    m = re.exec(segment);
+  }
+  return out;
+}
+function writesViaRedirect(segment) {
+  const unquoted = segment.replace(/"[^"]*"|'[^']*'/g, '""');
+  const re = /(\d*)>>?\s*(&\d+|\S+)?/g;
+  let m = re.exec(unquoted);
+  while (m) {
+    const target = m[2] ?? "";
+    if (!/^(&\d+|\/dev\/null|nul|NUL|\$null)$/.test(target)) return true;
+    m = re.exec(unquoted);
+  }
+  return false;
+}
+function gitIsReadOnly(args) {
+  let i = 0;
+  while (i < args.length && args[i].startsWith("-")) {
+    i += args[i] === "-C" || args[i] === "-c" ? 2 : 1;
+  }
+  const sub = args[i];
+  const rest = args.slice(i + 1);
+  if (!sub) return true;
+  if (READ_ONLY_GIT.has(sub)) return true;
+  const flags = new Set(rest.filter((a) => a.startsWith("-")));
+  const positional = rest.filter((a) => !a.startsWith("-"));
+  switch (sub) {
+    case "branch": {
+      const writes = ["-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy", "-f", "--force", "-u", "--set-upstream-to", "--unset-upstream", "--edit-description"];
+      if (writes.some((f) => flags.has(f) || [...flags].some((x) => x.startsWith(`${f}=`)))) return false;
+      if (flags.has("--list") || flags.has("-l")) return true;
+      const valued = /* @__PURE__ */ new Set(["--format", "--sort", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at"]);
+      for (let k = 0; k < rest.length; k += 1) {
+        if (rest[k].startsWith("-")) {
+          if (valued.has(rest[k])) k += 1;
+          continue;
+        }
+        return false;
+      }
+      return true;
+    }
+    case "tag":
+      return positional.length === 0 || flags.has("-l") || flags.has("--list");
+    case "remote":
+      return positional.length === 0 || ["show", "get-url"].includes(positional[0]);
+    case "stash":
+    case "notes":
+    case "worktree":
+      return ["list", "show"].includes(positional[0] ?? "");
+    case "reflog":
+      return positional.length === 0 || positional[0] === "show";
+    case "config":
+      return ["--get", "--get-all", "--get-regexp", "--list", "-l"].some((f) => flags.has(f));
+    case "symbolic-ref":
+      return positional.length <= 1 && !flags.has("-d") && !flags.has("--delete");
+    default:
+      return false;
+  }
+}
+function segmentIsReadOnly(segment, depth) {
+  if (depth > 4) return false;
+  for (const body of substitutions(segment)) {
+    if (!commandIsReadOnly(body, depth + 1)) return false;
+  }
+  const flat = segment.replace(/\$\((?:[^()]|\([^()]*\))*\)/g, "X");
+  if (writesViaRedirect(flat)) return false;
+  let words2 = tokens(flat);
+  while (words2.length && (CONSTRUCT_WORDS.has(words2[0]) || /^[A-Za-z_]\w*=/.test(words2[0]) || words2[0] === "if" || words2[0] === "while" || words2[0] === "until" || words2[0] === "!")) {
+    words2 = words2.slice(1);
+  }
+  if (words2.length === 0) return true;
+  const [program, ...args] = words2;
+  if (program === "for" || program === "case") return true;
+  if (program === "git") return gitIsReadOnly(args);
+  if (!READ_ONLY_PROGRAMS.has(program)) return false;
+  if (INFO_ONLY_PROGRAMS.has(program)) return args.length > 0 && args.every((a) => INFO_FLAGS.has(a));
+  if (program === "sed") return !args.some((a) => a === "-i" || a.startsWith("-i") || a === "--in-place" || a.startsWith("--in-place="));
+  if (program === "find") return !args.some((a) => ["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf", "-fls"].includes(a));
+  if (program === "sort") return !args.some((a) => a === "-o" || a.startsWith("--output"));
+  return true;
+}
+function commandIsReadOnly(command, depth) {
+  if (/`/.test(command)) return false;
+  const segments = splitSegments(command);
+  if (!segments || segments.length === 0) return false;
+  return segments.every((s) => segmentIsReadOnly(s, depth));
+}
+function isReadOnlyShellCommand(command) {
+  const trimmed = command.trim();
+  if (!trimmed) return false;
+  return commandIsReadOnly(trimmed, 0);
+}
+function isReadOnlyShellCall(tool, args) {
+  if (tool !== "run_command" || !args || typeof args !== "object") return false;
+  const record = args;
+  const command = typeof record.command === "string" ? record.command : typeof record.cmd === "string" ? record.cmd : "";
+  return isReadOnlyShellCommand(command);
 }
 
 // src/finishReason.ts
@@ -1674,9 +1953,9 @@ function getMcpToolStatus() {
 var MODEL_ROLES = ["plan", "code", "verify", "explore", "chat", "utility"];
 var MODEL_ROLE_DESCRIPTIONS = {
   plan: "Deciding an approach or breaking work down \u2014 no code written yet.",
-  code: "Writing or editing code. Default when the delegated work is itself an edit.",
+  code: "Writing or editing code. The default when no role is named.",
   verify: "Checking work already done \u2014 reading test/build output, reviewing a diff.",
-  explore: "Read-only investigation \u2014 locating, searching, summarising. Default when `read_only` is left true.",
+  explore: "Investigation \u2014 locating, searching, summarising.",
   chat: "A conversational answer with no task-shaped work behind it.",
   utility: "Small, mechanical, low-stakes work \u2014 formatting, extraction, a lookup."
 };
@@ -1684,8 +1963,8 @@ var ROLE_SET = new Set(MODEL_ROLES);
 function isModelRole(value) {
   return typeof value === "string" && ROLE_SET.has(value);
 }
-function delegationRole(raw, readOnly) {
-  return isModelRole(raw) ? raw : readOnly ? "explore" : "code";
+function delegationRole(raw) {
+  return isModelRole(raw) ? raw : "code";
 }
 
 // ../packages/agent-tools/src/workstreamScope.ts
@@ -3139,8 +3418,8 @@ var skillListTool = defineTool({
 });
 
 // ../packages/agent-tools/src/live-subagent-tools.ts
-var LIVE_DELEGATION_NOTE = "HERE the child runs IN THE BACKGROUND: the call returns its handle at once and you keep working \u2014 plan, code, or start more children \u2014 while it does its slice. Its messages appear in the chat under its own name, and its report reaches you on its own when it finishes (call wait_agents only when you cannot go on without it). Redirect it with message_agent; cancel it with stop_agent. Do not edit the files a writable child owns while it runs.";
-var LIVE_FANOUT_NEXT = "The children have no shell and no git. Keep working on anything not delegated; when their reports are in (they arrive on their own, or call wait_agents), verify the combined change (build and test), fix what the slices broke between them, commit, and report per workstream and ticket.";
+var LIVE_DELEGATION_NOTE = "HERE the child runs IN THE BACKGROUND: the call returns its handle at once and you keep working \u2014 plan, code, or start more children \u2014 while it does its slice. Its messages appear in the chat under its own name, and its report reaches you on its own when it finishes (call wait_agents only when you cannot go on without it). Redirect it with message_agent; cancel it with stop_agent. Do not edit the files a child is working on while it runs.";
+var LIVE_FANOUT_NEXT = "Keep working on anything not delegated; when their reports are in (they arrive on their own, or call wait_agents), check the combined result, fix anything the slices broke between them, and report per workstream and ticket.";
 var SUBAGENT_CONTROL_TOOL_NAMES = { wait: "wait_agents", message: "message_agent", stop: "stop_agent" };
 var MAX_WAIT_SECONDS = 600;
 var DEFAULT_WAIT_SECONDS = 300;
@@ -3222,7 +3501,7 @@ var SUBAGENT_CONTROL_TOOLS = [waitAgentsTool, messageAgentTool, stopAgentTool];
 var ROLE_ENUM_DESCRIPTION = MODEL_ROLES.map((role) => `${role} \u2014 ${MODEL_ROLE_DESCRIPTIONS[role]}`).join(" \xB7 ");
 var spawnAgentTool = defineTool({
   name: "spawn_agent",
-  description: "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back when it is done. Use it when finding something out would take many turns you do not want to carry \u2014 locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose \u2014 it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two. A CHANGE may be delegated (read_only: false) when the user asked for sub-agents or the slice is a ticket of its own \u2014 you then verify what the child changed, because you are accountable for what ships. " + LIVE_DELEGATION_NOTE,
+  description: "Delegate a self-contained sub-task to a child agent that works in its OWN context and reports back when it is done. Use it when finding something out would take many turns you do not want to carry \u2014 locating where a behaviour lives across an unfamiliar tree, checking whether a pattern is used anywhere else, summarising a large file you only need one fact from. The child sees NOTHING of this conversation, so `task` must state everything it needs to know, and it answers in prose \u2014 it cannot hand you files or tool output. Do NOT delegate work you can do in a turn or two. The child is a clone of you: it holds every tool you hold and carries its slice out end to end \u2014 investigating, editing, running commands, recording the work. You remain accountable for what ships, so check what it reports. " + LIVE_DELEGATION_NOTE,
   parameters: {
     type: "object",
     properties: {
@@ -3234,14 +3513,10 @@ var spawnAgentTool = defineTool({
         type: "string",
         description: "The child's complete brief: what to find out or do, where to look, and exactly what to report back. Assume it knows nothing about the ticket beyond what you write here."
       },
-      read_only: {
-        type: "boolean",
-        description: "Default true \u2014 the child may read, search and reason but not modify the working tree. Pass false ONLY when the delegated work is itself an edit you want it to make."
-      },
       role: {
         type: "string",
         enum: [...MODEL_ROLES],
-        description: `What kind of call the child's turns are \u2014 lets the surface pick a model suited to the work rather than reusing yours. Defaults to 'explore' when read_only, else 'code'. ${ROLE_ENUM_DESCRIPTION}`
+        description: `What kind of call the child's turns are \u2014 lets the surface pick a model suited to the work rather than reusing yours. Defaults to 'code'. ${ROLE_ENUM_DESCRIPTION}`
       },
       as_agent: {
         type: "string",
@@ -3256,13 +3531,11 @@ var spawnAgentTool = defineTool({
     const label = str3(args.label);
     const task = str3(args.task);
     if (!task) return { data: { ok: false, error: "task is required \u2014 the child sees none of your conversation" } };
-    const readOnly = args.read_only !== false;
-    const role = delegationRole(args.role, readOnly);
+    const role = delegationRole(args.role);
     const asAgent = str3(args.as_agent);
     const r = await ctx.caps.orchestration.spawn({
       label: label || task.slice(0, 60),
       task,
-      readOnly,
       role,
       ...asAgent ? { asAgent } : {}
     });
@@ -3283,13 +3556,11 @@ function parseWorkstreams(raw) {
     const w = item ?? {};
     const task = str3(w.task);
     if (!task) return `workstream ${i + 1} has no task \u2014 each child sees none of your conversation`;
-    const paths = Array.isArray(w.paths) ? w.paths.filter((p) => typeof p === "string" && normalizeScopePath(p) !== "") : [];
     const ticket = str3(w.ticket);
     const role = str3(w.role);
     out.push({
       label: str3(w.label) || task.slice(0, 60),
       task,
-      paths,
       ...ticket ? { ticket } : {},
       ...role ? { role } : {},
       asAgent: str3(w.as_agent)
@@ -3297,17 +3568,9 @@ function parseWorkstreams(raw) {
   }
   return out;
 }
-function workstreamScopeError(workstreams) {
-  const unscoped = workstreams.find((w) => w.paths.length === 0);
-  if (unscoped) {
-    return `workstream '${unscoped.label}' has no paths \u2014 a change made side by side must name the files or directories it owns`;
-  }
-  const clash = overlappingScopes(workstreams.map((w) => ({ label: w.label, paths: w.paths })));
-  return clash ? `workstreams '${clash.a}' and '${clash.b}' both claim '${clash.path}' \u2014 give each file to exactly one workstream, or run the dependent slices one after another with spawn_agent` : null;
-}
 var spawnAgentsTool = defineTool({
   name: SPAWN_AGENTS_TOOL,
-  description: `Run SEVERAL independent workstreams side by side \u2014 up to ${MAX_WORKSTREAMS} child agents at once, each in its own context, each reporting back to the chat. Use it when the request splits into slices that do not depend on each other: a PRD's workstreams, one change per package or feature. For a CHANGE (read_only: false) give every workstream the \`paths\` it OWNS (files or directories). Paths must not overlap, and a child may write only inside its own. Children read anywhere but have no shell and no git: once their reports are in, YOU verify (build and test), commit and report per workstream. File one ticket per workstream first and pass its id as \`ticket\`. Each child sees nothing of this conversation, so every \`task\` must stand alone: what to change, where, and how to know it is done. ` + LIVE_DELEGATION_NOTE,
+  description: `Run SEVERAL independent workstreams side by side \u2014 up to ${MAX_WORKSTREAMS} child agents at once, each in its own context, each reporting back to the chat. Use it when the request splits into slices that do not depend on each other: a PRD's workstreams, one change per package or feature. Each child is a clone of you with every tool you hold, and carries its slice out end to end. Give slices that do not touch the same files, so they do not overwrite each other; once their reports are in, check the combined result and report per workstream. File one ticket per workstream first and pass its id as \`ticket\`. Each child sees nothing of this conversation, so every \`task\` must stand alone: what to change, where, and how to know it is done. ` + LIVE_DELEGATION_NOTE,
   parameters: {
     type: "object",
     properties: {
@@ -3321,45 +3584,29 @@ var spawnAgentsTool = defineTool({
           properties: {
             label: { type: "string", description: "A few words naming the workstream, e.g. 'W8: company \u2192 project'." },
             task: { type: "string", description: "The child's complete, standalone brief." },
-            paths: {
-              type: "array",
-              items: { type: "string" },
-              description: "Workspace-relative files or directories this workstream OWNS and may write. Required for a change; must not overlap another workstream's."
-            },
             ticket: { type: "string", description: "The ticket this workstream delivers, echoed in the result." },
-            role: { type: "string", enum: [...MODEL_ROLES], description: "Model role for the child. Defaults to code for a change, explore otherwise." },
+            role: { type: "string", enum: [...MODEL_ROLES], description: "Model role for the child. Defaults to code." },
             as_agent: { type: "string", description: "Run this workstream AS one of the workspace's agents (its name or id). Optional: omit it when no teammate's role fits, and the child runs as a plain sub-agent." }
           },
           required: ["label", "task"]
         }
-      },
-      read_only: {
-        type: "boolean",
-        description: "Default true \u2014 parallel investigations. Pass false to have the children MAKE their changes."
       }
     },
     required: ["workstreams"]
   },
   requires: ["orchestrate.fanout"],
-  // The CLOUD form: each child is one `orchestrate` spawn — its own durable run, held to
-  // its scope. The editor starts its children as runs in its own process
-  // (`subagentFanOutTool.ts`) on the same schema, parser and conflict policy.
+  // The CLOUD form: each child is one `orchestrate` spawn — its own durable run. The
+  // editor starts its children as runs in its own process (`subagentFanOutTool.ts`) on
+  // the same schema and parser.
   async execute(args, ctx) {
     const parsed = parseWorkstreams(args.workstreams);
     if (typeof parsed === "string") return { data: { ok: false, error: parsed } };
-    const readOnly = args.read_only !== false;
-    if (!readOnly) {
-      const conflict = workstreamScopeError(parsed);
-      if (conflict) return { data: { ok: false, error: conflict } };
-    }
     const outputChars = Math.floor(FANOUT_OUTPUT_CHARS / parsed.length);
     const results = await Promise.all(parsed.map((w) => ctx.caps.orchestration.spawn({
       label: w.label,
       task: w.task,
-      readOnly,
-      role: delegationRole(w.role, readOnly),
+      role: delegationRole(w.role),
       outputChars,
-      ...readOnly ? {} : { scope: w.paths },
       ...w.ticket ? { ticket: w.ticket } : {},
       ...w.asAgent ? { asAgent: w.asAgent } : {}
     }).then((r) => ({ label: w.label, ...r }))));
@@ -3367,7 +3614,7 @@ var spawnAgentsTool = defineTool({
       data: {
         ok: results.every((r) => r.ok),
         workstreams: results,
-        ...readOnly ? {} : { next: LIVE_FANOUT_NEXT }
+        next: LIVE_FANOUT_NEXT
       }
     };
   }
@@ -5325,253 +5572,6 @@ function formatStaffingSummary(s) {
   return lines;
 }
 
-// src/readOnlyShell.ts
-var READ_ONLY_PROGRAMS = /* @__PURE__ */ new Set([
-  "cat",
-  "head",
-  "tail",
-  "wc",
-  "ls",
-  "dir",
-  "pwd",
-  "echo",
-  "printf",
-  "grep",
-  "egrep",
-  "fgrep",
-  "rg",
-  "find",
-  "tree",
-  "stat",
-  "file",
-  "du",
-  "df",
-  "which",
-  "where",
-  "type",
-  "sort",
-  "uniq",
-  "cut",
-  "tr",
-  "jq",
-  "basename",
-  "dirname",
-  "realpath",
-  "readlink",
-  "date",
-  "true",
-  "false",
-  "test",
-  "[",
-  "diff",
-  "cmp",
-  "comm",
-  "nl",
-  "column",
-  "less",
-  "more",
-  "sed",
-  "cd",
-  "read",
-  "whoami",
-  "hostname",
-  "uname",
-  "node",
-  "npm",
-  "pnpm",
-  "yarn",
-  "python",
-  "python3"
-]);
-var INFO_ONLY_PROGRAMS = /* @__PURE__ */ new Set(["node", "npm", "pnpm", "yarn", "python", "python3"]);
-var INFO_FLAGS = /* @__PURE__ */ new Set(["--version", "-v", "-V", "version", "--help", "-h"]);
-var READ_ONLY_GIT = /* @__PURE__ */ new Set([
-  "status",
-  "log",
-  "show",
-  "diff",
-  "rev-list",
-  "rev-parse",
-  "ls-files",
-  "ls-tree",
-  "ls-remote",
-  "cat-file",
-  "merge-base",
-  "for-each-ref",
-  "describe",
-  "blame",
-  "shortlog",
-  "grep",
-  "name-rev",
-  "count-objects",
-  "whatchanged",
-  "cherry",
-  "show-ref",
-  "show-branch",
-  "range-diff",
-  "var",
-  "check-ignore",
-  "check-attr"
-]);
-var CONSTRUCT_WORDS = /* @__PURE__ */ new Set(["then", "else", "fi", "do", "done", "esac", "{", "}", "(", ")"]);
-function splitSegments(command) {
-  const out = [];
-  let current = "";
-  let quote = null;
-  let depth = 0;
-  for (let i = 0; i < command.length; i += 1) {
-    const ch = command[i];
-    if (quote) {
-      current += ch;
-      if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      current += ch;
-      continue;
-    }
-    if (ch === "$" && command[i + 1] === "(") {
-      depth += 1;
-      current += "$(";
-      i += 1;
-      continue;
-    }
-    if (ch === ")" && depth > 0) {
-      depth -= 1;
-      current += ch;
-      continue;
-    }
-    if (ch === "&" && (command[i - 1] === ">" || command[i - 1] === "<" || command[i + 1] === ">")) {
-      current += ch;
-      continue;
-    }
-    if (depth === 0 && (ch === ";" || ch === "\n" || ch === "|" || ch === "&")) {
-      if ((ch === "&" || ch === "|") && command[i + 1] === ch) i += 1;
-      if (current.trim()) out.push(current.trim());
-      current = "";
-      continue;
-    }
-    current += ch;
-  }
-  if (quote || depth !== 0) return null;
-  if (current.trim()) out.push(current.trim());
-  return out;
-}
-function substitutions(segment) {
-  const out = [];
-  let i = segment.indexOf("$(");
-  while (i >= 0) {
-    let depth = 1;
-    let j = i + 2;
-    for (; j < segment.length && depth > 0; j += 1) {
-      if (segment[j] === "(") depth += 1;
-      else if (segment[j] === ")") depth -= 1;
-    }
-    out.push(segment.slice(i + 2, j - 1));
-    i = segment.indexOf("$(", j);
-  }
-  return out;
-}
-function tokens(segment) {
-  const out = [];
-  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
-  let m = re.exec(segment);
-  while (m) {
-    out.push(m[1] ?? m[2] ?? m[3]);
-    m = re.exec(segment);
-  }
-  return out;
-}
-function writesViaRedirect(segment) {
-  const unquoted = segment.replace(/"[^"]*"|'[^']*'/g, '""');
-  const re = /(\d*)>>?\s*(&\d+|\S+)?/g;
-  let m = re.exec(unquoted);
-  while (m) {
-    const target = m[2] ?? "";
-    if (!/^(&\d+|\/dev\/null|nul|NUL|\$null)$/.test(target)) return true;
-    m = re.exec(unquoted);
-  }
-  return false;
-}
-function gitIsReadOnly(args) {
-  let i = 0;
-  while (i < args.length && args[i].startsWith("-")) {
-    i += args[i] === "-C" || args[i] === "-c" ? 2 : 1;
-  }
-  const sub = args[i];
-  const rest = args.slice(i + 1);
-  if (!sub) return true;
-  if (READ_ONLY_GIT.has(sub)) return true;
-  const flags = new Set(rest.filter((a) => a.startsWith("-")));
-  const positional = rest.filter((a) => !a.startsWith("-"));
-  switch (sub) {
-    case "branch": {
-      const writes = ["-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy", "-f", "--force", "-u", "--set-upstream-to", "--unset-upstream", "--edit-description"];
-      if (writes.some((f) => flags.has(f) || [...flags].some((x) => x.startsWith(`${f}=`)))) return false;
-      if (flags.has("--list") || flags.has("-l")) return true;
-      const valued = /* @__PURE__ */ new Set(["--format", "--sort", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at"]);
-      for (let k = 0; k < rest.length; k += 1) {
-        if (rest[k].startsWith("-")) {
-          if (valued.has(rest[k])) k += 1;
-          continue;
-        }
-        return false;
-      }
-      return true;
-    }
-    case "tag":
-      return positional.length === 0 || flags.has("-l") || flags.has("--list");
-    case "remote":
-      return positional.length === 0 || ["show", "get-url"].includes(positional[0]);
-    case "stash":
-    case "notes":
-    case "worktree":
-      return ["list", "show"].includes(positional[0] ?? "");
-    case "reflog":
-      return positional.length === 0 || positional[0] === "show";
-    case "config":
-      return ["--get", "--get-all", "--get-regexp", "--list", "-l"].some((f) => flags.has(f));
-    case "symbolic-ref":
-      return positional.length <= 1 && !flags.has("-d") && !flags.has("--delete");
-    default:
-      return false;
-  }
-}
-function segmentIsReadOnly(segment, depth) {
-  if (depth > 4) return false;
-  for (const body of substitutions(segment)) {
-    if (!commandIsReadOnly(body, depth + 1)) return false;
-  }
-  const flat = segment.replace(/\$\((?:[^()]|\([^()]*\))*\)/g, "X");
-  if (writesViaRedirect(flat)) return false;
-  let words2 = tokens(flat);
-  while (words2.length && (CONSTRUCT_WORDS.has(words2[0]) || /^[A-Za-z_]\w*=/.test(words2[0]) || words2[0] === "if" || words2[0] === "while" || words2[0] === "until" || words2[0] === "!")) {
-    words2 = words2.slice(1);
-  }
-  if (words2.length === 0) return true;
-  const [program, ...args] = words2;
-  if (program === "for" || program === "case") return true;
-  if (program === "git") return gitIsReadOnly(args);
-  if (!READ_ONLY_PROGRAMS.has(program)) return false;
-  if (INFO_ONLY_PROGRAMS.has(program)) return args.length > 0 && args.every((a) => INFO_FLAGS.has(a));
-  if (program === "sed") return !args.some((a) => a === "-i" || a.startsWith("-i") || a === "--in-place" || a.startsWith("--in-place="));
-  if (program === "find") return !args.some((a) => ["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf", "-fls"].includes(a));
-  if (program === "sort") return !args.some((a) => a === "-o" || a.startsWith("--output"));
-  return true;
-}
-function commandIsReadOnly(command, depth) {
-  if (/`/.test(command)) return false;
-  const segments = splitSegments(command);
-  if (!segments || segments.length === 0) return false;
-  return segments.every((s) => segmentIsReadOnly(s, depth));
-}
-function isReadOnlyShellCommand(command) {
-  const trimmed = command.trim();
-  if (!trimmed) return false;
-  return commandIsReadOnly(trimmed, 0);
-}
-
 // src/readCoverage.ts
 var PATH_ARG_KEYS = /* @__PURE__ */ new Set(["path", "scope", "repo", "file", "filePath", "dir"]);
 function normalizePathArg(value) {
@@ -5596,12 +5596,6 @@ function canonicalReadArgs(tool, args) {
 var TREE_WIDE_READ_TOOLS = /* @__PURE__ */ new Set(["search_code", "find_symbol", "list_files", "semantic_search", "repo_map"]);
 function visitedScopeIs(visited, target) {
   return visited === target || (visited?.startsWith(`${target}${VISIT_QUESTION_SEPARATOR}`) ?? false);
-}
-function isReadOnlyShellCall(tool, args) {
-  if (tool !== "run_command" || !args || typeof args !== "object") return false;
-  const record = args;
-  const command = typeof record.command === "string" ? record.command : typeof record.cmd === "string" ? record.cmd : "";
-  return isReadOnlyShellCommand(command);
 }
 function isUnscopedMutation(tool, args) {
   return isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args);
@@ -6989,10 +6983,10 @@ function childTaskBrief(task, summary, ticketId) {
   return [
     ticketId != null ? `Ticket #${ticketId}: ${task.title}` : task.title,
     task.brief,
-    task.paths.length ? `You own these paths and may change only them: ${task.paths.join(", ")}` : "",
+    task.paths.length ? `Your slice covers: ${task.paths.join(", ")}. Sibling slices are working beside you on other paths.` : "",
     task.acceptance ? `Done when: ${task.acceptance}` : "",
     summary ? `Background (the analysis is finished \u2014 do not redo it): ${summary}` : "",
-    "Make the change now. Read only what the change itself needs. Finish with what you changed and anything outside your paths that must still change."
+    "Make the change now. Read only what the change itself needs. Finish with what you changed and anything outside your slice that must still change."
   ].filter(Boolean).join("\n\n");
 }
 function canRunInParallel(tasks) {
@@ -7072,13 +7066,11 @@ async function executeHandOff(plan, ports) {
     for (let start = 0; start < plan.tasks.length; start += FAN_OUT_BATCH) {
       const batch = plan.tasks.slice(start, start + FAN_OUT_BATCH);
       const out = asRecord(await call(ports, FAN_OUT_TOOL, {
-        read_only: false,
         workstreams: batch.map((t, k) => {
           const id = ids2[start + k];
           return {
             label: id != null ? `#${id} ${t.title}` : t.title,
             task: childTaskBrief(t, plan.summary, id),
-            paths: t.paths,
             role: "code",
             ...id != null ? { ticket: String(id) } : {}
           };
@@ -7542,7 +7534,7 @@ function leftDelegationUndone(input) {
 }
 function undelegatedRequestNudge(toolNames) {
   const fanOut = toolNames.includes("spawn_agents");
-  const call2 = fanOut ? 'Call spawn_agents NOW with read_only:false so the children make their changes: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, paths=<the files it owns>, a complete standalone task brief, role "code". It takes up to 4 per call and returns at once \u2014 the children run in the background, so start the next batch right away if there are more. Use spawn_agent (read_only:false) for a slice that must run alone.' : 'Call spawn_agent NOW with read_only:false, one slice at a time, with a complete standalone task brief and role "code".';
+  const call2 = fanOut ? 'Call spawn_agents NOW: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, a complete standalone task brief, role "code". Each child is a clone of you and makes its change itself. It takes up to 4 per call and returns at once \u2014 the children run in the background, so start the next batch right away if there are more. Use spawn_agent for a slice that must run alone.' : 'Call spawn_agent NOW, one slice at a time, with a complete standalone task brief and role "code". The child is a clone of you and makes its change itself.';
   return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: with no fitting teammate, OMIT it \u2014 the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ${call2} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`;
 }
 
@@ -10830,7 +10822,7 @@ function formatSubagentDiagnostics(children, capturedAtMs) {
     const models = modelsUsedInTrace(c.events);
     const span = spanOf(c.events);
     lines.push(
-      `\u2022 ${c.handle} ${c.name} \u2014 "${c.label}" \xB7 sub-agent of ${c.owner}${c.depth > 1 ? ` (depth ${c.depth})` : ""}${c.ticket ? ` \xB7 ticket ${c.ticket}` : ""}${c.readOnly ? " \xB7 read-only" : ""}`
+      `\u2022 ${c.handle} ${c.name} \u2014 "${c.label}" \xB7 sub-agent of ${c.owner}${c.depth > 1 ? ` (depth ${c.depth})` : ""}${c.ticket ? ` \xB7 ticket ${c.ticket}` : ""}`
     );
     lines.push(
       `  State: ${stateOf(c)} \xB7 Turns: ${c.events.filter((e) => e.category === "llm").length} \xB7 Tool calls: ${tools.length} \xB7 Failed: ${failures.length}${span ? ` \xB7 ${span}` : ""}`
@@ -11264,6 +11256,7 @@ export {
   declinesShipping,
   deriveChatTitle,
   describeLiveStep,
+  describeNetworkError,
   describeTool,
   detectAnnouncedButUnmadeToolCall,
   detectUnbackedTicketClaim,
@@ -11322,6 +11315,8 @@ export {
   isMalformedToolCall,
   isManagerRole,
   isMutationTool,
+  isReadOnlyShellCall,
+  isRepoPublishTool,
   isRouterTool,
   isRunning,
   isStepMessage,

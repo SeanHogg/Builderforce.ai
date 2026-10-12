@@ -19,7 +19,6 @@ import {
   type BrainRunPersistence,
   type RunLineage,
 } from "@seanhogg/builderforce-brain-embedded";
-import type { ChildPolicy } from "./childRunPolicy";
 import type { ChildRuns } from "./childRuns";
 import type { ChildOwner, ChildRequest, ChildRunHost } from "./childRunSpawner";
 import type { WebviewRunStart } from "./brainRunHostProtocol";
@@ -29,7 +28,6 @@ export interface RunSpec extends WebviewRunStart {
   /** Present when this run is someone's sub-agent. */
   child?: {
     lineage: RunLineage;
-    policy: ChildPolicy;
     /** The model role its turns are routed for (explore / code / verify …). */
     role: string;
   };
@@ -52,13 +50,6 @@ export interface ChildRunHostDeps {
   persistence: BrainRunPersistence;
   /** Tell every panel what a chat's live children are. */
   announce(rootChatId: number): void;
-}
-
-/** The child's opening turn: its brief, and the paths it owns when it has siblings. */
-function childTurn(req: ChildRequest): string {
-  return req.scope?.length
-    ? `${req.task}\n\nYou may write ONLY inside: ${req.scope.join(", ")}. Other workstreams own the rest of the tree.`
-    : req.task;
 }
 
 export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { afterRun(key: number): void } {
@@ -96,14 +87,14 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
       const base = parent.basePrompt ?? parent.systemPrompt;
       return deps.start({
         chatId: key,
-        systemPrompt: `${subagentSystemPrompt(!req.writable, req.persona, { owner: owner.name })}\n\n${base}`,
+        systemPrompt: `${subagentSystemPrompt(req.persona, { owner: owner.name })}\n\n${base}`,
         basePrompt: base,
         ...(parent.model ? { model: parent.model } : {}),
         ...(parent.modelStrict != null ? { modelStrict: parent.modelStrict } : {}),
         ...(parent.routingMode ? { routingMode: parent.routingMode } : {}),
         ...(parent.maxTokens ? { maxTokens: parent.maxTokens } : {}),
         ...(parent.reasoning ? { reasoning: parent.reasoning } : {}),
-        userTurn: childTurn(req),
+        userTurn: req.task,
         projectId: parent.projectId ?? null,
         chatMode: "work",
         autoApprove: deps.autoApproveOf(owner.rootChatId),
@@ -112,7 +103,6 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
         ...(parent.modelSurface ? { modelSurface: parent.modelSurface } : {}),
         child: {
           lineage,
-          policy: { readOnly: !req.writable, ...(req.scope?.length ? { scope: req.scope } : {}) },
           role: req.role,
         },
       });
@@ -150,6 +140,5 @@ export function ownerOf(spec: RunSpec, ownerName: string): ChildOwner {
     rootChatId: lineage?.rootChatId ?? spec.chatId,
     name: lineage?.agent.name ?? ownerName,
     depth: lineage?.depth ?? 0,
-    canWrite: true,
   };
 }

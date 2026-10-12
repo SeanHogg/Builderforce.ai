@@ -18,6 +18,10 @@ export type { BrainConfig, BrainRuntime, BrainPersistenceAdapter } from './confi
 // Streaming client + tool/message types
 // RepetitionLoopError: a model stuck repeating one block of prose, cut mid-stream.
 export { streamChatCompletion, StreamInterruptedError, RepetitionLoopError, TransportError } from './streamChatCompletion';
+// The reason behind Node's opaque `fetch failed` / `terminated`, read off the `cause` chain.
+export { describeNetworkError } from './networkErrorDetail';
+// Does this shell call only READ? Shared by the read guard and a read-only sub-agent's gate.
+export { isReadOnlyShellCall } from './readOnlyShell';
 export type {
   BrainTransport,
   BrainToolSpec,
@@ -357,6 +361,7 @@ export {
   isLocalWorkspaceTool,
   isCodeChangeTool,
   isUnscopedMutationTool,
+  isRepoPublishTool,
   canChangeCodeHere,
   canShipHere,
   localToolsIn,

@@ -1,58 +1,15 @@
 /**
- * What makes a child run a CHILD — the narrowing, and nothing else.
+ * WHO a child run is — the one decision a delegation makes about it.
  *
- * A sub-agent is the same run as the one that spawned it (`brainRunHost.ts` runs both
- * through one `runTurn`), so there is no child loop here. What a delegation decides is
- * only: which of the owner's tools the child may hold, where it may write, and WHO it is
- * (a workspace agent, staffed into the role if nobody fitting was named).
+ * A sub-agent is a CLONE of the run that spawned it: the same run (`brainRunHost.ts` runs
+ * both through one `runTurn`), the same catalog, the same approval gate, the same
+ * execution. There is no child loop, no child catalog and no child policy. A delegation
+ * decides only who the child runs AS — a workspace agent, staffed into the role if nobody
+ * fitting was named.
  */
 
-import { DELEGATION_DELIVERY_ROLES, inScope, staffDelegation, type ModelRole } from "@builderforce/agent-tools";
-import { isCodeChangeTool } from "@seanhogg/builderforce-brain-embedded";
-import type { ToolDef } from "./fileTools";
+import { DELEGATION_DELIVERY_ROLES, staffDelegation, type ModelRole } from "@builderforce/agent-tools";
 import type { ChildControls } from "./childRunSpawner";
-
-/** What a child run may do, carried on its run spec. */
-export interface ChildPolicy {
-  /** Investigation only — no tool that changes anything. */
-  readOnly: boolean;
-  /** Paths this child may WRITE. Set for a workstream running beside siblings. */
-  scope?: readonly string[];
-}
-
-/**
- * The child's catalog: the owner's, narrowed.
- *
- *   • read-only ⇒ no mutating tool is HANDED to it (the tools a run holds are the
- *     boundary, so a child that must not write is never shown one);
- *   • scoped (side by side with siblings) ⇒ of the mutating tools only the file writers
- *     whose target a scope can check: a shell, a commit or a push reaches the whole tree
- *     whatever the scope says, so the owner verifies, commits and pushes.
- *
- * Delegation tools are not narrowed here: the child's catalog is built with ITS OWN
- * controls, which stop offering spawn at the depth cap (`brainToolCatalog.ts`).
- */
-export function childCatalog(defs: readonly ToolDef[], policy: ChildPolicy): ToolDef[] {
-  return defs.filter((t) => {
-    if (!t.mutating) return true;
-    if (policy.readOnly) return false;
-    return !policy.scope || isCodeChangeTool(t.name);
-  });
-}
-
-/**
- * Why a scoped child may not make this write, or null. Refused BEFORE the human is asked,
- * so nobody is prompted for a write that must not happen; a sibling may own the path.
- */
-export function scopeRefusal(def: ToolDef, args: unknown, scope: readonly string[] | undefined): { ok: false; error: string } | null {
-  if (!scope || !def.mutating) return null;
-  const target = args && typeof args === "object" && typeof (args as { path?: unknown }).path === "string" ? (args as { path: string }).path : "";
-  if (target && inScope(target, scope)) return null;
-  return {
-    ok: false,
-    error: `'${target || "(no path)"}' is outside this workstream's paths (${scope.join(", ")}) — another workstream may own it. Change only files inside your paths, and name anything else you believe must change in your report.`,
-  };
-}
 
 /** One workspace agent as a child runs AS it. */
 export interface ResolvedPersona {

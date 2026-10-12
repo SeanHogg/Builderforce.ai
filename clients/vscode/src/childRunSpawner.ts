@@ -27,11 +27,9 @@ import { MAX_CHILD_DEPTH, type ChildReport, type ChildRuns } from "./childRuns";
 export interface ChildRequest {
   label: string;
   task: string;
-  writable: boolean;
   role: string;
   persona?: { name: string; brief: string };
   asAgent?: { ref: string; name: string };
-  scope?: readonly string[];
   ticket?: string;
 }
 
@@ -39,8 +37,6 @@ export type SpawnResult = { ok: true; handle: string; name: string; label: strin
 
 /** What an owner can do about its children. */
 export interface ChildControls {
-  /** Whether a child of this owner can be handed write tools (the host can raise a prompt). */
-  readonly canWrite: boolean;
   /** Whether this owner may spawn at all (the depth cap). */
   readonly canSpawn: boolean;
   /** Start a child. Returns at once; the child works alongside the owner. */
@@ -63,8 +59,6 @@ export interface ChildOwner {
   name: string;
   /** 0 for a top-level run. */
   depth: number;
-  /** Whether this host can raise an approval prompt for a child's writes. */
-  canWrite: boolean;
 }
 
 /** What the host lends the spawner. Every member is the host's own run machinery. */
@@ -96,7 +90,6 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
   };
 
   return {
-    canWrite: owner.canWrite,
     canSpawn: owner.depth < MAX_CHILD_DEPTH,
 
     spawn(req) {
@@ -108,7 +101,6 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
         label: req.label,
         agent: req.asAgent ?? { ref: `subagent:${req.label}`, name },
         depth: owner.depth + 1,
-        readOnly: !req.writable,
         ...(req.ticket ? { ticket: req.ticket } : {}),
       });
       if ("error" in registered) return { ok: false, error: registered.error };

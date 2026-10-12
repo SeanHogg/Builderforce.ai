@@ -23,6 +23,7 @@
 import { XmlToolCallFilter, extractXmlToolCalls } from './xmlToolCalls';
 import { detectRepetitionLoop } from '@builderforce/agent-loop';
 import { brainRequestError } from './chatError';
+import { describeNetworkError } from './networkErrorDetail';
 import { readWithIdleWatchdog, StreamIdleError, STREAM_IDLE_MS } from './streamIdleWatchdog';
 import type { ReasoningIntent } from './effort';
 
@@ -343,8 +344,8 @@ export class StreamInterruptedError extends Error {
  */
 export class TransportError extends Error {
   readonly model: string | undefined;
-  constructor(message: string, model: string | undefined = undefined) {
-    super(message);
+  constructor(message: string, model: string | undefined = undefined, options?: { cause?: unknown }) {
+    super(message, options);
     this.name = 'TransportError';
     this.model = model;
   }
@@ -465,8 +466,9 @@ export async function streamChatCompletion(
     // This is NOT an HTTP error — we never got a Response. Throw a TransportError so
     // the caller can retry under auto-routing, the same way it handles StreamInterruptedError.
     if (e instanceof TypeError) {
-      // `fetch failed` is the standard message when the network request cannot be made.
-      throw new TransportError(`fetch failed: ${e.message}`);
+      // `fetch failed` is all undici's own message says — the reason (timeout, reset,
+      // DNS, TLS) is in its `cause` chain, so that is what the message carries.
+      throw new TransportError(describeNetworkError(e), undefined, { cause: e });
     }
     // Rethrow anything else as-is — unexpected.
     throw e;
@@ -580,7 +582,7 @@ export async function streamChatCompletion(
       if (e instanceof StreamIdleError) {
         throw new StreamInterruptedError(`the stream went silent for ${Math.round(e.idleMs / 1000)}s`, resolvedModel());
       }
-      throw new StreamInterruptedError(`the stream dropped mid-answer: ${e instanceof Error ? e.message : String(e)}`, resolvedModel());
+      throw new StreamInterruptedError(`the stream dropped mid-answer: ${describeNetworkError(e)}`, resolvedModel());
     }
     const { done, value } = chunkRead;
     if (done) break;

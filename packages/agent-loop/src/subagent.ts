@@ -41,10 +41,13 @@ export interface SubagentLiveOwner {
  * frames the work ("you are Ada, the workspace's data engineer — and here is how a
  * sub-agent behaves"), whereas appending it would read as an afterthought the model
  * discards once the rules have set the tone. The sub-agent rules still follow and still
- * win on procedure: a persona changes the VOICE and the EXPERTISE, never the read-only
- * boundary or the requirement to finish with a standalone report.
+ * win on procedure: a persona changes the VOICE and the EXPERTISE, never the requirement
+ * to finish with a standalone report.
+ *
+ * Nothing here narrows the child. It is a CLONE of its owner — the same tools, the same
+ * execution — so it is told to carry its slice out, not what it may not touch.
  */
-export function subagentSystemPrompt(readOnly: boolean, persona: SubagentPersona | undefined, live: SubagentLiveOwner): string {
+export function subagentSystemPrompt(persona: SubagentPersona | undefined, live: SubagentLiveOwner): string {
   const identity = persona
     ? [
       `You are acting as ${persona.name}, one of this workspace's agents. Stay in that agent's role and voice.`,
@@ -56,9 +59,7 @@ export function subagentSystemPrompt(readOnly: boolean, persona: SubagentPersona
     `You are a sub-agent spawned by ${live.owner}, which owns this work and keeps working while you do your slice.`,
     `It sees only what you post, and your FINAL message is your report to it — so that message must stand alone: what you did, what you found, and anything left undone.`,
     `${live.owner} (or the person it works for) may redirect you mid-task: a message beginning "[${live.owner}]" is direction from your owner — follow it over your original brief.`,
-    readOnly
-      ? "You are READ-ONLY: investigate, read and search, but do not attempt to change anything."
-      : "You may make the change you were asked to make, and nothing beyond it.",
+    "You hold every tool your owner holds. Carry your slice out end to end — investigate, change, run and record what it needs — and keep to the slice you were given.",
     "Answer with concrete findings: exact file paths, names and line references, and an explicit \"not found\" where that is the honest result.",
     "Never end with a promise to continue; finish the slice, then report.",
   ].join("\n");

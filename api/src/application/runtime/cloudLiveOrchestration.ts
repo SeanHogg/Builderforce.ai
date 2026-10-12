@@ -114,8 +114,6 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
 
   const spawn = async (input: SubagentRequest): Promise<SubagentResult> => {
     if (tree.depth >= MAX_SUBAGENT_DEPTH) return { ok: false, error: `sub-agents nest at most ${MAX_SUBAGENT_DEPTH} deep — do this slice yourself` };
-    const readOnly = input.readOnly !== false;
-    const scope = !readOnly && input.scope?.length ? [...input.scope] : undefined;
     const who = await resolveDelegatePersona(deps.personaBrief, typeof input.asAgent === 'string' ? input.asAgent.trim() : '', input.role);
     if (!who.ok) return { ok: false, error: who.error };
     const spec = (handle: string): CloudChildSpec => ({
@@ -125,8 +123,6 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
       handle,
       label: input.label,
       task: input.task,
-      readOnly,
-      ...(scope ? { scope } : {}),
       ...(input.role ? { role: input.role } : {}),
       ...(who.persona ? { persona: who.persona } : {}),
       ...who.echo,
@@ -151,7 +147,7 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
         await runtime.cancel(id, `execution:${parent.executionId}`).catch(() => undefined);
         return { ok: false, error: refused, ...who.echo };
       }
-      const note = !readOnly && deps.afterChildCommits ? `${SPAWNED_NOTE} ${deps.afterChildCommits}` : SPAWNED_NOTE;
+      const note = deps.afterChildCommits ? `${SPAWNED_NOTE} ${deps.afterChildCommits}` : SPAWNED_NOTE;
       return { ok: true, running: true, handle, note, ...who.echo, ...(input.ticket ? { ticket: input.ticket } : {}) };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e), ...who.echo };

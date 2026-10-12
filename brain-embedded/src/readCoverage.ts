@@ -46,7 +46,7 @@
 
 import { activityTarget, visitTarget, VISIT_QUESTION_SEPARATOR } from './runActivity';
 import { isUnscopedMutationTool, isCodeChangeTool, isLocalWorkspaceTool, isRepoPublishTool, isRepoStateReadTool } from './localWorkspaceTools';
-import { isReadOnlyShellCommand } from './readOnlyShell';
+import { isReadOnlyShellCall } from './readOnlyShell';
 import { READ_DEFAULT_LINE_LIMIT, stableStringify } from '@builderforce/agent-tools';
 
 /** Argument keys that name a path — spelled `./a/b/`, `a\\b` and `a/b` by different turns. */
@@ -92,14 +92,6 @@ const TREE_WIDE_READ_TOOLS = new Set(['search_code', 'find_symbol', 'list_files'
  */
 function visitedScopeIs(visited: string | null, target: string): boolean {
   return visited === target || (visited?.startsWith(`${target}${VISIT_QUESTION_SEPARATOR}`) ?? false);
-}
-
-/** A `run_command` whose every segment only reads — `git log`, `ls`, a `for` loop of `git rev-list`. */
-function isReadOnlyShellCall(tool: string, args: unknown): boolean {
-  if (tool !== 'run_command' || !args || typeof args !== 'object') return false;
-  const record = args as Record<string, unknown>;
-  const command = typeof record.command === 'string' ? record.command : typeof record.cmd === 'string' ? record.cmd : '';
-  return isReadOnlyShellCommand(command);
 }
 
 /**

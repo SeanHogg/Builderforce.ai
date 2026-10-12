@@ -1,10 +1,10 @@
 /**
- * What a cloud sub-agent may TOUCH, and WHO it runs as.
+ * What a cloud sub-agent HOLDS, and WHO it runs as.
  *
  * A cloud child is its own durable run with an owner pointer (`cloudChildRuns.ts`,
  * spawned by `cloudLiveOrchestration.ts`) on every surface — the durable runner, the
- * Container and the Actions runner alike. This module is the part of that which is a
- * security boundary and a staffing rule, so it is pure and tested directly:
+ * Container and the Actions runner alike — and a CLONE of its owner: the owner's
+ * capabilities, minus only what a child mechanically cannot do. Pure and tested directly:
  *
  *   • A child never gets `human`. A run pauses for a person by ending the whole
  *     execution and waiting for an answer on resume; a child that could trigger that
@@ -16,8 +16,6 @@
 import {
   type Capability,
   type ModelRole,
-  type RepoWriteCapability,
-  inScope,
   staffDelegation,
 } from '@builderforce/agent-tools';
 
@@ -34,31 +32,11 @@ export const DELEGATION_CAPABILITIES: readonly Capability[] = ['orchestrate', 'o
  */
 export const NON_DELEGABLE_CAPABILITIES: readonly Capability[] = ['human', 'skill.author'];
 
-/**
- * Additionally withheld from a READ-ONLY child (the default). Anything that can change
- * the working tree, the ticket's PRD, the shared blackboard or durable memory — plus
- * `shell` and `process`, which are write capabilities wearing a different hat.
- */
-export const MUTATING_CAPABILITIES: readonly Capability[] = [
-  'repo.write', 'repo.edit', 'repo.delete', 'git.write', 'shell', 'process',
-  'prd.write', 'coordinate', 'memory.forget',
-];
-
-/**
- * Withheld from a SCOPED child — one writing beside siblings in the same tree
- * (`spawn_agents`). A shell, a process or a git write reaches the whole tree whatever
- * the child's paths say, so only the file writers a scope can check are left.
- */
-export const TREE_WIDE_CAPABILITIES: readonly Capability[] = ['shell', 'process', 'git.write'];
-
-/** The child's capability set: its owner's, minus what is never delegable, minus the
- *  mutating half when the delegation is read-only, minus the tree-wide writers when it
- *  is scoped, minus delegation itself at the depth cap. */
-export function childCapabilities(parent: ReadonlySet<Capability>, readOnly: boolean, scoped = false, canSpawn = false): ReadonlySet<Capability> {
+/** The child's capability set: its owner's, minus what is never delegable, minus
+ *  delegation itself at the depth cap. */
+export function childCapabilities(parent: ReadonlySet<Capability>, canSpawn = false): ReadonlySet<Capability> {
   const withheld = new Set<Capability>([
     ...NON_DELEGABLE_CAPABILITIES,
-    ...(readOnly ? MUTATING_CAPABILITIES : []),
-    ...(scoped ? TREE_WIDE_CAPABILITIES : []),
     ...(canSpawn ? [] : DELEGATION_CAPABILITIES),
   ]);
   return new Set([...parent].filter((c) => !withheld.has(c)));
@@ -99,17 +77,4 @@ export async function resolveDelegatePersona(
   const staffed = role ? staffDelegation(resolved, role) : { kind: 'as-agent' as const };
   if (staffed.kind === 'on-demand') return { ok: true, persona: staffed.persona, echo: { staffing: staffed.note } };
   return { ok: true, persona: { name: resolved.name, brief: resolved.brief }, echo: { asAgent: { ref: asAgent, name: resolved.name } } };
-}
-
-/** A scoped child's file writers: every path outside its scope is refused before anything is sent. */
-export function scopedRepoWrite(write: RepoWriteCapability, scope: readonly string[]): RepoWriteCapability {
-  const outside = (path: string): { ok: false; error: string } | null =>
-    inScope(path, scope)
-      ? null
-      : { ok: false, error: `'${path}' is outside this workstream's paths (${scope.join(', ')}) — another workstream may own it. Change only files inside your paths, and name anything else you believe must change in your answer.` };
-  return {
-    writeFile: async (path, content, summary) => outside(path) ?? write.writeFile(path, content, summary),
-    editFile: async (path, oldString, newString, replaceAll) => outside(path) ?? write.editFile(path, oldString, newString, replaceAll),
-    deleteFile: async (path, reason) => outside(path) ?? write.deleteFile(path, reason),
-  };
 }

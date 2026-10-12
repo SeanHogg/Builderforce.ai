@@ -26,7 +26,6 @@ export interface SubagentDiagnosticsInput {
   /** 1 for a child, 2 for a grandchild … */
   depth: number;
   ticket?: string;
-  readOnly?: boolean;
   /** Still running at capture. */
   running: boolean;
   /** Its own run's trace. */
@@ -76,7 +75,7 @@ export function formatSubagentDiagnostics(children: readonly SubagentDiagnostics
     const span = spanOf(c.events);
 
     lines.push(
-      `• ${c.handle} ${c.name} — "${c.label}" · sub-agent of ${c.owner}${c.depth > 1 ? ` (depth ${c.depth})` : ''}${c.ticket ? ` · ticket ${c.ticket}` : ''}${c.readOnly ? ' · read-only' : ''}`,
+      `• ${c.handle} ${c.name} — "${c.label}" · sub-agent of ${c.owner}${c.depth > 1 ? ` (depth ${c.depth})` : ''}${c.ticket ? ` · ticket ${c.ticket}` : ''}`,
     );
     lines.push(
       `  State: ${stateOf(c)} · Turns: ${c.events.filter((e) => e.category === 'llm').length} · Tool calls: ${tools.length} · Failed: ${failures.length}${span ? ` · ${span}` : ''}`,

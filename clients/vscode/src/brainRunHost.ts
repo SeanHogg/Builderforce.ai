@@ -54,7 +54,6 @@ import { createChildRuns } from "./childRuns";
 import { syncMessageFor, type RunHostMessage, type RunSink, type SinkEntry, type WebviewRunStart } from "./brainRunHostProtocol";
 import { childControls, directionText, type ChildControls, type ChildOwner } from "./childRunSpawner";
 import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
-import { childCatalog, scopeRefusal } from "./childRunPolicy";
 import { createChildApprovalRelay, type ChildApprover } from "./childApprovalRelay";
 
 export { syncMessageFor } from "./brainRunHostProtocol";
@@ -301,10 +300,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // THIS run's sub-agents — and, for a sub-agent, its own (the pointer nests). Read at
     // call time: the run's abort controller is created by `startRun`, after this catalog.
     const children = childControls(childHost, ownerOf(p, OWNER_NAME));
-    const catalog = await ports.tools(projectId, children, () => runAbortSignal(key));
-    const policy = p.child?.policy;
-    const defs = policy ? childCatalog(catalog, policy) : catalog;
-    // By run KEY: a sub-agent's narrower catalog must not overwrite its owner's count.
+    // A sub-agent is a clone of its owner: the same catalog, built the same way.
+    const defs = await ports.tools(projectId, children, () => runAbortSignal(key));
     broadcast({ type: "run.tools", chatId: key, count: defs.length });
     const native = createNativeRunTool({
       defs,
@@ -315,9 +312,6 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     });
     const runTool = async (name: string, args: unknown): Promise<unknown> => {
       const def = defs.find((d) => d.name === name);
-      // A workstream writes only inside its own paths — refused before anyone is asked.
-      const refused = def ? scopeRefusal(def, args, policy?.scope) : null;
-      if (refused) return refused;
       const out = await native(name, args);
       if (def) recordToolRun(def, argsRecord(args), out);
       return out;

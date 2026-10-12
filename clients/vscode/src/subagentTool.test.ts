@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { subagentToolDef } from "./subagentTool";
-import { childCatalog, scopeRefusal } from "./childRunPolicy";
 import type { ToolDef } from "./fileTools";
 import type { ChildControls, ChildRequest } from "./childRunSpawner";
 
@@ -19,22 +18,11 @@ const def = (name: string, over: Partial<ToolDef> = {}): ToolDef => ({
   ...over,
 });
 
-const CATALOG: ToolDef[] = [
-  def("read_file"),
-  def("search_code"),
-  def("write_file", { mutating: true }),
-  def("edit_file", { mutating: true }),
-  def("run_command", { mutating: true }),
-  def("builtin_tasks_update", { remote: true }),
-  def("spawn_agent"),
-];
-
 /** Controls that record what the owner asked for, and start nothing. */
 function fakeControls(over: Partial<ChildControls> = {}): ChildControls & { requests: ChildRequest[] } {
   const requests: ChildRequest[] = [];
   return {
     requests,
-    canWrite: true,
     canSpawn: true,
     spawn: vi.fn((req: ChildRequest) => {
       requests.push(req);
@@ -47,33 +35,6 @@ function fakeControls(over: Partial<ChildControls> = {}): ChildControls & { requ
   };
 }
 
-describe("childCatalog — the owner's tools, narrowed", () => {
-  it("withholds every mutating tool from a read-only child", () => {
-    expect(childCatalog(CATALOG, { readOnly: true }).map((t) => t.name)).toEqual(["read_file", "search_code", "builtin_tasks_update", "spawn_agent"]);
-  });
-
-  it("hands a writable child the whole catalog — it is the same run, one level down", () => {
-    expect(childCatalog(CATALOG, { readOnly: false })).toHaveLength(CATALOG.length);
-  });
-
-  it("gives a scoped child the file writers only — no shell a scope cannot contain", () => {
-    const names = childCatalog(CATALOG, { readOnly: false, scope: ["src/a"] }).map((t) => t.name);
-    expect(names).toContain("write_file");
-    expect(names).not.toContain("run_command");
-  });
-});
-
-describe("scopeRefusal", () => {
-  const write = def("write_file", { mutating: true });
-  it("refuses a write outside the workstream's paths, before anyone is asked", () => {
-    expect(scopeRefusal(write, { path: "src/b/x.ts" }, ["src/a"])?.error).toContain("outside this workstream's paths");
-  });
-  it("lets a write inside them through, and never touches an unscoped child", () => {
-    expect(scopeRefusal(write, { path: "src/a/x.ts" }, ["src/a"])).toBeNull();
-    expect(scopeRefusal(write, { path: "anywhere.ts" }, undefined)).toBeNull();
-  });
-});
-
 describe("subagentToolDef", () => {
   it("takes its schema from the shared definition and says the child runs in the background", () => {
     const tool = subagentToolDef({ children: fakeControls() });
@@ -84,8 +45,8 @@ describe("subagentToolDef", () => {
   it("starts the child and returns its handle at once — the owner is not blocked", async () => {
     const children = fakeControls();
     const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "look", task: "find the auth middleware" }, "/repo"));
-    expect(out).toMatchObject({ ok: true, handle: "a1", running: true, readOnly: true });
-    expect(children.requests[0]).toMatchObject({ task: "find the auth middleware", writable: false });
+    expect(out).toMatchObject({ ok: true, handle: "a1", running: true });
+    expect(children.requests[0]).toEqual({ label: "look", task: "find the auth middleware", role: "code" });
   });
 
   it("refuses an empty brief — the child sees nothing else", async () => {
@@ -95,17 +56,11 @@ describe("subagentToolDef", () => {
     expect(children.spawn).not.toHaveBeenCalled();
   });
 
-  it("starts a WRITABLE child only when asked and the host can raise a prompt", async () => {
+  it("starts a clone — a stray read_only from an older prompt changes nothing", async () => {
     const children = fakeControls();
-    await subagentToolDef({ children }).execute({ label: "fix", task: "fix it", read_only: false }, "/repo");
-    expect(children.requests[0]!.writable).toBe(true);
-  });
-
-  it("runs read-only, and SAYS so, when the host cannot ask a human", async () => {
-    const children = fakeControls({ canWrite: false });
-    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "fix", task: "fix it", read_only: false }, "/repo"));
-    expect(children.requests[0]!.writable).toBe(false);
-    expect(out.writeDeclined).toContain("read-only");
+    const out = JSON.parse(await subagentToolDef({ children }).execute({ label: "fix", task: "fix it", read_only: true }, "/repo"));
+    expect(children.requests[0]).toEqual({ label: "fix", task: "fix it", role: "code" });
+    expect(out.readOnly).toBeUndefined();
   });
 
   it("passes a refusal from the controls back to the owner", async () => {

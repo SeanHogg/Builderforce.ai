@@ -20,7 +20,6 @@ export function subagentLabels(): Record<string, string> {
     "sub.stopAll": t("Stop all"),
     "sub.collapse": t("Hide sub-agents"),
     "sub.expand": t("Show sub-agents"),
-    "sub.readOnly": t("read-only"),
     "sub.asks": t("{name} wants to run"),
     "sub.redirect": t("Redirect"),
     "sub.stop": t("Stop"),

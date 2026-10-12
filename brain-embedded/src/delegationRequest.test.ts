@@ -51,7 +51,7 @@ describe('undelegatedRequestNudge', () => {
     expect(nudge).toContain('as_agent is optional');
     expect(nudge).toContain('staff the role on this project');
     expect(nudge).toContain('spawn_agents');
-    expect(nudge).toContain('read_only:false');
+    expect(nudge).not.toContain('read_only');
   });
 
   it('falls back to spawn_agent where the host cannot fan out', () => {

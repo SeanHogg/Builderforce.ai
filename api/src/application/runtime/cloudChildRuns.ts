@@ -46,9 +46,6 @@ export interface CloudChildSpec {
   handle: string;
   label: string;
   task: string;
-  readOnly: boolean;
-  /** The paths a writable child beside siblings may write. */
-  scope?: string[];
   role?: ModelRole;
   /** Who it runs as — resolved by the parent at spawn, so the child never re-resolves. */
   persona?: { name: string; brief: string };
@@ -94,12 +91,9 @@ export function childPayload(parentPayload: string | undefined, spec: CloudChild
 
 /** The child's prompt and first turn — the sub-agent brief in front of its owner's prompt. */
 export function childBrief(spec: CloudChildSpec, basePrompt: string): { systemPrompt: string; userContent: string } {
-  const scope = spec.scope?.length
-    ? `\n\nYou may write ONLY inside: ${spec.scope.join(', ')}. Other workstreams own the rest of the tree.`
-    : '';
   return {
-    systemPrompt: `${subagentSystemPrompt(spec.readOnly, spec.persona, { owner: spec.owner })}\n\n${basePrompt}`,
-    userContent: `${spec.task}${scope}`,
+    systemPrompt: `${subagentSystemPrompt(spec.persona, { owner: spec.owner })}\n\n${basePrompt}`,
+    userContent: spec.task,
   };
 }
 

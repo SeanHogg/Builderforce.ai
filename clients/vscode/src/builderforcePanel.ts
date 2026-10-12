@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { autoApproveDefault } from "./permissionMode";
 import { listLocalModels, localModelOptions } from "./localModels";
-import { artifactRoutePath } from "@seanhogg/builderforce-brain-embedded";
+import { artifactRoutePath, describeNetworkError } from "@seanhogg/builderforce-brain-embedded";
 import { BUILD_ID, BUILT_AT } from "./buildInfo";
 import { posixShellReport } from "./posixShell";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
@@ -803,7 +803,7 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
       if (tail) send("llm.chunk", { text: tail });
       send("llm.end", {});
     } catch (e) {
-      send("llm.error", { error: e instanceof Error ? e.message : String(e) });
+      send("llm.error", { error: describeNetworkError(e) });
     } finally {
       this.localFetches.delete(id);
     }

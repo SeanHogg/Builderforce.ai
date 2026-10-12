@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseWorkstreams, spawnAgentsTool, workstreamScopeError, MAX_WORKSTREAMS } from "./subagent-tools.js";
+import { parseWorkstreams, spawnAgentTool, spawnAgentsTool, MAX_WORKSTREAMS } from "./subagent-tools.js";
 import type { SubagentRequest } from "./capabilities.js";
 import type { ToolContext } from "./tool.js";
 
-/** The fan-out's shared half: what a workstream is, and when side by side is unsafe. */
+/** The fan-out's shared half: what a workstream is. */
 describe("parseWorkstreams", () => {
-  it("parses label, task, paths, ticket and role", () => {
-    expect(parseWorkstreams([{ label: "A", task: "do a", paths: ["src/a", ""], ticket: "7", role: "code" }])).toEqual([
-      { label: "A", task: "do a", paths: ["src/a"], ticket: "7", role: "code", asAgent: "" },
+  it("parses label, task, ticket and role", () => {
+    expect(parseWorkstreams([{ label: "A", task: "do a", ticket: "7", role: "code" }])).toEqual([
+      { label: "A", task: "do a", ticket: "7", role: "code", asAgent: "" },
     ]);
   });
 
@@ -18,20 +18,11 @@ describe("parseWorkstreams", () => {
   });
 });
 
-describe("workstreamScopeError", () => {
-  const ws = (label: string, paths: string[]) => ({ label, task: "t", paths, asAgent: "" });
-  it("requires every writable workstream to own paths, and no two to share one", () => {
-    expect(workstreamScopeError([ws("A", ["a"]), ws("B", ["b"])])).toBeNull();
-    expect(workstreamScopeError([ws("A", ["a"]), ws("B", [])])).toContain("has no paths");
-    expect(workstreamScopeError([ws("A", ["src"]), ws("B", ["src/b.ts"])])).toContain("both claim");
-  });
-});
-
 describe("spawn_agents on a surface that backs orchestrate.fanout", () => {
   const ctxWith = (spawn: (r: SubagentRequest) => Promise<{ ok: boolean; output?: string; changedFiles?: string[] }>): ToolContext =>
     ({ caps: { capabilities: new Set(["orchestrate", "orchestrate.fanout"]), orchestration: { spawn } } }) as unknown as ToolContext;
 
-  it("starts every child at once, each scoped to its paths, and leaves the merge to the owner", async () => {
+  it("starts every child at once as a clone of the owner — no read-only flag, no scope", async () => {
     const started: SubagentRequest[] = [];
     let release!: () => void;
     const both = new Promise<void>((r) => { release = r; });
@@ -42,24 +33,24 @@ describe("spawn_agents on a surface that backs orchestrate.fanout", () => {
       return { ok: true, output: `did ${r.label}`, changedFiles: [`${r.label}.ts`] };
     });
     const out = await spawnAgentsTool.execute(
-      { read_only: false, workstreams: [{ label: "a", task: "do a", paths: ["a"], ticket: "1" }, { label: "b", task: "do b", paths: ["b"] }] },
+      { workstreams: [{ label: "a", task: "do a", ticket: "1" }, { label: "b", task: "do b" }] },
       ctxWith(spawn),
     );
-    expect(started.map((r) => [r.label, r.scope, r.role, r.ticket])).toEqual([["a", ["a"], "code", "1"], ["b", ["b"], "code", undefined]]);
+    expect(started.map((r) => [r.label, r.role, r.ticket])).toEqual([["a", "code", "1"], ["b", "code", undefined]]);
+    expect(started.every((r) => !("readOnly" in r) && !("scope" in r))).toBe(true);
     // Children commit their own slices; the owner verifies the combined branch, so the
     // fan-out reports no merged file list of its own.
     expect(out.data).toMatchObject({ ok: true });
     expect(out.data.changedFiles).toBeUndefined();
-    expect(String(out.data.next)).toContain("no shell and no git");
+    expect(String(out.data.next)).toContain("check the combined result");
   });
+});
 
-  it("refuses overlapping writable workstreams before any child starts", async () => {
-    const spawn = vi.fn();
-    const out = await spawnAgentsTool.execute(
-      { read_only: false, workstreams: [{ label: "a", task: "t", paths: ["src"] }, { label: "b", task: "t", paths: ["src/x.ts"] }] },
-      ctxWith(spawn),
-    );
-    expect(out.data.ok).toBe(false);
-    expect(spawn).not.toHaveBeenCalled();
+describe("spawn_agent", () => {
+  it("starts a clone: no read-only flag reaches the surface, and the role defaults to code", async () => {
+    const spawn = vi.fn(async (_r: SubagentRequest) => ({ ok: true }));
+    const ctx = { caps: { capabilities: new Set(["orchestrate"]), orchestration: { spawn } } } as unknown as ToolContext;
+    await spawnAgentTool.execute({ label: "x", task: "do x" }, ctx);
+    expect(spawn.mock.calls[0]![0]).toEqual({ label: "x", task: "do x", role: "code" });
   });
 });

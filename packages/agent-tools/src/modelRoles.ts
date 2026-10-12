@@ -20,9 +20,9 @@ export const MODEL_ROLES: readonly ModelRole[] = ["plan", "code", "verify", "exp
  *  picks deliberately rather than defaulting to whatever it is running as. */
 export const MODEL_ROLE_DESCRIPTIONS: Readonly<Record<ModelRole, string>> = {
   plan: "Deciding an approach or breaking work down — no code written yet.",
-  code: "Writing or editing code. Default when the delegated work is itself an edit.",
+  code: "Writing or editing code. The default when no role is named.",
   verify: "Checking work already done — reading test/build output, reviewing a diff.",
-  explore: "Read-only investigation — locating, searching, summarising. Default when `read_only` is left true.",
+  explore: "Investigation — locating, searching, summarising.",
   chat: "A conversational answer with no task-shaped work behind it.",
   utility: "Small, mechanical, low-stakes work — formatting, extraction, a lookup.",
 };
@@ -34,12 +34,12 @@ export function isModelRole(value: unknown): value is ModelRole {
 }
 
 /**
- * The role a delegation runs as. A model that named one gets it; otherwise its
- * `read_only` choice already typed the intent — reading is an investigation, writing
- * is an edit. ONE rule for every surface that backs `spawn_agent`.
+ * The role a delegation's turns are routed as. A model that named one gets it;
+ * otherwise `code` — a child is a clone of its owner and does the slice end to end.
+ * ONE rule for every surface that backs `spawn_agent`.
  */
-export function delegationRole(raw: unknown, readOnly: boolean): ModelRole {
-  return isModelRole(raw) ? raw : readOnly ? "explore" : "code";
+export function delegationRole(raw: unknown): ModelRole {
+  return isModelRole(raw) ? raw : "code";
 }
 
 /**

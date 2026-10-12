@@ -197,7 +197,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // confirm, so a child's write prompt is asked through the same modal as this turn's.
     const children = runHost && brainChatId != null
       ? runHost.childControls(
-          { key: runChatId, rootChatId: brainChatId, name: OWNER_NAME, depth: 0, canWrite: true },
+          { key: runChatId, rootChatId: brainChatId, name: OWNER_NAME, depth: 0 },
           {
             systemPrompt,
             ...(modelChoice.model ? { model: modelChoice.model } : {}),

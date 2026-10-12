@@ -319,6 +319,10 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ### Brain chat `[agents]`
 
+- **Git tools fail at a multi-repo workspace root.** `git_status` and `git_diff` with no `repo` return "not a git repository at the workspace root" when the open folder contains checkouts. The remedy then sends the model to call `list_files`. Chat #141 hit this in five sub-agents. Fix in `packages/agent-tools/src/git-tools.ts` `runGitTool`: infer `repo` from a `path` argument's first segment, or name the candidate repositories in the error. Unblocked.
+- **`builtin_cloud_agents_persona_brief` misses display names.** "Bob Developer" fails even though the roster lists "Bob Developer (V2 (Container))" (chat #141, a17). Match on the name without the runtime suffix, as `spawn_agent`'s `as_agent` does. Unblocked.
+- **`builtin_tasks_get` 404s on gap numbers.** Tickets titled `#2346: …` lead the model to pass the gap number as the id ("Task '2346' not found"; chat #141, five sub-agents). Fix: have the 404 name the matching ticket when one's title starts with `#<n>:`. Unblocked.
+
 - **No cross-turn guard against re-deriving a finished analysis.** `seedFrom` drops tool rows, so a guard must re-serve prior results with a staleness rule. *Blocker: a captured repro.*
 - **Ask-the-Manager zero tool calls — suspect the vendor path.** Instrument `buildResponsesBody` with a real 102-tool payload. *Blocker: a live turn on a known vendor.*
 - **Verify 308→64 tool selection restores tool calling on chat #71.** *Blocker: a live turn.*

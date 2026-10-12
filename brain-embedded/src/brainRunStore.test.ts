@@ -1192,7 +1192,7 @@ describe('ask_user — a question is a REPLY, and the run ends on it', () => {
       type: 'function' as const,
       function: { name, description: name, parameters: {} },
     }));
-    const SPAWN = { id: 's1', name: 'spawn_agents', args: JSON.stringify({ read_only: false, workstreams: [{ label: 'S2', task: 'do S2', ticket: '2861', paths: ['a'] }] }) };
+    const SPAWN = { id: 's1', name: 'spawn_agents', args: JSON.stringify({ workstreams: [{ label: 'S2', task: 'do S2', ticket: '2861' }] }) };
 
     it('answers the question with the delegation contract, and the next turn spawns', async () => {
       const rec = recorder();
@@ -1426,10 +1426,10 @@ describe('planning ends in tasks, and the tasks are the hand-off (chat #133)', (
     // One ticket per task, each linked to the chat.
     expect(calls.filter((c) => c.name === 'builtin_tasks_create').map((c) => c.args.title)).toEqual(['One StatTile', 'Drawer on SlideOutPanel']);
     expect(calls.filter((c) => c.name === 'builtin_chats_link_ticket')).toHaveLength(2);
-    // The tasks ran side by side, on the coding role, each owning its paths and its ticket.
+    // The tasks ran side by side, on the coding role, each on its ticket — as clones, no read-only flag.
     const fan = calls.find((c) => c.name === 'spawn_agents');
-    const workstreams = fan?.args.workstreams as Array<{ role: string; ticket: string; paths: string[]; task: string }>;
-    expect(fan?.args.read_only).toBe(false);
+    const workstreams = fan?.args.workstreams as Array<{ role: string; ticket: string; task: string }>;
+    expect(fan?.args.read_only).toBeUndefined();
     expect(workstreams.map((w) => [w.role, w.ticket])).toEqual([['code', '901'], ['code', '902']]);
     expect(workstreams[0]!.task).toContain('do not redo it');
     // The plan is in the chat, naming the tickets.

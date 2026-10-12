@@ -221,3 +221,11 @@ export function isReadOnlyShellCommand(command: string): boolean {
   if (!trimmed) return false;
   return commandIsReadOnly(trimmed, 0);
 }
+
+/** A `run_command` whose every segment only reads — `git log`, `ls`, a `for` loop of `git rev-list`. */
+export function isReadOnlyShellCall(tool: string, args: unknown): boolean {
+  if (tool !== 'run_command' || !args || typeof args !== 'object') return false;
+  const record = args as Record<string, unknown>;
+  const command = typeof record.command === 'string' ? record.command : typeof record.cmd === 'string' ? record.cmd : '';
+  return isReadOnlyShellCommand(command);
+}

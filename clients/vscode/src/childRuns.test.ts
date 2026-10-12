@@ -13,7 +13,6 @@ const child = (over: Partial<Parameters<ReturnType<typeof createChildRuns>["regi
   label: "slice",
   agent: { ref: "agent_ada", name: "Ada" },
   depth: 1,
-  readOnly: true,
   ...over,
 });
 

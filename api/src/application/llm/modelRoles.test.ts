@@ -115,11 +115,10 @@ describe('pickCloudModel — role over precedence', () => {
 });
 
 describe('delegationRole', () => {
-  it('honours a named role, else follows read_only', () => {
-    expect(delegationRole('verify', true)).toBe('verify');
-    expect(delegationRole(undefined, true)).toBe('explore');
-    expect(delegationRole(undefined, false)).toBe('code');
-    expect(delegationRole('nonsense', false)).toBe('code');
+  it('honours a named role, else code', () => {
+    expect(delegationRole('verify')).toBe('verify');
+    expect(delegationRole(undefined)).toBe('code');
+    expect(delegationRole('nonsense')).toBe('code');
   });
 });
 

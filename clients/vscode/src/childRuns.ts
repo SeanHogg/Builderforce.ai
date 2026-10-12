@@ -42,14 +42,12 @@ export interface ChildView {
   owner: string;
   ownerKey: number;
   depth: number;
-  readOnly: boolean;
   ticket?: string;
 }
 
 interface ChildRecord {
   key: number;
   lineage: RunLineage;
-  readOnly: boolean;
   ticket?: string;
   state: ChildState;
   report?: ChildReport;
@@ -69,7 +67,7 @@ interface Waiter {
 
 export interface ChildRuns {
   /** A key and handle for a new child of `ownerKey`, or why it may not start. */
-  register(input: Omit<RunLineage, "handle"> & { readOnly: boolean; ticket?: string }): { key: number; lineage: RunLineage } | { error: string };
+  register(input: Omit<RunLineage, "handle"> & { ticket?: string }): { key: number; lineage: RunLineage } | { error: string };
   /** The child settled. Returns the report when NO waiter took it — the caller delivers it. */
   settle(key: number, report: ChildReport): ChildReport | null;
   /** A child of `ownerKey` addressed by handle (only an owner commands its own children). */
@@ -108,10 +106,10 @@ export function createChildRuns(): ChildRuns {
       }
       const n = (counters.get(input.rootChatId) ?? 0) + 1;
       counters.set(input.rootChatId, n);
-      const { readOnly, ticket, ...rest } = input;
+      const { ticket, ...rest } = input;
       const lineage: RunLineage = { ...rest, handle: `a${n}` };
       const key = nextKey--;
-      records.set(key, { key, lineage, readOnly, ...(ticket ? { ticket } : {}), state: "running" });
+      records.set(key, { key, lineage, ...(ticket ? { ticket } : {}), state: "running" });
       return { key, lineage };
     },
 
@@ -157,7 +155,6 @@ export function createChildRuns(): ChildRuns {
         owner: r.lineage.ownerName,
         ownerKey: r.lineage.ownerKey,
         depth: r.lineage.depth,
-        readOnly: r.readOnly,
         ...(r.ticket ? { ticket: r.ticket } : {}),
       })),
 

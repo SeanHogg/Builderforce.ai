@@ -98,7 +98,7 @@ import {
 } from '@seanhogg/builderforce-memory-engine/limbic';
 import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, type LoopHooks, type LoopPorts, type LoopResult } from '@builderforce/agent-loop';
 import { buildLiveOrchestration } from './cloudLiveOrchestration';
-import { delegationCaps, delegationProvider, isChildDelegation, meterExecutionIdOf, type CloudRunDelegation } from './cloudRunDelegation';
+import { delegationCaps, isChildDelegation, meterExecutionIdOf, type CloudRunDelegation } from './cloudRunDelegation';
 import { absorbChildWrites, liveChildrenFinishBlock } from './cloudChildRuns';
 import { resolveAgentPersonaBrief } from '../agent/agentPersonaBrief';
 import { imageAdvertisedTools, readToolManifest } from './imageToolHandshake';
@@ -1293,8 +1293,7 @@ async function runCloudToolLoop(
   });
   // Rehearsal wraps the provider here (see CloudLoopOpts.decorateProvider). A live run
   // passes nothing and uses the provider as built.
-  const scopedProvider = delegationProvider(builtProvider, opts?.delegation);
-  const decoratedProvider = opts?.decorateProvider ? opts.decorateProvider(scopedProvider) : scopedProvider;
+  const decoratedProvider = opts?.decorateProvider ? opts.decorateProvider(builtProvider) : builtProvider;
   // Delegation. A child is its OWN durable run (`cloudLiveOrchestration.ts`) — the same
   // backing every cloud surface spawns through — so a run with no place in a tree (a
   // rehearsal) gets no spawner: a dry run must not start real runs.

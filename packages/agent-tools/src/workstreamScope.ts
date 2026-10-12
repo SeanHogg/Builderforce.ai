@@ -1,11 +1,11 @@
 /**
- * Write SCOPES for workstreams that run side by side in one working tree.
+ * Path OVERLAP for tasks that would run side by side in one working tree.
  *
  * Children that run concurrently share the user's checkout. Two of them editing the same
  * file would each read, change and write it back, and the second write would silently
- * discard the first. So a writable fan-out gives every workstream the paths it OWNS,
- * refuses to start when two workstreams' paths overlap, and refuses any write a child
- * aims outside its own. Reads stay unrestricted: understanding the code is not a conflict.
+ * discard the first. So the PLANNER (`planHandoff.ts`) runs tasks side by side only when
+ * their paths do not overlap, and in order otherwise. It is a scheduling rule: a child is
+ * a clone of its owner, and nothing here restricts what it may do.
  *
  * A scope entry is a workspace-relative file or directory. `src/auth` owns
  * `src/auth/login.ts` and everything else beneath it, never `src/authz.ts`. Pure.

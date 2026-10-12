@@ -12,8 +12,6 @@ const spec: CloudChildSpec = {
   handle: 'a42',
   label: 'port auth',
   task: 'Move the auth middleware to src/auth.',
-  readOnly: false,
-  scope: ['src/auth'],
   owner: 'Ada',
 };
 
@@ -48,8 +46,8 @@ describe('child brief', () => {
     const { systemPrompt, userContent } = childBrief(spec, 'BASE PROMPT');
     expect(systemPrompt).toContain('spawned by Ada');
     expect(systemPrompt.endsWith('BASE PROMPT')).toBe(true);
-    expect(userContent).toContain('Move the auth middleware');
-    expect(userContent).toContain('You may write ONLY inside: src/auth');
+    expect(userContent).toBe('Move the auth middleware to src/auth.');
+    expect(systemPrompt).toContain('every tool your owner holds');
   });
 });
 
@@ -63,10 +61,10 @@ describe('delegation', () => {
     expect(dry.has('orchestrate.live')).toBe(false);
   });
 
-  it('narrows a scoped child and lets it spawn only above the depth cap', () => {
+  it('hands a child its owner\'s capabilities, and lets it spawn only above the depth cap', () => {
     const child = delegationCaps(CLOUD_SURFACE_CAPS, tree(spec));
     expect(child.has('human')).toBe(false);
-    expect(child.has('repo.write')).toBe(true);
+    for (const c of ['repo.write', 'shell', 'git.write'] as const) expect(child.has(c)).toBe(CLOUD_SURFACE_CAPS.has(c));
     expect(child.has('orchestrate.live')).toBe(true);
     expect(delegationCaps(CLOUD_SURFACE_CAPS, tree({ ...spec, depth: 3 })).has('orchestrate')).toBe(false);
   });

@@ -14,11 +14,11 @@ import type { ChildReportLike, LiveChildControls } from "./capabilities.js";
 
 /** Appended to both spawn tools' description on a surface whose children run live. */
 export const LIVE_DELEGATION_NOTE =
-  "HERE the child runs IN THE BACKGROUND: the call returns its handle at once and you keep working — plan, code, or start more children — while it does its slice. Its messages appear in the chat under its own name, and its report reaches you on its own when it finishes (call wait_agents only when you cannot go on without it). Redirect it with message_agent; cancel it with stop_agent. Do not edit the files a writable child owns while it runs.";
+  "HERE the child runs IN THE BACKGROUND: the call returns its handle at once and you keep working — plan, code, or start more children — while it does its slice. Its messages appear in the chat under its own name, and its report reaches you on its own when it finishes (call wait_agents only when you cannot go on without it). Redirect it with message_agent; cancel it with stop_agent. Do not edit the files a child is working on while it runs.";
 
-/** What a parent is told once a writable fan-out has STARTED (not finished). */
+/** What a parent is told once a fan-out has STARTED (not finished). */
 export const LIVE_FANOUT_NEXT =
-  "The children have no shell and no git. Keep working on anything not delegated; when their reports are in (they arrive on their own, or call wait_agents), verify the combined change (build and test), fix what the slices broke between them, commit, and report per workstream and ticket.";
+  "Keep working on anything not delegated; when their reports are in (they arrive on their own, or call wait_agents), check the combined result, fix anything the slices broke between them, and report per workstream and ticket.";
 
 /** The owner's verbs, by name — ONE list every surface's catalog and pin guard read. */
 export const SUBAGENT_CONTROL_TOOL_NAMES = { wait: "wait_agents", message: "message_agent", stop: "stop_agent" } as const;

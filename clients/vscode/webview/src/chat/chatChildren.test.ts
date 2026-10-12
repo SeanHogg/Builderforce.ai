@@ -15,7 +15,6 @@ const view = (over: Partial<ChildView>): ChildView => ({
   owner: 'BuilderForce',
   ownerKey: 10,
   depth: 1,
-  readOnly: false,
   ...over,
 });
 

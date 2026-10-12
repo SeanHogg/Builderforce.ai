@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-10-11 — Sub-agents are clones of their parent; network failures name their cause (VSIX 2026.10.25 · agent-tools 2026.10.9 · agent-loop 2026.10.7 · brain-embedded 2026.10.18)
+
+- **Sub-agent "Unknown tool" failures (chats #141/#142).**
+  - Cause: `childCatalog` withheld every mutating tool from a read-only or scoped child, while the owner's WORK prompt still told it to call `builtin_tickets_from_delta`, `builtin_tasks_update`, `run_command` and `edit_file`.
+  - Fix: a child is now a clone of its owner, with the same catalog and the same execution. `read_only` and the fan-out `paths` scoping are gone from `spawn_agent`/`spawn_agents`, `SubagentRequest`, the cloud capabilities (`MUTATING_`/`TREE_WIDE_CAPABILITIES`, `scopedRepoWrite`, `delegationProvider`) and the VSIX (`childRunPolicy.ts` → `childPersona.ts`, plus `canWrite`/`writable`/`readOnly` and the strip tag).
+  - Kept: the depth cap and cloud `NON_DELEGABLE` (`human`, `skill.author`).
+  - Keeping slices apart is now the planner's job (`planHandoff.canRunInParallel`).
+- **`TransportError: fetch failed: fetch failed`.** undici's reason (`cause`) was discarded. `describeNetworkError` (brain-embedded `networkErrorDetail.ts`) now reads the cause chain in `streamChatCompletion` (before the response and mid-stream) and in the VSIX local-model proxy. `TransportError` keeps the original error as `.cause`.
+- `isReadOnlyShellCall` moved to `readOnlyShell.ts`, so there is one copy.
+
 ## ✅ RESOLVED 2026-10-11 — Marketplace: Built-in agents show, an All view opens the storefront
 
 - **Agents ▸ Built-in was empty for every visitor.** `provisionBuiltinAgents` creates each workspace's own copy with `published: false`. `publicAgentScope` lists only published rows, so `GET /api/workforce/agents` never returned a built-in, and the chip filtered that list for `builtin_kind`. It was also the default chip of a bare `/marketplace`, so the storefront opened on an empty grid.

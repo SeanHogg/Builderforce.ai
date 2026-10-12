@@ -81,7 +81,6 @@ function SubagentRow({ child, t, liveLabels }: { child: ChildView; t: ReturnType
         <strong>{child.name}</strong>
         <span className="bf-subagents__handle">{child.handle}</span>
         <span className="bf-subagents__owner">{t('tl.subagentOf', 'sub-agent of {owner}').replace('{owner}', child.owner)}</span>
-        {child.readOnly && <span className="bf-subagents__tag">{t('sub.readOnly', 'read-only')}</span>}
       </div>
       <div className="bf-subagents__label">{child.ticket ? `#${child.ticket} · ${child.label}` : child.label}</div>
       <LiveActivity activity={run.activity} isRunning={run.running} labels={liveLabels} />

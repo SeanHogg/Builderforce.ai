@@ -86,8 +86,8 @@ export function leftDelegationUndone(input: DelegationRequestInput): boolean {
 export function undelegatedRequestNudge(toolNames: readonly string[]): string {
   const fanOut = toolNames.includes('spawn_agents');
   const call = fanOut
-    ? 'Call spawn_agents NOW with read_only:false so the children make their changes: one workstream per open ticket whose files do not overlap — ticket=<id>, paths=<the files it owns>, a complete standalone task brief, role "code". It takes up to 4 per call and returns at once — the children run in the background, so start the next batch right away if there are more. Use spawn_agent (read_only:false) for a slice that must run alone.'
-    : 'Call spawn_agent NOW with read_only:false, one slice at a time, with a complete standalone task brief and role "code".';
+    ? 'Call spawn_agents NOW: one workstream per open ticket whose files do not overlap — ticket=<id>, a complete standalone task brief, role "code". Each child is a clone of you and makes its change itself. It takes up to 4 per call and returns at once — the children run in the background, so start the next batch right away if there are more. Use spawn_agent for a slice that must run alone.'
+    : 'Call spawn_agent NOW, one slice at a time, with a complete standalone task brief and role "code". The child is a clone of you and makes its change itself.';
   return (
     'The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed — the user already said. ' +
     'A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. ' +

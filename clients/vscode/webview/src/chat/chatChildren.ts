@@ -63,7 +63,6 @@ export function subagentDiagnosticsOf(chatId: number | null): SubagentDiagnostic
       label: c.label,
       owner: c.owner,
       depth: c.depth,
-      readOnly: c.readOnly,
       ...(c.ticket ? { ticket: c.ticket } : {}),
       running: live.has(c.key),
       events: getRunTrace(c.key),

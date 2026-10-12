@@ -351,13 +351,11 @@ export interface SubagentRequest {
   /** The child's ENTIRE brief. It sees none of the parent's conversation, so this
    *  must carry every fact the child needs. */
   task: string;
-  /** When true (the default) the child is given read/search capabilities only, so a
-   *  delegated investigation cannot change the working tree behind the parent. */
-  readOnly?: boolean;
   /** What KIND of call the child's turns are — lets the surface pick a model suited
    *  to the delegated work (e.g. a cheap reader for `explore`) instead of pinning
-   *  the child to whatever the parent happens to be running as. Defaults are applied
-   *  by the tool itself from `readOnly` before this ever reaches the capability. */
+   *  the child to whatever the parent happens to be running as. The default is applied
+   *  by the tool itself before this ever reaches the capability. The child is a clone of
+   *  its parent either way: the role routes its model, never what it may do. */
   role?: ModelRole;
   /**
    * Run the child AS one of the WORKSPACE's agents — an agent id or its name ("Ada").
@@ -369,12 +367,6 @@ export interface SubagentRequest {
    * model to read, never as a silently anonymous child wearing the wrong name.
    */
   asAgent?: string;
-  /**
-   * The paths this child may WRITE, when it runs beside siblings in one tree
-   * (`spawn_agents`). Present ⇒ every write outside them is refused, and the child gets
-   * no shell or git — those reach the whole tree whatever a scope says.
-   */
-  scope?: readonly string[];
   /** The ticket this child delivers — echoed on the result and in its chat report. */
   ticket?: string;
   /** Cap on the child's answer — a fan-out shares one result between its children. */
