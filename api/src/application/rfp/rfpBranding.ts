@@ -314,7 +314,7 @@ const PPTX_FONT = 'Arial';
 /** pptxgenjs wants 6-digit hex without `#`; palettes store CSS hex. */
 function pptxHex(css: string): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(css.trim());
-  return m ? m[1].toUpperCase() : '111827';
+  return m?.[1] ? m[1].toUpperCase() : '111827';
 }
 
 export type RfpDocSlide = {

@@ -9,7 +9,11 @@
  * pays nothing here exactly as they pay nothing on a creation.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fakeDb } from '../../../test/fakeDb';
+import { fakeDb, type FakeDb } from '../../../test/fakeDb';
+import type { Db } from '../../infrastructure/database/connection';
+
+/** The shared double stands in for the real client (the suite's `as unknown as Db` convention). */
+const asDb = (fake: FakeDb): Db => fake as unknown as Db;
 import { SKILL_PURCHASE_KIND, startSkillCheckout, completeSkillCheckout } from './skillCommerce';
 
 const mocks = vi.hoisted(() => ({
@@ -67,45 +71,45 @@ beforeEach(() => {
 
 describe('startSkillCheckout', () => {
   it('refuses an unpublished or missing skill', async () => {
-    await expect(startSkillCheckout(fakeDb([[]]), env, {
+    await expect(startSkillCheckout(asDb(fakeDb([[]])), env, {
       ...buyer, artifactType: 'skill', artifactSlug: 'missing', returnUrl: 'https://app.example/cart',
     })).rejects.toMatchObject({ status: 404 });
   });
 
   it('refuses a free skill — there is nothing to charge', async () => {
-    await expect(startSkillCheckout(fakeDb([[skill({ priceCents: 0 })]]), env, {
+    await expect(startSkillCheckout(asDb(fakeDb([[skill({ priceCents: 0 })]])), env, {
       ...buyer, artifactType: 'skill', artifactSlug: 'code-review', returnUrl: 'https://app.example/cart',
     })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/free/i) });
   });
 
   it('refuses a persona — personas have no price yet', async () => {
-    await expect(startSkillCheckout(fakeDb([[{
+    await expect(startSkillCheckout(asDb(fakeDb([[{
       slug: 'coach', name: 'Coach', authorId: 'u-seller', sellerTenantId: 7,
-    }]]), env, {
+    }]])), env, {
       ...buyer, artifactType: 'persona', artifactSlug: 'coach', returnUrl: 'https://app.example/cart',
     })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/free/i) });
   });
 
   it('refuses the author buying their own skill', async () => {
-    await expect(startSkillCheckout(fakeDb([[skill()]]), env, {
+    await expect(startSkillCheckout(asDb(fakeDb([[skill()]])), env, {
       buyerUserId: 'u-seller', artifactType: 'skill', artifactSlug: 'code-review', returnUrl: 'https://app.example/cart',
     })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/already own/i) });
   });
 
   it('refuses a skill this person already bought', async () => {
-    await expect(startSkillCheckout(fakeDb([[skill()], [{ id: 1 }]]), env, {
+    await expect(startSkillCheckout(asDb(fakeDb([[skill()], [{ id: 1 }]])), env, {
       ...buyer, artifactType: 'skill', artifactSlug: 'code-review', returnUrl: 'https://app.example/cart',
     })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/already own/i) });
   });
 
   it('refuses when payments are not configured', async () => {
-    await expect(startSkillCheckout(fakeDb([[skill()], []]), {} as never, {
+    await expect(startSkillCheckout(asDb(fakeDb([[skill()], []])), {} as never, {
       ...buyer, artifactType: 'skill', artifactSlug: 'code-review', returnUrl: 'https://app.example/cart',
     })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/not configured/i) });
   });
 
   it('mints a session tagged as a skill purchase, for this buyer, for this skill', async () => {
-    const { checkoutUrl } = await startSkillCheckout(fakeDb([[skill()], []]), env, {
+    const { checkoutUrl } = await startSkillCheckout(asDb(fakeDb([[skill()], []])), env, {
       ...buyer, artifactType: 'skill', artifactSlug: 'code-review', returnUrl: 'https://app.example/cart?from=drawer',
     });
     expect(checkoutUrl).toBe('https://pay.example/cs_1');
@@ -130,7 +134,7 @@ describe('startSkillCheckout', () => {
 describe('completeSkillCheckout', () => {
   it('refuses a session that is not paid — a forged id is not a grant', async () => {
     mocks.retrieveCheckoutSession.mockResolvedValue(paidSession({ paymentStatus: 'unpaid' }));
-    await expect(completeSkillCheckout(fakeDb([]), env, {
+    await expect(completeSkillCheckout(asDb(fakeDb([])), env, {
       buyerUserId: 'u-buyer', checkoutSessionId: 'cs_forged',
     })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/not been paid/i) });
   });
@@ -139,21 +143,21 @@ describe('completeSkillCheckout', () => {
     mocks.retrieveCheckoutSession.mockResolvedValue(paidSession({
       metadata: { ...paidSession().metadata, purchaseKind: 'workforce_agent' },
     }));
-    await expect(completeSkillCheckout(fakeDb([]), env, {
+    await expect(completeSkillCheckout(asDb(fakeDb([])), env, {
       buyerUserId: 'u-buyer', checkoutSessionId: 'cs_1',
     })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/not for a marketplace skill/i) });
   });
 
   it('refuses a session minted for someone else', async () => {
     mocks.retrieveCheckoutSession.mockResolvedValue(paidSession());
-    await expect(completeSkillCheckout(fakeDb([]), env, {
+    await expect(completeSkillCheckout(asDb(fakeDb([])), env, {
       buyerUserId: 'u-other', checkoutSessionId: 'cs_1',
     })).rejects.toMatchObject({ status: 403, message: expect.stringMatching(/someone else/i) });
   });
 
   it('refuses a session that underpays the current price', async () => {
     mocks.retrieveCheckoutSession.mockResolvedValue(paidSession({ amountTotalCents: 100 }));
-    await expect(completeSkillCheckout(fakeDb([[skill()]]), env, {
+    await expect(completeSkillCheckout(asDb(fakeDb([[skill()]])), env, {
       buyerUserId: 'u-buyer', checkoutSessionId: 'cs_1',
     })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/does not cover/i) });
   });
@@ -162,7 +166,7 @@ describe('completeSkillCheckout', () => {
     mocks.retrieveCheckoutSession.mockResolvedValue(paidSession());
     // skill lookup, insert, lifetime earnings, ledger insert.
     const db = fakeDb([[skill()], [{ id: 9 }], [{ total: '0', sales: '0' }], []]);
-    const purchase = await completeSkillCheckout(db, env, {
+    const purchase = await completeSkillCheckout(asDb(db), env, {
       buyerUserId: 'u-buyer', checkoutSessionId: 'cs_1',
     });
     expect(purchase).toEqual({
@@ -188,7 +192,7 @@ describe('completeSkillCheckout', () => {
   it('credits the seller user-account, not a workspace, past the take-rate threshold', async () => {
     mocks.retrieveCheckoutSession.mockResolvedValue(paidSession());
     const db = fakeDb([[skill()], [{ id: 9 }], [{ total: '20000000', sales: '5' }], []]);
-    const purchase = await completeSkillCheckout(db, env, {
+    const purchase = await completeSkillCheckout(asDb(db), env, {
       buyerUserId: 'u-buyer', checkoutSessionId: 'cs_1',
     });
     expect(purchase.commissionCents).toBe(135); // 15% of 900
@@ -217,7 +221,7 @@ describe('completeSkillCheckout', () => {
     // insert returns nothing (conflict), then the existing-row re-read, then
     // earnings + ledger (onConflictDoNothing on the fee pair).
     const db = fakeDb([[skill()], [], [{ id: 9 }], [{ total: '0', sales: '0' }], []]);
-    const purchase = await completeSkillCheckout(db, env, {
+    const purchase = await completeSkillCheckout(asDb(db), env, {
       buyerUserId: 'u-buyer', checkoutSessionId: 'cs_1',
     });
     expect(purchase.purchaseId).toBe(9);
