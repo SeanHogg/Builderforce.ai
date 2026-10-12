@@ -60,6 +60,7 @@ import { postRepoPrComment } from '../repos/postPrComment';
 import { claimTaskPrOpen, releaseTaskPrClaim, openTaskRepoSetPullRequests } from '../repos/openTaskPullRequest';
 import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../repos/readRepoContents';
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
+import { pollBranchCi, ciFinishDecision } from '../ci/pollCommitCiStatus';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
 import { CODING_BACKSTOP_MODELS, RECOGNIZED_CODER_MODELS, codingModelsForPlan, estimateRequestTokens, isPremiumModelSelection, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
 import type { ArcStage, ModelRole } from '../llm/modelRoles';
@@ -579,6 +580,11 @@ export interface CloudLoopState {
    *  reached — the gate would block a stub-shipping finish forever instead of relenting
    *  after N attempts and opening the PR annotated-unverified. */
   placeholderBlocks?: number;
+  /** How many finish attempts THIS RUN has blocked because branch CI was still
+   *  pending. Persisted across durable ticks (one step per alarm). */
+  ciPendingBlocks?: number;
+  /** How many finish attempts THIS RUN has blocked because branch CI failed. */
+  ciFailureBlocks?: number;
   /** Compiled governance gates for this run (compile-primitive policy modality).
    *  Persisted on the first tick so every durable tick enforces the SAME gates
    *  without re-reading the payload (which a later tick may not carry). */
@@ -919,19 +925,39 @@ function buildCloudProvider(args: {
         if (!repoCtx) return { ok: true, ran: false, note: `No repository is bound (${repoMiss}) — nothing to validate here; return the deliverable in your finish summary.` };
         if (writtenPaths.size === 0) return { ok: true, ran: false, note: 'No files written yet — write your changes first, then call run_checks to statically validate config files.' };
         const v = await verifyWrittenFiles({ ...repoCtx, ref: readRef() }, writtenPaths);
-        return v.ok
-          ? {
-              ok: true, ran: true, kind: 'static-validation',
-              checked: v.checked, skipped: v.skipped,
-              note: `Static source/config validation PASSED for ${v.checked.length} changed file(s)`
-                + `${v.skipped.length ? ` (${v.skipped.length} file(s) had no applicable shell-free policy)` : ''}. `
-                + 'This executor has NO shell, so it did NOT run the build, project-wide type-check, lint, or tests — CI on the pull request verifies those. Do not claim those passed; ensure your code is correct.',
-            }
-          : {
-              ok: false, ran: true, kind: 'static-validation',
-              errors: v.errors,
-              note: `Static validation FAILED on ${v.errors.length} file(s) — fix the parse error(s) below with write_file, then call run_checks again.`,
-            };
+        if (!v.ok) {
+          return {
+            ok: false, ran: true, kind: 'static-validation',
+            errors: v.errors,
+            note: `Static validation FAILED on ${v.errors.length} file(s) — fix the parse error(s) below with write_file, then call run_checks again.`,
+          };
+        }
+        // Ticket #3092: this executor has no shell, so branch CI is the in-run
+        // build/type-check/test. Poll HEAD; a red result fails the tool so the
+        // agent fixes before finishing. `none` (no checks yet / PR-only workflow)
+        // is not a failure — finish will still refuse a fabricated "tests passed".
+        const ci = await pollBranchCi(repoCtx);
+        const short = ci.sha ? ci.sha.slice(0, 7) : 'HEAD';
+        const staticNote = `Static source/config validation PASSED for ${v.checked.length} changed file(s)`
+          + `${v.skipped.length ? ` (${v.skipped.length} file(s) had no applicable shell-free policy)` : ''}.`;
+        if (ci.status === 'failure') {
+          return {
+            ok: false, ran: true, kind: 'branch-ci',
+            checked: v.checked, skipped: v.skipped,
+            errors: (ci.failed.length ? ci.failed : ['ci']).map((name) => ({ path: `(ci) ${name}`, message: ci.summary })),
+            note: `${staticNote} CI FAILED on ${short} (${ci.count} check(s)): ${ci.summary}. Fix, then call run_checks again. Do not claim tests passed.`,
+          };
+        }
+        const ciNote = ci.status === 'success'
+          ? ` CI on ${short} is GREEN (${ci.count} check(s)). You may claim those checks passed.`
+          : ci.status === 'pending'
+            ? ` CI is PENDING on ${short} (${ci.count} check(s)). Do not finish yet; call run_checks again. Do not claim tests passed.`
+            : ' No CI checks on this commit yet (none configured, or they only run after the PR opens). Do not claim a local build/type-check/test passed.';
+        return {
+          ok: true, ran: true, kind: 'static-validation',
+          checked: v.checked, skipped: v.skipped,
+          note: staticNote + ciNote,
+        };
       },
     },
     // Human-in-the-loop. The durable surface keeps its conversation in the DO
@@ -1244,6 +1270,13 @@ async function runCloudToolLoop(
   // Carried across DO ticks via resume state (the durable surface runs one step per
   // tick, so a per-call counter would reset before the cap was ever reached).
   let placeholderBlocks = opts?.resume?.placeholderBlocks ?? 0;
+  // In-run CI (ticket #3092): the Worker has no shell, so branch commit status /
+  // check-runs ARE the build/type-check/test. Caps persist across durable ticks
+  // the same way placeholderBlocks does — a loop-local counter would reset every
+  // alarm and the gate would either never relent or never fire twice.
+  let ciPendingBlocks = opts?.resume?.ciPendingBlocks ?? 0;
+  let ciFailureBlocks = opts?.resume?.ciFailureBlocks ?? 0;
+  let ciVerified = false;
   // Pre-finish completeness self-review (ROADMAP #38): block a finish that produced
   // NO code deliverable exactly ONCE, re-prompting the agent to verify it met the
   // PRD requirements. A genuine "nothing to change" run finishes on the retry; a
@@ -1490,6 +1523,17 @@ async function runCloudToolLoop(
       const prefinishVerification = repoCtx && writtenPaths.size > 0
         ? await verifyWrittenFiles({ ...repoCtx, ref: repoCtx.branch }, writtenPaths)
         : null;
+      // Ticket #3092: poll branch CI once static validation is clean. Decision is
+      // applied in the else-if chain below so a green/none result still falls
+      // through to honesty + anti-stub (an else-if that always matched would skip them).
+      let ciDecision: ReturnType<typeof ciFinishDecision> | null = null;
+      if (repoCtx && writtenPaths.size > 0 && prefinishVerification?.ok !== false) {
+        const ci = await pollBranchCi(repoCtx);
+        ciDecision = ciFinishDecision(ci, { pendingBlocks: ciPendingBlocks, failureBlocks: ciFailureBlocks });
+        ciPendingBlocks = ciDecision.pendingBlocks;
+        ciFailureBlocks = ciDecision.failureBlocks;
+        if (ciDecision.ciVerified) ciVerified = true;
+      }
       let finishBlock: string | null = null;
       if (requiredSignoff && !reviewVerdictRecorded) {
         finishBlock = missingReviewVerdictMessage(requiredSignoff);
@@ -1529,12 +1573,23 @@ async function runCloudToolLoop(
           detail: { reason: 'source_quality', errors: prefinishVerification.errors },
           result: `Blocked finish: ${prefinishVerification.errors.length} source/config quality issue(s)`,
         });
-      } else if (summary && !finishBlockedOnce && assertsUnrunVerification(summary)) {
-        // (2) Honesty: the summary claims a check passed, but nothing was (or
-        // could be) run. Block once and force an honest restatement.
+      } else if (ciDecision?.block) {
+        // (2) In-run CI: branch commit status / check-runs are this executor's
+        // build/type-check/test. Red and pending block up to a cap; green skips
+        // the honesty gate below. PR-only workflows report none and do not block.
+        finishBlock = ciDecision.block;
+        await recordCloudToolEvent(db, {
+          ...evt,
+          toolName: 'finish.blocked', category: 'tool',
+          detail: { reason: 'branch_ci', pendingBlocks: ciPendingBlocks, failureBlocks: ciFailureBlocks },
+          result: finishBlock.slice(0, 300),
+        });
+      } else if (summary && !finishBlockedOnce && !ciVerified && assertsUnrunVerification(summary)) {
+        // (3) Honesty: the summary claims a check passed, but nothing was (or
+        // could be) run — and in-run CI did not report green. Block once.
         finishBlockedOnce = true;
         finishBlock =
-          'You stated that a build/type-check/lint/test passed or is resolved, but this executor cannot run any of those — CI on the pull request verifies them. Call finish again with a summary that does NOT claim a check passed (describe what you changed and that CI will verify), or call run_checks first.';
+          'You stated that a build/type-check/lint/test passed or is resolved, but this executor cannot run a local shell and in-run CI did not report success. Call run_checks (it polls branch CI) or finish again with a summary that does NOT claim a check passed.';
       } else if (repoCtx && writtenPaths.size > 0 && placeholderBlocks < MAX_PLACEHOLDER_FINISH_BLOCKS) {
         // (3) Anti-stub: refuse to ship placeholder/scaffold code. Read the
         // committed files back and block if any still contain stub markers — the
@@ -1782,6 +1837,8 @@ async function runCloudToolLoop(
     reviewVerdictRecorded,
     requiredSignoff,
     placeholderBlocks,
+    ciPendingBlocks,
+    ciFailureBlocks,
     policyGates,
     policyAskedGates: [...policyAskedGates],
   });
@@ -1841,7 +1898,7 @@ async function runCloudToolLoop(
 
   const fin = await finalizeCloudRun(env, db, {
     tenantId, cloudAgentRef, executionId, taskRow, agentLabel,
-    repoCtx, repoMiss, writtenPaths, finalOutput, cancelled,
+    repoCtx, repoMiss, writtenPaths, finalOutput, cancelled, ciVerified,
   });
   return { ok: fin.ok, output: fin.output, cancelled, finished: true };
 }
@@ -2065,9 +2122,12 @@ export async function finalizeCloudRun(
     writtenPaths: Set<string>;
     finalOutput: string;
     cancelled: boolean;
+    /** True when in-run branch CI reported success before finish (ticket #3092). */
+    ciVerified?: boolean;
   },
 ): Promise<{ ok: boolean; output: string }> {
   const { tenantId, cloudAgentRef, executionId, taskRow, agentLabel, repoCtx, repoMiss, writtenPaths, finalOutput, cancelled } = args;
+  const ciVerified = !!args.ciVerified;
   // A steer that arrived after the loop's last step is NOT released here: the row is
   // not terminal yet, and such a steer now starts a follow-up run (lateSteerFollowUp.ts)
   // that must never start beside the run it follows. Each surface settles it right
@@ -2096,7 +2156,9 @@ export async function finalizeCloudRun(
       provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
       token: repoCtx.token, head: repoCtx.branch, base: repoCtx.base,
       title: `Task #${taskRow.id}: ${taskRow.title}`,
-      body: `Changes for task #${taskRow.id}, by ${agentLabel}. Files: ${[...writtenPaths].join(', ')}.\n\n> ⚠ **Not verified in-agent.** This serverless executor has no shell and ran no build, type-check, lint, or tests. CI on this PR is the source of truth — do not merge on the agent's summary alone.`,
+      body: `Changes for task #${taskRow.id}, by ${agentLabel}. Files: ${[...writtenPaths].join(', ')}.\n\n${ciVerified
+        ? '> ✅ **CI was green in-run** on the ticket-branch HEAD (combined commit status / check-runs). Re-check CI on this PR before merge — opening it or a later push can still go red.'
+        : '> ⚠ **Not verified in-agent.** This serverless executor has no shell and ran no local build, type-check, lint, or tests. CI on this PR is the source of truth — do not merge on the agent\'s summary alone.'}`,
     }).catch(() => ({ ok: false as const, code: 'provider_error' as const, reason: 'pr failed' }));
     prOpened = pr.ok;
     // Release the claim on a failed create so a later finalize can re-attempt.
@@ -2191,7 +2253,9 @@ export async function finalizeCloudRun(
         title: `Task #${taskRow.id}: ${taskRow.title}`,
         body: `Changes for task #${taskRow.id}, by ${agentLabel} (this ticket spans multiple repositories).
 
-> ⚠ **Not verified in-agent.** CI on this PR is the source of truth.`,
+${ciVerified
+          ? '> ✅ **CI was green in-run** on the ticket-branch HEAD. Re-check CI on this PR before merge.'
+          : '> ⚠ **Not verified in-agent.** CI on this PR is the source of truth.'}`,
       },
     ).catch((error) => {
       reportCaughtError(error, { source: 'application/runtime/cloudAgentEngine.ts', operation: 'finalizeCloudRun', context: { logMessage: '[cloud-finalize] spanning PR open failed', details: { tenantId, executionId, taskId: taskRow.id, error } } });
@@ -2260,8 +2324,10 @@ export async function finalizeCloudRun(
   const autoMergeFailed = prOpened && cloudAutoMergeEnabled(env) && !merged;
   // Mark the result unverified whenever a PR was opened: nothing was built or tested
   // in-agent, so the summary's claims are not authoritative — CI on the PR is.
-  const unverifiedNote = prOpened
-    ? '\n\n⚠ Not verified in-agent — this serverless executor ran no build/type-check/tests. CI on the PR is the source of truth.'
+  const unverifiedNote = prOpened && ciVerified
+    ? '\n\n✅ In-run CI on the ticket-branch HEAD was green. Re-check CI on this PR before merge.'
+    : prOpened
+    ? '\n\n⚠ Not verified in-agent — this serverless executor ran no local build/type-check/tests. CI on the PR is the source of truth.'
     : '';
 
   // Unified learning: contribute this run's output to the project's Evermind. The
@@ -2555,7 +2621,7 @@ export async function prepareCloudRun(
       // A human's explicit "merge/push to main" is their call: this surface has the clone
       // and the push credential, so it does exactly that instead of substituting a PR.
       "Your work normally ships as a pull request when you finish. If the human's directive EXPLICITLY asks you to merge into or push to the base branch (main), do exactly that with run_command — `git fetch origin`, merge your branch into the base branch, `git push origin <base>` — and report the resulting commit hash; do not substitute a pull request for an explicit instruction."
-    : 'You CANNOT run builds, type-checks, lint, or tests here — this executor has no shell. Those run in CI on the pull request your changes open, and that CI is the source of truth. There is NO run_code/run_command tool; if you want to acknowledge verification, call run_checks. NEVER state that a check passed, succeeded, is clean, or is resolved — you cannot run one. Write correct, complete code and finish with an honest summary. If asked to merge or push to the base branch, say plainly that this executor cannot push it: your work ships as the pull request the human merges.';
+    : 'You CANNOT run a local shell (there is NO run_command). After writing, call run_checks: it statically validates changed files AND polls CI (build/type-check/test) on this branch HEAD. If CI is red, fix before finishing. If CI is pending, wait and call run_checks again. Only claim a check passed when run_checks reported CI success. If no CI is configured yet (or it only runs after the PR opens), do not claim tests passed — the PR\'s CI is then the source of truth. If asked to merge or push to the base branch, say plainly that this executor cannot push it: your work ships as the pull request the human merges.';
 
   // ── The run's context, as BLOCKS ────────────────────────────────────────────
   //

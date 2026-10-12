@@ -513,7 +513,7 @@ export const webSearchTool: ToolDefinition = defineTool({
 const runChecksTool: ToolDefinition = defineTool({
   name: "run_checks",
   description:
-    "Statically validate the files you have written: it parses committed JSON/YAML and runs the platform's shell-free changed-source quality policies, returning structured path/line/rule diagnostics to fix BEFORE finishing. The same validation runs automatically at finish, so it cannot be skipped. IMPORTANT: this serverless executor has NO shell, so it does NOT run the full build, project-wide type-check, lint, or tests — those run in CI on the pull request (the source of truth). Never claim those checks passed.",
+    "Statically validate the files you have written: it parses committed JSON/YAML and runs the platform's shell-free changed-source quality policies, returning structured path/line/rule diagnostics to fix BEFORE finishing. On the cloud Worker it ALSO polls CI (build/type-check/test) for this branch's HEAD and reports success/pending/failure — that is this executor's in-run substitute for a local shell. The same static validation runs automatically at finish, so it cannot be skipped. Never claim a build/test passed unless this tool (or run_command on a Container) reported success.",
   parameters: { type: "object", properties: {} },
   requires: ["static-check"],
   async execute(_args, ctx): Promise<ToolResult> {
