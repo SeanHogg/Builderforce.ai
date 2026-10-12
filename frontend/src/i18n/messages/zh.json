@@ -31819,6 +31819,7 @@
       "openGaps": "写明的缺口：{count}",
       "open": "打开",
       "pdf": "PDF",
+      "pptx": "PPTX",
       "empty": "尚未为这家公司生成过融资材料。",
       "generatedOn": "生成于 {date}"
     },

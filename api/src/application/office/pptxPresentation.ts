@@ -3,9 +3,9 @@
  *
  * pptxgenjs is loaded on first use, never at module scope: a static import put the
  * library's evaluation on the cold-start path of EVERY request the Worker serves,
- * though only deck and slide exports ever touch it. Both renderers
- * (deck/render/GenerativeRenderer, office/slidesRenderer) build through here, so
- * neither can quietly reintroduce the static import.
+ * though only deck and slide exports ever touch it. All renderers
+ * (deck/render/GenerativeRenderer, office/slidesRenderer, rfp/rfpBranding)
+ * build through here, so none can quietly reintroduce the static import.
  */
 
 import type PptxGenJS from 'pptxgenjs';

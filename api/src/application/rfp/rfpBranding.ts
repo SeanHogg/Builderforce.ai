@@ -8,15 +8,16 @@
  * `renderRfpDocHtml` emits a self-contained, inline-styled proposal document (no external
  * assets) that any browser prints to PDF cleanly, mirroring `tabularExport.toHtmlTable`.
  *
- * `renderRfpDocPdf` emits the SAME proposal as real PDF bytes. Both read one
- * source — the `RfpResponseBody` — through `rfpDocSections`, so the file a buyer
- * receives and the page a seller previews cannot describe different numbers. The
- * HTML is still the on-screen preview and the emailable single file; the PDF is
- * the attachment, and it exists because "print this page yourself" is not an
- * export a proposal can be sent with.
+ * `renderRfpDocPdf` emits the SAME proposal as real PDF bytes. `renderRfpDocPptx`
+ * is the third rendering — a slide deck an investor can open in PowerPoint —
+ * built from the same `rfpDocSections` so HTML, PDF and PPTX cannot quote
+ * different numbers. The HTML is still the on-screen preview and the emailable
+ * single file; the PDF is the document attachment; the PPTX is the presentation
+ * export of the value brief.
  */
 import { renderPdf } from '../office/pdfWriter';
 import type { MdBlock } from '../office/markdownBlocks';
+import { createPresentation, type Presentation, type PresentationSlide } from '../office/pptxPresentation';
 import type { BrandPalette, RfpResponseBody } from './types';
 
 /** The responder tenant's default palette (Builderforce coral/cyan) when none stored. */
@@ -304,4 +305,173 @@ export function renderRfpDocPdf(opts: {
     footer: `Generated ${opts.generatedAtIso} - ${opts.tenantName} - Confidential pre-sales proposal`,
     theme: { accent: b.primary, secondary: b.secondary },
   });
+}
+
+// ── presentation export (the third rendering of rfpDocSections) ──────────────
+
+const PPTX_FONT = 'Arial';
+
+/** pptxgenjs wants 6-digit hex without `#`; palettes store CSS hex. */
+function pptxHex(css: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(css.trim());
+  return m ? m[1].toUpperCase() : '111827';
+}
+
+export type RfpDocSlide = {
+  title: string;
+  paragraphs: string[];
+  bullets: string[];
+  tables: Array<{ head: string[]; rows: string[][] }>;
+};
+
+/**
+ * One slide per heading of `rfpDocSections`.
+ *
+ * HTML and PDF already share that block list; the deck is the same reading
+ * grouped by section so a slide cannot invent a number the document does not
+ * contain.
+ */
+export function rfpDocSlides(body: RfpResponseBody): RfpDocSlide[] {
+  const slides: RfpDocSlide[] = [];
+  let current: RfpDocSlide | null = null;
+  for (const block of rfpDocSections(body)) {
+    if (block.kind === 'heading') {
+      current = { title: block.text, paragraphs: [], bullets: [], tables: [] };
+      slides.push(current);
+      continue;
+    }
+    if (!current) continue;
+    if (block.kind === 'paragraph') current.paragraphs.push(block.text);
+    else if (block.kind === 'list') current.bullets.push(...block.items);
+    else if (block.kind === 'table') current.tables.push({ head: block.head, rows: block.rows });
+  }
+  return slides;
+}
+
+function addTitleSlide(
+  pptx: Presentation,
+  opts: { title: string; subtitle: string; badgeLabel: string; badgeValue: string; primary: string },
+): void {
+  const s = pptx.addSlide();
+  s.background = { color: opts.primary };
+  s.addText(opts.title, {
+    x: 0.6, y: 1.5, w: 8.8, h: 1.3,
+    fontSize: 28, bold: true, color: 'FFFFFF', fontFace: PPTX_FONT,
+  });
+  if (opts.subtitle) {
+    s.addText(opts.subtitle, {
+      x: 0.6, y: 2.9, w: 8.8, h: 0.5,
+      fontSize: 14, color: 'E0E7FF', fontFace: PPTX_FONT,
+    });
+  }
+  s.addText(opts.badgeLabel, {
+    x: 0.6, y: 3.6, w: 8.8, h: 0.28,
+    fontSize: 11, color: 'E0E7FF', fontFace: PPTX_FONT,
+  });
+  s.addText(opts.badgeValue, {
+    x: 0.6, y: 3.9, w: 8.8, h: 0.5,
+    fontSize: 24, bold: true, color: 'FFFFFF', fontFace: PPTX_FONT,
+  });
+}
+
+function addContentSlide(
+  pptx: Presentation,
+  slide: RfpDocSlide,
+  theme: { primary: string; secondary: string; ink: string; bg: string },
+): void {
+  const s: PresentationSlide = pptx.addSlide();
+  s.background = { color: theme.bg };
+  s.addText(slide.title || ' ', {
+    x: 0.5, y: 0.28, w: 9, h: 0.5,
+    fontSize: 20, bold: true, color: theme.ink, fontFace: PPTX_FONT,
+  });
+  s.addShape('line' as never, {
+    x: 0.5, y: 0.82, w: 9, h: 0,
+    line: { color: theme.primary, width: 2 },
+  });
+
+  let y = 1.0;
+  const maxY = 5.2;
+
+  if (slide.paragraphs.length) {
+    const text = slide.paragraphs.join('\n\n');
+    const h = Math.min(1.8, 0.22 * Math.ceil(text.length / 90) + 0.35);
+    s.addText(text, {
+      x: 0.5, y, w: 9, h,
+      fontSize: 14, color: theme.ink, fontFace: PPTX_FONT, valign: 'top',
+    });
+    y += h + 0.12;
+  }
+
+  if (slide.bullets.length && y < maxY) {
+    const n = Math.min(slide.bullets.length, 8);
+    const h = Math.min(2.2, 0.32 * n + 0.15);
+    s.addText(
+      slide.bullets.slice(0, 8).map((b) => ({ text: b, options: { bullet: true, breakLine: true } })),
+      { x: 0.6, y, w: 8.8, h, fontSize: 14, color: theme.ink, fontFace: PPTX_FONT, valign: 'top' },
+    );
+    y += h + 0.12;
+  }
+
+  if (slide.tables.length && y < maxY) {
+    for (const table of slide.tables) {
+      if (y >= maxY) break;
+      const head = table.head.map((cell) => ({
+        text: cell,
+        options: { bold: true, color: 'FFFFFF', fill: { color: theme.secondary }, fontSize: 10 },
+      }));
+      const rows = table.rows.slice(0, 8).map((r) =>
+        table.head.map((_, i) => ({ text: r[i] ?? '', options: { color: theme.ink, fontSize: 10 } })),
+      );
+      const tableH = Math.min(2.4, 0.28 * (rows.length + 1) + 0.1);
+      s.addTable([head, ...rows] as never, {
+        x: 0.5, y, w: 9,
+        border: { type: 'solid', color: 'E5E7EB', pt: 1 },
+        fontFace: PPTX_FONT,
+        autoPage: false,
+      });
+      y += tableH + 0.12;
+    }
+  }
+}
+
+/**
+ * The branded proposal as a real .pptx — the presentation an investor opens.
+ *
+ * Same body, same sections as the HTML preview and the PDF attachment. Co-branding
+ * survives the format: blended primary paints the title slide, blended secondary
+ * paints table header bands.
+ */
+export async function renderRfpDocPptx(opts: {
+  title: string;
+  requesterOrgName: string;
+  tenantName: string;
+  body: RfpResponseBody;
+  generatedAtIso: string;
+}): Promise<Uint8Array> {
+  const b = opts.body.branding.blended;
+  const primary = pptxHex(b.primary);
+  const secondary = pptxHex(b.secondary);
+  const ink = pptxHex(b.text);
+  const bg = pptxHex(b.background);
+
+  const pptx = await createPresentation();
+  pptx.layout = 'LAYOUT_16x9';
+
+  addTitleSlide(pptx, {
+    title: opts.title,
+    subtitle: `Prepared for ${opts.requesterOrgName || 'the requesting organisation'} by ${opts.tenantName}`,
+    badgeLabel: 'Quoted price',
+    badgeValue: money(opts.body.costModel.quotedPriceUsd),
+    primary,
+  });
+
+  const theme = { primary, secondary, ink, bg };
+  for (const slide of rfpDocSlides(opts.body)) addContentSlide(pptx, slide, theme);
+
+  const b64 = (await pptx.write({ outputType: 'base64' })) as string;
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
 }

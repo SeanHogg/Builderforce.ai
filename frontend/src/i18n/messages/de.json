@@ -31819,6 +31819,7 @@
       "openGaps": "Benannte offene Lücken: {count}",
       "open": "Öffnen",
       "pdf": "PDF",
+      "pptx": "PPTX",
       "empty": "Für dieses Unternehmen wurde noch kein Paket erstellt.",
       "generatedOn": "Erstellt {date}"
     },

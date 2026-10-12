@@ -31819,6 +31819,7 @@
       "openGaps": "Huecos abiertos nombrados: {count}",
       "open": "Abrir",
       "pdf": "PDF",
+      "pptx": "PPTX",
       "empty": "Aún no se ha generado ningún dosier para esta empresa.",
       "generatedOn": "Generado {date}"
     },

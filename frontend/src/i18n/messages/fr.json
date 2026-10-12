@@ -31819,6 +31819,7 @@
       "openGaps": "Manques ouverts nommés : {count}",
       "open": "Ouvrir",
       "pdf": "PDF",
+      "pptx": "PPTX",
       "empty": "Aucun dossier n’a encore été généré pour cette société.",
       "generatedOn": "Généré le {date}"
     },

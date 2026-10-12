@@ -31819,6 +31819,7 @@
       "openGaps": "Open gaps named: {count}",
       "open": "Open",
       "pdf": "PDF",
+      "pptx": "PPTX",
       "empty": "No pack has been built for this company yet.",
       "generatedOn": "Generated {date}"
     },

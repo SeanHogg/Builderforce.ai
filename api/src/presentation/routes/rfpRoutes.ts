@@ -12,7 +12,7 @@
  *   PATCH  /requests/:id              edit a request                            [developer]
  *   POST   /requests/:id/generate     run the response generator                [developer]
  *   GET    /responses/:id             response detail (body)                    [viewer]
- *   GET    /responses/:id/document    branded doc — HTML, or `?format=pdf`      [viewer]
+ *   GET    /responses/:id/document    branded doc — HTML, or `?format=pdf|pptx` [viewer]
  *   POST   /responses/:id/reground    poll the deep analysis, re-ground roster  [developer]
  *   GET    /risks                     risk/dependency register + roll-up        [viewer]
  *   PATCH  /risks/:id                 register lifecycle (status/owner/detail)  [developer]
@@ -32,7 +32,7 @@ import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrast
 import { generateRfpResponse, matchPortfolio, regroundRfpResponse, type RfpGenerateDeps } from '../../application/rfp/rfpService';
 import { readRiskRegister, updateRegisterEntry } from '../../application/rfp/rfpRegister';
 import { discardRfpRequest } from '../../application/rfp/discardRequest';
-import { renderRfpDocPdf, normalizePalette, DEFAULT_TENANT_PALETTE } from '../../application/rfp/rfpBranding';
+import { renderRfpDocPdf, renderRfpDocPptx, normalizePalette, DEFAULT_TENANT_PALETTE } from '../../application/rfp/rfpBranding';
 import { extractSitePalette } from '../../application/rfp/brandExtraction';
 import type { RfpResponseBody } from '../../application/rfp/types';
 import type { TaskService } from '../../application/task/TaskService';
@@ -227,14 +227,16 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
     return c.json(row);
   });
 
-  // Branded document. `?format=pdf` renders real PDF bytes server-side - the
-  // attachment a proposal is actually sent as; anything else returns the
-  // self-contained HTML, which is the preview and the emailable single file.
-  // Both render the SAME body, so the two can never quote different numbers.
+  // Branded document. `?format=pdf` / `?format=pptx` render real Office bytes
+  // server-side — the attachment a proposal is actually sent as, and the deck
+  // an investor opens. Anything else returns the self-contained HTML, which is
+  // the preview and the emailable single file. All three render the SAME body,
+  // so they can never quote different numbers.
   router.get('/responses/:id/document', requireRole(TenantRole.VIEWER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const wantsPdf = c.req.query('format') === 'pdf';
+    const format = c.req.query('format');
+    const wantsBinary = format === 'pdf' || format === 'pptx';
 
     const [row] = await db
       .select({ docHtml: rfpResponses.docHtml, body: rfpResponses.body, requestId: rfpResponses.requestId, createdAt: rfpResponses.createdAt })
@@ -243,7 +245,7 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
       .limit(1);
     if (!row) return c.json({ error: 'Document not found' }, 404);
 
-    if (!wantsPdf) {
+    if (!wantsBinary) {
       if (!row.docHtml) return c.json({ error: 'Document not found' }, 404);
       return c.html(row.docHtml);
     }
@@ -255,14 +257,25 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
       .from(rfpRequests).where(and(eq(rfpRequests.id, row.requestId), eq(rfpRequests.tenantId, tenantId))).limit(1);
     const [tenant] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
 
-    const bytes = renderRfpDocPdf({
+    const opts = {
       title: request?.title ?? 'Proposal',
       requesterOrgName: request?.requesterOrgName ?? '',
       tenantName: tenant?.name ?? 'Our team',
       body,
       generatedAtIso: row.createdAt.toISOString().slice(0, 10),
-    });
+    };
     const name = (request?.title ?? 'proposal').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'proposal';
+    if (format === 'pptx') {
+      const bytes = await renderRfpDocPptx(opts);
+      return new Response(bytes as unknown as BodyInit, {
+        headers: {
+          'content-type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'content-disposition': `attachment; filename="${name}-proposal.pptx"`,
+          'cache-control': 'no-store',
+        },
+      });
+    }
+    const bytes = renderRfpDocPdf(opts);
     return new Response(bytes as unknown as BodyInit, {
       headers: {
         'content-type': 'application/pdf',

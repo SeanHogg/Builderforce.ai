@@ -12,8 +12,8 @@
  * from the company (IN-1's projects, the open round, the diligence state) and
  * hands it to `generateRfpResponse` unchanged. Forking the pipeline would give
  * the platform two documents that quote different numbers from the same data,
- * which is the failure `renderRfpDocHtml`/`renderRfpDocPdf` already share one body
- * to avoid, one level up.
+ * which is the failure `renderRfpDocHtml`/`renderRfpDocPdf`/`renderRfpDocPptx`
+ * already share one body to avoid, one level up.
  *
  * ── THE CLAIM-TO-PROOF LINE, IN THE CODE ────────────────────────────────────
  * No accounting adapter has run against live production data. The P&L this

@@ -350,9 +350,10 @@ export const investorApi = {
 
 /** The rendered pack, as a plain address the browser opens. The ONE renderer —
  *  the same endpoint a tender response is read through, so the two can never
- *  quote different numbers. `?format=pdf` returns real PDF bytes. */
-export function packDocumentUrl(responseId: string, format?: 'pdf'): string {
-  const suffix = format === 'pdf' ? '?format=pdf' : '';
+ *  quote different numbers. `?format=pdf` / `?format=pptx` return real Office
+ *  bytes (document vs presentation); anything else is the HTML preview. */
+export function packDocumentUrl(responseId: string, format?: 'pdf' | 'pptx'): string {
+  const suffix = format === 'pdf' ? '?format=pdf' : format === 'pptx' ? '?format=pptx' : '';
   return `${getApiBaseUrl()}/api/rfp/responses/${encodeURIComponent(responseId)}/document${suffix}`;
 }
 

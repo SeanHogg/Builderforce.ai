@@ -138,6 +138,9 @@ export function PackView({
               <a style={buttonStyle} href={packDocumentUrl(built.responseId, 'pdf')} target="_blank" rel="noopener noreferrer">
                 {t('pack.pdf')}
               </a>
+              <a style={buttonStyle} href={packDocumentUrl(built.responseId, 'pptx')} target="_blank" rel="noopener noreferrer">
+                {t('pack.pptx')}
+              </a>
             </div>
           )}
         </div>
@@ -162,6 +165,9 @@ export function PackView({
                 </a>
                 <a style={buttonStyle} href={packDocumentUrl(response.id, 'pdf')} target="_blank" rel="noopener noreferrer">
                   {t('pack.pdf')}
+                </a>
+                <a style={buttonStyle} href={packDocumentUrl(response.id, 'pptx')} target="_blank" rel="noopener noreferrer">
+                  {t('pack.pptx')}
                 </a>
               </span>
             </li>
