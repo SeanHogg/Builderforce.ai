@@ -127,19 +127,21 @@ export function useCanvasPublishing({ canEdit, confirm, connectionKind, creating
     const startedAt = performance.now();
     const started: CreationDeliverable = { id: deliveryId, action: 'publish', artifactKind: 'website', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-sites', resourceRef: `project:${projectId}` };
     setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Publishing…', deliverables: withCreationDeliverable(node.data, started) } } : node));
-    void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'started', artifactId: target.id, projectId: Number(projectId) }).catch(() => undefined);
+    // Canonical delivery action is `artifact.publish` — `website.publish` is a
+    // fourth spelling the metric contract refuses to count as a real deliverable.
+    void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'artifact.publish', phase: 'started', artifactId: target.id, projectId: Number(projectId), metadata: { kind: 'website' } }).catch(() => undefined);
     const subdomain = typeof target.data.subdomain === 'string' ? target.data.subdomain : undefined;
     return publishSite(projectId, buildWebsiteAssets(target.data), subdomain).then((site) => {
       const delivered: CreationDeliverable = { ...started, status: 'delivered', completedAt: new Date().toISOString(), url: site.url, pathUrl: site.pathUrl, mimeType: 'text/html', resourceRef: `site:${site.subdomain}`, validation: { status: 'passed', detail: `${site.assetCount} assets published (${site.totalBytes} bytes)` }, metadata: { versionToken: site.versionToken, assetCount: site.assetCount, totalBytes: site.totalBytes } };
       setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Published', url: site.url, siteUrl: site.url, pathUrl: site.pathUrl, subdomain: site.subdomain, deliverables: withCreationDeliverable(node.data, delivered) } } : node));
       setNotice(t('noticeWebsitePublished', { url: site.url }));
-      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'succeeded', artifactId: target.id, projectId: Number(projectId), durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { url: site.url, versionToken: site.versionToken } }).catch(() => undefined);
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'artifact.publish', phase: 'succeeded', artifactId: target.id, projectId: Number(projectId), durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { kind: 'website', url: site.url, versionToken: site.versionToken } }).catch(() => undefined);
     }).catch((error) => {
       const message = errorText(error);
       const failed: CreationDeliverable = { ...started, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
       setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Publish failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
       setNotice(message);
-      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'failed', artifactId: target.id, projectId: Number(projectId), durationMs: performance.now() - startedAt }).catch(() => undefined);
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'artifact.publish', phase: 'failed', artifactId: target.id, projectId: Number(projectId), durationMs: performance.now() - startedAt, metadata: { kind: 'website' } }).catch(() => undefined);
     });
   }, [errorText, sessionId, setNodes, setNotice, t]);
 

@@ -3,7 +3,7 @@ import { type Dispatch, type SetStateAction, useCallback } from 'react';
 import { boardFlowFromDefinition, type UnpackedFlow } from '@/domains/workflow/domain/boardFlowFromDefinition';
 import { newNode } from '../canvasNodeHelpers';
 import type { CreationNodeData } from '../types';
-import { workflowDefinitions } from '@/lib/builderforceApi';
+import { creationSessionsApi, workflowDefinitions } from '@/lib/builderforceApi';
 import { flowStepsFromCanvasSteps } from '@/domains/workflow/domain/flowStepsFromCanvasSteps';
 import { type CreationDeliverable, withCreationDeliverable } from '@/lib/creationDeliverables';
 import { createCloudAgent, updateAgent } from '@/lib/api';
@@ -21,6 +21,7 @@ export interface UseCanvasWorkflowRunDeps {
   requireAccount: (action: string, title: string, description: string) => void;
   resolveWorkflowNode: (workflowId?: string) => CanvasObject | null;
   selectedNode: CanvasObject | null;
+  sessionId: string;
   setEdges: Dispatch<SetStateAction<Edge[]>>;
   setNodes: Dispatch<SetStateAction<CanvasObject[]>>;
   setNotice: (text: string) => void;
@@ -29,7 +30,7 @@ export interface UseCanvasWorkflowRunDeps {
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
 }
 
-export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKind, errorText, persistence, requireAccount, resolveWorkflowNode, selectedNode, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t }: UseCanvasWorkflowRunDeps) {
+export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKind, errorText, persistence, requireAccount, resolveWorkflowNode, selectedNode, sessionId, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t }: UseCanvasWorkflowRunDeps) {
   /**
    * OPEN A LEGACY WORKFLOW CARD ON THE BOARD — the migration path for every workflow
    * authored before the canvas WAS the workflow.
@@ -176,6 +177,8 @@ export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKin
       const definitionId = linkedId || await compileWorkflow(targetId);
       if (!definitionId) return;
       const started: CreationDeliverable = { id: crypto.randomUUID(), action: 'run', artifactKind: 'workflow-run', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-workflows' };
+      const correlationId = `deliver:${started.id}`;
+      const startedAt = performance.now();
       setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', deliverables: withCreationDeliverable(node.data, started) } } : node));
       setNotice(t('noticeStartingWorkflow'));
       await workflowDefinitions.get(definitionId).then((definition) => {
@@ -198,6 +201,9 @@ export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKin
           setNotice(run.reason);
           return;
         }
+        if (persistence === 'server') {
+          void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'workflow.execute', phase: 'started', artifactId: targetId }).catch(() => undefined);
+        }
         setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: run.workflowId, workflowTaskCount: run.taskCount, deliverables: withCreationDeliverable(node.data, { ...started, resourceRef: `workflow-run:${run.workflowId}`, metadata: { taskCount: run.taskCount } }) } } : node));
         setNotice(t('noticeWorkflowStarted', { count: run.taskCount }));
         const pollRun = (remaining: number) => {
@@ -214,8 +220,22 @@ export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKin
                 const terminalDeliverable: CreationDeliverable | null = terminal ? { ...started, status: normalized === 'completed' || normalized === 'complete' ? 'delivered' : 'failed', completedAt: currentRun.completedAt || new Date().toISOString(), resourceRef: `workflow-run:${run.workflowId}`, validation: { status: normalized === 'completed' || normalized === 'complete' ? 'passed' : 'failed', detail: `Workflow ${currentRun.status}` }, metadata: { taskCount: run.taskCount }, ...(!(normalized === 'completed' || normalized === 'complete') ? { error: `Workflow ${currentRun.status}` } : {}) } : null;
                 return { ...node, data: { ...node.data, status: label, workflowRunStatus: currentRun.status, workflowCompletedAt: currentRun.completedAt, ...(terminalDeliverable ? { deliverables: withCreationDeliverable(node.data, terminalDeliverable) } : {}) } };
               }));
-              if (terminal) setNotice(t('noticeWorkflowStatus', { status: label.toLowerCase() }));
-              else pollRun(remaining - 1);
+              if (terminal) {
+                setNotice(t('noticeWorkflowStatus', { status: label.toLowerCase() }));
+                if (persistence === 'server') {
+                  const ok = normalized === 'completed' || normalized === 'complete';
+                  void creationSessionsApi.recordOutcome(sessionId, {
+                    correlationId,
+                    action: 'workflow.execute',
+                    phase: ok ? 'succeeded' : 'failed',
+                    actorType: 'system',
+                    artifactId: targetId,
+                    durationMs: performance.now() - startedAt,
+                    ...(ok ? { metricKey: 'deliverables_completed' as const, metricValue: 1, unit: 'count' as const } : {}),
+                    metadata: { taskCount: run.taskCount, status: currentRun.status },
+                  }).catch(() => undefined);
+                }
+              } else pollRun(remaining - 1);
             }).catch(() => pollRun(remaining - 1));
           }, 2_000);
         };
@@ -225,9 +245,13 @@ export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKin
         const failed: CreationDeliverable = { ...started, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
         setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Run failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
         setNotice(message);
+        if (persistence === 'server') {
+          void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'workflow.execute', phase: 'started', artifactId: targetId }).catch(() => undefined);
+          void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'workflow.execute', phase: 'failed', actorType: 'system', artifactId: targetId, durationMs: performance.now() - startedAt }).catch(() => undefined);
+        }
       });
     })();
-  }, [canRun, compileWorkflow, errorText, persistence, resolveWorkflowNode, setNodes, setNotice, t]);
+  }, [canRun, compileWorkflow, errorText, persistence, resolveWorkflowNode, sessionId, setNodes, setNotice, t]);
 
   const saveAgent = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'agent') return;

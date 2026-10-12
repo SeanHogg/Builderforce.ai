@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DELIVERY_ACTIONS,
   NORTH_STAR_METRIC_KEY,
   OUTCOME_METRICS,
   OUTCOME_METRIC_FAMILIES,
@@ -88,6 +89,12 @@ describe('outcome metric contract', () => {
     // CTE filters it out, so the metric can never be dragged down by one.
     const query = sqlText(outcomeFactsSql(sql`SELECT id, tenant_id, created_at FROM creation_sessions`));
     expect(query).toContain("e.phase = 'validated' AND e.action <> 'proof.grade'");
+  });
+
+  it('counts only the three canonical delivery spellings as a real deliverable', () => {
+    // A fourth name (`website.publish`) used to be emitted by the canvas and
+    // never moved canvas.shipped. The list is the contract — do not add aliases.
+    expect([...DELIVERY_ACTIONS]).toEqual(['artifact.deliver', 'artifact.publish', 'workflow.execute']);
   });
 
   it('aggregates under the metric keys, so a rollup row needs no second mapping', () => {
