@@ -27,6 +27,7 @@
  */
 
 import type { BrainMessage } from './types';
+import { batchStepPersistence } from './stepOutbox';
 import { getRunDriver } from './runDriver';
 import {
   StreamInterruptedError,
@@ -90,7 +91,7 @@ import {
 } from '@builderforce/agent-stall';
 import { resolveToolAlias } from '@builderforce/agent-tools';
 import { turnInterruption } from './finishReason.js';
-import { runAgentLoop, openAiChatCodec, MID_TURN_META_KEY, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, liftProseAskUser, splitVendorReasoning, canonicalReasoningText, replayTextOf, malformedCallOutcome, malformedCallLabel, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
+import { runAgentLoop, openAiChatCodec, MID_TURN_META_KEY, stepRow, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, liftProseAskUser, splitVendorReasoning, canonicalReasoningText, replayTextOf, malformedCallOutcome, malformedCallLabel, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
 import { formatEvermindMemoryBlock, countReconciledMemories, type EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import type { EvermindRunHooks, MemoryFirstAnswer } from './evermindMemory';
 import { windowed, buildWorkingTranscript, stillInWorkingContext, summarizeMiddle, type CompactMemo } from './workingTranscript';
@@ -507,6 +508,14 @@ interface RunCell {
    */
   runTraceFrom: number;
   /**
+   * Where THIS run's trace events are made durable — set by `startRun` for the run's
+   * lifetime and cleared when it ends. Every event {@link pushTrace} records while it is
+   * set becomes a step row, so the trace and its durable copy cannot drift: there is one
+   * writer and one store. Null outside a run — a mirrored run (`applyRemoteRun`) is
+   * persisted by the host that actually runs it, never twice.
+   */
+  persistStep: ((ev: BrainTraceEvent) => void) | null;
+  /**
    * Cached compressed-memory of the transcript's older part. When the transcript exceeds
    * the working-transcript token budget (`HISTORY_TOKEN_BUDGET` in `workingTranscript.ts`)
    * the loop SUMMARIZES `transcript[0, coveredEnd)` into this
@@ -591,6 +600,7 @@ function makeCell(): RunCell {
     deltaTicketId: null,
     deltaRecordedFiles: [],
     runTraceFrom: 0,
+    persistStep: null,
     compactMemo: null,
     liveTurn: null,
     stoppedTurn: null,
@@ -690,6 +700,7 @@ function setActivity(c: RunCell, activity: BrainRunActivity | null): void {
 
 function pushTrace(c: RunCell, ev: BrainTraceEvent): void {
   c.trace.push(ev);
+  c.persistStep?.(ev);
   // Bound a single run's trace so a long tool-chain can't grow without limit.
   if (c.trace.length > MAX_TRACE_EVENTS) {
     const dropped = c.trace.length - MAX_TRACE_EVENTS;
@@ -704,13 +715,12 @@ function runTrace(c: RunCell): BrainTraceEvent[] {
   return c.trace.slice(c.runTraceFrom);
 }
 
-/** Cap on the persisted step RESULT (chars). The live trace keeps the full result;
- *  only the durable copy is bounded so a big tool payload can't bloat the row. */
-const STEP_RESULT_CAP = 4_000;
-
 /**
  * Persist a step DURABLY so it survives a reload — the in-memory `trace` alone
  * vanishes on remount, which is why steps used to disappear from a reopened chat.
+ * Reached ONLY through {@link RunCell.persistStep} (i.e. every {@link pushTrace} of a
+ * live run): these rows are the single durable store of a run's steps. Sends are
+ * batched by `stepOutbox.ts`.
  * Stored as a `role:'tool'` message whose metadata carries the step payload
  * (`{ kind:'step', ... }`); the timeline reconstructs the node from it (see
  * timelineModel.buildSettledTimeline) and the triage diagnostics reconstruct the
@@ -718,7 +728,8 @@ const STEP_RESULT_CAP = 4_000;
  *
  * The DIAGNOSTICS scalars ride along verbatim: the pre-trim `resultBytes` and the
  * `truncated` flag on a tool step (so the "which tool flooded the window" signal
- * isn't lost to the 4 KB result cap below), and `usage` / `finishReason` /
+ * isn't lost to the 4 KB result cap), built by the shared `stepRow` (agent-loop) so
+ * the server's addressed-agent reply writes the identical row, and `usage` / `finishReason` /
  * `textChars` on an `llm` turn. Without them a reloaded chat's diagnostics could
  * only report a byte floor and no tokens at all.
  *
@@ -728,40 +739,9 @@ const STEP_RESULT_CAP = 4_000;
  * 400s strict vendors). Fire-and-forget — durability must never block or fail the run.
  */
 function persistStep(chatId: number, persistence: BrainRunPersistence, ev: BrainTraceEvent): void {
-  let result: unknown = ev.result ?? null;
-  try {
-    const s = JSON.stringify(result);
-    if (s.length > STEP_RESULT_CAP) result = `${s.slice(0, STEP_RESULT_CAP)}…[${s.length - STEP_RESULT_CAP} more chars]`;
-  } catch {
-    result = String(result);
-  }
-  const metadata = JSON.stringify({
-    kind: 'step',
-    category: ev.category,
-    label: ev.label,
-    args: ev.args ?? null,
-    result,
-    isError: ev.isError ?? false,
-    ...(ev.durationMs != null ? { durationMs: ev.durationMs } : {}),
-    // Diagnostics scalars — tiny, and the whole point of keeping the row.
-    ...(ev.resultBytes != null ? { resultBytes: ev.resultBytes } : {}),
-    ...(ev.truncated ? { truncated: true } : {}),
-    ...(ev.usage ? { usage: ev.usage } : {}),
-    ...(ev.finishReason != null ? { finishReason: ev.finishReason } : {}),
-    ...(ev.textChars != null ? { textChars: ev.textChars } : {}),
-    ...(ev.ttftMs != null ? { ttftMs: ev.ttftMs } : {}),
-    ts: ev.ts,
-  });
-  void persistence.sendMessages(chatId, [{ role: 'tool', content: '', metadata }]).catch(() => {
+  void persistence.sendMessages(chatId, [stepRow(ev)]).catch(() => {
     /* best-effort durability — the live trace already showed the step */
   });
-}
-
-/** {@link pushTrace} + {@link persistStep}: record a tool/memory step both live (trace)
- *  and durably (persisted), so it shows during the run AND survives a reload. */
-function pushDurableStep(c: RunCell, chatId: number, persistence: BrainRunPersistence, ev: BrainTraceEvent): void {
-  pushTrace(c, ev);
-  persistStep(chatId, persistence, ev);
 }
 
 /**
@@ -778,14 +758,8 @@ function pushDurableStep(c: RunCell, chatId: number, persistence: BrainRunPersis
  * (a 4xx, an exhausted loop, a connection back by the time the run unwinds), and
  * for those the reopened chat now ends with a reason instead of a cliff.
  */
-function recordRunFailure(
-  c: RunCell,
-  chatId: number,
-  persistence: BrainRunPersistence,
-  label: string,
-  message: string,
-): void {
-  pushDurableStep(c, chatId, persistence, {
+function recordRunFailure(c: RunCell, label: string, message: string): void {
+  pushTrace(c, {
     ts: nowIso(),
     category: 'error',
     label,
@@ -1057,7 +1031,6 @@ async function keepStoppedTurn(chatId: number, c: RunCell, persistence: BrainRun
   const stopped = c.stoppedTurn;
   c.stoppedTurn = null;
   if (!stopped) return;
-  persistStep(chatId, persistence, stopped.event);
   const text = canonicalTurnText(stopped.text);
   if (!text) return;
   const [msg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: text, metadata: stoppedTurnMetadata(stopped.source) }]);
@@ -1196,9 +1169,13 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
   // persists is attributed to the child and spliced into the owner's live view.
   const lineage = request.lineage;
   const chatId = lineage?.rootChatId ?? runKey;
-  const req: BrainRunRequest = lineage
-    ? { ...request, persistence: lineagePersistence(request.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) }
-    : request;
+  // Step rows are batched (see `stepOutbox.ts`) — outside the lineage wrap, so a queued
+  // row is still attributed to the child when its batch is sent.
+  const steps = batchStepPersistence(
+    lineage ? lineagePersistence(request.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) : request.persistence,
+  );
+  const req: BrainRunRequest = { ...request, persistence: steps.persistence };
+  c.persistStep = (ev) => persistStep(chatId, steps.persistence, ev);
   c.running = true;
   c.error = '';
   c.errorAction = null;
@@ -1248,7 +1225,7 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
       c.errorAction = chatErrorAction(e);
       // `c.error` is this cell's memory and nothing else's. Without a durable
       // twin, reopening the chat showed the steps and then nothing at all.
-      recordRunFailure(c, chatId, req.persistence, 'agent.run', c.error);
+      recordRunFailure(c, 'agent.run', c.error);
     }
   } finally {
     const aborted = c.abort?.signal.aborted ?? false;
@@ -1316,6 +1293,10 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
       failed: c.error !== '', shipped, trace: runTrace(c), projectId: req.projectId,
     });
     if (outcome) void req.reportOutcome!(outcome).catch(() => undefined);
+    // The run's last step rows leave now, not on the batch timer. Not awaited — like
+    // every step write, it must never hold the run open.
+    c.persistStep = null;
+    void steps.flush();
     // The run is over: nothing is in flight, so no indicator may claim otherwise.
     // Cleared LAST, after the backstops above, so `finishing` stays visible for them.
     c.activity = null;
@@ -1387,7 +1368,7 @@ async function recordCodeChangeTicket(
     // performed satisfies the same guarantee, so the settle pass must not mint again.
     c.ticketRecorded = true;
   }
-  pushDurableStep(c, chatId, req.persistence, {
+  pushTrace(c, {
     ts: nowIso(),
     category: 'tool',
     label: 'builtin_tickets_from_delta',
@@ -1426,7 +1407,7 @@ async function advanceLinkedTickets(chatId: number, c: RunCell, req: BrainRunReq
     } catch (e) {
       out = { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
-    pushDurableStep(c, chatId, req.persistence, {
+    pushTrace(c, {
       ts: nowIso(),
       category: 'tool',
       label: 'builtin_tasks_update',
@@ -1479,7 +1460,7 @@ async function completeLinkedTickets(
     } catch (e) {
       out = { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
-    pushDurableStep(c, chatId, req.persistence, {
+    pushTrace(c, {
       ts: nowIso(),
       category: 'tool',
       label: 'builtin_tasks_update',
@@ -1506,7 +1487,6 @@ async function completeLinkedTickets(
 async function autoLinkCreatedItem(
   chatId: number,
   c: RunCell,
-  persistence: BrainRunPersistence,
   runTool: (name: string, args: unknown) => Promise<unknown>,
   toolName: string,
   out: unknown,
@@ -1526,7 +1506,7 @@ async function autoLinkCreatedItem(
     result = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
   if (!isFailedToolResult(result)) c.ticketRecorded = true;
-  pushDurableStep(c, chatId, persistence, {
+  pushTrace(c, {
     ts: nowIso(),
     category: 'tool',
     label: 'builtin_chats_link_ticket',
@@ -1636,7 +1616,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         const block = formatEvermindMemoryBlock(recalled.items);
         if (block) {
           systemPrompt = `${systemPrompt}\n\n${block}`;
-          pushDurableStep(c, chatId, persistence, {
+          pushTrace(c, {
             ts: nowIso(),
             category: 'recall',
             label: 'evermind.recall',
@@ -1682,7 +1662,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         c.streamingText = '';
         recordAppended(c, assistantMsg);
         // Visible on the timeline: memory answered, the LLM was skipped.
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: 'recall',
           label: memAnswer!.source === 'evermind' ? 'evermind.answer' : 'memory.answer',
@@ -1903,7 +1883,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
   const emitEvermindLearnReconcile = (assistantMsg: BrainMessage | undefined, finalText: string): void => {
     const learn = assistantMsg?.evermindLearn;
     if (learn?.learned) {
-      pushDurableStep(c, chatId, persistence, {
+      pushTrace(c, {
         ts: nowIso(),
         category: 'learn',
         label: 'evermind.learn',
@@ -1913,7 +1893,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       });
       const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
       if (reconciled > 0) {
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: 'reconcile',
           label: 'evermind.reconcile',
@@ -1925,7 +1905,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       // on (chat not attached to a project / not seeded / frozen). Surface it as an
       // EXPLAINED muted step so "Connected, yet nothing learned" is never a silent
       // mystery again. `too-short` is mundane (a one-line turn) and intentionally not surfaced.
-      pushDurableStep(c, chatId, persistence, {
+      pushTrace(c, {
         ts: nowIso(),
         category: 'learn',
         label: 'evermind.learn',
@@ -2013,7 +1993,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       })) {
         delegationRecoveryUsed = true;
         redirectAskToDelegation = true;
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: 'message',
           label: 'loop.recover_undelegated_request',
@@ -2066,7 +2046,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       if (isRouterTool(call.name)) {
         const routed = handleRouterCall(allTools ?? [], call.name, call.args);
         if ('result' in routed) {
-          pushDurableStep(c, chatId, persistence, {
+          pushTrace(c, {
             ts: nowIso(),
             category: 'tool',
             label: call.name,
@@ -2110,7 +2090,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         // The role flips BEFORE the children start: they and every later turn are code.
         phase = 'code';
         c.codePhaseReached = true;
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: 'message',
           label: 'llm.role_handoff',
@@ -2121,8 +2101,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
           runTool: (name, args) => runTool!(name, args),
           toolNames: new Set(catalogToolNames),
           ...(req.projectId != null ? { projectId: req.projectId } : {}),
-          afterCreate: (toolName, out) => autoLinkCreatedItem(chatId, c, persistence, runTool!, toolName, out),
-          step: (label, args, out, durationMs) => pushDurableStep(c, chatId, persistence, {
+          afterCreate: (toolName, out) => autoLinkCreatedItem(chatId, c, runTool!, toolName, out),
+          step: (label, args, out, durationMs) => pushTrace(c, {
             ts: nowIso(), category: 'tool', label, durationMs, args, result: out ?? null, isError: isFailedToolResult(out),
           }),
           postPlan: async (text) => {
@@ -2161,7 +2141,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         const ok = await requestRunConfirm(runKey, { name: call.name, args }, { step: iter });
         if (!ok) {
           const declined = { cancelled: true, reason: 'User declined this action.' };
-          pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: 'tool', label: call.name, args, result: declined });
+          pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, args, result: declined });
           return { result: { data: declined } };
         }
       }
@@ -2283,13 +2263,13 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       if (!run) return undefined;
       const args = call.args;
       if (run.threw) {
-        pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: 'tool', label: call.name, durationMs: nowMs() - run.toolStart, args, result: run.out, isError: true });
+        pushTrace(c, { ts: nowIso(), category: 'tool', label: call.name, durationMs: nowMs() - run.toolStart, args, result: run.out, isError: true });
         return undefined;
       }
       // Keep what a successful read returned, anchored to the message that carries
       // it, so an exact repeat can be replayed once compaction removes that message.
       if (run.isReadTool && !isFailedToolResult(run.out)) readCoverage.cacheResult(call.name, args, { result: run.out ?? null, anchor: row });
-      pushDurableStep(c, chatId, persistence, {
+      pushTrace(c, {
         ts: nowIso(),
         category: 'tool',
         label: call.name,
@@ -2366,7 +2346,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         // turns and no sign the loop had ever fought back. The SHAPE rides along, because
         // "re-prompted" alone cannot tell a reader whether the model narrated a call it
         // never made or wrote the user a correct list of commands to go run.
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: 'message',
           label: shape === 'handed-off' ? 'loop.recover_handed_off_work' : 'loop.recover_announced_tool_call',
@@ -2394,7 +2374,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       })) {
         shipRecoveryUsed = true;
         await requeueWithNudge(unshippedChangeNudge());
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: 'message',
           label: 'loop.recover_unshipped_change',
@@ -2419,7 +2399,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       })) {
         reviewRecoveryUsed = true;
         await requeueWithNudge(unreviewedChangeNudge());
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: 'message',
           label: 'loop.recover_unreviewed_change',
@@ -2442,7 +2422,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       })) {
         delegationRecoveryUsed = true;
         await requeueWithNudge(undelegatedRequestNudge(catalogToolNames));
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: 'message',
           label: 'loop.recover_undelegated_request',
@@ -2460,7 +2440,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       if (runTool && !restateRecoveryUsed && isRestatedReply(result.text, priorReply)) {
         restateRecoveryUsed = true;
         await requeueWithNudge(restatedReplyNudge());
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: 'message',
           label: 'loop.recover_restated_reply',
@@ -2499,7 +2479,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         });
         if (next) {
           modelFailovers += 1;
-          pushDurableStep(c, chatId, persistence, {
+          pushTrace(c, {
             ts: nowIso(),
             category: 'message',
             label: 'loop.model_failover',
@@ -2517,7 +2497,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
           return { action: 'continue' };
         }
         const notice = stallExhaustedNotice(resolved, triedModels, shape);
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: 'error',
           label: 'loop.stall_unrecovered',
@@ -2713,7 +2693,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         // (the fetch never reached the gateway), so we retry without excluding any specific model.
         if (e instanceof StreamInterruptedError && e.model) {
           brokenModels.add(e.model);
-          pushDurableStep(c, chatId, persistence, {
+          pushTrace(c, {
             ts: nowIso(),
             category: 'message',
             label: 'llm.stream_interrupted',
@@ -2721,7 +2701,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
             result: `${e.message} — retrying this turn on another connected model. ${e.model} is left out for the rest of this run.`,
           });
         } else {
-          pushDurableStep(c, chatId, persistence, {
+          pushTrace(c, {
             ts: nowIso(),
             category: 'message',
             label: 'llm.transport_error',
@@ -2815,7 +2795,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       // copied after a reload reported `Turns: 0` / "Tokens: not reported" and could
       // never separate context exhaustion from model degradation. The payload is a
       // handful of scalars — no transcript text — so the row stays small.
-      pushDurableStep(c, chatId, persistence, {
+      pushTrace(c, {
         ts: nowIso(),
         category: 'llm',
         label: 'llm.complete',
@@ -2951,7 +2931,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       // remember the advisory builtin_chats_link_ticket call (which it often skips,
       // leaving the item created but orphaned from the chat). Fires the same shared
       // link tool the model would, tied to the run's resolved chatId.
-      await autoLinkCreatedItem(chatId, c, persistence, runTool, call.name, out);
+      await autoLinkCreatedItem(chatId, c, runTool, call.name, out);
       // The MODEL transcript gets a size-capped copy so a big list result can't
       // flood the context window; the TRACE keeps the full result (bounded by
       // MAX_TRACE_EVENTS) for the timeline + triage copy, plus the pre-trim byte
@@ -3115,8 +3095,6 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
   c.streamingText = '';
   recordRunFailure(
     c,
-    chatId,
-    req.persistence,
     'agent.loop',
     `Stopped after ${streak} consecutive failed tool calls over ${loop.step} steps (a forced final answer without tools also came back empty)`,
   );

@@ -69,6 +69,17 @@ beforeEach(() => {
   resetBrainRunStore();
 });
 
+/** Every row persisted so far, across requests — step rows ride along in batches. */
+const persistedRows = () =>
+  vi.mocked(persistence.sendMessages).mock.calls.flatMap(([, msgs]) => msgs);
+const rowsOfRole = (role: string) => persistedRows().filter((m) => m.role === role);
+/** `category:label` of each durable step row. */
+const stepRows = () =>
+  rowsOfRole('tool').map((m) => {
+    const meta = JSON.parse(m.metadata ?? '{}') as { category?: string; label?: string };
+    return `${meta.category}:${meta.label}`;
+  });
+
 describe('useBrainConversation agent loop (injected transport + persistence)', () => {
   it('streams durable messages appended by an assigned agent into the open chat', async () => {
     let notifyChanged: (() => void) | undefined;
@@ -162,10 +173,14 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     await act(async () => { await hook.current.send('hi'); });
 
     expect(mockStream).toHaveBeenCalledTimes(1);
-    // user + the durable `llm` turn step + assistant persisted. Each LLM turn now
+    // user + the durable `llm` turn step + assistant persisted. Each LLM turn
     // persists a compact diagnostics row (usage/finishReason — no transcript text)
-    // so a chat copied after a reload can still report its turns and tokens.
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(3);
+    // so a chat copied after a reload can still report its turns and tokens. The step
+    // row rides along with the assistant turn: two requests, not three.
+    expect(rowsOfRole('user')).toHaveLength(1);
+    expect(rowsOfRole('assistant')).toHaveLength(1);
+    expect(stepRows().filter((s) => s.startsWith('llm:'))).toHaveLength(1);
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
     await waitFor(() => {
       expect(hook.current.messages.map((m) => m.content)).toEqual(['hi', 'hello there']);
     });
@@ -197,8 +212,12 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
 
     // user + 2 durable `llm` turn steps + the durable tool STEP + final assistant
     // persist. Step rows (role:'tool') survive a reload but are NOT added to the live
-    // message list (recordAppended) and are excluded from the model seed.
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(5);
+    // message list (recordAppended) and are excluded from the model seed. The steps
+    // are batched onto the final assistant send.
+    expect(rowsOfRole('assistant')).toHaveLength(1);
+    expect(stepRows().filter((s) => s.startsWith('llm:'))).toHaveLength(2);
+    expect(stepRows()).toContain('tool:do_thing');
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
     await waitFor(() => {
       expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']);
     });
@@ -261,8 +280,11 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
         'All done.',
       ]);
     });
-    // user + 2 narrations + 2 durable tool steps + final answer.
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(9);
+    // user + 2 narrations + final answer as conversation rows; the 2 durable tool
+    // steps ride along with them rather than costing a request each.
+    expect(rowsOfRole('assistant')).toHaveLength(3);
+    expect(stepRows().filter((s) => s === 'tool:do_thing')).toHaveLength(2);
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(4);
   });
 
   it('persists nothing extra for a pure tool-call turn with no text', async () => {
@@ -280,7 +302,9 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
 
     // Empty narration ⇒ NO narration bubble; user + the durable tool step + final
     // assistant persist (the empty-text turn still records its tool step durably).
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(5);
+    expect(rowsOfRole('assistant')).toHaveLength(1);
+    expect(stepRows()).toContain('tool:do_thing');
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']));
   });
 

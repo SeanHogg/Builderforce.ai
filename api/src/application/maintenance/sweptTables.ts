@@ -41,7 +41,6 @@ import { VISITOR_RETENTION_DAYS, purgeVisitorActivity } from '../marketing/visit
 import {
   activitySignals,
   apiErrorLog,
-  brainChatTrace,
   errorEvents,
   executionLifecycleOutbox,
   ingestionUsageLog,
@@ -71,7 +70,7 @@ export interface SweptTable {
    *
    *  USUALLY ONE. The exceptions are tables whose writers moved to the transactional
    *  endpoint: `llm_*` and `api_error_log` when it was split out (2026-07-13), and the
-   *  agent-run telemetry (`tool_audit_*`, `brain_chat_trace`) on 2026-10-03, grouped
+   *  agent-run telemetry (`tool_audit_*`) on 2026-10-03, grouped
    *  with the usage ledger by when it is written. The relations were never dropped from
    *  primary, so a copy went on sitting there with no writer AND no sweep — 35 MB of
    *  rows frozen at the date of the split, invisible to a registry that could name only
@@ -490,14 +489,6 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
       + 'afterwards, which is retention-without-a-vacuum — the exact shape that left 46k live '
       + '`manager_actions` rows inside 593 MB.',
     purge: (db, cutoff) => purgeVisitorActivity(db, cutoff),
-  },
-  {
-    relation: 'brain_chat_trace',
-    connections: ['transactional', 'primary'],
-    retentionDays: 90,
-    pressureFloorDays: 14,
-    rationale: 'Per-turn Brain reasoning trace (llm/tool/recall/learn steps). Backs the expandable trace on a chat turn, which nobody opens on a chat older than a quarter.',
-    purge: (db, cutoff) => db.delete(brainChatTrace).where(acrossTenants(brainChatTrace, 'scheduled_sweep', lt(brainChatTrace.createdAt, cutoff))),
   },
   {
     relation: 'integration_sync_logs',

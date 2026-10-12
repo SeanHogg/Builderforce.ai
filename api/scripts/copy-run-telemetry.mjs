@@ -62,7 +62,6 @@ const TABLES = [
   { name: 'execution_claims', key: ['id'], serial: false },
   { name: 'execution_claim_evidence', key: ['claim_id', 'tool_audit_event_id'], serial: false },
   { name: 'usage_snapshots', key: ['id'], serial: true },
-  { name: 'brain_chat_trace', key: ['id'], serial: true },
   { name: 'run_context_state', key: ['id'], serial: true },
   { name: 'run_model_outcomes', key: ['id'], serial: true },
 ];
@@ -153,12 +152,6 @@ async function missingOnOps({ name, key }) {
 }
 
 async function main() {
-  // Rows written by the pre-move Worker carry no tenant on the trace; stamp them from the
-  // chat while core still has both, so the copy carries a tenant the reader scopes on.
-  if (!DRY) {
-    await core(`UPDATE brain_chat_trace t SET tenant_id = c.tenant_id FROM brain_chats c WHERE c.id = t.chat_id AND t.tenant_id IS NULL`);
-  }
-
   // The attach trigger would re-derive evidence for every copied claim (and refuse a claim
   // whose cited rows were never copied); the evidence is copied verbatim below instead.
   if (!DRY) await ops(`ALTER TABLE execution_claims DISABLE TRIGGER trg_execution_claim_attach_evidence`);

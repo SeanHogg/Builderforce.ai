@@ -79,9 +79,9 @@ const ORDER: Record<TimelineNode['kind'], number> = {
  *
  * The trace is a SEQUENCE, not a bag: the run emitted those events in an order the
  * array already holds. Ranking them against each other by kind therefore destroys
- * real information, and did — a reopened chat rehydrates its trace from
- * `GET /chats/:id/trace`, whose rows are written in ONE batch insert at run end and
- * so all carry the SAME `created_at`. Every timestamp tied, the kind rank became the
+ * real information, and did — a reopened chat used to rehydrate its trace from a
+ * since-retired store whose rows were written in ONE batch insert at run end and so
+ * all carried the SAME `created_at` (any trace whose stamps tie hits the same case). Every timestamp tied, the kind rank became the
  * only discriminator and regrouped the run into "every Thought, then every tool call"
  * instead of the interleaving that actually happened. (A live run hid this: its events
  * carry distinct wall-clock stamps, which is why sending one new message appeared to

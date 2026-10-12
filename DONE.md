@@ -1,3 +1,18 @@
+## ✅ RESOLVED 2026-10-11 — Run steps: one store, sent in batches (api 2026.10.36 · brain-embedded 2026.10.19 · agent-loop 2026.10.8 · frontend 2026.10.44 · VSIX 2026.10.26)
+
+- **One `POST /chats/:id/messages` per step.** Every tool call, LLM turn and memory step was its own request (chat #142: 57 tool calls over 22 turns, about 80 requests). Each request cost the API an access check, a membership upsert, the insert, a seq update, a chat touch and a learn-gate read.
+  - `stepOutbox.ts` (brain-embedded) now queues step rows per chat.
+  - A queued row rides along with the next conversational send for the chat, or leaves when 25 rows are queued, after 5 s at the latest, or at run end.
+  - Steps are ordered by their own `ts`, so batching cannot reorder them.
+- **Every step was persisted twice.** Steps were written as `role:'tool'` rows in `brain_chat_messages` AND posted at run end to `brain_chat_trace` (VS Code `persistRunTrace`, web `useBrainRunTrace`). Readers had to merge and dedupe the two (`mergeRecoveredTrace`).
+  - The step rows are now the only store.
+  - `pushTrace` is the one writer, through a per-run sink (`RunCell.persistStep`), so events that only reached the trace copy (dedupe stubs, replays, guard and stopped-turn events) are now step rows too.
+  - The row is built once, by `stepRow()` in `@builderforce/agent-loop`, for both the client loop and the server's `agentReply`. `agentReply` had written steps only to the trace table; its history query now skips step rows.
+  - Removed: `GET`/`POST /chats/:id/trace`, `BrainService.appendTrace`/`getTrace`, the `brainChatTrace` schema table and its swept/cascade/telemetry/copy-script entries, `postBrainTrace`, `getChatTrace`/`appendChatTrace`, `useBrainRunTrace`, `chatTrace.ts`, `traceRowToEvent`, `mergeRecoveredTrace` and `traceEventToPersistInput`.
+  - The table is dropped by migrations `1212` (primary) and transactional `0014`.
+  - Manager diagnostics derive the steps from messages (`chatStepTrace`, `conversationTurns`).
+- The extension's ambient traffic was audited and is already batched: activity flushes every 5 min, the connection beat runs every 15 min, and attention polling is adaptive. Tool calls stay sequential in the kernel (one pending slot), so the MCP relay calls cannot be batched without a concurrent kernel.
+
 ## ✅ RESOLVED 2026-10-11 — Sub-agents are clones of their parent; network failures name their cause (VSIX 2026.10.25 · agent-tools 2026.10.9 · agent-loop 2026.10.7 · brain-embedded 2026.10.18)
 
 - **Sub-agent "Unknown tool" failures (chats #141/#142).**

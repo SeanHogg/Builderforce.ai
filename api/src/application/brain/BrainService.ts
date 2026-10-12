@@ -1,9 +1,8 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { eq, and, or, desc, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
+import { eq, ne, and, or, desc, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
 import {
   brainChats,
   brainChatMessages,
-  brainChatTrace,
   chatMemories,
   chatMembers,
   chatSessions,
@@ -15,7 +14,6 @@ import {
   users,
   tenantMembers,
 } from '../../infrastructure/database/schema';
-import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { readTimelineTail } from '../../domain/shared/timelineTail';
 import { reconcileKeyedBatch, unwrittenKeys } from '../../domain/shared/keyedBatch';
@@ -38,7 +36,7 @@ import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
 import { shouldRecoverStalledTurn, isExhaustedStall, stallShape, stallRecoveryNudge, stallExhaustedNotice, modelFailoverNotice, chooseStallFailover, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS, stallRecoveryToolChoice, type ModelFallbackSurface } from '@builderforce/agent-stall';
-import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, trimRepetitionLoop, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, liftProseAskUser } from '@builderforce/agent-loop';
+import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, trimRepetitionLoop, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, liftProseAskUser, stepRow, type StepRowInput } from '@builderforce/agent-loop';
 import {
   BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN, ACCESSIBLE_ORIGINS,
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
@@ -248,52 +246,6 @@ export interface BrainChatMessageRow {
   metadata: string | null;
   seq: number;
   createdAt: Date;
-}
-
-const traceColumns = {
-  id: brainChatTrace.id,
-  turnSeq: brainChatTrace.turnSeq,
-  kind: brainChatTrace.kind,
-  label: brainChatTrace.label,
-  argsJson: brainChatTrace.argsJson,
-  resultJson: brainChatTrace.resultJson,
-  isError: brainChatTrace.isError,
-  durationMs: brainChatTrace.durationMs,
-  ttftMs: brainChatTrace.ttftMs,
-  occurredAt: brainChatTrace.occurredAt,
-  createdAt: brainChatTrace.createdAt,
-} as const;
-
-/** Per-blob cap for a persisted trace arg/result (chars) — a runaway tool result
- *  can't bloat a row; the model already gets the full result live. */
-const TRACE_JSON_MAX_CHARS = 20_000;
-
-/** An ISO instant supplied by a client → Date, or null when absent/unparseable.
- *  Null is the honest answer: the reader then falls back to the row's write time
- *  rather than ordering the timeline on a date that was never measured. */
-function parseInstant(iso: unknown): Date | null {
-  if (typeof iso !== 'string' || iso === '') return null;
-  const d = new Date(iso);
-  return Number.isFinite(d.getTime()) ? d : null;
-}
-
-/** One persisted Brain trace event (tool/LLM-turn timeline). Shape mirrors the
- *  webview's BrainTraceEvent, minus the fields we derive on insert. */
-export interface BrainTraceEventInput {
-  kind: string;
-  label?: string;
-  args?: unknown;
-  result?: unknown;
-  isError?: boolean;
-  durationMs?: number;
-  ttftMs?: number;
-  turnSeq?: number;
-  /**
-   * ISO instant at which the event HAPPENED, as the run observed it. Stored to
-   * `occurred_at`. Send it: a run posts its whole trace in ONE insert when it
-   * settles, so `created_at` is identical across the batch and cannot order it.
-   */
-  ts?: string;
 }
 
 type MessageFeedback = 'up' | 'down' | null;
@@ -1115,60 +1067,10 @@ export class BrainService {
   // -----------------------------------------------------------------------
 
   /** Verify the caller may read/write this chat (shared-access guard, 0288).
-   *  Public so the trace routes can gate before the cached read/append without
-   *  the service having to re-plumb tenantId/userId through every trace call. */
+   *  Public so a route can gate before a cached read without the service having
+   *  to re-plumb tenantId/userId through every call. */
   async canAccess(chatId: number, tenantId: number, userId: string): Promise<boolean> {
     return (await this.canAccessChat(chatId, tenantId, userId)) != null;
-  }
-
-  /** Bulk-append trace events to a chat (append-only, NO access check — the route
-   *  gates first). Neon-http has no interactive transactions, so this is a single
-   *  multi-row INSERT (one statement). Bounds each JSON blob so a runaway tool
-   *  result can't bloat a row. Returns the number of rows written. */
-  async appendTrace(chatId: number, tenantId: number, events: BrainTraceEventInput[]): Promise<{ appended: number }> {
-    if (!Array.isArray(events) || events.length === 0) return { appended: 0 };
-    const clamp = (v: unknown): string | null => {
-      if (v == null) return null;
-      const s = typeof v === 'string' ? v : JSON.stringify(v);
-      return s.length > TRACE_JSON_MAX_CHARS ? s.slice(0, TRACE_JSON_MAX_CHARS) : s;
-    };
-    const rows = events
-      .filter((e) => e && typeof e.kind === 'string' && e.kind.length > 0)
-      .map((e) => ({
-        chatId,
-        tenantId,
-        turnSeq: Number.isFinite(e.turnSeq as number) ? Number(e.turnSeq) : null,
-        kind: String(e.kind).slice(0, 24),
-        label: e.label != null ? String(e.label).slice(0, 120) : null,
-        argsJson: clamp(e.args),
-        resultJson: clamp(e.result),
-        isError: e.isError === true,
-        durationMs: Number.isFinite(e.durationMs as number) ? Number(e.durationMs) : null,
-        ttftMs: Number.isFinite(e.ttftMs as number) ? Number(e.ttftMs) : null,
-        // The instant the event happened. Unparseable or absent ⇒ null, so a reader
-        // falls back to `createdAt` instead of ordering on a bogus date.
-        occurredAt: parseInstant(e.ts),
-      }));
-    if (rows.length === 0) return { appended: 0 };
-    await runTelemetryDatabase(this.db).insert(brainChatTrace).values(rows);
-    return { appended: rows.length };
-  }
-
-  /** Read a chat's persisted trace timeline, oldest-first (insert order), capped to
-   *  its MOST RECENT `limit` steps so a long run keeps the steps that explain the
-   *  reply on screen rather than the ones that opened the chat. NO access check —
-   *  the route gates + wraps this in the read-through cache. */
-  async getTrace(chatId: number, tenantId: number, limit = 500) {
-    return readTimelineTail(
-      (rows) => runTelemetryDatabase(this.db)
-        .select(traceColumns)
-        .from(brainChatTrace)
-        .where(and(eq(brainChatTrace.chatId, chatId), eq(brainChatTrace.tenantId, tenantId)))
-        .orderBy(desc(brainChatTrace.id))
-        .limit(rows),
-      limit,
-      2000,
-    );
   }
 
   // -----------------------------------------------------------------------
@@ -1215,11 +1117,14 @@ export class BrainService {
     const apiKey = env.OPENROUTER_API_KEY;
     if (!apiKey) return { error: 'LLM not configured' as const };
 
+    // Conversation turns only: the `role:'tool'` step rows (this reply's own, and every
+    // client run's) are timeline evidence, not transcript — left in, they would eat the
+    // 80-row window and render as empty lines in the prompt.
     const msgs = await readTimelineTail(
       (rows) => this.db
         .select(messageColumns)
         .from(brainChatMessages)
-        .where(eq(brainChatMessages.chatId, chatId))
+        .where(and(eq(brainChatMessages.chatId, chatId), ne(brainChatMessages.role, 'tool')))
         .orderBy(desc(brainChatMessages.seq))
         .limit(rows),
       80,
@@ -1378,9 +1283,11 @@ export class BrainService {
     let toolCallCount = 0;
     let iterations = 0;
     /**
-     * The reply's TOOL TRACE, persisted at the end of the turn.
+     * The reply's STEPS, persisted at the end of the turn as `role:'tool'` step rows in
+     * `brain_chat_messages` — the one store for run steps, the same rows the client-driven
+     * Brain run loop writes (see {@link stepRow}).
      *
-     * This loop used to leave no server-side record of what it did: the trace table was
+     * This loop used to leave no server-side record of what it did: steps were
      * written only by the client-driven Brain run loop, so an addressed-agent reply — the
      * ONLY path the manager's accountability chat uses — was unauditable. When the manager
      * answered "the required tools have not returned results" there was literally nothing
@@ -1392,13 +1299,13 @@ export class BrainService {
      * inside the loop; one bounded append at the end is enough for a diagnostic and cannot
      * slow the reply. Best-effort throughout — a trace failure must never cost an answer.
      *
-     * Buffering is exactly why every event is stamped on the way in (see {@link record}):
+     * Buffering is exactly why every step is stamped on the way in (see {@link record}):
      * the single append at the end gives all of them the same `created_at`, which cannot
      * order them and used to leave a reopened chat's timeline regrouped by kind.
      */
-    const trace: BrainTraceEventInput[] = [];
-    /** Append a trace event, stamped with the instant it actually happened. */
-    const record = (ev: BrainTraceEventInput): void => { trace.push({ ...ev, ts: new Date().toISOString() }); };
+    const trace: StepRowInput[] = [];
+    /** Buffer a step, stamped with the instant it actually happened. */
+    const record = (step: Omit<StepRowInput, 'ts'>): void => { trace.push({ ...step, ts: new Date().toISOString() }); };
     // Budget for the announced-but-untaken tool call recovery below (shared with the
     // Brain run loop and the agent runtime via `@builderforce/agent-stall`).
     let announcementRecoveries = 0;
@@ -1530,11 +1437,10 @@ export class BrainService {
               // turn, and counting it as one would corrupt the "every turn was toolless"
               // rollup the diagnostics report computes.
               record({
-                kind: 'failover',
+                category: 'failover',
                 label: next,
                 args: { from: lastModel || activeModel || null, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
                 result: { notice: modelFailoverNotice(lastModel || activeModel, next, shape) },
-                turnSeq: iterations,
               });
               activeModel = next;
               // The new model starts with a full stall budget — the old one's failures say
@@ -1557,10 +1463,9 @@ export class BrainService {
         // evidence in the reply's trace, as its own kind so it is never counted as a turn.
         onRepetitionLoop: (_ctx, loop) => {
           record({
-            kind: 'repetition_loop',
+            category: 'repetition_loop',
             label: lastModel || activeModel || '(gateway default)',
             result: { copies: loop.copies, block: loop.block.trim().slice(0, 200) },
-            turnSeq: iterations,
           });
         },
         beforeToolCalls: (_ctx, turn, calls) => {
@@ -1597,8 +1502,8 @@ export class BrainService {
         afterDispatch: (call, result) => {
           if (call.name === ASK_USER_TOOL) return undefined;
           record({
-            kind: 'tool', label: toolIdOf(call.name), args: call.args, result: result.data,
-            isError: result.isError === true, durationMs: Date.now() - tStart, turnSeq: iterations,
+            category: 'tool', label: toolIdOf(call.name), args: call.args, result: result.data,
+            isError: result.isError === true, durationMs: Date.now() - tStart,
           });
           return undefined;
         },
@@ -1629,8 +1534,10 @@ export class BrainService {
           // stall, and without this row it is indistinguishable from a turn whose tools all
           // failed — the two have opposite fixes.
           record({
-            kind: 'llm',
+            category: 'llm',
             label: readModel(result) || activeModel || '(gateway default)',
+            finishReason,
+            textChars: content.length,
             result: {
               finishReason,
               toolCalls: toolCalls.length,
@@ -1638,7 +1545,6 @@ export class BrainService {
               replyChars: content.length,
               advertisedTools: tools.length,
             },
-            turnSeq: iterations,
           });
           return { content, toolCalls: readOpenAiToolCalls({ tool_calls: toolCalls }), meta: { message } };
         },
@@ -1691,8 +1597,10 @@ export class BrainService {
       // reply exists at all, and it was the ONLY one leaving no row — so an empty reply
       // produced HERE was invisible to the diagnostics report that exists to explain it.
       record({
-        kind: 'llm',
+        category: 'llm',
         label: readModel(finalResult) || activeModel || '(gateway default)',
+        finishReason: finalChoice.finishReason,
+        textChars: finalChoice.content.length,
         args: { synthesis: true },
         // No `advertisedTools`: this call is made WITHOUT tools by construction, and the
         // rollup reads the newest row that reports the field — writing 0 here would make
@@ -1703,7 +1611,6 @@ export class BrainService {
           toolNames: [],
           replyChars: finalChoice.content.length,
         },
-        turnSeq: iterations + 1,
       });
     }
 
@@ -1756,15 +1663,16 @@ export class BrainService {
       }
     }
 
-    // Persist the tool trace for THIS reply — BEFORE the empty-reply branch below, not
-    // after it. Until this moved, the trace was written only on the success path, so a
+    // Persist the steps of THIS reply — BEFORE the empty-reply branch below, not after
+    // it, and before the reply itself so they sit ahead of it in seq order. Until this
+    // moved, the trace was written only on the success path, so a
     // turn that produced NO reply — the exact failure the trace exists to explain — threw
     // its own evidence away and left the diagnostics report reading rows from whatever
     // older turn had last succeeded. That is how a support capture taken minutes after a
     // 400 came back describing a two-day-old, already-fixed defect. One bounded append;
-    // best-effort by design — a trace failure must never cost an answer or a diagnosis.
+    // best-effort by design — a step-write failure must never cost an answer or a diagnosis.
     if (trace.length > 0) {
-      await this.appendTrace(chatId, tenantId, trace).catch((error) => {
+      await this.appendRaw(chatId, trace.map((step) => stepRow(step))).catch((error) => {
         reportCaughtError(error, { source: "application/brain/BrainService.ts", operation: "agentReply" });
       });
     }
@@ -1844,7 +1752,7 @@ export class BrainService {
     });
     const [posted] = await this.appendRaw(chatId, [{ role: 'assistant', content: text, metadata }]);
 
-    // (The tool trace was persisted above, on BOTH the reply and no-reply paths.)
+    // (The reply's steps were persisted above, on BOTH the reply and no-reply paths.)
 
     // Audit: an agent ACTED in this chat, and on WHICH MODEL. Previously a chat turn
     // wrote no activity row at all, so the audit timeline could not answer "what model

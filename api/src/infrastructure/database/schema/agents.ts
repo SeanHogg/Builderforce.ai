@@ -2177,58 +2177,11 @@ export const platformPersonas = pgTable('platform_personas', {
 });
 
 
-// ---------------------------------------------------------------------------
-// Brain chat TRACE (0330) — the tool/LLM-turn timeline that survives a reload.
-// A Brain run streams a sequence of trace events (llm | tool | recall | learn |
-// reconcile | message | error) that the webview renders as the "thinking" /
-// tool-call timeline. Those events lived only in the browser, so reopening a
-// chat lost every tool turn. This table persists them (append-only, per chat)
-// so the frontend can rehydrate the timeline on chat load. Kept deliberately
-// simple: one row per event, JSON args/result as text, durations for the UI.
-// ---------------------------------------------------------------------------
-
-// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0013), resolved through
-// `runTelemetryDatabase()` — agent-run telemetry is grouped with the usage ledger by
-// when it is written. References to core entities are plain ids, not foreign keys.
-export const brainChatTrace = pgTable('brain_chat_trace', {
-  id:         serial('id').primaryKey(),
-  chatId:     integer('chat_id').notNull(),
-  /** The chat's tenant (migration 1191 / transactional 0013). With no key into
-   *  `brain_chats` the row cannot inherit it, and tenant erasure has to find it.
-   *  NULL only on rows written before 1191. */
-  tenantId:   integer('tenant_id'),
-  /** Monotonic per-run turn ordinal (groups events of the same assistant turn). */
-  turnSeq:    integer('turn_seq'),
-  /** 'llm'|'tool'|'message'|'recall'|'learn'|'reconcile'|'error'. */
-  kind:       varchar('kind', { length: 24 }).notNull(),
-  /** Short human label (tool name, model id, step name). */
-  label:      varchar('label', { length: 120 }),
-  /** JSON-as-text: the tool/LLM call arguments (bounded by the caller). */
-  argsJson:   text('args_json'),
-  /** JSON-as-text: the tool/LLM result (bounded by the caller). */
-  resultJson: text('result_json'),
-  isError:    boolean('is_error').notNull().default(false),
-  /** Full-step wall time (ms). */
-  durationMs: integer('duration_ms'),
-  /** Time-to-first-token (ms) for an 'llm' step; null otherwise. */
-  ttftMs:     integer('ttft_ms'),
-  /**
-   * When the event HAPPENED, as the run observed it. Distinct from `createdAt`,
-   * which is when the batch was written: a run posts its whole trace in one insert
-   * when it settles, so `createdAt` is identical across every event of that run and
-   * cannot order them. Null on rows written before migration 1128 — readers fall
-   * back to `createdAt` there rather than inventing an instant.
-   */
-  occurredAt: timestamp('occurred_at'),
-  createdAt:  timestamp('created_at').notNull().defaultNow(),
-}, (t) => [
-  index('idx_brain_chat_trace_chat').on(t.chatId, t.id),
-]);
-
 /**
  * ONE CAPTURED VERDICT about a Brain chat (migration 1178).
  *
- * The sibling above is PER-STEP and says what happened. This is per-CAPTURE and says what
+ * The step rows in `brain_chat_messages` (role 'tool', metadata kind 'step') are PER-STEP
+ * and say what happened. This is per-CAPTURE and says what
  * it meant: the surface the run was on, the cause the capture concluded ("tool budget",
  * "nobody staffed", "model refused"), and the full report — token/tool pressure, the model
  * turns, the error steps, the staffing summary — as one JSON document.

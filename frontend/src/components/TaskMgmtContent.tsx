@@ -91,7 +91,6 @@ interface BoardColumn {
   label: string;
   agents: SwimlaneAgent[];
 }
-const TASK_PRIORITIES = TASK_TASK_PRIORITIES;
 
 export interface TaskMgmtContentProps {
   /** When set, tasks are scoped to this project and project filter is hidden. */

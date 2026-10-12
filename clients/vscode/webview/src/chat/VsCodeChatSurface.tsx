@@ -58,7 +58,6 @@ import {
   CHAT_MODE_ICON,
   NEW_CHAT_MODE,
   normalizeChatMode,
-  mergeRecoveredTrace,
   projectMemoryHooks,
   lastServedModel,
   chatRosterFromParticipants,
@@ -69,7 +68,6 @@ import {
   type DirectedRecipient,
   type BrainPersonaAgent,
   type BrainPersonaChoice,
-  type BrainTraceEvent,
   type BrainMessage,
 } from '@seanhogg/builderforce-brain-embedded';
 import { authedFetch } from '../authedFetch';
@@ -112,7 +110,6 @@ import { decodeTokenClaims } from '@/lib/tokenClaims';
 import {
   effortDesc, makeT, personaModalityOptions, personaPickerLabels, promptMenuLabels, recipientPickerLabels, timelineLabels,
 } from './chatLabels';
-import { persistedToTraceEvent, type PersistedTraceRow } from './chatTrace';
 import { IconPlus, IconRename, MenuItem, PopoverMenu } from './ChatMenu';
 import { ComposerTrailingButton } from './ComposerTrailingButton';
 import { useGlobalRunState } from './useGlobalRunState';
@@ -633,24 +630,10 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     chatRoster,
   });
 
-  // Trace rehydrate (parity with the web app): on chat open, load the persisted
-  // tool/LLM-turn timeline so tool turns survive a reload — the module-level run store
-  // is empty after a webview reload, so without this a reopened chat shows only the
-  // durable user/assistant messages and loses its tool steps. We show the persisted
-  // trace ONLY when this session's live trace for the chat is empty, so a fresh run's
-  // live trace always wins and steps are never double-rendered.
-  const [persistedTrace, setPersistedTrace] = useState<BrainTraceEvent[]>([]);
-  useEffect(() => {
-    if (chatId == null) { setPersistedTrace([]); return; }
-    let cancelled = false;
-    apiReq<{ trace?: PersistedTraceRow[] }>(`/api/brain/chats/${chatId}/trace`)
-      .then((r) => { if (!cancelled) setPersistedTrace((r.trace ?? []).map(persistedToTraceEvent)); })
-      .catch(() => { if (!cancelled) setPersistedTrace([]); });
-    return () => { cancelled = true; };
-  }, [chatId, apiReq]);
-  // MERGED, not either/or: a live run must not erase the history it is continuing.
-  // Deduped by step identity in the shared primitive — see `mergeRecoveredTrace`.
-  const displayTrace = useMemo(() => mergeRecoveredTrace(persistedTrace, conv.trace), [persistedTrace, conv.trace]);
+  // The timeline renders the chat's durable step rows from `conv.messages` and dedupes
+  // them against this LIVE run trace (`buildSettledTimeline`) — one store, so a reopened
+  // chat shows its tool steps with nothing to rehydrate.
+  const displayTrace = conv.trace;
 
   // Per-turn limbic round-trip: fetch a fresh affective/personality block for THIS
   // turn's text from the host (which calls the gateway), with a short timeout so a
@@ -862,8 +845,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     },
   });
 
-  // A run's execution trace is persisted by the HOST that ran it (`brainRunHost.ts`,
-  // `persistTrace`), not here: runs execute in parallel and outlive this view, so a
+  // A run's steps are persisted as durable step rows by the run loop the HOST drives
+  // (`brainRunHost.ts`), not here: runs execute in parallel and outlive this view, so a
   // panel could only ever see — and save — the one chat it happened to be showing.
 
   const fileInputRef = useRef<HTMLInputElement>(null);

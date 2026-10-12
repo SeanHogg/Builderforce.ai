@@ -16,10 +16,13 @@
  * cause was the fourth: the system prompt named tools by catalog id, so the names matched
  * nothing in the model's tool list.)
  *
- * So this pairs each reply with the TOOL TRACE the server persisted for it — every call,
- * its arguments, whether it errored, how long it took — plus the LLM-turn rows that
- * record `toolCalls: 0`, which is the only positive evidence that a model narrated
- * instead of acting. The findings block names which of the four it was, first.
+ * So this pairs each reply with the TOOL TRACE persisted for it — every call, its
+ * arguments, whether it errored, how long it took — plus the LLM-turn steps that record
+ * `toolCalls: 0`, which is the only positive evidence that a model narrated instead of
+ * acting. The findings block names which of the four it was, first.
+ *
+ * The trace is read from the chat's durable STEP rows (`role:'tool'` messages carrying
+ * `{ kind:'step', … }`) — the ONE store every run writes — via {@link chatStepTrace}.
  *
  * PURE — no clock, no fetch, no DOM, no i18n (see {@link ./diagnosticsReport} for why the
  * body is deliberately locale-independent English while the button around it is not).
@@ -29,8 +32,11 @@ import {
   announcesUntakenAction,
   toolNamesMentionedIn,
   catalogToolNamesMentionedIn,
+  traceWithPersistedSteps,
+  isStepMessage,
+  type BrainTraceEvent,
 } from '@seanhogg/builderforce-brain-embedded';
-import type { BrainChatTraceRow, BrainMessage, ManagerChatHandle } from './builderforceApi';
+import type { BrainMessage, ManagerChatHandle } from './builderforceApi';
 import {
   capText,
   environmentLines,
@@ -45,7 +51,7 @@ import type { FindingSeverity, ManagerFinding } from './managerDiagnostics';
 /** Message window: a long accountability thread is head + tail, never silently cut. */
 export const MESSAGE_WINDOW_HEAD = 6;
 export const MESSAGE_WINDOW_TAIL = 24;
-/** Trace window. One reply can produce a dozen rows; a thread can produce hundreds. */
+/** Trace window. One reply can produce a dozen steps; a thread can produce hundreds. */
 export const TRACE_WINDOW_HEAD = 10;
 export const TRACE_WINDOW_TAIL = 40;
 
@@ -58,12 +64,27 @@ export interface ManagerChatDiagnosticsInput {
   messages: BrainMessage[];
   messagesError?: string | null;
   /**
-   * The persisted tool trace. `null` when the read failed — STATED, never rendered as an
-   * empty trace, which would fire the "the manager never called anything" finding off a
-   * network error and send the reader after a bug that is not there.
+   * The persisted tool trace — the chat's step rows as trace events ({@link chatStepTrace}).
+   * `null` when the read failed — STATED, never rendered as an empty trace, which would
+   * fire the "the manager never called anything" finding off a network error and send the
+   * reader after a bug that is not there.
    */
-  trace: BrainChatTraceRow[] | null;
+  trace: BrainTraceEvent[] | null;
   traceError?: string | null;
+}
+
+/**
+ * The tool trace of a chat, from its durable step rows: every `role:'tool'` message whose
+ * metadata is a `{ kind:'step', … }` step, as trace events in time order. PURE — the same
+ * reader the timeline and the triage diagnostics use, so all three agree on what ran.
+ */
+export function chatStepTrace(messages: BrainMessage[]): BrainTraceEvent[] {
+  return traceWithPersistedSteps(messages, []);
+}
+
+/** The visible conversation: the user/assistant turns, never the step rows. */
+export function conversationTurns(messages: readonly BrainMessage[]): BrainMessage[] {
+  return messages.filter((m) => !isStepMessage(m));
 }
 
 /** Read the agent display name a reply was attributed with (`metadata.authoredBy`). */
@@ -90,16 +111,16 @@ export function provenanceOf(message: BrainMessage): { model?: string; account?:
 
 /** What the trace says happened, rolled up. PURE. */
 export interface TraceRollup {
-  /** Rows of kind 'tool' — an actual platform call. */
+  /** Steps of category 'tool' — an actual platform call. */
   toolCalls: number;
   toolErrors: number;
-  /** Rows of kind 'llm' — one per model turn in the reply loop. */
+  /** Steps of category 'llm' — one per model turn in the reply loop. */
   modelTurns: number;
   /** Model turns that emitted ZERO tool calls. */
   turnsWithoutTools: number;
   /** Tool ids called, most frequent first. */
   byTool: Array<{ tool: string; count: number; errors: number }>;
-  /** How many tools the model was actually offered, per the newest llm row that says. */
+  /** How many tools the model was actually offered, per the newest llm step that says. */
   advertisedTools: number | null;
   /**
    * Distinct models that actually ran, in first-seen order.
@@ -110,16 +131,16 @@ export interface TraceRollup {
    * and the finding used to assert the second while the trace showed the first.
    */
   models: string[];
-  /** `failover` rows — the loop deciding to switch models. Zero with `models.length === 1`
+  /** Failover steps — the loop deciding to switch models. Zero with `models.length === 1`
    *  is positive evidence the run never left its first model. */
   failovers: number;
 }
 
-/** Row shapes the server writes into `result` for each trace kind. */
+/** The shape an `llm` step carries in `result`. */
 interface LlmTraceResult { toolCalls?: number; advertisedTools?: number; finishReason?: string; toolNames?: string[] }
 
-function readLlmResult(row: BrainChatTraceRow): LlmTraceResult | null {
-  const r = row.resultJson;
+function readLlmResult(ev: BrainTraceEvent): LlmTraceResult | null {
+  const r = ev.result;
   if (r == null) return null;
   try {
     const parsed: unknown = typeof r === 'string' ? JSON.parse(r) : r;
@@ -129,28 +150,37 @@ function readLlmResult(row: BrainChatTraceRow): LlmTraceResult | null {
   }
 }
 
-export function summarizeTrace(trace: readonly BrainChatTraceRow[]): TraceRollup {
+/**
+ * A model-failover decision. The agent-reply loop records it as its own `failover`
+ * category (a decision, not a model turn); the Brain run loop records it as the
+ * `loop.model_failover` message step. Both count, neither as a turn.
+ */
+function isFailoverStep(ev: BrainTraceEvent): boolean {
+  return (ev.category as string) === 'failover' || (ev.category === 'message' && ev.label === 'loop.model_failover');
+}
+
+export function summarizeTrace(trace: readonly BrainTraceEvent[]): TraceRollup {
   const byTool = new Map<string, { count: number; errors: number }>();
   const models: string[] = [];
   const out: TraceRollup = {
     toolCalls: 0, toolErrors: 0, modelTurns: 0, turnsWithoutTools: 0,
     byTool: [], advertisedTools: null, models, failovers: 0,
   };
-  for (const row of trace) {
-    if (row.kind === 'failover') { out.failovers += 1; continue; }
-    if (row.kind === 'tool') {
+  for (const ev of trace) {
+    if (isFailoverStep(ev)) { out.failovers += 1; continue; }
+    if (ev.category === 'tool') {
       out.toolCalls += 1;
-      const key = row.label || '(unlabelled)';
+      const key = ev.label || '(unlabelled)';
       const b = byTool.get(key) ?? { count: 0, errors: 0 };
       b.count += 1;
-      if (row.isError) { b.errors += 1; out.toolErrors += 1; }
+      if (ev.isError) { b.errors += 1; out.toolErrors += 1; }
       byTool.set(key, b);
       continue;
     }
-    if (row.kind !== 'llm') continue;
+    if (ev.category !== 'llm') continue;
     out.modelTurns += 1;
-    if (row.label && !models.includes(row.label)) models.push(row.label);
-    const parsed = readLlmResult(row);
+    if (ev.label && !models.includes(ev.label)) models.push(ev.label);
+    const parsed = readLlmResult(ev);
     if (parsed?.toolCalls === 0) out.turnsWithoutTools += 1;
     if (typeof parsed?.advertisedTools === 'number') out.advertisedTools = parsed.advertisedTools;
   }
@@ -277,7 +307,7 @@ export function managerChatFindings(input: ManagerChatDiagnosticsInput): Manager
 
   if (replies.length > 0 && input.trace.length === 0) {
     push('info', 'trace_empty',
-      'The trace is empty. Replies produced before server-side trace capture shipped carry no rows — ask the manager one more question and re-capture to get a trace for it.');
+      'The trace is empty. Replies produced before their steps were persisted as step rows carry none — ask the manager one more question and re-capture to get a trace for it.');
   }
 
   // Both sources, because they answer different questions and the second one only exists
@@ -320,7 +350,17 @@ function formatTranscript(messages: readonly BrainMessage[]): string[] {
   });
 }
 
-function formatTrace(trace: readonly BrainChatTraceRow[], roll: TraceRollup): string[] {
+/** A step's args/result as report text — strings verbatim, anything else as JSON. */
+function stepText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function formatTrace(trace: readonly BrainTraceEvent[], roll: TraceRollup): string[] {
   const out: string[] = [];
   out.push(line('tool calls', roll.toolCalls));
   out.push(line('tool calls that FAILED', roll.toolErrors));
@@ -340,23 +380,23 @@ function formatTrace(trace: readonly BrainChatTraceRow[], roll: TraceRollup): st
     out.push(`  ${t.tool}: ${t.count}${t.errors > 0 ? `  FAILED=${t.errors}` : ''}`);
   }
   out.push('');
-  if (trace.length === 0) return [...out, '(no trace rows)'];
+  if (trace.length === 0) return [...out, '(no trace steps)'];
 
-  const rendered = trace.map((r, i) => {
-    const head = `${String(i + 1).padStart(3, ' ')}. [${r.kind}] ${r.label ?? '—'}`
-      + `  turn=${r.turnSeq ?? '—'}${r.isError ? '  ERROR' : ''}`
-      + `${r.durationMs != null ? `  ${r.durationMs}ms` : ''}  at=${r.createdAt}`;
+  const rendered = trace.map((ev, i) => {
+    const head = `${String(i + 1).padStart(3, ' ')}. [${ev.category}] ${ev.label || '—'}`
+      + `${ev.isError ? '  ERROR' : ''}`
+      + `${ev.durationMs != null ? `  ${ev.durationMs}ms` : ''}  at=${ev.ts || '—'}`;
     const parts = [head];
-    if (r.argsJson) parts.push(`     args:   ${capText(String(r.argsJson), 600)}`);
-    if (r.resultJson) parts.push(`     result: ${capText(String(r.resultJson), 900)}`);
+    if (ev.args != null) parts.push(`     args:   ${capText(stepText(ev.args), 600)}`);
+    if (ev.result != null) parts.push(`     result: ${capText(stepText(ev.result), 900)}`);
     return parts.join('\n');
   });
   out.push(...windowRows(rendered, {
     head: TRACE_WINDOW_HEAD,
     tail: TRACE_WINDOW_TAIL,
     note: (elided) => [
-      `     … ${elided} trace row${elided === 1 ? '' : 's'} elided from the MIDDLE. The rollup above counts`,
-      '       every row; re-fetch GET /api/brain/chats/<id>/trace for the untrimmed list.',
+      `     … ${elided} trace step${elided === 1 ? '' : 's'} elided from the MIDDLE. The rollup above counts`,
+      "       every step; the chat's step rows (role 'tool' messages) hold the untrimmed list.",
     ],
   }));
   return out;
@@ -405,7 +445,7 @@ export function buildManagerChatDiagnosticsReport(
   out.push('');
 
   out.push('-- Tool trace (what the manager actually did) --');
-  out.push('One row per platform tool call and one per model turn. A model turn recording');
+  out.push('One step per platform tool call and one per model turn. A model turn recording');
   out.push('toolCalls=0 is the ONLY positive evidence that the manager narrated instead of');
   out.push('acting — the transcript cannot show it.');
   if (input.trace == null) {

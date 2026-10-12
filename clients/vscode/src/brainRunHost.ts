@@ -28,7 +28,6 @@ import {
   clearRunError,
   getGlobalRunState,
   getRunSnapshot,
-  getRunTrace,
   isFailedToolResult,
   isRunning,
   nextFallbackModel,
@@ -39,8 +38,6 @@ import {
   stopRun,
   subscribeRun,
   subscribeRunStore,
-  traceEventToPersistInput,
-  type PersistTraceEventInput,
   type BrainRunOutcome,
   type BrainRunPersistence,
   type BrainStreamFn,
@@ -86,13 +83,6 @@ export interface BrainRunHostPorts {
   stream(): Promise<BrainStreamFn>;
   /** Where the loop persists its turns — the same Brain store the panel reads. */
   persistence: BrainRunPersistence;
-  /**
-   * Persist ONE run's tool/LLM steps (just that run's, never the session's earlier
-   * ones) when it settles, so the timeline rehydrates after a reload. Owned here, not
-   * by a panel: runs execute in parallel and outlive their view, and a panel could only
-   * ever save the one chat it happened to be showing. Best-effort; a throw is swallowed.
-   */
-  persistTrace?(chatId: number, events: PersistTraceEventInput[]): Promise<unknown>;
   /** Project-Evermind hooks for a project (recall, memory-first answer, cache). */
   evermind(projectId: number): EvermindRunHooks | undefined;
   /**
@@ -222,26 +212,6 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     }
   };
 
-  /** Where a chat's session-lived trace stood when a run began, so the run persists
-   *  only its OWN steps — the earlier ones were saved by the runs that made them. */
-  const traceMark = (chatId: number) => {
-    const trace = getRunTrace(chatId);
-    return { len: trace.length, first: trace[0], at: new Date().toISOString() };
-  };
-  const persistRunTrace = async (runKey: number, chatId: number, mark: ReturnType<typeof traceMark>): Promise<void> => {
-    if (!ports.persistTrace) return;
-    const trace = getRunTrace(runKey);
-    // The store appends in place and trims from the head only past its bound (see
-    // `syncMessageFor`); if the head moved, fall back to the run's own time window.
-    const continues = mark.len <= trace.length && (mark.len === 0 || trace[0] === mark.first);
-    const events = (continues ? trace.slice(mark.len) : trace.filter((e) => e.ts >= mark.at)).map(traceEventToPersistInput);
-    if (events.length === 0) return;
-    try {
-      await ports.persistTrace(chatId, events);
-    } catch {
-      /* best-effort — a lost trace is never a run failure */
-    }
-  };
   /** The server chat a run lives in — its owner's, for a sub-agent. */
   const chatOf = (p: RunSpec): number => p.child?.lineage.rootChatId ?? p.chatId;
   const announce = (chatId: number): void => broadcast({ type: "run.children", chatId, children: registry.viewsIn(chatId) });
@@ -258,17 +228,14 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     watch(key);
     // Already running (a second tab, a double submit): the live run owns this key.
     // Returning before the setup keeps a no-op start from deleting the live run's Auto
-    // flag and posting its half-finished trace on the way out.
+    // flag on the way out.
     if (active.has(key) || isRunning(key)) return;
     active.add(key);
     specs.set(key, p);
-    const mark = traceMark(key);
     try {
       await runTurn(p);
     } finally {
       active.delete(key);
-      // Not awaited: `run.settled`, which frees the panel's composer, must not wait on it.
-      void persistRunTrace(key, chatOf(p), mark);
       // A child's report that arrived as this run was ending is heard now.
       childHost.afterRun(key);
     }

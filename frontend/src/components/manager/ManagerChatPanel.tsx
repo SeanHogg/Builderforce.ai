@@ -1,10 +1,10 @@
 import { Icon } from '@/components/ui/Icon';
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatInput } from '@/components/ChatInput';
 import { CopyButton } from '@/components/CopyButton';
-import { buildManagerChatDiagnosticsReport } from '@/lib/managerChatDiagnostics';
+import { buildManagerChatDiagnosticsReport, chatStepTrace, conversationTurns } from '@/lib/managerChatDiagnostics';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import {
   managerApi, brain,
@@ -54,6 +54,15 @@ const mutedStyle: CSSProperties = { color: 'var(--text-muted)', fontSize: '0.8re
 /** The accountability questions, as i18n keys under `manager.ask.starter`. */
 const STARTERS = ['today', 'blocked', 'plan'] as const;
 
+/**
+ * How many messages the transcript reads. The chat also holds each reply's durable STEP
+ * rows (`role:'tool'`), which count against the window but never render — so it is sized
+ * for the turns AND their steps, not for turns alone.
+ */
+const TRANSCRIPT_LIMIT = 200;
+/** The diagnostics read: the server's cap, so the trace covers as much of the thread as it can. */
+const DIAGNOSTICS_LIMIT = 500;
+
 /** Read the agent display name a reply was attributed with (`metadata.authoredBy`). */
 function authorOf(message: BrainMessage, fallback: string): string {
   if (!message.metadata) return fallback;
@@ -100,7 +109,7 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
       setHandle(h);
       // Compact mode renders starters only — skip the transcript fetch entirely rather
       // than loading a conversation it will not show.
-      if (!compact) setMessages(await brain.getMessages(h.chatId, 60));
+      if (!compact) setMessages(await brain.getMessages(h.chatId, TRANSCRIPT_LIMIT));
     } catch (e) {
       const message = faultMessage(e, t('error'));
       if (message) fail(message);
@@ -111,9 +120,12 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
 
   useEffect(() => { void load(); }, [load]);
 
+  // The dialogue the person reads: user/assistant turns, never the step rows.
+  const turns = useMemo(() => conversationTurns(messages), [messages]);
+
   // Keep the newest turn in view as the conversation grows — but never on the first
   // paint of a page the user is reading from the top.
-  const hasMessages = messages.length > 0;
+  const hasMessages = turns.length > 0;
   useEffect(() => {
     if (!compact && hasMessages) endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [compact, hasMessages, thinking]);
@@ -150,7 +162,7 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
         // persisted even though the reply failed, and dropping it would show the user a
         // conversation that lost their message. Inside the action so the composer stays
         // disabled until the re-read lands.
-        await brain.getMessages(chatId, 60).then(setMessages).catch(() => undefined);
+        await brain.getMessages(chatId, TRANSCRIPT_LIMIT).then(setMessages).catch(() => undefined);
         throw e;
       }
     }, { failure: t('error') });
@@ -170,14 +182,15 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
    * The one-paste HANDOVER for this conversation: the transcript AND the tool trace that
    * explains it.
    *
-   * Fetched on click, never on render — and the trace is fetched with `refresh` because
-   * the server now appends to it on every reply, which a client cache invalidated only by
-   * client writes can never learn about. A capture that quietly returned a pre-reply trace
-   * would be wrong in exactly the way that wastes the session it was taken for.
+   * Fetched on click, never on render. The trace is the chat's durable STEP rows, re-read
+   * fresh from the server: each reply writes its steps server-side, and the transcript in
+   * state only ever appended the reply itself — a capture built from state alone would
+   * quietly carry a pre-reply trace, wrong in exactly the way that wastes the session it
+   * was taken for.
    *
-   * Messages come from state rather than a re-fetch: what the report must explain is the
-   * conversation the person is LOOKING AT, and re-reading could show them a report about a
-   * thread that has moved on.
+   * The transcript comes from state rather than that re-fetch: what the report must explain
+   * is the conversation the person is LOOKING AT, and re-reading could show them a report
+   * about a thread that has moved on.
    *
    * Declared ABOVE the `compact` early return, with every other hook — a hook after a
    * conditional return changes hook order between the compact and full renders, which
@@ -185,21 +198,22 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
    * state the first time the same instance rendered both ways.
    */
   const buildDiagnostics = useCallback(async (): Promise<string> => {
-    const trace = handle
-      ? await brain.getChatTrace(handle.chatId, { refresh: true }).catch(() => null)
+    const fresh = handle
+      ? await brain.getMessages(handle.chatId, DIAGNOSTICS_LIMIT).catch(() => null)
       : null;
+    const trace = fresh ? chatStepTrace(fresh) : null;
     return buildManagerChatDiagnosticsReport(
       {
         projectId,
         handle,
         handleError: handle == null ? (error ?? 'the manager chat could not be resolved') : null,
-        messages,
+        messages: turns,
         trace,
         traceError: handle != null && trace == null ? 'the tool trace could not be loaded' : null,
       },
       await captureDiagnosticsContext(),
     );
-  }, [projectId, handle, messages, error]);
+  }, [projectId, handle, turns, error]);
 
   const starterRow = (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -286,10 +300,10 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
       )}
 
       <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {messages.length === 0 ? (
+        {turns.length === 0 ? (
           <p style={{ ...mutedStyle, margin: 0 }}>{t('empty')}</p>
         ) : (
-          messages.map((m) => {
+          turns.map((m) => {
             const mine = m.role === 'user';
             return (
               <article

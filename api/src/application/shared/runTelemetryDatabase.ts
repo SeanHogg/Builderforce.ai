@@ -2,9 +2,9 @@
  * THE DATABASE THAT OWNS AGENT-RUN TELEMETRY.
  *
  * `tool_audit_events` (+ its `tool_audit_daily` fold and the `execution_claims` /
- * `execution_claim_evidence` that cite it), `usage_snapshots`, `brain_chat_trace`,
- * `run_context_state` and `run_model_outcomes` live on the operational endpoint beside
- * the usage ledger, not on core.
+ * `execution_claim_evidence` that cite it), `usage_snapshots`, `run_context_state` and
+ * `run_model_outcomes` live on the operational endpoint beside the usage ledger, not on
+ * core.
  *
  * WHY THERE. Neon bills each project's compute by its own awake time, so tables are
  * grouped by WHEN they are written, not by subject. These are written at the same
@@ -25,7 +25,6 @@
 import { getTableName } from 'drizzle-orm';
 import { siblingDatabaseOf, type Db } from '../../infrastructure/database/connection';
 import {
-  brainChatTrace,
   executionClaimEvidence,
   executionClaims,
   runContextState,
@@ -36,12 +35,12 @@ import {
 } from '../../infrastructure/database/schema';
 
 /**
- * The relations this database owns — `transactional-migrations/0013` creates exactly
- * these. Derived from the Drizzle tables so a rename cannot drop one back onto core.
- * Read by code that is generic over tables and knows a relation only by name.
+ * The relations this database owns — the ones `transactional-migrations/0013` creates,
+ * less any a later migration on that track dropped (`brain_chat_trace`, 0014). Derived
+ * from the Drizzle tables so a rename cannot drop one back onto core. Read by code that is generic over tables and knows a relation only by name.
  */
 export const RUN_TELEMETRY_TABLES: ReadonlySet<string> = new Set(
-  [toolAuditEvents, toolAuditDaily, executionClaims, executionClaimEvidence, usageSnapshots, brainChatTrace, runContextState, runModelOutcomes]
+  [toolAuditEvents, toolAuditDaily, executionClaims, executionClaimEvidence, usageSnapshots, runContextState, runModelOutcomes]
     .map((table) => getTableName(table)),
 );
 

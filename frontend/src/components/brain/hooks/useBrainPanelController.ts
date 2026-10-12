@@ -35,7 +35,6 @@ import { useBrainTicketables } from './useBrainTicketables';
 import { useBrainSystemContext } from './useBrainSystemContext';
 import { useBrainChatMemory } from './useBrainChatMemory';
 import { useBrainConsolidateFork } from './useBrainConsolidateFork';
-import { useBrainRunTrace } from './useBrainRunTrace';
 import { useBrainRepoContext } from './useBrainRepoContext';
 import { useBrainPanelSeeds } from './useBrainPanelSeeds';
 import { usePinnedProjectChat } from './usePinnedProjectChat';
@@ -253,7 +252,10 @@ export function useBrainPanelController({
   }, [setAutoApproveMode, resolveConfirm]);
 
   const consolidation = useBrainConsolidateFork({ chats, conv, pinnedProjectId, viewingProjectId });
-  const timelineTrace = useBrainRunTrace(chats.activeChatId, conv.trace);
+  // The timeline renders the chat's durable step rows from `conv.messages` and dedupes
+  // them against this LIVE run trace (`buildSettledTimeline`) — one store, nothing to
+  // rehydrate.
+  const timelineTrace = conv.trace;
 
   // Who the next message goes to — the shared composer state the editor uses too:
   // reset when switching chats, drops a pick that has since left the roster, and

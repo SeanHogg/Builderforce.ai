@@ -238,7 +238,6 @@ __export(src_exports, {
   localToolsIn: () => localToolsIn,
   mcpActionsFrom: () => mcpActionsFrom,
   mentionRecipient: () => mentionRecipient,
-  mergeRecoveredTrace: () => mergeRecoveredTrace,
   midRunNotice: () => midRunNotice,
   modalityPersonaChoice: () => modalityPersonaChoice,
   modelCategoryLabel: () => modelCategoryLabel,
@@ -329,7 +328,6 @@ __export(src_exports, {
   toolExposureInTrace: () => toolExposureInTrace,
   toolNamesMentionedIn: () => toolNamesMentionedIn,
   toolSpecsFor: () => toolSpecsFor,
-  traceEventToPersistInput: () => traceEventToPersistInput,
   traceWithPersistedSteps: () => traceWithPersistedSteps,
   trimToolResult: () => trimToolResult,
   turnInterruption: () => turnInterruption,
@@ -908,6 +906,38 @@ var NARRATION_OPENER = new RegExp(
 
 // ../packages/agent-loop/src/turnPhase.ts
 var MID_TURN_META_KEY = "midTurn";
+
+// ../packages/agent-loop/src/stepRow.ts
+var STEP_RESULT_CAP = 4e3;
+function capped(value) {
+  let s;
+  try {
+    s = JSON.stringify(value ?? null);
+  } catch {
+    return String(value);
+  }
+  return s.length > STEP_RESULT_CAP ? `${s.slice(0, STEP_RESULT_CAP)}\u2026[${s.length - STEP_RESULT_CAP} more chars]` : value ?? null;
+}
+function stepRow(step) {
+  const metadata = JSON.stringify({
+    kind: "step",
+    category: step.category,
+    label: step.label,
+    args: step.args ?? null,
+    result: capped(step.result),
+    isError: step.isError ?? false,
+    // Diagnostics scalars — tiny, and the whole point of keeping the row.
+    ...step.durationMs != null ? { durationMs: step.durationMs } : {},
+    ...step.resultBytes != null ? { resultBytes: step.resultBytes } : {},
+    ...step.truncated ? { truncated: true } : {},
+    ...step.usage ? { usage: step.usage } : {},
+    ...step.finishReason != null ? { finishReason: step.finishReason } : {},
+    ...step.textChars != null ? { textChars: step.textChars } : {},
+    ...step.ttftMs != null ? { ttftMs: step.ttftMs } : {},
+    ts: step.ts
+  });
+  return { role: "tool", content: "", metadata };
+}
 
 // ../packages/agent-loop/src/reasoning.ts
 var REASONING_TAG = "think(?:ing)?|thought|antthinking|scratchpad|reasoning";
@@ -4774,18 +4804,6 @@ function consolidationMarkerContent(summary) {
 }
 
 // src/persistedSteps.ts
-function traceEventToPersistInput(ev) {
-  return {
-    kind: ev.category,
-    label: ev.label,
-    args: ev.args,
-    result: ev.result,
-    isError: ev.isError,
-    durationMs: ev.durationMs,
-    ttftMs: ev.ttftMs,
-    ts: ev.ts
-  };
-}
 function stepSig(category, label, tsIso) {
   return `${category}|${label}|${tsIso ?? ""}`;
 }
@@ -4846,13 +4864,6 @@ function traceWithPersistedSteps(messages, trace) {
   }
   if (fromMessages.length === 0) return trace;
   return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
-}
-function mergeRecoveredTrace(recovered, live2) {
-  if (recovered.length === 0) return live2;
-  if (live2.length === 0) return recovered;
-  const liveSigs = new Set(live2.map((e) => stepSig(e.category, e.label, e.ts)));
-  const kept = recovered.filter((e) => !liveSigs.has(stepSig(e.category, e.label, e.ts)));
-  return kept.length === 0 ? live2 : [...kept, ...live2];
 }
 
 // src/priorResearch.ts
@@ -6981,6 +6992,51 @@ function ratedTurnContext(messages, messageId) {
   };
 }
 
+// src/stepOutbox.ts
+var STEP_BATCH_MAX = 25;
+var STEP_BATCH_WAIT_MS = 5e3;
+var isStepRow = (m) => m.role === "tool";
+function batchStepPersistence(base, opts = {}) {
+  const maxRows = opts.maxRows ?? STEP_BATCH_MAX;
+  const waitMs = opts.waitMs ?? STEP_BATCH_WAIT_MS;
+  const queues = /* @__PURE__ */ new Map();
+  const timers = /* @__PURE__ */ new Map();
+  const take = (chatId) => {
+    const timer = timers.get(chatId);
+    if (timer !== void 0) clearTimeout(timer);
+    timers.delete(chatId);
+    const rows = queues.get(chatId) ?? [];
+    queues.delete(chatId);
+    return rows;
+  };
+  const flushChat = async (chatId) => {
+    const rows = take(chatId);
+    if (rows.length === 0) return;
+    await base.sendMessages(chatId, rows).catch(() => {
+    });
+  };
+  const sendMessages = async (chatId, messages) => {
+    if (messages.length > 0 && messages.every(isStepRow)) {
+      const queue = queues.get(chatId) ?? [];
+      queue.push(...messages);
+      queues.set(chatId, queue);
+      if (queue.length >= maxRows) void flushChat(chatId);
+      else if (!timers.has(chatId)) timers.set(chatId, setTimeout(() => void flushChat(chatId), waitMs));
+      return [];
+    }
+    const pending = take(chatId);
+    if (pending.length === 0) return base.sendMessages(chatId, messages);
+    const saved = await base.sendMessages(chatId, [...pending, ...messages]);
+    return saved.slice(pending.length);
+  };
+  return {
+    persistence: { ...base, sendMessages },
+    async flush() {
+      await Promise.all([...queues.keys()].map(flushChat));
+    }
+  };
+}
+
 // src/runDriver.ts
 var installed = null;
 function installRunDriver(driver) {
@@ -8254,6 +8310,7 @@ function makeCell() {
     deltaTicketId: null,
     deltaRecordedFiles: [],
     runTraceFrom: 0,
+    persistStep: null,
     compactMemo: null,
     liveTurn: null,
     stoppedTurn: null,
@@ -8316,6 +8373,7 @@ function setActivity(c, activity) {
 }
 function pushTrace(c, ev) {
   c.trace.push(ev);
+  c.persistStep?.(ev);
   if (c.trace.length > MAX_TRACE_EVENTS) {
     const dropped = c.trace.length - MAX_TRACE_EVENTS;
     c.trace.splice(0, dropped);
@@ -8326,41 +8384,12 @@ function pushTrace(c, ev) {
 function runTrace(c) {
   return c.trace.slice(c.runTraceFrom);
 }
-var STEP_RESULT_CAP = 4e3;
 function persistStep(chatId, persistence, ev) {
-  let result = ev.result ?? null;
-  try {
-    const s = JSON.stringify(result);
-    if (s.length > STEP_RESULT_CAP) result = `${s.slice(0, STEP_RESULT_CAP)}\u2026[${s.length - STEP_RESULT_CAP} more chars]`;
-  } catch {
-    result = String(result);
-  }
-  const metadata = JSON.stringify({
-    kind: "step",
-    category: ev.category,
-    label: ev.label,
-    args: ev.args ?? null,
-    result,
-    isError: ev.isError ?? false,
-    ...ev.durationMs != null ? { durationMs: ev.durationMs } : {},
-    // Diagnostics scalars — tiny, and the whole point of keeping the row.
-    ...ev.resultBytes != null ? { resultBytes: ev.resultBytes } : {},
-    ...ev.truncated ? { truncated: true } : {},
-    ...ev.usage ? { usage: ev.usage } : {},
-    ...ev.finishReason != null ? { finishReason: ev.finishReason } : {},
-    ...ev.textChars != null ? { textChars: ev.textChars } : {},
-    ...ev.ttftMs != null ? { ttftMs: ev.ttftMs } : {},
-    ts: ev.ts
-  });
-  void persistence.sendMessages(chatId, [{ role: "tool", content: "", metadata }]).catch(() => {
+  void persistence.sendMessages(chatId, [stepRow(ev)]).catch(() => {
   });
 }
-function pushDurableStep(c, chatId, persistence, ev) {
-  pushTrace(c, ev);
-  persistStep(chatId, persistence, ev);
-}
-function recordRunFailure(c, chatId, persistence, label, message) {
-  pushDurableStep(c, chatId, persistence, {
+function recordRunFailure(c, label, message) {
+  pushTrace(c, {
     ts: nowIso(),
     category: "error",
     label,
@@ -8498,7 +8527,6 @@ async function keepStoppedTurn(chatId, c, persistence) {
   const stopped = c.stoppedTurn;
   c.stoppedTurn = null;
   if (!stopped) return;
-  persistStep(chatId, persistence, stopped.event);
   const text = canonicalTurnText(stopped.text);
   if (!text) return;
   const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: stoppedTurnMetadata(stopped.source) }]);
@@ -8575,7 +8603,11 @@ async function startRun(runKey, request) {
   if (c.running) return;
   const lineage = request.lineage;
   const chatId = lineage?.rootChatId ?? runKey;
-  const req = lineage ? { ...request, persistence: lineagePersistence(request.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) } : request;
+  const steps = batchStepPersistence(
+    lineage ? lineagePersistence(request.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) : request.persistence
+  );
+  const req = { ...request, persistence: steps.persistence };
+  c.persistStep = (ev) => persistStep(chatId, steps.persistence, ev);
   c.running = true;
   c.error = "";
   c.errorAction = null;
@@ -8606,7 +8638,7 @@ async function startRun(runKey, request) {
     if (!c.abort?.signal.aborted) {
       c.error = e instanceof Error ? e.message : "Reply failed";
       c.errorAction = chatErrorAction(e);
-      recordRunFailure(c, chatId, req.persistence, "agent.run", c.error);
+      recordRunFailure(c, "agent.run", c.error);
     }
   } finally {
     const aborted = c.abort?.signal.aborted ?? false;
@@ -8654,6 +8686,8 @@ async function startRun(runKey, request) {
       projectId: req.projectId
     });
     if (outcome) void req.reportOutcome(outcome).catch(() => void 0);
+    c.persistStep = null;
+    void steps.flush();
     c.activity = null;
     emit(c);
   }
@@ -8688,7 +8722,7 @@ async function recordCodeChangeTicket(chatId, c, req, phase) {
     if (c.deltaTicketId == null && typeof id === "number") c.deltaTicketId = id;
     c.ticketRecorded = true;
   }
-  pushDurableStep(c, chatId, req.persistence, {
+  pushTrace(c, {
     ts: nowIso(),
     category: "tool",
     label: "builtin_tickets_from_delta",
@@ -8717,7 +8751,7 @@ async function advanceLinkedTickets(chatId, c, req) {
     } catch (e) {
       out = { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
-    pushDurableStep(c, chatId, req.persistence, {
+    pushTrace(c, {
       ts: nowIso(),
       category: "tool",
       label: "builtin_tasks_update",
@@ -8746,7 +8780,7 @@ async function completeLinkedTickets(chatId, c, req, select, reason) {
     } catch (e) {
       out = { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
-    pushDurableStep(c, chatId, req.persistence, {
+    pushTrace(c, {
       ts: nowIso(),
       category: "tool",
       label: "builtin_tasks_update",
@@ -8759,7 +8793,7 @@ async function completeLinkedTickets(chatId, c, req, select, reason) {
     });
   }
 }
-async function autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, out) {
+async function autoLinkCreatedItem(chatId, c, runTool, toolName, out) {
   const link = workItemLinkFromCreate(toolName, out);
   if (!link) return;
   const toolStart = nowMs2();
@@ -8775,7 +8809,7 @@ async function autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, ou
     result = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
   if (!isFailedToolResult(result)) c.ticketRecorded = true;
-  pushDurableStep(c, chatId, persistence, {
+  pushTrace(c, {
     ts: nowIso(),
     category: "tool",
     label: "builtin_chats_link_ticket",
@@ -8821,7 +8855,7 @@ async function runLoop(chatId, c, req, runKey) {
           systemPrompt = `${systemPrompt}
 
 ${block}`;
-          pushDurableStep(c, chatId, persistence, {
+          pushTrace(c, {
             ts: nowIso(),
             category: "recall",
             label: "evermind.recall",
@@ -8848,7 +8882,7 @@ ${block}`;
         const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
         c.streamingText = "";
         recordAppended(c, assistantMsg);
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: "recall",
           label: memAnswer.source === "evermind" ? "evermind.answer" : "memory.answer",
@@ -8957,7 +8991,7 @@ ${continuationDirective()}`;
   const emitEvermindLearnReconcile = (assistantMsg, finalText) => {
     const learn = assistantMsg?.evermindLearn;
     if (learn?.learned) {
-      pushDurableStep(c, chatId, persistence, {
+      pushTrace(c, {
         ts: nowIso(),
         category: "learn",
         label: "evermind.learn",
@@ -8967,7 +9001,7 @@ ${continuationDirective()}`;
       });
       const reconciled = recalled?.items ? (0, import_evermind.countReconciledMemories)(recalled.items, finalText) : 0;
       if (reconciled > 0) {
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: "reconcile",
           label: "evermind.reconcile",
@@ -8975,7 +9009,7 @@ ${continuationDirective()}`;
         });
       }
     } else if (learn && learn.reason && learn.reason !== "too-short") {
-      pushDurableStep(c, chatId, persistence, {
+      pushTrace(c, {
         ts: nowIso(),
         category: "learn",
         label: "evermind.learn",
@@ -9015,7 +9049,7 @@ ${continuationDirective()}`;
       })) {
         delegationRecoveryUsed = true;
         redirectAskToDelegation = true;
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: "message",
           label: "loop.recover_undelegated_request",
@@ -9058,7 +9092,7 @@ ${block}` : block : lead;
       if (isRouterTool(call2.name)) {
         const routed = handleRouterCall(allTools ?? [], call2.name, call2.args);
         if ("result" in routed) {
-          pushDurableStep(c, chatId, persistence, {
+          pushTrace(c, {
             ts: nowIso(),
             category: "tool",
             label: call2.name,
@@ -9092,7 +9126,7 @@ ${block}` : block : lead;
         if (typeof plan === "string") return { result: { data: { ok: false, error: plan } } };
         phase = "code";
         c.codePhaseReached = true;
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: "message",
           label: "llm.role_handoff",
@@ -9103,8 +9137,8 @@ ${block}` : block : lead;
           runTool: (name, args2) => runTool(name, args2),
           toolNames: new Set(catalogToolNames),
           ...req.projectId != null ? { projectId: req.projectId } : {},
-          afterCreate: (toolName, out) => autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, out),
-          step: (label, args2, out, durationMs) => pushDurableStep(c, chatId, persistence, {
+          afterCreate: (toolName, out) => autoLinkCreatedItem(chatId, c, runTool, toolName, out),
+          step: (label, args2, out, durationMs) => pushTrace(c, {
             ts: nowIso(),
             category: "tool",
             label,
@@ -9136,7 +9170,7 @@ ${block}` : block : lead;
         const ok = await requestRunConfirm(runKey, { name: call2.name, args }, { step: iter });
         if (!ok) {
           const declined = { cancelled: true, reason: "User declined this action." };
-          pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: call2.name, args, result: declined });
+          pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: declined });
           return { result: { data: declined } };
         }
       }
@@ -9235,11 +9269,11 @@ ${revisit}` : covered.note;
       if (!run) return void 0;
       const args = call2.args;
       if (run.threw) {
-        pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: call2.name, durationMs: nowMs2() - run.toolStart, args, result: run.out, isError: true });
+        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, durationMs: nowMs2() - run.toolStart, args, result: run.out, isError: true });
         return void 0;
       }
       if (run.isReadTool && !isFailedToolResult(run.out)) readCoverage.cacheResult(call2.name, args, { result: run.out ?? null, anchor: row });
-      pushDurableStep(c, chatId, persistence, {
+      pushTrace(c, {
         ts: nowIso(),
         category: "tool",
         label: call2.name,
@@ -9282,7 +9316,7 @@ ${revisit}` : covered.note;
         const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
         forceToolChoice = stallRecoveryToolChoice(stallInput);
         await requeueWithNudge(stallRecoveryNudge(lastChance, shape, stallInput));
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: "message",
           label: shape === "handed-off" ? "loop.recover_handed_off_work" : "loop.recover_announced_tool_call",
@@ -9301,7 +9335,7 @@ ${revisit}` : covered.note;
       })) {
         shipRecoveryUsed = true;
         await requeueWithNudge(unshippedChangeNudge());
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: "message",
           label: "loop.recover_unshipped_change",
@@ -9320,7 +9354,7 @@ ${revisit}` : covered.note;
       })) {
         reviewRecoveryUsed = true;
         await requeueWithNudge(unreviewedChangeNudge());
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: "message",
           label: "loop.recover_unreviewed_change",
@@ -9338,7 +9372,7 @@ ${revisit}` : covered.note;
       })) {
         delegationRecoveryUsed = true;
         await requeueWithNudge(undelegatedRequestNudge(catalogToolNames));
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: "message",
           label: "loop.recover_undelegated_request",
@@ -9352,7 +9386,7 @@ ${revisit}` : covered.note;
       if (runTool && !restateRecoveryUsed && isRestatedReply(result.text, priorReply)) {
         restateRecoveryUsed = true;
         await requeueWithNudge(restatedReplyNudge());
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: "message",
           label: "loop.recover_restated_reply",
@@ -9376,7 +9410,7 @@ ${revisit}` : covered.note;
         });
         if (next) {
           modelFailovers += 1;
-          pushDurableStep(c, chatId, persistence, {
+          pushTrace(c, {
             ts: nowIso(),
             category: "message",
             label: "loop.model_failover",
@@ -9392,7 +9426,7 @@ ${revisit}` : covered.note;
           return { action: "continue" };
         }
         const notice = stallExhaustedNotice(resolved, triedModels, shape);
-        pushDurableStep(c, chatId, persistence, {
+        pushTrace(c, {
           ts: nowIso(),
           category: "error",
           label: "loop.stall_unrecovered",
@@ -9542,7 +9576,7 @@ ${revisit}` : covered.note;
         if (!isRetryableError || activeModel) throw turnError(e);
         if (e instanceof StreamInterruptedError && e.model) {
           brokenModels.add(e.model);
-          pushDurableStep(c, chatId, persistence, {
+          pushTrace(c, {
             ts: nowIso(),
             category: "message",
             label: "llm.stream_interrupted",
@@ -9550,7 +9584,7 @@ ${revisit}` : covered.note;
             result: `${e.message} \u2014 retrying this turn on another connected model. ${e.model} is left out for the rest of this run.`
           });
         } else {
-          pushDurableStep(c, chatId, persistence, {
+          pushTrace(c, {
             ts: nowIso(),
             category: "message",
             label: "llm.transport_error",
@@ -9604,7 +9638,7 @@ ${revisit}` : covered.note;
       }
       const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n)) : [];
       const argBytes = toolCallArgBytes(result.toolCalls);
-      pushDurableStep(c, chatId, persistence, {
+      pushTrace(c, {
         ts: nowIso(),
         category: "llm",
         label: "llm.complete",
@@ -9704,7 +9738,7 @@ ${revisit}` : covered.note;
         }
       }
       if (isTicketRecordingTool(call2.name)) c.ticketRecorded = true;
-      await autoLinkCreatedItem(chatId, c, persistence, runTool, call2.name, out);
+      await autoLinkCreatedItem(chatId, c, runTool, call2.name, out);
       let advisory = null;
       if (!isReadTool) writeLedger.record(call2.name, args, { ok: !isFailedToolResult(out), unscoped: isUnscopedMutation(call2.name, args) });
       if (isFailedToolResult(out)) {
@@ -9823,8 +9857,6 @@ ${revisit}` : covered.note;
   c.streamingText = "";
   recordRunFailure(
     c,
-    chatId,
-    req.persistence,
     "agent.loop",
     `Stopped after ${streak} consecutive failed tool calls over ${loop.step} steps (a forced final answer without tools also came back empty)`
   );
@@ -11749,7 +11781,6 @@ function PromptInput({
   localToolsIn,
   mcpActionsFrom,
   mentionRecipient,
-  mergeRecoveredTrace,
   midRunNotice,
   modalityPersonaChoice,
   modelCategoryLabel,
@@ -11840,7 +11871,6 @@ function PromptInput({
   toolExposureInTrace,
   toolNamesMentionedIn,
   toolSpecsFor,
-  traceEventToPersistInput,
   traceWithPersistedSteps,
   trimToolResult,
   turnInterruption,

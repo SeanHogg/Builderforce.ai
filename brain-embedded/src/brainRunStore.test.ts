@@ -1531,3 +1531,47 @@ describe('a run can be steered while it runs, and a sub-agent is just a run with
     expect(getRunSnapshot(77).appended.some((m) => m.content.includes('src/auth.ts'))).toBe(true);
   });
 });
+
+describe('a run has ONE durable store for its steps', () => {
+  type Sent = { role: string; content: string; metadata?: string };
+
+  it('persists every trace event the run records — dedupe stubs included — as one step row each, batched', async () => {
+    const requests: Sent[][] = [];
+    const persistence = {
+      sendMessages: async (chatId: number, msgs: Sent[]) => {
+        requests.push(msgs);
+        return msgs.map((m, i) => ({ id: 2000 + requests.length * 100 + i, chatId, createdAt: '', ...m }));
+      },
+    } as never;
+    // The same read twice (the second is answered by the read-dedupe stub, which used
+    // to reach only the run-end trace copy), then an answer.
+    let turn = 0;
+    const stream: BrainStreamFn = async () => {
+      turn += 1;
+      if (turn <= 2) return { text: '', toolCalls: [{ id: `c${turn}`, name: 'read_file', args: JSON.stringify({ path: 'a.ts' }) }], finishReason: 'tool_calls' };
+      return { text: 'a.ts renders the bubble.', toolCalls: [], finishReason: 'stop' };
+    };
+    await startRun(4300, {
+      resolvedSystemPrompt: 'sys',
+      stream,
+      persistence,
+      tools: [{ type: 'function' as const, function: { name: 'read_file', description: 'read', parameters: {} } }],
+      runTool: async () => ({ ok: true, content: 'export const a = 1;' }),
+      userTurn: 'what does a.ts do?',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const sig = (category: string | undefined, label: string | undefined, ts: string | undefined) => `${category}|${label}|${ts}`;
+    const stepSigs = requests.flat()
+      .filter((m) => m.role === 'tool')
+      .map((m) => {
+        const meta = JSON.parse(m.metadata ?? '{}') as { category?: string; label?: string; ts?: string };
+        return sig(meta.category, meta.label, meta.ts);
+      });
+    const traceSigs = getRunTrace(4300).map((e) => sig(e.category, e.label, e.ts));
+    expect(traceSigs.length).toBeGreaterThan(0);
+    expect(stepSigs.sort()).toEqual(traceSigs.sort());
+    // Batched: the steps did not each cost a request.
+    expect(requests.length).toBeLessThan(stepSigs.length);
+  });
+});

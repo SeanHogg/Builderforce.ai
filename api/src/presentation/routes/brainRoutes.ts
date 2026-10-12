@@ -40,7 +40,6 @@ import { parseBody, parseOptionalBody } from './requestBody';
 import {
   AgentReplyBody,
   AppendMessagesBody,
-  AppendTraceBody,
   ChatDiagnosticsBody,
   ClaimGuestRoomBody,
   ConsolidateChatsBody,
@@ -64,12 +63,8 @@ function parseId(raw: string): number | null {
   return Number.isNaN(n) || n <= 0 ? null : n;
 }
 
-/** Per-chat version token for the cached trace read — bumped on every append so
- *  the next GET /chats/:id/trace re-loads (the trace keyspace folds this token in). */
-const traceVersionKey = (chatId: number): string => `brain-trace-version:chat:${chatId}`;
-
-/** Per-chat version token for the cached diagnostics read — same scheme as the trace's,
- *  bumped on every capture so the next GET sees it without a per-chat cache key to purge. */
+/** Per-chat version token for the cached diagnostics read — bumped on every capture
+ *  so the next GET sees it without a per-chat cache key to purge. */
 const diagnosticsVersionKey = (chatId: number): string => `brain-diagnostics-version:chat:${chatId}`;
 
 // ---------------------------------------------------------------------------
@@ -407,43 +402,8 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     return c.json({ messages: result, evermindLearn }, 201);
   });
 
-  // GET /chats/:id/trace — the persisted tool/LLM-turn timeline (survives reload).
-  // Cached read-through, keyed by a per-chat version token bumped on every append.
-  router.get('/chats/:id/trace', async (c) => {
-    const id = parseId(c.req.param('id'));
-    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
-
-    const tenantId = c.get('tenantId') as number;
-    const userId = c.get('userId') as string;
-    if (!(await brainService.canAccess(id, tenantId, userId))) return c.json({ error: 'Chat not found' }, 404);
-
-    const limit = limitParam(c.req.query('limit'), 500, 2000);
-    const token = await getCacheVersion(c.env as Env, traceVersionKey(id));
-    const key = `brain-trace:chat:${id}:v:${token}:l:${limit}`;
-    const trace = await getOrSetCached(c.env as Env, key, () => brainService.getTrace(id, tenantId, limit));
-    return c.json({ trace });
-  });
-
-  // POST /chats/:id/trace — persist tool-turn trace events for this chat.
-  router.post('/chats/:id/trace', async (c) => {
-    const id = parseId(c.req.param('id'));
-    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
-
-    const tenantId = c.get('tenantId') as number;
-    const userId = c.get('userId') as string;
-    if (!(await brainService.canAccess(id, tenantId, userId))) return c.json({ error: 'Chat not found' }, 404);
-
-    const body = await parseOptionalBody(c, AppendTraceBody);
-    const result = await brainService.appendTrace(id, tenantId, body.events ?? []);
-    // Invalidate the cached read so the next GET reflects these events.
-    await bumpCacheVersion(c.env as Env, traceVersionKey(id)).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
-    });
-    return c.json(result, 201);
-  });
-
   // ── Captured diagnostics ────────────────────────────────────────────────────
-  // The per-STEP trace above says what happened; a capture says what it MEANT. Same
+  // The per-STEP rows (role 'tool' step messages) say what happened; a capture says what it MEANT. Same
   // access check, because the verdict is about the same conversation.
 
   // POST /chats/:id/diagnostics — store one ChatDiagnosticsReport.

@@ -2,7 +2,6 @@ import { and, eq, inArray, notExists, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   agentHosts,
-  brainChatTrace,
   executionClaimEvidence,
   executions,
   projectSites,
@@ -68,7 +67,6 @@ export async function cascadeTenantDelete(core: Db, tenantId: number): Promise<v
   await telemetry.delete(toolAuditEvents).where(and(eq(toolAuditEvents.tenantId, tenantId), uncited));
   await telemetry.delete(toolAuditDaily).where(eq(toolAuditDaily.tenantId, tenantId));
   await telemetry.delete(usageSnapshots).where(eq(usageSnapshots.tenantId, tenantId));
-  await telemetry.delete(brainChatTrace).where(eq(brainChatTrace.tenantId, tenantId));
   await telemetry.delete(runContextState).where(eq(runContextState.tenantId, tenantId));
   await telemetry.update(runModelOutcomes).set({ tenantId: null, projectId: null }).where(eq(runModelOutcomes.tenantId, tenantId));
 }

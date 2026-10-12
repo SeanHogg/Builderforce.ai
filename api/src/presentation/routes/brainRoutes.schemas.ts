@@ -11,7 +11,7 @@
  * `.role` and die as a 500.
  */
 import { z, zNumberLike, zOptionalString } from './requestBody';
-import type { AppendMessagesDto, BrainTraceEventInput } from '../../application/brain/BrainService';
+import type { AppendMessagesDto } from '../../application/brain/BrainService';
 
 const isObjectLike = (value: unknown): boolean => typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -43,14 +43,6 @@ export const MarkReadBody = z.object({ seq: z.unknown().optional() });
  */
 export const AppendMessagesBody = z.object({
   messages: z.array(z.custom<AppendMessagesDto['messages'][number]>(isObjectLike, 'each message must be an object')).optional(),
-});
-
-/**
- * POST /chats/:id/trace. `appendTrace` filters out any event without a string `kind`
- * and normalizes every other field itself, so an element only has to be an object.
- */
-export const AppendTraceBody = z.object({
-  events: z.array(z.custom<BrainTraceEventInput>(isObjectLike, 'each event must be an object')).optional(),
 });
 
 /**

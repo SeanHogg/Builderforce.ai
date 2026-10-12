@@ -73,10 +73,9 @@ describe('buildSettledTimeline — durable tool/memory step reconstruction', () 
     expect(labels).toContain('run2.tool');
   });
 
-  // A reopened chat rehydrates its trace from GET /chats/:id/trace, whose rows are
-  // written in ONE batch insert at run end and therefore all carry the same
-  // `created_at`. Every timestamp tied, the old per-kind tie-break was the only
-  // discriminator and regrouped the run into "every Thought, then every tool call".
+  // A trace whose events all share one timestamp — as the since-retired batch-written
+  // trace store produced (one insert at run end ⇒ one `created_at`). Every timestamp
+  // tied, the old per-kind tie-break was the only discriminator and regrouped the run into "every Thought, then every tool call".
   it('keeps a rehydrated trace in RUN order when every event shares one timestamp', () => {
     const ts = '2026-01-01T00:00:00.000Z'; // one batch insert ⇒ one created_at
     const trace: BrainTraceEvent[] = [

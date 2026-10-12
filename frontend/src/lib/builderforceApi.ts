@@ -13,7 +13,6 @@ import { downloadBlob, filenameFromResponse } from './download';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { apiRequest, apiRequestStream, apiRequestText, type RequestOptions } from './apiClient';
 import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
-import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import type { SessionApp } from './embeddedApps';
 import type { OutcomeMetric, OutcomeMetricFamilyRef } from './outcomeMetrics';
 
@@ -413,8 +412,7 @@ export interface BrainMessage {
  * VS Code webview mounts, because both hosts call the same endpoints and their two
  * hand-written copies had already drifted on `deleteChat` and `markChatRead`. What
  * is spread on after it is the web-only surface: the team chat, chat↔ticket links,
- * members, agent invites and the persisted run trace, none of which the webview
- * mounts.
+ * members and agent invites, none of which the webview mounts.
  */
 export const brain = {
   ...createBrainRestPersistence({
@@ -513,36 +511,6 @@ export const brain = {
   requestAgentReply: (chatId: number, input: { agentRef: string; agentName?: string }) =>
     request<{ message: BrainMessage }>(`/api/brain/chats/${chatId}/agent-reply`, { method: 'POST', body: JSON.stringify(input) }).then((r) => r.message),
 
-  // --- Persisted run trace (tool/LLM turns survive reload) ---
-
-  /** Persist a batch of run-trace events (tool/LLM/error turns) for this chat, so
-   *  the timeline can rehydrate them after a reload. Best-effort; the caller drops
-   *  the promise. Clears the local read cache so the next GET reflects the append. */
-  appendChatTrace: (chatId: number, events: BrainChatTraceEventInput[]) => {
-    invalidateClientCache(`brain-trace:${chatId}`);
-    return request<{ appended: number }>(`/api/brain/chats/${chatId}/trace`, {
-      method: 'POST',
-      body: JSON.stringify({ events }),
-    });
-  },
-
-  /**
-   * Load a chat's persisted run trace (oldest-first). Cached per-chat client-side so
-   * switching chats back and forth is cheap.
-   *
-   * `refresh` bypasses that cache, and exists because the trace is no longer written
-   * only by this client: an addressed-agent reply now appends its tool trace SERVER-side,
-   * and a client cache invalidated solely by `appendChatTrace` can never learn about a
-   * write it did not make. A diagnostics capture that silently returned a pre-reply trace
-   * would be wrong in precisely the way that wastes the session it was captured for.
-   */
-  getChatTrace: async (chatId: number, opts?: { refresh?: boolean }): Promise<BrainChatTraceRow[]> => {
-    const key = `brain-trace:${chatId}`;
-    if (opts?.refresh) invalidateClientCache(key);
-    return getOrSetClientCached(key, () =>
-      request<{ trace: BrainChatTraceRow[] }>(`/api/brain/chats/${chatId}/trace`).then(({ trace }) => trace));
-  },
-
   /**
    * Persist one captured ChatDiagnosticsReport for this chat. Best-effort — the
    * copy path never waits on this; a capture that reached the user has already
@@ -556,38 +524,6 @@ export const brain = {
 };
 
 export type { ChatDiagnosticsReport };
-
-/** A persisted run-trace row as returned by GET /api/brain/chats/:id/trace. */
-export interface BrainChatTraceRow {
-  id: number;
-  turnSeq: number | null;
-  kind: string;
-  label: string | null;
-  argsJson: string | null;
-  resultJson: string | null;
-  isError: boolean;
-  durationMs: number | null;
-  ttftMs: number | null;
-  /** When the event HAPPENED. Null on rows written before migration 1128 — fall back
-   *  to `createdAt` there. Prefer this for ordering: `createdAt` is the batch write. */
-  occurredAt: string | null;
-  createdAt: string;
-}
-
-/** A run-trace event to persist via POST /api/brain/chats/:id/trace. */
-export interface BrainChatTraceEventInput {
-  kind: string;
-  label?: string;
-  args?: unknown;
-  result?: unknown;
-  isError?: boolean;
-  durationMs?: number;
-  ttftMs?: number;
-  turnSeq?: number;
-  /** ISO instant the event happened. A run posts its whole trace in one insert when
-   *  it settles, so without this every row of the run comes back at the same time. */
-  ts?: string;
-}
 
 /** A work-item kind a chat can be tied to (planning spine + roadmap + spec + gap). */
 export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task' | 'retro' | 'poker';

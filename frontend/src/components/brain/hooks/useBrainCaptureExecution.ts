@@ -4,6 +4,7 @@ import {
   formatChatDiagnostics,
   gatherChatDiagnostics,
   getMcpToolStatus,
+  traceWithPersistedSteps,
   type BrainTraceEvent,
 } from '@seanhogg/builderforce-brain-embedded';
 import { getProjectEvermindContributions } from '@/lib/projectEvermindApi';
@@ -127,7 +128,9 @@ export function useBrainCaptureExecution({
       // prose above is what a human reads; this is the half a query or an agent can.
       const jsonBlock = captureDiagnosticsBlock({
         diagnostics,
-        events: timelineTrace,
+        // The live trace alone covers only this session's run; the chat's durable step
+        // rows carry the rest, so the machine-readable half matches the prose above.
+        events: traceWithPersistedSteps(conv.messages, timelineTrace),
         messages: conv.messages,
         model: model ?? null,
         running: conv.sending,

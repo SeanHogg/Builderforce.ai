@@ -1,13 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildManagerChatDiagnosticsReport,
+  chatStepTrace,
+  conversationTurns,
   looksLikeToolNarration,
   narratedToolNaming,
   managerChatFindings,
   summarizeTrace,
   type ManagerChatDiagnosticsInput,
 } from './managerChatDiagnostics';
-import type { BrainChatTraceRow, BrainMessage, ManagerChatHandle } from './builderforceApi';
+import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
+import type { BrainMessage, ManagerChatHandle } from './builderforceApi';
 
 /**
  * The fixture is the REAL failure, verbatim.
@@ -54,23 +57,25 @@ const MESSAGES: BrainMessage[] = [
 
 const handle: ManagerChatHandle = { chatId: 77, agentRef: 'manager-t1', agentName: 'Manager', designated: false };
 
-const traceRow = (over: Partial<BrainChatTraceRow> & { id: number; kind: string }): BrainChatTraceRow => ({
-  turnSeq: 1, label: null, argsJson: null, resultJson: null,
-  isError: false, durationMs: null, ttftMs: null, occurredAt: null, createdAt: CAPTURED_AT, ...over,
-});
+/** A trace step as the chat's step rows yield it (see `chatStepTrace`). The `failover`
+ *  category is the agent-reply loop's own decision step, outside the live-trace union. */
+const step = (over: Omit<Partial<BrainTraceEvent>, 'category'> & { n: number; category: string; label: string }): BrainTraceEvent => {
+  const { n, category, ...rest } = over;
+  return { ts: `2026-07-27T20:20:${String(n).padStart(2, '0')}.000Z`, category: category as BrainTraceEvent['category'], ...rest };
+};
 
-/** What the loop records when the model narrates: model turns, zero tool rows. */
-const NARRATED_TRACE: BrainChatTraceRow[] = [
-  traceRow({ id: 1, kind: 'llm', label: 'claude-opus-5', resultJson: JSON.stringify({ finishReason: 'stop', toolCalls: 0, replyChars: 138, advertisedTools: 96 }) }),
-  traceRow({ id: 2, kind: 'llm', label: 'claude-opus-5', turnSeq: 2, resultJson: JSON.stringify({ finishReason: 'stop', toolCalls: 0, replyChars: 129, advertisedTools: 96 }) }),
+/** What the loop records when the model narrates: model turns, zero tool steps. */
+const NARRATED_TRACE: BrainTraceEvent[] = [
+  step({ n: 1, category: 'llm', label: 'claude-opus-5', result: { finishReason: 'stop', toolCalls: 0, replyChars: 138, advertisedTools: 96 } }),
+  step({ n: 2, category: 'llm', label: 'claude-opus-5', result: { finishReason: 'stop', toolCalls: 0, replyChars: 129, advertisedTools: 96 } }),
 ];
 
 /** What it records once the tools are named correctly. */
-const HEALTHY_TRACE: BrainChatTraceRow[] = [
-  traceRow({ id: 1, kind: 'llm', label: 'claude-opus-5', resultJson: JSON.stringify({ finishReason: 'tool_calls', toolCalls: 2, advertisedTools: 96 }) }),
-  traceRow({ id: 2, kind: 'tool', label: 'manager.digest', argsJson: '{"projectId":11}', resultJson: '{"team":{"shipped":{"today":3}}}', durationMs: 140 }),
-  traceRow({ id: 3, kind: 'tool', label: 'manager.policy', argsJson: '{"projectId":11}', resultJson: '{"policy":{"allowAutoMerge":false}}', durationMs: 90 }),
-  traceRow({ id: 4, kind: 'llm', label: 'claude-opus-5', turnSeq: 2, resultJson: JSON.stringify({ finishReason: 'stop', toolCalls: 0, advertisedTools: 96 }) }),
+const HEALTHY_TRACE: BrainTraceEvent[] = [
+  step({ n: 1, category: 'llm', label: 'claude-opus-5', result: { finishReason: 'tool_calls', toolCalls: 2, advertisedTools: 96 } }),
+  step({ n: 2, category: 'tool', label: 'manager.digest', args: { projectId: 11 }, result: { team: { shipped: { today: 3 } } }, durationMs: 140 }),
+  step({ n: 3, category: 'tool', label: 'manager.policy', args: { projectId: 11 }, result: { policy: { allowAutoMerge: false } }, durationMs: 90 }),
+  step({ n: 4, category: 'llm', label: 'claude-opus-5', result: { finishReason: 'stop', toolCalls: 0, advertisedTools: 96 } }),
 ];
 
 const input = (over: Partial<ManagerChatDiagnosticsInput> = {}): ManagerChatDiagnosticsInput => ({
@@ -122,10 +127,10 @@ describe('summarizeTrace', () => {
     // report than "two models both refused", and the findings must not conflate them.
     expect(summarizeTrace(NARRATED_TRACE)).toMatchObject({ models: ['claude-opus-5'], failovers: 0 });
 
-    const withFailover: BrainChatTraceRow[] = [
+    const withFailover: BrainTraceEvent[] = [
       ...NARRATED_TRACE,
-      traceRow({ id: 3, kind: 'failover', label: 'coder-1', resultJson: '{"notice":"switching"}' }),
-      traceRow({ id: 4, kind: 'llm', label: 'coder-1', turnSeq: 3, resultJson: JSON.stringify({ finishReason: 'stop', toolCalls: 0, advertisedTools: 96 }) }),
+      step({ n: 3, category: 'failover', label: 'coder-1', result: { notice: 'switching' } }),
+      step({ n: 4, category: 'llm', label: 'coder-1', result: { finishReason: 'stop', toolCalls: 0, advertisedTools: 96 } }),
     ];
     const roll = summarizeTrace(withFailover);
     expect(roll).toMatchObject({ models: ['claude-opus-5', 'coder-1'], failovers: 1 });
@@ -135,12 +140,53 @@ describe('summarizeTrace', () => {
     expect(roll.turnsWithoutTools).toBe(3);
   });
 
+  it("counts the Brain run loop's own failover step, never as a model turn", () => {
+    const roll = summarizeTrace([
+      ...NARRATED_TRACE,
+      step({ n: 3, category: 'message', label: 'loop.model_failover', result: 'switching' }),
+    ]);
+    expect(roll.failovers).toBe(1);
+    expect(roll.modelTurns).toBe(2);
+  });
+
   it('ranks the tools that ran and counts their failures separately', () => {
-    const withFailure = [...HEALTHY_TRACE, traceRow({ id: 5, kind: 'tool', label: 'manager.census', isError: true, resultJson: '{"error":"Forbidden"}' })];
+    const withFailure = [...HEALTHY_TRACE, step({ n: 5, category: 'tool', label: 'manager.census', isError: true, result: { error: 'Forbidden' } })];
     const roll = summarizeTrace(withFailure);
     expect(roll.toolCalls).toBe(3);
     expect(roll.toolErrors).toBe(1);
     expect(roll.byTool).toContainEqual({ tool: 'manager.census', count: 1, errors: 1 });
+  });
+});
+
+describe('chatStepTrace', () => {
+  /** A durable step row exactly as the run persists it: role 'tool', payload in metadata. */
+  const stepRow = (id: number, meta: Record<string, unknown>): BrainMessage =>
+    msg({ id, role: 'tool', content: '', metadata: JSON.stringify({ kind: 'step', ...meta }) });
+
+  const WITH_STEPS: BrainMessage[] = [
+    MESSAGES[0],
+    stepRow(10, { category: 'llm', label: 'claude-opus-5', result: { finishReason: 'tool_calls', toolCalls: 1, advertisedTools: 96 }, ts: '2026-07-27T20:20:01.000Z' }),
+    stepRow(11, { category: 'tool', label: 'manager.digest', args: { projectId: 11 }, result: { error: 'Forbidden' }, isError: true, durationMs: 40, ts: '2026-07-27T20:20:02.000Z' }),
+    stepRow(12, { category: 'failover', label: 'coder-1', result: { notice: 'switching' }, ts: '2026-07-27T20:20:03.000Z' }),
+    MESSAGES[1],
+  ];
+
+  it("reads the tool trace from the chat's step rows — the one durable store", () => {
+    const roll = summarizeTrace(chatStepTrace(WITH_STEPS));
+    expect(roll).toMatchObject({ toolCalls: 1, toolErrors: 1, modelTurns: 1, failovers: 1, advertisedTools: 96, models: ['claude-opus-5'] });
+    expect(roll.byTool).toEqual([{ tool: 'manager.digest', count: 1, errors: 1 }]);
+  });
+
+  it('keeps step rows out of the transcript', () => {
+    expect(conversationTurns(WITH_STEPS).map((m) => m.id)).toEqual([1, 2]);
+  });
+
+  it('renders step args and results in the report', () => {
+    const r = buildManagerChatDiagnosticsReport(
+      input({ messages: conversationTurns(WITH_STEPS), trace: chatStepTrace(WITH_STEPS) }), ctx);
+    expect(r).toContain('[tool] manager.digest  ERROR  40ms');
+    expect(r).toContain('args:   {"projectId":11}');
+    expect(r).toContain('result: {"error":"Forbidden"}');
   });
 });
 
@@ -197,7 +243,7 @@ describe('managerChatFindings', () => {
 
   it('separates "called nothing" from "calls failed" from "never got the tools"', () => {
     // Calls ran and failed → a different finding and a different fix.
-    const failed = [...HEALTHY_TRACE, traceRow({ id: 5, kind: 'tool', label: 'manager.digest', isError: true, resultJson: '{"error":"Project not found"}' })];
+    const failed = [...HEALTHY_TRACE, step({ n: 5, category: 'tool', label: 'manager.digest', isError: true, result: { error: 'Project not found' } })];
     const c = codes({ trace: failed });
     expect(c).toContain('tool_errors');
     expect(c).not.toContain('tools_narrated_never_called');
