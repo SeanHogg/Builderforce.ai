@@ -70,6 +70,11 @@ import type { Db } from '../../../infrastructure/database/connection';
 import type { RuntimeService } from '../RuntimeService';
 import { heartbeatExecution, isExecutionCancelled, type ContainerRunContext } from './runContext';
 import { skillOp } from './skillOp';
+import {
+  inRunVerifyOutcome,
+  planInRunVerify,
+  type PackageScriptRunner,
+} from './inRunVerify';
 
 /** What one op answers with — an HTTP status and a JSON body for the image. */
 export interface ContainerOpResult {
@@ -132,8 +137,16 @@ export type ContainerOpHandler = (deps: ContainerOpDeps) => Promise<ContainerOpR
  */
 export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
   status: async (deps) => {
-    const { db, executionId } = deps;
-    return { status: 200, body: { cancelled: await isExecutionCancelled(db, executionId) } };
+    const { db, executionId, surface } = deps;
+    return {
+      status: 200,
+      body: {
+        cancelled: await isExecutionCancelled(db, executionId),
+        // Additive: older images ignore unknown fields. Tells the image which
+        // package scripts to exec via `run_command` before finish.
+        inRunVerify: planInRunVerify({ surface }),
+      },
+    };
   },
 
   // Liveness heartbeat from the long-lived container, fired on a timer independent of
@@ -145,6 +158,42 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     await heartbeatExecution(db, executionId);
     return { status: 200, body: { ok: true, cancelled: await isExecutionCancelled(db, executionId) } };
   },
+
+  /**
+   * Image reports the commands it ran (or asks for the plan). The Worker never
+   * execs them — it records the honest outcome so finish can see `mayFinish`.
+   */
+  verify: async (deps) => {
+    const { db, executionId, args, tenantId, cloudAgentRef, surface } = deps;
+    const packageScripts = args.packageScripts && typeof args.packageScripts === 'object' && !Array.isArray(args.packageScripts)
+      ? Object.fromEntries(
+        Object.entries(args.packageScripts as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string'),
+      )
+      : null;
+    const writtenPaths = Array.isArray(args.writtenPaths)
+      ? (args.writtenPaths as unknown[]).filter((p): p is string => typeof p === 'string')
+      : [];
+    const results = Array.isArray(args.results)
+      ? (args.results as unknown[]).flatMap((row) => {
+        if (!row || typeof row !== 'object') return [];
+        const rec = row as Record<string, unknown>;
+        if (typeof rec.command !== 'string') return [];
+        return [{ command: rec.command, exitCode: typeof rec.exitCode === 'number' ? rec.exitCode : 1 }];
+      })
+      : null;
+    const runner: PackageScriptRunner = args.runner === 'pnpm' || args.runner === 'yarn' ? args.runner : 'npm';
+    const outcome = inRunVerifyOutcome({ surface, writtenPaths, packageScripts, runner, results });
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: 'in_run_verify', category: 'tool',
+      detail: { surface, kind: outcome.kind, reason: outcome.reason, commands: outcome.commands },
+      result: outcome.note,
+    }).catch((error) => reportCaughtError(error, {
+      source: 'application/runtime/cloudAgent/containerOps.ts', operation: 'inRunVerify',
+    }));
+    return { status: 200, body: { ok: outcome.mayFinish, ...outcome } };
+  },
+
   event: async (deps) => {
     const { db, executionId, args, tenantId, cloudAgentRef } = deps;
     await recordCloudToolEvent(db, {
