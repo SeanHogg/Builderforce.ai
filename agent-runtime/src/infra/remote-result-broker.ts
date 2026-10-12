@@ -14,7 +14,58 @@ type PendingCallback = {
   resolve: (result: string) => void;
   reject: (err: Error) => void;
   timeoutHandle: ReturnType<typeof setTimeout>;
+  onChunk?: (chunk: string) => void;
 };
+
+/** A live chunk or terminal result from a remote agentNode. */
+export type RemoteCallbackFrame =
+  | { kind: "chunk"; correlationId: string; chunk: string }
+  | { kind: "result"; correlationId: string; result: string };
+
+/**
+ * Normalize the two on-wire protocols into one frame:
+ *   - runtime:  `remote.task.chunk` / `remote.task.result` + `correlationId`
+ *   - docs/DO:  `remote.result.chunk` / `remote.result` + `taskCorrelationId`
+ */
+export function parseRemoteCallbackFrame(msg: Record<string, unknown>): RemoteCallbackFrame | null {
+  const type = typeof msg.type === "string" ? msg.type : "";
+  const correlationId =
+    (typeof msg.correlationId === "string" && msg.correlationId) ||
+    (typeof msg.taskCorrelationId === "string" && msg.taskCorrelationId) ||
+    "";
+  if (!correlationId) {
+    return null;
+  }
+  if (type === "remote.task.chunk" || type === "remote.result.chunk") {
+    const chunk =
+      typeof msg.chunk === "string" ? msg.chunk : typeof msg.result === "string" ? msg.result : "";
+    return { kind: "chunk", correlationId, chunk };
+  }
+  if (type === "remote.task.result" || type === "remote.result") {
+    const result = typeof msg.result === "string" ? msg.result : "";
+    return { kind: "result", correlationId, result };
+  }
+  return null;
+}
+
+/**
+ * Fold an assistant event into the accumulated remote-task text.
+ * Prefers `delta` (incremental) so we don't double-count full-text snapshots.
+ */
+export function applyAssistantChunk(
+  accumulated: string,
+  data: { delta?: unknown; text?: unknown },
+): { accumulated: string; piece: string } {
+  const delta = typeof data.delta === "string" ? data.delta : "";
+  const text = typeof data.text === "string" ? data.text : "";
+  if (delta) {
+    return { accumulated: accumulated + delta, piece: delta };
+  }
+  if (text) {
+    return { accumulated: text, piece: text };
+  }
+  return { accumulated, piece: "" };
+}
 
 const pending = new Map<string, PendingCallback>();
 
@@ -45,6 +96,7 @@ function registerPending(
   timeoutMs: number,
   resolve: (result: string) => void,
   reject: (err: Error) => void,
+  onChunk?: (chunk: string) => void,
 ): void {
   const timeoutHandle = setTimeout(() => {
     pending.delete(correlationId);
@@ -55,7 +107,7 @@ function registerPending(
       ),
     );
   }, timeoutMs);
-  pending.set(correlationId, { resolve, reject, timeoutHandle });
+  pending.set(correlationId, { resolve, reject, timeoutHandle, onChunk });
 }
 
 /**
@@ -69,12 +121,16 @@ function registerPending(
  * Slow path (`pending.size >= maxConcurrentRemote`): the registration is queued
  * FIFO and runs once an earlier task releases its slot.
  */
-export function awaitRemoteResult(correlationId: string, timeoutMs = 300_000): Promise<string> {
+export function awaitRemoteResult(
+  correlationId: string,
+  timeoutMs = 300_000,
+  onChunk?: (chunk: string) => void,
+): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     if (pending.size < maxConcurrentRemote) {
-      registerPending(correlationId, timeoutMs, resolve, reject);
+      registerPending(correlationId, timeoutMs, resolve, reject, onChunk);
     } else {
-      waitQueue.push(() => registerPending(correlationId, timeoutMs, resolve, reject));
+      waitQueue.push(() => registerPending(correlationId, timeoutMs, resolve, reject, onChunk));
     }
   });
 }
@@ -91,6 +147,19 @@ export function resolveRemoteResult(correlationId: string, result: string): bool
   pending.delete(correlationId);
   releaseSlot();
   cb.resolve(result);
+  return true;
+}
+
+/**
+ * Push a live result chunk to whoever is awaiting this correlationId.
+ * Returns false when no waiter is registered (chunk is dropped).
+ */
+export function pushRemoteResultChunk(correlationId: string, chunk: string): boolean {
+  const cb = pending.get(correlationId);
+  if (!cb || !chunk) {
+    return false;
+  }
+  cb.onChunk?.(chunk);
   return true;
 }
 

@@ -59,8 +59,16 @@ import {
   type LateSteer,
   type LateSteerReason,
 } from "./relay-late-steers.js";
-import { resolveRemoteResult } from "./remote-result-broker.js";
-import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./remote-subagent.js";
+import {
+  parseRemoteCallbackFrame,
+  pushRemoteResultChunk,
+  resolveRemoteResult,
+} from "./remote-result-broker.js";
+import {
+  dispatchChunkToRemoteAgentNode,
+  dispatchResultToRemoteAgentNode,
+  type RemoteDispatchOptions,
+} from "./remote-subagent.js";
 import { createGitRepoSync } from "./repo-sync.js";
 import { ClaudeSdkAgentEngine } from "./sdk-agent-engine.js";
 import {
@@ -163,7 +171,17 @@ export class BuilderforceRelayService implements IRelayService {
   /** Tracks pending remote task correlations so results can be sent back. */
   private pendingRemoteCorrelations = new Map<
     string,
-    { correlationId: string; callbackAgentNodeId: string; callbackBaseUrl: string }
+    {
+      correlationId: string;
+      callbackAgentNodeId: string;
+      callbackBaseUrl: string;
+      accumulated: string;
+    }
+  >();
+  /** Coalesced live chunks waiting to flush over HTTP (keyed by session). */
+  private remoteChunkFlush = new Map<
+    string,
+    { buf: string; timer: ReturnType<typeof setTimeout> | null }
   >();
   /** Remote dispatch options, set after construction so result callbacks work. */
   private remoteDispatchOpts: RemoteDispatchOptions | null = null;
@@ -921,6 +939,12 @@ export class BuilderforceRelayService implements IRelayService {
     this.ws = null;
     this.gatewayClient?.stop();
     this.gatewayClient = null;
+    for (const entry of this.remoteChunkFlush.values()) {
+      if (entry.timer) {
+        clearTimeout(entry.timer);
+      }
+    }
+    this.remoteChunkFlush.clear();
   }
 
   // ---------------------------------------------------------------------------
@@ -944,26 +968,81 @@ export class BuilderforceRelayService implements IRelayService {
       if (!correlation) {
         return;
       }
+      this.flushRemoteChunk(sessionKey);
       this.pendingRemoteCorrelations.delete(sessionKey);
-      // Capture the last assistant message or a summary from the lifecycle event
       const errorVal = evt.data["error"];
       const errorStr = typeof errorVal === "string" ? errorVal : "unknown error";
-      const summary =
+      const fallback =
         typeof evt.data["summary"] === "string"
           ? evt.data["summary"]
           : phase === "error"
             ? `Remote task failed: ${errorStr}`
             : `Remote task completed on agentNode ${this.opts.agentNodeId}`;
-      // Send the result back to the originating agentNode
+      const resultText = correlation.accumulated.trim() || fallback;
       if (this.remoteDispatchOpts) {
         void dispatchResultToRemoteAgentNode(
           this.remoteDispatchOpts,
           correlation.callbackAgentNodeId,
           correlation.correlationId,
-          summary,
+          resultText,
         );
       }
     });
+  }
+
+  /** Coalesce assistant output for a remote session and flush over HTTP. */
+  private captureRemoteOutput(sessionKey: string, piece: string, replace = false): void {
+    const corr = this.pendingRemoteCorrelations.get(sessionKey);
+    if (!corr || !piece) {
+      return;
+    }
+    if (replace) {
+      if (corr.accumulated) {
+        return;
+      }
+      corr.accumulated = piece;
+    } else {
+      corr.accumulated += piece;
+    }
+    this.enqueueRemoteChunk(sessionKey, piece);
+  }
+
+  private enqueueRemoteChunk(sessionKey: string, piece: string): void {
+    if (!piece) {
+      return;
+    }
+    const existing = this.remoteChunkFlush.get(sessionKey);
+    if (existing) {
+      existing.buf += piece;
+      return;
+    }
+    const entry: { buf: string; timer: ReturnType<typeof setTimeout> | null } = {
+      buf: piece,
+      timer: setTimeout(() => this.flushRemoteChunk(sessionKey), 250),
+    };
+    this.remoteChunkFlush.set(sessionKey, entry);
+  }
+
+  private flushRemoteChunk(sessionKey: string): void {
+    const entry = this.remoteChunkFlush.get(sessionKey);
+    this.remoteChunkFlush.delete(sessionKey);
+    if (entry?.timer) {
+      clearTimeout(entry.timer);
+    }
+    const chunk = entry?.buf ?? "";
+    if (!chunk) {
+      return;
+    }
+    const corr = this.pendingRemoteCorrelations.get(sessionKey);
+    if (!corr || !this.remoteDispatchOpts) {
+      return;
+    }
+    void dispatchChunkToRemoteAgentNode(
+      this.remoteDispatchOpts,
+      corr.callbackAgentNodeId,
+      corr.correlationId,
+      chunk,
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1161,6 +1240,7 @@ export class BuilderforceRelayService implements IRelayService {
             correlationId,
             callbackAgentNodeId,
             callbackBaseUrl,
+            accumulated: "",
           });
         }
         this.gatewayClient
@@ -1175,16 +1255,32 @@ export class BuilderforceRelayService implements IRelayService {
         break;
       }
 
-      case "remote.task.result": {
-        // A remote agentNode sent the result of a task we previously dispatched.
-        const correlationId = typeof msg.correlationId === "string" ? msg.correlationId : "";
-        const result = typeof msg.result === "string" ? msg.result : "";
-        if (correlationId) {
-          const resolved = resolveRemoteResult(correlationId, result);
-          logDebug(
-            `[builderforce-relay] remote.task.result ${correlationId}: ${resolved ? "resolved" : "no pending callback"}`,
-          );
+      case "remote.task.result":
+      case "remote.result":
+      case "remote.task.chunk":
+      case "remote.result.chunk": {
+        const parsed = parseRemoteCallbackFrame(msg);
+        if (!parsed) {
+          break;
         }
+        if (parsed.kind === "chunk") {
+          const delivered = pushRemoteResultChunk(parsed.correlationId, parsed.chunk);
+          if (delivered && parsed.chunk) {
+            this.sendToRelay({
+              type: "chat.delta",
+              delta: parsed.chunk,
+              session: `remote-${parsed.correlationId}`,
+            });
+          }
+          logDebug(
+            `[builderforce-relay] remote.task.chunk ${parsed.correlationId}: ${delivered ? "delivered" : "no waiter"}`,
+          );
+          break;
+        }
+        const resolved = resolveRemoteResult(parsed.correlationId, parsed.result);
+        logDebug(
+          `[builderforce-relay] remote.task.result ${parsed.correlationId}: ${resolved ? "resolved" : "no pending callback"}`,
+        );
         break;
       }
 
@@ -1518,21 +1614,29 @@ export class BuilderforceRelayService implements IRelayService {
     }
 
     switch (p.type) {
-      case "delta":
+      case "delta": {
+        const session = p.sessionKey ?? "main";
+        const delta = p.delta ?? "";
         this.sendToRelay({
           type: "chat.delta",
-          delta: p.delta ?? "",
-          session: p.sessionKey ?? "main",
+          delta,
+          session,
         });
+        this.captureRemoteOutput(session, delta);
         break;
-      case "message":
+      }
+      case "message": {
+        const session = p.sessionKey ?? "main";
+        const text = p.text ?? "";
         this.sendToRelay({
           type: "chat.message",
           role: p.role ?? "assistant",
-          text: p.text ?? "",
-          session: p.sessionKey ?? "main",
+          text,
+          session,
         });
+        this.captureRemoteOutput(session, text, true);
         break;
+      }
       case "tool_use":
         this.sendToRelay({
           type: "tool.start",

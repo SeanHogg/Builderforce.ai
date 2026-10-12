@@ -421,12 +421,12 @@ Auto-routing:     role: "remote:auto[cap1,cap2]"
 12. `/spec`, `/workflow`, `/compact`, `/handoff` TUI commands
 13. Staged edits — `/diff`, `/accept`, `/reject`
 14. `codebase_search` tool + MCP server at `GET /mcp`
+15. Remote task result streaming — target coalesces assistant output onto `remote.task.chunk` over `/forward`; source broker delivers live chunks then the terminal `remote.task.result` (actual assistant text, not a stub). Documented `remote.result` / `taskCorrelationId` aliases accepted.
 
 ### 🔲 Open Items
 
 - AgentHub marketplace download/install flow (client-side types ready, backend pending)
 - builderforce.ai: Persona Assignment API endpoint
-- Remote task result streaming (agent-to-agent result channel)
 - Semantic knowledge synthesis (architecture.md auto-update after structural edits)
 - VS Code extension (sidebar + inline diff decoration)
 - Tab autocomplete / FIM proxy endpoint

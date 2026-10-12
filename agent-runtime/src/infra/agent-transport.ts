@@ -88,7 +88,11 @@ export class BuilderforceAgentTransport implements IAgentTransport {
     }
 
     try {
-      const output = await awaitRemoteResult(payload.correlationId, payload.timeoutMs ?? 600_000);
+      const output = await awaitRemoteResult(
+        payload.correlationId,
+        payload.timeoutMs ?? 600_000,
+        payload.onChunk,
+      );
       return { status: "accepted", targetId, output };
     } catch (err) {
       // A correlationId was provided, so the caller IS expecting the remote

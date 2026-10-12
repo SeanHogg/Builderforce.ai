@@ -99,7 +99,7 @@ describe("BuilderforceAgentTransport", () => {
       "do work",
       expect.objectContaining({ correlationId: "corr-1" }),
     );
-    expect(awaitSpy).toHaveBeenCalledWith("corr-1", expect.any(Number));
+    expect(awaitSpy).toHaveBeenCalledWith("corr-1", expect.any(Number), undefined);
   });
 
   it("returns failed when no peer satisfies required capabilities", async () => {
@@ -146,6 +146,23 @@ describe("BuilderforceAgentTransport", () => {
       expect(result.targetId).toBe("7");
       expect(result.error).toMatch(/not received/);
     }
+  });
+
+  it("forwards onChunk into awaitRemoteResult", async () => {
+    vi.spyOn(remoteSubagent, "dispatchToRemoteAgentNode").mockResolvedValue({ status: "accepted" });
+    const awaitSpy = vi.spyOn(remoteResultBroker, "awaitRemoteResult").mockResolvedValue("ok");
+    const onChunk = vi.fn();
+
+    const transport = new BuilderforceAgentTransport(baseOpts);
+    const result = await transport.dispatch({
+      target: "remote:7",
+      input: "x",
+      correlationId: "corr-chunk",
+      onChunk,
+    });
+
+    expect(result).toEqual({ status: "accepted", targetId: "7", output: "ok" });
+    expect(awaitSpy).toHaveBeenCalledWith("corr-chunk", expect.any(Number), onChunk);
   });
 
   it("propagates rejection error from dispatchToRemoteAgentNode", async () => {

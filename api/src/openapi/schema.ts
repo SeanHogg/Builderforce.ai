@@ -54,6 +54,24 @@ export interface RemoteTaskPayload {
   callbackBaseUrl?: string;
 }
 
+/** POST /api/agent-hosts/:id/forward — live assistant output while a remote.task runs. */
+export interface RemoteTaskChunkPayload {
+  type: 'remote.task.chunk';
+  correlationId: string;
+  chunk: string;
+  fromAgentHostId: string;
+  timestamp: string;
+}
+
+/** POST /api/agent-hosts/:id/forward — terminal remote.task result. */
+export interface RemoteTaskResultPayload {
+  type: 'remote.task.result';
+  correlationId: string;
+  result: string;
+  fromAgentHostId: string;
+  timestamp: string;
+}
+
 /** POST /api/telemetry/spans — ingest a batch of workflow telemetry spans. */
 export interface TelemetrySpan {
   /** Span kind (e.g. "workflow.start", "task.start", "task.end", "task.error", "task.retry"). */

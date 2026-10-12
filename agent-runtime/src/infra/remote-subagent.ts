@@ -5,6 +5,7 @@
  *   - `fetchFleetEntries`   — `GET /api/agent-hosts/fleet` (agentNode-authenticated).
  *   - `dispatchToRemoteAgentNode` — `POST /api/agent-hosts/:targetId/forward` with HMAC payload.
  *   - `dispatchResultToRemoteAgentNode` — callback path for task results.
+ *   - `dispatchChunkToRemoteAgentNode` — live result chunks while the remote run is in flight.
  *
  * Higher-level concerns (capability-based routing, auto-target parsing, peer
  * filtering) live in `BuilderforceAgentTransport` (`./agent-transport.ts`),
@@ -241,24 +242,20 @@ export async function dispatchToRemoteAgentNode(
 }
 
 /**
- * Send a task result back to the originating agentNode.
- * Called by the target agentNode after completing a remote task.
+ * POST a callback frame to the originating agentNode's `/forward` door.
+ * Best-effort: errors are logged but not thrown.
  */
-export async function dispatchResultToRemoteAgentNode(
+async function postRemoteCallback(
   opts: RemoteDispatchOptions,
   callbackAgentNodeId: string,
-  correlationId: string,
-  result: string,
+  frame: Record<string, unknown>,
 ): Promise<void> {
   const url = `${normalizeBaseUrl(opts.baseUrl)}/api/agent-hosts/${callbackAgentNodeId}/forward`;
-  const payload = {
-    type: "remote.task.result",
-    correlationId,
-    result,
+  const body = JSON.stringify({
+    ...frame,
     fromAgentNodeId: opts.myAgentNodeId,
     timestamp: new Date().toISOString(),
-  };
-  const body = JSON.stringify(payload);
+  });
   const signature = signPayload(body, opts.apiKey);
   try {
     await fetch(url, {
@@ -273,9 +270,47 @@ export async function dispatchResultToRemoteAgentNode(
       signal: AbortSignal.timeout(15_000),
     });
     logDebug(
-      `[remote-subagent] result dispatched to callback agentNode ${callbackAgentNodeId} (correlation=${correlationId})`,
+      `[remote-subagent] ${String(frame.type)} dispatched to callback agentNode ${callbackAgentNodeId}`,
     );
   } catch (err) {
-    logDebug(`[remote-subagent] result dispatch failed: ${String(err)}`);
+    logDebug(`[remote-subagent] ${String(frame.type)} dispatch failed: ${String(err)}`);
   }
+}
+
+/**
+ * Send a task result back to the originating agentNode.
+ * Called by the target agentNode after completing a remote task.
+ */
+export async function dispatchResultToRemoteAgentNode(
+  opts: RemoteDispatchOptions,
+  callbackAgentNodeId: string,
+  correlationId: string,
+  result: string,
+): Promise<void> {
+  await postRemoteCallback(opts, callbackAgentNodeId, {
+    type: "remote.task.result",
+    correlationId,
+    result,
+  });
+}
+
+/**
+ * Send a live result chunk back to the originating agentNode while the remote
+ * task is still running. Same `/forward` door as the terminal result so we do
+ * not depend on the unused `/relay-result` path.
+ */
+export async function dispatchChunkToRemoteAgentNode(
+  opts: RemoteDispatchOptions,
+  callbackAgentNodeId: string,
+  correlationId: string,
+  chunk: string,
+): Promise<void> {
+  if (!chunk) {
+    return;
+  }
+  await postRemoteCallback(opts, callbackAgentNodeId, {
+    type: "remote.task.chunk",
+    correlationId,
+    chunk,
+  });
 }

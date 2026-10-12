@@ -131,6 +131,8 @@ export interface AgentTransportDispatchPayload {
   correlationId?: string;
   callbackAgentNodeId?: string;
   timeoutMs?: number;
+  /** Live remote-task output (assistant deltas coalesced by the target). */
+  onChunk?: (chunk: string) => void;
 }
 
 export type AgentTransportDispatchResult =
