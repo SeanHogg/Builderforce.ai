@@ -63,6 +63,7 @@ import { cloudCrashReason } from '../orphanReasons';
 import { teardownCrashedRunArtifacts } from '../runRollback';
 import { scoreRunOutcome } from '../scoreRunOutcome';
 import { agentCommitMessage, buildPrdCapability, recordTaskFileChange } from './prd';
+import { resolveIdeWorkspaceForRun, writeIdeWorkspaceFile } from './ideWorkspaceCoding';
 import { SUBAGENT_TOOLS, type Capability, type CapabilityProvider } from '@builderforce/agent-tools';
 import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
@@ -541,7 +542,43 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     const isNew = args.isNew !== false;
     if (!path || !content) return { status: 200, body: { ok: false, error: 'path and content are both required' } };
     const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), tenantId, taskId);
-    if (!repo.ok) return { status: 200, body: { ok: false, error: `no repo bound to this task (${repo.reason}); include the file contents in your final summary instead` } };
+    if (!repo.ok) {
+      // Ticket 3089: Brain/zero-setup projects have no git. The IDE workspace is
+      // the working tree — write there instead of dumping the deliverable as prose.
+      const ide = await resolveIdeWorkspaceForRun(env, db, tenantId, taskId);
+      if (!ide) {
+        return { status: 200, body: { ok: false, error: `no repo bound to this task (${repo.reason}); include the file contents in your final summary instead` } };
+      }
+      const blocked = await claimWriteLease({
+        env, db, path,
+        holder: {
+          tenantId, executionId, label: agentLabel, taskId,
+          repoSlug: `workspace:${ide.projectId}`,
+          branch: 'workspace',
+          scopeKey: coordinationScopeKey(taskId),
+        },
+        reason: typeof args.summary === 'string' && args.summary ? `writing: ${args.summary}` : 'writing this file',
+        onRefused: (p, heldBy) => {
+          void recordCloudToolEvent(db, {
+            tenantId, cloudAgentRef, executionId,
+            toolName: 'coordination.refused', category: 'tool',
+            detail: { path: p, heldBy }, result: `write to '${p}' refused — held by ${heldBy}`,
+          }).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgent/containerOps.ts", operation: "blocked", context: { logMessage: '[cloud-container] coordination refusal telemetry failed', details: { tenantId, executionId, taskId, path: p, error } } }));
+        },
+      });
+      if (blocked) return { status: 200, body: { ok: false, error: blocked } };
+      const write = await writeIdeWorkspaceFile(db, ide, {
+        tenantId, taskId, executionId, agent: agentLabel, path, content,
+      });
+      if (!write.ok) return { status: 200, body: write };
+      notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: write.change ?? 'modified', ts: new Date().toISOString() });
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef, executionId, toolName: 'write_file', category: 'tool',
+        detail: { path, summary: args.summary },
+        result: write.note ?? `wrote to IDE workspace ${ide.projectName}`,
+      });
+      return { status: 200, body: write };
+    }
     // MULTI-REPO SPANNING (0956): route this path to the repo in the task's set
     // whose pathGlobs claim it. Single-repo tasks resolve to `repo.ctx` unchanged.
     const router = await resolveTaskRepoRouter(db, integrationCredentialSecret(env), tenantId, taskId, { ctx: repo.ctx, reason: '' })

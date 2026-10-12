@@ -7,6 +7,15 @@ The VS Code roster already listed live children through `ChatTicketsPanel`'s `su
 - Shared `ChatRunHistoryVM.subagents` is optional so a degraded fetch is not "none running".
 - Closes the Gap Register row that needed migration 1209 first (already on the schema).
 
+## ✅ RESOLVED 2026-10-12 — Cloud loop in-run build/type-check/test via branch CI (ticket #3092)
+
+- **The gap:** the durable Worker has no shell, so the cloud loop could not run a build, type-check, or test before `finish`. It fell through to CI-on-PR + webhook auto-fix, and a finish summary that claimed tests passed was only caught by the honesty gate (block once, then ship unverified).
+- **In-run substitute:** `pollCommitCiStatus` / `pollBranchCi` (`api/src/application/ci/pollCommitCiStatus.ts`) read combined commit status (GitHub also merges `/check-runs`, because Actions often never publish a commit status) on the ticket-branch HEAD. Never throws; unreachable provider / missing SHA / no checks → `{ status: 'none' }`.
+- **`run_checks`:** after static source/config validation, polls CI. Red fails the tool. Pending/none stay `ok` with a note that forbids claiming tests passed. Green explicitly allows the claim.
+- **Pre-finish gate:** after static validation, `ciFinishDecision` blocks red (cap 3) and pending (cap 2). Caps persist on `CloudLoopState` across durable ticks. Green sets `ciVerified` and skips the honesty gate. `none` (including PR-only workflows) does not block; webhook auto-fix + `CLOUD_AUTOMERGE_REQUIRE_GREEN` remain the backstop.
+- **PR annotation:** when `ciVerified`, the PR body and run summary say in-run CI was green and to re-check CI on the PR; otherwise the unverified caveat stays.
+- Tests: `api/src/application/ci/pollCommitCiStatus.test.ts`.
+
 ## ✅ RESOLVED 2026-10-12 — Studio Brain turns stop repeating work: batched build-file reads, no Brain-trace undo steps, readable trace rows (ui 2026.10.47)
 
 - **The report:** session `local-148925cf` (ui 2026.10.45), "lots of duplicate calls". The diagnostics showed four separate causes.
@@ -102,8 +111,9 @@ The VS Code roster already listed live children through `ChatTicketsPanel`'s `su
 - **What:** A Brain `projects.create` minted a bare `projects` row. The board-dispatched coder then had neither a git repo nor an IDE workspace and returned prose ("No repo bound"). Scratch-repo-at-create is rejected (Brain tenants typically have no git provider). Designer projects now go through the IDE workspace (`ide/projects/{id}/`).
 - **Create door:** MCP `projects.create` calls `afterBrainProjectCreate` (provision starter files + board + Evermind, then bind `ide_projects`). REST POST `/api/projects`, `/upsert`, `/scaffold` bind the IDE workspace after `provisionProject`. Zero-setup starter-workspace uses the same Brain helper.
 - **Runtime (already on main):** coding-dispatch uses `DispatchDetail.workspace` when `repo` is null; agent-host `GET /:id/dispatch/:dispatchId` attaches `workspace.filesPath`; GET/POST `/:id/workspace/:projectId/files` is the R2 analogue of git-proxy. Reasoning-only is last resort and names the reason.
-- **Tests:** `builtinMcpService.test.ts` (env → afterBrain, no-env → bind, provision failure still returns the project); existing `ensureProjectCodingTarget.test.ts` + `builderforce-coding-dispatch.test.ts` workspace path.
-- **Files:** `api/src/application/llm/builtinMcpService.ts`, `api/src/presentation/routes/projectRoutes.ts`, `api/src/application/tenant/starterWorkspace.ts`, `api/src/services/ensureProjectCodingTarget.ts`.
+- **Cloud/board loop (ticket 3089 remaining hole):** when `resolveTicketRepoContext` misses, durable `buildCloudProvider` and container `write_file` now resolve the IDE R2 workspace (`ideWorkspaceCoding.ts`) and list/read/search/write/edit/delete there. Prompt uses `describeWorkspaceBlock` / `codingTargetToolingLine` so the model is told to use `write_file`, not dump a deliverable. Last-resort prose only if neither git nor IDE is bound. `staticCheck.verify` skips with a workspace note (no clone). Writes record `taskFileChanges` and take the same coordination lease (scope = ticket, slug `workspace:{projectId}`, branch `workspace`).
+- **Tests:** `builtinMcpService.test.ts` (env → afterBrain, no-env → bind, provision failure still returns the project); existing `ensureProjectCodingTarget.test.ts` + `builderforce-coding-dispatch.test.ts` workspace path; `ideWorkspaceCoding.test.ts` (prompt git vs IDE vs neither; list/read/search/write/edit/delete against fake R2; traversal write refused).
+- **Files:** `api/src/application/llm/builtinMcpService.ts`, `api/src/presentation/routes/projectRoutes.ts`, `api/src/application/tenant/starterWorkspace.ts`, `api/src/services/ensureProjectCodingTarget.ts`, `api/src/application/runtime/cloudAgent/ideWorkspaceCoding.ts`, `api/src/application/runtime/cloudAgent/ideWorkspaceCoding.test.ts`, `api/src/application/runtime/cloudAgent/prd.ts`, `api/src/application/runtime/cloudAgent/containerOps.ts`, `api/src/application/runtime/cloudAgentEngine.ts`.
 
 ---
 

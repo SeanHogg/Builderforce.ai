@@ -26,6 +26,7 @@ import {
 import { resolveTicketRepoContext } from '../../repos/commitFileAsPendingChange';
 import { commitPrdAsPendingChange, taskPrdRepoPath } from '../../repos/commitPrdToRepo';
 import { listBranchDiff, listRepoFiles } from '../../repos/readRepoContents';
+import { resolveIdeWorkspaceForRun, snapshotIdeWorkspace } from './ideWorkspaceCoding';
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { notifyExecutionSubscribers } from '../executionEvents';
 import { getOrSetCached } from '../../../infrastructure/cache/readThroughCache';
@@ -68,6 +69,12 @@ export async function recordTaskFileChange(
 export interface WorkspaceContext {
   /** Bound repo identity, or null when no usable repo is bound. */
   repo: { owner: string; repo: string; provider: string; base: string } | null;
+  /**
+   * IDE R2 workspace when no git repo is bound (ticket 3089). A Brain-created
+   * project still has a working tree — cloud writes land here instead of in a
+   * finish-summary dump.
+   */
+  ide?: { projectId: number; projectName: string };
   /** Why no repo (when `repo` is null) — surfaced to the agent + the timeline. */
   reason?: string;
   /** Top-level entries (dirs as `name/`, root files as `name`) on the base branch. */
@@ -89,7 +96,16 @@ export async function loadWorkspaceContext(
   const empty: WorkspaceContext = { repo: null, topLevel: [], fileCount: 0, truncated: false, priorChanges: [] };
   try {
     const resolved = await resolveTicketRepoContext(db, secret, tenantId, taskId);
-    if (!resolved.ok) return { ...empty, reason: resolved.reason };
+    if (!resolved.ok) {
+      // Ticket 3089: Brain/zero-setup tenants have no git. The IDE workspace is
+      // the working tree — do not tell the model there are no files to edit.
+      const ideRun = await resolveIdeWorkspaceForRun(env, db, tenantId, taskId);
+      if (ideRun) {
+        const snap = await snapshotIdeWorkspace(ideRun);
+        return { repo: null, ...snap, priorChanges: [] };
+      }
+      return { ...empty, reason: resolved.reason };
+    }
     const { ctx } = resolved;
     const readCtx = { provider: ctx.provider, host: ctx.host, owner: ctx.owner, repo: ctx.repo, token: ctx.token, ref: ctx.base };
 
