@@ -86,6 +86,35 @@ export interface WorkspaceContext {
   priorChanges: Array<{ path: string; status: string }>;
 }
 
+/**
+ * Compact repo snapshot appended to the PRD-draft prompt so a first draft is
+ * grounded in the bound workspace, not title+description alone. Host-delivered
+ * runs never reach `prepareCloudRun`, so this has to live with {@link ensureTaskPrd}.
+ * Pure — no I/O — so the write-path test can pin the shape without mocking GitHub.
+ */
+export function workspaceBriefForPrd(ws: WorkspaceContext): string {
+  const lines: string[] = [];
+  if (ws.repo) {
+    lines.push(`Bound repo: ${ws.repo.owner}/${ws.repo.repo} (${ws.repo.provider}, base ${ws.repo.base}).`);
+  } else if (ws.ide) {
+    lines.push(`IDE workspace: ${ws.ide.projectName} (project ${ws.ide.projectId}).`);
+  } else if (ws.reason) {
+    lines.push(`No coding target bound: ${ws.reason}`);
+  }
+  if (ws.topLevel.length > 0) {
+    lines.push(`Top-level: ${ws.topLevel.join(', ')}${ws.truncated ? ' (truncated)' : ''}.`);
+  }
+  if (ws.fileCount > 0) {
+    lines.push(`Tracked files: ${ws.fileCount}.`);
+  }
+  if (ws.priorChanges.length > 0) {
+    const shown = ws.priorChanges.slice(0, 20).map((c) => `${c.status} ${c.path}`);
+    const extra = ws.priorChanges.length > 20 ? '…' : '';
+    lines.push(`Prior branch changes: ${shown.join(', ')}${extra}.`);
+  }
+  return lines.join('\n');
+}
+
 export async function loadWorkspaceContext(
   env: Env,
   db: Db,
@@ -186,8 +215,31 @@ export async function ensureTaskPrd(
     const existing = await findTaskPrimarySpec(db, taskId).catch(() => null);
     return existing?.prd?.trim() ?? '';
   }
+  // Skip the extra workspace I/O when a PRD already exists — host-delivered
+  // runs call this on every dispatch, and a reuse must stay a cheap read.
+  const existing = await findTaskPrimarySpec(db, taskId).catch(() => null);
+  if (existing?.prd?.trim()) return existing.prd.trim();
+
+  // Ground a FIRST draft in the bound repo snapshot (REST tree/diff — there is
+  // no git clone on the durable path). Best-effort: a snapshot miss falls back
+  // to title+description, same as before this hoist.
+  let description = taskRow.description;
+  try {
+    const workspace = await loadWorkspaceContext(env, db, integrationCredentialSecret(env), tenantId, taskId);
+    const brief = workspaceBriefForPrd(workspace);
+    if (brief) {
+      description = [taskRow.description?.trim(), brief].filter(Boolean).join('\n\n') || null;
+    }
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/runtime/cloudAgent/prd.ts',
+      operation: 'ensureTaskPrd',
+      context: { logMessage: '[cloud-prd] workspace snapshot for first draft failed', details: { tenantId, taskId, error } },
+    });
+  }
+
   // Shared generate→persist→link core (reused by the on-demand endpoint + swimlane gate).
-  const ensured = await ensureTaskPrdRecord(db, env, { taskId, tenantId, projectId, title: taskRow.title, description: taskRow.description, agentLabel, model });
+  const ensured = await ensureTaskPrdRecord(db, env, { taskId, tenantId, projectId, title: taskRow.title, description, agentLabel, model });
   if (!ensured) return '';
   const { prd, status } = ensured;
   if (status === 'reused') return prd; // already had a PRD — no new commit/notification

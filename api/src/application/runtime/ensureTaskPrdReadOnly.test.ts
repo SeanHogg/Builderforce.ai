@@ -16,13 +16,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const ensureTaskPrdRecord = vi.fn();
 const findTaskPrimarySpec = vi.fn();
 
-vi.mock('../prd/taskPrd', () => ({
-  ensureTaskPrdRecord: (...a: unknown[]) => ensureTaskPrdRecord(...a),
-  findTaskPrimarySpec: (...a: unknown[]) => findTaskPrimarySpec(...a),
-  appendTaskPrdRevision: vi.fn(),
+vi.mock('../prd/taskPrd', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../prd/taskPrd')>();
+  return {
+    ...actual,
+    ensureTaskPrdRecord: (...a: unknown[]) => ensureTaskPrdRecord(...a),
+    findTaskPrimarySpec: (...a: unknown[]) => findTaskPrimarySpec(...a),
+  };
+});
+
+// First-draft grounding walks the bound workspace. Keep the write-path tests
+// hermetic — no GitHub, no IDE snapshot — and still prove the brief is fed in.
+vi.mock('../repos/commitFileAsPendingChange', () => ({
+  resolveTicketRepoContext: async () => ({ ok: false, reason: 'unbound' }),
+}));
+vi.mock('./cloudAgent/ideWorkspaceCoding', () => ({
+  resolveIdeWorkspaceForRun: async () => null,
+  snapshotIdeWorkspace: async () => ({ files: [] }),
 }));
 
-const { ensureTaskPrd } = await import('./cloudAgentEngine');
+const { ensureTaskPrd } = await import('./cloudAgent/prd');
 
 const env = {} as never;
 const db = {} as never;
@@ -62,14 +75,28 @@ describe('ensureTaskPrd — readOnly (the rehearsal invariant)', () => {
   });
 
   it('the DEFAULT path still ensures a PRD — the live run is unchanged', async () => {
+    findTaskPrimarySpec.mockResolvedValue(null);
     ensureTaskPrdRecord.mockResolvedValue({ specId: 's1', prd: '# Drafted', status: 'reused' });
     expect(await call(false)).toBe('# Drafted');
     expect(ensureTaskPrdRecord).toHaveBeenCalledOnce();
-    // 'reused' short-circuits before the commit, so the read-only lookup is not used.
-    expect(findTaskPrimarySpec).not.toHaveBeenCalled();
+  });
+
+  it('reuses an existing PRD without a second draft or workspace snapshot', async () => {
+    findTaskPrimarySpec.mockResolvedValue({ id: 's1', prd: '  # Existing  ' });
+    expect(await call(false)).toBe('# Existing');
+    expect(ensureTaskPrdRecord).not.toHaveBeenCalled();
+  });
+
+  it('grounds a first draft in the workspace snapshot (title+description is not enough)', async () => {
+    findTaskPrimarySpec.mockResolvedValue(null);
+    ensureTaskPrdRecord.mockResolvedValue({ specId: 's1', prd: '# Drafted', status: 'reused' });
+    expect(await call(false)).toBe('# Drafted');
+    const params = ensureTaskPrdRecord.mock.calls[0]?.[2] as { description: string };
+    expect(params.description).toContain('No coding target bound: unbound');
   });
 
   it('the default path returns empty when no PRD could be produced', async () => {
+    findTaskPrimarySpec.mockResolvedValue(null);
     ensureTaskPrdRecord.mockResolvedValue(null);
     expect(await call(false)).toBe('');
   });

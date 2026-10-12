@@ -24,8 +24,9 @@ import { RuntimeService } from './RuntimeService';
 import { tenantHasFeature } from '../tenant/featureEntitlements';
 import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
-  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, withDefaultModel, withExecutor,
+  isTerminalExecutionStatus, parseCloudAgentRef, parseModel, parseRepoId, withDefaultModel, withExecutor,
 } from './cloudDispatch';
+import { ensureTaskPrd } from './cloudAgent/prd';
 import { launchContainerRun, type ContainerRunTarget } from './containerRunLauncher';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { notifyExecutionSubscribers } from './executionEvents';
@@ -556,6 +557,30 @@ export async function startDispatchedExecution(
     // eval, for this exact version) — closed → no pin → today's model selection.
     : await resolveProjectInferenceModel(env as Env, db, tenantId, taskRow.projectId, { purpose: 'coding' });
   const effectivePayload = withDefaultModel(payload, agent.baseModel ?? projectEvermindPin);
+
+  // PRD-first at the dispatch choke point. Host-delivered runs never reach
+  // prepareCloudRun (the previous sole caller), so an On-Prem / pinned-host
+  // execution used to skip the draft entirely. Rehearsal never enters this
+  // function, so readOnly is always false here. Best-effort: a draft miss
+  // still starts the run (the agent can write a PRD later via update_prd).
+  await ensureTaskPrd(
+    env as Env,
+    db,
+    execution.id,
+    { title: taskRow.title, description: taskRow.description },
+    tenantId,
+    taskRow.projectId,
+    taskRow.id,
+    agent.label ?? 'BuilderForce Agent',
+    parseModel(effectivePayload) ?? agent.baseModel,
+  ).catch((error) => reportCaughtError(error, {
+    source: 'application/runtime/dispatchCloudRun.ts',
+    operation: 'startDispatchedExecution',
+    context: {
+      logMessage: '[runtime-dispatch] PRD-first ensure failed',
+      details: { tenantId, executionId: execution.id, taskId: taskRow.id, error },
+    },
+  }));
 
   const message: DispatchMessage = {
     type: 'task.assign',
