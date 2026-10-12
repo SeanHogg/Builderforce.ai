@@ -24,7 +24,7 @@ import {
 } from '@/lib/builderforceApi';
 import { WorkflowDagView } from './WorkflowDagView';
 import { TrendChart } from './charts/TrendChart';
-import { StatusPill, WORKFLOW_STATUS_TONE, cardStyle, subtleBtn } from './workflowRunUi';
+import { StatusPill, WORKFLOW_STATUS_TONE, cardStyle, subtleBtn, isLiveWorkflowStatus, LIVE_WORKFLOW_POLL_MS } from './workflowRunUi';
 import { statusColor } from '@/lib/statusTone';
 import { useFormat } from "@/i18n/useFormat";
 
@@ -151,6 +151,38 @@ export function WorkflowRunHistoryPanel({ definitionId, definitionName, initialR
       setLoadingGraph(false);
     }
   }, []);
+
+  // The graph endpoint is a snapshot (GET /graph), not a stream. While this run
+  // is still in flight, re-fetch the record (and the DAG, if that tab is open)
+  // so node status moves without the operator having to leave and come back.
+  useEffect(() => {
+    if (!selectedDetail || !isLiveWorkflowStatus(selectedDetail.status)) return;
+    const workflowId = selectedDetail.id;
+    const tab = detailTab;
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const next = await workflows.get(workflowId);
+        if (cancelled) return;
+        setSelectedDetail(next);
+        if (tab === 'graph') {
+          const g = await workflows.getGraph(workflowId);
+          if (cancelled) return;
+          setGraph(g);
+        }
+      } catch {
+        /* keep last snapshot */
+      }
+    };
+
+    void tick();
+    const timer = setInterval(() => { void tick(); }, LIVE_WORKFLOW_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [selectedDetail?.id, selectedDetail?.status, detailTab]);
 
   const tabBtnStyle = (active: boolean): React.CSSProperties => ({
     padding: '5px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, borderRadius: 'var(--radius-sm)',

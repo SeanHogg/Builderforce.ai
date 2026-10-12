@@ -32,6 +32,14 @@ export const subtleBtn: React.CSSProperties = {
 
 export type WorkflowRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
+/** Pending + running still have work in flight — poll the snapshot DAG until they leave this set. */
+export function isLiveWorkflowStatus(status: string | undefined): boolean {
+  return status === 'pending' || status === 'running';
+}
+
+/** How often the run-history graph/task snapshot re-fetches while a run is live. No workflow WS exists yet. */
+export const LIVE_WORKFLOW_POLL_MS = 2000;
+
 /**
  * THE workflow run/task status → tone map — the run list, the task rows and the DAG
  * view's nodes all read it, so a status is one colour on every workflow surface.
