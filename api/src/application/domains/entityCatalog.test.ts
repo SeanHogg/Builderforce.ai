@@ -288,7 +288,18 @@ describe('the entity catalog', () => {
     // tools, which check tenant ownership of the project BEFORE touching the row. A
     // generic PATCH would be a false statement about what a commit contains — the
     // override path is the repo's own `builderforce.json`.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(30);
+    //
+    // Ceiling moved 29 → 30 (2026-10-11) with `replay_visits` (migration 0486),
+    // adjudicated rather than counted: it lands on the NO TENANT TO REGISTER UNDER reason
+    // written above for `release_digest_runs` — `tenant_id` is NULLABLE (a visit can land
+    // before the visitor has an account), and the catalog registers into the tenant-scoped
+    // `objects` table. It is also not an object on its own merits: one row per recording
+    // holding the `foldVisit()` summary (domain/replay/visitSummary.ts) — counters and
+    // entry/exit paths derived from the replay event stream, keyed by an opaque recorder
+    // `visit_id`, with no title, no status and nothing a person edits. The reader is the
+    // superadmin Sessions canvas (GET /api/admin/replay-visits); a generic PATCH would be
+    // a false statement about a visit that already happened.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(31);
   });
 
   it('declares nothing that no migration creates', () => {
