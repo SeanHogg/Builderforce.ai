@@ -159,7 +159,11 @@ export function ToolStep({ node, labels }: { node: ToolStepNode; labels: ToolSte
           {node.isError ? '✗' : '✓'}
         </span>
         <span className="bf-tl__tool-name">{node.label}</span>
-        {view.subject && <span className="bf-tl__tool-subject">{view.subject}</span>}
+        {view.subject && (
+          <span className={`bf-tl__tool-subject${view.subjectIsPath ? ' bf-tl__tool-subject--path' : ''}`} title={view.subject}>
+            {view.subjectIsPath ? <bdi dir="ltr">{view.subject}</bdi> : view.subject}
+          </span>
+        )}
         {node.durationMs != null && <span className="bf-tl__tool-dur">{formatDuration(node.durationMs)}</span>}
         <span className="bf-tl__tool-caret" aria-hidden>
           ▸

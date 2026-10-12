@@ -50,6 +50,11 @@ export interface CommandRun {
 export interface ToolStepView {
   /** The concrete thing the call was about, for the collapsed header line. */
   subject: string | null;
+  /** The subject is one file path, so a narrow header must elide its START: the basename
+   *  is what tells `src/pages/Home.jsx` from `src/pages/Home.css`, and an end ellipsis
+   *  rendered both as `src/pages/Home…` — two different reads that looked like a
+   *  duplicate call (session `local-148925cf`). */
+  subjectIsPath: boolean;
   command: CommandRun | null;
   preview: ToolPreview | null;
   /** Raw argument JSON, minus anything the command line already shows. `''` = omit. */
@@ -180,12 +185,26 @@ function residualArgs(args: unknown, command: string | null): unknown {
   return Object.keys(rest).length > 0 ? rest : null;
 }
 
+/**
+ * The header subject: the call's target, or — for a call that reads several files at
+ * once (`paths`) — their basenames, since the shared directory says nothing.
+ */
+function subjectOf(args: unknown, isCommand: boolean): { subject: string | null; subjectIsPath: boolean } {
+  const target = activityTarget(args);
+  if (target) return { subject: target, subjectIsPath: !isCommand && target.includes('/') && !/\s/.test(target) };
+  const paths = asRecord(args)?.paths;
+  const names = Array.isArray(paths) ? paths.filter((path): path is string => typeof path === 'string' && !!path.trim()) : [];
+  if (names.length === 1) return { subject: names[0].trim(), subjectIsPath: names[0].includes('/') };
+  if (names.length > 1) return { subject: names.map((path) => path.trim().split(/[\\/]/).pop()).join(', '), subjectIsPath: false };
+  return { subject: null, subjectIsPath: false };
+}
+
 /** Decide how one tool step presents itself. */
 export function toolStepView({ args, result, isError }: { args: unknown; result: unknown; isError: boolean }): ToolStepView {
   const commandLine = commandOf(args);
   const command: CommandRun | null = commandLine ? { command: commandLine, ...shellOutcomeOf(result) } : null;
   return {
-    subject: activityTarget(args) ?? null,
+    ...subjectOf(args, !!command),
     command,
     preview: toolPreview(args),
     argsText: formatPayload(residualArgs(args, commandLine)),

@@ -10,6 +10,7 @@ import {
   CANVAS_BUILD_TOOL_NAMES,
   CANVAS_BUILD_WORKSPACE_WRITE_TOOLS,
   canvasBuildActions,
+  MAX_READ_FILES,
   type BoundCanvasBuild,
 } from './canvasBuildTools';
 import { ACCOUNT_REQUIRED_CANVAS_TOOLS, GUEST_SAFE_CANVAS_TOOLS } from '@builderforce/creation-canvas-contract';
@@ -153,6 +154,27 @@ describe('a workspace held in this browser', () => {
     expect(changed).toEqual([['local:tools-local', ['src/App.jsx']], ['local:tools-local', ['src/App.jsx']]]);
     // Each committed change names the build it went into, so the surface can show it.
     expect(written).toEqual(['b1', 'b1']);
+  });
+
+  it('reads several files in ONE call, naming any path that does not exist', async () => {
+    // Session local-148925cf: a three-import fix spent 11 of 16 steps on one-file reads.
+    await seedLocalWorkspace('tools-batch', { 'src/pages/Login.jsx': "import './Auth.css';", 'src/index.css': ':root{}' });
+    const actions = canvasBuildActions({
+      builds: () => [{ objectId: 'b1', title: 'Local', modality: 'designer', store: localFileStore('tools-batch') }],
+      createBuild: async () => { throw new Error('unused'); },
+    });
+    const result = await run(actions, 'canvas_read_build_file', { paths: ['/src/pages/Login.jsx', 'src/index.css', 'src/pages/Auth.css', 'src/index.css'] });
+    expect(result).toMatchObject({
+      ok: true,
+      files: [
+        { path: 'src/pages/Login.jsx', content: "import './Auth.css';", truncated: false },
+        { path: 'src/index.css', content: ':root{}', truncated: false },
+        { path: 'src/pages/Auth.css', error: expect.stringContaining('No file') },
+      ],
+    });
+    expect(String(result.next)).toContain('canvas_write_build_file');
+    expect(await run(actions, 'canvas_read_build_file', { paths: Array.from({ length: MAX_READ_FILES + 1 }, (_, i) => `f${i}.js`) }))
+      .toMatchObject({ error: expect.stringContaining(String(MAX_READ_FILES)) });
   });
 
   it('tells the model when a write imports a package package.json does not declare', async () => {

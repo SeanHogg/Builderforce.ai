@@ -991,7 +991,10 @@ describe('runCreationCanvasAi', () => {
       expect(MAX_CANVAS_BUILD_TURNS).toBeGreaterThan(MAX_CANVAS_TOOL_TURNS);
       expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(MAX_CANVAS_BUILD_TURNS);
       expect(run).toHaveBeenCalledTimes(MAX_CANVAS_BUILD_TURNS);
-      expect(answer).toBe(NOTICES.stepsExhausted);
+      // The notice is what the transcript keeps of this turn, so it names what was written
+      // — once, however many times the turn rewrote it.
+      expect(answer).toBe(NOTICES.stepsExhausted(['src/x.js']));
+      expect(answer).toContain('src/x.js');
     });
 
     it('gives a turn that only READS an app the code step budget, and says it stopped before changing anything', async () => {

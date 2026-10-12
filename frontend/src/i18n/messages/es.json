@@ -24385,6 +24385,7 @@
       "stoppedPartway": "El modelo dejó de responder a mitad de esta petición, así que no está terminada. Lo que completó está en el lienzo: di \"continuar\" para retomarla donde se quedó, o elige otro modelo en el menú /.",
       "toolError": "No he podido preparar los cambios solicitados en el lienzo: {detail}",
       "stepsExhausted": "He agotado todos los pasos que permite este turno y me he detenido aquí; todo lo que he construido hasta ahora está en el lienzo. Di «continuar» y seguiré desde donde lo dejé.",
+      "stepsExhaustedFiles": "Cambiado hasta ahora: {files}.",
       "stepsExhaustedUnchanged": "Usé todos los pasos de este turno leyendo la app y me detuve antes de cambiarla, así que todavía no hay nada distinto. Di «continuar» y haré los cambios.",
       "buildNotAuthored": "He preparado el espacio de trabajo inicial de la aplicación, pero no he escrito la aplicación en sí, así que la vista previa sigue mostrando la página de plantilla. Di «continuar» y construiré lo que pediste.",
       "answeredWithoutChange": "He respondido aquí, pero no he puesto nada en el lienzo. Pídeme que lo añada al lienzo y crearé el objeto correspondiente.",

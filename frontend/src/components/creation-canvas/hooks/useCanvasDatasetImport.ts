@@ -1,14 +1,11 @@
 /** Importing a tabular file as a dataset object. */
 import { type AttachmentBytesStrategy, fileToDataUrl, importCanvasFile } from '@/domains/canvas/application/ImportCanvasFile';
-import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect } from 'react';
+import { type Dispatch, type SetStateAction, useCallback } from 'react';
 import { uploadAttachmentSource } from '@/lib/canvasAttachmentUploadApi';
 import { profileTabular, type TabularSource } from '@/lib/canvasTabularData';
 import { createDefaultCreationData } from '../creationObjectRegistry';
 import { classificationSummary, classifyTabular } from '@/lib/canvasDataGovernance';
 import { faultText } from '@/lib/apiClient';
-import { type CanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
-import type { CreationFlowNode } from '../CreationNode';
-import type { Edge } from '@xyflow/react';
 import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
 import type { useTranslations } from 'next-intl';
 import type { Formatter } from '@/i18n/format';
@@ -17,24 +14,16 @@ import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 export interface UseCanvasDatasetImportDeps {
   canvasText: CanvasTextTranslator;
   datasetRowLimit: number;
-  edges: Edge[];
   fmt: Formatter;
-  historyApplyingRef: RefObject<boolean>;
-  historyBaselineRef: RefObject<string | null>;
-  hydratedRef: RefObject<boolean>;
   importLabel: CanvasTextTranslator;
-  journalRef: RefObject<CanvasJournal>;
-  nodes: CanvasObject[];
   persistence: 'local' | 'server';
-  redoStackRef: RefObject<string[]>;
   selectedId: string | null;
   setNodes: Dispatch<SetStateAction<CanvasObject[]>>;
   setNotice: (text: string) => void;
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
-  undoStackRef: RefObject<string[]>;
 }
 
-export function useCanvasDatasetImport({ canvasText, datasetRowLimit, edges, fmt, historyApplyingRef, historyBaselineRef, hydratedRef, importLabel, journalRef, nodes, persistence, redoStackRef, selectedId, setNodes, setNotice, t, undoStackRef }: UseCanvasDatasetImportDeps) {
+export function useCanvasDatasetImport({ canvasText, datasetRowLimit, fmt, importLabel, persistence, selectedId, setNodes, setNotice, t }: UseCanvasDatasetImportDeps) {
   /**
    * How a dropped file's bytes survive past the import that could not read
    * them, so a later tool can still escalate it (OCR on a scan, a multimodal
@@ -102,29 +91,5 @@ export function useCanvasDatasetImport({ canvasText, datasetRowLimit, edges, fmt
     }
   }, [canvasText, datasetRowLimit, fmt, importLabel, selectedId, setNodes, setNotice, t]);
 
-  useEffect(() => {
-    if (!hydratedRef.current || historyApplyingRef.current) return;
-    const next = JSON.stringify({ nodes, edges });
-    const handle = window.setTimeout(() => {
-      if (historyBaselineRef.current == null) historyBaselineRef.current = next;
-      else if (historyBaselineRef.current !== next) {
-        // Every board mutation — palette, drag, delete, inspector edit, an AI
-        // proposal being applied, an undo — settles HERE, so this is the one
-        // place that can record what the person did without a dozen handlers
-        // each remembering to. See `describeGraphChange`.
-        try {
-          const change = describeGraphChange(
-            JSON.parse(historyBaselineRef.current) as { nodes: CreationFlowNode[]; edges: Edge[] },
-            { nodes, edges },
-          );
-          if (change) journalRef.current.record({ kind: 'user', label: change.label, detail: change.detail });
-        } catch { /* the journal must never be able to break the history stack */ }
-        undoStackRef.current = [...undoStackRef.current.slice(-49), historyBaselineRef.current];
-        historyBaselineRef.current = next;
-        redoStackRef.current = [];
-      }
-    }, 500);
-    return () => window.clearTimeout(handle);
-  }, [edges, historyApplyingRef, historyBaselineRef, hydratedRef, journalRef, nodes, redoStackRef, undoStackRef]);
   return { attachmentBytesStrategy, importDataset };
 }

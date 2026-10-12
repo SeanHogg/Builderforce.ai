@@ -129,7 +129,7 @@ export const BUILD_NOT_AUTHORED_DIRECTIVE = 'You provisioned the workspace but h
 /** Truncation is an OUTPUT-SIZE failure, so the recovery is to author smaller —
  * the opposite of "answer again", which would truncate identically. The canvas
  * itself is the durable place for length, so splitting across calls costs nothing. */
-export const TRUNCATED_TURN_DIRECTIVE = 'Your previous response was cut off at the output limit before it finished, so nothing you sent could be used. Produce less in one step: make ONE canvas_* tool call at a time with the fields that matter, keep prose short, and split a long artifact across several calls or several objects rather than sending it all at once.';
+export const TRUNCATED_TURN_DIRECTIVE = 'Your previous response was cut off at the output limit before it finished, so nothing you sent could be used. Produce less in one step: send ONE file or ONE object per response with the fields that matter (reads are small — keep batching those), keep prose short, and split a long artifact across several calls or several objects rather than sending it all at once.';
 
 /** The model DID choose to act; the arguments were unparseable. Telling it to
  * "answer" here would discard a correct intent, so the directive keeps the action

@@ -15,7 +15,7 @@
     "components/ProviderKeysSettings.tsx": 1442,
     "components/TaskMgmtContent.tsx": 2762,
     "components/agent/AgentExecutionPanel.tsx": 1091,
-    "components/creation-canvas/CreationCanvas.tsx": 1163,
+    "components/creation-canvas/CreationCanvas.tsx": 1159,
     "components/manager/ManagerContent.tsx": 1182,
     "components/reliability/MonitoringSections.tsx": 954,
     "components/workforce/WorkforceAgents.tsx": 900,

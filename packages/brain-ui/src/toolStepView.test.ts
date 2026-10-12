@@ -124,6 +124,20 @@ describe('toolStepView', () => {
     expect(view.defaultOpen).toBe(false);
   });
 
+  it('marks a path subject so the header elides its start and keeps the basename', () => {
+    // Session local-148925cf: Home.jsx and Home.css both rendered `src/pages/Home…`.
+    expect(toolStepView({ args: { path: 'src/pages/Home.css' }, result: null, isError: false }).subjectIsPath).toBe(true);
+    expect(toolStepView({ args: { command: 'cat src/a.ts' }, result: null, isError: false }).subjectIsPath).toBe(false);
+    expect(toolStepView({ args: { query: 'Home' }, result: null, isError: false }).subjectIsPath).toBe(false);
+  });
+
+  it('names every file of a batched read by basename', () => {
+    const view = toolStepView({ args: { paths: ['src/pages/Login.jsx', 'src/pages/Auth.css'] }, result: null, isError: false });
+    expect(view.subject).toBe('Login.jsx, Auth.css');
+    expect(view.subjectIsPath).toBe(false);
+    expect(toolStepView({ args: { paths: ['src/App.jsx'] }, result: null, isError: false })).toMatchObject({ subject: 'src/App.jsx', subjectIsPath: true });
+  });
+
   it('opens a failed step — the one nobody should have to click to read', () => {
     expect(toolStepView({ args: { path: 'a.ts' }, result: { ok: false }, isError: true }).defaultOpen).toBe(true);
   });

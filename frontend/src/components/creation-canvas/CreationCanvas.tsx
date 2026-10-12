@@ -123,6 +123,8 @@ import { useCanvasScope } from './hooks/useCanvasScope';
 import { useCanvasLivePublish } from './hooks/useCanvasLivePublish';
 import { useCanvasBoardModel } from './hooks/useCanvasBoardModel';
 import { useCanvasDatasetImport } from './hooks/useCanvasDatasetImport';
+import { useCanvasHistoryCheckpoint } from './hooks/useCanvasHistoryCheckpoint';
+import { useBrainObjectMirror } from './hooks/useBrainObjectMirror';
 import { useCanvasEditing } from './hooks/useCanvasEditing';
 import { useCanvasPresentation } from './hooks/useCanvasPresentation';
 import { useCanvasDatasetViews } from './hooks/useCanvasDatasetViews';
@@ -753,13 +755,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   // The app the lens expects, made once the loaded board is on screen — before the first turn.
   const entryApp = useCanvasEntryApp({ boardLoaded, nodes, modality: lensDef.appModality, canEdit, appTitle: title.trim() || t('surface.app.defaultAppTitle'), createApp: sessionApp.createApp });
 
-  // The Brain Object mirrors the live turn — messages, trace, and the run state that
-  // drives its activity bar — so a working Brain reads as working on the board too,
-  // not only inside the dock (which the user may have closed).
-  useEffect(() => {
-    const messages = timeline.map((message) => ({ role: message.messageRole, content: message.body, createdAt: message.createdAt }));
-    setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, messages, ...(brainTrace.length ? { trace: brainTrace } : {}), brainRunning: thinking, brainRunStartedAt, aiResponse: [...timeline].reverse().find((message) => message.messageRole === 'assistant')?.body || node.data.aiResponse } } : node));
-  }, [brainRunStartedAt, brainTrace, setNodes, thinking, timeline]);
+  useBrainObjectMirror({ brainRunStartedAt, brainTrace, setNodes, thinking, timeline });
 
   useEffect(() => {
     if (lockObjectId === null) return;
@@ -781,7 +777,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
       void creationSessionsApi.lock(sessionId, lockedObjectId, 'release').catch(() => undefined);
     };
   }, [lockObjectId, sessionId, setNotice, t]);
-  const { attachmentBytesStrategy, importDataset } = useCanvasDatasetImport({ canvasText, datasetRowLimit, edges, fmt, historyApplyingRef, historyBaselineRef, hydratedRef, importLabel, journalRef, nodes, persistence, redoStackRef, selectedId, setNodes, setNotice, t, undoStackRef });
+  const { attachmentBytesStrategy, importDataset } = useCanvasDatasetImport({ canvasText, datasetRowLimit, fmt, importLabel, persistence, selectedId, setNodes, setNotice, t }); useCanvasHistoryCheckpoint({ edges, historyApplyingRef, historyBaselineRef, hydratedRef, journalRef, nodes, redoStackRef, undoStackRef });
   const { selectionIds, redo, undo, deleteObjects, duplicateSelection, copySelection, pasteSelection, openFrame, deleteNodeFromCard, alignSelection, frameSelection, togglePlacementLock, toggleHidden, deleteSelection, exitFrame } = useCanvasEditing({ canEdit, canvasClipboardRef, cardsEditable, edges, flowRef, historyApplyingRef, historyBaselineRef, journalRef, nodes, nodesRef, placeAppendedRef, redoStackRef, selectedId, selectedIds, setEdges, setFrameFocus, setNodePanel, setNodes, setNotice, setScopeMode, setSelectedId, setSelectedIds, t, undoStackRef });
 
   /**

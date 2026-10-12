@@ -33,8 +33,10 @@ export interface CanvasNotices {
   noAnswer: string;
   /** The turn changed the canvas and was still working when its step budget ran out.
    *  Distinct from `addedToCanvas`: the work is real but not finished, and the user
-   *  is told how to resume it rather than left to guess whether it is complete. */
-  stepsExhausted: string;
+   *  is told how to resume it rather than left to guess whether it is complete.
+   *  Names the files the turn changed: this sentence is what the transcript keeps of the
+   *  turn, so it is all the NEXT turn ("continue") knows of what was already done. */
+  stepsExhausted(changedFiles: readonly string[]): string;
   /** The turn was working inside an app and its step budget ran out before it changed
    *  anything. Distinct from `noAnswer`: the request was fine, and "continue" resumes it. */
   stepsExhaustedUnchanged: string;
@@ -76,7 +78,9 @@ export function canvasNoticesFrom(t: CanvasNoticeTranslator): CanvasNotices {
   return {
     addedToCanvas: t('addedToCanvas'),
     noAnswer: t('noAnswer'),
-    stepsExhausted: t('stepsExhausted'),
+    stepsExhausted: (changedFiles) => (changedFiles.length
+      ? `${t('stepsExhausted')} ${t('stepsExhaustedFiles', { files: changedFiles.join(', ') })}`
+      : t('stepsExhausted')),
     stepsExhaustedUnchanged: t('stepsExhaustedUnchanged'),
     buildNotAuthored: t('buildNotAuthored'),
     providerStalled: t('providerStalled'),

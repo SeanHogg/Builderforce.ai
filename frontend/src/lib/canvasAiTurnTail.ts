@@ -49,6 +49,8 @@ export interface CanvasTurnTailFacts {
   workspaceTurn: boolean;
   buildTurn: boolean;
   buildAuthored: boolean;
+  /** Workspace files this turn wrote, in the order it first wrote them. */
+  changedFiles: readonly string[];
   mutationRequested: boolean;
   /** Replaces an answer CLAIMING a canvas change nobody made (`unverifiedCreationClaim`). */
   verify: (answer: string) => string;
@@ -102,7 +104,7 @@ export function composeTurnTail(facts: CanvasTurnTailFacts): CanvasTurnTail {
         unanswered: { reason: 'no-answer', detail: facts.stalledStreams ? 'provider-stalled' : 'model-looped' },
       };
     }
-    if (facts.stepsExhausted && facts.buildTurn) return { answer: notices.stepsExhausted, learn: true };
+    if (facts.stepsExhausted && facts.buildTurn) return { answer: notices.stepsExhausted(facts.changedFiles), learn: true };
     return { answer: facts.buildTurn && !facts.buildAuthored ? notices.buildNotAuthored : notices.addedToCanvas, learn: true };
   }
   // From here down the string is a RUNTIME NOTICE, not something the model said. The

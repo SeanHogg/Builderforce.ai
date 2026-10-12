@@ -29,7 +29,7 @@ import {
   toolOutcomeChangedCanvas,
   unverifiedCreationClaim,
 } from '@/lib/canvasTurnOutcome';
-import { CANVAS_BUILD_FILE_WRITE_TOOLS, CANVAS_BUILD_TOOLS, CANVAS_BUILD_WORKSPACE_WRITE_TOOLS } from '@/lib/canvasBuildTools';
+import { CANVAS_BUILD_FILE_WRITE_TOOLS, CANVAS_BUILD_TOOLS, CANVAS_BUILD_WORKSPACE_WRITE_TOOLS, workspacePathArg } from '@/lib/canvasBuildTools';
 import { CANVAS_STREAM_STALL_MS, CanvasStreamStalledError, streamBoundedByActivity } from '@/lib/canvasStreamWatchdog';
 import type { CanvasNotices } from '@/lib/canvasNotices';
 import { canvasSystemMessages, promptNamedTools } from '@/lib/canvasAiSystemPrompt';
@@ -313,6 +313,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
    *  difference between a build turn that delivered an app and one that only seeded the
    *  starter template. */
   let buildAuthored = false;
+  /** The app files this turn wrote — named in the out-of-steps notice, which is all the
+   *  next turn's transcript keeps of this one. */
+  const changedFiles = new Set<string>();
   /** Set once a response is cut off at the output ceiling. Re-sending the same
    *  artifact under the same ceiling truncates identically (measured: one consolidated
    *  document, five identical cut-offs in a row), so the rest of the turn gets the
@@ -485,7 +488,11 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         if (toolOutcomeChangedCanvas(outcome)) {
           canvasChanged = true;
           if (CANVAS_BUILD_WORKSPACE_WRITE_TOOLS.has(call.name)) buildTurn = true;
-          if (CANVAS_BUILD_FILE_WRITE_TOOLS.has(call.name)) buildAuthored = true;
+          if (CANVAS_BUILD_FILE_WRITE_TOOLS.has(call.name)) {
+            buildAuthored = true;
+            const path = workspacePathArg((args as { path?: unknown } | null)?.path);
+            if (path) changedFiles.add(path);
+          }
         }
         if (outcome && typeof outcome === 'object') {
           const result = outcome as { error?: unknown };
@@ -681,6 +688,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     workspaceTurn,
     buildTurn,
     buildAuthored,
+    changedFiles: [...changedFiles],
     mutationRequested,
     verify: verified,
   });

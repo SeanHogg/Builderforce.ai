@@ -125,8 +125,19 @@ const SKIP_DIRECTORIES = ['node_modules/', 'dist/', '.git/'];
 /** What the history tools answer for a workspace held in this browser, which keeps none. */
 const NO_HISTORY = 'This workspace is held in this browser and keeps no file history yet. Saving the board to an account turns on history and restore.';
 
-/** Read cap for one `canvas_read_build_file` call. */
+/** Read cap for one `canvas_read_build_file` call, shared by every file it reads. */
 export const MAX_READ_CHARS = 100_000;
+
+/**
+ * Files one `canvas_read_build_file` call may read.
+ *
+ * A read took ONE path, so every file was one model round-trip — and each round-trip
+ * re-sends the whole conversation and every tool schema. Measured (session
+ * `local-148925cf`, ui 2026.10.45): fixing three missing stylesheet imports spent 11 of
+ * the turn's 16 steps on single-file reads, ran out of steps after the fix, and never
+ * told the user it was fixed. Eight covers the files one change touches.
+ */
+export const MAX_READ_FILES = 8;
 
 /** Match cap for one `canvas_search_build_files` call. */
 export const MAX_SEARCH_MATCHES = 100;
@@ -355,31 +366,51 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
     },
     {
       name: 'canvas_read_build_file',
-      description: "Read one file from a Builder object's workspace. Always read a file before editing it — canvas_edit_build_file needs the exact existing text to anchor against.",
+      description: `Read files from a Builder object's workspace. Pass \`paths\` to read up to ${MAX_READ_FILES} files in ONE call — every file a change touches (a page and its stylesheet, the component and what imports it) — instead of one call per file. Always read a file before editing it: canvas_edit_build_file needs the exact existing text to anchor against.`,
       parameters: {
-        type: 'object', required: ['path'], additionalProperties: false,
+        type: 'object', additionalProperties: false,
         properties: {
-          path: { type: 'string', description: 'Workspace-relative path, e.g. src/App.jsx' },
+          paths: { type: 'array', items: { type: 'string' }, maxItems: MAX_READ_FILES, description: 'Workspace-relative paths, e.g. ["src/pages/Login.jsx", "src/pages/Auth.css"].' },
+          path: { type: 'string', description: 'One workspace-relative path. Use paths for more than one file.' },
           objectId: { type: 'string', description: 'Builder object id. Omit when the board has one.' },
         },
       },
       run: async (raw: unknown) => {
-        const args = raw as { path?: unknown; objectId?: unknown };
-        const path = workspacePathArg(args.path);
-        if (!path) return { error: 'A path is required.' };
+        const args = raw as { path?: unknown; paths?: unknown; objectId?: unknown };
+        const requested = [...new Set([
+          ...(Array.isArray(args.paths) ? args.paths : []),
+          args.path,
+        ].map(workspacePathArg).filter(Boolean))];
+        if (!requested.length) return { error: 'A path is required — pass paths: ["src/App.jsx", …].' };
+        if (requested.length > MAX_READ_FILES) return { error: `Read at most ${MAX_READ_FILES} files per call; split the rest into another call.` };
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
         if ('error' in resolved) return resolved;
-        try {
-          const content = await resolved.build.store.read(path);
-          return {
-            ok: true,
-            path,
-            content: content.slice(0, MAX_READ_CHARS),
-            truncated: content.length > MAX_READ_CHARS,
-          };
-        } catch {
-          return { error: `No file "${path}" in this workspace. Call canvas_list_build_files to see what is there.` };
+        const { store } = resolved.build;
+        let budget = MAX_READ_CHARS;
+        const files: Array<{ path: string; content: string; truncated: boolean } | { path: string; error: string }> = [];
+        for (const path of requested) {
+          try {
+            const content = await store.read(path);
+            const shown = content.slice(0, Math.max(0, budget));
+            budget -= shown.length;
+            files.push({ path, content: shown, truncated: shown.length < content.length });
+          } catch {
+            files.push({ path, error: `No file "${path}" in this workspace.` });
+          }
         }
+        // One file keeps the single-file shape every caller and trace already reads.
+        if (files.length === 1) {
+          const [file] = files;
+          return 'error' in file
+            ? { error: `${file.error} Call canvas_list_build_files to see what is there.` }
+            : { ok: true, ...file };
+        }
+        const missing = files.filter((file) => 'error' in file).length;
+        return {
+          ok: missing < files.length,
+          files,
+          ...(missing ? { next: 'Some paths do not exist. Call canvas_list_build_files to see what is there, and canvas_write_build_file to create a file an import expects.' } : {}),
+        };
       },
     },
     {

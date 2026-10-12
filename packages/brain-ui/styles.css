@@ -846,6 +846,14 @@
   color: var(--bf-text-muted, #8a8a8a);
 }
 
+/* A path elides from the START, so the basename stays visible: `…/Home.jsx` and
+   `…/Home.css` must not both read `src/pages/Home…`. RTL moves the ellipsis to the
+   left; the LTR isolate (<bdi>) keeps the path itself in reading order. */
+.bf-tl__tool-subject--path {
+  direction: rtl;
+  text-align: left;
+}
+
 .bf-tl__tool-caret {
   margin-left: auto;
   color: var(--bf-text-muted, #8a8a8a);

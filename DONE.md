@@ -1,3 +1,21 @@
+## ✅ RESOLVED 2026-10-12 — Studio Brain turns stop repeating work: batched build-file reads, no Brain-trace undo steps, readable trace rows (ui 2026.10.46)
+
+- **The report:** session `local-148925cf` (ui 2026.10.45), "lots of duplicate calls". The diagnostics showed four separate causes.
+- **One file per step burned the budget.** `canvas_read_build_file` took one `path`. Each read was one model round-trip, and each round-trip re-sent the whole conversation plus 94 tool schemas. Fixing three missing stylesheet imports used 11 of the turn's 16 steps on single-file reads. The turn wrote the fix by step 8, then ran out of steps before telling the user.
+  - The tool now takes `paths` (up to `MAX_READ_FILES` = 8, sharing one `MAX_READ_CHARS` budget). A missing path is named per file, and a single path keeps the old result shape.
+  - The build section of the system prompt says to read together, and not to re-read a file the turn already read.
+  - `TRUNCATED_TURN_DIRECTIVE` no longer says "ONE canvas_* tool call at a time", which also serialised reads. The one-per-response limit now applies to writes only.
+  - The prompt now says a pasted error is fixed on its own, without resuming an earlier unfinished request, and that the turn says what it fixed.
+- **The next turn started blind.** The out-of-steps notice is all the transcript keeps of a build turn, and it named nothing, so "continue" re-listed and re-read the whole app. `notices.stepsExhausted(changedFiles)` now appends "Changed so far: …" (new key `creationCanvas.notice.stepsExhaustedFiles`, in all five catalogs). The runner collects the paths in dispatch.
+- **The Brain's trace became the user's undo history.** `CreationCanvas` copies the live turn into the chat object after every tool call. The history checkpoint recorded each copy as an undo step and as a `user/object.edit` journal row: 37 rows attributed to the person, and an undo depth of 21.
+  - `lib/canvasBrainMirror.ts` (new) owns `BRAIN_MIRROR_FIELDS`, the writer `brainMirrorData` and the reader `withoutBrainMirror`, so the field list cannot drift between them.
+  - `hooks/useCanvasHistoryCheckpoint.ts` (new) is the checkpoint, moved out of `useCanvasDatasetImport`, where it did not belong. A change confined to the mirror moves the baseline silently: no undo step and no journal row.
+  - `hooks/useBrainObjectMirror.ts` (new) is the mirror effect, moved out of `CreationCanvas.tsx`. Its line ceiling dropped from 1163 to 1159.
+- **Two different reads looked like one.** The trace header ellipsed the path at its end, so `src/pages/Home.jsx` and `src/pages/Home.css` both rendered as `src/pages/Home…`.
+  - In brain-ui, `toolStepView` now sets `subjectIsPath`, and `ToolStep` renders a path left-elided (`.bf-tl__tool-subject--path`, RTL plus a `<bdi>` isolate) with a full-path `title`.
+  - A batched read is labelled with its basenames.
+- Tests: `canvasBrainMirror.test.ts` (new); batched-read cases in `canvasBuildTools.test.ts`; the exhausted notice in `creationCanvasAi.test.ts`; subject cases in `toolStepView.test.ts`.
+
 ## ✅ RESOLVED 2026-10-12 — VSIX Work view stops dropping and reloading the Sessions list during agent runs (VSIX 2026.10.31)
 
 - **The gap:** every platform write from a run (`builtin_tasks_create`, `builtin_chats_link_ticket`, …) caused 6–10 API calls and two or more full rebuilds of the Sessions list. A ticket-heavy run therefore kept the Work panel blanking and reloading.

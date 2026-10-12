@@ -24385,6 +24385,7 @@
       "stoppedPartway": "The model stopped responding partway through this request, so it is not finished. What it completed is on the board — say \"continue\" to pick up where it left off, or pick a different model from the / menu.",
       "toolError": "I couldn't prepare the requested canvas changes: {detail}",
       "stepsExhausted": "I used every step this turn allows and stopped here; everything I built so far is on the board. Say \"continue\" and I will pick up where I left off.",
+      "stepsExhaustedFiles": "Changed so far: {files}.",
       "stepsExhaustedUnchanged": "I used every step this turn allows reading the app and stopped before changing it, so nothing is different yet. Say \"continue\" and I will make the changes.",
       "buildNotAuthored": "I set up the app's starter workspace but did not write the app itself, so the preview still shows the template page. Say \"continue\" and I will build what you asked for.",
       "answeredWithoutChange": "I answered here but did not put anything on the canvas. Ask me to add this to the canvas and I will create the object for it.",
