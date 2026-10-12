@@ -23,7 +23,7 @@
 import { XmlToolCallFilter, extractXmlToolCalls } from './xmlToolCalls';
 import { detectRepetitionLoop } from '@builderforce/agent-loop';
 import { brainRequestError } from './chatError';
-import { describeNetworkError } from './networkErrorDetail';
+import { describeNetworkError, isConnectFailure, retryOnConnectFailure } from './networkErrorDetail';
 import { readWithIdleWatchdog, StreamIdleError, STREAM_IDLE_MS } from './streamIdleWatchdog';
 import type { ReasoningIntent } from './effort';
 
@@ -110,6 +110,12 @@ export interface StreamHandlers {
    * no result is ever returned) otherwise never learns which model it was watching.
    */
   onModel?(model: string, account: string | undefined): void;
+  /**
+   * Fired before each wait when the gateway could not be reached at all (the connection
+   * never opened — `retryOnConnectFailure`). The request is sent again after `delayMs`;
+   * a caller uses this to show that the run is waiting on the network, not hung.
+   */
+  onConnectRetry?(attempt: number, delayMs: number, reason: string): void;
 }
 
 /**
@@ -344,10 +350,17 @@ export class StreamInterruptedError extends Error {
  */
 export class TransportError extends Error {
   readonly model: string | undefined;
-  constructor(message: string, model: string | undefined = undefined, options?: { cause?: unknown }) {
-    super(message, options);
+  /**
+   * The gateway could not be reached at all, and stayed unreachable through every
+   * backoff retry. Another model cannot help — none was ever asked — so the caller
+   * reports the outage instead of retrying.
+   */
+  readonly unreachable: boolean;
+  constructor(message: string, model: string | undefined = undefined, options?: { cause?: unknown; unreachable?: boolean }) {
+    super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = 'TransportError';
     this.model = model;
+    this.unreachable = options?.unreachable === true;
   }
 }
 
@@ -455,20 +468,26 @@ export async function streamChatCompletion(
   const doFetch = transport.fetch ?? ((input: string, init: RequestInit) => fetch(input, init));
   let res: Response;
   try {
-    res = await doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: opts.signal,
-    });
+    // A connection that never opened reached nobody, so it is sent again with backoff —
+    // the user's network dropping for a few seconds must not end the run.
+    res = await retryOnConnectFailure(
+      () => doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: opts.signal,
+      }),
+      { signal: opts.signal, ...(handlers.onConnectRetry ? { onRetry: handlers.onConnectRetry } : {}) },
+    );
   } catch (e) {
+    if (opts.signal?.aborted) throw e;
     // A transport-level failure (network error, DNS, refused, timeout before response).
     // This is NOT an HTTP error — we never got a Response. Throw a TransportError so
     // the caller can retry under auto-routing, the same way it handles StreamInterruptedError.
     if (e instanceof TypeError) {
       // `fetch failed` is all undici's own message says — the reason (timeout, reset,
       // DNS, TLS) is in its `cause` chain, so that is what the message carries.
-      throw new TransportError(describeNetworkError(e), undefined, { cause: e });
+      throw new TransportError(describeNetworkError(e), undefined, { cause: e, unreachable: isConnectFailure(e) });
     }
     // Rethrow anything else as-is — unexpected.
     throw e;

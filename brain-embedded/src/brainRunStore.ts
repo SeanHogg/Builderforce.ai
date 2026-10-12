@@ -1054,6 +1054,19 @@ function liveTurnModel(c: RunCell): NonNullable<StreamHandlers['onModel']> {
   };
 }
 
+/** `onConnectRetry` for a turn: say on the timeline that the run is waiting on the network. */
+function connectRetryStep(c: RunCell, step: number): NonNullable<StreamHandlers['onConnectRetry']> {
+  return (attempt, delayMs, reason) => {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: 'message',
+      label: 'llm.connect_retry',
+      args: { step, attempt },
+      result: `Could not reach BuilderForce (${reason}). Trying again in ${Math.round(delayMs / 1000)}s — nothing was sent, so nothing is repeated.`,
+    });
+  };
+}
+
 /**
  * Clear a chat's surfaced run error so the UI's error banner can be dismissed.
  * The error lives on the run cell (set when the LLM stream / tool loop threw),
@@ -2612,6 +2625,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       );
       const handlers: StreamHandlers = {
         onModel: liveTurnModel(c),
+        onConnectRetry: connectRetryStep(c, iter),
         onTextDelta: (d) => {
           c.streamingText += d;
           if (firstTokenAt === undefined) {
@@ -2682,9 +2696,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         // auto-routing, retry the turn ONCE on another connected model instead of ending
         // the run: this is the "Grok starts and then stops" failure. A pinned model is the
         // user's own choice, so it is not routed around.
-        // TransportError (network failure before response) also retries: we never reached the
-        // gateway, so we don't know which model would have been used, but another model might work.
-        const isRetryableError = e instanceof StreamInterruptedError || e instanceof TransportError;
+        // A TransportError where the gateway was reached (a reset or timeout before the
+        // response) retries too. One where it was NEVER reached has already been retried with
+        // backoff inside the stream (`retryOnConnectFailure`) — no model was asked, so another
+        // one cannot help, and the outage is reported as it is.
+        const unreachable = e instanceof TransportError && e.unreachable;
+        const isRetryableError = e instanceof StreamInterruptedError || (e instanceof TransportError && !unreachable);
         if (!isRetryableError || activeModel) throw turnError(e);
         // Out of every LATER turn too, not only this retry. Excluding it for the retry alone
         // sent the next turn straight back to it: chat #105 broke on the same model and was
@@ -3053,6 +3070,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         { messages: working, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         {
           onModel: liveTurnModel(c),
+          onConnectRetry: connectRetryStep(c, loop.step),
           onTextDelta: (d) => { if (closeFirstTokenAt === undefined) closeFirstTokenAt = nowMs(); c.streamingText += d; emit(c); },
         },
       ));

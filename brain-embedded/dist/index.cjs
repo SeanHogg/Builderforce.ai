@@ -39,6 +39,7 @@ __export(src_exports, {
   CHAT_MODES: () => CHAT_MODES,
   CHAT_MODE_ICON: () => CHAT_MODE_ICON,
   CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
+  CONNECT_RETRY_DELAYS_MS: () => CONNECT_RETRY_DELAYS_MS,
   CONSOLIDATION_MARKER_PREFIX: () => CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META: () => CONSOLIDATION_META,
   DEFAULT_AGENT_MODEL_SENTINEL: () => DEFAULT_AGENT_MODEL_SENTINEL,
@@ -204,6 +205,7 @@ __export(src_exports, {
   isChatMode: () => isChatMode,
   isCodeChangeTool: () => isCodeChangeTool,
   isCoderReask: () => isCoderReask,
+  isConnectFailure: () => isConnectFailure,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
   isConsolidationMarker: () => isConsolidationMarker,
   isDirectedToParticipant: () => isDirectedToParticipant,
@@ -290,6 +292,7 @@ __export(src_exports, {
   resetBrainRunStore: () => resetBrainRunStore,
   resolveRecipient: () => resolveRecipient,
   resolveRunConfirm: () => resolveRunConfirm,
+  retryOnConnectFailure: () => retryOnConnectFailure,
   revealsModelId: () => revealsModelId,
   revisitAdvisory: () => revisitAdvisory,
   routerToolSpecs: () => routerToolSpecs,
@@ -1403,6 +1406,15 @@ function chatErrorAction(err) {
 
 // src/networkErrorDetail.ts
 var MAX_DEPTH = 4;
+function causeChain(e) {
+  const levels = [];
+  let current = e;
+  for (let depth = 0; current !== void 0 && current !== null && depth < MAX_DEPTH; depth++) {
+    levels.push(current instanceof AggregateError && current.errors.length > 0 ? current.errors : [current]);
+    current = current instanceof Error ? current.cause : void 0;
+  }
+  return levels;
+}
 function describeOne(e) {
   if (!(e instanceof Error)) return String(e);
   const code = e.code;
@@ -1412,19 +1424,54 @@ function describeOne(e) {
 }
 function describeNetworkError(e) {
   const parts = [];
-  const push = (part) => {
+  for (const level of causeChain(e)) {
+    const part = level.map(describeOne).filter((s, i, all) => all.indexOf(s) === i).join(" | ");
     if (part && !parts.includes(part)) parts.push(part);
-  };
-  let current = e;
-  for (let depth = 0; current !== void 0 && current !== null && depth < MAX_DEPTH; depth++) {
-    if (current instanceof AggregateError && current.errors.length > 0) {
-      push(current.errors.map(describeOne).filter((s, i, all) => all.indexOf(s) === i).join(" | "));
-    } else {
-      push(describeOne(current));
-    }
-    current = current instanceof Error ? current.cause : void 0;
   }
   return parts.join(" \u2190 ");
+}
+var NEVER_CONNECTED = /* @__PURE__ */ new Set([
+  "ECONNREFUSED",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "UND_ERR_CONNECT_TIMEOUT"
+]);
+function isConnectFailure(e) {
+  return causeChain(e).some((level) => level.some((err) => {
+    const { code, syscall } = err ?? {};
+    return typeof code === "string" && (NEVER_CONNECTED.has(code) || code === "ETIMEDOUT" && syscall === "connect");
+  }));
+}
+var CONNECT_RETRY_DELAYS_MS = [1e3, 2e3, 4e3, 8e3, 16e3];
+function pause(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+async function retryOnConnectFailure(send, opts = {}) {
+  const delays = opts.delaysMs ?? CONNECT_RETRY_DELAYS_MS;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await send();
+    } catch (e) {
+      if (opts.signal?.aborted) throw opts.signal.reason ?? e;
+      if (attempt >= delays.length || !isConnectFailure(e)) throw e;
+      const delay = delays[attempt];
+      opts.onRetry?.(attempt + 1, delay, describeNetworkError(e));
+      await pause(delay, opts.signal);
+    }
+  }
 }
 
 // src/streamIdleWatchdog.ts
@@ -1486,10 +1533,17 @@ var StreamInterruptedError = class extends Error {
 };
 var TransportError = class extends Error {
   model;
+  /**
+   * The gateway could not be reached at all, and stayed unreachable through every
+   * backoff retry. Another model cannot help — none was ever asked — so the caller
+   * reports the outage instead of retrying.
+   */
+  unreachable;
   constructor(message, model = void 0, options) {
-    super(message, options);
+    super(message, options?.cause !== void 0 ? { cause: options.cause } : void 0);
     this.name = "TransportError";
     this.model = model;
+    this.unreachable = options?.unreachable === true;
   }
 };
 var LOOP_QUOTE_CHARS = 90;
@@ -1549,15 +1603,19 @@ async function streamChatCompletion(opts, handlers = {}) {
   const doFetch = transport.fetch ?? ((input, init) => fetch(input, init));
   let res;
   try {
-    res = await doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: opts.signal
-    });
+    res = await retryOnConnectFailure(
+      () => doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: opts.signal
+      }),
+      { signal: opts.signal, ...handlers.onConnectRetry ? { onRetry: handlers.onConnectRetry } : {} }
+    );
   } catch (e) {
+    if (opts.signal?.aborted) throw e;
     if (e instanceof TypeError) {
-      throw new TransportError(describeNetworkError(e), void 0, { cause: e });
+      throw new TransportError(describeNetworkError(e), void 0, { cause: e, unreachable: isConnectFailure(e) });
     }
     throw e;
   }
@@ -8604,6 +8662,17 @@ function liveTurnModel(c) {
     if (c.liveTurn) c.liveTurn = { model, account };
   };
 }
+function connectRetryStep(c, step) {
+  return (attempt, delayMs, reason) => {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "llm.connect_retry",
+      args: { step, attempt },
+      result: `Could not reach BuilderForce (${reason}). Trying again in ${Math.round(delayMs / 1e3)}s \u2014 nothing was sent, so nothing is repeated.`
+    });
+  };
+}
 function clearRunError(chatId) {
   if (chatId == null) return;
   const driver = getRunDriver();
@@ -9569,6 +9638,7 @@ ${revisit}` : covered.note;
       );
       const handlers = {
         onModel: liveTurnModel(c),
+        onConnectRetry: connectRetryStep(c, iter),
         onTextDelta: (d) => {
           c.streamingText += d;
           if (firstTokenAt === void 0) {
@@ -9631,7 +9701,8 @@ ${revisit}` : covered.note;
         result = await request(turnRole, [...brokenModels]);
       } catch (e) {
         if (c.abort?.signal.aborted) throw e;
-        const isRetryableError = e instanceof StreamInterruptedError || e instanceof TransportError;
+        const unreachable = e instanceof TransportError && e.unreachable;
+        const isRetryableError = e instanceof StreamInterruptedError || e instanceof TransportError && !unreachable;
         if (!isRetryableError || activeModel) throw turnError(e);
         if (e instanceof StreamInterruptedError && e.model) {
           brokenModels.add(e.model);
@@ -9875,6 +9946,7 @@ ${revisit}` : covered.note;
         { messages: working, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         {
           onModel: liveTurnModel(c),
+          onConnectRetry: connectRetryStep(c, loop.step),
           onTextDelta: (d) => {
             if (closeFirstTokenAt === void 0) closeFirstTokenAt = nowMs2();
             c.streamingText += d;
@@ -11641,6 +11713,7 @@ function PromptInput({
   CHAT_MODES,
   CHAT_MODE_ICON,
   CODE_CHANGE_TOOLS,
+  CONNECT_RETRY_DELAYS_MS,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
   DEFAULT_AGENT_MODEL_SENTINEL,
@@ -11806,6 +11879,7 @@ function PromptInput({
   isChatMode,
   isCodeChangeTool,
   isCoderReask,
+  isConnectFailure,
   isConnectedAccountUnused,
   isConsolidationMarker,
   isDirectedToParticipant,
@@ -11892,6 +11966,7 @@ function PromptInput({
   resetBrainRunStore,
   resolveRecipient,
   resolveRunConfirm,
+  retryOnConnectFailure,
   revealsModelId,
   revisitAdvisory,
   routerToolSpecs,

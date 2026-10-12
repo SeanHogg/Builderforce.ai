@@ -2,6 +2,7 @@ import type * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "./gateway";
 import type { ToolDef } from "./fileTools";
 import { ttlCache } from "./ttlCache";
+import { describeNetworkError, retryOnConnectFailure } from "@seanhogg/builderforce-brain-embedded";
 
 /**
  * Platform tools = the SHARED, server-side capability catalog (projects, tasks,
@@ -63,9 +64,11 @@ export async function listPlatformTools(secrets: vscode.SecretStorage): Promise<
   if (cached) return cached.value;
   let entries: McpToolEntry[] = [];
   try {
-    const res = await fetch(`${url}/llm/v1/mcp/tools`, {
+    // A run that starts while the network is down would otherwise hold NO platform tools,
+    // and every `builtin_*` call it was told to make would fail as an unknown tool.
+    const res = await retryOnConnectFailure(() => fetch(`${url}/llm/v1/mcp/tools`, {
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-    });
+    }));
     if (!res.ok) return [];
     const body = (await res.json()) as { tools?: McpToolEntry[] };
     entries = Array.isArray(body.tools) ? body.tools : [];
@@ -96,10 +99,14 @@ export async function callPlatformTool(
 ): Promise<string> {
   const key = await getApiKey(secrets);
   if (!key) throw new Error("not signed in");
-  const res = await fetch(`${getBaseUrl()}/llm/v1/mcp/call`, {
+  // Sent again only while the connection cannot be opened — then nothing reached the
+  // gateway, so even a write is safe to repeat. Any other failure is reported as it is.
+  const res = await retryOnConnectFailure(() => fetch(`${getBaseUrl()}/llm/v1/mcp/call`, {
     method: "POST",
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: JSON.stringify({ extensionId, tool, arguments: args }),
+  })).catch((e: unknown) => {
+    throw new Error(describeNetworkError(e), { cause: e });
   });
   const text = await res.text().catch(() => "");
   if (!res.ok) {

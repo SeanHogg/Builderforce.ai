@@ -19,7 +19,8 @@ export type { BrainConfig, BrainRuntime, BrainPersistenceAdapter } from './confi
 // RepetitionLoopError: a model stuck repeating one block of prose, cut mid-stream.
 export { streamChatCompletion, StreamInterruptedError, RepetitionLoopError, TransportError } from './streamChatCompletion';
 // The reason behind Node's opaque `fetch failed` / `terminated`, read off the `cause` chain.
-export { describeNetworkError } from './networkErrorDetail';
+export { describeNetworkError, isConnectFailure, retryOnConnectFailure, CONNECT_RETRY_DELAYS_MS } from './networkErrorDetail';
+export type { ConnectRetryOptions } from './networkErrorDetail';
 // Does this shell call only READ? Shared by the read guard and a read-only sub-agent's gate.
 export { isReadOnlyShellCall } from './readOnlyShell';
 export type {

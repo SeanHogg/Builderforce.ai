@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-10-12 — A dropped connection no longer ends the run (VSIX 2026.10.28 · brain-embedded 2026.10.21)
+
+- **What the new error messages showed (chats #141/#142):** `fetch failed ← connect ETIMEDOUT 172.67.182.187:443 | connect ENETUNREACH 2606:4700:…`. The client could not open a socket to the gateway at all, and it happened in every run in the same second, so it was a network drop on the user's machine.
+- **What we did about it:** we retried once, immediately, "on another connected model". No model had been involved, so that could not help.
+- **Retry:** `retryOnConnectFailure` and `isConnectFailure` (brain-embedded `networkErrorDetail.ts`) re-send a request whose connection never opened, with backoff of 1/2/4/8/16s. Nothing was sent, so this is safe even for writes. A reset or timeout on an open socket is never repeated, and a Stop ends the wait.
+- **Where it applies:** the completion stream, which marks `TransportError.unreachable` and logs `llm.connect_retry` steps; the run store, which no longer retries an unreachable gateway on another model; and the VSIX platform-tool catalog fetch and `builtin_*` calls.
+- **Tool catalog:** a run that started during an outage used to get an empty platform catalog, so every `builtin_*` call failed as an unknown tool. The catalog fetch now retries too.
+
 ## ✅ RESOLVED 2026-10-11 — One write outbox for all client chatter (write-outbox 2026.10.1 · brain-embedded 2026.10.20 · frontend 2026.10.45 · replay-sdk 2026.10.1 · VSIX 2026.10.27)
 
 - **Six hand-rolled queues → one.** Run steps (`stepOutbox`), VS Code activity, portal activity, the visitor journey, QA capture and session-replay chunks each had their own array, size cap, interval and unload flush.
