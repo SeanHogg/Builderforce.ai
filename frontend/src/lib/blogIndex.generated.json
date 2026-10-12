@@ -1,5 +1,18 @@
 [
   {
+    "slug": "synapse-runs-models-itself",
+    "title": "Synapse now runs models itself",
+    "date": "2026-10-12",
+    "description": "Synapse no longer needs a separately installed Ollama. It supervises bfi, our native engine, so 2-bit PQ2_0 and PTQ1_0 GGUF load on your machine, and VS Code finds those models in ~/.builderforce/desktop.json. The CPU sidecar ships; we have not claimed GPU 70% of llama-bench.",
+    "tags": [
+      "llm",
+      "local-first",
+      "vscode",
+      "on-device"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "workspace-hooks-your-team-commits",
     "title": "Tell the agent what every run must do, and commit it with the code",
     "date": "2026-10-12",

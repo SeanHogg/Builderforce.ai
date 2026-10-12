@@ -1,3 +1,12 @@
+## ✅ RESOLVED 2026-10-12 — Synapse→bfi cut-over: Ollama is not required (tickets #3766, #3767)
+
+Synapse now runs local models itself. The desktop app supervises `bfi serve`; a separately installed Ollama is not required.
+
+- **`bf-local` no longer drives Ollama.** `ollama.rs` and `SYNAPSE_USE_OLLAMA` are gone. `Handle::start()` always supervises `bfi` with health/backoff. The import-ollama CLI in `crates/bfi/src/ollama.rs` remains (one-shot conversion, not a runtime dependency).
+- **VSIX discovery.** The VS Code extension reads `~/.builderforce/desktop.json` (`{ models: { endpoint, provider?: "synapse", token? } }`, override `BUILDERFORCE_DESKTOP_DISCOVERY`) and lists Synapse as local provider id `synapse`. Catalog `GET {root}/v1/synapse/catalog`; install `POST {root}/api/pull`.
+- **CPU sidecar ships** with the Synapse app. `cargo install --git https://github.com/SeanHogg/builderforce-inference bfi` is the documented standalone install. Signed GitHub Release binaries are not published (owner signing secrets, ticket #3782).
+- **Still on the ROADMAP** (Local LLM row stays 🔄 Partial): GPU 70% tok/s vs llama-bench is unmeasured (ticket #3762); live Bonsai 27B greedy vs the PrismML fork has not been run (ticket #3764, no weights in CI). Do not claim those.
+
 ## ✅ RESOLVED 2026-10-12 — Web Agents list shows a cloud run's live sub-agents (ticket #3087)
 
 The VS Code roster already listed live children through `ChatTicketsPanel`'s `subagents` prop. The web passed nothing: no read returned a chat's live child executions (`parent_execution_id` set, payload `chatId` = the chat).
