@@ -11,28 +11,39 @@
 import { buildGitApiBaseUrl } from './gitProxy';
 
 /**
- * Auto-merge policy. Default (flag off): the cloud run merges to the deploy
- * branch immediately on finish. When `CLOUD_AUTOMERGE_REQUIRE_GREEN` is set, the
- * run does NOT merge on finish — a successful CI/deploy webhook merges instead
- * ("merge only on green"). Single source of truth for both the immediate-merge
- * sites and the webhook's merge-on-green path.
+ * When auto-merge is enabled, wait for green CI rather than merging unverified
+ * code on finish. DEFAULT ON — the durable (shell-less) executor never ran a
+ * build/type-check/test, so shipping on the agent's word is the V1 footgun
+ * (ROADMAP #3092). Opt out with `CLOUD_AUTOMERGE_REQUIRE_GREEN=0` (or 'false'/'off')
+ * only when the operator explicitly wants immediate merge. Single source of truth
+ * for both the immediate-merge sites and the webhook's merge-on-green path.
  */
 export function cloudAutoMergeRequiresGreen(env: unknown): boolean {
   const v = String((env as Record<string, unknown> | null)?.CLOUD_AUTOMERGE_REQUIRE_GREEN ?? '').toLowerCase();
-  return v === '1' || v === 'true';
+  return v !== '0' && v !== 'false' && v !== 'off';
 }
 
 /**
  * Master switch for "should a finished agent run auto-merge its branch at all?".
  * DEFAULT OFF — agent runs open a PR and STOP, leaving the merge to a human who
- * approves it in-product (or, when `CLOUD_AUTOMERGE_REQUIRE_GREEN`, to the green-CI
- * webhook). Set `CLOUD_AUTOMERGE_ENABLED=1` to opt back into hands-off
- * auto-merge + deploy. Single source of truth for both finalize sites (the cloud
- * runner and openTaskPullRequest), so the gate never drifts between them.
+ * approves it in-product (or, when auto-merge is on, to the green-CI webhook).
+ * Set `CLOUD_AUTOMERGE_ENABLED=1` to opt into hands-off auto-merge + deploy.
+ * Single source of truth for both finalize sites (the cloud runner and
+ * openTaskPullRequest), so the gate never drifts between them.
  */
 export function cloudAutoMergeEnabled(env: unknown): boolean {
   const v = String((env as Record<string, unknown> | null)?.CLOUD_AUTOMERGE_ENABLED ?? '').toLowerCase();
   return v === '1' || v === 'true';
+}
+
+/**
+ * True when a green CI webhook should merge the ticket branch: auto-merge is
+ * enabled AND the green gate is on (the default). Without the enabled check,
+ * flipping require-green to default-on would auto-merge every green PR even
+ * when the operator left auto-merge off (human-approval default).
+ */
+export function cloudMergeOnGreenCi(env: unknown): boolean {
+  return cloudAutoMergeEnabled(env) && cloudAutoMergeRequiresGreen(env);
 }
 
 /**

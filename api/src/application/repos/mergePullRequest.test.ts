@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mergePullRequest, normalizeMergeMethod, buildMergeRequest, isMergeConflictMessage } from './mergePullRequest';
-import { cloudAutoMergeEnabled, cloudAutoMergeRequiresGreen } from './mergeBranchToBase';
+import { cloudAutoMergeEnabled, cloudAutoMergeRequiresGreen, cloudMergeOnGreenCi } from './mergeBranchToBase';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -23,6 +23,43 @@ describe('cloudAutoMergeEnabled', () => {
   it('is independent of the green-CI gate', () => {
     expect(cloudAutoMergeRequiresGreen({ CLOUD_AUTOMERGE_REQUIRE_GREEN: '1' })).toBe(true);
     expect(cloudAutoMergeEnabled({ CLOUD_AUTOMERGE_REQUIRE_GREEN: '1' })).toBe(false);
+  });
+});
+
+describe('cloudAutoMergeRequiresGreen', () => {
+  it('defaults to true (wait for CI) when unset — never merge unverified code', () => {
+    expect(cloudAutoMergeRequiresGreen(undefined)).toBe(true);
+    expect(cloudAutoMergeRequiresGreen({})).toBe(true);
+    expect(cloudAutoMergeRequiresGreen({ CLOUD_AUTOMERGE_REQUIRE_GREEN: '' })).toBe(true);
+  });
+  it('is true for explicit 1/true and for any unrecognised value', () => {
+    expect(cloudAutoMergeRequiresGreen({ CLOUD_AUTOMERGE_REQUIRE_GREEN: '1' })).toBe(true);
+    expect(cloudAutoMergeRequiresGreen({ CLOUD_AUTOMERGE_REQUIRE_GREEN: 'true' })).toBe(true);
+    expect(cloudAutoMergeRequiresGreen({ CLOUD_AUTOMERGE_REQUIRE_GREEN: 'TRUE' })).toBe(true);
+    expect(cloudAutoMergeRequiresGreen({ CLOUD_AUTOMERGE_REQUIRE_GREEN: 'yes' })).toBe(true);
+  });
+  it('opts out only for explicit 0/false/off (immediate merge when auto-merge is also on)', () => {
+    expect(cloudAutoMergeRequiresGreen({ CLOUD_AUTOMERGE_REQUIRE_GREEN: '0' })).toBe(false);
+    expect(cloudAutoMergeRequiresGreen({ CLOUD_AUTOMERGE_REQUIRE_GREEN: 'false' })).toBe(false);
+    expect(cloudAutoMergeRequiresGreen({ CLOUD_AUTOMERGE_REQUIRE_GREEN: 'FALSE' })).toBe(false);
+    expect(cloudAutoMergeRequiresGreen({ CLOUD_AUTOMERGE_REQUIRE_GREEN: 'off' })).toBe(false);
+  });
+});
+
+describe('cloudMergeOnGreenCi', () => {
+  it('is false by default — auto-merge is off, so a green webhook must not merge', () => {
+    expect(cloudMergeOnGreenCi(undefined)).toBe(false);
+    expect(cloudMergeOnGreenCi({})).toBe(false);
+    expect(cloudMergeOnGreenCi({ CLOUD_AUTOMERGE_REQUIRE_GREEN: '1' })).toBe(false);
+  });
+  it('is true when auto-merge is on and green is required (the new default)', () => {
+    expect(cloudMergeOnGreenCi({ CLOUD_AUTOMERGE_ENABLED: '1' })).toBe(true);
+    expect(cloudMergeOnGreenCi({ CLOUD_AUTOMERGE_ENABLED: 'true', CLOUD_AUTOMERGE_REQUIRE_GREEN: '1' })).toBe(true);
+  });
+  it('is false when auto-merge is on but the operator opted out of waiting for CI', () => {
+    expect(cloudMergeOnGreenCi({ CLOUD_AUTOMERGE_ENABLED: '1', CLOUD_AUTOMERGE_REQUIRE_GREEN: '0' })).toBe(false);
+    expect(cloudMergeOnGreenCi({ CLOUD_AUTOMERGE_ENABLED: '1', CLOUD_AUTOMERGE_REQUIRE_GREEN: 'false' })).toBe(false);
+    expect(cloudMergeOnGreenCi({ CLOUD_AUTOMERGE_ENABLED: '1', CLOUD_AUTOMERGE_REQUIRE_GREEN: 'off' })).toBe(false);
   });
 });
 

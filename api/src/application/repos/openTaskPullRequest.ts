@@ -124,10 +124,11 @@ export async function openTaskPullRequest(
   }
 
   // Merge policy. DEFAULT (CLOUD_AUTOMERGE_ENABLED off): do NOT merge — leave the
-  // PR open for in-product human approval. When auto-merge is enabled: merge the
-  // ticket branch into the deploy branch now, unless the operator gates on green CI
-  // (then defer to the CI-success webhook). Best-effort — a conflict/failure leaves
-  // the PR open for manual resolution rather than blocking the finalize.
+  // PR open for in-product human approval. When auto-merge is enabled: wait for
+  // green CI by default (`CLOUD_AUTOMERGE_REQUIRE_GREEN`, opt out with 0/false/off)
+  // rather than merging unverified code; the CI-success webhook ships it. Best-effort
+  // — a conflict/failure leaves the PR open for manual resolution rather than
+  // blocking the finalize.
   const merge = !cloudAutoMergeEnabled(env)
     ? { ok: false as const, code: 'provider_error' as const, reason: 'deferred: awaiting in-product approval' }
     : cloudAutoMergeRequiresGreen(env)

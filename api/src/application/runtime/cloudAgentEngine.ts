@@ -2046,7 +2046,9 @@ export function resolveAgentEngine(rc: CloudEngineContext): AgentEngine {
  * ({@link runCloudToolLoop}) and the long-lived Container executor (which runs the
  * loop in its own process and calls this via the internal container-op endpoint).
  * By default the run STOPS with the PR open — nothing merges to the deploy branch
- * until a human approves (or `CLOUD_AUTOMERGE_ENABLED` ships it). Never throws.
+ * until a human approves. When `CLOUD_AUTOMERGE_ENABLED` is on, shipping waits for
+ * green CI by default (`CLOUD_AUTOMERGE_REQUIRE_GREEN`; opt out with 0/false/off).
+ * Never throws.
  */
 export async function finalizeCloudRun(
   env: Env,

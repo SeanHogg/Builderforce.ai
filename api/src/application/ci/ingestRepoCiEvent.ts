@@ -5,8 +5,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *
  * Two correlation paths:
  *   1. Pre-merge: an event on a `builderforce/task-<id>` branch is recorded on that
- *      task's latest execution; when the operator gates shipping on green CI
- *      (`CLOUD_AUTOMERGE_REQUIRE_GREEN`) a successful build merges the branch.
+ *      task's latest execution; when auto-merge is enabled (and the green gate
+ *      is on — the default) a successful build merges the branch.
  *   2. Post-merge: an event on the DEPLOY branch (e.g. `main`) is correlated by its
  *      head SHA to the merged PR we recorded that `merge_sha` for. We record the
  *      build outcome on the task and, on FAILURE, return an `autoFix` intent so the
@@ -23,7 +23,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
-import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
+import { mergeBranchToBase, cloudMergeOnGreenCi, cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
 import { ticketBranchName } from '../repos/commitFileAsPendingChange';
 import { markPullRequestMergedByTask, findMergedPullRequestBySha, findOpenPullRequestByTask, findOpenPullRequestByProject, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
 import { closeTicketAutomatically } from '../manager/reviewGateAuthority';
@@ -424,10 +424,11 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
     }
   }
 
-  // Gated shipping: merge only on green. Default-off — the cloud loop merges
-  // immediately unless this flag is set (then the green CI/deploy ships it here).
+  // Gated shipping: merge only on green, and only when auto-merge is actually
+  // enabled. Green is the default when auto-merge is on; the default overall is
+  // still "PR open, human approves" (CLOUD_AUTOMERGE_ENABLED off).
   let merged = false;
-  if (evt.outcome === 'success' && cloudAutoMergeRequiresGreen(env)) {
+  if (evt.outcome === 'success' && cloudMergeOnGreenCi(env)) {
     const repoRef = await resolveDefaultRepoForTask(db, task.tenantId, taskId);
     if (repoRef) {
       const resolved = await resolveRepoCredential(db, secret, task.tenantId, repoRef.repoId);
