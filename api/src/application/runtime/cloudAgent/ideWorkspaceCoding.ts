@@ -68,15 +68,15 @@ export async function snapshotIdeWorkspace(run: IdeWorkspaceRun): Promise<{
   truncated: boolean;
 }> {
   const entries = await listWorkspaceFiles(run.bucket, run.projectId);
-  const topLevel = [...new Set(entries.map((e) => {
+  const unique = [...new Set(entries.map((e) => {
     const i = e.path.indexOf('/');
     return i === -1 ? e.path : `${e.path.slice(0, i)}/`;
-  }))].sort().slice(0, 40);
+  }))].sort();
   return {
     ide: { projectId: run.projectId, projectName: run.projectName },
-    topLevel,
+    topLevel: unique.slice(0, 40),
     fileCount: entries.length,
-    truncated: false,
+    truncated: unique.length > 40,
   };
 }
 
