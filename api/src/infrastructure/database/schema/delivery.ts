@@ -679,9 +679,20 @@ export const specs = pgTable('specs', {
   prd:         text('prd'),
   archSpec:    text('arch_spec'),
   taskList:    text('task_list'),      // JSON array stored as text (jsonb not available in all envs)
+  /** Origin board provider id (`github` / `jira` / `linear`) when this spec was imported. */
+  sourceProvider:   varchar('source_provider', { length: 24 }),
+  /** Provider ticket id (GitHub issue number, Jira key, Linear UUID). */
+  sourceExternalId: varchar('source_external_id', { length: 255 }),
+  /** Canonical URL of the imported ticket. */
+  sourceUrl:        varchar('source_url', { length: 500 }),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => ({
+  // Partial: hand-written specs have NULL source and must not collide.
+  sourceUq: uniqueIndex('uq_specs_source')
+    .on(t.tenantId, t.sourceProvider, t.sourceExternalId)
+    .where(sql`source_provider IS NOT NULL AND source_external_id IS NOT NULL`),
+}));
 
 
 // Task <-> PRD (many-to-many, 0098). A task references 1..N project PRDs; at most

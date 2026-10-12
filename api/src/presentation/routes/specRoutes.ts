@@ -7,6 +7,7 @@
  * P1-1: Spec / Planning Storage API
  *
  * POST   /api/specs                    Create or upsert a spec (agentHost API key or tenant JWT)
+ * POST   /api/specs/import             Import a spec from GitHub / Linear / Jira (tenant JWT)
  * GET    /api/specs                    List specs for tenant (tenant JWT)
  * GET    /api/specs/:id                Get spec detail (tenant JWT)
  * PATCH  /api/specs/:id                Update spec status/content (tenant JWT)
@@ -21,6 +22,7 @@ import { specs, workflows, projects, tasks } from '../../infrastructure/database
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hostOrTenantAuth, requestAgentHostId } from '../middleware/hostOrTenantAuth';
 import { linkSpecToTask } from '../../application/prd/taskPrd';
+import { importSpecFromBoard, SpecImportError } from '../../application/prd/importSpec';
 import { bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -51,6 +53,13 @@ const PatchSpecBody = z.object({
 });
 /** `workflowId` stays optional so the handler's own "workflowId is required" wins. */
 const LinkWorkflowBody = z.object({ workflowId: z.string().nullish() });
+const ImportSpecBody = z.object({
+  projectId: z.number().nullish(),
+  externalId: z.string().nullish(),
+  provider: z.string().nullish(),
+  connectionId: z.string().nullish(),
+  taskId: z.number().nullish(),
+});
 
 type SpecsHonoEnv = HonoEnv;
 
@@ -129,6 +138,30 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
 
   // All remaining routes require tenant JWT
   router.use('*', authMiddleware);
+
+  // POST /api/specs/import — pull a GitHub / Linear / Jira ticket into a spec.
+  // Must be registered before /:id so "import" is not captured as an id.
+  router.post('/import', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const body = await parseBody(c, ImportSpecBody);
+    if (body.projectId == null) return c.json({ error: 'projectId is required' }, 400);
+    if (!body.externalId?.trim()) return c.json({ error: 'externalId is required' }, 400);
+    try {
+      const result = await importSpecFromBoard(db, c.env as Env, {
+        tenantId,
+        projectId: body.projectId,
+        externalId: body.externalId,
+        provider: body.provider,
+        connectionId: body.connectionId,
+        taskId: body.taskId,
+      });
+      await bumpTicketSearchVersion(c.env as Env, tenantId);
+      return c.json({ ...result.spec, created: result.created, linkedTaskId: result.linkedTaskId }, result.created ? 201 : 200);
+    } catch (err) {
+      if (err instanceof SpecImportError) return c.json({ error: err.message }, err.status);
+      throw err;
+    }
+  });
 
   // GET /api/specs?projectId=
   router.get('/', async (c) => {

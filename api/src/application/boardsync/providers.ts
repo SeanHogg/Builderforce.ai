@@ -101,6 +101,14 @@ export interface BoardProvider {
   /** Push a change-set to one external ticket. Resolves on success, throws on failure. */
   pushUpdate(externalId: string, changeSet: ChangeSet): Promise<void>;
   /**
+   * Fetch one ticket by its provider-native id (GitHub issue number, Jira key,
+   * Linear UUID or identifier). Optional — GitHub/Jira/Linear implement it for
+   * spec import; a provider that omits it cannot be used as an import source.
+   * Throws {@link PermanentBoardProviderError} with code `not_found` when the
+   * ticket does not exist (or is a GitHub PR).
+   */
+  fetchTicket?(externalId: string): Promise<NormalizedTicket>;
+  /**
    * Enumerate the external projects/boards, item types, and users for the
    * migration wizard. Optional — a provider that can't discover (or hasn't been
    * wired yet) simply omits it; MigrationService treats absence as "not
@@ -288,6 +296,43 @@ export class GitHubBoardProvider implements BoardProvider {
     if (!res.ok) throw new Error(`GitHub issue update failed: ${res.status}`);
   }
 
+  async fetchTicket(externalId: string): Promise<NormalizedTicket> {
+    const repo = githubRepoScope(this.cfg.externalBoardId);
+    const token = String(this.cfg.credentials.accessToken ?? '');
+    const id = externalId.replace(/^#/, '').trim();
+    const url = `https://api.github.com/repos/${repo}/issues/${encodeURIComponent(id)}`;
+    const res = await this.fetchFn(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'User-Agent': 'Builderforce/1.0',
+        Accept: 'application/vnd.github+json',
+      },
+    });
+    if (res.status === 404) {
+      throw new PermanentBoardProviderError(
+        `GitHub issue "${id}" was not found in "${decodeURIComponent(repo)}" or is not accessible to this credential`,
+        'not_found',
+      );
+    }
+    if (!res.ok) throw new Error(`GitHub issue fetch failed: ${res.status}`);
+    const issue = (await res.json()) as GitHubIssueRaw;
+    if (issue.pull_request) {
+      throw new PermanentBoardProviderError(
+        `GitHub issue "${id}" is a pull request, not an issue`,
+        'not_found',
+      );
+    }
+    return buildTicket(this.id, {
+      externalId:      String(issue.number),
+      externalUrl:     issue.html_url,
+      externalVersion: issue.updated_at,
+      title:           issue.title,
+      body:            issue.body,
+      state:           issue.state,
+      assigneeExternalId: issue.assignee?.login ?? null,
+    });
+  }
+
   async discover(): Promise<DiscoveryResult> {
     const token = String(this.cfg.credentials.accessToken ?? '');
     const headers = { Authorization: `Bearer ${token}`, 'User-Agent': 'Builderforce/1.0', Accept: 'application/vnd.github+json' };
@@ -447,6 +492,44 @@ export class JiraBoardProvider implements BoardProvider {
       body: JSON.stringify({ fields }),
     });
     if (!res.ok) throw new Error(`Jira issue update failed: ${res.status}`);
+  }
+
+  async fetchTicket(externalId: string): Promise<NormalizedTicket> {
+    const base = (this.cfg.baseUrl ?? '').replace(/\/$/, '');
+    if (!base) throw new Error('jira provider requires baseUrl');
+    const id = externalId.trim();
+    const spField = String(this.cfg.credentials.storyPointsField ?? 'customfield_10016');
+    const url = `${base}/rest/api/3/issue/${encodeURIComponent(id)}?fields=summary,description,updated,status,issuetype,assignee,${encodeURIComponent(spField)}`;
+    const res = await this.fetchFn(url, {
+      headers: {
+        Authorization: this.authHeader(),
+        Accept: 'application/json',
+      },
+    });
+    if (res.status === 404) {
+      throw new PermanentBoardProviderError(`Jira issue "${id}" was not found`, 'not_found');
+    }
+    if (!res.ok) throw new Error(`Jira issue fetch failed: ${res.status}`);
+    const issue = (await res.json()) as JiraIssueRaw;
+    const body =
+      typeof issue.fields.description === 'string'
+        ? issue.fields.description
+        : issue.fields.description
+          ? JSON.stringify(issue.fields.description)
+          : null;
+    const spRaw = (issue.fields as Record<string, unknown>)[spField];
+    const storyPoints = typeof spRaw === 'number' && Number.isFinite(spRaw) ? spRaw : null;
+    return buildTicket(this.id, {
+      externalId:         issue.key,
+      externalUrl:        issue.self ? issue.self : `${base}/browse/${issue.key}`,
+      externalVersion:    issue.fields.updated,
+      title:              issue.fields.summary,
+      body,
+      state:              issue.fields.status?.name ?? 'unknown',
+      storyPoints,
+      externalType:       issue.fields.issuetype?.name ?? null,
+      assigneeExternalId: issue.fields.assignee?.accountId ?? null,
+    });
   }
 
   async discover(): Promise<DiscoveryResult> {
@@ -634,6 +717,31 @@ export class LinearBoardProvider implements BoardProvider {
       issueUpdate(id: $id, input: $input) { success }
     }`;
     await gqlFetch(this.fetchFn, LinearBoardProvider.ENDPOINT, apiKey, query, { id: externalId, input }, 'Linear');
+  }
+
+  async fetchTicket(externalId: string): Promise<NormalizedTicket> {
+    const apiKey = String(this.cfg.credentials.apiKey ?? '');
+    if (!apiKey) throw new Error('linear provider requires an apiKey credential');
+    const id = externalId.trim();
+    const query = `query Issue($id: String!) {
+      issue(id: $id) { id identifier title description url updatedAt state { name } }
+    }`;
+    const data = await gqlFetch<{ issue: LinearIssueNode | null }>(
+      this.fetchFn, LinearBoardProvider.ENDPOINT, apiKey, query, { id }, 'Linear',
+    );
+    if (!data.issue) {
+      throw new PermanentBoardProviderError(`Linear issue "${id}" was not found`, 'not_found');
+    }
+    const n = data.issue;
+    return buildTicket(this.id, {
+      externalId:      n.id,
+      externalUrl:     n.url,
+      externalVersion: n.updatedAt,
+      title:           n.title,
+      body:            n.description ?? null,
+      state:           n.state?.name ?? 'unknown',
+      extra:           { identifier: n.identifier },
+    });
   }
 }
 

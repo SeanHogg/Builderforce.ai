@@ -116,6 +116,49 @@ describe('GitHubBoardProvider', () => {
 
     await expect(provider.fetchTicketsSince(null)).rejects.toBeInstanceOf(PermanentBoardProviderError);
   });
+
+  it('fetchTicket GETs one issue and strips a leading #', async () => {
+    const fetchFn = vi.fn(async (url: string) => {
+      expect(url).toBe('https://api.github.com/repos/o/r/issues/42');
+      return jsonResponse({
+        number: 42,
+        title: 'Ship import',
+        body: 'Do the thing',
+        html_url: 'https://github.com/o/r/issues/42',
+        state: 'open',
+        updated_at: '2024-01-01T00:00:00Z',
+      });
+    });
+    const provider = new GitHubBoardProvider(
+      { credentials: { accessToken: 'tok' }, externalBoardId: 'o/r' },
+      fetchFn,
+    );
+    const ticket = await provider.fetchTicket('#42');
+    expect(ticket.externalId).toBe('42');
+    expect(ticket.source).toBe('github');
+    expect(ticket.title).toBe('Ship import');
+    expect(ticket.body).toBe('Do the thing');
+  });
+
+  it('fetchTicket classifies 404 and pull requests as not_found', async () => {
+    const missing = new GitHubBoardProvider(
+      { credentials: { accessToken: 'tok' }, externalBoardId: 'o/r' },
+      async () => jsonResponse({ message: 'Not Found' }, 404),
+    );
+    await expect(missing.fetchTicket('99')).rejects.toMatchObject({
+      name: 'PermanentBoardProviderError',
+      code: 'not_found',
+    });
+
+    const pr = new GitHubBoardProvider(
+      { credentials: { accessToken: 'tok' }, externalBoardId: 'o/r' },
+      async () => jsonResponse({ number: 7, title: 'PR', pull_request: { url: 'x' }, html_url: 'https://github.com/o/r/pull/7', state: 'open', updated_at: '2024-01-01T00:00:00Z' }),
+    );
+    await expect(pr.fetchTicket('7')).rejects.toMatchObject({
+      name: 'PermanentBoardProviderError',
+      code: 'not_found',
+    });
+  });
 });
 
 describe('JiraBoardProvider', () => {
@@ -147,6 +190,36 @@ describe('JiraBoardProvider', () => {
     expect(t.source).toBe('jira');
     expect(t.state).toBe('To Do');
     expect(page.nextCursor).toBe('2024-02-02T00:00:00.000+0000');
+  });
+
+  it('fetchTicket GETs /rest/api/3/issue/{key}', async () => {
+    const fetchFn = vi.fn(async (url: string) => {
+      expect(url).toContain('/rest/api/3/issue/PROJ-7');
+      return jsonResponse({
+        key: 'PROJ-7',
+        self: 'https://x.atlassian.net/rest/api/3/issue/7',
+        fields: { summary: 'Sum', description: 'Desc', updated: '2024-02-02T00:00:00.000+0000', status: { name: 'To Do' } },
+      });
+    });
+    const provider = new JiraBoardProvider(
+      { credentials: { email: 'e@x.com', apiToken: 't' }, baseUrl: 'https://x.atlassian.net', externalBoardId: 'PROJ' },
+      fetchFn,
+    );
+    const ticket = await provider.fetchTicket('PROJ-7');
+    expect(ticket.externalId).toBe('PROJ-7');
+    expect(ticket.source).toBe('jira');
+    expect(ticket.title).toBe('Sum');
+  });
+
+  it('fetchTicket classifies 404 as not_found', async () => {
+    const provider = new JiraBoardProvider(
+      { credentials: { email: 'e@x.com', apiToken: 't' }, baseUrl: 'https://x.atlassian.net' },
+      async () => jsonResponse({ errorMessages: ['not found'] }, 404),
+    );
+    await expect(provider.fetchTicket('NOPE-1')).rejects.toMatchObject({
+      name: 'PermanentBoardProviderError',
+      code: 'not_found',
+    });
   });
 });
 
@@ -189,6 +262,35 @@ describe('LinearBoardProvider', () => {
     const p = new LinearBoardProvider({ credentials: { apiKey: 'x' } }, fetchFn);
     await p.pushUpdate('iss_1', { title: 'T', body: 'B' });
     expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it('fetchTicket queries issue(id) and maps the node', async () => {
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      const sent = JSON.parse(String(init?.body));
+      expect(sent.variables.id).toBe('iss_1');
+      expect(sent.query).toMatch(/issue\(id:/);
+      return jsonResponse({
+        data: {
+          issue: { id: 'iss_1', identifier: 'ENG-1', title: 'Fix', description: 'body', url: 'https://linear.app/x/issue/ENG-1', updatedAt: '2024-03-03T00:00:00Z', state: { name: 'In Progress' } },
+        },
+      });
+    });
+    const p = new LinearBoardProvider({ credentials: { apiKey: 'lin_k' } }, fetchFn);
+    const ticket = await p.fetchTicket('iss_1');
+    expect(ticket.externalId).toBe('iss_1');
+    expect(ticket.source).toBe('linear');
+    expect(ticket.fields.identifier).toBe('ENG-1');
+  });
+
+  it('fetchTicket classifies a null issue as not_found', async () => {
+    const p = new LinearBoardProvider(
+      { credentials: { apiKey: 'x' } },
+      async () => jsonResponse({ data: { issue: null } }),
+    );
+    await expect(p.fetchTicket('missing')).rejects.toMatchObject({
+      name: 'PermanentBoardProviderError',
+      code: 'not_found',
+    });
   });
 });
 

@@ -107,6 +107,7 @@ import { OnCallService } from '../incident/OnCallService';
 import { EscalationService } from '../incident/EscalationService';
 import { recallSops } from '../knowledge/recallSops';
 import { publishKnowledgeDoc } from '../knowledge/publishKnowledgeDoc';
+import { importSpecFromBoard, SpecImportError } from '../prd/importSpec';
 import { SecurityTicketAccessService } from '../security/SecurityTicketAccessService';
 import { recallProjectFacts, upsertProjectFact } from './projectFacts';
 import type { Task } from '../../domain/task/Task';
@@ -1458,6 +1459,28 @@ const CATALOG: BuiltinTool[] = [
         prd: a.prd != null ? str(a.prd) : null,
       }).returning();
       return row;
+    },
+  },
+  {
+    tool: 'specs.import', mutates: true,
+    description: 'Import a spec / PRD from a GitHub Issue, Linear issue, or Jira ticket using the project\'s board_connections credentials. Idempotent on (provider, externalId). Optionally link the spec to a task as its primary PRD. Params: projectId + externalId required; provider (github|jira|linear) or connectionId when the project has several board connections; optional taskId.',
+    parameters: obj({ projectId: N, externalId: S, provider: S, connectionId: S, taskId: N }, ['projectId', 'externalId']),
+    run: async (ctx, a) => {
+      try {
+        const result = await importSpecFromBoard(ctx.db, ctx.env ?? {}, {
+          tenantId: ctx.tenantId,
+          projectId: num(a.projectId),
+          externalId: str(a.externalId),
+          provider: a.provider != null ? str(a.provider) : null,
+          connectionId: a.connectionId != null ? str(a.connectionId) : null,
+          taskId: a.taskId != null ? num(a.taskId) : null,
+        });
+        if (ctx.env) await bumpTicketSearchVersion(ctx.env, ctx.tenantId);
+        return { ...result.spec, created: result.created, linkedTaskId: result.linkedTaskId };
+      } catch (err) {
+        if (err instanceof SpecImportError) throw new Error(err.message);
+        throw err;
+      }
     },
   },
   { tool: 'specs.delete', mutates: true, description: 'Delete a spec / PRD by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const rows = await ctx.db.delete(specs).where(and(eq(specs.id, str(a.id)), eq(specs.tenantId, ctx.tenantId))).returning({ id: specs.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },

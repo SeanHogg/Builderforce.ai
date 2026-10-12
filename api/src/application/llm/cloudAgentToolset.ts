@@ -51,7 +51,7 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // brings rather than on its name. Read-only.
   'cloud_agents.persona_brief',
   // Specs / PRDs — read + write (no delete)
-  'specs.list', 'specs.get', 'specs.create', 'specs.patch',
+  'specs.list', 'specs.get', 'specs.create', 'specs.patch', 'specs.import',
   // Strategy / OKRs — read + write (no delete). "update project related items (OKR)".
   'portfolios.list', 'portfolios.create', 'portfolios.update',
   'initiatives.list', 'initiatives.create', 'initiatives.update',
