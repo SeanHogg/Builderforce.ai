@@ -37,6 +37,10 @@ vi.mock('../project/ProjectService', () => ({ ProjectService: function () { retu
 vi.mock('../task/TaskService', () => ({ TaskService: function () { return {}; } }));
 vi.mock('../../infrastructure/repositories/ProjectRepository', () => ({ ProjectRepository: function () { /* stub */ } }));
 vi.mock('../../infrastructure/repositories/TaskRepository', () => ({ TaskRepository: function () { /* stub */ } }));
+vi.mock('../../infrastructure/cache/readThroughCache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/cache/readThroughCache')>()),
+  bumpTicketSearchVersion: vi.fn(async () => undefined),
+}));
 vi.mock('../prd/importSpec', () => ({
   importSpecFromBoard,
   SpecImportError,
@@ -46,6 +50,7 @@ vi.mock('../prd/importSpec', () => ({
 import { callBuiltinTool, listBuiltinTools } from './builtinMcpService';
 
 const db = {} as never;
+const env = { JWT_SECRET: 'test-secret' } as never;
 const TENANT = 7;
 
 const SPEC = {
@@ -77,9 +82,10 @@ describe('MCP specs.import', () => {
     const res = await callBuiltinTool(db, {
       tenantId: TENANT,
       tool: 'specs.import',
+      env,
       arguments: { projectId: 11, externalId: '42', provider: 'github' },
     }) as Record<string, unknown>;
-    expect(importSpecFromBoard).toHaveBeenCalledWith(db, {}, expect.objectContaining({
+    expect(importSpecFromBoard).toHaveBeenCalledWith(db, env, expect.objectContaining({
       tenantId: TENANT,
       projectId: 11,
       externalId: '42',
@@ -101,6 +107,7 @@ describe('MCP specs.import', () => {
     const res = await callBuiltinTool(db, {
       tenantId: TENANT,
       tool: 'specs.import',
+      env,
       arguments: { projectId: 11, externalId: '42' },
     }) as Record<string, unknown>;
     expect(res.created).toBe(false);
@@ -115,6 +122,7 @@ describe('MCP specs.import', () => {
     await expect(callBuiltinTool(db, {
       tenantId: TENANT,
       tool: 'specs.import',
+      env,
       arguments: { projectId: 11, externalId: '42', provider: 'monday' },
     })).rejects.toThrow(/not supported/);
   });
@@ -124,7 +132,17 @@ describe('MCP specs.import', () => {
     await expect(callBuiltinTool(db, {
       tenantId: TENANT,
       tool: 'specs.import',
+      env,
       arguments: { projectId: 11, externalId: '42' },
     })).rejects.toThrow(/board connection/);
+  });
+
+  it('refuses without the worker environment instead of decrypting with an empty secret', async () => {
+    await expect(callBuiltinTool(db, {
+      tenantId: TENANT,
+      tool: 'specs.import',
+      arguments: { projectId: 11, externalId: '42' },
+    })).rejects.toThrow(/platform environment/);
+    expect(importSpecFromBoard).not.toHaveBeenCalled();
   });
 });
