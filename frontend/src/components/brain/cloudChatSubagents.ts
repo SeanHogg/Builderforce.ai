@@ -18,12 +18,14 @@ function isChatSubagentVM(row: unknown): row is ChatSubagentVM {
 
 /**
  * Live cloud sub-agents from GET /chats/:id/runs.
- * The API adds `subagents` beside the run history; the rest adapter's type does not
- * name that field yet, so we read it off the JSON at runtime.
+ * The API adds `subagents` beside the run history. A failed fetch degrades to an
+ * empty history WITHOUT that field — that is not "none running".
  */
+export function runHistoryHasSubagents(raw: unknown): boolean {
+  return !!raw && typeof raw === 'object' && Array.isArray((raw as { subagents?: unknown }).subagents);
+}
+
 export function asChatSubagents(raw: unknown): ChatSubagentVM[] {
-  if (!raw || typeof raw !== 'object') return [];
-  const list = (raw as { subagents?: unknown }).subagents;
-  if (!Array.isArray(list)) return [];
-  return list.filter(isChatSubagentVM);
+  if (!runHistoryHasSubagents(raw)) return [];
+  return (raw as { subagents: unknown[] }).subagents.filter(isChatSubagentVM);
 }

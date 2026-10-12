@@ -1,3 +1,12 @@
+## ✅ RESOLVED 2026-10-12 — Web Agents list shows a cloud run's live sub-agents (ticket #3087)
+
+The VS Code roster already listed live children through `ChatTicketsPanel`'s `subagents` prop. The web passed nothing: no read returned a chat's live child executions (`parent_execution_id` set, payload `chatId` = the chat).
+
+- **`GET /chats/:id/runs`** now includes `subagents` (`ChatSubagentRecord`: key/handle/name/label/owner) even when the chat has no linked tickets and no parent runs. Children are live-mode rows with `parent_execution_id`, non-terminal status, payload `chatId` matching the chat (SQL LIKE is a prefilter; `parseOriginatingChatId` is the exact match so chat 7 ≠ 70). Name prefers `asAgent`, then persona, then the slice label. Cap 50.
+- **Web `ChatTicketsPanel`** polls `listRuns` every 4s (and on refresh/activity) and passes the mapped roster into the shared panel. A failed poll omits `subagents` and does not wipe the last roster.
+- Shared `ChatRunHistoryVM.subagents` is optional so a degraded fetch is not "none running".
+- Closes the Gap Register row that needed migration 1209 first (already on the schema).
+
 ## ✅ RESOLVED 2026-10-12 — Studio Brain turns stop repeating work: batched build-file reads, no Brain-trace undo steps, readable trace rows (ui 2026.10.47)
 
 - **The report:** session `local-148925cf` (ui 2026.10.45), "lots of duplicate calls". The diagnostics showed four separate causes.

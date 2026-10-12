@@ -33,20 +33,27 @@
  * `containerRuntime` entitlement is DEMOTED to `durable` at dispatch, which is correct
  * and cheap and completely invisible from inside the conversation.
  *
+ * Live cloud SUB-AGENTS of this chat ride the same read: rows with `parent_execution_id`
+ * whose payload `chatId` is the chat, mapped to the existing `ChatSubagentVM` shape
+ * (`key` / `handle` / `name` / `label` / `owner`). The web Agents list has nowhere else
+ * to learn them — VS Code already has its local run registry; the API did not.
+ *
  * Read-only and bounded. It is NOT read-through cached, on purpose: its callers are the
  * diagnostics capture (one fetch per "Copy diagnostics" click) and the `chats.runs`
- * tool, and every field it returns — status, `produced`, `completedAt` — is live run
- * state that changes under the reader. A cached run status in a report whose entire job
- * is to say what is happening right now is worse than the query it saves.
+ * tool, and every field it returns — status, `produced`, `completedAt`, live children —
+ * is live run state that changes under the reader. A cached run status in a report whose
+ * entire job is to say what is happening right now is worse than the query it saves.
  */
 
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, notInArray, sql } from 'drizzle-orm';
 import { executions, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { TERMINAL_EXECUTION_STATUSES } from '../../domain/execution/Execution';
 import { linkedRunnableTickets } from './chatLinkedTickets';
 import { resolveAgentIdentities } from './agentDisplayNames';
 import { resolveChatAccess } from './chatAccess';
-import { parseCloudAgentRef, parseExecutor } from '../runtime/cloudDispatch';
+import { parseCloudChild } from '../runtime/cloudChildRuns';
+import { parseCloudAgentRef, parseExecutor, parseOriginatingChatId } from '../runtime/cloudDispatch';
 import { agentHosts } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -62,6 +69,9 @@ export const CHAT_RUN_HISTORY_LIMIT = 25;
  * enough that nobody hits it while diagnosing a chat.
  */
 export const MAX_CHAT_RUN_HISTORY_LIMIT = 200;
+
+/** How many live child executions one history read will consider. Fan-out is capped. */
+export const CHAT_LIVE_SUBAGENT_LIMIT = 50;
 
 /** Coerce an untrusted `limit` into the supported range. */
 export function clampChatRunHistoryLimit(limit: number): number {
@@ -128,6 +138,21 @@ export interface ChatRunHistory {
    * was durable — none of them could build what it wrote" without walking the list.
    */
   executors: string[];
+  /**
+   * Live cloud sub-agents of this chat — child executions (`parent_execution_id` set)
+   * whose payload `chatId` is this chat and that have not settled. Same shape as the
+   * Agents roster's `ChatSubagentVM`; not a second schema.
+   */
+  subagents: ChatSubagentRecord[];
+}
+
+/** One live child, as the Agents list renders it (`ChatSubagentVM` on the wire). */
+export interface ChatSubagentRecord {
+  key: string;
+  handle: string;
+  name: string;
+  label: string;
+  owner: string;
 }
 
 /**
@@ -216,6 +241,58 @@ export function toChatRunRecords(
   });
 }
 
+function nonEmpty(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+/**
+ * Project a child execution onto the Agents-list shape. Pure — the query is one thing
+ * to get right; this is the other (which name, and never inventing a row the payload
+ * does not actually describe as a sub-agent).
+ */
+export function toChatSubagentRecord(row: { id: number; payload: string | null }): ChatSubagentRecord | null {
+  const spec = parseCloudChild(row.payload);
+  if (!spec) return null;
+  const name = [spec.asAgent?.name, spec.persona?.name, spec.label].find(nonEmpty);
+  if (!nonEmpty(spec.handle) || !name || !nonEmpty(spec.label) || !nonEmpty(spec.owner)) return null;
+  return { key: String(row.id), handle: spec.handle, name, label: spec.label, owner: spec.owner };
+}
+
+/**
+ * Keep only children whose payload `chatId` is this chat. The SQL prefilter is a LIKE;
+ * this is the exact match, so `"chatId":7` never pulls in chat 70.
+ */
+export function liveChatSubagentsOf(
+  chatId: number,
+  rows: readonly { id: number; payload: string | null }[],
+): ChatSubagentRecord[] {
+  return rows.flatMap((row) => {
+    if (parseOriginatingChatId(row.payload) !== chatId) return [];
+    const rec = toChatSubagentRecord(row);
+    return rec ? [rec] : [];
+  });
+}
+
+async function readLiveChatSubagents(db: Db, tenantId: number, chatId: number): Promise<ChatSubagentRecord[]> {
+  // Not `liveExecution()` — that helper excludes children (`parent_execution_id` set),
+  // which are exactly the rows this read wants. Mode still has to be live so a
+  // rehearsal fan-out never appears on the roster.
+  const rows = await db
+    .select({ id: executions.id, payload: executions.payload })
+    .from(executions)
+    .where(scopedToTenant(
+      executions,
+      tenantId,
+      eq(executions.mode, 'live'),
+      isNotNull(executions.parentExecutionId),
+      notInArray(executions.status, [...TERMINAL_EXECUTION_STATUSES]),
+      sql`${executions.payload} like ${`%"chatId":${chatId}%`}`,
+    ))
+    .orderBy(desc(executions.createdAt))
+    .limit(CHAT_LIVE_SUBAGENT_LIMIT);
+  return liveChatSubagentsOf(chatId, rows);
+}
+
 /**
  * Every run started against a ticket this chat links, newest first.
  *
@@ -230,8 +307,13 @@ export async function readChatRunHistory(
   chatId: number,
   limit: number = CHAT_RUN_HISTORY_LIMIT,
 ): Promise<ChatRunHistory> {
-  const linked = await linkedRunnableTickets(db, tenantId, chatId);
-  if (linked.length === 0) return { linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] };
+  const [linked, subagents] = await Promise.all([
+    linkedRunnableTickets(db, tenantId, chatId),
+    readLiveChatSubagents(db, tenantId, chatId),
+  ]);
+  if (linked.length === 0) {
+    return { linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [], subagents };
+  }
   const taskIds = linked.map((t) => t.id);
 
   const rows = await db
@@ -256,7 +338,7 @@ export async function readChatRunHistory(
     .limit(clampChatRunHistoryLimit(limit));
 
   if (rows.length === 0) {
-    return { linkedRunnableTickets: linked.length, runs: [], dispatchers: [], executors: [] };
+    return { linkedRunnableTickets: linked.length, runs: [], dispatchers: [], executors: [], subagents };
   }
 
   // Titles for the tickets that actually appear in the returned runs — not for every
@@ -295,6 +377,7 @@ export async function readChatRunHistory(
     runs,
     dispatchers: [...new Set(runs.map((r) => r.submittedBy))],
     executors: [...new Set(runs.map((r) => r.executor ?? (r.hostId != null ? 'on-prem' : 'unknown')))],
+    subagents,
   };
 }
 

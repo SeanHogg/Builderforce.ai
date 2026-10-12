@@ -103,6 +103,8 @@ export function createChatTicketsRestAdapter(opts: ChatTicketsRestOptions): Chat
         // failure of the capture that reads this — it is "nothing has run", which is the
         // answer. Degrading to an empty history keeps a diagnostics copy from failing on
         // the one read whose whole point is to be reassuring when it comes back empty.
+        // Deliberately omit `subagents`: a failed fetch is not "no children", and the
+        // web poller only replaces the roster when the field is present.
         .catch(() => ({ linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [] })),
 
     listTicketChats: (kind, ref) =>

@@ -3,10 +3,13 @@ import {
   CHAT_RUN_HISTORY_LIMIT,
   MAX_CHAT_RUN_HISTORY_LIMIT,
   clampChatRunHistoryLimit,
+  liveChatSubagentsOf,
   runAgentRefOf,
   toChatRunRecords,
+  toChatSubagentRecord,
   type ChatRunRow,
 } from './chatRunHistory';
+import { childPayload, type CloudChildSpec } from '../runtime/cloudChildRuns';
 
 /**
  * The projection from `executions` rows onto a chat's reported run history.
@@ -195,5 +198,58 @@ describe('toChatRunRecords — WHERE the run executed', () => {
     const rec = toChatRunRecords([row({ id: 208, payload: JSON.stringify({ executor: 'durable' }) })], titles, names)[0]!;
     expect(rec.hostId).toBeNull();
     expect(rec.hostName).toBeNull();
+  });
+});
+
+const childSpec = (over: Partial<CloudChildSpec> = {}): CloudChildSpec => ({
+  parentExecutionId: 41,
+  rootExecutionId: 40,
+  depth: 1,
+  handle: 'a42',
+  label: 'port auth',
+  task: 'Move the auth middleware.',
+  owner: 'Ada',
+  ...over,
+});
+
+describe('toChatSubagentRecord — live children on the Agents list', () => {
+  it('maps a child payload onto the existing ChatSubagentVM shape', () => {
+    const payload = childPayload(JSON.stringify({ chatId: 7 }), childSpec());
+    expect(toChatSubagentRecord({ id: 42, payload })).toEqual({
+      key: '42',
+      handle: 'a42',
+      name: 'port auth',
+      label: 'port auth',
+      owner: 'Ada',
+    });
+  });
+
+  it('prefers asAgent name, then persona, then the slice label', () => {
+    expect(toChatSubagentRecord({
+      id: 42,
+      payload: childPayload(undefined, childSpec({ asAgent: { ref: 'bob', name: 'Bob' } })),
+    })?.name).toBe('Bob');
+    expect(toChatSubagentRecord({
+      id: 42,
+      payload: childPayload(undefined, childSpec({ persona: { name: 'Persona', brief: 'x' } })),
+    })?.name).toBe('Persona');
+  });
+
+  it('returns null for a parent run or an unreadable payload', () => {
+    expect(toChatSubagentRecord({ id: 1, payload: JSON.stringify({ chatId: 7 }) })).toBeNull();
+    expect(toChatSubagentRecord({ id: 1, payload: null })).toBeNull();
+    expect(toChatSubagentRecord({ id: 1, payload: 'not json' })).toBeNull();
+  });
+});
+
+describe('liveChatSubagentsOf — payload chatId is this chat', () => {
+  it('keeps only children whose originating chatId matches', () => {
+    const ours = { id: 42, payload: childPayload(JSON.stringify({ chatId: 7 }), childSpec()) };
+    const theirs = { id: 43, payload: childPayload(JSON.stringify({ chatId: 70 }), childSpec({ handle: 'a43' })) };
+    expect(liveChatSubagentsOf(7, [ours, theirs]).map((s) => s.key)).toEqual(['42']);
+  });
+
+  it('drops a child whose payload has no chatId', () => {
+    expect(liveChatSubagentsOf(7, [{ id: 42, payload: childPayload(undefined, childSpec()) }])).toEqual([]);
   });
 });

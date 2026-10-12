@@ -19,15 +19,18 @@ import {
   ChatTicketsPanel as SharedChatTicketsPanel,
   createChatTicketsRestAdapter,
   useChatActivitySignal,
-  type ChatTicketsAdapter, type ChatTicketsLabels, type TicketLinkVM,
+  type ChatTicketsAdapter, type ChatTicketsLabels, type ChatSubagentVM, type TicketLinkVM,
 } from '@seanhogg/builderforce-brain-ui';
 import { artifactRoutePath } from '@seanhogg/builderforce-brain-embedded';
 import { brain, type BrainChat } from '@/lib/builderforceApi';
 import { apiRequest } from '@/lib/apiClient';
 import { onBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { usePermission } from '@/lib/rbac';
+import { asChatSubagents, runHistoryHasSubagents } from './cloudChatSubagents';
 
 const NO_TRANSCRIPT: ReadonlyArray<{ metadata?: string | null }> = [];
+/** Live children appear and settle without a page reload — the web has no host registry. */
+const LIVE_SUBAGENT_POLL_MS = 4_000;
 
 export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, transcript = NO_TRANSCRIPT }: {
   chatId: number;
@@ -65,7 +68,8 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
   const [refreshSignal, setRefreshSignal] = useState(0);
   useEffect(() => onBrainDataChanged(['chats', 'brain', 'tasks'], () => setRefreshSignal((n) => n + 1)), []);
   // A run milestone joins its agent to the chat server-side; its activity line arriving
-  // in the transcript is the signal to re-read the Agents list.
+  // in the transcript is the signal to re-read the Agents list. Live sub-agents also
+  // poll, because spawn does not always emit an activity-tagged line.
   const activitySignal = useChatActivitySignal(transcript);
 
   // LOCK state — owner-only toggle. Read once per chat (also picks up ownership).
@@ -116,6 +120,21 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
     canRun: () => ({ allowed: canDispatchRun, reason: tc('requiresDeveloperRole') }),
   }), [canDispatchRun, tc]);
 
+  const [subagents, setSubagents] = useState<ChatSubagentVM[]>([]);
+  useEffect(() => {
+    let live = true;
+    const load = () => {
+      adapter.listRuns(chatId).then((raw) => {
+        // A failed fetch degrades to a history without `subagents`. That is not
+        // "none running" — keep the last roster until a real answer arrives.
+        if (live && runHistoryHasSubagents(raw)) setSubagents(asChatSubagents(raw));
+      }).catch(() => { /* keep last roster */ });
+    };
+    load();
+    const timer = window.setInterval(load, LIVE_SUBAGENT_POLL_MS);
+    return () => { live = false; window.clearInterval(timer); };
+  }, [chatId, adapter, refreshSignal, activitySignal]);
+
   return (
     <div style={{ margin: '0 12px' }}>
       <SharedChatTicketsPanel
@@ -134,6 +153,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
         visibility={visibility}
         onSetVisibility={isOwner ? async (v) => { await brain.updateChat(chatId, { visibility: v }); setVisibility(v); } : undefined}
         onOpenTicket={openTicket}
+        subagents={subagents}
       />
     </div>
   );

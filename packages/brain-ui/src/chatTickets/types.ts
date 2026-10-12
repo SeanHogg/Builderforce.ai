@@ -150,6 +150,11 @@ export interface ChatRunHistoryVM {
   dispatchers: string[];
   /** Distinct executors across those runs ('container' | 'durable' | 'on-prem' | …). */
   executors: string[];
+  /**
+   * Live cloud sub-agents of this chat (`parent_execution_id` set, not yet settled).
+   * Absent on a failed fetch — that is not the same as "none running".
+   */
+  subagents?: ChatSubagentVM[];
 }
 
 /** A human participant of the chat (shared access / audience, migration 0288). */
