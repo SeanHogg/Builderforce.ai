@@ -1,3 +1,14 @@
+## ✅ RESOLVED 2026-10-12 — Sequential batching in bfi-runtime (builderforce-inference e4c07ee)
+
+- **What:** Added sequential batching to the local inference runtime so one Engine can run multiple prompts without reloading the model.
+- **Implementation:** `Engine::generate_batch(&mut self, prompts: &[&str], params: SampleParams) -> Result<Vec<String>>` loops through prompts calling `generate()`. The `run_queued<F, E>` helper runs each prompt sequentially on the same generator.
+- **Scope:** Minimal scheduler hook — sequential reuse of one loaded model. Concurrent token mixing / paged attention is out of scope for this iteration.
+- **Tests:** `cargo test -p bfi-runtime` — 39 tests passed, including `run_queued_two_prompts_reuses_same_generator`, `run_queued_empty_is_empty`, and `run_queued_stops_on_first_error`.
+- **Files changed:** `builderforce-inference/crates/bfi-runtime/src/engine/mod.rs`, `builderforce-inference/crates/bfi-runtime/src/lib.rs`.
+- **Related:** Parent ticket 2919 (M4: Advanced features - batching, caching, grammar).
+
+---
+
 ## ✅ RESOLVED 2026-10-12 — A dropped connection no longer ends the run (VSIX 2026.10.28 · brain-embedded 2026.10.21)
 
 - **What the new error messages showed (chats #141/#142):** `fetch failed ← connect ETIMEDOUT 172.67.182.187:443 | connect ENETUNREACH 2606:4700:…`. The client could not open a socket to the gateway at all, and it happened in every run in the same second, so it was a network drop on the user's machine.

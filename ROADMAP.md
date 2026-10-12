@@ -41,14 +41,14 @@ Enabling work is legitimate but never outranks a broken Idea→Real journey.
 | Live orchestration workspace (real-time DAG) | Agents | P0 | Q3 2026 | 🔄 Partial |
 | Inline diff / pair-programming (TUI accept/reject) | Agents | P1 | Q3 2026 | 🔄 Partial |
 | Session auto-checkpoint (`/sessions`, `/undo`, `/fork`) | Agents | P1 | Q3 2026 | 🔄 Partial |
-| Remote task result streaming | Agents | P2 | Q3 2026 | 📋 Planned |
+| Remote task result streaming | Agents | P2 | Q3 2026 | 🔄 Partial — live `remote.task.chunk` + terminal assistant text |
 | Multi-model role routing | Agents | P2 | Q3 2026 | 📋 Planned |
 | Spec import from GitHub Issues / Linear / Jira | Agents | P2 | Q3 2026 | 📋 Planned |
 | Remaining Canvas actions onto the outcome contract | Analytics | P0 | Q3 2026 | 🔄 In Progress |
 | Rendered presentation export of the value brief | Revenue | P1 | Q3 2026 | 🔄 Partial |
 | Phase 6 — activity/integration engines, scheduled reporting, PRD orchestration, analytics UI | 6 | P0–P1 | Q3–Q4 2026 | 📋 Planned |
 | Phase 7 — policy packs, governance-auditor, BLOCKER-gates-merge, SOC2 evidence ([PRD 08](./specs/builderforce/08-prd-agentic-governance.md)) | 7 | P1–P2 | Q3 2026 | 📋 Planned |
-| Local LLM execution — native pure-Rust engine that replaces Ollama, in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) (`bfi`; Synapse supervises `bfi serve`), hybrid routing — [PRD](https://github.com/SeanHogg/builderforce-inference/blob/main/docs/PRD-native-engine.md); M1 = ternary-kernel benchmark vs the PrismML fork | 3 | P2–P3 | Q4 2026 | 📋 Planned |
+| Local LLM execution — native pure-Rust engine that replaces Ollama, in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) (`bfi`; Synapse supervises `bfi serve`), hybrid routing — [PRD](https://github.com/SeanHogg/builderforce-inference/blob/main/docs/PRD-native-engine.md); M1–M4 crate scaffolding landed (tokenizer, sampler, prefix cache, grammar, embeddings, sequential `generate_batch` at e4c07ee). Remaining: concurrent token mixing, Synapse cut-over (still drives Ollama), VSIX | 3 | P2–P3 | Q4 2026 | 🔄 Partial |
 | Multi-agent orchestration at scale (DAG UI, memory mesh) | 4 | P1–P2 | Q3–Q4 2026 | 📋 Planned |
 | Production hardening (self-hosted, fleet failover, SIEM export) | 5 | P1–P3 | Q4 2026 | 📋 Planned |
 

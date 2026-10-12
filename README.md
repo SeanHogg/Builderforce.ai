@@ -8,6 +8,12 @@
 
 ---
 
+## What's New
+
+- **2026-10-12 — Sequential batching in the local inference runtime.** `Engine::generate_batch` in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) runs multiple prompts on one loaded model without a reload (`e4c07ee`). Concurrent token mixing / paged attention is not in this drop. Changelog: [DONE.md](./DONE.md).
+
+---
+
 ## What is Builderforce.ai?
 
 Builderforce.ai is a **human-in-the-loop, fully agentic cloud** where ideas become software and software becomes agents. You stay in control of every step while AI agents do the work — train your own specialist agents and put them to work *inside* your own agent, manage the whole workforce from a Kanban board, and review, validate, and approve everything without leaving your editor. It combines a full in-browser IDE with an AI training pipeline, a Workforce Registry for specialist agents, and an orchestration portal for self-hosted [BuilderForce Agents](https://builderforce.ai/agents) meshes.
