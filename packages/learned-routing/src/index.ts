@@ -11,11 +11,13 @@
  *   • `actionTypes`        — the closed action-type vocabulary + the kill switch
  *   • `modelQualityScore`  — outcome/rating blend + the rate-limit availability test
  *   • `rankModels`         — `rankModelsForAction`, the pure re-ranker
+ *   • `roleModels`         — role → catalog model id from config (documented default)
  *   • `routingScope`       — `project:<id> | tenant:<id> | global` and its token
  *   • `runOutcomeContract` — the `POST /llm/v1/run-outcome` body + its parser
  *
  * What does NOT live here: anything that touches KV, a DB, an env binding or the
  * network. The routing-table blob, its reconcile and its cache stay in the api.
+ * `parseRoleModelConfig` reads an env *bag* the caller already holds — no I/O.
  */
 
 export {
@@ -44,6 +46,14 @@ export {
   type ActionModelRankStat,
   type RankModelsOptions,
 } from './rankModels.js';
+
+export {
+  ROLE_MODELS_ENV,
+  ROLE_MODEL_DEFAULT_ENV,
+  parseRoleModelConfig,
+  resolveModelForRole,
+  type RoleModelConfig,
+} from './roleModels.js';
 
 export {
   OWN_TENANT_SCOPE_TOKEN,
