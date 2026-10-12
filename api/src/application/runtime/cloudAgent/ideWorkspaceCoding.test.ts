@@ -147,6 +147,53 @@ describe('IDE workspace file ops', () => {
     expect(await readWorkspaceFile(bucket, 34, 'src/added.js')).toBeNull();
   });
 
+  it('write then read persists in the IDE workspace, not a git clone', async () => {
+    const r2 = fakeR2();
+    const bucket = asBucket(r2);
+    const db = fakeDb([]);
+    const run = { bucket, projectId: 34, projectName: 'Brain App' };
+    const written = await writeIdeWorkspaceFile(db, run, {
+      tenantId: 1, taskId: 7, executionId: 9, agent: 'coder',
+      path: 'src/hello.js', content: 'export const hello = 1;\n',
+    });
+    expect(written.ok).toBe(true);
+    expect(written.branch).toBe('workspace');
+    const read = await readIdeWorkspaceFile(bucket, 34, 'src/hello.js');
+    expect(read).toEqual({ ok: true, path: 'src/hello.js', content: 'export const hello = 1;\n' });
+  });
+
+  it('edit of a missing file and empty search are honest errors; delete of a missing path is a no-op', async () => {
+    const r2 = fakeR2();
+    const bucket = asBucket(r2);
+    const db = fakeDb([]);
+    const run = { bucket, projectId: 34, projectName: 'Brain App' };
+
+    const missingEdit = await editIdeWorkspaceFile(db, run, {
+      tenantId: 1, taskId: 7, executionId: 9, agent: 'coder',
+      path: 'src/gone.js', oldString: 'a', newString: 'b',
+    });
+    expect(missingEdit.ok).toBe(false);
+    expect(missingEdit.error).toMatch(/file not found/i);
+
+    await writeWorkspaceFile(bucket, 34, 'src/gone.js', 'export const a = 1;\n');
+    const noMatch = await editIdeWorkspaceFile(db, run, {
+      tenantId: 1, taskId: 7, executionId: 9, agent: 'coder',
+      path: 'src/gone.js', oldString: 'does-not-exist', newString: 'x',
+    });
+    expect(noMatch.ok).toBe(false);
+    expect(noMatch.error).toMatch(/oldString not found/i);
+
+    const empty = await searchIdeWorkspace(bucket, 34, '   ');
+    expect(empty.ok).toBe(false);
+    expect(empty.error).toMatch(/query is required/i);
+
+    const missingDelete = await deleteIdeWorkspaceFile(db, run, {
+      tenantId: 1, taskId: 7, executionId: 9, agent: 'coder', path: 'src/never.js',
+    });
+    expect(missingDelete.ok).toBe(true);
+    expect(missingDelete.deleted).toBe(false);
+  });
+
   it('refuses a traversal write instead of dumping it into R2', async () => {
     const r2 = fakeR2();
     const result = await writeIdeWorkspaceFile(fakeDb([]), { bucket: asBucket(r2), projectId: 34, projectName: 'X' }, {
@@ -164,7 +211,7 @@ describe('resolveIdeWorkspaceForRun / snapshotIdeWorkspace', () => {
     expect(await resolveIdeWorkspaceForRun({} as Env, fakeDb([]), 1, 7)).toBeNull();
   });
 
-  it('resolves the task workspace and snapshots its tree', async () => {
+  it('has-workspace: resolves even with no git repoId, falling back to the project itself', async () => {
     const r2 = fakeR2();
     const env = { UPLOADS: asBucket(r2) } as Env;
     await writeWorkspaceFile(env.UPLOADS!, 5, 'src/index.js', 'ok');
@@ -178,6 +225,41 @@ describe('resolveIdeWorkspaceForRun / snapshotIdeWorkspace', () => {
     const snap = await snapshotIdeWorkspace(run!);
     expect(snap.fileCount).toBe(1);
     expect(snap.topLevel).toEqual(['src/']);
+    expect(snap.truncated).toBe(false);
     expect(snap.ide.projectName).toBe('Plain');
+  });
+
+  it('has-workspace: prefers the IDE child storage project when one is bound (still no git)', async () => {
+    const r2 = fakeR2();
+    const env = { UPLOADS: asBucket(r2) } as Env;
+    await writeWorkspaceFile(env.UPLOADS!, 34, 'src/App.jsx', 'export const App = () => 1;\n');
+    const db = fakeDb([
+      [{ projectId: 5 }],
+      [{ id: 5, name: 'Container' }],
+      [{ storageProjectId: 34, name: 'Brain App' }],
+    ]);
+    const run = await resolveIdeWorkspaceForRun(env, db, 42, 7);
+    expect(run).toMatchObject({ projectId: 34, projectName: 'Brain App' });
+    expect(run?.bucket).toBe(env.UPLOADS);
+    const snap = await snapshotIdeWorkspace(run!);
+    expect(snap.ide).toEqual({ projectId: 34, projectName: 'Brain App' });
+    expect(snap.topLevel).toEqual(['src/']);
+  });
+
+  it('no-workspace: returns null when the task/project is gone even if R2 is configured', async () => {
+    const env = { UPLOADS: asBucket(fakeR2()) } as Env;
+    expect(await resolveIdeWorkspaceForRun(env, fakeDb([[]]), 42, 7)).toBeNull();
+  });
+
+  it('marks the snapshot truncated when more than 40 top-level entries exist', async () => {
+    const r2 = fakeR2();
+    const bucket = asBucket(r2);
+    for (let i = 0; i < 41; i++) {
+      await writeWorkspaceFile(bucket, 9, `f${String(i).padStart(2, '0')}.js`, 'export const x = 1;\n');
+    }
+    const snap = await snapshotIdeWorkspace({ bucket, projectId: 9, projectName: 'Wide' });
+    expect(snap.fileCount).toBe(41);
+    expect(snap.topLevel).toHaveLength(40);
+    expect(snap.truncated).toBe(true);
   });
 });
