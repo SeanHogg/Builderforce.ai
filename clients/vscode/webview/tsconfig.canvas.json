@@ -39,6 +39,9 @@
       "@builderforce/interaction-contract": [
         "../../../packages/interaction-contract/src/index.ts"
       ],
+      "@builderforce/write-outbox": [
+        "../../../packages/write-outbox/src/index.ts"
+      ],
       "@builderforce/creation-canvas-contract/objectKinds": [
         "../../../packages/creation-canvas-contract/src/objectKinds.ts"
       ],

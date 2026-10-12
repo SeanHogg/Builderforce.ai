@@ -5,7 +5,7 @@ import { trackActivity, flushActivity } from '@/lib/activity/tracker';
 
 /**
  * Mounts once in the app shell for signed-in users. Auto-captures navigation
- * ("click sense") and drives the batch flush of the activity queue. Explicit
+ * ("click sense") and flushes the activity queue when the page is hidden. Explicit
  * signals (ticket lane moves, tool executions, agent messages, …) are emitted
  * by feature code via `trackActivity(...)`; this component owns the transport.
  * Renders nothing.
@@ -23,15 +23,13 @@ export default function ActivityTracker() {
     trackActivity('nav', { ref: pathname });
   }, [isAuthenticated, pathname]);
 
-  // Periodic flush + flush on tab hide / unload so nothing is lost.
+  // The outbox batches on its own clock; flush on tab hide / unload so nothing is lost.
   useEffect(() => {
     if (!isAuthenticated) return;
-    const timer = setInterval(() => { void flushActivity(); }, 15_000);
-    const onHide = () => { void flushActivity(); };
+    const onHide = () => { void flushActivity({ final: true }); };
     document.addEventListener('visibilitychange', onHide);
     window.addEventListener('pagehide', onHide);
     return () => {
-      clearInterval(timer);
       document.removeEventListener('visibilitychange', onHide);
       window.removeEventListener('pagehide', onHide);
       void flushActivity();

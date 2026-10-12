@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 afterEach(() => {
   vi.resetModules();
   document.querySelectorAll('script').forEach((s) => s.remove());
+  // A test that pins `currentScript` to a keyed script must not leak it into the next.
+  Object.defineProperty(document, 'currentScript', { configurable: true, get: () => null });
 });
 
 describe('loader boot', () => {

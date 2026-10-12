@@ -32,7 +32,6 @@ export function startRecorder(opts: ReplayInit): RecorderHandle | null {
 
   const endpoint = opts.endpoint ?? DEFAULT_ENDPOINT;
   const batch = new ChunkBatch({ url: ingestUrl(endpoint, opts.key), visitId });
-  batch.start();
 
   const origin = typeof performance !== 'undefined' ? performance.now() : 0;
   const at = () => Math.max(0, Math.round((typeof performance !== 'undefined' ? performance.now() : 0) - origin));
@@ -50,7 +49,7 @@ export function startRecorder(opts: ReplayInit): RecorderHandle | null {
   const onClick = (ev: MouseEvent) => {
     const target = ev.target;
     if (!(target instanceof Element)) return;
-    const selector = deriveSelector(target);
+    const { selector } = deriveSelector(target);
     const t = at();
     push({ t, kind: 'click', x: ev.clientX, y: ev.clientY, selector });
     marks.click({ t, x: ev.clientX, y: ev.clientY }, selector, target);
@@ -88,10 +87,8 @@ export function startRecorder(opts: ReplayInit): RecorderHandle | null {
         });
       },
       maskAllInputs: true,
-      maskInputFn: (text: string, el: { type?: string }) => {
-        if (el && typeof (el as unknown as Element).matches === 'function' && !shouldMask(el as unknown as Element)) {
-          return text;
-        }
+      maskInputFn: (text: string, el: HTMLElement) => {
+        if (el && typeof el.matches === 'function' && !shouldMask(el)) return text;
         return maskInputFn(text, el);
       },
     }) ?? undefined;
@@ -142,7 +139,6 @@ export function startRecorder(opts: ReplayInit): RecorderHandle | null {
       window.removeEventListener('pagehide', onHide);
       stopVitals();
       stopRrweb?.();
-      batch.stop();
       void batch.flush(true);
     },
   };
@@ -154,11 +150,12 @@ export function startRecorder(opts: ReplayInit): RecorderHandle | null {
 installGlobal();
 
 const exported = {
+  ...session,
+  // After the spread: the recorder's `init` must win over the bare session one.
   init(opts: ReplayInit) {
     session.init(opts);
     return startRecorder(opts);
   },
-  ...session,
 };
 
 export default exported;

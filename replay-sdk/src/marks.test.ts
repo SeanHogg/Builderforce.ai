@@ -10,6 +10,10 @@ describe('MarkTracker', () => {
     for (let i = 0; i < FRUSTRATION_THRESHOLDS.rage.minClicks; i++) {
       tracker.click({ t: t + i * 200, x: 10, y: 10 }, 'button.buy', {
         tagName: 'BUTTON',
+        id: '',
+        nodeType: 1,
+        textContent: null,
+        parentElement: null,
         getAttribute: () => null,
       });
     }

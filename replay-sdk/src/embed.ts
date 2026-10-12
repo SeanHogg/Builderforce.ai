@@ -57,8 +57,15 @@ function bootRecorder(cdn: string, key: string): void {
     });
 }
 
-installGlobal();
-const script = currentScript();
-const key = readKey(script);
-if (key) session.init({ key, cdn: cdnOrigin(script) });
-bootRecorder(cdnOrigin(script), key);
+/** Install the global and, when the snippet carries a key, start the session and the
+ *  recorder. Safe without a key (no-op beyond the global). */
+export function bootEmbed(): void {
+  installGlobal();
+  const script = currentScript();
+  const key = readKey(script);
+  if (key) session.init({ key, cdn: cdnOrigin(script) });
+  bootRecorder(cdnOrigin(script), key);
+}
+
+// The CDN IIFE starts itself, like the loader.
+if (typeof document !== 'undefined') bootEmbed();

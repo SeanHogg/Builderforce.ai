@@ -33,8 +33,12 @@ describe('getVisitId', () => {
     const t0 = 1_700_000_000_000;
     const first = getVisitId(t0);
     expect(first).toMatch(VISITOR_ID_PATTERN);
-    expect(getVisitId(t0 + VISIT_IDLE_MS)).toBe(first);
-    const next = getVisitId(t0 + VISIT_IDLE_MS + 1);
+    // Inside the window: same visit — and the call itself refreshes "last seen",
+    // because the window is an idle GAP, not a fixed span from the first call.
+    const seen = t0 + VISIT_IDLE_MS;
+    expect(getVisitId(seen)).toBe(first);
+    // A gap just past the window since that last activity starts a new visit.
+    const next = getVisitId(seen + VISIT_IDLE_MS + 1);
     expect(next).not.toBe(first);
     expect(next).toMatch(VISITOR_ID_PATTERN);
   });

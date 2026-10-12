@@ -17,6 +17,7 @@
  */
 
 import { deriveSelector, redactInput } from '@builderforce/interaction-contract';
+import { createOutbox } from '@builderforce/write-outbox';
 import { getApiBaseUrl, getAuthHeaders, apiRequestStream } from '../apiClient';
 import { AMBIENT_REQUEST_ERRORS } from '../errors/transportFailure';
 
@@ -57,8 +58,45 @@ function getSessionId(): string {
   }
 }
 
+/** A batch's project: a positive id, or null for the app shell. */
+type QaProject = number | null;
+
+/**
+ * Send one project's batch. `final` (page unload) uses sendBeacon: it cannot set
+ * Authorization, so it cannot go through the shared transport at all — a best-effort
+ * last gasp. The timed flush is the reliable, authenticated path.
+ */
+function sendQaBatch(projectId: QaProject, events: QaCaptureEvent[], final: boolean): Promise<unknown> | void {
+  const path = '/api/qa/events';
+  const payload = JSON.stringify({
+    sessionId: getSessionId(),
+    ...(projectId !== null ? { projectId } : {}),
+    events,
+  });
+  if (final && navigator.sendBeacon) {
+    navigator.sendBeacon(`${getApiBaseUrl()}${path}`, new Blob([payload], { type: 'application/json' }));
+    return;
+  }
+  return apiRequestStream(path, {
+    method: 'POST',
+    body: payload,
+    keepalive: true,
+    // Telemetry flush — best-effort, and fires on unload.
+    expectedErrors: AMBIENT_REQUEST_ERRORS,
+  });
+}
+
 class QaCapture {
-  private queue: QaCaptureEvent[] = [];
+  /**
+   * One lane per project, so a batch is never split across two attributions and a
+   * project switch needs no flush of its own. Batches leave at {@link MAX_QUEUE} or
+   * every {@link FLUSH_INTERVAL_MS}, in order; a failure is dropped (best-effort).
+   */
+  private outbox = createOutbox<QaCaptureEvent, QaProject>({
+    maxItems: MAX_QUEUE,
+    maxWaitMs: FLUSH_INTERVAL_MS,
+    send: (projectId, events, ctx) => sendQaBatch(projectId, events, ctx.final),
+  });
   private seq = 0;
   /**
    * The project these interactions belong to, or null for "the app shell", which
@@ -69,7 +107,6 @@ class QaCapture {
    * pre-0955 row carries.
    */
   private projectId: number | null = null;
-  private timer: ReturnType<typeof setInterval> | null = null;
   private started = false;
   private onClick = (e: Event) => this.handleClick(e);
   private onSubmit = (e: Event) => this.handleSubmit(e);
@@ -85,7 +122,6 @@ class QaCapture {
     document.addEventListener('submit', this.onSubmit, { capture: true });
     document.addEventListener('change', this.onChange, { capture: true });
     window.addEventListener('pagehide', this.onUnload);
-    this.timer = setInterval(() => this.flush(), FLUSH_INTERVAL_MS);
   }
 
   stop(): void {
@@ -95,19 +131,12 @@ class QaCapture {
     document.removeEventListener('submit', this.onSubmit, { capture: true } as EventListenerOptions);
     document.removeEventListener('change', this.onChange, { capture: true } as EventListenerOptions);
     window.removeEventListener('pagehide', this.onUnload);
-    if (this.timer) clearInterval(this.timer);
     this.flush(true);
   }
 
-  /**
-   * Attribute subsequent events to a project (or null for the app shell).
-   * Flushes first, so a batch is never split across two attributions.
-   */
+  /** Attribute subsequent events to a project (or null for the app shell). */
   setProject(projectId: number | null): void {
-    const next = projectId != null && Number.isInteger(projectId) && projectId > 0 ? projectId : null;
-    if (next === this.projectId) return;
-    this.flush();
-    this.projectId = next;
+    this.projectId = projectId != null && Number.isInteger(projectId) && projectId > 0 ? projectId : null;
   }
 
   /** Emit a pageview — call on every route change. */
@@ -117,8 +146,7 @@ class QaCapture {
 
   private push(ev: Omit<QaCaptureEvent, 'seq'>): void {
     try {
-      this.queue.push({ ...ev, seq: this.seq++ });
-      if (this.queue.length >= MAX_QUEUE) this.flush();
+      this.outbox.enqueue(this.projectId, { ...ev, seq: this.seq++ });
     } catch {
       /* capture must never throw */
     }
@@ -166,34 +194,9 @@ class QaCapture {
     }
   }
 
-  /** Send the queued batch. `beacon` uses sendBeacon for unload reliability. */
+  /** Send every queued batch. `beacon` = the page is unloading (see {@link sendQaBatch}). */
   flush(beacon = false): void {
-    if (this.queue.length === 0) return;
-    const batch = this.queue.splice(0, this.queue.length);
-    const path = '/api/qa/events';
-    const payload = JSON.stringify({
-      sessionId: getSessionId(),
-      ...(this.projectId !== null ? { projectId: this.projectId } : {}),
-      events: batch,
-    });
-    try {
-      if (beacon && navigator.sendBeacon) {
-        // sendBeacon can't set Authorization, so it cannot go through the shared
-        // transport at all; only use it as a best-effort last gasp. The interval
-        // flush (below) is the reliable, authenticated path.
-        navigator.sendBeacon(`${getApiBaseUrl()}${path}`, new Blob([payload], { type: 'application/json' }));
-        return;
-      }
-      void apiRequestStream(path, {
-        method: 'POST',
-        body: payload,
-        keepalive: true,
-        // Telemetry flush — best-effort, and fires on unload.
-        expectedErrors: AMBIENT_REQUEST_ERRORS,
-      }).catch(() => {});
-    } catch {
-      /* ignore */
-    }
+    void this.outbox.flush(undefined, { final: beacon });
   }
 }
 

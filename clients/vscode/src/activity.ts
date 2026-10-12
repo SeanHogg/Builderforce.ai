@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { createOutbox } from "@builderforce/write-outbox";
 import * as bfApi from "./bfApi";
 
 /**
@@ -12,12 +13,30 @@ import * as bfApi from "./bfApi";
  */
 
 let secretsRef: vscode.SecretStorage | undefined;
-let queue: bfApi.VsixActivitySignal[] = [];
+
+/** The editor's one activity stream. */
+const VSIX_STREAM = "vsix";
+
+/**
+ * Signals go through the shared write outbox: a full queue (25) leaves at once, and
+ * otherwise a batch waits up to five minutes. Every signal carries its own
+ * `occurredAt`/`durationSeconds`, so five minutes of heartbeats in one POST records
+ * exactly the same time — it only stops a focused editor from writing to the platform
+ * every minute. {@link coalesceSignals} then folds the adjacent duplicates, so the
+ * same five minutes is also one ROW.
+ */
+const signals = createOutbox<bfApi.VsixActivitySignal>({
+  maxItems: 25,
+  maxWaitMs: 5 * 60_000,
+  coalesce: (batch) => coalesceSignals(batch),
+  send: async (_stream, batch) => {
+    if (secretsRef) await bfApi.postActivitySignals(secretsRef, batch);
+  },
+});
 
 /** Emit one activity signal from the editor. */
 export function trackVsix(kind: string, opts: Omit<bfApi.VsixActivitySignal, "kind"> = {}): void {
-  queue.push({ kind, occurredAt: new Date().toISOString(), ...opts });
-  if (queue.length >= 25) void flushVsix();
+  signals.enqueue(VSIX_STREAM, { kind, occurredAt: new Date().toISOString(), ...opts });
 }
 
 /**
@@ -64,17 +83,10 @@ export function coalesceSignals(signals: bfApi.VsixActivitySignal[]): bfApi.Vsix
   return out;
 }
 
-async function flushVsix(): Promise<void> {
-  if (!secretsRef || queue.length === 0) return;
-  const batch = coalesceSignals(queue);
-  queue = [];
-  await bfApi.postActivitySignals(secretsRef, batch);
-}
-
 /**
  * Start editor activity capture. Emits a heartbeat every 60s WHILE the window is
- * focused (so idle time isn't billed), a nav signal on the active file changing,
- * and flushes the queue on a timer. Returns a Disposable for the extension's
+ * focused (so idle time isn't billed) and a nav signal on the active file changing;
+ * the outbox above owns batching and flushing. Returns a Disposable for the extension's
  * subscriptions.
  */
 export function initActivity(secrets: vscode.SecretStorage): vscode.Disposable {
@@ -95,17 +107,9 @@ export function initActivity(secrets: vscode.SecretStorage): vscode.Disposable {
     }),
   );
 
-  // Flush on a timer. Every signal carries its own `occurredAt`/`durationSeconds`, so
-  // batching five minutes of heartbeats into one POST records exactly the same time —
-  // it only stops a focused editor from writing to the platform every 20 seconds.
-  // A full queue (25) and disposal still flush immediately. `coalesceSignals` then folds
-  // the adjacent duplicates in that batch, so the same five minutes is also one ROW.
-  const flushTimer = setInterval(() => { void flushVsix(); }, 5 * 60_000);
-
   return new vscode.Disposable(() => {
     clearInterval(heartbeat);
-    clearInterval(flushTimer);
     disposables.forEach((d) => d.dispose());
-    void flushVsix();
+    void signals.flush();
   });
 }

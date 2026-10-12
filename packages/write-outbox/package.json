@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/write-outbox",
+  "version": "2026.10.1",
+  "private": true,
+  "type": "module",
+  "description": "THE queued writer for fire-and-forget client traffic — run steps, activity signals, visitor journey, QA capture. Items are queued per key, coalesced, and sent in batches (size cap, max wait, explicit flush, unload), with at most one request in flight per key so batches land in the order they were queued. Zero dependencies and no Node builtins: imported by the browser, the VS Code extension host and brain-embedded.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

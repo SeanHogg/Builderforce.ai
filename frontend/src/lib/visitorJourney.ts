@@ -17,6 +17,7 @@
  */
 
 import { VISIT_IDLE_MS } from '@builderforce/interaction-contract';
+import { createOutbox } from '@builderforce/write-outbox';
 import { apiRequestStream } from './apiClient';
 import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import { getVisitorId } from './visitor';
@@ -56,7 +57,16 @@ const VISIT_COUNT_KEY = 'bf_visit_count';
  *  cost a handful of requests, not one per click. */
 const FLUSH_AT = 10;
 
-let queue: VisitorEventInput[] = [];
+/** The visitor's one journey stream. */
+const JOURNEY_STREAM = 'journey';
+
+/** No timer: a batch leaves at {@link FLUSH_AT}, or when the visit ends / the page
+ *  hides. Order holds — one request in flight at a time. */
+const journey = createOutbox<VisitorEventInput>({
+  maxItems: FLUSH_AT,
+  maxWaitMs: 0,
+  send: (_stream, batch) => sendVisitorEvents(batch),
+});
 
 function randomToken(): string {
   const bytes = new Uint8Array(18);
@@ -124,22 +134,20 @@ export function beginVisit(): { visitId: string | null; visitNumber: number; ret
 
 /** Queue one event; sent on the next flush or page hide. */
 export function queueVisitorEvent(event: VisitorEventInput): void {
-  queue.push({ ...event, occurredAt: event.occurredAt ?? new Date().toISOString() });
-  if (queue.length >= FLUSH_AT) flushVisitorEvents();
+  journey.enqueue(JOURNEY_STREAM, { ...event, occurredAt: event.occurredAt ?? new Date().toISOString() });
 }
 
 /** Send one event now — for the ones whose moment is the point (a visit ending). */
 export function trackVisitorEvent(event: VisitorEventInput): void {
   queueVisitorEvent(event);
-  flushVisitorEvents();
+  // Final: the page is usually going away, so it must not queue behind a batch that
+  // is still in flight.
+  void journey.flush(undefined, { final: true });
 }
 
 /** Send whatever is queued. Safe to call when empty. */
 export function flushVisitorEvents(): void {
-  if (queue.length === 0) return;
-  const batch = queue;
-  queue = [];
-  void sendVisitorEvents(batch);
+  void journey.flush();
 }
 
 async function sendVisitorEvents(events: VisitorEventInput[]): Promise<void> {

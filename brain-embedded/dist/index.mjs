@@ -6584,48 +6584,107 @@ function ratedTurnContext(messages, messageId) {
   };
 }
 
+// ../packages/write-outbox/src/outbox.ts
+var OUTBOX_MAX_ITEMS = 25;
+var OUTBOX_MAX_WAIT_MS = 5e3;
+function createOutbox(opts) {
+  const maxItems = opts.maxItems ?? OUTBOX_MAX_ITEMS;
+  const maxWaitMs = opts.maxWaitMs ?? OUTBOX_MAX_WAIT_MS;
+  const lanes = /* @__PURE__ */ new Map();
+  const lane = (key) => {
+    let l = lanes.get(key);
+    if (!l) {
+      l = { items: [], timer: null, tail: Promise.resolve() };
+      lanes.set(key, l);
+    }
+    return l;
+  };
+  const take = (l) => {
+    if (l.timer !== null) clearTimeout(l.timer);
+    l.timer = null;
+    const items = l.items;
+    l.items = [];
+    if (items.length === 0) return items;
+    return opts.coalesce ? opts.coalesce(items) : items;
+  };
+  const sendNow = async (key, items, final) => {
+    try {
+      await opts.send(key, items, { final });
+    } catch (error) {
+      opts.onError?.(error, key);
+    }
+  };
+  const flushKey = (key, final) => {
+    const l = lanes.get(key);
+    if (!l) return Promise.resolve();
+    if (final) {
+      const items = take(l);
+      return items.length ? sendNow(key, items, true) : Promise.resolve();
+    }
+    const run = l.tail.then(() => {
+      const items = take(l);
+      return items.length ? sendNow(key, items, false) : void 0;
+    });
+    l.tail = run;
+    return run;
+  };
+  return {
+    enqueue(key, item) {
+      const l = lane(key);
+      l.items.push(item);
+      if (l.items.length >= maxItems) {
+        void flushKey(key, false);
+      } else if (l.timer === null && maxWaitMs > 0) {
+        l.timer = setTimeout(() => {
+          l.timer = null;
+          void flushKey(key, false);
+        }, maxWaitMs);
+      }
+    },
+    async flush(key, flushOpts) {
+      const final = flushOpts?.final ?? false;
+      const keys = key === void 0 ? [...lanes.keys()] : [key];
+      await Promise.all(keys.map((k) => flushKey(k, final)));
+    },
+    drainWith(key, request) {
+      const l = lane(key);
+      const run = l.tail.then(() => request(take(l)));
+      l.tail = run.catch(() => void 0);
+      return run;
+    },
+    size(key) {
+      if (key !== void 0) return lanes.get(key)?.items.length ?? 0;
+      let n = 0;
+      for (const l of lanes.values()) n += l.items.length;
+      return n;
+    }
+  };
+}
+
 // src/stepOutbox.ts
 var STEP_BATCH_MAX = 25;
 var STEP_BATCH_WAIT_MS = 5e3;
 var isStepRow = (m) => m.role === "tool";
 function batchStepPersistence(base, opts = {}) {
-  const maxRows = opts.maxRows ?? STEP_BATCH_MAX;
-  const waitMs = opts.waitMs ?? STEP_BATCH_WAIT_MS;
-  const queues = /* @__PURE__ */ new Map();
-  const timers = /* @__PURE__ */ new Map();
-  const take = (chatId) => {
-    const timer = timers.get(chatId);
-    if (timer !== void 0) clearTimeout(timer);
-    timers.delete(chatId);
-    const rows = queues.get(chatId) ?? [];
-    queues.delete(chatId);
-    return rows;
-  };
-  const flushChat = async (chatId) => {
-    const rows = take(chatId);
-    if (rows.length === 0) return;
-    await base.sendMessages(chatId, rows).catch(() => {
-    });
-  };
+  const steps = createOutbox({
+    maxItems: opts.maxRows ?? STEP_BATCH_MAX,
+    maxWaitMs: opts.waitMs ?? STEP_BATCH_WAIT_MS,
+    send: (chatId, rows) => base.sendMessages(chatId, rows)
+  });
   const sendMessages = async (chatId, messages) => {
     if (messages.length > 0 && messages.every(isStepRow)) {
-      const queue = queues.get(chatId) ?? [];
-      queue.push(...messages);
-      queues.set(chatId, queue);
-      if (queue.length >= maxRows) void flushChat(chatId);
-      else if (!timers.has(chatId)) timers.set(chatId, setTimeout(() => void flushChat(chatId), waitMs));
+      for (const m of messages) steps.enqueue(chatId, m);
       return [];
     }
-    const pending = take(chatId);
-    if (pending.length === 0) return base.sendMessages(chatId, messages);
-    const saved = await base.sendMessages(chatId, [...pending, ...messages]);
-    return saved.slice(pending.length);
+    return steps.drainWith(chatId, async (pending) => {
+      if (pending.length === 0) return base.sendMessages(chatId, messages);
+      const saved = await base.sendMessages(chatId, [...pending, ...messages]);
+      return saved.slice(pending.length);
+    });
   };
   return {
     persistence: { ...base, sendMessages },
-    async flush() {
-      await Promise.all([...queues.keys()].map(flushChat));
-    }
+    flush: () => steps.flush()
   };
 }
 

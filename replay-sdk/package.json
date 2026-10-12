@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-replay",
-  "version": "2026.10.0",
+  "version": "2026.10.1",
   "description": "Session-replay recorder for Builderforce.ai — CDN loader + hashed recorder, or the npm entry that self-updates from cdn.builderforce.ai.",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -53,10 +53,11 @@
     "node": ">=18"
   },
   "dependencies": {
-    "rrweb": "1.19.3"
+    "rrweb": "2.1.7"
   },
   "devDependencies": {
     "@types/node": "^24.7.2",
+    "jsdom": "^28.1.0",
     "tsup": "^8.5.0",
     "typescript": "^6.0.3",
     "vitest": "^4.0.3"

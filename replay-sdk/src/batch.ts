@@ -1,5 +1,11 @@
 /**
- * Chunk flush — 5 s timer, sendBeacon on hide, retry/backoff, 413 split, 429 Retry-After.
+ * Chunk flush — 5 s wait, keepalive on hide, retry/backoff, 413 split, 429 Retry-After.
+ *
+ * Queueing is the shared write outbox (`@builderforce/write-outbox`): events and marks
+ * enter ONE ordered lane, a chunk leaves at `maxEventsPerChunk` items or
+ * `flushIntervalMs` after the first, and only one chunk is on the wire at a time — so
+ * chunks (and their retries) land in `seq` order. This class owns only what is
+ * replay-specific: the chunk shape, its tags and the retry / split policy.
  */
 
 import {
@@ -9,6 +15,7 @@ import {
   type ReplayChunkEvent,
   type ReplayMark,
 } from '@builderforce/interaction-contract';
+import { createOutbox, type Outbox } from '@builderforce/write-outbox';
 
 export interface BatchSink {
   post(url: string, body: string, keepalive: boolean): Promise<{ status: number; retryAfterMs?: number }>;
@@ -45,57 +52,57 @@ export interface BatchOptions {
   sink?: BatchSink;
 }
 
+/** One queued entry: an event or a mark, in the order they happened. */
+type ChunkItem = { event: ReplayChunkEvent } | { mark: ReplayMark };
+
+/** The recording's one lane. */
+const VISIT_LANE = 'visit';
+
 export class ChunkBatch {
-  private events: ReplayChunkEvent[] = [];
-  private marks: ReplayMark[] = [];
   private tags: Record<string, string> = {};
   private seq = 0;
-  private timer: ReturnType<typeof setInterval> | null = null;
   private readonly url: string;
   private readonly visitId: string;
   private readonly sink: BatchSink;
-  private inflight = false;
+  private readonly outbox: Outbox<ChunkItem, string>;
 
   constructor(opts: BatchOptions) {
     this.url = opts.url;
     this.visitId = opts.visitId;
     this.sink = opts.sink ?? defaultSink;
-  }
-
-  start(): void {
-    if (this.timer) return;
-    this.timer = setInterval(() => {
-      void this.flush(false);
-    }, REPLAY_LIMITS.flushIntervalMs);
-  }
-
-  stop(): void {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
+    this.outbox = createOutbox<ChunkItem>({
+      maxItems: REPLAY_LIMITS.maxEventsPerChunk,
+      maxWaitMs: REPLAY_LIMITS.flushIntervalMs,
+      send: (_lane, items, ctx) => this.sendItems(items, ctx.final),
+    });
   }
 
   push(event: ReplayChunkEvent): void {
-    this.events.push(event);
-    if (this.events.length >= REPLAY_LIMITS.maxEventsPerChunk) void this.flush(false);
+    this.outbox.enqueue(VISIT_LANE, { event });
   }
 
   addMark(mark: ReplayMark): void {
-    this.marks.push(mark);
+    this.outbox.enqueue(VISIT_LANE, { mark });
   }
 
   setTag(key: string, value: string): void {
     this.tags[key] = value;
   }
 
-  async flush(keepalive: boolean): Promise<void> {
-    if (this.inflight || (this.events.length === 0 && this.marks.length === 0)) return;
-    const events = this.events.splice(0, this.events.length);
-    const marks = this.marks.splice(0, this.marks.length);
-    const tags = { ...this.tags };
+  /** Send what is queued. `keepalive` = the page is going away. */
+  flush(keepalive: boolean): Promise<void> {
+    return this.outbox.flush(VISIT_LANE, { final: keepalive });
+  }
+
+  private sendItems(items: ChunkItem[], keepalive: boolean): Promise<void> {
+    const events: ReplayChunkEvent[] = [];
+    const marks: ReplayMark[] = [];
+    for (const item of items) {
+      if ('event' in item) events.push(item.event);
+      else marks.push(item.mark);
+    }
     const seq = this.seq++;
-    await this.send({ visitId: this.visitId, seq, events, marks, tags }, keepalive, 0);
+    return this.send({ visitId: this.visitId, seq, events, marks, tags: { ...this.tags } }, keepalive, 0);
   }
 
   private async send(chunk: ReplayChunk, keepalive: boolean, attempt: number): Promise<void> {

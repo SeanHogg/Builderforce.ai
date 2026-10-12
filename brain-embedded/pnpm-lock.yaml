@@ -24,6 +24,9 @@ importers:
       '@builderforce/agent-tools':
         specifier: link:../packages/agent-tools
         version: link:../packages/agent-tools
+      '@builderforce/write-outbox':
+        specifier: link:../packages/write-outbox
+        version: link:../packages/write-outbox
       '@testing-library/dom':
         specifier: ^10.4.1
         version: 10.4.2

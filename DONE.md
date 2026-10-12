@@ -1,3 +1,31 @@
+## ✅ RESOLVED 2026-10-11 — One write outbox for all client chatter (write-outbox 2026.10.1 · brain-embedded 2026.10.20 · frontend 2026.10.45 · replay-sdk 2026.10.1 · VSIX 2026.10.27)
+
+- **Six hand-rolled queues → one.** Run steps (`stepOutbox`), VS Code activity, portal activity, the visitor journey, QA capture and session-replay chunks each had their own array, size cap, interval and unload flush.
+  - They now share `createOutbox` (`packages/write-outbox`, source-only).
+  - Items queue per key. Batches leave at a size cap, after a max wait from the first item, on an explicit flush, or riding along with a caller's request (`drainWith`).
+  - `coalesce` folds a batch before it's sent (VS Code `coalesceSignals`).
+- **Order.** Each key has at most one send in flight, so batches arrive in queue order. A final (unload) flush bypasses the lane, since the page is going away.
+  - Replay `ChunkBatch` declared an `inflight` guard but never set it, so concurrent flushes could interleave chunks. Retries now hold the lane, so chunks land in `seq` order.
+  - A step batch can no longer be overtaken by the assistant message that follows it.
+- **Fewer moving parts.** These are gone: the interval timers (VS Code activity 5 min, portal 15 s, QA 5 s, replay `start`/`stop`), QA's flush-before-project-switch (lanes are keyed by project), and the per-copy flush bodies.
+- **replay-sdk had never installed or type-checked.** These were not caused by the outbox change.
+  - `rrweb` was pinned to `1.19.3`, a version that does not exist. The recorder is written against the 2.x API (`maskInputFn(text, element)`), so it is now pinned to `2.1.7`.
+  - `rootDir: "src"` conflicted with the shared-package `paths`, so it is dropped (tsup emits the build).
+  - `index.ts` re-exported a `bootEmbed` that `embed.ts` never defined. `embed.ts` now exports `bootEmbed()` and starts itself like the loader.
+  - The click handler passed `deriveSelector()`'s `{ selector, label }` object where a selector string was expected, so every recorded click carried an object. It now passes the string.
+  - `...session` was spread after the recorder's `init`, silently replacing it. The spread now comes first.
+  - The `MarkTracker` test fixture now satisfies `SelectorElement`.
+  - `jsdom` (the test environment) was never declared, so no test file could start. It is now a devDependency.
+  - `rootDir` is set to `..`, because TS 6 defaults it to the tsconfig directory, which excludes the shared packages.
+  - `maskInputFn` takes rrweb 2.x's `HTMLElement`.
+  - Two tests were wrong and had never run:
+    - The visit-rotation test ignored that each call slides the idle window.
+    - The loader's no-key test inherited a `currentScript` pinned by the test before it.
+- **Not batched, on purpose.**
+  - Error reports (`/api/quality-ingest/client-report`): rare, and they must land at once.
+  - The agent's server-side tool calls: the kernel runs them one at a time.
+  - LLM streams.
+
 ## ✅ RESOLVED 2026-10-11 — Run steps: one store, sent in batches (api 2026.10.36 · brain-embedded 2026.10.19 · agent-loop 2026.10.8 · frontend 2026.10.44 · VSIX 2026.10.26)
 
 - **One `POST /chats/:id/messages` per step.** Every tool call, LLM turn and memory step was its own request (chat #142: 57 tool calls over 22 turns, about 80 requests). Each request cost the API an access check, a membership upsert, the insert, a seq update, a chat touch and a learn-gate read.

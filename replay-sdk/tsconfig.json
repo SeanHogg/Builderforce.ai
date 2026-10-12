@@ -12,10 +12,11 @@
     "esModuleInterop": true,
     "lib": ["ES2022", "DOM"],
     "types": ["node", "vitest/globals"],
-    "rootDir": "src",
     "outDir": "dist",
+    "rootDir": "..",
     "paths": {
-      "@builderforce/interaction-contract": ["../packages/interaction-contract/src/index.ts"]
+      "@builderforce/interaction-contract": ["../packages/interaction-contract/src/index.ts"],
+      "@builderforce/write-outbox": ["../packages/write-outbox/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"],
