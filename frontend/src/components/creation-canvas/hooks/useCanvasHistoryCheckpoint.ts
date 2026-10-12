@@ -42,14 +42,14 @@ export function useCanvasHistoryCheckpoint({ edges, historyApplyingRef, historyB
       const baseline = historyBaselineRef.current;
       if (baseline == null) { historyBaselineRef.current = next; return; }
       if (baseline === next) return;
-      let before: { nodes: CanvasObject[]; edges: Edge[] } | null = null;
-      try { before = JSON.parse(baseline) as { nodes: CanvasObject[]; edges: Edge[] }; } catch { /* an unreadable baseline is still a step */ }
-      if (before && JSON.stringify(withoutBrainMirror(before)) === JSON.stringify(withoutBrainMirror({ nodes, edges }))) {
-        historyBaselineRef.current = next;
-        return;
-      }
+      // An unreadable baseline is still a step: the catch falls through to the push below.
       try {
-        const change = before ? describeGraphChange(before, { nodes, edges }) : null;
+        const before = JSON.parse(baseline) as { nodes: CanvasObject[]; edges: Edge[] };
+        if (JSON.stringify(withoutBrainMirror(before)) === JSON.stringify(withoutBrainMirror({ nodes, edges }))) {
+          historyBaselineRef.current = next;
+          return;
+        }
+        const change = describeGraphChange(before, { nodes, edges });
         if (change) journalRef.current.record({ kind: 'user', label: change.label, detail: change.detail });
       } catch { /* the journal must never be able to break the history stack */ }
       undoStackRef.current = [...undoStackRef.current.slice(-(UNDO_LIMIT - 1)), baseline];

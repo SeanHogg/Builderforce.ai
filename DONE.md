@@ -1,4 +1,4 @@
-## ✅ RESOLVED 2026-10-12 — Studio Brain turns stop repeating work: batched build-file reads, no Brain-trace undo steps, readable trace rows (ui 2026.10.46)
+## ✅ RESOLVED 2026-10-12 — Studio Brain turns stop repeating work: batched build-file reads, no Brain-trace undo steps, readable trace rows (ui 2026.10.47)
 
 - **The report:** session `local-148925cf` (ui 2026.10.45), "lots of duplicate calls". The diagnostics showed four separate causes.
 - **One file per step burned the budget.** `canvas_read_build_file` took one `path`. Each read was one model round-trip, and each round-trip re-sent the whole conversation plus 94 tool schemas. Fixing three missing stylesheet imports used 11 of the turn's 16 steps on single-file reads. The turn wrote the fix by step 8, then ran out of steps before telling the user.
