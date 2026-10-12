@@ -304,6 +304,7 @@ export async function importSpecFromBoard(
       const [inserted] = await db
         .insert(specs)
         .values({
+          id: crypto.randomUUID(),
           tenantId: args.tenantId,
           projectId: args.projectId,
           goal: fields.goal,

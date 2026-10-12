@@ -1466,8 +1466,9 @@ const CATALOG: BuiltinTool[] = [
     description: 'Import a spec / PRD from a GitHub Issue, Linear issue, or Jira ticket using the project\'s board_connections credentials. Idempotent on (provider, externalId). Optionally link the spec to a task as its primary PRD. Params: projectId + externalId required; provider (github|jira|linear) or connectionId when the project has several board connections; optional taskId.',
     parameters: obj({ projectId: N, externalId: S, provider: S, connectionId: S, taskId: N }, ['projectId', 'externalId']),
     run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('Importing a spec requires the platform environment (board credentials cannot be decrypted without it).');
       try {
-        const result = await importSpecFromBoard(ctx.db, ctx.env ?? {}, {
+        const result = await importSpecFromBoard(ctx.db, ctx.env, {
           tenantId: ctx.tenantId,
           projectId: num(a.projectId),
           externalId: str(a.externalId),

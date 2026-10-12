@@ -115,8 +115,7 @@ export function planInRunVerify(input: {
 
 function wroteCode(writtenPaths: ReadonlySet<string> | readonly string[] | undefined): boolean {
   if (!writtenPaths) return false;
-  if (writtenPaths instanceof Set) return writtenPaths.size > 0;
-  return writtenPaths.length > 0;
+  return 'size' in writtenPaths ? writtenPaths.size > 0 : writtenPaths.length > 0;
 }
 
 /**

@@ -126,9 +126,11 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
     const load = () => {
       adapter.listRuns(chatId).then((raw) => {
         // A failed fetch degrades to a history without `subagents`. That is not
-        // "none running" — keep the last roster until a real answer arrives.
+        // "none running" — keep the last roster until a real answer arrives. A
+        // rejected poll means the same thing, so it resolves to no update; the
+        // next tick retries.
         if (live && runHistoryHasSubagents(raw)) setSubagents(asChatSubagents(raw));
-      }).catch(() => { /* keep last roster */ });
+      }).catch(() => undefined);
     };
     load();
     const timer = window.setInterval(load, LIVE_SUBAGENT_POLL_MS);

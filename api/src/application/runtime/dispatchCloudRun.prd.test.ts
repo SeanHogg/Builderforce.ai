@@ -9,10 +9,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Db } from '../../infrastructure/database/connection';
 
-const ensureTaskPrd = vi.fn(async () => '# Drafted PRD');
+const ensureTaskPrd = vi.fn(async (..._a: unknown[]) => '# Drafted PRD');
 const resolveCloudAgent = vi.fn();
-const markCloudExecutionRunning = vi.fn(async () => undefined);
-const recordCloudToolEvent = vi.fn(async () => undefined);
+const markCloudExecutionRunning = vi.fn(async (..._a: unknown[]) => undefined);
+const recordCloudToolEvent = vi.fn(async (..._a: unknown[]) => undefined);
 const reportCaughtError = vi.fn();
 
 vi.mock('./cloudAgent/prd', () => ({
@@ -155,7 +155,7 @@ describe('startDispatchedExecution — PRD-first (host-delivered)', () => {
     );
 
     expect(ensureTaskPrd).toHaveBeenCalledOnce();
-    const args = ensureTaskPrd.mock.calls[0];
+    const args = ensureTaskPrd.mock.calls[0]!;
     expect(args[2]).toBe(99); // executionId
     expect(args[3]).toEqual({ title: 'Add auth', description: 'Wire login' });
     expect(args[6]).toBe(42); // taskId
