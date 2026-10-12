@@ -27,7 +27,7 @@
  * - `done`/`total` are still returned for the "4/6" counter beside the percent.
  */
 
-import { isCancelledTaskStatus } from "./taskClosedState";
+import { isCancelledTaskStatus } from "./taskClosedState.js";
 
 export interface ChatTicketHealthInput {
   /** Authoritative progress for this ticket, 0–100. */

@@ -1,5 +1,19 @@
 [
   {
+    "slug": "workspace-hooks-your-team-commits",
+    "title": "Tell the agent what every run must do, and commit it with the code",
+    "date": "2026-10-12",
+    "description": "Workspace hooks let a repository give the BuilderForce agent standing directives, such as updating the docs before it finishes, never pushing until the tests pass, or formatting after every edit. They live in .builderforce/ so the whole team gets them through git.",
+    "tags": [
+      "vscode",
+      "agents",
+      "hooks",
+      "governance",
+      "developer-experience"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "one-chat-a-whole-team-working",
     "title": "One chat, a whole team working",
     "date": "2026-10-11",

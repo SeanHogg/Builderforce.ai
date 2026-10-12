@@ -18,14 +18,15 @@
  */
 
 import { IDEA_STAGES, isIdeaStage, type IdeaStage } from '@builderforce/creation-canvas-contract';
-import { specRefKey } from './specObjects';
+import { specRefKey, type SpecDeriveBoard } from './specObjects';
+import { specVerdict, type SpecVerdict, type SpecVerdictResult } from './specVerdict';
 
 /** The kind this log reads. */
 export const IDEA_KIND = 'idea';
 
 /** The kinds whose objects count as evidence for an idea, in the order a founder
  *  usually gathers them: talk to someone, run something, then ask a crowd.
- *  Consumed by `idea.evidence` in founderObjects — do not hardcode the same list there. */
+ *  Counted by `ideaEvidenceVerdict` — do not hardcode the same list elsewhere. */
 export const IDEA_EVIDENCE_KINDS = ['customerInterview', 'experiment', 'form'] as const;
 
 /** Stages in which an idea is still being worked on — the ones "untested" is about. An
@@ -75,6 +76,38 @@ export function ideaTestedBy(data: Readonly<Record<string, unknown>>): string[] 
     refs.push(ref);
   }
   return refs;
+}
+
+/**
+ * The `idea` spec's computed `evidence`: how many `testedBy` refs resolve to an
+ * `IDEA_EVIDENCE_KINDS` object on this board, and which do not. "Untested" is a real
+ * answer, so an idea with no refs reads as exactly that rather than as nothing.
+ */
+export function ideaEvidenceVerdict(
+  data: Readonly<Record<string, unknown>>,
+  board: SpecDeriveBoard,
+): SpecVerdictResult {
+  const refs = ideaTestedBy(data);
+  if (!refs.length) return specVerdict('idea.untested');
+  const counts: Record<(typeof IDEA_EVIDENCE_KINDS)[number], number> = {
+    customerInterview: 0, experiment: 0, form: 0,
+  };
+  const missing: string[] = [];
+  for (const ref of refs) {
+    const kind = IDEA_EVIDENCE_KINDS.find((candidate) => board.byRef(candidate, ref));
+    if (kind) counts[kind] += 1;
+    else missing.push(ref);
+  }
+  const parts: SpecVerdict[] = [];
+  if (counts.customerInterview + counts.experiment > 0) {
+    parts.push(specVerdict('idea.tested', {
+      interviews: counts.customerInterview,
+      experiments: counts.experiment,
+    }));
+  }
+  if (counts.form > 0) parts.push(specVerdict('idea.testedForms', { forms: counts.form }));
+  if (missing.length) parts.push(specVerdict('idea.missing', { refs: missing }));
+  return parts.length === 1 ? parts[0] : parts;
 }
 
 /** `testedBy` with one more ref, deduplicated the way the board matches refs. */

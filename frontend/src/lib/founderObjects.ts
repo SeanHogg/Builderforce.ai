@@ -66,7 +66,7 @@ import {
   type SpecObjectSpec,
 } from './specObjects';
 import { specVerdict, type SpecVerdict, type SpecVerdictResult } from './specVerdict';
-import { IDEA_EVIDENCE_KINDS, ideaTestedBy } from './ideaLog';
+import { ideaEvidenceVerdict } from './ideaLog';
 
 /** i18n namespace for every founder label, status, field, column and verdict. Named
  *  because `boardRefField` resolves its sentences here even when a legal or hiring kind
@@ -618,7 +618,7 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     // purpose: a scratchpad that demands a problem statement before it will take a note
     // is a form, and the note is lost. What the kind DOES insist on is honesty about
     // evidence — `evidence` is computed from the interviews, experiments and forms the
-    // idea names (`IDEA_EVIDENCE_KINDS`), so a card cannot claim to be tested by a
+    // idea names (`ideaEvidenceVerdict`), so a card cannot claim to be tested by a
     // conversation nobody had.
     kind: 'idea',
     icon: '✎',
@@ -639,29 +639,7 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       {
         name: 'evidence', render: 'verdict', label: 'evidence',
         hint: 'COMPUTED. How many of the `testedBy` refs resolve to a `customerInterview`, `experiment` or `form` on this board, and which do not. "Untested" is a real and common answer — it is the reason to plan an interview or ask people, not a reason to invent one.',
-        derive: (data, board) => {
-          const refs = ideaTestedBy(data);
-          if (!refs.length) return specVerdict('idea.untested');
-          const counts: Record<(typeof IDEA_EVIDENCE_KINDS)[number], number> = {
-            customerInterview: 0, experiment: 0, form: 0,
-          };
-          const missing: string[] = [];
-          for (const ref of refs) {
-            const kind = IDEA_EVIDENCE_KINDS.find((candidate) => board.byRef(candidate, ref));
-            if (kind) counts[kind] += 1;
-            else missing.push(ref);
-          }
-          const parts: SpecVerdict[] = [];
-          if (counts.customerInterview + counts.experiment > 0) {
-            parts.push(specVerdict('idea.tested', {
-              interviews: counts.customerInterview,
-              experiments: counts.experiment,
-            }));
-          }
-          if (counts.form > 0) parts.push(specVerdict('idea.testedForms', { forms: counts.form }));
-          if (missing.length) parts.push(specVerdict('idea.missing', { refs: missing }));
-          return parts.length === 1 ? parts[0] : parts;
-        },
+        derive: ideaEvidenceVerdict,
       },
       { name: 'promotedTo', render: 'stat', label: 'promotedTo', hint: 'What the idea became once `stage` is `promoted` — the title of the project, company or proof it turned into. Empty until then.' },
       { name: 'capturedAt', render: 'stat', label: 'capturedAt', bookkeeping: true, hint: 'ISO date-time the idea was first written down. Set by the canvas when it is captured; never backdate it.' },
