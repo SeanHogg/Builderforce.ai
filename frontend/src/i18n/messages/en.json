@@ -32882,7 +32882,8 @@
     "sourceBuild": "Build",
     "sourceRuntime": "Runtime",
     "noProblemsShort": "No problems",
-    "fixWithBrain": "Ask Brain to fix this"
+    "fixWithBrain": "Ask Brain to fix this",
+    "resolve": "Resolve"
   },
   "builderVersions": {
     "loading": "Loading versions…",

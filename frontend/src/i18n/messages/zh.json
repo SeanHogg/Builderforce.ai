@@ -32882,7 +32882,8 @@
     "sourceBuild": "构建",
     "sourceRuntime": "运行时",
     "noProblemsShort": "没有问题",
-    "fixWithBrain": "让 Brain 修复此问题"
+    "fixWithBrain": "让 Brain 修复此问题",
+    "resolve": "修复"
   },
   "builderVersions": {
     "loading": "正在加载版本……",

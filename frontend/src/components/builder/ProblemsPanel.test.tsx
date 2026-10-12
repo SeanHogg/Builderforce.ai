@@ -23,7 +23,9 @@ describe('ProblemsPanel', () => {
     recordBuildFailure(PROJECT, { source: 'runtime', message: 'Failed to load script: /src/main.jsx', at: 'index.html:12' });
     render(<ProblemsPanel projectId={PROJECT} failures={readBuildFailures(PROJECT)} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'builderPanels.fixWithBrain' }));
+    const resolve = screen.getByRole('button', { name: 'builderPanels.resolve' });
+    expect(resolve).toHaveTextContent('builderPanels.resolve');
+    fireEvent.click(resolve);
     expect(docked.ask).toHaveBeenCalledTimes(1);
     const sent = docked.ask.mock.calls[0][0] as string;
     expect(sent).toContain('ide.workspace.fixPrompt');
@@ -36,6 +38,6 @@ describe('ProblemsPanel', () => {
     hasDockedBrain = false;
     recordBuildFailure(PROJECT, { source: 'build', message: 'boom' });
     render(<ProblemsPanel projectId={PROJECT} failures={readBuildFailures(PROJECT)} />);
-    expect(screen.queryByRole('button', { name: 'builderPanels.fixWithBrain' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'builderPanels.resolve' })).toBeNull();
   });
 });

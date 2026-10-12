@@ -42,13 +42,14 @@ export function ProblemsPanel({ projectId, failures }: { projectId: WorkspaceId;
                     type="button"
                     variant="ghost"
                     size="sm"
-                    aria-label={t('fixWithBrain')}
+                    aria-label={t('resolve')}
                     title={t('fixWithBrain')}
                     // Inside <summary>: fix, don't also toggle the row open.
-                    onClick={(event) => { event.preventDefault(); fixWithBrain(failure); }}
-                    style={{ alignSelf: 'center', minWidth: 28, minHeight: 28, padding: '2px 6px', color: 'var(--accent)' }}
+                    onClick={(event) => { event.preventDefault(); event.stopPropagation(); fixWithBrain(failure); }}
+                    style={{ alignSelf: 'center', minHeight: 28, padding: '2px 8px', color: 'var(--accent)', gap: 4, flexShrink: 0 }}
                   >
                     <Icon name="sparkles" size={14} />
+                    {t('resolve')}
                   </Button>
                 )}
               </summary>
