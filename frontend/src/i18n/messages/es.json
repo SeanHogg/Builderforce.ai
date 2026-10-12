@@ -1874,6 +1874,7 @@
     "deleteCloudAgentConfirm": "¿Eliminar el agente «{name}»? Se borrarán sus habilidades y personas por agente.",
     "deleteSkillConfirm": "¿Eliminar esta habilidad?",
     "deleteNamedConfirm": "¿Eliminar «{name}»?",
+    "stopExecutionToDelete": "Detén la ejecución para eliminar este ticket.",
     "language": "Idioma",
     "typeTask": "Tarea",
     "typeEpic": "Épica",

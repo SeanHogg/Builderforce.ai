@@ -1874,6 +1874,7 @@
     "deleteCloudAgentConfirm": "Delete agent \"{name}\"? Its per-agent skills and personas will be cleared.",
     "deleteSkillConfirm": "Delete this skill?",
     "deleteNamedConfirm": "Delete \"{name}\"?",
+    "stopExecutionToDelete": "Stop the execution to delete this ticket.",
     "language": "Language",
     "typeTask": "Task",
     "typeEpic": "Epic",

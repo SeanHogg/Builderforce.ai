@@ -1874,6 +1874,7 @@
     "deleteCloudAgentConfirm": "删除智能体“{name}”？其各自的技能和人设将被清除。",
     "deleteSkillConfirm": "删除此技能？",
     "deleteNamedConfirm": "删除“{name}”？",
+    "stopExecutionToDelete": "请先停止执行再删除此工单。",
     "language": "语言",
     "typeTask": "任务",
     "typeEpic": "史诗",

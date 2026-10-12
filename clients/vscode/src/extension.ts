@@ -35,7 +35,8 @@ import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider, chatOfSessionNode, type SessionTreeNode } from "./sessionsTree";
 import { archive, unarchive } from "./sessionsArchive";
 import { InboxQuickActionsProvider, InboxTreeProvider } from "./inboxTree";
-import { AttentionPoller, onLocalRunsChange, managerAttention } from "./attention";
+import { AttentionPoller, onLocalRunsChange, managerAttention, attentionFor } from "./attention";
+import { confirmDestructiveDelete } from "./confirmDeletion";
 import { createVsCodeRunHost } from "./brainRunHostPorts";
 import { appUrl } from "./auth";
 import { MeetingsTreeProvider, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
@@ -474,6 +475,20 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.deleteSession", async (item: bfApi.BfBrainChat | string | SessionTreeNode) => {
       const id = chatIdOf(item);
       if (id == null) return;
+      const title = chatTitleOf(item) || vscode.l10n.t("New chat");
+      // Any live attention on this chat (running, awaiting input, local run) means
+      // an execution is in flight — deleting it would orphan that run.
+      const executing = attentionFor("chat", id) != null;
+      const ok = await confirmDestructiveDelete({
+        subject: title,
+        executing,
+        ui: {
+          showWarningMessage: (message, options, ...items) =>
+            vscode.window.showWarningMessage(message, options, ...items),
+        },
+        t: (message, ...args) => vscode.l10n.t(message, ...args),
+      });
+      if (!ok) return;
       try {
         await bfApi.deleteBrainChat(context.secrets, id);
         tree.refresh();

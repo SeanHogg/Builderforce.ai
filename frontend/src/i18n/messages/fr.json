@@ -1874,6 +1874,7 @@
     "deleteCloudAgentConfirm": "Supprimer l'agent « {name} » ? Ses compétences et personas par agent seront effacées.",
     "deleteSkillConfirm": "Supprimer cette compétence ?",
     "deleteNamedConfirm": "Supprimer « {name} » ?",
+    "stopExecutionToDelete": "Arrêtez l’exécution pour supprimer ce ticket.",
     "language": "Langue",
     "typeTask": "Tâche",
     "typeEpic": "Épopée",

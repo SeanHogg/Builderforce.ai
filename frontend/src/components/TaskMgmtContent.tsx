@@ -4,6 +4,7 @@ import type { Formatter } from '@/i18n/format';
 import { Select } from '@/components/Select';
 
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment, type CSSProperties } from 'react';
+import { formatTaskDate } from '@/lib/taskMgmtDateUtils';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -42,6 +43,7 @@ import AssigneeHovercard, { AssigneePersonalityInline } from './workforce/Assign
 import { MemberProfileEditor } from './workforce/MemberProfileEditor';
 import type { MemberKind } from '@/lib/builderforceApi';
 import { AgentChip, ACTIVE_EXECUTION_STATUSES } from './board/AgentChip';
+import { hasActiveExecution } from './board/taskDeleteGuard';
 import { SwimlaneTriageButton } from './board/SwimlaneTriageButton';
 import { trackActivity } from '@/lib/activity/tracker';
 import { TeamMemberAvatarFilter } from './board/TeamMemberAvatarFilter';
@@ -89,7 +91,7 @@ interface BoardColumn {
   label: string;
   agents: SwimlaneAgent[];
 }
-const PRIORITIES = TASK_PRIORITIES;
+const TASK_PRIORITIES = TASK_TASK_PRIORITIES;
 
 export interface TaskMgmtContentProps {
   /** When set, tasks are scoped to this project and project filter is hidden. */
@@ -102,11 +104,6 @@ export interface TaskMgmtContentProps {
   compact?: boolean;
   /** Optional task ID to open in the drawer on initial load (deep-link support). */
   initialTaskId?: number;
-}
-
-function formatDate(fmt: Formatter, d?: string | null): string {
-  if (!d) return '';
-  return fmt.dateWith(d, { month: 'short', day: 'numeric' });
 }
 
 /**
@@ -862,6 +859,10 @@ export function TaskMgmtContent({
   const removeTask = async (t: Task | null, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (!t?.id) return;
+    if (hasActiveExecution(agentRunsByTask.get(t.id))) {
+      await confirm({ message: tCommon('stopExecutionToDelete'), confirmLabel: tCommon('dismiss') });
+      return;
+    }
     if (!(await confirm(tCommon('deleteNamedConfirm', { name: t.title })))) return;
     try {
       await tasksApi.delete(t.id);
@@ -1133,7 +1134,7 @@ export function TaskMgmtContent({
               PR#{task.githubPrNumber ?? '—'}
             </a>
           )}
-          {task.dueDate && <span style={{ marginLeft: 'auto' }}>{formatDate(fmt, task.dueDate)}</span>}
+          {task.dueDate && <span style={{ marginLeft: 'auto' }}>{formatTaskDate(fmt, task.dueDate)}</span>}
         </div>
       </div>
     );
@@ -1401,7 +1402,7 @@ export function TaskMgmtContent({
             }}
           >
             <option value="">{tTask('allPriorities')}</option>
-            {PRIORITIES.map((p) => (
+            {TASK_PRIORITIES.map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>
@@ -1806,7 +1807,7 @@ export function TaskMgmtContent({
                         )}
                       </td>
                       <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
-                        {formatDate(fmt, task.dueDate)}
+                        {formatTaskDate(fmt, task.dueDate)}
                       </td>
                       <td style={{ padding: '10px 12px' }} onClick={(e) => e.stopPropagation()}>
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -1949,7 +1950,7 @@ export function TaskMgmtContent({
                       color: 'var(--text-primary)',
                     }}
                   >
-                    {PRIORITIES.map((p) => (
+                    {TASK_PRIORITIES.map((p) => (
                       <option key={p} value={p}>
                         {p}
                       </option>
@@ -2302,7 +2303,7 @@ export function TaskMgmtContent({
                       color: 'var(--text-primary)',
                     }}
                   >
-                    {PRIORITIES.map((p) => (
+                    {TASK_PRIORITIES.map((p) => (
                       <option key={p} value={p}>{p}</option>
                     ))}
                   </Select>
@@ -2565,7 +2566,7 @@ export function TaskMgmtContent({
                           borderBottom: '1px dashed var(--border-subtle)',
                         }}
                       >
-                        {formatDate(fmt, drawerTask.dueDate) || tTask('none')}
+                        {formatTaskDate(fmt, drawerTask.dueDate) || tTask('none')}
                       </span>
                     )}
                   </div>
@@ -2648,7 +2649,7 @@ export function TaskMgmtContent({
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
                     <span style={{ color: 'var(--text-muted)' }}>{tTask('created')}</span>
-                    <span style={{ color: 'var(--text-primary)' }}>{formatDate(fmt, drawerTask.createdAt)}</span>
+                    <span style={{ color: 'var(--text-primary)' }}>{formatTaskDate(fmt, drawerTask.createdAt)}</span>
                   </div>
                 </div>
               </div>
