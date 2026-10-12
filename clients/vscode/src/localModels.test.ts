@@ -11,6 +11,7 @@ import {
   localChatCompletionsUrl,
   localModelsUrl,
   localModelOptions,
+  LOCAL_PROVIDER_IDS,
   LOCAL_PROVIDER_LABEL,
   localTransport,
   normalizeLocalBaseUrl,
@@ -42,6 +43,12 @@ describe("local model refs", () => {
     const ref = formatLocalModelRef("freetoken", "gpt-oss-20b");
     expect(ref).toBe("local/freetoken/gpt-oss-20b");
     expect(parseLocalModelRef(ref)).toEqual({ provider: "freetoken", model: "gpt-oss-20b" });
+  });
+
+  it("round-trips a Synapse model id", () => {
+    const ref = formatLocalModelRef("synapse", "llama-3.1-8b");
+    expect(ref).toBe("local/synapse/llama-3.1-8b");
+    expect(parseLocalModelRef(ref)).toEqual({ provider: "synapse", model: "llama-3.1-8b" });
   });
 
   it("keeps an Ollama id containing ':' and '/' intact", () => {
@@ -218,6 +225,54 @@ describe("catalog discovery", () => {
     expect(models.map((m) => m.ref)).toEqual(["local/freetoken/m"]);
     expect(spy).toHaveBeenCalledTimes(1);
   });
+
+  it("probes Synapse /v1/models with Bearer when a token is set", async () => {
+    const spy = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(_url).toBe("http://127.0.0.1:11435/v1/models");
+      expect(init?.headers).toEqual(
+        expect.objectContaining({ authorization: "Bearer desk-token" }),
+      );
+      return new Response(JSON.stringify({ data: [{ id: "llama-3.1-8b" }] }), { status: 200 });
+    });
+    globalThis.fetch = spy as unknown as typeof fetch;
+    const models = await listProviderModels(
+      "synapse",
+      "http://127.0.0.1:11435/v1",
+      2_000,
+      "desk-token",
+    );
+    expect(models.map((m) => m.ref)).toEqual(["local/synapse/llama-3.1-8b"]);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips Synapse when no desktop endpoint was discovered", async () => {
+    const spy = vi.fn(async () => new Response(JSON.stringify({ data: [{ id: "m" }] }), { status: 200 }));
+    globalThis.fetch = spy as unknown as typeof fetch;
+    const models = await listLocalModels({
+      enabled: true,
+      endpoints: { ollama: { baseUrl: "http://127.0.0.1:11434" }, freetoken: { baseUrl: "" } },
+    });
+    expect(models.map((m) => m.ref)).toEqual(["local/ollama/m"]);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists Synapse models when desktop.json published an endpoint", async () => {
+    globalThis.fetch = vi.fn(async (url: string) => {
+      if (String(url).includes("11435")) {
+        return new Response(JSON.stringify({ data: [{ id: "qwen3:8b" }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const models = await listLocalModels({
+      enabled: true,
+      endpoints: {
+        ollama: { baseUrl: "" },
+        freetoken: { baseUrl: "" },
+        synapse: { baseUrl: "http://127.0.0.1:11435", token: "desk-token" },
+      },
+    });
+    expect(models.map((m) => m.ref)).toEqual(["local/synapse/qwen3:8b"]);
+  });
 });
 
 describe("rows for the shared model-list builder", () => {
@@ -228,10 +283,12 @@ describe("rows for the shared model-list builder", () => {
       localModelOptions([
         { ref: "local/freetoken/gpt-oss-20b", provider: "freetoken", model: "gpt-oss-20b" },
         { ref: "local/ollama/qwen3:8b", provider: "ollama", model: "qwen3:8b" },
+        { ref: "local/synapse/llama-3.1-8b", provider: "synapse", model: "llama-3.1-8b" },
       ]),
     ).toEqual([
       { id: "local/freetoken/gpt-oss-20b", label: "gpt-oss-20b", runtime: "FreeToken" },
       { id: "local/ollama/qwen3:8b", label: "qwen3:8b", runtime: "Ollama" },
+      { id: "local/synapse/llama-3.1-8b", label: "llama-3.1-8b", runtime: "Synapse" },
     ]);
   });
 
@@ -248,7 +305,9 @@ describe("rows for the shared model-list builder", () => {
       ollama: "Ollama",
       freetoken: "FreeToken",
       "kimi-code": "Kimi Code",
+      synapse: "Synapse",
     });
+    expect(LOCAL_PROVIDER_IDS).toContain("synapse");
   });
 
   it("has nothing to offer when nothing was discovered", () => {

@@ -17,6 +17,7 @@ import { afterWorkspaceScan, syncWorkspaceFacts } from "./workspaceFactsSync";
 import { watchWorkspaceSymbols } from "./workspaceSymbolWatch";
 import { getModels, getWebBaseUrl, getKimiCodeUnavailableReason, getLocalModelsConfig, SECRET_KEY, clearPersonalityBlockCache, invalidateKimiInstallMemo } from "./gateway";
 import { listLocalModels, localModelOptions, type LocalModel } from "./localModels";
+import { pickSynapseInstall, runSynapseInstall, synapseInstallRows, type SynapsePickRow } from "./synapseInstall";
 import { resolveModelRoute, routeRequiresSignIn } from "./modelRouting";
 import { PERMISSION_MODE_SETTING } from "./permissionMode";
 import { InsightsController } from "./insights";
@@ -543,6 +544,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // runs the real flow) instead of leaving "signed in" over empty panels.
     watchRejectedEditorKey(context.secrets, () => signOut(context, auth, { quiet: true })),
     vscode.commands.registerCommand("builderforce.pickModel", () => pickModel(context)),
+    vscode.commands.registerCommand("builderforce.installSynapseModel", () => pickSynapseInstall()),
     vscode.commands.registerCommand("builderforce.rescanCodebase", () => maybeScan(context, true)),
     // The committed `.builderforce/hooks.json` every run in this repository follows.
     vscode.commands.registerCommand("builderforce.editWorkspaceHooks", () =>
@@ -1211,10 +1213,16 @@ async function signOut(
  * signed-out path below — a gated pin is dead because the GATEWAY would refuse it, and
  * these never reach the gateway.
  */
+type ModelPickRow = vscode.QuickPickItem & {
+  selection?: ChatModelSelection;
+  unlock?: boolean;
+  synapseInstall?: string;
+};
+
 function localModelRows(
   models: readonly LocalModel[],
   labels: ModelChoiceLabels,
-): Array<vscode.QuickPickItem & { selection?: ChatModelSelection }> {
+): ModelPickRow[] {
   if (models.length === 0) return [];
   // Through the shared builder, not a parallel one: this fallback picker and the
   // composer's menu must name a runtime the same way, and the group heading and funding
@@ -1239,12 +1247,16 @@ function localModelRows(
  * on a message about plans, which is the wrong answer for someone who has a runtime
  * already running locally.
  */
-async function pickLocalOnly(rows: Array<vscode.QuickPickItem & { selection?: ChatModelSelection }>): Promise<boolean> {
+async function pickLocalOnly(rows: ModelPickRow[]): Promise<boolean> {
   const pick = await vscode.window.showQuickPick(rows, {
     title: vscode.l10n.t("Select BuilderForce model"),
     placeHolder: vscode.l10n.t("Models served on this machine"),
     matchOnDescription: true,
   });
+  if (pick?.synapseInstall) {
+    await runSynapseInstall(pick.synapseInstall);
+    return true;
+  }
   if (!pick?.selection || pick.selection.mode !== "model") return false;
   setSelectedModel(pick.selection.model);
   return true;
@@ -1255,6 +1267,7 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   // and a local runtime must still be offerable in that state.
   const localModels = await listLocalModels(getLocalModelsConfig());
   const localRows = localModelRows(localModels, modelChoiceLabels());
+  const synapseRows: SynapsePickRow[] = await synapseInstallRows();
   try {
     const { models, freeModels, configuredModels, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo, identity } =
       await getModels(context.secrets, true);
@@ -1284,7 +1297,7 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
       // about a runtime on this machine, so offer those before falling back to the
       // upgrade path — otherwise a developer with Ollama running is told to buy a plan to
       // use hardware they already own.
-      if (localRows.length > 0 && (await pickLocalOnly(localRows))) return;
+      if ((localRows.length > 0 || synapseRows.length > 0) && (await pickLocalOnly([...localRows, ...synapseRows]))) return;
       setSelectedModel(undefined);
       const action = await vscode.window.showInformationMessage(
         vscode.l10n.t(
@@ -1313,7 +1326,7 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
     // One separator per funding tier, in the builder's cost order. `auto` and the BYO
     // pool are routes rather than models, so they carry a glyph instead of a heading.
     const GLYPH: Partial<Record<string, string>> = { auto: "$(sparkle) ", byo_pool: "$(layers) " };
-    const rows: Array<vscode.QuickPickItem & { selection?: ChatModelSelection; unlock?: boolean }> = [];
+    const rows: ModelPickRow[] = [];
     let tier: ModelCategory | undefined;
     for (const item of items) {
       if (item.category !== tier) {
@@ -1363,6 +1376,8 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
       );
     }
 
+    rows.push(...synapseRows);
+
     const pick = await vscode.window.showQuickPick(rows, {
       title: vscode.l10n.t("Select BuilderForce model"),
       placeHolder: byo.providers.length > 0
@@ -1372,6 +1387,10 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
       matchOnDetail: true,
     });
     if (pick === undefined) return;
+    if (pick.synapseInstall) {
+      await runSynapseInstall(pick.synapseInstall);
+      return;
+    }
     if (pick.unlock) {
       void vscode.env.openExternal(
         vscode.Uri.parse(
@@ -1387,7 +1406,7 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
     const message = (e as { message?: string }).message ?? String(e);
     if (message.includes("not_signed_in")) {
       // Signed out is not a dead end when this machine can serve the turn itself.
-      if (localRows.length > 0 && (await pickLocalOnly(localRows))) return;
+      if ((localRows.length > 0 || synapseRows.length > 0) && (await pickLocalOnly([...localRows, ...synapseRows]))) return;
       const action = await vscode.window.showWarningMessage(vscode.l10n.t("Sign in to BuilderForce first."), vscode.l10n.t("Sign In"));
       if (action) void vscode.commands.executeCommand("builderforce.signIn");
     } else {

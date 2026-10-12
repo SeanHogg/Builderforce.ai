@@ -26,6 +26,7 @@
     "local models",
     "ollama",
     "freetoken",
+    "synapse",
     "offline"
   ],
   "icon": "media/icon.png",
@@ -344,6 +345,11 @@
         "command": "builderforce.pickModel",
         "title": "%command.pickModel%",
         "icon": "$(list-selection)"
+      },
+      {
+        "command": "builderforce.installSynapseModel",
+        "title": "%command.installSynapseModel%",
+        "icon": "$(cloud-download)"
       },
       {
         "command": "builderforce.openSettings",

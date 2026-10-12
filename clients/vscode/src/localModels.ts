@@ -59,7 +59,7 @@ export const LOCAL_MODEL_PREFIX = "local/";
 /**
  * The runtimes the EXTENSION HOST drives directly.
  *
- * `ollama` / `freetoken` are on-device engines. `kimi-code` is not — it is Kimi's hosted
+ * `ollama` / `freetoken` / `synapse` are on-device engines. `kimi-code` is not — it is Kimi's hosted
  * API — and it belongs here anyway, because membership of this list means "the extension
  * host performs this call itself", not "the weights are on this disk". That distinction
  * is exactly what Kimi requires: its edge refuses our hosted gateway before reading a
@@ -67,9 +67,9 @@ export const LOCAL_MODEL_PREFIX = "local/";
  * personal interactive client the subscription is licensed for. Same mechanism, and the
  * reason the whole vendor exists on this path rather than the gateway's.
  */
-export type LocalProviderId = "ollama" | "freetoken" | "kimi-code";
+export type LocalProviderId = "ollama" | "freetoken" | "kimi-code" | "synapse";
 
-export const LOCAL_PROVIDER_IDS: readonly LocalProviderId[] = ["ollama", "freetoken", "kimi-code"];
+export const LOCAL_PROVIDER_IDS: readonly LocalProviderId[] = ["ollama", "freetoken", "kimi-code", "synapse"];
 
 /**
  * Where a local provider's calls go, and what (if anything) authenticates them.
@@ -310,13 +310,17 @@ export async function listProviderModels(
   provider: LocalProviderId,
   baseUrl: string,
   timeoutMs = 2_000,
+  token?: string,
 ): Promise<LocalModel[]> {
   if (!baseUrl.trim()) return [];
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), timeoutMs);
   try {
     const res = await fetch(localModelsUrl(baseUrl), {
-      headers: { accept: "application/json" },
+      headers: {
+        accept: "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
       signal: abort.signal,
     });
     if (!res.ok) return [];
@@ -335,7 +339,7 @@ export async function listProviderModels(
 /** Providers whose catalog is discovered by PROBING an OpenAI `/v1/models` route. Kimi
  *  is excluded by construction: its catalog is declared in the install's own config, so
  *  probing would be a needless round trip for an answer already sitting on disk. */
-const PROBED_PROVIDER_IDS: readonly LocalProviderId[] = ["ollama", "freetoken"];
+const PROBED_PROVIDER_IDS: readonly LocalProviderId[] = ["ollama", "freetoken", "synapse"];
 
 /**
  * Every model this machine can serve directly. The on-device engines are probed
@@ -346,7 +350,12 @@ export async function listLocalModels(config: LocalModelsConfig): Promise<LocalM
   if (!config.enabled) return [];
   const lists = await Promise.all(
     PROBED_PROVIDER_IDS.map((provider) =>
-      listProviderModels(provider, config.endpoints[provider]?.baseUrl ?? ""),
+      listProviderModels(
+        provider,
+        config.endpoints[provider]?.baseUrl ?? "",
+        2_000,
+        config.endpoints[provider]?.token,
+      ),
     ),
   );
   const kimi: LocalModel[] = config.endpoints["kimi-code"]
@@ -368,6 +377,7 @@ export const LOCAL_PROVIDER_LABEL: Record<LocalProviderId, string> = {
   ollama: "Ollama",
   freetoken: "FreeToken",
   "kimi-code": "Kimi Code",
+  synapse: "Synapse",
 };
 
 /**

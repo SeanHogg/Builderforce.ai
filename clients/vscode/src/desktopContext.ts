@@ -16,6 +16,7 @@
  * exactly as before without the desktop app. No `vscode` import — unit-testable.
  */
 
+import * as nodeFs from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -71,6 +72,51 @@ async function readDiscovery(): Promise<DesktopDiscovery | null> {
   try {
     const d = JSON.parse(await fs.readFile(discoveryFilePath(), "utf8")) as Partial<DesktopDiscovery>;
     return typeof d.port === "number" && typeof d.token === "string" ? (d as DesktopDiscovery) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Synapse as a local chat provider, discovered from the same desktop.json the
+ * semantic-index client already reads.
+ *
+ * Independent of {@link readDiscovery}: a missing/invalid `models` object must
+ * not take the semantic-desktop path down, and a file that only names
+ * `models.endpoint` (no port/token) must still surface Synapse. Optional
+ * `models.provider` is `"synapse"` or omitted — anything else is skipped so a
+ * future non-Synapse writer cannot be misread as this provider. The id is
+ * never `bfi`.
+ */
+export interface DesktopModelsEndpoint {
+  baseUrl: string;
+  token?: string;
+}
+
+function parseModelsEndpoint(raw: unknown): DesktopModelsEndpoint | null {
+  if (!raw || typeof raw !== "object") return null;
+  const models = (raw as { models?: unknown }).models;
+  if (!models || typeof models !== "object") return null;
+  const m = models as { endpoint?: unknown; provider?: unknown; token?: unknown };
+  if (typeof m.provider === "string" && m.provider.trim() && m.provider.trim().toLowerCase() !== "synapse") {
+    return null;
+  }
+  const endpoint = typeof m.endpoint === "string" ? m.endpoint.trim() : "";
+  if (!endpoint) return null;
+  try {
+    const u = new URL(endpoint);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  } catch {
+    return null;
+  }
+  const token = typeof m.token === "string" && m.token.trim() ? m.token.trim() : undefined;
+  return { baseUrl: endpoint, ...(token ? { token } : {}) };
+}
+
+/** Sync so {@link getLocalModelsConfig} can stay synchronous. Missing/invalid → null. */
+export function readDesktopModelsEndpoint(): DesktopModelsEndpoint | null {
+  try {
+    return parseModelsEndpoint(JSON.parse(nodeFs.readFileSync(discoveryFilePath(), "utf8")));
   } catch {
     return null;
   }

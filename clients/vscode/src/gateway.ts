@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import nodeFs from "node:fs";
 import { productForPlan, type ModelIdentityContext } from "@seanhogg/builderforce-brain-embedded";
 import { type LocalEndpoint, type LocalModelsConfig, type LocalProviderId } from "./localModels";
+import { readDesktopModelsEndpoint } from "./desktopContext";
 import { isKimiCodeInstall, loadKimiCodeInstall, type KimiCodeInstallResult } from "./kimiCodeInstall";
 import { ensureFreshKimiToken } from "./kimiCodeAuth";
 
@@ -77,6 +78,10 @@ export function getLocalModelsConfig(): LocalModelsConfig {
   // them to re-enter any of that would be asking for something they have already given.
   // A machine without it simply contributes no endpoint and no rows.
   const kimi = currentKimiInstall();
+  // Synapse is DISCOVERED from desktop.json (`models.endpoint`), not a setting —
+  // same shape as Kimi Code, different file. A machine without it contributes
+  // no endpoint and is probed as empty.
+  const synapse = readDesktopModelsEndpoint();
   return {
     enabled: cfg.get<boolean>("localModels.enabled") === true,
     endpoints: {
@@ -88,6 +93,9 @@ export function getLocalModelsConfig(): LocalModelsConfig {
       // {@link authorizeLocalEndpoint}. The happy side effect is that the credential never
       // sits inside a config object that gets passed around and logged.
       ...(isKimiCodeInstall(kimi) ? { "kimi-code": { baseUrl: kimi.baseUrl } } : {}),
+      ...(synapse
+        ? { synapse: { baseUrl: synapse.baseUrl, ...(synapse.token ? { token: synapse.token } : {}) } }
+        : {}),
     },
     ...(isKimiCodeInstall(kimi) ? { kimiCodeModels: kimi.models } : {}),
   };
