@@ -370,6 +370,11 @@ interface CommandRun {
 interface ToolStepView {
     /** The concrete thing the call was about, for the collapsed header line. */
     subject: string | null;
+    /** The subject is one file path, so a narrow header must elide its START: the basename
+     *  is what tells `src/pages/Home.jsx` from `src/pages/Home.css`, and an end ellipsis
+     *  rendered both as `src/pages/Home…` — two different reads that looked like a
+     *  duplicate call (session `local-148925cf`). */
+    subjectIsPath: boolean;
     command: CommandRun | null;
     preview: ToolPreview | null;
     /** Raw argument JSON, minus anything the command line already shows. `''` = omit. */
@@ -1200,6 +1205,11 @@ interface ChatRunHistoryVM {
     dispatchers: string[];
     /** Distinct executors across those runs ('container' | 'durable' | 'on-prem' | …). */
     executors: string[];
+    /**
+     * Live cloud sub-agents of this chat (`parent_execution_id` set, not yet settled).
+     * Absent on a failed fetch — that is not the same as "none running".
+     */
+    subagents?: ChatSubagentVM[];
 }
 /** A human participant of the chat (shared access / audience, migration 0288). */
 interface ChatMemberVM {

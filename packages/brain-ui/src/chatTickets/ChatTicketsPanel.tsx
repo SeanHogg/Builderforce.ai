@@ -196,7 +196,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
 
       {/* Health rings for linked tickets */}
       {!isCollapsed && (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <div style={S.ticketGrid}>
         {tickets.length === 0 ? (
           <span style={S.muted}>{labels.none}</span>
         ) : tickets.map((tk) => {

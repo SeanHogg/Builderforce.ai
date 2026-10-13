@@ -76,10 +76,17 @@ function looksLikeRunNarration(text) {
   return dropped > 0 && kept.length * 2 <= t.length;
 }
 
-// ../agent-loop/src/chatTicketHealth.ts
-function isExcludedFromChatHealth(status) {
+// ../agent-loop/src/taskClosedState.ts
+var TASK_CLOSED_STATUSES = ["done", "cancelled", "canceled", "completed", "archived"];
+var CLOSED = new Set(TASK_CLOSED_STATUSES);
+function isCancelledTaskStatus(status) {
   const s = (status ?? "").trim().toLowerCase();
   return s === "cancelled" || s === "canceled";
+}
+
+// ../agent-loop/src/chatTicketHealth.ts
+function isExcludedFromChatHealth(status) {
+  return isCancelledTaskStatus(status);
 }
 function rollupChatTicketHealth(tickets) {
   let done = 0;
@@ -836,11 +843,20 @@ function residualArgs(args, command) {
   }
   return Object.keys(rest).length > 0 ? rest : null;
 }
+function subjectOf(args, isCommand) {
+  const target = activityTarget(args);
+  if (target) return { subject: target, subjectIsPath: !isCommand && target.includes("/") && !/\s/.test(target) };
+  const paths = asRecord(args)?.paths;
+  const names = Array.isArray(paths) ? paths.filter((path) => typeof path === "string" && !!path.trim()) : [];
+  if (names.length === 1) return { subject: names[0].trim(), subjectIsPath: names[0].includes("/") };
+  if (names.length > 1) return { subject: names.map((path) => path.trim().split(/[\\/]/).pop()).join(", "), subjectIsPath: false };
+  return { subject: null, subjectIsPath: false };
+}
 function toolStepView({ args, result, isError }) {
   const commandLine = commandOf(args);
   const command = commandLine ? { command: commandLine, ...shellOutcomeOf(result) } : null;
   return {
-    subject: activityTarget(args) ?? null,
+    ...subjectOf(args, !!command),
     command,
     preview: toolPreview(args),
     argsText: formatPayload(residualArgs(args, commandLine)),
@@ -935,7 +951,7 @@ function ToolStep({ node, labels }) {
         /* @__PURE__ */ jsxs4("summary", { className: "bf-tl__tool-head", children: [
           /* @__PURE__ */ jsx5("span", { className: "bf-tl__tool-status", "aria-hidden": true, children: node.isError ? "\u2717" : "\u2713" }),
           /* @__PURE__ */ jsx5("span", { className: "bf-tl__tool-name", children: node.label }),
-          view.subject && /* @__PURE__ */ jsx5("span", { className: "bf-tl__tool-subject", children: view.subject }),
+          view.subject && /* @__PURE__ */ jsx5("span", { className: `bf-tl__tool-subject${view.subjectIsPath ? " bf-tl__tool-subject--path" : ""}`, title: view.subject, children: view.subjectIsPath ? /* @__PURE__ */ jsx5("bdi", { dir: "ltr", children: view.subject }) : view.subject }),
           node.durationMs != null && /* @__PURE__ */ jsx5("span", { className: "bf-tl__tool-dur", children: formatDuration(node.durationMs) }),
           /* @__PURE__ */ jsx5("span", { className: "bf-tl__tool-caret", "aria-hidden": true, children: "\u25B8" })
         ] }),
@@ -2636,6 +2652,10 @@ var S2 = {
   caret: { display: "inline-block", fontSize: 11, color: V.muted, transition: "transform 120ms ease" },
   ticketsCount: { fontSize: 12, fontWeight: 600, color: V.text },
   ticketsAgg: { fontSize: 11, color: V.muted },
+  // Expanded ring grid — a chat can link hundreds of tickets, so the grid is a fixed-height
+  // scroll region (capped to the viewport on short panels) rather than growing past the
+  // host's clipped container where the rest could never be reached.
+  ticketGrid: { display: "flex", alignItems: "center", alignContent: "flex-start", gap: 12, flexWrap: "wrap", maxHeight: "min(320px, 45vh)", overflowY: "auto", overscrollBehavior: "contain", paddingRight: 4 },
   chip: { display: "flex", alignItems: "center", gap: 6, padding: "2px 6px", border: `1px solid ${V.border}`, borderRadius: 8 },
   ticketLabel: { fontSize: 12, fontWeight: 600, color: V.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   // Clickable variant of the label — opens the artifact. Underlined-on-hover link
@@ -3061,7 +3081,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         ]
       }
     ),
-    !isCollapsed && /* @__PURE__ */ jsx22("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }, children: tickets.length === 0 ? /* @__PURE__ */ jsx22("span", { style: S2.muted, children: labels.none }) : tickets.map((tk) => {
+    !isCollapsed && /* @__PURE__ */ jsx22("div", { style: S2.ticketGrid, children: tickets.length === 0 ? /* @__PURE__ */ jsx22("span", { style: S2.muted, children: labels.none }) : tickets.map((tk) => {
       const key = `${tk.kind}:${tk.ref}`;
       const parentTk = parentLink(tk);
       return /* @__PURE__ */ jsxs21("div", { style: S2.chip, children: [

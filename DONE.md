@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-10-13 — VSIX chat ticket rail: expanded grid scrolls (VSIX 2026.10.32)
+
+A chat with 60+ linked tickets expanded the ring grid past the host's clipped container, so later tickets could not be seen or scrolled to.
+
+- **`panelStyles.ticketGrid`** (`packages/brain-ui/src/chatTickets/`): the expanded grid is now a scroll region capped at `min(320px, 45vh)` with `overflowY: auto` and `overscrollBehavior: contain`. `ChatTicketsPanel` uses it instead of an inline style. brain-ui 2026.10.9.
+- **Verified:** brain-ui typecheck + build + `src/chatTickets` tests (21 pass); VSIX full type-check, package, and install of 2026.10.32 confirmed.
+
 ## ✅ RESOLVED 2026-10-12 — Spec import from GitHub Issues, Linear, and Jira (ticket #3075)
 
 One-shot import of an external issue as a Spec (not a Task). No two-way sync, no auto-import, no UI.
