@@ -649,6 +649,7 @@
             "monitoring": "Surveillance",
             "reliability": "Fiabilité",
             "agentOps": "Ops des agents",
+            "orchestration": "Orchestration",
             "sales": "Centre des ventes",
             "challenges": "Défis",
             "growth": "Croissance",
@@ -17415,6 +17416,21 @@
         "failedDelete": "Échec de la suppression du flux de travail",
         "noticeRunPendingApproval": "« {name} » doit être approuvé avant de pouvoir s'exécuter. Une demande d'approbation a été envoyée."
     },
+    "orchestrationWorkspace": {
+        "title": "Orchestration en direct",
+        "subtitle": "Workflows d'agents en cours. Le DAG est l'espace de travail — l'édition reste sur le canvas.",
+        "loading": "Chargement des exécutions en cours…",
+        "error": "Impossible de charger les exécutions en cours.",
+        "empty": "Aucun workflow en cours. Lancez une exécution depuis le canvas.",
+        "selectRun": "En cours",
+        "live": "En direct",
+        "loadingGraph": "Chargement du graphe…",
+        "noGraph": "Pas encore de graphe pour cette exécution.",
+        "openCanvas": "Ouvrir le canvas",
+        "authoringHint": "Pour concevoir un workflow, ouvrez le Creation Canvas.",
+        "refresh": "Actualiser",
+        "unnamed": "Exécution sans nom"
+    },
     "personalityUsage": {
         "title": "Utilisation de la personnalité",
         "activeTitle": "Personnalité active",
@@ -18586,7 +18602,8 @@
             "learning": "Parcours, prérequis et le LRS.",
             "marketplace": "Achetez et vendez agents, talents et modèles.",
             "developers": "Publiez sur la place de marché et gérez les installations.",
-            "sales": "Pipeline, campagnes, paiements et parrainages."
+            "sales": "Pipeline, campagnes, paiements et parrainages.",
+            "orchestration": "Exécutions en cours et le DAG en direct."
         }
     },
     "tutorials": {
@@ -27534,6 +27551,9 @@
             },
             "reliability": {
                 "description": "Supervision, incidents, astreinte et escalade dans une même boucle détecter-répondre."
+            },
+            "orchestration": {
+                "description": "Workflows d'agents en cours et le DAG en direct. L'édition reste sur le canvas."
             },
             "knowledge": {
                 "description": "Procédures, processus, documents, compétences, personas et prompts : la base versionnée sur laquelle vos agents s'appuient."

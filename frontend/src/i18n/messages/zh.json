@@ -649,6 +649,7 @@
             "monitoring": "监控",
             "reliability": "可靠性",
             "agentOps": "智能体运维",
+            "orchestration": "编排",
             "sales": "销售中心",
             "challenges": "挑战",
             "growth": "增长",
@@ -17415,6 +17416,21 @@
         "failedDelete": "无法删除工作流",
         "noticeRunPendingApproval": "“{name}”需要获得批准才能运行。审批请求已发送。"
     },
+    "orchestrationWorkspace": {
+        "title": "实时编排",
+        "subtitle": "进行中的智能体工作流。DAG 是工作台——编排设计仍在画布上完成。",
+        "loading": "正在加载进行中的运行…",
+        "error": "无法加载进行中的运行。",
+        "empty": "没有进行中的工作流。请从画布启动一次运行。",
+        "selectRun": "进行中",
+        "live": "实时",
+        "loadingGraph": "正在加载关系图…",
+        "noGraph": "此运行尚无关系图数据。",
+        "openCanvas": "打开画布",
+        "authoringHint": "要编写工作流，请打开 Creation Canvas。",
+        "refresh": "刷新",
+        "unnamed": "未命名运行"
+    },
     "personalityUsage": {
         "title": "人格使用情况",
         "activeTitle": "当前人格",
@@ -18586,7 +18602,8 @@
             "learning": "学习路径、先修条件与 LRS。",
             "marketplace": "买卖智能体、人才与模板。",
             "developers": "发布到市场并管理已安装项。",
-            "sales": "管道、营销活动、结算与推荐。"
+            "sales": "管道、营销活动、结算与推荐。",
+            "orchestration": "进行中的运行与实时 DAG。"
         }
     },
     "tutorials": {
@@ -27534,6 +27551,9 @@
             },
             "reliability": {
                 "description": "监控、事件、值班与升级，构成同一个发现并响应的闭环。"
+            },
+            "orchestration": {
+                "description": "进行中的智能体工作流与实时 DAG。编排设计仍在画布上完成。"
             },
             "knowledge": {
                 "description": "SOP、流程、文档、技能、人格与提示词——为智能体提供依据的版本化知识库。"

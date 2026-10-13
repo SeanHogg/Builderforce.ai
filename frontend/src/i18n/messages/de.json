@@ -649,6 +649,7 @@
       "monitoring": "Überwachung",
       "reliability": "Zuverlässigkeit",
       "agentOps": "Agenten-Betrieb",
+      "orchestration": "Orchestrierung",
       "sales": "Vertriebs-Hub",
       "challenges": "Challenges",
       "growth": "Wachstum",
@@ -17415,6 +17416,21 @@
     "failedDelete": "Workflow konnte nicht gelöscht werden",
     "noticeRunPendingApproval": "„{name}“ muss vor der Ausführung genehmigt werden. Eine Genehmigungsanfrage wurde gesendet."
   },
+  "orchestrationWorkspace": {
+    "title": "Live-Orchestrierung",
+    "subtitle": "Laufende Agenten-Workflows. Der DAG ist die Arbeitsfläche — die Erstellung bleibt auf der Canvas.",
+    "loading": "Laufende Runs werden geladen…",
+    "error": "Laufende Runs konnten nicht geladen werden.",
+    "empty": "Keine Workflows in Ausführung. Starte einen Run von der Canvas.",
+    "selectRun": "In Ausführung",
+    "live": "Live",
+    "loadingGraph": "Graph wird geladen…",
+    "noGraph": "Noch keine Graphdaten für diesen Run.",
+    "openCanvas": "Canvas öffnen",
+    "authoringHint": "Um einen Workflow zu erstellen, öffne die Creation Canvas.",
+    "refresh": "Aktualisieren",
+    "unnamed": "Unbenannter Run"
+  },
   "personalityUsage": {
     "title": "Persönlichkeitsnutzung",
     "activeTitle": "Aktive Persönlichkeit",
@@ -18586,7 +18602,8 @@
       "learning": "Lernpfade, Voraussetzungen und der LRS.",
       "marketplace": "Agenten, Talente und Vorlagen kaufen und verkaufen.",
       "developers": "Im Marktplatz veröffentlichen und Installationen verwalten.",
-      "sales": "Pipeline, Kampagnen, Auszahlungen und Empfehlungen."
+      "sales": "Pipeline, Kampagnen, Auszahlungen und Empfehlungen.",
+      "orchestration": "Laufende Runs und der Live-DAG."
     }
   },
   "tutorials": {
@@ -27534,6 +27551,9 @@
       },
       "reliability": {
         "description": "Monitore, Incidents, Rufbereitschaft und Eskalation in einer Schleife aus Erkennen und Reagieren."
+      },
+      "orchestration": {
+        "description": "Laufende Agenten-Workflows und der Live-DAG. Die Erstellung bleibt auf der Canvas."
       },
       "knowledge": {
         "description": "SOPs, Prozesse, Dokumente, Skills, Personas und Prompts — die versionierte Basis, auf der Ihre Agenten stehen."

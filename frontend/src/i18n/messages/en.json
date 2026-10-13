@@ -649,6 +649,7 @@
       "monitoring": "Monitoring",
       "reliability": "Reliability",
       "agentOps": "Agent Ops",
+      "orchestration": "Orchestration",
       "sales": "Sales Hub",
       "challenges": "Challenges",
       "growth": "Growth",
@@ -17415,6 +17416,21 @@
     "failedDelete": "Failed to delete workflow",
     "noticeRunPendingApproval": "\"{name}\" needs approval before it can run. An approval request has been sent."
   },
+  "orchestrationWorkspace": {
+    "title": "Live orchestration",
+    "subtitle": "In-flight agent workflows. The DAG is the workspace — authoring stays on the canvas.",
+    "loading": "Loading in-flight runs…",
+    "error": "Could not load in-flight runs.",
+    "empty": "No workflows in flight. Start a run from the canvas.",
+    "selectRun": "In flight",
+    "live": "Live",
+    "loadingGraph": "Loading graph…",
+    "noGraph": "No graph data for this run yet.",
+    "openCanvas": "Open canvas",
+    "authoringHint": "To author a workflow, open the Creation Canvas.",
+    "refresh": "Refresh",
+    "unnamed": "Untitled run"
+  },
   "personalityUsage": {
     "title": "Personality usage",
     "activeTitle": "Active personality",
@@ -18586,7 +18602,8 @@
       "learning": "Paths, prerequisites and the LRS.",
       "marketplace": "Buy and sell agents, talent and templates.",
       "developers": "Publish to the marketplace and manage installs.",
-      "sales": "Pipeline, campaigns, payouts and referrals."
+      "sales": "Pipeline, campaigns, payouts and referrals.",
+      "orchestration": "In-flight runs and the live DAG."
     }
   },
   "tutorials": {
@@ -27534,6 +27551,9 @@
       },
       "reliability": {
         "description": "Monitors, incidents, on-call, and escalation in one detect-and-respond loop."
+      },
+      "orchestration": {
+        "description": "In-flight agent workflows and the live DAG. Authoring stays on the canvas."
       },
       "knowledge": {
         "description": "SOPs, processes, documents, skills, personas, and prompts — the versioned base your agents are grounded in."

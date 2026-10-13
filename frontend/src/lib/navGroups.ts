@@ -433,6 +433,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'reporting', labelKey: 'tab.reporting', icon: '📊' },
     ],
   },
+  // Live orchestration: in-flight runs + the live DAG as the workspace. Authoring
+  // stays on Creation Canvas (`/create`); this destination is Run, not Idea.
+  { id: 'orchestration', labelKey: 'group.orchestration', icon: '◎', href: '/orchestration', match: ['/orchestration'], seat: 'Brain', stage: 'run' },
   // Knowledge is now ONE destination. SOPs / Processes / Documents / Training are
   // no longer separate tabs — they are a single template-driven library with the
   // training + compliance lens surfaced on the home. The former "Library" group is

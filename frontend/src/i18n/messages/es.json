@@ -649,6 +649,7 @@
       "monitoring": "Monitorización",
       "reliability": "Fiabilidad",
       "agentOps": "Operación de agentes",
+      "orchestration": "Orquestación",
       "sales": "Centro de ventas",
       "challenges": "Desafíos",
       "growth": "Crecimiento",
@@ -17415,6 +17416,21 @@
     "failedDelete": "No se pudo eliminar el flujo de trabajo",
     "noticeRunPendingApproval": "«{name}» necesita aprobación antes de ejecutarse. Se envió una solicitud de aprobación."
   },
+  "orchestrationWorkspace": {
+    "title": "Orquestación en vivo",
+    "subtitle": "Flujos de agentes en curso. El DAG es el espacio de trabajo; la autoría se queda en el canvas.",
+    "loading": "Cargando ejecuciones en curso…",
+    "error": "No se pudieron cargar las ejecuciones en curso.",
+    "empty": "No hay flujos en curso. Inicia una ejecución desde el canvas.",
+    "selectRun": "En curso",
+    "live": "En vivo",
+    "loadingGraph": "Cargando grafo…",
+    "noGraph": "Aún no hay datos de grafo para esta ejecución.",
+    "openCanvas": "Abrir canvas",
+    "authoringHint": "Para diseñar un flujo, abre el Creation Canvas.",
+    "refresh": "Actualizar",
+    "unnamed": "Ejecución sin nombre"
+  },
   "personalityUsage": {
     "title": "Uso de personalidad",
     "activeTitle": "Personalidad activa",
@@ -18586,7 +18602,8 @@
       "learning": "Rutas, requisitos previos y el LRS.",
       "marketplace": "Compra y vende agentes, talento y plantillas.",
       "developers": "Publica en el mercado y gestiona las instalaciones.",
-      "sales": "Pipeline, campañas, pagos y referidos."
+      "sales": "Pipeline, campañas, pagos y referidos.",
+      "orchestration": "Ejecuciones en curso y el DAG en vivo."
     }
   },
   "tutorials": {
@@ -27534,6 +27551,9 @@
       },
       "reliability": {
         "description": "Monitores, incidentes, guardias y escalado en un único ciclo de detectar y responder."
+      },
+      "orchestration": {
+        "description": "Flujos de agentes en curso y el DAG en vivo. La autoría se queda en el canvas."
       },
       "knowledge": {
         "description": "SOP, procesos, documentos, habilidades, personas y prompts: la base versionada en la que se apoyan tus agentes."

@@ -30,7 +30,7 @@ Enabling work is legitimate but never outranks a broken Idea→Real journey.
 | Marketplace monetization (listing + tx fee, Stripe) | Revenue | P1 | Q3 2026 | 🔄 Partial — awaits Stripe secrets |
 | Enterprise license GA (on-prem Docker) | Revenue | P1 | Q4 2026 | ✅ Shipped |
 | SOC 2 Type I audit | Revenue | P1 | Q4 2026 | 📋 Planned |
-| Live orchestration workspace (real-time DAG) | Agents | P0 | Q3 2026 | 🔄 Partial |
+| Live orchestration workspace (real-time DAG) | Agents | P0 | Q3 2026 | ✅ Shipped |
 | Inline diff / pair-programming (TUI accept/reject) | Agents | P1 | Q3 2026 | ✅ Shipped |
 | Session auto-checkpoint (`/sessions`, `/undo`, `/fork`) | Agents | P1 | Q3 2026 | ✅ Shipped |
 | Remote task result streaming | Agents | P2 | Q3 2026 | 🔄 Partial — live `remote.task.chunk` + terminal assistant text |

@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-10-13 — Live orchestration workspace (real-time DAG) (ticket #3688, epic #3066)
+
+Dedicated `/orchestration` Run-stage workspace lists in-flight workflows and paints the live DAG as the main surface (not a run-history drill-down). Authoring stays on Creation Canvas.
+
+- **Route.** `src/app/orchestration/page.tsx` — edge + `pageMetadata` (incidents-style, no teaser). Destination `orchestration` in `NAV_GROUPS` (Brain, stage `run`). Declared in `APP_ROUTE_SEGMENTS` so middleware does not hard-404 it.
+- **Live list + poll.** `useLiveOrchestration` lists `pending` and `running` (two `workflows.list({ status })` calls), merges newest-first, then polls `workflows.get` + `getGraph` at `LIVE_WORKFLOW_POLL_MS` (2s) while the selection is live. Same poll as WorkflowRunHistoryPanel / canvas flow-step status. No workflow WebSocket.
+- **DAG.** Reuses `WorkflowDagView`, `isLiveWorkflowStatus`, `StatusPill`. Open-canvas CTA to `/create`.
+- **i18n.** `orchestrationWorkspace` + `nav.group.orchestration` + `marketingNav.tagline.orchestration` + `routeMarketing.destination.orchestration` in en/de/es/fr/zh.
+- **Tests:** `useLiveOrchestration.test.ts`, `LiveOrchestrationWorkspace.test.tsx` (list in-flight, map graph onto DAG, select another run, stop poll on complete). Destinations / architecture / methodology / i18n / root-routes / edge-runtime checks pass.
+
 ## ✅ RESOLVED 2026-10-13 — TUI `/undo` rewinds the last conversation turn (ticket #3231, epic #3070)
 
 `/sessions` and `/fork` already existed; `/undo` now rewinds the last completed user+assistant turn (including tool results) on the **same** session key so the next prompt continues from the prior leaf. Does not revert filesystem or git.

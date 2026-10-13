@@ -30,7 +30,7 @@ export const APP_ROUTE_SEGMENTS: readonly string[] = [
   'facts', 'features', 'finance', 'finops', 'freelancer', 'growth', 'hires', 'hiring', 'import', 'inbox',
   'incidents', 'insights', 'integrations', 'investor', 'invoice', 'kanban-templates', 'knowledge',
   'learning', 'legal', 'legal-documents', 'login', 'logs', 'lti', 'marketplace', 'media', 'meetings',
-  'method', 'models', 'monitoring', 'p', 'personas', 'pmo', 'pricing', 'product', 'projects', 'prompts',
+  'method', 'models', 'monitoring', 'orchestration', 'p', 'personas', 'pmo', 'pricing', 'product', 'projects', 'prompts',
   'quality', 'realize', 'references', 'register', 'resume', 'reviews', 'salary', 'sales', 'seat',
   'security', 'sell-builderforce', 'settings', 'sign', 'skills', 'soc2', 'spawn', 'surveys',
   'studio', 'talent', 'tasks', 'templates', 'tenants', 'timeline', 'tools', 'training', 'tutorials',
