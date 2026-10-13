@@ -1,3 +1,29 @@
+## ✅ RESOLVED 2026-10-12 — Spec import from GitHub Issues, Linear, and Jira (ticket #3075)
+
+One-shot import of an external issue as a Spec (not a Task). No two-way sync, no auto-import, no UI.
+
+- **`POST /api/specs/import`** and MCP `specs.import`. `BoardProvider.fetchTicket` for GitHub / Jira / Linear. Upsert keyed by `(tenantId, sourceProvider, sourceExternalId)` (migration `1215_specs_source_fields.sql`); re-import is idempotent. Optional `taskId` links the spec as the task's primary PRD.
+- **Live credentials.** Import uses the project's board connection secrets (`98c77a6c7`); missing worker env refuses instead of forwarding `{}`. Connection tokens stay in credentials — they are never written onto spec rows, and HTTP/MCP output is projected to a public field list (`publicSpecImportResult`).
+- **Tests:** `importSpec.test.ts`, `specRoutes.import.test.ts`, `builtinMcpService.specsImport.test.ts` (including the no-env refusal).
+- **Commits:** `cb79a532c`, `98c77a6c7`, `bb3a4d9d7`, `ffd6eeb98`.
+
+## ✅ RESOLVED 2026-10-12 — PRD-first at dispatch so host runs draft too (ticket #3096)
+
+Host-delivered runs (On-Prem / pinned agent host) never entered `prepareCloudRun`, which used to be the only caller of `ensureTaskPrd`, so a host run started against a ticket with no PRD.
+
+- **`startDispatchedExecution`** now calls `ensureTaskPrd` before `dispatchToAgentHost`. Rehearsal never enters this function, so `readOnly` is always false here. Best-effort: a draft miss still starts the run (the agent can write a PRD later via `update_prd`).
+- **Still on the ROADMAP:** PRD commit is GitHub-only; no agent task-mutation tool; Auto runs carry no `cloudAgentRef`.
+- **Tests:** `dispatchCloudRun.prd.test.ts` (called before host dispatch; a draft failure still starts the run); `ensureTaskPrdReadOnly.test.ts`.
+- **Commit:** `54467a71d`.
+
+## ✅ RESOLVED 2026-10-12 — Role→model resolver in `@builderforce/learned-routing` (ticket #3073)
+
+Pin spawn/delegation roles to catalog model ids from `ROLE_MODELS` / `ROLE_MODEL_DEFAULT`. Unknown, empty, or unmapped roles use the documented default (no pin unless `defaultModel` is set). Pure, no I/O.
+
+- **Still on the ROADMAP** (row stays 🔄 Partial): not wired into the cloud engine yet.
+- **Tests:** `packages/learned-routing/src/roleModels.test.ts`.
+- **Commit:** `9f514a949`.
+
 ## ✅ RESOLVED 2026-10-12 — Docs consolidated under `docs/`; strategy docs and gitignored files kept out of the public repo
 
 - **One docs home.** `specs/builderforce/` → `docs/specs/`; root `PRD.md` (task #295's PRD) → `specs/tasks/task-295.md`; `LIGHT_THEME_BURNRATE.md` → `docs/design/light-theme-burnrate.md`. [`docs/README.md`](./docs/README.md) says what goes where. Every path reference (data-model guard scripts, code comments, ROADMAP/DONE, task PRDs) was rewritten. `specs/tasks/` stays at the root: `commitPrdToRepo.ts` writes task PRDs there in every bound repo.
@@ -31,7 +57,8 @@ The VS Code roster already listed live children through `ChatTicketsPanel`'s `su
 - **`run_checks`:** after static source/config validation, polls CI. Red fails the tool. Pending/none stay `ok` with a note that forbids claiming tests passed. Green explicitly allows the claim.
 - **Pre-finish gate:** after static validation, `ciFinishDecision` blocks red (cap 3) and pending (cap 2). Caps persist on `CloudLoopState` across durable ticks. Green sets `ciVerified` and skips the honesty gate. `none` (including PR-only workflows) does not block; webhook auto-fix + `CLOUD_AUTOMERGE_REQUIRE_GREEN` remain the backstop.
 - **PR annotation:** when `ciVerified`, the PR body and run summary say in-run CI was green and to re-check CI on the PR; otherwise the unverified caveat stays.
-- Tests: `api/src/application/ci/pollCommitCiStatus.test.ts`.
+- **Container / Actions / on-prem (`5b0670e06`):** `inRunVerify.ts` plans `typecheck` / `type-check` / `test` from the nearest `package.json` and the image runs them via `run_command` after code changes, before `finish`. Durable records an honest skip (`DURABLE_IN_RUN_VERIFY_NOTE`) and must not claim those checks passed. Finish may proceed on a durable skip; a container that wrote code and has not verified may not.
+- Tests: `api/src/application/ci/pollCommitCiStatus.test.ts`, `api/src/application/runtime/cloudAgent/inRunVerify.test.ts`.
 
 ## ✅ RESOLVED 2026-10-12 — Studio Brain turns stop repeating work: batched build-file reads, no Brain-trace undo steps, readable trace rows (ui 2026.10.47)
 
