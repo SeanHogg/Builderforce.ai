@@ -1,7 +1,7 @@
 # BuilderForce Agents Architecture
 
 > Last updated: 2026-03-04  
-> See also: [Vision](VISION.md) · [Feature Gap Analysis](FEATURE_GAP_ANALYSIS.md) · [Business Roadmap](BUSINESS_ROADMAP.md)
+> See also: [Vision](VISION.md)
 
 ## Overview
 

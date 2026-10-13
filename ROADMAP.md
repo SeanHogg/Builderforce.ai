@@ -21,14 +21,6 @@ Declared as spec data and ratcheted by `frontend/scripts/check-methodology.mjs`.
 
 Enabling work is legitimate but never outranks a broken Idea→Real journey.
 
-## The Buyer — the founder, then the team they hire
-
-- **First buyer:** a founder raising in the next few months. The arc is their company's arc; `DOMAIN_MANIFEST` gives them all seventeen seats from day one.
-- **Hook:** the fundraising pack (deck, model, metrics, data room) grounded on connected books — mostly built already in [`rfpService.ts`](./api/src/application/rfp/rfpService.ts) and [`dataRoomSharing.ts`](./api/src/application/investor/dataRoomSharing.ts).
-- **Retention:** a diligence document at `requested` is a hole in the raise; its `category` names the seat that closes it.
-- **Expansion:** a seat becomes a person. Pricing is fixed (2026-08-24); packaging is open — Pro caps `maxSeats: 1`, so the first teammate jumps $29 → five-seat Teams.
-- **Guardrail:** the pack is `🔄 Partial` until a release-gated journey test passes. No accounting adapter has run against live data, and no BurnRateOS rows have moved — copy must not say otherwise.
-
 ## Consolidated Feature Register
 
 | Feature | Area | P | Target | Status |
@@ -47,19 +39,10 @@ Enabling work is legitimate but never outranks a broken Idea→Real journey.
 | Remaining Canvas actions onto the outcome contract | Analytics | P0 | Q3 2026 | 🔄 In Progress |
 | Rendered presentation export of the value brief | Revenue | P1 | Q3 2026 | 🔄 Partial |
 | Phase 6 — activity/integration engines, scheduled reporting, PRD orchestration, analytics UI | 6 | P0–P1 | Q3–Q4 2026 | 📋 Planned |
-| Phase 7 — policy packs, governance-auditor, BLOCKER-gates-merge, SOC2 evidence ([PRD 08](./specs/builderforce/08-prd-agentic-governance.md)) | 7 | P1–P2 | Q3 2026 | 📋 Planned |
+| Phase 7 — policy packs, governance-auditor, BLOCKER-gates-merge, SOC2 evidence ([PRD 08](./docs/specs/08-prd-agentic-governance.md)) | 7 | P1–P2 | Q3 2026 | 📋 Planned |
 | Local LLM execution — native pure-Rust engine that replaces Ollama, in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) (`bfi`; Synapse supervises `bfi serve`; Ollama is not required), hybrid routing — [PRD](https://github.com/SeanHogg/builderforce-inference/blob/main/docs/PRD-native-engine.md); M1–M4 crates landed (tokenizer, sampler, prefix cache, grammar, embeddings, `mix_decode` concurrent batching); M5 Synapse cut-over shipped (`bf-local` no longer drives Ollama); M6 VSIX discovers Synapse via `~/.builderforce/desktop.json`. Remaining: GPU 70% tok/s vs llama-bench unmeasured (3762); live Bonsai 27B greedy vs PrismML fork not run (3764); unsigned GitHub Release binaries (3782) | 3 | P2–P3 | Q4 2026 | 🔄 Partial |
 | Multi-agent orchestration at scale (DAG UI, memory mesh) | 4 | P1–P2 | Q3–Q4 2026 | 📋 Planned |
 | Production hardening (self-hosted, fleet failover, SIEM export) | 5 | P1–P3 | Q4 2026 | 📋 Planned |
-
-## ARR Milestones
-
-| Period | Target ARR | Key driver |
-|---|---|---|
-| Q3 2026 | $50K | Teams plan + Agents LLM |
-| Q4 2026 | $200K | Enterprise pilots + marketplace |
-| Q1 2027 | $500K | Enterprise + marketplace |
-| Q2 2027 | $1M | Scale + enterprise contracts |
 
 ## Key Metrics
 
@@ -90,17 +73,8 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ## Programs
 
-- **hired.video absorption** ([PRD 18](./specs/builderforce/18-prd-hired-video-port.md)) — 100% deprecation to a redirect shell. Every remaining table maps to an existing primitive (`data-model/source-to-target.tsv`, 363/363); the rest is application code over existing tables. Affiliates = the Associate program.
-- **burnrateos.com shutdown** ([PRD 19](./specs/builderforce/19-prd-burnrateos-consolidation.md)) — a parity obligation: an unbuilt, unretired capability is LOST at shutdown. Held by `check:burnrate-parity`, `check:no-burnrate-runtime`, `check:burnrate-policy`. No row migration (2026-09-05). B1/B2 founder loop shipped 2026-09-15. PRD 19 §2 governs twelve capabilities both programs claim. *Operator work:* provider customer actions, identity-cutover comms, redirect verification.
-
-## Risk Register
-
-| Risk | Prob | Impact | Mitigation |
-|---|---|---|---|
-| Anthropic/OpenAI ships a multi-agent IDE | High | High | Self-hosting + open-source moat |
-| Cursor/Windsurf add MCP + multi-agent | Med | High | Live workflow DAG + agent mesh |
-| Free-tier model costs too high | Med | Med | Rate limiting + gateway margin |
-| Long enterprise sales cycle | High | Low | SMB Teams plan first |
+- **hired.video absorption** ([PRD 18](./docs/specs/18-prd-hired-video-port.md)) — 100% deprecation to a redirect shell. Every remaining table maps to an existing primitive (`data-model/source-to-target.tsv`, 363/363); the rest is application code over existing tables. Affiliates = the Associate program.
+- **burnrateos.com shutdown** ([PRD 19](./docs/specs/19-prd-burnrateos-consolidation.md)) — a parity obligation: an unbuilt, unretired capability is LOST at shutdown. Held by `check:burnrate-parity`, `check:no-burnrate-runtime`, `check:burnrate-policy`. No row migration (2026-09-05). B1/B2 founder loop shipped 2026-09-15. PRD 19 §2 governs twelve capabilities both programs claim. *Operator work:* provider customer actions, identity-cutover comms, redirect verification.
 
 ---
 
@@ -120,7 +94,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 ## 💡 Idea — Read · Prove
 
 - **[canvas] Ideas surface and Brain's "no data" reply read as unfinished.** Lede and empty body repeat; both point at "the prompt below" while the composer is in the right rail; the stepper stays on Make; Capture misses request-shaped text; the reply asks for an object ID instead of offering Paste / Upload / Plan an interview; header says "Brain" not the chat title. Mockup: frames 1–3 of https://claude.ai/artifact/KcEJGhrZaQMQWEMSHNJjyE. *Blocker: operator go-ahead (the 2026-10-04 pass was scoped to the chat panel).*
-- **[canvas] Validating an idea by asking the market is partial ([PRD 27](./specs/builderforce/27-prd-idea-validation-surveys.md), epic #3083).** B0 form loop is on main: `CanvasFormSurface` publish/close/`summarizeForm` poll, `CONNECTED_CANVAS_ACTIONS` `form:['publish','collect','close']`, public `/f/[slug]`. PRD §3.2 ("zero frontend callers") is stale. B1 Ask people (`formFromIdea`, Ideas row CTA, `IDEA_EVIDENCE_KINDS` includes `form`) is in the working tree uncommitted, not landed. Remaining product seam: B3 form → `marketing_campaign` Send and social Post (`sendForm` has 0 hits). B4 `addFromCrm` already exists on the form surface (`growthApi.addMembersFromCrm`). B5 founder stage select already exists (FR-8 is not auto-settle). `idea.reveal` is advertised in `CONNECTED_CANVAS_ACTIONS` but `ideaActs` only implements `explore`/`test`. Adjacent: `builtin_canvas_bind_ab_test` missing, no SMS/scheduled sends, clicks don't record the link, four unjoined contact stores, two survey stores, CSAT/NPS `question_set_id` unrendered, `newsletter_subscribers` siloed. Not blocked.
+- **[canvas] Validating an idea by asking the market is partial ([PRD 27](./docs/specs/27-prd-idea-validation-surveys.md), epic #3083).** B0 form loop is on main: `CanvasFormSurface` publish/close/`summarizeForm` poll, `CONNECTED_CANVAS_ACTIONS` `form:['publish','collect','close']`, public `/f/[slug]`. PRD §3.2 ("zero frontend callers") is stale. B1 Ask people (`formFromIdea`, Ideas row CTA, `IDEA_EVIDENCE_KINDS` includes `form`) is in the working tree uncommitted, not landed. Remaining product seam: B3 form → `marketing_campaign` Send and social Post (`sendForm` has 0 hits). B4 `addFromCrm` already exists on the form surface (`growthApi.addMembersFromCrm`). B5 founder stage select already exists (FR-8 is not auto-settle). `idea.reveal` is advertised in `CONNECTED_CANVAS_ACTIONS` but `ideaActs` only implements `explore`/`test`. Adjacent: `builtin_canvas_bind_ab_test` missing, no SMS/scheduled sends, clicks don't record the link, four unjoined contact stores, two survey stores, CSAT/NPS `question_set_id` unrendered, `newsletter_subscribers` siloed. Not blocked.
 - **[canvas] Wizard-of-oz `/queue` and `/pilot-report` are public and expose participant contacts.** They ship `verify: 'none'`; a seeded blocking ticket is a request, not a control. Fix = per-realization read secret, signed link, or the console behind app auth. *Blocker: product decision on where an operator console lives.*
 - **[canvas] Instrumented `/api/creation-sessions/claim` failure not yet observed.** The catch now logs PG code, constraint, statement and id counts to tell the fixed case-collision cause from any other. *Blocker: a live occurrence.*
 
@@ -131,7 +105,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 ### Cloud and IDE agent runs `[agents]`
 
 
-- **Cloud agents only happy-path validated — 50-gap PRD ([09](./specs/builderforce/09-prd-cloud-agent-validation.md)).** P0: V2 runs `bypassPermissions` + Bash on shared infra with no documented sandbox (G1); Worker fallback ignores steering/cancel (S5/S6); errored runs leak the workspace (W2); a missing BYO key may fall to a platform key (B2).
+- **Cloud agents only happy-path validated — 50-gap PRD ([09](./docs/specs/09-prd-cloud-agent-validation.md)).** P0: V2 runs `bypassPermissions` + Bash on shared infra with no documented sandbox (G1); Worker fallback ignores steering/cancel (S5/S6); errored runs leak the workspace (W2); a missing BYO key may fall to a platform key (B2).
 - **`cloud-container` executor needs a live image.** Built; account is Containers-paid (2026-09-22). Until `wrangler deploy` builds it and `/health` passes, `chooseCloudExecutor` silently demotes container runs to durable — paid workspaces defaulting to container get serverless with no explanation. Bounds: `sleepAfter` 20m, clone token in shell, GitHub-only tokened clones, no `ask_human` on containers. *Blocker: image build + deploy.*
 - **Container / Actions runners still cap at `CONTAINER_MAX_STEPS` = 40.** Every other surface stops only on the kernel failure-streak breaker. The image (`api/container/server.mjs`, Actions template) must be rebuilt with the breaker; until then the launcher keeps sending 40. *Blocker: container build + deploy.*
 - **Durable cloud loop still has no local shell.** In-run verify is now branch-CI poll (`run_checks` + pre-finish, ticket #3092): combined commit status / GitHub check-runs on ticket-branch HEAD, block finish on red (3×) or pending (2×), green skips the honesty gate. Remaining: PR-only workflows (`on: pull_request`) report `none` until the PR exists — webhook auto-fix + `CLOUD_AUTOMERGE_REQUIRE_GREEN` stay the backstop. A real local `npm test` still needs Container or Actions (`CONTAINER_MAX_STEPS` = 40).
@@ -170,7 +144,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ### Canvas runtimes and studio `[canvas]`
 
-- **Eight kinds have no editing runtime** (`video, voice, podcast, image, animation, comic, cad, model3d`, plus `drawing`) — they return a manifest ([PRD 18](./specs/builderforce/18-prd-hired-video-port.md)). Port from `C:\code\hired\hired.video\frontend\lib\studio` one kind per slice, dynamically importing heavy deps, through `creationObjectRegistry` data — never grow `CreationCanvas.tsx` (1,165 lines). Not blocked.
+- **Eight kinds have no editing runtime** (`video, voice, podcast, image, animation, comic, cad, model3d`, plus `drawing`) — they return a manifest ([PRD 18](./docs/specs/18-prd-hired-video-port.md)). Port from `C:\code\hired\hired.video\frontend\lib\studio` one kind per slice, dynamically importing heavy deps, through `creationObjectRegistry` data — never grow `CreationCanvas.tsx` (1,165 lines). Not blocked.
 - **One build-file write took 35.7s vs 38ms median** (session `local-148925cf`, `Layout.css`). *Blocker: a profile of a Studio build turn with preview running.*
 - **Knowledge editor has no `drawing` block.** Add a `BlockType` opened through the canvas drawing runtime once ported.
 - **Real-time co-editing live smoke.** *Blocker: next api deploy + a 2-client smoke.*
@@ -226,7 +200,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 ## 📊 Measure — grade the proof
 
 - **[platform] 14 of 17 seats write no domain metric.** `DOMAIN_MANIFEST` declares 45 keys; only `kernel/rollups/{finance,operations,legal}.ts` write `metric_facts`. Also missing: `channel_performance`, `site_traffic_daily`, `arr_projections`, `quota_attainment`, `rd_financials_quarterly`. Follows the PRD 20 data move. This is the open half of Measure.
-- **[finance] Vertical KPI Dashboards — Slice B next ([PRD 25](./specs/builderforce/25-prd-vertical-kpi-dashboards.md), build hand-off [25a](./specs/builderforce/25a-vertical-kpi-dashboards-implementation.md)).** Slice A shipped 2026-09-16. B: `growth.*` keys, LTV tranches, benchmark seeds for `saas`/`ai_ml` (kill: tiles read "Not measured"). C: `exitWaterfall.ts`, `exitScenario`/`marketSize` kinds (kill: disagrees with a hand spreadsheet). D: remaining eight verticals (kill per vertical: no design partner). No new tables.
+- **[finance] Vertical KPI Dashboards — Slice B next ([PRD 25](./docs/specs/25-prd-vertical-kpi-dashboards.md), build hand-off [25a](./docs/specs/25a-vertical-kpi-dashboards-implementation.md)).** Slice A shipped 2026-09-16. B: `growth.*` keys, LTV tranches, benchmark seeds for `saas`/`ai_ml` (kill: tiles read "Not measured"). C: `exitWaterfall.ts`, `exitScenario`/`marketSize` kinds (kill: disagrees with a hand spreadsheet). D: remaining eight verticals (kill per vertical: no design partner). No new tables.
 - **[growth] Session replay, heatmaps and live visitors — SHIPPED 2026-10-11.** S0–S8 complete. Release note 1211, blog post "See why visitors leave", dogfood on builderforce.ai, prepaid packs and usage metering wired. See [DONE.md](./DONE.md) for the full record.
 - **[growth] `experiment` records results nothing produced.** It stores authored variants with no binding to `ab_tests`, no landing-page variant, no traffic split. Bind to `ab_tests` + a variant field on `website`/`prototype`. Session replay S4e builds the missing traffic split for hosted sites: the sites Worker serves `ab_tests` allocations through a sticky cookie and records exposures and conversions. Binding the canvas `experiment` object to it is the remaining piece. *Blocker: the S4e build (operator go-ahead on PRD 33).*
 - **[growth] `useFounderJourney()` computes only `idea`/`run`.** Make/Measure need a per-tenant read of the graded-proof ledger (`outcomeMetricContract`). Planned fix: session replay S4d.5 (`GET /api/realizations/journey-signal`; a live proof collecting its sample, or graded within 14 days, = measure; built but no visits = make). *Blocker: the S4d build (operator go-ahead on PRD 33).*
@@ -245,12 +219,12 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Monetization partial:** `'agent'` isn't an `artifactTypeEnum` value (no purchase/payout); "Hire" only bumps `hire_count`; template/skill/persona installs are free; hosted-card one-off settlement for knowledge listings isn't wired (`{ requiresConfig: true }`) — settle once, landing on the `ledger_entries` unique reference. *Blocker for the live leg: Stripe secrets (see OTHER · billing).*
 - **Affiliates = the Associate program** — reconcile six tables onto `sales_*` with commissions as `ledger_entries`; retire `growth.affiliate_referrals`.
 - **Company directory family is inert** — `companies` is tenant-scoped with no owner/verification column. Level 2 nav waits on PRD 19 tracks; `earnedRung()` vs `RosterNav.earned()` want reconciling. *Blocker: PRD 19 B0 company graph + an answer to PRD 21 §7 decision 4 (list non-opted-in businesses?).*
-- **Insights (session replay) is not on the Marketplace.** The [DONE.md](./DONE.md) record for S0–S8 says S6 wired free capability install, but the S6.1 install half never landed. There is no `capability` kind in `MARKETPLACE_LISTING_KINDS` (no `'entitlement'` delivery). No migration inserts the `catalog_items` row for `slug='session-replay'` (`replayCatalog.ts` says outright that it does not write `catalog_items`). There is also no `heldCapabilityFeatures` source in `featureGate.ts` and no `sessionReplay` plan feature. So no marketplace chip or listing exists, and a workspace cannot install it. Fix per [33a §8 S6.1](./specs/builderforce/33a-session-replay-implementation.md): once the kind exists, the **Assets ▸ Capability** chip appears with no edit, because `familyKinds` reads the registry. *Blocker: the session-replay workstream is mid-edit in a concurrent session (replay-sdk, `schema/commerce.ts`, DONE/ROADMAP), so this slice belongs to that session or needs the operator to hand it over.*
+- **Insights (session replay) is not on the Marketplace.** The [DONE.md](./DONE.md) record for S0–S8 says S6 wired free capability install, but the S6.1 install half never landed. There is no `capability` kind in `MARKETPLACE_LISTING_KINDS` (no `'entitlement'` delivery). No migration inserts the `catalog_items` row for `slug='session-replay'` (`replayCatalog.ts` says outright that it does not write `catalog_items`). There is also no `heldCapabilityFeatures` source in `featureGate.ts` and no `sessionReplay` plan feature. So no marketplace chip or listing exists, and a workspace cannot install it. Fix per [33a §8 S6.1](./docs/specs/33a-session-replay-implementation.md): once the kind exists, the **Assets ▸ Capability** chip appears with no edit, because `familyKinds` reads the registry. *Blocker: the session-replay workstream is mid-edit in a concurrent session (replay-sdk, `schema/commerce.ts`, DONE/ROADMAP), so this slice belongs to that session or needs the operator to hand it over.*
 - **Marketplace categories:** `projects` needs a decision on visibility.
 - **Gigs:** fixed bids have no escrow/milestones; two publish paths could converge; eval scores aren't on an insights lens.
 - **Upwork parity:** escrow books are correct but money out rides the env-gated `PAYOUT_WEBHOOK_URL` stub; no 1099/W-8BEN/W-9; no payment-verified badge, bid economy, packages or agency accounts.
 - **Freelance/talent:** avatars full-size; payout and notify-email webhooks unset; `available_for_hire` schema drift needs a migration or allowlist.
-- **Advisor platform specified, not built ([PRD 26](./specs/builderforce/26-prd-advisor-platform.md))** — no Book on talent profiles, `/api/meetings/*` all authed, minutes don't create follow-ups.
+- **Advisor platform specified, not built ([PRD 26](./docs/specs/26-prd-advisor-platform.md))** — no Book on talent profiles, `/api/meetings/*` all authed, minutes don't create follow-ups.
 - **[integrations] Publishers can't list a canvas pack or prompt** — need `canvas`/`prompt` output kinds. *Blocker: product decision on what a purchased pack becomes.*
 - **[integrations] Developer Portal:** no live card run (Stripe secrets); hyperscaler listings need seller accounts; design-partner work is human.
 - **A signed-out buyer loses their place.** "Get" on a listing sends them to `/login?next=` (`ListingLaunch.tsx` L184-195, `signInHref`); after sign-up, verification and `/tenants?next=` they land back on the listing and must click again. `registerHref(next, intent)` carries an intent that nothing reads. Fix: ONE `resumeIntent(intent)` in `lib/auth.ts`, used by every free listing and by the Insights set-up (PRD 33 §2.6, 33a S6.5). *Blocker: operator go-ahead to start the replay build (S6.5 owns it).*
@@ -259,7 +233,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ### Marketing and campaigns `[growth]`
 
-- **Prompt-driven campaign ([PRD 30](./specs/builderforce/30-prd-guided-marketing-campaign.md))** — "run a marketing campaign" still maps to a portfolio table. Next: C1 `canvas_connect_mailbox`, C2 catalog use-case, C3 ICP on canvas, C4 campaign ROI. Don't clone HubSpot.
+- **Prompt-driven campaign ([PRD 30](./docs/specs/30-prd-guided-marketing-campaign.md))** — "run a marketing campaign" still maps to a portfolio table. Next: C1 `canvas_connect_mailbox`, C2 catalog use-case, C3 ICP on canvas, C4 campaign ROI. Don't clone HubSpot.
 - **Sales deck has zero customer proof.** *Blocker: one design partner and one measured result.*
 - **No ad adapter has run against a live account** (eight, all recorded-payload tested). *Blocker: a sandbox/live account + developer app per network.*
 - **Ad and social accounts connect by pasted token, not OAuth.** Code side is a registry entry + callback per network. *Blocker: a developer app and publishing/spend review per network.*
@@ -294,6 +268,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Project memory has no embedding fallback** (`vector(1536)` vs 1024-wide BGE). *Blocker: design decision* — second vector column or the same model from a second host.
 - **Vision gate skips `@cf/google/gemma-4-26b-a4b-it`** (declares `['tools']`). *Blocker: one live image request;* add `'vision'` if it works.
 - **`/incidents?tab=escalation` 404 in production** — likely an RSC prefetch miss. *Blocker: response headers from the deployed Worker.*
+- **Strategy content is still public in two places** (repo is public). (1) Git history still holds the files now in `docs/private/`, `ROADMAP.md`'s old ARR/Risk sections, and the 40 `SECURITY-FINDINGS.local.md` headings in old `.builderforce/symbols.json` commits. Purging them means a history rewrite plus a force-push. (2) The full pitch deck (TAM/SAM/SOM, competitive quadrant, internal ARR targets) is still a public download via `MEDIA_KIT` in `frontend/src/lib/content/brand.ts` → `frontend/public/media/` (the `/media` page and the Sales hub). *Blocker: operator decision* on whether to rewrite history and whether to keep or trim the public deck.
 
 ### LLM gateway, routing and cost `[agents]`
 

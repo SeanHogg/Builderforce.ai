@@ -1,7 +1,7 @@
 # PRD 26 — Advisor Platform implementation notes
 
 **Epic:** #2522  
-**Spec:** `specs/builderforce/26-prd-advisor-platform.md`  
+**Spec:** `docs/specs/26-prd-advisor-platform.md`  
 **Owner:** developer on the epic  
 **Date:** 2026-09-16  
 **Principle:** Compose existing primitives. Do not clone SCORE.  

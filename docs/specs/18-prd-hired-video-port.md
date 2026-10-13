@@ -534,7 +534,7 @@ Only after T1–T6 land for a surface. Per-surface, not big-bang:
 
 This section replaces the assumption the tracks were written under. The tracks assumed the
 remaining port was a SCHEMA port: ~360 tables to create, then behaviour on top. It is not.
-`specs/builderforce/data-model/source-to-target.tsv` — the committed coverage map, guarded by
+`docs/specs/data-model/source-to-target.tsv` — the committed coverage map, guarded by
 `check-model-coverage.mjs` — already assigns **every remaining hired.video table to a primitive
 this schema owns**, and the target schema is 362/363 written. Re-verified table by table on
 2026-08-22 against `api/src/infrastructure/database/schema/`.

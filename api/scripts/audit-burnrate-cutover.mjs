@@ -19,7 +19,7 @@ import { neon } from '@neondatabase/serverless';
 import { readBurnrateCutoverPolicy, validateBurnrateCutoverPolicy } from './check-burnrate-cutover-policy.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const mapPath = resolve(here, '..', '..', 'specs', 'builderforce', 'data-model', 'source-to-target.tsv');
+const mapPath = resolve(here, '..', '..', 'docs', 'specs', 'data-model', 'source-to-target.tsv');
 const args = new Set(process.argv.slice(2));
 const outputFlag = process.argv.indexOf('--output');
 const outputPath = outputFlag >= 0 ? process.argv[outputFlag + 1] : null;

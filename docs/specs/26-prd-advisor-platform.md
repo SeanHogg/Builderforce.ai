@@ -2,7 +2,7 @@
 
 **Status:** Product contract for epic **#2522** · rewritten 2026-09-16 on ticket **#2604**
 **Owner:** platform (Talent listing + meetings + board-sync)
-**Board:** epic **#2522** · Spec path (do not change): `specs/builderforce/26-prd-advisor-platform.md`
+**Board:** epic **#2522** · Spec path (do not change): `docs/specs/26-prd-advisor-platform.md`
 **Companion (compose-only):** [`26-implementation-notes-advisor-platform.md`](./26-implementation-notes-advisor-platform.md) — build detail only; **this file wins** if the two diverge
 **Not this epic:** marketplace composition A0–A5, `/marketplace?family=talent` Book bind, restricted Brain thread — those belong to epic **#2545** (see §6)
 

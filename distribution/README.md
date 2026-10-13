@@ -1,9 +1,8 @@
 # Distribution
 
-Everything needed to list Builderforce in a marketplace. The research behind the
-channel choices is in [docs/marketing/DISTRIBUTION-CHANNELS.md](../docs/marketing/DISTRIBUTION-CHANNELS.md);
-this directory is the operational half — what actually ships, and what is still
-waiting on a credential.
+Everything needed to list Builderforce in a marketplace. The channel research behind
+it is operator-only (`docs/private/`, not in source control); this directory is the
+operational half — what actually ships, and what is still waiting on a credential.
 
 ## Canonical copy
 

@@ -6,7 +6,7 @@
  * that number invites is silent: a table nobody claimed, dropped because no one
  * noticed it was load-bearing. The defence is a committed map — every source
  * table, the move that takes it there, and the target it lands in — with zero
- * rows unaccounted. `specs/builderforce/data-model/source-to-target.tsv` is that
+ * rows unaccounted. `docs/specs/data-model/source-to-target.tsv` is that
  * map, and this guard is what stops it rotting into a document nobody re-checks.
  *
  * TWO PHASES, because the target schema does not exist yet.
@@ -34,7 +34,7 @@ import { parseDrizzleTables } from './lib/drizzleSchema.mjs';
 
 const here = resolve(fileURLToPath(import.meta.url), '..');
 const srcDir = resolve(here, '..', 'src');
-const mapPath = resolve(here, '..', '..', 'specs', 'builderforce', 'data-model', 'source-to-target.tsv');
+const mapPath = resolve(here, '..', '..', 'docs', 'specs', 'data-model', 'source-to-target.tsv');
 
 /** The roster totals PRD 20 §3 enumerates. If the map stops agreeing with these,
  *  one of the two is wrong and the build should say so rather than pick a winner.

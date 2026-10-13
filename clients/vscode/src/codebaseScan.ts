@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as crypto from "crypto";
+import { gitIgnoredMatcher } from "@builderforce/agent-tools/node-git-ignore";
 import { routeComplete, type ModelRoute } from "./modelRouting";
 
 const SKIP_DIRS = new Set([
@@ -56,6 +57,8 @@ async function scanTree(root: string): Promise<ScanData> {
   const extCounts = new Map<string, number>();
   let fileCount = 0;
   let truncated = false;
+  // The map lands in `.builderforce/`, which teams commit — a gitignored path never goes in it.
+  const isIgnored = await gitIgnoredMatcher(root);
 
   async function rec(abs: string, rel: string, depth: number): Promise<void> {
     if (dirs.length > MAX_DIRS) {
@@ -69,20 +72,21 @@ async function scanTree(root: string): Promise<ScanData> {
       return;
     }
     for (const e of entries) {
+      const childRel = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) {
-        if (SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-        const childRel = rel ? `${rel}/${e.name}` : e.name;
+        if (SKIP_DIRS.has(e.name) || e.name.startsWith(".") || isIgnored(childRel)) continue;
         dirs.push(childRel);
         if (depth < MAX_DEPTH) await rec(path.join(abs, e.name), childRel, depth + 1);
       } else if (e.isFile()) {
+        if (isIgnored(childRel)) continue;
         fileCount++;
         const ext = path.extname(e.name).toLowerCase() || "(none)";
         extCounts.set(ext, (extCounts.get(ext) ?? 0) + 1);
-        if (isManifest(e.name)) manifests.push(rel ? `${rel}/${e.name}` : e.name);
+        if (isManifest(e.name)) manifests.push(childRel);
         // Index every root file, plus docs (*.md) one level down, so top-level
         // documents are named in the map (not just counted).
         if (rootFiles.length < MAX_ROOT_FILES && (depth === 0 || (depth === 1 && ext === ".md"))) {
-          rootFiles.push(rel ? `${rel}/${e.name}` : e.name);
+          rootFiles.push(childRel);
         }
       }
     }
@@ -111,9 +115,13 @@ function topExts(extCounts: Map<string, number>, n = 10): string {
 
 /** Indented tree from a flat list of relative dir paths, bounded by depth + line count. */
 function renderTree(dirs: string[], maxDepth: number, maxLines: number): string {
+  // Sort by path SEGMENTS, not the raw string: "-" sorts before "/", so a plain sort puts
+  // `docs-site` between `docs` and `docs/api`, and the indented tree then draws `api/`
+  // under `docs-site/`. A "\0" separator sorts below every name character.
+  const segmentKey = (d: string) => d.split("/").join("\0");
   const shown = dirs
     .filter((d) => d.split("/").length <= maxDepth)
-    .sort()
+    .sort((a, b) => (segmentKey(a) < segmentKey(b) ? -1 : segmentKey(a) > segmentKey(b) ? 1 : 0))
     .slice(0, maxLines);
   const lines = shown.map((d) => {
     const parts = d.split("/");

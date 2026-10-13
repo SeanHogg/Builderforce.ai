@@ -1,6 +1,6 @@
 # Agent Personas — Guide
 
-> See also: [Architecture](../ARCHITECTURE.md#persona-plugin-system) · [Business Roadmap](../BUSINESS_ROADMAP.md)
+> See also: [Architecture](../ARCHITECTURE.md#persona-plugin-system)
 
 Personas are agent role definitions that shape **identity, communication style, and
 decision-making** for every sub-agent spawned in a workflow. They can be:

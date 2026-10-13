@@ -91,11 +91,8 @@ Top-level files (name a file directly with read_file; use list_files with a `glo
 - Dockerfile.api
 - Dockerfile.frontend
 - LICENSE
-- LIGHT_THEME_BURNRATE.md
-- PRD.md
 - README.md
 - ROADMAP.md
-- SECURITY-FINDINGS.local.md
 - agent-runtime/CHANGELOG.md
 - brain-embedded/README.md
 - browser-sdk/README.md
@@ -117,8 +114,6 @@ Top-level files (name a file directly with read_file; use list_files with a `glo
 - server.json
 - studio-embedded/README.md
 - studio/README.md
-- tsgo-api.log
-- tsgo-fe.log
 - voice/README.md
 - webdit/README.md
 
@@ -308,7 +303,6 @@ agent-runtime/
     sag/
     session-logs/
     sherpa-onnx-tts/
-      bin/
     skill-creator/
       scripts/
     slack/
@@ -405,8 +399,6 @@ agent-runtime/
         schema/
       server/
       server-methods/
-        __tests__/
-        ws-connection/
     hooks/
       bundled/
         boot-md/
@@ -494,9 +486,6 @@ agent-runtime/
       styles/
         chat/
       ui/
-        __screenshots__/
-          config-form.browser.test.ts/
-          navigation.browser.test.ts/
         chat/
         components/
         controllers/
@@ -848,7 +837,6 @@ clients/
     l10n/
     media/
       webview/
-    out-integration/
     src/
     test-integration/
     webview/
@@ -921,33 +909,17 @@ docs-site/
           tools/
           web/
     styles/
-  api/
-  compliance/
-  design/
-    creation-canvas/
-      evidence/
-  guides/
-  marketing/
-  partnerships/
 feedback-sdk/
   src/
 frontend/
   docs/
   public/
     blog/
-    blog-i18n/
-      de/
-      es/
-      fr/
-      zh/
-      og/
-    i18n/
     ide/
     images/
       hero/
     media/
       sales/
-    ort/
   scripts/
     lib/
   src/
@@ -981,7 +953,6 @@ frontend/
         [slug]/
       book/
       book-demo/
-        [token]/
       brainstorm/
       career/
       ceremonies/
@@ -1079,15 +1050,6 @@ frontend/
       legal-documents/
         shared/
           [token]/
-        accessibility/
-        ai-transparency/
-        compliance/
-        cookies/
-        dpa/
-        privacy/
-        privacy-rights/
-        subprocessors/
-        terms/
       login/
       logs/
       lti/
@@ -1164,9 +1126,6 @@ frontend/
         [id]/
       training/
       tutorials/
-      webcontainer/
-        connect/
-          [id]/
       workflows/
         builder/
       workforce/
@@ -1299,7 +1258,6 @@ frontend/
       tools/
       ui/
       video/
-      webcontainer/
       widgets/
         registry-modules/
       workforce/
@@ -1365,7 +1323,6 @@ frontend/
       kernel/
       live/
       marketplace/
-      meetings/
       office/
       onboarding/
       pm/
@@ -1378,10 +1335,6 @@ frontend/
       widgets/
     test/
     types/
-marketing/
-  pitch-deck/
-    slides/
-  sxsw-pitch/
 packages/
   agent-loop/
     src/
@@ -1431,15 +1384,6 @@ packages/
     src/
 qa-e2e/
   src/
-  test-results/
-    creation-canvas-anonymous--505a6-cted-local-Creation-Session-chromium/
-    creation-canvas-desktop-1440-dark-command-bar-no-app-bar-chromium/
-    creation-canvas-desktop-1440-light-command-bar-no-app-bar-chromium/
-    creation-canvas-phone-360-still-draws-the-app-bar-chromium/
-    creation-canvas-phone-390×844-dark-app-bar-no-command-bar-chromium/
-    creation-canvas-phone-390×844-light-app-bar-no-command-bar-chromium/
-    creation-canvas-signed-in--6a8a5-en-a-durable-Canvas-Session-chromium/
-    creation-canvas-the-QA-obj-3e861-icker-and-land-on-the-board-chromium/
   tests/
 scripts/
   lib/
@@ -1450,18 +1394,13 @@ sdk/
     domain/
     infrastructure/
 specs/
-  builderforce/
-    data-model/
   tasks/
 studio/
 studio-embedded/
   src/
     components/
     test/
-  scripts/
   src/
-    engine/
-      voice/
 voice/
   src/
 webdit/

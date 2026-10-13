@@ -1,6 +1,6 @@
 # Custom BuilderForce Agentss with a Custom LLM
 
-> **See also:** [Architecture](../ARCHITECTURE.md) · [Agent Personas](agent-personas.md) · [Business Roadmap](../BUSINESS_ROADMAP.md)  
+> **See also:** [Architecture](../ARCHITECTURE.md) · [Agent Personas](agent-personas.md)  
 > **IDE spec reference:** `ide-architecture (1).md` in the repository root — the Builderforce.ai IDE
 > architecture document (v2.0, March 2026). The filename with `(1)` is the verbatim filename as
 > it exists in the repo root.

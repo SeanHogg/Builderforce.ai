@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./symbols": "./src/symbols.ts",
     "./node-path": "./src/node-path.ts",
-    "./node-symbols": "./src/node-symbols.ts"
+    "./node-symbols": "./src/node-symbols.ts",
+    "./node-git-ignore": "./src/node-git-ignore.ts"
   },
   "types": "./src/index.ts",
   "scripts": {

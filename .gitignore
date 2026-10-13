@@ -65,6 +65,8 @@ worker/secrets.json
 **/.wrangler/
 # Operator-only security findings / leak disclosures — never commit
 *.local.md
+# Strategy, competitor analysis, pitch decks, GTM research — operator-only; this repo is public
+docs/private/
 
 # Runtime workspace/session data (transient)
 .builderforce/sessions/

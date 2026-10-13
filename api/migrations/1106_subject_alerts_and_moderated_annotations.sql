@@ -1,7 +1,7 @@
 -- 1106 · Two generalisations that let the points economy and employer reviews land
 --        with ZERO new tables.
 --
--- Both halves exist because the coverage map (specs/builderforce/data-model/
+-- Both halves exist because the coverage map (docs/specs/data-model/
 -- source-to-target.tsv) already assigns the incoming capability to a primitive this
 -- schema owns, and in each case the primitive was one column short of being able to
 -- hold it honestly. Adding the column is the whole change; a `points_fraud_flags`
