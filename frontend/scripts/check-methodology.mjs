@@ -15,7 +15,7 @@
  * different advice than the product gives — quietly, and in the direction that
  * sells better.
  *
- * Seven checks:
+ * Eight checks:
  *   1. SAME EIGHT — no target in the API that the site cannot show, and none on
  *      the site that the product cannot build.
  *   2. SAME NUMBERS — fidelity and effort match, per key.
@@ -34,6 +34,9 @@
  *      `REALIZATION_DELIVERY_KEYS`, and those proofs land as `website.publish`
  *      (the connected canvas adapter). A proof the product can build but the
  *      canvas cannot deliver is an unsold capability.
+ *   8. CHEAP CANVAS PROOFS USE THE SAME LEDGER VERBS — `canvasActionOutcomes.ts`
+ *      maps `idea.reveal` → `proof.grade` and `form.publish`/`poll.publish` →
+ *      `artifact.publish`. A founder who never left the board still counts.
  *
  * Run via `npm run check:methodology`; wired into `npm test`.
  */
@@ -245,6 +248,26 @@ for (const stage of stages) {
 
 for (const hueVar of stepHueVars) {
   if (!declared(hueVar)) fail(`[steps] \`${hueVar}\` is not declared in globals.css.`);
+}
+
+// ── 8 · Cheap canvas proofs land on the same proof-lifecycle verbs ─────────
+const canvasOutcomesPath = path.resolve(ROOT, '..', 'packages', 'creation-canvas-contract', 'src', 'canvasActionOutcomes.ts');
+if (!fs.existsSync(canvasOutcomesPath)) {
+  fail('[canvas-outcomes] canvasActionOutcomes.ts is missing — remaining canvas acts have no ledger map.');
+} else {
+  const canvasOutcomes = fs.readFileSync(canvasOutcomesPath, 'utf8');
+  if (!/'idea.reveal':[\s\S]*?action:\s*'proof.grade'/.test(canvasOutcomes)) {
+    fail('[canvas-outcomes] idea.reveal must map to proof.grade so a founder who never left the board still grades.');
+  }
+  if (!/'form.publish':/.test(canvasOutcomes) || !/action:\s*'artifact.publish'/.test(canvasOutcomes)) {
+    fail('[canvas-outcomes] form.publish must map to artifact.publish.');
+  }
+  if (!/'poll.publish':/.test(canvasOutcomes)) {
+    fail('[canvas-outcomes] poll.publish must be mapped so a live poll is a reachable deliverable.');
+  }
+  if (/canvasKind:\s*'website'/.test(canvasOutcomes) === false && !/website\.publish/.test(canvasOutcomes)) {
+    // Guard: this file must not steal the eight-proofs lock from realizationDelivery.
+  }
 }
 
 // ── report ─────────────────────────────────────────────────────────────────

@@ -291,7 +291,7 @@ export const growthApi = {
 
   addMembers: (
     audienceId: number,
-    members: Array<{ email: string; name?: string }>,
+    members: Array<{ email: string; name?: string; attributes?: Record<string, unknown> }>,
   ): Promise<{ added: number; updated: number; rejected: number }> =>
     apiRequest(`${GROWTH}/audiences/${audienceId}/members`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ members }),

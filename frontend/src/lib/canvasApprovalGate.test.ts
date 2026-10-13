@@ -31,6 +31,9 @@ const entry = (over: Partial<ProvenanceEntry> = {}): ProvenanceEntry => ({
 describe('the registries', () => {
   it('gates the outbound acts the CMO review named and the attested ones the CFO review named', () => {
     expect(actionIsGated('emailCampaign', 'send')).toBe(true);
+    expect(actionIsGated('form', 'send')).toBe(true);
+    expect(actionIsGated('form', 'post')).toBe(true);
+    expect(actionIsGated('form', 'publish')).toBe(false);
     expect(actionIsGated('budget', 'approve')).toBe(true);
     expect(actionIsGated('bill', 'schedule-payment')).toBe(true);
     expect(actionIsGated('note', 'edit')).toBe(false);

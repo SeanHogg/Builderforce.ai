@@ -9,6 +9,7 @@ const t = ((key: string, values?: Record<string, unknown>) => {
   if (key === 'noticeIdeaUntitled') return 'Untitled idea';
   if (key === 'noticeIdeaInterviewPlanned') return `planned ${values?.idea}`;
   if (key === 'noticeIdeaFormCreated') return `form ${values?.idea}`;
+  if (key === 'noticeIdeaRevealMissing') return 'noticeIdeaRevealMissing';
   return key;
 }) as CardActContext['t'];
 
@@ -49,6 +50,65 @@ describe('ideaActs', () => {
     expect((result.patch as { testedBy: string[] }).testedBy).toContain('Interview: Scheduler');
     expect(result.add?.nodes).toEqual([created]);
     expect(result.notice).toContain('Scheduler');
+  });
+
+  it('reveal refuses when nothing is named in testedBy — that is not a grade', async () => {
+    const result = await ideaActs.run({
+      object: idea(),
+      action: 'reveal',
+      board: { objects: [], create: () => idea() },
+      t,
+    });
+    expect(result.notice).toBe('noticeIdeaNothingToReveal');
+    expect(result.ledger).toBeUndefined();
+    expect(result.patch).toBeUndefined();
+  });
+
+  it('reveal refuses when every named card is missing from the board', async () => {
+    const result = await ideaActs.run({
+      object: idea({ testedBy: ['Interview: Scheduler'] }),
+      action: 'reveal',
+      board: { objects: [], create: () => idea() },
+      t,
+    });
+    expect(result.notice).toBe('noticeIdeaRevealMissing');
+    expect(result.ledger).toBeUndefined();
+  });
+
+  it('reveal grades a miss when the named evidence is on the board but unanswered', async () => {
+    const interview: CanvasObject = {
+      id: 'iv-1',
+      type: 'creation',
+      position: { x: 0, y: 0 },
+      data: { kind: 'customerInterview', title: 'Interview: Scheduler' },
+    };
+    const result = await ideaActs.run({
+      object: idea({ testedBy: ['Interview: Scheduler'] }),
+      action: 'reveal',
+      board: { objects: [interview], create: () => idea() },
+      t,
+    });
+    expect(result.notice).toBe('noticeIdeaRevealMissed');
+    expect(result.ledger).toEqual({ metricKey: 'proof.grade', metricValue: 0 });
+    expect(result.patch).toEqual({});
+  });
+
+  it('reveal grades a met verdict and moves the idea to validated', async () => {
+    const interview: CanvasObject = {
+      id: 'iv-1',
+      type: 'creation',
+      position: { x: 0, y: 0 },
+      data: { kind: 'customerInterview', title: 'Interview: Scheduler', verdict: 'confirmed the pain' },
+    };
+    const result = await ideaActs.run({
+      object: idea({ testedBy: ['Interview: Scheduler'], stage: 'validating' }),
+      action: 'reveal',
+      board: { objects: [interview], create: () => idea() },
+      t,
+    });
+    expect(result.patch).toEqual({ stage: 'validated' });
+    expect(result.ledger).toEqual({ metricKey: 'proof.grade', metricValue: 1 });
+    expect(result.notice).toBe('noticeIdeaRevealMet');
   });
 
   it('test authors a form from the idea and does not pull a later stage back', async () => {

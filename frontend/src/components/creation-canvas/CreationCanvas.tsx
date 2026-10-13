@@ -823,7 +823,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const { generateVideo, runCreativeAction } = useCanvasCreativeGeneration({ errorText, nodes, persistence, requireAccount, selectedNode, sessionId, setNodes, setNotice, t });
   const { exportArtifact } = useCanvasArtifactExport({ edges, nodes, setNodes, setNotice, t });
   const { revealObject, walkthroughRef, walkthroughStops, sessionFiles, downloadCanvasFile } = useCanvasFiles({ edges, exportArtifact, flowRef, nodes, revealObjectRef, setInspectorFocus, setNotice, setSelectedId, setSelectedIds, setSurface, t });
-  const { runPollAction, evaluateReleaseGate, runCardActOnObject, cardActBoard } = useCanvasCardActs({ canvasText, edges, nodes, nodesRef, persistence, requireAccount, setEdges, setNodes, setNotice, setSurface, t, tPoll, updateNodeData });
+  const { runPollAction, evaluateReleaseGate, runCardActOnObject, cardActBoard } = useCanvasCardActs({ canvasText, edges, nodes, nodesRef, persistence, requireAccount, sessionId, setEdges, setNodes, setNotice, setSurface, t, tPoll, updateNodeData });
 
   /**
    * Brain's queued object actions, one at a time. An action is about ITS object, and

@@ -24466,6 +24466,10 @@
         "noticeIdeaFormTitle": "Donnez un titre à l’idée pour nommer le formulaire.",
         "noticeIdeaFormCreated": "Formulaire créé. Publiez-le pour obtenir un lien à envoyer.",
         "noticeIdeaActFailed": "Cette action sur l’idée n’a pas pu aboutir.",
+    "noticeIdeaNothingToReveal": "Nommez l’entretien, l’expérience ou le formulaire qui a testé cette idée avant de la noter.",
+    "noticeIdeaRevealMissing": "Aucune des preuves nommées n’est sur ce tableau : {refs}.",
+    "noticeIdeaRevealMet": "Les preuves ont répondu. Cette idée est validée.",
+    "noticeIdeaRevealMissed": "Les preuves nommées sont sur le tableau mais n’ont pas encore répondu. Ce n’est pas un oui — un échec jusqu’à ce qu’elles le fassent.",
     "surface": {
       "chat": {
         "label": "Discussion",
@@ -31086,6 +31090,8 @@
     "noticeCrmImported": "Contacts CRM : {added} ajoutés, {updated} mis à jour, {rejected} rejetés.",
     "crmFailed": "Les contacts CRM n’ont pas pu être importés.",
     "publish": "Publier",
+    "send": "Envoyer",
+    "post": "Publier",
     "close": "Fermer",
     "exit": "Retour au tableau",
     "unpublishedHint": "Publiez ce formulaire pour obtenir une adresse depuis laquelle on peut répondre au téléphone. Aucun compte n’est requis pour répondre.",

@@ -24466,6 +24466,10 @@
         "noticeIdeaFormTitle": "先给想法起个标题，才能给表单命名。",
         "noticeIdeaFormCreated": "表单已创建。发布后即可获得可发送的链接。",
         "noticeIdeaActFailed": "该想法操作未能完成。",
+    "noticeIdeaNothingToReveal": "先点名测试过这个想法的访谈、实验或表单，再给它打分。",
+    "noticeIdeaRevealMissing": "点名的证据都不在这块画板上：{refs}。",
+    "noticeIdeaRevealMet": "证据已作答。这个想法已验证。",
+    "noticeIdeaRevealMissed": "点名的证据在画板上，但尚未作答。这不是通过——在作答之前是未达标。",
     "surface": {
       "chat": {
         "label": "对话",

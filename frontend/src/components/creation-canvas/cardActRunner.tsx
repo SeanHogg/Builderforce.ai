@@ -6,6 +6,7 @@ import type { CanvasObjectFactory } from '@/domains/canvas/application/Materiali
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
 import { downloadText } from '@/lib/download';
+import { recordCanvasActOutcomes } from '@/lib/recordCanvasActOutcome';
 
 /**
  * RUNNING a card act against the board, and reaching that from anywhere on the canvas.
@@ -44,38 +45,54 @@ export interface CardActBoardBinding {
   /** `'local'` is a draft on this device; acts that need a server say so themselves. */
   persistence: 'local' | 'server';
   t: CanvasTextTranslator;
+  /** Server-backed session this board is. Absent on a local draft — recording no-ops. */
+  sessionId?: string | null;
 }
 
 /** Build the runner for one board. The board mounts this once and both uses it and
  *  publishes it through {@link CardActProvider}. */
 export function useCardActRunnerFor(board: CardActBoardBinding): CardActRunner {
-  const { objects, create, setNodes, setEdges, setNotice, persistence, t } = board;
+  const { objects, create, setNodes, setEdges, setNotice, persistence, t, sessionId } = board;
   return useCallback<CardActRunner>((objectId, action) => {
     void (async () => {
+      const current = objects();
+      const kind = current.find((node) => node.id === objectId)?.data.kind;
       const outcome = await runCardAct(CARD_ACTS, {
         objectId, action, persistence, t,
-        board: { objects: objects(), create },
+        board: { objects: current, create },
       });
       // Nothing answered. The caller's own dispatch says so — guessing a sentence here
       // for an act that does not exist is how a button ends up lying about what it did.
       if (!outcome) return;
-      const { patch, add, download } = outcome;
+      const { patch, add, download, ledger } = outcome;
       if (patch || add) {
-        setNodes((current) => {
+        setNodes((nodes) => {
           const patched = patch
-            ? current.map((node) => (node.id === objectId ? { ...node, data: { ...node.data, ...patch } } : node))
-            : current;
+            ? nodes.map((node) => (node.id === objectId ? { ...node, data: { ...node.data, ...patch } } : node))
+            : nodes;
           return add ? [...patched, ...add.nodes] : patched;
         });
-        if (add?.edges.length) setEdges((current) => [...current, ...add.edges]);
+        if (add?.edges.length) setEdges((edges) => [...edges, ...add.edges]);
       }
       // A file the act described is saved here, by the one download implementation.
       if (download) downloadText(download.text, download.filename, download.mimeType);
       setNotice(outcome.notice);
       // The slow half — an LMS score push — replaces the sentence when it lands.
       if (outcome.settle) void outcome.settle.then(setNotice);
+      // A notice-only refusal (no questions, unpublished, nothing to grade) is not
+      // a delivery — do not start a correlation for work that did not happen.
+      if ((patch || add || download || ledger) && persistence === 'server' && sessionId && kind) {
+        recordCanvasActOutcomes({
+          sessionId,
+          kind,
+          action,
+          objectId,
+          patch: patch as Record<string, unknown> | undefined,
+          extra: ledger,
+        });
+      }
     })();
-  }, [objects, create, setNodes, setEdges, setNotice, persistence, t]);
+  }, [objects, create, setNodes, setEdges, setNotice, persistence, t, sessionId]);
 }
 
 const CardActContext = createContext<CardActRunner | null>(null);

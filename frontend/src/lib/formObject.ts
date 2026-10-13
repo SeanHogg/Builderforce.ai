@@ -33,6 +33,10 @@ export interface FormCardData {
   questionSetId?: unknown;
   shareUrl?: unknown;
   joinUrl?: unknown;
+  invitations?: unknown;
+  marketingAudienceId?: unknown;
+  campaignId?: unknown;
+  socialCampaignId?: unknown;
 }
 
 export function formAudienceOf(data: FormCardData): FormAudience {
@@ -202,4 +206,36 @@ export function formPublishBody(data: FormCardData, objectId: string): PublishFo
 export function formJoinUrl(slug: string): string {
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
   return `${origin}/f/${slug}`;
+}
+
+/** The public address already on the card, if any. */
+export function formShareUrl(data: FormCardData): string {
+  if (typeof data.shareUrl === 'string' && data.shareUrl) return data.shareUrl;
+  return typeof data.joinUrl === 'string' ? data.joinUrl : '';
+}
+
+/**
+ * The address a named recipient opens. The plaintext token is returned once at
+ * publish and must stay on the URL as `?t=` — the public submit path hashes it.
+ */
+export function formRecipientUrl(shareUrl: string, token?: string): string {
+  if (!token) return shareUrl;
+  const sep = shareUrl.includes('?') ? '&' : '?';
+  return `${shareUrl}${sep}t=${encodeURIComponent(token)}`;
+}
+
+/** Invitation rows the publish response wrote onto the card (email + token). */
+export function readFormInvitations(raw: unknown): Array<{ email: string; name?: string; token: string }> {
+  if (!Array.isArray(raw)) return [];
+  const out: Array<{ email: string; name?: string; token: string }> = [];
+  for (const value of raw) {
+    if (!value || typeof value !== 'object') continue;
+    const row = value as Record<string, unknown>;
+    const email = typeof row.email === 'string' ? row.email.trim() : '';
+    const token = typeof row.token === 'string' ? row.token.trim() : '';
+    if (!email.includes('@') || !token) continue;
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    out.push(name ? { email, name, token } : { email, token });
+  }
+  return out;
 }

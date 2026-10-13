@@ -31,7 +31,11 @@ import {
 } from '@/lib/founderOpsApi';
 import { payRunFieldsFrom } from '@/lib/canvasFounderOpsTools';
 import { cardRows, cardText, type CardAct, type CardActOutcome } from '@/domains/canvas/application/CardAct';
-import { formJoinUrl, formPublishBody, readFormQuestions } from '@/lib/formObject';
+import { postForm, sendForm } from '@/lib/formDistribution';
+import {
+  formAudienceOf, formJoinUrl, formPublishBody, formShareUrl,
+  readFormInvitations, readFormQuestions, readFormRecipients,
+} from '@/lib/formObject';
 import { ideaActs } from './ideaActs';
 
 /**
@@ -215,15 +219,16 @@ export const payRunSyncAct: CardAct = {
 };
 
 /**
- * `form.publish` / `form.collect` / `form.close` — the same three acts the
- * form surface's buttons use, so Brain's `canvas_invoke_object_action` and a
- * person pressing the row cannot disagree about what the card's `questions`
- * mean. Recipients come from the card's own `recipients` rows; a named-recipient
- * form with none says so and sends nothing.
+ * `form.publish` / `form.collect` / `form.close` / `form.send` / `form.post` —
+ * the same acts the form surface's buttons use, so Brain's
+ * `canvas_invoke_object_action` and a person pressing the row cannot disagree.
+ * Recipients come from the card's own `recipients` rows; a named-recipient
+ * form with none says so and sends nothing. Send writes a marketing campaign;
+ * Post writes a social campaign. Both surface blockers before they fire.
  */
 export const formActs: CardAct = {
   kind: 'form' as CardAct['kind'],
-  actions: ['publish', 'collect', 'close'],
+  actions: ['publish', 'collect', 'close', 'send', 'post'],
   accountRequired: 'noticeFormNeedsAccount',
   failureNotice: 'noticeFormFailed',
   async run({ object, action, t }): Promise<CardActOutcome> {
@@ -244,6 +249,7 @@ export const formActs: CardAct = {
           shareUrl: url,
           joinUrl: url,
           status: result.status,
+          ...(result.invitations.length ? { invitations: result.invitations } : {}),
         },
         notice: t('noticeFormPublished', { url }),
       };
@@ -264,6 +270,41 @@ export const formActs: CardAct = {
         },
         notice: t('noticeFormCollected', { count: summary.submissionCount }),
       };
+    }
+
+    if (action === 'send') {
+      const result = await sendForm({
+        title: typeof data.title === 'string' ? data.title : '',
+        shareUrl: formShareUrl(data),
+        audience: formAudienceOf(data),
+        recipients: readFormRecipients(data.recipients),
+        invitations: readFormInvitations(data.invitations),
+        marketingAudienceId: typeof data.marketingAudienceId === 'number' ? data.marketingAudienceId : undefined,
+      });
+      if (!result.ok) {
+        if (result.reason === 'unpublished') return { notice: t('noticeFormUnpublished') };
+        if (result.reason === 'noAudience') return { notice: t('noticeFormNoAudience') };
+        return {
+          ...(result.campaignId ? { patch: { campaignId: result.campaignId } } : {}),
+          notice: t('noticeFormBlocked', { blockers: (result.blockers ?? []).join(', ') }),
+        };
+      }
+      return { patch: { campaignId: result.campaignId }, notice: t('noticeFormSent', { queued: result.queued }) };
+    }
+
+    if (action === 'post') {
+      const result = await postForm({
+        title: typeof data.title === 'string' ? data.title : '',
+        shareUrl: formShareUrl(data),
+      });
+      if (!result.ok) {
+        if (result.reason === 'unpublished') return { notice: t('noticeFormUnpublished') };
+        return {
+          ...(result.campaignId ? { patch: { socialCampaignId: result.campaignId } } : {}),
+          notice: t('noticeFormBlocked', { blockers: (result.blockers ?? []).map((row) => row.code).join(', ') }),
+        };
+      }
+      return { patch: { socialCampaignId: result.campaignId }, notice: t('noticeFormPosted', { published: result.published }) };
     }
 
     await closeForm(questionSetId);

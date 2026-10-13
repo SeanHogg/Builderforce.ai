@@ -63,6 +63,10 @@ export const GATED_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   socialCampaign: ['publish'],
   website: ['publish'],
   investorUpdate: ['send'],
+  // Form Send/Post leave the building the same way a campaign does. Publish
+  // stays open so any editor can mint the join address; Send is Manager-gated
+  // (PRD 27 FR-6).
+  form: ['send', 'post'],
   dataRoom: ['share'],
   // Attested — the CFO half. Approving a budget, authorising a bill and issuing an
   // invoice are the three acts a finance function exists to control, and all three were
