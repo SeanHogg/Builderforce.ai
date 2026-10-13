@@ -18,7 +18,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { getPullRequestDetail } from './getPullRequestDetail';
+import { getPullRequestDetail, type PullRequestDetail } from './getPullRequestDetail';
+import { isNetDestructiveDiff } from './getPullRequestDiffSummary';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { setPullRequestBuildStatus } from './recordPullRequestRow';
 
@@ -37,23 +38,27 @@ export interface PollablePr {
  * Skips the provider round-trip entirely when the row is already 'success' (terminal
  * for on_green) or has no repo/number to query.
  */
+async function loadPrDetail(env: Env, db: Db, tenantId: number, pr: PollablePr): Promise<PullRequestDetail | null> {
+  if (!pr.repoId || pr.number == null) return null;
+  const secret = integrationCredentialSecret(env);
+  const resolved = await resolveRepoCredential(db, secret, tenantId, pr.repoId);
+  if (isResolveError(resolved)) return null;
+  const versionToken = pr.updatedAt instanceof Date ? pr.updatedAt.toISOString() : String(pr.updatedAt);
+  return getPullRequestDetail(env, pr.id, versionToken, {
+    provider: resolved.repo.provider, host: resolved.repo.host,
+    owner: resolved.repo.owner, repo: resolved.repo.repo,
+    token: resolved.token, number: pr.number,
+  });
+}
+
 export async function pollPrCiStatus(env: Env, db: Db, tenantId: number, pr: PollablePr): Promise<string | null> {
   // Already green — nothing to poll; the caller can merge.
   if (pr.buildStatus === 'success') return 'success';
   if (!pr.repoId || pr.number == null) return pr.buildStatus;
 
   try {
-    const secret =
-      integrationCredentialSecret(env);
-    const resolved = await resolveRepoCredential(db, secret, tenantId, pr.repoId);
-    if (isResolveError(resolved)) return pr.buildStatus;
-
-    const versionToken = pr.updatedAt instanceof Date ? pr.updatedAt.toISOString() : String(pr.updatedAt);
-    const detail = await getPullRequestDetail(env, pr.id, versionToken, {
-      provider: resolved.repo.provider, host: resolved.repo.host,
-      owner: resolved.repo.owner, repo: resolved.repo.repo,
-      token: resolved.token, number: pr.number,
-    });
+    const detail = await loadPrDetail(env, db, tenantId, pr);
+    if (!detail) return pr.buildStatus;
 
     // `checks` is the combined head-commit status ('success' | 'failure' | 'pending'),
     // or null when the provider reports no checks configured. Treat "no checks" as
@@ -69,3 +74,22 @@ export async function pollPrCiStatus(env: Env, db: Db, tenantId: number, pr: Pol
     return pr.buildStatus;
   }
 }
+
+/**
+ * Line-count snapshot for the merge-gate net-destructive heuristic. Best-effort:
+ * missing credentials / provider totals return null (do not block the merge).
+ */
+export async function pollPrLineStats(
+  env: Env, db: Db, tenantId: number, pr: PollablePr,
+): Promise<{ additions: number; deletions: number } | null> {
+  try {
+    const detail = await loadPrDetail(env, db, tenantId, pr);
+    if (!detail) return null;
+    if (detail.additions == null || detail.deletions == null) return null;
+    return { additions: detail.additions, deletions: detail.deletions };
+  } catch {
+    return null;
+  }
+}
+
+export { isNetDestructiveDiff };

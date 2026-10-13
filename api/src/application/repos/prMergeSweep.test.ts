@@ -134,6 +134,18 @@ describe('the queue semantics carried over unchanged', () => {
     expect(sweepSrc).toMatch(/resolveRequiredSignoffGate\(/);
     expect(sweepSrc).toMatch(/if \(!policy\.allowAutoMerge\) \{/);
   });
+
+  it('blocks net-destructive diffs with the same MERGE_BLOCKED continue as withheld authority', () => {
+    expect(sweepSrc).toMatch(/pollPrLineStats\(/);
+    expect(sweepSrc).toMatch(/isNetDestructiveDiff\(/);
+    expect(sweepSrc).toMatch(/gate: 'net_destructive_diff'/);
+    const allow = sweepSrc.indexOf('if (!policy.allowAutoMerge) {');
+    const dest = sweepSrc.indexOf("gate: 'net_destructive_diff'");
+    const merge = sweepSrc.indexOf('const result = await mergeRecordedPullRequest');
+    expect(allow).toBeGreaterThan(-1);
+    expect(dest).toBeGreaterThan(allow);
+    expect(dest).toBeLessThan(merge);
+  });
 });
 
 /**

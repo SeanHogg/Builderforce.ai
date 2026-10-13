@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyDiffPath, summarizeDiffFiles } from './getPullRequestDiffSummary';
+import { classifyDiffPath, isNetDestructiveDiff, summarizeDiffFiles } from './getPullRequestDiffSummary';
 
 describe('pull request diff summary', () => {
   it.each([
@@ -31,5 +31,25 @@ describe('pull request diff summary', () => {
     const result = summarizeDiffFiles([{ filename: 'PRD.md' }, { filename: 'docs/runbook.mdx' }]);
     expect(result.docsOnly).toBe(true);
     expect(result.codeChanged).toBe(false);
+    expect(result.netDestructive).toBe(false);
+  });
+
+  it('flags a docs-only rewrite whose deletions dwarf additions', () => {
+    const result = summarizeDiffFiles([{ filename: 'DONE.md', additions: 5, deletions: 34118 }]);
+    expect(result.docsOnly).toBe(true);
+    expect(result.netDestructive).toBe(true);
+  });
+});
+
+describe('isNetDestructiveDiff', () => {
+  it('holds a PR that deletes far more than it adds', () => {
+    expect(isNetDestructiveDiff(5, 34118)).toBe(true);
+    expect(isNetDestructiveDiff(0, 200)).toBe(true);
+  });
+
+  it('does not flag a small delete or a balanced rewrite', () => {
+    expect(isNetDestructiveDiff(0, 20)).toBe(false);
+    expect(isNetDestructiveDiff(400, 500)).toBe(false);
+    expect(isNetDestructiveDiff(100, 400)).toBe(false);
   });
 });

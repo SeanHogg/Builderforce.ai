@@ -42,6 +42,38 @@ describe('commitFileToRepo — GitLab [non-github write]', () => {
     expect(r.ok && r.existed).toBe(true);
     expect(methods).toContain('PUT');
   });
+
+  it('refuses overwrite when the existence probe is not 404', async () => {
+    const fileMethods: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/repository/files/')) fileMethods.push(init?.method ?? 'GET');
+      if (url.includes('/repository/branches?')) return res({}, 400);
+      if (url.includes('/repository/files/') && (init?.method ?? 'GET') === 'GET') return res({ message: '500' }, 500);
+      if (url.includes('/repository/files/')) return res({ file_path: 'src/x.ts' }, 200);
+      return res({}, 404);
+    }));
+    const r = await commitFileToRepo({ ...commitBase, provider: 'gitlab' });
+    expect(r.ok).toBe(false);
+    expect(r.ok ? '' : r.code).toBe('unreadable');
+    expect(fileMethods).toEqual(['GET']);
+  });
+
+  it('refuses replacing a large existing file with a much smaller body', async () => {
+    const methods: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      methods.push(init?.method ?? 'GET');
+      if (url.includes('/repository/branches?')) return res({}, 400);
+      if (url.includes('/repository/files/') && (init?.method ?? 'GET') === 'GET') {
+        return res({ file_path: 'src/x.ts', size: 20000 }, 200);
+      }
+      if (url.includes('/repository/files/')) return res({ file_path: 'src/x.ts' }, 200);
+      return res({}, 404);
+    }));
+    const r = await commitFileToRepo({ ...commitBase, provider: 'gitlab', content: 'tiny\n' });
+    expect(r.ok).toBe(false);
+    expect(r.ok ? '' : r.code).toBe('destructive_overwrite');
+    expect(methods).not.toContain('PUT');
+  });
 });
 
 describe('deleteFileFromRepo — GitLab', () => {
@@ -83,5 +115,43 @@ describe('commitFileToRepo — Bitbucket Cloud (/src form-encoded)', () => {
     const r = await commitFileToRepo({ ...commitBase, provider: 'gitea' });
     expect(r.ok).toBe(false);
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('commitFileToRepo — GitHub overwrite guard', () => {
+  function githubFetch(contents: Response, extra?: { put?: boolean }) {
+    const put = extra?.put === true;
+    return vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (url.includes('/git/ref/heads/')) return res({ object: { sha: 'basesha' } });
+      if (url.endsWith('/git/refs') && method === 'POST') return res({ ref: 'refs/heads/feature' }, 201);
+      if (url.includes('/contents/') && method === 'GET') return contents;
+      if (url.includes('/contents/') && method === 'PUT') {
+        if (!put) throw new Error('PUT should not have been sent');
+        return res({ commit: { html_url: 'https://example/commit' } });
+      }
+      return res({}, 404);
+    });
+  }
+
+  it('still creates when GitHub reports the path missing', async () => {
+    vi.stubGlobal('fetch', githubFetch(res({ message: 'Not Found' }, 404), { put: true }));
+    const r = await commitFileToRepo({ ...commitBase, provider: 'github' });
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.existed).toBe(false);
+  });
+
+  it('hard-stops when GitHub cannot read the existing file', async () => {
+    vi.stubGlobal('fetch', githubFetch(res({ message: 'server error' }, 500)));
+    const r = await commitFileToRepo({ ...commitBase, provider: 'github' });
+    expect(r.ok).toBe(false);
+    expect(r.ok ? '' : r.code).toBe('unreadable');
+  });
+
+  it('refuses shrinking a large GitHub file', async () => {
+    vi.stubGlobal('fetch', githubFetch(res({ sha: 'filesha', size: 34000 })));
+    const r = await commitFileToRepo({ ...commitBase, provider: 'github', content: '# tiny\n' });
+    expect(r.ok).toBe(false);
+    expect(r.ok ? '' : r.code).toBe('destructive_overwrite');
   });
 });
