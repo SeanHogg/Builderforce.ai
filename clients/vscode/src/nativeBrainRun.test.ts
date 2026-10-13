@@ -385,6 +385,33 @@ describe("a governance gate", () => {
     expect(approvals).toHaveLength(1);
     expect(approvals[0]?.gateReason).toBe("writes need a reviewer");
   });
+
+  it("blocks write_file on a path-scoped glob and allows a path outside it", async () => {
+    const gates: PolicyGate[] = [
+      { id: "no-secret", tool: "write_file", effect: "block", paths: ["src/secret/**"], reason: "secrets are off-limits" },
+    ];
+    const blocked = toolDef("write_file", { mutating: true });
+    const { log: blockedLog } = await runTurn({
+      tools: [blocked],
+      policyGates: gates,
+      permissionMode: "acceptEdits",
+      script: (ctx) =>
+        ctx.turn === 0 ? { toolCalls: [{ name: "write_file", args: { path: "src/secret/x.ts" } }] } : { text: "refused." },
+    });
+    expect(blocked.calls).toHaveLength(0);
+    expect(blockedLog.toolResults.some((r) => !r.ok)).toBe(true);
+
+    const allowed = toolDef("write_file", { mutating: true });
+    await runTurn({
+      tools: [allowed],
+      policyGates: gates,
+      permissionMode: "acceptEdits",
+      script: (ctx) =>
+        ctx.turn === 0 ? { toolCalls: [{ name: "write_file", args: { path: "README.md" } }] } : { text: "done" },
+    });
+    expect(allowed.calls).toHaveLength(1);
+    expect(allowed.calls[0]).toMatchObject({ path: "README.md" });
+  });
 });
 
 // The workspace's committed `.builderforce/` directives, end-to-end through the real loop.
@@ -574,6 +601,14 @@ describe("nativeNeedsConfirm", () => {
 
   it("treats an unknown tool as mutating", () => {
     expect(nativeNeedsConfirm(defs, "ask", undefined)({ name: "mystery", args: {} })).toBe(true);
+  });
+
+  it("pauses on a path-scoped require-approval gate even in acceptEdits", () => {
+    const gates: PolicyGate[] = [
+      { id: "review-secret", tool: "write_file", effect: "require-approval", paths: ["src/secret/**"], reason: "secrets need a reviewer" },
+    ];
+    expect(nativeNeedsConfirm(defs, "acceptEdits", gates)({ name: "write_file", args: { path: "src/secret/x.ts" } })).toBe(true);
+    expect(nativeNeedsConfirm(defs, "acceptEdits", gates)({ name: "write_file", args: { path: "README.md" } })).toBe(false);
   });
 });
 

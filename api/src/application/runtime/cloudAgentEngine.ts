@@ -88,7 +88,7 @@ import {
   assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey, type RawToolCall,
 } from './cloudAgentTools';
 import {
-  CURRENT_ENGINE_ID, evaluatePolicyGate, filterByGlob, applyStringEdit, editFacts,
+  CURRENT_ENGINE_ID, evaluatePolicyGate, toolCallPaths, filterByGlob, applyStringEdit, editFacts,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type PolicyGate, type AgentExecParams, type Capability,
   type PrdWriteCapability, type PrdUpdateResult, type ToolSchema,
 } from '@builderforce/agent-tools';
@@ -1455,7 +1455,7 @@ async function runCloudToolLoop(
       // the agent sees the refusal and must take another path; `require-approval` parks
       // the run on a human question (reusing the ask_human pause/resume path) the FIRST
       // time it is reached, then proceeds once the human has answered (the run resumes).
-      const gate = evaluatePolicyGate(policyGates, name);
+      const gate = evaluatePolicyGate(policyGates, name, toolCallPaths(parsed));
       const candidatePath = typeof parsed.path === 'string' ? parsed.path : null;
       const prospectiveFiles = candidatePath && /^(write_file|edit_file|delete_file)$/.test(name) && !writtenPaths.has(candidatePath)
         ? writtenPaths.size + 1 : writtenPaths.size;

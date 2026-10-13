@@ -57,7 +57,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 | P | Promise | Honest position today | Proof required | Status |
 |---|---|---|---|---|
 | P0 | One canvas from idea to real | Connects supported artifacts into supported delivery | Release-gated journey test per marketed artifact | 🔄 Partial |
-| P0 | People control agent work | Policy gates on configured paths | Classify every mutating tool; CI fails on an unclassified one | 🔄 In Progress |
+| P0 | People control agent work | Policy gates on configured paths | Classify every mutating tool; CI fails on an unclassified one | ✅ Available |
 | P0 | Complete agent auditability | Supported workflows emit records | One audit envelope at every mutation entry point | 🔄 Partial |
 | P0 | Private, local AI work | WebGPU is local; collab/eval/publish transmit | Boundary manifest per action, shown before execution | 🔄 In Progress |
 | P1 | Evermind stays current | Keyed updates replace superseded facts | Provenance, contradiction detection, freshness budgets, stale-recall evals | 📋 Planned |
