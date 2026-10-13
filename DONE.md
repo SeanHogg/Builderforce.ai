@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-10-13 — Remaining Canvas acts onto the outcome contract (epic #3077)
+
+Connected canvas acts now emit correlated ledger events instead of applying a patch and stopping. Draft objects are still not proofs.
+
+- **Mapping is data.** `packages/creation-canvas-contract/src/canvasActionOutcomes.ts` maps `kind.action` onto proof-lifecycle / delivery verbs. Missing keys fall back to `{kind}.{action}`. Methodology check 8 ratchets `idea.reveal` → `proof.grade` and `form.publish`/`poll.publish` → `artifact.publish`. The eight-proofs lock on `website.publish` is unchanged.
+- **One writer.** `frontend/src/lib/recordCanvasActOutcome.ts` emits `started` then one terminal, same `correlationId` (`act:{objectId}:{kind}.{action}`). The runner POSTs after a real mutation (`patch`/`add`/`download`/`ledger`); notice-only refusals do not start a correlation. Poll publish/open/close/reveal and `testPlan.gate` use the same helper. No `recordOutcome` under `domains/` or `components/creation-canvas/actions`.
+- **Cheap idea path.** `idea.explore` → `idea.read`; `idea.test` → `proof.choose`; `idea.reveal` (was advertised, unimplemented) grades named interview / experiment / form evidence as `proof.grade` with `metricValue` 1 (met) or 0 (missed). `form.publish` / `poll.publish` are `artifact.publish` + `proof.build` with `metadata.reachable` from `/f/{slug}` / `/p/{slug}`.
+- **Not this ticket.** Experiment stays unclaimed (`CONNECTED_CANVAS_ACTIONS` unchanged; no `bind_ab_test`). PRD 27 B3–B5 (form send/post, CRM, founder stage) are adjacent.
+- **Tests:** `canvasActionOutcomes.test.ts`, `recordCanvasActOutcome.test.ts`, `ideaActs.test.ts` (reveal met/missed/missing).
+
 ## ✅ RESOLVED 2026-10-13 — VSIX chat ticket rail: expanded grid scrolls (VSIX 2026.10.32)
 
 A chat with 60+ linked tickets expanded the ring grid past the host's clipped container, so later tickets could not be seen or scrolled to.
