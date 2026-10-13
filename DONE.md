@@ -1,3 +1,18 @@
+## ✅ RESOLVED 2026-10-13 — Multi-model role routing (ticket #3073)
+
+`resolveModelForRole` / `parseRoleModelConfig` in `@builderforce/learned-routing` (`9f514a949`) now pin a catalog model from `ROLE_MODELS` / `ROLE_MODEL_DEFAULT` on both remaining surfaces. Explicit user/run model still wins; undefined pin leaves the ranker/plan seed unchanged.
+
+- **Cloud.** `api/src/application/runtime/cloudAgent/routing.ts` + `cloudAgentEngine.ts` (`c34d5084b`). Tests: `routing.roleModels.test.ts`.
+- **VS Code.** `clients/vscode/src/roleModelPin.ts` over `process.env`; `modelState.resolveEffectiveModelChoice` after explicit pick and Evermind; child runs pin by `req.role` (`9689f3699`). Tests: `roleModelPin.test.ts`.
+
+## ✅ RESOLVED 2026-10-13 — Remote task result streaming (ticket #3071)
+
+Live `remote.task.chunk` events plus terminal assistant text. Ticket closed; ROADMAP row moved to Shipped.
+
+## ✅ RESOLVED 2026-10-13 — Rendered presentation export of the value brief (ticket #3079)
+
+`renderRfpDocPptx` emits the RFP/value-brief as PPTX from the same `rfpDocSections` as HTML/PDF (`rfpBranding.ts`, `rfpRoutes.ts`). Canvas artifact PPTX (`useCanvasArtifactExport`) and investor pack PPTX (`PackView`) share the office writer. Tests: `rfpBranding.test.ts`.
+
 ## ✅ RESOLVED 2026-10-13 — Live orchestration workspace (real-time DAG) (ticket #3688, epic #3066)
 
 Dedicated `/orchestration` Run-stage workspace lists in-flight workflows and paints the live DAG as the main surface (not a run-history drill-down). Authoring stays on Creation Canvas.

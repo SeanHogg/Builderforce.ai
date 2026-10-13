@@ -33,11 +33,11 @@ Enabling work is legitimate but never outranks a broken Idea→Real journey.
 | Live orchestration workspace (real-time DAG) | Agents | P0 | Q3 2026 | ✅ Shipped |
 | Inline diff / pair-programming (TUI accept/reject) | Agents | P1 | Q3 2026 | ✅ Shipped |
 | Session auto-checkpoint (`/sessions`, `/undo`, `/fork`) | Agents | P1 | Q3 2026 | ✅ Shipped |
-| Remote task result streaming | Agents | P2 | Q3 2026 | 🔄 Partial — live `remote.task.chunk` + terminal assistant text |
-| Multi-model role routing | Agents | P2 | Q3 2026 | 🔄 Partial — resolver in `@builderforce/learned-routing` (`9f514a949`); not wired into the cloud engine |
+| Remote task result streaming | Agents | P2 | Q3 2026 | ✅ Shipped — live `remote.task.chunk` + terminal assistant text |
+| Multi-model role routing | Agents | P2 | Q3 2026 | ✅ Shipped — resolver in `@builderforce/learned-routing` (`9f514a949`); wired into cloud engine (`c34d5084b`) and VS Code native Brain (`9689f3699`) |
 | Spec import from GitHub Issues / Linear / Jira | Agents | P2 | Q3 2026 | ✅ Shipped |
 | Remaining Canvas actions onto the outcome contract | Analytics | P0 | Q3 2026 | ✅ Shipped — cheap proofs on the ledger (epic #3077) |
-| Rendered presentation export of the value brief | Revenue | P1 | Q3 2026 | 🔄 Partial |
+| Rendered presentation export of the value brief | Revenue | P1 | Q3 2026 | ✅ Shipped — `renderRfpDocPptx` from the same `rfpDocSections` as HTML/PDF; canvas PPTX + investor pack PPTX |
 | Phase 6 — activity/integration engines, scheduled reporting, PRD orchestration, analytics UI | 6 | P0–P1 | Q3–Q4 2026 | 📋 Planned |
 | Phase 7 — policy packs, governance-auditor, BLOCKER-gates-merge, SOC2 evidence ([PRD 08](./docs/specs/08-prd-agentic-governance.md)) | 7 | P1–P2 | Q3 2026 | 📋 Planned |
 | Local LLM execution — native pure-Rust engine that replaces Ollama, in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) (`bfi`; Synapse supervises `bfi serve`; Ollama is not required), hybrid routing — [PRD](https://github.com/SeanHogg/builderforce-inference/blob/main/docs/PRD-native-engine.md); M1–M4 crates landed (tokenizer, sampler, prefix cache, grammar, embeddings, `mix_decode` concurrent batching); M5 Synapse cut-over shipped (`bf-local` no longer drives Ollama); M6 VSIX discovers Synapse via `~/.builderforce/desktop.json`. Remaining: GPU 70% tok/s vs llama-bench unmeasured (3762); live Bonsai 27B greedy vs PrismML fork not run (3764); unsigned GitHub Release binaries (3782) | 3 | P2–P3 | Q4 2026 | 🔄 Partial |
