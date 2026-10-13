@@ -111,6 +111,30 @@ describe('canvasActOutcomeBodies', () => {
     });
     expect(bodies[1]).toMatchObject({ action: 'proof.grade', phase: 'validated', metricValue: 0 });
   });
+
+  it('emailCampaign.send and socialCampaign.publish emit started then succeeded on one correlationId', () => {
+    for (const [kind, action, objectId] of [
+      ['emailCampaign', 'send', 'em-1'],
+      ['socialCampaign', 'publish', 'sc-1'],
+    ] as const) {
+      const bodies = canvasActOutcomeBodies({ sessionId: 'ses-1', kind, action, objectId });
+      expect(bodies).toHaveLength(2);
+      expect(bodies[0]).toMatchObject({
+        correlationId: `act:${objectId}:${kind}.${action}`,
+        action: `${kind}.${action}`,
+        phase: 'started',
+        artifactId: objectId,
+        metadata: { kind, canvasAction: action },
+      });
+      expect(bodies[1]).toMatchObject({
+        correlationId: `act:${objectId}:${kind}.${action}`,
+        action: `${kind}.${action}`,
+        phase: 'succeeded',
+        artifactId: objectId,
+      });
+      expect(bodies[0]!.correlationId).toBe(bodies[1]!.correlationId);
+    }
+  });
 });
 
 describe('connected cheap-proof acts have adapters', () => {
