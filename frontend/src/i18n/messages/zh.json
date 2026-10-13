@@ -31096,6 +31096,8 @@
         "noticeCrmImported": "CRM 联系人：新增 {added}，更新 {updated}，拒绝 {rejected}。",
         "crmFailed": "无法导入 CRM 联系人。",
         "publish": "发布",
+        "send": "发送",
+        "post": "发布",
         "close": "关闭",
         "exit": "返回看板",
         "unpublishedHint": "发布此表单即可获得一个手机也能作答的地址。作答无需账号。",
