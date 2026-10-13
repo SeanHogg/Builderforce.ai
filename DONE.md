@@ -1,3 +1,25 @@
+## ✅ RESOLVED 2026-10-13 — Managed Agent hosting add-on ($49/mo/Agent) (epic #3056)
+
+Self-serve add-on for hosting Managed Agents on BuilderForce infrastructure, priced at $49/host/month.
+
+- **Stripe checkout.** Recurring subscription `$49/host/mo`, `purchaseKind: 'managed_agent_host'`, recorded via `ADDON_RECORDERS` in `purchaseRegistry.ts`. No `TenantPlan` mutation.
+- **Waitlist + ops PATCH.** `POST /api/managed-agent-hosts` returns 403 if unpaid, 409 if qty exhausted. `DELETE` returns 409 for non-pending. Admin `PATCH /api/admin/managed-agent-hosts/:id` calls `provisionManagedAgentHostRequest(db, {requestId, status, agentHostId})` and maps `{error}`.
+- **Tenant UI.** Pricing CTA + cart checkout, `ManagedAgentHostPanel` on WorkforceAgents, i18n in en/de/es/fr/zh.
+- **Tests:** `managedAgentHostSubscription.test.ts`, `managedAgentHostRoutes.test.ts`, `tenantRoutes.managedHost.test.ts`, `adminRoutes.managedHost.test.ts`, StripeProvider tests.
+- **Commits:** `dff067555`, `48e80c44c`, `ab226fdef`.
+
+**Stretch not done:** #3343 auto-provision/VM deprovision (out of MVP scope).
+
+## ✅ RESOLVED 2026-10-13 — Validate idea by asking the market: form send/post (epic #3083)
+
+PRD 27 B3: form send → marketing_campaign, post → social_campaign.
+
+- **Form send.** `CanvasFormSurface.tsx` "Send" button calls `sendForm()` which creates a `marketing_campaign` via the campaign API. Notice keys `form.noticeFormUnpublished`, `form.noticeFormNoAudience`, `form.noticeFormBlocked`, `form.noticeFormSent`, `form.sendFailed` in all five catalogs.
+- **Form post.** "Post" button calls `postForm()` which creates a `social_campaign`. Notice keys `form.noticeFormPosted`, `form.postFailed`.
+- **Ask people flow.** `formFromIdea` (`formObject.ts`), "Ask people" button in Ideas row (`IdeaLogRow.tsx`), `IDEA_EVIDENCE_KINDS` includes `form`.
+- **Tests:** CanvasFormSurface + canvasIdeasSurface (16 pass).
+- **Commit:** `ba9a3f2a4`.
+
 ## ✅ RESOLVED 2026-10-13 — Remaining Canvas acts onto the outcome contract (epic #3077)
 
 Connected canvas acts now emit correlated ledger events instead of applying a patch and stopping. Draft objects are still not proofs.

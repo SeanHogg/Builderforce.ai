@@ -25,13 +25,13 @@ Enabling work is legitimate but never outranks a broken Idea→Real journey.
 
 | Feature | Area | P | Target | Status |
 |---|---|---|---|---|
-| Managed Agent hosting add-on ($49/mo/Agent) | Revenue | P0 | Q3 2026 | 🔄 In Progress |
-| Onboarding — first Agent in < 5 min | Revenue | P1 | Q3 2026 | 📋 Planned |
+| Managed Agent hosting add-on ($49/mo/Agent) | Revenue | P0 | Q3 2026 | 🔄 Partial — Stripe + waitlist + tenant UI shipped (`dff067555`, `48e80c44c`, `ab226fdef`); auto-provision VM (#3343) remains |
+| Onboarding — first Agent in < 5 min | Revenue | P1 | Q3 2026 | ✅ Shipped |
 | Marketplace monetization (listing + tx fee, Stripe) | Revenue | P1 | Q3 2026 | 🔄 Partial — awaits Stripe secrets |
-| Enterprise license GA (on-prem Docker) | Revenue | P1 | Q4 2026 | 📋 Planned |
+| Enterprise license GA (on-prem Docker) | Revenue | P1 | Q4 2026 | ✅ Shipped |
 | SOC 2 Type I audit | Revenue | P1 | Q4 2026 | 📋 Planned |
 | Live orchestration workspace (real-time DAG) | Agents | P0 | Q3 2026 | 🔄 Partial |
-| Inline diff / pair-programming (TUI accept/reject) | Agents | P1 | Q3 2026 | 🔄 Partial |
+| Inline diff / pair-programming (TUI accept/reject) | Agents | P1 | Q3 2026 | ✅ Shipped |
 | Session auto-checkpoint (`/sessions`, `/undo`, `/fork`) | Agents | P1 | Q3 2026 | 🔄 Partial |
 | Remote task result streaming | Agents | P2 | Q3 2026 | 🔄 Partial — live `remote.task.chunk` + terminal assistant text |
 | Multi-model role routing | Agents | P2 | Q3 2026 | 🔄 Partial — resolver in `@builderforce/learned-routing` (`9f514a949`); not wired into the cloud engine |
@@ -94,7 +94,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 ## 💡 Idea — Read · Prove
 
 - **[canvas] Ideas surface and Brain's "no data" reply read as unfinished.** Lede and empty body repeat; both point at "the prompt below" while the composer is in the right rail; the stepper stays on Make; Capture misses request-shaped text; the reply asks for an object ID instead of offering Paste / Upload / Plan an interview; header says "Brain" not the chat title. Mockup: frames 1–3 of https://claude.ai/artifact/KcEJGhrZaQMQWEMSHNJjyE. *Blocker: operator go-ahead (the 2026-10-04 pass was scoped to the chat panel).*
-- **[canvas] Validating an idea by asking the market is partial ([PRD 27](./docs/specs/27-prd-idea-validation-surveys.md), epic #3083).** B0 form loop is on main: `CanvasFormSurface` publish/close/`summarizeForm` poll, `CONNECTED_CANVAS_ACTIONS` `form:['publish','collect','close']`, public `/f/[slug]`. PRD §3.2 ("zero frontend callers") is stale. B1 Ask people (`formFromIdea`, Ideas row CTA, `IDEA_EVIDENCE_KINDS` includes `form`) is in the working tree uncommitted, not landed. Remaining product seam: B3 form → `marketing_campaign` Send and social Post (`sendForm` has 0 hits). B4 `addFromCrm` already exists on the form surface (`growthApi.addMembersFromCrm`). B5 founder stage select already exists (FR-8 is not auto-settle). `idea.reveal` now grades named evidence onto `proof.grade` (met or missed). Adjacent: `builtin_canvas_bind_ab_test` missing, no SMS/scheduled sends, clicks don't record the link, four unjoined contact stores, two survey stores, CSAT/NPS `question_set_id` unrendered, `newsletter_subscribers` siloed. Not blocked.
+- **[canvas] Validating an idea by asking the market is shipped for B0–B5 ([PRD 27](./docs/specs/27-prd-idea-validation-surveys.md), epic #3083).** B0 form loop on main: `CanvasFormSurface` publish/close/`summarizeForm` poll, public `/f/[slug]`. B1 Ask people (`formFromIdea`, Ideas row CTA, `IDEA_EVIDENCE_KINDS` includes `form`) landed. B3 form → `marketing_campaign` Send and social Post wired (`sendForm` / `postForm`, commit `ba9a3f2a4`). B4 `addFromCrm` on the form surface. B5 founder stage select exists (FR-8 is not auto-settle). `idea.reveal` grades named evidence onto `proof.grade`. Adjacent (not this epic): `builtin_canvas_bind_ab_test` missing, no SMS/scheduled sends, clicks don't record the link, four unjoined contact stores, two survey stores, CSAT/NPS `question_set_id` unrendered, `newsletter_subscribers` siloed.
 - **[canvas] Wizard-of-oz `/queue` and `/pilot-report` are public and expose participant contacts.** They ship `verify: 'none'`; a seeded blocking ticket is a request, not a control. Fix = per-realization read secret, signed link, or the console behind app auth. *Blocker: product decision on where an operator console lives.*
 - **[canvas] Instrumented `/api/creation-sessions/claim` failure not yet observed.** The catch now logs PG code, constraint, statement and id counts to tell the fixed case-collision cause from any other. *Blocker: a live occurrence.*
 
