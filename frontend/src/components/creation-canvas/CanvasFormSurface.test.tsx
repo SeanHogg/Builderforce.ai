@@ -9,6 +9,11 @@ vi.mock('@/lib/founderOpsApi', () => ({
   summarizeForm: vi.fn(async () => ({ summary: null })),
 }));
 
+vi.mock('@/lib/formDistribution', () => ({
+  sendForm: vi.fn(),
+  postForm: vi.fn(),
+}));
+
 vi.mock('@/lib/growthApi', () => ({
   growthApi: {
     listAudiences: vi.fn(async () => ({ audiences: [] })),
@@ -51,5 +56,82 @@ describe('CanvasFormSurface', () => {
     );
     expect(screen.queryByRole('button', { name: 'form.publish' })).toBeNull();
     expect(screen.getByText('form.readOnlyHint')).toBeTruthy();
+  });
+
+  it('shows Send and Post for a published editable form that is not closed', () => {
+    render(
+      <CanvasFormSurface
+        objectId="form-1"
+        onExit={() => {}}
+        onEdit={() => {}}
+        data={{
+          kind: 'form',
+          title: 'Validation',
+          questions: [{ id: 'q1', type: 'boolean', label: 'Q?' }],
+          questionSetId: 'qs-1',
+          status: 'open',
+          shareUrl: 'https://builderforce.ai/f/test',
+        } as CreationNodeData}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'form.send' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'form.post' })).toBeTruthy();
+  });
+
+  it('hides Send and Post when form is unpublished (no questionSetId)', () => {
+    render(
+      <CanvasFormSurface
+        objectId="form-1"
+        onExit={() => {}}
+        onEdit={() => {}}
+        data={{
+          kind: 'form',
+          title: 'Validation',
+          questions: [{ id: 'q1', type: 'boolean', label: 'Q?' }],
+          status: 'open',
+        } as CreationNodeData}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'form.send' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'form.post' })).toBeNull();
+  });
+
+  it('hides Send and Post when form is closed', () => {
+    render(
+      <CanvasFormSurface
+        objectId="form-1"
+        onExit={() => {}}
+        onEdit={() => {}}
+        data={{
+          kind: 'form',
+          title: 'Validation',
+          questions: [{ id: 'q1', type: 'boolean', label: 'Q?' }],
+          questionSetId: 'qs-1',
+          status: 'closed',
+          shareUrl: 'https://builderforce.ai/f/test',
+        } as CreationNodeData}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'form.send' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'form.post' })).toBeNull();
+  });
+
+  it('hides Send and Post when viewer cannot edit', () => {
+    render(
+      <CanvasFormSurface
+        objectId="form-1"
+        onExit={() => {}}
+        data={{
+          kind: 'form',
+          title: 'Validation',
+          questions: [{ id: 'q1', type: 'boolean', label: 'Q?' }],
+          questionSetId: 'qs-1',
+          status: 'open',
+          shareUrl: 'https://builderforce.ai/f/test',
+        } as CreationNodeData}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'form.send' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'form.post' })).toBeNull();
   });
 });
