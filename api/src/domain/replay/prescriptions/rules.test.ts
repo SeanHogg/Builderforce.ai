@@ -26,11 +26,15 @@ function issue(over: Partial<IssueAggregate>): IssueAggregate {
 const run = (id: string, a: SiteAggregates) => PRESCRIPTION_RULE_BY_ID.get(id)!.detect(a);
 
 describe('PRESCRIPTION_RULES', () => {
-  it('declares all twelve §5.1 rules, each with an area, an effort, actions and an acceptance', () => {
+  it('declares the twelve §5.1 rules then the §5.2 page-review rules, each with an area, an effort, actions and an acceptance', () => {
     expect(PRESCRIPTION_RULES.map((r) => r.id)).toEqual([
       'rage_on_element', 'error_on_step', 'dead_click_heading', 'cta_below_fold', 'quickback_after_reveal',
       'excessive_scroll_missing_info', 'device_gap', 'release_regression', 'pricing_hesitation',
       'checkout_abandon_known', 'objection_pattern', 'proof_missed_reason',
+      'seo_title_length', 'seo_missing_meta_description', 'seo_multiple_h1', 'seo_no_structured_data',
+      'seo_low_ctr_high_impressions', 'content_no_value_prop_above_fold', 'content_cta_vague', 'content_readability',
+      'content_missing_trust', 'perf_lcp_poor', 'perf_cls_poor', 'perf_heavy_hero_image', 'a11y_contrast',
+      'a11y_tap_targets', 'a11y_missing_labels', 'vision_observed',
     ]);
     for (const rule of PRESCRIPTION_RULES) {
       expect([1, 2, 3]).toContain(rule.effort);

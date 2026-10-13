@@ -13,6 +13,7 @@ import type {
   ReplayMatchMode,
   ReplaySmartEventRuleKind,
 } from '@builderforce/interaction-contract';
+import type { InsightPanelLevel } from '@/components/insights/panelKinds';
 
 export interface SmartEventDraft {
   ruleKind: ReplaySmartEventRuleKind;
@@ -59,4 +60,9 @@ export function parseFunnelLevelId(id: string): FunnelLevelAddress {
   const matchMode = MATCH_MODES.find((m) => m === mode) ?? 'equals';
   if (ruleKind && match) address.draft = { ruleKind, match, matchMode };
   return address;
+}
+
+/** The panel level that creates (no `funnelId`) or edits a funnel — the `funnel_edit` kind (D16: a level, not an overlay). */
+export function funnelEditLevel(funnelId?: string): InsightPanelLevel {
+  return { kind: 'funnel_edit', id: funnelLevelId(funnelId ? { funnelId } : {}) };
 }

@@ -47,8 +47,9 @@ export async function flushReplayRollups(
   db: Db,
   batch: ReplayRollupBatch,
   report: (error: unknown, table: string) => void,
-): Promise<void> {
+): Promise<{ newReleases: Array<{ siteId: string; tenantId: number; releaseKey: string }> }> {
   const store = replayTelemetryDb(env, db);
+  const newReleases: Array<{ siteId: string; tenantId: number; releaseKey: string }> = [];
   const run = async (table: string, work: () => Promise<unknown>) => {
     try {
       await work();
@@ -180,13 +181,24 @@ export async function flushReplayRollups(
 
   await run('replay_releases', async () => {
     for (const rows of slices(batch.releases)) {
-      await store.insert(replayReleases).values(rows.map((r) => ({
+      const upserted = await store.insert(replayReleases).values(rows.map((r) => ({
         siteId: r.siteId, tenantId: r.tenantId, releaseKey: r.releaseKey, source: r.source,
         firstSeenAt: r.firstSeenAt, lastSeenAt: r.lastSeenAt,
       }))).onConflictDoUpdate({
         target: [replayReleases.siteId, replayReleases.releaseKey],
         set: { lastSeenAt: sql`greatest(${replayReleases.lastSeenAt}, ${excluded(replayReleases.lastSeenAt)})` },
+      }).returning({
+        siteId: replayReleases.siteId,
+        tenantId: replayReleases.tenantId,
+        releaseKey: replayReleases.releaseKey,
+        // `xmax = 0` only on a row this statement INSERTED: the release is seen for the first time.
+        inserted: sql<boolean>`(xmax = 0)`,
       });
+      // S4f: a release first seen starts its page captures and measures hand-applied fixes.
+      for (const row of upserted ?? []) {
+        if (row.inserted === true || String(row.inserted) === 'true') newReleases.push({ siteId: row.siteId, tenantId: row.tenantId, releaseKey: row.releaseKey });
+      }
     }
   });
+  return { newReleases };
 }

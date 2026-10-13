@@ -8,10 +8,11 @@
  * cohorts its impact is computed from. Nothing here phrases anything: the AI only
  * words a finding that a rule already proved.
  *
- * The §5.2 page-review rules join this list in S4f.
+ * The §5.2 page-review rules (`pageRules.ts`) close the list.
  */
 
 import { rowDecile, selectorKind } from '../heatInsightRules';
+import { PAGE_PRESCRIPTION_RULES } from './pageRules';
 import type { ElementAggregate, Finding, IssueAggregate, PrescriptionRule, SiteAggregates } from './types';
 
 const EVIDENCE_MAX = 3;
@@ -383,6 +384,7 @@ export const PRESCRIPTION_RULES: readonly PrescriptionRule[] = [
   knownCohortRule('checkout_abandon_known', 'checkout', 2),
   objectionPattern,
   proofMissedReason,
+  ...PAGE_PRESCRIPTION_RULES,
 ];
 
 export const PRESCRIPTION_RULE_BY_ID: ReadonlyMap<string, PrescriptionRule> = new Map(PRESCRIPTION_RULES.map((r) => [r.id, r]));

@@ -3635,12 +3635,14 @@
         "lead": "Contacto",
         "overview": "Resumen",
         "recordings": "Grabaciones"
-      }
+      },
+      "funnelEdit": "Editar embudo"
     },
     "lenses": {
       "live": "En vivo",
       "heat": "Calor",
-      "stuck": "Atascos"
+      "stuck": "Atascos",
+      "fixes": "Correcciones"
     },
     "journey": {
       "steps": "{count, plural, one {# página} other {# páginas}}",
@@ -3687,6 +3689,58 @@
         "heat": "Calor"
       },
       "openAria": "Abrir la página {route}"
+    },
+    "fix": {
+      "tabs": {
+        "change": "Cambio",
+        "measure": "Medición"
+      },
+      "issueTabs": {
+        "fix": "Corrección",
+        "history": "Historial"
+      },
+      "noFix": "Aún no se ha prescrito ninguna corrección para este problema.",
+      "measure": {
+        "acceptanceTitle": "Se acepta cuando",
+        "acceptanceNone": "Aún no se ha redactado una prueba de aceptación.",
+        "resultTitle": "Resultado",
+        "notYet": "Aún sin medir. El veredicto llega cuando la versión que publica la corrección alcanza su muestra."
+      },
+      "history": {
+        "title": "Historial",
+        "created": "Detectada",
+        "applied": "{action}",
+        "measured": "Medida: {verdict}",
+        "dismissed": "Descartada: {reason}"
+      }
+    },
+    "fixes": {
+      "kind": "Todas las correcciones",
+      "findNow": "Buscar correcciones ahora",
+      "finding": "Buscando…",
+      "sweepResult": "{found, plural, one {# hallazgo} other {# hallazgos}}, {created} nuevos",
+      "sweepLimited": "Ya se buscaron correcciones en la última hora. Vuelva a intentarlo más tarde.",
+      "viewAll": "Ver todas",
+      "error": "No se pudieron cargar las correcciones.",
+      "loading": "Cargando correcciones…",
+      "empty": "Ninguna corrección coincide con este filtro.",
+      "areaAll": "Todas ({count})",
+      "areaChip": "{area} ({count})",
+      "areaAria": "Filtrar correcciones por área",
+      "loadMore": "Mostrar más"
+    },
+    "release": {
+      "title": "Versión {label}",
+      "firstSeen": "Vista por primera vez el {date}",
+      "empty": "Esta versión no publicó ninguna corrección.",
+      "notMeasured": "Aún sin medir",
+      "openAria": "Abrir corrección: {title}",
+      "strip": {
+        "title": "Resultado por versión",
+        "aria": "Correcciones publicadas por versión",
+        "label": "{label}: {count, plural, one {# corrección} other {# correcciones}}, {worked} funcionaron, {worse} empeoraron",
+        "empty": "Ninguna versión ha publicado aún una corrección."
+      }
     }
   },
   "cloudAgentForm": {
@@ -11503,6 +11557,10 @@
       "your-private-evermind-on-your-machine": {
         "title": "Tu Evermind privado, en tu equipo: con modelos locales, conectores y aprobaciones desde el móvil",
         "description": "Synapse ahora ejecuta modelos locales a la medida de tu ordenador y los ofrece a Claude Code y a tus scripts, aloja conectores MCP que el Brain puede usar, te deja aprobar el paso de un agente desde el móvil y te da un modelo privado con el que empezar. Todo lo que aprende se queda en tu equipo salvo que lo publiques."
+      },
+      "fix-what-visitors-tell-you": {
+        "title": "Insights le dice qué corregir — y demuestra que funcionó",
+        "description": "Las grabaciones y los mapas de calor le mostraban el problema y le dejaban el siguiente paso a usted. Insights ahora nombra el cambio, lo renderiza sobre su página, se lo entrega a una IA como prompt o lo aplica, y lo califica en la siguiente versión."
       }
     }
   },
@@ -34316,6 +34374,229 @@
           "conversions": "conversiones"
         }
       }
+    },
+    "prescription": {
+      "area": {
+        "funnel": "Embudo",
+        "ux": "Usabilidad",
+        "site": "Sitio",
+        "sales": "Ventas",
+        "seo": "SEO",
+        "content": "Contenido",
+        "performance": "Rendimiento",
+        "accessibility": "Accesibilidad"
+      },
+      "status": {
+        "proposed": "Propuesta",
+        "applied": "En curso",
+        "measuring": "Midiendo",
+        "worked": "Funcionó",
+        "no_effect": "Sin efecto",
+        "worse": "Empeoró",
+        "dismissed": "Descartada"
+      },
+      "verdict": {
+        "worked": "Funcionó",
+        "no_effect": "Sin efecto",
+        "worse": "Empeoró"
+      },
+      "rule": {
+        "fallback": "Hallazgo {ruleId}",
+        "rage_on_element": {
+          "title": "El {share} % de las visitas a {route} hace clics de frustración en «{label}»",
+          "description": "{sessions} sesiones hicieron clic una y otra vez porque no respondía como esperaban."
+        },
+        "error_on_step": {
+          "title": "Un error está detrás del {share} % de los abandonos en «{step}» de {funnel}",
+          "description": "«{error}» aparece en las sesiones que salieron del embudo en este paso."
+        },
+        "dead_click_heading": {
+          "title": "El {share} % de las visitas a {route} hace clic en el título «{label}», que no hace nada",
+          "description": "{sessions} sesiones esperaban que el título fuera un enlace o un botón."
+        },
+        "cta_below_fold": {
+          "title": "Solo el {reach} % de los visitantes de {route} se desplaza lo suficiente para ver «{label}»",
+          "description": "La llamada a la acción está por debajo del punto donde la mayoría deja de desplazarse."
+        },
+        "quickback_after_reveal": {
+          "title": "El {share} % de las visitas a {route} vuelve enseguida tras abrir «{label}»",
+          "description": "{sessions} sesiones volvieron en segundos: lo que encontraron no era lo que esperaban."
+        },
+        "excessive_scroll_missing_info": {
+          "title": "El {share} % de las visitas a {route} se desplaza arriba y abajo buscando algo",
+          "description": "{sessions} sesiones se desplazaron en exceso: la información que buscan es difícil de encontrar."
+        },
+        "device_gap": {
+          "title": "Los móviles convierten al {phoneRate} % y los ordenadores al {desktopRate} %",
+          "description": "{sessions} sesiones móviles convierten a menos de la mitad de la tasa de escritorio."
+        },
+        "release_regression": {
+          "title": "La conversión cayó del {before} % al {after} % en {release}",
+          "description": "Un {drop} % por debajo de {previous}, la versión anterior."
+        },
+        "pricing_hesitation": {
+          "title": "{visitors} visitantes conocidos vieron {route} y no compraron",
+          "description": "Están identificados, así que un seguimiento puede llegar a ellos."
+        },
+        "checkout_abandon_known": {
+          "title": "{visitors} visitantes conocidos abandonaron el pago en {route}",
+          "description": "Están identificados, así que un seguimiento puede llegar a ellos."
+        },
+        "objection_pattern": {
+          "title": "Los visitantes dudan por: {pattern}",
+          "description": "Visto en {examples} grabaciones citadas."
+        },
+        "proof_missed_reason": {
+          "title": "{proof} no alcanzó su objetivo: {reason}",
+          "description": "El {share} % de las visitas a {route} encontró este problema durante la medición."
+        }
+      },
+      "observed": "Observado",
+      "rankAria": "Posición {rank}",
+      "evidenceTitle": "Visto en",
+      "evidenceItem": "Grabación {n} en {time}",
+      "evidenceAria": "Ver la grabación {n} en {time}",
+      "prescriptionTitle": "Qué cambiar",
+      "drafting": "Se está redactando el texto de esta corrección.",
+      "change": {
+        "title": "Cambio propuesto",
+        "before": "Ahora",
+        "after": "Cambio",
+        "target": "En {target}",
+        "unknown": "Hay un cambio propuesto para esta corrección."
+      },
+      "changeKind": {
+        "copy": "Texto",
+        "layout": "Diseño",
+        "code": "Código",
+        "content": "Contenido"
+      },
+      "impact": {
+        "estimateApprox": "≈ +{value} {unit} en {days} días ({low}–{high})",
+        "estimateExact": "+{value} {unit} en {days} días ({low}–{high})",
+        "pointApprox": "≈ +{value} {unit} en {days} días",
+        "pointExact": "+{value} {unit} en {days} días",
+        "rangeApprox": "≈ {low}–{high} {unit} en {days} días",
+        "rangeExact": "{low}–{high} {unit} en {days} días",
+        "none": "Aún no hay visitas suficientes para estimar el impacto"
+      },
+      "confidence": {
+        "low": "confianza baja",
+        "medium": "confianza media",
+        "high": "confianza alta"
+      },
+      "unit": {
+        "conversions": "conversiones",
+        "visits": "visitas",
+        "sessions": "sesiones"
+      },
+      "measured": {
+        "beforeAfter": "Antes {before} → después {after}",
+        "onRelease": "en la versión {release}",
+        "source": {
+          "ticket_effect": "medido en la versión que la publicó",
+          "ab_test": "medido con una prueba A/B",
+          "follow_up": "medido frente a visitantes sin seguimiento"
+        }
+      },
+      "dismissedBecause": "Descartada: {reason}",
+      "acceptance": {
+        "text": "{metric} {direction}, en al menos {minVisits} visitas",
+        "direction": {
+          "up": "sube",
+          "down": "baja"
+        }
+      },
+      "metric": {
+        "rage_rate": "Tasa de clics de frustración",
+        "step_conversion": "Conversión del paso",
+        "dead_click_rate": "Tasa de clics muertos",
+        "conversion_rate": "Tasa de conversión",
+        "quickback_rate": "Tasa de vueltas rápidas",
+        "excessive_scroll_rate": "Tasa de desplazamiento excesivo",
+        "phone_conversion_rate": "Tasa de conversión móvil",
+        "known_conversion_rate": "Tasa de conversión de visitantes conocidos",
+        "proof_metric": "La métrica de la prueba"
+      },
+      "actionsAria": "Acciones para esta corrección",
+      "actions": {
+        "fix": "Corregir",
+        "test": "Probar",
+        "start-test": "Iniciar la prueba",
+        "follow-up": "Hacer seguimiento",
+        "ticket": "Ticket",
+        "publish-preview": "Publicar",
+        "revert": "Revertir",
+        "dismiss": "Descartar",
+        "copy-prompt": "Copiar prompt",
+        "apply-page": "Aplicar a la página",
+        "apply-in-composer": "Aplicar en el editor"
+      },
+      "confirm": {
+        "start-test": {
+          "title": "¿Iniciar la prueba?",
+          "message": "Los visitantes se repartirán entre el sitio en vivo y la vista previa hasta que se decida la prueba.",
+          "confirm": "Iniciar prueba"
+        },
+        "publish-preview": {
+          "title": "¿Publicar la vista previa?",
+          "message": "La vista previa con esta corrección pasa a ser el sitio en vivo para todos los visitantes.",
+          "confirm": "Publicar"
+        },
+        "revert": {
+          "title": "¿Revertir esta corrección?",
+          "message": "El sitio vuelve a la versión anterior a la publicación de esta corrección.",
+          "confirm": "Revertir"
+        }
+      },
+      "dismiss": {
+        "title": "Descartar esta corrección",
+        "reasonLabel": "¿Por qué descartarla? (obligatorio)",
+        "reasonPlaceholder": "Por ejemplo: la página se rediseñó",
+        "submit": "Descartar",
+        "cancel": "Cancelar"
+      },
+      "followUp": {
+        "title": "A quién se haría seguimiento",
+        "none": "Ningún contacto conocido coincide con este hallazgo.",
+        "unmatched": "{count, plural, one {# visitante identificado no tiene} other {# visitantes identificados no tienen}} contacto coincidente",
+        "enrolled": "{count, plural, one {# contacto inscrito} other {# contactos inscritos}}",
+        "draftTitle": "Primer contacto propuesto (solo se envía desde la secuencia, después de que lo edite)",
+        "sequenceLabel": "Secuencia en la que inscribir",
+        "sequenceHint": "Pegue el enlace o el id de la tarjeta de secuencia",
+        "enrol": "{count, plural, one {Inscribir # contacto} other {Inscribir # contactos}}",
+        "cancel": "Cancelar",
+        "contactAria": "Inscribir a {name}"
+      },
+      "project": {
+        "label": "Proyecto",
+        "none": "Elija un proyecto"
+      },
+      "result": {
+        "refusal": "{reason}",
+        "run": "Un agente de código está trabajando en el ticket #{taskId}.",
+        "ticket": "Ticket #{taskId} creado.",
+        "test": "Prueba A/B preparada. Iníciela cuando esté listo.",
+        "enrolled": "{count, plural, one {# contacto inscrito} other {# contactos inscritos}}",
+        "done": "Hecho."
+      },
+      "maker": {
+        "fix": "La hace un agente de código",
+        "test": "La demuestra una prueba A/B",
+        "start-test": "La demuestra una prueba A/B",
+        "follow-up": "La hace un seguimiento comercial",
+        "ticket": "La hace su equipo (ticket)",
+        "publish-preview": "Lista para publicar",
+        "revert": "Lista para revertir"
+      },
+      "openAria": "Abrir corrección: {title}"
+    },
+    "fixes": {
+      "overviewTitle": "Correcciones principales",
+      "stepTitle": "Corrección prescrita",
+      "playerTitle": "Correcciones para {route}",
+      "proofTitle": "La corrección prescrita",
+      "empty": "Aún no hay ninguna corrección prescrita para esta página."
     }
   },
   "apps": {

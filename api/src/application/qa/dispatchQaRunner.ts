@@ -61,7 +61,8 @@ export async function dispatchQaRunner(env: Env, args: QaDispatchArgs): Promise<
  * narrowly-scoped credentials in `payload`; none gets the tenant-wide QA token.
  */
 export interface QaRunnerJob {
-  kind: 'replay_export';
+  /** `replay_export` (S4b MP4); `page_capture` / `page_render_after` (S4f page review). */
+  kind: 'replay_export' | 'page_capture' | 'page_render_after';
   /** Unique per job; names the container instance (`<kind>:<jobId>`). */
   jobId: string;
   payload: Record<string, unknown>;

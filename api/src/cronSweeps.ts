@@ -37,6 +37,7 @@ import { runByoCredentialHealthCron } from './application/llm/byoCredentialHealt
 import { runRetentionPurge } from './application/maintenance/retentionPurge';
 import { runReplayRollup } from './application/replay/replayRollup';
 import { runPrescriptionSweep } from './application/replay/prescriptionSweep';
+import { runWeeklyPageCaptures } from './application/replay/pageCapture';
 import { runProofVerdictSweep } from './application/realization/proofVerdictSweep';
 import { runBloatReclaim, runTableVacuum } from './application/maintenance/tableMaintenance';
 import { describeStoragePressure, runStoragePressureSweep } from './application/maintenance/storagePressure';
@@ -433,6 +434,17 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       return r.dispatched > 0
         ? `tenantsWithSecurityAgent=${r.tenantsWithSecurityAgent} dispatched=${r.dispatched}`
         : null;
+    },
+  },
+  {
+    key: 'replay-page-captures',
+    cadence: 'weekly-mon',
+    // A new release captures its key pages when ingest first sees it; this is the weekly
+    // floor for sites that did not ship (PRD 33 §5.2). Jobs go to THE runner.
+    description: 'Insights page review: queue the weekly capture of the key pages of every active site (desktop + phone) on the QA runner.',
+    run: async ({ env, db }) => {
+      const r = await runWeeklyPageCaptures(env, db);
+      return r.sites > 0 ? `sites=${r.sites} queued=${r.queued} unavailable=${r.unavailable}` : null;
     },
   },
   {

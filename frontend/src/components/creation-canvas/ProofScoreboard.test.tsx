@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ProofEvaluationDto, ProofMeasure } from '@builderforce/interaction-contract';
 import { realizationApi, type Realization } from '@/lib/builderforceApi';
+import { replayApi } from '@/lib/replayApi';
+import { prescription } from '@/test/replayPrescriptionFixtures';
 import { scoreboardStatus } from './proofScoreboardModel';
 
 /**
@@ -60,6 +62,7 @@ const proof = (over: Partial<Realization> = {}) => ({
 beforeEach(() => {
   vi.spyOn(realizationApi, 'measure').mockResolvedValue(evaluation());
   vi.spyOn(realizationApi, 'callEarly').mockResolvedValue(proof({ verdict: 'missed' }));
+  vi.spyOn(replayApi, 'listPrescriptions').mockResolvedValue([]);
 });
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -102,6 +105,26 @@ describe('ProofScoreboard', () => {
     const again = screen.getByRole('link', { name: 'creationCanvas.proof.readAgain' });
     expect(again.getAttribute('href')).toMatch(/^\/realize\?prior=r1&idea=Answer\+order\+questions&session=s1$/);
     expect(screen.queryByRole('button', { name: 'creationCanvas.proof.callEarly' })).toBeNull();
+  });
+
+  it('"Why it missed" carries the prescribed fix for this proof — THE fix card, linking into Insights', async () => {
+    vi.mocked(realizationApi.measure).mockResolvedValue(evaluation({ status: 'missed' }));
+    vi.mocked(replayApi.listPrescriptions).mockResolvedValue([
+      prescription({ id: 'rx-proof', ruleId: 'proof_missed_reason', area: 'funnel', subjectKey: 'proof:r1' }),
+      prescription({ id: 'rx-other-proof', ruleId: 'proof_missed_reason', area: 'funnel', subjectKey: 'proof:r2' }),
+      prescription({ id: 'rx-rage', subjectKey: '/pricing|button.buy' }),
+    ]);
+    render(<ProofScoreboard realization={proof({ verdict: 'missed' })} />);
+    const card = await screen.findByTestId('prescription-card');
+    expect(screen.getAllByTestId('prescription-card')).toHaveLength(1);
+    expect(card).toHaveAttribute('data-rule', 'proof_missed_reason');
+    expect(replayApi.listPrescriptions).toHaveBeenCalledWith(SITE, { filter: null });
+    // Outside the Insights home there is no panel: the card links to the app, on this site, at this fix.
+    const link = screen.getByRole('link', { name: /replay\.prescription\.openAria/ });
+    const href = new URL(link.getAttribute('href') ?? '', 'https://app.example');
+    expect(href.pathname).toBe('/apps/insights');
+    expect(href.searchParams.get('site')).toBe(SITE);
+    expect(href.searchParams.get('panel')).toBe('fix:rx-proof:change');
   });
 
   it('"Call it early…" requires a written reason, then grades and reports the change', async () => {

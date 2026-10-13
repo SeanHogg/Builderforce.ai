@@ -60,3 +60,33 @@ describe('prescriptionMatchesFilter', () => {
     expect(prescriptionMatchesFilter({ pagePath: null, fingerprint: null }, { all: [{ field: 'entryPath', op: 'eq', value: '/' }] })).toBe(false);
   });
 });
+
+describe('nextActions — the §5.2 page actions', () => {
+  const page = ['fix', 'ticket', 'copy_prompt', 'apply_in_composer', 'apply_page'] as const;
+  const base = { actionKind: null, refs: EMPTY_REFS, ruleActions: page };
+
+  it('offers copy-prompt and apply-page on any open fix with a page, apply-in-composer only on a hosted canvas app', () => {
+    expect(nextActions({ ...base, status: 'proposed', pagePath: '/pricing' })).toEqual(['fix', 'ticket', 'copy-prompt', 'apply-page', 'dismiss']);
+    expect(nextActions({ ...base, status: 'proposed', pagePath: '/pricing', hostedCanvas: true }))
+      .toEqual(['fix', 'ticket', 'copy-prompt', 'apply-page', 'apply-in-composer', 'dismiss']);
+  });
+
+  it('offers none of them without a page, or once the fix is settled', () => {
+    expect(nextActions({ ...base, status: 'proposed', pagePath: null, hostedCanvas: true })).toEqual(['fix', 'ticket', 'dismiss']);
+    expect(nextActions({ ...base, status: 'worked', pagePath: '/pricing', hostedCanvas: true })).toEqual([]);
+  });
+
+  it('keeps copy-prompt open after a hand-applied fix, but not apply-in-composer', () => {
+    expect(nextActions({ ...base, status: 'applied', actionKind: 'copy_prompt', pagePath: '/pricing', hostedCanvas: true }))
+      .toEqual(['copy-prompt', 'apply-page', 'dismiss']);
+  });
+
+  it('closes apply-page when the page has no accepted fix', () => {
+    expect(nextActions({ ...base, status: 'proposed', pagePath: '/pricing', pageAcceptedFixes: 0 })).toEqual(['fix', 'ticket', 'copy-prompt', 'dismiss']);
+  });
+
+  it('never offers Revert on a hand-applied fix', () => {
+    const refs = { ...EMPTY_REFS, previewRelease: 'r2', liveRelease: 'r1' };
+    expect(nextActions({ ...base, status: 'worse', actionKind: 'copy_prompt', refs })).toEqual([]);
+  });
+});

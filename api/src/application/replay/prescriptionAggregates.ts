@@ -44,6 +44,8 @@ import {
   readSplits,
 } from './prescriptionAggregateReads';
 import type { ReplaySiteRecord } from './replaySites';
+import { buildPageFacts } from './pageAggregates';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** The window every rule reads. */
 export const PRESCRIPTION_WINDOW_DAYS = 30;
@@ -153,12 +155,18 @@ export async function buildSiteAggregates(
       cohorts: cohorts.get(issue.fingerprint) ?? null,
     }));
 
-    const [heat, steps, knownCohorts, proofs, cachedPatterns] = await Promise.all([
+    const [heat, steps, knownCohorts, proofs, cachedPatterns, pages] = await Promise.all([
       heatFor(store, scope, routes.slice(0, ROUTES_DETAILED).map((r) => r.route), sinceDay),
       funnelSteps(env, db, store, scope, days, now),
       readKnownCohorts(store, scope, since),
       site.kind === 'hosted' && site.projectId !== null ? readGradedProofs(db, site.tenantId, site.projectId) : Promise.resolve([]),
       peekCached<ReplaySegmentSummaryDto>(env, keys.segmentSummary(days, '')),
+      // S4f: the key pages' captures + field vitals + search. A page-review outage must
+      // not take the behaviour rules down with it.
+      buildPageFacts(env, db, site, { days, now }).catch((error) => {
+        reportCaughtError(error, { source: 'application/replay/prescriptionAggregates.ts', operation: 'buildPageFacts' });
+        return [];
+      }),
     ]);
 
     const releaseSplit = new Map(splits.releases.map((r) => [r.value, r]));
@@ -186,6 +194,7 @@ export async function buildSiteAggregates(
       knownCohorts,
       proofs,
       patterns: cachedPatterns?.patterns ?? [],
+      pages,
     };
   }, TTL);
 }

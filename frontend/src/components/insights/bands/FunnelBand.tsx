@@ -3,17 +3,17 @@
  * each step's visits and its conversion from the step before, all ≈ (funnels
  * run over kept recordings, D18) — over the window and the ONE filter. A
  * segment opens the `funnel` kind on that funnel. A site with no funnel gets
- * "Create a funnel", which opens the editor in place.
+ * "Create a funnel", which opens the editor as a level of the ONE panel
+ * (`funnel_edit`, D16) — and the band reads again when the panel moves on.
  */
 
-import { useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import type { ReplayFunnelDto, ReplayFunnelEvalDto } from '@builderforce/interaction-contract';
 import { replayApi } from '@/lib/replayApi';
 import { useFormat } from '@/i18n/useFormat';
 import { useAdminData } from '@/components/admin/adminShared';
-import { FunnelEditor } from '@/components/replay/funnels/FunnelEditor';
-import { funnelLevelId } from '@/components/replay/funnels/funnelLevel';
+import { funnelEditLevel, funnelLevelId } from '@/components/replay/funnels/funnelLevel';
 import { useInsightsScope } from '../insightsScope';
 import { usePanel } from '../usePanel';
 
@@ -45,10 +45,18 @@ export function FunnelBand() {
   const t = useTranslations('insights.funnel.band');
   const fmt = useFormat();
   const { siteId, days, filter } = useInsightsScope();
-  const { push } = usePanel();
-  const [creating, setCreating] = useState(false);
+  const { push, levels } = usePanel();
   const funnels = useAdminData<ReplayFunnelDto[]>(() => replayApi.listFunnels(siteId), [siteId]);
   const first = funnels.data?.[0] ?? null;
+  const hasFunnel = first !== null;
+  const reloadFunnels = funnels.reload;
+  // A funnel created in the panel's editor level: read again once the panel moves on from it.
+  const editing = levels.some((level) => level.kind === 'funnel_edit');
+  const wasEditing = useRef(editing);
+  useEffect(() => {
+    if (wasEditing.current && !editing && !hasFunnel) reloadFunnels();
+    wasEditing.current = editing;
+  }, [hasFunnel, editing, reloadFunnels]);
   const filterKey = JSON.stringify(filter);
   const evaluation = useAdminData<ReplayFunnelEvalDto | null>(
     () => (first ? replayApi.evaluateFunnel(siteId, first.id, { days, filter }) : Promise.resolve(null)),
@@ -61,16 +69,7 @@ export function FunnelBand() {
     return (
       <section aria-label={t('aria')} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap', minWidth: 0 }}>
         <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>{t('none')}</span>
-        <button type="button" className="btn-secondary" style={{ minHeight: 44 }} onClick={() => setCreating(true)}>{t('create')}</button>
-        {creating && (
-          <FunnelEditor
-            siteId={siteId}
-            days={days}
-            funnel={null}
-            onClose={() => setCreating(false)}
-            onSaved={() => { setCreating(false); funnels.reload(); }}
-          />
-        )}
+        <button type="button" className="btn-secondary" style={{ minHeight: 44 }} onClick={() => push(funnelEditLevel())}>{t('create')}</button>
       </section>
     );
   }

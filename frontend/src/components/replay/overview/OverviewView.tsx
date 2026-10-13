@@ -5,7 +5,8 @@
  * top lists (`OverviewBreakdowns`). Unfiltered it is exact; filtered it is ≈.
  *
  * A breakdown row narrows the filter in place; a frustration tile narrows it to
- * that signal and opens the issues behind it.
+ * that signal and opens the issues behind it. The top three open fixes for the
+ * same filter lead (THE fix card, compact — D13: fixes lead, numbers are evidence).
  */
 
 import { useTranslations } from 'next-intl';
@@ -18,6 +19,9 @@ import { PanelPending } from '@/components/insights/kinds/PanelPending';
 import { useInsightsScope } from '@/components/insights/insightsScope';
 import type { InsightPanelLevel } from '@/components/insights/panelKinds';
 import { addClause } from '../filter/useReplayFilter';
+import { PrescriptionCard } from '../prescriptions/PrescriptionCard';
+import { isOpenPrescription } from '../prescriptions/prescriptionModel';
+import { usePrescriptionsFor } from '../prescriptions/usePrescriptionsFor';
 import { OverviewBreakdowns } from './OverviewBreakdowns';
 import { OverviewTiles } from './OverviewTiles';
 
@@ -28,8 +32,12 @@ export interface OverviewViewProps {
 
 const heading = { margin: '0 0 var(--space-2)', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' } as const;
 
+/** Fixes the Overview leads with. */
+export const OVERVIEW_TOP_FIXES = 3;
+
 export function OverviewView({ siteId, push }: OverviewViewProps) {
   const t = useTranslations('replay.overview');
+  const tFixes = useTranslations('replay.fixes');
   const fmt = useFormat();
   const { days, filter, setFilter } = useInsightsScope();
   const filterKey = JSON.stringify(filter);
@@ -37,6 +45,7 @@ export function OverviewView({ siteId, push }: OverviewViewProps) {
     () => replayApi.getOverview(siteId, { days, filter }),
     [siteId, days, filterKey],
   );
+  const fixes = usePrescriptionsFor({ siteId, filter }).items.filter(isOpenPrescription).slice(0, OVERVIEW_TOP_FIXES);
   if (!data) return <PanelPending loading={loading} error={error} />;
 
   const narrow = (clause: ReplayFilterClause) => setFilter(addClause(filter, clause));
@@ -50,6 +59,12 @@ export function OverviewView({ siteId, push }: OverviewViewProps) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', minWidth: 0 }}>
       {data.estimated && (
         <p role="note" style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>{t('estimatedNote')}</p>
+      )}
+      {fixes.length > 0 && (
+        <section aria-label={tFixes('overviewTitle')} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+          <h3 style={heading}>{tFixes('overviewTitle')}</h3>
+          {fixes.map((p) => <PrescriptionCard key={p.id} compact siteId={siteId} prescription={p} push={push} />)}
+        </section>
       )}
       <OverviewTiles overview={data} onFrustration={openFrustration} />
       {data.trend.length > 1 && (

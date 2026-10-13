@@ -11,6 +11,7 @@ import type {
   ReplayPrescriptionActionKind,
   ReplayPrescriptionArea,
 } from '@builderforce/interaction-contract';
+import type { PageFacts } from './pageFacts';
 
 /** A conversion cohort: visits and the conversions among them (≈ when from kept recordings). */
 export interface Cohort {
@@ -146,6 +147,8 @@ export interface SiteAggregates {
   knownCohorts: KnownCohortAggregate[];
   proofs: ProofAggregate[];
   patterns: CitedPatternAggregate[];
+  /** S4f: the key pages' captures, field vitals, behaviour and search facts (§5.2). */
+  pages?: PageFacts[];
 }
 
 /** What a rule found: deterministic, cited by recording, with its own cohorts. */
@@ -167,6 +170,10 @@ export interface Finding {
   /** Visits the finding touched in the window. */
   affected: number;
   cohorts: ImpactCohorts | null;
+  /** S4f: the page capture the finding was read from. */
+  captureId?: string | null;
+  /** What the impact counts when it is not conversions (SEO rules count `clicks`). */
+  impactUnit?: string;
 }
 
 export interface PrescriptionAcceptance {

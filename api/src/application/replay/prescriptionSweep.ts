@@ -126,12 +126,17 @@ export async function sweepSite(
     const key = keyOf(finding.ruleId, finding.subjectKey);
     if (dismissed.has(key)) continue;
     // `basis` keeps the cohorts the range came from (Test it sizes its sample from them); the DTO does not expose it.
-    const impact = { ...estimateImpact(finding, finding.cohorts, agg.days), basis: finding.cohorts };
+    const impact = {
+      ...estimateImpact(finding, finding.cohorts, agg.days),
+      // S4f: an SEO finding's impact counts search clicks, not conversions.
+      ...(finding.impactUnit ? { unit: finding.impactUnit } : {}),
+      basis: finding.cohorts,
+    };
     const existing = open.get(key);
     if (existing) {
       const [updated] = await db
         .update(replayPrescriptions)
-        .set({ finding: storedFinding(finding), impact, pagePath: finding.pagePath, updatedAt: now })
+        .set({ finding: storedFinding(finding), impact, pagePath: finding.pagePath, captureId: finding.captureId ?? existing.captureId, updatedAt: now })
         .where(eq(replayPrescriptions.id, existing.id))
         .returning();
       result.refreshed += 1;
@@ -149,6 +154,7 @@ export async function sweepSite(
         source: 'rule',
         subjectKey: finding.subjectKey,
         pagePath: finding.pagePath,
+        captureId: finding.captureId ?? null,
         status: 'proposed',
         finding: storedFinding(finding),
         impact,

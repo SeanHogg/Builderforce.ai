@@ -51,4 +51,5 @@ export default defineConfig([
   cdnIife('recorder', 'src/recorder.ts', 'BuilderforceReplayRecorder'),
   cdnIife('embed', 'src/embed.ts', 'BuilderforceEmbed'),
   cdnIife('player', 'src/player.ts', 'BuilderforceReplayPlayer'),
+  cdnIife('pagekit', 'src/pageKit.ts', 'BuilderforcePageKit'),
 ]);

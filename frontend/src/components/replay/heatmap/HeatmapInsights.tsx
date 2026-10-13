@@ -5,7 +5,9 @@
  * finding's title from `replay.heatInsight.<ruleId>` over its `params`, plus
  * the actions in `HEAT_INSIGHT_ACTIONS` that apply to it — "Watch replays"
  * (the `issues` kind on the route, and the element when there is one) and,
- * for a ticket-worthy finding, "Copy link" to paste into the ticket.
+ * for a ticket-worthy finding, "Copy link" to paste into the ticket. A finding
+ * about an element that a fix has been prescribed for carries that fix (THE fix
+ * card, compact — matched by the route and the element's selector).
  */
 
 import { useTranslations } from 'next-intl';
@@ -17,6 +19,9 @@ import { panelHref } from '@/components/insights/panelUrl';
 import type { InsightPanelLevel } from '@/components/insights/panelKinds';
 import { useFormat } from '@/i18n/useFormat';
 import type { Formatter } from '@/i18n/format';
+import { PrescriptionCard } from '../prescriptions/PrescriptionCard';
+import { matchesPrescription } from '../prescriptions/prescriptionModel';
+import { usePrescriptionsFor } from '../prescriptions/usePrescriptionsFor';
 import { issuesOnRoute, routeHeatLevel } from './heatLinks';
 
 export interface HeatmapInsightsProps {
@@ -78,6 +83,7 @@ export function HeatmapInsights({ siteId, route, release = null, compare = null,
     () => replayApi.heatInsights(siteId, { route, release, compare, device, days }),
     [siteId, route, release, compare, device, days],
   );
+  const fixes = usePrescriptionsFor({ siteId, route }).items;
 
   const ctx: ActionContext = {
     push,
@@ -117,6 +123,9 @@ export function HeatmapInsights({ siteId, route, release = null, compare = null,
                   </button>
                 ))}
               </div>
+              {insight.selector && fixes
+                .filter((p) => matchesPrescription(p, { selector: insight.selector ?? undefined }))
+                .map((p) => <PrescriptionCard key={p.id} compact siteId={siteId} prescription={p} push={push} />)}
             </li>
           ))}
         </ul>

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { filterFromQuery, type ReplayHeatInsightDto } from '@builderforce/interaction-contract';
 import { replayApi } from '@/lib/replayApi';
+import { prescription } from '@/test/replayPrescriptionFixtures';
 import { HeatmapInsights } from './HeatmapInsights';
 
 /**
@@ -40,6 +41,7 @@ beforeEach(() => {
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
   window.history.replaceState({}, '', '/apps/insights?site=site-1');
   vi.spyOn(replayApi, 'heatInsights').mockResolvedValue(insights);
+  vi.spyOn(replayApi, 'listPrescriptions').mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -103,5 +105,20 @@ describe('HeatmapInsights', () => {
     vi.mocked(replayApi.heatInsights).mockResolvedValue([]);
     render(<HeatmapInsights siteId="site-1" route="/pricing" push={vi.fn()} />);
     expect(await screen.findByText('replay.heatInsight.empty')).toBeInTheDocument();
+  });
+
+  it('a finding about an element carries the fix prescribed for it — matched by route and selector', async () => {
+    vi.mocked(replayApi.listPrescriptions).mockResolvedValue([
+      prescription({ id: 'rx-buy', pagePath: '/pricing', finding: { ...prescription().finding, selector: 'getByRole("button", { name: "Buy" })' } }),
+      prescription({ id: 'rx-elsewhere', pagePath: '/checkout', finding: { ...prescription().finding, selector: 'getByRole("button", { name: "Buy" })' } }),
+    ]);
+    const push = vi.fn();
+    render(<HeatmapInsights siteId="site-1" route="/pricing" push={push} />);
+    await screen.findAllByTestId('heat-insight');
+    const rx = await within(card('rage_spike')).findByTestId('prescription-card');
+    expect(rx).toHaveAttribute('data-compact', 'true');
+    expect(screen.getAllByTestId('prescription-card')).toHaveLength(1);
+    fireEvent.click(within(rx).getByRole('button', { name: /replay\.prescription\.openAria/ }));
+    expect(push).toHaveBeenCalledWith({ kind: 'fix', id: 'rx-buy', tab: 'change' });
   });
 });

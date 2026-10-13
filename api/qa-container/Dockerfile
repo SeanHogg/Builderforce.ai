@@ -23,7 +23,7 @@ RUN npm install --no-audit --no-fund \
   && npm cache clean --force \
   && rm -rf /var/lib/apt/lists/* /root/.npm
 
-COPY server.mjs replayExport.mjs ./
+COPY server.mjs replayExport.mjs pageCapture.mjs pageFacts.mjs ./
 
 ENV NODE_ENV=production
 ENV PORT=8080

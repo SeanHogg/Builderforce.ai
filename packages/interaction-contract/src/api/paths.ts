@@ -66,4 +66,23 @@ export const REPLAY_PATHS = {
   prescriptionSweep: '/api/replay/prescriptions/sweep',
   /** GET — `ReplayReleaseReportDto`. */
   releaseReport: '/api/replay/releases/:releaseKey/report',
+  // S4f page review
+  /** GET `?site` — `ReplayPageListDto` (the key pages, scored). */
+  pages: '/api/replay/pages',
+  /** GET `?site&path` — `ReplayPageReviewDto`. */
+  pageReview: '/api/replay/pages/review',
+  /** POST `?site`, body `ReplayPageCaptureRequest` — capture now (MANAGER, once an hour); `ReplayPageCaptureResultDto`. */
+  pageCapture: '/api/replay/pages/capture',
+  /** GET `?site` — a capture's `screenshot` | `fold` | `rects` | `after-desktop` | `after-phone` (`:asset`). */
+  capturesAsset: '/api/replay/pages/captures/:captureId/:asset',
+  /** GET `?site&audience` — `ReplayImprovementPromptDto` for one fix. */
+  improvementPrompt: '/api/replay/prescriptions/:prescriptionId/prompt',
+  /** GET `?site&path&audience` — `ReplayImprovementPromptDto` for every accepted fix on a page. */
+  pagePrompt: '/api/replay/pages/prompt',
+  /** GET `?site` — `ReplayPreviewUrlDto`: a short-lived signed link to a hosted release before it is published. */
+  previewUrl: '/api/replay/releases/:releaseKey/preview',
+  /** GET `?site` — `ReplaySequenceChoiceDto[]` (Follow up's sequence picker). */
+  sequences: '/api/replay/sequences',
+  /** GET `?site` — `ReplayCodingAgentChoiceDto[]` (Fix it's agent picker; empty for an external site). */
+  codingAgents: '/api/replay/coding-agents',
 } as const;

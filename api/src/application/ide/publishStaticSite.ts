@@ -33,6 +33,7 @@ import { choosePublishSubdomain, claimSiteRow } from './siteSubdomainClaim';
 import { ensureProjectBackend } from '../backend';
 import { recordSiteRelease, type ReleaseSource } from './siteReleases';
 import { SITE_LANDING_KEY, landingPageForProject } from './siteLandingPage';
+import { noteComposerPublish } from '../replay/prescriptionReleaseHooks';
 
 /** A single built file, dist-relative. */
 export interface PublishAsset {
@@ -292,6 +293,10 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
   
     reportCaughtError(error, { source: "application/ide/publishStaticSite.ts", operation: "publishStaticSite" });
   }
+
+  // Insights (PRD 33 §5.2): fixes applied in the composer are measured on the release
+  // this publish made. Best-effort and never throws.
+  await noteComposerPublish(env, db, { tenantId, projectId, versionToken });
 
   return {
     ok: true,

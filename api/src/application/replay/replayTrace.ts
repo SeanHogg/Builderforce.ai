@@ -54,6 +54,10 @@ export const REPLAY_TRACE_VERBS = {
   prescriptionDismiss: 'replay.prescription.dismiss',
   prescriptionPublishPreview: 'replay.prescription.publish-preview',
   prescriptionRevert: 'replay.prescription.revert',
+  // S4f: the page-review actions (`prescriptionPageActions.ts`).
+  prescriptionCopyPrompt: 'replay.prescription.copy-prompt',
+  prescriptionApplyPage: 'replay.prescription.apply-page',
+  prescriptionApplyInComposer: 'replay.prescription.apply-in-composer',
 } as const;
 
 export type ReplayTraceVerb = (typeof REPLAY_TRACE_VERBS)[keyof typeof REPLAY_TRACE_VERBS];

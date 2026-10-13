@@ -37,6 +37,8 @@ import {
 import { replayReadKeys } from './replayCacheKeys';
 import { filterCacheKey } from './replayReadModel';
 import { ReplayReadService } from './ReplayReadService';
+import { visualOf } from './pageVisual';
+import { getSiteForTenant } from './replaySites';
 
 export type PrescriptionRow = typeof replayPrescriptions.$inferSelect;
 
@@ -103,8 +105,27 @@ function acceptanceOf(raw: unknown): ReplayPrescriptionDto['acceptance'] {
   return { metric: a.metric, direction: a.direction, minVisits: Number(a.minVisits) || 0 };
 }
 
+/** What the §5.2 page actions need to know beyond the row (`nextActions`). */
+export interface PrescriptionDtoContext {
+  /** The site is a Builderforce-hosted canvas app (`apply-in-composer`). */
+  hostedCanvas?: boolean;
+  /** Open fixes on the row's page (`apply-page`); defaults to the row itself. */
+  pageAcceptedFixes?: number;
+}
+
+const PAGE_ACTION_KINDS: readonly ReplayPrescriptionActionKind[] = ['copy_prompt', 'apply_page', 'apply_in_composer'];
+const OPEN_STATUSES = new Set(['proposed', 'applied', 'measuring']);
+
+/** The context of the rows of one site: hosted or not, and the open fixes per page. */
+export function dtoContextFor(site: { kind: string; projectId: number | null }, rows: readonly Pick<PrescriptionRow, 'pagePath' | 'status'>[]): (row: Pick<PrescriptionRow, 'pagePath'>) => PrescriptionDtoContext {
+  const hostedCanvas = site.kind === 'hosted' && site.projectId !== null;
+  const open = new Map<string, number>();
+  for (const r of rows) if (r.pagePath && OPEN_STATUSES.has(r.status)) open.set(r.pagePath, (open.get(r.pagePath) ?? 0) + 1);
+  return (row) => ({ hostedCanvas, ...(row.pagePath ? { pageAcceptedFixes: open.get(row.pagePath) ?? 0 } : {}) });
+}
+
 /** One row as the contract DTO. `rank` is the row's place in its ranked list. */
-export function toPrescriptionDto(row: PrescriptionRow, rank = 0): ReplayPrescriptionDto {
+export function toPrescriptionDto(row: PrescriptionRow, rank = 0, ctx: PrescriptionDtoContext = {}): ReplayPrescriptionDto {
   const rule = PRESCRIPTION_RULE_BY_ID.get(row.ruleId);
   const refs = decodeActionRef(row.actionRef);
   const ruleActions = rule?.actions ?? [];
@@ -120,10 +141,19 @@ export function toPrescriptionDto(row: PrescriptionRow, rank = 0): ReplayPrescri
     finding,
     prescription: row.prescription,
     change: row.change ?? null,
-    visual: row.visual ?? null,
+    visual: visualOf(row.visual),
+    captureId: row.captureId ?? null,
     impact: impactOf(row.impact),
-    actions: [...new Set<ReplayPrescriptionActionKind>([...ruleActions, 'dismiss'])],
-    next: nextActions({ status: row.status, actionKind: row.actionKind, refs, ruleActions }),
+    actions: [...new Set<ReplayPrescriptionActionKind>([...ruleActions, ...(row.pagePath ? PAGE_ACTION_KINDS : []), 'dismiss'])],
+    next: nextActions({
+      status: row.status,
+      actionKind: row.actionKind,
+      refs,
+      ruleActions,
+      pagePath: row.pagePath,
+      hostedCanvas: ctx.hostedCanvas,
+      pageAcceptedFixes: ctx.pageAcceptedFixes,
+    }),
     actionKind: (ACTION_KINDS as readonly string[]).includes(row.actionKind ?? '') ? (row.actionKind as ReplayPrescriptionActionKind) : null,
     actionRef: row.actionRef,
     refs,
@@ -189,7 +219,8 @@ export async function listPrescriptions(
       prescriptionMatchesFilter({ pagePath: row.pagePath, fingerprint: strOrNull(record(row.finding).fingerprint) }, input.filter)));
     const open = ranked.filter((r) => r.status === 'proposed' || r.status === 'applied' || r.status === 'measuring');
     const decided = ranked.filter((r) => !open.includes(r));
-    return [...open, ...decided].slice(0, PRESCRIPTIONS_LIST_MAX).map((row, i) => toPrescriptionDto(row, i + 1));
+    const contextOf = dtoContextFor(await getSiteForTenant(env, db, scope.tenantId, scope.siteId), rows);
+    return [...open, ...decided].slice(0, PRESCRIPTIONS_LIST_MAX).map((row, i) => toPrescriptionDto(row, i + 1, contextOf(row)));
   }, TTL);
 }
 
@@ -201,7 +232,11 @@ export async function getPrescription(env: Env, db: Db, scope: ReplayScope, pres
   const ranked = list.find((p) => p.id === prescriptionId);
   if (ranked) return ranked;
   return getOrSetCached(env, `${keys.prescriptions('', '', '')}:one:${prescriptionId}`, async () =>
-    toPrescriptionDto(await loadPrescriptionRow(db, scope, prescriptionId)), TTL);
+    toPrescriptionDto(
+      await loadPrescriptionRow(db, scope, prescriptionId),
+      0,
+      { hostedCanvas: await getSiteForTenant(env, db, scope.tenantId, scope.siteId).then((s) => s.kind === 'hosted' && s.projectId !== null) },
+    ), TTL);
 }
 
 const REPORT_MAX = 50;

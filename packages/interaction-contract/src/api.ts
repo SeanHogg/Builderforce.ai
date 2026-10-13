@@ -16,4 +16,5 @@ export * from './api/core';
 export * from './api/heat';
 export * from './api/analysis';
 export * from './api/prescriptions';
+export * from './api/review';
 export * from './api/paths';

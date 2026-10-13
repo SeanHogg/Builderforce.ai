@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReplayOverviewDto } from '@builderforce/interaction-contract';
 import { replayApi } from '@/lib/replayApi';
 import { InsightsScopeProvider, useInsightsScope } from '@/components/insights/insightsScope';
+import { prescription } from '@/test/replayPrescriptionFixtures';
 import { OverviewView } from './OverviewView';
 
 /**
@@ -54,6 +55,7 @@ function renderView(push = vi.fn()) {
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/apps/insights');
+  vi.spyOn(replayApi, 'listPrescriptions').mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -97,5 +99,23 @@ describe('OverviewView', () => {
     // An enum value is translated, and its clause is still the raw value.
     fireEvent.click(screen.getByRole('button', { name: 'replay.overview.addFilterAria replay.filter.value.phone replay.filter.field.device' }));
     expect(JSON.parse(screen.getByTestId('filter').textContent ?? '').all).toContainEqual({ field: 'device', op: 'eq', value: 'phone' });
+  });
+
+  it('leads with the top three open fixes for the same filter — THE fix card, compact', async () => {
+    vi.spyOn(replayApi, 'getOverview').mockResolvedValue(overview());
+    vi.mocked(replayApi.listPrescriptions).mockResolvedValue([
+      prescription({ id: 'rx-1', rank: 1 }),
+      prescription({ id: 'rx-done', rank: 2, status: 'worked' }),
+      prescription({ id: 'rx-2', rank: 3 }),
+      prescription({ id: 'rx-3', rank: 4 }),
+      prescription({ id: 'rx-4', rank: 5 }),
+    ]);
+    const push = renderView();
+    expect(await screen.findByText('replay.fixes.overviewTitle')).toBeInTheDocument();
+    const cards = await screen.findAllByTestId('prescription-card');
+    expect(cards).toHaveLength(3);
+    cards.forEach((card) => expect(card).toHaveAttribute('data-compact', 'true'));
+    fireEvent.click(screen.getAllByRole('button', { name: /replay\.prescription\.openAria/ })[0]!);
+    expect(push).toHaveBeenCalledWith({ kind: 'fix', id: 'rx-1', tab: 'change' });
   });
 });

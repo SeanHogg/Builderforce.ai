@@ -18,7 +18,9 @@ import { useInsightsScope } from '@/components/insights/insightsScope';
 import type { InsightPanelLevel } from '@/components/insights/panelKinds';
 import { fmtClock } from '../replayMarks';
 import { DroppedRecordings } from './DroppedRecordings';
-import { FunnelEditor } from './FunnelEditor';
+import { funnelEditLevel } from './funnelLevel';
+import { PrescriptionCard } from '../prescriptions/PrescriptionCard';
+import { usePrescriptionsFor } from '../prescriptions/usePrescriptionsFor';
 
 export interface FunnelsViewProps {
   siteId: string;
@@ -27,29 +29,14 @@ export interface FunnelsViewProps {
   push: (level: InsightPanelLevel) => void;
 }
 
-type Editing = { funnel: ReplayFunnelDto | null } | null;
-
 export function FunnelsView({ siteId, initialFunnelId, push }: FunnelsViewProps) {
   const t = useTranslations('replay.funnels');
-  const { days } = useInsightsScope();
   const funnels = useAdminData<ReplayFunnelDto[]>(() => replayApi.listFunnels(siteId), [siteId]);
   const [chosen, setChosen] = useState<string | null>(initialFunnelId ?? null);
-  const [editing, setEditing] = useState<Editing>(null);
   const list = funnels.data ?? [];
   const selected = list.find((funnel) => funnel.id === chosen) ?? list[0] ?? null;
 
   if (!funnels.data) return <PanelPending loading={funnels.loading} error={funnels.error} />;
-
-  const editor = editing && (
-    <FunnelEditor
-      siteId={siteId}
-      days={days}
-      funnel={editing.funnel}
-      onClose={() => setEditing(null)}
-      onSaved={(saved) => { setEditing(null); setChosen(saved.id); funnels.reload(); }}
-      onDeleted={() => { setEditing(null); setChosen(null); funnels.reload(); }}
-    />
-  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', minWidth: 0 }}>
@@ -64,13 +51,12 @@ export function FunnelsView({ siteId, initialFunnelId, push }: FunnelsViewProps)
         )}
         {selected && list.length === 1 && <strong>{selected.name}</strong>}
         {selected && (
-          <button type="button" className="btn-ghost" style={{ minHeight: 44 }} onClick={() => setEditing({ funnel: selected })}>{t('edit')}</button>
+          <button type="button" className="btn-ghost" style={{ minHeight: 44 }} onClick={() => push(funnelEditLevel(selected.id))}>{t('edit')}</button>
         )}
-        <button type="button" className="btn-secondary" style={{ minHeight: 44 }} onClick={() => setEditing({ funnel: null })}>{t('new')}</button>
+        <button type="button" className="btn-secondary" style={{ minHeight: 44 }} onClick={() => push(funnelEditLevel())}>{t('new')}</button>
       </div>
       {!selected && <p style={{ margin: 0, color: 'var(--text-secondary)' }}>{t('empty')}</p>}
       {selected && <FunnelSteps siteId={siteId} funnel={selected} push={push} />}
-      {editor}
     </div>
   );
 }
@@ -133,16 +119,36 @@ function FunnelSteps({ siteId, funnel, push }: { siteId: string; funnel: ReplayF
                 )}
               </div>
               {watching === step.ord && (
-                <DroppedRecordings
-                  siteId={siteId}
-                  ids={step.droppedRecordingIds}
-                  onOpen={(recordingId) => push({ kind: 'recording', id: recordingId, tab: 'replay' })}
-                />
+                <>
+                  <StepPrescriptions siteId={siteId} funnelId={funnel.id} ord={step.ord} push={push} />
+                  <DroppedRecordings
+                    siteId={siteId}
+                    ids={step.droppedRecordingIds}
+                    onOpen={(recordingId) => push({ kind: 'recording', id: recordingId, tab: 'replay' })}
+                  />
+                </>
               )}
             </li>
           );
         })}
       </ol>
+    </section>
+  );
+}
+
+/**
+ * "Prescribed fix" in a step's drop panel (PRD 33 §5.1): the `error_on_step`
+ * fixes whose subject is this funnel step (`<funnelId>:<ord>:<fingerprint>`),
+ * as THE fix card, compact. Nothing when there is none.
+ */
+function StepPrescriptions({ siteId, funnelId, ord, push }: { siteId: string; funnelId: string; ord: number; push: (level: InsightPanelLevel) => void }) {
+  const t = useTranslations('replay.fixes');
+  const { items } = usePrescriptionsFor({ siteId, subject: `${funnelId}:${ord}:` });
+  if (items.length === 0) return null;
+  return (
+    <section aria-label={t('stepTitle')} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', minWidth: 0 }}>
+      <strong style={{ fontSize: 'var(--font-size-small)' }}>{t('stepTitle')}</strong>
+      {items.map((p) => <PrescriptionCard key={p.id} compact siteId={siteId} prescription={p} push={push} />)}
     </section>
   );
 }

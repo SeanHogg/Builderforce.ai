@@ -3635,12 +3635,14 @@
         "lead": "Lead",
         "overview": "Overview",
         "recordings": "Recordings"
-      }
+      },
+      "funnelEdit": "Edit funnel"
     },
     "lenses": {
       "live": "Live",
       "heat": "Heat",
-      "stuck": "Stuck"
+      "stuck": "Stuck",
+      "fixes": "Fixes"
     },
     "journey": {
       "steps": "{count, plural, one {# page} other {# pages}}",
@@ -3687,6 +3689,58 @@
         "heat": "Heat"
       },
       "openAria": "Open the page {route}"
+    },
+    "fix": {
+      "tabs": {
+        "change": "Change",
+        "measure": "Measure"
+      },
+      "issueTabs": {
+        "fix": "Fix",
+        "history": "History"
+      },
+      "noFix": "No fix has been prescribed for this issue yet.",
+      "measure": {
+        "acceptanceTitle": "Accepted when",
+        "acceptanceNone": "No acceptance test has been drafted yet.",
+        "resultTitle": "Result",
+        "notYet": "Not measured yet. The verdict arrives once the release that ships the fix reaches its sample."
+      },
+      "history": {
+        "title": "History",
+        "created": "Found",
+        "applied": "{action}",
+        "measured": "Measured: {verdict}",
+        "dismissed": "Dismissed: {reason}"
+      }
+    },
+    "fixes": {
+      "kind": "All fixes",
+      "findNow": "Find fixes now",
+      "finding": "Looking…",
+      "sweepResult": "{found, plural, one {# finding} other {# findings}}, {created} new",
+      "sweepLimited": "Fixes were looked for within the last hour. Try again later.",
+      "viewAll": "View all",
+      "error": "Could not load fixes.",
+      "loading": "Loading fixes…",
+      "empty": "No fix matches this filter.",
+      "areaAll": "All ({count})",
+      "areaChip": "{area} ({count})",
+      "areaAria": "Filter fixes by area",
+      "loadMore": "Show more"
+    },
+    "release": {
+      "title": "Release {label}",
+      "firstSeen": "First seen {date}",
+      "empty": "This release shipped no fix.",
+      "notMeasured": "Not measured yet",
+      "openAria": "Open fix: {title}",
+      "strip": {
+        "title": "Score by release",
+        "aria": "Fixes shipped per release",
+        "label": "{label}: {count, plural, one {# fix} other {# fixes}}, {worked} worked, {worse} made it worse",
+        "empty": "No release has shipped a fix yet."
+      }
     }
   },
   "cloudAgentForm": {
@@ -11503,6 +11557,10 @@
       "your-private-evermind-on-your-machine": {
         "title": "Your private Evermind, on your machine — with local models, connectors and approvals from your phone",
         "description": "Synapse now runs local models sized to your computer and serves them to Claude Code and your scripts, hosts MCP connectors the Brain can use, lets you approve an agent's step from your phone, and gives you a private model to start from. Everything it learns stays on your machine unless you publish it."
+      },
+      "fix-what-visitors-tell-you": {
+        "title": "Insights tells you what to fix — and proves it worked",
+        "description": "Recordings and heatmaps showed you the problem and left the next step to you. Insights now names the change, renders it on your page, hands it to an AI as a prompt or applies it, and grades it on the next release."
       }
     }
   },
@@ -34316,6 +34374,229 @@
           "conversions": "conversions"
         }
       }
+    },
+    "prescription": {
+      "area": {
+        "funnel": "Funnel",
+        "ux": "Usability",
+        "site": "Site",
+        "sales": "Sales",
+        "seo": "SEO",
+        "content": "Content",
+        "performance": "Performance",
+        "accessibility": "Accessibility"
+      },
+      "status": {
+        "proposed": "Proposed",
+        "applied": "In progress",
+        "measuring": "Measuring",
+        "worked": "Worked",
+        "no_effect": "No effect",
+        "worse": "Made it worse",
+        "dismissed": "Dismissed"
+      },
+      "verdict": {
+        "worked": "Worked",
+        "no_effect": "No effect",
+        "worse": "Made it worse"
+      },
+      "rule": {
+        "fallback": "Finding {ruleId}",
+        "rage_on_element": {
+          "title": "{share}% of visits to {route} rage-click “{label}”",
+          "description": "{sessions} sessions clicked it again and again because it did not respond the way they expected."
+        },
+        "error_on_step": {
+          "title": "An error is behind {share}% of drops at “{step}” in {funnel}",
+          "description": "“{error}” appears in the sessions that left the funnel at this step."
+        },
+        "dead_click_heading": {
+          "title": "{share}% of visits to {route} click the heading “{label}”, which does nothing",
+          "description": "{sessions} sessions expected the heading to be a link or a button."
+        },
+        "cta_below_fold": {
+          "title": "Only {reach}% of visitors to {route} scroll far enough to see “{label}”",
+          "description": "The call to action sits below the point where most visitors stop scrolling."
+        },
+        "quickback_after_reveal": {
+          "title": "{share}% of visits to {route} come straight back after opening “{label}”",
+          "description": "{sessions} sessions returned within seconds: what they found did not match what they expected."
+        },
+        "excessive_scroll_missing_info": {
+          "title": "{share}% of visits to {route} scroll back and forth looking for something",
+          "description": "{sessions} sessions scrolled excessively: the information they look for is hard to find."
+        },
+        "device_gap": {
+          "title": "Phones convert at {phoneRate}%, desktops at {desktopRate}%",
+          "description": "{sessions} phone sessions convert at less than half the desktop rate."
+        },
+        "release_regression": {
+          "title": "Conversion fell from {before}% to {after}% in {release}",
+          "description": "That is {drop}% below {previous}, the release before it."
+        },
+        "pricing_hesitation": {
+          "title": "{visitors} known visitors viewed {route} and did not buy",
+          "description": "They are identified, so a follow-up can reach them."
+        },
+        "checkout_abandon_known": {
+          "title": "{visitors} known visitors left checkout on {route}",
+          "description": "They are identified, so a follow-up can reach them."
+        },
+        "objection_pattern": {
+          "title": "Visitors hesitate over: {pattern}",
+          "description": "Seen in {examples} cited recordings."
+        },
+        "proof_missed_reason": {
+          "title": "{proof} missed its target: {reason}",
+          "description": "{share}% of visits to {route} hit this issue while the proof was measured."
+        }
+      },
+      "observed": "Observed",
+      "rankAria": "Rank {rank}",
+      "evidenceTitle": "Seen in",
+      "evidenceItem": "Recording {n} at {time}",
+      "evidenceAria": "Watch recording {n} at {time}",
+      "prescriptionTitle": "What to change",
+      "drafting": "The wording of this fix is being drafted.",
+      "change": {
+        "title": "Drafted change",
+        "before": "Now",
+        "after": "Change",
+        "target": "On {target}",
+        "unknown": "A change is drafted for this fix."
+      },
+      "changeKind": {
+        "copy": "Copy",
+        "layout": "Layout",
+        "code": "Code",
+        "content": "Content"
+      },
+      "impact": {
+        "estimateApprox": "≈ +{value} {unit} in {days} days ({low}–{high})",
+        "estimateExact": "+{value} {unit} in {days} days ({low}–{high})",
+        "pointApprox": "≈ +{value} {unit} in {days} days",
+        "pointExact": "+{value} {unit} in {days} days",
+        "rangeApprox": "≈ {low}–{high} {unit} in {days} days",
+        "rangeExact": "{low}–{high} {unit} in {days} days",
+        "none": "Not enough visits to estimate the impact yet"
+      },
+      "confidence": {
+        "low": "low confidence",
+        "medium": "medium confidence",
+        "high": "high confidence"
+      },
+      "unit": {
+        "conversions": "conversions",
+        "visits": "visits",
+        "sessions": "sessions"
+      },
+      "measured": {
+        "beforeAfter": "Before {before} → after {after}",
+        "onRelease": "on release {release}",
+        "source": {
+          "ticket_effect": "measured on the release that shipped it",
+          "ab_test": "measured by an A/B test",
+          "follow_up": "measured against visitors not followed up"
+        }
+      },
+      "dismissedBecause": "Dismissed: {reason}",
+      "acceptance": {
+        "text": "{metric} goes {direction}, over at least {minVisits} visits",
+        "direction": {
+          "up": "up",
+          "down": "down"
+        }
+      },
+      "metric": {
+        "rage_rate": "Rage-click rate",
+        "step_conversion": "Step conversion",
+        "dead_click_rate": "Dead-click rate",
+        "conversion_rate": "Conversion rate",
+        "quickback_rate": "Quick-back rate",
+        "excessive_scroll_rate": "Excessive-scroll rate",
+        "phone_conversion_rate": "Phone conversion rate",
+        "known_conversion_rate": "Known-visitor conversion rate",
+        "proof_metric": "The proof’s metric"
+      },
+      "actionsAria": "Actions for this fix",
+      "actions": {
+        "fix": "Fix it",
+        "test": "Test it",
+        "start-test": "Start the test",
+        "follow-up": "Follow up",
+        "ticket": "Ticket",
+        "publish-preview": "Publish",
+        "revert": "Revert",
+        "dismiss": "Dismiss",
+        "copy-prompt": "Copy prompt",
+        "apply-page": "Apply to the page",
+        "apply-in-composer": "Apply in composer"
+      },
+      "confirm": {
+        "start-test": {
+          "title": "Start the test?",
+          "message": "Visitors will be split between the live site and the preview until the test is decided.",
+          "confirm": "Start test"
+        },
+        "publish-preview": {
+          "title": "Publish the preview?",
+          "message": "The preview with this fix becomes the live site for every visitor.",
+          "confirm": "Publish"
+        },
+        "revert": {
+          "title": "Revert this fix?",
+          "message": "The site goes back to the release before this fix was published.",
+          "confirm": "Revert"
+        }
+      },
+      "dismiss": {
+        "title": "Dismiss this fix",
+        "reasonLabel": "Why dismiss it? (required)",
+        "reasonPlaceholder": "For example: the page was redesigned",
+        "submit": "Dismiss",
+        "cancel": "Cancel"
+      },
+      "followUp": {
+        "title": "Who would be followed up",
+        "none": "No known contact matches this finding.",
+        "unmatched": "{count, plural, one {# identified visitor has} other {# identified visitors have}} no matching contact",
+        "enrolled": "{count, plural, one {# contact enrolled} other {# contacts enrolled}}",
+        "draftTitle": "Drafted first touch (sent only from the sequence, after you edit it)",
+        "sequenceLabel": "Sequence to enrol into",
+        "sequenceHint": "Paste the sequence card’s link or id",
+        "enrol": "{count, plural, one {Enrol # contact} other {Enrol # contacts}}",
+        "cancel": "Cancel",
+        "contactAria": "Enrol {name}"
+      },
+      "project": {
+        "label": "Project",
+        "none": "Choose a project"
+      },
+      "result": {
+        "refusal": "{reason}",
+        "run": "A coding agent is working on ticket #{taskId}.",
+        "ticket": "Ticket #{taskId} created.",
+        "test": "A/B test drafted. Start it when you are ready.",
+        "enrolled": "{count, plural, one {# contact enrolled} other {# contacts enrolled}}",
+        "done": "Done."
+      },
+      "maker": {
+        "fix": "Made by a coding agent",
+        "test": "Proved by an A/B test",
+        "start-test": "Proved by an A/B test",
+        "follow-up": "Made by a sales follow-up",
+        "ticket": "Made by your team (ticket)",
+        "publish-preview": "Ready to publish",
+        "revert": "Ready to revert"
+      },
+      "openAria": "Open fix: {title}"
+    },
+    "fixes": {
+      "overviewTitle": "Top fixes",
+      "stepTitle": "Prescribed fix",
+      "playerTitle": "Fixes for {route}",
+      "proofTitle": "The prescribed fix",
+      "empty": "No fix prescribed for this page yet."
     }
   },
   "apps": {

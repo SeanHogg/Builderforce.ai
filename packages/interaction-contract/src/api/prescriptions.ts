@@ -1,4 +1,7 @@
 /** Insights API contract — prescriptions (PRD 33). Re-exported by `../api.ts`; see its header. */
+import type { ImprovementAudience } from '../improvementPrompt';
+import type { ReplayVisualDto } from './review';
+
 // ── S4e prescriptions (PRD 33 §5.1, D13) ─────────────────────────────────────
 
 export type ReplayPrescriptionArea =
@@ -16,12 +19,14 @@ export type ReplayPrescriptionStatus =
 export type ReplayPrescriptionActionKind =
   | 'fix' | 'test' | 'follow_up' | 'ticket' | 'dismiss' | 'apply_in_composer' | 'copy_prompt' | 'apply_page';
 
-/** The `:action` segment of `REPLAY_PATHS.prescriptionAction`. */
+/** The `:action` segment of `REPLAY_PATHS.prescriptionAction` (the last three are the §5.2 page-review actions). */
 export type ReplayPrescriptionRouteAction =
-  | 'fix' | 'test' | 'start-test' | 'follow-up' | 'ticket' | 'dismiss' | 'publish-preview' | 'revert';
+  | 'fix' | 'test' | 'start-test' | 'follow-up' | 'ticket' | 'dismiss' | 'publish-preview' | 'revert'
+  | 'copy-prompt' | 'apply-page' | 'apply-in-composer';
 
 export const REPLAY_PRESCRIPTION_ROUTE_ACTIONS: readonly ReplayPrescriptionRouteAction[] = [
   'fix', 'test', 'start-test', 'follow-up', 'ticket', 'dismiss', 'publish-preview', 'revert',
+  'copy-prompt', 'apply-page', 'apply-in-composer',
 ];
 
 /**
@@ -83,9 +88,12 @@ export interface ReplayPrescriptionDto {
   finding: ReplayPrescriptionFindingDto;
   /** The AI's cited phrasing; null until drafted (top 5 a day per site). */
   prescription: string | null;
-  /** The drafted change (`{ kind, description, target? }`), or a §5.2 `VisualPatch`. */
+  /** The drafted change (`{ kind, description, target? }`). */
   change: unknown | null;
-  visual: unknown | null;
+  /** A page-review fix's rendered before/after (§5.2); null for every other fix. */
+  visual: ReplayVisualDto | null;
+  /** The page capture a page-review finding was read from. */
+  captureId?: string | null;
   impact: ReplayImpactDto;
   /** The card's actions for this rule. */
   actions: ReplayPrescriptionActionKind[];
@@ -120,6 +128,8 @@ export interface ReplayPrescriptionActionInput {
   contactIds?: string[];
   /** `follow-up`: false (default) answers the preview; true enrols. */
   confirm?: boolean;
+  /** `copy-prompt` / `apply-page`: the prompt's audience (default `coding_agent`; `apply-in-composer` is always `composer`). */
+  audience?: ImprovementAudience;
 }
 
 /** `follow-up` without `confirm`: what WOULD happen, shown before a person enrols anyone. */
@@ -142,6 +152,12 @@ export interface ReplayPrescriptionActionResultDto {
   refusal?: string | null;
   testId?: number | null;
   followUp?: ReplayFollowUpPreviewDto | null;
+  /** `copy-prompt` / `apply-page` / `apply-in-composer`: the compiled improvement prompt (never stored). */
+  prompt?: string | null;
+  /** `apply-in-composer`: the selectors the canvas pushes as `previewPick` chips. */
+  selectors?: string[];
+  /** `apply-page`: every fix the page action applied. */
+  prescriptionIds?: string[];
 }
 
 export interface ReplayPrescriptionSweepResultDto {

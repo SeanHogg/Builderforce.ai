@@ -4,6 +4,7 @@ import type { ReplayFunnelDto, ReplayIssueDto, ReplayKpisDto, ReplayLiveDto, Rep
 import { replayApi } from '@/lib/replayApi';
 import { InsightsHome } from './InsightsHome';
 import { HOME_BANDS, homeGridTemplate } from './homeBands';
+import { prescription } from '@/test/replayPrescriptionFixtures';
 
 /**
  * The ONE Insights home (PRD 33 D16): every registered band renders over the
@@ -92,6 +93,7 @@ const overview: ReplayOverviewDto = {
 beforeEach(() => {
   window.history.replaceState({}, '', '/apps/insights');
   vi.spyOn(replayApi, 'listReleases').mockResolvedValue([]);
+  vi.spyOn(replayApi, 'listPrescriptions').mockResolvedValue([]);
   vi.spyOn(replayApi, 'filterOptions').mockResolvedValue([]);
   vi.spyOn(replayApi, 'listSegments').mockResolvedValue([]);
   vi.spyOn(replayApi, 'listFunnels').mockResolvedValue([funnel]);
@@ -141,8 +143,8 @@ describe('InsightsHome', () => {
     expect(await screen.findByText('heatmap /pricing click,scroll,areas')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'insights.lenses.live' }));
     expect(await screen.findByText(/replay\.live\.active/)).toBeInTheDocument();
-    // Do next waits for S4e, honestly.
-    expect(screen.getByText('insights.overview.doNextEmpty')).toBeInTheDocument();
+    // Do next with no fixes yet says so, honestly.
+    expect(await screen.findByText('insights.overview.doNextEmpty')).toBeInTheDocument();
 
     expect(replayApi.getKpis).toHaveBeenCalledWith('site-1', expect.objectContaining({ days: 30 }));
     expect(replayApi.listIssues).toHaveBeenCalledWith('site-1', expect.objectContaining({ days: 30, limit: 6 }));
@@ -151,6 +153,32 @@ describe('InsightsHome', () => {
     for (const band of HOME_BANDS) {
       expect(root.querySelector(`[data-area="${band.area}"]`)).not.toBeNull();
     }
+  });
+
+  it('Do next lists the ranked open fixes for the goal and the filter, and a fix opens the fix kind', async () => {
+    window.history.replaceState({}, '', '/apps/insights?f.device.eq=phone');
+    vi.mocked(replayApi.listPrescriptions).mockResolvedValue([
+      prescription({ id: 'rx-sales', area: 'sales', ruleId: 'pricing_hesitation', rank: 1, next: ['follow-up', 'dismiss'] }),
+      prescription({ id: 'rx-ux', area: 'ux', rank: 2 }),
+      prescription({ id: 'rx-done', area: 'ux', rank: 3, status: 'worked', next: [] }),
+    ]);
+    render(<InsightsHome siteId="site-1" />);
+    const next = await screen.findByRole('region', { name: 'insights.overview.homeAria' });
+    const doNext = next.querySelector<HTMLElement>('[data-area="next"]')!;
+    const cards = await within(doNext).findAllByTestId('prescription-card');
+    // Activation's areas lead (ux before sales); a decided fix is not "next".
+    expect(cards.map((card) => card.getAttribute('data-rule'))).toEqual(['rage_on_element', 'pricing_hesitation']);
+    expect(replayApi.listPrescriptions).toHaveBeenCalledWith('site-1', { filter: { all: [{ field: 'device', op: 'eq', value: 'phone' }] } });
+    // The goal re-orders: Revenue puts sales first.
+    fireEvent.click(screen.getByRole('button', { name: 'insights.goals.revenue' }));
+    await vi.waitFor(() => expect(within(doNext).getAllByTestId('prescription-card').map((card) => card.getAttribute('data-rule'))).toEqual(['pricing_hesitation', 'rage_on_element']));
+
+    // The fix level reads its prescription (left pending here: the card itself is FixKind.test's).
+    vi.spyOn(replayApi, 'getPrescription').mockReturnValue(new Promise(() => undefined));
+    fireEvent.click(within(doNext).getAllByRole('button', { name: /replay\.prescription\.openAria/ })[0]!);
+    const panel = await screen.findByRole('dialog');
+    expect(within(panel).getByText('insights.kinds.fix')).toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).get('panel')).toBe('fix:rx-sales:change');
   });
 
   it('refetches the numbers when the window changes', async () => {

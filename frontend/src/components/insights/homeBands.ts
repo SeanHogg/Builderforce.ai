@@ -2,19 +2,20 @@
  * HOME_BANDS — what the Insights home draws, and where (PRD 33 §4.1, D16).
  *
  * A band is `{ id, Component, area }`; `HOME_ROWS` places the areas on the
- * grid. `FunnelBand` (area `funnel`) arrived with S4c; later waves add `DoNext` +
- * `ScoreStrip` (area `next`, replacing `DoNextEmpty`) as rows here — the home never
+ * grid. `FunnelBand` (area `funnel`) arrived with S4c, `DoNext` + `ScoreStrip`
+ * (area `next`, stacked in its column) with S4e — rows here; the home never
  * changes. An area with no band takes no row, so an unbuilt band leaves no gap.
  */
 
 import type { ComponentType } from 'react';
-import { DoNextEmpty } from './bands/DoNextEmpty';
+import { DoNext } from './bands/DoNext';
 import { FunnelBand } from './bands/FunnelBand';
 import { GoalBar } from './bands/GoalBar';
 import { InsightsHeader } from './bands/InsightsHeader';
 import { IssuesTable } from './bands/IssuesTable';
 import { KpiTiles } from './bands/KpiTiles';
 import { PageStage } from './bands/PageStage';
+import { ScoreStrip } from './bands/ScoreStrip';
 
 export type HomeArea = 'header' | 'goal' | 'numbers' | 'funnel' | 'issues' | 'stage' | 'next';
 
@@ -31,7 +32,8 @@ export const HOME_BANDS: ReadonlyArray<HomeBand> = [
   { id: 'funnel', Component: FunnelBand, area: 'funnel' },
   { id: 'issues', Component: IssuesTable, area: 'issues' },
   { id: 'page-stage', Component: PageStage, area: 'stage' },
-  { id: 'do-next', Component: DoNextEmpty, area: 'next' },
+  { id: 'do-next', Component: DoNext, area: 'next' },
+  { id: 'score-strip', Component: ScoreStrip, area: 'next' },
 ];
 
 /** The grid, top to bottom. The last row takes the remaining height; the body splits 38 / 34 / 28. */

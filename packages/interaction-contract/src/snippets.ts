@@ -25,10 +25,15 @@ export const REPLAY_EMBED_PATH = '/embed/v1.js';
 export interface ReplayManifest {
   latest: { version: string; url: string; hash: string; builtAt: string };
   player?: { url: string; cssUrl: string; rrweb: string };
+  /** The page-review kit (`deriveSelector` + `applyVisualPatch`) the capture runner injects into the page under review. */
+  pageKit?: { url: string };
 }
 
 /** The global the player bundle assigns. */
 export const REPLAY_PLAYER_GLOBAL = 'BuilderforceReplayPlayer';
+
+/** The global the page-review kit bundle assigns (`replay-sdk/src/pageKit.ts`). */
+export const REPLAY_PAGE_KIT_GLOBAL = 'BuilderforcePageKit';
 
 /** The npm package that installs the same loader. */
 export const REPLAY_NPM_PACKAGE = '@seanhogg/builderforce-replay';

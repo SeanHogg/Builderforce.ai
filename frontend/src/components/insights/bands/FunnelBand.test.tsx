@@ -10,7 +10,7 @@ import { parseFunnelLevelId } from '@/components/replay/funnels/funnelLevel';
 /**
  * The home's funnel band: the first funnel as one row of segments (≈ visits,
  * conversion from the step before) over the ONE filter; a segment opens the
- * `funnel` kind on that funnel; no funnel → "Create a funnel" opens the editor.
+ * `funnel` kind on that funnel; no funnel → "Create a funnel" pushes the editor level.
  */
 
 const funnel: ReplayFunnelDto = {
@@ -74,11 +74,12 @@ describe('FunnelBand', () => {
     expect(parseFunnelLevelId(level.id)).toEqual({ funnelId: 'fun-1' });
   });
 
-  it('offers to create a funnel when the site has none', async () => {
+  it('offers to create a funnel when the site has none — as a level of the ONE panel, never a second overlay', async () => {
     vi.mocked(replayApi.listFunnels).mockResolvedValue([]);
     renderBand();
     fireEvent.click(await screen.findByRole('button', { name: 'insights.funnel.band.create' }));
-    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(JSON.parse(screen.getByTestId('levels').textContent ?? '[]')).toEqual([{ kind: 'funnel_edit', id: '' }]);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(replayApi.evaluateFunnel).not.toHaveBeenCalled();
   });
 });

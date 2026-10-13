@@ -28,6 +28,7 @@ import { decodeChunkBody, gzip, withinReplayIpBudget } from './replayIngestBody'
 import { keepChunk, type RecordingRow } from './replayRecordingWriter';
 import { sharedReplayRollupBuffer, type ReleaseSource, type ReplayRollupBuffer } from './replayRollupBuffer';
 import { flushReplayRollups } from './replayRollupFlush';
+import { onReleasesFirstSeen } from './prescriptionReleaseHooks';
 import { purgeStaleLive } from './replayRetention';
 import { resolveSiteForIngest, type ReplaySiteRecord } from './replaySites';
 import { recordReplayTrace, REPLAY_TRACE_VERBS } from './replayTrace';
@@ -167,9 +168,11 @@ export class ReplayIngestService {
         if (site.kind === 'hosted') await bumpJourneySignal(this.env, site.tenantId);
       }
       if (this.buffer.shouldFlush()) {
-        await flushReplayRollups(this.env, this.db, this.buffer.drain(), (error, table) => {
+        const flushed = await flushReplayRollups(this.env, this.db, this.buffer.drain(), (error, table) => {
           reportCaughtError(error, { source: SOURCE, operation: 'flushReplayRollups', context: { table } });
         });
+        // S4f: a release seen for the first time → its page captures + hand-applied fixes measured.
+        if (flushed?.newReleases?.length) await onReleasesFirstSeen(this.env, this.db, flushed.newReleases, now);
       }
       // Once a minute per site: orphan its cached reads and sweep its stale presence.
       if (await bumpSiteVersionThrottled(this.env, site.id)) {

@@ -34,6 +34,8 @@ import { replayTelemetryDb } from './replayDatabase';
 import { toRecordingSummary } from './replayReadModel';
 import { recordingLocation } from './replayRecordingWriter';
 import type { PrescriptionRow } from './prescriptionReads';
+import { buildPageDraftTranscript, PAGE_DRAFT_HEADER, pageShapeExtra, pageVisualFromDraft } from './pageDraft';
+import { requestRender } from './pageRender';
 import type { ReplaySiteRecord } from './replaySites';
 
 const SOURCE = 'application/replay/prescriptionDraft.ts';
@@ -166,16 +168,22 @@ export async function draftPrescriptions(
     used += 1;
     await setCached(env, capKey, used, { kvTtlSeconds: 2 * 86_400 });
     try {
-      const prompt = await buildDraftTranscript(env, db, site, row, agg);
+      // S4f: a page-review finding is drafted from its capture and also asks for its visual.
+      const pagePrompt = row.captureId ? await buildPageDraftTranscript(env, db, site, row) : null;
+      const prompt = pagePrompt ?? await buildDraftTranscript(env, db, site, row, agg);
       const condensed = await condenseTranscript(env, site.tenantId, {
         transcript: prompt.transcript,
-        header: 'A proved website finding, the page\'s element map and the timelines of visits that show it. Each line is numbered #n.',
-        shape: SHAPE,
-        maxTokens: 500,
+        header: pagePrompt
+          ? PAGE_DRAFT_HEADER
+          : 'A proved website finding, the page\'s element map and the timelines of visits that show it. Each line is numbered #n.',
+        shape: pagePrompt ? SHAPE + pageShapeExtra(row) : SHAPE,
+        maxTokens: pagePrompt ? 900 : 500,
       });
       if ('error' in condensed) continue;
       const draft = parseDraft(condensed.text, prompt.lines, prompt.selectors);
       if (!draft.prescription) continue;
+      const page = pagePrompt ? pageVisualFromDraft(condensed.text, row, pagePrompt.page) : null;
+      if (page?.rejected) console.warn('[insights] page draft visual rejected', { siteId: site.id, ruleId: row.ruleId, reason: page.rejected });
       const rule = PRESCRIPTION_RULE_BY_ID.get(row.ruleId);
       const updated = await db
         .update(replayPrescriptions)
@@ -183,11 +191,13 @@ export async function draftPrescriptions(
           prescription: draft.prescription,
           change: draft.change,
           acceptance: draft.acceptance ?? rule?.acceptance ?? null,
+          ...(page?.visual ? { visual: page.visual } : {}),
           updatedAt: now,
         })
         .where(and(eq(replayPrescriptions.id, row.id), isNull(replayPrescriptions.prescription)))
         .returning({ id: replayPrescriptions.id });
       written += updated.length;
+      if (updated.length > 0 && page?.visual) await requestRender(env, db, site, { id: row.id, pagePath: row.pagePath, visual: page.visual }, now);
     } catch (error) {
       reportCaughtError(error, { source: SOURCE, operation: 'draftPrescription', context: { siteId: site.id, ruleId: row.ruleId } });
     }

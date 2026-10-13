@@ -302,6 +302,7 @@ import { createReplayHeatmapRoutes } from './presentation/routes/replayHeatmapRo
 import { createReplayExportRoutes } from './presentation/routes/replayExportRoutes';
 import { createReplayAnalysisRoutes } from './presentation/routes/replayAnalysisRoutes';
 import { createReplayPrescriptionRoutes } from './presentation/routes/replayPrescriptionRoutes';
+import { createReplayPageRoutes } from './presentation/routes/replayPageRoutes';
 import { createReplayOpsRoutes } from './presentation/routes/replayOpsRoutes';
 import { createReplayTicketEffectRoutes } from './presentation/routes/replayTicketEffectRoutes';
 import { createReplayMethodSeedRoutes } from './presentation/routes/replayMethodSeedRoutes';
@@ -1263,6 +1264,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/replay',           createReplayExportRoutes());  // MP4 export + its runner callbacks (S4b)
   app.route('/api/replay',           createReplayAnalysisRoutes()); // segments, overview, smart events, funnels, flow, AI summaries (S4c)
   app.route('/api/replay',           createReplayPrescriptionRoutes()); // ranked fixes, their actions and verdicts (S4e)
+  app.route('/api/replay',           createReplayPageRoutes()); // page review: captures, prompts, previews + runner callbacks (S4f)
   app.route('/api/admin/replay-ops', createReplayOpsRoutes()); // aggregates only (D17)
   app.route('/api/replay',           createReplayTicketEffectRoutes()); // ticket-from-moment effect (S4d)
   app.route('/api/admin/replay-ops', createReplayMethodSeedRoutes(db)); // seed "The method" funnel (S4d, superadmin)

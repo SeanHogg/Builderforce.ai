@@ -113,6 +113,15 @@ async function readEffect(env: Env, db: Db, scope: ReplayScope, taskId: number, 
 }
 
 /**
+ * The effect of a moment with no ticket behind it (S4f: a fix a person applied by hand
+ * from its prompt) — the same fold, read and cache as a ticket's. `taskId` is 0.
+ */
+export async function momentEffect(env: Env, db: Db, scope: ReplayScope, moment: ReplayMoment): Promise<ReplayTicketEffectDto> {
+  const keys = await replayReadKeys(env, scope);
+  return getOrSetCached(env, keys.ticketEffect(0, fnv1a64(JSON.stringify(moment))), () => readEffect(env, db, scope, 0, moment), TTL);
+}
+
+/**
  * The ticket's measured effect, or null when it was not raised from a replay
  * moment. 404 for a task outside the workspace; 403 when the moment names a site
  * that is not the workspace's (`getSiteForTenant`).

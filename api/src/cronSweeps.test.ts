@@ -64,6 +64,13 @@ describe('CRON_SWEEPS registry', () => {
     ]);
   });
 
+  /** PRD 33 §5.2: the weekly floor of the page review's captures (a new release captures on first sight). */
+  it('registers the weekly replay-page-captures sweep, non-dispatching (runner jobs, no agent runs)', () => {
+    const sweep = CRON_SWEEPS.find((s) => s.key === 'replay-page-captures');
+    expect(sweep?.cadence).toBe('weekly-mon');
+    expect(sweep?.dispatches).toBeFalsy();
+  });
+
   /** PRD 33 §5.3.2: window-end proof verdicts are written by the daily runner, after the replay rollup. */
   it('registers the daily proof-verdicts sweep after replay-rollup, as a non-dispatching sweep', () => {
     const keys = CRON_SWEEPS.map((s) => s.key);

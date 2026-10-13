@@ -17,6 +17,14 @@
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import { REPLAY_EXPORT_JOB, runReplayExport, validateReplayExportJob } from './replayExport.mjs';
+import {
+  PAGE_CAPTURE_JOB,
+  PAGE_RENDER_JOB,
+  runPageCapture,
+  runPageRender,
+  validatePageCaptureJob,
+  validatePageRenderJob,
+} from './pageCapture.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 const MAX_FINDINGS = 200;
@@ -335,6 +343,9 @@ async function runExploration(spec) {
 /** Non-exploration jobs, by `kind` (`dispatchQaRunnerJob`). A body with no kind is an exploration. */
 const JOBS = {
   [REPLAY_EXPORT_JOB]: { validate: validateReplayExportJob, run: runReplayExport, id: (spec) => spec.exportId },
+  // PRD 33 §5.2 page review: one page × one size, and a fix's after render.
+  [PAGE_CAPTURE_JOB]: { validate: validatePageCaptureJob, run: runPageCapture, id: (spec) => `${spec.path}:${spec.device}` },
+  [PAGE_RENDER_JOB]: { validate: validatePageRenderJob, run: runPageRender, id: (spec) => spec.prescriptionId },
 };
 
 const server = createServer((req, res) => {

@@ -5,8 +5,9 @@
  *
  * Loading, rrweb and follow mode live in `useReplayPlayback`; this file is
  * layout and the outward actions — copy a link at this moment, the speed /
- * inactivity controls, the heat overlay (`PlayerHeatOverlay`) and "Export as
- * video" (`ReplayExportControl`).
+ * inactivity controls, the heat overlay (`PlayerHeatOverlay`), "Export as
+ * video" (`ReplayExportControl`) and the fixes prescribed for the recording's
+ * own page (THE fix card, compact).
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -23,6 +24,8 @@ import { ReplayHeader } from './ReplayHeader';
 import { ReplaySummary } from './ReplaySummary';
 import { ReplayTimeline } from './ReplayTimeline';
 import { TicketFromMoment } from './TicketFromMoment';
+import { PrescriptionCard } from './prescriptions/PrescriptionCard';
+import { usePrescriptionsFor } from './prescriptions/usePrescriptionsFor';
 import { fmtClock } from './replayMarks';
 import { REPLAY_SPEEDS, useReplayPlayback } from './useReplayPlayback';
 
@@ -190,6 +193,21 @@ function PlayerBody({ siteId, recordingId, startAtSeconds = 0, follow = false, o
       </section>
 
       <ReplaySummary siteId={siteId} recordingId={recordingId} onSeek={playback.seek} />
+
+      {recording && <PlayerFixes siteId={siteId} route={recording.entryPath} />}
     </div>
+  );
+}
+
+/** The fixes prescribed for the page this recording landed on. Nothing when there are none. */
+function PlayerFixes({ siteId, route }: { siteId: string; route: string }) {
+  const t = useTranslations('replay.fixes');
+  const { items } = usePrescriptionsFor({ siteId, route });
+  if (items.length === 0) return null;
+  return (
+    <section aria-label={t('playerTitle', { route })} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', minWidth: 0 }}>
+      <h3 style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>{t('playerTitle', { route })}</h3>
+      {items.map((p) => <PrescriptionCard key={p.id} compact siteId={siteId} prescription={p} />)}
+    </section>
   );
 }

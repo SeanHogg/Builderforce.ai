@@ -67,3 +67,8 @@ export function usePanel(): PanelStackApi {
   if (!api) throw new Error('usePanel must be used inside InsightsPanelProvider');
   return api;
 }
+
+/** The panel when there is one (a card shown outside the Insights home links instead of pushing). */
+export function useOptionalPanel(): PanelStackApi | null {
+  return useContext(PanelContext);
+}

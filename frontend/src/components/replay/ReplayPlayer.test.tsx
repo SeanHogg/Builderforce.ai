@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReplayExportDto, ReplayRecordingDto } from '@builderforce/interaction-contract';
 import { replayApi } from '@/lib/replayApi';
+import { prescription } from '@/test/replayPrescriptionFixtures';
 import { ReplayPlayer } from './ReplayPlayer';
 
 /**
@@ -76,6 +77,7 @@ beforeEach(() => {
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
   window.history.replaceState({}, '', '/apps/insights?site=site-1');
   vi.spyOn(replayApi, 'getRecording').mockResolvedValue(recording);
+  vi.spyOn(replayApi, 'listPrescriptions').mockResolvedValue([]);
   vi.spyOn(replayApi, 'getRecordingChunk')
     .mockResolvedValueOnce([{ type: 4, timestamp: 1 }, { type: 2, timestamp: 2 }])
     .mockResolvedValueOnce([{ type: 3, timestamp: 3 }]);
@@ -234,5 +236,17 @@ describe('ReplayPlayer', () => {
     render(<ReplayPlayer siteId="site-1" recordingId="rec-1" />);
     expect(await screen.findByRole('alert')).toHaveTextContent('replay.player.error');
     expect(fake.createReplayer).not.toHaveBeenCalled();
+  });
+
+  it('shows the fixes prescribed for the page the recording landed on — THE fix card, compact', async () => {
+    vi.mocked(replayApi.listPrescriptions).mockResolvedValue([
+      prescription({ id: 'rx-here', pagePath: recording.entryPath }),
+      prescription({ id: 'rx-elsewhere', pagePath: '/somewhere-else' }),
+    ]);
+    render(<ReplayPlayer siteId="site-1" recordingId="rec-1" />);
+    const cards = await screen.findAllByTestId('prescription-card');
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toHaveAttribute('data-compact', 'true');
+    expect(screen.getByText(`replay.fixes.playerTitle ${recording.entryPath}`)).toBeInTheDocument();
   });
 });

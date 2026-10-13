@@ -101,6 +101,7 @@ export {
   REPLAY_LOADER_PATH,
   REPLAY_MANIFEST_PATH,
   REPLAY_NPM_PACKAGE,
+  REPLAY_PAGE_KIT_GLOBAL,
   REPLAY_PLAYER_GLOBAL,
   replayLoaderUrl,
   replaySnippets,
@@ -142,6 +143,41 @@ export {
   type ReplayMoment,
   type ReplayMomentMetric,
 } from './replayMoment';
+
+export {
+  PATCH_ATTRS,
+  PATCH_COLOUR_PROPERTIES,
+  PATCH_HTML_TAGS,
+  PATCH_STYLE_PROPERTIES,
+  VISUAL_PATCH_LIMITS,
+  applyVisualPatch,
+  isSameOriginHref,
+  normaliseColour,
+  patchCallouts,
+  sanitizePatchHtml,
+  selectorIndex,
+  styleProblem,
+  validateVisualPatch,
+  type PageRect,
+  type PatchAttr,
+  type PatchContext,
+  type PatchDocument,
+  type PatchElement,
+  type SanitisedHtml,
+  type VisualPatch,
+  type VisualPatchOp,
+  type VisualPatchValidation,
+} from './visualPatch';
+
+export {
+  IMPROVEMENT_AUDIENCES,
+  IMPROVEMENT_PROMPT_SECTIONS,
+  compileImprovementPrompt,
+  scrubPromptText,
+  type ImprovementAudience,
+  type ImprovementChange,
+  type ImprovementPromptInput,
+} from './improvementPrompt';
 
 /** The read/write API DTOs and the path table — every export of `api.ts`. */
 export * from './api';

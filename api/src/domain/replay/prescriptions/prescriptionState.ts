@@ -97,13 +97,35 @@ const ROUTE_ACTION_OF: Partial<Record<ReplayPrescriptionActionKind, ReplayPrescr
   dismiss: 'dismiss',
 };
 
-/** What a card may call now. */
-export function nextActions(input: {
+/**
+ * The §5.2 page actions open on a fix right now:
+ *   copy-prompt        any open fix that has a page
+ *   apply-page         an open fix on a page that has ≥ 1 accepted fix (itself, by default)
+ *   apply-in-composer  a proposed fix on a page of a hosted canvas app
+ */
+function pageActions(input: NextActionsInput): ReplayPrescriptionRouteAction[] {
+  if (!input.pagePath || isTerminalStatus(input.status)) return [];
+  const out: ReplayPrescriptionRouteAction[] = ['copy-prompt'];
+  if ((input.pageAcceptedFixes ?? 1) >= 1) out.push('apply-page');
+  if (input.status === 'proposed' && input.hostedCanvas) out.push('apply-in-composer');
+  return out;
+}
+
+export interface NextActionsInput {
   status: string;
   actionKind: string | null;
   refs: PrescriptionRefs;
   ruleActions: readonly ReplayPrescriptionActionKind[];
-}): ReplayPrescriptionRouteAction[] {
+  /** The fix's page (§5.2 page actions need one). */
+  pagePath?: string | null;
+  /** The site is a Builderforce-hosted canvas app (`apply-in-composer`). */
+  hostedCanvas?: boolean;
+  /** Accepted (open) fixes on the page; defaults to 1 — the open fix itself. */
+  pageAcceptedFixes?: number;
+}
+
+/** What a card may call now. */
+export function nextActions(input: NextActionsInput): ReplayPrescriptionRouteAction[] {
   const { status, actionKind, refs } = input;
   if (status === 'proposed') {
     const offered = input.ruleActions
@@ -111,7 +133,7 @@ export function nextActions(input: {
       .filter((a): a is ReplayPrescriptionRouteAction => !!a)
       // Test it splits live against a PREVIEW: it opens only after a fix built one.
       .filter((a) => a !== 'test');
-    return [...new Set<ReplayPrescriptionRouteAction>([...offered, 'dismiss'])];
+    return [...new Set<ReplayPrescriptionRouteAction>([...offered, ...pageActions(input), 'dismiss'])];
   }
   const out: ReplayPrescriptionRouteAction[] = [];
   if (status === 'applied' && actionKind === 'fix' && refs.previewRelease) {
@@ -122,7 +144,9 @@ export function nextActions(input: {
   // A test that proved the preview: a person still publishes it.
   if (status === 'worked' && actionKind === 'test' && refs.previewRelease && !refs.liveRelease) out.push('publish-preview');
   if (status === 'applied' && actionKind === 'follow_up') out.push('follow-up');
-  if (status === 'worse' && refs.liveRelease && refs.previewRelease) out.push('revert');
+  // Revert republishes the release that was live before a PUBLISHED fix — never a hand-applied one.
+  if (status === 'worse' && refs.liveRelease && refs.previewRelease && (actionKind === 'fix' || actionKind === 'test')) out.push('revert');
+  out.push(...pageActions(input));
   if (!isTerminalStatus(status)) out.push('dismiss');
   return out;
 }

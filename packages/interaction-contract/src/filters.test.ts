@@ -5,6 +5,7 @@ import {
   filterFromQuery,
   filterToQuery,
   parseReplayFilter,
+  withFilterQuery,
   type ReplayFilter,
 } from './filters';
 
@@ -100,5 +101,36 @@ describe('filterToQuery / filterFromQuery', () => {
     expect(filterFromQuery('f.nope.eq=1&f.durationMs.gte=abc&f.device.eq=phone')).toEqual({
       all: [{ field: 'device', op: 'eq', value: 'phone' }],
     });
+  });
+});
+
+describe('withFilterQuery', () => {
+  const phones: ReplayFilter = { all: [{ field: 'device', op: 'eq', value: 'phone' }] };
+
+  it('replaces every filter param and keeps the rest of the address, in order', () => {
+    const next = withFilterQuery('?site=s1&f.browser.eq=Chrome&panel=issue%3Ai1&f.country.in=NZ,AU&days=7', phones);
+    expect([...next.keys()]).toEqual(['site', 'panel', 'days', 'f.device.eq']);
+    expect(next.get('site')).toBe('s1');
+    expect(next.get('panel')).toBe('issue:i1');
+    expect(next.get('days')).toBe('7');
+    expect(filterFromQuery(next)).toEqual(phones);
+  });
+
+  it('accepts URLSearchParams and never mutates them', () => {
+    const source = new URLSearchParams('site=s1&f.device.eq=desktop');
+    const next = withFilterQuery(source, phones);
+    expect(source.toString()).toBe('site=s1&f.device.eq=desktop');
+    expect(next.get('f.device.eq')).toBe('phone');
+    expect(next).not.toBe(source);
+  });
+
+  it('clears the filter with the empty filter and accepts a string without "?"', () => {
+    const next = withFilterQuery('site=s1&f.device.eq=phone&f.durationMs.gte=5000', { all: [] });
+    expect(next.toString()).toBe('site=s1');
+  });
+
+  it('keeps repeated non-filter params', () => {
+    const next = withFilterQuery('tag=a&tag=b', phones);
+    expect(next.getAll('tag')).toEqual(['a', 'b']);
   });
 });

@@ -5,8 +5,9 @@
  * The kill condition in words, sample and success progress, days left and a status
  * pill (collecting / on track / at risk / met / missed); then the three moves the
  * evidence supports — watch the visitors who did not convert, read why it missed
- * (the patterns cited at grading), and call it early with a written reason — and,
- * once graded, "Read again with what we learned". Renders nothing for a proof
+ * (the patterns cited at grading, and the fix prescribed for it — rule
+ * `proof_missed_reason`, THE fix card, compact), and call it early with a written
+ * reason — and, once graded, "Read again with what we learned". Renders nothing for a proof
  * whose target declares no measure: there is no visitor number to show.
  *
  * Shown on the proof card (`/realize`) and at the top of the canvas Visitors
@@ -22,6 +23,8 @@ import { useFormat } from '@/i18n/useFormat';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { useProofMeasure } from './useProofMeasure';
 import { ProofEarlyCallPanel } from './ProofEarlyCallPanel';
+import { PrescriptionCard } from '@/components/replay/prescriptions/PrescriptionCard';
+import { usePrescriptionsFor } from '@/components/replay/prescriptions/usePrescriptionsFor';
 import {
   daysLeft,
   nonConvertingHref,
@@ -168,6 +171,12 @@ export function ProofScoreboard({ realization, onRealizationChange }: ProofScore
 
 function WhyItMissed({ evaluation }: { evaluation: ProofEvaluationDto }) {
   const t = useTranslations('creationCanvas.proof');
+  const tFixes = useTranslations('replay.fixes');
+  const { items: fixes } = usePrescriptionsFor({
+    siteId: evaluation.siteId,
+    ruleId: 'proof_missed_reason',
+    subject: `proof:${evaluation.realizationId}`,
+  });
   return (
     <div style={{ display: 'grid', gap: 6 }}>
       <h4 style={{ margin: 0, fontSize: 13, color: 'var(--text-primary)' }}>{t('whyMissed')}</h4>
@@ -179,6 +188,12 @@ function WhyItMissed({ evaluation }: { evaluation: ProofEvaluationDto }) {
             <li key={pattern.text} style={{ overflowWrap: 'anywhere' }}>{pattern.text}</li>
           ))}
         </ul>
+      )}
+      {evaluation.siteId && fixes.length > 0 && (
+        <section aria-label={tFixes('proofTitle')} style={{ display: 'grid', gap: 6 }}>
+          <h5 style={{ margin: 0, fontSize: 13, color: 'var(--text-primary)' }}>{tFixes('proofTitle')}</h5>
+          {fixes.map((p) => <PrescriptionCard key={p.id} compact siteId={evaluation.siteId ?? ''} prescription={p} />)}
+        </section>
       )}
     </div>
   );

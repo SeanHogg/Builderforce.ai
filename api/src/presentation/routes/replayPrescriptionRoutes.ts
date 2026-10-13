@@ -31,6 +31,7 @@ const ActionBody = z.object({
   sequenceObjectId: z.string().max(64).nullish(),
   contactIds: z.array(z.string().max(64)).max(500).optional(),
   confirm: z.boolean().optional(),
+  audience: z.enum(['composer', 'coding_agent', 'site_builder']).optional(),
 });
 
 const manager = requireRole(TenantRole.MANAGER);

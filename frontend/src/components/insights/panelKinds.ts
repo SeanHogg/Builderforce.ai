@@ -4,8 +4,8 @@
  *
  * A level of the panel is `{ kind, id, tab? }`; the kind's row names its label
  * and its tabs, and each tab is a component taking `InsightPanelKindProps`.
- * A later slice adds a kind by adding a row (fix, route, metric, funnel, proof,
- * release) or a tab by adding a tab to a row — never a branch in the panel,
+ * A later slice adds a kind by adding a row (route, proof) or a tab by adding a
+ * tab to a row — never a branch in the panel,
  * never a second overlay. A kind with one view has one tab, id `main`.
  *
  * `labelKey`s resolve under the `insights` namespace.
@@ -22,10 +22,14 @@ import { RecordingJourneyTab, RecordingLeadTab, RecordingReplayTab } from './kin
 import { RouteHeatTab } from './kinds/RouteKind';
 import { MetricKind } from './kinds/MetricKind';
 import { FunnelEventsTab, FunnelFlowTab, FunnelStepsTab } from './kinds/FunnelKind';
+import { FunnelEditKind } from './kinds/FunnelEditKind';
+import { FixChangeTab, FixMeasureTab, IssueFixTab, IssueHistoryTab } from './kinds/FixKind';
+import { FixesKind } from './kinds/FixesKind';
+import { ReleaseKind } from './kinds/ReleaseKind';
 
 export type InsightPanelKind =
-  | 'recording' | 'issue' | 'issues' | 'fix' | 'route' | 'metric'
-  | 'funnel' | 'live' | 'proof' | 'release' | 'sites' | 'plan';
+  | 'recording' | 'issue' | 'issues' | 'fix' | 'fixes' | 'route' | 'metric'
+  | 'funnel' | 'funnel_edit' | 'live' | 'proof' | 'release' | 'sites' | 'plan';
 
 export type InsightPanelLevel = {
   kind: InsightPanelKind;
@@ -78,9 +82,25 @@ export const INSIGHT_PANEL_KINDS: ReadonlyArray<InsightPanelKindDef> = [
     tabs: [
       { id: 'overview', labelKey: 'kinds.tabs.overview', Component: IssueOverviewTab },
       { id: 'recordings', labelKey: 'kinds.tabs.recordings', Component: IssueRecordingsTab },
+      // S4e: the issue's prescription (by `prescriptionId`) and its status history.
+      { id: 'fix', labelKey: 'fix.issueTabs.fix', Component: IssueFixTab },
+      { id: 'history', labelKey: 'fix.issueTabs.history', Component: IssueHistoryTab },
     ],
   },
   { kind: 'issues', labelKey: 'kinds.issues', tabs: [{ id: 'main', labelKey: 'kinds.issues', Component: IssuesKind }] },
+  {
+    // One prescription (S4e). S4f adds `{ id: 'prompt', … }` between these two.
+    kind: 'fix',
+    labelKey: 'kinds.fix',
+    tabs: [
+      { id: 'change', labelKey: 'fix.tabs.change', Component: FixChangeTab },
+      { id: 'measure', labelKey: 'fix.tabs.measure', Component: FixMeasureTab },
+    ],
+  },
+  // Every fix, from Do next's "View all" (S4e). The level id is the area to open on.
+  { kind: 'fixes', labelKey: 'fixes.kind', tabs: [{ id: 'main', labelKey: 'fixes.kind', Component: FixesKind }] },
+  // One release's improvement ledger, from the score-by-release strip (S4e).
+  { kind: 'release', labelKey: 'kinds.release', tabs: [{ id: 'main', labelKey: 'kinds.release', Component: ReleaseKind }] },
   {
     // One page: its heat now; S4f adds `{ id: 'review', … }` to these tabs.
     kind: 'route',
@@ -101,6 +121,8 @@ export const INSIGHT_PANEL_KINDS: ReadonlyArray<InsightPanelKindDef> = [
       { id: 'flow', labelKey: 'funnel.tabs.flow', Component: FunnelFlowTab },
     ],
   },
+  // Creating / editing a funnel: a level over the funnel (D16 — never a second overlay).
+  { kind: 'funnel_edit', labelKey: 'kinds.funnelEdit', tabs: [{ id: 'main', labelKey: 'kinds.funnelEdit', Component: FunnelEditKind }] },
   { kind: 'live', labelKey: 'kinds.live', tabs: [{ id: 'main', labelKey: 'kinds.live', Component: LiveKind }] },
   { kind: 'sites', labelKey: 'kinds.sites', tabs: [{ id: 'main', labelKey: 'kinds.sites', Component: SitesKind }] },
   { kind: 'plan', labelKey: 'kinds.plan', tabs: [{ id: 'main', labelKey: 'kinds.plan', Component: PlanKind }] },

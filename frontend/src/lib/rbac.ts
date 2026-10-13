@@ -220,6 +220,10 @@ export const CAPABILITIES = {
   // for a hosted app and buying recording packs. Mirrors requireRole(MANAGER) on
   // the replay site writes and the pack checkout; reading is any member.
   'insights.manageSites':    'manager',
+  // Acting on a prescribed fix (Fix it, Test it, Follow up, Ticket, Dismiss, publish,
+  // revert) and "Find fixes now". Mirrors requireRole(MANAGER) on
+  // POST /api/replay/prescriptions/*; reading fixes is any member.
+  'insights.actOnFixes':     'manager',
 } as const satisfies Record<string, TenantRole>;
 
 export type Capability = keyof typeof CAPABILITIES;

@@ -7,6 +7,7 @@
  *   dist/assets/embed/v1.js                   (max-age 300)
  *   dist/assets/replay/r/player.<hash>.js     (immutable) — rrweb Replayer for the Insights player + MP4 export
  *   dist/assets/replay/r/player.<hash>.css    (immutable) — rrweb's replayer stylesheet
+ *   dist/assets/replay/r/pagekit.<hash>.js    (immutable) — deriveSelector + applyVisualPatch for the page-review runner
  *
  * `ReplayConfigService` reads `latest` from REPLAY_MANIFEST_URL and names the
  * recorder in the config answer; nothing else reads the manifest.
@@ -30,6 +31,7 @@ const loader = readFileSync(join(dist, 'loader.js'));
 const recorder = readFileSync(join(dist, 'recorder.js'));
 const embed = readFileSync(join(dist, 'embed.js'));
 const player = readFileSync(join(dist, 'player.js'));
+const pageKit = readFileSync(join(dist, 'pagekit.js'));
 const playerCss = readFileSync(join(root, 'node_modules', 'rrweb', 'dist', 'style.css'));
 const rrwebVersion = JSON.parse(readFileSync(join(root, 'node_modules', 'rrweb', 'package.json'), 'utf8')).version;
 const contentHash = (bytes) => createHash('sha256').update(bytes).digest('hex').slice(0, HASH_LENGTH);
@@ -37,6 +39,7 @@ const hash = contentHash(recorder);
 const recorderKey = `replay/r/recorder.${hash}.js`;
 const playerKey = `replay/r/player.${contentHash(player)}.js`;
 const playerCssKey = `replay/r/player.${contentHash(playerCss)}.css`;
+const pageKitKey = `replay/r/pagekit.${contentHash(pageKit)}.js`;
 
 rmSync(out, { recursive: true, force: true });
 rmSync(join(dist, 'cdn'), { recursive: true, force: true });
@@ -47,6 +50,7 @@ writeFileSync(join(out, recorderKey), recorder);
 writeFileSync(join(out, 'embed', 'v1.js'), embed);
 writeFileSync(join(out, playerKey), player);
 writeFileSync(join(out, playerCssKey), playerCss);
+writeFileSync(join(out, pageKitKey), pageKit);
 
 const manifest = {
   latest: {
@@ -60,7 +64,10 @@ const manifest = {
     cssUrl: `${CDN_ORIGIN}/${playerCssKey}`,
     rrweb: rrwebVersion,
   },
+  pageKit: {
+    url: `${CDN_ORIGIN}/${pageKitKey}`,
+  },
 };
 writeFileSync(join(out, 'replay', 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
-console.log(`emit-assets: recorder ${hash} → dist/assets/{replay/v1/loader.js, ${recorderKey}, replay/manifest.json, embed/v1.js, ${playerKey}, ${playerCssKey}}`);
+console.log(`emit-assets: recorder ${hash} → dist/assets/{replay/v1/loader.js, ${recorderKey}, replay/manifest.json, embed/v1.js, ${playerKey}, ${playerCssKey}, ${pageKitKey}}`);

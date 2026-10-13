@@ -9,7 +9,9 @@
  *   test         → `variantResults` — which withholds lift until both arms reach the
  *                  test's minimum sample, so a verdict here is never a day-two read;
  *                  a decided test is concluded, which switches the split off;
- *   follow_up    → enrolled vs matched-not-enrolled conversion after 14 days.
+ *   follow_up    → enrolled vs matched-not-enrolled conversion after 14 days;
+ *   copy_prompt / apply_page / apply_in_composer → the page on the release that shipped
+ *                  the hand-applied fix vs the release before (`prescriptionReleaseEffect.ts`).
  * A verdict writes `measured`, moves the status to worked / no_effect / worse,
  * settles the linked issue group, and records `prescription.verify` (phase
  * `validated`, the delta as the metric) in the outcome ledger.
@@ -42,6 +44,7 @@ import { SYSTEM_ACTOR } from '../activity/activityLog';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { effectFor } from './ticketEffect';
 import { measureFollowUp } from './prescriptionFollowUp';
+import { viaReleaseEffect } from './prescriptionReleaseEffect';
 import { loadPrescriptionRow, type PrescriptionRow } from './prescriptionReads';
 import { bumpReplaySitesVersion, bumpSiteVersion, prescriptionVerifyGateKey } from './replayCacheKeys';
 import { replayTelemetryDb } from './replayDatabase';
@@ -112,6 +115,10 @@ export const VERIFIERS: Readonly<Record<string, Verifier>> = {
   ticket: viaTicketEffect,
   test: viaAbTest,
   follow_up: viaFollowUp,
+  // S4f: fixes a person applied by hand from a page prompt, measured on the release that shipped them.
+  copy_prompt: viaReleaseEffect,
+  apply_page: viaReleaseEffect,
+  apply_in_composer: viaReleaseEffect,
 };
 
 /** The board this site's project is (or the fix ticket's project's), for the outcome ledger. */

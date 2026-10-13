@@ -4,6 +4,7 @@ import type { ReplayFunnelDto, ReplayFunnelEvalDto, ReplayRecordingDto } from '@
 import { replayApi } from '@/lib/replayApi';
 import { InsightsScopeProvider } from '@/components/insights/insightsScope';
 import { FunnelsView } from './FunnelsView';
+import { prescription } from '@/test/replayPrescriptionFixtures';
 
 /**
  * The Steps tab: the funnel evaluated over the window and the ONE filter, every
@@ -66,6 +67,7 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/apps/insights?f.device.eq=phone');
   vi.spyOn(replayApi, 'listFunnels').mockResolvedValue([funnel]);
   vi.spyOn(replayApi, 'evaluateFunnel').mockResolvedValue(evaluation);
+  vi.spyOn(replayApi, 'listPrescriptions').mockResolvedValue([]);
   vi.spyOn(replayApi, 'getRecording').mockImplementation(async (_siteId, id) => {
     if (id === 'rec-gone') throw new Error('gone');
     return recording(id);
@@ -113,9 +115,30 @@ describe('FunnelsView', () => {
 
   it('offers to create a funnel when the site has none', async () => {
     vi.mocked(replayApi.listFunnels).mockResolvedValue([]);
-    renderView();
+    const push = renderView();
     expect(await screen.findByText('replay.funnels.empty')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'replay.funnels.new' }));
-    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    // The editor is a level of the ONE panel (D16), never a second overlay.
+    expect(push).toHaveBeenCalledWith({ kind: 'funnel_edit', id: '' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('edits the chosen funnel as a panel level', async () => {
+    const push = renderView();
+    fireEvent.click(await screen.findByRole('button', { name: 'replay.funnels.edit' }));
+    expect(push).toHaveBeenCalledWith({ kind: 'funnel_edit', id: 'funnel=fun-1' });
+  });
+
+  it('shows the prescribed fix for a step in its drop panel — THE fix card, compact', async () => {
+    vi.mocked(replayApi.listPrescriptions).mockResolvedValue([
+      prescription({ id: 'rx-step', subjectKey: 'fun-1:1:fp-err', ruleId: 'error_on_step' }),
+      prescription({ id: 'rx-other', subjectKey: 'fun-2:1:fp-err', ruleId: 'error_on_step' }),
+    ]);
+    renderView();
+    fireEvent.click(await screen.findByRole('button', { name: 'replay.funnels.watchDropped 2' }));
+    const cards = await screen.findAllByTestId('prescription-card');
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toHaveAttribute('data-compact', 'true');
+    expect(screen.getByText('replay.fixes.stepTitle')).toBeInTheDocument();
   });
 });

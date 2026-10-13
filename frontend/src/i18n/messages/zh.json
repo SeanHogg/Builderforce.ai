@@ -3635,12 +3635,14 @@
         "lead": "线索",
         "overview": "概览",
         "recordings": "录制"
-      }
+      },
+      "funnelEdit": "编辑漏斗"
     },
     "lenses": {
       "live": "实时",
       "heat": "热图",
-      "stuck": "受阻"
+      "stuck": "受阻",
+      "fixes": "修复"
     },
     "journey": {
       "steps": "{count} 个页面",
@@ -3687,6 +3689,58 @@
         "heat": "热图"
       },
       "openAria": "打开页面 {route}"
+    },
+    "fix": {
+      "tabs": {
+        "change": "修改",
+        "measure": "衡量"
+      },
+      "issueTabs": {
+        "fix": "修复",
+        "history": "历史"
+      },
+      "noFix": "此问题还没有建议的修复。",
+      "measure": {
+        "acceptanceTitle": "验收条件",
+        "acceptanceNone": "尚未起草验收测试。",
+        "resultTitle": "结果",
+        "notYet": "尚未衡量。发布该修复的版本达到样本量后即会给出结论。"
+      },
+      "history": {
+        "title": "历史",
+        "created": "发现",
+        "applied": "{action}",
+        "measured": "已衡量：{verdict}",
+        "dismissed": "已忽略：{reason}"
+      }
+    },
+    "fixes": {
+      "kind": "全部修复",
+      "findNow": "立即查找修复",
+      "finding": "查找中…",
+      "sweepResult": "{found, plural, other {# 项发现}}，{created} 项新增",
+      "sweepLimited": "过去一小时内已查找过修复，请稍后再试。",
+      "viewAll": "查看全部",
+      "error": "无法加载修复。",
+      "loading": "正在加载修复…",
+      "empty": "没有符合此筛选条件的修复。",
+      "areaAll": "全部（{count}）",
+      "areaChip": "{area}（{count}）",
+      "areaAria": "按领域筛选修复",
+      "loadMore": "显示更多"
+    },
+    "release": {
+      "title": "版本 {label}",
+      "firstSeen": "首次出现于 {date}",
+      "empty": "此版本没有发布任何修复。",
+      "notMeasured": "尚未衡量",
+      "openAria": "打开修复：{title}",
+      "strip": {
+        "title": "按版本统计",
+        "aria": "每个版本发布的修复",
+        "label": "{label}：{count, plural, other {# 项修复}}，{worked} 项有效，{worse} 项变差",
+        "empty": "还没有版本发布过修复。"
+      }
     }
   },
   "cloudAgentForm": {
@@ -11503,6 +11557,10 @@
       "your-private-evermind-on-your-machine": {
         "title": "你的私有 Evermind，就在你的电脑上——本地模型、连接器，以及在手机上批准",
         "description": "Synapse 现在可以运行适合你电脑配置的本地模型，并提供给 Claude Code 和你的脚本使用；托管 Brain 可用的 MCP 连接器；让你在手机上批准智能体的步骤；还为你提供一个起步用的私有模型。它学到的一切都留在你的电脑上，除非你选择发布。"
+      },
+      "fix-what-visitors-tell-you": {
+        "title": "Insights 告诉你该修复什么——并证明它有效",
+        "description": "录像和热图让你看到问题，却把下一步留给了你。现在，Insights 会指出该做的改动，把它渲染在你的页面上，作为提示词交给 AI 或直接应用，并在下一个版本上给它打分。"
       }
     }
   },
@@ -34316,6 +34374,229 @@
           "conversions": "转化"
         }
       }
+    },
+    "prescription": {
+      "area": {
+        "funnel": "漏斗",
+        "ux": "易用性",
+        "site": "网站",
+        "sales": "销售",
+        "seo": "SEO",
+        "content": "内容",
+        "performance": "性能",
+        "accessibility": "无障碍"
+      },
+      "status": {
+        "proposed": "已提议",
+        "applied": "进行中",
+        "measuring": "衡量中",
+        "worked": "有效",
+        "no_effect": "无效果",
+        "worse": "变差了",
+        "dismissed": "已忽略"
+      },
+      "verdict": {
+        "worked": "有效",
+        "no_effect": "无效果",
+        "worse": "变差了"
+      },
+      "rule": {
+        "fallback": "发现 {ruleId}",
+        "rage_on_element": {
+          "title": "访问 {route} 的会话中有 {share}% 狂点“{label}”",
+          "description": "{sessions} 个会话反复点击它，因为它没有按预期响应。"
+        },
+        "error_on_step": {
+          "title": "{funnel} 中“{step}”步骤 {share}% 的流失背后有一个错误",
+          "description": "“{error}”出现在于此步骤离开漏斗的会话中。"
+        },
+        "dead_click_heading": {
+          "title": "访问 {route} 的会话中有 {share}% 点击了标题“{label}”，但它没有任何作用",
+          "description": "{sessions} 个会话以为该标题是链接或按钮。"
+        },
+        "cta_below_fold": {
+          "title": "{route} 的访客中只有 {reach}% 滚动到能看见“{label}”的位置",
+          "description": "行动号召位于大多数访客停止滚动的位置之下。"
+        },
+        "quickback_after_reveal": {
+          "title": "访问 {route} 的会话中有 {share}% 在打开“{label}”后立即返回",
+          "description": "{sessions} 个会话在几秒内返回：他们看到的内容与预期不符。"
+        },
+        "excessive_scroll_missing_info": {
+          "title": "访问 {route} 的会话中有 {share}% 来回滚动寻找内容",
+          "description": "{sessions} 个会话过度滚动：他们要找的信息很难找到。"
+        },
+        "device_gap": {
+          "title": "手机转化率为 {phoneRate}%，桌面端为 {desktopRate}%",
+          "description": "{sessions} 个手机会话的转化率不到桌面端的一半。"
+        },
+        "release_regression": {
+          "title": "在 {release} 中转化率从 {before}% 降到 {after}%",
+          "description": "比上一个版本 {previous} 低 {drop}%。"
+        },
+        "pricing_hesitation": {
+          "title": "{visitors} 位已知访客查看了 {route} 但没有购买",
+          "description": "他们已被识别，因此可以通过跟进联系到他们。"
+        },
+        "checkout_abandon_known": {
+          "title": "{visitors} 位已知访客在 {route} 放弃了结账",
+          "description": "他们已被识别，因此可以通过跟进联系到他们。"
+        },
+        "objection_pattern": {
+          "title": "访客在此处犹豫：{pattern}",
+          "description": "见于 {examples} 条被引用的录制。"
+        },
+        "proof_missed_reason": {
+          "title": "{proof} 未达成目标：{reason}",
+          "description": "衡量期间，访问 {route} 的会话中有 {share}% 遇到了这个问题。"
+        }
+      },
+      "observed": "观察所得",
+      "rankAria": "排名 {rank}",
+      "evidenceTitle": "见于",
+      "evidenceItem": "录制 {n}，{time}",
+      "evidenceAria": "观看录制 {n} 的 {time} 处",
+      "prescriptionTitle": "需要修改什么",
+      "drafting": "此修复的文字说明正在起草中。",
+      "change": {
+        "title": "起草的修改",
+        "before": "现在",
+        "after": "修改",
+        "target": "作用于 {target}",
+        "unknown": "已为此修复起草了一项修改。"
+      },
+      "changeKind": {
+        "copy": "文案",
+        "layout": "布局",
+        "code": "代码",
+        "content": "内容"
+      },
+      "impact": {
+        "estimateApprox": "≈ {days} 天内 +{value} {unit}（{low}–{high}）",
+        "estimateExact": "{days} 天内 +{value} {unit}（{low}–{high}）",
+        "pointApprox": "≈ {days} 天内 +{value} {unit}",
+        "pointExact": "{days} 天内 +{value} {unit}",
+        "rangeApprox": "≈ {days} 天内 {low}–{high} {unit}",
+        "rangeExact": "{days} 天内 {low}–{high} {unit}",
+        "none": "访问量还不足以估算影响"
+      },
+      "confidence": {
+        "low": "置信度低",
+        "medium": "置信度中",
+        "high": "置信度高"
+      },
+      "unit": {
+        "conversions": "次转化",
+        "visits": "次访问",
+        "sessions": "个会话"
+      },
+      "measured": {
+        "beforeAfter": "之前 {before} → 之后 {after}",
+        "onRelease": "于版本 {release}",
+        "source": {
+          "ticket_effect": "在发布该修复的版本上衡量",
+          "ab_test": "由 A/B 测试衡量",
+          "follow_up": "与未跟进的访客对比衡量"
+        }
+      },
+      "dismissedBecause": "已忽略：{reason}",
+      "acceptance": {
+        "text": "{metric}{direction}，至少覆盖 {minVisits} 次访问",
+        "direction": {
+          "up": "上升",
+          "down": "下降"
+        }
+      },
+      "metric": {
+        "rage_rate": "狂点率",
+        "step_conversion": "步骤转化率",
+        "dead_click_rate": "无效点击率",
+        "conversion_rate": "转化率",
+        "quickback_rate": "快速返回率",
+        "excessive_scroll_rate": "过度滚动率",
+        "phone_conversion_rate": "手机转化率",
+        "known_conversion_rate": "已知访客转化率",
+        "proof_metric": "验证的指标"
+      },
+      "actionsAria": "此修复的操作",
+      "actions": {
+        "fix": "修复",
+        "test": "测试",
+        "start-test": "开始测试",
+        "follow-up": "跟进",
+        "ticket": "工单",
+        "publish-preview": "发布",
+        "revert": "回滚",
+        "dismiss": "忽略",
+        "copy-prompt": "复制提示词",
+        "apply-page": "应用到页面",
+        "apply-in-composer": "在编辑器中应用"
+      },
+      "confirm": {
+        "start-test": {
+          "title": "开始测试？",
+          "message": "在测试得出结论之前，访客将在线上网站和预览之间分流。",
+          "confirm": "开始测试"
+        },
+        "publish-preview": {
+          "title": "发布预览？",
+          "message": "包含此修复的预览将成为所有访客看到的线上网站。",
+          "confirm": "发布"
+        },
+        "revert": {
+          "title": "回滚此修复？",
+          "message": "网站将回到发布此修复之前的版本。",
+          "confirm": "回滚"
+        }
+      },
+      "dismiss": {
+        "title": "忽略此修复",
+        "reasonLabel": "为什么忽略？（必填）",
+        "reasonPlaceholder": "例如：该页面已重新设计",
+        "submit": "忽略",
+        "cancel": "取消"
+      },
+      "followUp": {
+        "title": "将被跟进的人",
+        "none": "没有已知联系人与此发现匹配。",
+        "unmatched": "{count, plural, other {# 位已识别访客}}没有匹配的联系人",
+        "enrolled": "{count, plural, other {已加入 # 位联系人}}",
+        "draftTitle": "起草的首次触达（仅在您编辑后从序列中发送）",
+        "sequenceLabel": "要加入的序列",
+        "sequenceHint": "粘贴序列卡片的链接或 ID",
+        "enrol": "{count, plural, other {加入 # 位联系人}}",
+        "cancel": "取消",
+        "contactAria": "加入 {name}"
+      },
+      "project": {
+        "label": "项目",
+        "none": "选择项目"
+      },
+      "result": {
+        "refusal": "{reason}",
+        "run": "一个编码智能体正在处理工单 #{taskId}。",
+        "ticket": "已创建工单 #{taskId}。",
+        "test": "A/B 测试已起草。准备好后即可开始。",
+        "enrolled": "{count, plural, other {已加入 # 位联系人}}",
+        "done": "完成。"
+      },
+      "maker": {
+        "fix": "由编码智能体完成",
+        "test": "由 A/B 测试验证",
+        "start-test": "由 A/B 测试验证",
+        "follow-up": "由销售跟进完成",
+        "ticket": "由您的团队完成（工单）",
+        "publish-preview": "可以发布",
+        "revert": "可以回滚"
+      },
+      "openAria": "打开修复：{title}"
+    },
+    "fixes": {
+      "overviewTitle": "首要修复",
+      "stepTitle": "建议的修复",
+      "playerTitle": "{route} 的修复",
+      "proofTitle": "建议的修复",
+      "empty": "此页面还没有建议的修复。"
     }
   },
   "apps": {

@@ -65,7 +65,22 @@ vi.mock('./replayTrace', () => ({
     prescriptionStartTest: 'replay.prescription.start-test', prescriptionFollowUp: 'replay.prescription.follow-up',
     prescriptionTicket: 'replay.prescription.ticket', prescriptionDismiss: 'replay.prescription.dismiss',
     prescriptionPublishPreview: 'replay.prescription.publish-preview', prescriptionRevert: 'replay.prescription.revert',
+    prescriptionCopyPrompt: 'replay.prescription.copy-prompt', prescriptionApplyPage: 'replay.prescription.apply-page',
+    prescriptionApplyInComposer: 'replay.prescription.apply-in-composer',
   },
+}));
+const pageMocks = vi.hoisted(() => ({
+  prescriptionPrompt: vi.fn(async (_e: unknown, _d: unknown, _s: unknown, id: string, audience: string) => ({
+    audience, prompt: `PROMPT ${audience} ${id}`, selectors: ['getByRole("button", { name: "Pay" })'], prescriptionIds: [id],
+  })),
+  pagePrompt: vi.fn(async (_e: unknown, _d: unknown, _s: unknown, _path: string, audience: string) => ({
+    audience, prompt: `PAGE ${audience}`, selectors: ['a', 'b'], prescriptionIds: ['99999999-2222-4333-8444-555555555555', 'other-rx'],
+  })),
+}));
+vi.mock('./pagePrompts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./pagePrompts')>()),
+  prescriptionPrompt: pageMocks.prescriptionPrompt,
+  pagePrompt: pageMocks.pagePrompt,
 }));
 vi.mock('./ReplayReadService', () => ({
   ReplayReadService: vi.fn(function ReplayReadService() { return { releases: async () => [{ releaseKey: 'r9' }] }; }),
@@ -279,5 +294,53 @@ describe('dismiss', () => {
 
   it('refuses an unknown action', async () => {
     await expect(act(fakeDb().db, 'launch')).rejects.toMatchObject({ name: 'NotFoundError' });
+  });
+});
+
+describe('the §5.2 page actions', () => {
+  beforeEach(() => {
+    pageMocks.prescriptionPrompt.mockClear();
+    pageMocks.pagePrompt.mockClear();
+  });
+
+  it('copy-prompt answers the compiled prompt and marks the fix applied by hand (manual), without storing the prompt', async () => {
+    const { db, updates } = fakeDb();
+    const out = await act(db, 'copy-prompt', { audience: 'site_builder' });
+    expect(pageMocks.prescriptionPrompt).toHaveBeenCalledWith({}, db, SCOPE, RX, 'site_builder');
+    expect(out).toMatchObject({ prompt: `PROMPT site_builder ${RX}` });
+    expect(updates[0]).toMatchObject({ status: 'applied', actionKind: 'copy_prompt', actionRef: 'manual' });
+    expect(JSON.stringify(updates[0])).not.toContain('PROMPT');
+    const traced = (mocks.trace.mock.calls[0] as unknown as [unknown, unknown, { metadata: Record<string, unknown> }])[2];
+    expect(traced.metadata.prompt).toBeUndefined();
+  });
+
+  it('copy-prompt on an already applied fix answers the prompt and writes nothing', async () => {
+    mocks.row = baseRow({ status: 'applied', actionKind: 'copy_prompt', actionRef: 'manual' });
+    const { db, updates } = fakeDb();
+    const out = await act(db, 'copy-prompt');
+    expect(out.prompt).toContain('coding_agent');
+    expect(updates).toHaveLength(0);
+  });
+
+  it('apply-page bundles every accepted fix on the page into one prompt and applies the others too', async () => {
+    const { db, updates } = fakeDb();
+    const out = await act(db, 'apply-page');
+    expect(pageMocks.pagePrompt).toHaveBeenCalledWith({}, db, SCOPE, '/checkout', 'coding_agent');
+    expect(out.prescriptionIds).toEqual([RX, 'other-rx']);
+    expect(updates[0]).toMatchObject({ status: 'applied', actionKind: 'apply_page', actionRef: 'manual' }); // the siblings
+    expect(updates[1]).toMatchObject({ status: 'applied', actionKind: 'apply_page', actionRef: 'manual' }); // this fix
+  });
+
+  it('apply-in-composer returns the composer prompt and the selectors for previewPick chips, pending the canvas publish', async () => {
+    const { db, updates } = fakeDb();
+    const out = await act(db, 'apply-in-composer');
+    expect(pageMocks.prescriptionPrompt).toHaveBeenCalledWith({}, db, SCOPE, RX, 'composer');
+    expect(out).toMatchObject({ prompt: `PROMPT composer ${RX}`, selectors: ['getByRole("button", { name: "Pay" })'] });
+    expect(updates[0]).toMatchObject({ status: 'applied', actionKind: 'apply_in_composer', actionRef: 'composer' });
+  });
+
+  it('apply-in-composer is not open on an external site', async () => {
+    mocks.site = EXTERNAL;
+    await expect(act(fakeDb().db, 'apply-in-composer')).rejects.toMatchObject({ name: 'ConflictError' });
   });
 });

@@ -19,6 +19,7 @@
  *   dismiss          reason required; the sweep keeps the subject dismissed for 30 days
  *   publish-preview  the existing pointer move, by a person
  *   revert           republish the release that was live before (offered only on `worse`)
+ *   copy-prompt / apply-page / apply-in-composer   the §5.2 page actions (`prescriptionPageActions.ts`)
  */
 
 import { and, eq } from 'drizzle-orm';
@@ -61,6 +62,7 @@ import { ReplayReadService } from './ReplayReadService';
 import { ReplayHeatmapService } from './ReplayHeatmapService';
 import { getSiteForTenant, type ReplaySiteRecord } from './replaySites';
 import { recordReplayTrace, REPLAY_TRACE_VERBS, type ReplayTraceVerb } from './replayTrace';
+import { PAGE_PRESCRIPTION_ACTIONS } from './prescriptionPageActions';
 
 const DISMISS_REASON_MAX = 500;
 
@@ -78,7 +80,8 @@ export interface ActionContext {
 
 /** The columns an action writes, and what it tells the caller. */
 export interface ActionOutcome {
-  set: Partial<Pick<PrescriptionRow, 'status' | 'actionKind' | 'dismissReason' | 'decidedBy'>> & { refs?: PrescriptionRefs };
+  /** `actionRef` raw is a §5.2 pending marker (`manual` | `composer`); `refs` encodes everything else. */
+  set: Partial<Pick<PrescriptionRow, 'status' | 'actionKind' | 'dismissReason' | 'decidedBy' | 'actionRef'>> & { refs?: PrescriptionRefs };
   result?: Omit<ReplayPrescriptionActionResultDto, 'prescription'>;
   /** False for a preview that changed nothing (no trace, no write). */
   acted?: boolean;
@@ -287,7 +290,10 @@ const revert: PrescriptionActionDef = {
 };
 
 /** Every action, as data. */
-export const PRESCRIPTION_ACTIONS: readonly PrescriptionActionDef[] = [fix, test, startTestAction, followUp, ticket, dismiss, publishPreview, revert];
+export const PRESCRIPTION_ACTIONS: readonly PrescriptionActionDef[] = [
+  fix, test, startTestAction, followUp, ticket, dismiss, publishPreview, revert,
+  ...PAGE_PRESCRIPTION_ACTIONS,
+];
 const BY_ACTION = new Map(PRESCRIPTION_ACTIONS.map((a) => [a.action, a]));
 
 /** Run one action a person chose. 404 for an unknown action or prescription; 409 when it is not open now. */
@@ -304,7 +310,8 @@ export async function runPrescriptionAction(
   if (!def) throw new NotFoundError('Prescription action', action);
   const site = await getSiteForTenant(env, db, scope.tenantId, scope.siteId);
   const row = await loadPrescriptionRow(db, scope, prescriptionId);
-  const dto = toPrescriptionDto(row);
+  const context = { hostedCanvas: site.kind === 'hosted' && site.projectId !== null };
+  const dto = toPrescriptionDto(row, 0, context);
   if (!dto.next.includes(def.action)) throw new ConflictError(`"${def.action}" is not open for this fix now`);
   const now = opts.now ?? new Date();
   const ctx: ActionContext = { env, db, scope, site, row, refs: dto.refs, input, actorId: opts.actorId, now };
@@ -329,8 +336,8 @@ export async function runPrescriptionAction(
     siteId: scope.siteId,
     verb: def.verb,
     actorId: opts.actorId,
-    metadata: { prescriptionId: row.id, ruleId: row.ruleId, ...(outcome.result ?? {}), followUp: undefined },
+    metadata: { prescriptionId: row.id, ruleId: row.ruleId, ...(outcome.result ?? {}), followUp: undefined, prompt: undefined, selectors: undefined },
   });
   await bumpSiteVersion(env, scope.siteId);
-  return { prescription: toPrescriptionDto(updated), ...outcome.result };
+  return { prescription: toPrescriptionDto(updated, 0, context), ...outcome.result };
 }

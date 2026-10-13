@@ -102,6 +102,16 @@ export interface ReplayReadKeys {
   prescriptions(area: string, status: string, filterKey: string): string;
   /** S4e: the improvement ledger of one release. */
   releaseReport(releaseKey: string): string;
+  /** S4f: the key pages a review captures (`pageSelection.ts`). */
+  pageSelection(): string;
+  /** S4f: the scored key-page list. */
+  pages(): string;
+  /** S4f: one page's review (captures, fixes, score by release). */
+  pageReview(path: string): string;
+  /** S4f: the `PageFacts` of the key pages the page rules read (`pageAggregates.ts`). */
+  pageFacts(days: number): string;
+  /** S4f: the pickers a fix's actions need (`sequences`, `coding-agents`); short TTL — they change outside Insights. */
+  choices(kind: string): string;
 }
 
 export async function replayReadKeys(env: Env, scope: ReplayScope): Promise<ReplayReadKeys> {
@@ -132,6 +142,11 @@ export async function replayReadKeys(env: Env, scope: ReplayScope): Promise<Repl
     prescriptionAggregates: (days) => k('rx-aggregates', days),
     prescriptions: (area, status, filterKey) => k('rx-list', area || '-', status || '-', filterKey || '-'),
     releaseReport: (releaseKey) => k('rx-release', encodeURIComponent(releaseKey)),
+    pageSelection: () => k('page-selection'),
+    pages: () => k('pages'),
+    pageReview: (path) => k('page-review', encodeURIComponent(path)),
+    pageFacts: (days) => k('page-facts', days),
+    choices: (kind) => k('choices', kind),
   };
 }
 
@@ -214,3 +229,19 @@ export const abConversionKey = (testId: number, visitId: string): string => `rep
 
 /** "This prescription was verified on read recently" (`prescriptionVerify.ts`). */
 export const prescriptionVerifyGateKey = (prescriptionId: string): string => `replay:rx-verify:${prescriptionId}`;
+
+// ── S4f page review (KV gates) ─────────────────────────────────────────────
+
+/** "Capture now" ran within the hour for this site (`pageCapture.ts`). */
+export const pageCaptureNowKey = (siteId: string): string => `replay:page-capture-now:${siteId}`;
+
+/** "This release's key pages were already queued for capture." */
+export const pageCaptureReleaseKey = (siteId: string, releaseKey: string): string =>
+  `replay:page-capture:${siteId}:${encodeURIComponent(releaseKey)}`;
+
+/** "This page was already reviewed by vision on this release" (`visionReview.ts`). */
+export const pageVisionKey = (siteId: string, path: string, releaseKey: string): string =>
+  `replay:page-vision:${siteId}:${encodeURIComponent(releaseKey)}:${encodeURIComponent(path)}`;
+
+/** "This site's weekly page capture ran this week" (`pageCapture.runWeeklyPageCaptures`). */
+export const pageCaptureWeekKey = (siteId: string, week: string): string => `replay:page-capture-week:${siteId}:${week}`;
