@@ -190,6 +190,6 @@ Likely touch (children confirm against tree; do not invent files that are not th
 
 ## 10. What this change contains
 
-This notes file (the epic composition contract), with A0 HTTP/auth posture corrected on #2605. No one-line pointer is added to [26-prd-advisor-platform.md](./26-prd-advisor-platform.md) here — that reconcile is #2604. Epic working notes `specs/tasks/task-2522.md` stay on epic #2522 / PR #829 — they are not part of this change. No talent, booking, or minutes implementation source, and no #2588 env-bind.
+This notes file (the epic composition contract), with A0 HTTP/auth posture corrected on #2605. No one-line pointer is added to [26-prd-advisor-platform.md](./26-prd-advisor-platform.md) here — that reconcile is #2604. Epic working notes `specs/tasks/task-2522.md` and the #2527 renderer CTA line were truth-matched on #2605 so they no longer present authed POST `/reservations` as a public kill-path write. No talent, booking, or minutes implementation source, and no #2588 env-bind.
 
 Implementers pick up at #2527 → #2532 → #2538 in that order.
