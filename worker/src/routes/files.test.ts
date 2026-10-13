@@ -7,14 +7,18 @@
  * the router exactly as it is mounted in `src/index.ts`, so a route that cannot
  * see its own path fails them.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { Hono } from 'hono';
+import { signHs256 } from '@builderforce/hs256-jwt';
+import files from './files';
 
-vi.mock('../lib/auth', () => ({
-  requireAuth: async (_c: unknown, next: () => Promise<void>) => next(),
-}));
+const SECRET = 'test';
+const FUTURE = 4_000_000_000;
 
-const { default: files } = await import('./files');
+/** No `jti` → requireAuth is signature-only (no session introspection). */
+async function bearer() {
+  return `Bearer ${await signHs256({ sub: 'u1', exp: FUTURE }, SECRET)}`;
+}
 
 function appWithStorage(objects: Map<string, string>) {
   const STORAGE = {
@@ -26,8 +30,11 @@ function appWithStorage(objects: Map<string, string>) {
   };
   const app = new Hono();
   app.route('/api/projects/:projectId/files', files as never);
-  return (path: string, init?: RequestInit) =>
-    app.request(`http://x${path}`, init, { STORAGE, JWT_SECRET: 'test' });
+  return async (path: string, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    if (!headers.has('Authorization')) headers.set('Authorization', await bearer());
+    return app.request(`http://x${path}`, { ...init, headers }, { STORAGE, JWT_SECRET: SECRET });
+  };
 }
 
 describe('worker file routes', () => {
