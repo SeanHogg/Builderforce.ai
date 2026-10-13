@@ -6227,7 +6227,7 @@
                     },
                     {
                         "question": "Qu’est-ce qu’un AgentHost géré ?",
-                        "answer": "Un AgentHost géré est une instance hébergée de BuilderForce Agents exploitée par Builderforce, facturée mensuellement par AgentHost hébergé. Ajoutez-le depuis la page des tarifs avec un forfait Pro ou Teams actif, puis demandez un hôte dans Workforce. Nous provisionnons sous 1 jour ouvrable. Son prix en vigueur est fourni par le contrat tarifaire public."
+                        "answer": "Un AgentHost géré est une instance hébergée de BuilderForce Agents exploitée par Builderforce, facturée mensuellement par AgentHost hébergé. Ajoutez-le depuis la page des tarifs avec un forfait Pro ou Teams actif, puis demandez un hôte dans Workforce. Le provisionnement démarre lorsque vous demandez un hôte. Son prix en vigueur est fourni par le contrat tarifaire public."
                     },
                     {
                         "question": "Proposez-vous une facturation annuelle ?",
@@ -18087,7 +18087,7 @@
             "statusRequestActive": "Actif",
             "statusCancelled": "Annulé",
             "statusFailed": "Échec",
-            "provisionNote": "Nous provisionnons sous 1 jour ouvrable.",
+            "provisionNote": "Le provisionnement démarre lorsque vous demandez un hôte.",
             "cta": "Comparer les offres"
         },
         "paymentMethodTitle": "Moyen de paiement",

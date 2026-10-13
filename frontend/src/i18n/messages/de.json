@@ -6227,7 +6227,7 @@
           },
           {
             "question": "Was ist ein Managed AgentHost?",
-            "answer": "Ein Managed AgentHost ist eine gehostete BuilderForce-Agents-Instanz, die von Builderforce betrieben und monatlich pro gehostetem AgentHost abgerechnet wird. Fügen Sie ihn auf der Preisseite mit einem aktiven Pro- oder Teams-Tarif hinzu und fragen Sie den Host unter Workforce an. Wir stellen innerhalb eines Werktags bereit. Den aktuellen Preis liefert der öffentliche Preisvertrag."
+            "answer": "Ein Managed AgentHost ist eine gehostete BuilderForce-Agents-Instanz, die von Builderforce betrieben und monatlich pro gehostetem AgentHost abgerechnet wird. Fügen Sie ihn auf der Preisseite mit einem aktiven Pro- oder Teams-Tarif hinzu und fragen Sie den Host unter Workforce an. Die Bereitstellung startet, sobald Sie einen Host anfordern. Den aktuellen Preis liefert der öffentliche Preisvertrag."
           },
           {
             "question": "Bieten Sie jährliche Abrechnung an?",
@@ -18087,7 +18087,7 @@
       "statusRequestActive": "Aktiv",
       "statusCancelled": "Storniert",
       "statusFailed": "Fehlgeschlagen",
-      "provisionNote": "Wir stellen innerhalb eines Werktags bereit.",
+      "provisionNote": "Die Bereitstellung startet, sobald Sie einen Host anfordern.",
       "cta": "Tarife vergleichen"
     },
     "paymentMethodTitle": "Zahlungsmethode",

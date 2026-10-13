@@ -5,8 +5,8 @@
  * the host count. Entitlement lives on `settings.feature = 'managed_agent_host'`.
  *
  * On addon.cancelled / addon.past_due we cancel still-pending waitlist rows so
- * unpaid tenants cannot keep a queue. We do NOT delete an already-active linked
- * AgentHost — deprovision is out of this MVP (auto-hosting stretch).
+ * unpaid tenants cannot keep a queue. Occupying (provisioning/active) hosts are
+ * deprovisioned by the purchase recorder on addon.cancelled.
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
@@ -128,8 +128,8 @@ export async function recordManagedAgentHostEvent(db: Db, event: WebhookEvent): 
   if (event.cartId && status === 'active') {
     await db.update(carts).set({ status: 'converted', updatedAt: sql`now()` }).where(and(eq(carts.id, event.cartId), eq(carts.tenantId, event.tenantId)));
   }
-  // Cancel still-pending waitlist rows when the add-on lapses. Do NOT delete an
-  // already-active linked AgentHost — deprovision is out of this MVP.
+  // Cancel still-pending waitlist rows when the add-on lapses. Occupying hosts
+  // are deprovisioned by the purchase recorder on addon.cancelled.
   if (status === 'cancelled' || status === 'past_due') {
     await cancelPendingManagedAgentHostRequests(db, event.tenantId);
   }

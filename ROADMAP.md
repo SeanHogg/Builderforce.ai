@@ -25,7 +25,7 @@ Enabling work is legitimate but never outranks a broken Idea→Real journey.
 
 | Feature | Area | P | Target | Status |
 |---|---|---|---|---|
-| Managed Agent hosting add-on ($49/mo/Agent) | Revenue | P0 | Q3 2026 | 🔄 Partial — Stripe + waitlist + tenant UI shipped (`dff067555`, `48e80c44c`, `ab226fdef`); auto-provision VM (#3343) remains |
+| Managed Agent hosting add-on ($49/mo/Agent) | Revenue | P0 | Q3 2026 | ✅ Shipped |
 | Onboarding — first Agent in < 5 min | Revenue | P1 | Q3 2026 | ✅ Shipped |
 | Marketplace monetization (listing + tx fee, Stripe) | Revenue | P1 | Q3 2026 | 🔄 Partial — awaits Stripe secrets |
 | Enterprise license GA (on-prem Docker) | Revenue | P1 | Q4 2026 | ✅ Shipped |

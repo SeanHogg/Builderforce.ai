@@ -6227,7 +6227,7 @@
           },
           {
             "question": "¿Qué es un AgentHost gestionado?",
-            "answer": "Un AgentHost gestionado es una instancia alojada de BuilderForce Agents operada por Builderforce, facturada mensualmente por cada AgentHost alojado. Añádelo desde la página de precios con un plan Pro o Teams activo y solicita el host en Workforce. Lo aprovisionamos en 1 día laborable. Su precio vigente lo indica el contrato público de precios."
+            "answer": "Un AgentHost gestionado es una instancia alojada de BuilderForce Agents operada por Builderforce, facturada mensualmente por cada AgentHost alojado. Añádelo desde la página de precios con un plan Pro o Teams activo y solicita el host en Workforce. El aprovisionamiento comienza cuando solicitas un host. Su precio vigente lo indica el contrato público de precios."
           },
           {
             "question": "¿Ofrecéis facturación anual?",
@@ -18087,7 +18087,7 @@
       "statusRequestActive": "Activo",
       "statusCancelled": "Cancelado",
       "statusFailed": "Fallido",
-      "provisionNote": "Aprovisionamos en 1 día laborable.",
+      "provisionNote": "El aprovisionamiento comienza cuando solicitas un host.",
       "cta": "Comparar planes"
     },
     "paymentMethodTitle": "Método de pago",

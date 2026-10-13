@@ -28,6 +28,8 @@ import {
 } from '../marketplace/listingCommerce';
 import { recordBusinessPhoneEvent } from '../tenant/businessPhoneSubscription';
 import { recordManagedAgentHostEvent, MANAGED_AGENT_HOST_KIND } from '../tenant/managedAgentHostSubscription';
+import { deprovisionOccupyingManagedAgentHosts } from '../tenant/managedAgentHostProvision';
+import { managedAgentHostContainerRuntime } from '../tenant/managedAgentHostRuntime';
 import { completeSpawnTopUp, SPAWN_TOKENS_KIND } from '../spawn/spawnTopUp';
 import { recordSpawnPlanEvent, SPAWN_PLAN_KIND } from '../spawn/spawnMembership';
 
@@ -79,8 +81,14 @@ const ADDON_RECORDERS: Readonly<Record<string, AddonRecorder>> = {
     await recordBusinessPhoneEvent(db, event);
     return true;
   },
-  [MANAGED_AGENT_HOST_KIND]: async (db, _env, event) => {
+  [MANAGED_AGENT_HOST_KIND]: async (db, env, event) => {
     await recordManagedAgentHostEvent(db, event);
+    if (event.type === 'addon.cancelled' && event.tenantId) {
+      await deprovisionOccupyingManagedAgentHosts(db, event.tenantId, {
+        runtime: managedAgentHostContainerRuntime(env),
+        env,
+      });
+    }
     return true;
   },
   [SPAWN_PLAN_KIND]: recordSpawnPlanEvent,

@@ -6227,7 +6227,7 @@
                     },
                     {
                         "question": "什么是托管 AgentHost？",
-                        "answer": "托管 AgentHost 是由 Builderforce 运营的托管版 BuilderForce Agents 实例，按每个托管 AgentHost 按月计费。在有效的 Pro 或 Teams 套餐下从定价页添加，然后在 Workforce 申请主机。我们会在 1 个工作日内开通。当前价格由公开定价约定提供。"
+                        "answer": "托管 AgentHost 是由 Builderforce 运营的托管版 BuilderForce Agents 实例，按每个托管 AgentHost 按月计费。在有效的 Pro 或 Teams 套餐下从定价页添加，然后在 Workforce 申请主机。申请主机后即开始开通。当前价格由公开定价约定提供。"
                     },
                     {
                         "question": "你们提供按年计费吗？",
@@ -18087,7 +18087,7 @@
             "statusRequestActive": "有效",
             "statusCancelled": "已取消",
             "statusFailed": "失败",
-            "provisionNote": "我们会在 1 个工作日内开通。",
+            "provisionNote": "申请主机后即开始开通。",
             "cta": "比较套餐"
         },
         "paymentMethodTitle": "付款方式",
