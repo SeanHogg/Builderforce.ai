@@ -23,6 +23,7 @@ import {
   validateSessionsPatchParams,
   validateSessionsPreviewParams,
   validateSessionsResetParams,
+  validateSessionsForkParams,
   validateSessionsResolveParams,
 } from "../protocol/index.js";
 import {
@@ -42,6 +43,7 @@ import {
 } from "../session-utils.js";
 import { applySessionsPatchToStore } from "../sessions-patch.js";
 import { resolveSessionKeyFromResolveParams } from "../sessions-resolve.js";
+import { forkGatewaySession } from "./sessions-fork.js";
 import type { GatewayRequestHandlers, RespondFn } from "./types.js";
 import { assertValidParams } from "./validation.js";
 
@@ -345,6 +347,22 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       reason: "reset",
     });
     respond(true, { ok: true, key: target.canonicalKey, entry: next }, undefined);
+  },
+  "sessions.fork": async ({ params, respond }) => {
+    if (!assertValidParams(params, validateSessionsForkParams, "sessions.fork", respond)) {
+      return;
+    }
+    const p = params;
+    const key = requireSessionKey(p.key, respond);
+    if (!key) {
+      return;
+    }
+    const result = await forkGatewaySession(key);
+    if (!result.ok) {
+      respond(false, undefined, result.error);
+      return;
+    }
+    respond(true, result, undefined);
   },
   "sessions.delete": async ({ params, respond }) => {
     if (!assertValidParams(params, validateSessionsDeleteParams, "sessions.delete", respond)) {

@@ -215,6 +215,12 @@ export class GatewayChatClient {
     });
   }
 
+  async forkSession(key: string) {
+    return await this.client.request<{ ok: true; key: string; entry: unknown }>("sessions.fork", {
+      key,
+    });
+  }
+
   async getStatus() {
     return await this.client.request("status");
   }

@@ -159,6 +159,79 @@ describe("tui command handlers", () => {
     expect(loadHistory).toHaveBeenCalledTimes(2);
   });
 
+  it("forks the current session and switches to the clone", async () => {
+    const forkSession = vi.fn().mockResolvedValue({ ok: true, key: "agent:main:fork-abc" });
+    const setSession = vi.fn().mockResolvedValue(undefined);
+    const addSystem = vi.fn();
+    const requestRender = vi.fn();
+
+    const { handleCommand } = createCommandHandlers({
+      client: { forkSession } as never,
+      chatLog: { addSystem } as never,
+      tui: { requestRender } as never,
+      opts: {},
+      state: {
+        currentSessionKey: "agent:main:main",
+        activeChatRunId: null,
+        sessionInfo: {},
+      } as never,
+      deliverDefault: false,
+      openOverlay: vi.fn(),
+      closeOverlay: vi.fn(),
+      refreshSessionInfo: vi.fn(),
+      loadHistory: vi.fn(),
+      setSession,
+      refreshAgents: vi.fn(),
+      abortActive: vi.fn(),
+      setActivityStatus: vi.fn(),
+      formatSessionKey: (key: string) => key,
+      applySessionInfoFromPatch: vi.fn(),
+      noteLocalRunId: vi.fn(),
+    });
+
+    await handleCommand("/fork");
+
+    expect(forkSession).toHaveBeenCalledWith("agent:main:main");
+    expect(setSession).toHaveBeenCalledWith("agent:main:fork-abc");
+    expect(addSystem).toHaveBeenCalledWith("forked session agent:main:fork-abc");
+    expect(requestRender).toHaveBeenCalled();
+  });
+
+  it("reports fork failures without switching session", async () => {
+    const forkSession = vi.fn().mockRejectedValue(new Error("boom"));
+    const setSession = vi.fn();
+    const addSystem = vi.fn();
+
+    const { handleCommand } = createCommandHandlers({
+      client: { forkSession } as never,
+      chatLog: { addSystem } as never,
+      tui: { requestRender: vi.fn() } as never,
+      opts: {},
+      state: {
+        currentSessionKey: "agent:main:main",
+        activeChatRunId: null,
+        sessionInfo: {},
+      } as never,
+      deliverDefault: false,
+      openOverlay: vi.fn(),
+      closeOverlay: vi.fn(),
+      refreshSessionInfo: vi.fn(),
+      loadHistory: vi.fn(),
+      setSession,
+      refreshAgents: vi.fn(),
+      abortActive: vi.fn(),
+      setActivityStatus: vi.fn(),
+      formatSessionKey: vi.fn(),
+      applySessionInfoFromPatch: vi.fn(),
+      noteLocalRunId: vi.fn(),
+    });
+
+    await handleCommand("/fork");
+
+    expect(setSession).not.toHaveBeenCalled();
+    expect(addSystem).toHaveBeenCalledWith(expect.stringContaining("fork failed"));
+  });
+
   it("runs /gateway restart via service command runner", async () => {
     const addSystem = vi.fn();
     const requestRender = vi.fn();

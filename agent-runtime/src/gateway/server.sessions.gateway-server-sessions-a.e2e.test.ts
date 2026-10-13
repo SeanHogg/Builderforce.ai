@@ -190,6 +190,7 @@ describe("gateway server sessions", () => {
         "sessions.preview",
         "sessions.patch",
         "sessions.reset",
+        "sessions.fork",
         "sessions.delete",
         "sessions.compact",
       ]),
@@ -739,6 +740,71 @@ describe("gateway server sessions", () => {
     expect(filesAfterDeleteAttempt.some((f) => f.startsWith("sess-active.jsonl.deleted."))).toBe(
       false,
     );
+
+    ws.close();
+  });
+
+  test("sessions.fork clones transcript onto a new store key", async () => {
+    const { dir, storePath } = await createSessionStoreDir();
+    const parentSessionId = "sess-fork-parent";
+    const parentFile = path.join(dir, `${parentSessionId}.jsonl`);
+    const header = {
+      type: "session",
+      version: 3,
+      id: parentSessionId,
+      timestamp: new Date().toISOString(),
+      cwd: process.cwd(),
+    };
+    const message = {
+      type: "message",
+      id: "m1",
+      parentId: null,
+      timestamp: new Date().toISOString(),
+      message: { role: "user", content: "Fork me" },
+    };
+    const parentRaw = `${JSON.stringify(header)}\n${JSON.stringify(message)}\n`;
+    await fs.writeFile(parentFile, parentRaw, "utf-8");
+    await writeSessionStore({
+      entries: {
+        main: {
+          sessionId: parentSessionId,
+          sessionFile: parentFile,
+          updatedAt: Date.now(),
+          thinkingLevel: "low",
+        },
+      },
+    });
+
+    const { ws } = await openClient();
+    const forked = await rpcReq<{
+      ok: true;
+      key: string;
+      entry: { sessionId: string; sessionFile?: string; thinkingLevel?: string };
+    }>(ws, "sessions.fork", { key: "agent:main:main" });
+
+    expect(forked.ok).toBe(true);
+    expect(forked.payload?.key).not.toBe("agent:main:main");
+    expect(forked.payload?.key).toMatch(/^agent:main:fork-/);
+    expect(forked.payload?.entry.sessionId).not.toBe(parentSessionId);
+    expect(forked.payload?.entry.thinkingLevel).toBe("low");
+
+    const store = JSON.parse(await fs.readFile(storePath, "utf-8")) as Record<
+      string,
+      { sessionId?: string; sessionFile?: string }
+    >;
+    expect(store["agent:main:main"]?.sessionId).toBe(parentSessionId);
+    expect(store["agent:main:main"]?.sessionFile).toBe(parentFile);
+    const forkKey = forked.payload?.key ?? "";
+    expect(store[forkKey]?.sessionId).toBe(forked.payload?.entry.sessionId);
+
+    expect(await fs.readFile(parentFile, "utf-8")).toBe(parentRaw);
+    const clonedFile = forked.payload?.entry.sessionFile;
+    expect(clonedFile).toBeTruthy();
+    const clonedRaw = await fs.readFile(clonedFile as string, "utf-8");
+    const [clonedHeaderLine] = clonedRaw.split(/\r?\n/).filter((line) => line.trim().length > 0);
+    const clonedHeader = JSON.parse(clonedHeaderLine ?? "{}") as { parentSession?: string };
+    expect(clonedHeader.parentSession).toBe(path.resolve(parentFile));
+    expect(clonedRaw).toContain("Fork me");
 
     ws.close();
   });

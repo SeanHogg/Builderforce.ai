@@ -713,6 +713,22 @@ export function createCommandHandlers(context: CommandHandlerContext) {
           chatLog.addSystem(`activation failed: ${String(err)}`);
         }
         break;
+      case "fork":
+        try {
+          const result = await client.forkSession(state.currentSessionKey);
+          const nextKey = typeof result?.key === "string" ? result.key.trim() : "";
+          if (!nextKey) {
+            chatLog.addSystem("fork failed: no session key returned");
+            tui.requestRender();
+            break;
+          }
+          await setSession(nextKey);
+          chatLog.addSystem(`forked session ${formatSessionKey(nextKey)}`);
+        } catch (err) {
+          chatLog.addSystem(`fork failed: ${String(err)}`);
+        }
+        tui.requestRender();
+        break;
       case "new":
       case "reset":
         try {
