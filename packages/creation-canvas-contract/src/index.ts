@@ -61,6 +61,10 @@ export * from './equity';
 // same numbers — see the module header.
 export * from './viewport';
 export * from './website';
+// How a marketed proof form lands on the canvas and how it is delivered. Shared
+// because `canvas_realize`, the API catalog test and the methodology ratchet
+// must name the same eight keys and the same adapter; see realizationDelivery.ts.
+export * from './realizationDelivery';
 // The framework-free HTML renderer for that same vocabulary — one document string
 // shared by the static site publisher and the canvas `app` surface. See its own header
 // for why the pixels live here rather than beside either caller.

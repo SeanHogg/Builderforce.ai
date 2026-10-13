@@ -15,7 +15,7 @@
  * different advice than the product gives — quietly, and in the direction that
  * sells better.
  *
- * Six checks:
+ * Seven checks:
  *   1. SAME EIGHT — no target in the API that the site cannot show, and none on
  *      the site that the product cannot build.
  *   2. SAME NUMBERS — fidelity and effort match, per key.
@@ -30,6 +30,10 @@
  *      undeclared custom property silently drops the declaration that uses it.
  *      A template literal is invisible to `check-design-tokens`; this closes it.
  *      (`--stage-expand` was missing for as long as the stage existed.)
+ *   7. SAME EIGHT ON THE CANVAS DELIVERY MAP — every API target has a row in
+ *      `REALIZATION_DELIVERY_KEYS`, and those proofs land as `website.publish`
+ *      (the connected canvas adapter). A proof the product can build but the
+ *      canvas cannot deliver is an unsold capability.
  *
  * Run via `npm run check:methodology`; wired into `npm test`.
  */
@@ -122,6 +126,33 @@ for (const key of mirror.keys()) {
       `[same-eight] lib/methodology.ts advertises \`${key}\`, which no API target declares.\n` +
       '    Remove it, or add the target — a marketing page may not promise a proof that cannot be built.',
     );
+  }
+}
+
+// ── 7 · Same eight on the canvas delivery map ──────────────────────────────
+const deliverySourcePath = path.resolve(ROOT, '..', 'packages', 'creation-canvas-contract', 'src', 'realizationDelivery.ts');
+if (!fs.existsSync(deliverySourcePath)) {
+  fail('[delivery] packages/creation-canvas-contract/src/realizationDelivery.ts is missing — marketed proofs have no canvas delivery map.');
+} else {
+  const deliverySource = fs.readFileSync(deliverySourcePath, 'utf8');
+  const deliveryBlock = deliverySource.match(/export const REALIZATION_DELIVERY_KEYS[\s\S]*?as const/)?.[0] ?? '';
+  const deliveryKeys = [...deliveryBlock.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  const deliverySet = new Set(deliveryKeys);
+  for (const key of targets.keys()) {
+    if (!deliverySet.has(key)) {
+      fail(
+        `[delivery] The API builds \`${key}\` and REALIZATION_DELIVERY_KEYS does not list it.\n` +
+        '    A proof the product can run but the canvas cannot deliver is an unsold capability.',
+      );
+    }
+  }
+  for (const key of deliveryKeys) {
+    if (!targets.has(key)) {
+      fail(`[delivery] realizationDelivery.ts advertises \`${key}\`, which no API target declares.`);
+    }
+  }
+  if (!/canvasKind:\s*'website'/.test(deliverySource) || !/deliveryAction:\s*'publish'/.test(deliverySource)) {
+    fail('[delivery] Realization proofs must land as website.publish — the connected canvas adapter.');
   }
 }
 
@@ -225,5 +256,5 @@ if (failures.length > 0) {
 
 console.log(
   `✅ check-methodology OK — ${targets.size} proof forms mirrored from the API with matching ` +
-  `fidelity/effort and copy; ${steps.length} method steps and ${stages.length} stages all have copy and a hue.`,
+  `fidelity/effort, copy and canvas delivery; ${steps.length} method steps and ${stages.length} stages all have copy and a hue.`,
 );

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { REALIZATION_KEYS } from '../realization/realizationTarget';
 import { shapeProofJourney, type ProofJourneyEvent } from './proofJourney';
 
 let seq = 0;
@@ -116,5 +117,23 @@ describe('shapeProofJourney', () => {
     ];
     const journey = shapeProofJourney('session-1', events);
     expect(journey.verdict.stalledAt).toBe('not_reachable');
+  });
+});
+
+describe.each(REALIZATION_KEYS)('marketed artifact %s reaches graded proof', (key) => {
+  it('walks idea.read → proof.choose → proof.build → proof.grade', () => {
+    seq = 0;
+    const events = [
+      event({
+        action: 'idea.read', phase: 'succeeded', correlationId: 'read:r1',
+        metadata: { recommendations: [{ key, score: 0.9, recommended: true }] },
+      }),
+      event({ action: 'proof.choose', phase: 'succeeded', correlationId: `choose:${key}`, metadata: { targetKey: key } }),
+      event({ action: 'proof.build', phase: 'succeeded', correlationId: `build:${key}`, metadata: { reachable: true } }),
+      event({ action: 'proof.grade', phase: 'validated', correlationId: `grade:${key}`, metricValue: 1 }),
+    ];
+    const journey = shapeProofJourney('session-1', events);
+    expect(journey.attempts[0]).toMatchObject({ targetKey: key, grade: { result: 'met' } });
+    expect(journey.verdict).toMatchObject({ reachedGradedProof: true, stalledAt: null });
   });
 });

@@ -13,6 +13,14 @@
  * canvas object got wrong (2026-08-29 diagnostic: wrong webhook URLs, no
  * WEBHOOK_SHARED_SECRET, a `workflow` card with zero authored steps).
  */
+import {
+  authoredWebsiteProblem,
+  realizationCanvasDelivery,
+  realizationWebsiteFromPlan,
+  type RealizationCanvasDelivery,
+  type WebsitePage,
+  type WebsiteTheme,
+} from '@builderforce/creation-canvas-contract';
 import { apiRequest } from './apiClient';
 
 export interface RealizationTargetSummary {
@@ -118,4 +126,64 @@ export async function createCanvasRealization(input: {
 export function primaryRealizationDoc(files: Record<string, string>): { path: string; content: string } | null {
   const path = Object.keys(files).find((candidate) => candidate.endsWith('.md'));
   return path ? { path, content: files[path] } : null;
+}
+
+/**
+ * What `canvas_realize` puts on the board. The website is the delivered
+ * artifact (`website.publish` / `artifact.publish`); the markdown charter is
+ * working notes beside it, not a substitute. Unknown target keys refuse rather
+ * than land a titled shell or a `workflow` card.
+ */
+export interface RealizationCanvasLanding {
+  delivery: RealizationCanvasDelivery;
+  website: {
+    title: string;
+    subtitle: string;
+    status: string;
+    pages: WebsitePage[];
+    websiteTheme: WebsiteTheme;
+  };
+  document: {
+    title: string;
+    subtitle: string;
+    content: string;
+    status: string;
+  } | null;
+}
+
+export function realizationCanvasLanding(
+  realization: Pick<RealizationView, 'id' | 'targetKey' | 'title' | 'plan'>,
+): RealizationCanvasLanding | { error: string } {
+  const delivery = realizationCanvasDelivery(realization.targetKey);
+  if (!delivery) {
+    return { error: `No canvas delivery adapter for "${realization.targetKey}". Call canvas_list_realization_targets and name a tested proof form.` };
+  }
+  const nextStep = `Open /realize/${realization.id} to review the plan and build it live.`;
+  const website = realizationWebsiteFromPlan({
+    title: realization.title,
+    summary: realization.plan.summary,
+    successCriteria: realization.plan.successCriteria ?? [],
+    nextStep,
+  });
+  const problem = authoredWebsiteProblem(website);
+  if (problem) return { error: problem };
+  const doc = primaryRealizationDoc(realization.plan.files ?? {});
+  return {
+    delivery,
+    website: {
+      title: realization.title,
+      subtitle: realization.plan.summary,
+      status: 'Plan ready',
+      pages: website.pages,
+      websiteTheme: website.websiteTheme,
+    },
+    document: doc
+      ? {
+          title: `${realization.title} — ${realization.plan.blueprintName}`,
+          subtitle: realization.plan.summary,
+          content: doc.content,
+          status: 'Plan ready',
+        }
+      : null,
+  };
 }
