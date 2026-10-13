@@ -4,11 +4,11 @@ import type { ReactNode } from 'react';
 import { INSIGHT_PANEL_KINDS, panelKindDef } from '../panelKinds';
 import { PAGE_STAGE_LENSES } from '../bands/pageStageLenses';
 import { InsightsScopeProvider } from '../insightsScope';
-import { RouteHeatTab } from './RouteKind';
+import { RouteHeatTab, RouteReviewTab } from './RouteKind';
 
 /**
  * S4 wires into the ONE screen by registry rows only (D16): the `route` panel
- * kind (one `heat` tab now; S4f adds a review tab to the same row) and the
+ * kind (its `heat` tab and S4f's `review` tab, one row) and the
  * Page stage's `heat` and `stuck` lenses.
  */
 
@@ -32,12 +32,13 @@ vi.mock('@/components/replay/heatmap/HeatmapInsights', () => ({
 }));
 
 describe('route kind + heat lenses registration', () => {
-  it('registers the route kind with its heat tab', () => {
+  it('registers the route kind with its heat and review tabs', () => {
     const def = panelKindDef('route');
     expect(def).toBeDefined();
     expect(def!.labelKey).toBe('route.kind');
-    expect(def!.tabs.map((tab) => tab.id)).toEqual(['heat']);
+    expect(def!.tabs.map((tab) => tab.id)).toEqual(['heat', 'review']);
     expect(def!.tabs[0]!.Component).toBe(RouteHeatTab);
+    expect(def!.tabs[1]!.Component).toBe(RouteReviewTab);
     expect(INSIGHT_PANEL_KINDS.filter((row) => row.kind === 'route')).toHaveLength(1);
   });
 

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ProofEvaluationDto, ProofMeasure } from '@builderforce/interaction-contract';
-import { realizationApi, type Realization } from '@/lib/builderforceApi';
+import { realizationApi, type Realization } from '@/lib/realizationApi';
 import { replayApi } from '@/lib/replayApi';
 import { prescription } from '@/test/replayPrescriptionFixtures';
 import { scoreboardStatus } from './proofScoreboardModel';

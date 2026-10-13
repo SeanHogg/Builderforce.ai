@@ -44,7 +44,11 @@ export function IssuesKind({ siteId, id, push }: InsightPanelKindProps) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', minWidth: 0 }}>
       <SegmentSummary key={JSON.stringify(filter)} siteId={siteId} days={days} filter={filter} onOpenRecording={(recordingId, seconds) => push({ kind: 'recording', id: recordingId, tab: 'replay', t: seconds })} />
       <IssueStatusTabs value={statusTab} onChange={setStatusTab} />
-      {pages.items.length > 0 && <IssueRows issues={pages.items} onOpen={open} />}
+      {/* A filter is answered from kept recordings (≈), exactly as the API marks it `estimated`. */}
+      {pages.items.length > 0 && filter.all.length > 0 && (
+        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>{t('estimatedNote')}</p>
+      )}
+      {pages.items.length > 0 && <IssueRows issues={pages.items} onOpen={open} estimated={filter.all.length > 0} />}
       {!pages.loading && !error && pages.items.length === 0 && <p style={{ margin: 0, color: 'var(--text-secondary)' }}>{t('empty')}</p>}
       <PanelPending loading={pages.loading} error={error} />
       {pages.hasMore && !pages.loading && (

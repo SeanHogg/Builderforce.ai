@@ -38,6 +38,9 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/apps/insights');
   vi.spyOn(replayApi, 'listPrescriptions').mockResolvedValue([]);
   vi.spyOn(replayApi, 'sweepPrescriptions').mockResolvedValue({ found: 4, created: 2, refreshed: 2, prescribed: 1 });
+  vi.spyOn(replayApi, 'pagePrompt').mockImplementation(async (_site, path, audience, ids) => ({
+    audience, prompt: `one prompt for ${path}: ${(ids ?? []).join('+')}`, selectors: [], prescriptionIds: [...(ids ?? [])],
+  }));
 });
 
 afterEach(() => {
@@ -84,5 +87,36 @@ describe('DoNext', () => {
     expect(levels()).toEqual([{ kind: 'fixes', id: '' }]);
     fireEvent.click(await screen.findByRole('button', { name: /^replay\.prescription\.openAria / }));
     expect(levels()).toEqual([{ kind: 'fixes', id: '' }, { kind: 'fix', id: 'rx-1', tab: 'change' }]);
+  });
+
+  it('"Pages" opens the pages kind', async () => {
+    renderBand();
+    fireEvent.click(await screen.findByRole('button', { name: 'insights.pages.open' }));
+    expect(levels()).toEqual([{ kind: 'pages', id: '' }]);
+  });
+
+  it('"Apply all" bundles the visible open fixes on the page into ONE prompt', async () => {
+    vi.mocked(replayApi.listPrescriptions).mockResolvedValue([
+      prescription({ id: 'rx-a', rank: 1 }),
+      prescription({ id: 'rx-b', rank: 2 }),
+      prescription({ id: 'rx-other', rank: 3, pagePath: '/signup', subjectKey: '/signup|form' }),
+    ]);
+    renderBand();
+    await screen.findAllByTestId('prescription-card');
+    const applyAll = screen.getByRole('button', { name: 'insights.fixes.applyAll' });
+    expect(applyAll).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(applyAll);
+    // No Page-stage route yet: the top fix's page, and only the fixes shown for it.
+    await waitFor(() => expect(replayApi.pagePrompt).toHaveBeenCalledWith('site-1', '/pricing', 'coding_agent', ['rx-a', 'rx-b']));
+    expect(screen.getByRole('region', { name: 'insights.fixes.applyAllTitle /pricing' })).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('one prompt for /pricing: rx-a+rx-b')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /replay\.prompt\.copy$/ })).toBeInTheDocument();
+  });
+
+  it('"Apply all" is disabled with no fix on a page', async () => {
+    vi.mocked(replayApi.listPrescriptions).mockResolvedValue([prescription({ pagePath: null })]);
+    renderBand();
+    await screen.findAllByTestId('prescription-card');
+    expect(screen.getByRole('button', { name: 'insights.fixes.applyAll' })).toBeDisabled();
   });
 });

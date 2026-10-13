@@ -7,7 +7,7 @@
  * words, whether they came back, whether they signed up, whether they paid.
  *
  * The row is a summary — three lines of intent is enough to recognise a lead —
- * and the full text is one click away in RecordingPanel. The header stays put
+ * and the full text is one click away in VisitorPanel. The header stays put
  * while that list scrolls, because a sorted column whose label has scrolled off
  * is a column you have to re-derive.
  */

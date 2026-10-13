@@ -19,6 +19,7 @@ vi.mock('../middleware/authMiddleware', async (importOriginal) => {
     c.set('tenantId', 7);
     c.set('userId', 'u1');
     c.set('role', (c.req.header('x-role') ?? 'developer') as never);
+    if (c.req.header('x-emulation')) c.set('isEmulation', true);
     await next();
   };
   return { ...real, authMiddleware: fakeAuth };
@@ -101,5 +102,14 @@ describe('POST /:projectId/replay/site', () => {
   it('404s a manager switching on another workspace project', async () => {
     expect((await call('/43/replay/site', { method: 'POST', role: 'manager' })).status).toBe(404);
     expect(mocks.createHostedSite).not.toHaveBeenCalled();
+  });
+});
+
+describe('superadmin emulation (D17)', () => {
+  it('403s the project site read before the ownership check', async () => {
+    const res = await call('/42/replay/site', { headers: { 'x-emulation': '1' } });
+    expect(res.status).toBe(403);
+    expect(mocks.projectInTenantCached).not.toHaveBeenCalled();
+    expect(mocks.projectSiteDto).not.toHaveBeenCalled();
   });
 });

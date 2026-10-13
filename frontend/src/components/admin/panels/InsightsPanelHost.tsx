@@ -3,7 +3,7 @@
  *
  * Flow and leads read builderforce.ai's `activity_log` journey; they are two
  * readings of the same funnel, so they live on one page and open the same
- * RecordingPanel. Recordings are NOT here (PRD 33 D17: Builderforce is
+ * VisitorPanel. Recordings are NOT here (PRD 33 D17: Builderforce is
  * customer #1 and reviews them in the Insights app like any workspace) — the
  * header links there, carrying the `?panel=` a legacy admin address maps to.
  */
@@ -17,7 +17,7 @@ import { adminApi, type AdminGuestSession, type AdminGuestSessionsPage } from '@
 import { AdminPanelHeader, useAdminData } from '@/components/admin/adminShared';
 import { FlowView } from '@/components/admin/visitors/FlowView';
 import { LeadsView } from '@/components/admin/visitors/LeadsView';
-import { RecordingPanel, type RecordingPanelTabId } from '@/components/visitors/RecordingPanel';
+import { VisitorPanel, type VisitorPanelTabId } from '@/components/visitors/VisitorPanel';
 
 const WINDOWS = [7, 30, 90] as const;
 
@@ -31,7 +31,7 @@ export default function InsightsPanelHost() {
   const [days, setDays] = useState<number>(30);
   const [openVisitorId, setOpenVisitorId] = useState<string | null>(null);
   const [openSession, setOpenSession] = useState<AdminGuestSession | null>(null);
-  const [tab, setTab] = useState<RecordingPanelTabId>('journey');
+  const [tab, setTab] = useState<VisitorPanelTabId>('journey');
 
   // The flow loads itself from its source (`FlowView`'s `FLOW_SOURCES`); refresh bumps its key.
   const [flowReloadKey, setFlowReloadKey] = useState(0);
@@ -101,7 +101,7 @@ export default function InsightsPanelHost() {
         error={leadsError}
         onOpenLead={openLead}
       />
-      <RecordingPanel
+      <VisitorPanel
         visitorId={openVisitorId}
         session={openSession}
         tab={tab}

@@ -1,6 +1,8 @@
 /**
  * `POST /api/admin/replay-ops/sites/:siteId/seed-method-funnel` (PRD 33 §5.3.6):
- * superadmin only, idempotent, audited. The real `seedMethodFunnel` runs against a
+ * superadmin only, only on a site of a workspace the operator is a member of (D17:
+ * the Builderforce workspace), the funnel + steps in one transaction, idempotent,
+ * audited. The real `seedMethodFunnel` runs against a
  * fake db; the guard, the audit writer and the site read are mocked.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -50,11 +52,13 @@ beforeEach(() => {
 describe('POST /sites/:siteId/seed-method-funnel', () => {
   it('creates the four custom smart events and "The method" funnel, audited', async () => {
     const db = fakeDb([
+      [{ tenantId: 1 }], // the operator is a member of the site's workspace
       METHOD_ACTS.map((name) => ({ name })), // smart events inserted
       [], // no funnel yet
       [{ id: 'funnel-1' }], // funnel inserted
       [], // steps inserted
     ]);
+    const transaction = vi.spyOn(db, 'transaction');
     const res = await seed(db);
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ siteId: SITE, funnelId: 'funnel-1', createdSmartEvents: [...METHOD_ACTS], createdFunnel: true });
@@ -67,10 +71,21 @@ describe('POST /sites/:siteId/seed-method-funnel', () => {
     expect((inserts[2]!.payload as Array<{ match: string }>).map((s) => s.match)).toEqual(['/', 'composer.submit', ...METHOD_ACTS]);
     expect(METHOD_FUNNEL_STEPS[0]).toEqual({ stepKind: 'page', match: '/', matchMode: 'prefix' });
     expect(mocks.writeAdminAudit).toHaveBeenCalledWith(db, 'REPLAY_METHOD_FUNNEL_SEEDED', 'op-1', expect.objectContaining({ tenantId: 1 }));
+    // The funnel and its steps were written inside ONE transaction.
+    expect(transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a site of a workspace the operator is not a member of (a customer site), writing nothing', async () => {
+    const db = fakeDb([[{ tenantId: 2 }, { tenantId: 3 }]]);
+    const res = await seed(db);
+    expect(res.status).toBe(403);
+    expect(db.calls.filter((c) => c.kind === 'insert')).toHaveLength(0);
+    expect(mocks.writeAdminAudit).not.toHaveBeenCalled();
   });
 
   it('is idempotent: a re-run creates nothing, answers 200 and writes no audit row', async () => {
     const db = fakeDb([
+      [{ tenantId: 1 }], // member of the site's workspace
       [], // every smart event already existed
       [{ id: 'funnel-1' }], // the funnel already exists
     ]);

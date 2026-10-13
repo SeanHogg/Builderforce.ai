@@ -2,7 +2,8 @@
  * PAGE_STAGE_LENSES — what the Page stage can show for its route (PRD 33 §4.1:
  * Heat · Stuck · Fixes · Live). `heat` (click · scroll · areas) and `stuck`
  * (rage · dead) are the one `HeatmapView` with a layer subset; `fixes` (S4e) is
- * the route's prescriptions as THE fix card, compact.
+ * the route's prescriptions as THE fix card, compact, led by the way into the
+ * route's page review (S4f, `route:<route>:review`).
  */
 
 import type { ComponentType } from 'react';
@@ -14,6 +15,7 @@ import { PrescriptionCard } from '@/components/replay/prescriptions/Prescription
 import { usePrescriptionsFor } from '@/components/replay/prescriptions/usePrescriptionsFor';
 import { useInsightsScope } from '../insightsScope';
 import { usePanel } from '../usePanel';
+import { pageReviewLevel } from '../kinds/PagesKind';
 
 export interface PageStageLensProps {
   siteId: string;
@@ -39,14 +41,18 @@ function LiveLens({ siteId, route }: PageStageLensProps) {
   );
 }
 
-/** The route's fixes, ranked (`pagePath` = the stage's route). */
+/** The route's fixes, ranked (`pagePath` = the stage's route), and the way into its page review. */
 function FixesLens({ siteId, route }: PageStageLensProps) {
   const t = useTranslations('replay.fixes');
+  const tStage = useTranslations('insights.route.review');
   const { push } = usePanel();
   const { items, loading } = usePrescriptionsFor({ siteId, route });
-  if (!loading && items.length === 0) return <p style={{ margin: 0, color: 'var(--text-secondary)' }}>{t('empty')}</p>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', minWidth: 0 }}>
+      <button type="button" className="btn-secondary" data-testid="open-page-review" style={{ minHeight: 44, alignSelf: 'flex-start' }} onClick={() => push(pageReviewLevel(route))}>
+        {tStage('open')}
+      </button>
+      {!loading && items.length === 0 && <p style={{ margin: 0, color: 'var(--text-secondary)' }}>{t('empty')}</p>}
       {items.map((p) => <PrescriptionCard key={p.id} compact siteId={siteId} prescription={p} push={push} />)}
     </div>
   );

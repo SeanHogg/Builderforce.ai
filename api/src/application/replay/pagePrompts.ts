@@ -138,16 +138,20 @@ async function compileFor(
 ): Promise<ReplayImprovementPromptDto> {
   const site = await getSiteForTenant(env, db, scope.tenantId, scope.siteId);
   const origin = await siteOrigin(env, db, site).catch(() => null);
+  const labelOf = await labelsFor(env, db, scope, rows);
   const input = promptInputFor(rows, {
     path,
     url: origin ? `${origin}${path}` : null,
     siteLabel: site.label || site.id,
-    labelOf: await labelsFor(env, db, scope, rows),
+    labelOf,
   });
+  const selectors = selectorsOf(input);
   return {
     audience,
     prompt: compileImprovementPrompt(input, { audience }),
-    selectors: selectorsOf(input),
+    selectors,
+    // The rect map's label for each (empty for a masked region) — one composer chip each.
+    targets: selectors.map((selector) => ({ selector, label: labelOf(selector) })),
     prescriptionIds: rows.map((r) => r.id),
   };
 }
@@ -158,11 +162,23 @@ export async function prescriptionPrompt(env: Env, db: Db, scope: ReplayScope, p
   return compileFor(env, db, scope, rx.pagePath ?? '/', [rx], audience);
 }
 
-/** Every accepted fix on a page, in ranked order. 404 when the page has none. */
-export async function pagePrompt(env: Env, db: Db, scope: ReplayScope, path: string, audience: ImprovementAudience): Promise<ReplayImprovementPromptDto> {
+/**
+ * Every accepted fix on a page, in ranked order — or only the ones `ids` names (the
+ * page review's "include in one prompt" checkboxes). 404 when nothing is left.
+ */
+export async function pagePrompt(
+  env: Env,
+  db: Db,
+  scope: ReplayScope,
+  path: string,
+  audience: ImprovementAudience,
+  ids?: readonly string[] | null,
+): Promise<ReplayImprovementPromptDto> {
   const clean = path.trim();
   if (!clean.startsWith('/')) throw new ValidationError('path must start with /');
-  const rows = (await listPrescriptions(env, db, scope)).filter((rx) => rx.pagePath === clean && ACCEPTED_STATUSES.has(rx.status));
+  const only = ids && ids.length > 0 ? new Set(ids) : null;
+  const rows = (await listPrescriptions(env, db, scope))
+    .filter((rx) => rx.pagePath === clean && ACCEPTED_STATUSES.has(rx.status) && (!only || only.has(rx.id)));
   if (rows.length === 0) throw new NotFoundError('Fixes on page', clean);
   return compileFor(env, db, scope, clean, rows, audience);
 }

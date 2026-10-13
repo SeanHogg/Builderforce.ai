@@ -8,7 +8,8 @@
  *                      proposed one becomes `applied` / `manual`
  *   apply-in-composer  a hosted canvas app: `applied` with `action_ref = 'composer'`
  *                      until the canvas publishes; answers the `composer` prompt and the
- *                      selectors the canvas pushes as `previewPick` chips
+ *                      selectors (with their rect-map labels, `targets`) the canvas
+ *                      pushes as selector-anchored `previewPick` chips
  *
  * Nothing here changes the site. The release that ships a hand-applied fix starts its
  * verification (`prescriptionReleaseHooks.ts`): the next release first seen for a
@@ -33,7 +34,7 @@ const copyPrompt: PrescriptionActionDef = {
   async run(ctx) {
     const audience = parseAudience(ctx.input.audience);
     const compiled = await prescriptionPrompt(ctx.env, ctx.db, ctx.scope, ctx.row.id, audience);
-    const result = { prompt: compiled.prompt, selectors: compiled.selectors };
+    const result = { prompt: compiled.prompt, selectors: compiled.selectors, targets: compiled.targets };
     // Copying again (the fix is already applied) changes nothing.
     if (ctx.row.status !== 'proposed') return { set: {}, acted: false, result };
     return { set: { status: 'applied', actionKind: 'copy_prompt', actionRef: MANUAL_ACTION_REF }, result };
@@ -58,7 +59,7 @@ const applyPage: PrescriptionActionDef = {
           eq(replayPrescriptions.status, 'proposed'),
         ));
     }
-    const result = { prompt: compiled.prompt, selectors: compiled.selectors, prescriptionIds: compiled.prescriptionIds };
+    const result = { prompt: compiled.prompt, selectors: compiled.selectors, targets: compiled.targets, prescriptionIds: compiled.prescriptionIds };
     if (ctx.row.status !== 'proposed') return { set: {}, result };
     return { set: { status: 'applied', actionKind: 'apply_page', actionRef: MANUAL_ACTION_REF }, result };
   },
@@ -72,7 +73,7 @@ const applyInComposer: PrescriptionActionDef = {
     const compiled = await prescriptionPrompt(ctx.env, ctx.db, ctx.scope, ctx.row.id, 'composer');
     return {
       set: { status: 'applied', actionKind: 'apply_in_composer', actionRef: COMPOSER_ACTION_REF },
-      result: { prompt: compiled.prompt, selectors: compiled.selectors },
+      result: { prompt: compiled.prompt, selectors: compiled.selectors, targets: compiled.targets },
     };
   },
 };

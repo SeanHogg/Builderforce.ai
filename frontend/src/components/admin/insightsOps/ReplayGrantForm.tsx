@@ -10,7 +10,8 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useFormat } from '@/i18n/useFormat';
-import { replayOpsApi, type ReplayCreditGrantResult } from '@/lib/replayOpsApi';
+import type { ReplayCreditGrantResult } from '@builderforce/interaction-contract';
+import { replayOpsApi } from '@/lib/replayOpsApi';
 import { AdminError, errText } from '@/components/admin/adminShared';
 import { insightsOpsCardStyle, insightsOpsInputStyle } from './insightsOpsStyles';
 

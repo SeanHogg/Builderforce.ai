@@ -79,6 +79,13 @@ for (const [field, ext] of [['url', 'js'], ['cssUrl', 'css']]) {
   if (!existsSync(join(assets, m[1]))) fail(`manifest.player.${field} names missing ${m[1]}`);
 }
 
+// The page-review runner's kit (PRD 33 §5.2): `page_capture` / `page_render_after` load it by this URL.
+const pageKit = manifest.pageKit;
+if (!pageKit || typeof pageKit !== 'object') fail('manifest.pageKit missing — the page-review runner cannot capture or render');
+const pageKitMatch = /^https:\/\/cdn\.builderforce\.ai\/(replay\/r\/pagekit\.[0-9a-f]{10,}\.js)$/.exec(pageKit.url ?? '');
+if (!pageKitMatch) fail(`manifest.pageKit.url is ${pageKit.url}`);
+if (!existsSync(join(assets, pageKitMatch[1]))) fail(`manifest.pageKit.url names missing ${pageKitMatch[1]}`);
+
 const loaderGz = await gzipBytes(loader);
 const recorderGz = await gzipBytes(recorder);
 const embedRaw = statSync(embed).size;

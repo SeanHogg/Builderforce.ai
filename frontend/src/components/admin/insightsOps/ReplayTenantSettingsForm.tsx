@@ -10,7 +10,8 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { replayOpsApi, type ReplayTenantSettings } from '@/lib/replayOpsApi';
+import type { ReplayTenantSettings } from '@builderforce/interaction-contract';
+import { replayOpsApi } from '@/lib/replayOpsApi';
 import { AdminError, AdminLoading, errText, useAdminData } from '@/components/admin/adminShared';
 import { insightsOpsCardStyle, insightsOpsInputStyle } from './insightsOpsStyles';
 

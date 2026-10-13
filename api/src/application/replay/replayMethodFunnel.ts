@@ -12,17 +12,24 @@
  *
  * Idempotent: smart events ride the `(site_id, name)` unique index; the funnel is
  * found by name first. A re-run creates nothing and says so.
+ *
+ * Only on a Builderforce site (D17): the site's workspace must be one the acting
+ * superadmin is an active member of (`operatorWorkspaces.ts` — there is no platform
+ * tenant id to compare against). The funnel and its steps are written in ONE
+ * transaction (`inTransaction`), so a failed step insert never leaves a stepless
+ * funnel that a re-run would then find by name and skip.
  */
 
 import { and, eq } from 'drizzle-orm';
 import type { ReplayMethodFunnelSeedDto } from '@builderforce/interaction-contract';
 import type { Env } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import { replayFunnelSteps, replayFunnels, replaySmartEvents } from '../../infrastructure/database/schema';
 import { writeAdminAudit } from '../../infrastructure/audit/adminAudit';
-import { NotFoundError } from '../../domain/shared/errors';
+import { ForbiddenError, NotFoundError } from '../../domain/shared/errors';
 import { bumpSiteVersion } from './replayCacheKeys';
 import { getSite } from './replaySites';
+import { operatorWorkspaceTenantIds } from './operatorWorkspaces';
 import { FUNNEL_WINDOW_MAX_MINUTES } from './ReplayFunnelService';
 
 export const METHOD_FUNNEL_NAME = 'The method';
@@ -43,6 +50,9 @@ export async function seedMethodFunnel(
 ): Promise<ReplayMethodFunnelSeedDto> {
   const site = await getSite(env, db, input.siteId);
   if (!site) throw new NotFoundError('Insights site', input.siteId);
+  if (!(await operatorWorkspaceTenantIds(db, input.actorId)).includes(site.tenantId)) {
+    throw new ForbiddenError('"The method" is seeded only on a site of a workspace you are a member of (the Builderforce workspace)');
+  }
 
   const created = await db
     .insert(replaySmartEvents)
@@ -50,27 +60,27 @@ export async function seedMethodFunnel(
     .onConflictDoNothing()
     .returning({ name: replaySmartEvents.name });
 
-  const [existing] = await db
-    .select({ id: replayFunnels.id })
-    .from(replayFunnels)
-    .where(and(eq(replayFunnels.siteId, site.id), eq(replayFunnels.name, METHOD_FUNNEL_NAME)))
-    .limit(1);
-
-  let funnelId = existing?.id ?? null;
-  if (!funnelId) {
-    const [row] = await db
+  const { funnelId, createdFunnel } = await inTransaction(db, async (tx) => {
+    const [existing] = await tx
+      .select({ id: replayFunnels.id })
+      .from(replayFunnels)
+      .where(and(eq(replayFunnels.siteId, site.id), eq(replayFunnels.name, METHOD_FUNNEL_NAME)))
+      .limit(1);
+    if (existing) return { funnelId: existing.id, createdFunnel: false };
+    const [row] = await tx
       .insert(replayFunnels)
       .values({ siteId: site.id, name: METHOD_FUNNEL_NAME, windowMinutes: METHOD_FUNNEL_WINDOW_MINUTES, createdBy: input.actorId })
       .returning({ id: replayFunnels.id });
-    funnelId = row!.id;
-    await db.insert(replayFunnelSteps).values(METHOD_FUNNEL_STEPS.map((step, ord) => ({ funnelId: funnelId!, ord, ...step })));
-  }
+    const id = row!.id;
+    await tx.insert(replayFunnelSteps).values(METHOD_FUNNEL_STEPS.map((step, ord) => ({ funnelId: id, ord, ...step })));
+    return { funnelId: id, createdFunnel: true };
+  });
 
   const result: ReplayMethodFunnelSeedDto = {
     siteId: site.id,
     funnelId,
     createdSmartEvents: created.map((c) => c.name),
-    createdFunnel: !existing,
+    createdFunnel,
   };
   if (result.createdFunnel || result.createdSmartEvents.length > 0) {
     await writeAdminAudit(db, 'REPLAY_METHOD_FUNNEL_SEEDED', input.actorId, {

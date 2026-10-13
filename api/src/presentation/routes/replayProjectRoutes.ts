@@ -21,6 +21,7 @@ import { projectInTenantCached } from '../../application/project/projectOwnershi
 import { createHostedSite, projectSiteDto } from '../../application/replay/replaySiteAdmin';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requireFeature } from '../middleware/featureGate';
+import { refuseInsightsDuringEmulation } from '../middleware/insightsEmulationGuard';
 
 const SITE_PATH = '/:projectId/replay/site';
 
@@ -37,6 +38,7 @@ export function createReplayProjectRoutes(db: DbHandle): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use(SITE_PATH, authMiddleware);
   router.use(SITE_PATH, async (c, next) => {
+    refuseInsightsDuringEmulation(c); // D17: no superadmin data path
     const gate = await requireFeature(c, 'sessionReplay');
     if (gate) return gate;
     await next();

@@ -52,6 +52,8 @@ export interface CanvasSurfaceStageProps {
   setShareOpen: Dispatch<SetStateAction<boolean>>;
   /** The doors Operate and Launch open — panels and rows the canvas already has. */
   doors: CanvasPlaceDoors;
+  /** Put a draft in THE ONE composer (and show it) — Measure ▸ Visitors' "Apply in composer". */
+  composeDraft?: (text: string) => void;
 }
 
 /**
@@ -62,7 +64,7 @@ export interface CanvasSurfaceStageProps {
  */
 export function CanvasSurfaceStage({
   surface, hostSurfaces, surfaceNode, exitSurface, setSurface, sessionApp, sessionTitle, entryAppPending, nodes, editable, updateNodeData, appendAtCenter,
-  revealObject, conversation, roster, room, resume, openGamePanel, setShareOpen, doors,
+  revealObject, conversation, roster, room, resume, openGamePanel, setShareOpen, doors, composeDraft,
 }: CanvasSurfaceStageProps) {
   const { persistence, lens } = useCanvasSessionFacts();
   // "Leave this surface" goes to the board — unless the lens keeps a HOME surface
@@ -114,7 +116,7 @@ export function CanvasSurfaceStage({
             insights: <CanvasInsightsSurface onExit={exitToBoard} />,
             // Measure ▸ Visitors — THE Insights home for this board's app (PRD 33 S7),
             // board-scoped like Insights: the app it reads is the board's primary app.
-            sessions: <CanvasVisitorsSurface nodes={nodes} onExit={exitToBoard} />,
+            sessions: <CanvasVisitorsSurface nodes={nodes} onExit={exitToBoard} composeDraft={composeDraft} />,
             // Reach as a PLACE: the Make-it-real doors laid out as sections.
             launch: <CanvasLaunchSurface nodes={nodes} doors={doors} onExit={exitToBoard} />,
             // The idea scratchpad — board-scoped like `insights`. It reads the `idea` cards

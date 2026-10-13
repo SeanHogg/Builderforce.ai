@@ -8,25 +8,19 @@
  * cohorts its impact is computed from. Nothing here phrases anything: the AI only
  * words a finding that a rule already proved.
  *
- * The §5.2 page-review rules (`pageRules.ts`) close the list.
+ * The sales rules (known-visitor cohorts, objections) live in `salesRules.ts` and
+ * the §5.2 page-review rules (`pageRules.ts`) close the list; the evidence
+ * helpers they share are `ruleEvidence.ts`.
  */
 
 import { rowDecile, selectorKind } from '../heatInsightRules';
 import { PAGE_PRESCRIPTION_RULES } from './pageRules';
+import { evidenceOf } from './ruleEvidence';
+import { checkoutAbandonKnown, objectionPattern, pricingHesitation } from './salesRules';
 import type { ElementAggregate, Finding, IssueAggregate, PrescriptionRule, SiteAggregates } from './types';
 
-const EVIDENCE_MAX = 3;
 const pct = (share: number): number => Math.round(share * 1000) / 10;
 const rate = (c: { sessions: number; conversions: number }): number => (c.sessions > 0 ? c.conversions / c.sessions : 0);
-
-const evidenceOf = (ids: readonly string[]) => ids.slice(0, EVIDENCE_MAX).map((recordingId) => ({ recordingId, atMs: 0 }));
-
-/** A short stable hash (djb2, hex) — a subject key for a finding with no natural id. */
-export function stableHash(text: string): string {
-  let h = 5381;
-  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) >>> 0;
-  return h.toString(16).padStart(8, '0');
-}
 
 /** A heading: an `h1`–`h6` tag or a `heading` role. */
 export function isHeadingSelector(selector: string): boolean {
@@ -42,8 +36,6 @@ export function isCta(element: Pick<ElementAggregate, 'selector' | 'label'>): bo
   if (selectorKind(element.selector) !== 'interactive') return false;
   return CTA_WORDS.test(element.label ?? '') || CTA_WORDS.test(element.selector);
 }
-
-const OBJECTION_WORDS = /\b(price|pricing|expensive|cost|fee|trust|secur|privacy|shipping|delivery|refund|return|compar|hesitat|unclear|confus|doubt|risk|contract|cancel)/i;
 
 function labelFor(agg: SiteAggregates, route: string, selector: string): string | null {
   return agg.elements.find((e) => e.route === route && e.selector === selector)?.label ?? null;
@@ -286,62 +278,6 @@ const releaseRegression: PrescriptionRule = {
   },
 };
 
-function knownCohortRule(id: string, kind: 'pricing' | 'checkout', minNotConverted: number): PrescriptionRule {
-  return {
-    id,
-    area: 'sales',
-    effort: 1,
-    actions: ['follow_up', 'ticket'],
-    thresholds: { minNotConverted },
-    acceptance: { metric: 'known_conversion_rate', direction: 'up', minVisits: 20 },
-    detect(agg) {
-      return agg.knownCohorts
-        .filter((c) => c.kind === kind && c.identifiedVisitors - c.convertedVisitors >= minNotConverted)
-        .map((c): Finding => ({
-          ruleId: id,
-          area: 'sales',
-          subjectKey: `${kind}:${c.route}`.slice(0, 400),
-          pagePath: c.route,
-          params: { route: c.route, visitors: c.identifiedVisitors - c.convertedVisitors },
-          evidence: evidenceOf(c.recordingIds),
-          issueId: null,
-          fingerprint: null,
-          selector: null,
-          label: null,
-          affected: c.identifiedVisitors - c.convertedVisitors,
-          cohorts: null,
-        }));
-    },
-  };
-}
-
-const objectionPattern: PrescriptionRule = {
-  id: 'objection_pattern',
-  area: 'sales',
-  effort: 2,
-  actions: ['ticket', 'follow_up'],
-  thresholds: { minExamples: 2 },
-  acceptance: { metric: 'conversion_rate', direction: 'up', minVisits: 500 },
-  detect(agg) {
-    return agg.patterns
-      .filter((p) => p.examples.length >= this.thresholds.minExamples! && OBJECTION_WORDS.test(p.text))
-      .map((p): Finding => ({
-        ruleId: this.id,
-        area: this.area,
-        subjectKey: `objection:${stableHash(p.text.toLowerCase().replace(/\s+/g, ' ').trim())}`,
-        pagePath: null,
-        params: { pattern: p.text.slice(0, 160), examples: p.examples.length },
-        evidence: p.examples.slice(0, EVIDENCE_MAX),
-        issueId: null,
-        fingerprint: null,
-        selector: null,
-        label: null,
-        affected: p.examples.length,
-        cohorts: null,
-      }));
-  },
-};
-
 const proofMissedReason: PrescriptionRule = {
   id: 'proof_missed_reason',
   area: 'funnel',
@@ -380,8 +316,8 @@ export const PRESCRIPTION_RULES: readonly PrescriptionRule[] = [
   excessiveScrollMissingInfo,
   deviceGap,
   releaseRegression,
-  knownCohortRule('pricing_hesitation', 'pricing', 3),
-  knownCohortRule('checkout_abandon_known', 'checkout', 2),
+  pricingHesitation,
+  checkoutAbandonKnown,
   objectionPattern,
   proofMissedReason,
   ...PAGE_PRESCRIPTION_RULES,

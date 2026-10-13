@@ -6,8 +6,8 @@
  *   Measure  the acceptance test, the measured before → after and verdict, and
  *            the status history (`prescriptionHistory`).
  *
- * The Prompt tab is S4f's (the page review's improvement prompt) — a row it adds
- * to this kind, not a branch here. The issue tabs read the issue's
+ * The Prompt tab (S4f) is `FixPromptTab` — a row of this kind in `panelKinds.ts`,
+ * not a branch here. The issue tabs read the issue's
  * `prescriptionId` and show the same two views.
  */
 
@@ -24,7 +24,8 @@ import { useInsightsScope } from '../insightsScope';
 import type { InsightPanelKindProps } from '../panelKinds';
 import { PanelPending } from './PanelPending';
 
-function usePrescription(siteId: string, id: string | null) {
+/** One fix by id (null id → nothing to read). */
+export function usePrescription(siteId: string, id: string | null) {
   return useAdminData<ReplayPrescriptionDto | null>(
     () => (id ? replayApi.getPrescription(siteId, id) : Promise.resolve(null)),
     [siteId, id],

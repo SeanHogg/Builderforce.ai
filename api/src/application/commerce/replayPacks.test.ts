@@ -49,7 +49,7 @@ const fakeDb = {
   select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) }),
 } as unknown as Db;
 
-const stripeEnv = { STRIPE_SECRET_KEY: 'sk_test_123' } as unknown as Env;
+const stripeEnv = { STRIPE_SECRET_KEY: 'sk_test_123', APP_URL: 'https://app.example.com,https://www.example.com' } as unknown as Env;
 
 beforeEach(() => {
   mocks.createOneTimeCheckoutSession.mockReset();
@@ -107,7 +107,7 @@ describe('startReplayPackCheckout', () => {
   });
 
   it('answers 503 when payments are not configured', async () => {
-    const noStripe = { STRIPE_SECRET_KEY: undefined } as unknown as Env;
+    const noStripe = { STRIPE_SECRET_KEY: undefined, APP_URL: 'https://app.example.com' } as unknown as Env;
     const failure = startReplayPackCheckout(fakeDb, noStripe, {
       tenantId: 7, buyerRef: 'u1', packId: 'p10k', returnUrl: 'https://app.example.com/replay',
     });
@@ -121,6 +121,23 @@ describe('startReplayPackCheckout', () => {
     })).rejects.toMatchObject({ status: 404 });
     expect(mocks.recordReplayTrace).not.toHaveBeenCalled();
     expect(mocks.createOneTimeCheckoutSession).not.toHaveBeenCalled();
+  });
+
+  it('400s a return URL on another origin (no open redirect), before any trace or session', async () => {
+    for (const returnUrl of ['https://evil.example.net/apps/insights', 'https://app.example.com.evil.net/x', 'http://app.example.com/x']) {
+      await expect(startReplayPackCheckout(fakeDb, stripeEnv, {
+        tenantId: 7, buyerRef: 'u1', packId: 'p10k', returnUrl,
+      })).rejects.toMatchObject({ status: 400 });
+    }
+    expect(mocks.recordReplayTrace).not.toHaveBeenCalled();
+    expect(mocks.createOneTimeCheckoutSession).not.toHaveBeenCalled();
+  });
+
+  it('accepts any origin APP_URL lists', async () => {
+    await startReplayPackCheckout(fakeDb, stripeEnv, {
+      tenantId: 7, buyerRef: 'u1', packId: 'p10k', returnUrl: 'https://www.example.com/apps/insights',
+    });
+    expect(mocks.createOneTimeCheckoutSession).toHaveBeenCalledTimes(1);
   });
 
   it('400s a return URL that is not absolute', async () => {

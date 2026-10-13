@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { REPLAY_LIMITS } from '@builderforce/interaction-contract';
 import type { HonoEnv } from '../../env';
 import type { DbHandle } from '../../application/shared/dbHandle';
 import { ReplayConfigService } from '../../application/replay/ReplayConfigService';
@@ -18,6 +19,11 @@ import { ReplayIngestService } from '../../application/replay/ReplayIngestServic
  *
  * The site token rides in the query string because a `sendBeacon` can set neither
  * headers nor credentials.
+ *
+ * A chunk whose declared `Content-Length` is over `REPLAY_LIMITS.maxChunkBytes` is
+ * answered (the same 202) BEFORE its body is buffered: nothing is read or written,
+ * so an oversized post costs the worker no memory. The service still enforces the
+ * limit on the bytes for a body sent without a length (chunked transfer).
  */
 
 /** `cf.country`, when the runtime supplies it. */
@@ -36,6 +42,8 @@ export function createReplayIngestRoutes(db: DbHandle): Hono<HonoEnv> {
   });
 
   router.post('/v1/chunks', async (c) => {
+    const declared = Number(c.req.header('Content-Length'));
+    if (Number.isFinite(declared) && declared > REPLAY_LIMITS.maxChunkBytes) return c.json({ ok: true }, 202);
     let body: ArrayBuffer;
     try {
       body = await c.req.arrayBuffer();

@@ -34,6 +34,10 @@ export const REPLAY_PATHS = {
   capabilityPacks: '/api/capabilities/session-replay/packs',
   capabilityPackCheckout: '/api/capabilities/session-replay/packs/:packId/checkout',
   opsSummary: '/api/admin/replay-ops/summary',
+  /** GET / PATCH, superadmin — `ReplayTenantSettings`. */
+  opsTenantSettings: '/api/admin/replay-ops/tenants/:tenantId/settings',
+  /** POST, superadmin — `ReplayCreditGrantInput` → `ReplayCreditGrantResult`. */
+  opsGrants: '/api/admin/replay-ops/grants',
   // S4c analysis parity
   segments: '/api/replay/segments',
   segment: '/api/replay/segments/:segmentId',
@@ -51,6 +55,8 @@ export const REPLAY_PATHS = {
   /** POST. */
   segmentSummary: '/api/replay/summary',
   // S4d method link
+  /** DELETE `?site` (MANAGER) — erase one visitor's recordings from that site; `ReplayVisitorErasureDto`. */
+  visitor: '/api/replay/visitors/:visitorId',
   /** GET — `ReplayTicketEffectDto` for a ticket raised from a replay moment. */
   ticketEffect: '/api/replay/ticket-effect/:taskId',
   /** POST, superadmin — seeds "The method" funnel + its four smart events on a site. */
@@ -77,7 +83,7 @@ export const REPLAY_PATHS = {
   capturesAsset: '/api/replay/pages/captures/:captureId/:asset',
   /** GET `?site&audience` — `ReplayImprovementPromptDto` for one fix. */
   improvementPrompt: '/api/replay/prescriptions/:prescriptionId/prompt',
-  /** GET `?site&path&audience` — `ReplayImprovementPromptDto` for every accepted fix on a page. */
+  /** GET `?site&path&audience[&ids=a,b]` — `ReplayImprovementPromptDto` for every accepted fix on a page (or only the listed ones). */
   pagePrompt: '/api/replay/pages/prompt',
   /** GET `?site` — `ReplayPreviewUrlDto`: a short-lived signed link to a hosted release before it is published. */
   previewUrl: '/api/replay/releases/:releaseKey/preview',

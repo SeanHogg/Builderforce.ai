@@ -14,7 +14,7 @@ vi.mock('./apiClient', () => ({
 }));
 
 import { emitMethodEvent } from './methodEvents';
-import { realizationApi } from './builderforceApi';
+import { realizationApi } from './realizationApi';
 
 const recorder = { event: vi.fn() };
 const g = globalThis as unknown as { window?: { BFReplay?: unknown } };
@@ -73,7 +73,7 @@ describe('the realizationApi wrappers', () => {
 });
 
 describe('where it is called from', () => {
-  it('only builderforceApi.ts calls emitMethodEvent', () => {
+  it('only realizationApi.ts calls emitMethodEvent', () => {
     const src = resolve(__dirname, '..');
     const callers: string[] = [];
     const walk = (dir: string) => {
@@ -87,6 +87,6 @@ describe('where it is called from', () => {
       }
     };
     walk(src);
-    expect(callers.sort()).toEqual(['lib/builderforceApi.ts', 'lib/methodEvents.ts']);
+    expect(callers.sort()).toEqual(['lib/methodEvents.ts', 'lib/realizationApi.ts']);
   });
 });

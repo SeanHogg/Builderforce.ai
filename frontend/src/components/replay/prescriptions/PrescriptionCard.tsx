@@ -7,6 +7,7 @@
  *
  * Full: area · rank · status, the finding (a rule's title over its params), the
  * cited recordings, the AI's prescription, the drafted change as before → after,
+ * a page-review fix's rendered before → after (`PrescriptionVisual`, §5.2),
  * the impact range with its confidence, the measured verdict, and the actions
  * the DTO's `next` offers. Compact: the finding as before → after, the impact,
  * who makes it, and a link into the `fix` kind for the rest.
@@ -17,8 +18,9 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { ReplayPrescriptionDto } from '@builderforce/interaction-contract';
+import type { ReplayCaptureDevice, ReplayPageCaptureDto, ReplayPrescriptionDto } from '@builderforce/interaction-contract';
 import type { InsightPanelLevel } from '@/components/insights/panelKinds';
+import { PrescriptionVisual } from '../pageReview/PrescriptionVisual';
 import { draftedChange, makerOf } from './prescriptionModel';
 import { PrescriptionActions } from './PrescriptionActions';
 import { AreaChip, ChangeView, EvidenceLinks, ImpactLine, MeasuredLine, StatusChip, useFindingTitle } from './PrescriptionParts';
@@ -31,13 +33,17 @@ export interface PrescriptionCardProps {
   /** Push onto the panel; defaults to the panel in scope, else links to `/apps/insights`. */
   push?: (level: InsightPanelLevel) => void;
   onChanged?: (prescription: ReplayPrescriptionDto) => void;
+  /** A page-review fix: the page's captures for its before → after (read on demand otherwise). */
+  captures?: readonly ReplayPageCaptureDto[];
+  /** The device the before → after opens on. */
+  device?: ReplayCaptureDevice;
 }
 
 export function fixLevel(prescriptionId: string, tab = 'change'): InsightPanelLevel {
   return { kind: 'fix', id: prescriptionId, tab };
 }
 
-export function PrescriptionCard({ siteId, prescription, compact = false, push, onChanged }: PrescriptionCardProps) {
+export function PrescriptionCard({ siteId, prescription, compact = false, push, onChanged, captures, device }: PrescriptionCardProps) {
   const t = useTranslations('replay.prescription');
   const findingText = useFindingTitle();
   const opener = useInsightsLevel(siteId, push);
@@ -50,7 +56,7 @@ export function PrescriptionCard({ siteId, prescription, compact = false, push, 
     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)' }}>
       <AreaChip area={p.area} />
       <span aria-label={t('rankAria', { rank: p.rank })} style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>#{p.rank}</span>
-      {p.source === 'observed' && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>{t('observed')}</span>}
+      {p.source === 'observed' && <span data-testid="observed-label" style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>{t('observed')}</span>}
       <span style={{ marginLeft: 'auto' }}><StatusChip status={p.status} /></span>
     </div>
   );
@@ -111,9 +117,10 @@ export function PrescriptionCard({ siteId, prescription, compact = false, push, 
         </p>
       </section>
       <ChangeView p={p} before={title} />
+      <PrescriptionVisual siteId={siteId} prescription={p} captures={captures} device={device} />
       <ImpactLine impact={p.impact} />
       <MeasuredLine p={p} />
-      <PrescriptionActions siteId={siteId} prescription={p} onChanged={changed} />
+      <PrescriptionActions siteId={siteId} prescription={p} onChanged={changed} push={push} />
     </article>
   );
 }

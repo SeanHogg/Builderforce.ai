@@ -7,9 +7,9 @@
  *   GET    /api/realizations                  the workspace's proofs
  *   POST   /api/realizations                  choose a target and plan it
  *   GET    /api/realizations/:id               also rolls up the proof's verdict (`verdictChanged`)
- *   (journey-signal, :id/measure, :id/call-early live in `realizationMeasureRoutes.ts`)
+ *   (journey-signal, :id/measure, :id/call-early and :id/verdict — the reads that grade
+ *    a proof and the two verdicts a person sets — live in `realizationMeasureRoutes.ts`)
  *   POST   /api/realizations/:id/build        build it, publish it, wire its forms
- *   PATCH  /api/realizations/:id/verdict      park it — the one verdict a person sets
  *   DELETE /api/realizations/:id
  *
  * ── THE LOOP RECORDS ITSELF ─────────────────────────────────────────────────
@@ -39,7 +39,6 @@ import { parseBrief, type ChallengeSpec } from '../../application/challenge/pars
 import type { ChallengePlan } from '../../application/challenge/planChallenge';
 import { planRealization } from '../../application/realization/planRealization';
 import {
-  abandonRealization,
   createRealization,
   deleteRealization,
   getRealization,
@@ -75,10 +74,6 @@ const CreateRealizationBody = z.object({
   targetKey: z.unknown().optional(),
   strategy: z.unknown().optional(),
   sessionId: z.unknown().optional(),
-});
-const VerdictBody = z.object({
-  verdict: z.unknown().optional(),
-  note: z.unknown().optional(),
 });
 
 /** Ideas longer than this are a brief, and belong in the challenge pipeline. */
@@ -304,42 +299,6 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
     const synced = await syncRealizationVerdict(c.env as Env, db, tenantId, row);
     // The client emits its `proof.grade` method event only on a read that changed the grade.
     return c.json({ realization: toRealizationView(synced), verdictChanged: synced.verdict !== row.verdict });
-  });
-
-  /**
-   * Park it. The one verdict a person sets rather than the console: abandoning
-   * is a judgement call with no number to compute, so it does not go through
-   * the same rollup as `met`/`missed`.
-   */
-  router.patch('/:id/verdict', async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const body = await parseOptionalBody(c, VerdictBody);
-    if (body.verdict !== 'abandoned') {
-      return c.json(
-        { error: 'Only "abandoned" may be set here — met and missed are recorded from the proof\'s own console.' },
-        400,
-      );
-    }
-    const note = typeof body.note === 'string' ? body.note : undefined;
-    const updated = await abandonRealization(db, tenantId, c.req.param('id'), note);
-    if (!updated) return c.json({ error: 'Realization not found' }, 404);
-    // Terminates the grade correlation as FAILED, never validated: parking an
-    // idea is a judgement with no number behind it, and counting it as graded
-    // would let the north-star metric be satisfied by giving up.
-    await recordProofOutcome(db, {
-      tenantId,
-      userId: (c.get('userId') as string) ?? null,
-      projectId: updated.projectId,
-      sessionId: updated.sessionId,
-      correlationId: `grade:${updated.id}`,
-      action: 'proof.grade',
-      phase: 'failed',
-      realizationId: updated.id,
-      targetKey: updated.targetKey,
-      metadata: { verdict: 'abandoned' },
-    });
-    await bumpJourneySignal(c.env as Env, tenantId);
-    return c.json({ realization: toRealizationView(updated) });
   });
 
   /**

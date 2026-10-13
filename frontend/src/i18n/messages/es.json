@@ -1504,7 +1504,8 @@
       "where": "Elegido en la vista previa: {file}, línea {line}",
       "aria": "Elemento elegido:",
       "remove": "Quitar el elemento elegido",
-      "unresolved": "No se puede localizar el código de ese elemento. Descríbelo en el cuadro de texto."
+      "unresolved": "No se puede localizar el código de ese elemento. Descríbelo en el cuadro de texto.",
+      "whereSelector": "En {page}: {selector}"
     },
     "releases": {
       "title": "Versiones anteriores",
@@ -3565,7 +3566,8 @@
       "seconds": "{value} s",
       "versus": "frente a {value}",
       "trendAria": "Tendencia de {label}",
-      "openAria": "Abrir {label}"
+      "openAria": "Abrir {label}",
+      "approx": "≈ {value}"
     },
     "issues": {
       "title": "Problemas",
@@ -3607,7 +3609,9 @@
       },
       "representatives": "Grabaciones representativas",
       "repAria": "Abrir grabación representativa {rank}",
-      "recordingsOfIssue": "Grabaciones que tuvieron este problema en {route}"
+      "recordingsOfIssue": "Grabaciones que tuvieron este problema en {route}",
+      "approx": "≈ {value}",
+      "estimatedNote": "≈ Estimado a partir de las grabaciones conservadas para este filtro."
     },
     "panel": {
       "crumbRoot": "Insights",
@@ -3686,14 +3690,19 @@
     "route": {
       "kind": "Página",
       "tabs": {
-        "heat": "Calor"
+        "heat": "Calor",
+        "review": "Revisión"
       },
-      "openAria": "Abrir la página {route}"
+      "openAria": "Abrir la página {route}",
+      "review": {
+        "open": "Abrir la revisión de la página"
+      }
     },
     "fix": {
       "tabs": {
         "change": "Cambio",
-        "measure": "Medición"
+        "measure": "Medición",
+        "prompt": "Prompt"
       },
       "issueTabs": {
         "fix": "Corrección",
@@ -3727,7 +3736,9 @@
       "areaAll": "Todas ({count})",
       "areaChip": "{area} ({count})",
       "areaAria": "Filtrar correcciones por área",
-      "loadMore": "Mostrar más"
+      "loadMore": "Mostrar más",
+      "applyAll": "Aplicar todo",
+      "applyAllTitle": "Un solo prompt para {route}"
     },
     "release": {
       "title": "Versión {label}",
@@ -3741,6 +3752,25 @@
         "label": "{label}: {count, plural, one {# corrección} other {# correcciones}}, {worked} funcionaron, {worse} empeoraron",
         "empty": "Ninguna versión ha publicado aún una corrección."
       }
+    },
+    "pages": {
+      "kind": "Páginas",
+      "open": "Páginas",
+      "empty": "Aún no hay páginas clave. Aparecen cuando el sitio tiene visitas y sus páginas se capturan.",
+      "openAria": "Abrir la revisión de {path}",
+      "thumbAlt": "La primera pantalla de {path}",
+      "noFix": "Ninguna corrección abierta",
+      "opportunity": "≈ {value} por ganar",
+      "noScore": "Sin puntuar",
+      "score": "Puntuación {score}"
+    },
+    "eraseVisitor": {
+      "action": "Borrar este visitante",
+      "erasing": "Borrando…",
+      "confirmTitle": "¿Borrar este visitante?",
+      "confirmMessage": "Se eliminan todas las grabaciones de este visitante en este sitio, con sus resúmenes de IA. No se puede deshacer.",
+      "confirm": "Borrar",
+      "done": "{count, plural, one {# grabación borrada.} other {# grabaciones borradas.}}"
     }
   },
   "cloudAgentForm": {
@@ -34449,9 +34479,73 @@
         "proof_missed_reason": {
           "title": "{proof} no alcanzó su objetivo: {reason}",
           "description": "El {share} % de las visitas a {route} encontró este problema durante la medición."
+        },
+        "seo_title_length": {
+          "title": "El título de {route} tiene {length} caracteres",
+          "description": "Los resultados de búsqueda muestran completos los títulos de {min} a {max} caracteres; uno más corto desperdicia espacio y uno más largo se corta."
+        },
+        "seo_missing_meta_description": {
+          "title": "{route} tiene una meta descripción de {length} caracteres",
+          "description": "Sin una descripción de al menos {min} caracteres, los buscadores escriben su propio fragmento a partir de la página."
+        },
+        "seo_multiple_h1": {
+          "title": "{route} tiene {count} encabezados principales",
+          "description": "Un solo H1 dice a los buscadores y lectores de pantalla de qué trata la página; varios lo difuminan."
+        },
+        "seo_no_structured_data": {
+          "title": "{route} no tiene datos estructurados",
+          "description": "Una página de {words} palabras sin JSON-LD no puede obtener resultados enriquecidos en la búsqueda."
+        },
+        "seo_low_ctr_high_impressions": {
+          "title": "{route} se ve en la búsqueda pero casi no recibe clics",
+          "description": "{impressions} impresiones trajeron {clicks} clics ({ctr} % frente al {siteCtr} % del sitio): el título y la descripción no se ganan el clic."
+        },
+        "content_no_value_prop_above_fold": {
+          "title": "La primera pantalla de {route} no dice qué ofrece",
+          "description": "En {device, select, phone {móvil} other {escritorio}} las {words} palabras visibles sin desplazarse no llevan propuesta de valor, así que los visitantes se van antes de saber por qué quedarse."
+        },
+        "content_cta_vague": {
+          "title": "La llamada a la acción «{label}» en {route} no dice qué pasa",
+          "description": "Una etiqueta que nombra el resultado consigue más clics que una genérica ({ctas} llamadas a la acción en la página)."
+        },
+        "content_readability": {
+          "title": "{route} se lee en el nivel {grade}",
+          "description": "El texto por encima del nivel {max} pierde lectores; frases más cortas y palabras más sencillas los retienen."
+        },
+        "content_missing_trust": {
+          "title": "{route} pide actuar sin pruebas",
+          "description": "La página tiene {ctas} llamadas a la acción y {fields} campos de formulario, pero ningún testimonio, reseña, valoración, logotipo ni garantía."
+        },
+        "perf_lcp_poor": {
+          "title": "El contenido principal de {route} tarda {p75} ms en aparecer",
+          "description": "Las visitas reales en {device, select, phone {móvil} other {escritorio}} esperan más que el límite de {max} ms antes de que se vea el elemento más grande."
+        },
+        "perf_cls_poor": {
+          "title": "El diseño de {route} se desplaza mientras carga ({p75})",
+          "description": "El contenido que se mueve después de aparecer (más de {max} en {device, select, phone {móvil} other {escritorio}}) hace que los visitantes pulsen lo que no querían."
+        },
+        "perf_heavy_hero_image": {
+          "title": "La primera imagen de {route} pesa {kb} KB",
+          "description": "Una imagen visible sin desplazarse de más de {maxKb} KB retrasa la primera pantalla; comprímela o sirve un tamaño menor."
+        },
+        "a11y_contrast": {
+          "title": "{count, plural, one {# elemento de {route} no cumple} other {# elementos de {route} no cumplen}} el contraste de color",
+          "description": "El par más débil llega a {ratio}:1 cuando se necesita {required}:1: difícil de leer para muchos visitantes, y para todos con mucha luz."
+        },
+        "a11y_tap_targets": {
+          "title": "{count, plural, one {# zona táctil de {route} es demasiado pequeña} other {# zonas táctiles de {route} son demasiado pequeñas}} en móvil",
+          "description": "Las zonas de menos de {min} × {min} px son fáciles de fallar con el pulgar."
+        },
+        "a11y_missing_labels": {
+          "title": "{count, plural, one {# campo de {route} no tiene} other {# campos de {route} no tienen}} etiqueta",
+          "description": "Un campo sin etiqueta no puede ser nombrado por un lector de pantalla y es fácil rellenarlo mal."
+        },
+        "vision_observed": {
+          "title": "{observation}",
+          "description": "Observado en la página capturada y conservado porque las cifras de la propia página lo respaldan."
         }
       },
-      "observed": "Observado",
+      "observed": "Observado en la pantalla",
       "rankAria": "Posición {rank}",
       "evidenceTitle": "Visto en",
       "evidenceItem": "Grabación {n} en {time}",
@@ -34563,10 +34657,26 @@
         "enrolled": "{count, plural, one {# contacto inscrito} other {# contactos inscritos}}",
         "draftTitle": "Primer contacto propuesto (solo se envía desde la secuencia, después de que lo edite)",
         "sequenceLabel": "Secuencia en la que inscribir",
-        "sequenceHint": "Pegue el enlace o el id de la tarjeta de secuencia",
         "enrol": "{count, plural, one {Inscribir # contacto} other {Inscribir # contactos}}",
         "cancel": "Cancelar",
-        "contactAria": "Inscribir a {name}"
+        "contactAria": "Inscribir a {name}",
+        "noSequences": "Este espacio de trabajo aún no tiene secuencias. Crea una en un lienzo para hacer seguimiento.",
+        "sequencesLoading": "Cargando secuencias…",
+        "sequenceChoose": "Elige una secuencia",
+        "modeLabel": "Secuencia",
+        "modeExisting": "Usar una secuencia existente",
+        "modeNew": "Redactar una secuencia nueva",
+        "createAndEnrol": "{count, plural, one {Crear secuencia e inscribir # contacto} other {Crear secuencia e inscribir # contactos}}",
+        "newSequence": {
+          "hint": "Redactada a partir de la objeción que cita esta mejora. Edítala ahora: se crea como secuencia en borrador y no se envía nada hasta que la inicies en su tablero.",
+          "nameLabel": "Nombre de la secuencia",
+          "stepTitle": "Paso {n}",
+          "delayLabel": "Días tras la inscripción",
+          "subjectLabel": "Asunto",
+          "bodyLabel": "Mensaje",
+          "drafting": "Redactando una secuencia a partir del hallazgo…",
+          "retry": "Redactar la secuencia"
+        }
       },
       "project": {
         "label": "Proyecto",
@@ -34578,7 +34688,10 @@
         "ticket": "Ticket #{taskId} creado.",
         "test": "Prueba A/B preparada. Iníciela cuando esté listo.",
         "enrolled": "{count, plural, one {# contacto inscrito} other {# contactos inscritos}}",
-        "done": "Hecho."
+        "done": "Hecho.",
+        "composer": "El prompt está en el compositor. Revísalo y envíalo.",
+        "page": "{count, plural, one {# corrección agrupada en un solo prompt.} other {# correcciones agrupadas en un solo prompt.}}",
+        "sequenceCreated": "«{name}» se creó como secuencia en borrador con {count, plural, one {# contacto} other {# contactos}}. Iníciala en su tablero para enviar."
       },
       "maker": {
         "fix": "La hace un agente de código",
@@ -34589,7 +34702,18 @@
         "publish-preview": "Lista para publicar",
         "revert": "Lista para revertir"
       },
-      "openAria": "Abrir corrección: {title}"
+      "openAria": "Abrir corrección: {title}",
+      "agent": {
+        "label": "Agente de código",
+        "none": "Ningún agente de código puede trabajar en este sitio, así que «Arreglar» solo crea un ticket.",
+        "ticketOnly": "Solo ticket"
+      },
+      "applyPage": {
+        "title": "Aplicar todas las correcciones de esta página",
+        "body": "Cada corrección aceptada de la página entra en un solo prompt y se marca como aplicada. Elige para quién es el prompt.",
+        "submit": "Aplicar a la página",
+        "cancel": "Cancelar"
+      }
     },
     "fixes": {
       "overviewTitle": "Correcciones principales",
@@ -34597,6 +34721,128 @@
       "playerTitle": "Correcciones para {route}",
       "proofTitle": "La corrección prescrita",
       "empty": "Aún no hay ninguna corrección prescrita para esta página."
+    },
+    "prompt": {
+      "audienceAria": "Para quién es el prompt",
+      "audience": {
+        "composer": "Compositor de Builderforce",
+        "coding_agent": "Agente de código",
+        "site_builder": "Creador de sitios"
+      },
+      "textAria": "Prompt de mejora",
+      "copy": "Copiar prompt",
+      "copied": "Copiado",
+      "copyFailed": "El portapapeles no está disponible aquí. Selecciona el texto y cópialo.",
+      "markedApplied": "Copiado y marcado como aplicado. La próxima versión se medirá frente a él.",
+      "noneChosen": "Elige al menos una corrección para crear un prompt.",
+      "pageTitle": "Un solo prompt para esta página",
+      "loading": "Escribiendo el prompt…",
+      "bundled": "{count, plural, one {# corrección en este prompt} other {# correcciones en este prompt}}",
+      "applyInComposer": "Aplicar en el compositor",
+      "intro": "Entrega esta corrección a cualquier IA: el prompt dice qué cambiar, por qué, qué no debe cambiar y cómo se mide el resultado.",
+      "pageBody": "Agrupa en su lugar cada corrección aceptada de {route} en un solo prompt.",
+      "applyPage": "Aplicar a la página"
+    },
+    "page": {
+      "noCapture": "Aún no hay captura de esta página.",
+      "imageFailed": "No se pudo cargar la captura de pantalla.",
+      "imageLoading": "Cargando la captura de pantalla…",
+      "calloutAria": "Cambio {n}: {element}",
+      "beforeAfter": {
+        "title": "Antes y después",
+        "beforeAlt": "La página tal como está, con los cambios numerados",
+        "afterAlt": "La página con los cambios aplicados",
+        "afterPending": "La página con esta corrección aún no se ha renderizado.",
+        "sliderAria": "Deslizar entre antes y después",
+        "toggleAria": "Mostrar antes o después",
+        "before": "Antes",
+        "after": "Después",
+        "modeAria": "Cómo comparar",
+        "mode": {
+          "slider": "Deslizador",
+          "toggle": "Alternar",
+          "side": "Lado a lado"
+        }
+      },
+      "device": {
+        "aria": "Dispositivo",
+        "desktop": "Escritorio",
+        "phone": "Móvil"
+      },
+      "serp": {
+        "title": "En los resultados de búsqueda",
+        "before": "Ahora",
+        "after": "Con la corrección",
+        "jsonLdTitle": "Datos estructurados que añadir",
+        "jsonLdAria": "JSON-LD propuesto"
+      },
+      "score": {
+        "title": "Puntuación de la página",
+        "none": "Aún sin puntuar.",
+        "ringAria": "{label}: {score} de 100",
+        "ringNone": "{label}: sin datos",
+        "part": {
+          "total": "Total",
+          "conversion": "Conversión",
+          "frustration": "Frustración",
+          "seo": "SEO",
+          "performance": "Rendimiento",
+          "accessibility": "Accesibilidad"
+        },
+        "byRelease": "Puntuación por versión",
+        "releaseRow": "{release}: {score}"
+      },
+      "facts": {
+        "title": "Lo que encontró la captura",
+        "none": "La captura aún no contiene datos.",
+        "pass": "OK",
+        "fail": "Corregir",
+        "group": {
+          "seo": "SEO",
+          "content": "Contenido",
+          "performance": "Rendimiento",
+          "accessibility": "Accesibilidad"
+        },
+        "titleLength": "Título: {value} caracteres",
+        "metaDescriptionLength": "Meta descripción: {value} caracteres",
+        "h1Count": "Encabezados principales: {value}",
+        "structuredData": "Tipos de datos estructurados: {value}",
+        "imagesWithoutAlt": "Imágenes sin texto alternativo: {value}",
+        "aboveFoldWords": "Palabras visibles sin desplazarse: {value}",
+        "ctaAboveFold": "Llamadas a la acción visibles sin desplazarse: {value}",
+        "readabilityGrade": "Nivel de lectura: {value}",
+        "trustSignals": "Señales de confianza: {value}",
+        "lcp": "Contenido más grande (laboratorio): {value} ms",
+        "cls": "Desplazamiento del diseño (laboratorio): {value}",
+        "pageWeight": "Peso de la página: {value} KB",
+        "contrastFailures": "Fallos de contraste: {value}",
+        "smallTapTargets": "Zonas táctiles pequeñas: {value}",
+        "missingLabels": "Campos sin etiqueta: {value}"
+      },
+      "capture": {
+        "request": "Solicitar una captura ahora",
+        "requesting": "Solicitando…",
+        "queued": "{count, plural, one {# captura en cola.} other {# capturas en cola.}} La revisión se actualiza cuando el ejecutor termina.",
+        "limited": "Las páginas se capturaron hace menos de una hora. Inténtalo más tarde.",
+        "unavailable": {
+          "runner_unavailable": "Las capturas necesitan el ejecutor de páginas, que no está disponible en este despliegue.",
+          "page_kit_unavailable": "El kit del ejecutor de páginas aún no está publicado, así que no se capturó nada.",
+          "no_pages": "Aún no hay páginas clave que capturar: el sitio primero necesita visitas.",
+          "no_origin": "El sitio no tiene una dirección desde la que capturar. Añade primero un dominio permitido.",
+          "other": "No se capturó nada."
+        }
+      },
+      "loadFailed": "No se pudo cargar la revisión de la página.",
+      "loading": "Cargando la revisión de la página…",
+      "noCaptures": "Esta página aún no se ha capturado. Las capturas se hacen en cada nueva versión y cada semana.",
+      "screenTitle": "La primera pantalla",
+      "release": "versión {release}",
+      "foldAlt": "La primera pantalla de {path} en {device}",
+      "noDeviceCapture": "No hay captura de {device} de esta versión.",
+      "fixesTitle": "Correcciones para esta página",
+      "noFixes": "No hay correcciones para esta página.",
+      "includeInPrompt": "Incluir en un solo prompt para esta página",
+      "promptTitle": "Un solo prompt para esta página"
     }
   },
   "apps": {

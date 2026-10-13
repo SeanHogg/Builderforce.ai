@@ -111,6 +111,12 @@ export interface ReplayRecordingDto extends ReplayRecordingSummaryDto {
 export interface ReplayPage<T> {
   items: T[];
   nextCursor: string | null;
+  /**
+   * Set (true) by a read that answered a filter from the KEPT recordings weighted by
+   * `sample_weight` rather than the exact rollups (D15/D18) — the UI prints ≈.
+   * Absent on exact or plain lists.
+   */
+  estimated?: boolean;
 }
 
 export interface ReplayReleaseDto {
@@ -123,7 +129,7 @@ export interface ReplayReleaseDto {
   lastSeenAt: string;
 }
 
-/** Exact counts from the daily rollups over every session (D15, D18). */
+/** Exact counts from the daily rollups over every session (D15, D18), or ≈ under a filter (`estimated`). */
 export interface ReplayKpisDto {
   days: number;
   sessions: number;
@@ -137,6 +143,12 @@ export interface ReplayKpisDto {
   /** p75 LCP in ms from the vitals histogram, null when no samples. */
   lcpP75: number | null;
   trend: Array<{ day: string; sessions: number; frustrated: number; conversions: number }>;
+  /**
+   * True when a filter was applied: every number is then estimated from the kept
+   * recordings matching it, weighted by `sample_weight` (≈), `newVisitors` is 0 and
+   * `lcpP75` null (a kept row carries neither). Absent/false = exact rollups.
+   */
+  estimated?: boolean;
 }
 
 export type ReplayIssueStatus =
@@ -249,4 +261,33 @@ export interface ReplayOpsSummaryDto {
   keptRecordings7d: number;
   bytes7d: number;
   packRevenueCents30d: number;
+}
+
+/** `tenants.settings` keys the operator controls (D8, D9) — `REPLAY_PATHS.opsTenantSettings`. */
+export interface ReplayTenantSettings {
+  replayExcluded: boolean;
+  /** Null = the catalog's free allowance applies. */
+  replayFreeAllowanceOverride: number | null;
+}
+
+/** POST body of `REPLAY_PATHS.opsGrants` — an audited credit grant (D17). */
+export interface ReplayCreditGrantInput {
+  tenantId: number;
+  units: number;
+  reason: string;
+}
+
+export interface ReplayCreditGrantResult {
+  auditId: string;
+  reference: string;
+  units: number;
+  /** The workspace's spendable credits after the grant. */
+  credits: number;
+}
+
+/** `DELETE REPLAY_PATHS.visitor` — one visitor's kept recordings erased from one site (rows, summaries, bytes). */
+export interface ReplayVisitorErasureDto {
+  visitorId: string;
+  /** Recordings removed. */
+  erased: number;
 }

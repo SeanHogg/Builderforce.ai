@@ -3,7 +3,7 @@ import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { CanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
 import { canvasSurfaceDefinition, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import type { CreationTemplate } from '@/lib/templates/creationTemplates';
-import { PreviewPickChip } from '@/components/builder/PreviewPickChip';
+import { PreviewPickChips } from '@/components/builder/PreviewPickChip';
 import { CanvasComposer, type CanvasComposerInputProps } from '../CanvasComposer';
 import { CanvasActionsTrigger } from '../CanvasActionsTrigger';
 import { BrainActivityIndicator } from '../BrainActivityView';
@@ -123,7 +123,7 @@ export function CanvasPromptComposer({
       // surface that SHOWS the board, since a selection you cannot see (the App surface,
       // where every turn selects the Brain card) is nothing to narrow to.
       contextControls: <>
-        <PreviewPickChip />
+        <PreviewPickChips />
         {surfaceDef.showsBoard && <CanvasScopeChip scopeMode={scopeMode} onScopeModeChange={setScopeMode} autoLabel={scopeLabel} selectionCount={selectionCount} frameSelected={frameSelected} />}
       </>,
       onAttach,

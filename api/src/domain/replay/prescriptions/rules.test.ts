@@ -3,7 +3,8 @@
  * (PRD 33 §5.1.1). Rules are pure over `SiteAggregates`, so each fixture is data.
  */
 import { describe, expect, it } from 'vitest';
-import { detectFindings, isCta, isHeadingSelector, PRESCRIPTION_RULE_BY_ID, PRESCRIPTION_RULES, stableHash } from './rules';
+import { detectFindings, isCta, isHeadingSelector, PRESCRIPTION_RULE_BY_ID, PRESCRIPTION_RULES } from './rules';
+import { stableHash } from './ruleEvidence';
 import type { IssueAggregate, SiteAggregates } from './types';
 
 function agg(over: Partial<SiteAggregates> = {}): SiteAggregates {

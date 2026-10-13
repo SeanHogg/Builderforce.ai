@@ -44,6 +44,11 @@ beforeEach(() => {
   vi.spyOn(replayApi, 'actOnPrescription').mockImplementation(async (_site, id, action) => ({
     prescription: prescription({ id, status: action === 'dismiss' ? 'dismissed' : 'applied', next: [] }),
   }));
+  vi.spyOn(replayApi, 'listCodingAgents').mockResolvedValue([]);
+  vi.spyOn(replayApi, 'listSequences').mockResolvedValue([
+    { id: SEQUENCE, name: 'Pricing follow-up' },
+    { id: 'bbbbbbbb-cccc-4ddd-8eee-000000000002', name: 'Onboarding' },
+  ]);
 });
 
 afterEach(() => {
@@ -129,9 +134,12 @@ describe('PrescriptionCard', () => {
     expect(enrol).toBeDisabled();
 
     fireEvent.click(within(shown).getByRole('checkbox', { name: 'replay.prescription.followUp.contactAria Bo' }));
-    fireEvent.change(within(shown).getByRole('textbox', { name: 'replay.prescription.followUp.sequenceLabel' }), {
-      target: { value: `https://builderforce.ai/canvas/s1?object=${SEQUENCE}` },
-    });
+    // The sequence is picked from the workspace's sequences, not pasted.
+    const sequence = within(shown).getByRole('combobox', { name: 'replay.prescription.followUp.sequenceLabel' });
+    await waitFor(() => expect(sequence).not.toBeDisabled());
+    expect(replayApi.listSequences).toHaveBeenCalledWith('site-1');
+    expect(within(sequence).getByRole('option', { name: 'Pricing follow-up' })).toBeInTheDocument();
+    fireEvent.change(sequence, { target: { value: SEQUENCE } });
     const enrolOne = within(shown).getByRole('button', { name: 'replay.prescription.followUp.enrol 1' });
     expect(enrolOne).not.toBeDisabled();
     fireEvent.click(enrolOne);
@@ -206,5 +214,52 @@ describe('PrescriptionCard', () => {
     expect(actionButtons()).toEqual([]);
     fireEvent.click(screen.getByRole('button', { name: /^replay\.prescription\.openAria / }));
     expect(push).toHaveBeenCalledWith({ kind: 'fix', id: 'rx-1', tab: 'change' });
+  });
+
+  it('Fix it runs on the coding agent picked (agentRef)', async () => {
+    vi.mocked(replayApi.listCodingAgents).mockResolvedValue([
+      { ref: '11', name: 'Builder' },
+      { ref: '12', name: 'Reviewer' },
+    ]);
+    render(<PrescriptionCard siteId="site-1" prescription={prescription()} />);
+    const picker = await screen.findByRole('combobox', { name: 'replay.prescription.agent.label' });
+    expect(replayApi.listCodingAgents).toHaveBeenCalledWith('site-1');
+    fireEvent.change(picker, { target: { value: '12' } });
+    fireEvent.click(button('fix'));
+    await waitFor(() => expect(replayApi.actOnPrescription).toHaveBeenCalledWith('site-1', 'rx-1', 'fix', { agentRef: '12' }));
+  });
+
+  it('with no coding agent, says Fix it creates a ticket only and sends no agent', async () => {
+    render(<PrescriptionCard siteId="site-1" prescription={prescription()} />);
+    expect(await screen.findByTestId('fix-ticket-only')).toHaveTextContent('replay.prescription.agent.none');
+    expect(screen.queryByRole('combobox', { name: 'replay.prescription.agent.label' })).toBeNull();
+    fireEvent.click(button('fix'));
+    await waitFor(() => expect(replayApi.actOnPrescription).toHaveBeenCalledWith('site-1', 'rx-1', 'fix', {}));
+  });
+
+  it('Copy prompt opens the fix kind on its Prompt tab', () => {
+    const push = vi.fn();
+    render(<PrescriptionCard siteId="site-1" prescription={prescription({ next: ['copy-prompt', 'dismiss'] })} push={push} />);
+    fireEvent.click(button('copy-prompt'));
+    expect(push).toHaveBeenCalledWith({ kind: 'fix', id: 'rx-1', tab: 'prompt' });
+    expect(replayApi.actOnPrescription).not.toHaveBeenCalled();
+  });
+
+  it('Apply to the page asks who the prompt is for, then shows the bundled prompt', async () => {
+    vi.mocked(replayApi.actOnPrescription).mockResolvedValue({
+      prescription: prescription({ status: 'applied', actionKind: 'apply_page', next: ['copy-prompt', 'dismiss'] }),
+      prompt: 'Improve one page of my website.',
+      selectors: [],
+      prescriptionIds: ['rx-1', 'rx-2'],
+    });
+    render(<PrescriptionCard siteId="site-1" prescription={prescription({ next: ['apply-page', 'dismiss'] })} />);
+    fireEvent.click(button('apply-page'));
+    expect(replayApi.actOnPrescription).not.toHaveBeenCalled();
+    const form = screen.getByRole('form', { name: 'replay.prescription.applyPage.title' });
+    fireEvent.click(within(form).getByRole('tab', { name: 'replay.prompt.audience.site_builder' }));
+    fireEvent.click(within(form).getByRole('button', { name: 'replay.prescription.applyPage.submit' }));
+    await waitFor(() => expect(replayApi.actOnPrescription).toHaveBeenCalledWith('site-1', 'rx-1', 'apply-page', { audience: 'site_builder' }));
+    expect(await screen.findByDisplayValue('Improve one page of my website.')).toBeInTheDocument();
+    expect(screen.getByText('replay.prescription.result.page 2')).toBeInTheDocument();
   });
 });

@@ -58,6 +58,8 @@ export const REPLAY_TRACE_VERBS = {
   prescriptionCopyPrompt: 'replay.prescription.copy-prompt',
   prescriptionApplyPage: 'replay.prescription.apply-page',
   prescriptionApplyInComposer: 'replay.prescription.apply-in-composer',
+  // A member erased one visitor's recordings from a site (`DELETE /api/replay/visitors/:id`).
+  visitorErased: 'replay.visitor.erased',
 } as const;
 
 export type ReplayTraceVerb = (typeof REPLAY_TRACE_VERBS)[keyof typeof REPLAY_TRACE_VERBS];

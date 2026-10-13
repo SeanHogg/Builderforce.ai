@@ -2,7 +2,8 @@
  * The `recording` panel kind's three tabs (PRD 33 §4.1): Replay · Journey ·
  * Lead. Each is a plain component the registry row points at; the lead row
  * declares `requires: 'identified'`, so the panel — not this file — decides
- * whether it shows.
+ * whether it shows. The Journey tab — always offered — carries "Erase this
+ * visitor" (MANAGER), the member's privacy action for the visitor behind it.
  */
 
 import type { ReplayRecordingDto } from '@builderforce/interaction-contract';
@@ -11,6 +12,7 @@ import { useAdminData } from '@/components/admin/adminShared';
 import { ReplayPlayer } from '@/components/replay/ReplayPlayer';
 import { RecordingJourney } from '@/components/replay/RecordingJourney';
 import { RecordingLead } from '@/components/replay/RecordingLead';
+import { EraseVisitorAction } from '@/components/replay/EraseVisitorAction';
 import { funnelLevelId } from '@/components/replay/funnels/funnelLevel';
 import type { InsightPanelKindProps } from '../panelKinds';
 import { PanelPending as Pending } from './PanelPending';
@@ -40,10 +42,13 @@ export function RecordingJourneyTab({ siteId, id, push }: InsightPanelKindProps)
   const { data, loading, error } = useRecording(siteId, id);
   if (!data) return <Pending loading={loading} error={error} />;
   return (
-    <RecordingJourney
-      recording={data}
-      onSeek={(atMs) => push({ kind: 'recording', id, tab: 'replay', t: Math.floor(atMs / 1000) })}
-    />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', minWidth: 0 }}>
+      <RecordingJourney
+        recording={data}
+        onSeek={(atMs) => push({ kind: 'recording', id, tab: 'replay', t: Math.floor(atMs / 1000) })}
+      />
+      <EraseVisitorAction siteId={siteId} visitorId={data.visitorId} />
+    </div>
   );
 }
 

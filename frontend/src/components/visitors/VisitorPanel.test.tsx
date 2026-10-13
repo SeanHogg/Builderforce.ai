@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { adminApi } from '@/lib/adminApi';
-import { RecordingPanel, VISITOR_PANEL_TABS } from './RecordingPanel';
+import { VisitorPanel, VISITOR_PANEL_TABS } from './VisitorPanel';
 
 /**
  * The admin visitor panel: tabs from `VISITOR_PANEL_TABS`, and erase — now in
@@ -38,14 +38,14 @@ function renderLead(over: { onClose?: () => void; onErased?: () => void } = {}) 
   const onClose = over.onClose ?? vi.fn();
   const onErased = over.onErased ?? vi.fn();
   render(
-    <RecordingPanel visitorId="vis-1" tab="lead" onTabChange={() => {}} onClose={onClose} onErased={onErased} />,
+    <VisitorPanel visitorId="vis-1" tab="lead" onTabChange={() => {}} onClose={onClose} onErased={onErased} />,
   );
   return { onClose, onErased };
 }
 
-describe('RecordingPanel', () => {
+describe('VisitorPanel', () => {
   it('draws its tabs from VISITOR_PANEL_TABS', async () => {
-    render(<RecordingPanel visitorId="vis-1" tab="journey" onTabChange={() => {}} onClose={() => {}} />);
+    render(<VisitorPanel visitorId="vis-1" tab="journey" onTabChange={() => {}} onClose={() => {}} />);
     const panel = await screen.findByRole('dialog');
     expect(within(panel).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(VISITOR_PANEL_TABS.map((row) => row.labelKey));
     expect(within(panel).getByText('journey of vis-1')).toBeInTheDocument();
@@ -53,7 +53,7 @@ describe('RecordingPanel', () => {
 
   it('switches tabs through the host', async () => {
     const onTabChange = vi.fn();
-    render(<RecordingPanel visitorId="vis-1" tab="journey" onTabChange={onTabChange} onClose={() => {}} />);
+    render(<VisitorPanel visitorId="vis-1" tab="journey" onTabChange={onTabChange} onClose={() => {}} />);
     fireEvent.click(await screen.findByRole('tab', { name: 'admin.insights.tabLead' }));
     expect(onTabChange).toHaveBeenCalledWith('lead');
   });

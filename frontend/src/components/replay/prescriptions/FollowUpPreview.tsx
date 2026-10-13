@@ -5,41 +5,78 @@
  * enrolled. Nothing is sent from here: enrolling puts the chosen contacts into a
  * `sequence`, whose cadence runner sends after the seller edits the draft.
  *
+ * Two ways in: "Use an existing sequence" (the workspace's sequences), or "Draft a new
+ * sequence" — the API drafts 2–3 steps from the finding's cited objection, shown here
+ * EDITABLE (`FollowUpSequenceDraft`) before the person creates it and enrols.
+ *
  * Inline in the card (D16: no second overlay).
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { ReplayFollowUpPreviewDto } from '@builderforce/interaction-contract';
+import type { ReplayFollowUpPreviewDto, ReplayFollowUpSequenceDraftDto, ReplaySequenceChoiceDto } from '@builderforce/interaction-contract';
+import { replayApi } from '@/lib/replayApi';
+import { FollowUpSequenceDraft } from './FollowUpSequenceDraft';
 
-const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+/** What a confirm enrols into: an existing sequence, or a new one created from the edited draft. */
+export type FollowUpEnrolInput =
+  | { sequenceObjectId: string; contactIds: string[] }
+  | { newSequence: ReplayFollowUpSequenceDraftDto; contactIds: string[] };
 
-/** A pasted sequence card link or its id → the id (the last uuid in the text). */
-export function sequenceIdFrom(text: string): string | null {
-  const all = text.match(new RegExp(UUID.source, 'gi'));
-  return all && all.length > 0 ? all[all.length - 1]!.toLowerCase() : null;
+type SequenceMode = 'existing' | 'new';
+const SEQUENCE_MODES: readonly SequenceMode[] = ['existing', 'new'];
+
+/** A draft a person can confirm: a name and at least one step with a subject and a body. */
+function draftReady(draft: ReplayFollowUpSequenceDraftDto | null): draft is ReplayFollowUpSequenceDraftDto {
+  return !!draft && draft.name.trim() !== '' && draft.steps.some((step) => step.subject.trim() !== '' && step.body.trim() !== '');
 }
 
 export interface FollowUpPreviewProps {
+  siteId: string;
   preview: ReplayFollowUpPreviewDto;
   /** The sequence this fix already enrols into, if any. */
   sequenceObjectId: string | null;
   busy: boolean;
-  onEnrol: (input: { sequenceObjectId: string; contactIds: string[] }) => void;
+  /** Ask the API for a drafted new sequence (the preview comes back with `draftSequence`). */
+  onDraftSequence: () => void;
+  onEnrol: (input: FollowUpEnrolInput) => void;
   onCancel: () => void;
 }
 
-export function FollowUpPreview({ preview, sequenceObjectId, busy, onEnrol, onCancel }: FollowUpPreviewProps) {
+export function FollowUpPreview({ siteId, preview, sequenceObjectId, busy, onDraftSequence, onEnrol, onCancel }: FollowUpPreviewProps) {
   const t = useTranslations('replay.prescription.followUp');
   const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set(preview.matched.map((c) => c.contactId)));
-  const [sequenceText, setSequenceText] = useState(sequenceObjectId ?? '');
-  const sequenceId = sequenceIdFrom(sequenceText);
+  const [sequenceId, setSequenceId] = useState<string | null>(sequenceObjectId);
+  // null = not read yet.
+  const [sequences, setSequences] = useState<ReplaySequenceChoiceDto[] | null>(null);
+  const [mode, setMode] = useState<SequenceMode>('existing');
+  // The person's edit of the API's draft; reset whenever a new draft arrives.
+  const [draft, setDraft] = useState<ReplayFollowUpSequenceDraftDto | null>(preview.draftSequence ?? null);
+  useEffect(() => { setDraft(preview.draftSequence ?? null); }, [preview.draftSequence]);
+  useEffect(() => {
+    let live = true;
+    replayApi.listSequences(siteId)
+      .then((found) => { if (live) setSequences(found); })
+      .catch(() => { if (live) setSequences([]); });
+    return () => { live = false; };
+  }, [siteId]);
   const toggle = (contactId: string, on: boolean) => setChosen((current) => {
     const next = new Set(current);
     if (on) next.add(contactId); else next.delete(contactId);
     return next;
   });
-  const canEnrol = !busy && chosen.size > 0 && sequenceId !== null;
+  const chooseMode = (next: SequenceMode) => {
+    setMode(next);
+    // The draft is one model call, made only when a person asks for it.
+    if (next === 'new' && !preview.draftSequence && !busy) onDraftSequence();
+  };
+  const target = mode === 'new' ? (draftReady(draft) ? draft : null) : sequenceId;
+  const canEnrol = !busy && chosen.size > 0 && target !== null;
+  const enrol = () => {
+    const contactIds = [...chosen];
+    if (mode === 'new' && draftReady(draft)) onEnrol({ newSequence: draft, contactIds });
+    else if (mode === 'existing' && sequenceId) onEnrol({ sequenceObjectId: sequenceId, contactIds });
+  };
 
   return (
     <section
@@ -74,30 +111,63 @@ export function FollowUpPreview({ preview, sequenceObjectId, busy, onEnrol, onCa
       {preview.enrolled > 0 && (
         <p role="status" style={{ margin: 0, color: 'var(--success)', fontSize: 'var(--font-size-small)' }}>{t('enrolled', { count: preview.enrolled })}</p>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', minWidth: 0 }}>
-        <strong style={{ fontSize: 'var(--font-size-small)' }}>{t('draftTitle')}</strong>
-        <p style={{ margin: 0, fontWeight: 600, overflowWrap: 'anywhere' }}>{preview.draft.subject}</p>
-        <p data-testid="follow-up-draft" style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', color: 'var(--text-primary)' }}>{preview.draft.body}</p>
+      <div role="radiogroup" aria-label={t('modeLabel')} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+        {SEQUENCE_MODES.map((option) => (
+          <label key={option} style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', minHeight: 44 }}>
+            <input
+              type="radio"
+              name={`follow-up-mode-${siteId}`}
+              value={option}
+              checked={mode === option}
+              onChange={() => chooseMode(option)}
+            />
+            <span>{t(option === 'new' ? 'modeNew' : 'modeExisting')}</span>
+          </label>
+        ))}
       </div>
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-        <span style={{ fontSize: 'var(--font-size-small)' }}>{t('sequenceLabel')}</span>
-        <input
-          className="input"
-          value={sequenceText}
-          placeholder={t('sequenceHint')}
-          onChange={(event) => setSequenceText(event.currentTarget.value)}
-          style={{ minHeight: 44 }}
-        />
-      </label>
+      {mode === 'existing' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', minWidth: 0 }}>
+          <strong style={{ fontSize: 'var(--font-size-small)' }}>{t('draftTitle')}</strong>
+          <p style={{ margin: 0, fontWeight: 600, overflowWrap: 'anywhere' }}>{preview.draft.subject}</p>
+          <p data-testid="follow-up-draft" style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', color: 'var(--text-primary)' }}>{preview.draft.body}</p>
+        </div>
+      )}
+      {mode === 'new' ? (
+        draft ? (
+          <FollowUpSequenceDraft draft={draft} onChange={setDraft} disabled={busy} />
+        ) : busy ? (
+          <p role="status" style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>{t('newSequence.drafting')}</p>
+        ) : (
+          <button type="button" className="btn-secondary" style={{ minHeight: 44, alignSelf: 'flex-start' }} onClick={onDraftSequence}>
+            {t('newSequence.retry')}
+          </button>
+        )
+      ) : sequences !== null && sequences.length === 0 ? (
+        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>{t('noSequences')}</p>
+      ) : (
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+          <span style={{ fontSize: 'var(--font-size-small)' }}>{t('sequenceLabel')}</span>
+          <select
+            className="input"
+            value={sequenceId ?? ''}
+            disabled={sequences === null}
+            onChange={(event) => setSequenceId(event.currentTarget.value || null)}
+            style={{ minHeight: 44 }}
+          >
+            <option value="">{sequences === null ? t('sequencesLoading') : t('sequenceChoose')}</option>
+            {(sequences ?? []).map((sequence) => <option key={sequence.id} value={sequence.id}>{sequence.name}</option>)}
+          </select>
+        </label>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
         <button
           type="button"
           className="btn-primary"
           disabled={!canEnrol}
           style={{ minHeight: 44 }}
-          onClick={() => { if (sequenceId) onEnrol({ sequenceObjectId: sequenceId, contactIds: [...chosen] }); }}
+          onClick={enrol}
         >
-          {t('enrol', { count: chosen.size })}
+          {t(mode === 'new' ? 'createAndEnrol' : 'enrol', { count: chosen.size })}
         </button>
         <button type="button" className="btn-ghost" style={{ minHeight: 44 }} onClick={onCancel}>{t('cancel')}</button>
       </div>

@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { realizationApi, type Realization } from '@/lib/builderforceApi';
+import { realizationApi, type Realization } from '@/lib/realizationApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 export interface ProofEarlyCallPanelProps {

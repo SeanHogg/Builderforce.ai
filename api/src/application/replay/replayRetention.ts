@@ -10,6 +10,8 @@
  *     day-prefix sweep for its bytes (the registry's 90-day entry is the backstop for
  *     rows whose site no longer exists);
  *   • an MP4 EXPORT (row and file) lives seven days — `purgeExpiredExports`;
+ *   • a PAGE CAPTURE (row and `replay/pages/…` objects) lives for the site's window or
+ *     90 days, whichever is longer — `purgeExpiredCaptures` (`pageCaptureRetention.ts`);
  *   • LIVE presence older than five minutes is purged by ingest itself (once a minute
  *     per site, piggybacked on the cache-version gate) and by the daily sweep.
  */
@@ -24,6 +26,7 @@ import type { ReplayScope } from '../../domain/replay/replayScope';
 import { replayTelemetryDb } from './replayDatabase';
 import { deleteOlderThan } from './replayChunkStore';
 import { purgeExpiredExports } from './replayExportStore';
+import { purgeExpiredCaptures } from './pageCaptureRetention';
 import { MAX_RETENTION_DAYS, siteSettings } from './replaySites';
 
 /** Presence older than this is not "live". */
@@ -97,9 +100,10 @@ export async function purgeExpiredRecordings(env: Env, db: Db, now: Date): Promi
   return { rows, objects };
 }
 
-/** The daily retention pass for Insights: recordings + their bytes, MP4 exports, then stale presence. */
+/** The daily retention pass for Insights: recordings + their bytes, MP4 exports, page captures, then stale presence. */
 export async function runReplayRetention(env: Env, db: Db, now: Date): Promise<void> {
   await purgeExpiredRecordings(env, db, now);
   await purgeExpiredExports(env, db, now);
+  await purgeExpiredCaptures(env, db, now);
   await purgeStaleLive(env, db, now);
 }

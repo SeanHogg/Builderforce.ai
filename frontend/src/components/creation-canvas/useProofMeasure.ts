@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { ProofEvaluationDto } from '@builderforce/interaction-contract';
-import { realizationApi } from '@/lib/builderforceApi';
+import { realizationApi } from '@/lib/realizationApi';
 
 export interface ProofMeasureState {
   evaluation: ProofEvaluationDto | null;

@@ -18,6 +18,7 @@ import {
   type ReplayPackDto,
 } from '@builderforce/interaction-contract';
 import { apiRequest } from './apiClient';
+import { fill, listOf } from './replayHttp';
 import { getStoredTenant } from './auth';
 import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
 
@@ -25,20 +26,6 @@ import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@
 export const CAPABILITY_CACHE_PREFIX = 'capability:';
 /** A capability changes on a purchase or an install, never per render. */
 export const CAPABILITY_STATE_TTL_MS = 60_000;
-
-/** Fill `:name` segments of a `REPLAY_PATHS` template. */
-export function fillReplayPath(template: string, params: Record<string, string | number>): string {
-  return template.replace(/:([A-Za-z]+)/g, (_, name: string) => encodeURIComponent(String(params[name] ?? '')));
-}
-
-/** A list answered bare, as `{ items }`, or under its own name. */
-export function listOf<T>(body: unknown, key: string): T[] {
-  if (Array.isArray(body)) return body as T[];
-  if (!body || typeof body !== 'object') return [];
-  const record = body as Record<string, unknown>;
-  const list = record.items ?? record[key];
-  return Array.isArray(list) ? (list as T[]) : [];
-}
 
 /** One record answered bare or under its own name. */
 export function oneOf<T>(body: unknown, key: string): T | null {
@@ -68,7 +55,7 @@ export const capabilityApi = {
     return getOrSetClientCached(
       capabilityStateKey(slug),
       async () => {
-        const body = await apiRequest<unknown>(fillReplayPath(REPLAY_PATHS.capabilityState, { slug }));
+        const body = await apiRequest<unknown>(fill(REPLAY_PATHS.capabilityState, { slug }));
         const state = oneOf<CapabilityStateDto>(body, 'state');
         if (!state) throw new Error('capability state: empty answer');
         return state;
@@ -89,7 +76,7 @@ export const capabilityApi = {
    */
   async startPackCheckout(packId: string, returnUrl: string): Promise<string> {
     const input: CapabilityPackCheckoutInput = { returnUrl };
-    const body = await apiRequest<unknown>(fillReplayPath(REPLAY_PATHS.capabilityPackCheckout, { packId }), {
+    const body = await apiRequest<unknown>(fill(REPLAY_PATHS.capabilityPackCheckout, { packId }), {
       method: 'POST',
       body: JSON.stringify(input),
       // 503 = payments are not configured; the panel says so rather than raising a fault.

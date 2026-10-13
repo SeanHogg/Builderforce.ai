@@ -6,7 +6,7 @@
  * typed, which pages they walked, what broke, how long they stayed, and whether
  * they ever came back — which is the only view that turns a drop-off into a
  * cause. It owns its own fetch so any surface that has a visitor id can mount it
- * unchanged. The panel chrome lives on RecordingPanel; this is the timeline body.
+ * unchanged. The panel chrome lives on VisitorPanel; this is the timeline body.
  */
 
 import { useTranslations } from 'next-intl';

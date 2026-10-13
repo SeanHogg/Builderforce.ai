@@ -1,7 +1,8 @@
 /**
  * Issues band (PRD 33 §4.1, 38% column): issue groups ranked for the window,
  * bounded to the rows that fit; "View all" opens the `issues` kind, a row the
- * `issue` kind. The first issue's route seeds the Page stage.
+ * `issue` kind. The first issue's route seeds the Page stage. Under a filter the
+ * list is estimated from kept recordings and says so (≈).
  */
 
 import { useEffect, useState } from 'react';
@@ -52,7 +53,10 @@ export function IssuesTable() {
         {error && <p role="alert" style={{ margin: 0, color: 'var(--error)' }}>{t('error')} {error}</p>}
         {!error && loading && !data && <p role="status" style={{ margin: 0, color: 'var(--text-secondary)' }}>{t('loading')}</p>}
         {!error && data && issues.length === 0 && <p style={{ margin: 0, color: 'var(--text-secondary)' }}>{t('empty')}</p>}
-        {issues.length > 0 && <IssueRows issues={issues} onOpen={open} />}
+        {issues.length > 0 && data?.estimated && (
+          <p style={{ margin: '0 0 var(--space-1)', color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>{t('estimatedNote')}</p>
+        )}
+        {issues.length > 0 && <IssueRows issues={issues} onOpen={open} estimated={data?.estimated === true} />}
       </div>
     </section>
   );

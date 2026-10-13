@@ -1,12 +1,17 @@
 /**
- * A fix card's actions (PRD 33 §5.1.4, D13): one button per entry of the DTO's
- * `next`, drawn from `PRESCRIPTION_ACTION_UI` — no branch per action. The
+ * A fix card's actions (PRD 33 §5.1.4, §5.2, D13): one button per entry of the
+ * DTO's `next`, drawn from `PRESCRIPTION_ACTION_UI` — no branch per action. The
  * registry's `gate` decides what happens between the press and the POST:
  *
- *   none     the POST;
- *   reason   an inline reason field (Dismiss) — required, in the card (D16);
- *   preview  `follow-up` without `confirm` → `FollowUpPreview` → enrol on confirm;
- *   confirm  `useConfirm` first (Start test, Publish preview, Revert).
+ *   none       the POST;
+ *   reason     an inline reason field (Dismiss) — required, in the card (D16);
+ *   preview    `follow-up` without `confirm` → `FollowUpPreview` → enrol on confirm;
+ *   confirm    `useConfirm` first (Start test, Publish preview, Revert);
+ *   promptTab  the `fix` kind's Prompt tab (Copy prompt: the copy there records it);
+ *   audience   an inline audience switch, then the POST; the bundled prompt is shown
+ *              with its Copy button (Apply to the page);
+ *   composer   the POST, then its prompt + selectors go to the host's ONE composer
+ *              (`ComposerBridge`) — drawn only where a bridge exists.
  *
  * Writes are MANAGER (`requireRole(MANAGER)` on every POST) — the group sits in
  * ONE `RoleGate`, disabled with the role hint for everyone else.
@@ -15,9 +20,9 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type {
+  ImprovementAudience,
   ReplayFollowUpPreviewDto,
   ReplayPrescriptionActionInput,
-  ReplayPrescriptionActionResultDto,
   ReplayPrescriptionDto,
   ReplayPrescriptionRouteAction,
 } from '@builderforce/interaction-contract';
@@ -27,8 +32,14 @@ import { RoleGate } from '@/components/RoleGate';
 import { Icon } from '@/components/ui/Icon';
 import { useErrorText } from '@/i18n/useErrorMessage';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
+import type { InsightPanelLevel } from '@/components/insights/panelKinds';
+import { composerTargets, useComposerBridge } from '@/components/insights/composerBridge';
+import { CodingAgentPicker } from './CodingAgentPicker';
 import { FollowUpPreview } from './FollowUpPreview';
+import { ApplyPageGate, actionResultNote, type ActionNote } from './PrescriptionActionGates';
 import { offeredActions, PRESCRIPTION_ACTION_UI } from './prescriptionActionUi';
+import { useInsightsLevel } from './useInsightsLevel';
+import { PromptBox } from '../prompt/PromptBox';
 
 export interface PrescriptionActionsProps {
   siteId: string;
@@ -37,52 +48,62 @@ export interface PrescriptionActionsProps {
   /** Narrow to these actions (the release report offers Revert only). */
   only?: readonly ReplayPrescriptionRouteAction[];
   compact?: boolean;
+  /** Push onto the panel (Copy prompt opens the Prompt tab); defaults to the panel in scope, else a link. */
+  push?: (level: InsightPanelLevel) => void;
 }
 
-type Gate = { kind: 'reason' } | { kind: 'preview'; preview: ReplayFollowUpPreviewDto } | null;
+type Gate =
+  | { kind: 'reason' }
+  | { kind: 'preview'; preview: ReplayFollowUpPreviewDto }
+  | { kind: 'audience' }
+  | { kind: 'prompt'; prompt: string }
+  | null;
 
 const TONE_CLASS = { primary: 'btn-primary', secondary: 'btn-secondary', ghost: 'btn-ghost' } as const;
 
-/** What an action's answer says to the reader, as a `replay.prescription.result` key + values. */
-function resultNote(result: ReplayPrescriptionActionResultDto): { key: string; values: Record<string, string | number> } {
-  if (result.refusal) return { key: 'refusal', values: { reason: result.refusal } };
-  if (result.executionId != null) return { key: 'run', values: { taskId: result.taskId ?? '' } };
-  if (result.taskId != null) return { key: 'ticket', values: { taskId: result.taskId } };
-  if (result.testId != null) return { key: 'test', values: { testId: result.testId } };
-  if (result.followUp && result.followUp.enrolled > 0) return { key: 'enrolled', values: { count: result.followUp.enrolled } };
-  return { key: 'done', values: {} };
-}
-
-export function PrescriptionActions({ siteId, prescription, onChanged, only, compact = false }: PrescriptionActionsProps) {
+export function PrescriptionActions({ siteId, prescription, onChanged, only, compact = false, push }: PrescriptionActionsProps) {
   const t = useTranslations('replay.prescription');
   const confirm = useConfirm();
   const errorText = useErrorText();
   const projectScope = useOptionalProjectScope();
+  const bridge = useComposerBridge();
+  const opener = useInsightsLevel(siteId, push);
   const [busy, setBusy] = useState<ReplayPrescriptionRouteAction | null>(null);
   const [gate, setGate] = useState<Gate>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
-  const [note, setNote] = useState<{ key: string; values: Record<string, string | number> } | null>(null);
+  const [note, setNote] = useState<ActionNote | null>(null);
   const [projectId, setProjectId] = useState<number | null>(projectScope?.currentProjectId ?? null);
-  const offered = offeredActions(prescription.next, only);
+  const [agentRef, setAgentRef] = useState<string | null>(null);
+  const offered = offeredActions(prescription.next, only, { composer: bridge !== null });
   if (offered.length === 0) return null;
   const needsProject = offered.some(({ ui }) => ui.project);
+  const needsAgent = offered.some(({ ui }) => ui.agent);
   const projects = projectScope?.projects ?? [];
 
   const run = async (action: ReplayPrescriptionRouteAction, input: ReplayPrescriptionActionInput = {}) => {
+    const ui = PRESCRIPTION_ACTION_UI[action];
     setBusy(action);
     setError('');
     setNote(null);
     try {
-      const body = PRESCRIPTION_ACTION_UI[action].project && projectId != null ? { ...input, projectId } : input;
+      const body: ReplayPrescriptionActionInput = {
+        ...input,
+        ...(ui.project && projectId != null ? { projectId } : {}),
+        ...(ui.agent && agentRef ? { agentRef } : {}),
+      };
       const result = await replayApi.actOnPrescription(siteId, prescription.id, action, body);
       if (action === 'follow-up' && input.confirm !== true && result.followUp) {
         setGate({ kind: 'preview', preview: result.followUp });
         return;
       }
-      setGate(null);
       setReason('');
-      setNote(resultNote(result));
+      if (ui.gate === 'audience' && result.prompt) setGate({ kind: 'prompt', prompt: result.prompt });
+      else setGate(null);
+      if (ui.gate === 'composer' && bridge && result.prompt) {
+        bridge.applyToComposer({ prompt: result.prompt, targets: composerTargets(result), pagePath: prescription.pagePath ?? '/' });
+      }
+      setNote(actionResultNote(result, ui.gate));
       onChanged(result.prescription);
     } catch (failure) {
       setError(errorText(failure));
@@ -94,6 +115,12 @@ export function PrescriptionActions({ siteId, prescription, onChanged, only, com
   const press = async (action: ReplayPrescriptionRouteAction) => {
     const ui = PRESCRIPTION_ACTION_UI[action];
     if (ui.gate === 'reason') { setGate({ kind: 'reason' }); return; }
+    if (ui.gate === 'audience') { setGate({ kind: 'audience' }); return; }
+    if (ui.gate === 'promptTab') {
+      const level: InsightPanelLevel = { kind: 'fix', id: prescription.id, tab: 'prompt' };
+      if (opener.push) opener.push(level); else window.location.assign(opener.href(level));
+      return;
+    }
     if (ui.gate === 'preview') { await run(action, { confirm: false }); return; }
     if (ui.gate === 'confirm') {
       const ok = await confirm({
@@ -139,6 +166,7 @@ export function PrescriptionActions({ siteId, prescription, onChanged, only, com
               </select>
             </label>
           )}
+          {needsAgent && !compact && <CodingAgentPicker siteId={siteId} value={agentRef} onChange={setAgentRef} />}
         </div>
       </RoleGate>
 
@@ -170,13 +198,26 @@ export function PrescriptionActions({ siteId, prescription, onChanged, only, com
 
       {gate?.kind === 'preview' && (
         <FollowUpPreview
+          siteId={siteId}
           preview={gate.preview}
           sequenceObjectId={prescription.refs.sequenceObjectId}
           busy={busy !== null}
+          onDraftSequence={() => void run('follow-up', { confirm: false, draftSequence: true })}
           onEnrol={(input) => void run('follow-up', { confirm: true, ...input })}
           onCancel={() => setGate(null)}
         />
       )}
+
+      {gate?.kind === 'audience' && (
+        <ApplyPageGate
+          busy={busy !== null}
+          onApply={(audience: ImprovementAudience) => void run('apply-page', { audience })}
+          onCancel={() => setGate(null)}
+        />
+      )}
+
+      {/* apply-page already recorded every fix it bundled: the copy records nothing more. */}
+      {gate?.kind === 'prompt' && <PromptBox prompt={gate.prompt} />}
 
       {error && <p role="alert" style={{ margin: 0, color: 'var(--error)', fontSize: 'var(--font-size-small)' }}>{error}</p>}
       {note && <p role="status" style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)', overflowWrap: 'anywhere' }}>{t(`result.${note.key}`, note.values)}</p>}

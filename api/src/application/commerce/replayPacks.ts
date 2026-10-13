@@ -44,12 +44,37 @@ export async function loadReplayPacks(env: Env | undefined, db: Db): Promise<rea
   return (await loadReplayCatalog(env, db)).packs;
 }
 
-function checkoutUrls(returnUrl: string): { successUrl: string; cancelUrl: string } {
+/**
+ * The app's own origins: every entry of `APP_URL` (it may hold a comma-separated
+ * allow-list; the first is canonical — `resolveAppBaseUrl`). A checkout may return
+ * only there.
+ */
+function appOrigins(env: Pick<Env, 'APP_URL'>): Set<string> {
+  const origins = new Set<string>();
+  for (const entry of (env.APP_URL ?? 'https://builderforce.ai').split(',')) {
+    try {
+      origins.add(new URL(entry.trim()).origin);
+    } catch {
+      // A malformed entry names no origin.
+    }
+  }
+  return origins;
+}
+
+/**
+ * The processor's success/cancel URLs. 400 unless `returnUrl` is absolute AND on
+ * the app's own origin: the processor redirects the buyer there after payment, so
+ * an arbitrary origin would make the checkout an open redirect.
+ */
+function checkoutUrls(env: Pick<Env, 'APP_URL'>, returnUrl: string): { successUrl: string; cancelUrl: string } {
   let base: URL;
   try {
     base = new URL(returnUrl);
   } catch {
     throw new ReplayCommerceError('returnUrl must be an absolute URL', 400);
+  }
+  if (!appOrigins(env).has(base.origin)) {
+    throw new ReplayCommerceError('returnUrl must be on the app origin', 400);
   }
   return {
     // Only origin + path: a return url cannot smuggle a query string back
@@ -76,7 +101,7 @@ export async function startReplayPackCheckout(
   const packs = await loadReplayPacks(env, db);
   const pack = replayPack(input.packId, packs);
   if (!pack) throw new ReplayCommerceError('That recording pack does not exist', 404);
-  const urls = checkoutUrls(input.returnUrl);
+  const urls = checkoutUrls(env, input.returnUrl);
 
   await recordReplayTrace(env, db, {
     tenantId: input.tenantId,

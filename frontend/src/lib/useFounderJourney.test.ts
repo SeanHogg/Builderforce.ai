@@ -17,6 +17,8 @@ vi.mock('./AuthContext', () => ({ useAuth: () => ({ isAuthenticated: true, hasTe
 vi.mock('./investorApi', () => ({ investorApi: { companies: { list: api.companies } } }));
 vi.mock('./builderforceApi', () => ({
   creationSessionsApi: { list: api.sessions },
+}));
+vi.mock('./realizationApi', () => ({
   realizationApi: { journeySignal: api.journeySignal, list: api.realizations },
 }));
 

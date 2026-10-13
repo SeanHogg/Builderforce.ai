@@ -29,6 +29,24 @@ function ruleIds(): string[] {
   return [...literal, ...factory];
 }
 
+/** The page-review rules (§5.2), appended to `PRESCRIPTION_RULES`. */
+const PAGE_RULES_SOURCE = resolve(__dirname, '../../../../../api/src/domain/replay/prescriptions/pageRules.ts');
+
+function pageRuleIds(): string[] {
+  const source = readFileSync(PAGE_RULES_SOURCE, 'utf8');
+  // `pageRule({ id: 'seo_title_length', area: …` — and the observed row's id constant.
+  const literal = [...source.matchAll(/\bid: '([a-z0-9_]+)', area:/g)].map((m) => m[1]!);
+  const observed = [...source.matchAll(/OBSERVED_RULE_ID = '([a-z_]+)'/g)].map((m) => m[1]!);
+  return [...literal, ...observed];
+}
+
+const PAGE_RULE_IDS = [
+  'seo_title_length', 'seo_missing_meta_description', 'seo_multiple_h1', 'seo_no_structured_data',
+  'seo_low_ctr_high_impressions', 'content_no_value_prop_above_fold', 'content_cta_vague', 'content_readability',
+  'content_missing_trust', 'perf_lcp_poor', 'perf_cls_poor', 'perf_heavy_hero_image', 'a11y_contrast',
+  'a11y_tap_targets', 'a11y_missing_labels', 'vision_observed',
+];
+
 type Catalog = Record<string, unknown>;
 const CATALOGS: Record<string, Catalog> = { en, zh, es, fr, de };
 
@@ -39,7 +57,11 @@ function at(catalog: Catalog, path: string): unknown {
 const STATUSES = ['proposed', 'applied', 'measuring', 'worked', 'no_effect', 'worse', 'dismissed'];
 
 describe('prescription catalog', () => {
-  const ids = ruleIds();
+  const ids = [...ruleIds(), ...pageRuleIds()];
+
+  it('finds every page-review rule of PAGE_PRESCRIPTION_RULES', () => {
+    expect(pageRuleIds().sort()).toEqual([...PAGE_RULE_IDS].sort());
+  });
 
   it('finds every rule of PRESCRIPTION_RULES', () => {
     expect(ids).toEqual(expect.arrayContaining([

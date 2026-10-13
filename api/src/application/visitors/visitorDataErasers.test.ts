@@ -22,6 +22,7 @@ const db = {
   }),
 } as never;
 const env = {} as never;
+const context = { replayScope: { tenantIds: [1] } };
 
 beforeEach(() => {
   mocks.forgetVisitorActivity.mockClear();
@@ -36,19 +37,20 @@ describe('VISITOR_DATA_ERASERS', () => {
 
 describe('eraseVisitorData', () => {
   it('runs every eraser and reports each count and the total', async () => {
-    const result = await eraseVisitorData(env, db, 'visitor_0001');
+    const result = await eraseVisitorData(env, db, 'visitor_0001', context);
     expect(result).toEqual({ erased: 9, byEraser: { prompts: 3, journey: 4, replay: 2 } });
-    expect(mocks.eraseReplayVisitor).toHaveBeenCalledWith(env, db, 'visitor_0001');
+    // Insights is erased inside the scope it is handed, never across every tenant (D17).
+    expect(mocks.eraseReplayVisitor).toHaveBeenCalledWith(env, db, 'visitor_0001', { tenantIds: [1] });
   });
 
   it('erases the journey on the endpoint the journey is written to', async () => {
-    await eraseVisitorData(env, db, 'visitor_0001');
+    await eraseVisitorData(env, db, 'visitor_0001', context);
     expect(mocks.forgetVisitorActivity).toHaveBeenCalledWith(mocks.activityDb, 'visitor_0001');
   });
 
   it('takes a registry, so a new store is one entry', async () => {
     const extra: VisitorDataEraser = { id: 'extra', erase: vi.fn(async () => 1) };
-    const result = await eraseVisitorData(env, db, 'v', [extra]);
+    const result = await eraseVisitorData(env, db, 'v', context, [extra]);
     expect(result).toEqual({ erased: 1, byEraser: { extra: 1 } });
   });
 });

@@ -10,23 +10,36 @@
 
 Builderforce cannot see what a visitor does on a page. `lib/visitorJourney.ts` → `POST /api/visitor/events` → `activity_log` records that a visitor arrived, which pages they opened, what they typed into the composer, errors and sign-up. Nothing records where they clicked, what they clicked that did nothing, what they rage-clicked, how far they scrolled, or what the page looked like when they gave up, and nothing ties behaviour to a release. Customers who publish an app from a canvas get page views only (`site_traffic_daily`).
 
-### 0.1 Build status (kept current; updated by the planning session after each slice audit)
+### 0.1 Build status (kept current by the planning session)
 
-| Slice | Status 2026-10-12 | What exists | What remains |
-|---|---|---|---|
-| S0 Consolidation | Partial | `StatTile`; `UserDetailDrawer` on `SlideOutPanel`; `TenantApiKeyUsageRow`; `FlowView`, `LeadsView`, `RecordingPanel` (journey, lead), `VisitorJourneyTimeline`, `VisitorLeadDetail`; erase wired; `heatZones.ts`; `packages/interaction-contract` (diverged shapes) | contract realignment (§3.4); `InsightsHome` + bands; `InsightsPanel` + `INSIGHT_PANEL_KINDS`; `?panel=` addressing; `LEGACY_ADMIN_SUB`; dead `VisitorJourneyDrawer.tsx`; tests |
-| S1 Data plane | Not built | pure folds in `domain/replay/*` (unused); core `replay_visits` (wrong track, nullable tenant); superadmin `GET /api/admin/replay-visits` (violates D17) | everything in §3.2–3.3 and §8 S1 |
-| S2 Recorder + CDN | Partial | `replay-sdk` (builds; size test); `emit-assets.mjs`; `cdn-ensure.sh`, `cdn-publish.sh`, `infra/cdn/*` | public API `BFReplay`, loader contract (config fetch, DNT/GPC, consent, sampling, stub queue), buffer mode + keep triggers, gzip, block/mask selectors, canvas, release key, error fingerprint, `vital` marks at pagehide, `bfr_` id namespace, `publish-cdn` job + npm matrix in `release.yml` |
-| S3 Dogfood + player | Not built | — | all |
-| S4 Heatmaps + S4b MP4 | Not built | — | all |
-| S4c Analysis parity | Not built | filter / smart-event / frustration primitives in the contract | all services, routes and views |
-| S4d Method link | Not built | `useFounderJourney` (idea/run only) | all |
-| S4e Prescriptions | Not built | — | all |
-| S4f Page review | Not built | — | all |
-| S5 Live + Flow links | Not built | `VisitorFlowGraph.onSelectNode` prop (unused) | all |
-| S6 Commerce + buyer path | Partial, unwired | `commerce/replayCatalog.ts`, `replayWallet.ts`, `replayPacks.ts` (no caller); `metering/replayUsage.ts` (hard-coded 50/month, contradicts D4); sitemap lists listings | capability kind, catalog row, entitlement, settler registration, routes, keys, sites, set-up, landing, `/apps/[slug]`, `resumeIntent`; retire the 50/month meter |
-| S7 Buyer surfaces | Partial | canvas `sessions` surface registered (phases, i18n) rendering `CanvasSessionsSurface` from the superadmin route | hosted injection; `CanvasInsightsSurface` with three entitlement states; dock side |
-| S8 Ship | Content only | release note 1211, blog ×5 | release note corrected to what ships; runbook (operator) |
+**2026-10-13: every slice S0–S7 is built in code, plus S8's content.** Per operator instruction, nothing in this build was compiled or test-run; the tests were written alongside the code, and CI runs them on merge. Live validation (§11) needs the operator.
+
+| Slice | Status 2026-10-13 | Where it lives |
+|---|---|---|
+| S0 Consolidation | Built | `packages/interaction-contract` (realigned to §3.4; API DTOs split under `src/api/*`); `components/insights/*` (ONE `InsightsHome`, ONE `InsightsPanel`, `INSIGHT_PANEL_KINDS`, `?panel=` that follows the URL); admin `LEGACY_ADMIN_SUB` |
+| S1 Data plane | Built | migrations 1216 (core), 1217 (operational mirror), transactional 0015; `application/replay/*` (ingest, rollup buffers + flush, chunk store, sites, config, read services, usage over the wallet, erasers, retention); `/api/replay-ingest`, `/api/replay`, `/api/admin/replay-ops` |
+| S2 Recorder + CDN | Built | `replay-sdk` (loader, `BFReplay`, buffer mode + keep triggers, gzip, masking/blocking, release key, vitals); CDN bundles: loader, recorder, `player` (rrweb Replayer), `pagekit` (selector + visual patch for the runner); `publish-cdn` job in `release.yml` |
+| S3 Dogfood + player | Built | `ReplayLoader` (consent; `NEXT_PUBLIC_REPLAY_RECORD_SIGNED_IN`; `replayExcluded` via the consumption snapshot); sensitive-region attributes; legal DRAFT (migration 1219); `components/replay/*` player, list, timeline, ticket from a moment |
+| S4 Heatmaps + S4b MP4 | Built | `ReplayHeatmapService`, `HEATMAP_INSIGHT_RULES`, heat/stuck lenses, `route` kind; MP4 via the QA runner `replay_export` job, charged 10 units on delivery |
+| S4c Analysis parity | Built | one `replayFilterCompiler`, segments, overview, smart events, funnels + flow, cited summaries on one AI budget, nightly representatives + regressions, Brain `replay.*` tools, `replay:read` keys |
+| S4d Method link | Built | `ProofMeasure` (smoke test only — the other targets' criteria are not visitor behaviour), measured verdicts with evidence, read-again `priorGrade`, ticket effect, journey make/measure, method events + operator-seeded method funnel, `ProofScoreboard` |
+| S4e Prescriptions | Built | `domain/replay/prescriptions/*`, sweep + cited drafts, actions with human gates, verify (`prescription.verify`), sites-Worker A/B split, preview links, Fixes UI (`PrescriptionCard`, `DoNext`, `ScoreStrip`, `fix`/`fixes`/`release` kinds) |
+| S4f Page review | Built | captures via the QA runner (`page_capture`, `page_render_after`), page rules, anchored vision review, validated visual patches, improvement prompts, page score; page review UI |
+| S5 Live + Flow links | Built | `replay_live` + `LiveView` + follow mode; `FlowView` with a `source` registry |
+| S6 Commerce + buyer path | Built | `capability` kind + catalog row, held-licence entitlement, `replay_pack` settler/refunder, `bfr_` keys, sites, landing, `resumeIntent`, `/apps/[slug]` + setup, Insights operations panel |
+| S7 Buyer surfaces | Built | hosted loader injection; canvas Measure ▸ Visitors (`CanvasVisitorsSurface`, three entitlement states, panel opposite the Brain) |
+| S8 Ship | Content built | release notes 1211 + 1224; blog posts `see-why-visitors-leave` and `fix-what-visitors-tell-you` ×5 locales; runbook (§11) needs the operator |
+
+### 0.2 Amendments taken during the build (2026-10-13)
+- **Contract split:** `packages/interaction-contract/src/api.ts` is a barrel over `api/{core,heat,analysis,prescriptions,review,paths}.ts`.
+- **Player delivery:** rrweb is not a frontend dependency. The replay-sdk publishes the Replayer as a hashed CDN bundle named in `manifest.player`, and the frontend CSP allows `https://cdn.builderforce.ai`. The QA runner loads `manifest.pageKit` for `deriveSelector` + `applyVisualPatch` (one copy of that logic).
+- **Signed-in recording switch:** a deploy-time env (`NEXT_PUBLIC_REPLAY_RECORD_SIGNED_IN`), not a platform settings row. `replayExcluded` and `replayFreeAllowanceOverride` are set by a superadmin in Admin ▸ Growth ▸ Insights operations.
+- **Funnel kind tabs:** Steps · Events · Flow (smart events live in Events). The funnel editor is a panel level (`funnel_edit`), never a second overlay. The funnel window is up to 30 days (`FUNNEL_WINDOW_MAX_MINUTES`).
+- **Ticket moment:** tasks have no metadata column. The replay moment rides a hidden trailer in the description (`formatReplayMomentTrailer`), which every ticket view strips.
+- **Read gate:** `/api/replay/*` reads pass for a workspace holding Insights OR for its own live proof site (`isProofSite`, the same clause as `replayEntitledForSite`).
+- **MP4 export:** checked up front, charged once on delivery (`replay-export:<id>`). A failed or `unavailable` export costs nothing.
+- **Fix it preview:** `publishPreviewRelease` records a release without moving the live pointer. A person sees it through a 30-minute preview link (`?bf_preview=`), and publishes or reverts through the existing pointer move.
+- **Method funnel:** seeded by a superadmin action on the Builderforce workspace's site, not by a fixed-uuid migration.
 
 ## 1. Outcome
 
@@ -180,7 +193,7 @@ The loader URL never changes. On each page load the config answer names the reco
 | `fix` | Change · Prompt · Measure |
 | `route` | the page review |
 | `metric` | trend, breakdowns, segments |
-| `funnel` | Steps · Clusters · Flow |
+| `funnel` | Steps · Events · Flow (+ the `funnel_edit` level) |
 | `live`, `proof`, `release`, `issues`, `sites`, `plan` | — |
 
 Rules: a slice registers a kind or a tab row, never a route or a second overlay; `?panel=<kind>:<id>[:<tab>]` (and `&t=<s>` for a recording) opens the panel on load; home lists are bounded, panel lists cursor-paginated; legacy admin URLs alias to the app with the matching `?panel=`. Canvas Measure ▸ Visitors renders the same home with the panel docked opposite the Brain.

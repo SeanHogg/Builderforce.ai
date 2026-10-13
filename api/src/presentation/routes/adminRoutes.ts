@@ -1398,7 +1398,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const visitorId = c.req.param('visitorId');
     if (!isValidVisitorId(visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
     const db = requestDb(c);
-    const erased = await new GuestPromptService(db).forgetVisitor(c.env as Env, visitorId);
+    const erased = await new GuestPromptService(db).forgetVisitor(c.env as Env, visitorId, c.get('userId') as string);
     await writeAdminAudit(db, 'GUEST_PROMPTS_ERASED', c.get('userId') as string, {
       metadata: { visitorId, ...erased },
     });

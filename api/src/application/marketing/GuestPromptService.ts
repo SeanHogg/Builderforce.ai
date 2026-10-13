@@ -3,6 +3,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { marketingSessionPrompts, marketingSessions } from '../../infrastructure/database/schema';
 import { eraseVisitorData, type VisitorErasure } from '../visitors/visitorDataErasers';
+import { operatorWorkspaceTenantIds } from '../replay/operatorWorkspaces';
 import {
   GUEST_PROMPT_LIMITS,
   parseGuestPrompt,
@@ -356,9 +357,14 @@ export class GuestPromptService {
    * (`application/visitors/visitorDataErasers.ts`): prompts, the journey in
    * `activity_log` (1111) and the visitor's Insights recordings. A new store of
    * visitor data is a registry entry, not a second erase path.
+   *
+   * Insights here is builderforce.ai's OWN recordings only (D17): the scope is the
+   * Builderforce workspace(s) the acting operator is a member of. A customer's
+   * visitors are erased by that customer (`DELETE /api/replay/visitors/:id`).
    */
-  async forgetVisitor(env: Env, visitorId: string): Promise<VisitorErasure & { prompts: number; events: number }> {
-    const erasure = await eraseVisitorData(env, this.db, visitorId);
+  async forgetVisitor(env: Env, visitorId: string, actorId: string): Promise<VisitorErasure & { prompts: number; events: number }> {
+    const replayScope = { tenantIds: await operatorWorkspaceTenantIds(this.db, actorId) };
+    const erasure = await eraseVisitorData(env, this.db, visitorId, { replayScope });
     await Promise.all([
       invalidateCached(env, GUEST_SESSIONS_CACHE_KEY),
       invalidateCached(env, visitorStandingCacheKey(visitorId)),

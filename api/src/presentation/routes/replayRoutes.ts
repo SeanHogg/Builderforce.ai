@@ -5,12 +5,13 @@
  *   GET   /recordings/:recordingId?site               ReplayRecordingDto (traces replay.session.viewed)
  *   GET   /recordings/:recordingId/chunks/:seq?site   stored gzip bytes (immutable)
  *   GET   /releases?site                              ReplayReleaseDto[]
- *   PATCH /releases/:releaseKey?site  { label }        ReplayReleaseDto (traces replay.release.renamed)
- *   GET   /kpis?site&days&release                     ReplayKpisDto
- *   GET   /issues?site&days&status&cursor&limit       ReplayPage<ReplayIssueDto>
+ *   PATCH /releases/:releaseKey?site  { label }        ReplayReleaseDto (MANAGER; traces replay.release.renamed)
+ *   GET   /kpis?site&days&release&f.*                 ReplayKpisDto (≈ `estimated` under a filter)
+ *   GET   /issues?site&days&status&cursor&limit&f.*   ReplayPage<ReplayIssueDto> (≈ `estimated` under a filter)
  *   GET   /issues/:issueId?site&days                  ReplayIssueDetailDto
  *   GET   /live?site                                  ReplayLiveDto
  *   GET   /usage                                      ReplayUsageDto (the workspace's, no site)
+ *   DELETE /visitors/:visitorId?site                  ReplayVisitorErasureDto (MANAGER; traces replay.visitor.erased)
  *
  * Every route: a workspace member (`authMiddleware`) of a workspace holding Insights
  * (`requireFeature('sessionReplay')`), and every `?site=` must be that workspace's —
@@ -19,15 +20,17 @@
  * path it does not own. A presentation adapter only: services, no tables.
  */
 import { Hono, type Context } from 'hono';
-import { filterFromQuery } from '@builderforce/interaction-contract';
+import { filterFromQuery, VISITOR_ID_PATTERN, type ReplayVisitorErasureDto } from '@builderforce/interaction-contract';
 import type { HonoEnv } from '../../env';
+import { TenantRole } from '../../domain/shared/types';
 import { requestDb } from '../../application/shared/dbHandle';
 import { deferPastResponse } from '../../application/shared/requestScope';
 import { ValidationError } from '../../domain/shared/errors';
 import { ReplayReadService } from '../../application/replay/ReplayReadService';
 import { recordReplayTrace, REPLAY_TRACE_VERBS } from '../../application/replay/replayTrace';
 import { usageSnapshot } from '../../application/replay/replayUsage';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { eraseReplayVisitor } from '../../application/replay/replayVisitorEraser';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { replayReadKeyOrMember } from '../middleware/replayReadAuth';
 import { requireTenantId } from '../middleware/tenantContext';
 import { parseBody, z } from './requestBody';
@@ -85,7 +88,7 @@ export function createReplayRoutes(): Hono<HonoEnv> {
     return c.json(await reads(c).releases(await scopeOf(c)));
   });
 
-  router.patch('/releases/:releaseKey', authMiddleware, insightsGate, async (c) => {
+  router.patch('/releases/:releaseKey', authMiddleware, insightsGate, requireRole(TenantRole.MANAGER), async (c) => {
     const scope = await scopeOf(c);
     const body = await parseBody(c, RenameReleaseBody);
     const releaseKey = c.req.param('releaseKey');
@@ -105,6 +108,7 @@ export function createReplayRoutes(): Hono<HonoEnv> {
     return c.json(await reads(c).kpis(scope, {
       days: optionalNumber(c.req.query('days')),
       release: c.req.query('release') || null,
+      filter: filterFromQuery(new URL(c.req.url).searchParams),
     }));
   });
 
@@ -115,6 +119,7 @@ export function createReplayRoutes(): Hono<HonoEnv> {
       status: c.req.query('status') || null,
       cursor: c.req.query('cursor') ?? null,
       limit: optionalNumber(c.req.query('limit')),
+      filter: filterFromQuery(new URL(c.req.url).searchParams),
     }));
   });
 
@@ -129,6 +134,23 @@ export function createReplayRoutes(): Hono<HonoEnv> {
 
   router.get('/usage', authMiddleware, insightsGate, async (c) => {
     return c.json(await usageSnapshot(c.env, requestDb(c), requireTenantId(c)));
+  });
+
+  // A privacy request a customer actions itself: this site's recordings of the visitor, nothing else (D17).
+  router.delete('/visitors/:visitorId', authMiddleware, insightsGate, requireRole(TenantRole.MANAGER), async (c) => {
+    const scope = await scopeOf(c);
+    const visitorId = c.req.param('visitorId');
+    if (!VISITOR_ID_PATTERN.test(visitorId)) throw new ValidationError('visitorId is not a visitor id');
+    const erased = await eraseReplayVisitor(c.env, requestDb(c), visitorId, scope);
+    await recordReplayTrace(c.env, requestDb(c), {
+      tenantId: scope.tenantId,
+      siteId: scope.siteId,
+      verb: REPLAY_TRACE_VERBS.visitorErased,
+      actorId: (c.get('userId') as string | undefined) ?? null,
+      metadata: { visitorId, erased },
+    });
+    const body: ReplayVisitorErasureDto = { visitorId, erased };
+    return c.json(body);
   });
 
   return router;

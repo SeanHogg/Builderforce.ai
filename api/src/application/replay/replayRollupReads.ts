@@ -101,7 +101,8 @@ export async function readKpis(
   };
 }
 
-const ISSUE_COLUMNS = {
+/** The issue columns every issue read selects (exact here, ≈ in `replayFilteredReads.ts`). */
+export const ISSUE_COLUMNS = {
   id: replayIssues.id,
   fingerprint: replayIssues.fingerprint,
   kind: replayIssues.kind,

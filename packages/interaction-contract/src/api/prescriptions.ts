@@ -1,6 +1,6 @@
 /** Insights API contract — prescriptions (PRD 33). Re-exported by `../api.ts`; see its header. */
 import type { ImprovementAudience } from '../improvementPrompt';
-import type { ReplayVisualDto } from './review';
+import type { ReplayComposerTargetDto, ReplayVisualDto } from './review';
 
 // ── S4e prescriptions (PRD 33 §5.1, D13) ─────────────────────────────────────
 
@@ -124,12 +124,26 @@ export interface ReplayPrescriptionActionInput {
   projectId?: number | null;
   /** `follow-up`: the `sequence` canvas object to enrol into. */
   sequenceObjectId?: string | null;
+  /** `follow-up` preview: also draft a NEW sequence from the finding's cited objection (`ReplayFollowUpPreviewDto.draftSequence`). */
+  draftSequence?: boolean;
+  /** `follow-up` confirm: create this sequence (the person's edited draft) and enrol into it, instead of `sequenceObjectId`. */
+  newSequence?: ReplayFollowUpSequenceDraftDto | null;
   /** `follow-up`: which matched contacts to enrol (default: all matched). */
   contactIds?: string[];
   /** `follow-up`: false (default) answers the preview; true enrols. */
   confirm?: boolean;
   /** `copy-prompt` / `apply-page`: the prompt's audience (default `coding_agent`; `apply-in-composer` is always `composer`). */
   audience?: ImprovementAudience;
+}
+
+/**
+ * A new follow-up sequence: drafted by the API from the finding's cited objection (never
+ * sent from here), edited by a person, created as a DRAFT cadence on confirm.
+ */
+export interface ReplayFollowUpSequenceDraftDto {
+  name: string;
+  /** In firing order; `delayDays` = days after enrolment (0 = on enrolment). At most 3. */
+  steps: Array<{ subject: string; body: string; delayDays: number }>;
 }
 
 /** `follow-up` without `confirm`: what WOULD happen, shown before a person enrols anyone. */
@@ -142,6 +156,10 @@ export interface ReplayFollowUpPreviewDto {
   /** Builderforce's own site, superadmin only: matched `sales_leads` ids for the broadcast composer. */
   platformLeadIds: string[];
   enrolled: number;
+  /** Preview with `draftSequence`: the drafted new sequence, for the person to edit before confirming. */
+  draftSequence?: ReplayFollowUpSequenceDraftDto;
+  /** Confirm with `newSequence`: the sequence that was created (a draft cadence a person starts on its board). */
+  createdSequence?: { id: string; name: string };
 }
 
 export interface ReplayPrescriptionActionResultDto {
@@ -156,6 +174,8 @@ export interface ReplayPrescriptionActionResultDto {
   prompt?: string | null;
   /** `apply-in-composer`: the selectors the canvas pushes as `previewPick` chips. */
   selectors?: string[];
+  /** `apply-in-composer` / `copy-prompt` / `apply-page`: `selectors` with their rect-map labels — one composer chip each. */
+  targets?: ReplayComposerTargetDto[];
   /** `apply-page`: every fix the page action applied. */
   prescriptionIds?: string[];
 }

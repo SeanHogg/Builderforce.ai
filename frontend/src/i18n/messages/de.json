@@ -1504,7 +1504,8 @@
       "where": "In der Vorschau ausgewählt: {file}, Zeile {line}",
       "aria": "Ausgewähltes Element:",
       "remove": "Ausgewähltes Element entfernen",
-      "unresolved": "Dieses Element lässt sich nicht im Quellcode finden. Beschreib es stattdessen im Eingabefeld."
+      "unresolved": "Dieses Element lässt sich nicht im Quellcode finden. Beschreib es stattdessen im Eingabefeld.",
+      "whereSelector": "Auf {page}: {selector}"
     },
     "releases": {
       "title": "Frühere Versionen",
@@ -3565,7 +3566,8 @@
       "seconds": "{value} s",
       "versus": "vs. {value}",
       "trendAria": "Verlauf: {label}",
-      "openAria": "{label} öffnen"
+      "openAria": "{label} öffnen",
+      "approx": "≈ {value}"
     },
     "issues": {
       "title": "Probleme",
@@ -3607,7 +3609,9 @@
       },
       "representatives": "Repräsentative Aufzeichnungen",
       "repAria": "Repräsentative Aufzeichnung {rank} öffnen",
-      "recordingsOfIssue": "Aufzeichnungen mit diesem Problem auf {route}"
+      "recordingsOfIssue": "Aufzeichnungen mit diesem Problem auf {route}",
+      "approx": "≈ {value}",
+      "estimatedNote": "≈ Geschätzt aus den für diesen Filter gespeicherten Aufzeichnungen."
     },
     "panel": {
       "crumbRoot": "Insights",
@@ -3686,14 +3690,19 @@
     "route": {
       "kind": "Seite",
       "tabs": {
-        "heat": "Heatmap"
+        "heat": "Heatmap",
+        "review": "Prüfung"
       },
-      "openAria": "Seite {route} öffnen"
+      "openAria": "Seite {route} öffnen",
+      "review": {
+        "open": "Seitenprüfung öffnen"
+      }
     },
     "fix": {
       "tabs": {
         "change": "Änderung",
-        "measure": "Messung"
+        "measure": "Messung",
+        "prompt": "Prompt"
       },
       "issueTabs": {
         "fix": "Korrektur",
@@ -3727,7 +3736,9 @@
       "areaAll": "Alle ({count})",
       "areaChip": "{area} ({count})",
       "areaAria": "Korrekturen nach Bereich filtern",
-      "loadMore": "Mehr anzeigen"
+      "loadMore": "Mehr anzeigen",
+      "applyAll": "Alle anwenden",
+      "applyAllTitle": "Ein Prompt für {route}"
     },
     "release": {
       "title": "Release {label}",
@@ -3741,6 +3752,25 @@
         "label": "{label}: {count, plural, one {# Korrektur} other {# Korrekturen}}, {worked} wirksam, {worse} verschlechtert",
         "empty": "Noch kein Release hat eine Korrektur ausgeliefert."
       }
+    },
+    "pages": {
+      "kind": "Seiten",
+      "open": "Seiten",
+      "empty": "Noch keine Schlüsselseiten. Sie erscheinen, sobald die Website Besuche hat und ihre Seiten erfasst sind.",
+      "openAria": "Prüfung von {path} öffnen",
+      "thumbAlt": "Der erste Bildschirm von {path}",
+      "noFix": "Kein offener Fix",
+      "opportunity": "≈ {value} zu gewinnen",
+      "noScore": "Nicht bewertet",
+      "score": "Bewertung {score}"
+    },
+    "eraseVisitor": {
+      "action": "Diesen Besucher löschen",
+      "erasing": "Wird gelöscht…",
+      "confirmTitle": "Diesen Besucher löschen?",
+      "confirmMessage": "Alle Aufzeichnungen dieses Besuchers auf dieser Website werden samt KI-Zusammenfassungen gelöscht. Das kann nicht rückgängig gemacht werden.",
+      "confirm": "Löschen",
+      "done": "{count, plural, one {# Aufzeichnung gelöscht.} other {# Aufzeichnungen gelöscht.}}"
     }
   },
   "cloudAgentForm": {
@@ -34449,9 +34479,73 @@
         "proof_missed_reason": {
           "title": "{proof} hat sein Ziel verfehlt: {reason}",
           "description": "{share} % der Besuche auf {route} trafen während der Messung auf dieses Problem."
+        },
+        "seo_title_length": {
+          "title": "Der Titel von {route} hat {length} Zeichen",
+          "description": "Suchergebnisse zeigen Titel mit {min} bis {max} Zeichen vollständig; ein kürzerer verschenkt Platz, ein längerer wird abgeschnitten."
+        },
+        "seo_missing_meta_description": {
+          "title": "{route} hat eine Meta-Beschreibung mit {length} Zeichen",
+          "description": "Ohne eine Beschreibung von mindestens {min} Zeichen schreiben Suchmaschinen ihr eigenes Snippet aus der Seite."
+        },
+        "seo_multiple_h1": {
+          "title": "{route} hat {count} Hauptüberschriften",
+          "description": "Eine H1 sagt Suchmaschinen und Screenreadern, worum es auf der Seite geht; mehrere verwischen das."
+        },
+        "seo_no_structured_data": {
+          "title": "{route} hat keine strukturierten Daten",
+          "description": "Eine Seite mit {words} Wörtern ohne JSON-LD kann in der Suche keine Rich Results erhalten."
+        },
+        "seo_low_ctr_high_impressions": {
+          "title": "{route} wird in der Suche gesehen, aber selten angeklickt",
+          "description": "{impressions} Impressionen brachten {clicks} Klicks ({ctr} % gegenüber {siteCtr} % der Website): Titel und Beschreibung verdienen den Klick nicht."
+        },
+        "content_no_value_prop_above_fold": {
+          "title": "Der erste Bildschirm von {route} sagt nicht, was er bietet",
+          "description": "Auf {device, select, phone {Smartphones} other {Desktops}} enthalten die {words} Wörter im sichtbaren Bereich kein Nutzenversprechen, also gehen Besucher, bevor sie erfahren, warum sie bleiben sollten."
+        },
+        "content_cta_vague": {
+          "title": "Der Call-to-Action „{label}“ auf {route} sagt nicht, was passiert",
+          "description": "Eine Beschriftung, die das Ergebnis nennt, bekommt mehr Klicks als eine allgemeine ({ctas} Calls-to-Action auf der Seite)."
+        },
+        "content_readability": {
+          "title": "{route} liest sich auf Stufe {grade}",
+          "description": "Text über Stufe {max} verliert Leser; kürzere Sätze und einfachere Wörter halten sie."
+        },
+        "content_missing_trust": {
+          "title": "{route} fordert zum Handeln auf, ohne Belege zu zeigen",
+          "description": "Die Seite hat {ctas} Calls-to-Action und {fields} Formularfelder, aber kein Testimonial, keine Bewertung, kein Logo und keine Garantie."
+        },
+        "perf_lcp_poor": {
+          "title": "Der Hauptinhalt von {route} braucht {p75} ms bis zur Anzeige",
+          "description": "Echte Besuche auf {device, select, phone {Smartphones} other {Desktops}} warten länger als die Grenze von {max} ms, bis das größte Element erscheint."
+        },
+        "perf_cls_poor": {
+          "title": "Das Layout von {route} verschiebt sich beim Laden ({p75})",
+          "description": "Inhalte, die sich nach dem Erscheinen bewegen (über {max} auf {device, select, phone {Smartphones} other {Desktops}}), lassen Besucher das Falsche anklicken."
+        },
+        "perf_heavy_hero_image": {
+          "title": "Das erste Bild auf {route} wiegt {kb} KB",
+          "description": "Ein Bild im sichtbaren Bereich über {maxKb} KB verzögert den ersten Bildschirm; komprimieren Sie es oder liefern Sie eine kleinere Größe aus."
+        },
+        "a11y_contrast": {
+          "title": "{count, plural, one {# Element auf {route} hat} other {# Elemente auf {route} haben}} zu wenig Farbkontrast",
+          "description": "Das schwächste Paar erreicht {ratio}:1, wo {required}:1 nötig ist — für viele Besucher schwer lesbar, bei hellem Licht für alle."
+        },
+        "a11y_tap_targets": {
+          "title": "{count, plural, one {# Tippziel auf {route} ist} other {# Tippziele auf {route} sind}} auf Smartphones zu klein",
+          "description": "Ziele unter {min} × {min} px verfehlt man mit dem Daumen leicht."
+        },
+        "a11y_missing_labels": {
+          "title": "{count, plural, one {# Feld auf {route} hat} other {# Felder auf {route} haben}} keine Beschriftung",
+          "description": "Ein Feld ohne Beschriftung kann ein Screenreader nicht benennen, und es wird leicht falsch ausgefüllt."
+        },
+        "vision_observed": {
+          "title": "{observation}",
+          "description": "Auf der erfassten Seite beobachtet und behalten, weil die eigenen Zahlen der Seite es stützen."
         }
       },
-      "observed": "Beobachtet",
+      "observed": "Auf dem Bildschirm beobachtet",
       "rankAria": "Rang {rank}",
       "evidenceTitle": "Gesehen in",
       "evidenceItem": "Aufzeichnung {n} bei {time}",
@@ -34563,10 +34657,26 @@
         "enrolled": "{count, plural, one {# Kontakt aufgenommen} other {# Kontakte aufgenommen}}",
         "draftTitle": "Entworfener Erstkontakt (wird nur aus der Sequenz gesendet, nachdem Sie ihn bearbeitet haben)",
         "sequenceLabel": "Sequenz für die Aufnahme",
-        "sequenceHint": "Link oder ID der Sequenzkarte einfügen",
         "enrol": "{count, plural, one {# Kontakt aufnehmen} other {# Kontakte aufnehmen}}",
         "cancel": "Abbrechen",
-        "contactAria": "{name} aufnehmen"
+        "contactAria": "{name} aufnehmen",
+        "noSequences": "Dieser Workspace hat noch keine Sequenz. Erstellen Sie eine auf einem Canvas, um nachzufassen.",
+        "sequencesLoading": "Sequenzen werden geladen…",
+        "sequenceChoose": "Sequenz wählen",
+        "modeLabel": "Sequenz",
+        "modeExisting": "Vorhandene Sequenz verwenden",
+        "modeNew": "Neue Sequenz entwerfen",
+        "createAndEnrol": "{count, plural, one {Sequenz erstellen und # Kontakt aufnehmen} other {Sequenz erstellen und # Kontakte aufnehmen}}",
+        "newSequence": {
+          "hint": "Entworfen aus dem Einwand, den diese Korrektur belegt. Jetzt bearbeiten: Sie wird als Entwurfssequenz erstellt, und nichts wird gesendet, bevor Sie sie auf ihrem Board starten.",
+          "nameLabel": "Name der Sequenz",
+          "stepTitle": "Schritt {n}",
+          "delayLabel": "Tage nach der Aufnahme",
+          "subjectLabel": "Betreff",
+          "bodyLabel": "Nachricht",
+          "drafting": "Sequenz wird aus dem Befund entworfen…",
+          "retry": "Sequenz entwerfen"
+        }
       },
       "project": {
         "label": "Projekt",
@@ -34578,7 +34688,10 @@
         "ticket": "Ticket #{taskId} erstellt.",
         "test": "A/B-Test entworfen. Starten Sie ihn, wenn Sie bereit sind.",
         "enrolled": "{count, plural, one {# Kontakt aufgenommen} other {# Kontakte aufgenommen}}",
-        "done": "Erledigt."
+        "done": "Erledigt.",
+        "composer": "Der Prompt steht im Composer. Prüfen Sie ihn und senden Sie ihn ab.",
+        "page": "{count, plural, one {# Fix in einem Prompt gebündelt.} other {# Fixes in einem Prompt gebündelt.}}",
+        "sequenceCreated": "„{name}“ als Entwurfssequenz mit {count, plural, one {# Kontakt} other {# Kontakten}} erstellt. Starten Sie sie auf ihrem Board, um zu senden."
       },
       "maker": {
         "fix": "Umgesetzt von einem Coding-Agenten",
@@ -34589,7 +34702,18 @@
         "publish-preview": "Bereit zur Veröffentlichung",
         "revert": "Bereit zum Zurücksetzen"
       },
-      "openAria": "Korrektur öffnen: {title}"
+      "openAria": "Korrektur öffnen: {title}",
+      "agent": {
+        "label": "Coding-Agent",
+        "none": "Kein Coding-Agent kann an dieser Website arbeiten, daher erstellt „Beheben“ nur ein Ticket.",
+        "ticketOnly": "Nur Ticket"
+      },
+      "applyPage": {
+        "title": "Alle Fixes auf dieser Seite anwenden",
+        "body": "Jeder akzeptierte Fix auf der Seite kommt in einen Prompt und wird als angewendet markiert. Wählen Sie, für wen der Prompt ist.",
+        "submit": "Auf die Seite anwenden",
+        "cancel": "Abbrechen"
+      }
     },
     "fixes": {
       "overviewTitle": "Wichtigste Korrekturen",
@@ -34597,6 +34721,128 @@
       "playerTitle": "Korrekturen für {route}",
       "proofTitle": "Die verordnete Korrektur",
       "empty": "Für diese Seite ist noch keine Korrektur verordnet."
+    },
+    "prompt": {
+      "audienceAria": "Für wen der Prompt ist",
+      "audience": {
+        "composer": "Builderforce-Composer",
+        "coding_agent": "Coding-Agent",
+        "site_builder": "Website-Baukasten"
+      },
+      "textAria": "Verbesserungs-Prompt",
+      "copy": "Prompt kopieren",
+      "copied": "Kopiert",
+      "copyFailed": "Die Zwischenablage ist hier nicht verfügbar. Markieren Sie den Text und kopieren Sie ihn.",
+      "markedApplied": "Kopiert und als angewendet markiert. Das nächste Release wird daran gemessen.",
+      "noneChosen": "Wählen Sie mindestens einen Fix, um einen Prompt zu erstellen.",
+      "pageTitle": "Ein Prompt für diese Seite",
+      "loading": "Der Prompt wird geschrieben…",
+      "bundled": "{count, plural, one {# Fix in diesem Prompt} other {# Fixes in diesem Prompt}}",
+      "applyInComposer": "Im Composer anwenden",
+      "intro": "Geben Sie diesen Fix an eine beliebige KI: Der Prompt sagt, was zu ändern ist, warum, was gleich bleiben muss und wie das Ergebnis gemessen wird.",
+      "pageBody": "Stattdessen jeden akzeptierten Fix auf {route} in einem Prompt bündeln.",
+      "applyPage": "Auf die Seite anwenden"
+    },
+    "page": {
+      "noCapture": "Noch keine Erfassung dieser Seite.",
+      "imageFailed": "Der Screenshot konnte nicht geladen werden.",
+      "imageLoading": "Screenshot wird geladen…",
+      "calloutAria": "Änderung {n}: {element}",
+      "beforeAfter": {
+        "title": "Vorher und nachher",
+        "beforeAlt": "Die Seite, wie sie jetzt ist, mit nummerierten Änderungen",
+        "afterAlt": "Die Seite mit angewendeten Änderungen",
+        "afterPending": "Die Seite mit diesem Fix wurde noch nicht gerendert.",
+        "sliderAria": "Zwischen vorher und nachher schieben",
+        "toggleAria": "Vorher oder nachher zeigen",
+        "before": "Vorher",
+        "after": "Nachher",
+        "modeAria": "Vergleichsart",
+        "mode": {
+          "slider": "Schieberegler",
+          "toggle": "Umschalten",
+          "side": "Nebeneinander"
+        }
+      },
+      "device": {
+        "aria": "Gerät",
+        "desktop": "Desktop",
+        "phone": "Smartphone"
+      },
+      "serp": {
+        "title": "In den Suchergebnissen",
+        "before": "Jetzt",
+        "after": "Mit dem Fix",
+        "jsonLdTitle": "Hinzuzufügende strukturierte Daten",
+        "jsonLdAria": "Vorgeschlagenes JSON-LD"
+      },
+      "score": {
+        "title": "Seitenbewertung",
+        "none": "Noch nicht bewertet.",
+        "ringAria": "{label}: {score} von 100",
+        "ringNone": "{label}: keine Daten",
+        "part": {
+          "total": "Gesamt",
+          "conversion": "Conversion",
+          "frustration": "Frustration",
+          "seo": "SEO",
+          "performance": "Performance",
+          "accessibility": "Barrierefreiheit"
+        },
+        "byRelease": "Bewertung nach Release",
+        "releaseRow": "{release}: {score}"
+      },
+      "facts": {
+        "title": "Was die Erfassung gefunden hat",
+        "none": "Die Erfassung enthält noch keine Fakten.",
+        "pass": "OK",
+        "fail": "Beheben",
+        "group": {
+          "seo": "SEO",
+          "content": "Inhalt",
+          "performance": "Performance",
+          "accessibility": "Barrierefreiheit"
+        },
+        "titleLength": "Titel: {value} Zeichen",
+        "metaDescriptionLength": "Meta-Beschreibung: {value} Zeichen",
+        "h1Count": "Hauptüberschriften: {value}",
+        "structuredData": "Typen strukturierter Daten: {value}",
+        "imagesWithoutAlt": "Bilder ohne Alt-Text: {value}",
+        "aboveFoldWords": "Wörter im sichtbaren Bereich: {value}",
+        "ctaAboveFold": "Calls-to-Action im sichtbaren Bereich: {value}",
+        "readabilityGrade": "Lesestufe: {value}",
+        "trustSignals": "Vertrauenssignale: {value}",
+        "lcp": "Größter Inhalt (Labor): {value} ms",
+        "cls": "Layoutverschiebung (Labor): {value}",
+        "pageWeight": "Seitengewicht: {value} KB",
+        "contrastFailures": "Kontrastfehler: {value}",
+        "smallTapTargets": "Kleine Tippziele: {value}",
+        "missingLabels": "Felder ohne Beschriftung: {value}"
+      },
+      "capture": {
+        "request": "Jetzt eine Erfassung anfordern",
+        "requesting": "Wird angefordert…",
+        "queued": "{count, plural, one {# Erfassung in der Warteschlange.} other {# Erfassungen in der Warteschlange.}} Die Prüfung aktualisiert sich, wenn der Runner fertig ist.",
+        "limited": "Die Seiten wurden vor weniger als einer Stunde erfasst. Versuchen Sie es später erneut.",
+        "unavailable": {
+          "runner_unavailable": "Erfassungen brauchen den Seiten-Runner, der in diesem Deployment nicht verfügbar ist.",
+          "page_kit_unavailable": "Das Kit des Seiten-Runners ist noch nicht veröffentlicht, daher wurde nichts erfasst.",
+          "no_pages": "Noch keine Schlüsselseiten zu erfassen: Die Website braucht zuerst Besuche.",
+          "no_origin": "Die Website hat keine Adresse zum Erfassen. Fügen Sie zuerst eine erlaubte Domain hinzu.",
+          "other": "Es wurde nichts erfasst."
+        }
+      },
+      "loadFailed": "Die Seitenprüfung konnte nicht geladen werden.",
+      "loading": "Seitenprüfung wird geladen…",
+      "noCaptures": "Diese Seite wurde noch nicht erfasst. Erfassungen laufen bei jedem neuen Release und wöchentlich.",
+      "screenTitle": "Der erste Bildschirm",
+      "release": "Release {release}",
+      "foldAlt": "Der erste Bildschirm von {path} auf {device}",
+      "noDeviceCapture": "Keine Erfassung für {device} in diesem Release.",
+      "fixesTitle": "Fixes für diese Seite",
+      "noFixes": "Keine Fixes für diese Seite.",
+      "includeInPrompt": "In einen Prompt für diese Seite aufnehmen",
+      "promptTitle": "Ein Prompt für diese Seite"
     }
   },
   "apps": {

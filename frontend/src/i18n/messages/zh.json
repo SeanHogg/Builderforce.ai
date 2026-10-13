@@ -1504,7 +1504,8 @@
       "where": "在预览中选中：{file}，第 {line} 行",
       "aria": "已选元素：",
       "remove": "移除已选元素",
-      "unresolved": "无法追溯到该元素的源代码。请改为在输入框中描述它。"
+      "unresolved": "无法追溯到该元素的源代码。请改为在输入框中描述它。",
+      "whereSelector": "位于 {page}：{selector}"
     },
     "releases": {
       "title": "历史版本",
@@ -3565,7 +3566,8 @@
       "seconds": "{value} 秒",
       "versus": "对比 {value}",
       "trendAria": "{label} 趋势",
-      "openAria": "打开{label}"
+      "openAria": "打开{label}",
+      "approx": "≈ {value}"
     },
     "issues": {
       "title": "问题",
@@ -3607,7 +3609,9 @@
       },
       "representatives": "代表性录制",
       "repAria": "打开代表性录制 {rank}",
-      "recordingsOfIssue": "在 {route} 上遇到此问题的录制"
+      "recordingsOfIssue": "在 {route} 上遇到此问题的录制",
+      "approx": "≈ {value}",
+      "estimatedNote": "≈ 根据此筛选条件下保留的录像估算。"
     },
     "panel": {
       "crumbRoot": "洞察",
@@ -3686,14 +3690,19 @@
     "route": {
       "kind": "页面",
       "tabs": {
-        "heat": "热图"
+        "heat": "热图",
+        "review": "审查"
       },
-      "openAria": "打开页面 {route}"
+      "openAria": "打开页面 {route}",
+      "review": {
+        "open": "打开页面审查"
+      }
     },
     "fix": {
       "tabs": {
         "change": "修改",
-        "measure": "衡量"
+        "measure": "衡量",
+        "prompt": "提示词"
       },
       "issueTabs": {
         "fix": "修复",
@@ -3727,7 +3736,9 @@
       "areaAll": "全部（{count}）",
       "areaChip": "{area}（{count}）",
       "areaAria": "按领域筛选修复",
-      "loadMore": "显示更多"
+      "loadMore": "显示更多",
+      "applyAll": "全部应用",
+      "applyAllTitle": "{route} 的一个提示词"
     },
     "release": {
       "title": "版本 {label}",
@@ -3741,6 +3752,25 @@
         "label": "{label}：{count, plural, other {# 项修复}}，{worked} 项有效，{worse} 项变差",
         "empty": "还没有版本发布过修复。"
       }
+    },
+    "pages": {
+      "kind": "页面",
+      "open": "页面",
+      "empty": "还没有关键页面。站点有访问且页面被捕获后会显示。",
+      "openAria": "打开 {path} 的审查",
+      "thumbAlt": "{path} 的首屏",
+      "noFix": "没有未完成的修复",
+      "opportunity": "可赢得 ≈ {value}",
+      "noScore": "未评分",
+      "score": "评分 {score}"
+    },
+    "eraseVisitor": {
+      "action": "删除此访客",
+      "erasing": "正在删除…",
+      "confirmTitle": "删除此访客？",
+      "confirmMessage": "此访客在本站点的所有录像及其 AI 摘要都将被删除，且无法撤销。",
+      "confirm": "删除",
+      "done": "{count, plural, other {已删除 # 条录像。}}"
     }
   },
   "cloudAgentForm": {
@@ -34449,9 +34479,73 @@
         "proof_missed_reason": {
           "title": "{proof} 未达成目标：{reason}",
           "description": "衡量期间，访问 {route} 的会话中有 {share}% 遇到了这个问题。"
+        },
+        "seo_title_length": {
+          "title": "{route} 的标题有 {length} 个字符",
+          "description": "搜索结果会完整显示 {min} 到 {max} 个字符的标题；太短浪费空间，太长会被截断。"
+        },
+        "seo_missing_meta_description": {
+          "title": "{route} 的元描述只有 {length} 个字符",
+          "description": "没有至少 {min} 个字符的描述时，搜索引擎会从页面中自行摘取摘要。"
+        },
+        "seo_multiple_h1": {
+          "title": "{route} 有 {count} 个主标题",
+          "description": "一个 H1 能告诉搜索引擎和屏幕阅读器页面讲什么；多个会让主题模糊。"
+        },
+        "seo_no_structured_data": {
+          "title": "{route} 没有结构化数据",
+          "description": "一个 {words} 词的页面没有 JSON-LD，就无法在搜索中获得富媒体结果。"
+        },
+        "seo_low_ctr_high_impressions": {
+          "title": "{route} 在搜索中被看到但很少被点击",
+          "description": "{impressions} 次展示只带来 {clicks} 次点击（{ctr}%，全站为 {siteCtr}%）：标题和描述没有赢得点击。"
+        },
+        "content_no_value_prop_above_fold": {
+          "title": "{route} 的首屏没有说明提供什么",
+          "description": "在{device, select, phone {手机} other {桌面端}}上，首屏的 {words} 个词没有价值主张，访客还没弄清为什么留下就离开了。"
+        },
+        "content_cta_vague": {
+          "title": "{route} 上的行动号召“{label}”没有说明会发生什么",
+          "description": "写明结果的按钮文字比笼统的文字获得更多点击（页面上共有 {ctas} 个行动号召）。"
+        },
+        "content_readability": {
+          "title": "{route} 的阅读难度为 {grade} 级",
+          "description": "超过 {max} 级的文字会流失读者；更短的句子和更朴素的用词能留住他们。"
+        },
+        "content_missing_trust": {
+          "title": "{route} 要求访客行动却没有给出证明",
+          "description": "页面有 {ctas} 个行动号召和 {fields} 个表单字段，却没有推荐语、评价、评分、徽标或保障。"
+        },
+        "perf_lcp_poor": {
+          "title": "{route} 的主要内容需要 {p75} 毫秒才出现",
+          "description": "{device, select, phone {手机} other {桌面端}}上的真实访问要等超过 {max} 毫秒的界线，最大元素才显示出来。"
+        },
+        "perf_cls_poor": {
+          "title": "{route} 的布局在加载时发生偏移（{p75}）",
+          "description": "内容出现后又移动（{device, select, phone {手机} other {桌面端}}上超过 {max}），会让访客点错地方。"
+        },
+        "perf_heavy_hero_image": {
+          "title": "{route} 的第一张图片有 {kb} KB",
+          "description": "首屏图片超过 {maxKb} KB 会拖慢首屏；请压缩它或提供更小的尺寸。"
+        },
+        "a11y_contrast": {
+          "title": "{route} 上有 {count} 个元素颜色对比度不足",
+          "description": "最弱的一组只有 {ratio}:1，而要求是 {required}:1——许多访客难以阅读，在强光下所有人都难以阅读。"
+        },
+        "a11y_tap_targets": {
+          "title": "{route} 上有 {count} 个点按目标在手机上太小",
+          "description": "小于 {min} × {min} 像素的目标很容易被拇指点偏。"
+        },
+        "a11y_missing_labels": {
+          "title": "{route} 上有 {count} 个字段没有标签",
+          "description": "没有标签的字段无法被屏幕阅读器读出名称，也容易填错。"
+        },
+        "vision_observed": {
+          "title": "{observation}",
+          "description": "在捕获的页面上观察到，并因页面自身的数据支持而保留。"
         }
       },
-      "observed": "观察所得",
+      "observed": "从屏幕上观察到",
       "rankAria": "排名 {rank}",
       "evidenceTitle": "见于",
       "evidenceItem": "录制 {n}，{time}",
@@ -34563,10 +34657,26 @@
         "enrolled": "{count, plural, other {已加入 # 位联系人}}",
         "draftTitle": "起草的首次触达（仅在您编辑后从序列中发送）",
         "sequenceLabel": "要加入的序列",
-        "sequenceHint": "粘贴序列卡片的链接或 ID",
         "enrol": "{count, plural, other {加入 # 位联系人}}",
         "cancel": "取消",
-        "contactAria": "加入 {name}"
+        "contactAria": "加入 {name}",
+        "noSequences": "此工作区还没有序列。请在画布上创建一个以便跟进。",
+        "sequencesLoading": "正在加载序列…",
+        "sequenceChoose": "选择一个序列",
+        "modeLabel": "序列",
+        "modeExisting": "使用现有序列",
+        "modeNew": "起草新序列",
+        "createAndEnrol": "{count, plural, other {创建序列并加入 # 位联系人}}",
+        "newSequence": {
+          "hint": "根据此修复引用的顾虑起草。请现在编辑：它将以草稿序列创建，在你于其看板上启动之前不会发送任何内容。",
+          "nameLabel": "序列名称",
+          "stepTitle": "第 {n} 步",
+          "delayLabel": "加入后的天数",
+          "subjectLabel": "主题",
+          "bodyLabel": "消息",
+          "drafting": "正在根据发现起草序列…",
+          "retry": "起草序列"
+        }
       },
       "project": {
         "label": "项目",
@@ -34578,7 +34688,10 @@
         "ticket": "已创建工单 #{taskId}。",
         "test": "A/B 测试已起草。准备好后即可开始。",
         "enrolled": "{count, plural, other {已加入 # 位联系人}}",
-        "done": "完成。"
+        "done": "完成。",
+        "composer": "提示词已放入输入框。请检查后发送。",
+        "page": "已将 {count} 个修复合并为一个提示词。",
+        "sequenceCreated": "“{name}”已作为草稿序列创建，包含 {count, plural, other {# 位联系人}}。在其看板上启动后才会发送。"
       },
       "maker": {
         "fix": "由编码智能体完成",
@@ -34589,7 +34702,18 @@
         "publish-preview": "可以发布",
         "revert": "可以回滚"
       },
-      "openAria": "打开修复：{title}"
+      "openAria": "打开修复：{title}",
+      "agent": {
+        "label": "编码代理",
+        "none": "没有编码代理能处理此站点，因此“修复”只会创建工单。",
+        "ticketOnly": "仅工单"
+      },
+      "applyPage": {
+        "title": "应用此页面上的所有修复",
+        "body": "页面上每个已接受的修复都会放进一个提示词，并标记为已应用。请选择提示词的对象。",
+        "submit": "应用到页面",
+        "cancel": "取消"
+      }
     },
     "fixes": {
       "overviewTitle": "首要修复",
@@ -34597,6 +34721,128 @@
       "playerTitle": "{route} 的修复",
       "proofTitle": "建议的修复",
       "empty": "此页面还没有建议的修复。"
+    },
+    "prompt": {
+      "audienceAria": "提示词的对象",
+      "audience": {
+        "composer": "Builderforce 输入框",
+        "coding_agent": "编码代理",
+        "site_builder": "建站工具"
+      },
+      "textAria": "改进提示词",
+      "copy": "复制提示词",
+      "copied": "已复制",
+      "copyFailed": "此处无法使用剪贴板。请选中文字后复制。",
+      "markedApplied": "已复制并标记为已应用。下一个版本将以此为基准进行衡量。",
+      "noneChosen": "请至少选择一个修复来生成提示词。",
+      "pageTitle": "此页面的一个提示词",
+      "loading": "正在编写提示词…",
+      "bundled": "此提示词包含 {count} 个修复",
+      "applyInComposer": "在输入框中应用",
+      "intro": "把这个修复交给任何 AI：提示词说明要改什么、为什么改、哪些不能改，以及如何衡量结果。",
+      "pageBody": "改为把 {route} 上每个已接受的修复合并为一个提示词。",
+      "applyPage": "应用到页面"
+    },
+    "page": {
+      "noCapture": "此页面还没有捕获。",
+      "imageFailed": "无法加载截图。",
+      "imageLoading": "正在加载截图…",
+      "calloutAria": "修改 {n}：{element}",
+      "beforeAfter": {
+        "title": "修改前后",
+        "beforeAlt": "页面当前的样子，修改处已编号",
+        "afterAlt": "应用修改后的页面",
+        "afterPending": "应用此修复后的页面尚未渲染。",
+        "sliderAria": "在修改前后之间滑动",
+        "toggleAria": "显示修改前或修改后",
+        "before": "修改前",
+        "after": "修改后",
+        "modeAria": "对比方式",
+        "mode": {
+          "slider": "滑块",
+          "toggle": "切换",
+          "side": "并排"
+        }
+      },
+      "device": {
+        "aria": "设备",
+        "desktop": "桌面端",
+        "phone": "手机"
+      },
+      "serp": {
+        "title": "在搜索结果中",
+        "before": "现在",
+        "after": "修复后",
+        "jsonLdTitle": "要添加的结构化数据",
+        "jsonLdAria": "建议的 JSON-LD"
+      },
+      "score": {
+        "title": "页面评分",
+        "none": "尚未评分。",
+        "ringAria": "{label}：{score} / 100",
+        "ringNone": "{label}：无数据",
+        "part": {
+          "total": "总分",
+          "conversion": "转化",
+          "frustration": "受挫",
+          "seo": "SEO",
+          "performance": "性能",
+          "accessibility": "无障碍"
+        },
+        "byRelease": "各版本评分",
+        "releaseRow": "{release}：{score}"
+      },
+      "facts": {
+        "title": "捕获发现的情况",
+        "none": "捕获中还没有数据。",
+        "pass": "正常",
+        "fail": "需修复",
+        "group": {
+          "seo": "SEO",
+          "content": "内容",
+          "performance": "性能",
+          "accessibility": "无障碍"
+        },
+        "titleLength": "标题：{value} 个字符",
+        "metaDescriptionLength": "元描述：{value} 个字符",
+        "h1Count": "主标题：{value}",
+        "structuredData": "结构化数据类型：{value}",
+        "imagesWithoutAlt": "没有替代文字的图片：{value}",
+        "aboveFoldWords": "首屏词数：{value}",
+        "ctaAboveFold": "首屏行动号召：{value}",
+        "readabilityGrade": "阅读难度：{value}",
+        "trustSignals": "信任信号：{value}",
+        "lcp": "最大内容（实验室）：{value} 毫秒",
+        "cls": "布局偏移（实验室）：{value}",
+        "pageWeight": "页面大小：{value} KB",
+        "contrastFailures": "对比度问题：{value}",
+        "smallTapTargets": "过小的点按目标：{value}",
+        "missingLabels": "没有标签的字段：{value}"
+      },
+      "capture": {
+        "request": "立即请求捕获",
+        "requesting": "正在请求…",
+        "queued": "已排队 {count} 个捕获。运行器完成后审查会更新。",
+        "limited": "页面在一小时内已捕获过。请稍后再试。",
+        "unavailable": {
+          "runner_unavailable": "捕获需要页面运行器，而此部署中不可用。",
+          "page_kit_unavailable": "页面运行器的工具包尚未发布，因此没有捕获任何内容。",
+          "no_pages": "还没有可捕获的关键页面：站点需要先有访问。",
+          "no_origin": "站点没有可捕获的地址。请先添加一个允许的域名。",
+          "other": "没有捕获任何内容。"
+        }
+      },
+      "loadFailed": "无法加载页面审查。",
+      "loading": "正在加载页面审查…",
+      "noCaptures": "此页面尚未被捕获。每个新版本以及每周都会进行捕获。",
+      "screenTitle": "首屏",
+      "release": "版本 {release}",
+      "foldAlt": "{path} 在{device}上的首屏",
+      "noDeviceCapture": "此版本没有{device}捕获。",
+      "fixesTitle": "此页面的修复",
+      "noFixes": "此页面没有修复。",
+      "includeInPrompt": "纳入此页面的一个提示词",
+      "promptTitle": "此页面的一个提示词"
     }
   },
   "apps": {

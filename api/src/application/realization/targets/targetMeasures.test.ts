@@ -10,7 +10,7 @@ import type { ChallengeSpec } from '../../challenge/parseBrief';
 import { planRealization } from '../planRealization';
 import type { RealizationKey } from '../realizationTarget';
 import { REALIZATION_TARGETS, realizationTargetByKey } from './index';
-import { SMOKE_SOURCE_TAG, SMOKE_SUCCESS_EVENT, SMOKE_UNNAMED_SOURCE } from './smokeTest';
+import { SMOKE_SOURCE_TAG, SMOKE_SUCCESS_EVENT, SMOKE_UNNAMED_SOURCE, SMOKE_WINDOW_DAYS } from './smokeTestMeasure';
 
 const spec = {
   title: 'Acme Concierge',
@@ -46,6 +46,7 @@ describe('smoke-test measure', () => {
     const sample = charterNumber(/Out of at least \| \*\*(\d+)\*\*/);
     const windowDays = charterNumber(/Window \| \*\*(\d+) days\*\*/);
     expect([target, sample, windowDays]).toEqual([25, 500, 14]);
+    expect(windowDays).toBe(SMOKE_WINDOW_DAYS);
 
     expect(output.measure).toEqual({
       sample: {

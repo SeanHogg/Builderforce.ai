@@ -27,7 +27,7 @@ import { NotFoundError, ValidationError } from '../../domain/shared/errors';
 import { DAY_MS } from '../../domain/shared/time';
 import { isUuid, type ReplayScope } from '../../domain/replay/replayScope';
 import { replayTelemetryDb } from './replayDatabase';
-import { resolveKnownContacts } from './resolveKnownContacts';
+import { resolveKnownContacts, type KnownContact, type KnownContactsResult } from './resolveKnownContacts';
 import type { PrescriptionRow } from './prescriptionReads';
 
 /** Days after enrolment before a follow-up is judged. */
@@ -73,7 +73,7 @@ export async function cohortVisitorIds(env: Env | undefined, db: Db, scope: Repl
 }
 
 /** A first touch the seller edits in the sequence before anything is sent. Never sent from here. */
-function draftFor(row: Pick<PrescriptionRow, 'ruleId' | 'pagePath'>): ReplayFollowUpPreviewDto['draft'] {
+export function firstTouchDraft(row: Pick<PrescriptionRow, 'ruleId' | 'pagePath'>): ReplayFollowUpPreviewDto['draft'] {
   const where = row.pagePath ?? 'our site';
   return row.ruleId === 'checkout_abandon_known'
     ? { subject: 'Anything we can help with?', body: `Hi {{firstName}},\n\nI saw you started an order on ${where} and did not finish. If something got in the way, just reply and I will sort it out.` }
@@ -100,14 +100,14 @@ export async function previewFollowUp(
   return {
     matched: known.matched.map((c) => ({ contactId: c.contactId, name: c.name, email: c.email })),
     unmatched: known.unmatched,
-    draft: draftFor(row),
+    draft: firstTouchDraft(row),
     platformLeadIds: await platformLeadIds(env, db, input.actorId, visitorIds),
     enrolled: input.enrolled ?? 0,
   };
 }
 
-/** The `sequence` object, if it is this workspace's. */
-async function loadSequence(db: Db, tenantId: number, objectId: string) {
+/** The `sequence` object, if it is this workspace's (404 otherwise). */
+export async function loadSequence(db: Db, tenantId: number, objectId: string) {
   if (!isUuid(objectId)) throw new NotFoundError('Sequence', objectId);
   const [row] = await db
     .select({ id: creationSessionObjects.id, content: creationSessionObjects.content, sessionId: creationSessionObjects.sessionId })
@@ -117,6 +117,30 @@ async function loadSequence(db: Db, tenantId: number, objectId: string) {
     .limit(1);
   if (!row) throw new NotFoundError('Sequence', objectId);
   return row;
+}
+
+/** The matched contacts (all, or the chosen ones) with an email; 400 when there are none. */
+function reachableOf(known: KnownContactsResult, contactIds: string[] | undefined): KnownContact[] {
+  const chosen = contactIds && contactIds.length > 0
+    ? known.matched.filter((c) => contactIds.includes(c.contactId))
+    : known.matched;
+  const reachable = chosen.filter((c) => c.email);
+  if (reachable.length === 0) throw new ValidationError('None of these visitors matches a contact with an email to follow up');
+  return reachable;
+}
+
+/**
+ * Throws what {@link enrolFollowUp} would (400) when nobody chosen can be enrolled — so a
+ * caller that must create something first (a new sequence) checks before it creates.
+ */
+export async function assertFollowUpReachable(
+  env: Env,
+  db: Db,
+  scope: ReplayScope,
+  row: PrescriptionRow,
+  input: { contactIds?: string[]; now: Date },
+): Promise<void> {
+  reachableOf(await resolveKnownContacts(env, db, scope, await cohortVisitorIds(env, db, scope, row, input.now)), input.contactIds);
 }
 
 /**
@@ -132,12 +156,7 @@ export async function enrolFollowUp(
   input: { sequenceObjectId: string; contactIds?: string[]; now: Date },
 ): Promise<number> {
   const sequence = await loadSequence(db, scope.tenantId, input.sequenceObjectId);
-  const known = await resolveKnownContacts(env, db, scope, await cohortVisitorIds(env, db, scope, row, input.now));
-  const chosen = input.contactIds && input.contactIds.length > 0
-    ? known.matched.filter((c) => input.contactIds!.includes(c.contactId))
-    : known.matched;
-  const reachable = chosen.filter((c) => c.email);
-  if (reachable.length === 0) throw new ValidationError('None of these visitors matches a contact with an email to follow up');
+  const reachable = reachableOf(await resolveKnownContacts(env, db, scope, await cohortVisitorIds(env, db, scope, row, input.now)), input.contactIds);
 
   const content = asJsonRecord(sequence.content);
   const current = readSequenceEnrolments(content.enrolments);

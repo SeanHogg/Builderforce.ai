@@ -13,6 +13,7 @@
  * Audit first, on purpose: a credit with no audit row would be exactly the unmetered
  * back door D17 rules out. A failed audit write fails the grant.
  */
+import type { ReplayCreditGrantResult } from '@builderforce/interaction-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { writeAdminAudit } from '../../infrastructure/audit/adminAudit';
@@ -25,13 +26,6 @@ export const REPLAY_CREDITS_GRANTED_EVENT = 'REPLAY_CREDITS_GRANTED';
 
 /** A single grant above this is a typo, not a decision (1M = the largest pack). */
 export const REPLAY_GRANT_MAX_UNITS = 1_000_000;
-
-export interface ReplayCreditGrantResult {
-  auditId: string;
-  reference: string;
-  units: number;
-  credits: number;
-}
 
 export async function grantReplayCredits(
   db: Db,

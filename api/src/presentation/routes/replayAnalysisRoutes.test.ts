@@ -21,7 +21,7 @@ const INGEST_KEY = 'bfr_0123456789abcdef0123456789abcdef';
 const mocks = vi.hoisted(() => ({
   entitled: true,
   getSiteForTenant: vi.fn(),
-  requirePublicApiKey: vi.fn(),
+  requirePublicApiKeyCached: vi.fn(),
   listSegments: vi.fn(async () => []),
   createSegment: vi.fn(async () => ({ id: 's1' })),
   overview: vi.fn(async () => ({ sessions: 1, estimated: false })),
@@ -40,6 +40,7 @@ vi.mock('../middleware/authMiddleware', async (importOriginal) => {
     c.set('userId', 'u1');
     c.set('role', (c.req.header('x-role') ?? 'manager') as never);
     c.set('db', {} as never);
+    if (c.req.header('x-emulation')) c.set('isEmulation', true);
     await next();
   };
   return { ...real, authMiddleware: fakeAuth };
@@ -57,7 +58,7 @@ vi.mock('../../application/replay/replaySites', () => ({ getSiteForTenant: mocks
 vi.mock('../../application/shared/dbHandle', () => ({
   requestDb: (c: { get(key: 'db'): unknown }) => c.get('db') ?? {},
 }));
-vi.mock('../../application/publicApi/publicApiAuth', () => ({ requirePublicApiKey: mocks.requirePublicApiKey }));
+vi.mock('../../application/publicApi/publicApiAuth', () => ({ requirePublicApiKeyCached: mocks.requirePublicApiKeyCached }));
 vi.mock('../../application/replay/replaySegments', () => ({
   listSegments: mocks.listSegments, createSegment: mocks.createSegment, updateSegment: vi.fn(), deleteSegment: vi.fn(),
 }));
@@ -90,7 +91,7 @@ import { createReplayRoutes } from './replayRoutes';
 
 const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as never;
 
-function call(path: string, init: RequestInit & { tenant?: number; role?: string; key?: string } = {}) {
+function call(path: string, init: RequestInit & { tenant?: number; role?: string; key?: string; emulation?: boolean } = {}) {
   const router = createReplayAnalysisRoutes();
   router.route('/', createReplayRoutes());
   router.onError(errorHandler as never);
@@ -98,19 +99,20 @@ function call(path: string, init: RequestInit & { tenant?: number; role?: string
   if (init.tenant) headers.set('x-tenant', String(init.tenant));
   if (init.role) headers.set('x-role', init.role);
   if (init.key) headers.set('Authorization', `Bearer ${init.key}`);
+  if (init.emulation) headers.set('x-emulation', '1');
   if (init.body) headers.set('content-type', 'application/json');
   return router.request(path, { ...init, headers }, {} as never, ctx);
 }
 
 beforeEach(() => {
   mocks.entitled = true;
-  for (const fn of [mocks.getSiteForTenant, mocks.requirePublicApiKey, mocks.summarizeRecording, mocks.summarizeSegment]) fn.mockReset();
+  for (const fn of [mocks.getSiteForTenant, mocks.requirePublicApiKeyCached, mocks.summarizeRecording, mocks.summarizeSegment]) fn.mockReset();
   for (const fn of [mocks.listSegments, mocks.createSegment, mocks.overview, mocks.evaluate, mocks.listRecordings]) fn.mockClear();
   mocks.getSiteForTenant.mockImplementation(async (_env: unknown, _db: unknown, tenantId: number, siteId: string) => {
     if (tenantId !== 7 || siteId !== OWN_SITE) throw new ForbiddenError('That Insights site is not in this workspace');
     return { id: siteId, tenantId };
   });
-  mocks.requirePublicApiKey.mockImplementation(async (_db: unknown, header: string | undefined, _origin: unknown, scope: string) =>
+  mocks.requirePublicApiKeyCached.mockImplementation(async (_env: unknown, _db: unknown, header: string | undefined, _origin: unknown, scope: string) =>
     (header === `Bearer ${READ_KEY}` && scope === 'replay:read'
       ? { ok: true, keyId: 'k1', tenantId: 7 }
       : { ok: false, error: 'Invalid or revoked API key', status: 401 }));
@@ -170,7 +172,7 @@ describe('the read API: replay:read keys', () => {
     expect((await call(`/overview?site=${OWN_SITE}`, { key: READ_KEY })).status).toBe(200);
     expect((await call(`/recordings?site=${OWN_SITE}`, { key: READ_KEY })).status).toBe(200);
     expect((await call(`/funnels/${FUNNEL}/evaluate?site=${OWN_SITE}`, { key: READ_KEY })).status).toBe(200);
-    expect(mocks.requirePublicApiKey).toHaveBeenCalledWith(expect.anything(), `Bearer ${READ_KEY}`, null, 'replay:read');
+    expect(mocks.requirePublicApiKeyCached).toHaveBeenCalledWith(expect.anything(), expect.anything(), `Bearer ${READ_KEY}`, null, 'replay:read');
     expect(mocks.overview).toHaveBeenCalledTimes(1);
     expect(mocks.listRecordings).toHaveBeenCalledTimes(1);
     expect(mocks.evaluate).toHaveBeenCalledTimes(1);
@@ -188,8 +190,25 @@ describe('the read API: replay:read keys', () => {
 
   it('refuses a site key (replay:ingest only) and a key for another workspace\'s site', async () => {
     expect((await call(`/overview?site=${OWN_SITE}`, { key: INGEST_KEY })).status).toBe(401);
-    mocks.requirePublicApiKey.mockResolvedValueOnce({ ok: true, keyId: 'k2', tenantId: 8 });
+    mocks.requirePublicApiKeyCached.mockResolvedValueOnce({ ok: true, keyId: 'k2', tenantId: 8 });
     expect((await call(`/overview?site=${OWN_SITE}`, { key: READ_KEY })).status).toBe(403);
     expect(mocks.overview).not.toHaveBeenCalled();
+  });
+});
+
+describe('superadmin emulation (D17: no superadmin data path)', () => {
+  it('403s recording chunks, the recordings list and the overview of the emulated workspace', async () => {
+    for (const path of [`/recordings/${REC}/chunks/0?site=${OWN_SITE}`, `/recordings?site=${OWN_SITE}`, `/overview?site=${OWN_SITE}`, `/segments?site=${OWN_SITE}`]) {
+      const res = await call(path, { emulation: true });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: expect.stringContaining('not available during emulation') });
+    }
+    expect(mocks.getSiteForTenant).not.toHaveBeenCalled();
+    expect(mocks.listRecordings).not.toHaveBeenCalled();
+    expect(mocks.overview).not.toHaveBeenCalled();
+  });
+
+  it('still serves the same member without emulation', async () => {
+    expect((await call(`/recordings?site=${OWN_SITE}`)).status).toBe(200);
   });
 });

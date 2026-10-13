@@ -15,6 +15,7 @@
  * two keys are dropped so the change is enforced at once rather than on a TTL.
  */
 import { eq } from 'drizzle-orm';
+import type { ReplayTenantSettings } from '@builderforce/interaction-contract';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { tenants } from '../../infrastructure/database/schema';
@@ -29,12 +30,6 @@ export const REPLAY_TENANT_SETTINGS_CHANGED_EVENT = 'REPLAY_TENANT_SETTINGS_CHAN
 
 /** Anything above this is a typo, not a decision (matches the largest grant). */
 export const REPLAY_ALLOWANCE_OVERRIDE_MAX = 1_000_000;
-
-export interface ReplayTenantSettings {
-  replayExcluded: boolean;
-  /** Null = the catalog's free allowance applies. */
-  replayFreeAllowanceOverride: number | null;
-}
 
 export type ReplayTenantSettingsPatch = Partial<ReplayTenantSettings>;
 

@@ -31,6 +31,7 @@ import {
   updateSite,
 } from '../../application/replay/replaySiteAdmin';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { refuseInsightsDuringEmulation } from '../middleware/insightsEmulationGuard';
 import { requireFeature } from '../middleware/featureGate';
 import { parseBody, z, zJsonObject } from './requestBody';
 
@@ -58,6 +59,7 @@ export function createReplaySiteRoutes(db: DbHandle): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
   router.use('*', async (c, next) => {
+    refuseInsightsDuringEmulation(c); // D17: no superadmin data path
     const gate = await requireFeature(c, 'sessionReplay');
     if (gate) return gate;
     await next();

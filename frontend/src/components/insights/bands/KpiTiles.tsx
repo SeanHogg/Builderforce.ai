@@ -5,6 +5,8 @@
  * every measured tile opens the `metric` kind (the Overview dashboard, S4c),
  * its level id naming the tile.
  * Choosing a release to compare adds that release's value as the hint.
+ * Under a filter the API answers from the kept recordings (`kpis.estimated`), so
+ * every `estimable` tile prints ≈ (D15/D18).
  */
 
 import { useTranslations } from 'next-intl';
@@ -31,19 +33,21 @@ export interface KpiTileDef {
   /** A fixed hint (e.g. the score's "after the first page review"). */
   hintKey?: string;
   opens?: InsightPanelKind;
+  /** Prints ≈ when the numbers are estimated from kept recordings (a filter is set). */
+  estimable?: boolean;
 }
 
 const LCP_POOR_MS = 4000;
 const LCP_NEEDS_WORK_MS = 2500;
 
 export const KPI_TILES: ReadonlyArray<KpiTileDef> = [
-  { id: 'sessions', labelKey: 'sessions', value: (k, fmt) => fmt.number(k.sessions), trend: (k) => k.trend.map((d) => d.sessions), opens: 'metric' },
-  { id: 'conversion', labelKey: 'conversion', value: (k, fmt) => fmt.percent(k.conversionRate, 1), trend: (k) => k.trend.map((d) => d.conversions), opens: 'metric' },
+  { id: 'sessions', labelKey: 'sessions', value: (k, fmt) => fmt.number(k.sessions), trend: (k) => k.trend.map((d) => d.sessions), opens: 'metric', estimable: true },
+  { id: 'conversion', labelKey: 'conversion', value: (k, fmt) => fmt.percent(k.conversionRate, 1), trend: (k) => k.trend.map((d) => d.conversions), opens: 'metric', estimable: true },
   {
     id: 'frustrated', labelKey: 'frustrated', value: (k, fmt) => fmt.number(k.frustratedSessions),
-    trend: (k) => k.trend.map((d) => d.frustrated), tone: (k) => (k.frustratedSessions > 0 ? 'warning' : undefined), opens: 'metric',
+    trend: (k) => k.trend.map((d) => d.frustrated), tone: (k) => (k.frustratedSessions > 0 ? 'warning' : undefined), opens: 'metric', estimable: true,
   },
-  { id: 'errors', labelKey: 'errorsPer1k', value: (k, fmt) => fmt.number(k.errorsPer1k, { maximumFractionDigits: 1 }), tone: (k) => (k.errorsPer1k > 0 ? 'error' : undefined), opens: 'metric' },
+  { id: 'errors', labelKey: 'errorsPer1k', value: (k, fmt) => fmt.number(k.errorsPer1k, { maximumFractionDigits: 1 }), tone: (k) => (k.errorsPer1k > 0 ? 'error' : undefined), opens: 'metric', estimable: true },
   {
     id: 'lcp', labelKey: 'lcp',
     value: (k, fmt, t) => (k.lcpP75 == null ? '—' : t('seconds', { value: fmt.number(k.lcpP75 / 1000, { maximumFractionDigits: 1 }) })),
@@ -52,6 +56,12 @@ export const KPI_TILES: ReadonlyArray<KpiTileDef> = [
   },
   { id: 'score', labelKey: 'score', value: () => '—', hintKey: 'scorePending' },
 ];
+
+/** A tile's value, with ≈ when the answer is estimated and the tile can be. */
+export function tileValue(tile: KpiTileDef, kpis: ReplayKpisDto, fmt: Formatter, t: T): string {
+  const value = tile.value(kpis, fmt, t);
+  return kpis.estimated && tile.estimable ? t('approx', { value }) : value;
+}
 
 export function KpiTiles() {
   const t = useTranslations('insights.kpi');
@@ -70,10 +80,10 @@ export function KpiTiles() {
       {error && <p role="alert" style={{ gridColumn: '1 / -1', margin: 0, color: 'var(--error)' }}>{t('error')} {error}</p>}
       {KPI_TILES.map((tile) => {
         const label = t(tile.labelKey);
-        const value = data ? tile.value(data, fmt, t) : '…';
+        const value = data ? tileValue(tile, data, fmt, t) : '…';
         const hint = tile.hintKey
           ? t(tile.hintKey)
-          : versus && data ? t('versus', { value: tile.value(versus, fmt, t) }) : undefined;
+          : versus && data ? t('versus', { value: tileValue(tile, versus, fmt, t) }) : undefined;
         const trend = data && tile.trend ? tile.trend(data) : [];
         const body = (
           <StatTile

@@ -4,7 +4,9 @@
  * Every method takes a `ReplayScope` and applies BOTH halves of it in every
  * statement — scope is never inferred from a fetched row. Every read goes through
  * `getOrSetCached` under the site's version token (`replayCacheKeys`); live presence
- * is bucketed to five seconds in its key. Chunk bytes are the exception: they are
+ * is held in the isolate for five seconds and never written to KV. KPIs and issues
+ * are exact from the rollups, or ≈ from the kept recordings when a filter is set
+ * (`replayFilteredReads.ts`), cached per filter. Chunk bytes are the exception: they are
  * immutable and served with `Cache-Control: immutable` by the route instead.
  */
 
@@ -43,13 +45,15 @@ import {
 } from './replayReadModel';
 import { recordingLocation, type RecordingRow } from './replayRecordingWriter';
 import { readIssue, readIssues, readKpis } from './replayRollupReads';
+import { hasFilter, readIssuesEstimated, readKpisEstimated } from './replayFilteredReads';
 import { compileScopeFilter } from './replaySmartEventRules';
 
 const LIST_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 const ROLLUP_TTL = { kvTtlSeconds: 300, l1TtlMs: 30_000 };
 /** A visitor seen within this window is "live". */
 export const LIVE_ACTIVE_MS = 60_000;
-const LIVE_BUCKET_MS = 5_000;
+/** How long one isolate reuses a live answer. */
+const LIVE_TTL_MS = 5_000;
 const LIVE_VISITORS_MAX = 200;
 const LABEL_MAX = 80;
 
@@ -171,23 +175,39 @@ export class ReplayReadService {
     return found;
   }
 
-  async kpis(scope: ReplayScope, input: { days?: number; release?: string | null } = {}): Promise<ReplayKpisDto> {
+  /** Exact from the rollups; with a filter, ≈ from the kept recordings matching it (`estimated: true`). */
+  async kpis(
+    scope: ReplayScope,
+    input: { days?: number; release?: string | null; filter?: ReplayFilter | null } = {},
+  ): Promise<ReplayKpisDto> {
     const days = clampDays(input.days);
+    const release = input.release ?? null;
+    const filter = input.filter;
     const keys = await replayReadKeys(this.env, scope);
-    return getOrSetCached(this.env, `${keys.kpis(days)}:${input.release ?? '-'}`, () =>
-      readKpis(this.store, scope, { days, release: input.release ?? null, now: this.clock() }), ROLLUP_TTL);
+    return getOrSetCached(this.env, keys.kpis(days, release, filterCacheKey(filter)), () => {
+      const now = this.clock();
+      return hasFilter(filter)
+        ? readKpisEstimated(this.env, this.db, this.store, scope, { days, release, now, filter })
+        : readKpis(this.store, scope, { days, release, now });
+    }, ROLLUP_TTL);
   }
 
+  /** Exact from the rollups; with a filter, ≈ from the kept recordings' `issue_fps` (`estimated: true`). */
   async issues(
     scope: ReplayScope,
-    input: { days?: number; status?: string | null; cursor?: string | null; limit?: number } = {},
+    input: { days?: number; status?: string | null; cursor?: string | null; limit?: number; filter?: ReplayFilter | null } = {},
   ): Promise<ReplayPage<ReplayIssueDto>> {
     const days = clampDays(input.days);
     const offset = decodeOffsetCursor(input.cursor);
+    const filter = input.filter;
     const keys = await replayReadKeys(this.env, scope);
-    const key = `${keys.issues(days, input.status ?? null, String(offset))}:${input.limit ?? '-'}`;
-    return getOrSetCached(this.env, key, () =>
-      readIssues(this.store, scope, { days, status: input.status, offset, limit: input.limit, now: this.clock() }), ROLLUP_TTL);
+    const key = keys.issues(days, input.status ?? null, String(offset), input.limit ?? null, filterCacheKey(filter));
+    return getOrSetCached(this.env, key, () => {
+      const now = this.clock();
+      return hasFilter(filter)
+        ? readIssuesEstimated(this.env, this.db, this.store, scope, { days, status: input.status, offset, limit: input.limit, now, filter })
+        : readIssues(this.store, scope, { days, status: input.status, offset, limit: input.limit, now });
+    }, ROLLUP_TTL);
   }
 
   async issue(scope: ReplayScope, issueId: string, input: { days?: number } = {}): Promise<ReplayIssueDetailDto> {
@@ -197,11 +217,16 @@ export class ReplayReadService {
       readIssue(this.store, scope, { issueId, days, now: this.clock() }), ROLLUP_TTL);
   }
 
-  /** Who is on the site now (seen in the last minute). Cached per 5-second bucket. */
+  /**
+   * Who is on the site now (seen in the last minute). Held in the isolate (L1) for
+   * five seconds and NEVER written to KV: KV cannot expire under 60 s, so a KV entry
+   * per 5-second bucket would be a write every poll that nothing reads twice.
+   * `getOrSetCached` with no binding is exactly L1 + single-flight.
+   */
   async live(scope: ReplayScope): Promise<ReplayLiveDto> {
-    const now = this.clock();
     const keys = await replayReadKeys(this.env, scope);
-    return getOrSetCached(this.env, keys.live(Math.floor(now.getTime() / LIVE_BUCKET_MS)), async () => {
+    return getOrSetCached(undefined, keys.live(), async () => {
+      const now = this.clock();
       const rows = await this.store
         .select()
         .from(replayLive)
@@ -227,6 +252,6 @@ export class ReplayReadService {
           recordingId: row.recordingId,
         })),
       };
-    }, { kvTtlSeconds: 60, l1TtlMs: LIVE_BUCKET_MS });
+    }, { l1TtlMs: LIVE_TTL_MS });
   }
 }

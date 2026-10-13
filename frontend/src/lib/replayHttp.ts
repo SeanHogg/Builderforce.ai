@@ -34,7 +34,16 @@ export function shared<T>(key: string, load: () => Promise<T>): Promise<T> {
   return getOrSetClientCached(`replay:${key}`, () => load(), { ttlMs: 0 });
 }
 
-export function listOf<T>(body: T[] | { items: T[] } | null | undefined): T[] {
-  if (Array.isArray(body)) return body;
-  return body?.items ?? [];
+/**
+ * A list answered bare, as `{ items }`, or (with `key`) under its own name —
+ * the ONE unwrapper every Insights / capability client shares.
+ */
+export function listOf<T>(body: T[] | { items: T[] } | null | undefined): T[];
+export function listOf<T>(body: unknown, key: string): T[];
+export function listOf<T>(body: unknown, key?: string): T[] {
+  if (Array.isArray(body)) return body as T[];
+  if (!body || typeof body !== 'object') return [];
+  const record = body as Record<string, unknown>;
+  const list = record.items ?? (key === undefined ? undefined : record[key]);
+  return Array.isArray(list) ? (list as T[]) : [];
 }

@@ -11,6 +11,11 @@
  *
  * Erasers run one after another and each reports its own count, so the audit row
  * says what each store actually lost.
+ *
+ * Every eraser receives the erase's {@link VisitorEraseContext}: the platform's own
+ * stores (prompts, the journey) are Builderforce's and ignore it; Insights holds
+ * CUSTOMERS' recordings too, so its eraser reaches only `replayScope` (D17) — the
+ * operator's erase passes the Builderforce workspace(s) it is a member of.
  */
 
 import { eq } from 'drizzle-orm';
@@ -19,13 +24,19 @@ import type { Db } from '../../infrastructure/database/connection';
 import { marketingSessionPrompts } from '../../infrastructure/database/schema';
 import { activityDatabase } from '../activity/activityLog';
 import { forgetVisitorActivity } from '../marketing/visitorActivity';
-import { eraseReplayVisitor } from '../replay/replayVisitorEraser';
+import { eraseReplayVisitor, type ReplayEraseScope } from '../replay/replayVisitorEraser';
+
+/** What one erase may reach beyond the platform's own stores. */
+export interface VisitorEraseContext {
+  /** The Insights recordings in reach — never every tenant (D17). */
+  replayScope: ReplayEraseScope;
+}
 
 export interface VisitorDataEraser {
   /** Stable id — the key of this eraser's count in the audit metadata. */
   id: string;
   /** Delete this store's data for the visitor; returns rows (or recordings) removed. */
-  erase(env: Env, db: Db, visitorId: string): Promise<number>;
+  erase(env: Env, db: Db, visitorId: string, context: VisitorEraseContext): Promise<number>;
 }
 
 export const VISITOR_DATA_ERASERS: readonly VisitorDataEraser[] = [
@@ -47,9 +58,9 @@ export const VISITOR_DATA_ERASERS: readonly VisitorDataEraser[] = [
     erase: (env, db, visitorId) => forgetVisitorActivity(activityDatabase(env, db), visitorId),
   },
   {
-    // Their kept Insights recordings: rows, summaries and R2 bytes.
+    // Their kept Insights recordings: rows, summaries and R2 bytes — inside the scope only.
     id: 'replay',
-    erase: (env, db, visitorId) => eraseReplayVisitor(env, db, visitorId),
+    erase: (env, db, visitorId, context) => eraseReplayVisitor(env, db, visitorId, context.replayScope),
   },
 ];
 
@@ -65,12 +76,13 @@ export async function eraseVisitorData(
   env: Env,
   db: Db,
   visitorId: string,
+  context: VisitorEraseContext,
   erasers: readonly VisitorDataEraser[] = VISITOR_DATA_ERASERS,
 ): Promise<VisitorErasure> {
   const byEraser: Record<string, number> = {};
   let erased = 0;
   for (const eraser of erasers) {
-    const n = await eraser.erase(env, db, visitorId);
+    const n = await eraser.erase(env, db, visitorId, context);
     byEraser[eraser.id] = n;
     erased += n;
   }

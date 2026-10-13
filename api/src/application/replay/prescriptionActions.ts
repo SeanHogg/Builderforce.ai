@@ -14,12 +14,21 @@
  *                    for a pull request. Never anything live.
  *   test             a DRAFT A/B test, live vs the fix's preview (`prescriptionReleases`)
  *   start-test       a person starts it
- *   follow-up        preview who/what first; `confirm` enrols matched contacts
+ *   follow-up        preview who/what first (optionally a drafted NEW sequence); `confirm`
+ *                    enrols matched contacts (`prescriptionFollowUpAction.ts`)
  *   ticket           the brief as a ticket body (objection_pattern adds FAQ + talk track)
  *   dismiss          reason required; the sweep keeps the subject dismissed for 30 days
  *   publish-preview  the existing pointer move, by a person
  *   revert           republish the release that was live before (offered only on `worse`)
  *   copy-prompt / apply-page / apply-in-composer   the §5.2 page actions (`prescriptionPageActions.ts`)
+ *
+ * The row is CLAIMED before an action runs: one interactive transaction
+ * (`inTransaction`) takes `SELECT … FOR UPDATE` on it and re-checks its status, so a
+ * second, concurrent action on the same fix waits, then finds the status moved and
+ * answers 409 — it never creates a second ticket or dispatches a second run. The
+ * action's own writes (tasks, releases, other rows) go through `db`; only this row's
+ * columns are written through the transaction. A failure rolls back and releases
+ * the claim.
  */
 
 import { and, eq } from 'drizzle-orm';
@@ -30,7 +39,7 @@ import {
   type ReplayPrescriptionRouteAction,
 } from '@builderforce/interaction-contract';
 import type { Env } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
+import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import { ideAgents, projectRepositories, replayPrescriptions } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ConflictError, NotFoundError, ValidationError } from '../../domain/shared/errors';
@@ -49,7 +58,6 @@ import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { resolveHumanActor, SYSTEM_ACTOR, type ActorIdentity } from '../activity/activityLog';
 import { loadPrescriptionRow, toPrescriptionDto, type PrescriptionRow } from './prescriptionReads';
-import { enrolFollowUp, previewFollowUp } from './prescriptionFollowUp';
 import {
   createPrescriptionTest,
   hostedProjectOf,
@@ -63,6 +71,7 @@ import { ReplayHeatmapService } from './ReplayHeatmapService';
 import { getSiteForTenant, type ReplaySiteRecord } from './replaySites';
 import { recordReplayTrace, REPLAY_TRACE_VERBS, type ReplayTraceVerb } from './replayTrace';
 import { PAGE_PRESCRIPTION_ACTIONS } from './prescriptionPageActions';
+import { FOLLOW_UP_PRESCRIPTION_ACTION } from './prescriptionFollowUpAction';
 
 const DISMISS_REASON_MAX = 500;
 
@@ -91,6 +100,12 @@ export interface PrescriptionActionDef {
   action: ReplayPrescriptionRouteAction;
   verb: ReplayTraceVerb;
   run(ctx: ActionContext): Promise<ActionOutcome>;
+  /**
+   * True when this input only READS (a preview a person reviews before confirming):
+   * it runs without the row claim, so a slow read (a drafted sequence is a model
+   * call) never holds the prescription's row lock.
+   */
+  preview?(input: ReplayPrescriptionActionInput): boolean;
 }
 
 async function actorOf(ctx: ActionContext): Promise<ActorIdentity> {
@@ -246,24 +261,6 @@ const startTestAction: PrescriptionActionDef = {
   },
 };
 
-const followUp: PrescriptionActionDef = {
-  action: 'follow-up',
-  verb: REPLAY_TRACE_VERBS.prescriptionFollowUp,
-  async run(ctx) {
-    if (ctx.input.confirm !== true) {
-      // The draft and the people first; nothing is written until a person confirms.
-      return { set: {}, acted: false, result: { followUp: await previewFollowUp(ctx.env, ctx.db, ctx.scope, ctx.row, { actorId: ctx.actorId, now: ctx.now }) } };
-    }
-    const sequenceObjectId = typeof ctx.input.sequenceObjectId === 'string' ? ctx.input.sequenceObjectId : '';
-    if (!sequenceObjectId) throw new ValidationError('Choose the sequence to enrol into');
-    const enrolled = await enrolFollowUp(ctx.env, ctx.db, ctx.scope, ctx.row, { sequenceObjectId, contactIds: ctx.input.contactIds, now: ctx.now });
-    return {
-      set: { status: 'applied', actionKind: 'follow_up', refs: { ...ctx.refs, sequenceObjectId } },
-      result: { followUp: await previewFollowUp(ctx.env, ctx.db, ctx.scope, ctx.row, { actorId: ctx.actorId, now: ctx.now, enrolled }) },
-    };
-  },
-};
-
 const publishPreview: PrescriptionActionDef = {
   action: 'publish-preview',
   verb: REPLAY_TRACE_VERBS.prescriptionPublishPreview,
@@ -291,7 +288,7 @@ const revert: PrescriptionActionDef = {
 
 /** Every action, as data. */
 export const PRESCRIPTION_ACTIONS: readonly PrescriptionActionDef[] = [
-  fix, test, startTestAction, followUp, ticket, dismiss, publishPreview, revert,
+  fix, test, startTestAction, FOLLOW_UP_PRESCRIPTION_ACTION, ticket, dismiss, publishPreview, revert,
   ...PAGE_PRESCRIPTION_ACTIONS,
 ];
 const BY_ACTION = new Map(PRESCRIPTION_ACTIONS.map((a) => [a.action, a]));
@@ -315,28 +312,48 @@ export async function runPrescriptionAction(
   if (!dto.next.includes(def.action)) throw new ConflictError(`"${def.action}" is not open for this fix now`);
   const now = opts.now ?? new Date();
   const ctx: ActionContext = { env, db, scope, site, row, refs: dto.refs, input, actorId: opts.actorId, now };
-  const outcome = await def.run(ctx);
-  if (outcome.acted === false) return { prescription: dto, ...outcome.result };
 
-  const { refs, ...columns } = outcome.set;
-  const [updated] = await db
-    .update(replayPrescriptions)
-    .set({
-      ...columns,
-      ...(refs ? { actionRef: encodeActionRef(refs) } : {}),
-      decidedBy: columns.decidedBy ?? opts.actorId ?? row.decidedBy,
-      updatedAt: now,
-    })
-    .where(and(eq(replayPrescriptions.id, row.id), eq(replayPrescriptions.status, row.status)))
-    .returning();
-  if (!updated) throw new ConflictError('This fix changed while you were acting on it; reload it');
+  if (def.preview?.(input)) {
+    const outcome = await def.run(ctx);
+    return { prescription: dto, ...outcome.result };
+  }
+
+  const claimed = await inTransaction(db, async (tx) => {
+    // The claim: held until this transaction ends, so a concurrent action waits here.
+    const [current] = await tx
+      .select({ status: replayPrescriptions.status, actionRef: replayPrescriptions.actionRef })
+      .from(replayPrescriptions)
+      .where(and(eq(replayPrescriptions.id, row.id), eq(replayPrescriptions.siteId, scope.siteId)))
+      .limit(1)
+      .for('update');
+    if (!current || current.status !== row.status || current.actionRef !== row.actionRef) {
+      throw new ConflictError('This fix changed while you were acting on it; reload it');
+    }
+    const outcome = await def.run(ctx);
+    if (outcome.acted === false) return { outcome, updated: null };
+    const { refs, ...columns } = outcome.set;
+    const [updated] = await tx
+      .update(replayPrescriptions)
+      .set({
+        ...columns,
+        ...(refs ? { actionRef: encodeActionRef(refs) } : {}),
+        decidedBy: columns.decidedBy ?? opts.actorId ?? row.decidedBy,
+        updatedAt: now,
+      })
+      .where(and(eq(replayPrescriptions.id, row.id), eq(replayPrescriptions.status, row.status)))
+      .returning();
+    if (!updated) throw new ConflictError('This fix changed while you were acting on it; reload it');
+    return { outcome, updated };
+  });
+  const { outcome, updated } = claimed;
+  if (!updated) return { prescription: dto, ...outcome.result };
 
   await recordReplayTrace(env, db, {
     tenantId: scope.tenantId,
     siteId: scope.siteId,
     verb: def.verb,
     actorId: opts.actorId,
-    metadata: { prescriptionId: row.id, ruleId: row.ruleId, ...(outcome.result ?? {}), followUp: undefined, prompt: undefined, selectors: undefined },
+    metadata: { prescriptionId: row.id, ruleId: row.ruleId, ...(outcome.result ?? {}), followUp: undefined, prompt: undefined, selectors: undefined, targets: undefined },
   });
   await bumpSiteVersion(env, scope.siteId);
   return { prescription: toPrescriptionDto(updated, 0, context), ...outcome.result };

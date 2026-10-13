@@ -14,6 +14,7 @@ import { isProofSite } from '../../application/realization/proofSite';
 import type { ReplayScope } from '../../domain/replay/replayScope';
 import { ValidationError } from '../../domain/shared/errors';
 import { requireFeature } from '../middleware/featureGate';
+import { refuseInsightsDuringEmulation } from '../middleware/insightsEmulationGuard';
 import { optionalTenantId, requireTenantId } from '../middleware/tenantContext';
 
 /**
@@ -21,8 +22,11 @@ import { optionalTenantId, requireTenantId } from '../middleware/tenantContext';
  * reads is its own live proof site (D12, §5.3.1): a proof is recorded with no install,
  * so its founder can watch the visitors it is graded on. Same clause as
  * `replayEntitledForSite`, read through the same cached `isProofSite`.
+ *
+ * 403 before anything else under superadmin emulation (D17: no superadmin data path).
  */
 export const insightsGate: MiddlewareHandler<HonoEnv> = async (c, next) => {
+  refuseInsightsDuringEmulation(c);
   const gate = await requireFeature(c, 'sessionReplay');
   if (gate && !(await readsOwnProofSite(c))) return gate;
   await next();
@@ -37,8 +41,13 @@ async function readsOwnProofSite(c: Context<HonoEnv>): Promise<boolean> {
   return !!site && site.tenantId === tenantId && isProofSite(c.env, db, site);
 }
 
-/** The caller's scope for `?site=`: 400 when absent, 403 when not this workspace's. */
+/**
+ * The caller's scope for `?site=`: 400 when absent, 403 when not this workspace's,
+ * and 403 under emulation — refused here too, so a route that forgot `insightsGate`
+ * still cannot read a customer's site through an emulated session.
+ */
 export async function replayScopeOf(c: Context<HonoEnv>): Promise<ReplayScope> {
+  refuseInsightsDuringEmulation(c);
   const tenantId = requireTenantId(c);
   const siteId = c.req.query('site');
   if (!siteId) throw new ValidationError('site is required');

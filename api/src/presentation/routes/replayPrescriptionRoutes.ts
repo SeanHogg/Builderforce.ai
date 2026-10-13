@@ -31,6 +31,16 @@ const ActionBody = z.object({
   sequenceObjectId: z.string().max(64).nullish(),
   contactIds: z.array(z.string().max(64)).max(500).optional(),
   confirm: z.boolean().optional(),
+  draftSequence: z.boolean().optional(),
+  // The person's edited draft; `cleanSequenceDraft` re-validates and clamps it.
+  newSequence: z.object({
+    name: z.string().max(200),
+    steps: z.array(z.object({
+      subject: z.string().max(500),
+      body: z.string().max(5_000),
+      delayDays: z.number().int().min(0).max(365),
+    })).min(1).max(3),
+  }).nullish(),
   audience: z.enum(['composer', 'coding_agent', 'site_builder']).optional(),
 });
 

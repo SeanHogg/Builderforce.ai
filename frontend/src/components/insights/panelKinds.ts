@@ -19,16 +19,18 @@ import { IssueOverviewTab, IssueRecordingsTab } from './kinds/IssueKind';
 import { IssuesKind } from './kinds/IssuesKind';
 import { LiveKind } from './kinds/LiveKind';
 import { RecordingJourneyTab, RecordingLeadTab, RecordingReplayTab } from './kinds/RecordingKind';
-import { RouteHeatTab } from './kinds/RouteKind';
+import { RouteHeatTab, RouteReviewTab } from './kinds/RouteKind';
 import { MetricKind } from './kinds/MetricKind';
 import { FunnelEventsTab, FunnelFlowTab, FunnelStepsTab } from './kinds/FunnelKind';
 import { FunnelEditKind } from './kinds/FunnelEditKind';
 import { FixChangeTab, FixMeasureTab, IssueFixTab, IssueHistoryTab } from './kinds/FixKind';
 import { FixesKind } from './kinds/FixesKind';
+import { FixPromptTab } from './kinds/FixPromptTab';
+import { PagesKind } from './kinds/PagesKind';
 import { ReleaseKind } from './kinds/ReleaseKind';
 
 export type InsightPanelKind =
-  | 'recording' | 'issue' | 'issues' | 'fix' | 'fixes' | 'route' | 'metric'
+  | 'recording' | 'issue' | 'issues' | 'fix' | 'fixes' | 'pages' | 'route' | 'metric'
   | 'funnel' | 'funnel_edit' | 'live' | 'proof' | 'release' | 'sites' | 'plan';
 
 export type InsightPanelLevel = {
@@ -89,24 +91,28 @@ export const INSIGHT_PANEL_KINDS: ReadonlyArray<InsightPanelKindDef> = [
   },
   { kind: 'issues', labelKey: 'kinds.issues', tabs: [{ id: 'main', labelKey: 'kinds.issues', Component: IssuesKind }] },
   {
-    // One prescription (S4e). S4f adds `{ id: 'prompt', … }` between these two.
+    // One prescription (S4e); its improvement prompt (S4f).
     kind: 'fix',
     labelKey: 'kinds.fix',
     tabs: [
       { id: 'change', labelKey: 'fix.tabs.change', Component: FixChangeTab },
+      { id: 'prompt', labelKey: 'fix.tabs.prompt', Component: FixPromptTab },
       { id: 'measure', labelKey: 'fix.tabs.measure', Component: FixMeasureTab },
     ],
   },
   // Every fix, from Do next's "View all" (S4e). The level id is the area to open on.
   { kind: 'fixes', labelKey: 'fixes.kind', tabs: [{ id: 'main', labelKey: 'fixes.kind', Component: FixesKind }] },
+  // The key pages ranked by opportunity, from Do next's header (S4f). A row opens `route:<path>:review`.
+  { kind: 'pages', labelKey: 'pages.kind', tabs: [{ id: 'main', labelKey: 'pages.kind', Component: PagesKind }] },
   // One release's improvement ledger, from the score-by-release strip (S4e).
   { kind: 'release', labelKey: 'kinds.release', tabs: [{ id: 'main', labelKey: 'kinds.release', Component: ReleaseKind }] },
   {
-    // One page: its heat now; S4f adds `{ id: 'review', … }` to these tabs.
+    // One page: its heat, and its page review (S4f).
     kind: 'route',
     labelKey: 'route.kind',
     tabs: [
       { id: 'heat', labelKey: 'route.tabs.heat', Component: RouteHeatTab },
+      { id: 'review', labelKey: 'route.tabs.review', Component: RouteReviewTab },
     ],
   },
   // The Overview dashboard, opened from a KPI tile (S4c).

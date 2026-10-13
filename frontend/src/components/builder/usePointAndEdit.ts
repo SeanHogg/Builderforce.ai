@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { previewErrorFrom, recordBuildFailure } from '@/lib/buildDiagnostics';
 import { VISUAL_ARM_MESSAGE, isVisualUnresolved, visualSelectionFrom } from '@/lib/visualEditor';
-import { clearPreviewPick, setPreviewPick } from '@/lib/workspace/previewPick';
+import { clearPreviewPicks, setPreviewPick } from '@/lib/workspace/previewPick';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 
 /**
@@ -54,7 +54,7 @@ export function usePointAndEdit({ store, appName, previewUrl }: {
       const selected = visualSelectionFrom(event.data);
       if (!selected) return;
       setUnresolved(false);
-      setPreviewPick({ ...selected, workspaceId: store.id, appName });
+      setPreviewPick({ owner: store.id, appName, anchor: { kind: 'source', ...selected } });
       arm(false);
     };
     window.addEventListener('message', onMessage);
@@ -62,7 +62,7 @@ export function usePointAndEdit({ store, appName, previewUrl }: {
   }, [previewUrl, store.id, appName, arm]);
 
   // A pick never outlives the preview it points into.
-  useEffect(() => () => clearPreviewPick({ workspaceId: store.id }), [store.id]);
+  useEffect(() => () => clearPreviewPicks({ owner: store.id }), [store.id]);
 
   // Re-arm after a reload: the overlay is a fresh script in a fresh document and
   // has no memory of having been armed before the dev server restarted it.

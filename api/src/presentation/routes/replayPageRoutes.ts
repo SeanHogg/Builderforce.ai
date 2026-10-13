@@ -6,7 +6,7 @@
  *   GET  /pages/review?site&path                       ReplayPageReviewDto
  *   POST /pages/capture?site                           ReplayPageCaptureResultDto   MANAGER, once an hour (429)
  *   GET  /pages/captures/:captureId/:asset?site[&prescription]   screenshot | fold | rects | after-desktop | after-phone
- *   GET  /pages/prompt?site&path&audience              ReplayImprovementPromptDto (every accepted fix on the page)
+ *   GET  /pages/prompt?site&path&audience[&ids]        ReplayImprovementPromptDto (every accepted fix on the page, or the `ids` among them)
  *   GET  /prescriptions/:prescriptionId/prompt?site&audience     ReplayImprovementPromptDto
  *   GET  /releases/:releaseKey/preview?site            ReplayPreviewUrlDto (a hosted release, before it is published)
  *   GET  /sequences?site                               ReplaySequenceChoiceDto[]
@@ -81,7 +81,8 @@ export function createReplayPageRoutes(): Hono<HonoEnv> {
 
   router.get('/pages/prompt', authMiddleware, insightsGate, async (c) => {
     const scope = await replayScopeOf(c);
-    return c.json(await pagePrompt(c.env, db(c), scope, c.req.query('path') ?? '', parseAudience(c.req.query('audience'))));
+    const ids = (c.req.query('ids') ?? '').split(',').map((id) => id.trim()).filter(Boolean).slice(0, 50);
+    return c.json(await pagePrompt(c.env, db(c), scope, c.req.query('path') ?? '', parseAudience(c.req.query('audience')), ids));
   });
 
   router.get('/prescriptions/:prescriptionId/prompt', authMiddleware, insightsGate, async (c) => {

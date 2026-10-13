@@ -17,6 +17,7 @@ vi.mock('../../application/replay/ReplayConfigService', () => ({
   ReplayConfigService: vi.fn(function ReplayConfigService() { return { config: mocks.config }; }),
 }));
 
+import { REPLAY_LIMITS } from '@builderforce/interaction-contract';
 import { createReplayIngestRoutes } from './replayIngestRoutes';
 import { ALLOWED_REQUEST_HEADERS, resolveAllowedOrigin } from '../middleware/cors';
 
@@ -55,6 +56,29 @@ describe('POST /v1/chunks', () => {
     }));
     const body = mocks.ingest.mock.calls[0]![0].body as ArrayBuffer;
     expect(new Uint8Array(body)).toEqual(new Uint8Array([1, 2, 3]));
+  });
+});
+
+describe('POST /v1/chunks — oversized', () => {
+  it('answers 202 and buffers nothing when the declared length is over the chunk limit', async () => {
+    const res = await app().request('/v1/chunks?site=bfr_abc', {
+      method: 'POST',
+      headers: { Origin: 'https://shop.example.com', 'Content-Encoding': 'gzip', 'Content-Length': String(REPLAY_LIMITS.maxChunkBytes + 1) },
+      body: new Uint8Array([1, 2, 3]),
+    }, {});
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(mocks.ingest).not.toHaveBeenCalled();
+  });
+
+  it('still ingests a chunk at the limit', async () => {
+    mocks.ingest.mockResolvedValue('counted');
+    await app().request('/v1/chunks?site=bfr_abc', {
+      method: 'POST',
+      headers: { 'Content-Length': '3' },
+      body: new Uint8Array([1, 2, 3]),
+    }, {});
+    expect(mocks.ingest).toHaveBeenCalledTimes(1);
   });
 });
 

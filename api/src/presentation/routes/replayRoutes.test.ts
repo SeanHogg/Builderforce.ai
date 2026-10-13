@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   getSiteForTenant: vi.fn(),
   recordReplayTrace: vi.fn(async () => {}),
   usageSnapshot: vi.fn(),
+  eraseReplayVisitor: vi.fn(),
 }));
 
 vi.mock('../middleware/authMiddleware', async (importOriginal) => {
@@ -36,6 +37,7 @@ vi.mock('../middleware/authMiddleware', async (importOriginal) => {
   const fakeAuth: MiddlewareHandler<HonoEnv> = async (c, next) => {
     c.set('tenantId', Number(c.req.header('x-tenant') ?? 7));
     c.set('userId', 'u1');
+    c.set('role', (c.req.header('x-role') ?? 'manager') as never);
     c.set('db', {} as never);
     await next();
   };
@@ -61,9 +63,10 @@ vi.mock('../../application/replay/ReplayReadService', () => ({
 vi.mock('../../application/replay/replaySites', () => ({ getSiteForTenant: mocks.getSiteForTenant }));
 vi.mock('../../application/replay/replayTrace', () => ({
   recordReplayTrace: mocks.recordReplayTrace,
-  REPLAY_TRACE_VERBS: { sessionViewed: 'replay.session.viewed', releaseRenamed: 'replay.release.renamed' },
+  REPLAY_TRACE_VERBS: { sessionViewed: 'replay.session.viewed', releaseRenamed: 'replay.release.renamed', visitorErased: 'replay.visitor.erased' },
 }));
 vi.mock('../../application/replay/replayUsage', () => ({ usageSnapshot: mocks.usageSnapshot }));
+vi.mock('../../application/replay/replayVisitorEraser', () => ({ eraseReplayVisitor: mocks.eraseReplayVisitor }));
 
 import { errorHandler } from '../middleware/errorHandler';
 import { createReplayRoutes } from './replayRoutes';
@@ -84,6 +87,7 @@ beforeEach(() => {
   for (const fn of Object.values(mocks.read)) fn.mockReset();
   mocks.recordReplayTrace.mockClear();
   mocks.usageSnapshot.mockReset();
+  mocks.eraseReplayVisitor.mockReset();
   mocks.getSiteForTenant.mockReset();
   // The application rule: only workspace 7 owns OWN_SITE; anything else is one 403.
   mocks.getSiteForTenant.mockImplementation(async (_env: unknown, _db: unknown, tenantId: number, siteId: string) => {
@@ -178,6 +182,36 @@ describe('releases', () => {
     expect(mocks.read.renameRelease).toHaveBeenCalledWith({ tenantId: 7, siteId: OWN_SITE }, 'abc', 'Spring');
     expect(mocks.recordReplayTrace).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ verb: 'replay.release.renamed' }));
   });
+
+  it('needs MANAGER to rename a release', async () => {
+    const res = await call(`/releases/abc?site=${OWN_SITE}`, {
+      method: 'PATCH', body: JSON.stringify({ label: 'Spring' }), headers: { 'x-role': 'developer' },
+    });
+    expect(res.status).toBe(403);
+    expect(mocks.read.renameRelease).not.toHaveBeenCalled();
+  });
+});
+
+describe('the filter reaches the KPIs and the issues (≈ under a filter)', () => {
+  const PHONES = { all: [{ field: 'device', op: 'eq', value: 'phone' }] };
+
+  it('parses f.* into the KPI read', async () => {
+    mocks.read.kpis.mockResolvedValue({ sessions: 4, estimated: true });
+    const res = await call(`/kpis?site=${OWN_SITE}&days=7&release=r2&f.device.eq=phone`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ estimated: true });
+    expect(mocks.read.kpis).toHaveBeenCalledWith({ tenantId: 7, siteId: OWN_SITE }, { days: 7, release: 'r2', filter: PHONES });
+  });
+
+  it('parses f.* into the issues read', async () => {
+    mocks.read.issues.mockResolvedValue({ items: [], nextCursor: null, estimated: true });
+    const res = await call(`/issues?site=${OWN_SITE}&status=new&limit=6&f.device.eq=phone`);
+    expect(res.status).toBe(200);
+    expect(mocks.read.issues).toHaveBeenCalledWith(
+      { tenantId: 7, siteId: OWN_SITE },
+      expect.objectContaining({ status: 'new', limit: 6, filter: PHONES }),
+    );
+  });
 });
 
 describe('GET /usage', () => {
@@ -186,5 +220,25 @@ describe('GET /usage', () => {
     const res = await call('/usage');
     expect(res.status).toBe(200);
     expect(mocks.usageSnapshot).toHaveBeenCalledWith({}, {}, 7);
+  });
+});
+
+describe('DELETE /visitors/:visitorId', () => {
+  it('erases the visitor inside the caller site only, and traces replay.visitor.erased', async () => {
+    mocks.eraseReplayVisitor.mockResolvedValue(3);
+    const res = await call(`/visitors/visitor_0001?site=${OWN_SITE}`, { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ visitorId: 'visitor_0001', erased: 3 });
+    expect(mocks.eraseReplayVisitor).toHaveBeenCalledWith({}, {}, 'visitor_0001', { tenantId: 7, siteId: OWN_SITE });
+    expect(mocks.recordReplayTrace).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({
+      verb: 'replay.visitor.erased', tenantId: 7, siteId: OWN_SITE, metadata: { visitorId: 'visitor_0001', erased: 3 },
+    }));
+  });
+
+  it('needs MANAGER, the caller own site, and a well-formed id', async () => {
+    expect((await call(`/visitors/visitor_0001?site=${OWN_SITE}`, { method: 'DELETE', headers: { 'x-role': 'developer' } })).status).toBe(403);
+    expect((await call(`/visitors/visitor_0001?site=${OTHER_SITE}`, { method: 'DELETE' })).status).toBe(403);
+    expect((await call(`/visitors/bad!?site=${OWN_SITE}`, { method: 'DELETE' })).status).toBe(400);
+    expect(mocks.eraseReplayVisitor).not.toHaveBeenCalled();
   });
 });

@@ -44,7 +44,12 @@ export function IssueStatusTabs({ value, onChange }: { value: string; onChange: 
   );
 }
 
-export function IssueRows({ issues, onOpen }: { issues: readonly ReplayIssueDto[]; onOpen: (issue: ReplayIssueDto) => void }) {
+/** `estimated`: the list answered a filter from kept recordings — sessions print ≈ (D15/D18). */
+export function IssueRows({ issues, onOpen, estimated = false }: {
+  issues: readonly ReplayIssueDto[];
+  onOpen: (issue: ReplayIssueDto) => void;
+  estimated?: boolean;
+}) {
   const t = useTranslations('insights.issues');
   const fmt = useFormat();
   return (
@@ -74,7 +79,9 @@ export function IssueRows({ issues, onOpen }: { issues: readonly ReplayIssueDto[
                   </span>
                 </button>
               </td>
-              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmt.number(issue.sessions)}</td>
+              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                {estimated ? t('approx', { value: fmt.number(issue.sessions) }) : fmt.number(issue.sessions)}
+              </td>
               <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmt.percent(issue.share, 1)}</td>
               <td>
                 <Sparkline values={issue.sparkline} width={72} height={20} color="var(--accent)" ariaLabel={t('trendAria', { title: issue.title })} />

@@ -1504,7 +1504,8 @@
       "where": "Picked in the preview: {file}, line {line}",
       "aria": "Picked element:",
       "remove": "Remove the picked element",
-      "unresolved": "That element can't be traced to its source. Describe it in the prompt instead."
+      "unresolved": "That element can't be traced to its source. Describe it in the prompt instead.",
+      "whereSelector": "On {page}: {selector}"
     },
     "releases": {
       "title": "Previous versions",
@@ -3565,7 +3566,8 @@
       "seconds": "{value} s",
       "versus": "vs {value}",
       "trendAria": "{label} trend",
-      "openAria": "Open {label}"
+      "openAria": "Open {label}",
+      "approx": "≈ {value}"
     },
     "issues": {
       "title": "Issues",
@@ -3607,7 +3609,9 @@
       },
       "representatives": "Representative recordings",
       "repAria": "Open representative recording {rank}",
-      "recordingsOfIssue": "Recordings that hit this issue on {route}"
+      "recordingsOfIssue": "Recordings that hit this issue on {route}",
+      "approx": "≈ {value}",
+      "estimatedNote": "≈ Estimated from the recordings kept for this filter."
     },
     "panel": {
       "crumbRoot": "Insights",
@@ -3686,14 +3690,19 @@
     "route": {
       "kind": "Page",
       "tabs": {
-        "heat": "Heat"
+        "heat": "Heat",
+        "review": "Review"
       },
-      "openAria": "Open the page {route}"
+      "openAria": "Open the page {route}",
+      "review": {
+        "open": "Open the page review"
+      }
     },
     "fix": {
       "tabs": {
         "change": "Change",
-        "measure": "Measure"
+        "measure": "Measure",
+        "prompt": "Prompt"
       },
       "issueTabs": {
         "fix": "Fix",
@@ -3727,7 +3736,9 @@
       "areaAll": "All ({count})",
       "areaChip": "{area} ({count})",
       "areaAria": "Filter fixes by area",
-      "loadMore": "Show more"
+      "loadMore": "Show more",
+      "applyAll": "Apply all",
+      "applyAllTitle": "One prompt for {route}"
     },
     "release": {
       "title": "Release {label}",
@@ -3741,6 +3752,25 @@
         "label": "{label}: {count, plural, one {# fix} other {# fixes}}, {worked} worked, {worse} made it worse",
         "empty": "No release has shipped a fix yet."
       }
+    },
+    "pages": {
+      "kind": "Pages",
+      "open": "Pages",
+      "empty": "No key pages yet. They appear once the site has visits and its pages are captured.",
+      "openAria": "Open the review of {path}",
+      "thumbAlt": "The first screen of {path}",
+      "noFix": "No open fix",
+      "opportunity": "≈ {value} to win",
+      "noScore": "Not scored",
+      "score": "Score {score}"
+    },
+    "eraseVisitor": {
+      "action": "Erase this visitor",
+      "erasing": "Erasing…",
+      "confirmTitle": "Erase this visitor?",
+      "confirmMessage": "Every recording of this visitor on this site is deleted, with its AI summaries. This cannot be undone.",
+      "confirm": "Erase",
+      "done": "{count, plural, one {# recording erased.} other {# recordings erased.}}"
     }
   },
   "cloudAgentForm": {
@@ -34449,9 +34479,73 @@
         "proof_missed_reason": {
           "title": "{proof} missed its target: {reason}",
           "description": "{share}% of visits to {route} hit this issue while the proof was measured."
+        },
+        "seo_title_length": {
+          "title": "The title of {route} is {length} characters",
+          "description": "Search results show titles of {min} to {max} characters in full; a shorter one wastes the space, a longer one is cut off."
+        },
+        "seo_missing_meta_description": {
+          "title": "{route} has a {length}-character meta description",
+          "description": "Without a description of at least {min} characters, search engines write their own snippet from the page."
+        },
+        "seo_multiple_h1": {
+          "title": "{route} has {count} main headings",
+          "description": "One H1 tells search engines and screen readers what the page is about; several blur it."
+        },
+        "seo_no_structured_data": {
+          "title": "{route} has no structured data",
+          "description": "A page of {words} words with no JSON-LD cannot earn rich results in search."
+        },
+        "seo_low_ctr_high_impressions": {
+          "title": "{route} is seen in search but rarely clicked",
+          "description": "{impressions} impressions brought {clicks} clicks ({ctr}% against the site’s {siteCtr}%): the title and description do not earn the click."
+        },
+        "content_no_value_prop_above_fold": {
+          "title": "The first screen of {route} does not say what it offers",
+          "description": "On {device, select, phone {phones} other {desktops}} the {words} words above the fold carry no value proposition, so visitors leave before they learn why to stay."
+        },
+        "content_cta_vague": {
+          "title": "The call to action “{label}” on {route} does not say what happens",
+          "description": "A label that names the outcome gets more clicks than a generic one ({ctas} calls to action on the page)."
+        },
+        "content_readability": {
+          "title": "{route} reads at grade {grade}",
+          "description": "Text above grade {max} loses readers; shorter sentences and plainer words keep them."
+        },
+        "content_missing_trust": {
+          "title": "{route} asks visitors to act without proof",
+          "description": "The page has {ctas} calls to action and {fields} form fields but no testimonial, review, rating, logo or guarantee."
+        },
+        "perf_lcp_poor": {
+          "title": "The main content of {route} takes {p75} ms to appear",
+          "description": "Real visits on {device, select, phone {phones} other {desktops}} wait longer than the {max} ms line before the largest element shows."
+        },
+        "perf_cls_poor": {
+          "title": "The layout of {route} shifts while it loads ({p75})",
+          "description": "Content that moves after it appears (above {max} on {device, select, phone {phones} other {desktops}}) makes visitors click the wrong thing."
+        },
+        "perf_heavy_hero_image": {
+          "title": "The first image on {route} weighs {kb} KB",
+          "description": "An above-the-fold image over {maxKb} KB delays the first screen; compress it or serve a smaller size."
+        },
+        "a11y_contrast": {
+          "title": "{count, plural, one {# element on {route} fails} other {# elements on {route} fail}} colour contrast",
+          "description": "The weakest pair reaches {ratio}:1 where {required}:1 is needed — hard to read for many visitors, and in bright light for everyone."
+        },
+        "a11y_tap_targets": {
+          "title": "{count, plural, one {# tap target on {route} is} other {# tap targets on {route} are}} too small on phones",
+          "description": "Targets under {min} × {min} px are easy to miss with a thumb."
+        },
+        "a11y_missing_labels": {
+          "title": "{count, plural, one {# field on {route} has} other {# fields on {route} have}} no label",
+          "description": "A field without a label cannot be named by a screen reader, and is easy to fill in wrong."
+        },
+        "vision_observed": {
+          "title": "{observation}",
+          "description": "Observed on the captured page and kept because the page’s own numbers support it."
         }
       },
-      "observed": "Observed",
+      "observed": "Observed from the screen",
       "rankAria": "Rank {rank}",
       "evidenceTitle": "Seen in",
       "evidenceItem": "Recording {n} at {time}",
@@ -34563,10 +34657,26 @@
         "enrolled": "{count, plural, one {# contact enrolled} other {# contacts enrolled}}",
         "draftTitle": "Drafted first touch (sent only from the sequence, after you edit it)",
         "sequenceLabel": "Sequence to enrol into",
-        "sequenceHint": "Paste the sequence card’s link or id",
         "enrol": "{count, plural, one {Enrol # contact} other {Enrol # contacts}}",
         "cancel": "Cancel",
-        "contactAria": "Enrol {name}"
+        "contactAria": "Enrol {name}",
+        "noSequences": "This workspace has no sequence yet. Create one on a canvas to follow up.",
+        "sequencesLoading": "Loading sequences…",
+        "sequenceChoose": "Choose a sequence",
+        "modeLabel": "Sequence",
+        "modeExisting": "Use an existing sequence",
+        "modeNew": "Draft a new sequence",
+        "createAndEnrol": "{count, plural, one {Create sequence and enrol # contact} other {Create sequence and enrol # contacts}}",
+        "newSequence": {
+          "hint": "Drafted from the objection this fix cites. Edit it now: it is created as a draft sequence, and nothing is sent until you start it on its board.",
+          "nameLabel": "Sequence name",
+          "stepTitle": "Step {n}",
+          "delayLabel": "Days after enrolment",
+          "subjectLabel": "Subject",
+          "bodyLabel": "Message",
+          "drafting": "Drafting a sequence from the finding…",
+          "retry": "Draft the sequence"
+        }
       },
       "project": {
         "label": "Project",
@@ -34578,7 +34688,10 @@
         "ticket": "Ticket #{taskId} created.",
         "test": "A/B test drafted. Start it when you are ready.",
         "enrolled": "{count, plural, one {# contact enrolled} other {# contacts enrolled}}",
-        "done": "Done."
+        "done": "Done.",
+        "composer": "The prompt is in the composer. Review it and press send.",
+        "page": "{count, plural, one {# fix bundled into one prompt.} other {# fixes bundled into one prompt.}}",
+        "sequenceCreated": "“{name}” created as a draft sequence with {count, plural, one {# contact} other {# contacts}}. Start it on its board to send."
       },
       "maker": {
         "fix": "Made by a coding agent",
@@ -34589,7 +34702,18 @@
         "publish-preview": "Ready to publish",
         "revert": "Ready to revert"
       },
-      "openAria": "Open fix: {title}"
+      "openAria": "Open fix: {title}",
+      "agent": {
+        "label": "Coding agent",
+        "none": "No coding agent can work on this site, so Fix it creates a ticket only.",
+        "ticketOnly": "Ticket only"
+      },
+      "applyPage": {
+        "title": "Apply every fix on this page",
+        "body": "Every accepted fix on the page goes into one prompt and is marked applied. Choose who the prompt is for.",
+        "submit": "Apply to the page",
+        "cancel": "Cancel"
+      }
     },
     "fixes": {
       "overviewTitle": "Top fixes",
@@ -34597,6 +34721,128 @@
       "playerTitle": "Fixes for {route}",
       "proofTitle": "The prescribed fix",
       "empty": "No fix prescribed for this page yet."
+    },
+    "prompt": {
+      "audienceAria": "Who the prompt is for",
+      "audience": {
+        "composer": "Builderforce composer",
+        "coding_agent": "Coding agent",
+        "site_builder": "Site builder"
+      },
+      "textAria": "Improvement prompt",
+      "copy": "Copy prompt",
+      "copied": "Copied",
+      "copyFailed": "The clipboard is not available here. Select the text and copy it.",
+      "markedApplied": "Copied, and marked as applied. The next release is measured against it.",
+      "noneChosen": "Choose at least one fix to build a prompt.",
+      "pageTitle": "One prompt for this page",
+      "loading": "Writing the prompt…",
+      "bundled": "{count, plural, one {# fix in this prompt} other {# fixes in this prompt}}",
+      "applyInComposer": "Apply in composer",
+      "intro": "Hand this fix to any AI: the prompt says what to change, why, what must not change and how the result is measured.",
+      "pageBody": "Bundle every accepted fix on {route} into one prompt instead.",
+      "applyPage": "Apply to the page"
+    },
+    "page": {
+      "noCapture": "No capture of this page yet.",
+      "imageFailed": "The screenshot could not be loaded.",
+      "imageLoading": "Loading the screenshot…",
+      "calloutAria": "Change {n}: {element}",
+      "beforeAfter": {
+        "title": "Before and after",
+        "beforeAlt": "The page as it is now, with the changes numbered",
+        "afterAlt": "The page with the changes applied",
+        "afterPending": "The page with this fix applied has not been rendered yet.",
+        "sliderAria": "Slide between before and after",
+        "toggleAria": "Show before or after",
+        "before": "Before",
+        "after": "After",
+        "modeAria": "How to compare",
+        "mode": {
+          "slider": "Slider",
+          "toggle": "Toggle",
+          "side": "Side by side"
+        }
+      },
+      "device": {
+        "aria": "Device",
+        "desktop": "Desktop",
+        "phone": "Phone"
+      },
+      "serp": {
+        "title": "In search results",
+        "before": "Now",
+        "after": "With the fix",
+        "jsonLdTitle": "Structured data to add",
+        "jsonLdAria": "Proposed JSON-LD"
+      },
+      "score": {
+        "title": "Page score",
+        "none": "Not scored yet.",
+        "ringAria": "{label}: {score} out of 100",
+        "ringNone": "{label}: no data",
+        "part": {
+          "total": "Total",
+          "conversion": "Conversion",
+          "frustration": "Frustration",
+          "seo": "SEO",
+          "performance": "Performance",
+          "accessibility": "Accessibility"
+        },
+        "byRelease": "Score by release",
+        "releaseRow": "{release}: {score}"
+      },
+      "facts": {
+        "title": "What the capture found",
+        "none": "The capture carries no facts yet.",
+        "pass": "OK",
+        "fail": "Fix",
+        "group": {
+          "seo": "SEO",
+          "content": "Content",
+          "performance": "Performance",
+          "accessibility": "Accessibility"
+        },
+        "titleLength": "Title: {value} characters",
+        "metaDescriptionLength": "Meta description: {value} characters",
+        "h1Count": "Main headings: {value}",
+        "structuredData": "Structured data types: {value}",
+        "imagesWithoutAlt": "Images without alt text: {value}",
+        "aboveFoldWords": "Words above the fold: {value}",
+        "ctaAboveFold": "Calls to action above the fold: {value}",
+        "readabilityGrade": "Reading grade: {value}",
+        "trustSignals": "Trust signals: {value}",
+        "lcp": "Largest content (lab): {value} ms",
+        "cls": "Layout shift (lab): {value}",
+        "pageWeight": "Page weight: {value} KB",
+        "contrastFailures": "Contrast failures: {value}",
+        "smallTapTargets": "Small tap targets: {value}",
+        "missingLabels": "Fields without labels: {value}"
+      },
+      "capture": {
+        "request": "Request a capture now",
+        "requesting": "Requesting…",
+        "queued": "{count, plural, one {# capture queued.} other {# captures queued.}} The review updates when the runner is done.",
+        "limited": "Pages were captured less than an hour ago. Try again later.",
+        "unavailable": {
+          "runner_unavailable": "Captures need the page runner, which is not available on this deploy.",
+          "page_kit_unavailable": "The page runner’s kit is not published yet, so nothing was captured.",
+          "no_pages": "No key pages to capture yet: the site needs visits first.",
+          "no_origin": "The site has no address to capture from. Add an allowed domain first.",
+          "other": "Nothing was captured."
+        }
+      },
+      "loadFailed": "Could not load the page review.",
+      "loading": "Loading the page review…",
+      "noCaptures": "This page has not been captured yet. Captures run on each new release and weekly.",
+      "screenTitle": "The first screen",
+      "release": "release {release}",
+      "foldAlt": "The first screen of {path} on {device}",
+      "noDeviceCapture": "No {device} capture of this release.",
+      "fixesTitle": "Fixes for this page",
+      "noFixes": "No fixes for this page.",
+      "includeInPrompt": "Include in one prompt for this page",
+      "promptTitle": "One prompt for this page"
     }
   },
   "apps": {

@@ -1,37 +1,56 @@
-// No `'use client'`: this module exports a store and a hook, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
+// No `'use client'`: this module exports a store and hooks, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import type { VisualSelection } from '@/lib/visualEditor';
 import type { WorkspaceId } from './workspaceId';
 
 /**
- * THE ELEMENT SOMEONE POINTED AT IN A LIVE PREVIEW — and the one way it reaches a Brain.
+ * THE ELEMENTS SOMEONE POINTED AT — and the one way they reach a Brain.
  *
  * "Select to edit" used to open its own two-field form under the preview (copy, classes)
  * that rewrote one source line without the Brain. That was a second place to ask for a
  * change, with a second vocabulary, beside the prompt every other request goes through.
- * Now a pick is CONTEXT for the ONE prompt: the composer shows it as a removable chip,
- * and the next request the person sends is told exactly which element, in which file, on
- * which line it means — so "make this bigger" is answered by the same Brain, in the same
- * transcript, as everything else.
+ * Now a pick is CONTEXT for the ONE prompt: the composer shows each pick as a removable
+ * chip, and the next request the person sends is told exactly which elements it means —
+ * so "make this bigger" is answered by the same Brain, in the same transcript, as
+ * everything else.
  *
- * One pick per window, because there is one composer per screen. The preview that made a
- * pick withdraws it when it unmounts (`clearPreviewPick` with its own workspace id), so a
- * chip never outlives the preview it points into.
+ * A pick has one of two anchors:
+ *   • `source`   — an element clicked in a live preview, anchored where React rendered
+ *                  it (file and line);
+ *   • `selector` — an element of a captured page, anchored by its rect-map CSS selector
+ *                  and label (Insights "Apply in composer", PRD 33 §5.2) — no source
+ *                  location exists for it, so the model is told the page and selector.
+ *
+ * The store holds every pick in the window, grouped by OWNER (a preview's workspace id,
+ * or a host surface such as Insights). An owner replaces its own picks as a set — a
+ * preview's new click replaces its previous one; a new "Apply in composer" replaces the
+ * previous fix's elements — and withdraws them when it unmounts, so a chip never outlives
+ * the thing it points into. Other owners' picks are untouched.
  */
-export interface PreviewPick extends VisualSelection {
-  /** The workspace whose preview the element was picked in. */
-  workspaceId: WorkspaceId;
-  /** The app's name — which app, on a board that holds more than one. */
-  appName: string;
+export type PreviewPickAnchor =
+  | ({ kind: 'source' } & VisualSelection)
+  | { kind: 'selector'; selector: string; label: string; pagePath: string };
+
+/** Who made a pick: a preview's workspace, or a host surface (`surface:<name>`). */
+export type PreviewPickOwner = WorkspaceId | `surface:${string}`;
+
+export interface PreviewPick {
+  owner: PreviewPickOwner;
+  /** The app's name — which app, on a board that holds more than one; null when not known. */
+  appName: string | null;
+  anchor: PreviewPickAnchor;
 }
 
-let current: PreviewPick | null = null;
+const NONE: readonly PreviewPick[] = Object.freeze([]);
+
+let current: readonly PreviewPick[] = NONE;
 const listeners = new Set<() => void>();
 
-function publish(next: PreviewPick | null): void {
-  if (next === current) return;
-  current = next;
+function publish(next: readonly PreviewPick[]): void {
+  const settled = next.length === 0 ? NONE : next;
+  if (settled === current) return;
+  current = settled;
   for (const listener of listeners) listener();
 }
 
@@ -40,48 +59,67 @@ function subscribe(listener: () => void): () => void {
   return () => { listeners.delete(listener); };
 }
 
-function snapshot(): PreviewPick | null {
+function snapshot(): readonly PreviewPick[] {
   return current;
 }
 
-function serverSnapshot(): PreviewPick | null {
-  return null;
+function serverSnapshot(): readonly PreviewPick[] {
+  return NONE;
 }
 
-/** Point the composer at an element. Replaces any earlier pick. */
+/** What makes two picks the same element (dedupe, React keys). */
+export function previewPickKey(pick: PreviewPick): string {
+  const a = pick.anchor;
+  return a.kind === 'source'
+    ? `${String(pick.owner)}|source|${a.file}:${a.line}:${a.column}`
+    : `${String(pick.owner)}|selector|${a.pagePath}|${a.selector}`;
+}
+
+/** Replace `owner`'s picks with `picks` (duplicates dropped); every other owner's stay. */
+export function setPreviewPicks(owner: PreviewPickOwner, picks: readonly PreviewPick[]): void {
+  const seen = new Set<string>();
+  const mine = picks.filter((pick) => {
+    const key = previewPickKey(pick);
+    if (pick.owner !== owner || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const others = current.filter((pick) => pick.owner !== owner);
+  if (mine.length === 0 && others.length === current.length) return;
+  publish([...others, ...mine]);
+}
+
+/** Point the composer at one element: it replaces its owner's earlier pick(s). */
 export function setPreviewPick(pick: PreviewPick): void {
-  publish(pick);
+  setPreviewPicks(pick.owner, [pick]);
 }
 
-/**
- * Withdraw the pick — any pick, or only one the caller made: a preview unmounting passes
- * its workspace, and a turn that used a pick passes that pick, so neither wipes a newer
- * pick made in the meantime.
- */
-export function clearPreviewPick(only?: { workspaceId: WorkspaceId } | PreviewPick): void {
-  if (!current) return;
-  if (only) {
-    // A pick is matched by identity; a workspace by id.
-    const matches = 'file' in only ? current === only : current.workspaceId === only.workspaceId;
-    if (!matches) return;
-  }
-  publish(null);
+/** Withdraw one pick (a chip's ×, or a turn spending what it carried). Matched by identity. */
+export function removePreviewPick(pick: PreviewPick): void {
+  if (!current.includes(pick)) return;
+  publish(current.filter((p) => p !== pick));
 }
 
-/** The pick as it stands, outside React — a turn reads it at the moment it is sent. */
-export function getPreviewPick(): PreviewPick | null {
+/** Withdraw every pick, or only one owner's (a preview unmounting passes its own). */
+export function clearPreviewPicks(only?: { owner: PreviewPickOwner }): void {
+  if (current.length === 0) return;
+  publish(only ? current.filter((pick) => pick.owner !== only.owner) : NONE);
+}
+
+/** The picks as they stand, outside React — a turn reads them at the moment it is sent. */
+export function getPreviewPicks(): readonly PreviewPick[] {
   return current;
 }
 
-/** Read the pick and withdraw it: the turn being sent is the one it was for. */
-export function takePreviewPick(): PreviewPick | null {
-  const pick = current;
-  publish(null);
-  return pick;
+/** Read the picks and withdraw them: the turn being sent is the one they were for. */
+export function takePreviewPicks(): readonly PreviewPick[] {
+  const picks = current;
+  publish(NONE);
+  return picks;
 }
 
-/** The pick, live. */
-export function usePreviewPick(): PreviewPick | null {
+/** The picks, live. */
+export function usePreviewPicks(): readonly PreviewPick[] {
   return useSyncExternalStore(subscribe, snapshot, serverSnapshot);
 }
 
@@ -91,27 +129,31 @@ export function usePreviewPick(): PreviewPick | null {
  * whose chip lands in a hidden prompt is a click that seemed to do nothing.
  */
 export function useOnPreviewPick(reveal: () => void): void {
-  const pick = usePreviewPick();
+  const picks = usePreviewPicks();
   const revealRef = useRef(reveal);
+  const previous = useRef<readonly PreviewPick[]>(NONE);
   useEffect(() => { revealRef.current = reveal; }, [reveal]);
   useEffect(() => {
-    if (pick) revealRef.current();
-  }, [pick]);
+    const before = previous.current;
+    previous.current = picks;
+    if (picks.some((pick) => !before.includes(pick))) revealRef.current();
+  }, [picks]);
 }
 
 /**
  * For a composer whose context is read reactively (the workspace Brain's `extraSystem`):
- * the pick standing when a turn STARTS is the one that turn carried, so it is withdrawn
- * when that turn settles — unless the person has picked something else meanwhile.
+ * the picks standing when a turn STARTS are the ones that turn carried, so they are
+ * withdrawn when that turn settles — any pick made meanwhile stays for the next one.
  */
-export function useSpendPreviewPickOnSettle(sending: boolean): void {
-  const carried = useRef<PreviewPick | null>(null);
+export function useSpendPreviewPicksOnSettle(sending: boolean): void {
+  const carried = useRef<readonly PreviewPick[]>(NONE);
   const wasSending = useRef(false);
   useEffect(() => {
     if (sending && !wasSending.current) carried.current = current;
-    if (!sending && wasSending.current && carried.current) {
-      clearPreviewPick(carried.current);
-      carried.current = null;
+    if (!sending && wasSending.current && carried.current.length > 0) {
+      const spent = carried.current;
+      publish(current.filter((pick) => !spent.includes(pick)));
+      carried.current = NONE;
     }
     wasSending.current = sending;
   }, [sending]);
@@ -125,18 +167,34 @@ export function previewPickExcerpt(text: string | null, max = 60): string | null
 }
 
 /**
- * What the model is told about the pick. Model-facing, not UI copy: it rides in the
- * turn's system context, never in the transcript. It names the anchor React reported —
- * file and line — so the edit starts at the right place instead of a search for it.
+ * What the model is told about one pick. Model-facing, not UI copy: it rides in the
+ * turn's system context, never in the transcript. A source pick names the anchor React
+ * reported — file and line — so the edit starts at the right place; a selector pick names
+ * the element by label and selector on its page, which is all a captured page knows.
  */
 export function previewPickContext(pick: PreviewPick): string {
-  const text = previewPickExcerpt(pick.text, 200);
+  const a = pick.anchor;
+  const app = pick.appName ? ` of the app "${pick.appName}"` : '';
+  if (a.kind === 'selector') {
+    const label = previewPickExcerpt(a.label, 80);
+    const element = label ? `element \`${label}\` (\`${a.selector}\`)` : `element \`${a.selector}\``;
+    return [
+      `The user attached an element of a page${app}: ${element} on \`${a.pagePath}\`.`,
+      'Apply this request to that element: find the component that renders it on that page, and change nothing else unless the request asks for it.',
+    ].join('\n');
+  }
+  const text = previewPickExcerpt(a.text, 200);
   const details = [
     text ? `its visible text is "${text}"` : null,
-    pick.className ? `its classes are "${pick.className}"` : null,
+    a.className ? `its classes are "${a.className}"` : null,
   ].filter(Boolean).join(' and ');
   return [
-    `The user picked an element in the live preview of the app "${pick.appName}": a <${pick.tag}> rendered from \`${pick.file}\` at line ${pick.line}${details ? `; ${details}` : ''}.`,
-    `Apply this request to that element: edit \`${pick.file}\` around line ${pick.line} in that app's files, and change nothing else unless the request asks for it.`,
+    `The user picked an element in the live preview${app}: a <${a.tag}> rendered from \`${a.file}\` at line ${a.line}${details ? `; ${details}` : ''}.`,
+    `Apply this request to that element: edit \`${a.file}\` around line ${a.line} in that app's files, and change nothing else unless the request asks for it.`,
   ].join('\n');
+}
+
+/** Every pick's note, one paragraph each; '' when nothing is picked. */
+export function previewPicksContext(picks: readonly PreviewPick[]): string {
+  return picks.map(previewPickContext).join('\n\n');
 }

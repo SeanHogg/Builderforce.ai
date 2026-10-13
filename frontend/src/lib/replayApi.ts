@@ -37,6 +37,8 @@ import { fill, listOf, shared, withQuery, type QueryValue } from './replayHttp';
 import { replayAnalysisApi } from './replayAnalysisApi';
 import { replayMethodApi } from './replayMethodApi';
 import { replayPrescriptionsApi } from './replayPrescriptionsApi';
+import { replayPageApi } from './replayPageApi';
+import { replayVisitorApi } from './replayVisitorApi';
 
 /** The three windows every Insights view offers. */
 export const REPLAY_WINDOWS = [7, 30, 90] as const;
@@ -115,6 +117,10 @@ export const replayApi = {
   ...replayMethodApi,
   // ── Prescriptions (S4e): ranked fixes, their actions, "Find fixes now", the release ledger ──
   ...replayPrescriptionsApi,
+  // ── Page review (S4f): key pages, captures, improvement prompts, the Fix it / Follow up pickers ──
+  ...replayPageApi,
+  // ── Visitors: a member's erase of one visitor's recordings on a site ──
+  ...replayVisitorApi,
 
   listRecordings(siteId: string, query: RecordingsQuery = {}): Promise<ReplayPage<ReplayRecordingSummaryDto>> {
     const { filter, ...rest } = query;

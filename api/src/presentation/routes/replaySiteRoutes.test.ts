@@ -26,6 +26,7 @@ vi.mock('../middleware/authMiddleware', async (importOriginal) => {
     c.set('tenantId', Number(c.req.header('x-tenant') ?? 7));
     c.set('userId', 'u1');
     c.set('role', (c.req.header('x-role') ?? 'developer') as never);
+    if (c.req.header('x-emulation')) c.set('isEmulation', true);
     await next();
   };
   return { ...real, authMiddleware: fakeAuth };
@@ -151,5 +152,16 @@ describe('a site is only reachable inside the caller workspace (D17)', () => {
   it('403s a malformed site id without touching the service', async () => {
     expect((await call('/not-a-uuid/verify')).status).toBe(403);
     expect(mocks.siteVerify).not.toHaveBeenCalled();
+  });
+});
+
+describe('superadmin emulation (D17)', () => {
+  it('403s every site read of the emulated workspace', async () => {
+    const headers = { 'x-emulation': '1' };
+    expect((await call('/', { headers })).status).toBe(403);
+    expect((await call(`/${OWN_SITE}`, { headers })).status).toBe(403);
+    expect((await call(`/${OWN_SITE}/verify`, { headers })).status).toBe(403);
+    expect(mocks.listSiteDtos).not.toHaveBeenCalled();
+    expect(mocks.getSiteDto).not.toHaveBeenCalled();
   });
 });

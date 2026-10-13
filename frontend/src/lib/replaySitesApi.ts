@@ -18,7 +18,8 @@ import {
 } from '@builderforce/interaction-contract';
 import { apiRequest, ApiRequestError } from './apiClient';
 import { fetchProjects, fetchSite } from './api';
-import { fillReplayPath, invalidateCapabilityState, listOf, oneOf } from './capabilityApi';
+import { invalidateCapabilityState, oneOf } from './capabilityApi';
+import { fill, listOf } from './replayHttp';
 
 /** A site write changes what `capabilityState.siteCount` says. */
 function afterSiteWrite<T>(value: T): T {
@@ -42,7 +43,7 @@ export const replaySitesApi = {
   },
 
   async get(siteId: string): Promise<ReplaySiteDto | null> {
-    return oneOf<ReplaySiteDto>(await apiRequest<unknown>(fillReplayPath(REPLAY_PATHS.site, { siteId })), 'site');
+    return oneOf<ReplaySiteDto>(await apiRequest<unknown>(fill(REPLAY_PATHS.site, { siteId })), 'site');
   },
 
   async createExternal(input: ReplaySiteCreateInput): Promise<ReplaySiteDto> {
@@ -57,7 +58,7 @@ export const replaySitesApi = {
   },
 
   async update(siteId: string, input: ReplaySiteUpdateInput): Promise<ReplaySiteDto> {
-    const body = await apiRequest<unknown>(fillReplayPath(REPLAY_PATHS.site, { siteId }), {
+    const body = await apiRequest<unknown>(fill(REPLAY_PATHS.site, { siteId }), {
       method: 'PATCH',
       body: JSON.stringify(input),
       expectedErrors: [400],
@@ -69,13 +70,13 @@ export const replaySitesApi = {
 
   /** The live install checks (§4.2 step 6). */
   verify(siteId: string): Promise<ReplaySiteVerifyDto> {
-    return apiRequest<ReplaySiteVerifyDto>(fillReplayPath(REPLAY_PATHS.siteVerify, { siteId }));
+    return apiRequest<ReplaySiteVerifyDto>(fill(REPLAY_PATHS.siteVerify, { siteId }));
   },
 
   /** A project's hosted site, or null when recording is not switched on for it. */
   async projectSite(projectId: number): Promise<ReplaySiteDto | null> {
     try {
-      const body = await apiRequest<unknown>(fillReplayPath(REPLAY_PATHS.projectSite, { projectId }), { expectedErrors: [404] });
+      const body = await apiRequest<unknown>(fill(REPLAY_PATHS.projectSite, { projectId }), { expectedErrors: [404] });
       return oneOf<ReplaySiteDto>(body, 'site');
     } catch (error) {
       if (error instanceof ApiRequestError && error.status === 404) return null;
@@ -85,7 +86,7 @@ export const replaySitesApi = {
 
   /** Switch recording on for a project's hosted site (idempotent server-side). */
   async enableProjectSite(projectId: number): Promise<ReplaySiteDto> {
-    const body = await apiRequest<unknown>(fillReplayPath(REPLAY_PATHS.projectSite, { projectId }), {
+    const body = await apiRequest<unknown>(fill(REPLAY_PATHS.projectSite, { projectId }), {
       method: 'POST',
       expectedErrors: [400, 409],
     });

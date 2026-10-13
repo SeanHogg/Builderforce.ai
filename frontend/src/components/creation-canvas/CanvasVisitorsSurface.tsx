@@ -3,11 +3,12 @@
  * already sits behind the canvas client boundary, so a directive would mark a
  * second entry point that does not exist.
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { ReplaySiteDto } from '@builderforce/interaction-contract';
 import { InsightsHome } from '@/components/insights/InsightsHome';
+import { ComposerBridgeProvider, composerBridgeFor, type ComposerBridge } from '@/components/insights/composerBridge';
 import { RoleGate } from '@/components/RoleGate';
 import { useCapability } from '@/lib/useCapability';
 import { replaySitesApi } from '@/lib/replaySitesApi';
@@ -33,24 +34,37 @@ const INSIGHTS = CAPABILITY_APPS.insights;
  *
  * The app is the board's primary app (`useOperateReading`), the same selector
  * Operate reads; its durable project id is what the hosted site hangs off.
+ *
+ * The canvas HAS the ONE composer, so this host provides the Insights
+ * `ComposerBridge`: "Apply in composer" puts a fix's compiled `composer` prompt in
+ * the composer as a draft and attaches each element it changes as a chip (a
+ * selector-anchored pick, `composerBridgeFor`); the person presses send.
  */
 export interface CanvasVisitorsSurfaceProps {
   nodes: readonly CreationFlowNode[];
   /** Escape hands the board back; this surface is in the rail, so its entry is the way out. */
   onExit: () => void;
+  /** Put a draft in the canvas composer and show it; absent → no composer bridge. */
+  composeDraft?: (text: string) => void;
 }
 
-export function CanvasVisitorsSurface({ nodes, onExit }: CanvasVisitorsSurfaceProps) {
+export function CanvasVisitorsSurface({ nodes, onExit, composeDraft }: CanvasVisitorsSurfaceProps) {
   const t = useTranslations('creationCanvas.surface.sessions');
   const errorMessage = useErrorMessage();
   const { lens } = useCanvasSessionFacts();
   const panelSide = useCounterBrainDockSide(lens);
-  const projectId = useOperateReading(nodes).app?.projectId ?? null;
+  const app = useOperateReading(nodes).app;
+  const projectId = app?.projectId ?? null;
+  const appName = app?.title || null;
   const { entitled } = useCapability(INSIGHTS.listingSlug);
   // undefined = not read yet; null = the app is not recorded.
   const [site, setSite] = useState<ReplaySiteDto | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const bridge = useMemo<ComposerBridge | null>(
+    () => (composeDraft ? composerBridgeFor(composeDraft, appName) : null),
+    [composeDraft, appName],
+  );
 
   useEffect(() => {
     // Never read replay data for a workspace that does not hold the licence.
@@ -103,7 +117,9 @@ export function CanvasVisitorsSurface({ nodes, onExit }: CanvasVisitorsSurfacePr
   } else {
     body = (
       <div className={styles.visitorsHome} data-testid="canvas-visitors-home">
-        <InsightsHome siteId={site.id} panelSide={panelSide} />
+        <ComposerBridgeProvider value={bridge}>
+          <InsightsHome siteId={site.id} panelSide={panelSide} />
+        </ComposerBridgeProvider>
       </div>
     );
   }

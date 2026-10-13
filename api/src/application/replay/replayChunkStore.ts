@@ -109,7 +109,7 @@ async function listKeys(store: R2Bucket, prefix: string): Promise<string[]> {
 }
 
 /** The immediate "directories" under `prefix`. */
-async function listPrefixes(store: R2Bucket, prefix: string): Promise<string[]> {
+export async function listPrefixes(store: R2Bucket, prefix: string): Promise<string[]> {
   const out: string[] = [];
   let cursor: string | undefined;
   do {

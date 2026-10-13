@@ -163,7 +163,15 @@ export interface ReplayImprovementPromptDto {
   prompt: string;
   /** The selectors the prompt changes, in order (the canvas pushes `previewPick` chips for them). */
   selectors: string[];
+  /** `selectors` with each element's rect-map label ('' for a masked region) — one composer chip each. */
+  targets?: ReplayComposerTargetDto[];
   prescriptionIds: string[];
+}
+
+/** One element an improvement prompt changes: its rect-map selector and label. */
+export interface ReplayComposerTargetDto {
+  selector: string;
+  label: string;
 }
 
 /** `GET REPLAY_PATHS.previewUrl` — a short-lived signed link to a hosted release. */

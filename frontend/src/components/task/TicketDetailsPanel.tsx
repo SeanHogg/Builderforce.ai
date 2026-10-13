@@ -77,7 +77,7 @@ export function TicketDetailsPanel({ taskId, onClose }: TicketDetailsPanelProps)
                     {(task.description && stripReplayMomentTrailer(task.description)) || t('noDescription')}
                   </div>
                 </section>
-                {replayMomentFromDescription(task.description) && <ReplayEffectChip taskId={task.id} />}
+                {(() => { const moment = replayMomentFromDescription(task.description); return moment && <ReplayEffectChip taskId={task.id} siteId={moment.siteId} />; })()}
                 {task.githubPrUrl && (
                   <a href={task.githubPrUrl} target="_blank" rel="noopener noreferrer" className="btn-ghost" style={{ alignSelf: 'flex-start' }}>
                     {t('viewPr')}{task.githubPrNumber ? ` #${task.githubPrNumber}` : ''}

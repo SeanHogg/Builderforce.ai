@@ -8,17 +8,19 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { ProofScoreboard } from '@/components/creation-canvas/ProofScoreboard';
 import {
   challengeApi,
-  realizationApi,
   type BackendStrategyKey,
   type ChallengeSetupStep,
   type ChallengeSpec,
   type HostingStrategySummary,
+} from '@/lib/builderforceApi';
+import {
+  realizationApi,
   type Realization,
   type RealizationBuildResult,
   type RealizationKey,
   type RealizationRecommendation,
   type RealizationTargetSummary,
-} from '@/lib/builderforceApi';
+} from '@/lib/realizationApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 /**

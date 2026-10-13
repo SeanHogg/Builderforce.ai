@@ -111,15 +111,24 @@ function baseRow(over: Record<string, unknown> = {}) {
   };
 }
 
-/** select → queued rows; update records its set and returns the row with it applied. */
+/**
+ * select → queued rows (a `FOR UPDATE` claim answers the row as it stands now);
+ * update records its set and returns the row with it applied; `transaction` runs the
+ * body on this same double and counts the claims taken.
+ */
 function fakeDb(selects: unknown[][] = []) {
   const updates: Array<Record<string, unknown>> = [];
-  const db = {
+  const claims: string[] = [];
+  const db: Record<string, unknown> = {
     select: () => {
-      const rows = selects.shift() ?? [];
+      let locked = false;
       const chain: Record<string, unknown> = {};
-      for (const m of ['from', 'where', 'innerJoin']) chain[m] = () => chain;
-      chain.limit = async () => rows;
+      for (const m of ['from', 'where', 'innerJoin', 'limit']) chain[m] = () => chain;
+      chain.for = (mode: string) => { locked = true; claims.push(mode); return chain; };
+      chain.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) => {
+        const rows = locked ? [{ status: mocks.row.status, actionRef: mocks.row.actionRef }] : (selects.shift() ?? []);
+        return Promise.resolve(rows).then(resolve, reject);
+      };
       return chain;
     },
     update: () => ({
@@ -129,7 +138,8 @@ function fakeDb(selects: unknown[][] = []) {
       },
     }),
   };
-  return { db: db as never, updates };
+  db.transaction = async (fn: (tx: unknown) => Promise<unknown>) => fn(db);
+  return { db: db as never, updates, claims };
 }
 
 const act = (db: never, action: string, input: Record<string, unknown> = {}) =>
@@ -342,5 +352,35 @@ describe('the §5.2 page actions', () => {
   it('apply-in-composer is not open on an external site', async () => {
     mocks.site = EXTERNAL;
     await expect(act(fakeDb().db, 'apply-in-composer')).rejects.toMatchObject({ name: 'ConflictError' });
+  });
+});
+
+describe('the claim (no orphaned ticket or run under concurrency)', () => {
+  it('takes FOR UPDATE on the fix before acting', async () => {
+    const { db, claims } = fakeDb([[{ id: 'agent-1' }]]);
+    await act(db, 'fix', { agentRef: 'agent-1' });
+    expect(claims).toEqual(['update']);
+  });
+
+  it('acts on nothing when the fix moved since it was read (a concurrent action won the claim)', async () => {
+    const { db, updates } = fakeDb([[{ id: 'agent-1' }]]);
+    const read = baseRow();
+    // The route read the row as proposed; by the time the claim is taken, another action applied it.
+    const loader = await import('./prescriptionReads');
+    vi.mocked(loader.loadPrescriptionRow).mockResolvedValueOnce(read as never);
+    mocks.row = baseRow({ status: 'applied', actionKind: 'fix', actionRef: 't=76' });
+    await expect(act(db, 'fix', { agentRef: 'agent-1' })).rejects.toMatchObject({ name: 'ConflictError' });
+    expect(mocks.createTask).not.toHaveBeenCalled();
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+    expect(updates).toHaveLength(0);
+    expect(mocks.trace).not.toHaveBeenCalled();
+  });
+
+  it('releases the claim when the action fails: nothing is written or traced', async () => {
+    mocks.createTask.mockRejectedValueOnce(new Error('task store down'));
+    const { db, updates } = fakeDb([[{ id: 'agent-1' }]]);
+    await expect(act(db, 'fix', { agentRef: 'agent-1' })).rejects.toThrow('task store down');
+    expect(updates).toHaveLength(0);
+    expect(mocks.trace).not.toHaveBeenCalled();
   });
 });

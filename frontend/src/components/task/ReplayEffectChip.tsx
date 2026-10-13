@@ -18,7 +18,8 @@ const LOWER_IS_BETTER: Readonly<Record<ReplayTicketEffectDto['metric'], boolean>
   conversions: false,
 };
 
-export function ReplayEffectChip({ taskId }: { taskId: number }) {
+/** `siteId` is the replay moment's site: it scopes the read, so a proof site passes the gate without an Insights install. */
+export function ReplayEffectChip({ taskId, siteId }: { taskId: number; siteId: string }) {
   const t = useTranslations('replay.ticket.effect');
   const fmt = useFormat();
   const [effect, setEffect] = useState<ReplayTicketEffectDto | null>(null);
@@ -26,11 +27,11 @@ export function ReplayEffectChip({ taskId }: { taskId: number }) {
   useEffect(() => {
     let live = true;
     setEffect(null);
-    replayApi.ticketEffect(taskId)
+    replayApi.ticketEffect(taskId, siteId)
       .then((found) => { if (live) setEffect(found); })
       .catch(() => { if (live) setEffect(null); });
     return () => { live = false; };
-  }, [taskId]);
+  }, [taskId, siteId]);
 
   if (!effect) return null;
   const pct = (n: number | null) => (n === null ? '—' : fmt.number(n, { style: 'percent', maximumFractionDigits: 1 }));

@@ -1,6 +1,6 @@
 /**
  * The lead body of a recording — funnel numbers, contact fields, the prompt
- * history, and the erase action. RecordingPanel owns the chrome; this owns the
+ * history, and the erase action. VisitorPanel owns the chrome; this owns the
  * fetch so a surface that already has a session row can pass it in without a
  * second list round-trip. Erase lives here, beside the data it deletes; after
  * it succeeds the host is told (`onErased`) and closes the panel, because there

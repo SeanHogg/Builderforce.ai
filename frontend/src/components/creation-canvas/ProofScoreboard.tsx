@@ -18,7 +18,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { ProofEvaluationDto } from '@builderforce/interaction-contract';
-import type { Realization } from '@/lib/builderforceApi';
+import type { Realization } from '@/lib/realizationApi';
 import { useFormat } from '@/i18n/useFormat';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { useProofMeasure } from './useProofMeasure';

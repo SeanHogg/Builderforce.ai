@@ -72,11 +72,13 @@ export interface ReplayReadKeys {
   recordings(days: number, cursor: string | null, filterKey: string): string;
   recording(recordingId: string): string;
   releases(): string;
-  kpis(days: number): string;
-  issues(days: number, status: string | null, cursor: string | null): string;
+  /** `release` null for every release; `filterKey` is `filterCacheKey(filter)` ('' for none — exact rollups). */
+  kpis(days: number, release: string | null, filterKey: string): string;
+  /** `filterKey` as for `kpis`; `limit` null for the default page. */
+  issues(days: number, status: string | null, cursor: string | null, limit: number | null, filterKey: string): string;
   issue(issueId: string, days: number): string;
-  /** Live is bucketed to 5 s in the key itself, since KV cannot hold a sub-minute TTL. */
-  live(bucket: number): string;
+  /** Live presence: ONE key per scope, held in the isolate (L1) only — never in KV (see `ReplayReadService.live`). */
+  live(): string;
   /** A heatmap read (`grid`, `elements`, `scroll`, `routes`, `snapshot`, `insights`); free-text parts are URI-encoded. */
   heat(what: string, parts: ReadonlyArray<string | number | null>): string;
   /** An MP4 export's status, bucketed to 5 s like live. */
@@ -121,10 +123,10 @@ export async function replayReadKeys(env: Env, scope: ReplayScope): Promise<Repl
     recordings: (days, cursor, filterKey) => k('recordings', days, cursor ?? '-', filterKey || '-'),
     recording: (recordingId) => k('recording', recordingId),
     releases: () => k('releases'),
-    kpis: (days) => k('kpis', days),
-    issues: (days, status, cursor) => k('issues', days, status ?? '-', cursor ?? '-'),
+    kpis: (days, release, filterKey) => k('kpis', days, release ? encodeURIComponent(release) : '-', filterKey || '-'),
+    issues: (days, status, cursor, limit, filterKey) => k('issues', days, status ?? '-', cursor ?? '-', limit ?? '-', filterKey || '-'),
     issue: (issueId, days) => k('issue', issueId, days),
-    live: (bucket) => k('live', bucket),
+    live: () => k('live'),
     heat: (what, parts) => k(`heat-${what}`, ...parts.map((part) => (part === null ? '-' : encodeURIComponent(String(part))))),
     exportStatus: (exportId, bucket) => k('export', exportId, bucket),
     segments: () => k('segments'),
@@ -223,6 +225,9 @@ export const prescriptionSweepNowKey = (siteId: string): string => `replay:rx-sw
 
 /** How many prescriptions were drafted by AI for this site today (cap 5). */
 export const prescriptionDraftCountKey = (siteId: string, day: string): string => `replay:rx-drafted:${siteId}:${day}`;
+
+/** A Follow up's drafted new sequence, per fix (a day): re-opening the preview costs no model call. */
+export const followUpSequenceDraftKey = (prescriptionId: string): string => `replay:rx-followup-draft:${prescriptionId}`;
 
 /** "This visit's conversion was already counted for this A/B test" (`replayAbConversion.ts`). */
 export const abConversionKey = (testId: number, visitId: string): string => `replay:ab-conv:${testId}:${visitId}`;

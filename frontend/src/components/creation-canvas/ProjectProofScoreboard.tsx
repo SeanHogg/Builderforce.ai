@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { realizationApi, type Realization } from '@/lib/builderforceApi';
+import { realizationApi, type Realization } from '@/lib/realizationApi';
 import { ProofScoreboard } from './ProofScoreboard';
 
 export function ProjectProofScoreboard({ projectId }: { projectId: number }) {

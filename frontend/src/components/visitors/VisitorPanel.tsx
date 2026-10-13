@@ -18,7 +18,7 @@ import { GuestSessionCopyButton } from '@/components/visitors/GuestSessionCopyBu
 import { VisitorJourneyTimeline } from '@/components/visitors/VisitorJourneyTimeline';
 import { VisitorLeadDetail } from '@/components/visitors/VisitorLeadDetail';
 
-export type RecordingPanelTabId = 'journey' | 'lead';
+export type VisitorPanelTabId = 'journey' | 'lead';
 
 export interface VisitorPanelTabProps {
   visitorId: string;
@@ -27,7 +27,7 @@ export interface VisitorPanelTabProps {
 }
 
 export interface VisitorPanelTab {
-  id: RecordingPanelTabId;
+  id: VisitorPanelTabId;
   /** Full keys (several admin namespaces share this panel). */
   labelKey: string;
   titleKey: string;
@@ -63,21 +63,23 @@ const FACTS: Record<NonNullable<VisitorPanelTab['requires']>, (session: AdminGue
   session: (session) => session != null,
 };
 
-export function RecordingPanel({
+export interface VisitorPanelProps {
+  visitorId: string | null;
+  session?: AdminGuestSession | null;
+  tab: VisitorPanelTabId;
+  onTabChange: (tab: VisitorPanelTabId) => void;
+  onClose: () => void;
+  onErased?: () => void;
+}
+
+export function VisitorPanel({
   visitorId,
   session = null,
   tab,
   onTabChange,
   onClose,
   onErased,
-}: {
-  visitorId: string | null;
-  session?: AdminGuestSession | null;
-  tab: RecordingPanelTabId;
-  onTabChange: (tab: RecordingPanelTabId) => void;
-  onClose: () => void;
-  onErased?: () => void;
-}) {
+}: VisitorPanelProps) {
   const t = useTranslations();
   const tInsights = useTranslations('admin.insights');
   const tSessions = useTranslations('admin.sessions');

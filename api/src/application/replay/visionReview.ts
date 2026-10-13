@@ -27,7 +27,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { replayPrescriptions } from '../../infrastructure/database/schema';
 import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { asJsonObject, extractJsonPayload } from '../../domain/shared/json';
-import { stableHash } from '../../domain/replay/prescriptions/rules';
+import { stableHash } from '../../domain/replay/prescriptions/ruleEvidence';
 import { estimateImpact } from '../../domain/replay/prescriptions/impact';
 import { conversionCohorts, OBSERVED_RULE_ID, PAGE_PRESCRIPTION_RULES } from '../../domain/replay/prescriptions/pageRules';
 import { pageFactKeys, type PageFacts } from '../../domain/replay/prescriptions/pageFacts';

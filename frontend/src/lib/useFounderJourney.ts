@@ -23,7 +23,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { creationSessionsApi, realizationApi } from './builderforceApi';
+import { creationSessionsApi } from './builderforceApi';
+import { realizationApi } from './realizationApi';
 import { investorApi } from './investorApi';
 import type { Stage } from './navGroups';
 import type { MethodStep } from './methodology';
