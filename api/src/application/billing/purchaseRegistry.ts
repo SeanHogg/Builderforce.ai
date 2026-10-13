@@ -27,6 +27,7 @@ import {
   recordMarketplaceListingEvent,
 } from '../marketplace/listingCommerce';
 import { recordBusinessPhoneEvent } from '../tenant/businessPhoneSubscription';
+import { recordManagedAgentHostEvent, MANAGED_AGENT_HOST_KIND } from '../tenant/managedAgentHostSubscription';
 import { completeSpawnTopUp, SPAWN_TOKENS_KIND } from '../spawn/spawnTopUp';
 import { recordSpawnPlanEvent, SPAWN_PLAN_KIND } from '../spawn/spawnMembership';
 
@@ -76,6 +77,10 @@ const ONE_OFF_SETTLERS: Readonly<Record<string, OneOffSettler>> = {
 const ADDON_RECORDERS: Readonly<Record<string, AddonRecorder>> = {
   business_phone: async (db, _env, event) => {
     await recordBusinessPhoneEvent(db, event);
+    return true;
+  },
+  [MANAGED_AGENT_HOST_KIND]: async (db, _env, event) => {
+    await recordManagedAgentHostEvent(db, event);
     return true;
   },
   [SPAWN_PLAN_KIND]: recordSpawnPlanEvent,

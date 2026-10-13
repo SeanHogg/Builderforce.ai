@@ -230,3 +230,9 @@ export const PartnerTrackBody = z.object({
   track: text,
   featured: z.boolean().nullish().transform((value) => (value === null ? false : value)),
 });
+
+/** `PATCH /api/admin/managed-agent-hosts/:id` — ops provision of a waitlisted host. */
+export const ManagedAgentHostProvisionBody = z.object({
+  status: text,
+  agentHostId: z.number().int().nullish(),
+});

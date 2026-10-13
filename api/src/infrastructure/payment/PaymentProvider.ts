@@ -83,6 +83,18 @@ export interface BusinessPhoneCheckoutOpts {
   cancelUrl: string;
 }
 
+/** Recurring Managed AgentHost add-on. Quantity is the hosted AgentHost count. */
+export interface ManagedAgentHostCheckoutOpts {
+  tenantId: number;
+  cartId: string;
+  billingEmail: string;
+  currency: string;
+  monthlyCents: number;
+  quantity: number;
+  successUrl: string;
+  cancelUrl: string;
+}
+
 /**
  * A one-off marketplace listing purchase, hosted by the processor.
  *
@@ -395,6 +407,9 @@ export interface PaymentProvider {
 
   /** Purchase the Business Phone recurring add-on plus its one-time activation. */
   createBusinessPhoneCheckoutSession(opts: BusinessPhoneCheckoutOpts): Promise<CheckoutSessionResult>;
+
+  /** Purchase the Managed AgentHost recurring add-on (monthly, quantity = host count). */
+  createManagedAgentHostCheckoutSession(opts: ManagedAgentHostCheckoutOpts): Promise<CheckoutSessionResult>;
 
   /**
    * A ONE-OFF hosted payment for a marketplace listing, with quantity billing.

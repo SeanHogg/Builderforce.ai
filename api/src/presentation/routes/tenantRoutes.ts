@@ -70,6 +70,11 @@ import {
 import { getPublishedPricing } from '../../application/tenant/pricingConfiguration';
 import { getBusinessPhoneSubscription } from '../../application/tenant/businessPhoneSubscription';
 import {
+  getManagedAgentHostSubscription,
+  managedAgentHostCheckoutBlock,
+  managedAgentHostQuantity,
+} from '../../application/tenant/managedAgentHostSubscription';
+import {
   readNavigationFeatures,
   validateNavigationFeatures,
   writeNavigationFeatures,
@@ -80,6 +85,7 @@ import {
   AddMemberBody,
   BusinessPhoneCheckoutBody,
   CardValidationBody,
+  ManagedAgentHostCheckoutBody,
   ChangeRoleBody,
   DefaultAgentHostBody,
   DefaultSpendCapBody,
@@ -426,6 +432,55 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         billingEmail: body.billingEmail.trim(), currency: pricing.currency,
         activationCents, monthlyCents,
         successUrl: `${appUrl}/crm/phone?purchase=success`, cancelUrl: `${appUrl}/pricing?phone=cancelled`,
+      });
+    } catch (error) {
+      await db.update(carts).set({ status: 'abandoned', updatedAt: sql`now()` }).where(and(eq(carts.id, cart.id), eq(carts.tenantId, tenantId)));
+      throw error;
+    }
+    return c.json(result);
+  });
+
+  router.get('/:id/add-ons/managed-agent-host', requirePermission(PERMISSIONS.BILLING_READ), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (tenantId !== c.get('tenantId')) return c.json({ error: 'Forbidden' }, 403);
+    return c.json({ subscription: await getManagedAgentHostSubscription(db, tenantId) });
+  });
+
+  router.post('/:id/add-ons/managed-agent-host/checkout', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.BILLING_MANAGE), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (tenantId !== c.get('tenantId')) return c.json({ error: 'Forbidden' }, 403);
+    const body = await parseBody(c, ManagedAgentHostCheckoutBody);
+    if (!body.billingEmail?.trim()) return c.json({ error: 'billingEmail is required' }, 400);
+    const quantity = managedAgentHostQuantity(body.quantity);
+    const pricing = await getPublishedPricing(db, c.env as Env);
+    const existing = await getManagedAgentHostSubscription(db, tenantId);
+    const baseSubscription = await tenantService.getSubscription(tenantId);
+    const blocked = managedAgentHostCheckoutBlock(
+      { billingStatus: baseSubscription.billingStatus, effectivePlan: baseSubscription.effectivePlan },
+      existing,
+      quantity,
+    );
+    if (blocked) return c.json({ error: blocked.error }, blocked.status);
+    const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
+    const monthlyCents = Math.round(pricing.pricing.managedAgentHost.perAgentHostMonthly * 100);
+    const [cart] = await db.insert(carts).values({
+      tenantId,
+      buyerRef: c.get('userId') as string,
+      currency: pricing.currency,
+      subtotalCents: monthlyCents * quantity,
+      totalCents: monthlyCents * quantity,
+    }).returning({ id: carts.id });
+    if (!cart) throw new Error('Managed AgentHost cart was not created');
+    let result: { checkoutUrl: string; sessionId: string };
+    try {
+      result = await tenantService.createManagedAgentHostCheckoutSession(tenantId, {
+        cartId: cart.id,
+        billingEmail: body.billingEmail.trim(),
+        currency: pricing.currency,
+        monthlyCents,
+        quantity,
+        successUrl: `${appUrl}/pricing?managedHost=success`,
+        cancelUrl: `${appUrl}/pricing?managedHost=cancelled`,
       });
     } catch (error) {
       await db.update(carts).set({ status: 'abandoned', updatedAt: sql`now()` }).where(and(eq(carts.id, cart.id), eq(carts.tenantId, tenantId)));

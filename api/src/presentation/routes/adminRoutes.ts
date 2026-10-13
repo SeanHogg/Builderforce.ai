@@ -44,6 +44,7 @@ import {
   TokenLimitOverrideBody,
   UserPermissionOverridesBody,
   UserStatusBody,
+  ManagedAgentHostProvisionBody,
 } from './adminRoutes.schemas';
 /**
  * Superadmin routes — /api/admin/*
@@ -124,6 +125,7 @@ import {
   tenants,
   tenantMembers,
   agentHosts,
+  managedAgentHostRequests,
   llmUsageLog,
   userMfaRecoveryCodes,
   projects,
@@ -218,6 +220,7 @@ import { evaluateCronGate, readScheduleStall, signalPendingWork } from '../../ap
 import { createTickDispatchBudget } from '../../application/runtime/tickDispatchBudget';
 import { API_VERSION } from '../../version';
 import { getPricingDraft, publishPricing, savePricingDraft } from '../../application/tenant/pricingConfiguration';
+import { provisionManagedAgentHostRequest } from '../../application/tenant/managedAgentHostSubscription';
 import { coerceStringArray } from '../../domain/shared/jsonColumn';
 import { daysParam, limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
@@ -416,6 +419,43 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.use('*', superAdminMiddleware);
 
   router.get('/pricing', async (c) => c.json(await getPricingDraft(requestDb(c))));
+
+  router.get('/managed-agent-hosts', async (c) => {
+    const db = requestDb(c);
+    const status = c.req.query('status');
+    const rows = status
+      ? await db.select().from(managedAgentHostRequests)
+        .where(eq(managedAgentHostRequests.status, status))
+        .orderBy(desc(managedAgentHostRequests.createdAt))
+        .limit(200)
+      : await db.select().from(managedAgentHostRequests)
+        .orderBy(desc(managedAgentHostRequests.createdAt))
+        .limit(200);
+    return c.json({ requests: rows });
+  });
+
+  router.patch('/managed-agent-hosts/:id', async (c) => {
+    const db = requestDb(c);
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid request id' }, 400);
+    const body = await parseBody(c, ManagedAgentHostProvisionBody);
+    try {
+      const updated = await provisionManagedAgentHostRequest(db, id, {
+        status: body.status,
+        agentHostId: body.agentHostId ?? null,
+      });
+      const actorId = c.get('userId') as string;
+      await writeAudit(db, 'MANAGED_AGENT_HOST_PROVISIONED', actorId, {
+        metadata: { requestId: id, status: body.status, agentHostId: body.agentHostId ?? null },
+      });
+      return c.json({ request: updated });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Provision failed';
+      if (message === 'Managed AgentHost request not found') return c.json({ error: message }, 404);
+      if (message === 'Cannot provision a cancelled Managed AgentHost request') return c.json({ error: message }, 409);
+      return c.json({ error: message }, 400);
+    }
+  });
 
   // Draft saves never touch the public cache. Only the explicit publication
   // boundary below can make content visible and invalidate cached responses.

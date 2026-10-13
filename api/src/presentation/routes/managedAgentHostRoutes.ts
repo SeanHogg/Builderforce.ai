@@ -21,6 +21,11 @@ import type { Db } from '../../infrastructure/database/connection';
 import { TenantRole } from '../../domain/shared/types';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { parseBody, z, zNonEmptyString, zOptionalString } from './requestBody';
+import {
+  getManagedAgentHostSubscription,
+  managedAgentHostRequestBlock,
+  occupyingManagedAgentHostCount,
+} from '../../application/tenant/managedAgentHostSubscription';
 
 const HostRequestBody = z.object({
   agentHostName: zNonEmptyString,
@@ -36,6 +41,10 @@ export function createManagedAgentHostRoutes(db: Db): Hono<HonoEnv> {
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const body = await parseBody(c, HostRequestBody);
+    const entitlement = await getManagedAgentHostSubscription(db, tenantId);
+    const occupying = await occupyingManagedAgentHostCount(db, tenantId);
+    const blocked = managedAgentHostRequestBlock(entitlement, occupying);
+    if (blocked) return c.json({ error: blocked.error }, blocked.status);
 
     const [inserted] = await db
       .insert(managedAgentHostRequests)

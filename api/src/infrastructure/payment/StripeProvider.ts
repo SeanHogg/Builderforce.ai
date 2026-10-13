@@ -28,6 +28,7 @@
 
 import type {
   BusinessPhoneCheckoutOpts,
+  ManagedAgentHostCheckoutOpts,
   ConnectedAccountStatus,
   InvoiceItemOpts,
   InvoicePaymentLinkOpts,
@@ -188,6 +189,36 @@ export class StripeProvider implements PaymentProvider {
     if (!res.ok) {
       const err = await res.json() as { error?: { message?: string } };
       throw new Error(`Stripe business-phone checkout error: ${err.error?.message ?? res.status}`);
+    }
+    const session = await res.json() as { id: string; url: string; customer: string | null };
+    return { sessionId: session.id, checkoutUrl: session.url, externalCustomerId: session.customer ?? null, externalSubscriptionId: null };
+  }
+
+  async createManagedAgentHostCheckoutSession(opts: ManagedAgentHostCheckoutOpts): Promise<CheckoutSessionResult> {
+    this.requireConfigured();
+    const currency = opts.currency.toLowerCase();
+    const quantity = billingQuantity(opts.quantity);
+    const params = new URLSearchParams({
+      mode: 'subscription', customer_email: opts.billingEmail, success_url: opts.successUrl, cancel_url: opts.cancelUrl,
+      'line_items[0][quantity]': String(quantity), 'line_items[0][price_data][currency]': currency,
+      'line_items[0][price_data][unit_amount]': String(opts.monthlyCents),
+      'line_items[0][price_data][recurring][interval]': 'month',
+      'line_items[0][price_data][product_data][name]': 'BuilderForce Managed AgentHost',
+      'metadata[tenantId]': String(opts.tenantId), 'metadata[purchaseKind]': 'managed_agent_host',
+      'metadata[cartId]': opts.cartId,
+      'metadata[monthlyCents]': String(opts.monthlyCents), 'metadata[quantity]': String(quantity),
+      'subscription_data[metadata][tenantId]': String(opts.tenantId),
+      'subscription_data[metadata][purchaseKind]': 'managed_agent_host',
+      'subscription_data[metadata][cartId]': opts.cartId,
+      'subscription_data[metadata][monthlyCents]': String(opts.monthlyCents),
+      'subscription_data[metadata][quantity]': String(quantity),
+    });
+    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST', headers: { Authorization: `Bearer ${this.config.secretKey}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(),
+    });
+    if (!res.ok) {
+      const err = await res.json() as { error?: { message?: string } };
+      throw new Error(`Stripe managed-agent-host checkout error: ${err.error?.message ?? res.status}`);
     }
     const session = await res.json() as { id: string; url: string; customer: string | null };
     return { sessionId: session.id, checkoutUrl: session.url, externalCustomerId: session.customer ?? null, externalSubscriptionId: null };
