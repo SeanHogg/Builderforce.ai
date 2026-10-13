@@ -105,4 +105,24 @@ describe("native SessionManager", () => {
   it("standalone buildSessionContext returns empty for leafId === null", () => {
     expect(buildSessionContext([], null).messages).toEqual([]);
   });
+
+  it("persistLeaf rewrites the transcript so a reload hides entries after the leaf", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sm-undo-"));
+    const file = join(dir, "s.jsonl");
+    const sm = SessionManager.open(file);
+    sm.appendMessage(userMsg("first"));
+    const keep = sm.appendMessage(assistantMsg("first-reply"));
+    sm.appendMessage(userMsg("second"));
+    sm.appendMessage(assistantMsg("second-reply"));
+    sm.branch(keep);
+    sm.persistLeaf();
+
+    const reloaded = SessionManager.open(file);
+    expect(reloaded.getLeafId()).toBe(keep);
+    expect(reloaded.buildSessionContext().messages.map((m) => m.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(readFileSync(file, "utf8")).not.toContain("second");
+  });
 });

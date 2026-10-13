@@ -166,6 +166,7 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
     method === "sessions.patch" ||
     method === "sessions.reset" ||
     method === "sessions.fork" ||
+    method === "sessions.undo" ||
     method === "sessions.delete" ||
     method === "sessions.compact"
   ) {

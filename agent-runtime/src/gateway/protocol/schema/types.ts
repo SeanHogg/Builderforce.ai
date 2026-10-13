@@ -120,6 +120,7 @@ import type {
   SessionsPreviewParamsSchema,
   SessionsResetParamsSchema,
   SessionsForkParamsSchema,
+  SessionsUndoParamsSchema,
   SessionsResolveParamsSchema,
   SessionsUsageParamsSchema,
 } from "./sessions.js";
@@ -170,6 +171,7 @@ export type SessionsResolveParams = Static<typeof SessionsResolveParamsSchema>;
 export type SessionsPatchParams = Static<typeof SessionsPatchParamsSchema>;
 export type SessionsResetParams = Static<typeof SessionsResetParamsSchema>;
 export type SessionsForkParams = Static<typeof SessionsForkParamsSchema>;
+export type SessionsUndoParams = Static<typeof SessionsUndoParamsSchema>;
 export type SessionsDeleteParams = Static<typeof SessionsDeleteParamsSchema>;
 export type SessionsCompactParams = Static<typeof SessionsCompactParamsSchema>;
 export type SessionsUsageParams = Static<typeof SessionsUsageParamsSchema>;

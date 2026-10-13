@@ -32,7 +32,7 @@ Enabling work is legitimate but never outranks a broken Idea→Real journey.
 | SOC 2 Type I audit | Revenue | P1 | Q4 2026 | 📋 Planned |
 | Live orchestration workspace (real-time DAG) | Agents | P0 | Q3 2026 | 🔄 Partial |
 | Inline diff / pair-programming (TUI accept/reject) | Agents | P1 | Q3 2026 | ✅ Shipped |
-| Session auto-checkpoint (`/sessions`, `/undo`, `/fork`) | Agents | P1 | Q3 2026 | 🔄 Partial |
+| Session auto-checkpoint (`/sessions`, `/undo`, `/fork`) | Agents | P1 | Q3 2026 | ✅ Shipped |
 | Remote task result streaming | Agents | P2 | Q3 2026 | 🔄 Partial — live `remote.task.chunk` + terminal assistant text |
 | Multi-model role routing | Agents | P2 | Q3 2026 | 🔄 Partial — resolver in `@builderforce/learned-routing` (`9f514a949`); not wired into the cloud engine |
 | Spec import from GitHub Issues / Linear / Jira | Agents | P2 | Q3 2026 | ✅ Shipped |

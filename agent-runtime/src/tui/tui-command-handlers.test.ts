@@ -232,6 +232,126 @@ describe("tui command handlers", () => {
     expect(addSystem).toHaveBeenCalledWith(expect.stringContaining("fork failed"));
   });
 
+  it("rewinds the current session and reloads history without switching session", async () => {
+    const undoSession = vi.fn().mockResolvedValue({
+      ok: true,
+      undone: true,
+      key: "agent:main:main",
+      leafId: "a1",
+    });
+    const setSession = vi.fn();
+    const loadHistory = vi.fn().mockResolvedValue(undefined);
+    const addSystem = vi.fn();
+    const requestRender = vi.fn();
+
+    const { handleCommand } = createCommandHandlers({
+      client: { undoSession } as never,
+      chatLog: { addSystem } as never,
+      tui: { requestRender } as never,
+      opts: {},
+      state: {
+        currentSessionKey: "agent:main:main",
+        activeChatRunId: null,
+        sessionInfo: {},
+      } as never,
+      deliverDefault: false,
+      openOverlay: vi.fn(),
+      closeOverlay: vi.fn(),
+      refreshSessionInfo: vi.fn(),
+      loadHistory,
+      setSession,
+      refreshAgents: vi.fn(),
+      abortActive: vi.fn(),
+      setActivityStatus: vi.fn(),
+      formatSessionKey: (key: string) => key,
+      applySessionInfoFromPatch: vi.fn(),
+      noteLocalRunId: vi.fn(),
+    });
+
+    await handleCommand("/undo");
+
+    expect(undoSession).toHaveBeenCalledWith("agent:main:main");
+    expect(setSession).not.toHaveBeenCalled();
+    expect(loadHistory).toHaveBeenCalledTimes(1);
+    expect(addSystem).toHaveBeenCalledWith("undid last turn");
+    expect(requestRender).toHaveBeenCalled();
+  });
+
+  it("reports nothing to undo without reloading history", async () => {
+    const undoSession = vi.fn().mockResolvedValue({
+      ok: true,
+      undone: false,
+      key: "agent:main:main",
+      leafId: null,
+    });
+    const loadHistory = vi.fn();
+    const addSystem = vi.fn();
+
+    const { handleCommand } = createCommandHandlers({
+      client: { undoSession } as never,
+      chatLog: { addSystem } as never,
+      tui: { requestRender: vi.fn() } as never,
+      opts: {},
+      state: {
+        currentSessionKey: "agent:main:main",
+        activeChatRunId: null,
+        sessionInfo: {},
+      } as never,
+      deliverDefault: false,
+      openOverlay: vi.fn(),
+      closeOverlay: vi.fn(),
+      refreshSessionInfo: vi.fn(),
+      loadHistory,
+      setSession: vi.fn(),
+      refreshAgents: vi.fn(),
+      abortActive: vi.fn(),
+      setActivityStatus: vi.fn(),
+      formatSessionKey: vi.fn(),
+      applySessionInfoFromPatch: vi.fn(),
+      noteLocalRunId: vi.fn(),
+    });
+
+    await handleCommand("/undo");
+
+    expect(loadHistory).not.toHaveBeenCalled();
+    expect(addSystem).toHaveBeenCalledWith("nothing to undo");
+  });
+
+  it("reports undo failures without reloading history", async () => {
+    const undoSession = vi.fn().mockRejectedValue(new Error("boom"));
+    const loadHistory = vi.fn();
+    const addSystem = vi.fn();
+
+    const { handleCommand } = createCommandHandlers({
+      client: { undoSession } as never,
+      chatLog: { addSystem } as never,
+      tui: { requestRender: vi.fn() } as never,
+      opts: {},
+      state: {
+        currentSessionKey: "agent:main:main",
+        activeChatRunId: null,
+        sessionInfo: {},
+      } as never,
+      deliverDefault: false,
+      openOverlay: vi.fn(),
+      closeOverlay: vi.fn(),
+      refreshSessionInfo: vi.fn(),
+      loadHistory,
+      setSession: vi.fn(),
+      refreshAgents: vi.fn(),
+      abortActive: vi.fn(),
+      setActivityStatus: vi.fn(),
+      formatSessionKey: vi.fn(),
+      applySessionInfoFromPatch: vi.fn(),
+      noteLocalRunId: vi.fn(),
+    });
+
+    await handleCommand("/undo");
+
+    expect(loadHistory).not.toHaveBeenCalled();
+    expect(addSystem).toHaveBeenCalledWith(expect.stringContaining("undo failed"));
+  });
+
   it("runs /gateway restart via service command runner", async () => {
     const addSystem = vi.fn();
     const requestRender = vi.fn();

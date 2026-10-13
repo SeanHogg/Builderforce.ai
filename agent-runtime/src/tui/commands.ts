@@ -49,6 +49,7 @@ export function getSlashCommands(options: SlashCommandOptions = {}): SlashComman
     { name: "session", description: "Switch session (or open picker)" },
     { name: "sessions", description: "Open session picker" },
     { name: "fork", description: "Clone the current session into a new transcript" },
+    { name: "undo", description: "Rewind the last conversation turn" },
     {
       name: "model",
       description: "Set model (or open picker)",
@@ -206,6 +207,7 @@ export function helpText(options: SlashCommandOptions = {}): string {
     "/agent <id> (or /agents)",
     "/session <key> (or /sessions)",
     "/fork",
+    "/undo",
     "/model <provider/model> (or /models)",
     `/think <${thinkLevels}>`,
     "/verbose <on|off>",

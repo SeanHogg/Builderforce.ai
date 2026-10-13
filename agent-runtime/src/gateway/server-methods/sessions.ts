@@ -24,6 +24,7 @@ import {
   validateSessionsPreviewParams,
   validateSessionsResetParams,
   validateSessionsForkParams,
+  validateSessionsUndoParams,
   validateSessionsResolveParams,
 } from "../protocol/index.js";
 import {
@@ -44,6 +45,7 @@ import {
 import { applySessionsPatchToStore } from "../sessions-patch.js";
 import { resolveSessionKeyFromResolveParams } from "../sessions-resolve.js";
 import { forkGatewaySession } from "./sessions-fork.js";
+import { undoGatewaySession } from "./sessions-undo.js";
 import type { GatewayRequestHandlers, RespondFn } from "./types.js";
 import { assertValidParams } from "./validation.js";
 
@@ -358,6 +360,33 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       return;
     }
     const result = await forkGatewaySession(key);
+    if (!result.ok) {
+      respond(false, undefined, result.error);
+      return;
+    }
+    respond(true, result, undefined);
+  },
+  "sessions.undo": async ({ params, respond }) => {
+    if (!assertValidParams(params, validateSessionsUndoParams, "sessions.undo", respond)) {
+      return;
+    }
+    const key = requireSessionKey(params.key, respond);
+    if (!key) {
+      return;
+    }
+    const { cfg, target } = resolveGatewaySessionTargetFromKey(key);
+    const { entry } = loadSessionEntry(key);
+    const cleanupError = await ensureSessionRuntimeCleanup({
+      cfg,
+      key,
+      target,
+      sessionId: entry?.sessionId,
+    });
+    if (cleanupError) {
+      respond(false, undefined, cleanupError);
+      return;
+    }
+    const result = await undoGatewaySession(key);
     if (!result.ok) {
       respond(false, undefined, result.error);
       return;

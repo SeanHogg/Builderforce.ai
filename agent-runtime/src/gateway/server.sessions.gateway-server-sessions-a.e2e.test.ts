@@ -191,6 +191,7 @@ describe("gateway server sessions", () => {
         "sessions.patch",
         "sessions.reset",
         "sessions.fork",
+        "sessions.undo",
         "sessions.delete",
         "sessions.compact",
       ]),
@@ -805,6 +806,95 @@ describe("gateway server sessions", () => {
     const clonedHeader = JSON.parse(clonedHeaderLine ?? "{}") as { parentSession?: string };
     expect(clonedHeader.parentSession).toBe(path.resolve(parentFile));
     expect(clonedRaw).toContain("Fork me");
+
+    ws.close();
+  });
+
+  test("sessions.undo rewinds the last turn on the same session key", async () => {
+    const { dir } = await createSessionStoreDir();
+    const sessionId = "sess-undo-parent";
+    const sessionFile = path.join(dir, `${sessionId}.jsonl`);
+    const ts = new Date().toISOString();
+    const header = {
+      type: "session",
+      version: 3,
+      id: sessionId,
+      timestamp: ts,
+      cwd: process.cwd(),
+    };
+    const lines = [
+      JSON.stringify(header),
+      JSON.stringify({
+        type: "message",
+        id: "u1",
+        parentId: null,
+        timestamp: ts,
+        message: { role: "user", content: "keep me" },
+      }),
+      JSON.stringify({
+        type: "message",
+        id: "a1",
+        parentId: "u1",
+        timestamp: ts,
+        message: { role: "assistant", content: "kept reply" },
+      }),
+      JSON.stringify({
+        type: "message",
+        id: "u2",
+        parentId: "a1",
+        timestamp: ts,
+        message: { role: "user", content: "drop me" },
+      }),
+      JSON.stringify({
+        type: "message",
+        id: "a2",
+        parentId: "u2",
+        timestamp: ts,
+        message: { role: "assistant", content: "dropped reply" },
+      }),
+    ];
+    await fs.writeFile(sessionFile, `${lines.join("\n")}\n`, "utf-8");
+    await writeSessionStore({
+      entries: {
+        main: {
+          sessionId,
+          sessionFile,
+          updatedAt: Date.now(),
+        },
+      },
+    });
+
+    const { ws } = await openClient();
+    const undone = await rpcReq<{
+      ok: true;
+      undone: boolean;
+      key: string;
+      leafId: string | null;
+    }>(ws, "sessions.undo", { key: "agent:main:main" });
+
+    expect(undone.ok).toBe(true);
+    expect(undone.payload?.undone).toBe(true);
+    expect(undone.payload?.key).toBe("agent:main:main");
+    expect(undone.payload?.leafId).toBe("a1");
+
+    const raw = await fs.readFile(sessionFile, "utf-8");
+    expect(raw).toContain("keep me");
+    expect(raw).not.toContain("drop me");
+
+    const again = await rpcReq<{ ok: true; undone: boolean; leafId: string | null }>(
+      ws,
+      "sessions.undo",
+      { key: "agent:main:main" },
+    );
+    expect(again.ok).toBe(true);
+    expect(again.payload?.undone).toBe(true);
+    expect(again.payload?.leafId).toBeNull();
+
+    const atRoot = await rpcReq<{ ok: true; undone: boolean }>(ws, "sessions.undo", {
+      key: "agent:main:main",
+    });
+    expect(atRoot.ok).toBe(true);
+    expect(atRoot.payload?.undone).toBe(false);
 
     ws.close();
   });

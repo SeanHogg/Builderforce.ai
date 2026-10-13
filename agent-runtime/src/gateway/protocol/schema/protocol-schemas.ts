@@ -127,6 +127,7 @@ import {
   SessionsPreviewParamsSchema,
   SessionsResetParamsSchema,
   SessionsForkParamsSchema,
+  SessionsUndoParamsSchema,
   SessionsResolveParamsSchema,
   SessionsUsageParamsSchema,
 } from "./sessions.js";
@@ -181,6 +182,7 @@ export const ProtocolSchemas: Record<string, TSchema> = {
   SessionsPatchParams: SessionsPatchParamsSchema,
   SessionsResetParams: SessionsResetParamsSchema,
   SessionsForkParams: SessionsForkParamsSchema,
+  SessionsUndoParams: SessionsUndoParamsSchema,
   SessionsDeleteParams: SessionsDeleteParamsSchema,
   SessionsCompactParams: SessionsCompactParamsSchema,
   SessionsUsageParams: SessionsUsageParamsSchema,

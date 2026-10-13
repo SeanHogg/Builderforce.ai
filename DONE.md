@@ -1,3 +1,12 @@
+## ✅ RESOLVED 2026-10-13 — TUI `/undo` rewinds the last conversation turn (ticket #3231, epic #3070)
+
+`/sessions` and `/fork` already existed; `/undo` now rewinds the last completed user+assistant turn (including tool results) on the **same** session key so the next prompt continues from the prior leaf. Does not revert filesystem or git.
+
+- **Persist.** `SessionManager.persistLeaf()` rewrites the JSONL to header + root→leaf. In-memory `branch()` alone is not enough: `chat.history` reads every jsonl message line.
+- **RPC.** Admin-scope `sessions.undo` `{ key }` aborts an in-flight run (same cleanup as reset/delete) then `rewindLastTurn`. Same store key; no new jsonl; no archive. Empty/root → `{ ok: true, undone: false }` (no throw).
+- **TUI.** `/undo` in the slash registry + help; handler calls `client.undoSession`, then `loadHistory()` on success (`undid last turn`) or `nothing to undo` at the root. Failures: `undo failed:`.
+- **Tests:** `sessions-undo.test.ts`, `session-manager.test.ts` persistLeaf, TUI handler tests, e2e `sessions.undo rewinds the last turn on the same session key`.
+
 ## ✅ RESOLVED 2026-10-13 — Managed Agent hosting add-on ($49/mo/Agent) (epic #3056)
 
 Self-serve add-on for hosting Managed Agents on BuilderForce infrastructure, priced at $49/host/month.

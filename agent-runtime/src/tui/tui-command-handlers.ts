@@ -729,6 +729,20 @@ export function createCommandHandlers(context: CommandHandlerContext) {
         }
         tui.requestRender();
         break;
+      case "undo":
+        try {
+          const result = await client.undoSession(state.currentSessionKey);
+          if (!result?.undone) {
+            chatLog.addSystem("nothing to undo");
+          } else {
+            await loadHistory();
+            chatLog.addSystem("undid last turn");
+          }
+        } catch (err) {
+          chatLog.addSystem(`undo failed: ${String(err)}`);
+        }
+        tui.requestRender();
+        break;
       case "new":
       case "reset":
         try {
