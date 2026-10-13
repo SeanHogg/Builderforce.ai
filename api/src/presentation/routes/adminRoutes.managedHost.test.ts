@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fakeDb } from '../../../test/fakeDb';
 
-const dbRef = vi.hoisted(() => ({ current: fakeDb() }));
+const dbRef = vi.hoisted(() => ({ current: null as ReturnType<typeof fakeDb> | null }));
 
 vi.mock('../middleware/superAdminMiddleware', () => ({
   superAdminMiddleware: async (c: any, next: any) => {
