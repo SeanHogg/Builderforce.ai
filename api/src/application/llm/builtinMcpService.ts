@@ -54,7 +54,7 @@ import { parseTaskListScope, scopeNeedsArchived, taskInScope, TASK_LIST_SCOPES }
 import { addManagerDirective } from '../manager/managerDirectives';
 import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
 import { salesRevenueForecast } from '../sales/salesPolicy';
-import { resolveManagerAssignee } from '../manager/managerPolicy';
+import { resolveDefaultCreateTaskAssignee } from '../task/resolveCreateTaskAssignee';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { isLifecycleManagedTask } from '../kanban/managedExecutionGuard';
 import { BUILTIN_ROLES, parseDeliveryRoleKeys } from '../kanban/roleCatalog';
@@ -468,6 +468,32 @@ async function salesSettings(ctx: BuiltinCtx, ownerUserId: string) {
   const [existing] = await ctx.db.select().from(salesAssociateSettings).where(eq(salesAssociateSettings.ownerUserId, ownerUserId)).limit(1);
   return existing;
 }
+
+/** Failed lookup ≡ no such user — never insert a dangling `assigned_user_id`. */
+async function userRowExists(db: BuiltinCtx['db'], id: string): Promise<boolean> {
+  try {
+    const [row] = await db.select({ id: users.id }).from(users).where(eq(users.id, id)).limit(1);
+    return Boolean(row);
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/llm/builtinMcpService.ts', operation: 'userRowExists' });
+    return false;
+  }
+}
+
+async function readManagerRefOrNull(
+  db: BuiltinCtx['db'],
+  tenantId: number,
+  projectId: number,
+  env: BuiltinCtx['env'],
+): Promise<string | null> {
+  try {
+    return (await getEffectiveManagerPolicy(db, tenantId, projectId, env)).managerRef ?? null;
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/llm/builtinMcpService.ts', operation: 'readManagerRefOrNull' });
+    return null;
+  }
+}
+
 const CATALOG: BuiltinTool[] = [
   // ---- Native creative platform -----------------------------------------
   {
@@ -1079,17 +1105,16 @@ const CATALOG: BuiltinTool[] = [
         throw new Error('A ticket must have exactly one Coordinator; pass only one assignee field.');
       }
       const hasExplicitAssignee = Object.values(explicitAssignee).some((v) => v != null);
-      const policyAssignee = hasExplicitAssignee
-        ? { assignedUserId: null, assignedAgentRef: null, assignedAgentHostId: null }
-        : resolveManagerAssignee((await getEffectiveManagerPolicy(ctx.db, ctx.tenantId, projectId, ctx.env)).managerRef);
+      // Default path: Delivery Manager, else requesting human IF they exist in
+      // `users`. A null/system managerRef or a dangling fallback id must insert
+      // NULL — never a sentinel that trips tasks_assigned_user_id_fkey.
       const coordinator = hasExplicitAssignee
         ? explicitAssignee
-        : Object.values(policyAssignee).some((v) => v != null)
-          ? policyAssignee
-          : { assignedUserId: ctx.userId ?? null, assignedAgentRef: null, assignedAgentHostId: null };
-      if (!Object.values(coordinator).some((v) => v != null)) {
-        throw new Error('Every ticket requires a Coordinator. Configure a project Delivery Manager or pass an assignee returned by tasks.assignees.');
-      }
+        : await resolveDefaultCreateTaskAssignee({
+            managerRef: await readManagerRefOrNull(ctx.db, ctx.tenantId, projectId, ctx.env),
+            requestingUserId: ctx.userId,
+            userExists: (id) => userRowExists(ctx.db, id),
+          });
       if (dupeTask) {
         let reconciled = dupeTask;
         const plain = dupeTask.toPlain();
