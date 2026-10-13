@@ -11,11 +11,14 @@
  */
 
 import { eq } from 'drizzle-orm';
+import { parseJsonObject } from '../../domain/shared/json';
 import { tenants } from '../../infrastructure/database/schema';
 import { siblingDatabase, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveAllFeatureEntitlements, type FeatureEntitlementSet } from '../tenant/featureEntitlements';
+import { heldCapabilityFeatures } from '../tenant/heldCapabilities';
+import { usageSnapshot } from '../replay/replayUsage';
 import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly, resolveOutboundFetchesMonthly, resolveCloudRunsMonthly, resolveStageSandboxRunsMonthly, resolveFeedbackSubmissionsMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { dailyTenantTextTokens, utcDayStart } from '../llm/tokenUsage';
@@ -31,8 +34,8 @@ import { utcMonthStart, utcNextMonthStart } from '../llm/tokenUsage';
 import { aiCreditBalance } from '../points/aiCredits';
 import { DAY_MS } from '../../domain/shared/time';
 
-export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs' | 'stage_sandbox_runs' | 'feedback_submissions';
-export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs' | 'sandbox_runs' | 'submissions';
+export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs' | 'stage_sandbox_runs' | 'feedback_submissions' | 'replay_recordings';
+export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs' | 'sandbox_runs' | 'submissions' | 'recordings';
 
 export interface MeterSnapshot {
   key: MeterKey;
@@ -85,6 +88,12 @@ export interface ConsumptionSnapshot {
    * feature answer means a second evaluator on the client.
    */
   features: FeatureEntitlementSet;
+  /**
+   * `tenants.settings.replayExcluded` (PRD 33 D9): this workspace's members are never
+   * recorded on builderforce.ai. Rides this snapshot because the dogfood loader
+   * already reads it for the plan, and the session carries no tenant settings.
+   */
+  replayExcluded: boolean;
 }
 
 /** Assemble one meter from a raw used/limit pair (-1 limit = unlimited). */
@@ -203,6 +212,7 @@ export async function buildConsumptionSnapshot(
         trialEndsAt: tenants.trialEndsAt,
         tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
         premiumOverride: tenants.premiumOverride,
+        settings: tenants.settings,
       })
       .from(tenants)
       .where(eq(tenants.id, tenantId))
@@ -253,6 +263,15 @@ export async function buildConsumptionSnapshot(
   const [stageSandboxRunsUsed, stageSandboxRunsTrend] = densifyDaily(stageSandboxRunsDaily, monthStart);
   const [feedbackSubmissionsUsed, feedbackSubmissionsTrend] = densifyDaily(feedbackSubmissionsDaily, monthStart);
 
+  // Insights recordings (PRD 33 D4) — only for a workspace that installed Insights, and
+  // from the SAME wallet snapshot ingest enforces (`replay/replayUsage`): used this
+  // month against free allowance + credits. Never superadmin-unlimited (D17).
+  const heldFeatures = await heldCapabilityFeatures(env, db, tenantId);
+  const replayUsage = heldFeatures.includes('sessionReplay')
+    ? await usageSnapshot(env, db, tenantId)
+    : null;
+  const replayExcluded = parseJsonObject<{ replayExcluded?: unknown }>(tenantRow?.settings).replayExcluded === true;
+
   return {
     period: { start: monthStart.toISOString(), resetsAt: monthEnd.toISOString() },
     plan: { effective: effectivePlan, billingStatus },
@@ -262,7 +281,11 @@ export async function buildConsumptionSnapshot(
       effectivePlan,
       premiumOverride: tenantRow?.premiumOverride ?? false,
       isSuperadmin,
+      // Capability licences (Insights) are part of what the gate grants, so the
+      // client's feature map carries them too — displayed == enforced.
+      heldFeatures,
     }),
+    replayExcluded,
     meters: [
       makeMeter('ai_tokens', 'tokens', tokensUsed, tokenLimit, tokensTrend),
       makeMeter('cloud_runs', 'runs', cloudRunsUsed, cloudRunsLimit, cloudRunsTrend),
@@ -271,6 +294,7 @@ export async function buildConsumptionSnapshot(
       makeMeter('error_events', 'events', errorEventsUsed, errorEventsLimit, errorEventsTrend),
       makeMeter('outbound_fetches', 'fetches', outboundFetchesUsed, outboundFetchesLimit, outboundFetchesTrend),
       makeMeter('feedback_submissions', 'submissions', feedbackSubmissionsUsed, feedbackSubmissionsLimit, feedbackSubmissionsTrend),
+      ...(replayUsage ? [makeMeter('replay_recordings', 'recordings', replayUsage.used, replayUsage.limit)] : []),
     ],
   };
 }

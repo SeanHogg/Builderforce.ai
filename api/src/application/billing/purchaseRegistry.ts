@@ -14,6 +14,11 @@
  * need (unretryable — acknowledged), otherwise whether the settlement applied.
  * They re-read the session from the processor themselves, so a webhook can never
  * grant what the processor does not confirm.
+ *
+ * ORDER REFUNDERS are the other direction: the one refund route
+ * (`refundListingOrder`) hands an order whose number names a self-settled flow to
+ * that flow's refunder, so a refund reverses what the flow granted — a recording
+ * pack's unused credits — rather than revoking a marketplace licence it never sold.
  */
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -24,6 +29,8 @@ import { SKILL_PURCHASE_KIND, completeSkillCheckout } from '../marketplace/skill
 import { recordBusinessPhoneEvent } from '../tenant/businessPhoneSubscription';
 import { completeSpawnTopUp, SPAWN_TOKENS_KIND } from '../spawn/spawnTopUp';
 import { recordSpawnPlanEvent, SPAWN_PLAN_KIND } from '../spawn/spawnMembership';
+import { REPLAY_PACK_KIND } from '../commerce/replayPacks';
+import { REPLAY_PACK_ORDER_PREFIX, refundReplayPackOrder, settleReplayPack } from '../commerce/replayPackSettlement';
 
 export interface OneOffSettlement {
   checkoutSessionId: string;
@@ -33,6 +40,11 @@ export interface OneOffSettlement {
 
 type OneOffSettler = (db: Db, env: Env, settlement: OneOffSettlement) => Promise<boolean | null>;
 type AddonRecorder = (db: Db, env: Env, event: WebhookEvent) => Promise<boolean>;
+export type OrderRefunder = (
+  db: Db,
+  env: Env,
+  input: { tenantId: number; orderId: number; actorRef: string },
+) => Promise<{ refundedCents: number }>;
 
 const ONE_OFF_SETTLERS: Readonly<Record<string, OneOffSettler>> = {
   [COMMS_TOPUP_KIND]: async (db, env, { checkoutSessionId, tenantId }) => {
@@ -59,6 +71,14 @@ const ONE_OFF_SETTLERS: Readonly<Record<string, OneOffSettler>> = {
     await completeSkillCheckout(db, env, { buyerUserId, checkoutSessionId });
     return true;
   },
+  // Insights recording packs (PRD 33 D4): credits on the tenant's
+  // `replay_recordings` ledger, keyed on the checkout so redirect + webhook = one row.
+  [REPLAY_PACK_KIND]: (db, env, settlement) => settleReplayPack(db, env, settlement),
+};
+
+/** Order-number prefix → the flow that refunds such an order. */
+const ORDER_REFUNDERS: Readonly<Record<string, OrderRefunder>> = {
+  [REPLAY_PACK_ORDER_PREFIX]: (db, env, input) => refundReplayPackOrder(db, env, input),
 };
 
 const ADDON_RECORDERS: Readonly<Record<string, AddonRecorder>> = {
@@ -77,4 +97,13 @@ export function oneOffSettlerFor(kind: string | undefined): OneOffSettler | null
 /** The recorder for a recurring add-on kind, or null when nothing listens for it. */
 export function addonRecorderFor(kind: string | undefined): AddonRecorder | null {
   return (kind && ADDON_RECORDERS[kind]) || null;
+}
+
+/** The refunder for an order a self-settled flow wrote, or null for a marketplace sale. */
+export function orderRefunderFor(orderNumber: string | null | undefined): OrderRefunder | null {
+  if (!orderNumber) return null;
+  for (const [prefix, refunder] of Object.entries(ORDER_REFUNDERS)) {
+    if (orderNumber.startsWith(prefix)) return refunder;
+  }
+  return null;
 }

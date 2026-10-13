@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adminSubHref, resolveAdminRoute } from './adminGroups';
+import { LEGACY_ADMIN_SUB, adminSubHref, resolveAdminRoute } from './adminGroups';
 
 describe('Creation Sessions super-admin route', () => {
   it('resolves the platform value dashboard in Overview', () => {
@@ -47,5 +47,35 @@ describe('Growth ▸ Visitors consolidation', () => {
     expect(resolveAdminRoute('visitorFlow', '').sub.id).toBe('visitors');
     expect(resolveAdminRoute('sessions', '').group.id).toBe('growth');
     expect(resolveAdminRoute('sessions', '').sub.id).toBe('visitors');
+  });
+});
+
+describe('LEGACY_ADMIN_SUB and the Insights panel alias (PRD 33 S0)', () => {
+  it('declares both legacy visitor addresses as data', () => {
+    expect(LEGACY_ADMIN_SUB.map((row) => `${row.fromGroup}/${row.fromSub}`)).toEqual(['users/sessions', 'growth/visitorFlow']);
+    for (const row of LEGACY_ADMIN_SUB) {
+      expect(row).toMatchObject({ toGroup: 'growth', toSub: 'visitors' });
+    }
+  });
+
+  it('carries the matching Insights panel for the old sessions list', () => {
+    expect(resolveAdminRoute('users', 'sessions').panel).toBe('issues');
+    expect(resolveAdminRoute('sessions', '').panel).toBe('issues');
+  });
+
+  it('returns no panel for an address that never had one', () => {
+    expect(resolveAdminRoute('growth', 'visitorFlow').panel).toBeUndefined();
+    expect(resolveAdminRoute('growth', 'visitors').panel).toBeUndefined();
+    expect('panel' in resolveAdminRoute('users', '')).toBe(false);
+  });
+
+  it('falls back to the group default for an unknown sub, and to Overview for an unknown tab', () => {
+    const route = resolveAdminRoute('growth', 'no-such-sub');
+    expect(route.group.id).toBe('growth');
+    expect(route.sub.id).toBe('');
+    expect(route.panel).toBeUndefined();
+    const unknown = resolveAdminRoute('no-such-tab', 'whatever');
+    expect(unknown.group.id).toBe('');
+    expect(unknown.sub.subKey).toBe('outcomes');
   });
 });

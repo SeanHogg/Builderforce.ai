@@ -4,7 +4,7 @@ import { CanvasSurfaceRouter, type CanvasSurfaceNodes } from '../CanvasSurfaceRo
 import { CanvasChatSurface, type CanvasChatSurfaceMember } from '../CanvasChatSurface';
 import { CanvasAppSurface } from '../CanvasAppSurface';
 import { CanvasInsightsSurface } from '../CanvasInsightsSurface';
-import { CanvasSessionsSurface } from '../CanvasSessionsSurface';
+import { CanvasVisitorsSurface } from '../CanvasVisitorsSurface';
 import { CanvasOperateSurface } from '../CanvasOperateSurface';
 import { CanvasLaunchSurface, type CanvasPlaceDoors } from '../CanvasLaunchSurface';
 import { CanvasIdeasSurface } from '../CanvasIdeasSurface';
@@ -112,9 +112,9 @@ export function CanvasSurfaceStage({
             // What is RUNNING (from Run): deployments, releases, the app — see the component.
             operate: <CanvasOperateSurface nodes={nodes} onExit={exitToBoard} onOpenApp={() => setSurface('app')} onOpenReleases={() => doors.openReleases()} />,
             insights: <CanvasInsightsSurface onExit={exitToBoard} />,
-            // Recordings of this canvas — board-scoped like Insights. The list itself
-            // is Visitors; this is the Measure-phase door onto that reading.
-            sessions: <CanvasSessionsSurface onExit={exitToBoard} />,
+            // Measure ▸ Visitors — THE Insights home for this board's app (PRD 33 S7),
+            // board-scoped like Insights: the app it reads is the board's primary app.
+            sessions: <CanvasVisitorsSurface nodes={nodes} onExit={exitToBoard} />,
             // Reach as a PLACE: the Make-it-real doors laid out as sections.
             launch: <CanvasLaunchSurface nodes={nodes} doors={doors} onExit={exitToBoard} />,
             // The idea scratchpad — board-scoped like `insights`. It reads the `idea` cards

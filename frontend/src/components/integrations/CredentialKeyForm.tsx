@@ -4,6 +4,7 @@ import { Select } from '@/components/Select';
 import type { ConnectableProvider, CredentialFieldDescriptor } from '@/lib/connectableCatalog';
 import { draftProblem, isRotating, type CredentialDraft } from './credentialDraft';
 import { btnPrimary, btnSubtle, formPanel, inputStyle } from './integrationStyles';
+import { REPLAY_BLOCK } from '@/lib/replaySensitive';
 
 /**
  * The add / edit form for one integration key, rendered ENTIRELY from the
@@ -76,7 +77,7 @@ export function CredentialKeyForm({ providers, editing, saving, serverError, onS
   const shownError = problem ?? serverError;
 
   return (
-    <div style={formPanel}>
+    <div style={formPanel} {...REPLAY_BLOCK}>
       <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600 }}>
         {editing ? t('editKeyTitle', { provider: descriptor.label }) : t('addKeyTitle')}
       </div>

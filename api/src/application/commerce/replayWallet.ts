@@ -15,7 +15,7 @@
  * statement, then cached.
  */
 
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { ledgerEntries } from '../../infrastructure/database/schema';
@@ -245,6 +245,32 @@ export async function creditReplayPack(
   }, 1);
 }
 
+/**
+ * An operator's audited credit grant (D17: the Builderforce workspace is customer
+ * #1 and holds credits the same way a buyer does — no unmetered back door). The
+ * reference is `replay-grant:<admin audit id>`, so one audit row can never credit
+ * twice. Grants do not expire: an operator decision is not a purchase on a clock.
+ */
+export async function creditReplayGrant(
+  db: Db,
+  env: Env | undefined,
+  input: { tenantId: number; units: number; auditId: string; reason: string; actorId: string },
+): Promise<boolean> {
+  return move(db, env, {
+    tenantId: input.tenantId,
+    amount: input.units,
+    reference: replayGrantReference(input.auditId),
+    memo: `Session replay recordings — operator grant (${input.units.toLocaleString('en-US')})`,
+    accountRef: String(input.tenantId),
+    entryKind: 'grant',
+    metadata: { kind: 'operator_grant', auditId: input.auditId, reason: input.reason, actorId: input.actorId },
+  }, 1);
+}
+
+export function replayGrantReference(auditId: string): string {
+  return `replay-grant:${auditId}`;
+}
+
 export async function debitReplayCredits(
   db: Db,
   env: Env | undefined,
@@ -363,28 +389,4 @@ export async function replayWalletSnapshot(
 
 export async function loadGrantRows(db: Db, tenantId: number): Promise<ReplayLedgerRow[]> {
   return loadCreditRows(db, tenantId);
-}
-
-/** True when this visit has already been billed (any of the visit's references). */
-export async function visitAlreadyBilled(
-  db: Db,
-  tenantId: number,
-  visitId: string,
-): Promise<boolean> {
-  const refs = [
-    `replay-visit:${visitId}`,
-    `replay-visit:${visitId}:free`,
-    `replay-visit:${visitId}:credits`,
-  ];
-  const [row] = await db
-    .select({ id: ledgerEntries.id })
-    .from(ledgerEntries)
-    .where(scopedToTenant(
-      ledgerEntries,
-      tenantId,
-      eq(ledgerEntries.denomination, REPLAY_RECORDINGS_DENOMINATION),
-      inArray(ledgerEntries.reference, refs),
-    ))
-    .limit(1);
-  return Boolean(row);
 }

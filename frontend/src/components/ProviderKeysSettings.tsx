@@ -26,6 +26,7 @@ import {
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { REPLAY_BLOCK } from '@/lib/replaySensitive';
 /**
  * BYO (bring-your-own-provider) credentials. A workspace owner connects their OWN
  * frontier-model accounts — Anthropic, OpenAI, and/or Google — and the platform
@@ -1261,7 +1262,7 @@ export function ProviderKeysSettings({
   );
 
   return (
-    <div>
+    <div {...REPLAY_BLOCK}>
       <div style={{ ...sectionTitle, fontSize: 'var(--font-size-card-title)', marginBottom: 4 }}>{t('title')}</div>
       <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 14px' }}>{t('subtitle')}</p>
 

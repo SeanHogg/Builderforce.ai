@@ -1,23 +1,35 @@
 /**
  * Session-replay recording packs — the published ladder (PRD 33 §8 S6 / D4).
  *
- * The unit is one visit of up to 2 MiB; a larger visit costs
+ * The unit is one KEPT recording of up to 2 MiB; a larger one costs
  * `ceil(bytes / 2 MiB)` units, never less than one. Packs last twelve months
  * from the grant. The free monthly allowance (5,000 recordings) is not a pack:
  * it is an implicit grant that resets on the calendar month, tracked as spend
  * against a `free:yyyy-mm` ledger account rather than a second balance table.
  *
- * Pack prices also live on the `session-replay` catalog item's body when that
- * listing exists. This module is the fallback AND the parser, so checkout can
- * settle before the listing workstream lands, and picks up the listing's
- * prices the moment it does — without this slice writing `catalog_items`.
+ * The ladder's source of truth is the platform-published `session-replay`
+ * capability listing (`catalog_items`, written by migration 1218): its `body`
+ * carries `packs` and `freeMonthlyUnits`, and {@link loadReplayCatalog} reads
+ * them (cached). The constants below are the parser's fallback for an
+ * environment where that row is missing or malformed — the shop keeps selling
+ * the D4 ladder rather than refusing.
  */
+
+import { and, eq, isNull } from 'drizzle-orm';
+import type { ReplayPackDto } from '@builderforce/interaction-contract';
+import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+import { catalogItems } from '../../infrastructure/database/schema';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { billableUnits, REPLAY_UNIT_BYTES } from '../../domain/replay/billing';
+import { CAPABILITY_LISTING_KIND, CAPABILITY_PUBLISHER_REF } from '../../domain/tenant/capabilityFeatures';
 
 export const SESSION_REPLAY_SLUG = 'session-replay';
 export const SESSION_REPLAY_ADDON = 'session_replay';
 
-/** One recording = one visit of up to this many bytes. */
-export const REPLAY_UNIT_BYTES = 2_097_152;
+/** One recording = one kept recording of up to this many bytes — owned by the domain billing rule. */
+export { REPLAY_UNIT_BYTES };
 
 /** Implicit monthly grant for an installed (or superadmin) workspace. */
 export const REPLAY_FREE_MONTHLY_UNITS = 5_000;
@@ -37,23 +49,19 @@ export const REPLAY_AUTORECHARGE_THRESHOLD = 0.1;
  */
 export const REPLAY_RECORDINGS_DENOMINATION = 'replay_recordings';
 
-export interface ReplayPack {
-  id: string;
-  units: number;
-  /** USD cents charged for the pack. */
-  cents: number;
-}
+/** One pack on the ladder — the wire shape (`ReplayPackDto`): `amountCents` is USD cents. */
+export type ReplayPack = ReplayPackDto;
 
 /**
  * D4 ladder. Ids are stable: they are what checkout metadata stamps, so a
  * rename would orphan in-flight sessions.
  */
 export const REPLAY_PACKS: readonly ReplayPack[] = [
-  { id: 'p10k', units: 10_000, cents: 4_000 },
-  { id: 'p50k', units: 50_000, cents: 14_000 },
-  { id: 'p150k', units: 150_000, cents: 24_000 },
-  { id: 'p500k', units: 500_000, cents: 65_000 },
-  { id: 'p1m', units: 1_000_000, cents: 120_000 },
+  { id: 'p10k', units: 10_000, amountCents: 4_000 },
+  { id: 'p50k', units: 50_000, amountCents: 14_000 },
+  { id: 'p150k', units: 150_000, amountCents: 24_000 },
+  { id: 'p500k', units: 500_000, amountCents: 65_000 },
+  { id: 'p1m', units: 1_000_000, amountCents: 120_000 },
 ];
 
 /** Body shape the `session-replay` catalog item is expected to carry. */
@@ -80,8 +88,7 @@ export function replayPack(id: string, packs: readonly ReplayPack[] = REPLAY_PAC
  * heartbeat with no payload is still a visit that occupied a slot.
  */
 export function unitsForBytes(bytes: number): number {
-  if (!Number.isFinite(bytes) || bytes <= 0) return 1;
-  return Math.max(1, Math.ceil(bytes / REPLAY_UNIT_BYTES));
+  return billableUnits(bytes);
 }
 
 /** Calendar month key (`yyyy-mm`, UTC) the free allowance resets on. */
@@ -116,9 +123,9 @@ function parsePack(value: unknown): ReplayPack | null {
   const row = value as Record<string, unknown>;
   if (typeof row.id !== 'string' || row.id.length === 0) return null;
   const units = asPositiveInt(row.units);
-  const cents = asPositiveInt(row.cents);
-  if (units === null || cents === null) return null;
-  return { id: row.id, units, cents };
+  const amountCents = asPositiveInt(row.amountCents);
+  if (units === null || amountCents === null) return null;
+  return { id: row.id, units, amountCents };
 }
 
 /**
@@ -145,4 +152,39 @@ export function freeMonthlyFromCatalogBody(body: unknown): number {
   if (!body || typeof body !== 'object') return REPLAY_FREE_MONTHLY_UNITS;
   const value = asPositiveInt((body as { freeMonthlyUnits?: unknown }).freeMonthlyUnits);
   return value ?? REPLAY_FREE_MONTHLY_UNITS;
+}
+
+/** What the published listing says, with the D4 fallbacks applied. */
+export interface ReplayCatalog {
+  /** `catalog_items.id` of the listing, or null when the row does not exist. */
+  listingId: string | null;
+  packs: readonly ReplayPack[];
+  freeMonthlyUnits: number;
+}
+
+const REPLAY_CATALOG_CACHE_KEY = 'replay:catalog:session-replay';
+
+/**
+ * The platform's `session-replay` capability row. Platform-published only
+ * (`tenant_id IS NULL`, `publisher_ref = 'builderforce'`), so a seller's listing
+ * that happens to share the slug can never price a pack.
+ */
+export async function loadReplayCatalog(env: Env | undefined, db: Db): Promise<ReplayCatalog> {
+  return getOrSetCached(env, REPLAY_CATALOG_CACHE_KEY, async (): Promise<ReplayCatalog> => {
+    const [row] = await db
+      .select({ id: catalogItems.id, body: catalogItems.body })
+      .from(catalogItems)
+      .where(acrossTenants(catalogItems, 'public_catalogue', and(
+        eq(catalogItems.slug, SESSION_REPLAY_SLUG),
+        eq(catalogItems.kind, CAPABILITY_LISTING_KIND),
+        isNull(catalogItems.tenantId),
+        eq(catalogItems.publisherRef, CAPABILITY_PUBLISHER_REF),
+      )))
+      .limit(1);
+    return {
+      listingId: row?.id ?? null,
+      packs: (row ? packsFromCatalogBody(row.body) : null) ?? REPLAY_PACKS,
+      freeMonthlyUnits: row ? freeMonthlyFromCatalogBody(row.body) : REPLAY_FREE_MONTHLY_UNITS,
+    };
+  }, { kvTtlSeconds: 10 * 60 });
 }

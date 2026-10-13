@@ -10,6 +10,7 @@ import {
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
+import { REPLAY_BLOCK } from '@/lib/replaySensitive';
 /**
  * The operating surface for a project's server-side half.
  *
@@ -187,7 +188,7 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
   const unboundSecrets = health ? Object.entries(health.secrets).filter(([, bound]) => !bound).map(([n]) => n) : [];
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
+    <div style={{ display: 'grid', gap: 16 }} {...REPLAY_BLOCK}>
       <div style={{ ...card, display: 'grid', gap: 12 }}>
         <div style={label}>{t('title')}</div>
 

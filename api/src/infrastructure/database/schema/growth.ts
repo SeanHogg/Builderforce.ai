@@ -31,7 +31,10 @@ import {
   jsonb,
   numeric,
   pgTable,
+  primaryKey,
+  real,
   serial,
+  smallint,
   text,
   timestamp,
   type AnyPgColumn,
@@ -42,7 +45,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { catalogItems, connections, objects } from './kernel';
 import { creationSessionObjects, creationSessions } from './canvas';
-import { tenants, users } from './identity';
+import { tenantApiKeys, tenants, users } from './identity';
 import { connectorConnections, mailboxConnections } from './integrations';
 import { projects } from './delivery';
 
@@ -2036,40 +2039,378 @@ export const hostedListingLifecycle = pgTable('hosted_listing_lifecycle', {
 ]);
 
 // ---------------------------------------------------------------------------
-// Session replay
+// Insights (session replay) — PRD 33 §3.2
+//
+// Two groups. The DEFINITIONS a person edits live on core (migration 1216): the site,
+// segments, smart events, funnels, prescriptions and page captures. Every child hangs
+// off `replay_sites` by a NOT NULL cascading key, so it inherits the site's tenant.
+//
+// The per-visitor TELEMETRY lives on the operational endpoint (the `replay_*` tables
+// after `replayPageCaptures` below) — see the LIVES ON comments.
 // ---------------------------------------------------------------------------
 
 /**
- * One recorded visit's summary — the foldVisit() row the Sessions canvas lists.
- *
- * Counters, paths and active time are the incremental fold in
- * `domain/replay/visitSummary.ts`. Ingest that writes this table is a later
- * slice; S4 only needs the read. `site_id` is an opaque recorder key, not
- * `project_sites.id` (serial integer) — `replay_sites` does not exist yet.
- * `tenant_id` is nullable because a visit can land before the visitor has an
- * account.
+ * One recorded site: a hosted app (`project_id` set) or an external site whose
+ * snippet carries the `bfr_` key in `api_key_id` (its allowed origins live on the
+ * key). `settings` is `ReplaySiteSettings` from the interaction contract.
  */
-export const replayVisits = pgTable('replay_visits', {
-  visitId:               varchar('visit_id', { length: 64 }).primaryKey(),
-  siteId:                varchar('site_id', { length: 64 }).notNull(),
-  tenantId:              integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
-  startedAt:             timestamp('started_at').notNull(),
-  lastEventAt:           timestamp('last_event_at').notNull(),
-  endedAt:               timestamp('ended_at'),
-  durationMs:            integer('duration_ms').notNull().default(0),
-  activeMs:              integer('active_ms').notNull().default(0),
-  entryPath:             varchar('entry_path', { length: 512 }).notNull().default(''),
-  exitPath:              varchar('exit_path', { length: 512 }).notNull().default(''),
-  pageCount:             integer('page_count').notNull().default(0),
-  clickCount:            integer('click_count').notNull().default(0),
-  rageCount:             integer('rage_count').notNull().default(0),
-  deadCount:             integer('dead_count').notNull().default(0),
-  errorCount:            integer('error_count').notNull().default(0),
-  quickbackCount:        integer('quickback_count').notNull().default(0),
-  excessiveScrollCount:  integer('excessive_scroll_count').notNull().default(0),
-  converted:             boolean('converted').notNull().default(false),
-  chunkCount:            integer('chunk_count').notNull().default(0),
+export const replaySites = pgTable('replay_sites', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** `hosted` | `external`. */
+  kind:      varchar('kind', { length: 16 }).notNull(),
+  /** Bare project id (the hosted site's project); resolved through the apps database. */
+  projectId: integer('project_id'),
+  label:     varchar('label', { length: 200 }).notNull().default(''),
+  apiKeyId:  uuid('api_key_id').references(() => tenantApiKeys.id, { onDelete: 'set null' }),
+  settings:  jsonb('settings').notNull().default(sql`'{}'::jsonb`),
+  /** `active` | `disabled`. */
+  status:    varchar('status', { length: 16 }).notNull().default('active'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  index('idx_replay_visits_site_last').on(t.siteId, t.lastEventAt),
-  index('idx_replay_visits_site_started').on(t.siteId, t.startedAt),
+  uniqueIndex('uq_replay_sites_project').on(t.tenantId, t.projectId).where(sql`${t.projectId} IS NOT NULL`),
+  uniqueIndex('uq_replay_sites_api_key').on(t.apiKeyId).where(sql`${t.apiKeyId} IS NOT NULL`),
+  index('idx_replay_sites_tenant').on(t.tenantId, t.createdAt),
+]);
+
+/** A saved `ReplayFilter` (S4c). */
+export const replaySegments = pgTable('replay_segments', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  siteId:    uuid('site_id').notNull().references(() => replaySites.id, { onDelete: 'cascade' }),
+  name:      varchar('name', { length: 120 }).notNull(),
+  filter:    jsonb('filter').notNull().default(sql`'{"all":[]}'::jsonb`),
+  createdBy: varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_replay_segments_name').on(t.siteId, t.name),
+]);
+
+/** A site's own smart-event rule (S4c). Built-ins are code data, never rows. */
+export const replaySmartEvents = pgTable('replay_smart_events', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  siteId:    uuid('site_id').notNull().references(() => replaySites.id, { onDelete: 'cascade' }),
+  name:      varchar('name', { length: 120 }).notNull(),
+  /** `page` | `click` | `custom`. */
+  ruleKind:  varchar('rule_kind', { length: 16 }).notNull(),
+  match:     varchar('match', { length: 400 }).notNull(),
+  /** `equals` | `prefix` | `contains`. */
+  matchMode: varchar('match_mode', { length: 16 }).notNull().default('equals'),
+  createdBy: varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_replay_smart_events_name').on(t.siteId, t.name),
+]);
+
+/** A funnel over pages, clicks and smart events (S4c). */
+export const replayFunnels = pgTable('replay_funnels', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  siteId:        uuid('site_id').notNull().references(() => replaySites.id, { onDelete: 'cascade' }),
+  name:          varchar('name', { length: 120 }).notNull(),
+  windowMinutes: integer('window_minutes').notNull().default(30),
+  createdBy:     varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_replay_funnels_site').on(t.siteId, t.createdAt),
+]);
+
+export const replayFunnelSteps = pgTable('replay_funnel_steps', {
+  funnelId:  uuid('funnel_id').notNull().references(() => replayFunnels.id, { onDelete: 'cascade' }),
+  ord:       smallint('ord').notNull(),
+  /** `page` | `click` | `event`. */
+  stepKind:  varchar('step_kind', { length: 16 }).notNull(),
+  match:     varchar('match', { length: 400 }).notNull(),
+  matchMode: varchar('match_mode', { length: 16 }).notNull().default('equals'),
+}, (t) => [
+  primaryKey({ columns: [t.funnelId, t.ord] }),
+]);
+
+/** One key page's capture per release and device (S4f page review). */
+export const replayPageCaptures = pgTable('replay_page_captures', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  siteId:            uuid('site_id').notNull().references(() => replaySites.id, { onDelete: 'cascade' }),
+  path:              varchar('path', { length: 400 }).notNull(),
+  releaseKey:        varchar('release_key', { length: 64 }).notNull().default(''),
+  deviceClass:       varchar('device_class', { length: 16 }).notNull(),
+  capturedAt:        timestamp('captured_at').notNull().defaultNow(),
+  screenshotKey:     text('screenshot_key'),
+  foldScreenshotKey: text('fold_screenshot_key'),
+  rectMapKey:        text('rect_map_key'),
+  seo:               jsonb('seo'),
+  content:           jsonb('content'),
+  labPerf:           jsonb('lab_perf'),
+  a11y:              jsonb('a11y'),
+  score:             jsonb('score'),
+}, (t) => [
+  uniqueIndex('uq_replay_page_captures_grain').on(t.siteId, t.path, t.releaseKey, t.deviceClass),
+]);
+
+/**
+ * A ranked fix (S4e). One writer per column group: the sweep (finding, impact,
+ * prescription, change, visual), the action route (action, status), the verifier
+ * (measured, status). One OPEN row per (site, rule, subject).
+ */
+export const replayPrescriptions = pgTable('replay_prescriptions', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  siteId:        uuid('site_id').notNull().references(() => replaySites.id, { onDelete: 'cascade' }),
+  ruleId:        varchar('rule_id', { length: 48 }).notNull(),
+  area:          varchar('area', { length: 16 }).notNull(),
+  /** `rule` | `observed`. */
+  source:        varchar('source', { length: 16 }).notNull().default('rule'),
+  subjectKey:    varchar('subject_key', { length: 400 }).notNull(),
+  pagePath:      varchar('page_path', { length: 400 }),
+  captureId:     uuid('capture_id').references(() => replayPageCaptures.id, { onDelete: 'set null' }),
+  status:        varchar('status', { length: 16 }).notNull().default('proposed'),
+  finding:       jsonb('finding').notNull().default(sql`'{}'::jsonb`),
+  prescription:  text('prescription'),
+  change:        jsonb('change'),
+  visual:        jsonb('visual'),
+  impact:        jsonb('impact').notNull().default(sql`'{}'::jsonb`),
+  actionKind:    varchar('action_kind', { length: 24 }),
+  actionRef:     varchar('action_ref', { length: 120 }),
+  acceptance:    jsonb('acceptance'),
+  measured:      jsonb('measured'),
+  dismissReason: text('dismiss_reason'),
+  decidedBy:     varchar('decided_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_replay_prescriptions_open')
+    .on(t.siteId, t.ruleId, t.subjectKey)
+    .where(sql`${t.status} NOT IN ('worked', 'no_effect', 'worse', 'dismissed')`),
+  index('idx_replay_prescriptions_site').on(t.siteId, t.status, t.updatedAt),
+]);
+
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0015), resolved through
+// `buildTransactionalDatabase()` / `siblingDatabase(env, db, 'operational')` — replay
+// telemetry is written while visitors browse, beside the usage ledger. `site_id` is a
+// plain id into core's `replay_sites`, not a foreign key. Mirrored on core by 1217.
+/** One row per KEPT recording (D15/D18): counters, paths and the arrays filters,
+ *  funnels and flow read. The bytes are R2 chunks under `replay/`. */
+export const replayRecordings = pgTable('replay_recordings', {
+  id:                   uuid('id').primaryKey().defaultRandom(),
+  siteId:               uuid('site_id').notNull(),
+  tenantId:             integer('tenant_id').notNull(),
+  visitorId:            varchar('visitor_id', { length: 64 }).notNull(),
+  visitId:              varchar('visit_id', { length: 64 }).notNull(),
+  startedAt:            timestamp('started_at').notNull(),
+  lastEventAt:          timestamp('last_event_at').notNull(),
+  endedAt:              timestamp('ended_at'),
+  durationMs:           integer('duration_ms').notNull().default(0),
+  activeMs:             integer('active_ms').notNull().default(0),
+  entryPath:            varchar('entry_path', { length: 400 }).notNull().default(''),
+  exitPath:             varchar('exit_path', { length: 400 }).notNull().default(''),
+  pageCount:            integer('page_count').notNull().default(0),
+  releaseKey:           varchar('release_key', { length: 64 }).notNull().default(''),
+  recorderVersion:      varchar('recorder_version', { length: 32 }).notNull().default(''),
+  deviceClass:          varchar('device_class', { length: 16 }).notNull(),
+  viewportW:            integer('viewport_w').notNull().default(0),
+  viewportH:            integer('viewport_h').notNull().default(0),
+  browser:              varchar('browser', { length: 32 }),
+  os:                   varchar('os', { length: 32 }),
+  country:              varchar('country', { length: 2 }),
+  referrerHost:         varchar('referrer_host', { length: 200 }),
+  clickCount:           integer('click_count').notNull().default(0),
+  rageCount:            integer('rage_count').notNull().default(0),
+  deadCount:            integer('dead_count').notNull().default(0),
+  errorCount:           integer('error_count').notNull().default(0),
+  quickbackCount:       integer('quickback_count').notNull().default(0),
+  excessiveScrollCount: integer('excessive_scroll_count').notNull().default(0),
+  converted:            boolean('converted').notNull().default(false),
+  /** `ReplayKeepReason`. */
+  keepReason:           varchar('keep_reason', { length: 16 }).notNull(),
+  sampleWeight:         real('sample_weight').notNull().default(1),
+  variant:              varchar('variant', { length: 64 }),
+  identifiedId:         varchar('identified_id', { length: 128 }),
+  traits:               jsonb('traits'),
+  billableUnits:        integer('billable_units').notNull().default(0),
+  chunkCount:           integer('chunk_count').notNull().default(0),
+  bytes:                bigint('bytes', { mode: 'number' }).notNull().default(0),
+  routes:               text('routes').array().notNull().default(sql`'{}'::text[]`),
+  events:               text('events').array().notNull().default(sql`'{}'::text[]`),
+  frustrations:         text('frustrations').array().notNull().default(sql`'{}'::text[]`),
+  clicked:              text('clicked').array().notNull().default(sql`'{}'::text[]`),
+  issueFps:             text('issue_fps').array().notNull().default(sql`'{}'::text[]`),
+  steps:                text('steps').array().notNull().default(sql`'{}'::text[]`),
+  tags:                 jsonb('tags').notNull().default(sql`'{}'::jsonb`),
+  createdAt:            timestamp('created_at').notNull().defaultNow(),
+  updatedAt:            timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_replay_recordings_visit').on(t.siteId, t.visitId),
+  index('idx_replay_recordings_site_started').on(t.siteId, t.startedAt),
+  index('idx_replay_recordings_site_release').on(t.siteId, t.releaseKey),
+  index('idx_replay_recordings_visitor').on(t.visitorId),
+  index('idx_replay_recordings_started').on(t.startedAt),
+  index('idx_replay_recordings_routes').using('gin', t.routes),
+  index('idx_replay_recordings_events').using('gin', t.events),
+  index('idx_replay_recordings_frustrations').using('gin', t.frustrations),
+  index('idx_replay_recordings_issue_fps').using('gin', t.issueFps),
+]);
+
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0015). See replayRecordings.
+/** A release a site shipped, by first and last sighting. `label` null → `R<ordinal>`. */
+export const replayReleases = pgTable('replay_releases', {
+  siteId:      uuid('site_id').notNull(),
+  tenantId:    integer('tenant_id').notNull(),
+  releaseKey:  varchar('release_key', { length: 64 }).notNull(),
+  label:       varchar('label', { length: 80 }),
+  /** `explicit` | `hosted` | `fingerprint`. */
+  source:      varchar('source', { length: 16 }).notNull().default('explicit'),
+  firstSeenAt: timestamp('first_seen_at').notNull().defaultNow(),
+  lastSeenAt:  timestamp('last_seen_at').notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.siteId, t.releaseKey] }),
+]);
+
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0015). See replayRecordings.
+/** Exact per-route counts over EVERY session (additive upserts from the ingest buffers). */
+export const replayRouteDaily = pgTable('replay_route_daily', {
+  siteId:         uuid('site_id').notNull(),
+  tenantId:       integer('tenant_id').notNull(),
+  day:            date('day').notNull(),
+  releaseKey:     varchar('release_key', { length: 64 }).notNull(),
+  route:          varchar('route', { length: 200 }).notNull(),
+  deviceClass:    varchar('device_class', { length: 16 }).notNull(),
+  sessions:       integer('sessions').notNull().default(0),
+  entries:        integer('entries').notNull().default(0),
+  exits:          integer('exits').notNull().default(0),
+  pageviews:      integer('pageviews').notNull().default(0),
+  newVisitors:    integer('new_visitors').notNull().default(0),
+  conversions:    integer('conversions').notNull().default(0),
+  frustrated:     integer('frustrated').notNull().default(0),
+  errors:         integer('errors').notNull().default(0),
+  activeMsSum:    bigint('active_ms_sum', { mode: 'number' }).notNull().default(0),
+  scrollDepthSum: integer('scroll_depth_sum').notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.siteId, t.day, t.releaseKey, t.route, t.deviceClass] }),
+  index('idx_replay_route_daily_day').on(t.day),
+]);
+
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0015). See replayRecordings.
+/** Session counts per dimension value (`country|device|browser|os|referrer|entry|exit`). */
+export const replayBreakdownDaily = pgTable('replay_breakdown_daily', {
+  siteId:   uuid('site_id').notNull(),
+  tenantId: integer('tenant_id').notNull(),
+  day:      date('day').notNull(),
+  dim:      varchar('dim', { length: 16 }).notNull(),
+  value:    varchar('value', { length: 200 }).notNull(),
+  sessions: integer('sessions').notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.siteId, t.day, t.dim, t.value] }),
+  index('idx_replay_breakdown_daily_day').on(t.day),
+]);
+
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0015). See replayRecordings.
+/** Heat cells: click/rage/dead on the `GRID` lattice; scroll uses `gy` = depth decile. */
+export const replayHeatDaily = pgTable('replay_heat_daily', {
+  siteId:      uuid('site_id').notNull(),
+  tenantId:    integer('tenant_id').notNull(),
+  day:         date('day').notNull(),
+  releaseKey:  varchar('release_key', { length: 64 }).notNull(),
+  route:       varchar('route', { length: 200 }).notNull(),
+  deviceClass: varchar('device_class', { length: 16 }).notNull(),
+  kind:        varchar('kind', { length: 16 }).notNull(),
+  selector:    varchar('selector', { length: 200 }).notNull(),
+  label:       varchar('label', { length: 80 }).notNull(),
+  gx:          smallint('gx').notNull(),
+  gy:          smallint('gy').notNull(),
+  n:           integer('n').notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.siteId, t.day, t.releaseKey, t.route, t.deviceClass, t.kind, t.selector, t.label, t.gx, t.gy] }),
+  index('idx_replay_heat_daily_day').on(t.day),
+]);
+
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0015). See replayRecordings.
+/** Core Web Vitals histograms; p75 is read with `p75FromHistogram` over `VITAL_BUCKETS`. */
+export const replayVitalsDaily = pgTable('replay_vitals_daily', {
+  siteId:      uuid('site_id').notNull(),
+  tenantId:    integer('tenant_id').notNull(),
+  day:         date('day').notNull(),
+  releaseKey:  varchar('release_key', { length: 64 }).notNull(),
+  route:       varchar('route', { length: 200 }).notNull(),
+  deviceClass: varchar('device_class', { length: 16 }).notNull(),
+  metric:      varchar('metric', { length: 8 }).notNull(),
+  bucket:      smallint('bucket').notNull(),
+  n:           integer('n').notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.siteId, t.day, t.releaseKey, t.route, t.deviceClass, t.metric, t.bucket] }),
+  index('idx_replay_vitals_daily_day').on(t.day),
+]);
+
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0015). See replayRecordings.
+/** An issue group: every session that hit the same (route, kind, subject) fingerprint. */
+export const replayIssues = pgTable('replay_issues', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  siteId:         uuid('site_id').notNull(),
+  tenantId:       integer('tenant_id').notNull(),
+  fingerprint:    varchar('fingerprint', { length: 32 }).notNull(),
+  kind:           varchar('kind', { length: 24 }).notNull(),
+  route:          varchar('route', { length: 200 }).notNull(),
+  subject:        varchar('subject', { length: 400 }).notNull(),
+  title:          varchar('title', { length: 240 }).notNull(),
+  firstRelease:   varchar('first_release', { length: 64 }),
+  lastRelease:    varchar('last_release', { length: 64 }),
+  firstSeenAt:    timestamp('first_seen_at').notNull().defaultNow(),
+  lastSeenAt:     timestamp('last_seen_at').notNull().defaultNow(),
+  /** `ReplayIssueStatus`. */
+  status:         varchar('status', { length: 16 }).notNull().default('new'),
+  /** Core `replay_prescriptions.id`, a plain id across endpoints. */
+  prescriptionId: uuid('prescription_id'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_replay_issues_fingerprint').on(t.siteId, t.fingerprint),
+  index('idx_replay_issues_site_seen').on(t.tenantId, t.siteId, t.lastSeenAt),
+]);
+
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0015). See replayRecordings.
+export const replayIssueDaily = pgTable('replay_issue_daily', {
+  issueId:     uuid('issue_id').notNull().references(() => replayIssues.id, { onDelete: 'cascade' }),
+  day:         date('day').notNull(),
+  releaseKey:  varchar('release_key', { length: 64 }).notNull(),
+  deviceClass: varchar('device_class', { length: 16 }).notNull(),
+  sessions:    integer('sessions').notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.issueId, t.day, t.releaseKey, t.deviceClass] }),
+  index('idx_replay_issue_daily_day').on(t.day),
+]);
+
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0015). See replayRecordings.
+/** The recordings that best show an issue, ranked. */
+export const replayIssueRepresentatives = pgTable('replay_issue_representatives', {
+  issueId:     uuid('issue_id').notNull().references(() => replayIssues.id, { onDelete: 'cascade' }),
+  rank:        smallint('rank').notNull(),
+  recordingId: uuid('recording_id').notNull().references(() => replayRecordings.id, { onDelete: 'cascade' }),
+  share:       real('share').notNull().default(0),
+  label:       varchar('label', { length: 120 }),
+}, (t) => [
+  primaryKey({ columns: [t.issueId, t.rank] }),
+  index('idx_replay_issue_representatives_recording').on(t.recordingId),
+]);
+
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0015). See replayRecordings.
+/** A cited AI summary of one recording (S4c). */
+export const replayVisitSummaries = pgTable('replay_visit_summaries', {
+  recordingId: uuid('recording_id').primaryKey().references(() => replayRecordings.id, { onDelete: 'cascade' }),
+  summary:     text('summary').notNull(),
+  citations:   jsonb('citations').notNull().default(sql`'[]'::jsonb`),
+  model:       varchar('model', { length: 120 }),
+  generatedAt: timestamp('generated_at').notNull().defaultNow(),
+});
+
+// LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0015). See replayRecordings.
+/** Who is on the site now. Rows older than five minutes are purged (ingest + daily sweep). */
+export const replayLive = pgTable('replay_live', {
+  siteId:      uuid('site_id').notNull(),
+  tenantId:    integer('tenant_id').notNull(),
+  visitId:     varchar('visit_id', { length: 64 }).notNull(),
+  lastSeenAt:  timestamp('last_seen_at').notNull().defaultNow(),
+  route:       varchar('route', { length: 200 }).notNull().default(''),
+  deviceClass: varchar('device_class', { length: 16 }).notNull(),
+  x:           smallint('x'),
+  y:           smallint('y'),
+  recordingId: uuid('recording_id'),
+}, (t) => [
+  primaryKey({ columns: [t.siteId, t.visitId] }),
+  index('idx_replay_live_site_seen').on(t.siteId, t.lastSeenAt),
 ]);

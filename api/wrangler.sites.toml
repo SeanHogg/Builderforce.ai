@@ -28,6 +28,8 @@ mode = "smart"
 [vars]
 ENVIRONMENT = "production"
 APP_URL     = "https://builderforce.ai"
+# Insights loader origin injected into hosted apps (siteReplayInjection.ts, PRD 33 §8 S7).
+REPLAY_CDN_ORIGIN = "https://cdn.builderforce.ai"
 
 # Same bucket and cache namespace as the API: a published site's files and its cached
 # site record are one store, written by the API's publish path and read here.

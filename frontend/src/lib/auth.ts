@@ -20,6 +20,7 @@
 
 import type { AuthUser, Tenant } from './types';
 import { API_ORIGIN } from './apiOrigin';
+import { isSafeRelativePath } from './safeRedirect';
 
 export const AUTH_API_URL = API_ORIGIN;
 
@@ -219,6 +220,57 @@ export function registerHref(next?: string, intent?: string): string {
   if (intent) params.set('intent', intent);
   const query = params.toString();
   return query ? `/register?${query}` : '/register';
+}
+
+/**
+ * What a person was on their way to DO when the product asked them to sign up —
+ * `next` (where) plus `intent` (what, e.g. `install:insights`).
+ */
+export interface ResumableIntent {
+  next?: string | null;
+  intent?: string | null;
+}
+
+/** Anything with `get(name)`: `URLSearchParams` and Next's `ReadonlyURLSearchParams`. */
+export interface IntentParams {
+  get(name: string): string | null;
+}
+
+/** The intent a page arrived with (`?next=…&intent=…`). */
+export function readIntent(params: IntentParams): ResumableIntent {
+  return { next: params.get('next'), intent: params.get('intent') };
+}
+
+/**
+ * THE way back to an interrupted intent — sign-up, email verification and the
+ * workspace choice all finish here, so a buyer who clicked "Start free" lands on
+ * the set-up page rather than the dashboard.
+ *
+ * The intent is folded INTO the returned path (`/apps/insights/setup?intent=…`),
+ * so every later hop that only carries `next` — the `/tenants?next=` workspace
+ * picker, the OAuth round trip, `useRequireSession`'s redirect — keeps it without
+ * knowing it exists. Unsafe destinations (another origin, `//host`, a scheme) fall
+ * back, the same rule as `safeRedirectPath`.
+ */
+export function resumeIntent(intent: ResumableIntent | null | undefined, fallback = '/dashboard'): string {
+  const next = intent?.next;
+  const path = isSafeRelativePath(next) ? next : fallback;
+  const what = intent?.intent?.trim();
+  if (!what || !path) return path;
+  const hashAt = path.indexOf('#');
+  const base = hashAt >= 0 ? path.slice(0, hashAt) : path;
+  const hash = hashAt >= 0 ? path.slice(hashAt) : '';
+  const queryAt = base.indexOf('?');
+  const params = new URLSearchParams(queryAt >= 0 ? base.slice(queryAt + 1) : '');
+  if (params.has('intent')) return path;
+  params.set('intent', what);
+  return `${queryAt >= 0 ? base.slice(0, queryAt) : base}?${params.toString()}${hash}`;
+}
+
+/** The workspace picker, coming back to the interrupted intent once a workspace is chosen. */
+export function workspaceChoiceHref(intent: ResumableIntent | null | undefined): string {
+  const target = resumeIntent(intent, '');
+  return target ? `/tenants?next=${encodeURIComponent(target)}` : '/tenants';
 }
 
 // ---------------------------------------------------------------------------

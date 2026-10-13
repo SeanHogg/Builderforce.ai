@@ -102,7 +102,7 @@ export function LegalHistoryDrawer({ context, onClose }: LegalHistoryDrawerProps
                     background: 'var(--surface)',
                   }}
                 >
-                  {v.changeKind === 'amend' ? t('legal.history.amend') : t('legal.history.publish')}
+                  {v.changeKind === 'amend' ? t('legal.history.amend') : v.changeKind === 'draft' ? t('legal.history.draft') : t('legal.history.publish')}
                 </span>
                 <span className="text-muted" style={{ fontSize: 11, marginLeft: 'auto' }}>
                   {fmtDateTime(v.createdAt)}

@@ -340,11 +340,14 @@ export function StatTile({
   value,
   hint,
   tone,
+  footer,
 }: {
   label: string;
   value: string;
   hint?: string;
   tone?: 'success' | 'error' | 'warning';
+  /** Drawn under the hint — e.g. the Insights home's sparkline. */
+  footer?: React.ReactNode;
 }): React.JSX.Element {
   const toneColor =
     tone === 'success'
@@ -375,6 +378,7 @@ export function StatTile({
         {value}
       </div>
       {hint && <div className="text-muted" style={{ fontSize: 'var(--font-size-eyebrow)', marginTop: 2 }}>{hint}</div>}
+      {footer != null && <div style={{ marginTop: 4 }}>{footer}</div>}
     </div>
   );
 }

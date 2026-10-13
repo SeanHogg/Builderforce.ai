@@ -1829,6 +1829,10 @@ export const realizations = pgTable('realizations', {
   /** The number that decided it, straight from the console that computed it —
    *  e.g. `{ metricLabel: 'Signups', metricValue: 31, target: 25, sample: 500 }`. */
   verdictMetric: jsonb('verdict_metric'),
+  /** The proof's `ProofMeasure` (PRD 33 §5.3, S4d): what visitor behaviour grades it —
+   *  sample, success event or funnel, threshold and window. Null when the target's
+   *  criteria are not visitor behaviour. Migration 1216. */
+  measure:       jsonb('measure'),
   /** When the verdict was recorded. Distinct from `updatedAt`, which a rebuild
    *  also bumps without touching the verdict. */
   decidedAt:     timestamp('decided_at'),

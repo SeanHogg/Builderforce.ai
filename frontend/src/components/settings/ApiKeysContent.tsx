@@ -172,7 +172,7 @@ export function ApiKeysContent({ embedded = false, showProviderKeys = true, sear
   };
 
   return (
-    <PageContainer width={embedded ? 'full' : 'narrow'} style={{ padding: embedded ? 0 : '32px 40px' }}>
+    <PageContainer width={embedded ? 'full' : 'narrow'} style={{ padding: embedded ? 0 : '32px 40px' }} privacy="block">
       {!embedded && <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>{t('title')}</h1>}
       {!embedded && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
         {t.rich('subtitle', {

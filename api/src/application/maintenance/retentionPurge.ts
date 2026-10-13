@@ -27,6 +27,7 @@ import { SWEPT_TABLES } from './sweptTables';
 import { purgeExpiredMemories } from '../memory/memoryService';
 import { EXECUTION_PAYLOAD_RETENTION_DAYS, redactStaleExecutionPayloads } from '../runtime/executionPayloadRetention';
 import { DAY_MS } from '../../domain/shared/time';
+import { runReplayRetention } from '../replay/replayRetention';
 
 const cutoff = (now: number, days: number) => new Date(now - days * DAY_MS);
 
@@ -128,6 +129,11 @@ export async function runRetentionPurge(
     // on domain data. `executions` is business data with twelve cascading children and
     // live writers, so the sweep may neither delete from it nor rewrite it — but one
     // column on it was 29 MB that no reader of a 30-day-old run can reach.
+    // Insights recordings (PRD 33 D3): a PER-SITE window (30 days unless the site raised
+    // it, at most 90), so it cannot be one registry row. Deletes the rows and sweeps the
+    // R2 day-prefixes that hold their bytes, then stale live presence. The registry's
+    // `replay_recordings` entry is only the 90-day backstop and the vacuum.
+    { name: 'replay_recordings', run: () => runReplayRetention(env, db, new Date(now)) },
     {
       name: 'execution_payloads',
       run: () => redactStaleExecutionPayloads(db, cutoff(now, EXECUTION_PAYLOAD_RETENTION_DAYS)),

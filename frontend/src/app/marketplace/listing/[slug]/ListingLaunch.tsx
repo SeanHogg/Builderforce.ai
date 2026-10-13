@@ -17,12 +17,12 @@
  * entitlement is a client that can be told to decide differently.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { signInHref } from '@/lib/auth';
+import { registerHref, signInHref } from '@/lib/auth';
 import {
   DeclaredLimits,
   HostedStatusNote,
@@ -37,7 +37,8 @@ import {
   type LaunchPayload,
 } from '@/lib/creationListings';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
-import { requiresWorkspace, resolveDelivery } from '@builderforce/creation-canvas-contract';
+import { isEntitlementKind, requiresWorkspace, resolveDelivery } from '@builderforce/creation-canvas-contract';
+import { capabilityAppForListing, capabilityStartHref } from '@/lib/marketplace/capabilityApps';
 import { SessionGate } from '@/components/guest/SessionGate';
 
 export function ListingLaunch({ listing }: { listing: CreationListing }) {
@@ -56,6 +57,12 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
   // re-derived here, and through `resolveDelivery` so a listing cached before
   // `delivery` was on the wire degrades to its kind's default.
   const needsWorkspace = requiresWorkspace(listing.delivery ?? resolveDelivery(listing.kind));
+  // A CAPABILITY listing (Insights) has no snapshot to copy onto a board: taking it
+  // is its app's set-up page, which installs through the one free-acquire call.
+  // Decided by kind → `CAPABILITY_APPS`, never by a slug here.
+  const entitlementKind = isEntitlementKind(listing.kind);
+  const capabilityApp = entitlementKind ? capabilityAppForListing(listing.slug) : null;
+  const tCapability = useTranslations('marketplace.capability');
 
   const load = useCallback(async () => {
     setError(null);
@@ -144,6 +151,25 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
     }
   }, [listing.slug, router, errorMessage]);
 
+  /**
+   * Resume "Get" after sign-up. A signed-out visitor taking a FREE listing is sent
+   * to register with `intent=install:<slug>`; `resumeIntent` folds that into the
+   * way back, so they land here again with it. Taking it then is what they already
+   * asked for — once, and the parameter is stripped so a refresh is not a second ask.
+   */
+  const installIntent = `install:${listing.slug}`;
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (resumed.current || capabilityApp?.id || !signedIn || !free || !launch || launch.entitled || owned) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('intent') !== installIntent) return;
+    resumed.current = true;
+    params.delete('intent');
+    const query = params.toString();
+    router.replace(`${window.location.pathname}${query ? `?${query}` : ''}`);
+    void acquire();
+  }, [signedIn, free, launch, owned, installIntent, router, acquire, capabilityApp?.id]);
+
   const entitled = launch?.entitled ?? false;
 
   const takeButton = (
@@ -183,10 +209,19 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
             control renders, inert, with "sign in / create a workspace" under it.
             `SessionGate` decides its own state, so a signed-in buyer with a
             workspace gets the live button through the same branch. */}
-        {needsWorkspace && !(signedIn && (owned || entitled)) ? (
+        {capabilityApp ? (
+          <Link className="mpl-btn" href={owned || entitled ? capabilityApp.homePath : capabilityStartHref(capabilityApp, signedIn, registerHref)}>
+            {owned || entitled ? tCapability('openApp', { app: listing.name }) : tCapability('startFree')}
+          </Link>
+        ) : needsWorkspace && !(signedIn && (owned || entitled)) ? (
           <SessionGate action="takeCopy" variant="stacked">{takeButton}</SessionGate>
         ) : !signedIn ? (
-          <Link className="mpl-btn" href={signInHref(`/marketplace/listing/${listing.slug}`)}>
+          <Link
+            className="mpl-btn"
+            href={free
+              ? registerHref(`/marketplace/listing/${listing.slug}`, installIntent)
+              : signInHref(`/marketplace/listing/${listing.slug}`)}
+          >
             {free ? t('signInToInstall') : t('signInToBuy')}
           </Link>
         ) : owned || entitled ? (
@@ -194,7 +229,7 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
         ) : (
           takeButton
         )}
-        {(owned || entitled) && signedIn && (
+        {(owned || entitled) && signedIn && !entitlementKind && (
           <button type="button" className="mpl-btn mpl-btn-ghost" onClick={install} disabled={busy}>
             {t('openInCanvas')}
           </button>

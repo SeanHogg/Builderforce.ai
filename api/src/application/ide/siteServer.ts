@@ -51,6 +51,7 @@ import { handleSiteBilling } from '../marketplace/siteBilling';
 import { forkedDocumentHeaders, resolveSiteVisitor } from './siteVisitor';
 import { landingPageApplies } from './siteLandingRule';
 import { withSiteBadge } from './siteAttribution';
+import { withReplayLoader } from './siteReplayInjection';
 import {
   SITE_API_PREFIX,
   SITE_BACKEND_PREFIX,
@@ -72,7 +73,8 @@ export async function serveHostedSite(
   const site = await lookupSite(env, subdomain);
   if (!site) return new Response('Site not found', { status: 404 });
   const { response } = await serveAsset(env, site, assetPath);
-  return withSiteBadge(env, site.tenantId, response);
+  return withReplayLoader(env, site.tenantId, site.projectId, site.versionToken,
+    await withSiteBadge(env, site.tenantId, response));
 }
 
 /** The `page-view` workflow trigger — fired from the API only, which is why the
@@ -378,7 +380,8 @@ export async function tryServeHostedSite(
       const landing = await serveLandingDocument(env, site);
       if (landing) {
         await count(landing.bytes, true);
-        return withSiteBadge(env, site.tenantId, landing.response);
+        return withReplayLoader(env, site.tenantId, site.projectId, site.versionToken,
+          await withSiteBadge(env, site.tenantId, landing.response));
       }
       // The pointer said there is a shop window and R2 did not have it. Serving the
       // app is the right failure: the visitor gets the product rather than an error

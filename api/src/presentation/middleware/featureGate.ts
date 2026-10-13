@@ -17,6 +17,7 @@ import {
 } from '../../domain/tenant/planFeatures';
 import { listTenantProviderKeys } from '../../application/llm/tenantProviderKeyService';
 import { upgradeRequiredBody, type UpgradeRequiredBody } from '../../domain/tenant/paymentRequired';
+import { capabilityRequiredBody } from '../../domain/tenant/capabilityFeatures';
 
 /**
  * Feature gate — the ONE reusable entry point route handlers use to gate a
@@ -207,6 +208,10 @@ export function featureGateBody(ent: FeatureEntitlement): UpgradeRequiredBody {
  *
  *   const gate = await requireFeature(c, 'psychometricPersona');
  *   if (gate) return gate;
+ *
+ * A feature granted by a marketplace CAPABILITY (e.g. `sessionReplay`) is not
+ * unlocked by any plan, so its miss is a **403** naming the listing to install
+ * (`capability_required`), never an upgrade wall.
  */
 export async function requireFeature(
   c: Context<HonoEnv>,
@@ -216,5 +221,6 @@ export async function requireFeature(
   const userId = c.get('userId') as string | undefined;
   const ent = await resolveFeatureEntitlement(c.env, tenantId, userId, feature);
   if (ent.entitled) return null;
+  if (ent.capability) return c.json(capabilityRequiredBody(ent.feature, ent.label), 403);
   return c.json(featureGateBody(ent), 402);
 }

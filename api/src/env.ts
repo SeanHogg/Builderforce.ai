@@ -283,6 +283,12 @@ export interface Env {
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
 
+  /** Public CDN origin of the Insights loader and recorder (PRD 33 D5). `[vars]` in
+   *  wrangler.toml; recordings themselves go to UPLOADS under `replay/` (D18). */
+  REPLAY_CDN_ORIGIN?: string;
+  /** The recorder manifest `ReplayConfigService` reads (read-through cached 10 min). */
+  REPLAY_MANIFEST_URL?: string;
+
   /** Freelancer payout provider webhook. When set, "Pay" on an approved freelancer
    *  invoice POSTs `{invoiceId, amountCents, currency, freelancerUserId, tenantId}`
    *  here (Bearer PAYOUT_WEBHOOK_KEY) and marks the invoice paid with the returned

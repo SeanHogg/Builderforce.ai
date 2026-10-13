@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import type { Db } from '../../infrastructure/database/connection';
 import {
   DEFAULT_REPLAY_CATALOG_BODY,
   freeMonthlyFromCatalogBody,
+  loadReplayCatalog,
   packsFromCatalogBody,
   replayCheckoutIdempotencyKey,
   replayCreditExpiresAt,
@@ -18,7 +20,7 @@ import {
 
 describe('replayCatalog', () => {
   it('publishes the D4 ladder (units and cents)', () => {
-    expect(REPLAY_PACKS.map((p) => [p.id, p.units, p.cents])).toEqual([
+    expect(REPLAY_PACKS.map((p) => [p.id, p.units, p.amountCents])).toEqual([
       ['p10k', 10_000, 4_000],
       ['p50k', 50_000, 14_000],
       ['p150k', 150_000, 24_000],
@@ -34,7 +36,7 @@ describe('replayCatalog', () => {
   });
 
   it('looks a pack up by id and refuses unknown ids', () => {
-    expect(replayPack('p10k')?.cents).toBe(4_000);
+    expect(replayPack('p10k')?.amountCents).toBe(4_000);
     expect(replayPack('nope')).toBeNull();
   });
 
@@ -65,9 +67,38 @@ describe('replayCatalog', () => {
   it('parses catalog body packs and ignores malformed rows', () => {
     expect(packsFromCatalogBody(null)).toBeNull();
     expect(packsFromCatalogBody({ packs: [] })).toBeNull();
-    expect(packsFromCatalogBody({ packs: [{ id: 'p10k', units: 10_000, cents: 4_000 }, { id: 'bad' }] }))
-      .toEqual([{ id: 'p10k', units: 10_000, cents: 4_000 }]);
+    expect(packsFromCatalogBody({ packs: [{ id: 'p10k', units: 10_000, amountCents: 4_000 }, { id: 'bad' }] }))
+      .toEqual([{ id: 'p10k', units: 10_000, amountCents: 4_000 }]);
     expect(freeMonthlyFromCatalogBody({ freeMonthlyUnits: 9_000 })).toBe(9_000);
     expect(freeMonthlyFromCatalogBody({})).toBe(REPLAY_FREE_MONTHLY_UNITS);
+  });
+});
+
+describe('loadReplayCatalog', () => {
+  function dbReturning(rows: unknown[]): Db {
+    const chain = { from: () => chain, where: () => chain, limit: async () => rows };
+    return { select: () => chain } as unknown as Db;
+  }
+
+  it('reads packs and the free allowance from the published listing body', async () => {
+    const catalog = await loadReplayCatalog(undefined, dbReturning([{
+      id: 'listing-1',
+      body: {
+        addon: 'session_replay',
+        freeMonthlyUnits: 7_500,
+        unitBytes: REPLAY_UNIT_BYTES,
+        packs: [{ id: 'p10k', units: 10_000, amountCents: 3_900 }],
+      },
+    }]));
+    expect(catalog).toEqual({
+      listingId: 'listing-1',
+      packs: [{ id: 'p10k', units: 10_000, amountCents: 3_900 }],
+      freeMonthlyUnits: 7_500,
+    });
+  });
+
+  it('falls back to the D4 ladder when the row is missing', async () => {
+    const catalog = await loadReplayCatalog(undefined, dbReturning([]));
+    expect(catalog).toEqual({ listingId: null, packs: REPLAY_PACKS, freeMonthlyUnits: REPLAY_FREE_MONTHLY_UNITS });
   });
 });

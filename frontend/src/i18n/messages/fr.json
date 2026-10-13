@@ -2213,7 +2213,8 @@
       "ingestion": "Données",
       "error_events": "Erreurs",
       "outbound_fetches": "Requêtes sortantes",
-      "feedback_submissions": "Retours"
+      "feedback_submissions": "Retours",
+      "replay_recordings": "Enregistrements"
     },
     "unlimited": "Illimité",
     "freePerMo": "{amount} gratuit / mois",
@@ -3514,6 +3515,156 @@
       "colDispatched": "Lancés",
       "colExecutionRate": "Taux d'exécution",
       "colCost": "Coût"
+    },
+    "overview": {
+      "title": "Insights",
+      "homeAria": "Accueil Insights",
+      "periodLabel": "Période",
+      "window": "{days} j",
+      "windowAria": "{days} derniers jours",
+      "compare": "Comparer la version",
+      "compareNone": "Aucune comparaison",
+      "releaseOrdinal": "R{n}",
+      "live": "En direct",
+      "goalLabel": "Objectif",
+      "stageTitle": "Scène de page",
+      "stageEmpty": "Choisissez un problème pour voir sa page ici.",
+      "lensesAria": "Vues de la page",
+      "doNextTitle": "À faire ensuite",
+      "doNextEmpty": "Les correctifs classés apparaîtront ici dès que suffisamment de sessions permettront de les mesurer."
+    },
+    "goals": {
+      "activation": "Activation",
+      "revenue": "Revenus",
+      "signups": "Inscriptions",
+      "retention": "Rétention"
+    },
+    "kpi": {
+      "aria": "Chiffres clés",
+      "error": "Impossible de charger les chiffres.",
+      "sessions": "Sessions",
+      "conversion": "Conversion",
+      "frustrated": "Sessions frustrées",
+      "errorsPer1k": "Erreurs JS pour 1 000",
+      "lcp": "LCP p75",
+      "score": "Score du site",
+      "scorePending": "Après la première revue de page",
+      "seconds": "{value} s",
+      "versus": "vs {value}",
+      "trendAria": "Tendance : {label}",
+      "openAria": "Ouvrir {label}"
+    },
+    "issues": {
+      "title": "Problèmes",
+      "viewAll": "Tout voir",
+      "loading": "Chargement des problèmes…",
+      "error": "Impossible de charger les problèmes.",
+      "empty": "Aucun problème sur cette période.",
+      "loadMore": "Charger plus",
+      "statusAria": "Statut du problème",
+      "status": {
+        "all": "Tous",
+        "new": "Nouveaux",
+        "regressed": "Régressions",
+        "ongoing": "En cours"
+      },
+      "statusName": {
+        "new": "nouveau",
+        "ongoing": "en cours",
+        "regressed": "régression",
+        "proposed": "correctif proposé",
+        "preview": "en aperçu",
+        "measuring": "en mesure",
+        "verified": "vérifié",
+        "ignored": "ignoré"
+      },
+      "colIssue": "Problème",
+      "colSessions": "Sessions",
+      "colShare": "Part",
+      "colTrend": "Tendance",
+      "rowAria": "Ouvrir le problème : {title}",
+      "trendAria": "Sessions quotidiennes pour {title}",
+      "overview": {
+        "sessions": "Sessions touchées",
+        "share": "Part de la route",
+        "firstSeen": "Vu pour la première fois",
+        "lastSeen": "Vu pour la dernière fois",
+        "byRelease": "Par version",
+        "byDevice": "Par appareil"
+      },
+      "representatives": "Enregistrements représentatifs",
+      "repAria": "Ouvrir l’enregistrement représentatif {rank}",
+      "recordingsOnRoute": "Enregistrements ayant visité {route}"
+    },
+    "panel": {
+      "crumbRoot": "Insights",
+      "crumbAria": "Chemin du panneau",
+      "backTo": "Retour à {label}",
+      "loading": "Chargement…",
+      "loadFailed": "Impossible de charger ce contenu."
+    },
+    "kinds": {
+      "recording": "Enregistrement",
+      "issue": "Problème",
+      "issues": "Tous les problèmes",
+      "fix": "Correctif",
+      "route": "Revue de page",
+      "metric": "Indicateur",
+      "funnel": "Entonnoir",
+      "live": "Visiteurs en direct",
+      "proof": "Preuve",
+      "release": "Version",
+      "sites": "Sites",
+      "plan": "Offre et utilisation",
+      "tabs": {
+        "replay": "Relecture",
+        "journey": "Parcours",
+        "lead": "Prospect",
+        "overview": "Vue d’ensemble",
+        "recordings": "Enregistrements"
+      }
+    },
+    "lenses": {
+      "live": "En direct"
+    },
+    "journey": {
+      "steps": "{count, plural, one {# page} other {# pages}}",
+      "entryExit": "{entry} → {exit}",
+      "signals": "Signaux",
+      "noSignals": "Aucun signal de frustration ou d’erreur dans cet enregistrement."
+    },
+    "lead": {
+      "identifiedId": "Identifié comme",
+      "traits": "Attributs",
+      "noTraits": "Le site n’a envoyé aucun attribut pour ce visiteur.",
+      "tags": "Étiquettes"
+    },
+    "sites": {
+      "loading": "Chargement des sites…",
+      "empty": "Aucun site pour l’instant.",
+      "add": "Ajouter un site",
+      "listLabel": "Sites",
+      "kind": {
+        "external": "Site web",
+        "hosted": "App Builderforce"
+      },
+      "settings": "Paramètres",
+      "save": "Enregistrer",
+      "saved": "Enregistré.",
+      "saveFailed": "Les paramètres n’ont pas pu être enregistrés.",
+      "install": "Installation",
+      "verify": "Vérifications d’installation"
+    },
+    "plan": {
+      "loading": "Chargement de l’utilisation…",
+      "usageTitle": "Ce mois-ci",
+      "usedOfLimit": "{used} sur {limit} enregistrements utilisés en {period}",
+      "free": "Quota gratuit",
+      "freeUsed": "{used} sur {allowance} utilisés",
+      "credits": "Crédits prépayés",
+      "packsTitle": "Acheter des enregistrements",
+      "receipts": "Paiements et reçus",
+      "checkoutReturned": "Merci. Vos crédits apparaîtront ici dès que le paiement sera confirmé."
     }
   },
   "cloudAgentForm": {
@@ -13149,6 +13300,271 @@
       "signIn": "Connectez-vous pour l’utiliser",
       "empty": "Aucun agent intégré ne correspond à votre recherche.",
       "error": "Impossible de charger les agents intégrés. Réessayez dans un instant."
+    },
+    "landing": {
+      "insights": {
+        "hero": {
+          "eyebrow": "Insights pour tout site web",
+          "title": "Voyez ce que font vos visiteurs, et ce qu’il faut corriger en premier",
+          "lead": "Insights enregistre de vraies visites, regroupe ce qui a mal tourné en problèmes et transforme chacun en correctif classé que vous pouvez appliquer, tester et mesurer à la prochaine version.",
+          "startFree": "Commencer gratuitement",
+          "freeNote": "5 000 enregistrements par mois offerts. Aucune carte requise."
+        },
+        "install": {
+          "title": "En ligne en trois étapes",
+          "steps": {
+            "paste": {
+              "title": "Collez une balise",
+              "body": "Ajoutez le chargeur à votre site une seule fois, ou activez-le pour une app hébergée sur Builderforce. Les mises à jour de l’enregistreur arrivent d’elles-mêmes."
+            },
+            "verify": {
+              "title": "Suivez la connexion",
+              "body": "La configuration vérifie en direct la balise, votre domaine et la première visite, et vous indique précisément quelle étape demande votre attention."
+            },
+            "improve": {
+              "title": "Corrigez l’essentiel",
+              "body": "Les problèmes sont classés selon leur effet sur votre objectif, chacun avec un correctif, un prompt pour vos outils d’IA et un verdict à la prochaine version."
+            }
+          }
+        },
+        "pillars": {
+          "title": "Tout ce qu’il faut pour améliorer une page",
+          "items": {
+            "fixes": {
+              "title": "Correctifs classés",
+              "body": "Chaque constat repose sur un comportement mesuré, avec l’impact attendu et une action : corriger, tester, relancer ou créer un ticket."
+            },
+            "recordings": {
+              "title": "Enregistrements de sessions",
+              "body": "Rejouez chaque visite comme une vidéo, allez directement au moment clé et partagez un lien vers celui-ci."
+            },
+            "heatmaps": {
+              "title": "Cartes de chaleur par version",
+              "body": "Cartes de clics, de défilement et de zones pour chaque version, pour comparer avant et après un changement."
+            },
+            "funnels": {
+              "title": "Entonnoirs et parcours",
+              "body": "Voyez où les visiteurs abandonnent un parcours et regardez les visites qui se sont arrêtées à chaque étape."
+            },
+            "live": {
+              "title": "Visiteurs en direct",
+              "body": "Qui est sur le site en ce moment, sur quelle page, et suivez un visiteur pendant qu’il navigue."
+            },
+            "privacy": {
+              "title": "Confidentiel par défaut",
+              "body": "Les saisies sont masquées dans le navigateur, les mots de passe et numéros de carte ne sont jamais capturés, et Do Not Track est respecté."
+            }
+          }
+        },
+        "compare": {
+          "title": "Plus qu’un enregistreur",
+          "lead": "La plupart des outils de replay s’arrêtent à ce qui s’est passé. Insights vous dit aussi quoi changer et si le changement a fonctionné.",
+          "feature": "Fonctionnalité",
+          "columns": {
+            "insights": "Insights",
+            "typical": "Un outil de replay classique"
+          },
+          "rows": {
+            "recordings": {
+              "feature": "Enregistrements de sessions avec masquage",
+              "insights": "Inclus",
+              "typical": "Inclus"
+            },
+            "heatmaps": {
+              "feature": "Cartes de clics et de défilement",
+              "insights": "Par version",
+              "typical": "Le plus souvent sur toute la période"
+            },
+            "frustration": {
+              "feature": "Clics de rage, clics morts et erreurs",
+              "insights": "Regroupés en problèmes",
+              "typical": "Listés par session"
+            },
+            "fixes": {
+              "feature": "Correctifs classés avec impact attendu",
+              "insights": "Inclus",
+              "typical": "Non proposé"
+            },
+            "releases": {
+              "feature": "Comparaison de versions",
+              "insights": "Détectée automatiquement",
+              "typical": "Rarement proposé"
+            },
+            "measured": {
+              "feature": "Verdict mesuré pour chaque correctif",
+              "insights": "À la version suivante",
+              "typical": "Non proposé"
+            }
+          }
+        },
+        "pricing": {
+          "title": "Gratuit pour commencer, facturé selon ce que vous conservez",
+          "lead": "Chaque espace de travail reçoit {free} enregistrements conservés offerts par mois. Au-delà, des packs prépayés valables 12 mois.",
+          "visitorsLabel": "{count} visites par mois",
+          "recordings": "Enregistrements par mois",
+          "monthly": "Coût mensuel estimé",
+          "free": "Gratuit",
+          "packsOnSignup": "Les packs sont affichés après l’inscription",
+          "withinFree": "Cela tient dans les {free} enregistrements gratuits par mois.",
+          "packLine": "{count, plural, one {# pack} other {# packs}} de {units} enregistrements couvriraient le mois.",
+          "overFree": "{over} enregistrements au-delà du quota gratuit nécessiteraient un pack.",
+          "estimateNote": "Une estimation, sur la base d’un enregistrement conservé par visite. Vous ne payez que les enregistrements conservés.",
+          "startFree": "Commencer gratuitement"
+        },
+        "faq": {
+          "title": "Questions",
+          "items": {
+            "what": {
+              "q": "Qu’est-ce qu’Insights ?",
+              "a": "Une app de replay de sessions et d’analyse pour tout site web. Elle enregistre les visites, trouve les problèmes qui vous font perdre des visiteurs et recommande des correctifs classés et mesurables."
+            },
+            "install": {
+              "q": "Comment l’installer ?",
+              "a": "Collez une balise script, installez le paquet npm ou ajoutez une balise Google Tag Manager. Les apps hébergées sur Builderforce n’ont besoin que d’un interrupteur."
+            },
+            "privacy": {
+              "q": "Et la confidentialité ?",
+              "a": "Les saisies sont masquées dans le navigateur avant tout envoi, les champs de mot de passe et de carte ne sont jamais capturés, et Do Not Track ainsi que Global Privacy Control sont respectés. Vous pouvez exiger un consentement avant l’enregistrement."
+            },
+            "pricing": {
+              "q": "Combien ça coûte ?",
+              "a": "5 000 enregistrements conservés par mois sont gratuits pour chaque espace de travail. Au-delà, vous achetez des packs prépayés ; les crédits durent 12 mois et rien ne se renouvelle tout seul."
+            },
+            "builderforce": {
+              "q": "Mon site doit-il être construit sur Builderforce ?",
+              "a": "Non. Insights fonctionne sur tout site web. Si votre app est hébergée sur Builderforce, vous activez l’enregistrement sans rien coller."
+            }
+          }
+        },
+        "proof": {
+          "title": "Nous l’utilisons sur builderforce.ai",
+          "lead": "Builderforce fait tourner Insights sur son propre site avec le même extrait public que celui que vous collez, et l’installe via la marketplace comme tout autre espace de travail.",
+          "startFree": "Commencer gratuitement"
+        }
+      }
+    },
+    "capability": {
+      "setupTitle": "Configurer {app}",
+      "signUpFirst": "Créez un compte gratuit pour configurer {app}. Vous reviendrez directement ici ensuite.",
+      "startFree": "Commencer gratuitement",
+      "loading": "Chargement de la configuration…",
+      "stepsLabel": "Étapes de configuration",
+      "steps": {
+        "workspace": "Espace de travail",
+        "site": "Site",
+        "snippet": "Installer",
+        "verify": "Vérifier",
+        "plan": "Offre"
+      },
+      "workspace": {
+        "choose": "Choisissez ou créez l’espace de travail auquel {app} appartiendra.",
+        "chooseAction": "Choisir un espace de travail",
+        "installInto": "Installer {app} dans {workspace}. C’est gratuit, et vous pouvez le retirer à tout moment.",
+        "install": "Installer {app}",
+        "installing": "Installation…",
+        "another": "Utiliser un autre espace de travail",
+        "failed": "L’installation n’a pas abouti. Réessayez."
+      },
+      "site": {
+        "label": "Nom du site",
+        "domains": "Domaines autorisés",
+        "removeDomain": "Retirer {domain}",
+        "domainPlaceholder": "shop.example.com",
+        "addDomain": "Ajouter le domaine",
+        "domainInvalid": "Saisissez une adresse web comme shop.example.com.",
+        "privacy": "Confidentialité",
+        "switches": {
+          "maskAllText": {
+            "label": "Masquer tout le texte",
+            "hint": "Masquer chaque texte de la page, pas seulement les champs de formulaire."
+          },
+          "consentRequired": {
+            "label": "Attendre le consentement",
+            "hint": "N’enregistrer qu’après l’appel de BFReplay.consent(true) par votre site."
+          },
+          "recordCanvas": {
+            "label": "Enregistrer le contenu canvas",
+            "hint": "Capturer les images canvas et WebGL à faible cadence."
+          },
+          "identify": {
+            "label": "Autoriser l’identification",
+            "hint": "Votre site peut nommer les visiteurs connectés avec BFReplay.identify."
+          }
+        },
+        "modeLabel": "Où se trouve le site ?",
+        "modes": {
+          "external": "Mon site web",
+          "hosted": "Une app Builderforce"
+        },
+        "externalLead": "Nommez le site et indiquez les domaines sur lesquels il tourne. Seuls ces domaines peuvent envoyer des enregistrements.",
+        "create": "Créer le site",
+        "hostedLead": "Choisissez une app publiée de cet espace de travail. Son chargeur est ajouté pour vous.",
+        "loadingProjects": "Chargement de vos apps publiées…",
+        "noProjects": "Cet espace de travail n’a pas encore d’app publiée.",
+        "record": "Enregistrer {name}",
+        "failed": "Le site n’a pas pu être créé. Réessayez."
+      },
+      "snippet": {
+        "tabsLabel": "Modes d’installation",
+        "tabs": {
+          "script": "Balise script",
+          "npm": "npm",
+          "gtm": "Google Tag Manager",
+          "app": "App Builderforce"
+        },
+        "hostedOn": "L’enregistrement est activé pour cette app. Rien à coller.",
+        "appHint": "Les apps hébergées sur Builderforce n’ont pas besoin d’extrait : activez plutôt l’enregistrement pour l’app.",
+        "hints": {
+          "script": "Collez ceci dans la section head de chaque page.",
+          "npm": "Installez @seanhogg/builderforce-replay, puis appelez ceci une fois au démarrage de votre app.",
+          "gtm": "Ajoutez une balise HTML personnalisée avec ce contenu et déclenchez-la sur toutes les pages."
+        },
+        "copy": "Copier",
+        "copied": "Copié",
+        "noKey": "Ce site n’a pas encore de clé. Rechargez dans un instant.",
+        "lead": "Ajoutez le chargeur à votre site de l’une de ces façons, puis passez à la vérification.",
+        "hostedLead": "Votre app est hébergée sur Builderforce, son chargeur est donc ajouté automatiquement.",
+        "next": "Continuer"
+      },
+      "verify": {
+        "lead": "Ouvrez votre site dans un autre onglet. Ces vérifications se mettent à jour toutes les quelques secondes.",
+        "checks": {
+          "loader": {
+            "label": "Chargeur détecté",
+            "fix": "Vérifiez que la balise est sur la page et que la page a été ouverte depuis son ajout."
+          },
+          "origin": {
+            "label": "Domaine autorisé",
+            "fix": "Ajoutez le domaine qui sert la page aux domaines autorisés."
+          },
+          "firstEvent": {
+            "label": "Première visite reçue",
+            "fix": "Parcourez une page quelques secondes. Si vous exigez un consentement, accordez-le."
+          },
+          "firstRecording": {
+            "label": "Premier enregistrement conservé",
+            "fix": "Un enregistrement apparaît quand une visite se termine ou qu’il se passe quelque chose à conserver."
+          }
+        },
+        "passed": "réussi",
+        "waiting": "en attente",
+        "unreachable": "Les vérifications n’ont pas pu être lues pour l’instant. Nouvelle tentative.",
+        "stoppedAt": "En attente : {step}.",
+        "allPassed": "Tout est connecté.",
+        "next": "Continuer"
+      },
+      "plan": {
+        "lead": "Commencez avec le quota gratuit, ou achetez dès maintenant un pack pour les sites plus fréquentés.",
+        "startFree": "Commencer avec le quota gratuit",
+        "checkoutFailed": "Le paiement n’a pas pu démarrer. Réessayez.",
+        "loadingPacks": "Chargement des packs…",
+        "noPacks": "Les packs ne sont pas disponibles pour le moment. Le quota gratuit s’applique.",
+        "buyAria": "Acheter {units} enregistrements pour {price}",
+        "packUnits": "{units} enregistrements",
+        "redirecting": "Ouverture du paiement…",
+        "packTerms": "Prépayé, paiement unique. Les crédits durent 12 mois et rien ne se renouvelle."
+      },
+      "openApp": "Ouvrir {app}"
     }
   },
   "models": {
@@ -14409,7 +14825,8 @@
         "loading": "Chargement de l'historique…",
         "empty": "Aucune version pour le moment.",
         "publish": "Publié",
-        "amend": "Modifié"
+        "amend": "Modifié",
+        "draft": "Brouillon (non publié)"
       }
     },
     "newsletter": {
@@ -15001,7 +15418,14 @@
       "subtitle": "L'entonnoir anonyme et les personnes qui s'y trouvent — parcours, leads, un enregistrement.",
       "tabJourney": "Parcours",
       "tabLead": "Lead",
-      "crumb": "Visiteurs"
+      "crumb": "Visiteurs",
+      "openApp": "Ouvrir l’app Insights",
+      "nodeStripAria": "Étape {step}",
+      "nodeVisitors": "{count} visiteurs",
+      "nodeEvents": "{count} événements",
+      "nodeExits": "{count} sorties",
+      "watchStep": "Voir les enregistrements de cette étape",
+      "nodeStripClose": "Fermer le détail de l’étape"
     },
     "visitorFlow": {
       "title": "Parcours visiteurs",
@@ -24462,10 +24886,10 @@
     "noticeFormFailed": "Cette action du formulaire n’a pas pu aboutir.",
     "noticeIdeaUntitled": "Donnez un titre à l’idée avant de demander aux gens.",
     "noticeIdeaInterviewTitle": "Donnez un titre à l’idée pour nommer l’entretien.",
-        "noticeIdeaInterviewPlanned": "Entretien planifié. Ouvrez-le sur le tableau pour choisir un horaire.",
-        "noticeIdeaFormTitle": "Donnez un titre à l’idée pour nommer le formulaire.",
-        "noticeIdeaFormCreated": "Formulaire créé. Publiez-le pour obtenir un lien à envoyer.",
-        "noticeIdeaActFailed": "Cette action sur l’idée n’a pas pu aboutir.",
+    "noticeIdeaInterviewPlanned": "Entretien planifié. Ouvrez-le sur le tableau pour choisir un horaire.",
+    "noticeIdeaFormTitle": "Donnez un titre à l’idée pour nommer le formulaire.",
+    "noticeIdeaFormCreated": "Formulaire créé. Publiez-le pour obtenir un lien à envoyer.",
+    "noticeIdeaActFailed": "Cette action sur l’idée n’a pas pu aboutir.",
     "surface": {
       "chat": {
         "label": "Discussion",
@@ -24534,15 +24958,21 @@
         "noBoardMetric": "Aucune métrique sur ce tableau pour l’instant"
       },
       "sessions": {
-        "label": "Sessions",
-        "enter": "Voir qui a utilisé ceci",
-        "active": "Vous êtes dans Sessions",
-        "regionLabel": "Enregistrements de session",
-        "emptyTitle": "Pas encore d’enregistrements de ce canevas",
-        "emptyBody": "Lorsque des visiteurs utiliseront ce canevas, leurs sessions apparaîtront ici. Ouvrez Visiteurs pour les lire.",
-        "openFull": "Ouvrir les enregistrements des visiteurs",
-        "listLabel": "Visites enregistrées",
-        "converted": "Converti"
+        "label": "Visiteurs",
+        "enter": "Voir qui est venu",
+        "active": "Vous êtes dans Visiteurs",
+        "regionLabel": "Visiteurs",
+        "loadingTitle": "Chargement des visiteurs",
+        "loadingBody": "Vérification des enregistrements de cette app.",
+        "buyTitle": "Voyez ce que font les visiteurs",
+        "buyBody": "Installez Insights pour enregistrer les visites de cette app, trouver ce qui ne va pas et obtenir des correctifs classés. C’est gratuit pour commencer.",
+        "buyAction": "Obtenir Insights",
+        "noAppTitle": "Pas encore d’app",
+        "noAppBody": "Les visiteurs apparaissent ici dès que ce tableau a une app que d’autres peuvent ouvrir.",
+        "offTitle": "L’enregistrement est désactivé",
+        "offBody": "Activez l’enregistrement pour cette app. Rien à coller : le chargeur est ajouté pour vous à l’app hébergée.",
+        "enable": "Enregistrer cette app",
+        "enableFailed": "L’enregistrement n’a pas pu être activé. Réessayez."
       },
       "room": {
         "label": "Salle",
@@ -29102,7 +29532,8 @@
       "course": "Cours",
       "dataset": "Jeu de données",
       "tool": "Outil",
-      "creative": "Ressource créative"
+      "creative": "Ressource créative",
+      "capability": "Fonctionnalité"
     }
   },
   "marketplaceCreations": {
@@ -29146,7 +29577,8 @@
       "creative": "Ressource créative",
       "book": "Livre",
       "survey": "Enquête",
-      "room": "Aménagement de salle"
+      "room": "Aménagement de salle",
+      "capability": "Fonctionnalité"
     },
     "launchVerb": {
       "play": "Jouer",
@@ -33325,5 +33757,113 @@
       "Des hypothèses présentées comme des résultats mesurés",
       "Les désinscriptions cachées en petits caractères"
     ]
+  },
+  "replay": {
+    "list": {
+      "when": "Quand",
+      "where": "Où",
+      "release": "Version",
+      "pages": "Pages",
+      "duration": "Durée",
+      "signals": "Signaux",
+      "keep": "Conservé car",
+      "route": "{entry} → {exit}",
+      "noSignals": "Aucun",
+      "signal": {
+        "rage": "{count, plural, one {# clic rageur} other {# clics rageurs}}",
+        "dead": "{count, plural, one {# clic mort} other {# clics morts}}",
+        "errors": "{count, plural, one {# erreur} other {# erreurs}}",
+        "quickbacks": "{count, plural, one {# retour rapide} other {# retours rapides}}"
+      },
+      "keepReason": {
+        "sample": "Échantillon",
+        "frustration": "Frustration",
+        "error": "Erreur",
+        "goal": "Objectif atteint",
+        "tag": "Étiqueté",
+        "manual": "Conservé par le site"
+      },
+      "weighted": "≈ ×{weight}",
+      "sortBy": "Trier par {column}",
+      "error": "Impossible de charger les enregistrements.",
+      "retry": "Réessayer",
+      "empty": "Aucun enregistrement n’a encore été conservé pour cette vue.",
+      "open": "Regarder",
+      "openAria": "Regarder l’enregistrement arrivé sur {path}",
+      "loading": "Chargement des enregistrements…",
+      "loadMore": "Charger plus"
+    },
+    "player": {
+      "loading": "Chargement de l’enregistrement…",
+      "empty": "Cet enregistrement n’a encore rien à lire.",
+      "error": "Impossible de lire l’enregistrement.",
+      "play": "Lire",
+      "pause": "Pause",
+      "scrubber": "Position de lecture",
+      "markersAria": "Moments de cet enregistrement",
+      "markerAria": "{time} · {label}",
+      "speed": "Vitesse",
+      "speedOption": "{speed}×",
+      "skipInactive": "Ignorer l’inactivité",
+      "copyLink": "Copier le lien à {time}",
+      "copied": "Lien copié.",
+      "copyFailed": "Impossible de copier le lien.",
+      "following": "Suivi en direct — la nouvelle activité apparaît dès son arrivée.",
+      "events": "Événements",
+      "eventsEmpty": "Aucun événement n’a été marqué dans cet enregistrement.",
+      "release": "Version",
+      "device": "Appareil",
+      "country": "Pays",
+      "referrer": "Référent",
+      "duration": "Durée",
+      "direct": "Direct",
+      "deviceClass": {
+        "desktop": "Ordinateur",
+        "tablet": "Tablette",
+        "phone": "Téléphone"
+      },
+      "mark": {
+        "page": "Page",
+        "click": "Clic",
+        "event": "Événement",
+        "rage": "Clic rageur",
+        "dead": "Clic mort",
+        "quickback": "Retour rapide",
+        "excessive_scroll": "Défilement excessif",
+        "error": "Erreur JavaScript",
+        "vital": "Signal web essentiel",
+        "scroll": "Profondeur de défilement"
+      }
+    },
+    "live": {
+      "loading": "Recherche des visiteurs en direct…",
+      "error": "Impossible de charger les visiteurs en direct.",
+      "active": "{count, plural, one {# visiteur actif en ce moment} other {# visiteurs actifs en ce moment}}",
+      "byRoute": "Par page",
+      "empty": "Personne n’est sur ce site en ce moment.",
+      "lastSeen": "vu {time}",
+      "notRecorded": "Non enregistré",
+      "watchAria": "Regarder en direct le visiteur sur {route}"
+    }
+  },
+  "apps": {
+    "loading": "Chargement…",
+    "notEntitled": "Cet espace de travail n’a pas encore installé {app}. Installez-le depuis la marketplace ; c’est gratuit pour commencer.",
+    "getIt": "Obtenir {app}",
+    "needsSetup": "{app} est installé. Ajoutez votre premier site pour commencer l’enregistrement.",
+    "setUp": "Configurer",
+    "navTitle": "Apps",
+    "insights": {
+      "name": "Insights",
+      "loading": "Chargement des sites…",
+      "noSiteTitle": "Aucun site pour l’instant",
+      "noSiteBody": "Ajoutez un site web ou activez l’enregistrement pour une app Builderforce.",
+      "setUp": "Ajouter un site",
+      "siteLabel": "Site",
+      "usageChip": "{used} / {limit} enregistrements",
+      "usageAria": "Utilisation : {used} sur {limit} enregistrements ce mois-ci. Ouvrir l’offre.",
+      "sites": "Sites",
+      "addSite": "Ajouter un site"
+    }
   }
 }

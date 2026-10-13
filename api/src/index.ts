@@ -291,6 +291,13 @@ import { createAssetRoutes } from './presentation/routes/assetRoutes';
 import { createKnowledgeMarketRoutes } from './presentation/routes/knowledgeMarketRoutes';
 import { createCreationListingRoutes, createPublicListingRoutes } from './presentation/routes/creationListingRoutes';
 import { createStageSandboxRoutes } from './presentation/routes/stageSandboxRoutes';
+import { createReplaySiteRoutes } from './presentation/routes/replaySiteRoutes';
+import { createReplayProjectRoutes } from './presentation/routes/replayProjectRoutes';
+import { createCapabilityRoutes } from './presentation/routes/capabilityRoutes';
+import { createReplayOpsGrantRoutes } from './presentation/routes/replayOpsGrantRoutes';
+import { createReplayIngestRoutes } from './presentation/routes/replayIngestRoutes';
+import { createReplayRoutes } from './presentation/routes/replayRoutes';
+import { createReplayOpsRoutes } from './presentation/routes/replayOpsRoutes';
 import { createWebSearchRoutes } from './presentation/routes/webSearchRoutes';
 
 import { API_VERSION } from './version';
@@ -1230,6 +1237,20 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/creation-listings', createCreationListingRoutes(db));
   app.route('/api/listings',          createPublicListingRoutes(db)); // PUBLIC browse + launch
   app.route('/api/creation-listings/sandbox', createStageSandboxRoutes(db)); // Stage Sandbox container callbacks (machine token)
+
+  // Insights commerce + sites (PRD 33 S6). `/api/replay/sites` must stay mounted
+  // BEFORE the broader `/api/replay` router so its paths never reach that router's
+  // `?site=` middleware. The project route scopes its middleware to its own path, so
+  // it adds nothing to the other `/api/projects` routers.
+  app.route('/api/replay/sites',     createReplaySiteRoutes(db));
+  app.route('/api/projects',         createReplayProjectRoutes(db));
+  app.route('/api/capabilities',     createCapabilityRoutes(db));
+  app.route('/api/admin/replay-ops', createReplayOpsGrantRoutes(db)); // superadmin credit grant (D17)
+  // Insights data plane (PRD 33 S1): the PUBLIC ingest (any origin, cors.ts), the
+  // workspace reads (`?site=` must be the caller's), and the operator aggregates.
+  app.route('/api/replay-ingest',    createReplayIngestRoutes(db));
+  app.route('/api/replay',           createReplayRoutes());
+  app.route('/api/admin/replay-ops', createReplayOpsRoutes()); // aggregates only (D17)
 
   // The domain router is intentionally LAST among `/api` mounts. It owns dynamic
   // `/api/:domain/*` paths and installs blanket auth for them; mounting it earlier

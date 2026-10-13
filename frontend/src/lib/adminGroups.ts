@@ -92,7 +92,7 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
  * Legacy single-panel `?tab=` id → new {group, sub}. Keeps every pre-consolidation
  * deep link (e.g. `/admin?tab=security`, bookmarks, the old email links) working.
  */
-export const LEGACY_ADMIN_TAB: Record<string, { group: string; sub: string }> = {
+export const LEGACY_ADMIN_TAB: Record<string, { group: string; sub: string; panel?: string }> = {
   health: { group: '', sub: 'health' },
   outcomes: { group: '', sub: '' },
   users: { group: 'users', sub: '' },
@@ -111,33 +111,22 @@ export const LEGACY_ADMIN_TAB: Record<string, { group: string; sub: string }> = 
   billing: { group: 'growth', sub: '' },
   newsletter: { group: 'growth', sub: 'newsletter' },
   visitorFlow: { group: 'growth', sub: 'visitors' },
-  sessions: { group: 'growth', sub: 'visitors' },
+  sessions: { group: 'growth', sub: 'visitors', panel: 'issues' },
   errors: { group: 'logs', sub: '' },
   auditlog: { group: 'logs', sub: 'audit' },
   apikeys: { group: 'developer', sub: '' },
   token: { group: 'developer', sub: 'token' },
 };
 
-/** Resolve `?tab=`/`?sub=` (or a legacy tab id) to a concrete group + sub. */
-export function resolveAdminRoute(tabParam: string, subParam: string): { group: AdminGroupMeta; sub: AdminSubMeta } {
-  let group = ADMIN_GROUP_META.find((g) => g.id === tabParam);
-  let subId = subParam;
-  if (!group) {
-    const legacy = LEGACY_ADMIN_TAB[tabParam];
-    if (legacy) {
-      group = ADMIN_GROUP_META.find((g) => g.id === legacy.group);
-      subId = legacy.sub;
-    }
-  }
-  if (!group) group = ADMIN_GROUP_META[0];
-  const fromGroup = group.id;
-  const alias = ADMIN_SUB_ALIASES.find((entry) => entry.fromGroup === fromGroup && entry.fromSub === subId);
-  if (alias) {
-    group = ADMIN_GROUP_META.find((g) => g.id === alias.toGroup) ?? group;
-    subId = alias.toSub;
-  }
-  const sub = group.subs.find((s) => s.id === subId) ?? group.subs[0];
-  return { group, sub };
+/**
+ * A resolved admin address. `panel` is the Insights app's `?panel=` value a
+ * legacy address maps to (PRD 33 §4.1: legacy admin URLs alias to the app);
+ * Admin ▸ Growth ▸ Visitors carries it on its "Open Insights app" link.
+ */
+export interface AdminRoute {
+  group: AdminGroupMeta;
+  sub: AdminSubMeta;
+  panel?: string;
 }
 
 /**
@@ -145,10 +134,35 @@ export function resolveAdminRoute(tabParam: string, subParam: string): { group: 
  * group is found so `?tab=users&sub=sessions` and `?tab=growth&sub=visitorFlow`
  * still land on Visitors.
  */
-const ADMIN_SUB_ALIASES: Array<{ fromGroup: string; fromSub: string; toGroup: string; toSub: string }> = [
-  { fromGroup: 'users', fromSub: 'sessions', toGroup: 'growth', toSub: 'visitors' },
+export const LEGACY_ADMIN_SUB: ReadonlyArray<{ fromGroup: string; fromSub: string; toGroup: string; toSub: string; panel?: string }> = [
+  { fromGroup: 'users', fromSub: 'sessions', toGroup: 'growth', toSub: 'visitors', panel: 'issues' },
   { fromGroup: 'growth', fromSub: 'visitorFlow', toGroup: 'growth', toSub: 'visitors' },
 ];
+
+/** Resolve `?tab=`/`?sub=` (or a legacy tab id) to a concrete group + sub. */
+export function resolveAdminRoute(tabParam: string, subParam: string): AdminRoute {
+  let group = ADMIN_GROUP_META.find((g) => g.id === tabParam);
+  let subId = subParam;
+  let panel: string | undefined;
+  if (!group) {
+    const legacy = LEGACY_ADMIN_TAB[tabParam];
+    if (legacy) {
+      group = ADMIN_GROUP_META.find((g) => g.id === legacy.group);
+      subId = legacy.sub;
+      panel = legacy.panel;
+    }
+  }
+  if (!group) group = ADMIN_GROUP_META[0];
+  const fromGroup = group.id;
+  const alias = LEGACY_ADMIN_SUB.find((entry) => entry.fromGroup === fromGroup && entry.fromSub === subId);
+  if (alias) {
+    group = ADMIN_GROUP_META.find((g) => g.id === alias.toGroup) ?? group;
+    subId = alias.toSub;
+    panel = alias.panel ?? panel;
+  }
+  const sub = group.subs.find((s) => s.id === subId) ?? group.subs[0];
+  return panel ? { group, sub, panel } : { group, sub };
+}
 
 /** Canonical href for a group's sub. Default group '' → /admin; default sub '' → no &sub. */
 export function adminSubHref(groupId: string, subId: string): string {

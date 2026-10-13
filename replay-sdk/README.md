@@ -1,68 +1,85 @@
 # `@seanhogg/builderforce-replay`
 
-Session-replay recorder for Builderforce.ai.
+Session replay for Builderforce.ai Insights (PRD 33). One loader, one recorder,
+one public API.
 
-Two ways in, one recorder:
+## Install
 
-1. **Snippet** — `https://cdn.builderforce.ai/replay/v1/loader.js` with
-   `data-builderforce-key`. The loader reads `/replay/manifest.json` and
-   injects the hashed recorder.
-2. **npm** — `init({ key })` fetches the same manifest and self-updates when
-   a newer recorder hash is published; otherwise it runs the bundled build.
+Paste into `<head>`:
 
 ```html
-<script
-  src="https://cdn.builderforce.ai/replay/v1/loader.js"
-  data-builderforce-key="SITE_PUBLIC_KEY"
-  async
-></script>
+<script async src="https://cdn.builderforce.ai/replay/v1/loader.js" data-site="bfr_YOUR_SITE_KEY"></script>
 ```
+
+or from npm (it injects the same loader, so the recorder updates without a
+reinstall):
 
 ```ts
-import { init } from '@seanhogg/builderforce-replay';
-await init({ key: 'SITE_PUBLIC_KEY' });
+import { startReplay } from '@seanhogg/builderforce-replay';
+startReplay({ site: 'bfr_YOUR_SITE_KEY' });
 ```
 
-`window.BuilderForce.session` is the public API either way:
+Optional tag attributes: `data-release` (your release name; otherwise the
+recorder fingerprints the page's hashed assets), `data-variant` (A/B label),
+`data-api` (API origin override).
 
-- `identify(userId, traits?)`
-- `setTag(key, value)`
-- `track(name, props?)`
-- `unmask(selector)` — opt a field out of the default input mask
-- `stop()`
+## What the loader does
 
-Inputs are masked by default (`input`, `textarea`, `[data-bf-mask]`,
-password/email/tel, credit-card autocomplete). `[data-bf-unmask]` and
-`unmask()` opt out.
+1. Installs a queued `window.BFReplay` stub, so page code never breaks.
+2. Stops — before any network call — under Do Not Track or Global Privacy Control.
+3. Fetches `https://api.builderforce.ai/api/replay-ingest/v1/config?site=…`
+   (no credentials). Stops when the site is disabled.
+4. When the site requires consent, waits for `BFReplay.consent(true)`.
+5. Injects the recorder the config names (`/replay/r/recorder.<hash>.js`).
 
-Chunks flush every 5 s (`REPLAY_LIMITS.flushIntervalMs`), `sendBeacon` on
-hide, retry with backoff on 5xx, split on 413, honour 429 `Retry-After`.
-Visitor/visit ids match `VISITOR_ID_PATTERN`; a visit rotates after
-`VISIT_IDLE_MS` (30 min).
+## `window.BFReplay`
 
-The same CDN also serves `https://cdn.builderforce.ai/embed/v1.js` (the
-`unifiedEmbedSnippet` URL). That file boots this recorder from
-`data-builderforce-key` and installs `window.BuilderForce.session`.
+| Call | Effect |
+| --- | --- |
+| `consent(granted)` | `false` stops recording and ends the visit |
+| `event(name)` | custom event (≤80 chars of `[\w .:-]`) |
+| `tag(key, value)` | sticky tag (key ≤64, value ≤200, ≤20 keys); keeps the recording. Values that look like an email or a card number are refused |
+| `identify(id, traits?)` | only when the site enables identify; traits are a flat string map (≤20 keys) |
+| `keep()` | keep this session's recording |
+| `stop()` | stop recording and end the visit |
+| `version` | recorder version |
 
-`GET /replay/manifest.json` is the contract `ReplayConfigService` reads:
+## Privacy
 
-```json
-{
-  "version": 1,
-  "hash": "<8 hex>",
-  "loader": "/replay/v1/loader.js",
-  "recorder": "/replay/r/recorder.<hash>.js",
-  "embed": "/embed/v1.js",
-  "builtAt": "<ISO-8601>",
-  "latest": {
-    "version": "2026.10.0",
-    "url": "https://cdn.builderforce.ai/replay/r/recorder.<hash>.js",
-    "hash": "<8 hex>",
-    "builtAt": "<ISO-8601>"
-  }
-}
+- Every input is masked (`maskAllInputs` is hard-coded on). Password and
+  payment-card (`autocomplete="cc-*"`) fields are never captured.
+- `data-bf-mask` masks text (all text when the site sets "mask all text");
+  `data-bf-block` replaces a region with a placeholder.
+- Canvas frames only when the site enables canvas recording (2 fps, JPEG 0.4).
+
+## Recording
+
+Every session sends marks (pages, clicks with grid cells, rage, dead clicks,
+quick backs, excessive scrolling, errors, custom events, scroll depth, Core
+Web Vitals) so counts are exact. Full recordings are kept for a head sample
+(`keepRate`) or when something happens: frustration, an error, a sign-up /
+purchase / checkout, a tag or `keep()`. Until then the recorder holds the last
+60 s in memory, so a kept recording includes the moments before the trigger.
+
+Chunks go to `/api/replay-ingest/v1/chunks` every 5 s while visible and on
+pagehide (`keepalive`), gzip-compressed when the browser supports
+`CompressionStream`.
+
+Ids: `bf_visitor_id` / `bf_visit_id` on builderforce.ai (shared with the
+product's visitor journey), `bfr_visitor_id` / `bfr_visit_id` elsewhere. A
+visit rotates after 30 minutes idle.
+
+## Build
+
+`npm run build` writes the CDN layout to `dist/assets/`:
+
+```
+replay/v1/loader.js            loader (≤ 2 KB gzip)
+replay/r/recorder.<hash>.js    recorder incl. rrweb (≤ 80 KB gzip), immutable
+replay/manifest.json           { "latest": { "version", "url", "hash", "builtAt" } }
+embed/v1.js                    unified embed rail (boots replay from data-site)
 ```
 
-`npm run build` writes that layout to `dist/assets/` (and a `dist/cdn/`
-alias). `npm run size` asserts gzip budgets after a build: loader ≤ 2 KB,
-recorder ≤ 80 KB including rrweb `record`.
+`npm run size` checks the layout and the gzip budgets. The release workflow's
+`publish-cdn` job uploads it with `.github/scripts/cdn-publish.sh` (manifest
+last); see `infra/cdn/README.md`.

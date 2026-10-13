@@ -15,7 +15,7 @@ import { resolveAuthPanel } from '@/lib/content/auth';
 import MarketingVisual from '@/components/account/MarketingVisual';
 import AccountTypeChooser from '@/components/account/AccountTypeChooser';
 import EmailVerificationStep from '@/components/account/EmailVerificationStep';
-import { safeRedirectPath } from '@/lib/safeRedirect';
+import { readIntent, resumeIntent } from '@/lib/auth';
 import { getRetainedDiscountCode, retainDiscountCode } from '@/lib/discountCode';
 import { useLegalDocs } from '@/components/legal/useLegalDocs';
 import LegalDocModal, { type LegalDocType } from '@/components/legal/LegalDocModal';
@@ -53,7 +53,9 @@ export default function RegisterPageClient() {
 
   // Freelancers land on their for-hire profile (the restricted gig shell); standard
   // accounts go to the builder dashboard.
-  const requestedDestination = safeRedirectPath(searchParams.get('next'));
+  // `resumeIntent` folds `?intent=` into the destination, so the intent survives
+  // verification and the workspace picker that only carry `next`.
+  const requestedDestination = resumeIntent(readIntent(searchParams));
   const destination = accountType === 'freelancer' ? '/freelancer/profile' : accountType === 'sales' ? '/sales' : requestedDestination;
 
   useEffect(() => {

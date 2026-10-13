@@ -8,6 +8,8 @@ import { TenantPlan } from '../../domain/shared/types';
 import type { Env } from '../../env';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import { resolveTenantPlan } from './tenantPlanSnapshot';
+import { heldCapabilityFeatures } from './heldCapabilities';
+import { isCapabilityFeature } from '../../domain/tenant/capabilityFeatures';
 
 /**
  * Every plan feature resolved at once, for a caller who needs the whole set
@@ -38,6 +40,8 @@ export function resolveAllFeatureEntitlements(input: {
   effectivePlan: TenantPlan;
   premiumOverride: boolean;
   isSuperadmin: boolean;
+  /** Features held through capability licences — {@link heldCapabilityFeatures}. */
+  heldFeatures?: readonly PlanFeature[];
 }): FeatureEntitlementSet {
   const entitled = {} as Record<PlanFeature, boolean>;
   const requiredPlan = {} as Record<PlanFeature, TenantPlan>;
@@ -57,8 +61,10 @@ export function toTenantPlan(ep: 'free' | 'pro' | 'teams'): TenantPlan {
 }
 
 /**
- * Resolve a caller's entitlement to `feature` — plan + superadmin + comped override,
- * composed over the ONE cached plan read. `userId` optional: when absent the superadmin
+ * Resolve a caller's entitlement to `feature` — plan + superadmin + comped override +
+ * held capability licences, composed over the ONE cached plan read. The capability
+ * read (`heldCapabilityFeatures`, also cached) is only made for a feature a
+ * capability grants, so a plan-feature gate costs nothing extra. `userId` optional: when absent the superadmin
  * dimension is skipped (machine callers can't be superadmins).
  *
  * This lives in the APPLICATION layer, not behind the route gate, because decisions other
@@ -72,15 +78,17 @@ export async function resolveFeatureEntitlement(
   userId: string | undefined | null,
   feature: PlanFeature,
 ): Promise<FeatureEntitlement> {
-  const [access, isSuperadmin] = await Promise.all([
+  const [access, isSuperadmin, heldFeatures] = await Promise.all([
     resolveTenantPlan(env, tenantId),
     resolveIsSuperadmin(env, userId),
+    isCapabilityFeature(feature) ? heldCapabilityFeatures(env, undefined, tenantId) : Promise.resolve([]),
   ]);
   return evaluateFeatureEntitlement({
     feature,
     effectivePlan: toTenantPlan(access.effectivePlan),
     premiumOverride: access.premiumOverride,
     isSuperadmin,
+    heldFeatures,
   });
 }
 

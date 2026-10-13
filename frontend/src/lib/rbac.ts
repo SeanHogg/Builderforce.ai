@@ -215,6 +215,11 @@ export const CAPABILITIES = {
   // xAPI credential are manager+, mirroring the requireRole(MANAGER) split on
   // /api/learning.
   'learning.manage':         'manager',
+
+  // Insights (PRD 33): creating and changing replay sites, switching recording on
+  // for a hosted app and buying recording packs. Mirrors requireRole(MANAGER) on
+  // the replay site writes and the pack checkout; reading is any member.
+  'insights.manageSites':    'manager',
 } as const satisfies Record<string, TenantRole>;
 
 export type Capability = keyof typeof CAPABILITIES;

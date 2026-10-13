@@ -1,152 +1,141 @@
 /**
- * Smart-event rules — the conversion / CTA catalogue Insights highlights
- * without the site owner configuring anything.
+ * Smart events (PRD 33 §3.4) — named moments derived from marks, retroactively.
  *
- * Patterns are lowercase substrings matched against path, label or href.
- * Multilingual on purpose: a Spanish `/gracias` and a Japanese `/ありがとう`
- * are the same conversion as `/thank-you`.
+ * A rule matches ONE mark: a `page` rule a page mark's route, a `click` rule
+ * a click mark's label or link target, a `custom` rule a `BFReplay.event`
+ * name. Site rules live in `replay_smart_events`; the built-ins are this data.
+ * One matcher (`markMatchesRule`) serves the recorder's goal trigger, ingest
+ * and the funnel / filter compiler.
  */
 
-export type SmartEventMatchKind = 'path' | 'click' | 'submit';
+import type { ReplayMark } from './chunk';
+
+export type SmartEventRuleKind = 'page' | 'click' | 'custom';
+export type SmartEventMatchMode = 'equals' | 'prefix' | 'contains';
 
 export interface SmartEventRule {
-  id: string;
-  label: string;
-  match: {
-    kind: SmartEventMatchKind;
-    patterns: readonly string[];
-  };
+  name: string;
+  ruleKind: SmartEventRuleKind;
+  /** Compared case-insensitively. */
+  match: string;
+  matchMode: SmartEventMatchMode;
 }
 
-export const BUILTIN_SMART_EVENTS: readonly SmartEventRule[] = [
-  {
-    id: 'conversion.thank-you',
-    label: 'Thank-you / confirmation page',
-    match: {
-      kind: 'path',
-      patterns: [
-        'thank',
-        'thanks',
-        'gracias',
-        'merci',
-        'obrigad',
-        'danke',
-        'grazie',
-        'tack',
-        'bedankt',
-        'dziek',
-        'spasibo',
-        'arigato',
-        'ありがとう',
-        'thankyou',
-        'success',
-        'confirmed',
-        'confirmation',
-        'order-complete',
-        'order_complete',
-        'purchase-complete',
-      ],
-    },
-  },
-  {
-    id: 'conversion.checkout',
-    label: 'Checkout',
-    match: {
-      kind: 'path',
-      patterns: ['checkout', 'panier', 'warenkorb', 'carrito', 'carrinho', 'kassa', 'cassa'],
-    },
-  },
-  {
-    id: 'cta.buy',
-    label: 'Buy / purchase',
-    match: {
-      kind: 'click',
-      patterns: ['buy', 'purchase', 'comprar', 'acheter', 'kaufen', 'acquista', 'купить', '買う'],
-    },
-  },
-  {
-    id: 'cta.signup',
-    label: 'Sign up / register',
-    match: {
-      kind: 'click',
-      patterns: [
-        'sign up',
-        'signup',
-        'register',
-        'registr',
-        'inscri',
-        'anmeld',
-        'cadastr',
-        '登録',
-        'create account',
-        'get started',
-        'empezar',
-        'commencer',
-      ],
-    },
-  },
-  {
-    id: 'cta.demo',
-    label: 'Book a demo',
-    match: {
-      kind: 'click',
-      patterns: ['demo', 'book a call', 'schedule', 'talk to sales', 'contact sales', 'hablar'],
-    },
-  },
-  {
-    id: 'cta.subscribe',
-    label: 'Subscribe',
-    match: {
-      kind: 'click',
-      patterns: ['subscribe', 'newsletter', 'abon', 'inscrev', '購読'],
-    },
-  },
-  {
-    id: 'form.lead',
-    label: 'Lead form submit',
-    match: {
-      kind: 'submit',
-      patterns: ['contact', 'lead', 'quote', 'demo', 'trial', 'newsletter', 'signup', 'sign-up'],
-    },
-  },
-];
+export const BUILTIN_SMART_EVENT_NAMES = [
+  'sign up',
+  'purchase',
+  'add to cart',
+  'begin checkout',
+  'contact',
+  'download',
+] as const;
 
-export interface SmartEventMark {
-  kind: string;
-  label?: string | null;
-  path?: string | null;
-  href?: string | null;
+export type BuiltinSmartEventName = (typeof BUILTIN_SMART_EVENT_NAMES)[number];
+
+/** Built-in names that make an unkept session worth keeping (`keep: 'goal'`). */
+export const GOAL_SMART_EVENTS: readonly BuiltinSmartEventName[] = ['sign up', 'purchase', 'begin checkout'];
+
+function rules(
+  name: BuiltinSmartEventName,
+  ruleKind: SmartEventRuleKind,
+  matchMode: SmartEventMatchMode,
+  matches: readonly string[],
+): SmartEventRule[] {
+  return matches.map((match) => ({ name, ruleKind, match, matchMode }));
 }
 
 /**
- * Whether a captured mark matches a smart-event rule. Comparison is
- * case-insensitive substring against the fields the rule's `kind` names.
+ * Click labels in en / zh / es / fr / de, link targets and paths. Several
+ * rules share a name; any one matching names the mark.
  */
-export function markMatchesRule(mark: SmartEventMark, rule: SmartEventRule): boolean {
-  const haystacks: string[] = [];
-  if (rule.match.kind === 'path') {
-    if (mark.path) haystacks.push(mark.path);
-    if (mark.href) haystacks.push(mark.href);
-  } else if (rule.match.kind === 'click') {
-    if (mark.kind !== 'click') return false;
-    if (mark.label) haystacks.push(mark.label);
-    if (mark.href) haystacks.push(mark.href);
-  } else if (rule.match.kind === 'submit') {
-    if (mark.kind !== 'submit' && mark.kind !== 'form') return false;
-    if (mark.label) haystacks.push(mark.label);
-    if (mark.path) haystacks.push(mark.path);
-  } else {
-    return false;
+export const BUILTIN_SMART_EVENTS: readonly SmartEventRule[] = [
+  ...rules('sign up', 'click', 'contains', [
+    'sign up', 'signup', 'create account', 'register',
+    '注册', '创建账户',
+    'registrarse', 'regístrate', 'crear cuenta',
+    "s'inscrire", 'inscrivez-vous', 'créer un compte',
+    'registrieren', 'konto erstellen',
+  ]),
+  ...rules('sign up', 'page', 'contains', ['/signup/complete', '/welcome']),
+  ...rules('purchase', 'click', 'contains', [
+    'place order', 'complete purchase', 'pay now', 'buy now',
+    '提交订单', '立即购买', '立即支付',
+    'realizar pedido', 'comprar ahora', 'pagar ahora',
+    'passer la commande', 'acheter maintenant', 'payer maintenant',
+    'jetzt kaufen', 'kaufen', 'zahlungspflichtig bestellen', 'jetzt bezahlen',
+  ]),
+  ...rules('purchase', 'page', 'contains', ['/order-confirmation', '/order-complete', '/checkout/success', '/thank-you-for-your-order']),
+  ...rules('add to cart', 'click', 'contains', [
+    'add to cart', 'add to bag', 'add to basket',
+    '加入购物车',
+    'añadir al carrito', 'agregar al carrito',
+    'ajouter au panier',
+    'in den warenkorb',
+  ]),
+  ...rules('begin checkout', 'click', 'contains', [
+    'checkout', 'check out', 'proceed to payment',
+    '结账', '去结算',
+    'finalizar compra', 'tramitar pedido',
+    'paiement', 'commander',
+    'zur kasse',
+  ]),
+  ...rules('begin checkout', 'page', 'prefix', ['/checkout']),
+  ...rules('contact', 'click', 'prefix', ['mailto:', 'tel:']),
+  ...rules('contact', 'click', 'contains', [
+    'contact us', 'contact sales', 'get in touch',
+    '联系我们',
+    'contáctanos', 'contactar',
+    'nous contacter', 'contactez-nous',
+    'kontakt aufnehmen', 'kontaktieren',
+  ]),
+  ...rules('download', 'click', 'contains', [
+    '.pdf', '.zip', '.dmg', '.exe', '.msi', '.pkg', '.apk', '.csv', '.xlsx', '.docx',
+    'download', '下载', 'descargar', 'télécharger', 'herunterladen',
+  ]),
+];
+
+function textMatches(text: string, rule: SmartEventRule): boolean {
+  const haystack = text.toLowerCase();
+  const needle = rule.match.toLowerCase();
+  if (!needle) return false;
+  switch (rule.matchMode) {
+    case 'equals':
+      return haystack === needle;
+    case 'prefix':
+      return haystack.startsWith(needle);
+    case 'contains':
+      return haystack.includes(needle);
   }
-  if (haystacks.length === 0) return false;
-  const lower = haystacks.map((h) => h.toLowerCase());
-  return rule.match.patterns.some((pattern) => lower.some((h) => h.includes(pattern.toLowerCase())));
 }
 
-/** First builtin rule the mark matches, if any. */
-export function matchingSmartEvent(mark: SmartEventMark): SmartEventRule | null {
-  for (const rule of BUILTIN_SMART_EVENTS) {
-    if (markMatchesRule(mark, rule)) return rule;
+/** The mark fields a rule reads. */
+export type SmartEventMark = Pick<ReplayMark, 'kind' | 'key' | 'label' | 'href'>;
+
+/**
+ * Whether one mark matches one rule. `page` → a `page` mark's `key` (route);
+ * `click` → a `click` mark's `label` or `href`; `custom` → an `event` mark's
+ * `key` (event name).
+ */
+export function markMatchesRule(mark: SmartEventMark, rule: SmartEventRule): boolean {
+  switch (rule.ruleKind) {
+    case 'page':
+      return mark.kind === 'page' && textMatches(mark.key, rule);
+    case 'click':
+      if (mark.kind !== 'click') return false;
+      return (!!mark.label && textMatches(mark.label, rule)) || (!!mark.href && textMatches(mark.href, rule));
+    case 'custom':
+      return mark.kind === 'event' && textMatches(mark.key, rule);
   }
-  return null;
+}
+
+/** Every distinct smart-event name the mark matches, in rule order. */
+export function smartEventsForMark(
+  mark: SmartEventMark,
+  ruleSet: readonly SmartEventRule[] = BUILTIN_SMART_EVENTS,
+): string[] {
+  const names: string[] = [];
+  for (const rule of ruleSet) {
+    if (!names.includes(rule.name) && markMatchesRule(mark, rule)) names.push(rule.name);
+  }
+  return names;
 }

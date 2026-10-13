@@ -2213,7 +2213,8 @@
       "ingestion": "数据",
       "error_events": "错误",
       "outbound_fetches": "出站请求",
-      "feedback_submissions": "反馈"
+      "feedback_submissions": "反馈",
+      "replay_recordings": "录制"
     },
     "unlimited": "无限制",
     "freePerMo": "每月免费 {amount}",
@@ -3514,6 +3515,156 @@
       "colDispatched": "已派发",
       "colExecutionRate": "执行率",
       "colCost": "成本"
+    },
+    "overview": {
+      "title": "洞察",
+      "homeAria": "洞察主页",
+      "periodLabel": "时间范围",
+      "window": "{days} 天",
+      "windowAria": "最近 {days} 天",
+      "compare": "对比版本",
+      "compareNone": "不对比",
+      "releaseOrdinal": "R{n}",
+      "live": "实时",
+      "goalLabel": "目标",
+      "stageTitle": "页面舞台",
+      "stageEmpty": "选择一个问题，即可在此查看其页面。",
+      "lensesAria": "页面视角",
+      "doNextTitle": "下一步",
+      "doNextEmpty": "收集到足够的会话后，这里会显示按影响排序的修复建议。"
+    },
+    "goals": {
+      "activation": "激活",
+      "revenue": "收入",
+      "signups": "注册",
+      "retention": "留存"
+    },
+    "kpi": {
+      "aria": "核心指标",
+      "error": "无法加载指标。",
+      "sessions": "会话",
+      "conversion": "转化率",
+      "frustrated": "受挫会话",
+      "errorsPer1k": "每千次 JS 错误",
+      "lcp": "p75 LCP",
+      "score": "站点评分",
+      "scorePending": "首次页面评审后显示",
+      "seconds": "{value} 秒",
+      "versus": "对比 {value}",
+      "trendAria": "{label} 趋势",
+      "openAria": "打开{label}"
+    },
+    "issues": {
+      "title": "问题",
+      "viewAll": "查看全部",
+      "loading": "正在加载问题…",
+      "error": "无法加载问题。",
+      "empty": "此时间段内没有问题。",
+      "loadMore": "加载更多",
+      "statusAria": "问题状态",
+      "status": {
+        "all": "全部",
+        "new": "新增",
+        "regressed": "回退",
+        "ongoing": "持续"
+      },
+      "statusName": {
+        "new": "新增",
+        "ongoing": "持续",
+        "regressed": "回退",
+        "proposed": "已提出修复",
+        "preview": "预览中",
+        "measuring": "衡量中",
+        "verified": "已验证",
+        "ignored": "已忽略"
+      },
+      "colIssue": "问题",
+      "colSessions": "会话",
+      "colShare": "占比",
+      "colTrend": "趋势",
+      "rowAria": "打开问题：{title}",
+      "trendAria": "{title} 的每日会话",
+      "overview": {
+        "sessions": "受影响会话",
+        "share": "占该路由比例",
+        "firstSeen": "首次出现",
+        "lastSeen": "最近出现",
+        "byRelease": "按版本",
+        "byDevice": "按设备"
+      },
+      "representatives": "代表性录制",
+      "repAria": "打开代表性录制 {rank}",
+      "recordingsOnRoute": "访问过 {route} 的录制"
+    },
+    "panel": {
+      "crumbRoot": "洞察",
+      "crumbAria": "面板路径",
+      "backTo": "返回{label}",
+      "loading": "加载中…",
+      "loadFailed": "无法加载此内容。"
+    },
+    "kinds": {
+      "recording": "录制",
+      "issue": "问题",
+      "issues": "全部问题",
+      "fix": "修复",
+      "route": "页面评审",
+      "metric": "指标",
+      "funnel": "漏斗",
+      "live": "实时访客",
+      "proof": "验证",
+      "release": "版本",
+      "sites": "站点",
+      "plan": "套餐与用量",
+      "tabs": {
+        "replay": "回放",
+        "journey": "路径",
+        "lead": "线索",
+        "overview": "概览",
+        "recordings": "录制"
+      }
+    },
+    "lenses": {
+      "live": "实时"
+    },
+    "journey": {
+      "steps": "{count} 个页面",
+      "entryExit": "{entry} → {exit}",
+      "signals": "信号",
+      "noSignals": "此录制中没有受挫或错误信号。"
+    },
+    "lead": {
+      "identifiedId": "识别为",
+      "traits": "属性",
+      "noTraits": "该站点未发送此访客的属性。",
+      "tags": "标签"
+    },
+    "sites": {
+      "loading": "正在加载站点…",
+      "empty": "还没有站点。",
+      "add": "添加站点",
+      "listLabel": "站点",
+      "kind": {
+        "external": "网站",
+        "hosted": "Builderforce 应用"
+      },
+      "settings": "设置",
+      "save": "保存",
+      "saved": "已保存。",
+      "saveFailed": "无法保存设置。",
+      "install": "安装",
+      "verify": "安装检查"
+    },
+    "plan": {
+      "loading": "正在加载用量…",
+      "usageTitle": "本月",
+      "usedOfLimit": "{period} 已使用 {used} / {limit} 条录制",
+      "free": "免费额度",
+      "freeUsed": "已使用 {used} / {allowance}",
+      "credits": "预付额度",
+      "packsTitle": "购买录制",
+      "receipts": "付款与收据",
+      "checkoutReturned": "谢谢。付款确认后，你的额度会显示在这里。"
     }
   },
   "cloudAgentForm": {
@@ -13149,6 +13300,271 @@
       "signIn": "登录后使用",
       "empty": "没有与搜索匹配的内置智能体。",
       "error": "无法加载内置智能体，请稍后再试。"
+    },
+    "landing": {
+      "insights": {
+        "hero": {
+          "eyebrow": "适用于任何网站的 Insights",
+          "title": "看清访客在做什么，以及应先修复什么",
+          "lead": "Insights 录制真实访问，把出错的地方归并为问题，并把每个问题变成一条按优先级排序的修复建议，你可以在下一个版本中应用、测试并衡量效果。",
+          "startFree": "免费开始",
+          "freeNote": "每月免费 5,000 条录制。无需绑卡。"
+        },
+        "install": {
+          "title": "三步上线",
+          "steps": {
+            "paste": {
+              "title": "粘贴一个标签",
+              "body": "在网站中添加一次加载器，或为托管在 Builderforce 上的应用打开开关。录制器更新会自动送达。"
+            },
+            "verify": {
+              "title": "实时查看连接",
+              "body": "设置流程会实时检查标签、域名和首次访问，并准确告诉你哪一步需要处理。"
+            },
+            "improve": {
+              "title": "修复关键问题",
+              "body": "问题按其对目标的影响排序，每个都附带修复方案、可交给 AI 工具的提示词，以及下一个版本的效果判定。"
+            }
+          }
+        },
+        "pillars": {
+          "title": "改进页面所需的一切",
+          "items": {
+            "fixes": {
+              "title": "排序后的修复建议",
+              "body": "每条发现都基于实测行为，附带预期影响和一个操作：修复、测试、跟进或建工单。"
+            },
+            "recordings": {
+              "title": "会话录制",
+              "body": "像看视频一样回放任何访问，直接跳到关键时刻并分享链接。"
+            },
+            "heatmaps": {
+              "title": "按版本的热力图",
+              "body": "每个版本的点击、滚动和区域热力图，方便对比改动前后的效果。"
+            },
+            "funnels": {
+              "title": "漏斗与路径",
+              "body": "查看访客在哪一步离开，并观看在每一步停下的访问。"
+            },
+            "live": {
+              "title": "实时访客",
+              "body": "查看此刻谁在网站上、在哪个页面，并跟随某位访客浏览。"
+            },
+            "privacy": {
+              "title": "默认保护隐私",
+              "body": "输入内容在浏览器中即被遮蔽，从不采集密码和卡号，并遵守“请勿跟踪”。"
+            }
+          }
+        },
+        "compare": {
+          "title": "不只是录制器",
+          "lead": "大多数会话回放工具只告诉你发生了什么。Insights 还会告诉你该改什么，以及改动是否奏效。",
+          "feature": "功能",
+          "columns": {
+            "insights": "Insights",
+            "typical": "常见的回放工具"
+          },
+          "rows": {
+            "recordings": {
+              "feature": "带遮蔽的会话录制",
+              "insights": "包含",
+              "typical": "包含"
+            },
+            "heatmaps": {
+              "feature": "点击与滚动热力图",
+              "insights": "按版本",
+              "typical": "通常为全时段"
+            },
+            "frustration": {
+              "feature": "狂点、无效点击与错误",
+              "insights": "归并为问题",
+              "typical": "按会话列出"
+            },
+            "fixes": {
+              "feature": "附预期影响的排序修复",
+              "insights": "包含",
+              "typical": "不提供"
+            },
+            "releases": {
+              "feature": "版本对比",
+              "insights": "自动识别",
+              "typical": "很少提供"
+            },
+            "measured": {
+              "feature": "每项修复的实测判定",
+              "insights": "在下一个版本",
+              "typical": "不提供"
+            }
+          }
+        },
+        "pricing": {
+          "title": "免费起步，按保留的录制计费",
+          "lead": "每个工作区每月免费保留 {free} 条录制。超出部分使用预付套餐，有效期 12 个月。",
+          "visitorsLabel": "每月 {count} 次访问",
+          "recordings": "每月录制数",
+          "monthly": "预计每月费用",
+          "free": "免费",
+          "packsOnSignup": "注册后可查看套餐",
+          "withinFree": "在每月 {free} 条免费录制之内。",
+          "packLine": "{count, plural, other {# 个}}含 {units} 条录制的套餐即可覆盖当月。",
+          "overFree": "超出免费额度的 {over} 条录制需要购买套餐。",
+          "estimateNote": "此为估算，按每次访问保留一条录制计算。你只为保留的录制付费。",
+          "startFree": "免费开始"
+        },
+        "faq": {
+          "title": "常见问题",
+          "items": {
+            "what": {
+              "q": "什么是 Insights？",
+              "a": "一款适用于任何网站的会话回放与分析应用。它录制访问，找出让你流失访客的问题，并推荐可衡量的排序修复。"
+            },
+            "install": {
+              "q": "如何安装？",
+              "a": "粘贴一个 script 标签、安装 npm 包，或添加一个 Google Tag Manager 标签。托管在 Builderforce 上的应用只需打开一个开关。"
+            },
+            "privacy": {
+              "q": "隐私如何保障？",
+              "a": "任何数据发送前，输入内容都会在浏览器中被遮蔽；密码和卡号字段从不采集；并遵守“请勿跟踪”和全球隐私控制（GPC）。你也可以要求先获得同意再录制。"
+            },
+            "pricing": {
+              "q": "费用是多少？",
+              "a": "每个工作区每月免费保留 5,000 条录制。超出部分购买预付套餐；额度有效期 12 个月，不会自动续费。"
+            },
+            "builderforce": {
+              "q": "我的网站必须在 Builderforce 上搭建吗？",
+              "a": "不需要。Insights 适用于任何网站。如果你的应用托管在 Builderforce 上，无需粘贴任何代码即可开启录制。"
+            }
+          }
+        },
+        "proof": {
+          "title": "我们在 builderforce.ai 上使用它",
+          "lead": "Builderforce 在自己的网站上运行 Insights，使用的正是你粘贴的同一段公开代码，并像其他工作区一样通过应用市场安装。",
+          "startFree": "免费开始"
+        }
+      }
+    },
+    "capability": {
+      "setupTitle": "设置 {app}",
+      "signUpFirst": "创建免费账户以设置 {app}。完成后会直接回到这里。",
+      "startFree": "免费开始",
+      "loading": "正在加载设置…",
+      "stepsLabel": "设置步骤",
+      "steps": {
+        "workspace": "工作区",
+        "site": "站点",
+        "snippet": "安装",
+        "verify": "验证",
+        "plan": "方案"
+      },
+      "workspace": {
+        "choose": "选择或创建将拥有 {app} 的工作区。",
+        "chooseAction": "选择工作区",
+        "installInto": "在 {workspace} 中安装 {app}。免费，且可随时移除。",
+        "install": "安装 {app}",
+        "installing": "正在安装…",
+        "another": "使用其他工作区",
+        "failed": "安装未完成，请重试。"
+      },
+      "site": {
+        "label": "站点名称",
+        "domains": "允许的域名",
+        "removeDomain": "移除 {domain}",
+        "domainPlaceholder": "shop.example.com",
+        "addDomain": "添加域名",
+        "domainInvalid": "请输入网址，例如 shop.example.com。",
+        "privacy": "隐私",
+        "switches": {
+          "maskAllText": {
+            "label": "遮蔽全部文本",
+            "hint": "隐藏页面上的所有文字，而不仅是表单输入。"
+          },
+          "consentRequired": {
+            "label": "等待用户同意",
+            "hint": "仅在你的网站调用 BFReplay.consent(true) 后才开始录制。"
+          },
+          "recordCanvas": {
+            "label": "录制 Canvas 内容",
+            "hint": "以较低帧率采集 Canvas 和 WebGL 画面。"
+          },
+          "identify": {
+            "label": "允许识别",
+            "hint": "允许你的网站用 BFReplay.identify 标注已登录访客。"
+          }
+        },
+        "modeLabel": "站点在哪里？",
+        "modes": {
+          "external": "我的网站",
+          "hosted": "Builderforce 应用"
+        },
+        "externalLead": "为站点命名并列出它运行的域名。只有这些域名可以发送录制。",
+        "create": "创建站点",
+        "hostedLead": "从此工作区中选择一个已发布的应用。加载器会自动为你添加。",
+        "loadingProjects": "正在加载你已发布的应用…",
+        "noProjects": "此工作区还没有已发布的应用。",
+        "record": "录制 {name}",
+        "failed": "无法创建站点，请重试。"
+      },
+      "snippet": {
+        "tabsLabel": "安装方式",
+        "tabs": {
+          "script": "Script 标签",
+          "npm": "npm",
+          "gtm": "Google Tag Manager",
+          "app": "Builderforce 应用"
+        },
+        "hostedOn": "此应用已开启录制，无需粘贴任何内容。",
+        "appHint": "托管在 Builderforce 上的应用无需代码片段：改为为该应用开启录制即可。",
+        "hints": {
+          "script": "将其粘贴到每个页面的 head 部分。",
+          "npm": "安装 @seanhogg/builderforce-replay，然后在应用启动时调用一次。",
+          "gtm": "用此内容添加一个自定义 HTML 标签，并在所有页面上触发。"
+        },
+        "copy": "复制",
+        "copied": "已复制",
+        "noKey": "此站点还没有密钥，请稍后刷新。",
+        "lead": "用以下任一方式把加载器加入你的网站，然后继续验证。",
+        "hostedLead": "你的应用托管在 Builderforce 上，因此加载器会自动添加。",
+        "next": "继续"
+      },
+      "verify": {
+        "lead": "在另一个标签页中打开你的网站。这些检查每隔几秒更新一次。",
+        "checks": {
+          "loader": {
+            "label": "已检测到加载器",
+            "fix": "确认标签已在页面上，并且添加后页面已被打开过。"
+          },
+          "origin": {
+            "label": "域名已允许",
+            "fix": "把提供该页面的域名加入允许的域名。"
+          },
+          "firstEvent": {
+            "label": "已收到首次访问",
+            "fix": "在页面上浏览几秒钟。如果要求同意，请先授予。"
+          },
+          "firstRecording": {
+            "label": "已保留首条录制",
+            "fix": "访问结束或发生值得保留的事件后，录制就会出现。"
+          }
+        },
+        "passed": "已通过",
+        "waiting": "等待中",
+        "unreachable": "暂时无法读取检查结果，正在重试。",
+        "stoppedAt": "等待中：{step}。",
+        "allPassed": "一切已连接。",
+        "next": "继续"
+      },
+      "plan": {
+        "lead": "先使用免费额度，或为访问量更大的网站立即购买套餐。",
+        "startFree": "使用免费额度开始",
+        "checkoutFailed": "无法发起支付，请重试。",
+        "loadingPacks": "正在加载套餐…",
+        "noPacks": "套餐暂时不可用，适用免费额度。",
+        "buyAria": "以 {price} 购买 {units} 条录制",
+        "packUnits": "{units} 条录制",
+        "redirecting": "正在打开支付页面…",
+        "packTerms": "预付、一次性付款。额度有效期 12 个月，不会自动续费。"
+      },
+      "openApp": "打开 {app}"
     }
   },
   "models": {
@@ -14409,7 +14825,8 @@
         "loading": "正在加载历史…",
         "empty": "暂无历史版本。",
         "publish": "发布",
-        "amend": "修订"
+        "amend": "修订",
+        "draft": "草稿（未发布）"
       }
     },
     "newsletter": {
@@ -15001,7 +15418,14 @@
       "subtitle": "匿名漏斗及其中的人——流向、线索、一段录像。",
       "tabJourney": "旅程",
       "tabLead": "线索",
-      "crumb": "访客"
+      "crumb": "访客",
+      "openApp": "打开洞察应用",
+      "nodeStripAria": "步骤 {step}",
+      "nodeVisitors": "{count} 位访客",
+      "nodeEvents": "{count} 个事件",
+      "nodeExits": "{count} 次离开",
+      "watchStep": "观看此步骤的录制",
+      "nodeStripClose": "关闭步骤详情"
     },
     "visitorFlow": {
       "title": "访客流向",
@@ -24462,10 +24886,10 @@
     "noticeFormFailed": "该表单操作未能完成。",
     "noticeIdeaUntitled": "先给想法起个标题，再去问市场。",
     "noticeIdeaInterviewTitle": "先给想法起个标题，才能给访谈命名。",
-        "noticeIdeaInterviewPlanned": "访谈已安排。在看板上打开它以选择时间。",
-        "noticeIdeaFormTitle": "先给想法起个标题，才能给表单命名。",
-        "noticeIdeaFormCreated": "表单已创建。发布后即可获得可发送的链接。",
-        "noticeIdeaActFailed": "该想法操作未能完成。",
+    "noticeIdeaInterviewPlanned": "访谈已安排。在看板上打开它以选择时间。",
+    "noticeIdeaFormTitle": "先给想法起个标题，才能给表单命名。",
+    "noticeIdeaFormCreated": "表单已创建。发布后即可获得可发送的链接。",
+    "noticeIdeaActFailed": "该想法操作未能完成。",
     "surface": {
       "chat": {
         "label": "对话",
@@ -24534,15 +24958,21 @@
         "noBoardMetric": "此看板上还没有指标"
       },
       "sessions": {
-        "label": "会话",
-        "enter": "查看谁用过这个画布",
-        "active": "你正在查看会话",
-        "regionLabel": "会话录像",
-        "emptyTitle": "还没有这个画布的录像",
-        "emptyBody": "访客使用这个画布后，他们的会话会出现在这里。打开访客即可回放。",
-        "openFull": "打开访客录像",
-        "listLabel": "已录制的访问",
-        "converted": "已转化"
+        "label": "访客",
+        "enter": "查看谁来访问过",
+        "active": "你正在“访客”中",
+        "regionLabel": "访客",
+        "loadingTitle": "正在加载访客",
+        "loadingBody": "正在检查此应用的录制。",
+        "buyTitle": "看清访客在做什么",
+        "buyBody": "安装 Insights 以录制此应用的访问、找出问题并获得排序后的修复建议。免费即可开始。",
+        "buyAction": "获取 Insights",
+        "noAppTitle": "还没有应用",
+        "noAppBody": "当此看板有一个可供他人打开的应用后，访客会显示在这里。",
+        "offTitle": "录制已关闭",
+        "offBody": "为此应用开启录制。无需粘贴任何内容：加载器会自动添加到托管的应用中。",
+        "enable": "录制此应用",
+        "enableFailed": "无法开启录制，请重试。"
       },
       "room": {
         "label": "会议室",
@@ -29102,7 +29532,8 @@
       "course": "课程",
       "dataset": "数据集",
       "tool": "工具",
-      "creative": "创意素材"
+      "creative": "创意素材",
+      "capability": "平台功能"
     }
   },
   "marketplaceCreations": {
@@ -29146,7 +29577,8 @@
       "creative": "创意素材",
       "book": "书籍",
       "survey": "问卷",
-      "room": "房间设计"
+      "room": "房间设计",
+      "capability": "平台功能"
     },
     "launchVerb": {
       "play": "试玩",
@@ -33325,5 +33757,113 @@
       "把假设当作已测量的结果来呈现",
       "藏在小字里的退出选项"
     ]
+  },
+  "replay": {
+    "list": {
+      "when": "时间",
+      "where": "位置",
+      "release": "版本",
+      "pages": "页面数",
+      "duration": "时长",
+      "signals": "信号",
+      "keep": "保留原因",
+      "route": "{entry} → {exit}",
+      "noSignals": "无",
+      "signal": {
+        "rage": "{count} 次愤怒点击",
+        "dead": "{count} 次无效点击",
+        "errors": "{count} 个错误",
+        "quickbacks": "{count} 次快速返回"
+      },
+      "keepReason": {
+        "sample": "抽样",
+        "frustration": "受挫",
+        "error": "错误",
+        "goal": "达成目标",
+        "tag": "已标记",
+        "manual": "站点手动保留"
+      },
+      "weighted": "≈ ×{weight}",
+      "sortBy": "按{column}排序",
+      "error": "无法加载录制。",
+      "retry": "重试",
+      "empty": "此视图尚未保留任何录制。",
+      "open": "观看",
+      "openAria": "观看从 {path} 进入的录制",
+      "loading": "正在加载录制…",
+      "loadMore": "加载更多"
+    },
+    "player": {
+      "loading": "正在加载录制…",
+      "empty": "此录制暂无可播放内容。",
+      "error": "无法播放该录制。",
+      "play": "播放",
+      "pause": "暂停",
+      "scrubber": "播放位置",
+      "markersAria": "此录制中的关键时刻",
+      "markerAria": "{time} · {label}",
+      "speed": "速度",
+      "speedOption": "{speed}×",
+      "skipInactive": "跳过无操作时段",
+      "copyLink": "复制 {time} 处的链接",
+      "copied": "链接已复制。",
+      "copyFailed": "无法复制链接。",
+      "following": "正在实时跟随——新的活动到达后即会显示。",
+      "events": "事件",
+      "eventsEmpty": "此录制中没有标记事件。",
+      "release": "版本",
+      "device": "设备",
+      "country": "国家/地区",
+      "referrer": "来源",
+      "duration": "时长",
+      "direct": "直接访问",
+      "deviceClass": {
+        "desktop": "桌面端",
+        "tablet": "平板",
+        "phone": "手机"
+      },
+      "mark": {
+        "page": "页面",
+        "click": "点击",
+        "event": "事件",
+        "rage": "愤怒点击",
+        "dead": "无效点击",
+        "quickback": "快速返回",
+        "excessive_scroll": "过度滚动",
+        "error": "JavaScript 错误",
+        "vital": "网页核心指标",
+        "scroll": "滚动深度"
+      }
+    },
+    "live": {
+      "loading": "正在查找实时访客…",
+      "error": "无法加载实时访客。",
+      "active": "当前 {count} 位活跃访客",
+      "byRoute": "按页面",
+      "empty": "当前没有人访问此站点。",
+      "lastSeen": "{time}出现",
+      "notRecorded": "未录制",
+      "watchAria": "实时观看 {route} 上的访客"
+    }
+  },
+  "apps": {
+    "loading": "加载中…",
+    "notEntitled": "此工作区尚未安装 {app}。请从应用市场安装，免费即可开始。",
+    "getIt": "获取 {app}",
+    "needsSetup": "{app} 已安装。添加你的第一个站点即可开始录制。",
+    "setUp": "设置",
+    "navTitle": "应用",
+    "insights": {
+      "name": "Insights",
+      "loading": "正在加载站点…",
+      "noSiteTitle": "还没有站点",
+      "noSiteBody": "添加一个网站，或为某个 Builderforce 应用开启录制。",
+      "setUp": "添加站点",
+      "siteLabel": "站点",
+      "usageChip": "{used} / {limit} 条录制",
+      "usageAria": "用量：本月 {used} / {limit} 条录制。打开方案。",
+      "sites": "站点",
+      "addSite": "添加站点"
+    }
   }
 }

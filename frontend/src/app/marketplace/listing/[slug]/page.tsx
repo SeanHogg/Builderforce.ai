@@ -5,6 +5,10 @@ import { pageMetadata } from '@/lib/seo';
 import { publicApiGet } from '@/lib/publicApi';
 import type { CreationListing } from '@/lib/creationListings';
 import { ListingLaunch } from './ListingLaunch';
+import JsonLd from '@/components/JsonLd';
+import { ListingLanding } from '@/components/marketplace/landing/ListingLanding';
+import { landingFor, listingLandingJsonLd } from '@/lib/marketplace/listingLandings';
+import { BRAND } from '@/lib/content/brand';
 
 /**
  * A creation, for sale, and RUNNABLE from this page.
@@ -53,6 +57,9 @@ export default async function ListingPage({
   const listing = await loadListing(slug);
   if (!listing) notFound();
   const t = await getTranslations('marketplaceListing');
+  // ONE lookup: a listing with a landing (`LISTING_LANDINGS`) draws it above the
+  // launch surface; every other listing renders exactly as before.
+  const landing = landingFor(listing.slug);
 
   return (
     <main className="mpl">
@@ -92,6 +99,9 @@ export default async function ListingPage({
             {listing.tags.map((tag) => <span key={tag} className="mpl-tag">{tag}</span>)}
           </div>
         )}
+
+        {landing && <JsonLd data={listingLandingJsonLd(listing, BRAND.url)} />}
+        <ListingLanding sections={landing} />
 
         <ListingLaunch listing={listing} />
       </div>

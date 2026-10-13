@@ -4,6 +4,7 @@ import { AiDisclosure } from '../AiDisclosure';
 import { useBrainPanel } from './BrainPanelContext';
 import { BrainToolConfirmBar } from './BrainToolConfirmBar';
 import { BrainComposer } from './BrainComposer';
+import { REPLAY_MASK } from '@/lib/replaySensitive';
 
 /**
  * The composer's footer, pinned at the bottom in BOTH states of the docked panel so
@@ -17,7 +18,7 @@ export function BrainComposerArea() {
   const { pendingConfirm, resolveConfirm } = conv;
   const { pendingQuestion } = timeline;
   return (
-    <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
+    <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }} {...REPLAY_MASK}>
       {pendingConfirm && <BrainToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
       {pendingQuestion && (
         <PendingQuestionBanner

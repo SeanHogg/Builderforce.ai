@@ -83,6 +83,38 @@ describe('evaluateFeatureEntitlement — one verdict, applied consistently', () 
   });
 });
 
+describe('evaluateFeatureEntitlement — capability features (marketplace licences)', () => {
+  const base = {
+    feature: 'sessionReplay' as PlanFeature,
+    effectivePlan: TenantPlan.TEAMS,
+    premiumOverride: false,
+    isSuperadmin: false,
+  };
+
+  it('no plan grants sessionReplay, not even Teams', () => {
+    const r = evaluateFeatureEntitlement(base);
+    expect(r.entitled).toBe(false);
+    expect(r.capability).toBe('session-replay');
+  });
+
+  it('a held capability licence grants it', () => {
+    expect(evaluateFeatureEntitlement({ ...base, heldFeatures: ['sessionReplay'] }))
+      .toMatchObject({ entitled: true, reason: 'capability' });
+  });
+
+  it('a comped premium override does not stand in for the install', () => {
+    expect(evaluateFeatureEntitlement({ ...base, premiumOverride: true }).entitled).toBe(false);
+  });
+
+  it('a superadmin is entitled without one', () => {
+    expect(evaluateFeatureEntitlement({ ...base, isSuperadmin: true })).toMatchObject({ entitled: true, reason: 'superadmin' });
+  });
+
+  it('plan features carry no capability', () => {
+    expect(evaluateFeatureEntitlement({ ...base, feature: 'voiceCloning' }).capability).toBeNull();
+  });
+});
+
 describe('evaluateFrontierAccess — plan OR superadmin OR premium OR BYO unlocks frontier', () => {
   const base = { effectivePlan: TenantPlan.FREE, premiumOverride: false, isSuperadmin: false, hasConnectedByoFrontier: false };
 

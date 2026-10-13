@@ -11,6 +11,12 @@ import { adminAuditLog } from '../database/schema';
 import type { Db } from '../database/connection';
 
 export interface AdminAuditOpts {
+  /**
+   * A caller-minted row id, for an action that must reference its own audit row
+   * (e.g. the Insights credit grant's ledger reference `replay-grant:<audit id>`).
+   * Omitted → the database default.
+   */
+  id?: string;
   targetUserId?: string | null;
   tenantId?: number | null;
   metadata?: Record<string, unknown>;
@@ -26,6 +32,7 @@ export async function writeAdminAudit(
   opts: AdminAuditOpts = {},
 ): Promise<void> {
   await db.insert(adminAuditLog).values({
+    ...(opts.id ? { id: opts.id } : {}),
     event,
     actorId:      actorId ?? null,
     targetUserId: opts.targetUserId ?? null,

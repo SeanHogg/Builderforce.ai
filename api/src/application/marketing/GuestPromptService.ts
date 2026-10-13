@@ -2,7 +2,7 @@ import { desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { marketingSessionPrompts, marketingSessions } from '../../infrastructure/database/schema';
-import { forgetVisitorActivity } from './visitorActivity';
+import { eraseVisitorData, type VisitorErasure } from '../visitors/visitorDataErasers';
 import {
   GUEST_PROMPT_LIMITS,
   parseGuestPrompt,
@@ -352,22 +352,23 @@ export class GuestPromptService {
    * request as actioned — a privacy failure that looks like a success. The
    * counts are returned separately so the audit record says what actually went.
    *
-   * The journey now lives in `activity_log` (migration 1111), so the delete is
-   * `forgetVisitorActivity` rather than a table this file names — which is what
-   * keeps the erasure correct if that mapping ever moves again.
+   * Every store is erased through ONE registry, `VISITOR_DATA_ERASERS`
+   * (`application/visitors/visitorDataErasers.ts`): prompts, the journey in
+   * `activity_log` (1111) and the visitor's Insights recordings. A new store of
+   * visitor data is a registry entry, not a second erase path.
    */
-  async forgetVisitor(env: Env, visitorId: string): Promise<{ prompts: number; events: number }> {
-    const [prompts, events] = await Promise.all([
-      this.db
-        .delete(marketingSessionPrompts)
-        .where(eq(marketingSessionPrompts.visitorId, visitorId))
-        .returning({ id: marketingSessionPrompts.id }),
-      forgetVisitorActivity(this.db, visitorId),
-    ]);
+  async forgetVisitor(env: Env, visitorId: string): Promise<VisitorErasure & { prompts: number; events: number }> {
+    const erasure = await eraseVisitorData(env, this.db, visitorId);
     await Promise.all([
       invalidateCached(env, GUEST_SESSIONS_CACHE_KEY),
       invalidateCached(env, visitorStandingCacheKey(visitorId)),
     ]);
-    return { prompts: prompts.length, events };
+    // `prompts` / `events` keep the shape the erase route and its audit row read;
+    // `erased` is the total across EVERY registered eraser (prompts, journey, replay).
+    return {
+      ...erasure,
+      prompts: erasure.byEraser.prompts ?? 0,
+      events: erasure.byEraser.journey ?? 0,
+    };
   }
 }

@@ -224,6 +224,32 @@ export interface ReplayPackDto {
   amountCents: number;
 }
 
+/** `POST REPLAY_PATHS.sites` body: an external site (§4.2 step 4). */
+export interface ReplaySiteCreateInput {
+  label: string;
+  /** Origins (`https://shop.example.com`) the site's `bfr_` key accepts. */
+  allowedOrigins: string[];
+  settings?: Partial<ReplaySiteSettings>;
+}
+
+/** `PATCH REPLAY_PATHS.site` body. Every field optional. */
+export interface ReplaySiteUpdateInput {
+  label?: string;
+  allowedOrigins?: string[];
+  settings?: Partial<ReplaySiteSettings>;
+  status?: 'active' | 'disabled';
+}
+
+/** `POST REPLAY_PATHS.capabilityPackCheckout` body and answer. */
+export interface CapabilityPackCheckoutInput {
+  /** Absolute URL the processor returns to; may carry `{CHECKOUT_SESSION_ID}`. */
+  returnUrl: string;
+}
+
+export interface CapabilityPackCheckoutDto {
+  checkoutUrl: string;
+}
+
 export interface ReplayOpsSummaryDto {
   sites: number;
   tenants: number;

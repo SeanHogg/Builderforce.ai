@@ -1,50 +1,36 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { bootEmbed } from './embed';
 
 afterEach(() => {
-  vi.resetModules();
   vi.unstubAllGlobals();
   document.querySelectorAll('script').forEach((s) => s.remove());
-  Object.defineProperty(document, 'currentScript', { configurable: true, get: () => null });
-  const w = window as unknown as { BuilderForce?: { session?: unknown } };
-  delete w.BuilderForce;
+  delete window.BFReplay;
+  delete window.__bfReplay;
 });
 
-describe('embed/v1.js boot', () => {
-  it('installs window.BuilderForce.session and injects the hashed recorder', async () => {
-    const script = document.createElement('script');
-    script.setAttribute('data-builderforce-key', 'site_abc');
-    script.src = 'https://cdn.builderforce.ai/embed/v1.js';
-    document.body.appendChild(script);
-    Object.defineProperty(document, 'currentScript', { configurable: true, get: () => script });
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ recorder: '/replay/r/recorder.deadbeef.js', hash: 'deadbeef' }),
-      })),
+describe('embed/v1.js', () => {
+  it('boots replay from data-site', async () => {
+    const fetchFn = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      ({ ok: true, json: async () => ({ enabled: true, recorderUrl: 'https://cdn.test/replay/r/recorder.abcdef123456.js' }) }) as unknown as Response,
     );
-
-    await import('./embed');
-
-    const w = window as unknown as { BuilderForce?: { session?: { init: unknown } } };
-    expect(w.BuilderForce?.session).toBeTruthy();
-
-    await vi.waitFor(() => {
-      const injected = document.querySelector(
-        'script[src="https://cdn.builderforce.ai/replay/r/recorder.deadbeef.js"]',
-      );
-      expect(injected).toBeTruthy();
-    });
-
-    vi.unstubAllGlobals();
+    vi.stubGlobal('fetch', fetchFn);
+    const script = document.createElement('script');
+    script.dataset.site = 'bfr_abc';
+    script.setAttribute('data-builderforce-key', 'bf_42');
+    document.head.appendChild(script);
+    await bootEmbed(script);
+    expect(fetchFn).toHaveBeenCalledWith('https://api.builderforce.ai/api/replay-ingest/v1/config?site=bfr_abc', { credentials: 'omit' });
+    expect(window.__bfReplay?.site).toBe('bfr_abc');
   });
 
-  it('does not fetch without a site key', async () => {
+  it('never uses the workspace key as a replay key', async () => {
     const fetchFn = vi.fn();
     vi.stubGlobal('fetch', fetchFn);
-    await import('./embed');
+    const script = document.createElement('script');
+    script.setAttribute('data-builderforce-key', 'bf_42');
+    document.head.appendChild(script);
+    await bootEmbed(script);
     expect(fetchFn).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
+    expect(window.BFReplay).toBeUndefined();
   });
 });

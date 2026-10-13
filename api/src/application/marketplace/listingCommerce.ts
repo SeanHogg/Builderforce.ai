@@ -51,6 +51,9 @@ import { ListingError, invalidateListingCaches, recordInstall } from './creation
 import { chargeAllHostedAppMaintenance, sellerMaintenanceCostCents } from './appMaintenanceCost';
 import { USD_CENTS } from '../kernel/denominations';
 import { userAccount } from '../kernel/ledgerAccount';
+import { capabilityLicenceChanged } from '../tenant/heldCapabilities';
+import { traceCapabilityGranted } from '../replay/replayTrace';
+import { orderRefunderFor } from '../billing/purchaseRegistry';
 
 
 /** The platform's cut ONCE A SELLER IS PAST THE THRESHOLD. 15%, overridable. */
@@ -386,6 +389,17 @@ async function grantListing(
     })
     .returning();
   if (!licence) throw new ListingError('Could not grant the licence', 400);
+
+  // A capability listing's licence IS a feature entitlement (`heldCapabilities.ts`):
+  // drop the cached set so the gate sees the install on the next request, and write
+  // the buyer's-path trace for it (a no-op for every other listing).
+  await capabilityLicenceChanged(env, input.tenantId);
+  await traceCapabilityGranted(env, db, {
+    tenantId: input.tenantId,
+    slug: listing.slug,
+    actorId: input.buyerRef,
+    licenceId: licence.id,
+  });
 
   // A sale with no seller tenant is a platform-owned listing; there is nobody to
   // credit, and inventing an account for it would put money in a workspace that
@@ -740,6 +754,12 @@ export async function refundListingOrder(
   if (!order) throw new ListingError('Order not found', 404);
   if (order.status === 'refunded') return { refundedCents: order.totalCents };
 
+  // An order a self-settled flow wrote (a recording pack, `RP-…`) is refunded by that
+  // flow: it sold credits, not a licence, so revoking a licence here would uninstall
+  // the capability the credits are for.
+  const refunder = orderRefunderFor(order.orderNumber);
+  if (refunder) return refunder(db, env, input);
+
   const [line] = await db
     .select()
     .from(orderLineItems)
@@ -768,6 +788,7 @@ export async function refundListingOrder(
       eq(templateLicenses.catalogItemId, line.catalogItemId),
       eq(templateLicenses.licenseeRef, order.buyerRef ?? ''),
     ));
+  await capabilityLicenceChanged(env, input.tenantId);
 
   const sellerCents = Math.max(0, line.amountCents - line.commissionCents);
   if (sellerCents > 0 && line.sellerRef && sellerTenantId != null) {

@@ -1,187 +1,251 @@
 /**
- * THE Insights filter registry.
+ * THE Insights filter (PRD 33 §3.4) — one contract, one compiler.
  *
- * Device, country, path, UTM, frustration, duration — declared once so the
- * URL, the query builder, the Insights views and the API parse the same
- * vocabulary. A filter the UI writes is a filter the list endpoint can
- * read, and the other way around.
+ * Every band, panel, list and the read API take a `ReplayFilter`. The
+ * fields are declared once here (`FILTER_FIELDS`) so the URL, the filter bar,
+ * the API parser and the compiler read one vocabulary; a filter the UI writes
+ * is a filter the API can read, and the other way around.
  */
 
-export const FILTER_OPERATORS = ['eq', 'neq', 'in', 'contains', 'gte', 'lte'] as const;
-export type FilterOperator = (typeof FILTER_OPERATORS)[number];
+import type { ReplayDeviceClass } from './api';
+import { FRUSTRATION_MARK_KINDS } from './kinds';
 
-export type FilterFieldType = 'string' | 'number' | 'enum' | 'boolean';
+export const FILTER_OPS = ['eq', 'neq', 'in', 'contains', 'prefix', 'gte', 'lte'] as const;
+export type FilterOp = (typeof FILTER_OPS)[number];
+
+/**
+ * - `string` / `number` / `boolean`: a scalar of that type.
+ * - `enum`: one of the field's `values`.
+ * - `keyValue`: `"key=value"` (tags).
+ * An `in` clause carries a non-empty list of the scalar kind.
+ */
+export type FilterValueKind = 'string' | 'number' | 'boolean' | 'enum' | 'keyValue';
+
+export const FILTER_FIELD_IDS = [
+  'device',
+  'browser',
+  'os',
+  'country',
+  'referrer',
+  'entryPath',
+  'exitPath',
+  'visitedPath',
+  'clickedSelector',
+  'frustration',
+  'durationMs',
+  'activeMs',
+  'pageCount',
+  'release',
+  'smartEvent',
+  'tag',
+  'converted',
+  'variant',
+] as const;
+
+export type FilterFieldId = (typeof FILTER_FIELD_IDS)[number];
 
 export interface FilterFieldSpec {
-  readonly key: string;
-  readonly type: FilterFieldType;
-  readonly operators: readonly FilterOperator[];
+  readonly id: FilterFieldId;
+  readonly ops: readonly FilterOp[];
+  readonly valueKind: FilterValueKind;
+  /** Allowed values of an `enum` field. */
   readonly values?: readonly string[];
 }
 
+const DEVICE_VALUES: readonly ReplayDeviceClass[] = ['desktop', 'tablet', 'phone'];
+const TEXT_OPS: readonly FilterOp[] = ['eq', 'neq', 'in', 'contains'];
+const PATH_OPS: readonly FilterOp[] = ['eq', 'neq', 'in', 'contains', 'prefix'];
+const RANGE_OPS: readonly FilterOp[] = ['gte', 'lte'];
+const LIST_OPS: readonly FilterOp[] = ['eq', 'neq', 'in'];
+
 export const FILTER_FIELDS: readonly FilterFieldSpec[] = [
-  { key: 'device', type: 'enum', operators: ['eq', 'in'], values: ['mobile', 'desktop', 'tablet'] },
-  { key: 'country', type: 'string', operators: ['eq', 'in'] },
-  { key: 'path', type: 'string', operators: ['eq', 'contains'] },
-  { key: 'entryPath', type: 'string', operators: ['eq', 'contains'] },
-  { key: 'exitPath', type: 'string', operators: ['eq', 'contains'] },
-  { key: 'utmSource', type: 'string', operators: ['eq', 'in'] },
-  { key: 'utmCampaign', type: 'string', operators: ['eq', 'in'] },
-  { key: 'utmMedium', type: 'string', operators: ['eq', 'in'] },
-  { key: 'referrer', type: 'string', operators: ['eq', 'contains'] },
-  {
-    key: 'frustration',
-    type: 'enum',
-    operators: ['eq', 'in'],
-    values: ['rage', 'dead', 'quickback', 'excessive_scroll', 'error'],
-  },
-  { key: 'durationMs', type: 'number', operators: ['gte', 'lte'] },
-  { key: 'releaseKey', type: 'string', operators: ['eq', 'in'] },
-  { key: 'hasError', type: 'boolean', operators: ['eq'] },
+  { id: 'device', ops: LIST_OPS, valueKind: 'enum', values: DEVICE_VALUES },
+  { id: 'browser', ops: LIST_OPS, valueKind: 'string' },
+  { id: 'os', ops: LIST_OPS, valueKind: 'string' },
+  { id: 'country', ops: LIST_OPS, valueKind: 'string' },
+  { id: 'referrer', ops: TEXT_OPS, valueKind: 'string' },
+  { id: 'entryPath', ops: PATH_OPS, valueKind: 'string' },
+  { id: 'exitPath', ops: PATH_OPS, valueKind: 'string' },
+  { id: 'visitedPath', ops: PATH_OPS, valueKind: 'string' },
+  { id: 'clickedSelector', ops: ['eq', 'neq', 'contains'], valueKind: 'string' },
+  { id: 'frustration', ops: LIST_OPS, valueKind: 'enum', values: FRUSTRATION_MARK_KINDS },
+  { id: 'durationMs', ops: RANGE_OPS, valueKind: 'number' },
+  { id: 'activeMs', ops: RANGE_OPS, valueKind: 'number' },
+  { id: 'pageCount', ops: ['eq', 'gte', 'lte'], valueKind: 'number' },
+  { id: 'release', ops: LIST_OPS, valueKind: 'string' },
+  { id: 'smartEvent', ops: LIST_OPS, valueKind: 'string' },
+  { id: 'tag', ops: ['eq', 'neq'], valueKind: 'keyValue' },
+  { id: 'converted', ops: ['eq'], valueKind: 'boolean' },
+  { id: 'variant', ops: LIST_OPS, valueKind: 'string' },
 ];
 
-export const FILTER_FIELD_BY_KEY: ReadonlyMap<string, FilterFieldSpec> = new Map(
-  FILTER_FIELDS.map((field) => [field.key, field]),
+export const FILTER_FIELD_BY_ID: ReadonlyMap<FilterFieldId, FilterFieldSpec> = new Map(
+  FILTER_FIELDS.map((field) => [field.id, field]),
 );
 
+/** Most clauses one filter may carry. */
+export const MAX_FILTER_CLAUSES = 12;
+/** Most items in one `in` list. */
+export const MAX_FILTER_LIST = 50;
+/** Longest string value. */
+export const MAX_FILTER_VALUE = 200;
+
+export type FilterScalar = string | number | boolean;
+
 export interface ReplayFilterClause {
-  field: string;
-  op: FilterOperator;
-  value: string | number | boolean | ReadonlyArray<string | number>;
+  field: FilterFieldId;
+  op: FilterOp;
+  value: FilterScalar | ReadonlyArray<string | number>;
 }
 
+/** Every clause must hold (AND). */
 export interface ReplayFilter {
-  clauses: ReplayFilterClause[];
+  all: ReplayFilterClause[];
 }
 
-const OPERATOR_SET = new Set<string>(FILTER_OPERATORS);
+export const EMPTY_REPLAY_FILTER: ReplayFilter = { all: [] };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function coerceValue(spec: FilterFieldSpec, raw: string): string | number | boolean | null {
-  if (spec.type === 'number') {
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : null;
-  }
-  if (spec.type === 'boolean') {
-    if (raw === 'true' || raw === '1') return true;
-    if (raw === 'false' || raw === '0') return false;
-    return null;
-  }
-  if (spec.type === 'enum' && spec.values && !spec.values.includes(raw)) return null;
-  return raw;
+function isFilterOp(value: unknown): value is FilterOp {
+  return typeof value === 'string' && (FILTER_OPS as readonly string[]).includes(value);
 }
 
-function isOperator(value: string): value is FilterOperator {
-  return OPERATOR_SET.has(value);
+function scalarOk(spec: FilterFieldSpec, value: unknown): value is FilterScalar {
+  switch (spec.valueKind) {
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value);
+    case 'boolean':
+      return typeof value === 'boolean';
+    case 'enum':
+      return typeof value === 'string' && (spec.values ?? []).includes(value);
+    case 'keyValue': {
+      if (typeof value !== 'string' || value.length > MAX_FILTER_VALUE) return false;
+      const eq = value.indexOf('=');
+      return eq > 0;
+    }
+    case 'string':
+      return typeof value === 'string' && value.length > 0 && value.length <= MAX_FILTER_VALUE;
+  }
 }
 
 function parseClause(raw: unknown): ReplayFilterClause | null {
   if (!isRecord(raw)) return null;
-  const field = raw.field;
+  const spec = FILTER_FIELD_BY_ID.get(raw.field as FilterFieldId);
+  if (!spec) return null;
   const op = raw.op;
-  if (typeof field !== 'string' || typeof op !== 'string') return null;
-  const spec = FILTER_FIELD_BY_KEY.get(field);
-  if (!spec || !isOperator(op) || !spec.operators.includes(op)) return null;
+  if (!isFilterOp(op) || !spec.ops.includes(op)) return null;
   const value = raw.value;
-  if (Array.isArray(value)) {
-    if (op !== 'in') return null;
-    const items = value.filter((item): item is string | number => typeof item === 'string' || typeof item === 'number');
-    if (items.length === 0) return null;
-    return { field, op, value: items };
+  if (op === 'in') {
+    if (!Array.isArray(value) || value.length === 0 || value.length > MAX_FILTER_LIST) return null;
+    const items: Array<string | number> = [];
+    for (const item of value) {
+      if (!scalarOk(spec, item) || typeof item === 'boolean') return null;
+      items.push(item);
+    }
+    return { field: spec.id, op, value: items };
   }
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return { field, op, value };
-  }
-  return null;
+  if (!scalarOk(spec, value)) return null;
+  return { field: spec.id, op, value };
 }
 
 /**
- * Accept a `ReplayFilter`, a `{ field: value }` shorthand, a query string,
- * or `URLSearchParams`. Invalid input returns null rather than throwing —
- * a bad URL must not take the Insights page down.
+ * Validate an untrusted filter. `null` / `undefined` is the empty filter;
+ * anything else must be `{ all: clause[] }` with at most
+ * `MAX_FILTER_CLAUSES` clauses, each naming a registered field, one of its
+ * ops and a value of its kind. Returns null (never throws) otherwise.
  */
 export function parseReplayFilter(raw: unknown): ReplayFilter | null {
-  if (raw == null || raw === '') return { clauses: [] };
-  if (typeof raw === 'string' || raw instanceof URLSearchParams) {
-    return filterFromQuery(typeof raw === 'string' ? new URLSearchParams(raw.startsWith('?') ? raw.slice(1) : raw) : raw);
+  if (raw === null || raw === undefined) return { all: [] };
+  if (!isRecord(raw) || !Array.isArray(raw.all)) return null;
+  if (raw.all.length > MAX_FILTER_CLAUSES) return null;
+  const all: ReplayFilterClause[] = [];
+  for (const item of raw.all) {
+    const clause = parseClause(item);
+    if (!clause) return null;
+    all.push(clause);
   }
-  if (!isRecord(raw)) return null;
-  if (Array.isArray(raw.clauses)) {
-    const clauses: ReplayFilterClause[] = [];
-    for (const item of raw.clauses) {
-      const clause = parseClause(item);
-      if (!clause) return null;
-      clauses.push(clause);
-    }
-    return { clauses };
-  }
-  const clauses: ReplayFilterClause[] = [];
-  for (const [field, value] of Object.entries(raw)) {
-    if (field === 'clauses') continue;
-    const spec = FILTER_FIELD_BY_KEY.get(field);
-    if (!spec) return null;
-    if (Array.isArray(value)) {
-      if (!spec.operators.includes('in')) return null;
-      const items = value.filter((item): item is string | number => typeof item === 'string' || typeof item === 'number');
-      if (items.length === 0) return null;
-      clauses.push({ field, op: 'in', value: items });
-      continue;
-    }
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      clauses.push({ field, op: 'eq', value });
-      continue;
-    }
-    return null;
-  }
-  return { clauses };
+  return { all };
 }
 
-/** Encode a filter as query params (`device=mobile`, `durationMs.gte=5000`). */
+/** Query-param prefix, so filter params never collide with `site`, `days`, `panel`. */
+const PARAM_PREFIX = 'f.';
+
+function encodeScalar(value: string | number | boolean): string {
+  return String(value);
+}
+
+function decodeScalar(spec: FilterFieldSpec, raw: string): FilterScalar | null {
+  if (spec.valueKind === 'number') {
+    if (raw.trim() === '') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (spec.valueKind === 'boolean') {
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+    return null;
+  }
+  return raw;
+}
+
+/**
+ * Encode a filter as query params: one `f.<field>.<op>=<value>` per clause.
+ * An `in` list is its items URI-encoded and joined by commas, so an item may
+ * itself contain a comma.
+ */
 export function filterToQuery(filter: ReplayFilter): URLSearchParams {
   const params = new URLSearchParams();
-  for (const clause of filter.clauses) {
-    const key = clause.op === 'eq' ? clause.field : `${clause.field}.${clause.op}`;
-    if (Array.isArray(clause.value)) {
-      for (const item of clause.value) params.append(key, String(item));
-    } else {
-      params.append(key, String(clause.value));
-    }
+  for (const clause of filter.all) {
+    const key = `${PARAM_PREFIX}${clause.field}.${clause.op}`;
+    const value = Array.isArray(clause.value)
+      ? clause.value.map((item) => encodeURIComponent(String(item))).join(',')
+      : encodeScalar(clause.value as FilterScalar);
+    params.append(key, value);
   }
   return params;
 }
 
-/** Decode query params into a filter, dropping unknown fields / operators. */
-export function filterFromQuery(params: URLSearchParams): ReplayFilter {
-  const grouped = new Map<string, string[]>();
-  for (const [key, value] of params.entries()) {
-    const list = grouped.get(key);
-    if (list) list.push(value);
-    else grouped.set(key, [value]);
-  }
-  const clauses: ReplayFilterClause[] = [];
-  for (const [key, values] of grouped) {
-    const dot = key.lastIndexOf('.');
-    const field = dot === -1 ? key : key.slice(0, dot);
-    const opRaw = dot === -1 ? 'eq' : key.slice(dot + 1);
-    const spec = FILTER_FIELD_BY_KEY.get(field);
-    if (!spec || !isOperator(opRaw) || !spec.operators.includes(opRaw)) continue;
-    if (opRaw === 'in' || values.length > 1) {
+/**
+ * Decode `filterToQuery` output. Params without the `f.` prefix are ignored
+ * (the URL carries other state). Malformed filter params are dropped, and the
+ * result is held to `parseReplayFilter`'s rules.
+ */
+export function filterFromQuery(params: URLSearchParams | string): ReplayFilter {
+  const search = typeof params === 'string'
+    ? new URLSearchParams(params.startsWith('?') ? params.slice(1) : params)
+    : params;
+  const all: ReplayFilterClause[] = [];
+  search.forEach((rawValue, key) => {
+    if (!key.startsWith(PARAM_PREFIX) || all.length >= MAX_FILTER_CLAUSES) return;
+    const rest = key.slice(PARAM_PREFIX.length);
+    const dot = rest.lastIndexOf('.');
+    if (dot <= 0) return;
+    const spec = FILTER_FIELD_BY_ID.get(rest.slice(0, dot) as FilterFieldId);
+    const op = rest.slice(dot + 1);
+    if (!spec || !isFilterOp(op)) return;
+    let value: unknown;
+    if (op === 'in') {
       const items: Array<string | number> = [];
-      for (const raw of values) {
-        const coerced = coerceValue(spec, raw);
-        if (coerced === null || typeof coerced === 'boolean') continue;
-        items.push(coerced);
+      for (const part of rawValue.split(',')) {
+        let decoded: string;
+        try {
+          decoded = decodeURIComponent(part);
+        } catch {
+          return;
+        }
+        const item = decodeScalar(spec, decoded);
+        if (item === null || typeof item === 'boolean') return;
+        items.push(item);
       }
-      if (items.length === 0) continue;
-      clauses.push({ field, op: spec.operators.includes('in') ? 'in' : opRaw, value: items });
-      continue;
+      value = items;
+    } else {
+      value = decodeScalar(spec, rawValue);
     }
-    const coerced = coerceValue(spec, values[0]!);
-    if (coerced === null) continue;
-    clauses.push({ field, op: opRaw, value: coerced });
-  }
-  return { clauses };
+    const clause = parseClause({ field: spec.id, op, value });
+    if (clause) all.push(clause);
+  });
+  return { all };
 }

@@ -2213,7 +2213,8 @@
       "ingestion": "Datos",
       "error_events": "Errores",
       "outbound_fetches": "Solicitudes salientes",
-      "feedback_submissions": "Comentarios"
+      "feedback_submissions": "Comentarios",
+      "replay_recordings": "Grabaciones"
     },
     "unlimited": "Ilimitado",
     "freePerMo": "{amount} gratis / mes",
@@ -3514,6 +3515,156 @@
       "colDispatched": "Despachados",
       "colExecutionRate": "Tasa de ejecución",
       "colCost": "Coste"
+    },
+    "overview": {
+      "title": "Insights",
+      "homeAria": "Inicio de Insights",
+      "periodLabel": "Periodo",
+      "window": "{days} d",
+      "windowAria": "Últimos {days} días",
+      "compare": "Comparar versión",
+      "compareNone": "Sin comparación",
+      "releaseOrdinal": "R{n}",
+      "live": "En vivo",
+      "goalLabel": "Objetivo",
+      "stageTitle": "Escenario de página",
+      "stageEmpty": "Elige un problema para ver su página aquí.",
+      "lensesAria": "Vistas de la página",
+      "doNextTitle": "Qué hacer ahora",
+      "doNextEmpty": "Las correcciones priorizadas aparecerán aquí cuando lleguen suficientes sesiones para medirlas."
+    },
+    "goals": {
+      "activation": "Activación",
+      "revenue": "Ingresos",
+      "signups": "Registros",
+      "retention": "Retención"
+    },
+    "kpi": {
+      "aria": "Cifras clave",
+      "error": "No se pudieron cargar las cifras.",
+      "sessions": "Sesiones",
+      "conversion": "Conversión",
+      "frustrated": "Sesiones frustradas",
+      "errorsPer1k": "Errores JS por 1000",
+      "lcp": "LCP p75",
+      "score": "Puntuación del sitio",
+      "scorePending": "Tras la primera revisión de página",
+      "seconds": "{value} s",
+      "versus": "frente a {value}",
+      "trendAria": "Tendencia de {label}",
+      "openAria": "Abrir {label}"
+    },
+    "issues": {
+      "title": "Problemas",
+      "viewAll": "Ver todo",
+      "loading": "Cargando problemas…",
+      "error": "No se pudieron cargar los problemas.",
+      "empty": "No hay problemas en este periodo.",
+      "loadMore": "Cargar más",
+      "statusAria": "Estado del problema",
+      "status": {
+        "all": "Todos",
+        "new": "Nuevos",
+        "regressed": "Recaídos",
+        "ongoing": "En curso"
+      },
+      "statusName": {
+        "new": "nuevo",
+        "ongoing": "en curso",
+        "regressed": "recaído",
+        "proposed": "corrección propuesta",
+        "preview": "en vista previa",
+        "measuring": "midiendo",
+        "verified": "verificado",
+        "ignored": "ignorado"
+      },
+      "colIssue": "Problema",
+      "colSessions": "Sesiones",
+      "colShare": "Proporción",
+      "colTrend": "Tendencia",
+      "rowAria": "Abrir problema: {title}",
+      "trendAria": "Sesiones diarias de {title}",
+      "overview": {
+        "sessions": "Sesiones afectadas",
+        "share": "Proporción de la ruta",
+        "firstSeen": "Visto por primera vez",
+        "lastSeen": "Visto por última vez",
+        "byRelease": "Por versión",
+        "byDevice": "Por dispositivo"
+      },
+      "representatives": "Grabaciones representativas",
+      "repAria": "Abrir grabación representativa {rank}",
+      "recordingsOnRoute": "Grabaciones que visitaron {route}"
+    },
+    "panel": {
+      "crumbRoot": "Insights",
+      "crumbAria": "Ruta del panel",
+      "backTo": "Volver a {label}",
+      "loading": "Cargando…",
+      "loadFailed": "No se pudo cargar."
+    },
+    "kinds": {
+      "recording": "Grabación",
+      "issue": "Problema",
+      "issues": "Todos los problemas",
+      "fix": "Corrección",
+      "route": "Revisión de página",
+      "metric": "Métrica",
+      "funnel": "Embudo",
+      "live": "Visitantes en vivo",
+      "proof": "Prueba",
+      "release": "Versión",
+      "sites": "Sitios",
+      "plan": "Plan y uso",
+      "tabs": {
+        "replay": "Reproducción",
+        "journey": "Recorrido",
+        "lead": "Contacto",
+        "overview": "Resumen",
+        "recordings": "Grabaciones"
+      }
+    },
+    "lenses": {
+      "live": "En vivo"
+    },
+    "journey": {
+      "steps": "{count, plural, one {# página} other {# páginas}}",
+      "entryExit": "{entry} → {exit}",
+      "signals": "Señales",
+      "noSignals": "Esta grabación no tiene señales de frustración ni errores."
+    },
+    "lead": {
+      "identifiedId": "Identificado como",
+      "traits": "Atributos",
+      "noTraits": "El sitio no envió atributos para este visitante.",
+      "tags": "Etiquetas"
+    },
+    "sites": {
+      "loading": "Cargando sitios…",
+      "empty": "Aún no hay sitios.",
+      "add": "Añadir un sitio",
+      "listLabel": "Sitios",
+      "kind": {
+        "external": "Sitio web",
+        "hosted": "App de Builderforce"
+      },
+      "settings": "Ajustes",
+      "save": "Guardar",
+      "saved": "Guardado.",
+      "saveFailed": "No se pudieron guardar los ajustes.",
+      "install": "Instalación",
+      "verify": "Comprobaciones de instalación"
+    },
+    "plan": {
+      "loading": "Cargando el uso…",
+      "usageTitle": "Este mes",
+      "usedOfLimit": "{used} de {limit} grabaciones usadas en {period}",
+      "free": "Cupo gratuito",
+      "freeUsed": "{used} de {allowance} usadas",
+      "credits": "Créditos prepago",
+      "packsTitle": "Comprar grabaciones",
+      "receipts": "Pagos y recibos",
+      "checkoutReturned": "Gracias. Tus créditos aparecerán aquí en cuanto se confirme el pago."
     }
   },
   "cloudAgentForm": {
@@ -13149,6 +13300,271 @@
       "signIn": "Inicia sesión para usarlo",
       "empty": "Ningún agente integrado coincide con tu búsqueda.",
       "error": "No se pudieron cargar los agentes integrados. Inténtalo de nuevo en breve."
+    },
+    "landing": {
+      "insights": {
+        "hero": {
+          "eyebrow": "Insights para cualquier sitio web",
+          "title": "Mira qué hacen tus visitantes y qué arreglar primero",
+          "lead": "Insights graba visitas reales, agrupa lo que salió mal en incidencias y convierte cada una en una corrección priorizada que puedes aplicar, probar y medir en tu próxima versión.",
+          "startFree": "Empezar gratis",
+          "freeNote": "5.000 grabaciones al mes gratis. Sin tarjeta."
+        },
+        "install": {
+          "title": "En marcha en tres pasos",
+          "steps": {
+            "paste": {
+              "title": "Pega una etiqueta",
+              "body": "Añade el cargador a tu sitio una sola vez, o actívalo para una app alojada en Builderforce. Las actualizaciones del grabador llegan solas."
+            },
+            "verify": {
+              "title": "Mira cómo se conecta",
+              "body": "La configuración comprueba en directo la etiqueta, tu dominio y la primera visita, y te dice exactamente qué paso necesita atención."
+            },
+            "improve": {
+              "title": "Arregla lo importante",
+              "body": "Las incidencias se ordenan por su efecto en tu objetivo, cada una con una corrección, un prompt para tus herramientas de IA y un veredicto en la próxima versión."
+            }
+          }
+        },
+        "pillars": {
+          "title": "Todo lo que necesitas para mejorar una página",
+          "items": {
+            "fixes": {
+              "title": "Correcciones priorizadas",
+              "body": "Cada hallazgo se basa en comportamiento medido, con el impacto esperado y una acción: corregir, probar, hacer seguimiento o abrir un ticket."
+            },
+            "recordings": {
+              "title": "Grabaciones de sesiones",
+              "body": "Reproduce cualquier visita como un vídeo, salta al momento que importa y comparte un enlace a él."
+            },
+            "heatmaps": {
+              "title": "Mapas de calor por versión",
+              "body": "Mapas de clics, desplazamiento y áreas para cada versión, para comparar antes y después de un cambio."
+            },
+            "funnels": {
+              "title": "Embudos y recorridos",
+              "body": "Mira dónde abandonan los visitantes un recorrido y revisa las visitas que se detuvieron en cada paso."
+            },
+            "live": {
+              "title": "Visitantes en directo",
+              "body": "Quién está ahora en el sitio, en qué página, y sigue a uno mientras navega."
+            },
+            "privacy": {
+              "title": "Privado por defecto",
+              "body": "Las entradas se enmascaran en el navegador, las contraseñas y los números de tarjeta nunca se capturan y se respeta Do Not Track."
+            }
+          }
+        },
+        "compare": {
+          "title": "Más que un grabador",
+          "lead": "La mayoría de las herramientas de replay se quedan en mostrar lo que pasó. Insights además te dice qué cambiar y si el cambio funcionó.",
+          "feature": "Capacidad",
+          "columns": {
+            "insights": "Insights",
+            "typical": "Una herramienta de replay típica"
+          },
+          "rows": {
+            "recordings": {
+              "feature": "Grabaciones de sesiones con enmascarado",
+              "insights": "Incluido",
+              "typical": "Incluido"
+            },
+            "heatmaps": {
+              "feature": "Mapas de clics y de desplazamiento",
+              "insights": "Por versión",
+              "typical": "Normalmente de todo el periodo"
+            },
+            "frustration": {
+              "feature": "Clics de rabia, clics muertos y errores",
+              "insights": "Agrupados en incidencias",
+              "typical": "Listados por sesión"
+            },
+            "fixes": {
+              "feature": "Correcciones priorizadas con impacto esperado",
+              "insights": "Incluido",
+              "typical": "No disponible"
+            },
+            "releases": {
+              "feature": "Comparación de versiones",
+              "insights": "Detectada automáticamente",
+              "typical": "Poco habitual"
+            },
+            "measured": {
+              "feature": "Veredicto medido de cada corrección",
+              "insights": "En la siguiente versión",
+              "typical": "No disponible"
+            }
+          }
+        },
+        "pricing": {
+          "title": "Gratis para empezar, pagas por lo que conservas",
+          "lead": "Cada espacio de trabajo recibe {free} grabaciones conservadas al mes gratis. Por encima, paquetes prepago válidos durante 12 meses.",
+          "visitorsLabel": "{count} visitas al mes",
+          "recordings": "Grabaciones al mes",
+          "monthly": "Coste mensual estimado",
+          "free": "Gratis",
+          "packsOnSignup": "Los paquetes se muestran tras registrarte",
+          "withinFree": "Cabe dentro de las {free} grabaciones gratuitas al mes.",
+          "packLine": "{count, plural, one {# paquete} other {# paquetes}} de {units} grabaciones cubrirían el mes.",
+          "overFree": "{over} grabaciones por encima del cupo gratuito necesitarían un paquete.",
+          "estimateNote": "Una estimación, suponiendo una grabación conservada por visita. Solo pagas las grabaciones que conservas.",
+          "startFree": "Empezar gratis"
+        },
+        "faq": {
+          "title": "Preguntas",
+          "items": {
+            "what": {
+              "q": "¿Qué es Insights?",
+              "a": "Una app de grabación de sesiones y analítica para cualquier sitio web. Graba visitas, encuentra los problemas que te hacen perder visitantes y recomienda correcciones priorizadas y medibles."
+            },
+            "install": {
+              "q": "¿Cómo se instala?",
+              "a": "Pega una etiqueta script, instala el paquete npm o añade una etiqueta de Google Tag Manager. Las apps alojadas en Builderforce solo necesitan un interruptor."
+            },
+            "privacy": {
+              "q": "¿Y la privacidad?",
+              "a": "Las entradas se enmascaran en el navegador antes de enviar nada, los campos de contraseña y tarjeta nunca se capturan y se respetan Do Not Track y Global Privacy Control. Puedes exigir consentimiento antes de grabar."
+            },
+            "pricing": {
+              "q": "¿Cuánto cuesta?",
+              "a": "5.000 grabaciones conservadas al mes son gratis para cada espacio de trabajo. Por encima compras paquetes prepago; los créditos duran 12 meses y nada se renueva solo."
+            },
+            "builderforce": {
+              "q": "¿Tengo que crear mi sitio en Builderforce?",
+              "a": "No. Insights funciona en cualquier sitio web. Si tu app está alojada en Builderforce, activas la grabación sin pegar nada."
+            }
+          }
+        },
+        "proof": {
+          "title": "Lo usamos en builderforce.ai",
+          "lead": "Builderforce ejecuta Insights en su propio sitio con el mismo fragmento público que pegas tú, y lo instala desde el marketplace como cualquier otro espacio de trabajo.",
+          "startFree": "Empezar gratis"
+        }
+      }
+    },
+    "capability": {
+      "setupTitle": "Configurar {app}",
+      "signUpFirst": "Crea una cuenta gratuita para configurar {app}. Después vuelves directamente aquí.",
+      "startFree": "Empezar gratis",
+      "loading": "Cargando la configuración…",
+      "stepsLabel": "Pasos de configuración",
+      "steps": {
+        "workspace": "Espacio de trabajo",
+        "site": "Sitio",
+        "snippet": "Instalar",
+        "verify": "Verificar",
+        "plan": "Plan"
+      },
+      "workspace": {
+        "choose": "Elige o crea el espacio de trabajo al que pertenecerá {app}.",
+        "chooseAction": "Elegir un espacio de trabajo",
+        "installInto": "Instala {app} en {workspace}. Es gratis y puedes quitarlo cuando quieras.",
+        "install": "Instalar {app}",
+        "installing": "Instalando…",
+        "another": "Usar otro espacio de trabajo",
+        "failed": "La instalación no terminó. Inténtalo de nuevo."
+      },
+      "site": {
+        "label": "Nombre del sitio",
+        "domains": "Dominios permitidos",
+        "removeDomain": "Quitar {domain}",
+        "domainPlaceholder": "shop.example.com",
+        "addDomain": "Añadir dominio",
+        "domainInvalid": "Escribe una dirección web como shop.example.com.",
+        "privacy": "Privacidad",
+        "switches": {
+          "maskAllText": {
+            "label": "Enmascarar todo el texto",
+            "hint": "Oculta todo el texto de la página, no solo los campos de formulario."
+          },
+          "consentRequired": {
+            "label": "Esperar el consentimiento",
+            "hint": "Graba solo después de que tu sitio llame a BFReplay.consent(true)."
+          },
+          "recordCanvas": {
+            "label": "Grabar contenido canvas",
+            "hint": "Captura fotogramas canvas y WebGL a baja frecuencia."
+          },
+          "identify": {
+            "label": "Permitir identificar",
+            "hint": "Tu sitio puede nombrar a los visitantes con sesión iniciada con BFReplay.identify."
+          }
+        },
+        "modeLabel": "¿Dónde está el sitio?",
+        "modes": {
+          "external": "Mi sitio web",
+          "hosted": "Una app de Builderforce"
+        },
+        "externalLead": "Pon nombre al sitio e indica los dominios en los que funciona. Solo esos dominios pueden enviar grabaciones.",
+        "create": "Crear sitio",
+        "hostedLead": "Elige una app publicada de este espacio de trabajo. Su cargador se añade por ti.",
+        "loadingProjects": "Cargando tus apps publicadas…",
+        "noProjects": "Este espacio de trabajo aún no tiene apps publicadas.",
+        "record": "Grabar {name}",
+        "failed": "No se pudo crear el sitio. Inténtalo de nuevo."
+      },
+      "snippet": {
+        "tabsLabel": "Formas de instalar",
+        "tabs": {
+          "script": "Etiqueta script",
+          "npm": "npm",
+          "gtm": "Google Tag Manager",
+          "app": "App de Builderforce"
+        },
+        "hostedOn": "La grabación está activada para esta app. No hay nada que pegar.",
+        "appHint": "Las apps alojadas en Builderforce no necesitan fragmento: activa en su lugar la grabación para la app.",
+        "hints": {
+          "script": "Pega esto en la sección head de cada página.",
+          "npm": "Instala @seanhogg/builderforce-replay y llama a esto una vez al iniciar tu app.",
+          "gtm": "Añade una etiqueta de HTML personalizado con este contenido y actívala en todas las páginas."
+        },
+        "copy": "Copiar",
+        "copied": "Copiado",
+        "noKey": "Este sitio aún no tiene clave. Recarga en un momento.",
+        "lead": "Añade el cargador a tu sitio de una de estas formas y continúa para verificarlo.",
+        "hostedLead": "Tu app está alojada en Builderforce, así que su cargador se añade automáticamente.",
+        "next": "Continuar"
+      },
+      "verify": {
+        "lead": "Abre tu sitio en otra pestaña. Estas comprobaciones se actualizan cada pocos segundos.",
+        "checks": {
+          "loader": {
+            "label": "Cargador detectado",
+            "fix": "Asegúrate de que la etiqueta está en la página y de que la página se ha abierto desde que la añadiste."
+          },
+          "origin": {
+            "label": "Dominio permitido",
+            "fix": "Añade a los dominios permitidos el dominio desde el que se sirve la página."
+          },
+          "firstEvent": {
+            "label": "Primera visita recibida",
+            "fix": "Navega por una página unos segundos. Si exiges consentimiento, concédelo."
+          },
+          "firstRecording": {
+            "label": "Primera grabación conservada",
+            "fix": "Aparece una grabación cuando termina una visita o pasa algo que merece conservarse."
+          }
+        },
+        "passed": "superada",
+        "waiting": "pendiente",
+        "unreachable": "No se pudieron leer las comprobaciones ahora mismo. Reintentando.",
+        "stoppedAt": "Pendiente: {step}.",
+        "allPassed": "Todo está conectado.",
+        "next": "Continuar"
+      },
+      "plan": {
+        "lead": "Empieza con el cupo gratuito o compra ahora un paquete para sitios con más tráfico.",
+        "startFree": "Empezar con el cupo gratuito",
+        "checkoutFailed": "No se pudo iniciar el pago. Inténtalo de nuevo.",
+        "loadingPacks": "Cargando paquetes…",
+        "noPacks": "Los paquetes no están disponibles ahora mismo. Se aplica el cupo gratuito.",
+        "buyAria": "Comprar {units} grabaciones por {price}",
+        "packUnits": "{units} grabaciones",
+        "redirecting": "Abriendo el pago…",
+        "packTerms": "Prepago, pago único. Los créditos duran 12 meses y nada se renueva."
+      },
+      "openApp": "Abrir {app}"
     }
   },
   "models": {
@@ -14409,7 +14825,8 @@
         "loading": "Cargando historial…",
         "empty": "Aún no hay versiones.",
         "publish": "Publicado",
-        "amend": "Modificado"
+        "amend": "Modificado",
+        "draft": "Borrador (sin publicar)"
       }
     },
     "newsletter": {
@@ -15001,7 +15418,14 @@
       "subtitle": "El embudo anónimo y las personas en él — flujo, leads, una grabación.",
       "tabJourney": "Recorrido",
       "tabLead": "Lead",
-      "crumb": "Visitantes"
+      "crumb": "Visitantes",
+      "openApp": "Abrir la app Insights",
+      "nodeStripAria": "Paso {step}",
+      "nodeVisitors": "{count} visitantes",
+      "nodeEvents": "{count} eventos",
+      "nodeExits": "{count} salidas",
+      "watchStep": "Ver grabaciones de este paso",
+      "nodeStripClose": "Cerrar detalles del paso"
     },
     "visitorFlow": {
       "title": "Flujo de visitantes",
@@ -24462,10 +24886,10 @@
     "noticeFormFailed": "No se pudo completar esa acción del formulario.",
     "noticeIdeaUntitled": "Ponle un título a la idea antes de preguntar a la gente.",
     "noticeIdeaInterviewTitle": "Ponle un título a la idea para poder nombrar la entrevista.",
-        "noticeIdeaInterviewPlanned": "Entrevista planificada. Ábrela en el tablero para elegir una hora.",
-        "noticeIdeaFormTitle": "Ponle un título a la idea para poder nombrar el formulario.",
-        "noticeIdeaFormCreated": "Formulario creado. Publícalo para obtener un enlace que puedas enviar.",
-        "noticeIdeaActFailed": "No se pudo completar esa acción de la idea.",
+    "noticeIdeaInterviewPlanned": "Entrevista planificada. Ábrela en el tablero para elegir una hora.",
+    "noticeIdeaFormTitle": "Ponle un título a la idea para poder nombrar el formulario.",
+    "noticeIdeaFormCreated": "Formulario creado. Publícalo para obtener un enlace que puedas enviar.",
+    "noticeIdeaActFailed": "No se pudo completar esa acción de la idea.",
     "surface": {
       "chat": {
         "label": "Chat",
@@ -24534,15 +24958,21 @@
         "noBoardMetric": "Todavía no hay métricas en este tablero"
       },
       "sessions": {
-        "label": "Sesiones",
-        "enter": "Ver quién usó esto",
-        "active": "Estás en Sesiones",
-        "regionLabel": "Grabaciones de sesión",
-        "emptyTitle": "Aún no hay grabaciones de este lienzo",
-        "emptyBody": "Cuando los visitantes usen este lienzo, sus sesiones aparecerán aquí. Abre Visitantes para reproducirlas.",
-        "openFull": "Abrir grabaciones de visitantes",
-        "listLabel": "Visitas grabadas",
-        "converted": "Convertido"
+        "label": "Visitantes",
+        "enter": "Ver quién visitó",
+        "active": "Estás en Visitantes",
+        "regionLabel": "Visitantes",
+        "loadingTitle": "Cargando visitantes",
+        "loadingBody": "Comprobando las grabaciones de esta app.",
+        "buyTitle": "Mira qué hacen los visitantes",
+        "buyBody": "Instala Insights para grabar las visitas a esta app, encontrar lo que falla y obtener correcciones priorizadas. Empezar es gratis.",
+        "buyAction": "Conseguir Insights",
+        "noAppTitle": "Aún no hay app",
+        "noAppBody": "Los visitantes aparecen aquí cuando este tablero tiene una app que otros pueden abrir.",
+        "offTitle": "La grabación está desactivada",
+        "offBody": "Activa la grabación para esta app. No hay nada que pegar: el cargador se añade por ti a la app alojada.",
+        "enable": "Grabar esta app",
+        "enableFailed": "No se pudo activar la grabación. Inténtalo de nuevo."
       },
       "room": {
         "label": "Sala",
@@ -29102,7 +29532,8 @@
       "course": "Curso",
       "dataset": "Conjunto de datos",
       "tool": "Herramienta",
-      "creative": "Recurso creativo"
+      "creative": "Recurso creativo",
+      "capability": "Funcionalidad"
     }
   },
   "marketplaceCreations": {
@@ -29146,7 +29577,8 @@
       "creative": "Recurso creativo",
       "book": "Libro",
       "survey": "Encuesta",
-      "room": "Diseño de sala"
+      "room": "Diseño de sala",
+      "capability": "Funcionalidad"
     },
     "launchVerb": {
       "play": "Jugar",
@@ -33325,5 +33757,113 @@
       "Hipótesis presentadas como resultados medidos",
       "Bajas escondidas en la letra pequeña"
     ]
+  },
+  "replay": {
+    "list": {
+      "when": "Cuándo",
+      "where": "Dónde",
+      "release": "Versión",
+      "pages": "Páginas",
+      "duration": "Duración",
+      "signals": "Señales",
+      "keep": "Guardada por",
+      "route": "{entry} → {exit}",
+      "noSignals": "Ninguna",
+      "signal": {
+        "rage": "{count, plural, one {# clic de frustración} other {# clics de frustración}}",
+        "dead": "{count, plural, one {# clic sin respuesta} other {# clics sin respuesta}}",
+        "errors": "{count, plural, one {# error} other {# errores}}",
+        "quickbacks": "{count, plural, one {# vuelta rápida} other {# vueltas rápidas}}"
+      },
+      "keepReason": {
+        "sample": "Muestra",
+        "frustration": "Frustración",
+        "error": "Error",
+        "goal": "Objetivo alcanzado",
+        "tag": "Etiquetada",
+        "manual": "Guardada por el sitio"
+      },
+      "weighted": "≈ ×{weight}",
+      "sortBy": "Ordenar por {column}",
+      "error": "No se pudieron cargar las grabaciones.",
+      "retry": "Reintentar",
+      "empty": "Todavía no se guardaron grabaciones para esta vista.",
+      "open": "Ver",
+      "openAria": "Ver la grabación que entró por {path}",
+      "loading": "Cargando grabaciones…",
+      "loadMore": "Cargar más"
+    },
+    "player": {
+      "loading": "Cargando la grabación…",
+      "empty": "Esta grabación aún no tiene nada que reproducir.",
+      "error": "No se pudo reproducir la grabación.",
+      "play": "Reproducir",
+      "pause": "Pausar",
+      "scrubber": "Posición de reproducción",
+      "markersAria": "Momentos de esta grabación",
+      "markerAria": "{time} · {label}",
+      "speed": "Velocidad",
+      "speedOption": "{speed}×",
+      "skipInactive": "Saltar inactividad",
+      "copyLink": "Copiar enlace en {time}",
+      "copied": "Enlace copiado.",
+      "copyFailed": "No se pudo copiar el enlace.",
+      "following": "Siguiendo en vivo: la nueva actividad aparece a medida que llega.",
+      "events": "Eventos",
+      "eventsEmpty": "No se marcaron eventos en esta grabación.",
+      "release": "Versión",
+      "device": "Dispositivo",
+      "country": "País",
+      "referrer": "Referente",
+      "duration": "Duración",
+      "direct": "Directo",
+      "deviceClass": {
+        "desktop": "Escritorio",
+        "tablet": "Tableta",
+        "phone": "Teléfono"
+      },
+      "mark": {
+        "page": "Página",
+        "click": "Clic",
+        "event": "Evento",
+        "rage": "Clic de frustración",
+        "dead": "Clic sin respuesta",
+        "quickback": "Vuelta rápida",
+        "excessive_scroll": "Desplazamiento excesivo",
+        "error": "Error de JavaScript",
+        "vital": "Métrica web vital",
+        "scroll": "Profundidad de desplazamiento"
+      }
+    },
+    "live": {
+      "loading": "Buscando visitantes en vivo…",
+      "error": "No se pudieron cargar los visitantes en vivo.",
+      "active": "{count, plural, one {# visitante activo ahora} other {# visitantes activos ahora}}",
+      "byRoute": "Por página",
+      "empty": "Nadie está en este sitio ahora mismo.",
+      "lastSeen": "visto {time}",
+      "notRecorded": "No grabado",
+      "watchAria": "Ver en vivo al visitante en {route}"
+    }
+  },
+  "apps": {
+    "loading": "Cargando…",
+    "notEntitled": "Este espacio de trabajo aún no ha instalado {app}. Instálalo desde el marketplace; empezar es gratis.",
+    "getIt": "Conseguir {app}",
+    "needsSetup": "{app} está instalado. Añade tu primer sitio para empezar a grabar.",
+    "setUp": "Configurar",
+    "navTitle": "Apps",
+    "insights": {
+      "name": "Insights",
+      "loading": "Cargando sitios…",
+      "noSiteTitle": "Aún no hay sitios",
+      "noSiteBody": "Añade un sitio web o activa la grabación para una app de Builderforce.",
+      "setUp": "Añadir un sitio",
+      "siteLabel": "Sitio",
+      "usageChip": "{used} / {limit} grabaciones",
+      "usageAria": "Uso: {used} de {limit} grabaciones este mes. Abrir el plan.",
+      "sites": "Sitios",
+      "addSite": "Añadir sitio"
+    }
   }
 }

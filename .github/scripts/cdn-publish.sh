@@ -85,6 +85,7 @@ type_for() {
   case "$file" in
     *.js) echo "application/javascript; charset=utf-8" ;;
     *.json) echo "application/json; charset=utf-8" ;;
+    *.css) echo "text/css; charset=utf-8" ;;
     *) echo "application/octet-stream" ;;
   esac
 }

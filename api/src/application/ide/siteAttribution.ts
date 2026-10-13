@@ -38,12 +38,22 @@ export function siteBadgeHtml(): string {
   return `<a id="${BADGE_ID}" href="${SITE_BADGE_URL}" target="_blank" rel="noopener" style="${BADGE_STYLE}">${SITE_BADGE_LABEL}</a>`;
 }
 
+/**
+ * Insert `snippet` before the LAST `</body>` (or append it to a fragment), unless an
+ * element with `id="<markerId>"` or a `data-bf-marker="<markerId>"` attribute is
+ * already in the document. The ONE body-close injector: the badge and the Insights
+ * loader (`siteReplayInjection.ts`) both go through it, so a document served twice
+ * through the same decorators never carries two copies of either.
+ */
+export function injectBeforeBodyClose(html: string, markerId: string, snippet: string): string {
+  if (html.includes(`id="${markerId}"`) || html.includes(`data-bf-marker="${markerId}"`)) return html;
+  const close = html.toLowerCase().lastIndexOf('</body>');
+  return close < 0 ? html + snippet : html.slice(0, close) + snippet + html.slice(close);
+}
+
 /** Insert the badge before the LAST `</body>` (or append to a fragment). Idempotent. */
 export function injectSiteBadge(html: string): string {
-  if (html.includes(`id="${BADGE_ID}"`)) return html;
-  const badge = siteBadgeHtml();
-  const close = html.toLowerCase().lastIndexOf('</body>');
-  return close < 0 ? html + badge : html.slice(0, close) + badge + html.slice(close);
+  return injectBeforeBodyClose(html, BADGE_ID, siteBadgeHtml());
 }
 
 /**

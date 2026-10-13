@@ -176,32 +176,6 @@ export interface AdminGuestSessionsPage {
   sessions: AdminGuestSession[];
 }
 
-/** VisitRow (domain/replay/visitSummary) as JSON, plus the recording's site. */
-export interface AdminReplayVisit {
-  visitId: string;
-  siteId: string;
-  startedAt: string;
-  lastEventAt: string;
-  endedAt: string | null;
-  durationMs: number;
-  activeMs: number;
-  entryPath: string;
-  exitPath: string;
-  pageCount: number;
-  clickCount: number;
-  rageCount: number;
-  deadCount: number;
-  errorCount: number;
-  quickbackCount: number;
-  excessiveScrollCount: number;
-  converted: boolean;
-  chunkCount: number;
-}
-
-export interface AdminReplayVisitsPage {
-  visits: AdminReplayVisit[];
-}
-
 /** One prompt in a visitor's history — the drill-in. */
 export interface AdminGuestPrompt {
   id: string;
@@ -786,7 +760,7 @@ export interface LegalDocVersion {
   version: string;
   title: string;
   content: string;
-  changeKind: 'publish' | 'amend';
+  changeKind: 'publish' | 'amend' | 'draft';
   changedBy: string | null;
   createdAt: string;
 }
@@ -1132,13 +1106,6 @@ export const adminApi = {
 
   async guestSessions(): Promise<AdminGuestSessionsPage> {
     return adminRequest<AdminGuestSessionsPage>('/api/admin/guest-sessions');
-  },
-
-  async replayVisits(params: { siteId?: string } = {}): Promise<AdminReplayVisitsPage> {
-    const q = new URLSearchParams();
-    if (params.siteId) q.set('site_id', params.siteId);
-    const qs = q.toString();
-    return adminRequest<AdminReplayVisitsPage>(`/api/admin/replay-visits${qs ? `?${qs}` : ''}`);
   },
 
   /** One visitor's prompts, newest first. */

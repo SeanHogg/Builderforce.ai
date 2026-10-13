@@ -1,12 +1,17 @@
 /**
- * The lead body of a recording — funnel numbers, contact fields, and the prompt
- * history. RecordingPanel owns the chrome; this owns the fetch so a surface that
- * already has a session row can pass it in without a second list round-trip.
+ * The lead body of a recording — funnel numbers, contact fields, the prompt
+ * history, and the erase action. RecordingPanel owns the chrome; this owns the
+ * fetch so a surface that already has a session row can pass it in without a
+ * second list round-trip. Erase lives here, beside the data it deletes; after
+ * it succeeds the host is told (`onErased`) and closes the panel, because there
+ * is nothing left to show.
  */
 
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminGuestPrompt, type AdminGuestSession } from '@/lib/adminApi';
+import { useConfirm } from '@/components/ConfirmProvider';
+import { useToast } from '@/components/ToastProvider';
 import { AdminError, AdminLoading, StatTile, errText, useAdminData, useAdminFormat } from '@/components/admin/adminShared';
 
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
@@ -21,26 +26,59 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
 export function VisitorLeadDetail({
   visitorId,
   session,
-  reloadToken = 0,
+  onErased,
 }: {
   visitorId: string;
   session: AdminGuestSession | null;
-  /** Bumped after erase so the prompt history refetches without unmounting. */
-  reloadToken?: number;
+  /** Called after a successful erase; the host closes the panel. */
+  onErased?: () => void;
 }) {
   const t = useTranslations('admin.sessions');
   const { fmtDateTime, fmtNum } = useAdminFormat();
+  const confirm = useConfirm();
+  const toast = useToast();
+  const [erasing, setErasing] = useState(false);
   const { data: prompts, loading, error } = useAdminData<AdminGuestPrompt[]>(
     () => adminApi.guestPrompts(visitorId).catch((err) => {
       throw new Error(errText(err));
     }),
-    [visitorId, reloadToken],
+    [visitorId],
   );
+
+  async function erase() {
+    if (!(await confirm({
+      message: t('eraseConfirm'),
+      confirmLabel: t('erase'),
+      destructive: true,
+    }))) return;
+    setErasing(true);
+    try {
+      const count = await adminApi.forgetGuestPrompts(visitorId);
+      toast.success(t('eraseDone', { count }));
+      onErased?.();
+    } catch (err) {
+      toast.error(t('eraseFailed'));
+      void err;
+    } finally {
+      setErasing(false);
+    }
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ fontFamily: 'monospace', fontSize: 'var(--font-size-small)', overflowWrap: 'anywhere' }}>
-        {visitorId}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontFamily: 'monospace', fontSize: 'var(--font-size-small)', overflowWrap: 'anywhere', minWidth: 0 }}>
+          {visitorId}
+        </div>
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => void erase()}
+          disabled={erasing}
+          aria-label={t('eraseAria', { visitor: visitorId })}
+        >
+          {t('erase')}
+        </button>
       </div>
 
       {session && (

@@ -8,7 +8,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import { deriveSelector } from './telemetry';
-import { redactInput } from '@builderforce/interaction-contract';
+import * as contract from '@builderforce/interaction-contract';
+
+const { redactInput } = contract;
+
+describe('telemetry re-export', () => {
+  it('is the shared contract deriveSelector, not a copy', () => {
+    expect(deriveSelector).toBe(contract.deriveSelector);
+  });
+});
 
 describe('deriveSelector (DOM)', () => {
   it('prefers data-testid on a real element', () => {

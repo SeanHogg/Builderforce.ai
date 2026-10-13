@@ -24,6 +24,7 @@ import {
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { landingPageApplies } from './siteLandingRule';
 import { withSiteBadge } from './siteAttribution';
+import { withReplayLoader } from './siteReplayInjection';
 import { hasEventTriggerListeners } from '../workflow/eventTriggerListeners';
 
 /** Path prefix reserved for the site's datastore. A published site cannot use
@@ -220,7 +221,8 @@ export async function serveCountedAsset(
 ): Promise<Response> {
   const { response, bytes } = await serveAsset(env, site, path.replace(/^\/+/, ''));
   await afterResponse(countSiteRequest(env, site, request, path, bytes, { onPageView }), waitUntil);
-  return withSiteBadge(env, site.tenantId, response);
+  return withReplayLoader(env, site.tenantId, site.projectId, site.versionToken,
+    await withSiteBadge(env, site.tenantId, response));
 }
 
 export type StaticSiteOutcome =

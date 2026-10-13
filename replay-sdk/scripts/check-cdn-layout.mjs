@@ -48,29 +48,36 @@ if (!existsSync(embed)) fail(`missing ${embed} — unifiedEmbedSnippet 404s with
 if (!existsSync(manifestPath)) fail(`missing ${manifestPath}`);
 if (!existsSync(recorderDir)) fail(`missing ${recorderDir}`);
 
-const recorders = readdirSync(recorderDir).filter((n) => /^recorder\.[0-9a-f]{8}\.js$/.test(n));
+const recorders = readdirSync(recorderDir).filter((n) => /^recorder\.[0-9a-f]{10,}\.js$/.test(n));
 if (recorders.length !== 1) {
   fail(`expected exactly one hashed recorder under replay/r, got ${recorders.join(',') || '(none)'}`);
 }
 const recorder = join(recorderDir, recorders[0]);
 
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-if (typeof manifest.hash !== 'string' || !/^[0-9a-f]{8}$/.test(manifest.hash)) {
-  fail('manifest.hash must be 8 hex chars');
-}
-if (manifest.recorder !== `/replay/r/recorder.${manifest.hash}.js`) {
-  fail(`manifest.recorder ${manifest.recorder} does not match hash`);
-}
-if (!manifest.latest || typeof manifest.latest !== 'object') {
+const latest = manifest.latest;
+if (!latest || typeof latest !== 'object') {
   fail('manifest.latest missing — ReplayConfigService cannot learn the recorder');
 }
-const latest = manifest.latest;
-if (latest.hash !== manifest.hash) fail('manifest.latest.hash must equal manifest.hash');
-if (latest.url !== `https://cdn.builderforce.ai/replay/r/recorder.${manifest.hash}.js`) {
+if (typeof latest.hash !== 'string' || !/^[0-9a-f]{10,}$/.test(latest.hash)) {
+  fail('manifest.latest.hash must be at least 10 hex chars');
+}
+if (recorders[0] !== `recorder.${latest.hash}.js`) {
+  fail(`manifest.latest.hash ${latest.hash} does not name ${recorders[0]}`);
+}
+if (latest.url !== `https://cdn.builderforce.ai/replay/r/recorder.${latest.hash}.js`) {
   fail(`manifest.latest.url is ${latest.url}`);
 }
 if (typeof latest.version !== 'string' || !latest.version) fail('manifest.latest.version missing');
 if (typeof latest.builtAt !== 'string' || !latest.builtAt) fail('manifest.latest.builtAt missing');
+
+const player = manifest.player;
+if (!player || typeof player !== 'object') fail('manifest.player missing — the Insights player cannot load rrweb');
+for (const [field, ext] of [['url', 'js'], ['cssUrl', 'css']]) {
+  const m = new RegExp(String.raw`^https://cdn\.builderforce\.ai/(replay/r/player\.[0-9a-f]{10,}\.` + ext + ')$').exec(player[field] ?? '');
+  if (!m) fail(`manifest.player.${field} is ${player[field]}`);
+  if (!existsSync(join(assets, m[1]))) fail(`manifest.player.${field} names missing ${m[1]}`);
+}
 
 const loaderGz = await gzipBytes(loader);
 const recorderGz = await gzipBytes(recorder);
@@ -84,5 +91,5 @@ if (recorderGz > RECORDER_MAX) {
 }
 
 console.log(
-  `size: loader ${loaderGz} B gz (≤ ${LOADER_MAX}), recorder ${recorderGz} B gz (≤ ${RECORDER_MAX}), embed ${embedRaw} B raw, hash=${manifest.hash}`,
+  `size: loader ${loaderGz} B gz (≤ ${LOADER_MAX}), recorder ${recorderGz} B gz (≤ ${RECORDER_MAX}), embed ${embedRaw} B raw, hash=${latest.hash}`,
 );

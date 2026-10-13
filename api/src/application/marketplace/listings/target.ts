@@ -6,6 +6,7 @@
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import {
+  isEntitlementKind,
   listingKindSpec,
   resolveDelivery,
   resolveTrialPolicy,
@@ -113,6 +114,9 @@ export async function resolveListingTarget(
 ): Promise<ListingTarget> {
   const spec = listingKindSpec(input.kind);
   if (!spec) throw new ListingError(`Unknown listing kind "${input.kind}"`, 400);
+  // A capability is the platform's own product: its licence IS an entitlement the
+  // feature gate reads, so a seller-published one would be a way to mint access.
+  if (isEntitlementKind(spec.id)) throw new ListingError(`A ${spec.id} is published by the platform`, 400);
 
   const name = input.name.trim().slice(0, 200);
   if (!name) throw new ListingError('A listing needs a name', 400);

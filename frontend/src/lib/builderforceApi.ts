@@ -3227,8 +3227,8 @@ export const dashboardApi = {
 // Mirrors `api/src/application/consumption/meters.ts` exactly. A key the server
 // emits and this union omits used to reach the UI as `undefined` everywhere the
 // meter was looked up by key — see `UsageMeter.tsx`, which no longer trusts it.
-export type MeterKey = 'ai_tokens' | 'cloud_runs' | 'stage_sandbox_runs' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'feedback_submissions';
-export type MeterUnit = 'tokens' | 'runs' | 'sandbox_runs' | 'bytes' | 'events' | 'fetches' | 'submissions';
+export type MeterKey = 'ai_tokens' | 'cloud_runs' | 'stage_sandbox_runs' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'feedback_submissions' | 'replay_recordings';
+export type MeterUnit = 'tokens' | 'runs' | 'sandbox_runs' | 'bytes' | 'events' | 'fetches' | 'submissions' | 'recordings';
 
 export interface MeterSnapshot {
   key: MeterKey;
@@ -3253,7 +3253,7 @@ export type PlanFeatureKey =
   | 'approvalWorkflows' | 'fleetMesh' | 'fullTelemetry' | 'customAgentRoles'
   | 'psychometricPersona' | 'teamApprovalInbox' | 'seatCostControls'
   | 'voiceCloning' | 'advancedInsights' | 'evermindTraining' | 'livePreview'
-  | 'containerRuntime' | 'removeBranding' | 'serverVideoRender';
+  | 'containerRuntime' | 'removeBranding' | 'serverVideoRender' | 'sessionReplay';
 
 export interface ConsumptionSnapshot {
   period: { start: string; resetsAt: string };
@@ -3270,6 +3270,8 @@ export interface ConsumptionSnapshot {
     entitled: Partial<Record<PlanFeatureKey, boolean>>;
     requiredPlan: Partial<Record<PlanFeatureKey, 'free' | 'pro' | 'teams'>>;
   };
+  /** `tenants.settings.replayExcluded` (PRD 33 D9): never record this workspace's members. */
+  replayExcluded?: boolean;
 }
 
 export const consumptionApi = {

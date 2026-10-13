@@ -3,17 +3,12 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { readConsent, writeConsent, type ConsentChoice as Consent } from '@/lib/analyticsConsent';
 
-type Consent = { version: 1; analytics: boolean; marketing: boolean; gpc: boolean; updatedAt: string };
-const KEY = 'builderforce-consent-v1';
 const GTM_ID = 'GTM-5Q488PKG';
 
 function hasGpc(): boolean {
   return (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl === true;
-}
-
-function readConsent(): Consent | null {
-  try { return JSON.parse(localStorage.getItem(KEY) ?? 'null') as Consent | null; } catch { return null; }
 }
 
 function enableAnalytics() {
@@ -39,7 +34,7 @@ export function CookieConsentManager() {
     const gpc = hasGpc();
     const saved = readConsent();
     const effective = saved ? { ...saved, analytics: gpc ? false : saved.analytics, marketing: gpc ? false : saved.marketing, gpc } : null;
-    if (effective && JSON.stringify(effective) !== JSON.stringify(saved)) localStorage.setItem(KEY, JSON.stringify(effective));
+    if (effective && JSON.stringify(effective) !== JSON.stringify(saved)) writeConsent(effective);
     setConsent(effective);
     setAnalytics(effective?.analytics ?? false);
     if (effective?.analytics) enableAnalytics();
@@ -59,7 +54,7 @@ export function CookieConsentManager() {
   const save = (allowAnalytics: boolean) => {
     const gpc = hasGpc();
     const next: Consent = { version: 1, analytics: gpc ? false : allowAnalytics, marketing: false, gpc, updatedAt: new Date().toISOString() };
-    localStorage.setItem(KEY, JSON.stringify(next));
+    writeConsent(next);
     setConsent(next);
     setCustomizing(false);
     if (next.analytics) enableAnalytics();

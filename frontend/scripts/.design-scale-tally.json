@@ -164,7 +164,6 @@
     "components/admin/panels/VisitorFlowPanel.tsx": 2,
     "components/admin/TenantApiKeysAdminTab.tsx": 7,
     "components/admin/visitor-flow/VisitorFlowGraph.tsx": 3,
-    "components/admin/visitor-flow/VisitorJourneyDrawer.tsx": 6,
     "components/agent/AgentExecutionPanel.tsx": 30,
     "components/agent/AgentTab.tsx": 1,
     "components/agent/EvermindRunChip.tsx": 1,

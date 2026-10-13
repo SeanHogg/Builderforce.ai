@@ -318,7 +318,7 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
   );
 
   return (
-    <PageContainer width="readable" style={{ padding: '32px 40px' }}>
+    <PageContainer width="readable" style={{ padding: '32px 40px' }} privacy="block">
       <h1 style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>{t('title')}</h1>
       <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 20px' }}>{t('intro')}</p>
       <DestinationIndex items={subTabs} activeId={view} ariaLabel={t('subnavLabel')} />

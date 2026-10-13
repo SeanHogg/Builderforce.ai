@@ -2746,14 +2746,10 @@
 .appEmpty p,.insightsEmpty p { max-width:44ch; margin:0; color:var(--canvas-muted); font-size:11.5px; line-height:1.6; }
 .insightsEmpty a { color:var(--canvas-accent); font-size:12px; font-weight:650; text-decoration:none; }
 .insightsEmpty a:hover { text-decoration:underline; }
-.sessionsVisitList { display:flex; flex-direction:column; gap:8px; flex:1; width:min(720px,100%); margin:0 auto; padding:24px 16px; list-style:none; overflow:auto; }
-.sessionsVisitRow { display:grid; grid-template-columns:1fr auto auto; gap:8px 16px; align-items:center; padding:10px 12px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); color:var(--canvas-ink); font-size:12px; }
-.sessionsVisitPath { font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.sessionsVisitMeta { color:var(--canvas-muted); font-size:11px; }
-.sessionsConverted { color:var(--canvas-accent); font-weight:650; font-size:11px; }
-.sessionsVisitFooter { display:flex; justify-content:center; padding:8px 0 16px; }
-.sessionsVisitFooter a { color:var(--canvas-accent); font-size:12px; font-weight:650; text-decoration:none; }
-.sessionsVisitFooter a:hover { text-decoration:underline; }
+/* Measure ▸ Visitors (CanvasVisitorsSurface): the Insights home fills the body; the hosted-site switch is a 44px target. */
+.visitorsHome { flex:1; min-height:0; min-width:0; display:flex; flex-direction:column; overflow:auto; }
+.visitorsSwitch { display:inline-flex; align-items:center; gap:10px; min-height:44px; color:var(--canvas-ink); font-size:12px; font-weight:650; cursor:pointer; }
+.visitorsSwitch input { width:44px; height:24px; accent-color:var(--canvas-accent); }
 
 @media (max-width:720px) {
   /* The address is the first thing to go on a phone: the bar's budget is two controls
