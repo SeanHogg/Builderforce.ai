@@ -21,6 +21,11 @@ import type { WebhookEvent } from '../../infrastructure/payment/PaymentProvider'
 import { completeCommsTopUp, COMMS_TOPUP_KIND } from '../phone/commsTopUp';
 import { AGENT_PURCHASE_KIND, completeAgentCheckout } from '../marketplace/agentCommerce';
 import { SKILL_PURCHASE_KIND, completeSkillCheckout } from '../marketplace/skillCommerce';
+import {
+  MARKETPLACE_LISTING_KIND,
+  completeListingCheckout,
+  recordMarketplaceListingEvent,
+} from '../marketplace/listingCommerce';
 import { recordBusinessPhoneEvent } from '../tenant/businessPhoneSubscription';
 import { completeSpawnTopUp, SPAWN_TOKENS_KIND } from '../spawn/spawnTopUp';
 import { recordSpawnPlanEvent, SPAWN_PLAN_KIND } from '../spawn/spawnMembership';
@@ -59,6 +64,13 @@ const ONE_OFF_SETTLERS: Readonly<Record<string, OneOffSettler>> = {
     await completeSkillCheckout(db, env, { buyerUserId, checkoutSessionId });
     return true;
   },
+  [MARKETPLACE_LISTING_KIND]: async (db, env, { checkoutSessionId, metadata }) => {
+    const tenantId = Number(metadata.buyerTenantId ?? metadata.tenantId);
+    const buyerRef = metadata.buyerRef;
+    if (!Number.isInteger(tenantId) || tenantId <= 0 || !buyerRef) return null;
+    await completeListingCheckout(db, env, { tenantId, buyerRef, checkoutSessionId });
+    return true;
+  },
 };
 
 const ADDON_RECORDERS: Readonly<Record<string, AddonRecorder>> = {
@@ -67,6 +79,10 @@ const ADDON_RECORDERS: Readonly<Record<string, AddonRecorder>> = {
     return true;
   },
   [SPAWN_PLAN_KIND]: recordSpawnPlanEvent,
+  // Pay-once listings settle on `checkout.completed` via the one-off settler.
+  // This recorder is the close-the-tab path for a leftover `listing.purchased`
+  // or `addon.*` event that still names the kind — same grant, re-read from Stripe.
+  [MARKETPLACE_LISTING_KIND]: recordMarketplaceListingEvent,
 };
 
 /** The settler for a pay-once kind, or null when it settles only on its redirect. */

@@ -87,6 +87,7 @@ const RevertBody = z.object({
 const CheckoutBody = z.object({
   buyerEmail: z.string().nullable().optional(),
   returnUrl: zOptionalString,
+  quantity: z.number().int().min(1).max(99).optional(),
 });
 
 export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
@@ -231,6 +232,7 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
       buyerEmail: body.buyerEmail ?? null,
       slug: c.req.param('slug'),
       returnUrl: body.returnUrl ?? resolveAppBaseUrl(c.env),
+      quantity: body.quantity,
     });
     return c.json(result);
   });

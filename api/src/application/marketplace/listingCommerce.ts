@@ -42,6 +42,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { buildPaymentProvider } from '../../infrastructure/payment';
+import type { WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { registerObject } from '../kernel/ObjectRegistry';
 import { fireEventTriggers } from '../workflow/eventTriggers';
@@ -52,6 +53,22 @@ import { chargeAllHostedAppMaintenance, sellerMaintenanceCostCents } from './app
 import { USD_CENTS } from '../kernel/denominations';
 import { userAccount } from '../kernel/ledgerAccount';
 
+
+/** The Stripe `purchaseKind` for a canvas-creation listing bought once. */
+export const MARKETPLACE_LISTING_KIND = 'marketplace_listing';
+
+/**
+ * Stripe line quantity for a listing purchase.
+ *
+ * Integer 1–99; anything else is 1. The hosted session bills this many copies
+ * at the listing's unit price; the grant checks Stripe captured at least that
+ * product. A value outside the band is a typo, not a bulk order.
+ */
+export function marketplaceListingQuantity(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isInteger(n) || n < 1) return 1;
+  return Math.min(n, 99);
+}
 
 /** The platform's cut ONCE A SELLER IS PAST THE THRESHOLD. 15%, overridable. */
 const DEFAULT_TAKE_RATE_BPS = 1500;
@@ -234,7 +251,7 @@ export interface AcquireInput {
    * request body — which is a paid product handed to anyone who posts a plausible
    * string.
    */
-  verifiedPayment?: { paymentIntentId: string; amountCents: number } | null;
+  verifiedPayment?: { paymentIntentId: string; amountCents: number; quantity?: number } | null;
 }
 
 /**
@@ -275,10 +292,12 @@ async function grantListing(
   if (priceCents > 0 && !input.verifiedPayment) {
     throw new ListingError('This listing is paid — start checkout first', 400);
   }
+  const quantity = marketplaceListingQuantity(input.verifiedPayment?.quantity);
+  const chargeCents = priceCents * quantity;
   // The amount Stripe actually captured must match what is being granted. Without
   // this, a buyer could open checkout while a listing costs $1, wait for the seller
   // to raise it to $99, and complete the old session against the new price.
-  if (input.verifiedPayment && input.verifiedPayment.amountCents < priceCents) {
+  if (input.verifiedPayment && input.verifiedPayment.amountCents < chargeCents) {
     throw new ListingError('The payment does not cover this listing', 400);
   }
 
@@ -311,8 +330,8 @@ async function grantListing(
     tenantId: sellerTenantId,
     ref: sellerRef,
   });
-  const commissionCents = Math.round((priceCents * takeRateBps) / 10_000);
-  const sellerCents = Math.max(0, priceCents - commissionCents);
+  const commissionCents = Math.round((chargeCents * takeRateBps) / 10_000);
+  const sellerCents = Math.max(0, chargeCents - commissionCents);
   const orderNumber = `MP-${Date.now().toString(36).toUpperCase()}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
 
   const [order] = await db
@@ -323,8 +342,8 @@ async function grantListing(
       buyerRef: input.buyerRef,
       buyerEmail: input.buyerEmail ?? null,
       currency: listing.currency ?? 'USD',
-      subtotalCents: priceCents,
-      totalCents: priceCents,
+      subtotalCents: chargeCents,
+      totalCents: chargeCents,
       // A free acquisition is fulfilled the moment it is made; a paid one arrives
       // with the charge already captured, so both are 'paid' rather than pending.
       status: 'paid',
@@ -348,9 +367,9 @@ async function grantListing(
     orderId: order.id,
     catalogItemId: listing.id,
     description: listing.name,
-    quantity: 1,
+    quantity,
     unitCents: priceCents,
-    amountCents: priceCents,
+    amountCents: chargeCents,
     sellerRef,
     // Stamped, not derived at read time: changing the platform's rate tomorrow
     // must not silently re-price what somebody already sold today.
@@ -455,7 +474,7 @@ export async function acquireListing(
 export async function startListingCheckout(
   db: Db,
   env: Env,
-  input: { tenantId: number; buyerRef: string; buyerEmail?: string | null; slug: string; returnUrl: string },
+  input: { tenantId: number; buyerRef: string; buyerEmail?: string | null; slug: string; returnUrl: string; quantity?: number },
 ): Promise<{ checkoutUrl: string }> {
   const [listing] = await db
     .select()
@@ -477,11 +496,13 @@ export async function startListingCheckout(
     throw new ListingError('Payments are not configured on this deployment', 400);
   }
 
+  const quantity = marketplaceListingQuantity(input.quantity);
   const base = new URL(input.returnUrl);
-  const session = await buildPaymentProvider(env).createOneTimeCheckoutSession({
+  const session = await buildPaymentProvider(env).createMarketplaceListingCheckoutSession({
     amountCents: priceCents,
     currency: listing.currency ?? 'USD',
     productName: listing.name,
+    quantity,
     billingEmail: input.buyerEmail ?? null,
     // `{CHECKOUT_SESSION_ID}` is substituted by Stripe, so the value that comes
     // back is one Stripe minted — and it is still re-read from Stripe before it
@@ -489,13 +510,18 @@ export async function startListingCheckout(
     successUrl: `${base.origin}${base.pathname}?checkout={CHECKOUT_SESSION_ID}`,
     cancelUrl: `${base.origin}${base.pathname}?checkout=cancelled`,
     metadata: {
-      purchaseKind: 'marketplace_listing',
+      purchaseKind: MARKETPLACE_LISTING_KIND,
       listingId: listing.id,
       listingSlug: listing.slug,
       buyerRef: input.buyerRef,
       buyerTenantId: String(input.tenantId),
+      // ownFlow fills `event.tenantId` from this, not from `buyerTenantId`.
+      tenantId: String(input.tenantId),
+      quantity: String(quantity),
     },
-    idempotencyKey: `mp-checkout:${listing.id}:${input.buyerRef}`,
+    idempotencyKey: quantity === 1
+      ? `mp-checkout:${listing.id}:${input.buyerRef}`
+      : `mp-checkout:${listing.id}:${input.buyerRef}:${quantity}`,
   });
   return { checkoutUrl: session.checkoutUrl };
 }
@@ -517,7 +543,7 @@ export async function completeListingCheckout(
 ): Promise<AcquisitionResult> {
   const verified = await verifyPaidCheckout(env, {
     checkoutSessionId: input.checkoutSessionId,
-    purchaseKind: 'marketplace_listing',
+    purchaseKind: MARKETPLACE_LISTING_KIND,
     owner: { buyerRef: input.buyerRef, buyerTenantId: input.tenantId },
     messages: {
       notConfigured: 'Payments are not configured on this deployment',
@@ -540,8 +566,39 @@ export async function completeListingCheckout(
     verifiedPayment: {
       paymentIntentId: verified.paymentRef,
       amountCents: verified.amountCents,
+      quantity: marketplaceListingQuantity(verified.metadata.quantity),
     },
   });
+}
+
+/**
+ * Webhook-side settlement for a listing purchase.
+ *
+ * The pay-once analog of `recordBusinessPhoneEvent`: the purchase registry
+ * calls this from both the one-off settler (`checkout.completed`) and the
+ * add-on recorder (a leftover `listing.purchased` or `addon.*` event that
+ * still names this kind). Incomplete metadata is not an error — the
+ * registry acknowledges rather than 500'ing the processor into a retry.
+ */
+export async function recordMarketplaceListingEvent(
+  db: Db,
+  env: Env,
+  event: WebhookEvent,
+): Promise<boolean> {
+  if (event.purchaseKind && event.purchaseKind !== MARKETPLACE_LISTING_KIND) return false;
+  const checkoutSessionId = event.checkoutSessionId;
+  if (!checkoutSessionId) return false;
+  const tenantId = event.tenantId
+    ?? Number(event.metadata?.buyerTenantId ?? event.metadata?.tenantId);
+  const buyerRef = event.buyerRef ?? event.metadata?.buyerRef;
+  if (!Number.isInteger(tenantId) || tenantId <= 0 || !buyerRef) return false;
+  await completeListingCheckout(db, env, {
+    tenantId,
+    buyerRef,
+    buyerEmail: event.billingEmail ?? null,
+    checkoutSessionId,
+  });
+  return true;
 }
 
 /**
