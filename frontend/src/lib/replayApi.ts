@@ -11,8 +11,14 @@
 import { gunzipSync, strFromU8 } from 'fflate';
 import {
   REPLAY_PATHS,
-  filterToQuery,
   type ReplayFilter,
+  type ReplayDeviceClass,
+  type ReplayElementRowDto,
+  type ReplayExportDto,
+  type ReplayHeatGridDto,
+  type ReplayHeatInsightDto,
+  type ReplayHeatKind,
+  type ReplayHeatSnapshotDto,
   type ReplayIssueDetailDto,
   type ReplayIssueDto,
   type ReplayIssueStatus,
@@ -22,9 +28,14 @@ import {
   type ReplayRecordingDto,
   type ReplayRecordingSummaryDto,
   type ReplayReleaseDto,
+  type ReplayRouteStatDto,
+  type ReplayScrollDepthDto,
 } from '@builderforce/interaction-contract';
 import { apiRequest, apiRequestStream } from './apiClient';
-import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
+import { downloadBlob, filenameFromResponse } from './download';
+import { fill, listOf, shared, withQuery, type QueryValue } from './replayHttp';
+import { replayAnalysisApi } from './replayAnalysisApi';
+import { replayMethodApi } from './replayMethodApi';
 
 /** The three windows every Insights view offers. */
 export const REPLAY_WINDOWS = [7, 30, 90] as const;
@@ -51,35 +62,18 @@ export interface KpisQuery {
   filter?: ReplayFilter | null;
 }
 
-type QueryValue = string | number | null | undefined;
-
-/** Fill `:name` segments of a `REPLAY_PATHS` template. */
-function fill(template: string, params: Record<string, string | number>): string {
-  return template.replace(/:([A-Za-z]+)/g, (_, name: string) => encodeURIComponent(String(params[name] ?? '')));
-}
-
-/** `path?site=…&k=v…` plus the filter's own params. */
-function withQuery(path: string, siteId: string, query: Record<string, QueryValue> = {}, filter?: ReplayFilter | null): string {
-  const params = filter ? filterToQuery(filter) : new URLSearchParams();
-  params.set('site', siteId);
-  for (const [key, value] of Object.entries(query)) {
-    if (value != null && value !== '') params.set(key, String(value));
-  }
-  return `${path}?${params.toString()}`;
-}
-
 /**
- * Concurrent identical reads share one request (several tabs of one panel level
- * read the same recording at mount). Single-flight only — `ttlMs: 0` means a
- * settled answer is never reused, so live follow always sees new chunks.
+ * Every heatmap read's parameters (`replayHeatmapRoutes.ts`): the route, the
+ * release (null = every release), a second release to compare, the device
+ * (null = every device), the layer and the window. Counts are exact (D15/D18).
  */
-function shared<T>(key: string, load: () => Promise<T>): Promise<T> {
-  return getOrSetClientCached(`replay:${key}`, () => load(), { ttlMs: 0 });
-}
-
-function listOf<T>(body: T[] | { items: T[] } | null | undefined): T[] {
-  if (Array.isArray(body)) return body;
-  return body?.items ?? [];
+export interface HeatQuery {
+  route: string;
+  release?: string | null;
+  compare?: string | null;
+  device?: ReplayDeviceClass | null;
+  kind?: ReplayHeatKind;
+  days?: number;
 }
 
 const GZIP_MAGIC = [0x1f, 0x8b] as const;
@@ -114,6 +108,11 @@ export function parseChunkBytes(bytes: Uint8Array): unknown[] {
 }
 
 export const replayApi = {
+  // ── Analysis parity (S4c): segments, filter options, overview, smart events, funnels, flow, AI summaries ──
+  ...replayAnalysisApi,
+  // ── Method link (S4d): a replay-moment ticket's measured effect ──
+  ...replayMethodApi,
+
   listRecordings(siteId: string, query: RecordingsQuery = {}): Promise<ReplayPage<ReplayRecordingSummaryDto>> {
     const { filter, ...rest } = query;
     return apiRequest(withQuery(REPLAY_PATHS.recordings, siteId, rest, filter));
@@ -162,4 +161,81 @@ export const replayApi = {
   getLive(siteId: string): Promise<ReplayLiveDto> {
     return apiRequest(withQuery(REPLAY_PATHS.live, siteId));
   },
+
+  // ── Heatmaps (S4) ──────────────────────────────────────────────────────────
+
+  /** One heat layer on the `GRID` lattice for the route. */
+  heatGrid(siteId: string, query: HeatQuery): Promise<ReplayHeatGridDto> {
+    const url = withQuery(REPLAY_PATHS.heatGrid, siteId, heatParams(query, true));
+    return shared(url, () => apiRequest<ReplayHeatGridDto>(url));
+  },
+
+  /** The route's elements, ranked; `compare` fills `compareClicks` / `delta`. */
+  heatElements(siteId: string, query: HeatQuery): Promise<ReplayElementRowDto[]> {
+    const url = withQuery(REPLAY_PATHS.heatElements, siteId, heatParams(query, false));
+    return shared(url, async () => listOf(await apiRequest<ReplayElementRowDto[] | { items: ReplayElementRowDto[] }>(url)));
+  },
+
+  /** Share of page views reaching each depth decile. */
+  heatScroll(siteId: string, query: HeatQuery): Promise<ReplayScrollDepthDto> {
+    const url = withQuery(REPLAY_PATHS.heatScroll, siteId, heatParams(query, false));
+    return shared(url, () => apiRequest<ReplayScrollDepthDto>(url));
+  },
+
+  /** The busiest routes in the window, for the route picker. */
+  heatRoutes(siteId: string, query: { days?: number } = {}): Promise<ReplayRouteStatDto[]> {
+    const url = withQuery(REPLAY_PATHS.heatRoutes, siteId, { days: query.days });
+    return shared(url, async () => listOf(await apiRequest<ReplayRouteStatDto[] | { items: ReplayRouteStatDto[] }>(url)));
+  },
+
+  /** `HEATMAP_INSIGHT_RULES` findings for the route (and the compare release). */
+  heatInsights(siteId: string, query: HeatQuery): Promise<ReplayHeatInsightDto[]> {
+    const url = withQuery(REPLAY_PATHS.heatInsights, siteId, heatParams(query, false));
+    return shared(url, async () => listOf(await apiRequest<ReplayHeatInsightDto[] | { items: ReplayHeatInsightDto[] }>(url)));
+  },
+
+  /** The recording + chunk seq whose first full snapshot is the heatmap's background. */
+  heatSnapshot(siteId: string, query: HeatQuery): Promise<ReplayHeatSnapshotDto> {
+    const url = withQuery(REPLAY_PATHS.heatSnapshot, siteId, heatParams(query, false));
+    return shared(url, () => apiRequest<ReplayHeatSnapshotDto>(url));
+  },
+
+  // ── Video export (S4b) ─────────────────────────────────────────────────────
+
+  /** Ask for a video of the recording (10 units once, D10). Idempotent while one is open. */
+  requestExport(siteId: string, recordingId: string): Promise<ReplayExportDto> {
+    return apiRequest(withQuery(fill(REPLAY_PATHS.recordingExport, { recordingId }), siteId), { method: 'POST' });
+  },
+
+  exportStatus(siteId: string, exportId: string): Promise<ReplayExportDto> {
+    return apiRequest(withQuery(fill(REPLAY_PATHS.exportStatus, { exportId }), siteId));
+  },
+
+  /** The authenticated download path of a finished export (never put in an `href`: it needs the bearer). */
+  exportDownloadUrl(siteId: string, exportId: string): string {
+    return withQuery(fill(REPLAY_PATHS.exportDownload, { exportId }), siteId);
+  },
+
+  /**
+   * Download a finished export the way every authenticated download does: fetch
+   * through the shared transport (bearer header, never a token in a URL), then
+   * hand the blob to `downloadBlob` under the server's filename.
+   */
+  async downloadExport(siteId: string, exportId: string): Promise<void> {
+    const res = await apiRequestStream(replayApi.exportDownloadUrl(siteId, exportId));
+    if (!res.ok) throw new Error(`replay export ${exportId}: ${res.status}`);
+    downloadBlob(await res.blob(), filenameFromResponse(res, `replay-${exportId}.mp4`));
+  },
 };
+
+/** The query a heatmap read sends; only the grid carries `kind`. */
+function heatParams(query: HeatQuery, withKind: boolean): Record<string, QueryValue> {
+  return {
+    route: query.route,
+    release: query.release ?? null,
+    compare: query.compare ?? null,
+    device: query.device ?? null,
+    kind: withKind ? query.kind ?? 'click' : null,
+    days: query.days,
+  };
+}

@@ -48,9 +48,11 @@ function cdnOrigin(env: Env): string {
 }
 
 /** The loader tag for a hosted site and the release being served. */
-export function hostedReplayLoaderTag(input: { siteId: string; versionToken: string; cdnOrigin?: string }): string {
+export function hostedReplayLoaderTag(input: { siteId: string; versionToken: string; cdnOrigin?: string; variant?: string | null }): string {
   const src = replayLoaderUrl(input.cdnOrigin ?? REPLAY_CDN_ORIGIN);
-  return `<script async src="${attr(src)}" data-site="hosted:${attr(input.siteId)}" data-release="${attr(input.versionToken)}" data-bf-marker="${REPLAY_LOADER_MARKER}"></script>`;
+  // `data-variant`: the A/B arm this document was served from (`siteAbSplit.ts`).
+  const variant = input.variant ? ` data-variant="${attr(input.variant)}"` : '';
+  return `<script async src="${attr(src)}" data-site="hosted:${attr(input.siteId)}" data-release="${attr(input.versionToken)}"${variant} data-bf-marker="${REPLAY_LOADER_MARKER}"></script>`;
 }
 
 /** Add the loader to a document unless it already has one (ours or a pasted one). */
@@ -88,6 +90,8 @@ export async function withReplayLoader(
   projectId: number,
   versionToken: string,
   response: Response,
+  /** The A/B arm label when a prescription test split this request (`siteAbSplit.ts`). */
+  variant?: string | null,
 ): Promise<Response> {
   const type = response.headers.get('content-type') ?? '';
   if (!type.toLowerCase().includes('text/html') || !response.body) return response;
@@ -102,7 +106,7 @@ export async function withReplayLoader(
   }
   if (!siteId) return response;
 
-  const tag = hostedReplayLoaderTag({ siteId, versionToken, cdnOrigin: cdnOrigin(env) });
+  const tag = hostedReplayLoaderTag({ siteId, versionToken, cdnOrigin: cdnOrigin(env), variant });
   const headers = new Headers(response.headers);
   headers.delete('content-length');
   return new Response(injectReplayLoader(await response.text(), tag), {

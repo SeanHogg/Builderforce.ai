@@ -22,6 +22,7 @@
  * anyone can enumerate is a leak, and this one is full of email addresses.
  */
 
+import type { ProofMeasure } from '@builderforce/interaction-contract';
 import { esc, renderProofShell, INGRESS_PRELUDE } from '../proofShell';
 import { audienceOf, capabilityLabel, criteriaFrom, goalHeadline, verdictRecorderScript, VERDICT_COLLECTION } from './shared';
 import type { RealizationTarget, RealizeContext, RealizationOutput } from '../realizationTarget';
@@ -31,6 +32,40 @@ const COLLECTION = 'waitlist';
 /** Default threshold when the brief named none. Stated, never silently assumed. */
 const DEFAULT_TARGET = 25;
 const DEFAULT_SAMPLE = 500;
+/** The charter's window: "14 days from first traffic". */
+const WINDOW_DAYS = 14;
+
+/**
+ * The success the landing page reports (`BFReplay.event`) — the built-in
+ * "sign up" smart event, so it reads under the same name in every Insights view.
+ */
+export const SMOKE_SUCCESS_EVENT = 'sign up';
+/** The tag the landing page carries: where the visit came from. */
+export const SMOKE_SOURCE_TAG = 'source';
+/** A visit with no named source. The charter's sample is visitors FROM a named source. */
+export const SMOKE_UNNAMED_SOURCE = 'direct';
+
+/**
+ * The charter, as a measure: at least `sample` landing-page visits from a named
+ * source, judged on ≥ `target` sign-ups within the window. Every number is one the
+ * charter already states — nothing here is invented to make the proof gradeable.
+ */
+export function smokeTestMeasure(target: number, sample: number): ProofMeasure {
+  return {
+    sample: {
+      filter: {
+        all: [
+          { field: 'visitedPath', op: 'in', value: ['/', '/index.html'] },
+          { field: 'tag', op: 'neq', value: `${SMOKE_SOURCE_TAG}=${SMOKE_UNNAMED_SOURCE}` },
+        ],
+      },
+      min: sample,
+    },
+    success: { kind: 'smartEvent', ref: SMOKE_SUCCESS_EVENT },
+    threshold: { op: '>=', value: target, unit: 'count' },
+    windowDays: WINDOW_DAYS,
+  };
+}
 
 function renderLanding(ctx: RealizeContext): string {
   const { spec } = ctx;
@@ -77,6 +112,9 @@ ${benefits.map((benefit) => `      <div class="card">
   const script = `  var form = document.getElementById('signup');
   var status = document.getElementById('status');
   var submit = document.getElementById('submit');
+  var query = new URLSearchParams(location.search);
+  var source = query.get('utm_source') || query.get('ref') || query.get('src') || '${SMOKE_UNNAMED_SOURCE}';
+  window.BFReplay && BFReplay.tag('${SMOKE_SOURCE_TAG}', source);
 
   form.addEventListener('submit', function (event) {
     event.preventDefault();
@@ -98,10 +136,11 @@ ${benefits.map((benefit) => `      <div class="card">
         context: document.getElementById('context').value.trim(),
         company_website: document.getElementById('company_website').value,
         referrer: document.referrer || '',
-        source: new URLSearchParams(location.search).get('src') || 'direct',
+        source: source,
       }),
     }).then(function (res) {
       if (!res.ok) throw new Error('rejected');
+      window.BFReplay && BFReplay.event('${SMOKE_SUCCESS_EVENT}');
       // Told the truth, immediately. A fake door that leaves someone believing
       // they have bought something is not a test.
       document.getElementById('signup-card').innerHTML =
@@ -268,7 +307,7 @@ ${goalHeadline(spec)}
 |---|---|
 | Signups needed | **${target}** |
 | Out of at least | **${sample}** unique visitors |
-| Window | **14 days** from first traffic |
+| Window | **${WINDOW_DAYS} days** from first traffic |
 
 ## The decision
 
@@ -356,6 +395,7 @@ not in a purchase somebody thinks they made.
         `The signup count is recorded against the ${target} threshold, and a build-or-park decision is written down.`,
         'Every person who signed up was told, at the moment of signing up, that it is not built yet.',
       ]),
+      measure: smokeTestMeasure(target, sample),
     };
   },
 };

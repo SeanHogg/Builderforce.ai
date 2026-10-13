@@ -231,6 +231,7 @@ import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createCompileRoutes }     from './presentation/routes/compileRoutes';
 import { createChallengeRoutes }   from './presentation/routes/challengeRoutes';
 import { createRealizationRoutes } from './presentation/routes/realizationRoutes';
+import { createRealizationMeasureRoutes } from './presentation/routes/realizationMeasureRoutes';
 import { createDeveloperRoutes }  from './presentation/routes/developerRoutes';
 import { createBackendRuntimeRoutes } from './presentation/routes/backendRuntimeRoutes';
 import { createProjectBackendRoutes } from './presentation/routes/projectBackendRoutes';
@@ -297,7 +298,13 @@ import { createCapabilityRoutes } from './presentation/routes/capabilityRoutes';
 import { createReplayOpsGrantRoutes } from './presentation/routes/replayOpsGrantRoutes';
 import { createReplayIngestRoutes } from './presentation/routes/replayIngestRoutes';
 import { createReplayRoutes } from './presentation/routes/replayRoutes';
+import { createReplayHeatmapRoutes } from './presentation/routes/replayHeatmapRoutes';
+import { createReplayExportRoutes } from './presentation/routes/replayExportRoutes';
+import { createReplayAnalysisRoutes } from './presentation/routes/replayAnalysisRoutes';
+import { createReplayPrescriptionRoutes } from './presentation/routes/replayPrescriptionRoutes';
 import { createReplayOpsRoutes } from './presentation/routes/replayOpsRoutes';
+import { createReplayTicketEffectRoutes } from './presentation/routes/replayTicketEffectRoutes';
+import { createReplayMethodSeedRoutes } from './presentation/routes/replayMethodSeedRoutes';
 import { createWebSearchRoutes } from './presentation/routes/webSearchRoutes';
 
 import { API_VERSION } from './version';
@@ -1166,6 +1173,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Idea → REAL. Eight proof forms (demo video, clickable prototype, smoke test,
   // wizard-of-oz, proof of concept, pilot, phone line, live system), each built,
   // published to a URL and wired to its own forms. See application/realization.
+  // BEFORE the realization router: `/journey-signal` must not be read as `/:id` (PRD 33 S4d).
+  app.route('/api/realizations', createRealizationMeasureRoutes(db));
   app.route('/api/realizations', createRealizationRoutes(db, runtimeService));
   // Operating a project's server-side half: hosting strategy, live handlers, the
   // per-project secret vault, and the inbound-delivery log.
@@ -1250,7 +1259,13 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // workspace reads (`?site=` must be the caller's), and the operator aggregates.
   app.route('/api/replay-ingest',    createReplayIngestRoutes(db));
   app.route('/api/replay',           createReplayRoutes());
+  app.route('/api/replay',           createReplayHeatmapRoutes()); // heatmaps + release compare (S4)
+  app.route('/api/replay',           createReplayExportRoutes());  // MP4 export + its runner callbacks (S4b)
+  app.route('/api/replay',           createReplayAnalysisRoutes()); // segments, overview, smart events, funnels, flow, AI summaries (S4c)
+  app.route('/api/replay',           createReplayPrescriptionRoutes()); // ranked fixes, their actions and verdicts (S4e)
   app.route('/api/admin/replay-ops', createReplayOpsRoutes()); // aggregates only (D17)
+  app.route('/api/replay',           createReplayTicketEffectRoutes()); // ticket-from-moment effect (S4d)
+  app.route('/api/admin/replay-ops', createReplayMethodSeedRoutes(db)); // seed "The method" funnel (S4d, superadmin)
 
   // The domain router is intentionally LAST among `/api` mounts. It owns dynamic
   // `/api/:domain/*` paths and installs blanket auth for them; mounting it earlier

@@ -1,6 +1,6 @@
 /**
- * Playback state for one recording: fetch the row, stream its chunks in order
- * through `replayApi`, hand the events to rrweb's `Replayer` (loaded on
+ * Playback state for one recording: fetch the row, stream its stored chunks
+ * (`chunkSeqs`, ascending) in order through `replayApi`, hand the events to rrweb's `Replayer` (loaded on
  * demand), and expose play / pause / seek / speed / skip-inactivity.
  *
  * Follow mode (live, PRD 33 S5) re-reads the recording every 5 s while the tab
@@ -18,6 +18,16 @@ export type PlaybackStatus = 'loading' | 'ready' | 'empty' | 'error';
 
 const TICK_MS = 200;
 const FOLLOW_POLL_MS = 5_000;
+
+/**
+ * The stored seqs to stream, ascending. A trigger-kept recording starts
+ * mid-visit (its first seq is above 0), so the API's `chunkSeqs` is the truth;
+ * `0..chunkCount-1` is only the fallback for a row served before that field.
+ */
+export function recordingSeqs(row: Pick<ReplayRecordingDto, 'chunkCount'> & { chunkSeqs?: number[] }): number[] {
+  if (Array.isArray(row.chunkSeqs)) return row.chunkSeqs;
+  return Array.from({ length: Math.max(0, row.chunkCount) }, (_, index) => index);
+}
 
 export interface ReplayPlaybackOptions {
   siteId: string;
@@ -43,6 +53,8 @@ export interface ReplayPlayback {
   seek: (ms: number) => void;
   setSpeed: (speed: number) => void;
   setSkipInactive: (skip: boolean) => void;
+  /** The replayed page's document (rrweb's same-origin sandbox), or null before it is built. */
+  frameDocument: () => Document | null;
 }
 
 export function useReplayPlayback({ siteId, recordingId, follow = false, startAtMs = 0 }: ReplayPlaybackOptions): ReplayPlayback {
@@ -61,15 +73,15 @@ export function useReplayPlayback({ siteId, recordingId, follow = false, startAt
   const [speed, setSpeedState] = useState(1);
   const [skipInactive, setSkipState] = useState(true);
 
-  /** Fetch chunks `[loaded, upTo)` in order; the first batch builds the replayer. */
-  const loadChunks = useCallback(async (upTo: number, isCancelled: () => boolean) => {
+  /** Fetch the stored seqs not yet loaded, in order; the first batch builds the replayer. */
+  const loadChunks = useCallback(async (seqs: readonly number[], isCancelled: () => boolean) => {
     if (busyRef.current) return;
     busyRef.current = true;
     try {
-      for (let seq = loadedRef.current; seq < upTo; seq += 1) {
-        const events = await replayApi.getRecordingChunk(siteId, recordingId, seq);
+      for (let index = loadedRef.current; index < seqs.length; index += 1) {
+        const events = await replayApi.getRecordingChunk(siteId, recordingId, seqs[index]!);
         if (isCancelled()) return;
-        loadedRef.current = seq + 1;
+        loadedRef.current = index + 1;
         const replayer = replayerRef.current;
         if (replayer) {
           for (const event of events) replayer.addEvent(event);
@@ -105,7 +117,7 @@ export function useReplayPlayback({ siteId, recordingId, follow = false, startAt
       .then(async (row) => {
         if (cancelled) return;
         setRecording(row);
-        await loadChunks(row.chunkCount, isCancelled);
+        await loadChunks(recordingSeqs(row), isCancelled);
         if (!cancelled && !replayerRef.current) setStatus('empty');
       })
       .catch((err: unknown) => {
@@ -134,7 +146,8 @@ export function useReplayPlayback({ siteId, recordingId, follow = false, startAt
     const row = await replayApi.getRecording(siteId, recordingId);
     if (signal.aborted) return;
     setRecording(row);
-    if (row.chunkCount > loadedRef.current) await loadChunks(row.chunkCount, () => signal.aborted);
+    const seqs = recordingSeqs(row);
+    if (seqs.length > loadedRef.current) await loadChunks(seqs, () => signal.aborted);
   }, { intervalMs: FOLLOW_POLL_MS, enabled: follow && status === 'ready', immediate: false });
 
   const play = useCallback(() => {
@@ -178,8 +191,10 @@ export function useReplayPlayback({ siteId, recordingId, follow = false, startAt
     replayerRef.current?.setConfig({ skipInactive: next });
   }, []);
 
+  const frameDocument = useCallback(() => replayerRef.current?.iframe?.contentDocument ?? null, []);
+
   return {
     rootRef, recording, status, error, playing, currentMs, totalMs, speed, skipInactive,
-    play, pause, seek, setSpeed, setSkipInactive,
+    play, pause, seek, setSpeed, setSkipInactive, frameDocument,
   };
 }

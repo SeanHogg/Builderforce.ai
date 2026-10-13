@@ -11,6 +11,7 @@ import { useAdminData } from '@/components/admin/adminShared';
 import { ReplayPlayer } from '@/components/replay/ReplayPlayer';
 import { RecordingJourney } from '@/components/replay/RecordingJourney';
 import { RecordingLead } from '@/components/replay/RecordingLead';
+import { funnelLevelId } from '@/components/replay/funnels/funnelLevel';
 import type { InsightPanelKindProps } from '../panelKinds';
 import { PanelPending as Pending } from './PanelPending';
 
@@ -18,8 +19,21 @@ function useRecording(siteId: string, id: string) {
   return useAdminData<ReplayRecordingDto>(() => replayApi.getRecording(siteId, id), [siteId, id]);
 }
 
-export function RecordingReplayTab({ siteId, id, t, follow }: InsightPanelKindProps) {
-  return <ReplayPlayer siteId={siteId} recordingId={id} startAtSeconds={t ?? 0} follow={follow ?? false} />;
+export function RecordingReplayTab({ siteId, id, t, follow, push }: InsightPanelKindProps) {
+  // "Define from this click" → the funnel kind's Events tab, its editor prefilled with a click rule.
+  return (
+    <ReplayPlayer
+      siteId={siteId}
+      recordingId={id}
+      startAtSeconds={t ?? 0}
+      follow={follow ?? false}
+      onDefineEvent={(selector) => push({
+        kind: 'funnel',
+        id: funnelLevelId({ draft: { ruleKind: 'click', match: selector, matchMode: 'equals' } }),
+        tab: 'events',
+      })}
+    />
+  );
 }
 
 export function RecordingJourneyTab({ siteId, id, push }: InsightPanelKindProps) {

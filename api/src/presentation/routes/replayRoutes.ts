@@ -1,7 +1,7 @@
 /**
  * Insights DATA — `/api/replay/*` (PRD 33 §3, `REPLAY_PATHS`, D17).
  *
- *   GET   /recordings?site&days&cursor&limit&f.*     ReplayPage<ReplayRecordingSummaryDto>
+ *   GET   /recordings?site&days&cursor&limit&f.*     ReplayPage<ReplayRecordingSummaryDto>  (also a `replay:read` key)
  *   GET   /recordings/:recordingId?site               ReplayRecordingDto (traces replay.session.viewed)
  *   GET   /recordings/:recordingId/chunks/:seq?site   stored gzip bytes (immutable)
  *   GET   /releases?site                              ReplayReleaseDto[]
@@ -18,44 +18,22 @@
  * router, which shares the `/api/replay` prefix with the sites router, never wraps a
  * path it does not own. A presentation adapter only: services, no tables.
  */
-import { Hono, type Context, type MiddlewareHandler } from 'hono';
+import { Hono, type Context } from 'hono';
 import { filterFromQuery } from '@builderforce/interaction-contract';
 import type { HonoEnv } from '../../env';
 import { requestDb } from '../../application/shared/dbHandle';
 import { deferPastResponse } from '../../application/shared/requestScope';
-import type { ReplayScope } from '../../domain/replay/replayScope';
 import { ValidationError } from '../../domain/shared/errors';
 import { ReplayReadService } from '../../application/replay/ReplayReadService';
-import { getSiteForTenant } from '../../application/replay/replaySites';
 import { recordReplayTrace, REPLAY_TRACE_VERBS } from '../../application/replay/replayTrace';
 import { usageSnapshot } from '../../application/replay/replayUsage';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { requireFeature } from '../middleware/featureGate';
+import { replayReadKeyOrMember } from '../middleware/replayReadAuth';
 import { requireTenantId } from '../middleware/tenantContext';
 import { parseBody, z } from './requestBody';
+import { insightsGate, optionalNumber, replayScopeOf as scopeOf } from './replayRouteScope';
 
 const RenameReleaseBody = z.object({ label: z.string().max(200).nullable() });
-
-const insightsGate: MiddlewareHandler<HonoEnv> = async (c, next) => {
-  const gate = await requireFeature(c, 'sessionReplay');
-  if (gate) return gate;
-  await next();
-};
-
-/** The caller's scope for `?site=`: 400 when absent, 403 when not this workspace's. */
-async function scopeOf(c: Context<HonoEnv>): Promise<ReplayScope> {
-  const tenantId = requireTenantId(c);
-  const siteId = c.req.query('site');
-  if (!siteId) throw new ValidationError('site is required');
-  const site = await getSiteForTenant(c.env, requestDb(c), tenantId, siteId);
-  return { tenantId, siteId: site.id };
-}
-
-const optionalNumber = (raw: string | undefined): number | undefined => {
-  if (raw === undefined || raw === '') return undefined;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : undefined;
-};
 
 /** Let the trace finish after the response; await it where the runtime cannot defer. */
 async function afterResponse(task: Promise<unknown>): Promise<void> {
@@ -66,7 +44,9 @@ export function createReplayRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   const reads = (c: Context<HonoEnv>) => new ReplayReadService(c.env, requestDb(c));
 
-  router.get('/recordings', authMiddleware, insightsGate, async (c) => {
+  // The read API: a `replay:read` tenant key is accepted here (and only on the three
+  // documented GETs — see `replayReadAuth.ts`), as well as a member session.
+  router.get('/recordings', replayReadKeyOrMember, insightsGate, async (c) => {
     const scope = await scopeOf(c);
     return c.json(await reads(c).listRecordings(scope, {
       days: optionalNumber(c.req.query('days')),

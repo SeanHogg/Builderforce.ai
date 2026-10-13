@@ -2826,7 +2826,20 @@
       "link": "关联到",
       "linkNone": "不关联",
       "linkProjects": "项目",
-      "linkInitiatives": "举措"
+      "linkInitiatives": "举措",
+      "band": {
+        "aria": "漏斗",
+        "none": "还没有漏斗。",
+        "create": "创建漏斗",
+        "openAria": "在 {step} 处打开漏斗",
+        "approx": "≈ {value}",
+        "conversion": "转化 {value}"
+      },
+      "tabs": {
+        "steps": "步骤",
+        "events": "事件",
+        "flow": "流向"
+      }
     },
     "alloc": {
       "title": "投资分配",
@@ -3594,7 +3607,7 @@
       },
       "representatives": "代表性录制",
       "repAria": "打开代表性录制 {rank}",
-      "recordingsOnRoute": "访问过 {route} 的录制"
+      "recordingsOfIssue": "在 {route} 上遇到此问题的录制"
     },
     "panel": {
       "crumbRoot": "洞察",
@@ -3625,7 +3638,9 @@
       }
     },
     "lenses": {
-      "live": "实时"
+      "live": "实时",
+      "heat": "热图",
+      "stuck": "受阻"
     },
     "journey": {
       "steps": "{count} 个页面",
@@ -3665,6 +3680,13 @@
       "packsTitle": "购买录制",
       "receipts": "付款与收据",
       "checkoutReturned": "谢谢。付款确认后，你的额度会显示在这里。"
+    },
+    "route": {
+      "kind": "页面",
+      "tabs": {
+        "heat": "热图"
+      },
+      "openAria": "打开页面 {route}"
     }
   },
   "cloudAgentForm": {
@@ -14354,7 +14376,8 @@
       "broadcasts": "广播",
       "llmRatings": "评分",
       "visitorFlow": "访客流向",
-      "visitors": "访客"
+      "visitors": "访客",
+      "insightsOps": "Insights 运营"
     },
     "common": {
       "loading": "加载中…",
@@ -15508,6 +15531,62 @@
         },
         "noteWarn": "超过 80%：每晚的维护任务现在会以缩短的保留期清理所有可压缩的日志表，并立即回收空间，而不再等待每周的重写。",
         "noteCritical": "超过 90%：所有可压缩的日志表都以其声明的最短保留期清理。合规与计费窗口绝不会被缩短。"
+      }
+    },
+    "insightsOps": {
+      "title": "Insights 运营",
+      "subtitle": "Insights 的平台汇总数据，以及单个工作区的录制设置和额度授予。此处不显示任何站点、访客或录制内容。",
+      "navLink": "Insights 运营",
+      "summary": {
+        "aria": "Insights 平台汇总",
+        "sessions7d": "会话（7 天）",
+        "keptRecordings7d": "保留的录制（7 天）",
+        "bytes7d": "存储量（7 天）",
+        "sites": "站点",
+        "tenants": "工作区",
+        "packRevenue30d": "套餐包收入（30 天）"
+      },
+      "workspace": {
+        "title": "工作区",
+        "label": "工作区",
+        "empty": "暂无工作区。"
+      },
+      "settings": {
+        "title": "录制设置",
+        "excluded": "不在 builderforce.ai 上录制",
+        "excludedHint": "该工作区的成员登录 builderforce.ai 时永远不会被录制。",
+        "override": "每月免费录制数",
+        "overrideHint": "为该工作区覆盖目录中的免费额度。设为 0 可测试真实的套餐包购买。留空则使用默认值。",
+        "overridePlaceholder": "目录默认值",
+        "clear": "清除",
+        "save": "保存设置",
+        "saving": "正在保存…",
+        "saved": "已保存。此更改已记入审计日志。",
+        "invalidOverride": "请输入 0 或更大的整数，或留空。"
+      },
+      "grant": {
+        "title": "授予录制额度",
+        "hint": "授予会先写入审计日志，然后才计入额度。",
+        "units": "录制数",
+        "reason": "原因",
+        "reasonPlaceholder": "为什么该工作区获得这些录制额度",
+        "submit": "授予额度",
+        "granting": "正在授予…",
+        "invalid": "请输入 1 到 {max} 之间的录制数，并填写至少 3 个字符的原因。",
+        "confirmTitle": "授予录制额度？",
+        "confirmMessage": "向 {tenant} 授予 {units} 个录制额度？此操作会被审计，且无法在此处撤销。",
+        "confirmLabel": "授予",
+        "done": "已授予 {units} 个录制额度。该工作区现有 {credits} 个额度。参考号：{reference}"
+      },
+      "methodFunnel": {
+        "title": "初始化“方法”漏斗",
+        "hint": "在 Builderforce 自己的洞察站点上创建四个方法智能事件，以及从首页到已评级验证的漏斗。可重复运行。",
+        "siteLabel": "Builderforce 洞察站点 ID",
+        "invalid": "请输入站点 ID（UUID）。",
+        "submit": "初始化漏斗",
+        "seeding": "正在初始化…",
+        "done": "已初始化——创建了 {events} 个智能事件。",
+        "already": "已初始化——无需创建。"
       }
     }
   },
@@ -19510,7 +19589,7 @@
     },
     "install": {
       "title": "One script, every capability",
-      "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host."
+      "description": "在客户网站上安装一次即可。组件的更改会在下次页面加载时生效，无需重新部署宿主站点。只有当标签同时带有你的 Insights 站点密钥（data-site）时，热图和会话回放才会启动；工作区创建 Insights 站点后，该密钥会自动加入此处。"
     },
     "consent": {
       "title": "Consent log",
@@ -19542,7 +19621,7 @@
       },
       "heatmaps": {
         "name": "Heatmaps",
-        "description": "Measure click locations and scroll depth to understand real customer behavior.",
+        "description": "来自 Insights 会话回放的点击、愤怒点击、无效点击和滚动热图。安装脚本带上你的 Insights 站点密钥后才会开始记录。",
         "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps."
       },
       "feature_management": {
@@ -19644,6 +19723,13 @@
         "title": "把您的创意放进客户的产品里",
         "body": "创建免费工作区即可获取嵌入密钥，开启所需能力，今天就发布到您自己的网站。"
       }
+    },
+    "insights": {
+      "needsSite": "需要一个 Insights 站点：仅打开此开关不会记录任何数据。",
+      "siteReady": "正在通过你的 Insights 站点密钥记录。",
+      "setup": "设置 Insights",
+      "open": "打开 Insights",
+      "standaloneTitle": "单独使用会话回放（不含组件）"
     }
   },
   "embedInstall": {
@@ -26801,6 +26887,40 @@
       "leaveTitle": "在 Studio 构建时离开？",
       "leaveMessage": "Studio 仍在处理你的请求。前往 Studio 首页会停止它；你的应用和已构建的内容都会保留在这个画布上。",
       "leaveConfirm": "仍然离开"
+    },
+    "proof": {
+      "title": "验证计分板",
+      "loading": "正在加载计分板…",
+      "loadFailed": "无法加载计分板。",
+      "killAtLeast": "仅当“{event}”在 {days} 天内的 {sample} 次抽样访问中至少发生 {target} 次时才去构建。",
+      "killAtMost": "仅当“{event}”在 {days} 天内的 {sample} 次抽样访问中不超过 {target} 时才去构建。",
+      "sample": "样本",
+      "sampleOf": "{n} / {min} 次访问",
+      "success": "成功",
+      "successOf": "{n} / {target}",
+      "daysLeft": "剩余 {days} 天",
+      "windowNotStarted": "窗口从第一次抽样访问开始计算。",
+      "windowClosed": "窗口已结束。",
+      "status": {
+        "collecting": "收集中",
+        "onTrack": "进展顺利",
+        "atRisk": "有风险",
+        "met": "已达成",
+        "missed": "未达成"
+      },
+      "watch": "观看未转化的访客",
+      "whyMissed": "未达成的原因",
+      "noPatterns": "尚无可引用的模式。",
+      "callEarly": "提前判定…",
+      "callEarlyTitle": "提前判定此验证",
+      "callEarlyBody": "结论将立即根据实测数据判定。请说明为何不等待完整样本——原因会被记录在案。",
+      "reasonLabel": "为什么现在判定？",
+      "reasonPlaceholder": "例如：流量来源已耗尽，不会再补充。",
+      "reasonRequired": "提前判定需要填写原因。",
+      "callEarlySubmit": "立即判定",
+      "calling": "正在判定…",
+      "callEarlyFailed": "无法记录判定，请重试。",
+      "readAgain": "带着所学重新解读"
     }
   },
   "canvasCommands": {
@@ -33844,6 +33964,358 @@
       "lastSeen": "{time}出现",
       "notRecorded": "未录制",
       "watchAria": "实时观看 {route} 上的访客"
+    },
+    "heat": {
+      "route": "页面",
+      "release": "版本",
+      "allReleases": "所有版本",
+      "releaseOrdinal": "R{ordinal}",
+      "compare": "对比版本",
+      "noCompare": "不对比",
+      "compareHint": "选择一个对比版本，即可并排查看或查看两者差异。",
+      "device": "设备",
+      "allDevices": "所有设备",
+      "layersAria": "热图图层",
+      "layers": {
+        "click": "点击",
+        "rage": "愤怒点击",
+        "dead": "无效点击",
+        "scroll": "滚动深度",
+        "areas": "区域"
+      },
+      "modesAria": "对比视图",
+      "modes": {
+        "single": "当前版本",
+        "side": "并排",
+        "difference": "差异"
+      },
+      "legendCold": "冷",
+      "legendHot": "热",
+      "legendAria": "色阶：从冷（交互少）到热（交互多）",
+      "legendLess": "少于对比版本",
+      "legendMore": "多于对比版本",
+      "legendDiffAria": "色阶：从少于对比版本的交互到多于对比版本的交互",
+      "overlayAria": "热图，共 {count} 个活跃单元格",
+      "exactTotal": "{count} 次交互，基于所有会话的精确统计",
+      "empty": "此时间段内该页面没有记录到交互。",
+      "error": "无法加载热图。",
+      "frameTitle": "{route} 的快照",
+      "pageLoading": "正在重建页面…",
+      "noBackground": "此时间段内没有保留的录制访问过该页面，因此热图在没有页面背景的情况下绘制。",
+      "pageError": "页面无法重建，因此热图在没有页面背景的情况下绘制。",
+      "sideCurrent": "当前版本：{release}",
+      "sideCompare": "对比版本：{release}",
+      "differenceCaption": "{release} 与 {compare} 对比",
+      "highlightAria": "高亮元素 {element}",
+      "playerToggle": "热图叠加",
+      "areas": {
+        "aria": "各元素的点击占比",
+        "share": "点击占比 {share}",
+        "zoneAria": "{element}：点击占比 {share}"
+      },
+      "elements": {
+        "title": "元素",
+        "element": "元素",
+        "clicks": "点击",
+        "rage": "愤怒",
+        "dead": "无效",
+        "delta": "相对对比版本的变化",
+        "none": "—",
+        "sortBy": "按 {column} 排序",
+        "empty": "此时间段内该页面没有元素被点击。",
+        "open": "回放",
+        "openAria": "观看点击了 {element} 的回放"
+      },
+      "scroll": {
+        "title": "滚动到达率",
+        "loading": "正在加载滚动深度…",
+        "error": "无法加载滚动深度。",
+        "empty": "此时间段内没有页面浏览报告滚动深度。",
+        "sessions": "{count} 次页面浏览报告了滚动深度",
+        "band": "{from}–{to}%",
+        "reachAria": "{share} 的页面浏览到达 {band}"
+      }
+    },
+    "heatInsight": {
+      "title": "热图发现",
+      "loading": "正在分析热图…",
+      "error": "无法加载发现。",
+      "empty": "该页面暂时没有突出的问题。",
+      "rage_spike": "“{label}”上的愤怒点击升至 {rage} 次，按流量调整后是对比版本（{compareRage} 次）的 {ratio} 倍。",
+      "dead_text": "“{label}”上有 {dead} 次无效点击：它是文本而非控件，但访客以为它能点。",
+      "buried_top_click": "点击最多的元素“{label}”（{clicks} 次点击）位于页面 {depth}% 深处，只有 {reach} 的访客能滚动到那里。",
+      "quickback_doubled": "该页面的快速返回从对比版本的 {compareQuickbacks} 次升至 {quickbacks} 次（按流量调整后为 {ratio} 倍）。",
+      "actions": {
+        "watch": "观看回放",
+        "copyLink": "复制链接"
+      },
+      "copied": "链接已复制，可粘贴到工单中。",
+      "copyFailed": "无法复制链接。"
+    },
+    "export": {
+      "button": "导出为视频",
+      "requesting": "正在请求…",
+      "cost": "将此回放渲染为视频。一次性消耗额度中的 10 条录制。",
+      "download": "下载视频",
+      "downloadFailed": "视频无法下载。",
+      "status": {
+        "queued": "已排队，即将开始渲染。",
+        "running": "正在渲染视频…",
+        "done": "视频已就绪。"
+      },
+      "error": {
+        "runner_unavailable": "目前无法导出视频：没有正在运行的渲染器。",
+        "insufficient_units": "额度中剩余的录制不足以导出视频（需要 10 条）。请在“套餐与用量”中购买资源包。",
+        "no_chunks": "此录制没有可渲染的存储数据。",
+        "dispatch_failed": "渲染器无法启动，请稍后重试。",
+        "timed_out": "渲染时间过长已被停止，请重试。",
+        "generic": "导出失败。"
+      }
+    },
+    "filter": {
+      "aria": "筛选",
+      "add": "添加筛选",
+      "full": "一个筛选最多包含 12 个条件。",
+      "fieldsAria": "筛选依据",
+      "clear": "清除筛选",
+      "remove": "移除 {clause}",
+      "editorAria": "按{field}筛选",
+      "opAria": "条件",
+      "valueAria": "值",
+      "apply": "应用",
+      "cancel": "取消",
+      "choose": "请选择…",
+      "field": {
+        "device": "设备",
+        "browser": "浏览器",
+        "os": "操作系统",
+        "country": "国家/地区",
+        "referrer": "来源",
+        "entryPath": "入口页面",
+        "exitPath": "退出页面",
+        "visitedPath": "访问过的页面",
+        "clickedSelector": "点击的元素",
+        "frustration": "挫败信号",
+        "durationMs": "时长",
+        "activeMs": "活跃时间",
+        "pageCount": "浏览页数",
+        "release": "版本",
+        "smartEvent": "智能事件",
+        "tag": "标签",
+        "converted": "已转化",
+        "variant": "测试变体",
+        "issue": "问题"
+      },
+      "op": {
+        "eq": "是",
+        "neq": "不是",
+        "in": "是以下任一",
+        "contains": "包含",
+        "prefix": "开头为",
+        "gte": "至少",
+        "lte": "至多"
+      },
+      "value": {
+        "desktop": "桌面端",
+        "tablet": "平板",
+        "phone": "手机",
+        "rage": "愤怒点击",
+        "dead": "无效点击",
+        "quickback": "快速返回",
+        "excessive_scroll": "过度滚动",
+        "error": "JavaScript 错误",
+        "true": "是",
+        "false": "否"
+      },
+      "placeholder": {
+        "list": "多个值，用逗号分隔",
+        "text": "值",
+        "tagKey": "标签名",
+        "tagValue": "标签值"
+      },
+      "unit": {
+        "seconds": "秒"
+      }
+    },
+    "segments": {
+      "button": "分群",
+      "aria": "已保存的分群",
+      "empty": "还没有保存的分群。先筛选视图，再在此保存。",
+      "applyAria": "应用分群 {name}",
+      "renameAria": "重命名分群 {name}",
+      "saveName": "保存",
+      "deleteAria": "删除分群 {name}",
+      "deleteTitle": "删除分群",
+      "deleteConfirm": "删除分群“{name}”？录制内容不受影响。",
+      "delete": "删除",
+      "namePlaceholder": "为此筛选命名",
+      "nameAria": "分群名称",
+      "save": "保存分群",
+      "saveNeedsFilter": "请先添加筛选。"
+    },
+    "overview": {
+      "approx": "≈ {value}",
+      "trafficAria": "流量",
+      "frustrationAria": "挫败信号",
+      "notInWeighted": "筛选视图下无法得知",
+      "frustrationOpen": "查看包含{label}的问题",
+      "ofSessions": "占会话比例",
+      "tile": {
+        "sessions": "会话",
+        "newVisitors": "新访客",
+        "pagesPerSession": "每次会话页数",
+        "activeTime": "平均活跃时间",
+        "scrollDepth": "平均滚动深度"
+      },
+      "frustration": {
+        "rage": "愤怒点击",
+        "dead": "无效点击",
+        "quickback": "快速返回",
+        "excessiveScroll": "过度滚动",
+        "error": "JavaScript 错误"
+      },
+      "top": {
+        "pages": "热门页面",
+        "entryPages": "入口页面",
+        "exitPages": "退出页面",
+        "referrers": "来源",
+        "countries": "国家/地区",
+        "devices": "设备",
+        "browsers": "浏览器",
+        "os": "操作系统"
+      },
+      "topEmpty": "暂无数据。",
+      "unknown": "未知",
+      "addFilterAria": "筛选{field}：{label}",
+      "estimatedNote": "已筛选：数字根据保留的录制估算（≈）。",
+      "trendTitle": "最近 {days} 天",
+      "trendSessionsAria": "每日会话数",
+      "trendFrustrated": "受挫会话",
+      "trendFrustratedAria": "每日受挫会话占比",
+      "breakdownsTitle": "细分"
+    },
+    "funnels": {
+      "choose": "漏斗",
+      "edit": "编辑",
+      "new": "新建漏斗",
+      "empty": "还没有漏斗。创建一个，看看访客在哪里流失。",
+      "editTitle": "编辑漏斗",
+      "newTitle": "新建漏斗",
+      "name": "名称",
+      "windowMinutes": "完成时限（分钟）",
+      "stepAria": "第 {n} 步",
+      "stepKindAria": "第 {n} 步类型",
+      "matchModeAria": "第 {n} 步匹配方式",
+      "matchAria": "第 {n} 步的值",
+      "stepKind": {
+        "page": "页面",
+        "click": "点击",
+        "event": "事件"
+      },
+      "matchPlaceholder": {
+        "page": "/pricing",
+        "click": "button.checkout",
+        "event": "signup"
+      },
+      "removeStep": "移除第 {n} 步",
+      "addStep": "添加步骤",
+      "save": "保存漏斗",
+      "cancel": "取消",
+      "delete": "删除漏斗",
+      "deleteTitle": "删除漏斗",
+      "deleteConfirm": "删除漏斗“{name}”？",
+      "approx": "≈ {value}",
+      "stepsAria": "{name} 的步骤",
+      "estimatedNote": "漏斗基于保留的录制计算，因此次数和时间均为估算（≈）。",
+      "truncated": "仅读取了最近的 20,000 条录制。",
+      "chartAria": "{name} 每一步的访问量",
+      "visits": "{value} 次访问",
+      "conversion": "较上一步 {value}",
+      "medianTime": "距上一步中位 {value}",
+      "watchDropped": "观看流失的 {count} 位访客",
+      "droppedGone": "这些录制已不再保留。"
+    },
+    "smartEvents": {
+      "new": "新建事件",
+      "empty": "还没有事件。",
+      "editorAria": "定义智能事件",
+      "name": "名称",
+      "namePlaceholder": "点击了定价页按钮",
+      "ruleKindLabel": "监测",
+      "ruleKind": {
+        "page": "页面浏览",
+        "click": "点击",
+        "custom": "命名事件"
+      },
+      "matchModeLabel": "匹配方式",
+      "matchMode": {
+        "equals": "完全等于",
+        "prefix": "开头为",
+        "contains": "包含"
+      },
+      "match": "值",
+      "matchPlaceholder": {
+        "page": "/pricing",
+        "click": "button.checkout",
+        "custom": "signup"
+      },
+      "save": "保存事件",
+      "cancel": "取消",
+      "delete": "删除",
+      "deleteTitle": "删除智能事件",
+      "deleteConfirm": "删除智能事件“{name}”？使用它的漏斗将不再匹配。",
+      "deleteAria": "删除 {name}",
+      "tableAria": "智能事件",
+      "col": {
+        "name": "事件",
+        "rule": "规则",
+        "count": "录制数，最近 {days} 天",
+        "actions": "操作"
+      },
+      "builtin": "内置",
+      "ruleSummary": "{kind} {mode} {match}",
+      "approx": "≈ {value}",
+      "filter": "筛选",
+      "filterAria": "筛选包含 {name} 的录制",
+      "defineFromClick": "根据此次点击定义事件",
+      "defineFromClickAria": "根据对 {label} 的点击定义事件",
+      "preview": {
+        "idle": "输入一个值，查看匹配的录制数量。",
+        "checking": "正在统计匹配的录制…",
+        "invalid": "该规则无效。",
+        "count": "最近 {days} 天约有 ≈ {value} 条录制匹配"
+      }
+    },
+    "summary": {
+      "title": "摘要",
+      "summarize": "生成摘要",
+      "regenerate": "重新生成摘要",
+      "loading": "正在生成摘要…",
+      "limit": "今日 AI 摘要次数已用完，请明天再试。",
+      "uncited": "无法为此写出有依据的摘要，请直接观看录制。",
+      "error": "无法生成摘要。",
+      "citeAria": "跳转到 {time}",
+      "segmentTitle": "这些访客做了什么",
+      "summarizeSegment": "总结这些录制",
+      "sampled": "基于 {count} 条录制的样本。",
+      "exampleAria": "观看 {time} 处的示例"
+    },
+    "ticket": {
+      "raise": "在 {time} 创建工单",
+      "title": "回放：{time} 的 {label}",
+      "body": "由访客录像创建：{route} 上 {time} 的“{label}”。",
+      "watchLink": "观看这一时刻",
+      "created": "工单已创建。",
+      "failed": "无法创建工单。",
+      "effect": {
+        "waiting": "{route} 上{metric}的效果：等待新版本获得 {visits} 次访问。",
+        "measured": "{route} 上{metric}的效果：{before} → {after}（新版本 {visits} 次访问）。",
+        "metric": {
+          "frustrated": "受挫访问",
+          "errors": "出错访问",
+          "conversions": "转化"
+        }
+      }
     }
   },
   "apps": {

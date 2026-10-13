@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DELIVERY_ACTIONS,
   NORTH_STAR_METRIC_KEY,
+  OUTCOME_DEFINITION_VERSION,
   OUTCOME_METRICS,
   OUTCOME_METRIC_FAMILIES,
   outcomeAggregateSql,
@@ -91,10 +92,20 @@ describe('outcome metric contract', () => {
     expect(query).toContain("e.phase = 'validated' AND e.action <> 'proof.grade'");
   });
 
-  it('counts only the three canonical delivery spellings as a real deliverable', () => {
-    // A fourth name (`website.publish`) used to be emitted by the canvas and
+  it('counts only the canonical delivery spellings as a real deliverable', () => {
+    // A stray name (`website.publish`) used to be emitted by the canvas and
     // never moved canvas.shipped. The list is the contract — do not add aliases.
-    expect([...DELIVERY_ACTIONS]).toEqual(['artifact.deliver', 'artifact.publish', 'workflow.execute']);
+    expect([...DELIVERY_ACTIONS]).toEqual(['artifact.deliver', 'artifact.publish', 'workflow.execute', 'prescription.verify']);
+  });
+
+  it('files the Insights fix verdict in the delivery family, under a bumped definition version', () => {
+    expect(DELIVERY_ACTIONS).toContain('prescription.verify');
+    expect(OUTCOME_DEFINITION_VERSION).toBe('2026.10-prescription-verify');
+    const query = sqlText(outcomeFactsSql(sql`SELECT id, tenant_id, created_at FROM creation_sessions`));
+    // Delivery counts read started/succeeded only; a `validated` verdict feeds the validation counts.
+    expect(query).toContain("e.phase = 'validated' AND e.action <> 'proof.grade'");
+    // Four bound actions (parameters render empty here, so three separators).
+    expect(query).toContain("e.action IN (, , , ) AND e.phase = 'succeeded'");
   });
 
   it('aggregates under the metric keys, so a rollup row needs no second mapping', () => {

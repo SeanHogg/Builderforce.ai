@@ -29,7 +29,7 @@ import { dailyTenantOutboundFetches } from '../web/outboundFetchLedger';
 import { dailyTenantCloudRuns } from '../runtime/cloudRunLedger';
 import { dailyTenantStageSandboxRuns } from '../marketplace/stageSandboxLedger';
 import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { utcMonthStart, utcNextMonthStart } from '../llm/tokenUsage';
 import { aiCreditBalance } from '../points/aiCredits';
 import { DAY_MS } from '../../domain/shared/time';
@@ -163,6 +163,23 @@ export function resolveMeterLimits(input: {
  * caller's entry — a superadmin's unlimited snapshot must not be served to a
  * capped member.
  */
+/** The snapshot's cache key for one tenant, month (`YYYY-MM`) and bucket. */
+export function consumptionSnapshotCacheKey(tenantId: number, monthKey: string, superadmin: boolean): string {
+  return `consumption-meter:v6:${tenantId}:${monthKey}:${superadmin ? 'sa' : 'plan'}`;
+}
+
+/**
+ * Drop this month's cached snapshots (both buckets) after a write the snapshot reads
+ * outside its own meters — e.g. `tenants.settings.replayExcluded`.
+ */
+export async function invalidateConsumptionSnapshot(env: Env | undefined, tenantId: number, now: Date = new Date()): Promise<void> {
+  const monthKey = utcMonthStart(now).toISOString().slice(0, 7);
+  await Promise.all([
+    invalidateCached(env, consumptionSnapshotCacheKey(tenantId, monthKey, false)),
+    invalidateCached(env, consumptionSnapshotCacheKey(tenantId, monthKey, true)),
+  ]);
+}
+
 export async function getConsumptionSnapshot(
   db: Db,
   env: Env,
@@ -175,7 +192,7 @@ export async function getConsumptionSnapshot(
   const isSuperadmin = await resolveSuperadminUnlimited(db, tenantId, { actingUserId }, env);
   return getOrSetCached(
     env,
-    `consumption-meter:v6:${tenantId}:${monthKey}:${isSuperadmin ? 'sa' : 'plan'}`,
+    consumptionSnapshotCacheKey(tenantId, monthKey, isSuperadmin),
     () => buildConsumptionSnapshot(db, tenantId, monthStart, monthEnd, env, { actingIsSuperadmin: isSuperadmin }),
     { kvTtlSeconds: 60, l1TtlMs: 30_000 },
   );

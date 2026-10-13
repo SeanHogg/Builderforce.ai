@@ -23,6 +23,7 @@ import { rollupCells, type VisitRollupState } from '../../domain/replay/interact
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { deferPastResponse } from '../shared/requestScope';
 import { bumpSiteVersionThrottled, firstEventKey } from './replayCacheKeys';
+import { bumpJourneySignal } from '../realization/journeySignal';
 import { decodeChunkBody, gzip, withinReplayIpBudget } from './replayIngestBody';
 import { keepChunk, type RecordingRow } from './replayRecordingWriter';
 import { sharedReplayRollupBuffer, type ReleaseSource, type ReplayRollupBuffer } from './replayRollupBuffer';
@@ -30,6 +31,7 @@ import { flushReplayRollups } from './replayRollupFlush';
 import { purgeStaleLive } from './replayRetention';
 import { resolveSiteForIngest, type ReplaySiteRecord } from './replaySites';
 import { recordReplayTrace, REPLAY_TRACE_VERBS } from './replayTrace';
+import { recordVariantConversion } from './replayAbConversion';
 
 const SOURCE = 'application/replay/ReplayIngestService.ts';
 const FIRST_EVENT_TTL_SECONDS = 365 * 24 * 60 * 60;
@@ -132,6 +134,8 @@ export class ReplayIngestService {
     const ref = { siteId: site.id, tenantId: site.tenantId };
     this.buffer.add(ref, utcDay(now), cells, { recordingId, at: now });
     this.buffer.noteRelease(ref, chunk.release, releaseSource(site, chunk.release), now);
+    // A prescription A/B arm (`data-variant`): its conversion, after the rollups, never throwing.
+    if (chunk.variant) await afterResponse(recordVariantConversion(this.env, this.db, site, chunk));
 
     await afterResponse(this.settle(site, now));
     return outcome;
@@ -159,6 +163,8 @@ export class ReplayIngestService {
           verb: REPLAY_TRACE_VERBS.ingestFirstEvent,
           summary: 'First visitor event received',
         });
+        // S4d: a proof's first visitor moves the founder from Make to Measure.
+        if (site.kind === 'hosted') await bumpJourneySignal(this.env, site.tenantId);
       }
       if (this.buffer.shouldFlush()) {
         await flushReplayRollups(this.env, this.db, this.buffer.drain(), (error, table) => {

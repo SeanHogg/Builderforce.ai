@@ -1,20 +1,21 @@
 /**
  * The `issue` panel kind: Overview (what, where, how many, since which
  * release, on which devices) and Recordings (the representatives first, then
- * every kept recording that visited the issue's route).
+ * every kept recording that hit the issue).
  *
- * The recordings filter is `visitedPath = issue.route`: the contract's filter
- * fields (PRD 33 §3.4) carry no issue-fingerprint clause, so the route is the
- * narrowest filter the list endpoint can apply today.
+ * The recordings filter is the `issue` clause (the issue group's fingerprint,
+ * PRD 33 §3.4) AND-ed onto the home's ONE filter, so the list honours whatever
+ * slice the reader is looking at; the segment summary sits above it.
  */
 
 import { useTranslations } from 'next-intl';
-import type { ReplayIssueDetailDto, ReplayFilter } from '@builderforce/interaction-contract';
+import { MAX_FILTER_CLAUSES, type ReplayIssueDetailDto, type ReplayFilter } from '@builderforce/interaction-contract';
 import { replayApi } from '@/lib/replayApi';
 import { useFormat } from '@/i18n/useFormat';
 import { StatTile, useAdminData } from '@/components/admin/adminShared';
 import { BarChart } from '@/components/charts/BarChart';
 import { RecordingsList } from '@/components/replay/RecordingsList';
+import { SegmentSummary } from '@/components/replay/SegmentSummary';
 import { useInsightsScope } from '../insightsScope';
 import type { InsightPanelKindProps } from '../panelKinds';
 import { PanelPending } from './PanelPending';
@@ -23,8 +24,11 @@ function useIssue(siteId: string, id: string, days: number) {
   return useAdminData<ReplayIssueDetailDto>(() => replayApi.getIssue(siteId, id, { days }), [siteId, id, days]);
 }
 
-export function issueRecordingsFilter(route: string): ReplayFilter {
-  return { all: [{ field: 'visitedPath', op: 'eq', value: route }] };
+/** The home's filter narrowed to recordings that hit the issue (its fingerprint). */
+export function issueRecordingsFilter(fingerprint: string, base: ReplayFilter = { all: [] }): ReplayFilter {
+  // The issue clause always wins a slot: a home filter already at the cap gives up its last clause.
+  const rest = base.all.filter((clause) => clause.field !== 'issue').slice(0, MAX_FILTER_CLAUSES - 1);
+  return { all: [...rest, { field: 'issue', op: 'eq', value: fingerprint }] };
 }
 
 export function IssueOverviewTab({ siteId, id }: InsightPanelKindProps) {
@@ -69,10 +73,11 @@ export function IssueOverviewTab({ siteId, id }: InsightPanelKindProps) {
 export function IssueRecordingsTab({ siteId, id, push }: InsightPanelKindProps) {
   const t = useTranslations('insights.issues');
   const fmt = useFormat();
-  const { days } = useInsightsScope();
+  const { days, filter } = useInsightsScope();
   const { data, loading, error } = useIssue(siteId, id, days);
   if (!data) return <PanelPending loading={loading} error={error} />;
   const open = (recordingId: string) => push({ kind: 'recording', id: recordingId, tab: 'replay' });
+  const recordingsFilter = issueRecordingsFilter(data.fingerprint, filter);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', minWidth: 0 }}>
@@ -98,9 +103,16 @@ export function IssueRecordingsTab({ siteId, id, push }: InsightPanelKindProps) 
       )}
       <section>
         <h3 style={{ margin: '0 0 var(--space-2)', fontSize: 'var(--font-size-small)', overflowWrap: 'anywhere' }}>
-          {t('recordingsOnRoute', { route: data.route })}
+          {t('recordingsOfIssue', { route: data.route })}
         </h3>
-        <RecordingsList siteId={siteId} days={days} filter={issueRecordingsFilter(data.route)} onOpen={open} />
+        <SegmentSummary
+          key={JSON.stringify(recordingsFilter)}
+          siteId={siteId}
+          days={days}
+          filter={recordingsFilter}
+          onOpenRecording={(recordingId, seconds) => push({ kind: 'recording', id: recordingId, tab: 'replay', t: seconds })}
+        />
+        <RecordingsList siteId={siteId} days={days} filter={recordingsFilter} onOpen={open} />
       </section>
     </div>
   );

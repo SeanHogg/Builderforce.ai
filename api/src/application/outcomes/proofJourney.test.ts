@@ -117,4 +117,28 @@ describe('shapeProofJourney', () => {
     const journey = shapeProofJourney('session-1', events);
     expect(journey.verdict.stalledAt).toBe('not_reachable');
   });
+
+  it('chains a re-read attempt to the graded proof it learned from (priorGrade.realizationId)', () => {
+    seq = 0;
+    const events = [
+      event({ action: 'idea.read', phase: 'succeeded', correlationId: 'read:r1', metadata: { recommendations: [{ key: 'smoke-test', score: 0.9, recommended: true }] } }),
+      event({ action: 'proof.choose', phase: 'succeeded', correlationId: 'choose:real-1', metadata: { targetKey: 'smoke-test' } }),
+      event({ action: 'proof.build', phase: 'succeeded', correlationId: 'build:real-1', metadata: { reachable: true } }),
+      event({ action: 'proof.grade', phase: 'validated', correlationId: 'grade:real-1', metricValue: 0 }),
+      event({
+        action: 'idea.read', phase: 'succeeded', correlationId: 'read:r2',
+        metadata: {
+          recommendations: [{ key: 'clickable-prototype', score: 0.8, recommended: true }],
+          priorGrade: { realizationId: 'real-1', targetKey: 'smoke-test', verdict: 'missed', rule: 'missed_with_sample' },
+        },
+      }),
+      event({ action: 'proof.choose', phase: 'succeeded', correlationId: 'choose:real-2', metadata: { targetKey: 'clickable-prototype' } }),
+    ];
+    const journey = shapeProofJourney('session-1', events);
+    expect(journey.attempts.map((a) => [a.realizationId, a.priorRealizationId])).toEqual([
+      ['real-1', null],
+      ['real-2', 'real-1'],
+    ]);
+    expect(journey.attempts[1]!.chosenWasTopRecommended).toBe(true);
+  });
 });

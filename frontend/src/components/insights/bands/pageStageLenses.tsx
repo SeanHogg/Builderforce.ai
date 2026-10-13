@@ -1,11 +1,15 @@
 /**
  * PAGE_STAGE_LENSES — what the Page stage can show for its route (PRD 33 §4.1:
- * Heat · Stuck · Fixes · Live). Live ships now; S4 adds `heat`, S4c `stuck`,
- * S4e `fixes`, each as a row here.
+ * Heat · Stuck · Fixes · Live). `heat` (click · scroll · areas) and `stuck`
+ * (rage · dead) are the one `HeatmapView` with a layer subset; S4e adds
+ * `fixes` as a row here.
  */
 
 import type { ComponentType } from 'react';
 import { LiveView } from '@/components/replay/LiveView';
+import { HeatmapView } from '@/components/replay/heatmap/HeatmapView';
+import type { HeatLayerId } from '@/components/replay/heatmap/heatLayers';
+import { useInsightsScope } from '../insightsScope';
 import { usePanel } from '../usePanel';
 
 export interface PageStageLensProps {
@@ -32,6 +36,18 @@ function LiveLens({ siteId, route }: PageStageLensProps) {
   );
 }
 
+/** A heat lens is the compact `HeatmapView` over a subset of layers; the key remounts it per route. */
+function heatLens(layers: readonly HeatLayerId[]): ComponentType<PageStageLensProps> {
+  function HeatLens({ siteId, route }: PageStageLensProps) {
+    const { days } = useInsightsScope();
+    const { push } = usePanel();
+    return <HeatmapView key={route} compact siteId={siteId} route={route} days={days} layers={layers} push={push} />;
+  }
+  return HeatLens;
+}
+
 export const PAGE_STAGE_LENSES: ReadonlyArray<PageStageLens> = [
+  { id: 'heat', labelKey: 'heat', Component: heatLens(['click', 'scroll', 'areas']) },
+  { id: 'stuck', labelKey: 'stuck', Component: heatLens(['rage', 'dead']) },
   { id: 'live', labelKey: 'live', Component: LiveLens },
 ];

@@ -16,6 +16,7 @@ import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { useOperateReading } from './hooks/useOperateReading';
 import { useCounterBrainDockSide } from './hooks/useCounterBrainDockSide';
 import { useCanvasSessionFacts } from './chrome/canvasSessionContext';
+import { ProjectProofScoreboard } from './ProjectProofScoreboard';
 import type { CreationFlowNode } from './CreationNode';
 import styles from './CreationCanvas.module.css';
 
@@ -114,7 +115,11 @@ export function CanvasVisitorsSurface({ nodes, onExit }: CanvasVisitorsSurfacePr
       aria-label={t('regionLabel')}
       onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); onExit(); } }}
     >
-      <div className={styles.insightsSurfaceBody}>{body}</div>
+      <div className={styles.insightsSurfaceBody}>
+        {/* A proof app is recorded with no install (D12): its scoreboard leads, whatever the licence state. */}
+        {projectId !== null && <ProjectProofScoreboard projectId={projectId} />}
+        {body}
+      </div>
     </section>
   );
 }

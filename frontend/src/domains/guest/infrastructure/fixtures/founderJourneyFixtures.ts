@@ -8,12 +8,21 @@
  * is the honest, correct answer for a visitor who has not raised anything, and
  * it is what puts the journey on Idea rather than Run. Adding a sample company
  * would flip that by accident, so its absence is load-bearing, not a gap.
+ *
+ * The journey signal (PRD 33 §5.3.5) answers "no signal" for the same reason: the
+ * sample's proofs are a story about reading an idea, and a sample proof "being
+ * measured" would put a visitor on Measure with no site behind it.
  */
 
 import { SAMPLE_IDEA_SESSION } from '../../domain/sampleWorkspace';
 import { dayOffsetToIso, exact, type GuestFixture } from '../../domain/guestFixture';
 
 export const founderJourneyFixtures: GuestFixture[] = [
+  {
+    id: 'realizations.journeySignal',
+    match: exact('/api/realizations/journey-signal'),
+    respond: () => ({ stage: null, realizationId: null }),
+  },
   {
     id: 'creationSessions.list',
     match: exact('/api/creation-sessions'),

@@ -73,6 +73,8 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
     { id: 'releaseNotes', subKey: 'releaseNotes', icon: '📣' },
     { id: 'broadcasts', subKey: 'broadcasts', icon: '📢' },
     { id: 'visitors', subKey: 'visitors', icon: '🧭' },
+    // Insights operations (PRD 33 D17): aggregates, per-workspace switches, audited grants.
+    { id: 'insights-ops', subKey: 'insightsOps', icon: '◎' },
     { id: 'salesLeads', subKey: 'salesLeads', icon: '📇' },
     { id: 'sales-commissions', subKey: 'salesCommissions', icon: '％' },
   ] },

@@ -40,6 +40,7 @@ export const FILTER_FIELD_IDS = [
   'tag',
   'converted',
   'variant',
+  'issue',
 ] as const;
 
 export type FilterFieldId = (typeof FILTER_FIELD_IDS)[number];
@@ -77,6 +78,8 @@ export const FILTER_FIELDS: readonly FilterFieldSpec[] = [
   { id: 'tag', ops: ['eq', 'neq'], valueKind: 'keyValue' },
   { id: 'converted', ops: ['eq'], valueKind: 'boolean' },
   { id: 'variant', ops: LIST_OPS, valueKind: 'string' },
+  /** An issue group's fingerprint (`replay_issues.fingerprint`) — "recordings that hit this issue". */
+  { id: 'issue', ops: ['eq'], valueKind: 'string' },
 ];
 
 export const FILTER_FIELD_BY_ID: ReadonlyMap<FilterFieldId, FilterFieldSpec> = new Map(
@@ -248,4 +251,22 @@ export function filterFromQuery(params: URLSearchParams | string): ReplayFilter 
     if (clause) all.push(clause);
   });
   return { all };
+}
+
+/**
+ * A copy of `params` carrying `filter` in place of whatever filter it held:
+ * every `f.` param is dropped, the filter's own params appended, and every
+ * other param (site, days, panel) kept. The ONE way a surface writes the
+ * filter into an address without touching the rest of it.
+ */
+export function withFilterQuery(params: URLSearchParams | string, filter: ReplayFilter): URLSearchParams {
+  const source = typeof params === 'string'
+    ? new URLSearchParams(params.startsWith('?') ? params.slice(1) : params)
+    : params;
+  const next = new URLSearchParams();
+  source.forEach((value, key) => {
+    if (!key.startsWith(PARAM_PREFIX)) next.append(key, value);
+  });
+  filterToQuery(filter).forEach((value, key) => next.append(key, value));
+  return next;
 }

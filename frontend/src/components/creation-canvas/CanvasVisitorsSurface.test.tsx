@@ -25,6 +25,9 @@ vi.mock('./chrome/canvasSessionContext', () => ({ useCanvasSessionFacts: () => (
 const reading = vi.hoisted(() => ({ current: { app: { nodeId: 'n1', title: 'Shop', projectId: 42 } as null | { nodeId: string; title: string; projectId: number | null } } }));
 vi.mock('./hooks/useOperateReading', () => ({ useOperateReading: () => reading.current }));
 
+// The proof scoreboard has its own tests (ProofScoreboard.test.tsx); here it is inert.
+vi.mock('./ProjectProofScoreboard', () => ({ ProjectProofScoreboard: () => null }));
+
 // The manager gate is RoleGate's own concern (tested there); these tests run as a manager.
 vi.mock('@/components/RoleGate', () => ({ RoleGate: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 

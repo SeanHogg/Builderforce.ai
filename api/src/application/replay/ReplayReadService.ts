@@ -28,7 +28,7 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { NotFoundError } from '../../domain/shared/errors';
 import { isUuid, type ReplayScope } from '../../domain/replay/replayScope';
 import { bumpSiteVersion, replayReadKeys } from './replayCacheKeys';
-import { getChunk, getMarks } from './replayChunkStore';
+import { getChunk, getMarks, listChunkSeqs } from './replayChunkStore';
 import { replayTelemetryDb } from './replayDatabase';
 import {
   afterRecordingCursor,
@@ -38,12 +38,12 @@ import {
   encodeRecordingCursor,
   filterCacheKey,
   RECORDINGS_PAGE,
-  recordingFilterWhere,
   toRecordingDto,
   toRecordingSummary,
 } from './replayReadModel';
 import { recordingLocation, type RecordingRow } from './replayRecordingWriter';
 import { readIssue, readIssues, readKpis } from './replayRollupReads';
+import { compileScopeFilter } from './replaySmartEventRules';
 
 const LIST_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 const ROLLUP_TTL = { kvTtlSeconds: 300, l1TtlMs: 30_000 };
@@ -56,11 +56,11 @@ const LABEL_MAX = 80;
 export class ReplayReadService {
   private readonly store: Db;
 
-  constructor(private readonly env: Env, db: Db, private readonly clock: () => Date = () => new Date()) {
+  constructor(private readonly env: Env, private readonly db: Db, private readonly clock: () => Date = () => new Date()) {
     this.store = replayTelemetryDb(env, db);
   }
 
-  /** Kept recordings, newest first, 50 per page (keyset on started_at, id). */
+  /** Kept recordings matching the filter (THE compiler), newest first, 50 per page (keyset on started_at, id). */
   async listRecordings(
     scope: ReplayScope,
     input: { days?: number; cursor?: string | null; filter?: ReplayFilter | null; limit?: number } = {},
@@ -72,6 +72,7 @@ export class ReplayReadService {
     const key = keys.recordings(days, cursor ? `${input.cursor}~${limit}` : `~${limit}`, filterCacheKey(input.filter));
     return getOrSetCached(this.env, key, async () => {
       const since = new Date(this.clock().getTime() - days * 86_400_000);
+      const { where: filterWhere } = await compileScopeFilter(this.env, this.db, scope, input.filter);
       const rows = await this.store
         .select()
         .from(replayRecordings)
@@ -80,7 +81,7 @@ export class ReplayReadService {
           eq(replayRecordings.siteId, scope.siteId),
           gte(replayRecordings.startedAt, since),
           afterRecordingCursor(cursor),
-          recordingFilterWhere(input.filter),
+          filterWhere,
         ))
         .orderBy(desc(replayRecordings.startedAt), desc(replayRecordings.id))
         .limit(limit + 1);
@@ -108,12 +109,16 @@ export class ReplayReadService {
     return row;
   }
 
-  /** One recording with its timeline (`marks.json`). 404 outside the scope. */
+  /** One recording with its timeline (`marks.json`) and its stored chunk seqs. 404 outside the scope. */
   async getRecording(scope: ReplayScope, recordingId: string): Promise<ReplayRecordingDto> {
     const keys = await replayReadKeys(this.env, scope);
     return getOrSetCached(this.env, keys.recording(recordingId), async () => {
       const row = await this.row(scope, recordingId);
-      return toRecordingDto(row, await getMarks(this.env, recordingLocation(row)));
+      const loc = recordingLocation(row);
+      // Both reads inside the cached read: the seqs say which chunks exist (a
+      // trigger-kept recording starts mid-visit, above seq 0).
+      const [marks, chunkSeqs] = await Promise.all([getMarks(this.env, loc), listChunkSeqs(this.env, loc)]);
+      return toRecordingDto(row, marks, chunkSeqs);
     }, LIST_TTL);
   }
 

@@ -2826,7 +2826,20 @@
       "link": "Vincular a",
       "linkNone": "Sin vínculo",
       "linkProjects": "Proyectos",
-      "linkInitiatives": "Iniciativas"
+      "linkInitiatives": "Iniciativas",
+      "band": {
+        "aria": "Embudo",
+        "none": "Aún no hay embudo.",
+        "create": "Crear un embudo",
+        "openAria": "Abrir el embudo en {step}",
+        "approx": "≈ {value}",
+        "conversion": "{value} convirtieron"
+      },
+      "tabs": {
+        "steps": "Pasos",
+        "events": "Eventos",
+        "flow": "Flujo"
+      }
     },
     "alloc": {
       "title": "Asignación de inversión",
@@ -3594,7 +3607,7 @@
       },
       "representatives": "Grabaciones representativas",
       "repAria": "Abrir grabación representativa {rank}",
-      "recordingsOnRoute": "Grabaciones que visitaron {route}"
+      "recordingsOfIssue": "Grabaciones que tuvieron este problema en {route}"
     },
     "panel": {
       "crumbRoot": "Insights",
@@ -3625,7 +3638,9 @@
       }
     },
     "lenses": {
-      "live": "En vivo"
+      "live": "En vivo",
+      "heat": "Calor",
+      "stuck": "Atascos"
     },
     "journey": {
       "steps": "{count, plural, one {# página} other {# páginas}}",
@@ -3665,6 +3680,13 @@
       "packsTitle": "Comprar grabaciones",
       "receipts": "Pagos y recibos",
       "checkoutReturned": "Gracias. Tus créditos aparecerán aquí en cuanto se confirme el pago."
+    },
+    "route": {
+      "kind": "Página",
+      "tabs": {
+        "heat": "Calor"
+      },
+      "openAria": "Abrir la página {route}"
     }
   },
   "cloudAgentForm": {
@@ -14354,7 +14376,8 @@
       "broadcasts": "Comunicados",
       "llmRatings": "Valoraciones",
       "visitorFlow": "Flujo de visitantes",
-      "visitors": "Visitantes"
+      "visitors": "Visitantes",
+      "insightsOps": "Operaciones de Insights"
     },
     "common": {
       "loading": "Cargando…",
@@ -15508,6 +15531,62 @@
         },
         "noteWarn": "Por encima del 80 %: el barrido de mantenimiento nocturno ya purga todas las tablas de registro comprimibles con una ventana más corta y recupera espacio de inmediato en lugar de esperar a la reescritura semanal.",
         "noteCritical": "Por encima del 90 %: todas las tablas de registro comprimibles se purgan con su ventana declarada más corta. Las ventanas de cumplimiento y facturación nunca se acortan."
+      }
+    },
+    "insightsOps": {
+      "title": "Operaciones de Insights",
+      "subtitle": "Totales de la plataforma para Insights, más la configuración de grabación y las concesiones de créditos de un espacio de trabajo. Aquí no se muestran sitios, visitantes ni grabaciones.",
+      "navLink": "Operaciones de Insights",
+      "summary": {
+        "aria": "Totales de la plataforma Insights",
+        "sessions7d": "Sesiones (7 días)",
+        "keptRecordings7d": "Grabaciones conservadas (7 días)",
+        "bytes7d": "Almacenado (7 días)",
+        "sites": "Sitios",
+        "tenants": "Espacios de trabajo",
+        "packRevenue30d": "Ingresos por paquetes (30 días)"
+      },
+      "workspace": {
+        "title": "Espacio de trabajo",
+        "label": "Espacio de trabajo",
+        "empty": "Todavía no hay espacios de trabajo."
+      },
+      "settings": {
+        "title": "Configuración de grabación",
+        "excluded": "Excluir de la grabación en builderforce.ai",
+        "excludedHint": "Los miembros de este espacio de trabajo nunca se graban mientras tienen la sesión iniciada en builderforce.ai.",
+        "override": "Grabaciones gratuitas al mes",
+        "overrideHint": "Sustituye la asignación del catálogo para este espacio de trabajo. Pon 0 para probar una compra real de paquete. Déjalo vacío para usar el valor predeterminado.",
+        "overridePlaceholder": "Valor del catálogo",
+        "clear": "Borrar",
+        "save": "Guardar configuración",
+        "saving": "Guardando…",
+        "saved": "Guardado. El cambio queda auditado.",
+        "invalidOverride": "Introduce un número entero de 0 o más, o déjalo vacío."
+      },
+      "grant": {
+        "title": "Conceder créditos de grabación",
+        "hint": "La concesión se anota en el registro de auditoría antes de acreditarse.",
+        "units": "Grabaciones",
+        "reason": "Motivo",
+        "reasonPlaceholder": "Por qué este espacio de trabajo recibe estas grabaciones",
+        "submit": "Conceder créditos",
+        "granting": "Concediendo…",
+        "invalid": "Introduce entre 1 y {max} grabaciones y un motivo de al menos 3 caracteres.",
+        "confirmTitle": "¿Conceder créditos de grabación?",
+        "confirmMessage": "¿Conceder {units} grabaciones a {tenant}? Queda auditado y no se puede deshacer desde aquí.",
+        "confirmLabel": "Conceder",
+        "done": "Se concedieron {units} grabaciones. El espacio de trabajo tiene ahora {credits} créditos. Referencia: {reference}"
+      },
+      "methodFunnel": {
+        "title": "Sembrar el embudo «El método»",
+        "hint": "Crea los cuatro eventos inteligentes del método y el embudo desde la página de inicio hasta una prueba calificada en el sitio de Insights de Builderforce. Se puede ejecutar dos veces sin riesgo.",
+        "siteLabel": "ID del sitio de Insights de Builderforce",
+        "invalid": "Introduce un ID de sitio (un UUID).",
+        "submit": "Sembrar el embudo",
+        "seeding": "Sembrando…",
+        "done": "Sembrado: se crearon {events} eventos inteligentes.",
+        "already": "Ya estaba sembrado: no hay nada que crear."
       }
     }
   },
@@ -19510,7 +19589,7 @@
     },
     "install": {
       "title": "One script, every capability",
-      "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host."
+      "description": "Instálalo una vez en el sitio del cliente. Los cambios de widgets se aplican en la siguiente carga de página sin volver a desplegar el sitio. Los mapas de calor y la grabación de sesiones solo arrancan cuando la etiqueta lleva también la clave de tu sitio de Insights (data-site); se añade aquí en cuanto el espacio de trabajo tiene un sitio de Insights."
     },
     "consent": {
       "title": "Consent log",
@@ -19542,7 +19621,7 @@
       },
       "heatmaps": {
         "name": "Heatmaps",
-        "description": "Measure click locations and scroll depth to understand real customer behavior.",
+        "description": "Mapas de clics, clics de frustración, clics muertos y desplazamiento a partir de la grabación de sesiones de Insights. Registran en cuanto el script de instalación lleva la clave de tu sitio de Insights.",
         "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps."
       },
       "feature_management": {
@@ -19644,6 +19723,13 @@
         "title": "Pon tu idea dentro del producto de tus clientes",
         "body": "Crea un espacio de trabajo gratuito para obtener tu clave de integración, activa las capacidades que quieras y publícalas hoy mismo en tu sitio."
       }
+    },
+    "insights": {
+      "needsSite": "Necesita un sitio de Insights: activar esto por sí solo no registra nada.",
+      "siteReady": "Registrando con la clave de tu sitio de Insights.",
+      "setup": "Configurar Insights",
+      "open": "Abrir Insights",
+      "standaloneTitle": "Solo grabación de sesiones (sin widgets)"
     }
   },
   "embedInstall": {
@@ -26801,6 +26887,40 @@
       "leaveTitle": "¿Salir mientras Studio está construyendo?",
       "leaveMessage": "Studio sigue trabajando en tu solicitud. Ir al inicio de Studio la detiene; tu app y todo lo construido hasta ahora se quedan en este lienzo.",
       "leaveConfirm": "Salir de todos modos"
+    },
+    "proof": {
+      "title": "Marcador de la prueba",
+      "loading": "Cargando el marcador…",
+      "loadFailed": "No se pudo cargar el marcador.",
+      "killAtLeast": "Constrúyelo solo si «{event}» ocurre al menos {target} veces entre {sample} visitas de muestra en {days} días.",
+      "killAtMost": "Constrúyelo solo si «{event}» se mantiene en {target} o menos entre {sample} visitas de muestra en {days} días.",
+      "sample": "Muestra",
+      "sampleOf": "{n} de {min} visitas",
+      "success": "Éxito",
+      "successOf": "{n} de {target}",
+      "daysLeft": "Quedan {days} días",
+      "windowNotStarted": "La ventana empieza con la primera visita de muestra.",
+      "windowClosed": "La ventana se ha cerrado.",
+      "status": {
+        "collecting": "Recopilando",
+        "onTrack": "En camino",
+        "atRisk": "En riesgo",
+        "met": "Cumplida",
+        "missed": "No cumplida"
+      },
+      "watch": "Ver a los visitantes que no convirtieron",
+      "whyMissed": "Por qué no se cumplió",
+      "noPatterns": "Aún no hay patrones citados.",
+      "callEarly": "Decidir antes…",
+      "callEarlyTitle": "Decidir esta prueba antes de tiempo",
+      "callEarlyBody": "El veredicto se decide ahora, con las cifras medidas. Explica por qué no esperas a la muestra completa: el motivo queda registrado.",
+      "reasonLabel": "¿Por qué decidir ahora?",
+      "reasonPlaceholder": "Por ejemplo: la fuente de tráfico se ha agotado y no se repondrá.",
+      "reasonRequired": "Decidir antes requiere un motivo por escrito.",
+      "callEarlySubmit": "Decidir ahora",
+      "calling": "Decidiendo…",
+      "callEarlyFailed": "No se pudo registrar la decisión. Inténtalo de nuevo.",
+      "readAgain": "Leer de nuevo con lo aprendido"
     }
   },
   "canvasCommands": {
@@ -33844,6 +33964,358 @@
       "lastSeen": "visto {time}",
       "notRecorded": "No grabado",
       "watchAria": "Ver en vivo al visitante en {route}"
+    },
+    "heat": {
+      "route": "Página",
+      "release": "Versión",
+      "allReleases": "Todas las versiones",
+      "releaseOrdinal": "R{ordinal}",
+      "compare": "Comparar con",
+      "noCompare": "Sin comparación",
+      "compareHint": "Elige una versión para comparar y verlas lado a lado o como diferencia.",
+      "device": "Dispositivo",
+      "allDevices": "Todos los dispositivos",
+      "layersAria": "Capa de calor",
+      "layers": {
+        "click": "Clics",
+        "rage": "Clics de frustración",
+        "dead": "Clics muertos",
+        "scroll": "Profundidad de desplazamiento",
+        "areas": "Áreas"
+      },
+      "modesAria": "Vista de comparación",
+      "modes": {
+        "single": "Esta versión",
+        "side": "Lado a lado",
+        "difference": "Diferencia"
+      },
+      "legendCold": "frío",
+      "legendHot": "caliente",
+      "legendAria": "Escala de color de frío (pocas interacciones) a caliente (muchas)",
+      "legendLess": "menos que la comparada",
+      "legendMore": "más que la comparada",
+      "legendDiffAria": "Escala de color de menos interacciones que la versión comparada a más",
+      "overlayAria": "Mapa de calor con {count} celdas activas",
+      "exactTotal": "{count} interacciones, exactas sobre todas las sesiones",
+      "empty": "No se registraron interacciones en esta página en este periodo.",
+      "error": "No se pudo cargar el mapa de calor.",
+      "frameTitle": "Instantánea de {route}",
+      "pageLoading": "Reconstruyendo la página…",
+      "noBackground": "Ninguna grabación conservada visitó esta página en este periodo, así que el calor se dibuja sin la página detrás.",
+      "pageError": "No se pudo reconstruir la página, así que el calor se dibuja sin ella.",
+      "sideCurrent": "Esta versión: {release}",
+      "sideCompare": "Comparada: {release}",
+      "differenceCaption": "{release} comparada con {compare}",
+      "highlightAria": "Elemento resaltado {element}",
+      "playerToggle": "Capa de calor",
+      "areas": {
+        "aria": "Proporción de clics por elemento",
+        "share": "{share} de los clics",
+        "zoneAria": "{element}: {share} de los clics"
+      },
+      "elements": {
+        "title": "Elementos",
+        "element": "Elemento",
+        "clicks": "Clics",
+        "rage": "Frustración",
+        "dead": "Muertos",
+        "delta": "Cambio frente a la comparada",
+        "none": "—",
+        "sortBy": "Ordenar por {column}",
+        "empty": "No se hizo clic en ningún elemento de esta página en este periodo.",
+        "open": "Grabaciones",
+        "openAria": "Ver grabaciones que hicieron clic en {element}"
+      },
+      "scroll": {
+        "title": "Alcance del desplazamiento",
+        "loading": "Cargando la profundidad de desplazamiento…",
+        "error": "No se pudo cargar la profundidad de desplazamiento.",
+        "empty": "Ninguna vista de página informó una profundidad de desplazamiento en este periodo.",
+        "sessions": "{count} vistas de página informaron una profundidad de desplazamiento",
+        "band": "{from}–{to} %",
+        "reachAria": "El {share} de las vistas de página llega a {band}"
+      }
+    },
+    "heatInsight": {
+      "title": "Lo que dice el calor",
+      "loading": "Leyendo el calor…",
+      "error": "No se pudieron cargar los hallazgos.",
+      "empty": "Nada destaca en esta página por ahora.",
+      "rage_spike": "Los clics de frustración en «{label}» subieron a {rage}, {ratio}× la versión comparada ({compareRage}) tras ajustar por tráfico.",
+      "dead_text": "{dead} clics muertos en «{label}»: es texto, no un control, pero los visitantes esperan que haga algo.",
+      "buried_top_click": "El elemento más pulsado, «{label}» ({clicks} clics), está al {depth} % de la página, y solo el {reach} de los visitantes llega hasta allí.",
+      "quickback_doubled": "Las vueltas atrás rápidas en esta página subieron a {quickbacks} desde {compareQuickbacks} en la versión comparada ({ratio}× tras ajustar por tráfico).",
+      "actions": {
+        "watch": "Ver grabaciones",
+        "copyLink": "Copiar enlace"
+      },
+      "copied": "Enlace copiado. Pégalo en el ticket.",
+      "copyFailed": "No se pudo copiar el enlace."
+    },
+    "export": {
+      "button": "Exportar como vídeo",
+      "requesting": "Solicitando…",
+      "cost": "Convierte esta grabación en un vídeo. Cuesta 10 grabaciones de tu cupo, una sola vez.",
+      "download": "Descargar vídeo",
+      "downloadFailed": "No se pudo descargar el vídeo.",
+      "status": {
+        "queued": "En cola. El renderizado empieza en breve.",
+        "running": "Renderizando el vídeo…",
+        "done": "El vídeo está listo."
+      },
+      "error": {
+        "runner_unavailable": "La exportación de vídeo no está disponible ahora mismo: no hay ningún renderizador en marcha.",
+        "insufficient_units": "No quedan suficientes grabaciones en tu cupo para un vídeo (cuesta 10). Compra un paquete en Plan y uso.",
+        "no_chunks": "Esta grabación no tiene datos almacenados que renderizar.",
+        "dispatch_failed": "No se pudo iniciar el renderizador. Inténtalo de nuevo en breve.",
+        "timed_out": "El renderizado tardó demasiado y se detuvo. Inténtalo de nuevo.",
+        "generic": "La exportación falló."
+      }
+    },
+    "filter": {
+      "aria": "Filtro",
+      "add": "Añadir filtro",
+      "full": "Un filtro admite como máximo 12 condiciones.",
+      "fieldsAria": "Filtrar por",
+      "clear": "Quitar filtros",
+      "remove": "Quitar {clause}",
+      "editorAria": "Filtrar por {field}",
+      "opAria": "Condición",
+      "valueAria": "Valor",
+      "apply": "Aplicar",
+      "cancel": "Cancelar",
+      "choose": "Elegir…",
+      "field": {
+        "device": "Dispositivo",
+        "browser": "Navegador",
+        "os": "Sistema operativo",
+        "country": "País",
+        "referrer": "Origen",
+        "entryPath": "Página de entrada",
+        "exitPath": "Página de salida",
+        "visitedPath": "Página visitada",
+        "clickedSelector": "Elemento pulsado",
+        "frustration": "Señal de frustración",
+        "durationMs": "Duración",
+        "activeMs": "Tiempo activo",
+        "pageCount": "Páginas vistas",
+        "release": "Versión",
+        "smartEvent": "Evento inteligente",
+        "tag": "Etiqueta",
+        "converted": "Convertida",
+        "variant": "Variante de prueba",
+        "issue": "Problema"
+      },
+      "op": {
+        "eq": "es",
+        "neq": "no es",
+        "in": "es alguno de",
+        "contains": "contiene",
+        "prefix": "empieza por",
+        "gte": "al menos",
+        "lte": "como máximo"
+      },
+      "value": {
+        "desktop": "Escritorio",
+        "tablet": "Tableta",
+        "phone": "Móvil",
+        "rage": "Clic de rabia",
+        "dead": "Clic muerto",
+        "quickback": "Vuelta rápida",
+        "excessive_scroll": "Desplazamiento excesivo",
+        "error": "Error de JavaScript",
+        "true": "Sí",
+        "false": "No"
+      },
+      "placeholder": {
+        "list": "Valores separados por comas",
+        "text": "Valor",
+        "tagKey": "Nombre de la etiqueta",
+        "tagValue": "Valor de la etiqueta"
+      },
+      "unit": {
+        "seconds": "s"
+      }
+    },
+    "segments": {
+      "button": "Segmentos",
+      "aria": "Segmentos guardados",
+      "empty": "Aún no hay segmentos guardados. Filtra la vista y guárdala aquí.",
+      "applyAria": "Aplicar el segmento {name}",
+      "renameAria": "Cambiar el nombre del segmento {name}",
+      "saveName": "Guardar",
+      "deleteAria": "Eliminar el segmento {name}",
+      "deleteTitle": "Eliminar segmento",
+      "deleteConfirm": "¿Eliminar el segmento «{name}»? Las grabaciones no se ven afectadas.",
+      "delete": "Eliminar",
+      "namePlaceholder": "Pon nombre a este filtro",
+      "nameAria": "Nombre del segmento",
+      "save": "Guardar segmento",
+      "saveNeedsFilter": "Añade antes un filtro."
+    },
+    "overview": {
+      "approx": "≈ {value}",
+      "trafficAria": "Tráfico",
+      "frustrationAria": "Señales de frustración",
+      "notInWeighted": "No se conoce en una vista filtrada",
+      "frustrationOpen": "Ver los problemas con {label}",
+      "ofSessions": "de las sesiones",
+      "tile": {
+        "sessions": "Sesiones",
+        "newVisitors": "Visitantes nuevos",
+        "pagesPerSession": "Páginas por sesión",
+        "activeTime": "Tiempo activo medio",
+        "scrollDepth": "Profundidad de desplazamiento media"
+      },
+      "frustration": {
+        "rage": "Clics de rabia",
+        "dead": "Clics muertos",
+        "quickback": "Vueltas rápidas",
+        "excessiveScroll": "Desplazamiento excesivo",
+        "error": "Errores de JavaScript"
+      },
+      "top": {
+        "pages": "Páginas principales",
+        "entryPages": "Páginas de entrada",
+        "exitPages": "Páginas de salida",
+        "referrers": "Orígenes",
+        "countries": "Países",
+        "devices": "Dispositivos",
+        "browsers": "Navegadores",
+        "os": "Sistemas operativos"
+      },
+      "topEmpty": "Nada todavía.",
+      "unknown": "Desconocido",
+      "addFilterAria": "Filtrar {field}: {label}",
+      "estimatedNote": "Filtrado: las cifras se estiman a partir de las grabaciones conservadas (≈).",
+      "trendTitle": "Últimos {days} días",
+      "trendSessionsAria": "Sesiones por día",
+      "trendFrustrated": "Sesiones frustradas",
+      "trendFrustratedAria": "Proporción de sesiones frustradas por día",
+      "breakdownsTitle": "Desgloses"
+    },
+    "funnels": {
+      "choose": "Embudo",
+      "edit": "Editar",
+      "new": "Nuevo embudo",
+      "empty": "Aún no hay embudos. Crea uno para ver dónde abandonan los visitantes.",
+      "editTitle": "Editar embudo",
+      "newTitle": "Nuevo embudo",
+      "name": "Nombre",
+      "windowMinutes": "Completar en (minutos)",
+      "stepAria": "Paso {n}",
+      "stepKindAria": "Tipo del paso {n}",
+      "matchModeAria": "Coincidencia del paso {n}",
+      "matchAria": "Valor del paso {n}",
+      "stepKind": {
+        "page": "Página",
+        "click": "Clic",
+        "event": "Evento"
+      },
+      "matchPlaceholder": {
+        "page": "/pricing",
+        "click": "button.checkout",
+        "event": "signup"
+      },
+      "removeStep": "Quitar el paso {n}",
+      "addStep": "Añadir paso",
+      "save": "Guardar embudo",
+      "cancel": "Cancelar",
+      "delete": "Eliminar embudo",
+      "deleteTitle": "Eliminar embudo",
+      "deleteConfirm": "¿Eliminar el embudo «{name}»?",
+      "approx": "≈ {value}",
+      "stepsAria": "Pasos de {name}",
+      "estimatedNote": "Los embudos se calculan con las grabaciones conservadas, así que los recuentos y tiempos son estimaciones (≈).",
+      "truncated": "Solo se leyeron las 20.000 grabaciones más recientes.",
+      "chartAria": "Visitas por paso de {name}",
+      "visits": "{value} visitas",
+      "conversion": "{value} desde el paso anterior",
+      "medianTime": "mediana de {value} desde el paso anterior",
+      "watchDropped": "Ver a los {count} que abandonaron",
+      "droppedGone": "Estas grabaciones ya no se conservan."
+    },
+    "smartEvents": {
+      "new": "Nuevo evento",
+      "empty": "Aún no hay eventos.",
+      "editorAria": "Definir un evento inteligente",
+      "name": "Nombre",
+      "namePlaceholder": "Pulsó el botón de precios",
+      "ruleKindLabel": "Detectar",
+      "ruleKind": {
+        "page": "Una vista de página",
+        "click": "Un clic",
+        "custom": "Un evento con nombre"
+      },
+      "matchModeLabel": "Coincidencia",
+      "matchMode": {
+        "equals": "es exactamente",
+        "prefix": "empieza por",
+        "contains": "contiene"
+      },
+      "match": "Valor",
+      "matchPlaceholder": {
+        "page": "/pricing",
+        "click": "button.checkout",
+        "custom": "signup"
+      },
+      "save": "Guardar evento",
+      "cancel": "Cancelar",
+      "delete": "Eliminar",
+      "deleteTitle": "Eliminar evento inteligente",
+      "deleteConfirm": "¿Eliminar el evento inteligente «{name}»? Los embudos que lo usan dejarán de coincidir.",
+      "deleteAria": "Eliminar {name}",
+      "tableAria": "Eventos inteligentes",
+      "col": {
+        "name": "Evento",
+        "rule": "Regla",
+        "count": "Grabaciones, últimos {days} días",
+        "actions": "Acciones"
+      },
+      "builtin": "Integrado",
+      "ruleSummary": "{kind} {mode} {match}",
+      "approx": "≈ {value}",
+      "filter": "Filtrar",
+      "filterAria": "Filtrar las grabaciones con {name}",
+      "defineFromClick": "Definir un evento a partir de este clic",
+      "defineFromClickAria": "Definir un evento a partir del clic en {label}",
+      "preview": {
+        "idle": "Escribe un valor para ver cuántas grabaciones coinciden.",
+        "checking": "Contando las grabaciones que coinciden…",
+        "invalid": "Esa regla no es válida.",
+        "count": "≈ {value} grabaciones coinciden en los últimos {days} días"
+      }
+    },
+    "summary": {
+      "title": "Resumen",
+      "summarize": "Resumir",
+      "regenerate": "Resumir de nuevo",
+      "loading": "Resumiendo…",
+      "limit": "Se ha alcanzado el límite diario de resúmenes con IA. Vuelve a intentarlo mañana.",
+      "uncited": "No se pudo escribir un resumen fundamentado. Mira la grabación.",
+      "error": "No se pudo crear el resumen.",
+      "citeAria": "Ir a {time}",
+      "segmentTitle": "Qué hicieron estos visitantes",
+      "summarizeSegment": "Resumir estas grabaciones",
+      "sampled": "A partir de una muestra de {count} grabaciones.",
+      "exampleAria": "Ver el ejemplo en {time}"
+    },
+    "ticket": {
+      "raise": "Crear un ticket en {time}",
+      "title": "Repetición: {label} en {time}",
+      "body": "Creado desde una grabación de visitante: «{label}» en {time} en {route}.",
+      "watchLink": "Ver este momento",
+      "created": "Ticket creado.",
+      "failed": "No se pudo crear el ticket.",
+      "effect": {
+        "waiting": "Efecto en {metric} en {route}: esperando {visits} visitas en una versión más nueva.",
+        "measured": "Efecto en {metric} en {route}: {before} → {after} ({visits} visitas en la nueva versión).",
+        "metric": {
+          "frustrated": "visitas frustradas",
+          "errors": "visitas con errores",
+          "conversions": "conversiones"
+        }
+      }
     }
   },
   "apps": {

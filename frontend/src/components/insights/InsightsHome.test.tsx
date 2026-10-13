@@ -1,14 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import type { ReplayIssueDto, ReplayKpisDto, ReplayLiveDto } from '@builderforce/interaction-contract';
+import type { ReplayFunnelDto, ReplayIssueDto, ReplayKpisDto, ReplayLiveDto, ReplayOverviewDto } from '@builderforce/interaction-contract';
 import { replayApi } from '@/lib/replayApi';
 import { InsightsHome } from './InsightsHome';
 import { HOME_BANDS, homeGridTemplate } from './homeBands';
 
 /**
  * The ONE Insights home (PRD 33 D16): every registered band renders over the
- * typed client, a row opens the `issue` kind, `?panel=` opens on load, and the
- * desktop grid is the no-scroll 38 / 34 / 28 layout.
+ * typed client, every band reads the ONE filter, a row opens the `issue` kind,
+ * a KPI tile the `metric` kind, `?panel=` opens on load, and the desktop grid
+ * is the no-scroll 38 / 34 / 28 layout.
  * Copy is the passthrough key under the global next-intl mock.
  */
 
@@ -16,6 +17,9 @@ vi.mock('@/components/insights/kinds/SitesKind', () => ({ SitesKind: () => <div>
 vi.mock('@/components/insights/kinds/PlanKind', () => ({ PlanKind: () => <div>plan-kind</div> }));
 vi.mock('@/components/replay/ReplayPlayer', () => ({
   ReplayPlayer: ({ recordingId }: { recordingId: string }) => <div>player {recordingId}</div>,
+}));
+vi.mock('@/components/replay/heatmap/HeatmapView', () => ({
+  HeatmapView: ({ route, layers }: { route: string; layers: string[] }) => <div>heatmap {route} {layers.join(',')}</div>,
 }));
 
 const issue = (over: Partial<ReplayIssueDto> = {}): ReplayIssueDto => ({
@@ -62,9 +66,45 @@ const live: ReplayLiveDto = {
   ],
 };
 
+const funnel: ReplayFunnelDto = {
+  id: 'fun-1',
+  name: 'Checkout',
+  windowMinutes: 60,
+  steps: [
+    { ord: 0, stepKind: 'page', match: '/pricing', matchMode: 'equals', label: '/pricing' },
+    { ord: 1, stepKind: 'event', match: 'purchase', matchMode: 'equals', label: 'purchase' },
+  ],
+};
+
+const overview: ReplayOverviewDto = {
+  days: 30,
+  sessions: 1200,
+  newVisitors: 900,
+  pagesPerSession: 3.3,
+  avgActiveMs: 40_000,
+  avgScrollDepthPct: 60,
+  frustration: { rage: 0.05, dead: 0.01, quickback: 0, excessiveScroll: 0, error: 0.02 },
+  trend: [],
+  top: { pages: [], entryPages: [], exitPages: [], referrers: [], countries: [], devices: [], browsers: [], os: [] },
+  estimated: false,
+};
+
 beforeEach(() => {
   window.history.replaceState({}, '', '/apps/insights');
   vi.spyOn(replayApi, 'listReleases').mockResolvedValue([]);
+  vi.spyOn(replayApi, 'filterOptions').mockResolvedValue([]);
+  vi.spyOn(replayApi, 'listSegments').mockResolvedValue([]);
+  vi.spyOn(replayApi, 'listFunnels').mockResolvedValue([funnel]);
+  vi.spyOn(replayApi, 'evaluateFunnel').mockResolvedValue({
+    funnelId: 'fun-1',
+    steps: [
+      { ord: 0, label: '/pricing', visits: 200, conversionFromPrevPct: null, medianTimeFromPrevMs: null, droppedRecordingIds: [] },
+      { ord: 1, label: 'purchase', visits: 50, conversionFromPrevPct: 25, medianTimeFromPrevMs: 60_000, droppedRecordingIds: [] },
+    ],
+    truncated: false,
+    estimated: true,
+  });
+  vi.spyOn(replayApi, 'getOverview').mockResolvedValue(overview);
   vi.spyOn(replayApi, 'getKpis').mockResolvedValue(kpis);
   vi.spyOn(replayApi, 'listIssues').mockResolvedValue({
     items: [issue(), issue({ id: 'iss-2', title: 'JS error on checkout', route: '/checkout', kind: 'error' })],
@@ -95,9 +135,11 @@ describe('InsightsHome', () => {
     // Issues, ranked rows.
     expect(await screen.findByText('Rage clicks on Buy')).toBeInTheDocument();
     expect(screen.getByText('JS error on checkout')).toBeInTheDocument();
-    // The Page stage takes the first issue's route and its Live lens.
-    expect(await screen.findByRole('heading', { name: '/pricing' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'insights.lenses.live' })).toHaveAttribute('aria-selected', 'true');
+    // The Page stage takes the first issue's route and opens on its Heat lens.
+    expect(await screen.findByRole('button', { name: 'insights.route.openAria /pricing' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'insights.lenses.heat' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByText('heatmap /pricing click,scroll,areas')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'insights.lenses.live' }));
     expect(await screen.findByText(/replay\.live\.active/)).toBeInTheDocument();
     // Do next waits for S4e, honestly.
     expect(screen.getByText('insights.overview.doNextEmpty')).toBeInTheDocument();
@@ -131,12 +173,42 @@ describe('InsightsHome', () => {
     expect(new URLSearchParams(window.location.search).get('panel')).toBe('issue:iss-1:overview');
   });
 
-  it('opens the issues kind from the sessions tile', async () => {
+  it('opens the metric kind from a KPI tile', async () => {
     render(<InsightsHome siteId="site-1" />);
     await screen.findByText('1,200');
     fireEvent.click(screen.getByRole('button', { name: 'insights.kpi.openAria insights.kpi.sessions' }));
     const panel = await screen.findByRole('dialog');
-    expect(within(panel).getByText('insights.kinds.issues')).toBeInTheDocument();
+    expect(within(panel).getByText('insights.kinds.metric')).toBeInTheDocument();
+    expect(await within(panel).findByText('replay.overview.tile.newVisitors')).toBeInTheDocument();
+    expect(replayApi.getOverview).toHaveBeenCalledWith('site-1', { days: 30, filter: { all: [] } });
+    expect(new URLSearchParams(window.location.search).get('panel')).toBe('metric:sessions');
+  });
+
+  it('hands every band the ONE filter, and the filter bar changes it for all of them', async () => {
+    window.history.replaceState({}, '', '/apps/insights?f.device.eq=phone');
+    render(<InsightsHome siteId="site-1" />);
+    const phones = { all: [{ field: 'device', op: 'eq', value: 'phone' }] };
+    await screen.findByText('1,200');
+    await vi.waitFor(() => expect(replayApi.evaluateFunnel).toHaveBeenCalled());
+    expect(replayApi.getKpis).toHaveBeenCalledWith('site-1', expect.objectContaining({ filter: phones }));
+    expect(replayApi.listIssues).toHaveBeenCalledWith('site-1', expect.objectContaining({ filter: phones }));
+    expect(replayApi.evaluateFunnel).toHaveBeenCalledWith('site-1', 'fun-1', expect.objectContaining({ filter: phones }));
+    // The header's query bar shows it, and removing the chip re-reads every band unfiltered.
+    fireEvent.click(screen.getByRole('button', { name: /replay\.filter\.remove/ }));
+    await vi.waitFor(() => expect(replayApi.getKpis).toHaveBeenLastCalledWith('site-1', expect.objectContaining({ filter: { all: [] } })));
+    expect(replayApi.listIssues).toHaveBeenLastCalledWith('site-1', expect.objectContaining({ filter: { all: [] } }));
+    await vi.waitFor(() => expect(replayApi.evaluateFunnel).toHaveBeenLastCalledWith('site-1', 'fun-1', expect.objectContaining({ filter: { all: [] } })));
+    expect(new URLSearchParams(window.location.search).has('f.device.eq')).toBe(false);
+  });
+
+  it('opens the funnel kind from the funnel band', async () => {
+    render(<InsightsHome siteId="site-1" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'insights.funnel.band.openAria purchase' }));
+    const panel = await screen.findByRole('dialog');
+    expect(within(panel).getByText('insights.kinds.funnel')).toBeInTheDocument();
+    expect(within(panel).getByRole('tab', { name: 'insights.funnel.tabs.steps' })).toHaveAttribute('aria-selected', 'true');
+    expect(within(panel).getByRole('tab', { name: 'insights.funnel.tabs.events' })).toBeInTheDocument();
+    expect(within(panel).getByRole('tab', { name: 'insights.funnel.tabs.flow' })).toBeInTheDocument();
   });
 
   it('opens ?panel=issues on load', async () => {
@@ -182,10 +254,12 @@ describe('InsightsHome', () => {
     }
   });
 
-  it('leaves no grid row for an area with no band (the funnel arrives in S4c)', () => {
+  it('gives the funnel band its own full-width row, and leaves none for an area with no band', () => {
     const template = homeGridTemplate(HOME_BANDS);
-    expect(template.areas).not.toContain('funnel');
+    expect(template.areas).toContain('"funnel funnel funnel"');
     expect(template.areas).toContain('"issues stage next"');
-    expect(template.rows.split(' minmax')[0]!.split(' ').filter(Boolean)).toEqual(['auto', 'auto', 'auto']);
+    expect(template.rows.split(' minmax')[0]!.split(' ').filter(Boolean)).toEqual(['auto', 'auto', 'auto', 'auto']);
+    const withoutFunnel = homeGridTemplate(HOME_BANDS.filter((band) => band.area !== 'funnel'));
+    expect(withoutFunnel.areas).not.toContain('funnel');
   });
 });

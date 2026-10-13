@@ -7,8 +7,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 
-const mocks = vi.hoisted(() => ({ getMarks: vi.fn(async () => [{ kind: 'page', key: '/', atMs: 0 }]), getChunk: vi.fn() }));
-vi.mock('./replayChunkStore', () => ({ getMarks: mocks.getMarks, getChunk: mocks.getChunk }));
+const mocks = vi.hoisted(() => ({
+  getMarks: vi.fn(async () => [{ kind: 'page', key: '/', atMs: 0 }]),
+  getChunk: vi.fn(),
+  listChunkSeqs: vi.fn(async () => [3, 4]),
+}));
+vi.mock('./replayChunkStore', () => ({ getMarks: mocks.getMarks, getChunk: mocks.getChunk, listChunkSeqs: mocks.listChunkSeqs }));
 
 import { ReplayReadService } from './ReplayReadService';
 import { encodeRecordingCursor } from './replayReadModel';
@@ -52,6 +56,7 @@ const rendered = (cond: SQL) => dialect.sqlToQuery(cond);
 let service: (db: never) => ReplayReadService;
 beforeEach(() => {
   mocks.getMarks.mockClear();
+  mocks.listChunkSeqs.mockClear();
   service = (db) => new ReplayReadService({} as never, db, () => NOW);
 });
 
@@ -87,7 +92,7 @@ describe('listRecordings', () => {
     expect(params).toContain(recording(49).id);
   });
 
-  it('compiles the S1 filter subset into the same statement', async () => {
+  it('compiles the filter (THE compiler) into the same statement', async () => {
     const { db, wheres } = fakeDb([]);
     await service(db).listRecordings(SCOPE, { filter: { all: [{ field: 'device', op: 'eq', value: 'phone' }, { field: 'durationMs', op: 'gte', value: 5_000 }] } });
     const { params } = rendered(wheres[0]!);
@@ -102,6 +107,10 @@ describe('getRecording', () => {
     const dto = await service(db).getRecording(SCOPE, row.id);
     expect(dto.marks).toEqual([{ kind: 'page', key: '/', atMs: 0 }]);
     expect(dto.viewport).toEqual({ w: 390, h: 844 });
+    // A trigger-kept recording starts mid-visit: the stored seqs, not 0..chunkCount-1.
+    expect(dto.chunkSeqs).toEqual([3, 4]);
+    expect(dto.chunkCount).toBe(2);
+    expect(mocks.listChunkSeqs).toHaveBeenCalledTimes(1);
     const { params } = rendered(wheres[0]!);
     expect(params).toEqual(expect.arrayContaining([7, SITE, row.id]));
   });

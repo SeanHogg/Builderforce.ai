@@ -47,6 +47,35 @@ describe('resolveIdentity', () => {
     expect(resolveIdentity('bfr', seen + VISIT_IDLE_MS + 1).visitId).not.toBe(first);
   });
 
+  it('reads a bf_ visitor the product minted within this visit as new', () => {
+    const t0 = 1_700_000_000_000;
+    // `frontend/src/lib/visitor.ts` minted the id moments before the recorder loaded.
+    window.localStorage.setItem('bf_visitor_id', 'productVisitor123');
+    window.localStorage.setItem('bf_visitor_minted_at', String(t0));
+    const identity = resolveIdentity('bf', t0 + 2_000);
+    expect(identity.visitorId).toBe('productVisitor123');
+    expect(identity.newVisitor).toBe(true);
+    expect(storageKeys('bf').minted).toBe('bf_visitor_minted_at');
+  });
+
+  it('reads a bf_ visitor minted before this visit, or with no mint time, as returning', () => {
+    const t0 = 1_700_000_000_000;
+    window.localStorage.setItem('bf_visitor_id', 'productVisitor123');
+    expect(resolveIdentity('bf', t0).newVisitor).toBe(false);
+
+    window.localStorage.setItem('bf_visitor_minted_at', String(t0));
+    expect(resolveIdentity('bf', t0 + VISIT_IDLE_MS + 1).newVisitor).toBe(false);
+
+    window.localStorage.setItem('bf_visitor_minted_at', 'garbage');
+    expect(resolveIdentity('bf', t0).newVisitor).toBe(false);
+  });
+
+  it('never reads the bf_ mint time for a customer site', () => {
+    window.localStorage.setItem('bfr_visitor_id', 'customerVisitor1');
+    window.localStorage.setItem('bf_visitor_minted_at', String(5_000));
+    expect(resolveIdentity('bfr', 6_000).newVisitor).toBe(false);
+  });
+
   it('reuses the product visit on builderforce.ai', () => {
     window.localStorage.setItem('bf_visit_id', 'productVisit123');
     window.localStorage.setItem('bf_visit_last_seen', String(5_000));

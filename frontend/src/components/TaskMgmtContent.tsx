@@ -1,4 +1,5 @@
 import { Icon } from '@/components/ui/Icon';
+import { stripReplayMomentTrailer } from '@builderforce/interaction-contract';
 import { ModalOverlay } from '@/components/ui/ModalOverlay';
 import type { Formatter } from '@/i18n/format';
 import { Select } from '@/components/Select';
@@ -2428,7 +2429,7 @@ export function TaskMgmtContent({
                     }}
                   >
                     {drawerTask.description
-                      ? <ChatMessageContent content={drawerTask.description} />
+                      ? <ChatMessageContent content={stripReplayMomentTrailer(drawerTask.description)} />
                       : tTask('addDescription')}
                   </div>
                 )}

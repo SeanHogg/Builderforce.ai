@@ -2181,6 +2181,30 @@ export const replayPrescriptions = pgTable('replay_prescriptions', {
   index('idx_replay_prescriptions_site').on(t.siteId, t.status, t.updatedAt),
 ]);
 
+/**
+ * An MP4/WebM render of one kept recording (S4b, migration 1220), produced by the QA
+ * runner's `replay_export` job. `recordingId` is a plain id into the operational
+ * `replay_recordings`. Written only by `application/replay/replayVideoExport.ts`.
+ */
+export const replayExports = pgTable('replay_exports', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  siteId:      uuid('site_id').notNull().references(() => replaySites.id, { onDelete: 'cascade' }),
+  recordingId: uuid('recording_id').notNull(),
+  /** `ReplayExportStatus`: queued | running | done | failed | unavailable. */
+  status:      varchar('status', { length: 16 }).notNull().default('queued'),
+  /** `mp4` | `webm`, once done. */
+  format:      varchar('format', { length: 8 }),
+  r2Key:       text('r2_key'),
+  error:       varchar('error', { length: 400 }),
+  requestedBy: varchar('requested_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_replay_exports_recording').on(t.tenantId, t.siteId, t.recordingId, t.createdAt),
+  index('idx_replay_exports_created').on(t.createdAt),
+]);
+
 // LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0015), resolved through
 // `buildTransactionalDatabase()` / `siblingDatabase(env, db, 'operational')` — replay
 // telemetry is written while visitors browse, beside the usage ledger. `site_id` is a

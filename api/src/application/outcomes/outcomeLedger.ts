@@ -34,7 +34,8 @@ import { OUTCOME_PHASES, type OutcomePhase } from './outcomeMetricContract';
 
 /** Metadata larger than this is dropped rather than stored: the ledger is a
  *  measurement record, not a place to park a payload. */
-const MAX_METADATA_CHARS = 4_000;
+export const OUTCOME_METADATA_MAX_CHARS = 4_000;
+const MAX_METADATA_CHARS = OUTCOME_METADATA_MAX_CHARS;
 
 export interface OutcomeEventInput {
   /** Ties `started` to its terminal. Stable across retries of the same action. */

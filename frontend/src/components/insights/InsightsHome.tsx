@@ -7,12 +7,12 @@
  * Owns the scope (window, goal, filter, release compare, Page-stage route)
  * through `InsightsScopeProvider`, and lays out `HOME_BANDS` on the grid
  * `homeGridTemplate` derives from them. The filter starts from the address
- * (`?f.visitedPath.eq=/pricing` from Admin's Flow view), so links can arrive filtered.
+ * (`?f.visitedPath.eq=/pricing` from Admin's Flow view) and the address follows
+ * it, so links arrive filtered and a filtered view is a link.
  */
 
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { EMPTY_REPLAY_FILTER, filterFromQuery } from '@builderforce/interaction-contract';
 import { InsightsScopeProvider } from './insightsScope';
 import { InsightsPanelProvider } from './usePanel';
 import { InsightsPanel } from './InsightsPanel';
@@ -77,12 +77,9 @@ function HomeGrid() {
 }
 
 export function InsightsHome({ siteId, panelSide = 'right' }: InsightsHomeProps): React.JSX.Element {
-  const initialFilter = useMemo(
-    () => (typeof window === 'undefined' ? EMPTY_REPLAY_FILTER : filterFromQuery(new URLSearchParams(window.location.search))),
-    [],
-  );
+  // The scope reads its filter from the address and keeps the two in sync (`useReplayFilterState`).
   return (
-    <InsightsScopeProvider key={siteId} siteId={siteId} initialFilter={initialFilter}>
+    <InsightsScopeProvider key={siteId} siteId={siteId}>
       <InsightsPanelProvider>
         <HomeGrid />
         <InsightsPanel siteId={siteId} side={panelSide} />

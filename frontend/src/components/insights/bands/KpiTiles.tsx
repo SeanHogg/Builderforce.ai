@@ -1,8 +1,9 @@
 /**
  * Numbers band (PRD 33 §4.1): six headline tiles over the window, each the
  * shared `StatTile` with a sparkline from `kpis.trend`. The tiles are the
- * `KPI_TILES` registry; a tile that opens a panel kind names it in `opens`
- * (only sessions → issues today; the `metric` kind arrives with S4c).
+ * `KPI_TILES` registry; a tile that opens a panel kind names it in `opens` —
+ * every measured tile opens the `metric` kind (the Overview dashboard, S4c),
+ * its level id naming the tile.
  * Choosing a release to compare adds that release's value as the hint.
  */
 
@@ -36,17 +37,18 @@ const LCP_POOR_MS = 4000;
 const LCP_NEEDS_WORK_MS = 2500;
 
 export const KPI_TILES: ReadonlyArray<KpiTileDef> = [
-  { id: 'sessions', labelKey: 'sessions', value: (k, fmt) => fmt.number(k.sessions), trend: (k) => k.trend.map((d) => d.sessions), opens: 'issues' },
-  { id: 'conversion', labelKey: 'conversion', value: (k, fmt) => fmt.percent(k.conversionRate, 1), trend: (k) => k.trend.map((d) => d.conversions) },
+  { id: 'sessions', labelKey: 'sessions', value: (k, fmt) => fmt.number(k.sessions), trend: (k) => k.trend.map((d) => d.sessions), opens: 'metric' },
+  { id: 'conversion', labelKey: 'conversion', value: (k, fmt) => fmt.percent(k.conversionRate, 1), trend: (k) => k.trend.map((d) => d.conversions), opens: 'metric' },
   {
     id: 'frustrated', labelKey: 'frustrated', value: (k, fmt) => fmt.number(k.frustratedSessions),
-    trend: (k) => k.trend.map((d) => d.frustrated), tone: (k) => (k.frustratedSessions > 0 ? 'warning' : undefined),
+    trend: (k) => k.trend.map((d) => d.frustrated), tone: (k) => (k.frustratedSessions > 0 ? 'warning' : undefined), opens: 'metric',
   },
-  { id: 'errors', labelKey: 'errorsPer1k', value: (k, fmt) => fmt.number(k.errorsPer1k, { maximumFractionDigits: 1 }), tone: (k) => (k.errorsPer1k > 0 ? 'error' : undefined) },
+  { id: 'errors', labelKey: 'errorsPer1k', value: (k, fmt) => fmt.number(k.errorsPer1k, { maximumFractionDigits: 1 }), tone: (k) => (k.errorsPer1k > 0 ? 'error' : undefined), opens: 'metric' },
   {
     id: 'lcp', labelKey: 'lcp',
     value: (k, fmt, t) => (k.lcpP75 == null ? '—' : t('seconds', { value: fmt.number(k.lcpP75 / 1000, { maximumFractionDigits: 1 }) })),
     tone: (k) => (k.lcpP75 == null ? undefined : k.lcpP75 > LCP_POOR_MS ? 'error' : k.lcpP75 > LCP_NEEDS_WORK_MS ? 'warning' : 'success'),
+    opens: 'metric',
   },
   { id: 'score', labelKey: 'score', value: () => '—', hintKey: 'scorePending' },
 ];
@@ -88,7 +90,7 @@ export function KpiTiles() {
             key={tile.id}
             type="button"
             aria-label={t('openAria', { label })}
-            onClick={() => push({ kind: opens, id: '' })}
+            onClick={() => push({ kind: opens, id: tile.id })}
             style={{ display: 'flex', padding: 0, border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', color: 'inherit', minWidth: 0 }}
           >
             {body}

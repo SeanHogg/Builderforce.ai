@@ -77,6 +77,31 @@ export interface ReplayReadKeys {
   issue(issueId: string, days: number): string;
   /** Live is bucketed to 5 s in the key itself, since KV cannot hold a sub-minute TTL. */
   live(bucket: number): string;
+  /** A heatmap read (`grid`, `elements`, `scroll`, `routes`, `snapshot`, `insights`); free-text parts are URI-encoded. */
+  heat(what: string, parts: ReadonlyArray<string | number | null>): string;
+  /** An MP4 export's status, bucketed to 5 s like live. */
+  exportStatus(exportId: string, bucket: number): string;
+  /** S4c analysis reads. `filterKey` is `filterCacheKey(filter)` ('' for none). */
+  segments(): string;
+  filterOptions(field: string, days: number): string;
+  overview(days: number, filterKey: string): string;
+  smartEventRules(): string;
+  smartEvents(days: number): string;
+  smartEventPreview(ruleKey: string, days: number): string;
+  funnels(): string;
+  funnelEval(funnelId: string, days: number, filterKey: string): string;
+  flow(days: number, filterKey: string): string;
+  segmentSummary(days: number, filterKey: string): string;
+  /** S4d: a proof's measured counts. `measureKey` hashes the measure and the proof's start. */
+  proofMeasure(realizationId: string, measureKey: string): string;
+  /** S4d: a ticket's before/after on its route (`ticketEffect.ts`). */
+  ticketEffect(taskId: number, momentKey: string): string;
+  /** S4e: the `SiteAggregates` the prescription rules read (`prescriptionAggregates.ts`). */
+  prescriptionAggregates(days: number): string;
+  /** S4e: the ranked prescription list (`area`/`status` '' for all). */
+  prescriptions(area: string, status: string, filterKey: string): string;
+  /** S4e: the improvement ledger of one release. */
+  releaseReport(releaseKey: string): string;
 }
 
 export async function replayReadKeys(env: Env, scope: ReplayScope): Promise<ReplayReadKeys> {
@@ -90,6 +115,23 @@ export async function replayReadKeys(env: Env, scope: ReplayScope): Promise<Repl
     issues: (days, status, cursor) => k('issues', days, status ?? '-', cursor ?? '-'),
     issue: (issueId, days) => k('issue', issueId, days),
     live: (bucket) => k('live', bucket),
+    heat: (what, parts) => k(`heat-${what}`, ...parts.map((part) => (part === null ? '-' : encodeURIComponent(String(part))))),
+    exportStatus: (exportId, bucket) => k('export', exportId, bucket),
+    segments: () => k('segments'),
+    filterOptions: (field, days) => k('filter-options', field, days),
+    overview: (days, filterKey) => k('overview', days, filterKey || '-'),
+    smartEventRules: () => k('smart-event-rules'),
+    smartEvents: (days) => k('smart-events', days),
+    smartEventPreview: (ruleKey, days) => k('smart-event-preview', ruleKey, days),
+    funnels: () => k('funnels'),
+    funnelEval: (funnelId, days, filterKey) => k('funnel-eval', funnelId, days, filterKey || '-'),
+    flow: (days, filterKey) => k('flow', days, filterKey || '-'),
+    segmentSummary: (days, filterKey) => k('segment-summary', days, filterKey || '-'),
+    proofMeasure: (realizationId, measureKey) => k('proof-measure', realizationId, measureKey),
+    ticketEffect: (taskId, momentKey) => k('ticket-effect', taskId, momentKey),
+    prescriptionAggregates: (days) => k('rx-aggregates', days),
+    prescriptions: (area, status, filterKey) => k('rx-list', area || '-', status || '-', filterKey || '-'),
+    releaseReport: (releaseKey) => k('rx-release', encodeURIComponent(releaseKey)),
   };
 }
 
@@ -140,3 +182,35 @@ export const MANIFEST_CACHE_KEY = 'replay:manifest';
 
 /** Per-tenant entitlement verdict at ingest. */
 export const entitlementKey = (tenantId: number): string => `replay:entitled:t${tenantId}`;
+
+/**
+ * `tenants.settings.replayFreeAllowanceOverride` (D8), read by `replayUsage.ts` and
+ * dropped by the operator's settings write (`replayTenantSettings.ts`).
+ */
+export const allowanceOverrideKey = (tenantId: number): string => `replay:allowance-override:t${tenantId}`;
+
+/** Per-tenant, per-UTC-day count of AI summaries (`replayAiBudget.ts`). */
+export const replayAiBudgetKey = (tenantId: number, day: string): string => `replay:ai-budget:t${tenantId}:${day}`;
+
+/** S4d: "this site belongs to a project with a live, measured proof" (`realization/proofSite.ts`). */
+export const proofSiteKey = (siteId: string): string => `replay:proof-site:${siteId}`;
+
+/** "This site's nightly issue rollup ran today" (`replayRollup.ts`). */
+export const replayRollupGateKey = (siteId: string, day: string): string => `replay:rollup:${siteId}:${day}`;
+
+// ── S4e prescriptions (KV gates) ────────────────────────────────────────────
+
+/** "This site's daily prescription sweep ran today" (`prescriptionSweep.ts`). */
+export const prescriptionSweepGateKey = (siteId: string, day: string): string => `replay:rx-sweep:${siteId}:${day}`;
+
+/** "Find fixes now" ran within the hour for this site. */
+export const prescriptionSweepNowKey = (siteId: string): string => `replay:rx-sweep-now:${siteId}`;
+
+/** How many prescriptions were drafted by AI for this site today (cap 5). */
+export const prescriptionDraftCountKey = (siteId: string, day: string): string => `replay:rx-drafted:${siteId}:${day}`;
+
+/** "This visit's conversion was already counted for this A/B test" (`replayAbConversion.ts`). */
+export const abConversionKey = (testId: number, visitId: string): string => `replay:ab-conv:${testId}:${visitId}`;
+
+/** "This prescription was verified on read recently" (`prescriptionVerify.ts`). */
+export const prescriptionVerifyGateKey = (prescriptionId: string): string => `replay:rx-verify:${prescriptionId}`;

@@ -1,6 +1,7 @@
 /**
  * What the Insights home is looking at: the site, the window, the goal, the
  * filter, the release to compare and the route on the Page stage.
+ * The filter is the ONE `ReplayFilter`, owned here and synced with the address.
  *
  * ONE context, so the bands (registered in `HOME_BANDS`) and the panel kinds
  * (registered in `INSIGHT_PANEL_KINDS`) take no props beyond their identity
@@ -9,8 +10,9 @@
  */
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
-import { EMPTY_REPLAY_FILTER, type ReplayFilter } from '@builderforce/interaction-contract';
+import type { ReplayFilter } from '@builderforce/interaction-contract';
 import type { ReplayWindow } from '@/lib/replayApi';
+import { useReplayFilterState } from '@/components/replay/filter/useReplayFilter';
 import type { InsightGoal } from './insightGoals';
 
 export interface InsightsScope {
@@ -33,23 +35,24 @@ const ScopeContext = createContext<InsightsScope | null>(null);
 
 export function InsightsScopeProvider({
   siteId,
-  initialFilter = EMPTY_REPLAY_FILTER,
+  initialFilter,
   initialDays = 30,
   children,
 }: {
   siteId: string;
+  /** Omitted: the filter the address carries (`?f.*`), kept in sync with it (`useReplayFilterState`). */
   initialFilter?: ReplayFilter;
   initialDays?: ReplayWindow;
   children: ReactNode;
 }) {
   const [days, setDays] = useState<ReplayWindow>(initialDays);
   const [goal, setGoal] = useState<InsightGoal>('activation');
-  const [filter, setFilter] = useState<ReplayFilter>(initialFilter);
+  const { filter, setFilter } = useReplayFilterState(initialFilter);
   const [compare, setCompare] = useState<string | null>(null);
   const [route, setRoute] = useState<string | null>(null);
   const value = useMemo<InsightsScope>(
     () => ({ siteId, days, setDays, goal, setGoal, filter, setFilter, compare, setCompare, route, setRoute }),
-    [siteId, days, goal, filter, compare, route],
+    [siteId, days, goal, filter, setFilter, compare, route],
   );
   return <ScopeContext.Provider value={value}>{children}</ScopeContext.Provider>;
 }

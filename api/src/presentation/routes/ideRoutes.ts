@@ -74,6 +74,8 @@ import { HOSTING_APEX, publishedSiteRecord } from '../../application/ide/siteHos
 import { listSiteReleases, restoreSiteRelease } from '../../application/ide/siteReleases';
 import { APP_PACKAGE_TARGETS, isAppPackageTarget, packageAppTarget } from '../../application/ide/packageApp';
 import { publishStaticSite, assetsFromFormData } from '../../application/ide/publishStaticSite';
+import { publishPreviewRelease } from '../../application/ide/publishPreviewRelease';
+import { notePrescriptionPreview } from '../../application/replay/prescriptionReleases';
 import { validateLoRASafetensors } from '../../domain/training/loraArtifact';
 // The dataset-use gate. Training is the one use that cannot be undone, so the boundary
 // that dispatches it is the boundary that has to ask. See its own header.
@@ -796,6 +798,22 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     if (Number(proj.tenantId) !== tenantId) return c.json({ error: 'Forbidden' }, 403);
 
     const form = await c.req.formData();
+
+    // `preview=1`: a release beside the live one, never live (an Insights fix, PRD 33
+    // §5.1.4); `prescription=<id>` records it on that fix. A person publishes it.
+    if (form.get('preview') === '1') {
+      const preview = await publishPreviewRelease({
+        db, bucket, projectId, tenantId,
+        assets: assetsFromFormData(form, ['subdomain', 'preview', 'prescription']),
+      });
+      if (!preview.ok) return c.json({ error: preview.error }, preview.status);
+      const prescriptionId = form.get('prescription');
+      if (typeof prescriptionId === 'string' && prescriptionId) {
+        await notePrescriptionPreview(c.env, db, { tenantId, projectId, prescriptionId, versionToken: preview.versionToken });
+      }
+      const { ok: _okPreview, ...previewBody } = preview;
+      return c.json({ ...previewBody, preview: true }, 201);
+    }
 
     // Subdomain claiming, stale-asset cleanup, the project_sites upsert and cache
     // invalidation all live in the shared core, so a browser publish and a GitHub

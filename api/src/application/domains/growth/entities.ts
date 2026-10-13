@@ -55,6 +55,7 @@ import {
   podcastOutreach,
   promoProjects,
   referralEntries,
+  replayExports,
   replayFunnelSteps,
   replayFunnels,
   replayPageCaptures,
@@ -175,4 +176,7 @@ export const GROWTH_ENTITIES = defineDomainEntities('growth', [
   entity(replayFunnelSteps, { readOnly: true }),
   entity(replayPrescriptions, { readOnly: true }),
   entity(replayPageCaptures, { readOnly: true }),
+  /** An MP4 export job (S4b). Read-only: its status moves only through the runner's
+   *  capability-token callbacks in `replayVideoExport`, which also meter the units. */
+  entity(replayExports, { readOnly: true }),
 ]);

@@ -34,7 +34,7 @@ import {
   type ReplayWalletSnapshot,
 } from '../commerce/replayWallet';
 import { recordReplayTrace, REPLAY_TRACE_VERBS } from './replayTrace';
-import { exhaustedTraceKey } from './replayCacheKeys';
+import { allowanceOverrideKey, exhaustedTraceKey } from './replayCacheKeys';
 
 const OVERRIDE_TTL_SECONDS = 5 * 60;
 const PAID_USED_TTL_SECONDS = 30;
@@ -49,7 +49,7 @@ export function replayUseReference(recordingId: string, unitIndex: number): stri
  * so a real pack purchase is exercised). Null when unset or not a non-negative number.
  */
 async function allowanceOverride(env: Env | undefined, db: Db, tenantId: number): Promise<number | null> {
-  return getOrSetCached(env, `replay:allowance-override:t${tenantId}`, async () => {
+  return getOrSetCached(env, allowanceOverrideKey(tenantId), async () => {
     const [row] = await db
       .select({ settings: tenants.settings })
       .from(tenants)
@@ -121,8 +121,16 @@ export async function usageSnapshot(env: Env | undefined, db: Db, tenantId: numb
  * (§3.3 step 4); only starting one needs a free unit or a credit.
  */
 export async function canKeepNewRecording(env: Env | undefined, db: Db, tenantId: number, now: Date = new Date()): Promise<boolean> {
+  return hasUnits(env, db, tenantId, 1, now);
+}
+
+/**
+ * Can ONE pool (the free pool or the credits) cover `units` right now? A multi-unit
+ * charge ({@link chargeUnits} with `units`) is never split across the two pools.
+ */
+export async function hasUnits(env: Env | undefined, db: Db, tenantId: number, units: number, now: Date = new Date()): Promise<boolean> {
   const w = await wallet(env, db, tenantId, now);
-  return w.freeRemaining > 0 || w.credits > 0;
+  return w.freeRemaining >= units || w.credits >= units;
 }
 
 /**
@@ -157,31 +165,45 @@ export interface ChargeResult {
  * Charge ONE unit of a kept recording: the free pool first, then credits. With
  * neither left the unit goes uncharged (a recording in progress is never cut off)
  * and the exhaustion is traced.
+ *
+ * Another metered act (an MP4 export, 10 units) passes `units` and its own ledger
+ * `reference` (`replay-export:<exportId>`) — the same idempotent write under a key of
+ * its own, never a second ledger path. `units` come from ONE pool, never split.
  */
 export async function chargeUnits(
   env: Env | undefined,
   db: Db,
-  input: { tenantId: number; siteId: string; recordingId: string; unitIndex: number; now?: Date },
+  input: {
+    tenantId: number;
+    siteId: string;
+    recordingId: string;
+    unitIndex: number;
+    now?: Date;
+    units?: number;
+    reference?: string;
+    memo?: string;
+  },
 ): Promise<ChargeResult> {
   const now = input.now ?? new Date();
+  const units = Math.max(1, Math.ceil(input.units ?? 1));
   const w = await wallet(env, db, input.tenantId, now);
-  const reference = replayUseReference(input.recordingId, input.unitIndex);
-  const memo = `Insights recording ${input.recordingId} · unit ${input.unitIndex}`;
+  const reference = input.reference ?? replayUseReference(input.recordingId, input.unitIndex);
+  const memo = input.memo ?? `Insights recording ${input.recordingId} · unit ${input.unitIndex}`;
   const metadata = { recordingId: input.recordingId, unitIndex: input.unitIndex, siteId: input.siteId };
 
-  if (w.freeRemaining > 0) {
+  if (w.freeRemaining >= units) {
     const charged = await debitReplayFree(db, env, {
-      tenantId: input.tenantId, units: 1, reference, period: w.period, memo, metadata,
+      tenantId: input.tenantId, units, reference, period: w.period, memo, metadata,
     });
-    if (charged && w.freeRemaining === 1 && w.credits === 0) {
+    if (charged && w.freeRemaining === units && w.credits === 0) {
       await noteAllowanceExhausted(env, db, { tenantId: input.tenantId, siteId: input.siteId, now });
     }
     return { charged, source: 'free' };
   }
 
-  if (w.credits > 0) {
+  if (w.credits >= units) {
     const firstPaid = !(await loadGrantRows(db, input.tenantId)).some((row) => row.kind === 'spend');
-    const charged = await debitReplayCredits(db, env, { tenantId: input.tenantId, units: 1, reference, memo, metadata });
+    const charged = await debitReplayCredits(db, env, { tenantId: input.tenantId, units, reference, memo, metadata });
     if (charged && firstPaid) {
       await recordReplayTrace(env, db, {
         tenantId: input.tenantId,
@@ -191,12 +213,14 @@ export async function chargeUnits(
         metadata: { recordingId: input.recordingId, unitIndex: input.unitIndex },
       });
     }
-    if (charged && w.credits === 1) {
+    if (charged && w.credits === units) {
       await noteAllowanceExhausted(env, db, { tenantId: input.tenantId, siteId: input.siteId, now });
     }
     return { charged, source: 'credits' };
   }
 
-  await noteAllowanceExhausted(env, db, { tenantId: input.tenantId, siteId: input.siteId, now });
+  if (w.freeRemaining <= 0 && w.credits <= 0) {
+    await noteAllowanceExhausted(env, db, { tenantId: input.tenantId, siteId: input.siteId, now });
+  }
   return { charged: false, source: null };
 }

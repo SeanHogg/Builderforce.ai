@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ReplayRecordingDto } from '@builderforce/interaction-contract';
+import type { ReplayExportDto, ReplayRecordingDto } from '@builderforce/interaction-contract';
 import { replayApi } from '@/lib/replayApi';
 import { ReplayPlayer } from './ReplayPlayer';
 
@@ -57,6 +57,7 @@ const recording: ReplayRecordingDto = {
   variant: null,
   traits: null,
   chunkCount: 2,
+  chunkSeqs: [0, 1],
   marks: [
     { kind: 'page', key: '/', atMs: 0 },
     { kind: 'rage', key: 'button.buy', label: 'Buy', atMs: 12_000 },
@@ -161,6 +162,71 @@ describe('ReplayPlayer', () => {
     await ready();
     expect(fake.replayer.pause).toHaveBeenCalledWith(20_000);
     expect(screen.getByRole('slider', { name: 'replay.player.scrubber' })).toHaveValue('20000');
+  });
+
+  it('streams the STORED chunk seqs — a trigger-kept recording starts mid-visit, above seq 0', async () => {
+    vi.mocked(replayApi.getRecording).mockResolvedValue({ ...recording, chunkCount: 2, chunkSeqs: [3, 4] });
+    render(<ReplayPlayer siteId="site-1" recordingId="rec-1" />);
+    await ready();
+    expect(replayApi.getRecordingChunk).toHaveBeenNthCalledWith(1, 'site-1', 'rec-1', 3);
+    expect(replayApi.getRecordingChunk).toHaveBeenNthCalledWith(2, 'site-1', 'rec-1', 4);
+    expect(replayApi.getRecordingChunk).not.toHaveBeenCalledWith('site-1', 'rec-1', 0);
+  });
+
+  it('draws the current page click heat over the replay when the overlay is on', async () => {
+    const heatGrid = vi.spyOn(replayApi, 'heatGrid').mockResolvedValue({
+      route: '/', releaseKey: null, deviceClass: 'phone', kind: 'click', cells: [{ gx: 1, gy: 1, n: 3 }], total: 3,
+    });
+    render(<ReplayPlayer siteId="site-1" recordingId="rec-1" />);
+    await ready();
+    expect(screen.queryByTestId('player-heat')).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'replay.heat.playerToggle' }));
+    expect(await screen.findByTestId('player-heat')).toHaveAttribute('data-route', '/');
+    await waitFor(() => expect(heatGrid).toHaveBeenCalledWith('site-1', expect.objectContaining({ route: '/', device: 'phone', kind: 'click' })));
+    expect(screen.getByText('replay.heat.legendCold')).toBeInTheDocument();
+  });
+
+  it('exports a video: request, poll every 5 s while open, then download', async () => {
+    const job = (status: ReplayExportDto['status'], error: string | null = null): ReplayExportDto => ({
+      id: 'exp-1', recordingId: 'rec-1', status, format: status === 'done' ? 'mp4' : null,
+      downloadUrl: null, error, createdAt: '2026-10-13T10:00:00.000Z',
+    });
+    vi.spyOn(replayApi, 'requestExport').mockResolvedValue(job('queued'));
+    vi.spyOn(replayApi, 'exportStatus').mockResolvedValue(job('done'));
+    vi.spyOn(replayApi, 'downloadExport').mockResolvedValue(undefined);
+    render(<ReplayPlayer siteId="site-1" recordingId="rec-1" />);
+    await ready();
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /replay\.export\.button/ }));
+      });
+      expect(replayApi.requestExport).toHaveBeenCalledWith('site-1', 'rec-1');
+      expect(await screen.findByText('replay.export.status.queued')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /replay\.export\.button/ })).toBeDisabled();
+      expect(replayApi.exportStatus).not.toHaveBeenCalled();
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+      expect(replayApi.exportStatus).toHaveBeenCalledWith('site-1', 'exp-1');
+      fireEvent.click(await screen.findByRole('button', { name: 'replay.export.download' }));
+      expect(replayApi.downloadExport).toHaveBeenCalledWith('site-1', 'exp-1');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('says plainly when an export cannot run', async () => {
+    vi.spyOn(replayApi, 'requestExport').mockResolvedValue({
+      id: 'exp-2', recordingId: 'rec-1', status: 'failed', format: null, downloadUrl: null,
+      error: 'insufficient_units', createdAt: '2026-10-13T10:00:00.000Z',
+    });
+    render(<ReplayPlayer siteId="site-1" recordingId="rec-1" />);
+    await ready();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /replay\.export\.button/ }));
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('replay.export.error.insufficient_units');
   });
 
   it('says when the recording cannot be loaded', async () => {

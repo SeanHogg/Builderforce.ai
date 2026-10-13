@@ -15,12 +15,15 @@ COPY package.json ./
 
 # Install the playwright client, then only the chromium browser + its system
 # libraries (`--with-deps` runs apt-get; needs root). Drop caches afterward.
+# ffmpeg (no recommends) turns the replay_export job's WebM into MP4; without it the
+# job still delivers WebM, so it is a quality step, not a hard dependency.
 RUN npm install --no-audit --no-fund \
   && npx playwright install --with-deps chromium \
+  && apt-get update && apt-get install -y --no-install-recommends ffmpeg \
   && npm cache clean --force \
   && rm -rf /var/lib/apt/lists/* /root/.npm
 
-COPY server.mjs ./
+COPY server.mjs replayExport.mjs ./
 
 ENV NODE_ENV=production
 ENV PORT=8080

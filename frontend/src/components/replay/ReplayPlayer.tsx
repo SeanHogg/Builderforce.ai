@@ -4,8 +4,9 @@
  * the panel; the timeline, event list and controls sit around it.
  *
  * Loading, rrweb and follow mode live in `useReplayPlayback`; this file is
- * layout and the two outward actions — copy a link at this moment, and the
- * speed / inactivity controls.
+ * layout and the outward actions — copy a link at this moment, the speed /
+ * inactivity controls, the heat overlay (`PlayerHeatOverlay`) and "Export as
+ * video" (`ReplayExportControl`).
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -14,9 +15,14 @@ import { useErrorText } from '@/i18n/useErrorMessage';
 import { useToast } from '@/components/ToastProvider';
 import { Icon } from '@/components/ui/Icon';
 import { panelHref } from '@/components/insights/panelUrl';
+import { HeatLegend } from './heatmap/HeatmapOverlay';
+import { PlayerHeatOverlay } from './PlayerHeatOverlay';
 import { ReplayEventList } from './ReplayEventList';
+import { ReplayExportControl } from './ReplayExportControl';
 import { ReplayHeader } from './ReplayHeader';
+import { ReplaySummary } from './ReplaySummary';
 import { ReplayTimeline } from './ReplayTimeline';
+import { TicketFromMoment } from './TicketFromMoment';
 import { fmtClock } from './replayMarks';
 import { REPLAY_SPEEDS, useReplayPlayback } from './useReplayPlayback';
 
@@ -27,6 +33,8 @@ export interface ReplayPlayerProps {
   startAtSeconds?: number;
   /** Live follow: keep appending new chunks. */
   follow?: boolean;
+  /** "Define from this click": a click mark's selector becomes a smart-event rule (the host opens the editor). */
+  onDefineEvent?: (selector: string) => void;
 }
 
 /** Scale the recorded viewport down to the stage's width (never up). */
@@ -49,8 +57,9 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
   return <PlayerBody key={props.recordingId} {...props} />;
 }
 
-function PlayerBody({ siteId, recordingId, startAtSeconds = 0, follow = false }: ReplayPlayerProps) {
+function PlayerBody({ siteId, recordingId, startAtSeconds = 0, follow = false, onDefineEvent }: ReplayPlayerProps) {
   const t = useTranslations('replay.player');
+  const tHeat = useTranslations('replay.heat');
   const toast = useToast();
   const errorText = useErrorText();
   const playback = useReplayPlayback({ siteId, recordingId, follow, startAtMs: startAtSeconds * 1000 });
@@ -58,6 +67,7 @@ function PlayerBody({ siteId, recordingId, startAtSeconds = 0, follow = false }:
   const viewport = recording?.viewport ?? null;
   const { stageRef, scale } = useStageScale(viewport);
   const marks = recording?.marks ?? [];
+  const [heatOn, setHeatOn] = useState(false);
 
   async function copyLink() {
     const seconds = Math.floor(currentMs / 1000);
@@ -101,6 +111,11 @@ function PlayerBody({ siteId, recordingId, startAtSeconds = 0, follow = false }:
             pointerEvents: 'none',
           }}
         />
+        {heatOn && recording && viewport && status === 'ready' && (
+          <div style={{ position: 'absolute', top: 0, left: 0, width: viewport.w, height: viewport.h, transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }}>
+            <PlayerHeatOverlay siteId={siteId} recording={recording} currentMs={currentMs} frameDocument={playback.frameDocument} />
+          </div>
+        )}
         {status !== 'ready' && (
           <div
             role={status === 'error' ? 'alert' : 'status'}
@@ -147,19 +162,34 @@ function PlayerBody({ siteId, recordingId, startAtSeconds = 0, follow = false }:
           />
           <span>{t('skipInactive')}</span>
         </label>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--font-size-small)', minHeight: 44 }}>
+          <input
+            type="checkbox"
+            checked={heatOn}
+            disabled={status !== 'ready'}
+            onChange={(event) => setHeatOn(event.currentTarget.checked)}
+          />
+          <span>{tHeat('playerToggle')}</span>
+        </label>
+        {heatOn && <HeatLegend />}
         <button type="button" className="btn-secondary" style={{ minHeight: 44 }} onClick={() => void copyLink()}>
           <Icon name="link" size={16} /> {t('copyLink', { time: fmtClock(currentMs) })}
         </button>
+        <TicketFromMoment siteId={siteId} recording={recording} currentMs={currentMs} />
       </div>
+
+      <ReplayExportControl siteId={siteId} recordingId={recordingId} />
 
       <section aria-labelledby={`replay-events-${recordingId}`} style={{ minWidth: 0 }}>
         <h3 id={`replay-events-${recordingId}`} style={{ margin: '0 0 var(--space-2)', fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>
           {t('events')}
         </h3>
         <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-          <ReplayEventList marks={marks} currentMs={currentMs} onSeek={playback.seek} />
+          <ReplayEventList marks={marks} currentMs={currentMs} onSeek={playback.seek} onDefineEvent={onDefineEvent} />
         </div>
       </section>
+
+      <ReplaySummary siteId={siteId} recordingId={recordingId} onSeek={playback.seek} />
     </div>
   );
 }

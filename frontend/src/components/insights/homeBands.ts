@@ -2,13 +2,14 @@
  * HOME_BANDS — what the Insights home draws, and where (PRD 33 §4.1, D16).
  *
  * A band is `{ id, Component, area }`; `HOME_ROWS` places the areas on the
- * grid. Later waves add `FunnelBand` (area `funnel`), `DoNext` + `ScoreStrip`
- * (area `next`, replacing `DoNextEmpty`) as rows here — the home never
+ * grid. `FunnelBand` (area `funnel`) arrived with S4c; later waves add `DoNext` +
+ * `ScoreStrip` (area `next`, replacing `DoNextEmpty`) as rows here — the home never
  * changes. An area with no band takes no row, so an unbuilt band leaves no gap.
  */
 
 import type { ComponentType } from 'react';
 import { DoNextEmpty } from './bands/DoNextEmpty';
+import { FunnelBand } from './bands/FunnelBand';
 import { GoalBar } from './bands/GoalBar';
 import { InsightsHeader } from './bands/InsightsHeader';
 import { IssuesTable } from './bands/IssuesTable';
@@ -27,6 +28,7 @@ export const HOME_BANDS: ReadonlyArray<HomeBand> = [
   { id: 'header', Component: InsightsHeader, area: 'header' },
   { id: 'goal', Component: GoalBar, area: 'goal' },
   { id: 'kpis', Component: KpiTiles, area: 'numbers' },
+  { id: 'funnel', Component: FunnelBand, area: 'funnel' },
   { id: 'issues', Component: IssuesTable, area: 'issues' },
   { id: 'page-stage', Component: PageStage, area: 'stage' },
   { id: 'do-next', Component: DoNextEmpty, area: 'next' },

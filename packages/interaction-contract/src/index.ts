@@ -68,6 +68,7 @@ export {
   MAX_FILTER_VALUE,
   filterFromQuery,
   filterToQuery,
+  withFilterQuery,
   parseReplayFilter,
   type FilterFieldId,
   type FilterFieldSpec,
@@ -106,6 +107,41 @@ export {
   type ReplayManifest,
   type ReplaySnippets,
 } from './snippets';
+
+export {
+  PROOF_EVIDENCE_RECORDINGS,
+  PROOF_STATUSES,
+  PROOF_SUCCESS_KINDS,
+  PROOF_THRESHOLD_OPS,
+  PROOF_THRESHOLD_UNITS,
+  PROOF_WINDOW_DAYS_MAX,
+  nonConvertingFilter,
+  parseProofMeasure,
+  proofStatus,
+  proofValue,
+  thresholdMet,
+  type ProofEvaluationDto,
+  type ProofEvidence,
+  type ProofJourneySignalDto,
+  type ProofMeasure,
+  type ProofPattern,
+  type ProofStatus,
+  type ProofStatusInput,
+  type ProofSuccessKind,
+  type ProofThreshold,
+  type ProofThresholdOp,
+  type ProofThresholdUnit,
+} from './proofMeasure';
+
+export {
+  REPLAY_MOMENT_METRICS,
+  formatReplayMomentTrailer,
+  parseReplayMoment,
+  replayMomentFromDescription,
+  stripReplayMomentTrailer,
+  type ReplayMoment,
+  type ReplayMomentMetric,
+} from './replayMoment';
 
 /** The read/write API DTOs and the path table — every export of `api.ts`. */
 export * from './api';

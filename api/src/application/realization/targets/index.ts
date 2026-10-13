@@ -24,6 +24,7 @@ import {
   type RealizationRecommendation,
   type RealizationTarget,
 } from '../realizationTarget';
+import { priorGradeRule, resolvePriorGradePick, type PriorGrade } from '../priorGrade';
 import { clickablePrototypeTarget } from './clickablePrototype';
 import { demoVideoTarget } from './demoVideo';
 import { liveSystemTarget } from './liveSystem';
@@ -86,8 +87,12 @@ function fitFor(target: RealizationTarget, wanted: ReadonlySet<Capability>): { f
  * FIRST, not a filter — a founder who has already smoke-tested should be able to
  * pick the pilot without the platform hiding it, and hiding options is how a
  * recommender stops being advice and starts being a decision.
+ *
+ * With a `priorGrade` ("Read again with what we learned", PRD 33 §5.3.3) the
+ * matching `PRIOR_GRADE_RULES` entry picks the recommendation instead of the cost
+ * preference, and says why first — the last proof's evidence outranks a guess.
  */
-export function recommendRealizations(spec: ChallengeSpec): RealizationRecommendation[] {
+export function recommendRealizations(spec: ChallengeSpec, priorGrade?: PriorGrade | null): RealizationRecommendation[] {
   const wanted = new Set(spec.capabilities);
 
   const scored = REALIZATION_TARGETS.map((target) => {
@@ -118,6 +123,20 @@ export function recommendRealizations(spec: ChallengeSpec): RealizationRecommend
   });
 
   scored.sort((a, b) => b.score - a.score || REALIZATION_KEYS.indexOf(a.key) - REALIZATION_KEYS.indexOf(b.key));
+
+  const rule = priorGrade ? priorGradeRule(priorGrade) : null;
+  const prior = priorGrade ? realizationTargetByKey(priorGrade.targetKey) : null;
+  if (rule && priorGrade && prior) {
+    const steered = resolvePriorGradePick(rule.pick, prior, REALIZATION_TARGETS);
+    const at = scored.findIndex((r) => r.key === steered.key);
+    if (at >= 0) {
+      const [pick] = scored.splice(at, 1);
+      pick!.reasons.unshift(rule.reason(priorGrade));
+      pick!.recommended = true;
+      scored.unshift(pick!);
+      return scored;
+    }
+  }
   if (scored[0]) scored[0].recommended = true;
   return scored;
 }

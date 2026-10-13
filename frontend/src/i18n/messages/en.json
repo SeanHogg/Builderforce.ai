@@ -2826,7 +2826,20 @@
       "link": "Link to",
       "linkNone": "No link",
       "linkProjects": "Projects",
-      "linkInitiatives": "Initiatives"
+      "linkInitiatives": "Initiatives",
+      "band": {
+        "aria": "Funnel",
+        "none": "No funnel yet.",
+        "create": "Create a funnel",
+        "openAria": "Open the funnel at {step}",
+        "approx": "≈ {value}",
+        "conversion": "{value} converted"
+      },
+      "tabs": {
+        "steps": "Steps",
+        "events": "Events",
+        "flow": "Flow"
+      }
     },
     "alloc": {
       "title": "Investment Allocation",
@@ -3594,7 +3607,7 @@
       },
       "representatives": "Representative recordings",
       "repAria": "Open representative recording {rank}",
-      "recordingsOnRoute": "Recordings that visited {route}"
+      "recordingsOfIssue": "Recordings that hit this issue on {route}"
     },
     "panel": {
       "crumbRoot": "Insights",
@@ -3625,7 +3638,9 @@
       }
     },
     "lenses": {
-      "live": "Live"
+      "live": "Live",
+      "heat": "Heat",
+      "stuck": "Stuck"
     },
     "journey": {
       "steps": "{count, plural, one {# page} other {# pages}}",
@@ -3665,6 +3680,13 @@
       "packsTitle": "Buy recordings",
       "receipts": "Payments and receipts",
       "checkoutReturned": "Thanks. Your credits appear here as soon as the payment is confirmed."
+    },
+    "route": {
+      "kind": "Page",
+      "tabs": {
+        "heat": "Heat"
+      },
+      "openAria": "Open the page {route}"
     }
   },
   "cloudAgentForm": {
@@ -14354,7 +14376,8 @@
       "broadcasts": "Broadcasts",
       "llmRatings": "Ratings",
       "visitorFlow": "Visitor flow",
-      "visitors": "Visitors"
+      "visitors": "Visitors",
+      "insightsOps": "Insights operations"
     },
     "common": {
       "loading": "Loading…",
@@ -15508,6 +15531,62 @@
         },
         "noteWarn": "Past 80%: the nightly maintenance sweep now purges every compressible log table on a shortened window and reclaims space immediately instead of waiting for the weekly rewrite.",
         "noteCritical": "Past 90%: every compressible log table is being purged at its shortest declared window. Compliance and billing windows are never shortened."
+      }
+    },
+    "insightsOps": {
+      "title": "Insights operations",
+      "subtitle": "Platform totals for Insights, plus one workspace's recording settings and credit grants. No sites, visitors or recordings are shown here.",
+      "navLink": "Insights operations",
+      "summary": {
+        "aria": "Insights platform totals",
+        "sessions7d": "Sessions (7 days)",
+        "keptRecordings7d": "Kept recordings (7 days)",
+        "bytes7d": "Stored (7 days)",
+        "sites": "Sites",
+        "tenants": "Workspaces",
+        "packRevenue30d": "Pack revenue (30 days)"
+      },
+      "workspace": {
+        "title": "Workspace",
+        "label": "Workspace",
+        "empty": "No workspaces yet."
+      },
+      "settings": {
+        "title": "Recording settings",
+        "excluded": "Exclude from builderforce.ai recording",
+        "excludedHint": "Members of this workspace are never recorded while signed in on builderforce.ai.",
+        "override": "Free recordings per month",
+        "overrideHint": "Overrides the catalog allowance for this workspace. Set 0 to test a real pack purchase. Leave empty for the default.",
+        "overridePlaceholder": "Catalog default",
+        "clear": "Clear",
+        "save": "Save settings",
+        "saving": "Saving…",
+        "saved": "Saved. The change is audited.",
+        "invalidOverride": "Enter a whole number of 0 or more, or leave it empty."
+      },
+      "grant": {
+        "title": "Grant recording credits",
+        "hint": "The grant is written to the audit log before it is credited.",
+        "units": "Recordings",
+        "reason": "Reason",
+        "reasonPlaceholder": "Why this workspace gets these recordings",
+        "submit": "Grant credits",
+        "granting": "Granting…",
+        "invalid": "Enter between 1 and {max} recordings and a reason of at least 3 characters.",
+        "confirmTitle": "Grant recording credits?",
+        "confirmMessage": "Grant {units} recordings to {tenant}? This is audited and cannot be undone from here.",
+        "confirmLabel": "Grant",
+        "done": "Granted {units} recordings. The workspace now has {credits} credits. Reference: {reference}"
+      },
+      "methodFunnel": {
+        "title": "Seed “The method” funnel",
+        "hint": "Creates the four method smart events and the funnel from the home page to a graded proof on Builderforce’s own Insights site. Safe to run twice.",
+        "siteLabel": "Builderforce Insights site id",
+        "invalid": "Enter a site id (a UUID).",
+        "submit": "Seed the funnel",
+        "seeding": "Seeding…",
+        "done": "Seeded — {events} smart events created.",
+        "already": "Already seeded — nothing to create."
       }
     }
   },
@@ -19510,7 +19589,7 @@
     },
     "install": {
       "title": "One script, every capability",
-      "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host."
+      "description": "Install this once on the customer site. Widget changes apply on the next page load without redeploying the host. Heatmaps and session replay start only when the tag also carries your Insights site key (data-site); it is added here once the workspace has an Insights site."
     },
     "consent": {
       "title": "Consent log",
@@ -19542,7 +19621,7 @@
       },
       "heatmaps": {
         "name": "Heatmaps",
-        "description": "Measure click locations and scroll depth to understand real customer behavior.",
+        "description": "Click, rage, dead-click and scroll heatmaps from Insights session replay. They record once the install script carries your Insights site key.",
         "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps."
       },
       "feature_management": {
@@ -19644,6 +19723,13 @@
         "title": "Put your idea inside your customers’ product",
         "body": "Create a free workspace to get your embed key, turn on the capabilities you want, and ship them to your own site today."
       }
+    },
+    "insights": {
+      "needsSite": "Needs an Insights site: switching this on alone records nothing.",
+      "siteReady": "Recording through your Insights site key.",
+      "setup": "Set up Insights",
+      "open": "Open Insights",
+      "standaloneTitle": "Session replay on its own (no widgets)"
     }
   },
   "embedInstall": {
@@ -26801,6 +26887,40 @@
       "leaveTitle": "Leave while Studio is building?",
       "leaveMessage": "Studio is still working on your request. Going to the Studio home stops it; your app and everything built so far stay on this board.",
       "leaveConfirm": "Leave anyway"
+    },
+    "proof": {
+      "title": "Proof scoreboard",
+      "loading": "Loading the scoreboard…",
+      "loadFailed": "Could not load the scoreboard.",
+      "killAtLeast": "Build it only if “{event}” happens at least {target} times among {sample} sampled visits within {days} days.",
+      "killAtMost": "Build it only if “{event}” stays at or below {target} among {sample} sampled visits within {days} days.",
+      "sample": "Sample",
+      "sampleOf": "{n} of {min} visits",
+      "success": "Success",
+      "successOf": "{n} of {target}",
+      "daysLeft": "{days} days left",
+      "windowNotStarted": "The window starts with the first sampled visit.",
+      "windowClosed": "The window has closed.",
+      "status": {
+        "collecting": "Collecting",
+        "onTrack": "On track",
+        "atRisk": "At risk",
+        "met": "Met",
+        "missed": "Missed"
+      },
+      "watch": "Watch the visitors who didn’t",
+      "whyMissed": "Why it missed",
+      "noPatterns": "No cited pattern yet.",
+      "callEarly": "Call it early…",
+      "callEarlyTitle": "Call this proof early",
+      "callEarlyBody": "The verdict is decided now, against the measured numbers. Say why you are not waiting for the full sample — the reason is kept on the record.",
+      "reasonLabel": "Why call it now?",
+      "reasonPlaceholder": "For example: the traffic source is exhausted and will not refill.",
+      "reasonRequired": "An early call needs a written reason.",
+      "callEarlySubmit": "Call it now",
+      "calling": "Calling…",
+      "callEarlyFailed": "Could not record the call. Try again.",
+      "readAgain": "Read again with what we learned"
     }
   },
   "canvasCommands": {
@@ -33844,6 +33964,358 @@
       "lastSeen": "seen {time}",
       "notRecorded": "Not recorded",
       "watchAria": "Watch the visitor on {route} live"
+    },
+    "heat": {
+      "route": "Page",
+      "release": "Release",
+      "allReleases": "All releases",
+      "releaseOrdinal": "R{ordinal}",
+      "compare": "Compare with",
+      "noCompare": "No comparison",
+      "compareHint": "Pick a release to compare to see the two side by side or as a difference.",
+      "device": "Device",
+      "allDevices": "All devices",
+      "layersAria": "Heat layer",
+      "layers": {
+        "click": "Clicks",
+        "rage": "Rage clicks",
+        "dead": "Dead clicks",
+        "scroll": "Scroll depth",
+        "areas": "Areas"
+      },
+      "modesAria": "Comparison view",
+      "modes": {
+        "single": "This release",
+        "side": "Side by side",
+        "difference": "Difference"
+      },
+      "legendCold": "cold",
+      "legendHot": "hot",
+      "legendAria": "Colour scale from cold (few interactions) to hot (many)",
+      "legendLess": "fewer than compare",
+      "legendMore": "more than compare",
+      "legendDiffAria": "Colour scale from fewer interactions than the compare release to more",
+      "overlayAria": "Heatmap with {count} active cells",
+      "exactTotal": "{count} interactions, exact over every session",
+      "empty": "No interactions were recorded on this page in this window.",
+      "error": "Could not load the heatmap.",
+      "frameTitle": "Snapshot of {route}",
+      "pageLoading": "Rebuilding the page…",
+      "noBackground": "No kept recording visited this page in this window, so the heat is drawn without the page behind it.",
+      "pageError": "The page could not be rebuilt, so the heat is drawn without it.",
+      "sideCurrent": "This release: {release}",
+      "sideCompare": "Compare: {release}",
+      "differenceCaption": "{release} compared with {compare}",
+      "highlightAria": "Highlighted element {element}",
+      "playerToggle": "Heat overlay",
+      "areas": {
+        "aria": "Share of clicks by element",
+        "share": "{share} of clicks",
+        "zoneAria": "{element}: {share} of clicks"
+      },
+      "elements": {
+        "title": "Elements",
+        "element": "Element",
+        "clicks": "Clicks",
+        "rage": "Rage",
+        "dead": "Dead",
+        "delta": "Change vs compare",
+        "none": "—",
+        "sortBy": "Sort by {column}",
+        "empty": "No element was clicked on this page in this window.",
+        "open": "Replays",
+        "openAria": "Watch replays that clicked {element}"
+      },
+      "scroll": {
+        "title": "Scroll reach",
+        "loading": "Loading scroll depth…",
+        "error": "Could not load scroll depth.",
+        "empty": "No page view reported a scroll depth in this window.",
+        "sessions": "{count} page views reported a scroll depth",
+        "band": "{from}–{to}%",
+        "reachAria": "{share} of page views reach {band}"
+      }
+    },
+    "heatInsight": {
+      "title": "What the heat says",
+      "loading": "Reading the heat…",
+      "error": "Could not load the findings.",
+      "empty": "Nothing stands out on this page yet.",
+      "rage_spike": "Rage clicks on “{label}” jumped to {rage}, {ratio}× the compare release ({compareRage}) after adjusting for traffic.",
+      "dead_text": "{dead} dead clicks on “{label}”: it is text, not a control, but visitors expect it to do something.",
+      "buried_top_click": "The most-clicked element, “{label}” ({clicks} clicks), sits {depth}% down the page, which only {reach} of visitors reach.",
+      "quickback_doubled": "Quick backs on this page rose to {quickbacks} from {compareQuickbacks} in the compare release ({ratio}× after adjusting for traffic).",
+      "actions": {
+        "watch": "Watch replays",
+        "copyLink": "Copy link"
+      },
+      "copied": "Link copied. Paste it into the ticket.",
+      "copyFailed": "Could not copy the link."
+    },
+    "export": {
+      "button": "Export as video",
+      "requesting": "Requesting…",
+      "cost": "Renders this replay as a video. Costs 10 recordings from your allowance, once.",
+      "download": "Download video",
+      "downloadFailed": "The video could not be downloaded.",
+      "status": {
+        "queued": "Queued. Rendering starts shortly.",
+        "running": "Rendering the video…",
+        "done": "The video is ready."
+      },
+      "error": {
+        "runner_unavailable": "Video export is not available right now: no renderer is running.",
+        "insufficient_units": "Not enough recordings left in your allowance for a video (it costs 10). Buy a pack in Plan and usage.",
+        "no_chunks": "This recording has no stored data to render.",
+        "dispatch_failed": "The renderer could not be started. Try again shortly.",
+        "timed_out": "Rendering took too long and was stopped. Try again.",
+        "generic": "The export failed."
+      }
+    },
+    "filter": {
+      "aria": "Filter",
+      "add": "Add filter",
+      "full": "A filter holds at most 12 conditions.",
+      "fieldsAria": "Filter by",
+      "clear": "Clear filters",
+      "remove": "Remove {clause}",
+      "editorAria": "Filter on {field}",
+      "opAria": "Condition",
+      "valueAria": "Value",
+      "apply": "Apply",
+      "cancel": "Cancel",
+      "choose": "Choose…",
+      "field": {
+        "device": "Device",
+        "browser": "Browser",
+        "os": "Operating system",
+        "country": "Country",
+        "referrer": "Referrer",
+        "entryPath": "Entry page",
+        "exitPath": "Exit page",
+        "visitedPath": "Visited page",
+        "clickedSelector": "Clicked element",
+        "frustration": "Frustration signal",
+        "durationMs": "Duration",
+        "activeMs": "Active time",
+        "pageCount": "Pages viewed",
+        "release": "Release",
+        "smartEvent": "Smart event",
+        "tag": "Tag",
+        "converted": "Converted",
+        "variant": "Test variant",
+        "issue": "Issue"
+      },
+      "op": {
+        "eq": "is",
+        "neq": "is not",
+        "in": "is any of",
+        "contains": "contains",
+        "prefix": "starts with",
+        "gte": "at least",
+        "lte": "at most"
+      },
+      "value": {
+        "desktop": "Desktop",
+        "tablet": "Tablet",
+        "phone": "Phone",
+        "rage": "Rage click",
+        "dead": "Dead click",
+        "quickback": "Quick back",
+        "excessive_scroll": "Excessive scrolling",
+        "error": "JavaScript error",
+        "true": "Yes",
+        "false": "No"
+      },
+      "placeholder": {
+        "list": "Values, separated by commas",
+        "text": "Value",
+        "tagKey": "Tag name",
+        "tagValue": "Tag value"
+      },
+      "unit": {
+        "seconds": "s"
+      }
+    },
+    "segments": {
+      "button": "Segments",
+      "aria": "Saved segments",
+      "empty": "No saved segments yet. Filter the view, then save it here.",
+      "applyAria": "Apply segment {name}",
+      "renameAria": "Rename segment {name}",
+      "saveName": "Save",
+      "deleteAria": "Delete segment {name}",
+      "deleteTitle": "Delete segment",
+      "deleteConfirm": "Delete the segment “{name}”? The recordings are not affected.",
+      "delete": "Delete",
+      "namePlaceholder": "Name this filter",
+      "nameAria": "Segment name",
+      "save": "Save segment",
+      "saveNeedsFilter": "Add a filter first."
+    },
+    "overview": {
+      "approx": "≈ {value}",
+      "trafficAria": "Traffic",
+      "frustrationAria": "Frustration signals",
+      "notInWeighted": "Not known for a filtered view",
+      "frustrationOpen": "Show issues with {label}",
+      "ofSessions": "of sessions",
+      "tile": {
+        "sessions": "Sessions",
+        "newVisitors": "New visitors",
+        "pagesPerSession": "Pages per session",
+        "activeTime": "Average active time",
+        "scrollDepth": "Average scroll depth"
+      },
+      "frustration": {
+        "rage": "Rage clicks",
+        "dead": "Dead clicks",
+        "quickback": "Quick backs",
+        "excessiveScroll": "Excessive scrolling",
+        "error": "JavaScript errors"
+      },
+      "top": {
+        "pages": "Top pages",
+        "entryPages": "Entry pages",
+        "exitPages": "Exit pages",
+        "referrers": "Referrers",
+        "countries": "Countries",
+        "devices": "Devices",
+        "browsers": "Browsers",
+        "os": "Operating systems"
+      },
+      "topEmpty": "Nothing yet.",
+      "unknown": "Unknown",
+      "addFilterAria": "Filter to {field}: {label}",
+      "estimatedNote": "Filtered: numbers are estimated from kept recordings (≈).",
+      "trendTitle": "Last {days} days",
+      "trendSessionsAria": "Sessions per day",
+      "trendFrustrated": "Frustrated sessions",
+      "trendFrustratedAria": "Share of frustrated sessions per day",
+      "breakdownsTitle": "Breakdowns"
+    },
+    "funnels": {
+      "choose": "Funnel",
+      "edit": "Edit",
+      "new": "New funnel",
+      "empty": "No funnels yet. Create one to see where visitors drop off.",
+      "editTitle": "Edit funnel",
+      "newTitle": "New funnel",
+      "name": "Name",
+      "windowMinutes": "Finish within (minutes)",
+      "stepAria": "Step {n}",
+      "stepKindAria": "Step {n} type",
+      "matchModeAria": "Step {n} match",
+      "matchAria": "Step {n} value",
+      "stepKind": {
+        "page": "Page",
+        "click": "Click",
+        "event": "Event"
+      },
+      "matchPlaceholder": {
+        "page": "/pricing",
+        "click": "button.checkout",
+        "event": "signup"
+      },
+      "removeStep": "Remove step {n}",
+      "addStep": "Add step",
+      "save": "Save funnel",
+      "cancel": "Cancel",
+      "delete": "Delete funnel",
+      "deleteTitle": "Delete funnel",
+      "deleteConfirm": "Delete the funnel “{name}”?",
+      "approx": "≈ {value}",
+      "stepsAria": "Steps of {name}",
+      "estimatedNote": "Funnels are read from kept recordings, so counts and times are estimates (≈).",
+      "truncated": "Only the most recent 20,000 recordings were read.",
+      "chartAria": "Visits per step of {name}",
+      "visits": "{value} visits",
+      "conversion": "{value} from the step before",
+      "medianTime": "median {value} from the step before",
+      "watchDropped": "Watch the {count} who dropped",
+      "droppedGone": "These recordings are no longer kept."
+    },
+    "smartEvents": {
+      "new": "New event",
+      "empty": "No events yet.",
+      "editorAria": "Define a smart event",
+      "name": "Name",
+      "namePlaceholder": "Clicked the pricing CTA",
+      "ruleKindLabel": "Watch for",
+      "ruleKind": {
+        "page": "A page view",
+        "click": "A click",
+        "custom": "A named event"
+      },
+      "matchModeLabel": "Match",
+      "matchMode": {
+        "equals": "is exactly",
+        "prefix": "starts with",
+        "contains": "contains"
+      },
+      "match": "Value",
+      "matchPlaceholder": {
+        "page": "/pricing",
+        "click": "button.checkout",
+        "custom": "signup"
+      },
+      "save": "Save event",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "deleteTitle": "Delete smart event",
+      "deleteConfirm": "Delete the smart event “{name}”? Funnels that use it stop matching.",
+      "deleteAria": "Delete {name}",
+      "tableAria": "Smart events",
+      "col": {
+        "name": "Event",
+        "rule": "Rule",
+        "count": "Recordings, last {days} days",
+        "actions": "Actions"
+      },
+      "builtin": "Built in",
+      "ruleSummary": "{kind} {mode} {match}",
+      "approx": "≈ {value}",
+      "filter": "Filter",
+      "filterAria": "Filter to recordings with {name}",
+      "defineFromClick": "Define an event from this click",
+      "defineFromClickAria": "Define an event from the click on {label}",
+      "preview": {
+        "idle": "Type a value to see how many recordings match.",
+        "checking": "Counting matching recordings…",
+        "invalid": "That rule is not valid.",
+        "count": "≈ {value} recordings match in the last {days} days"
+      }
+    },
+    "summary": {
+      "title": "Summary",
+      "summarize": "Summarize",
+      "regenerate": "Summarize again",
+      "loading": "Summarizing…",
+      "limit": "The daily limit for AI summaries has been reached. Try again tomorrow.",
+      "uncited": "No grounded summary could be written for this. Watch the recording instead.",
+      "error": "The summary could not be made.",
+      "citeAria": "Go to {time}",
+      "segmentTitle": "What these visitors did",
+      "summarizeSegment": "Summarize these recordings",
+      "sampled": "From a sample of {count} recordings.",
+      "exampleAria": "Watch the example at {time}"
+    },
+    "ticket": {
+      "raise": "Raise a ticket at {time}",
+      "title": "Replay: {label} at {time}",
+      "body": "Raised from a visitor recording: “{label}” at {time} on {route}.",
+      "watchLink": "Watch this moment",
+      "created": "Ticket created.",
+      "failed": "Could not create the ticket.",
+      "effect": {
+        "waiting": "Effect on {metric} at {route}: waiting for {visits} visits on a newer release.",
+        "measured": "Effect on {metric} at {route}: {before} → {after} ({visits} visits on the new release).",
+        "metric": {
+          "frustrated": "frustrated visits",
+          "errors": "visits with errors",
+          "conversions": "conversions"
+        }
+      }
     }
   },
   "apps": {

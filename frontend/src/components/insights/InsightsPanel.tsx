@@ -4,16 +4,17 @@
  * tabs, body — and every level beneath it is a breadcrumb that pops back to it.
  *
  * Addressable: `?panel=<kind>:<id>[:<tab>]` (+ `&t=`, `&follow=1`) opens it on
- * load, and the URL follows the top level so the address bar is always a
- * shareable link. Esc closes (SlideOutPanel owns the key).
+ * load AND on any later navigation to such an address (`usePanelAddressSync`),
+ * and the URL follows the top level so the address bar is always a shareable
+ * link. Esc closes (SlideOutPanel owns the key).
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { INSIGHT_PANEL_KINDS, TAB_REQUIREMENTS, panelKindDef, type InsightPanelKind, type InsightPanelLevel } from './panelKinds';
-import { parsePanelParams, withPanelParams } from './panelUrl';
+import { INSIGHT_PANEL_KINDS, TAB_REQUIREMENTS, panelKindDef, type InsightPanelLevel } from './panelKinds';
 import { usePanel } from './usePanel';
+import { usePanelAddressSync } from './usePanelAddressSync';
 
 export interface InsightsPanelProps {
   siteId: string;
@@ -30,37 +31,13 @@ function factKey(requirement: string, level: InsightPanelLevel): string {
 export function InsightsPanel({ siteId, side = 'right' }: InsightsPanelProps) {
   const t = useTranslations('insights');
   const { levels, push, pop, close, replace, setTab } = usePanel();
-  const hydrated = useRef(false);
   const [facts, setFacts] = useState<Record<string, boolean>>({});
 
-  // Open from the address on mount.
-  useEffect(() => {
-    const parsed = parsePanelParams(window.location.search);
-    if (parsed && KNOWN_KINDS.has(parsed.kind)) {
-      replace([{
-        kind: parsed.kind as InsightPanelKind,
-        id: parsed.id,
-        ...(parsed.tab ? { tab: parsed.tab } : {}),
-        ...(parsed.t != null ? { t: parsed.t } : {}),
-        ...(parsed.follow ? { follow: true } : {}),
-      }]);
-    }
-    hydrated.current = true;
-  }, [replace]);
+  // The panel follows its address and the address follows the panel (mount, client navigation, Back).
+  usePanelAddressSync({ levels, push, replace, close }, KNOWN_KINDS);
 
   const top = levels.length > 0 ? levels[levels.length - 1]! : null;
   const def = top ? panelKindDef(top.kind) : undefined;
-
-  // Keep the address on the top level (after the mount read, so it is not erased first).
-  useEffect(() => {
-    if (!hydrated.current) return;
-    const next = withPanelParams(new URLSearchParams(window.location.search), top);
-    const query = next.toString();
-    const href = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`;
-    if (href !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
-      window.history.replaceState(window.history.state, '', href);
-    }
-  }, [top]);
 
   // Resolve the facts the top level's tabs require, once per (requirement, level).
   const requested = useRef(new Set<string>());

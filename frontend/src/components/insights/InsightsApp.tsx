@@ -4,8 +4,8 @@
  *
  * The selected site lives in the address (`?site=`), so a link names the site it
  * is about. The usage chip and Sites open the home's ONE panel on the `plan` and
- * `sites` kinds through the same `?panel=` address a shared link uses; the home
- * reads that address when it mounts, so opening one re-mounts it.
+ * `sites` kinds through the same `?panel=` address a shared link uses; the
+ * panel follows its address (`usePanelAddressSync`), so a navigation opens it.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -30,8 +30,6 @@ export function InsightsApp() {
   const { state } = useCapability(APP.listingSlug);
   const [sites, setSites] = useState<ReplaySiteDto[] | null>(null);
   const [error, setError] = useState<unknown>(null);
-  // Bumped when a header control addresses the panel: the home opens `?panel=` on mount.
-  const [panelOpenCount, setPanelOpenCount] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -47,7 +45,7 @@ export function InsightsApp() {
   const navigate = useCallback((mutate: (params: URLSearchParams) => URLSearchParams) => {
     const params = mutate(new URLSearchParams(window.location.search));
     const query = params.toString();
-    router.replace(`${pathname}${query ? `?${query}` : ''}`);
+    router.replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false });
   }, [pathname, router]);
 
   // Pin the address to the site actually shown, so the link is shareable.
@@ -57,8 +55,7 @@ export function InsightsApp() {
 
   const openPanel = (level: InsightPanelLevel) => {
     if (!selected) return;
-    window.history.replaceState(window.history.state, '', `${pathname}?${withPanelParams(new URLSearchParams(window.location.search), level).toString()}`);
-    setPanelOpenCount((n) => n + 1);
+    navigate((params) => withPanelParams(params, level));
   };
 
   if (error) return <SectionError error={error} />;
@@ -103,7 +100,7 @@ export function InsightsApp() {
         <Button variant="secondary" onClick={() => openPanel({ kind: 'sites', id: selected.id })}>{t('sites')}</Button>
         <ButtonLink href={APP.setupPath} variant="ghost">{t('addSite')}</ButtonLink>
       </header>
-      <InsightsHome key={`${selected.id}:${panelOpenCount}`} siteId={selected.id} />
+      <InsightsHome key={selected.id} siteId={selected.id} />
     </div>
   );
 }

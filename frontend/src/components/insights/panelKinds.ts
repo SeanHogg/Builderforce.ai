@@ -19,6 +19,9 @@ import { IssueOverviewTab, IssueRecordingsTab } from './kinds/IssueKind';
 import { IssuesKind } from './kinds/IssuesKind';
 import { LiveKind } from './kinds/LiveKind';
 import { RecordingJourneyTab, RecordingLeadTab, RecordingReplayTab } from './kinds/RecordingKind';
+import { RouteHeatTab } from './kinds/RouteKind';
+import { MetricKind } from './kinds/MetricKind';
+import { FunnelEventsTab, FunnelFlowTab, FunnelStepsTab } from './kinds/FunnelKind';
 
 export type InsightPanelKind =
   | 'recording' | 'issue' | 'issues' | 'fix' | 'route' | 'metric'
@@ -78,6 +81,26 @@ export const INSIGHT_PANEL_KINDS: ReadonlyArray<InsightPanelKindDef> = [
     ],
   },
   { kind: 'issues', labelKey: 'kinds.issues', tabs: [{ id: 'main', labelKey: 'kinds.issues', Component: IssuesKind }] },
+  {
+    // One page: its heat now; S4f adds `{ id: 'review', … }` to these tabs.
+    kind: 'route',
+    labelKey: 'route.kind',
+    tabs: [
+      { id: 'heat', labelKey: 'route.tabs.heat', Component: RouteHeatTab },
+    ],
+  },
+  // The Overview dashboard, opened from a KPI tile (S4c).
+  { kind: 'metric', labelKey: 'kinds.metric', tabs: [{ id: 'main', labelKey: 'kinds.metric', Component: MetricKind }] },
+  {
+    // Funnels, smart events and the flow (S4c). The spec's "Clusters" tab is Events here.
+    kind: 'funnel',
+    labelKey: 'kinds.funnel',
+    tabs: [
+      { id: 'steps', labelKey: 'funnel.tabs.steps', Component: FunnelStepsTab },
+      { id: 'events', labelKey: 'funnel.tabs.events', Component: FunnelEventsTab },
+      { id: 'flow', labelKey: 'funnel.tabs.flow', Component: FunnelFlowTab },
+    ],
+  },
   { kind: 'live', labelKey: 'kinds.live', tabs: [{ id: 'main', labelKey: 'kinds.live', Component: LiveKind }] },
   { kind: 'sites', labelKey: 'kinds.sites', tabs: [{ id: 'main', labelKey: 'kinds.sites', Component: SitesKind }] },
   { kind: 'plan', labelKey: 'kinds.plan', tabs: [{ id: 'main', labelKey: 'kinds.plan', Component: PlanKind }] },

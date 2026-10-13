@@ -44,6 +44,16 @@ export const REPLAY_TRACE_VERBS = {
   paymentRefunded: 'replay.payment.refunded',
   allowanceExhausted: 'replay.allowance.exhausted',
   releaseRenamed: 'replay.release.renamed',
+  summaryGenerated: 'replay.summary.generated',
+  // S4e: every prescription action a person takes (`prescriptionActions.ts`).
+  prescriptionFix: 'replay.prescription.fix',
+  prescriptionTest: 'replay.prescription.test',
+  prescriptionStartTest: 'replay.prescription.start-test',
+  prescriptionFollowUp: 'replay.prescription.follow-up',
+  prescriptionTicket: 'replay.prescription.ticket',
+  prescriptionDismiss: 'replay.prescription.dismiss',
+  prescriptionPublishPreview: 'replay.prescription.publish-preview',
+  prescriptionRevert: 'replay.prescription.revert',
 } as const;
 
 export type ReplayTraceVerb = (typeof REPLAY_TRACE_VERBS)[keyof typeof REPLAY_TRACE_VERBS];

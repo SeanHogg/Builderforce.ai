@@ -15,6 +15,8 @@ import { apiRequest, apiRequestStream, apiRequestText, type RequestOptions } fro
 import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import type { SessionApp } from './embeddedApps';
 import type { OutcomeMetric, OutcomeMetricFamilyRef } from './outcomeMetrics';
+import { emitMethodEvent } from './methodEvents';
+import type { ProofEvaluationDto, ProofJourneySignalDto, ProofMeasure } from '@builderforce/interaction-contract';
 
 /**
  * `request` / `webRequest` are the two credential flavours this module's ~250
@@ -9519,6 +9521,8 @@ export interface Realization {
   verdict: RealizationVerdict | null;
   verdictMetric: RealizationVerdictMetric | null;
   decidedAt: string | null;
+  /** What visitor behaviour grades it (PRD 33 §5.3.1); null when the target's criteria are not visitor behaviour. */
+  measure?: ProofMeasure | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -9538,18 +9542,32 @@ export const realizationApi = {
       sessionId ? `/api/realizations?sessionId=${encodeURIComponent(sessionId)}` : '/api/realizations',
     ).then((r) => r.realizations),
 
+  /** Reading it also rolls its verdict up; a read that changed the grade is the method's `proof.grade` act. */
   get: (id: string): Promise<Realization> =>
-    request<{ realization: Realization }>(`/api/realizations/${encodeURIComponent(id)}`).then((r) => r.realization),
+    request<{ realization: Realization; verdictChanged?: boolean }>(`/api/realizations/${encodeURIComponent(id)}`).then((r) => {
+      if (r.verdictChanged) emitMethodEvent('proof.grade');
+      return r.realization;
+    }),
 
-  /** Read an idea and rank the proofs. Persists nothing. */
   /** Reading an idea persists nothing — except, when the idea belongs to a
-   *  board, that a READ happened. That is what `readBeforeBuildRate` counts. */
-  plan: (idea: string, sessionId?: string | null): Promise<{
+   *  board, that a READ happened. That is what `readBeforeBuildRate` counts.
+   *  `priorRealizationId` reads it again with that graded proof's evidence (PRD 33 §5.3.3). */
+  plan: (idea: string, sessionId?: string | null, opts: { priorRealizationId?: string | null } = {}): Promise<{
     spec: ChallengeSpec;
     recommendations: RealizationRecommendation[];
     targets: RealizationTargetSummary[];
   }> =>
-    request('/api/realizations/plan', { method: 'POST', body: JSON.stringify({ idea, ...(sessionId ? { sessionId } : {}) }) }),
+    request<{ spec: ChallengeSpec; recommendations: RealizationRecommendation[]; targets: RealizationTargetSummary[] }>('/api/realizations/plan', {
+      method: 'POST',
+      body: JSON.stringify({
+        idea,
+        ...(sessionId ? { sessionId } : {}),
+        ...(opts.priorRealizationId ? { priorRealizationId: opts.priorRealizationId } : {}),
+      }),
+    }).then((r) => {
+      emitMethodEvent('idea.read');
+      return r;
+    }),
 
   /** Choose a proof and plan it. Still builds nothing. */
   create: (input: {
@@ -9565,14 +9583,40 @@ export const realizationApi = {
     request<{ realization: Realization }>('/api/realizations', {
       method: 'POST',
       body: JSON.stringify(input),
-    }).then((r) => r.realization),
+    }).then((r) => {
+      emitMethodEvent('proof.choose');
+      return r.realization;
+    }),
 
   /** Build it, publish it, wire its forms. Idempotent. */
   build: (id: string): Promise<{ realization: Realization | null; result: RealizationBuildResult }> =>
     request<{ realization: Realization | null; result: RealizationBuildResult }>(
       `/api/realizations/${encodeURIComponent(id)}/build`,
       { method: 'POST' },
-    ),
+    ).then((r) => {
+      emitMethodEvent('proof.build');
+      return r;
+    }),
+
+  /** The proof's standing against its measure (the scoreboard's one read); null when it has none. */
+  measure: (id: string): Promise<ProofEvaluationDto | null> =>
+    request<ProofEvaluationDto>(`/api/realizations/${encodeURIComponent(id)}/measure`, { expectedErrors: [404] })
+      .catch((error: unknown) => {
+        if ((error as { status?: number } | null)?.status === 404) return null;
+        throw error;
+      }),
+
+  /** Grade it now, before the window ends. The reason is required and kept on the record. */
+  callEarly: (id: string, reason: string): Promise<Realization> =>
+    request<{ realization: Realization }>(`/api/realizations/${encodeURIComponent(id)}/call-early`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+      expectedErrors: [400, 409],
+    }).then((r) => r.realization),
+
+  /** Where the newest proof puts the founder: Make, Measure, or no signal. */
+  journeySignal: (): Promise<ProofJourneySignalDto> =>
+    request<ProofJourneySignalDto>('/api/realizations/journey-signal'),
 
   remove: (id: string): Promise<{ ok: boolean }> =>
     request<{ ok: boolean }>(`/api/realizations/${encodeURIComponent(id)}`, { method: 'DELETE' }),

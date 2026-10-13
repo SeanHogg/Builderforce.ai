@@ -2826,7 +2826,20 @@
       "link": "Lier à",
       "linkNone": "Aucun lien",
       "linkProjects": "Projets",
-      "linkInitiatives": "Initiatives"
+      "linkInitiatives": "Initiatives",
+      "band": {
+        "aria": "Entonnoir",
+        "none": "Aucun entonnoir pour l’instant.",
+        "create": "Créer un entonnoir",
+        "openAria": "Ouvrir l’entonnoir à {step}",
+        "approx": "≈ {value}",
+        "conversion": "{value} convertis"
+      },
+      "tabs": {
+        "steps": "Étapes",
+        "events": "Événements",
+        "flow": "Parcours"
+      }
     },
     "alloc": {
       "title": "Répartition des investissements",
@@ -3594,7 +3607,7 @@
       },
       "representatives": "Enregistrements représentatifs",
       "repAria": "Ouvrir l’enregistrement représentatif {rank}",
-      "recordingsOnRoute": "Enregistrements ayant visité {route}"
+      "recordingsOfIssue": "Enregistrements ayant rencontré ce problème sur {route}"
     },
     "panel": {
       "crumbRoot": "Insights",
@@ -3625,7 +3638,9 @@
       }
     },
     "lenses": {
-      "live": "En direct"
+      "live": "En direct",
+      "heat": "Chaleur",
+      "stuck": "Blocages"
     },
     "journey": {
       "steps": "{count, plural, one {# page} other {# pages}}",
@@ -3665,6 +3680,13 @@
       "packsTitle": "Acheter des enregistrements",
       "receipts": "Paiements et reçus",
       "checkoutReturned": "Merci. Vos crédits apparaîtront ici dès que le paiement sera confirmé."
+    },
+    "route": {
+      "kind": "Page",
+      "tabs": {
+        "heat": "Chaleur"
+      },
+      "openAria": "Ouvrir la page {route}"
     }
   },
   "cloudAgentForm": {
@@ -14354,7 +14376,8 @@
       "broadcasts": "Annonces",
       "llmRatings": "Évaluations",
       "visitorFlow": "Parcours visiteurs",
-      "visitors": "Visiteurs"
+      "visitors": "Visiteurs",
+      "insightsOps": "Opérations Insights"
     },
     "common": {
       "loading": "Chargement…",
@@ -15508,6 +15531,62 @@
         },
         "noteWarn": "Au-delà de 80 % : le balayage de maintenance nocturne purge désormais toutes les tables de journaux compressibles sur une fenêtre raccourcie et récupère l'espace immédiatement, sans attendre la réécriture hebdomadaire.",
         "noteCritical": "Au-delà de 90 % : toutes les tables de journaux compressibles sont purgées sur leur fenêtre déclarée la plus courte. Les fenêtres de conformité et de facturation ne sont jamais raccourcies."
+      }
+    },
+    "insightsOps": {
+      "title": "Opérations Insights",
+      "subtitle": "Les totaux de la plateforme pour Insights, ainsi que les réglages d'enregistrement et les octrois de crédits d'un espace de travail. Aucun site, visiteur ni enregistrement n'est affiché ici.",
+      "navLink": "Opérations Insights",
+      "summary": {
+        "aria": "Totaux de la plateforme Insights",
+        "sessions7d": "Sessions (7 jours)",
+        "keptRecordings7d": "Enregistrements conservés (7 jours)",
+        "bytes7d": "Stockage (7 jours)",
+        "sites": "Sites",
+        "tenants": "Espaces de travail",
+        "packRevenue30d": "Revenus des packs (30 jours)"
+      },
+      "workspace": {
+        "title": "Espace de travail",
+        "label": "Espace de travail",
+        "empty": "Aucun espace de travail pour l'instant."
+      },
+      "settings": {
+        "title": "Réglages d'enregistrement",
+        "excluded": "Exclure de l'enregistrement sur builderforce.ai",
+        "excludedHint": "Les membres de cet espace de travail ne sont jamais enregistrés lorsqu'ils sont connectés à builderforce.ai.",
+        "override": "Enregistrements gratuits par mois",
+        "overrideHint": "Remplace l'allocation du catalogue pour cet espace de travail. Indiquez 0 pour tester un véritable achat de pack. Laissez vide pour la valeur par défaut.",
+        "overridePlaceholder": "Valeur du catalogue",
+        "clear": "Effacer",
+        "save": "Enregistrer les réglages",
+        "saving": "Enregistrement…",
+        "saved": "Enregistré. La modification est consignée dans l'audit.",
+        "invalidOverride": "Saisissez un nombre entier supérieur ou égal à 0, ou laissez vide."
+      },
+      "grant": {
+        "title": "Octroyer des crédits d'enregistrement",
+        "hint": "L'octroi est inscrit au journal d'audit avant d'être crédité.",
+        "units": "Enregistrements",
+        "reason": "Motif",
+        "reasonPlaceholder": "Pourquoi cet espace de travail reçoit ces enregistrements",
+        "submit": "Octroyer les crédits",
+        "granting": "Octroi en cours…",
+        "invalid": "Saisissez entre 1 et {max} enregistrements et un motif d'au moins 3 caractères.",
+        "confirmTitle": "Octroyer des crédits d'enregistrement ?",
+        "confirmMessage": "Octroyer {units} enregistrements à {tenant} ? L'opération est auditée et ne peut pas être annulée ici.",
+        "confirmLabel": "Octroyer",
+        "done": "{units} enregistrements octroyés. L'espace de travail dispose maintenant de {credits} crédits. Référence : {reference}"
+      },
+      "methodFunnel": {
+        "title": "Initialiser l’entonnoir « La méthode »",
+        "hint": "Crée les quatre événements intelligents de la méthode et l’entonnoir de la page d’accueil jusqu’à une preuve notée, sur le site Insights de Builderforce. Peut être relancé sans risque.",
+        "siteLabel": "Identifiant du site Insights de Builderforce",
+        "invalid": "Saisissez un identifiant de site (un UUID).",
+        "submit": "Initialiser l’entonnoir",
+        "seeding": "Initialisation…",
+        "done": "Initialisé — {events} événements intelligents créés.",
+        "already": "Déjà initialisé — rien à créer."
       }
     }
   },
@@ -19510,7 +19589,7 @@
     },
     "install": {
       "title": "One script, every capability",
-      "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host."
+      "description": "Installez-le une fois sur le site client. Les changements de widgets s’appliquent au prochain chargement de page sans redéployer le site. Les cartes de chaleur et l’enregistrement de sessions ne démarrent que si la balise porte aussi la clé de votre site Insights (data-site) ; elle est ajoutée ici dès que l’espace de travail a un site Insights."
     },
     "consent": {
       "title": "Consent log",
@@ -19542,7 +19621,7 @@
       },
       "heatmaps": {
         "name": "Heatmaps",
-        "description": "Measure click locations and scroll depth to understand real customer behavior.",
+        "description": "Cartes de chaleur des clics, clics de rage, clics morts et du défilement, issues de l’enregistrement de sessions Insights. Elles enregistrent dès que le script d’installation porte la clé de votre site Insights.",
         "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps."
       },
       "feature_management": {
@@ -19644,6 +19723,13 @@
         "title": "Placez votre idée à l’intérieur du produit de vos clients",
         "body": "Créez un espace de travail gratuit pour obtenir votre clé d’intégration, activez les capacités souhaitées et publiez-les dès aujourd’hui sur votre site."
       }
+    },
+    "insights": {
+      "needsSite": "Nécessite un site Insights : activer ceci seul n’enregistre rien.",
+      "siteReady": "Enregistrement via la clé de votre site Insights.",
+      "setup": "Configurer Insights",
+      "open": "Ouvrir Insights",
+      "standaloneTitle": "Enregistrement de sessions seul (sans widgets)"
     }
   },
   "embedInstall": {
@@ -26801,6 +26887,40 @@
       "leaveTitle": "Quitter pendant que Studio construit ?",
       "leaveMessage": "Studio travaille encore sur votre demande. Aller à l’accueil de Studio l’interrompt ; votre app et tout ce qui a été construit restent sur ce canevas.",
       "leaveConfirm": "Quitter quand même"
+    },
+    "proof": {
+      "title": "Tableau de bord de la preuve",
+      "loading": "Chargement du tableau de bord…",
+      "loadFailed": "Impossible de charger le tableau de bord.",
+      "killAtLeast": "Ne le construire que si « {event} » se produit au moins {target} fois sur {sample} visites échantillonnées en {days} jours.",
+      "killAtMost": "Ne le construire que si « {event} » reste à {target} ou moins sur {sample} visites échantillonnées en {days} jours.",
+      "sample": "Échantillon",
+      "sampleOf": "{n} visites sur {min}",
+      "success": "Succès",
+      "successOf": "{n} sur {target}",
+      "daysLeft": "{days} jours restants",
+      "windowNotStarted": "La fenêtre démarre avec la première visite échantillonnée.",
+      "windowClosed": "La fenêtre est close.",
+      "status": {
+        "collecting": "Collecte",
+        "onTrack": "En bonne voie",
+        "atRisk": "À risque",
+        "met": "Atteint",
+        "missed": "Manqué"
+      },
+      "watch": "Voir les visiteurs qui n’ont pas converti",
+      "whyMissed": "Pourquoi c’est manqué",
+      "noPatterns": "Aucun motif cité pour l’instant.",
+      "callEarly": "Trancher plus tôt…",
+      "callEarlyTitle": "Trancher cette preuve plus tôt",
+      "callEarlyBody": "Le verdict est rendu maintenant, sur les chiffres mesurés. Expliquez pourquoi vous n’attendez pas l’échantillon complet : la raison est conservée au dossier.",
+      "reasonLabel": "Pourquoi trancher maintenant ?",
+      "reasonPlaceholder": "Par exemple : la source de trafic est épuisée et ne se renouvellera pas.",
+      "reasonRequired": "Trancher plus tôt exige une raison écrite.",
+      "callEarlySubmit": "Trancher maintenant",
+      "calling": "Enregistrement…",
+      "callEarlyFailed": "Impossible d’enregistrer la décision. Réessayez.",
+      "readAgain": "Relire avec ce que nous avons appris"
     }
   },
   "canvasCommands": {
@@ -33844,6 +33964,358 @@
       "lastSeen": "vu {time}",
       "notRecorded": "Non enregistré",
       "watchAria": "Regarder en direct le visiteur sur {route}"
+    },
+    "heat": {
+      "route": "Page",
+      "release": "Version",
+      "allReleases": "Toutes les versions",
+      "releaseOrdinal": "R{ordinal}",
+      "compare": "Comparer avec",
+      "noCompare": "Aucune comparaison",
+      "compareHint": "Choisissez une version à comparer pour les voir côte à côte ou en différence.",
+      "device": "Appareil",
+      "allDevices": "Tous les appareils",
+      "layersAria": "Calque de chaleur",
+      "layers": {
+        "click": "Clics",
+        "rage": "Clics de rage",
+        "dead": "Clics morts",
+        "scroll": "Profondeur de défilement",
+        "areas": "Zones"
+      },
+      "modesAria": "Vue de comparaison",
+      "modes": {
+        "single": "Cette version",
+        "side": "Côte à côte",
+        "difference": "Différence"
+      },
+      "legendCold": "froid",
+      "legendHot": "chaud",
+      "legendAria": "Échelle de couleur du froid (peu d’interactions) au chaud (beaucoup)",
+      "legendLess": "moins que la version comparée",
+      "legendMore": "plus que la version comparée",
+      "legendDiffAria": "Échelle de couleur de moins d’interactions que la version comparée à plus",
+      "overlayAria": "Carte de chaleur avec {count} cellules actives",
+      "exactTotal": "{count} interactions, exactes sur toutes les sessions",
+      "empty": "Aucune interaction n’a été enregistrée sur cette page pendant cette période.",
+      "error": "Impossible de charger la carte de chaleur.",
+      "frameTitle": "Instantané de {route}",
+      "pageLoading": "Reconstruction de la page…",
+      "noBackground": "Aucun enregistrement conservé n’a visité cette page pendant cette période : la chaleur est donc dessinée sans la page derrière.",
+      "pageError": "La page n’a pas pu être reconstruite : la chaleur est donc dessinée sans elle.",
+      "sideCurrent": "Cette version : {release}",
+      "sideCompare": "Comparée : {release}",
+      "differenceCaption": "{release} comparée à {compare}",
+      "highlightAria": "Élément mis en évidence {element}",
+      "playerToggle": "Calque de chaleur",
+      "areas": {
+        "aria": "Part des clics par élément",
+        "share": "{share} des clics",
+        "zoneAria": "{element} : {share} des clics"
+      },
+      "elements": {
+        "title": "Éléments",
+        "element": "Élément",
+        "clicks": "Clics",
+        "rage": "Rage",
+        "dead": "Morts",
+        "delta": "Écart avec la version comparée",
+        "none": "—",
+        "sortBy": "Trier par {column}",
+        "empty": "Aucun élément n’a été cliqué sur cette page pendant cette période.",
+        "open": "Enregistrements",
+        "openAria": "Voir les enregistrements qui ont cliqué sur {element}"
+      },
+      "scroll": {
+        "title": "Portée du défilement",
+        "loading": "Chargement de la profondeur de défilement…",
+        "error": "Impossible de charger la profondeur de défilement.",
+        "empty": "Aucune page vue n’a signalé de profondeur de défilement pendant cette période.",
+        "sessions": "{count} pages vues ont signalé une profondeur de défilement",
+        "band": "{from}–{to} %",
+        "reachAria": "{share} des pages vues atteignent {band}"
+      }
+    },
+    "heatInsight": {
+      "title": "Ce que dit la chaleur",
+      "loading": "Lecture de la chaleur…",
+      "error": "Impossible de charger les constats.",
+      "empty": "Rien ne ressort sur cette page pour l’instant.",
+      "rage_spike": "Les clics de rage sur « {label} » sont passés à {rage}, soit {ratio}× la version comparée ({compareRage}) après ajustement au trafic.",
+      "dead_text": "{dead} clics morts sur « {label} » : c’est du texte, pas une commande, mais les visiteurs s’attendent à ce qu’il réagisse.",
+      "buried_top_click": "L’élément le plus cliqué, « {label} » ({clicks} clics), se trouve à {depth} % de la page, que seuls {reach} des visiteurs atteignent.",
+      "quickback_doubled": "Les retours rapides sur cette page sont passés de {compareQuickbacks} dans la version comparée à {quickbacks} ({ratio}× après ajustement au trafic).",
+      "actions": {
+        "watch": "Voir les enregistrements",
+        "copyLink": "Copier le lien"
+      },
+      "copied": "Lien copié. Collez-le dans le ticket.",
+      "copyFailed": "Impossible de copier le lien."
+    },
+    "export": {
+      "button": "Exporter en vidéo",
+      "requesting": "Demande en cours…",
+      "cost": "Transforme cet enregistrement en vidéo. Coûte 10 enregistrements de votre quota, une seule fois.",
+      "download": "Télécharger la vidéo",
+      "downloadFailed": "La vidéo n’a pas pu être téléchargée.",
+      "status": {
+        "queued": "En file d’attente. Le rendu démarre sous peu.",
+        "running": "Rendu de la vidéo en cours…",
+        "done": "La vidéo est prête."
+      },
+      "error": {
+        "runner_unavailable": "L’export vidéo n’est pas disponible pour le moment : aucun moteur de rendu ne tourne.",
+        "insufficient_units": "Il ne reste pas assez d’enregistrements dans votre quota pour une vidéo (elle en coûte 10). Achetez un pack dans Forfait et utilisation.",
+        "no_chunks": "Cet enregistrement n’a aucune donnée stockée à rendre.",
+        "dispatch_failed": "Le moteur de rendu n’a pas pu démarrer. Réessayez dans un instant.",
+        "timed_out": "Le rendu a pris trop de temps et a été arrêté. Réessayez.",
+        "generic": "L’export a échoué."
+      }
+    },
+    "filter": {
+      "aria": "Filtre",
+      "add": "Ajouter un filtre",
+      "full": "Un filtre compte au plus 12 conditions.",
+      "fieldsAria": "Filtrer par",
+      "clear": "Effacer les filtres",
+      "remove": "Retirer {clause}",
+      "editorAria": "Filtrer sur {field}",
+      "opAria": "Condition",
+      "valueAria": "Valeur",
+      "apply": "Appliquer",
+      "cancel": "Annuler",
+      "choose": "Choisir…",
+      "field": {
+        "device": "Appareil",
+        "browser": "Navigateur",
+        "os": "Système d’exploitation",
+        "country": "Pays",
+        "referrer": "Provenance",
+        "entryPath": "Page d’entrée",
+        "exitPath": "Page de sortie",
+        "visitedPath": "Page visitée",
+        "clickedSelector": "Élément cliqué",
+        "frustration": "Signal de frustration",
+        "durationMs": "Durée",
+        "activeMs": "Temps actif",
+        "pageCount": "Pages vues",
+        "release": "Version",
+        "smartEvent": "Événement intelligent",
+        "tag": "Étiquette",
+        "converted": "Converti",
+        "variant": "Variante de test",
+        "issue": "Problème"
+      },
+      "op": {
+        "eq": "est",
+        "neq": "n’est pas",
+        "in": "est l’un de",
+        "contains": "contient",
+        "prefix": "commence par",
+        "gte": "au moins",
+        "lte": "au plus"
+      },
+      "value": {
+        "desktop": "Ordinateur",
+        "tablet": "Tablette",
+        "phone": "Téléphone",
+        "rage": "Clic de rage",
+        "dead": "Clic mort",
+        "quickback": "Retour rapide",
+        "excessive_scroll": "Défilement excessif",
+        "error": "Erreur JavaScript",
+        "true": "Oui",
+        "false": "Non"
+      },
+      "placeholder": {
+        "list": "Valeurs séparées par des virgules",
+        "text": "Valeur",
+        "tagKey": "Nom de l’étiquette",
+        "tagValue": "Valeur de l’étiquette"
+      },
+      "unit": {
+        "seconds": "s"
+      }
+    },
+    "segments": {
+      "button": "Segments",
+      "aria": "Segments enregistrés",
+      "empty": "Aucun segment enregistré. Filtrez la vue, puis enregistrez-la ici.",
+      "applyAria": "Appliquer le segment {name}",
+      "renameAria": "Renommer le segment {name}",
+      "saveName": "Enregistrer",
+      "deleteAria": "Supprimer le segment {name}",
+      "deleteTitle": "Supprimer le segment",
+      "deleteConfirm": "Supprimer le segment « {name} » ? Les enregistrements ne sont pas touchés.",
+      "delete": "Supprimer",
+      "namePlaceholder": "Nommez ce filtre",
+      "nameAria": "Nom du segment",
+      "save": "Enregistrer le segment",
+      "saveNeedsFilter": "Ajoutez d’abord un filtre."
+    },
+    "overview": {
+      "approx": "≈ {value}",
+      "trafficAria": "Trafic",
+      "frustrationAria": "Signaux de frustration",
+      "notInWeighted": "Inconnu pour une vue filtrée",
+      "frustrationOpen": "Voir les problèmes avec {label}",
+      "ofSessions": "des sessions",
+      "tile": {
+        "sessions": "Sessions",
+        "newVisitors": "Nouveaux visiteurs",
+        "pagesPerSession": "Pages par session",
+        "activeTime": "Temps actif moyen",
+        "scrollDepth": "Profondeur de défilement moyenne"
+      },
+      "frustration": {
+        "rage": "Clics de rage",
+        "dead": "Clics morts",
+        "quickback": "Retours rapides",
+        "excessiveScroll": "Défilement excessif",
+        "error": "Erreurs JavaScript"
+      },
+      "top": {
+        "pages": "Pages principales",
+        "entryPages": "Pages d’entrée",
+        "exitPages": "Pages de sortie",
+        "referrers": "Provenances",
+        "countries": "Pays",
+        "devices": "Appareils",
+        "browsers": "Navigateurs",
+        "os": "Systèmes d’exploitation"
+      },
+      "topEmpty": "Rien pour l’instant.",
+      "unknown": "Inconnu",
+      "addFilterAria": "Filtrer {field} : {label}",
+      "estimatedNote": "Filtré : les chiffres sont estimés à partir des enregistrements conservés (≈).",
+      "trendTitle": "{days} derniers jours",
+      "trendSessionsAria": "Sessions par jour",
+      "trendFrustrated": "Sessions frustrées",
+      "trendFrustratedAria": "Part des sessions frustrées par jour",
+      "breakdownsTitle": "Répartitions"
+    },
+    "funnels": {
+      "choose": "Entonnoir",
+      "edit": "Modifier",
+      "new": "Nouvel entonnoir",
+      "empty": "Aucun entonnoir. Créez-en un pour voir où les visiteurs décrochent.",
+      "editTitle": "Modifier l’entonnoir",
+      "newTitle": "Nouvel entonnoir",
+      "name": "Nom",
+      "windowMinutes": "À terminer en (minutes)",
+      "stepAria": "Étape {n}",
+      "stepKindAria": "Type de l’étape {n}",
+      "matchModeAria": "Correspondance de l’étape {n}",
+      "matchAria": "Valeur de l’étape {n}",
+      "stepKind": {
+        "page": "Page",
+        "click": "Clic",
+        "event": "Événement"
+      },
+      "matchPlaceholder": {
+        "page": "/pricing",
+        "click": "button.checkout",
+        "event": "signup"
+      },
+      "removeStep": "Retirer l’étape {n}",
+      "addStep": "Ajouter une étape",
+      "save": "Enregistrer l’entonnoir",
+      "cancel": "Annuler",
+      "delete": "Supprimer l’entonnoir",
+      "deleteTitle": "Supprimer l’entonnoir",
+      "deleteConfirm": "Supprimer l’entonnoir « {name} » ?",
+      "approx": "≈ {value}",
+      "stepsAria": "Étapes de {name}",
+      "estimatedNote": "Les entonnoirs se lisent sur les enregistrements conservés : comptes et durées sont des estimations (≈).",
+      "truncated": "Seuls les 20 000 enregistrements les plus récents ont été lus.",
+      "chartAria": "Visites par étape de {name}",
+      "visits": "{value} visites",
+      "conversion": "{value} depuis l’étape précédente",
+      "medianTime": "médiane de {value} depuis l’étape précédente",
+      "watchDropped": "Regarder les {count} qui ont décroché",
+      "droppedGone": "Ces enregistrements ne sont plus conservés."
+    },
+    "smartEvents": {
+      "new": "Nouvel événement",
+      "empty": "Aucun événement pour l’instant.",
+      "editorAria": "Définir un événement intelligent",
+      "name": "Nom",
+      "namePlaceholder": "A cliqué sur le bouton tarifs",
+      "ruleKindLabel": "Surveiller",
+      "ruleKind": {
+        "page": "Une page vue",
+        "click": "Un clic",
+        "custom": "Un événement nommé"
+      },
+      "matchModeLabel": "Correspondance",
+      "matchMode": {
+        "equals": "est exactement",
+        "prefix": "commence par",
+        "contains": "contient"
+      },
+      "match": "Valeur",
+      "matchPlaceholder": {
+        "page": "/pricing",
+        "click": "button.checkout",
+        "custom": "signup"
+      },
+      "save": "Enregistrer l’événement",
+      "cancel": "Annuler",
+      "delete": "Supprimer",
+      "deleteTitle": "Supprimer l’événement intelligent",
+      "deleteConfirm": "Supprimer l’événement intelligent « {name} » ? Les entonnoirs qui l’utilisent ne correspondront plus.",
+      "deleteAria": "Supprimer {name}",
+      "tableAria": "Événements intelligents",
+      "col": {
+        "name": "Événement",
+        "rule": "Règle",
+        "count": "Enregistrements, {days} derniers jours",
+        "actions": "Actions"
+      },
+      "builtin": "Intégré",
+      "ruleSummary": "{kind} {mode} {match}",
+      "approx": "≈ {value}",
+      "filter": "Filtrer",
+      "filterAria": "Filtrer les enregistrements avec {name}",
+      "defineFromClick": "Définir un événement à partir de ce clic",
+      "defineFromClickAria": "Définir un événement à partir du clic sur {label}",
+      "preview": {
+        "idle": "Saisissez une valeur pour voir combien d’enregistrements correspondent.",
+        "checking": "Comptage des enregistrements correspondants…",
+        "invalid": "Cette règle n’est pas valide.",
+        "count": "≈ {value} enregistrements correspondent sur les {days} derniers jours"
+      }
+    },
+    "summary": {
+      "title": "Résumé",
+      "summarize": "Résumer",
+      "regenerate": "Résumer à nouveau",
+      "loading": "Résumé en cours…",
+      "limit": "La limite quotidienne de résumés IA est atteinte. Réessayez demain.",
+      "uncited": "Aucun résumé étayé n’a pu être rédigé. Regardez plutôt l’enregistrement.",
+      "error": "Le résumé n’a pas pu être créé.",
+      "citeAria": "Aller à {time}",
+      "segmentTitle": "Ce qu’ont fait ces visiteurs",
+      "summarizeSegment": "Résumer ces enregistrements",
+      "sampled": "D’après un échantillon de {count} enregistrements.",
+      "exampleAria": "Regarder l’exemple à {time}"
+    },
+    "ticket": {
+      "raise": "Créer un ticket à {time}",
+      "title": "Replay : {label} à {time}",
+      "body": "Créé depuis un enregistrement de visiteur : « {label} » à {time} sur {route}.",
+      "watchLink": "Voir ce moment",
+      "created": "Ticket créé.",
+      "failed": "Impossible de créer le ticket.",
+      "effect": {
+        "waiting": "Effet sur {metric} sur {route} : en attente de {visits} visites sur une version plus récente.",
+        "measured": "Effet sur {metric} sur {route} : {before} → {after} ({visits} visites sur la nouvelle version).",
+        "metric": {
+          "frustrated": "les visites frustrées",
+          "errors": "les visites avec erreurs",
+          "conversions": "les conversions"
+        }
+      }
     }
   },
   "apps": {

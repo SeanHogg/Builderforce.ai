@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   creditReplayGrant: vi.fn(),
   loadTenantPlanRow: vi.fn(),
   recordReplayTrace: vi.fn(async () => undefined),
+  getReplayTenantSettings: vi.fn(),
+  updateReplayTenantSettings: vi.fn(),
 }));
 
 vi.mock('../middleware/superAdminMiddleware', () => {
@@ -41,6 +43,12 @@ vi.mock('../../application/commerce/replayWallet', async (importOriginal) => {
   };
 });
 
+vi.mock('../../application/replay/replayTenantSettings', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../application/replay/replayTenantSettings')>()),
+  getReplayTenantSettings: mocks.getReplayTenantSettings,
+  updateReplayTenantSettings: mocks.updateReplayTenantSettings,
+}));
+
 import { errorHandler } from '../middleware/errorHandler';
 import { createReplayOpsGrantRoutes } from './replayOpsGrantRoutes';
 
@@ -64,7 +72,21 @@ beforeEach(() => {
   mocks.creditReplayGrant.mockReset().mockImplementation(async () => { mocks.order.push('ledger'); return true; });
   mocks.loadTenantPlanRow.mockReset().mockResolvedValue({ id: 1 });
   mocks.recordReplayTrace.mockClear();
+  mocks.getReplayTenantSettings.mockReset().mockResolvedValue({ replayExcluded: false, replayFreeAllowanceOverride: null });
+  mocks.updateReplayTenantSettings.mockReset().mockImplementation(async (_db: unknown, _env: unknown, input: { patch: Record<string, unknown> }) => ({
+    replayExcluded: false, replayFreeAllowanceOverride: null, ...input.patch,
+  }));
 });
+
+function settings(method: 'GET' | 'PATCH', tenantId: string, body?: unknown) {
+  const router = createReplayOpsGrantRoutes(db);
+  router.onError(errorHandler as never);
+  return router.request(`/tenants/${tenantId}/settings`, {
+    method,
+    headers: { 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.9' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }, {} as never, ctx);
+}
 
 describe('POST /grants', () => {
   it('audits REPLAY_CREDITS_GRANTED, then credits the ledger under replay-grant:<audit id>', async () => {
@@ -110,5 +132,47 @@ describe('POST /grants', () => {
     mocks.writeAdminAudit.mockRejectedValue(new Error('audit down'));
     expect((await grant({ tenantId: 1, units: 10, reason: 'please' })).status).toBe(500);
     expect(mocks.creditReplayGrant).not.toHaveBeenCalled();
+  });
+});
+
+describe('/tenants/:tenantId/settings', () => {
+  it('GET returns the workspace switches', async () => {
+    mocks.getReplayTenantSettings.mockResolvedValue({ replayExcluded: true, replayFreeAllowanceOverride: 0 });
+    const res = await settings('GET', '7');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ replayExcluded: true, replayFreeAllowanceOverride: 0 });
+    expect(mocks.getReplayTenantSettings).toHaveBeenCalledWith(db, 7);
+  });
+
+  it('PATCH passes the operator, workspace and patch to the audited write', async () => {
+    const res = await settings('PATCH', '7', { replayFreeAllowanceOverride: 0 });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ replayExcluded: false, replayFreeAllowanceOverride: 0 });
+    expect(mocks.updateReplayTenantSettings).toHaveBeenCalledWith(db, {}, {
+      actorId: 'op-1', tenantId: 7, patch: { replayFreeAllowanceOverride: 0 }, ipAddress: '203.0.113.9',
+    });
+  });
+
+  it('PATCH accepts null to clear the override', async () => {
+    expect((await settings('PATCH', '7', { replayFreeAllowanceOverride: null })).status).toBe(200);
+    expect(mocks.updateReplayTenantSettings).toHaveBeenCalledWith(db, {}, expect.objectContaining({
+      patch: { replayFreeAllowanceOverride: null },
+    }));
+  });
+
+  it('refuses a caller who is not a superadmin, reading and writing nothing', async () => {
+    mocks.superadmin = false;
+    expect((await settings('GET', '7')).status).toBe(403);
+    expect((await settings('PATCH', '7', { replayExcluded: true })).status).toBe(403);
+    expect(mocks.getReplayTenantSettings).not.toHaveBeenCalled();
+    expect(mocks.updateReplayTenantSettings).not.toHaveBeenCalled();
+  });
+
+  it('400s a negative, fractional or empty patch before any write', async () => {
+    expect((await settings('PATCH', '7', { replayFreeAllowanceOverride: -1 })).status).toBe(400);
+    expect((await settings('PATCH', '7', { replayFreeAllowanceOverride: 2.5 })).status).toBe(400);
+    expect((await settings('PATCH', '7', { replayExcluded: 'yes' })).status).toBe(400);
+    expect((await settings('PATCH', '7', {})).status).toBe(400);
+    expect(mocks.updateReplayTenantSettings).not.toHaveBeenCalled();
   });
 });

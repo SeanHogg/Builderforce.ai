@@ -13,7 +13,7 @@ describe('FILTER_FIELDS', () => {
     expect(FILTER_FIELDS.map((f) => f.id)).toEqual([
       'device', 'browser', 'os', 'country', 'referrer', 'entryPath', 'exitPath', 'visitedPath',
       'clickedSelector', 'frustration', 'durationMs', 'activeMs', 'pageCount', 'release', 'smartEvent',
-      'tag', 'converted', 'variant',
+      'tag', 'converted', 'variant', 'issue',
     ]);
   });
 
@@ -41,6 +41,7 @@ describe('parseReplayFilter', () => {
         { field: 'converted', op: 'eq', value: true },
         { field: 'tag', op: 'eq', value: 'plan=pro' },
         { field: 'visitedPath', op: 'prefix', value: '/checkout' },
+        { field: 'issue', op: 'eq', value: '0123456789abcdef' },
       ],
     };
     expect(parseReplayFilter(filter)).toEqual(filter);
@@ -53,6 +54,7 @@ describe('parseReplayFilter', () => {
     expect(parseReplayFilter({ all: [{ field: 'durationMs', op: 'gte', value: '5000' }] })).toBeNull();
     expect(parseReplayFilter({ all: [{ field: 'tag', op: 'eq', value: 'noequals' }] })).toBeNull();
     expect(parseReplayFilter({ all: [{ field: 'country', op: 'in', value: [] }] })).toBeNull();
+    expect(parseReplayFilter({ all: [{ field: 'issue', op: 'in', value: ['a'] }] })).toBeNull();
     expect(parseReplayFilter({ clauses: [] })).toBeNull();
     expect(parseReplayFilter('device=phone')).toBeNull();
   });

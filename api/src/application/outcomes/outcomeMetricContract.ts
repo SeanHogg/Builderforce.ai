@@ -58,7 +58,10 @@ import { sql, type SQL } from 'drizzle-orm';
 
 /** The definition set these numbers were computed under. Bump on any change to
  *  a qualification rule, a denominator, or the action vocabulary below. */
-export const OUTCOME_DEFINITION_VERSION = '2026.08-idea-to-graded-proof';
+// 2026.10: `prescription.verify` joined the delivery family (an Insights fix measured
+// on the release that shipped it, PRD 33 §5.1.5) — its `validated` events now feed
+// the validation counts, so numbers quoted under the old version are not comparable.
+export const OUTCOME_DEFINITION_VERSION = '2026.10-prescription-verify';
 
 /**
  * How many of a workspace's most recently active boards make up the scorecard's
@@ -101,8 +104,13 @@ export const OUTCOME_FAMILY_LABELS: Record<OutcomeMetricFamily, string> = {
  * The canonical delivery actions. "A real deliverable" means one of these
  * succeeded — publishing, handing off to a project, or executing a workflow.
  * Creating a draft canvas object is not on this list and never qualifies.
+ *
+ * `prescription.verify` is the delivery family's MEASURE step for an Insights fix
+ * (PRD 33 §5.1.5): it is only ever written `validated`, carrying the measured delta
+ * as `metric_value`, so it adds to the validation counts and never to the
+ * started/succeeded delivery counts.
  */
-export const DELIVERY_ACTIONS = ['artifact.deliver', 'artifact.publish', 'workflow.execute'] as const;
+export const DELIVERY_ACTIONS = ['artifact.deliver', 'artifact.publish', 'workflow.execute', 'prescription.verify'] as const;
 
 /**
  * The proof-lifecycle actions — the loop, in the ledger.

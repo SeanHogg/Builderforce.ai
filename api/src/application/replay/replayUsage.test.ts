@@ -35,7 +35,7 @@ vi.mock('./replayTrace', () => ({
   REPLAY_TRACE_VERBS: { creditsFirstDebit: 'replay.credits.first_debit', allowanceExhausted: 'replay.allowance.exhausted' },
 }));
 
-import { canKeepNewRecording, chargeUnits, freeAllowance, replayUseReference, usageSnapshot } from './replayUsage';
+import { canKeepNewRecording, chargeUnits, freeAllowance, hasUnits, replayUseReference, usageSnapshot } from './replayUsage';
 
 /** Answers the tenants.settings read, then the paid-spend sum, in call order. */
 const db = {
@@ -151,5 +151,41 @@ describe('usageSnapshot', () => {
       used: 6_000,
       limit: 14_000,
     });
+  });
+});
+
+describe('a multi-unit charge (an MP4 export, 10 units)', () => {
+  const exportCharge = () => chargeUnits(env, db, {
+    tenantId: 7, siteId: SITE, recordingId: 'rec-1', unitIndex: 0, units: 10, reference: 'replay-export:e1', memo: 'Insights export e1',
+  });
+
+  it('spends all 10 from the free pool in one write under its own reference', async () => {
+    expect(await exportCharge()).toEqual({ charged: true, source: 'free' });
+    expect(mocks.debitReplayFree).toHaveBeenCalledTimes(1);
+    expect(mocks.debitReplayFree).toHaveBeenCalledWith(db, env, expect.objectContaining({
+      units: 10, reference: 'replay-export:e1', memo: 'Insights export e1',
+    }));
+  });
+
+  it('takes them from credits when the free pool cannot cover all 10', async () => {
+    mocks.wallet = { credits: 50, freeUsed: 4_995, freeRemaining: 5, period: '2026-10' };
+    expect(await exportCharge()).toEqual({ charged: true, source: 'credits' });
+    expect(mocks.debitReplayFree).not.toHaveBeenCalled();
+    expect(mocks.debitReplayCredits).toHaveBeenCalledWith(db, env, expect.objectContaining({ units: 10, reference: 'replay-export:e1' }));
+  });
+
+  it('never splits across pools, and does not claim the allowance is exhausted', async () => {
+    mocks.wallet = { credits: 5, freeUsed: 4_995, freeRemaining: 5, period: '2026-10' };
+    expect(await exportCharge()).toEqual({ charged: false, source: null });
+    expect(mocks.recordReplayTrace).not.toHaveBeenCalled();
+  });
+});
+
+describe('hasUnits', () => {
+  it('is true only when ONE pool covers the units', async () => {
+    expect(await hasUnits(env, db, 7, 10)).toBe(true);
+    mocks.wallet = { credits: 5, freeUsed: 4_995, freeRemaining: 5, period: '2026-10' };
+    expect(await hasUnits(env, db, 15, 10)).toBe(false);
+    expect(await hasUnits(env, db, 16, 5)).toBe(true);
   });
 });

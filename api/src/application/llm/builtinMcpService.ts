@@ -30,6 +30,7 @@ import { advertisedName, BUILTIN_EXTENSION_ID } from './toolNaming';
 import { CAREER_TOOLS } from './careerToolCatalog';
 import { DELIVERY_TOOLS } from './deliveryToolCatalog';
 import { CHAT_DIAGNOSTICS_TOOLS } from './chatDiagnosticsToolCatalog';
+import { REPLAY_TOOLS } from './replayToolCatalog';
 import { AGENT_PERSONA_TOOLS } from './agentPersonaToolCatalog';
 import { APP_BLUEPRINT_TOOLS } from './appBlueprintToolCatalog';
 import { readTicketPendingChanges } from '../task/ticketPendingChangesPort';
@@ -4175,6 +4176,11 @@ const CATALOG: BuiltinTool[] = [
   // reason as the two above; the row replays the brain route so it inherits that
   // route's access check rather than re-deciding who may read a chat.
   ...CHAT_DIAGNOSTICS_TOOLS,
+  // ---- Insights: chat with your site's visits (PRD 33 S4c) -----------------
+  // Read-only, over the same services the Insights screen reads. Its own module like
+  // the rows above; advertised only to a workspace holding Insights
+  // (`builtinToolEntitlements.ts`), and each run re-checks it.
+  ...REPLAY_TOOLS,
   // ---- Who a teammate IS, for delegating AS them ---------------------------
   // Pairs with `spawn_agent { as_agent }`: a model checks what an agent brings
   // before handing it a slice, and a wrong name comes back with the right ones.

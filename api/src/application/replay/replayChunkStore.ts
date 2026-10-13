@@ -120,6 +120,25 @@ async function listPrefixes(store: R2Bucket, prefix: string): Promise<string[]> 
   return out;
 }
 
+const CHUNK_NAME = /\/(\d{6})\.ndjson\.gz$/;
+
+/**
+ * The seqs actually stored for a recording, ascending. A recording kept by a trigger
+ * starts mid-visit, so its first stored seq is the visit's seq at keep time — not 0 —
+ * and only this listing (not `chunk_count`) says which seqs exist. The first one holds
+ * the full snapshot the recorder's ring buffer drained on keep.
+ */
+export async function listChunkSeqs(env: Env | undefined, loc: RecordingLocation): Promise<number[]> {
+  const found = bucket(env);
+  if (!found) return [];
+  const seqs: number[] = [];
+  for (const key of await listKeys(found, recordingPrefix(loc))) {
+    const match = CHUNK_NAME.exec(key);
+    if (match) seqs.push(Number(match[1]));
+  }
+  return seqs.sort((a, b) => a - b);
+}
+
 async function deletePrefix(store: R2Bucket, prefix: string): Promise<number> {
   const keys = await listKeys(store, prefix);
   for (let i = 0; i < keys.length; i += 1_000) await store.delete(keys.slice(i, i + 1_000));

@@ -4,6 +4,8 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { tasksApi, type Task } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
+import { replayMomentFromDescription, stripReplayMomentTrailer } from '@builderforce/interaction-contract';
+import { ReplayEffectChip } from './ReplayEffectChip';
 export interface TicketDetailsPanelProps {
   taskId: number | null;
   onClose: () => void;
@@ -72,9 +74,10 @@ export function TicketDetailsPanel({ taskId, onClose }: TicketDetailsPanelProps)
                 <section>
                   <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>{t('descriptionHeading')}</h3>
                   <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    {task.description || t('noDescription')}
+                    {(task.description && stripReplayMomentTrailer(task.description)) || t('noDescription')}
                   </div>
                 </section>
+                {replayMomentFromDescription(task.description) && <ReplayEffectChip taskId={task.id} />}
                 {task.githubPrUrl && (
                   <a href={task.githubPrUrl} target="_blank" rel="noopener noreferrer" className="btn-ghost" style={{ alignSelf: 'flex-start' }}>
                     {t('viewPr')}{task.githubPrNumber ? ` #${task.githubPrNumber}` : ''}

@@ -35,6 +35,9 @@ import { bumpCacheVersion } from './infrastructure/cache/readThroughCache';
 import { runVendorHealthCron } from './application/llm/vendorHealthCron';
 import { runByoCredentialHealthCron } from './application/llm/byoCredentialHealthCron';
 import { runRetentionPurge } from './application/maintenance/retentionPurge';
+import { runReplayRollup } from './application/replay/replayRollup';
+import { runPrescriptionSweep } from './application/replay/prescriptionSweep';
+import { runProofVerdictSweep } from './application/realization/proofVerdictSweep';
 import { runBloatReclaim, runTableVacuum } from './application/maintenance/tableMaintenance';
 import { describeStoragePressure, runStoragePressureSweep } from './application/maintenance/storagePressure';
 import { runEvalDriftSweep } from './application/eval/runEvalDriftSweep';
@@ -301,6 +304,39 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     // judges is both cheaper and more meaningful.
     description: 'Measure each Neon endpoint against its plan ceiling; past 80% re-purge at compressed windows and reclaim immediately instead of waiting for the weekly rewrite.',
     run: async ({ env }) => describeStoragePressure(await runStoragePressureSweep(env)),
+  },
+  {
+    key: 'replay-rollup',
+    cadence: 'daily',
+    // AFTER `retention`: representatives must point at recordings the per-site window keeps.
+    description: 'Insights: pick up to three representative recordings per open issue and flag issues that regressed after a release.',
+    run: async ({ env, db }) => {
+      const r = await runReplayRollup(env, db);
+      return r.sites > 0 ? `sites=${r.sites} issues=${r.issues} representatives=${r.representatives} regressed=${r.regressed}` : null;
+    },
+  },
+  {
+    key: 'proof-verdicts',
+    cadence: 'daily',
+    // AFTER `replay-rollup`: a proof graded "missed" cites the freshest recordings.
+    description: 'Method link: grade every live, measured proof whose window has closed by what its visitors did (PRD 33 §5.3.2).',
+    run: async ({ env, db }) => {
+      const r = await runProofVerdictSweep(env, db);
+      return r.graded > 0 || r.failed > 0 ? `checked=${r.checked} graded=${r.graded} failed=${r.failed}` : null;
+    },
+  },
+  {
+    key: 'replay-prescriptions',
+    cadence: 'daily',
+    // AFTER `replay-rollup` and `proof-verdicts`: the rules read the representatives, the
+    // regressions and the proof grades those two just wrote.
+    description: 'Insights: run the prescription rules per site, draft the top fixes (shared AI budget), and measure the fixes people applied.',
+    run: async ({ env, db }) => {
+      const r = await runPrescriptionSweep(env, db);
+      return r.sites > 0
+        ? `sites=${r.sites} created=${r.created} refreshed=${r.refreshed} prescribed=${r.prescribed} verified=${r.verified}`
+        : null;
+    },
   },
   {
     key: 'byo-health',

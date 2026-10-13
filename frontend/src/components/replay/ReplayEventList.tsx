@@ -1,7 +1,9 @@
 /**
  * Every mark of the recording as a list: the accessible, 44 px twin of the
  * timeline markers. A row seeks the player; the row at or just before the
- * playhead is marked current.
+ * playhead is marked current. With `onDefineEvent`, a click mark (its key is
+ * the element's selector) offers "Define from this click" — the smart-event
+ * editor opens prefilled with a click rule on that selector.
  */
 
 import { useTranslations } from 'next-intl';
@@ -13,10 +15,15 @@ export interface ReplayEventListProps {
   marks: readonly ReplayMark[];
   currentMs: number;
   onSeek: (ms: number) => void;
+  onDefineEvent?: (selector: string) => void;
 }
 
-export function ReplayEventList({ marks, currentMs, onSeek }: ReplayEventListProps) {
+/** Marks whose key is a clicked element's selector (`chunk.ts`), so a rule can be defined from them. */
+export const DEFINABLE_MARK_KINDS: ReadonlySet<string> = new Set(['click', 'rage', 'dead']);
+
+export function ReplayEventList({ marks, currentMs, onSeek, onDefineEvent }: ReplayEventListProps) {
   const t = useTranslations('replay.player');
+  const tEvents = useTranslations('replay.smartEvents');
   if (marks.length === 0) {
     return <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>{t('eventsEmpty')}</p>;
   }
@@ -31,14 +38,15 @@ export function ReplayEventList({ marks, currentMs, onSeek }: ReplayEventListPro
         const style = markStyle(mark.kind);
         const kindLabel = t(style.labelKey);
         return (
-          <li key={`${mark.kind}-${mark.atMs}-${index}`}>
+          <li key={`${mark.kind}-${mark.atMs}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <button
               type="button"
               aria-current={index === current ? 'true' : undefined}
               aria-label={t('markerAria', { time: fmtClock(mark.atMs), label: mark.label ?? kindLabel })}
               onClick={() => onSeek(mark.atMs)}
               style={{
-                width: '100%',
+                flex: 1,
+                minWidth: 0,
                 minHeight: 44,
                 display: 'flex',
                 alignItems: 'center',
@@ -63,6 +71,18 @@ export function ReplayEventList({ marks, currentMs, onSeek }: ReplayEventListPro
                 </span>
               )}
             </button>
+            {onDefineEvent && DEFINABLE_MARK_KINDS.has(mark.kind) && mark.key && (
+              <button
+                type="button"
+                className="btn-ghost"
+                aria-label={tEvents('defineFromClickAria', { label: mark.label ?? mark.key })}
+                title={tEvents('defineFromClick')}
+                onClick={() => onDefineEvent(mark.key)}
+                style={{ minHeight: 44, minWidth: 44, flexShrink: 0 }}
+              >
+                <Icon name="flag" size={14} />
+              </button>
+            )}
           </li>
         );
       })}

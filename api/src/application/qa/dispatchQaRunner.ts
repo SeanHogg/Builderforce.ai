@@ -53,3 +53,33 @@ export async function dispatchQaRunner(env: Env, args: QaDispatchArgs): Promise<
   });
   return res.ok;
 }
+
+/**
+ * A non-exploration job for the SAME runner container (no new queue, no new
+ * container). The container's `/run` reads `kind` and hands the body to that job's
+ * handler (`api/qa-container/server.mjs` → `JOBS`). Each job carries its own
+ * narrowly-scoped credentials in `payload`; none gets the tenant-wide QA token.
+ */
+export interface QaRunnerJob {
+  kind: 'replay_export';
+  /** Unique per job; names the container instance (`<kind>:<jobId>`). */
+  jobId: string;
+  payload: Record<string, unknown>;
+}
+
+/** Whether the runner container is provisioned on this deploy at all. */
+export function qaRunnerProvisioned(env: Env): boolean {
+  return Boolean(env.QA_RUNNER_CONTAINER);
+}
+
+/** Launch one runner job. False when the binding is absent or the container refused it. */
+export async function dispatchQaRunnerJob(env: Env, job: QaRunnerJob): Promise<boolean> {
+  const ns = env.QA_RUNNER_CONTAINER;
+  if (!ns) return false;
+  const stub = ns.get(ns.idFromName(`${job.kind}:${job.jobId}`));
+  const res = await stub.fetch('https://qa-runner/run', {
+    method: 'POST',
+    body: JSON.stringify({ ...job.payload, kind: job.kind }),
+  });
+  return res.ok;
+}

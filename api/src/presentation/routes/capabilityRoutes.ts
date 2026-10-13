@@ -28,6 +28,14 @@ const CheckoutBody = z.object({ returnUrl: z.string().trim().min(1) });
 
 export function createCapabilityRoutes(db: DbHandle): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  // The pack ladder is public pricing (D4): the signed-out listing landing's
+  // calculator reads it, so it is registered BEFORE the auth middleware.
+  router.get('/session-replay/packs', async (c) => {
+    const packs = await loadReplayPacks(c.env, db);
+    return c.json(packs.map((pack) => ({ id: pack.id, units: pack.units, amountCents: pack.amountCents })));
+  });
+
   router.use('*', authMiddleware);
 
   router.get('/:slug/state', async (c) => {
@@ -39,11 +47,6 @@ export function createCapabilityRoutes(db: DbHandle): Hono<HonoEnv> {
     });
     if (!state) throw new NotFoundError('Capability', slug);
     return c.json(state);
-  });
-
-  router.get('/session-replay/packs', async (c) => {
-    const packs = await loadReplayPacks(c.env, db);
-    return c.json(packs.map((pack) => ({ id: pack.id, units: pack.units, amountCents: pack.amountCents })));
   });
 
   router.post(

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReplayRecordingDto } from '@builderforce/interaction-contract';
 import { replayApi } from '@/lib/replayApi';
 import { InsightsPanel } from './InsightsPanel';
@@ -49,6 +49,7 @@ const recording = (over: Partial<ReplayRecordingDto> = {}): ReplayRecordingDto =
   variant: null,
   traits: null,
   chunkCount: 1,
+  chunkSeqs: [0],
   marks: [{ kind: 'page', key: '/', atMs: 0 }, { kind: 'rage', key: 'button.buy', label: 'Buy', atMs: 12_000 }],
   ...over,
 });
@@ -147,9 +148,10 @@ describe('InsightsPanel', () => {
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
 
     fireEvent.click(within(panel).getByRole('tab', { name: 'insights.kinds.tabs.recordings' }));
-    expect(await within(panel).findByText('insights.issues.recordingsOnRoute /pricing')).toBeInTheDocument();
+    expect(await within(panel).findByText('insights.issues.recordingsOfIssue /pricing')).toBeInTheDocument();
+    // The recordings that hit THIS issue (its fingerprint), within the home's filter.
     expect(replayApi.listRecordings).toHaveBeenCalledWith('site-1', expect.objectContaining({
-      filter: { all: [{ field: 'visitedPath', op: 'eq', value: '/pricing' }] },
+      filter: { all: [{ field: 'issue', op: 'eq', value: 'fp' }] },
     }));
     expect(new URLSearchParams(window.location.search).get('panel')).toBe('issue:iss-1:recordings');
   });
@@ -180,6 +182,30 @@ describe('InsightsPanel', () => {
     renderPanel([]);
     const panel = await screen.findByRole('dialog');
     expect(within(panel).getByText('player rec-1 at 12')).toBeInTheDocument();
+  });
+
+  it('follows the address after mount: opens, stacks a new level, and closes on navigation', async () => {
+    const navigateTo = (href: string) => act(() => {
+      window.history.pushState({}, '', href);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    renderPanel([]);
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    navigateTo('/apps/insights?site=site-1&panel=issue:iss-1:overview');
+    let panel = await screen.findByRole('dialog');
+    expect(within(panel).getByText('insights.kinds.issue')).toBeInTheDocument();
+
+    navigateTo('/apps/insights?site=site-1&panel=recording:rec-1:replay&t=5');
+    expect(await screen.findByText('player rec-1 at 5')).toBeInTheDocument();
+    panel = screen.getByRole('dialog');
+    expect(within(panel).getByRole('button', { name: 'insights.panel.backTo insights.kinds.issue' })).toBeInTheDocument();
+    // The stack's own write-back leaves the address as navigated (no echo loop).
+    expect(new URLSearchParams(window.location.search).get('panel')).toBe('recording:rec-1:replay');
+    expect(new URLSearchParams(window.location.search).get('site')).toBe('site-1');
+
+    navigateTo('/apps/insights?site=site-1');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('ignores a ?panel= naming an unregistered kind', async () => {

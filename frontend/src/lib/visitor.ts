@@ -8,7 +8,17 @@
  * tracked by (see MarketingService). Returns null during SSR (no window).
  */
 
+import { readLocal, writeLocal } from './storage';
+
 const VISITOR_KEY = 'bf_visitor_id';
+/**
+ * Epoch ms at which THIS browser minted `bf_visitor_id`. The session-replay
+ * recorder shares `bf_visitor_id` on builderforce.ai and loads after this module
+ * has minted it, so on its own it would report every visitor as returning; it
+ * reads this key instead (`replay-sdk/src/ids.ts`, `storageKeys(ns).minted`).
+ * Written only when a NEW id is minted, never for an id read back.
+ */
+export const VISITOR_MINTED_AT_KEY = 'bf_visitor_minted_at';
 const TOUCH_KEY = 'bf_visitor_touch';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
 
@@ -28,16 +38,12 @@ function randomId(): string {
 /** Stable anonymous visitor id, created on first call. Null during SSR. */
 export function getVisitorId(): string | null {
   if (typeof window === 'undefined') return null;
-  let id: string | null = null;
-  try {
-    id = window.localStorage.getItem(VISITOR_KEY);
-  } catch {
-    /* private mode — fall through to cookie */
-  }
-  if (!id) id = readCookie(VISITOR_KEY);
+  // Private mode reads null and falls through to the cookie.
+  let id = readLocal(VISITOR_KEY) ?? readCookie(VISITOR_KEY);
   if (!id) {
     id = randomId();
-    try { window.localStorage.setItem(VISITOR_KEY, id); } catch { /* ignore */ }
+    writeLocal(VISITOR_KEY, id);
+    writeLocal(VISITOR_MINTED_AT_KEY, String(Date.now()));
   }
   // Always (re)assert the cookie so the id survives a localStorage clear.
   writeCookie(VISITOR_KEY, id);
@@ -47,11 +53,7 @@ export function getVisitorId(): string | null {
 /** Existing anonymous visitor id without minting one for an authenticated user. */
 export function getExistingVisitorId(): string | null {
   if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(VISITOR_KEY) ?? readCookie(VISITOR_KEY);
-  } catch {
-    return readCookie(VISITOR_KEY);
-  }
+  return readLocal(VISITOR_KEY) ?? readCookie(VISITOR_KEY);
 }
 
 /** First-touch attribution, captured once on the first tools visit. */

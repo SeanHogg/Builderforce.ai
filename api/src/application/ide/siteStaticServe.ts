@@ -25,6 +25,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import { landingPageApplies } from './siteLandingRule';
 import { withSiteBadge } from './siteAttribution';
 import { withReplayLoader } from './siteReplayInjection';
+import { recordSplitExposure, resolveSiteSplit, withSplitCookie } from './siteAbSplit';
 import { hasEventTriggerListeners } from '../workflow/eventTriggerListeners';
 
 /** Path prefix reserved for the site's datastore. A published site cannot use
@@ -219,10 +220,16 @@ export async function serveCountedAsset(
   waitUntil: WaitUntil | undefined,
   onPageView?: OnPageView,
 ): Promise<Response> {
-  const { response, bytes } = await serveAsset(env, site, path.replace(/^\/+/, ''));
+  // A running prescription test serves this visitor's arm (live or the fix's preview);
+  // only a page view assigns one. Null → the live release, exactly as before.
+  const split = await resolveSiteSplit(env, site, request, { mayAssign: isPageView(path) });
+  const served = split?.served ?? site;
+  const { response, bytes } = await serveAsset(env, served, path.replace(/^\/+/, ''));
   await afterResponse(countSiteRequest(env, site, request, path, bytes, { onPageView }), waitUntil);
-  return withReplayLoader(env, site.tenantId, site.projectId, site.versionToken,
-    await withSiteBadge(env, site.tenantId, response));
+  if (split?.assigned) await afterResponse(recordSplitExposure(env, site.tenantId, split), waitUntil);
+  const out = await withReplayLoader(env, site.tenantId, site.projectId, served.versionToken,
+    await withSiteBadge(env, site.tenantId, response), split?.label ?? null);
+  return split ? withSplitCookie(out, split) : out;
 }
 
 export type StaticSiteOutcome =

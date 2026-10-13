@@ -1,21 +1,15 @@
 /**
- * Row → DTO mapping, cursors and the S1 recording filter for the Insights reads
+ * Row → DTO mapping, cursors and the filter cache key for the Insights reads
  * (PRD 33 §3.4 `api.ts`). Kept beside `ReplayReadService` so the service stays about
- * scope and caching.
- *
- * THE FILTER HERE IS THE S1 SUBSET. It compiles the clauses that map straight onto
- * one `replay_recordings` column or array (device, browser, os, country, release,
- * variant, converted, entry/exit path, durations, page count, visited path,
- * frustration, smart event, clicked selector, tag) and ignores the rest. S4c's
- * `replayFilterCompiler` replaces this function wholesale; it is the only caller.
+ * scope and caching. The filter itself compiles in `replayFilterCompiler.ts` — the
+ * one compiler.
  */
 
-import { and, arrayContains, arrayOverlaps, eq, gte, ilike, inArray, lte, ne, sql, type SQL } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import {
   fnv1a64,
   type ReplayDeviceClass,
   type ReplayFilter,
-  type ReplayFilterClause,
   type ReplayIssueDto,
   type ReplayIssueStatus,
   type ReplayKeepReason,
@@ -71,7 +65,7 @@ export function toRecordingSummary(row: RecordingRow): ReplayRecordingSummaryDto
   };
 }
 
-export function toRecordingDto(row: RecordingRow, marks: ReplayMark[]): ReplayRecordingDto {
+export function toRecordingDto(row: RecordingRow, marks: ReplayMark[], chunkSeqs: number[]): ReplayRecordingDto {
   return {
     ...toRecordingSummary(row),
     recorderVersion: row.recorderVersion,
@@ -79,6 +73,7 @@ export function toRecordingDto(row: RecordingRow, marks: ReplayMark[]): ReplayRe
     variant: row.variant,
     traits: row.traits ? stringMap(row.traits) : null,
     chunkCount: row.chunkCount,
+    chunkSeqs,
     marks,
   };
 }
@@ -107,90 +102,12 @@ export function decodeOffsetCursor(cursor: string | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-// ── The S1 recording filter ─────────────────────────────────────────────────
+// ── Filter cache key ────────────────────────────────────────────────────────
 
 /** A short stable key for a filter, for cache keys. */
 export function filterCacheKey(filter: ReplayFilter | null | undefined): string {
   if (!filter || filter.all.length === 0) return '';
   return fnv1a64(JSON.stringify(filter.all));
-}
-
-function list(value: ReplayFilterClause['value']): Array<string | number> {
-  return Array.isArray(value) ? [...value] : [value as string | number];
-}
-
-const COLUMNS = {
-  device: replayRecordings.deviceClass,
-  browser: replayRecordings.browser,
-  os: replayRecordings.os,
-  country: replayRecordings.country,
-  referrer: replayRecordings.referrerHost,
-  release: replayRecordings.releaseKey,
-  variant: replayRecordings.variant,
-  entryPath: replayRecordings.entryPath,
-  exitPath: replayRecordings.exitPath,
-} as const;
-
-const NUMBERS = {
-  durationMs: replayRecordings.durationMs,
-  activeMs: replayRecordings.activeMs,
-  pageCount: replayRecordings.pageCount,
-} as const;
-
-const ARRAYS = {
-  visitedPath: replayRecordings.routes,
-  frustration: replayRecordings.frustrations,
-  smartEvent: replayRecordings.events,
-  clickedSelector: replayRecordings.clicked,
-} as const;
-
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
-}
-
-function clauseWhere(clause: ReplayFilterClause): SQL | undefined {
-  const { field, op, value } = clause;
-  if (field in COLUMNS) {
-    const column = COLUMNS[field as keyof typeof COLUMNS];
-    if (op === 'eq') return eq(column, String(value));
-    if (op === 'neq') return ne(column, String(value));
-    if (op === 'in') return inArray(column, list(value).map(String));
-    if (op === 'contains') return ilike(column, `%${escapeLike(String(value))}%`);
-    if (op === 'prefix') return ilike(column, `${escapeLike(String(value))}%`);
-    return undefined;
-  }
-  if (field in NUMBERS) {
-    const column = NUMBERS[field as keyof typeof NUMBERS];
-    const n = Number(value);
-    if (!Number.isFinite(n)) return undefined;
-    if (op === 'gte') return gte(column, n);
-    if (op === 'lte') return lte(column, n);
-    if (op === 'eq') return eq(column, n);
-    return undefined;
-  }
-  if (field in ARRAYS) {
-    const column = ARRAYS[field as keyof typeof ARRAYS];
-    const items = list(value).map(String);
-    if (op === 'eq') return arrayContains(column, items);
-    if (op === 'in') return arrayOverlaps(column, items);
-    if (op === 'neq') return sql`not (${arrayContains(column, items)})`;
-    return undefined;
-  }
-  if (field === 'converted' && op === 'eq') return eq(replayRecordings.converted, value === true);
-  if (field === 'tag' && typeof value === 'string') {
-    const at = value.indexOf('=');
-    if (at <= 0) return undefined;
-    const match = sql`${replayRecordings.tags} ->> ${value.slice(0, at)} = ${value.slice(at + 1)}`;
-    return op === 'neq' ? sql`not (${match})` : match;
-  }
-  return undefined;
-}
-
-/** The S1 subset of a filter as one AND-ed predicate (undefined when nothing applies). */
-export function recordingFilterWhere(filter: ReplayFilter | null | undefined): SQL | undefined {
-  if (!filter) return undefined;
-  const parts = filter.all.map(clauseWhere).filter((part): part is SQL => part !== undefined);
-  return parts.length ? and(...parts) : undefined;
 }
 
 // ── Issues ──────────────────────────────────────────────────────────────────
