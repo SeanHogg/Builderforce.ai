@@ -1999,6 +1999,7 @@
    second rule set restating it. */
 .flowStep { display:grid; align-content:start; gap:6px; min-width:0; }
 .flowStepFamily { font-size:8px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--canvas-accent); }
+.flowStepRunStatus { display:flex; align-items:center; gap:6px; min-height:7px; }
 .flowStepSummary { margin:0; overflow-wrap:anywhere; font-size:10px; line-height:1.45; color:var(--canvas-muted); }
 .flowStepChip { justify-self:start; padding:2px 7px; border-radius:999px; background:color-mix(in srgb, var(--canvas-accent) 14%, var(--canvas-panel)); color:var(--canvas-accent-ink); font-size:8px; font-weight:700; }
 .flowStepContract { display:grid; gap:4px; margin:0; }

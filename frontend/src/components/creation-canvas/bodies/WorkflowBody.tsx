@@ -3,6 +3,7 @@ import { FlowExecutionSettings } from '../FlowExecutionSettings';
 import styles from '../CreationCanvas.module.css';
 import type { CreationBodyProps } from './types';
 import { asRecord } from './shared';
+import { liveStepDotClass } from '../liveGraphStatus';
 
 /**
  * What one authored step actually CALLS, in one line — "twilio → send_sms".
@@ -43,14 +44,10 @@ export function WorkflowBody({ data }: CreationBodyProps) {
         <div className={styles.workflowSteps}>{steps.map((step, index) => {
           const call = stepCall(step);
           const status = typeof step.status === 'string' && step.status ? step.status : '';
-          const normalized = status.toLowerCase();
-          // Status comes from the step, never from its POSITION. The old body
-          // drew step 1 green and step 2 blue on every workflow, so a card that
-          // had never run looked half-complete.
-          const dot = normalized.startsWith('fail') || normalized.startsWith('error') ? styles.failDot
-            : normalized.startsWith('complete') || normalized.startsWith('done') || normalized === 'delivered' ? styles.doneDot
-            : normalized.startsWith('run') || normalized.startsWith('progress') ? styles.liveDot
-            : styles.idleDot;
+          // Status comes from the step (compile-time or live graph overlay), never
+          // from its POSITION. The old body drew step 1 green and step 2 blue on
+          // every workflow, so a card that had never run looked half-complete.
+          const dot = liveStepDotClass(status, styles);
           return (
             <div className={styles.workflowStep} key={`${String(step.title || 'step')}-${index}`}>
               <span className={dot} />

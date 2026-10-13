@@ -1,5 +1,5 @@
 /** Unpacking, compiling and running workflows; saving agents authored on the board. */
-import { type Dispatch, type SetStateAction, useCallback } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useCallback } from 'react';
 import { boardFlowFromDefinition, type UnpackedFlow } from '@/domains/workflow/domain/boardFlowFromDefinition';
 import { newNode } from '../canvasNodeHelpers';
 import type { CreationNodeData } from '../types';
@@ -11,12 +11,14 @@ import { faultText } from '@/lib/apiClient';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { useTranslations } from 'next-intl';
 import type { Edge } from '@xyflow/react';
+import { applyLiveGraphToNodes, startCanvasWorkflowLivePoll } from '../liveGraphStatus';
 
 export interface UseCanvasWorkflowRunDeps {
   buildFlowFromFrame: (frameId: string) => Promise<string | null>;
   canRun: boolean;
   connectionKind: 'presentation' | 'data' | 'delivery' | 'control' | 'reference' | 'membership' | 'blocks' | 'verifies';
   errorText: (error: unknown) => string;
+  framedBoardRef: RefObject<{ memberIdsOf: (frameId: string) => string[] }>;
   persistence: 'local' | 'server';
   requireAccount: (action: string, title: string, description: string) => void;
   resolveWorkflowNode: (workflowId?: string) => CanvasObject | null;
@@ -30,7 +32,7 @@ export interface UseCanvasWorkflowRunDeps {
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
 }
 
-export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKind, errorText, persistence, requireAccount, resolveWorkflowNode, selectedNode, sessionId, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t }: UseCanvasWorkflowRunDeps) {
+export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKind, errorText, framedBoardRef, persistence, requireAccount, resolveWorkflowNode, selectedNode, sessionId, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t }: UseCanvasWorkflowRunDeps) {
   /**
    * OPEN A LEGACY WORKFLOW CARD ON THE BOARD — the migration path for every workflow
    * authored before the canvas WAS the workflow.
@@ -206,8 +208,26 @@ export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKin
         }
         setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: run.workflowId, workflowTaskCount: run.taskCount, deliverables: withCreationDeliverable(node.data, { ...started, resourceRef: `workflow-run:${run.workflowId}`, metadata: { taskCount: run.taskCount } }) } } : node));
         setNotice(t('noticeWorkflowStarted', { count: run.taskCount }));
+        // Frame terminal status still comes from definition-runs. Alongside that,
+        // poll GET /api/workflows/:id + /graph so sibling flowSteps paint live
+        // pending/running/completed/failed instead of the compile-time skeleton.
+        // Pending-approval returns above and never starts this.
+        const stopLive = startCanvasWorkflowLivePoll({
+          runId: run.workflowId,
+          onTick: ({ graph }) => {
+            if (!graph?.nodes?.length) return;
+            setNodes((nodesNow) => {
+              const memberIds = new Set(framedBoardRef.current?.memberIdsOf(targetId) ?? []);
+              return applyLiveGraphToNodes(nodesNow, {
+                targetId,
+                memberIds,
+                graphNodes: graph.nodes,
+              });
+            });
+          },
+        });
         const pollRun = (remaining: number) => {
-          if (remaining <= 0) return;
+          if (remaining <= 0) { stopLive(); return; }
           window.setTimeout(() => {
             void workflowDefinitions.runs(definitionId).then((runs) => {
               const currentRun = runs.find((candidate) => candidate.id === run.workflowId);
@@ -221,6 +241,7 @@ export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKin
                 return { ...node, data: { ...node.data, status: label, workflowRunStatus: currentRun.status, workflowCompletedAt: currentRun.completedAt, ...(terminalDeliverable ? { deliverables: withCreationDeliverable(node.data, terminalDeliverable) } : {}) } };
               }));
               if (terminal) {
+                stopLive();
                 setNotice(t('noticeWorkflowStatus', { status: label.toLowerCase() }));
                 if (persistence === 'server') {
                   const ok = normalized === 'completed' || normalized === 'complete';
@@ -251,7 +272,7 @@ export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKin
         }
       });
     })();
-  }, [canRun, compileWorkflow, errorText, persistence, resolveWorkflowNode, sessionId, setNodes, setNotice, t]);
+  }, [canRun, compileWorkflow, errorText, framedBoardRef, persistence, resolveWorkflowNode, sessionId, setNodes, setNotice, t]);
 
   const saveAgent = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'agent') return;
