@@ -122,6 +122,53 @@ describe("native Agent loop", () => {
     expect(produced.filter((m) => m.role === "toolResult")).toHaveLength(0);
   });
 
+  it("refuses write_file under a path-scoped block gate without executing the tool", async () => {
+    const calls: string[] = [];
+    const writeTool: AgentTool = {
+      name: "write_file",
+      label: "write_file",
+      description: "writes",
+      parameters: Type.Object({ path: Type.String() }),
+      execute: async (_id, params) => {
+        const { path } = params as { path: string };
+        calls.push(path);
+        return { content: [{ type: "text", text: `wrote:${path}` }], details: {} };
+      },
+    };
+    const toolCall: ToolCall = {
+      type: "toolCall",
+      id: "tc1",
+      name: "write_file",
+      arguments: { path: "secrets/key.txt" },
+    };
+    const streamFn = scriptedStreamFn([
+      assistant([toolCall], "toolUse"),
+      assistant([{ type: "text", text: "blocked" }], "stop"),
+    ]);
+    const agent = new Agent({
+      model,
+      tools: [writeTool],
+      systemPrompt: "sys",
+      policyGates: [
+        {
+          id: "no-secrets",
+          effect: "block",
+          tool: "write_file",
+          paths: ["secrets/**"],
+          reason: "do not write secrets",
+        },
+      ],
+    });
+    agent.streamFn = streamFn;
+    const produced = await agent.prompt([{ role: "user", content: "go", timestamp: 0 }]);
+    expect(calls).toEqual([]);
+    const toolResults = produced.filter((m) => m.role === "toolResult");
+    expect(toolResults).toHaveLength(1);
+    const text = (toolResults[0] as { content: { text: string }[] }).content[0].text;
+    expect(text).toContain("no-secrets");
+    expect((toolResults[0] as { isError?: boolean }).isError).toBe(true);
+  });
+
   /**
    * Announced-but-untaken tool call. Without recovery the loop reads "0 tool calls =
    * done" and ends the run holding a promise — for an autonomous run, a silent no-op

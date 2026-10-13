@@ -4,6 +4,7 @@ import { logDebug, logWarn } from "../logger.js";
 import { mapSdkMessage } from "./claude-agent-v2-events.js";
 import { createSteeringChannel, type SteeringChannel } from "../infra/relay-steering.js";
 import { buildSdkMemoryServer, SDK_MEMORY_SERVER, SDK_MEMORY_TOOLS } from "./sdk-memory-server.js";
+import { canUseToolDecision } from "./policy-gate-seam.js";
 
 /**
  * The on-prem SDK tool vocabulary — the names a `block` gate can remove.
@@ -85,12 +86,14 @@ export interface V2RunParams {
 
 /** Tools the SDK may use after `block` gates are applied (case-insensitive match on
  *  the SDK tool vocabulary plus any mounted MCP tool entries in `extraTools`;
- *  `*`/no-tool block gates remove every tool). Pure. */
+ *  `*`/no-tool block gates remove every tool). Path-scoped blocks are NOT stripped
+ *  here — they still need the tool for unmatched paths; `canUseTool` refuses the
+ *  matching calls. Pure. */
 export function allowedToolsAfterGates(
   gates: readonly PolicyGate[] | undefined,
   extraTools: readonly string[] = [],
 ): string[] {
-  const blocked = (gates ?? []).filter((g) => g.effect === "block");
+  const blocked = (gates ?? []).filter((g) => g.effect === "block" && !(g.paths && g.paths.length));
   if (blocked.some((g) => !g.tool || g.tool === "*")) return [];
   const blockedNames = new Set(blocked.map((g) => (g.tool ?? "").toLowerCase()));
   return [...SDK_TOOLS, ...extraTools].filter((t) => !blockedNames.has(t.toLowerCase()));
@@ -143,7 +146,16 @@ ${params.prompt}` : params.prompt;
       options: {
         ...(params.model ? { model: params.model } : {}),
         cwd: params.cwd,
-        permissionMode: "bypassPermissions",
+        // When gates are present, `canUseTool` is the per-call evaluatePolicyGate
+        // seam (path-scoped block / require-approval). `bypassPermissions` would
+        // skip that callback, so we drop it only for ungated runs.
+        ...(params.policyGates?.length
+          ? {
+              permissionMode: "default" as const,
+              canUseTool: async (toolName: string, input: Record<string, unknown>) =>
+                canUseToolDecision(params.policyGates, toolName, input),
+            }
+          : { permissionMode: "bypassPermissions" as const }),
         allowedTools: allowedToolsAfterGates(params.policyGates, memory ? [SDK_MEMORY_TOOLS] : []),
         ...(memory
           ? { mcpServers: { [SDK_MEMORY_SERVER]: memory as unknown as McpSdkServerConfigWithInstance } }

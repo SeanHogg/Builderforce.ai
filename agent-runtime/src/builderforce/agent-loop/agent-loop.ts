@@ -14,6 +14,12 @@ import {
   type LoopHooks,
   type LoopPorts,
 } from "@builderforce/agent-loop";
+import type { PolicyGate } from "@builderforce/agent-tools";
+import {
+  evaluateOnPremPolicyGate,
+  isPolicyRefusal,
+  policyRefusalMessage,
+} from "../../agents/policy-gate-seam.js";
 import type {
   AgentContext,
   AgentEvent,
@@ -67,6 +73,12 @@ export interface AgentLoopConfig {
   apiKey?: string;
   temperature?: number;
   maxTokens?: number;
+  /**
+   * Compiled governance gates evaluated at tool dispatch (`beforeDispatch`).
+   * A `block` / `require-approval` hit short-circuits `ports.dispatch` so the
+   * tool never runs; the model sees the refusal as an error tool result.
+   */
+  policyGates?: readonly PolicyGate[];
 }
 
 type ToolResultLike = AgentToolResult<unknown>;
@@ -397,6 +409,17 @@ async function runLoop(
         });
         return { result: { data: skipped, isError: true } };
       }
+      const decision = evaluateOnPremPolicyGate(config.policyGates, call.name, call.args);
+      if (isPolicyRefusal(decision)) {
+        // Honour block (and require-approval — this runtime has no policy-pause
+        // UI, so it refuses with a message the model sees). Kernel skips
+        // `ports.dispatch` when beforeDispatch returns `{ result }`.
+        const refused: ToolResultLike = {
+          content: [{ type: "text", text: policyRefusalMessage(decision) }],
+          details: { policy: decision },
+        };
+        return { result: { data: refused, isError: true } };
+      }
       return undefined;
     },
     afterDispatch: async (call, result, row) => {
@@ -503,6 +526,8 @@ export interface AgentOptions {
   /** See {@link AgentLoopConfig.onModelFallback}. The agent updates its own
    *  `state.model` on a swap regardless, so a host only needs this to persist it. */
   onModelFallback?: (from: Model, to: Model, notice: string) => void;
+  /** See {@link AgentLoopConfig.policyGates}. */
+  policyGates?: readonly PolicyGate[];
 }
 
 /**
@@ -525,6 +550,7 @@ export class Agent {
   sessionId?: string;
   private pickFallbackModel?: (tried: readonly string[]) => Model | undefined;
   private onModelFallback?: (from: Model, to: Model, notice: string) => void;
+  private policyGates?: readonly PolicyGate[];
 
   constructor(opts: AgentOptions) {
     this._state = {
@@ -540,6 +566,7 @@ export class Agent {
     this.getApiKey = opts.getApiKey;
     this.pickFallbackModel = opts.pickFallbackModel;
     this.onModelFallback = opts.onModelFallback;
+    this.policyGates = opts.policyGates;
   }
 
   get state(): AgentState {
@@ -617,6 +644,7 @@ export class Agent {
         this.setModel(to);
         this.onModelFallback?.(from, to, notice);
       },
+      ...(this.policyGates?.length ? { policyGates: this.policyGates } : {}),
     };
     const context: AgentContext = {
       systemPrompt: this._state.systemPrompt,
