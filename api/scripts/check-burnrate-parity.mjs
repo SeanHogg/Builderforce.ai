@@ -45,7 +45,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '..', '..');
-const dataDir = join(repo, 'specs', 'builderforce', 'data-model');
+const dataDir = join(repo, 'docs', 'specs', 'data-model');
 const mapPath = join(dataDir, 'source-to-target.tsv');
 const parityPath = join(dataDir, 'burnrate-parity.tsv');
 const modulesPath = join(dataDir, 'burnrate-modules.tsv');

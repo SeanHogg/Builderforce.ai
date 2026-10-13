@@ -12,6 +12,7 @@ import {
 import {
   emitCodingModelDegraded, emitModelSelection, hasVendorKeys, isCodingModelDegraded,
   refuseCloudRunWithoutByo, resolveCloudRouting, resolveLearnedRoutingInputs,
+  cloudRunRoleForModelPin, requestedModelForRole,
   type CloudRouting, type LearnedRoutingInputs,
 } from './cloudAgent/routing';
 export {
@@ -22,6 +23,7 @@ export type { ResolvedCloudAgent } from './cloudAgent/agent';
 export {
   emitCodingModelDegraded, emitModelSelection, isCodingModelDegraded,
   refuseCloudRunWithoutByo, resolveLearnedRoutingInputs,
+  cloudRunRoleForModelPin, requestedModelForRole,
 } from './cloudAgent/routing';
 export type { CloudRouting, LearnedRoutingInputs } from './cloudAgent/routing';
 /**
@@ -88,7 +90,7 @@ import {
   assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey, type RawToolCall,
 } from './cloudAgentTools';
 import {
-  CURRENT_ENGINE_ID, evaluatePolicyGate, filterByGlob, applyStringEdit, editFacts,
+  CURRENT_ENGINE_ID, evaluatePolicyGate, toolCallPaths, filterByGlob, applyStringEdit, editFacts,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type PolicyGate, type AgentExecParams, type Capability,
   type PrdWriteCapability, type PrdUpdateResult, type ToolSchema,
 } from '@builderforce/agent-tools';
@@ -440,7 +442,10 @@ async function imageRunTurn(
   const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = creds;
   // Evermind coding gate — undefined unless the pin is an `evermind/<ref>` route.
   const evermindCoding = await resolveEvermindCodingRoute(env, db, tenantId, model);
-  const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride, {
+  // Operator ROLE_MODELS pin is the requested model when this turn has no explicit
+  // user/agent pin. Undefined pin = existing plan seed / learned ranker.
+  const requested = requestedModelForRole(env, role, model);
+  const pick = pickCloudModel(requested, ctx.effectivePlan, ctx.premiumOverride, {
     ...(evermindCoding ? { evermindCoding } : {}),
     role,
     // Context-aware seed: a small-window model isn't picked for a big turn.
@@ -1200,6 +1205,14 @@ async function runCloudToolLoop(
   // the curated default (today's behaviour). The interactive SSM bias (if any) nudges
   // the order on top of the shared table.
   const learned = opts?.resume ? { actionType: 'other' as ActionType, actionStats: undefined } : await resolveLearnedRoutingInputs(env, db, { tenantId, projectId, taskRow });
+  // Spawn / call-purpose role on a child run, board delivery role on a signoff
+  // run, else the parent loop's existing `'code'`. Feeds ROLE_MODELS before the
+  // learned ranker / plan coding seed; an explicit user/agent/Evermind pin still wins.
+  const roleForPin = cloudRunRoleForModelPin({
+    spawnRole: opts?.delegation?.spec?.role,
+    deliveryRole: opts?.requiredSignoff?.roleKey,
+  });
+  const requested = requestedModelForRole(env, roleForPin, effectiveModel);
   // The resolved pin rides CloudLoopState so the DO surface keeps every tick on it.
   // A live project-Evermind pin hard-pins the project model (strict) and skips the
   // coding-pool selection entirely; otherwise the normal learned-routing seed runs.
@@ -1211,15 +1224,14 @@ async function runCloudToolLoop(
   // the graceful fallback rides the per-turn cascade below instead.
   const pick = projectInferenceModel
     ? { model: projectInferenceModel, strict: true as const }
-    : pickCloudModel(effectiveModel, routing.effectivePlan, routing.premiumOverride, {
+    : pickCloudModel(requested, routing.effectivePlan, routing.premiumOverride, {
         // Carries the gate's verdict so a closed-gate Evermind pin is dropped here too.
         ...(evermindCoding ? { evermindCoding } : {}),
         actionType: learned.actionType,
         actionStats: learned.actionStats,
         bias: opts?.routingBias,
-        // The primary agentic loop IS the run's coding work; a delegated child gets
-        // its own role on its own run (`CloudChildSpec.role`).
-        role: 'code',
+        // Child durable runs carry CloudChildSpec.role; the parent loop stays 'code'.
+        role: opts?.delegation?.spec?.role ?? 'code',
         arcStage: opts?.arcStage,
         // Context-aware seed: don't pick a small-window model for a big first turn.
         estimatedTokens: estimateRequestTokens(messages, cloudTools),
@@ -1247,7 +1259,7 @@ async function runCloudToolLoop(
   if (!opts?.resume) {
     await emitModelSelection(db, {
       tenantId, cloudAgentRef, executionId,
-      requested: model, pick, plan: routing.effectivePlan, premium: routing.premiumOverride,
+      requested, pick, plan: routing.effectivePlan, premium: routing.premiumOverride,
       actionType: learned.actionType,
     });
   }
@@ -1455,7 +1467,7 @@ async function runCloudToolLoop(
       // the agent sees the refusal and must take another path; `require-approval` parks
       // the run on a human question (reusing the ask_human pause/resume path) the FIRST
       // time it is reached, then proceeds once the human has answered (the run resumes).
-      const gate = evaluatePolicyGate(policyGates, name);
+      const gate = evaluatePolicyGate(policyGates, name, toolCallPaths(parsed));
       const candidatePath = typeof parsed.path === 'string' ? parsed.path : null;
       const prospectiveFiles = candidatePath && /^(write_file|edit_file|delete_file)$/.test(name) && !writtenPaths.has(candidatePath)
         ? writtenPaths.size + 1 : writtenPaths.size;

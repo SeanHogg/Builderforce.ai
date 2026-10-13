@@ -221,6 +221,105 @@ describe('Business Phone checkout', () => {
   });
 });
 
+describe('Marketplace listing checkout', () => {
+  it('bills the listing unit price times quantity and stamps purchaseKind', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id: 'cs_mp', url: 'https://checkout.stripe.test/mp' }), { status: 200 })));
+    await makeProvider().createMarketplaceListingCheckoutSession({
+      amountCents: 2500,
+      currency: 'USD',
+      productName: 'Onboarding board',
+      quantity: 3,
+      billingEmail: 'buyer@example.com',
+      successUrl: 'https://app.example.com/shop?checkout={CHECKOUT_SESSION_ID}',
+      cancelUrl: 'https://app.example.com/shop?checkout=cancelled',
+      metadata: { listingId: 'li_1', listingSlug: 'onboarding', buyerRef: 'u-b', buyerTenantId: '7', tenantId: '7' },
+      idempotencyKey: 'mp-checkout:li_1:u-b:3',
+    });
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const body = new URLSearchParams(String(init?.body));
+    expect(body.get('mode')).toBe('payment');
+    expect(body.get('line_items[0][quantity]')).toBe('3');
+    expect(body.get('line_items[0][price_data][unit_amount]')).toBe('2500');
+    expect(body.get('metadata[purchaseKind]')).toBe('marketplace_listing');
+    expect(body.get('metadata[quantity]')).toBe('3');
+    expect(body.get('metadata[tenantId]')).toBe('7');
+    expect(body.get('payment_intent_data[metadata][purchaseKind]')).toBe('marketplace_listing');
+  });
+
+  it('clamps a nonsense quantity to 1 rather than billing a bulk order', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id: 'cs_mp', url: 'https://checkout.stripe.test/mp' }), { status: 200 })));
+    await makeProvider().createMarketplaceListingCheckoutSession({
+      amountCents: 2500,
+      currency: 'USD',
+      productName: 'Onboarding board',
+      quantity: 0,
+      successUrl: 'https://app.example.com/ok',
+      cancelUrl: 'https://app.example.com/no',
+      metadata: {},
+      idempotencyKey: 'mp-checkout:x',
+    });
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const body = new URLSearchParams(String(init?.body));
+    expect(body.get('line_items[0][quantity]')).toBe('1');
+    expect(body.get('metadata[quantity]')).toBe('1');
+  });
+
+  it('reads a paid listing as checkout.completed so the purchase registry settles it', async () => {
+    const payload = JSON.stringify({
+      type: 'checkout.session.completed',
+      data: { object: {
+        id: 'cs_mp',
+        mode: 'payment',
+        customer: 'cus_mp',
+        metadata: {
+          purchaseKind: 'marketplace_listing',
+          tenantId: '7',
+          buyerTenantId: '7',
+          buyerRef: 'u-b',
+          listingSlug: 'onboarding',
+          quantity: '3',
+        },
+      } },
+    });
+    const event = await makeProvider().parseWebhook(payload, await sign(payload));
+    expect(event).toMatchObject({
+      type: 'checkout.completed',
+      purchaseKind: 'marketplace_listing',
+      tenantId: 7,
+      checkoutSessionId: 'cs_mp',
+      metadata: expect.objectContaining({ buyerRef: 'u-b', quantity: '3' }),
+    });
+  });
+});
+
+describe('Managed AgentHost checkout', () => {
+  it('bills one monthly line at the requested host quantity and stamps purchaseKind on session and subscription metadata', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id: 'cs_host', url: 'https://checkout.stripe.test/host', customer: null }), { status: 200 })));
+    await makeProvider().createManagedAgentHostCheckoutSession({
+      tenantId: 11, cartId: 'cart-host', billingEmail: 'ops@example.com', currency: 'USD', monthlyCents: 4900, quantity: 3,
+      successUrl: 'https://builderforce.ai/pricing?managedHost=success', cancelUrl: 'https://builderforce.ai/pricing?managedHost=cancelled',
+    });
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const body = new URLSearchParams(String(init?.body));
+    expect(body.get('mode')).toBe('subscription');
+    expect(body.get('line_items[0][quantity]')).toBe('3');
+    expect(body.get('line_items[0][price_data][unit_amount]')).toBe('4900');
+    expect(body.get('line_items[0][price_data][recurring][interval]')).toBe('month');
+    expect(body.get('line_items[1][quantity]')).toBeNull();
+    expect(body.get('metadata[purchaseKind]')).toBe('managed_agent_host');
+    expect(body.get('metadata[quantity]')).toBe('3');
+    expect(body.get('subscription_data[metadata][purchaseKind]')).toBe('managed_agent_host');
+    expect(body.get('subscription_data[metadata][quantity]')).toBe('3');
+  });
+
+  it('normalizes checkout completion as an add-on event, not a base-plan activation', async () => {
+    const payload = JSON.stringify({ type: 'checkout.session.completed', data: { object: { mode: 'subscription', customer: 'cus_host', subscription: 'sub_host', customer_email: 'ops@example.com', metadata: { tenantId: '11', purchaseKind: 'managed_agent_host', cartId: 'cart-host', monthlyCents: '4900', quantity: '3' } } } });
+    const event = await makeProvider().parseWebhook(payload, await sign(payload));
+    expect(event).toMatchObject({ type: 'addon.activated', purchaseKind: 'managed_agent_host', tenantId: 11 });
+    expect(event?.type).not.toBe('subscription.activated');
+  });
+});
+
 describe('self-named purchases never activate the workspace plan', () => {
   const completed = (mode: string, metadata: Record<string, string>) => JSON.stringify({
     type: 'checkout.session.completed',

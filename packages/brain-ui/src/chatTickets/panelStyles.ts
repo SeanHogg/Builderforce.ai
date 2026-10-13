@@ -15,6 +15,10 @@ export const S = {
   caret: { display: 'inline-block', fontSize: 11, color: V.muted, transition: 'transform 120ms ease' } as React.CSSProperties,
   ticketsCount: { fontSize: 12, fontWeight: 600, color: V.text } as React.CSSProperties,
   ticketsAgg: { fontSize: 11, color: V.muted } as React.CSSProperties,
+  // Expanded ring grid — a chat can link hundreds of tickets, so the grid is a fixed-height
+  // scroll region (capped to the viewport on short panels) rather than growing past the
+  // host's clipped container where the rest could never be reached.
+  ticketGrid: { display: 'flex', alignItems: 'center', alignContent: 'flex-start', gap: 12, flexWrap: 'wrap', maxHeight: 'min(320px, 45vh)', overflowY: 'auto', overscrollBehavior: 'contain', paddingRight: 4 } as React.CSSProperties,
   chip: { display: 'flex', alignItems: 'center', gap: 6, padding: '2px 6px', border: `1px solid ${V.border}`, borderRadius: 8 } as React.CSSProperties,
   ticketLabel: { fontSize: 12, fontWeight: 600, color: V.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as React.CSSProperties,
   // Clickable variant of the label — opens the artifact. Underlined-on-hover link

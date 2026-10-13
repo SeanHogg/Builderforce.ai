@@ -83,6 +83,39 @@ export interface BusinessPhoneCheckoutOpts {
   cancelUrl: string;
 }
 
+/** Recurring Managed AgentHost add-on. Quantity is the hosted AgentHost count. */
+export interface ManagedAgentHostCheckoutOpts {
+  tenantId: number;
+  cartId: string;
+  billingEmail: string;
+  currency: string;
+  monthlyCents: number;
+  quantity: number;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+/**
+ * A one-off marketplace listing purchase, hosted by the processor.
+ *
+ * Distinct from {@link OneTimeCheckoutOpts} so the listing flow can stamp
+ * `purchaseKind` and bill a quantity without every other one-off caller having
+ * to remember those two fields. Quantity is the Stripe line quantity — unit
+ * amount stays the listing's price.
+ */
+export interface MarketplaceListingCheckoutOpts {
+  amountCents: number;
+  currency: string;
+  productName: string;
+  /** Copies of the listing on the Stripe line. Defaults to 1; clamped 1–99. */
+  quantity?: number;
+  billingEmail?: string | null;
+  successUrl: string;
+  cancelUrl: string;
+  metadata: Record<string, string>;
+  idempotencyKey: string;
+}
+
 /** Options to start an explicit CARD-VALIDATION session (SetupIntent / $0 auth) —
  *  used to unlock PREMIUM (any-paid-OpenRouter) model selection, which needs a
  *  funding instrument on file even though it's metered per-request, not a plan. */
@@ -243,6 +276,8 @@ export interface OneTimeCheckoutOpts {
   metadata: Record<string, string>;
   /** Same key for the same buyer + item, so a double-click is one session. */
   idempotencyKey: string;
+  /** Stripe line quantity. Defaults to 1. */
+  quantity?: number;
 }
 
 /**
@@ -372,6 +407,15 @@ export interface PaymentProvider {
 
   /** Purchase the Business Phone recurring add-on plus its one-time activation. */
   createBusinessPhoneCheckoutSession(opts: BusinessPhoneCheckoutOpts): Promise<CheckoutSessionResult>;
+
+  /** Purchase the Managed AgentHost recurring add-on (monthly, quantity = host count). */
+  createManagedAgentHostCheckoutSession(opts: ManagedAgentHostCheckoutOpts): Promise<CheckoutSessionResult>;
+
+  /**
+   * A ONE-OFF hosted payment for a marketplace listing, with quantity billing.
+   * Grants nothing; pair it with {@link retrieveCheckoutSession}.
+   */
+  createMarketplaceListingCheckoutSession(opts: MarketplaceListingCheckoutOpts): Promise<{ sessionId: string; checkoutUrl: string }>;
 
   /**
    * A ONE-OFF hosted payment — a marketplace creation bought once, not a plan.

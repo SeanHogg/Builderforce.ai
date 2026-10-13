@@ -4,6 +4,7 @@ import { socialApi, type SocialFeedFilter, type SocialFeedItem, type SocialNetwo
 import { isSocialNetworkName, socialCampaignNodeData, socialFeedPatch, socialPostNodeData, socialPostProjection } from '@/lib/canvasSocial';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import { canvasMediaSource, describePublicMediaProblem, resolvePublicMediaUrls } from '@/lib/canvasPublicMedia';
+import { recordCanvasActOutcomes } from '@/lib/recordCanvasActOutcome';
 import type { CanvasActionContext } from './context';
 
 export function canvasSocialActions(ctx: CanvasActionContext): BrainAction[] {
@@ -339,6 +340,18 @@ export function canvasSocialActions(ctx: CanvasActionContext): BrainAction[] {
       }
       if (batch.campaign) {
         stage.updateObject(`Publish social campaign ${target.id}`, target.id, socialCampaignNodeData(batch.campaign));
+      }
+      // The dedicated publish tool is the Brain path that actually mutates. Card-act
+      // recording never sees it, so the ledger write lives here — after the API
+      // succeeds, never on a gate/unbound refusal or a thrown send. Session FK
+      // matches createCampaign: an unsaved board has no creation_sessions row.
+      if (persistence === 'server' && sessionId) {
+        recordCanvasActOutcomes({
+          sessionId,
+          kind: 'socialCampaign',
+          action: 'publish',
+          objectId: target.id,
+        });
       }
       return {
         ok: true, proposed: true, objectId: target.id,

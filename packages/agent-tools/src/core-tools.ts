@@ -44,6 +44,7 @@ import { GIT_TOOLS } from "./git-tools.js";
 // is gated on `repo.symbols`, so only a surface with a definition index advertises it.
 import { SYMBOL_TOOLS } from "./symbol-tools.js";
 import { SEMANTIC_TOOLS } from "./semantic-tools.js";
+import { probeFromRepoRead, refuseWriteOverwrite } from "./writeOverwriteGuard.js";
 
 export const listFilesTool: ToolDefinition = defineTool({
   name: "list_files",
@@ -194,7 +195,7 @@ export const readFileTool: ToolDefinition = defineTool({
 export const writeFileTool: ToolDefinition = defineTool({
   name: "write_file",
   description:
-    "Create or update a file, writing its complete contents. How the write lands depends on the surface: in an editor/on-prem workspace it edits the file in place; in a cloud/review run it is staged on the ticket branch as a reviewable pending change. Do NOT narrate a specific mechanism (e.g. \"opened a PR\") — just state what the file now contains. Use once per deliverable file. Provide the FULL file content.",
+    "Create a new file, or replace a whole file you have already read, with its complete contents. Prefer edit_file for surgical changes to an existing file — write_file refuses to replace a large existing file with a much smaller body, and a failed or empty read of a path you are about to overwrite is a hard stop (not an empty file). New-file create (read 404 / not found) is still allowed. How the write lands depends on the surface: in an editor/on-prem workspace it edits the file in place; in a cloud/review run it is staged on the ticket branch as a reviewable pending change. Do NOT narrate a specific mechanism (e.g. \"opened a PR\") — just state what the file now contains. Use once per deliverable file. Provide the FULL file content.",
   parameters: {
     type: "object",
     properties: {
@@ -210,6 +211,22 @@ export const writeFileTool: ToolDefinition = defineTool({
     const content = typeof args.content === "string" ? args.content : "";
     const summary = typeof args.summary === "string" ? args.summary : undefined;
     if (!path || !content) return { data: { ok: false, error: "path and content are both required" } };
+    if (ctx.caps.repoRead) {
+      let existing;
+      try {
+        existing = await ctx.caps.repoRead.readFile(path);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : "read failed";
+        return {
+          data: {
+            ok: false,
+            error: `cannot overwrite: ${reason}. A failed or empty read is not an empty file — use edit_file after a successful read, or create a new path.`,
+          },
+        };
+      }
+      const refusal = refuseWriteOverwrite(probeFromRepoRead(existing), content);
+      if (refusal) return { data: { ok: false, error: refusal } };
+    }
     const r = (await ctx.caps.repoWrite!.writeFile(path, content, summary)) as RepoWriteResult;
     return { data: r.ok ? { ok: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
   },

@@ -3,7 +3,7 @@ import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { toolsApi } from '@/lib/builderforceApi';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import { answersComplete, defaultInput, questionIds, type ToolResult } from '@/lib/tools';
-import { createCanvasRealization, listRealizationTargets, primaryRealizationDoc, rankRealizationIdea, type RealizationView } from '@/lib/canvasRealize';
+import { createCanvasRealization, listRealizationTargets, rankRealizationIdea, realizationCanvasLanding, type RealizationView } from '@/lib/canvasRealize';
 import { getStoredTenantToken } from '@/lib/auth';
 import { accountGateResult } from './accountGate';
 import { CANVAS_REALIZE_ACCOUNT_GATE } from '@builderforce/creation-canvas-contract';
@@ -146,12 +146,14 @@ export function canvasRealizationActions(ctx: CanvasActionContext): BrainAction[
      * legacy `workflow` card with zero authored steps, and a hand-typed Twilio guide
      * with the wrong webhook URLs and no WEBHOOK_SHARED_SECRET).
      *
-     * Deliberately PLANS ONLY — it never calls `/api/realizations/:id/build`. That
-     * second step provisions a real project, seeds a board of tickets and wires
+     * Deliberately does not call `/api/realizations/:id/build`. That second
+     * step provisions a real project, seeds a board of tickets and wires
      * external connectors, and the realization API's own contract is that a human
      * reviews the plan before any of that exists (see the docstring on
-     * `POST /api/realizations/:id/build`). The plan itself lands on the board
-     * immediately as the real generated document; going live is one click away.
+     * `POST /api/realizations/:id/build`). The plan lands immediately as a
+     * publishable `website` (the connected `website.publish` / `artifact.publish`
+     * adapter — never a `workflow` card) plus the generated runbook beside it;
+     * going live on the realization project is one click away.
      */
     name: 'canvas_realize',
     description: 'Turn an idea into one of the platform\'s 8 tested "Idea → Real" proofs — a phone line with real Twilio-signed routes, a pilot, a smoke test, a live production system, etc. — using the platform\'s own realization pipeline, the exact one the /realize page uses. Use this instead of canvas_add_object whenever the user asks to "stand up", "build" or "make real" something matching one of these proof forms. Call canvas_list_realization_targets first if the right targetKey is not obvious; omit it to auto-rank the idea against all 8 and use the top match.',
@@ -192,26 +194,46 @@ export function canvasRealizationActions(ctx: CanvasActionContext): BrainAction[
         return { error: toolErrorMessage(error, `That could not be planned as a "${targetKey}".`) };
       }
 
-      const doc = primaryRealizationDoc(realization.plan.files ?? {});
-      const node = stage.createObject('document');
-      node.data = {
-        ...node.data,
-        title: `${realization.title} — ${realization.plan.blueprintName}`,
-        subtitle: realization.plan.summary,
-        content: doc?.content ?? realization.plan.summary,
-        status: 'Plan ready',
+      const landing = realizationCanvasLanding(realization);
+      if ('error' in landing) return { error: landing.error };
+
+      const site = stage.createObject('website');
+      site.data = {
+        ...site.data,
+        kind: 'website',
+        title: landing.website.title,
+        subtitle: landing.website.subtitle,
+        status: landing.website.status,
+        pages: landing.website.pages,
+        websiteTheme: landing.website.websiteTheme,
       };
-      stage.addObject(`Realize "${realization.title}"`, node);
+      stage.addObject(`Realize "${realization.title}"`, site);
+
+      let documentId: string | undefined;
+      if (landing.document) {
+        const node = stage.createObject('document', { x: site.position.x + 520, y: site.position.y });
+        node.data = {
+          ...node.data,
+          title: landing.document.title,
+          subtitle: landing.document.subtitle,
+          content: landing.document.content,
+          status: landing.document.status,
+        };
+        stage.addObject(`Plan for "${realization.title}"`, node);
+        documentId = node.id;
+      }
 
       return {
         ok: true, proposed: true,
-        object: { id: node.id, kind: 'document', title: String(node.data.title), created: true },
+        object: { id: site.id, kind: 'website', title: landing.website.title, created: true },
+        ...(landing.document && documentId ? { document: { id: documentId, kind: 'document', title: landing.document.title } } : {}),
+        delivery: landing.delivery,
         realizationId: realization.id, targetKey: realization.targetKey,
         summary: realization.plan.summary,
         tasks: realization.plan.tasks,
         requiredConnectors: realization.plan.requiredConnectors,
         requiredSecrets: realization.plan.requiredSecrets,
-        nextStep: `The plan is on the board. Open /realize/${realization.id} to review it and build it live — that step creates the real project, publishes it and wires its connectors.`,
+        nextStep: `A publishable website is on the board. Publish it, or open /realize/${realization.id} to review the plan and build it live — that step creates the real project, publishes it and wires its connectors.`,
       };
     },
   }];

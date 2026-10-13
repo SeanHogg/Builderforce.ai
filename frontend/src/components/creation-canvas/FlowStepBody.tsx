@@ -8,6 +8,7 @@ import { isMultiOutletKind, stepOutlets } from '@/domains/workflow/domain/stepOu
 import { integrationForConfig } from '@/domains/workflow/domain/stepIntegrations';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
+import { liveStepDotClass, normalizeLiveStepStatus } from './liveGraphStatus';
 
 /**
  * ONE EXECUTABLE STEP, DRAWN ON THE BOARD.
@@ -56,12 +57,20 @@ export function FlowStepBody({ data }: { data: CreationNodeData }) {
   const inputs = stepInputsOf(data);
   const outputs = stepOutputsOf(data);
   const named = isMultiOutletKind(stepKind);
+  const liveStatus = typeof data.workflowRunStatus === 'string'
+    ? normalizeLiveStepStatus(data.workflowRunStatus)
+    : null;
 
   return (
     <div className={styles.flowStep}>
       <div className={styles.flowStepFamily} data-testid="flow-step-family">
         {meta ? tStep(`nodeGroup.${NODE_GROUP_KEYS[meta.group]}`) : stepKind}
       </div>
+      {liveStatus && (
+        <div className={styles.flowStepRunStatus} data-testid="flow-step-run-status" data-status={liveStatus}>
+          <span className={liveStepDotClass(liveStatus, styles)} />
+        </div>
+      )}
       <p className={styles.flowStepSummary}>
         {summary || (meta ? nodeKindBlurb(meta, tStep) : '')}
       </p>

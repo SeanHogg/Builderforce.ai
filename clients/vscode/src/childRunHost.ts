@@ -2,8 +2,10 @@
  * How the run host starts, stops and wakes a sub-agent — as ITSELF.
  *
  * Recursion, not a second loop: a child is a run spec derived from its owner's (same
- * model route, same project, same governance and base prompt) with the sub-agent brief in
+ * project, same governance and base prompt) with the sub-agent brief in
  * front, its task as the user turn and a lineage pointer, handed to the host's one `run`.
+ * The catalog model follows an explicit parent pick (`modelStrict`); otherwise
+ * `ROLE_MODELS` / `ROLE_MODEL_DEFAULT` may pin a different model for the child's role.
  * Waking an idle owner is the same call again with what arrived in its inbox as the turn.
  *
  * Kept apart from `brainRunHost.ts` so the host stays the run lifecycle and nothing else;
@@ -22,6 +24,7 @@ import {
 import type { ChildRuns } from "./childRuns";
 import type { ChildOwner, ChildRequest, ChildRunHost } from "./childRunSpawner";
 import type { WebviewRunStart } from "./brainRunHostProtocol";
+import { modelForChildRun } from "./roleModelPin";
 
 /** A run as the host executes it: what the panel sends, plus what only the host knows. */
 export interface RunSpec extends WebviewRunStart {
@@ -85,11 +88,12 @@ export function createChildRunHost(deps: ChildRunHostDeps): ChildRunHost & { aft
       const parent = deps.specOf(owner.key);
       if (!parent) return Promise.reject(new Error("the run that spawned this sub-agent is not known to this host"));
       const base = parent.basePrompt ?? parent.systemPrompt;
+      const model = modelForChildRun(parent, req.role);
       return deps.start({
         chatId: key,
         systemPrompt: `${subagentSystemPrompt(req.persona, { owner: owner.name })}\n\n${base}`,
         basePrompt: base,
-        ...(parent.model ? { model: parent.model } : {}),
+        ...(model ? { model } : {}),
         ...(parent.modelStrict != null ? { modelStrict: parent.modelStrict } : {}),
         ...(parent.routingMode ? { routingMode: parent.routingMode } : {}),
         ...(parent.maxTokens ? { maxTokens: parent.maxTokens } : {}),

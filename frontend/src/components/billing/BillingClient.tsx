@@ -46,6 +46,7 @@ import { CollectionsWorklist } from '@/components/billing/CollectionsWorklist';
 import { openReceivables, type OpenReceivable } from '@/lib/founderOpsApi';
 import { getStoredTenant } from '@/lib/auth';
 import { billingApi, type BillingSubscription } from '@/lib/billingApi';
+import { ManagedAgentHostPanel } from '@/components/workforce/ManagedAgentHostPanel';
 import { cardValidationApi, type CardValidationState } from '@/lib/builderforceApi';
 import { payoutsApi, type PayoutRecord } from '@/lib/payoutsApi';
 import { TaxCenter } from '@/components/tax/TaxCenter';
@@ -190,6 +191,7 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
           </Link>
         </div>
       </div>
+      <ManagedAgentHostPanel tenantId={tenantId ?? undefined} />
 
       <div style={cardStyle}>
         <div style={sectionTitle}>{t('paymentMethodTitle')}</div>

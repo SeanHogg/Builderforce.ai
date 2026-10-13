@@ -48,6 +48,7 @@ import { MemberConsolidationPanel } from '@/components/contributors/MemberConsol
 import { AgentOwnerActions } from './AgentOwnerActions';
 import { AgentTypePill } from '@/components/AgentTypePill';
 import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
+import { ManagedAgentHostPanel } from './ManagedAgentHostPanel';
 import { BuiltinKindBadge } from '@/components/BuiltinKindBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatAgentPrice } from '@/lib/agentPresentation';
@@ -67,6 +68,7 @@ import {
 import { useRuntimeSurfaceRefusal } from './RuntimeSurfaceSelect';
 import { useFormat } from "@/i18n/useFormat";
 import { faultText } from '@/lib/apiClient';
+import { type AgentKind, inviteBtn, cardStyle } from './workforceAgentChrome';
 /**
  * Workforce → the unified directory of everyone in the workspace: human members,
  * pending invites, the tenant's cloud agents, hired marketplace agents, and
@@ -78,16 +80,6 @@ import { faultText } from '@/lib/apiClient';
  * "Add agent" split button (Cloud agent or remote registration). Managing a
  * cloud agent — edit, capabilities, pricing — happens in a right-side slide-out.
  */
-
-type AgentKind = 'cloud' | 'host';
-
-// "Invite" (a person) — secondary to the coral "+ Agent" split button.
-const inviteBtn: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)', cursor: 'pointer', whiteSpace: 'nowrap' };
-
-// Host (remote agentHost) card chrome — cloud/purchased agents render via <AgentCard>.
-const cardStyle: React.CSSProperties = {
-  padding: 16, display: 'flex', flexDirection: 'column', gap: 8, position: 'relative',
-};
 
 export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   const fmt = useFormat();
@@ -439,6 +431,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       <div style={{ marginBottom: 16 }}>
         <ActiveRunsPanel />
       </div>
+      <ManagedAgentHostPanel tenantId={tenantId} />
 
       {error && !dialogOpen && (
         <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--error-text)' }}>{error}</div>

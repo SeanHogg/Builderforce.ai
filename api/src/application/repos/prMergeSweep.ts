@@ -57,7 +57,7 @@ import { MAX_REMEDY_ATTEMPTS } from '../manager/stallTriage';
 import { createPassBudget, MIN_DISPATCH_WINDOW_MS, type PassBudget } from '../manager/passBudget';
 import { resolveRequiredSignoffGate } from '../kanban/signoffGate';
 import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from './mergeRecordedPr';
-import { pollPrCiStatus } from './pollPrCiStatus';
+import { pollPrCiStatus, pollPrLineStats, isNetDestructiveDiff } from './pollPrCiStatus';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
 import { runBoundedPool } from '../runtime/boundedPool';
 import {
@@ -631,6 +631,25 @@ async function runPrMergeQueueBody(
               prMergePolicy: policy.prMergePolicy,
               requireSignoffToComplete: policy.requireSignoffToComplete,
               grantAt: 'workspace manager defaults, or this project’s manager policy',
+            },
+          });
+          alreadyReportedBlocked.add(pr.id);
+        }
+        continue;
+      }
+
+      // Net-destructive diffs (deletions >> additions) need a human even when
+      // CI is green and the change is docs-only — same MERGE_BLOCKED continue.
+      const lineStats = await pollPrLineStats(env, db, tenantId, pr);
+      if (lineStats && isNetDestructiveDiff(lineStats.additions, lineStats.deletions)) {
+        if (!alreadyReportedBlocked.has(pr.id)) {
+          await recordManagerAction(db, {
+            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_BLOCKED_ACTION,
+            summary: `PR #${pr.number ?? '?'} deletes ${lineStats.deletions} lines vs ${lineStats.additions} added — human review required.`,
+            detail: {
+              gate: 'net_destructive_diff',
+              additions: lineStats.additions,
+              deletions: lineStats.deletions,
             },
           });
           alreadyReportedBlocked.add(pr.id);

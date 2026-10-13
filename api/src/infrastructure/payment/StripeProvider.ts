@@ -28,9 +28,12 @@
 
 import type {
   BusinessPhoneCheckoutOpts,
+  ManagedAgentHostCheckoutOpts,
   ConnectedAccountStatus,
   InvoiceItemOpts,
   InvoicePaymentLinkOpts,
+  MarketplaceListingCheckoutOpts,
+  OneTimeCheckoutOpts,
   PaymentProvider,
   CheckoutSessionOpts,
   CheckoutSessionResult,
@@ -42,6 +45,13 @@ import { PaymentNotConfiguredError } from './PaymentProvider';
 import { TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 import { timingSafeEqual } from '../crypto/constantTime';
 import { hmacHex } from '../crypto/hmac';
+
+/** Stripe line quantity. Integer 1–99; anything else is 1. */
+function billingQuantity(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isInteger(n) || n < 1) return 1;
+  return Math.min(n, 99);
+}
 
 interface StripeConfig {
   secretKey: string;
@@ -184,6 +194,62 @@ export class StripeProvider implements PaymentProvider {
     return { sessionId: session.id, checkoutUrl: session.url, externalCustomerId: session.customer ?? null, externalSubscriptionId: null };
   }
 
+  async createManagedAgentHostCheckoutSession(opts: ManagedAgentHostCheckoutOpts): Promise<CheckoutSessionResult> {
+    this.requireConfigured();
+    const currency = opts.currency.toLowerCase();
+    const quantity = billingQuantity(opts.quantity);
+    const params = new URLSearchParams({
+      mode: 'subscription', customer_email: opts.billingEmail, success_url: opts.successUrl, cancel_url: opts.cancelUrl,
+      'line_items[0][quantity]': String(quantity), 'line_items[0][price_data][currency]': currency,
+      'line_items[0][price_data][unit_amount]': String(opts.monthlyCents),
+      'line_items[0][price_data][recurring][interval]': 'month',
+      'line_items[0][price_data][product_data][name]': 'BuilderForce Managed AgentHost',
+      'metadata[tenantId]': String(opts.tenantId), 'metadata[purchaseKind]': 'managed_agent_host',
+      'metadata[cartId]': opts.cartId,
+      'metadata[monthlyCents]': String(opts.monthlyCents), 'metadata[quantity]': String(quantity),
+      'subscription_data[metadata][tenantId]': String(opts.tenantId),
+      'subscription_data[metadata][purchaseKind]': 'managed_agent_host',
+      'subscription_data[metadata][cartId]': opts.cartId,
+      'subscription_data[metadata][monthlyCents]': String(opts.monthlyCents),
+      'subscription_data[metadata][quantity]': String(quantity),
+    });
+    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST', headers: { Authorization: `Bearer ${this.config.secretKey}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(),
+    });
+    if (!res.ok) {
+      const err = await res.json() as { error?: { message?: string } };
+      throw new Error(`Stripe managed-agent-host checkout error: ${err.error?.message ?? res.status}`);
+    }
+    const session = await res.json() as { id: string; url: string; customer: string | null };
+    return { sessionId: session.id, checkoutUrl: session.url, externalCustomerId: session.customer ?? null, externalSubscriptionId: null };
+  }
+
+  /**
+   * A ONE-OFF marketplace listing purchase, with quantity billing.
+   *
+   * Stamps `purchaseKind: marketplace_listing` so the webhook parser routes it
+   * through the purchase registry rather than as a plan activation. Quantity is
+   * the Stripe line quantity; unit amount stays the listing's price.
+   */
+  async createMarketplaceListingCheckoutSession(opts: MarketplaceListingCheckoutOpts): Promise<{ sessionId: string; checkoutUrl: string }> {
+    const quantity = billingQuantity(opts.quantity);
+    return this.createOneTimeCheckoutSession({
+      amountCents: opts.amountCents,
+      currency: opts.currency,
+      productName: opts.productName,
+      billingEmail: opts.billingEmail,
+      successUrl: opts.successUrl,
+      cancelUrl: opts.cancelUrl,
+      quantity,
+      metadata: {
+        ...opts.metadata,
+        purchaseKind: 'marketplace_listing',
+        quantity: String(quantity),
+      },
+      idempotencyKey: opts.idempotencyKey,
+    });
+  }
+
   /**
    * A ONE-OFF payment — the marketplace's shape, not a subscription.
    *
@@ -196,23 +262,14 @@ export class StripeProvider implements PaymentProvider {
    * back to our site proves nothing on its own. `retrieveCheckoutSession` reads it
    * back FROM STRIPE, which is the only party that knows whether money moved.
    */
-  async createOneTimeCheckoutSession(opts: {
-    amountCents: number;
-    currency: string;
-    productName: string;
-    billingEmail?: string | null;
-    successUrl: string;
-    cancelUrl: string;
-    metadata: Record<string, string>;
-    /** Same key for the same buyer+listing, so a double-click is one session. */
-    idempotencyKey: string;
-  }): Promise<{ sessionId: string; checkoutUrl: string }> {
+  async createOneTimeCheckoutSession(opts: OneTimeCheckoutOpts): Promise<{ sessionId: string; checkoutUrl: string }> {
     this.requireConfigured();
+    const quantity = billingQuantity(opts.quantity);
     const params = new URLSearchParams({
       mode: 'payment',
       success_url: opts.successUrl,
       cancel_url: opts.cancelUrl,
-      'line_items[0][quantity]': '1',
+      'line_items[0][quantity]': String(quantity),
       'line_items[0][price_data][currency]': opts.currency.toLowerCase(),
       'line_items[0][price_data][unit_amount]': String(opts.amountCents),
       'line_items[0][price_data][product_data][name]': opts.productName.slice(0, 250),
@@ -725,23 +782,13 @@ export class StripeProvider implements PaymentProvider {
 
         const customerDetails = obj['customer_details'] as Record<string, string> | undefined;
 
-        // A marketplace purchase is `mode: 'payment'` and has no subscription, so
-        // it is branched BEFORE the subscription mapping below — which would
-        // otherwise read a plan activation out of a one-off creation sale.
-        if (meta['purchaseKind'] === 'marketplace_listing') {
-          const buyerTenantId = Number(meta['buyerTenantId']);
-          return {
-            type: 'listing.purchased',
-            purchaseKind: 'marketplace_listing',
-            checkoutSessionId: obj['id'] as string,
-            buyerRef: meta['buyerRef'],
-            ...(Number.isInteger(buyerTenantId) && buyerTenantId > 0 ? { tenantId: buyerTenantId } : {}),
-            externalCustomerId: customer ?? '',
-            externalSubscriptionId: '',
-            billingEmail: (obj['customer_email'] as string | undefined) ?? customerDetails?.['email'],
-            raw: event,
-          };
-        }
+        // A marketplace listing purchase is `mode: 'payment'` with
+        // `purchaseKind: marketplace_listing`. It used to be a dedicated
+        // `listing.purchased` event; it now falls through to the self-named
+        // ownFlow below (`checkout.completed`) so the purchase registry settles
+        // it the same way a workforce agent or skill is settled. Stamping
+        // `tenantId` (in addition to `buyerTenantId`) on the session is what
+        // lets ownFlow fill `event.tenantId`.
 
         // A KNOWLEDGE listing sale. Branched here with the other two `mode: 'payment'`
         // purchases and for the same structural reason: the subscription mapping

@@ -649,6 +649,7 @@
       "monitoring": "Monitorización",
       "reliability": "Fiabilidad",
       "agentOps": "Operación de agentes",
+      "orchestration": "Orquestación",
       "sales": "Centro de ventas",
       "challenges": "Desafíos",
       "growth": "Crecimiento",
@@ -6483,7 +6484,7 @@
           },
           {
             "question": "¿Qué es un AgentHost gestionado?",
-            "answer": "Un AgentHost gestionado es una instancia alojada de BuilderForce Agents operada por Builderforce. Su precio vigente lo indica el contrato público de precios en la página de precios."
+            "answer": "Un AgentHost gestionado es una instancia alojada de BuilderForce Agents operada por Builderforce, facturada mensualmente por cada AgentHost alojado. Añádelo desde la página de precios con un plan Pro o Teams activo y solicita el host en Workforce. El aprovisionamiento comienza cuando solicitas un host. Su precio vigente lo indica el contrato público de precios."
           },
           {
             "question": "¿Ofrecéis facturación anual?",
@@ -10199,6 +10200,21 @@
     "teamsCostNoteYear": "${perSeat}/asiento/año — facturado como ${total}/año",
     "teamsCostNoteMonth": "${perSeat}/asiento/mes — facturado como ${total}/mes",
     "managedAddon": "Complemento: <b>AgentHost gestionado</b> — ${price}/mes por cada AgentHost alojado. Ejecutamos tu instancia de BuilderForce Agents por ti — sin Docker, sin DevOps.",
+    "managedHost": {
+      "eyebrow": "Complemento de hosting",
+      "title": "AgentHost gestionado",
+      "description": "Ejecutamos tu instancia de BuilderForce Agents por ti — sin Docker, sin DevOps. Facturación mensual por cada AgentHost alojado.",
+      "addonFor": "Complemento para Pro y Teams",
+      "perMonth": "/mes por AgentHost alojado",
+      "addToCart": "Añadir al carrito",
+      "viewCart": "Ver carrito",
+      "eligibility": "Requiere una suscripción Pro o Teams activa.",
+      "signIn": "Inicia sesión para comprar",
+      "quantity": "AgentHosts alojados",
+      "decrease": "Menos hosts",
+      "increase": "Más hosts",
+      "active": "Esta cantidad ya está cubierta por tu suscripción de AgentHost gestionado."
+    },
     "phone": {
       "eyebrow": "Complemento de retención",
       "title": "Teléfono empresarial",
@@ -17991,6 +18007,21 @@
     "failedDelete": "No se pudo eliminar el flujo de trabajo",
     "noticeRunPendingApproval": "«{name}» necesita aprobación antes de ejecutarse. Se envió una solicitud de aprobación."
   },
+  "orchestrationWorkspace": {
+    "title": "Orquestación en vivo",
+    "subtitle": "Flujos de agentes en curso. El DAG es el espacio de trabajo; la autoría se queda en el canvas.",
+    "loading": "Cargando ejecuciones en curso…",
+    "error": "No se pudieron cargar las ejecuciones en curso.",
+    "empty": "No hay flujos en curso. Inicia una ejecución desde el canvas.",
+    "selectRun": "En curso",
+    "live": "En vivo",
+    "loadingGraph": "Cargando grafo…",
+    "noGraph": "Aún no hay datos de grafo para esta ejecución.",
+    "openCanvas": "Abrir canvas",
+    "authoringHint": "Para diseñar un flujo, abre el Creation Canvas.",
+    "refresh": "Actualizar",
+    "unnamed": "Ejecución sin nombre"
+  },
   "personalityUsage": {
     "title": "Uso de personalidad",
     "activeTitle": "Personalidad activa",
@@ -18622,6 +18653,34 @@
     "loading": "Cargando…",
     "loadFailed": "No pudimos cargar tus datos de facturación.",
     "comparePlans": "Comparar planes",
+    "managedHost": {
+      "title": "AgentHost gestionado",
+      "description": "Ejecutamos tu instancia de BuilderForce Agents por ti — sin Docker, sin DevOps.",
+      "statusActive": "Activo",
+      "statusPastDue": "Vencido",
+      "statusNone": "Sin suscripción",
+      "quantityCovered": "Hosts cubiertos",
+      "requests": "Solicitudes de hosting",
+      "empty": "Aún no hay solicitudes de hosting.",
+      "name": "Nombre del AgentHost",
+      "region": "Región",
+      "notes": "Notas",
+      "submit": "Solicitar AgentHost alojado",
+      "cancel": "Cancelar solicitud",
+      "busy": "Trabajando…",
+      "unpaid": "Suscríbete a AgentHost gestionado en la página de precios antes de solicitar un host.",
+      "exhausted": "Todos los AgentHosts alojados de tu suscripción ya están solicitados o aprovisionados.",
+      "loadFailed": "No pudimos cargar los detalles de AgentHost gestionado.",
+      "requestFailed": "No pudimos enviar la solicitud de hosting.",
+      "cancelFailed": "No pudimos cancelar esa solicitud.",
+      "statusPending": "Pendiente",
+      "statusProvisioning": "Aprovisionando",
+      "statusRequestActive": "Activo",
+      "statusCancelled": "Cancelado",
+      "statusFailed": "Fallido",
+      "provisionNote": "El aprovisionamiento comienza cuando solicitas un host.",
+      "cta": "Comparar planes"
+    },
     "paymentMethodTitle": "Método de pago",
     "paymentMethodIntro": "La tarjeta con la que se cobran tu suscripción y el uso medido. Añadirla ejecuta una verificación de 0 USD, nunca un cargo.",
     "cardOnFile": "Tarjeta registrada",
@@ -19134,7 +19193,8 @@
       "learning": "Rutas, requisitos previos y el LRS.",
       "marketplace": "Compra y vende agentes, talento y plantillas.",
       "developers": "Publica en el mercado y gestiona las instalaciones.",
-      "sales": "Pipeline, campañas, pagos y referidos."
+      "sales": "Pipeline, campañas, pagos y referidos.",
+      "orchestration": "Ejecuciones en curso y el DAG en vivo."
     }
   },
   "tutorials": {
@@ -25058,12 +25118,22 @@
     "noticeFormClosed": "El formulario está cerrado. No se registrarán más respuestas.",
     "noticeFormUnpublished": "Publica el formulario antes de recoger o cerrarlo.",
     "noticeFormFailed": "No se pudo completar esa acción del formulario.",
+    "noticeFormSent": "Formulario enviado a {queued} destinatarios.",
+    "noticeFormPosted": "Formulario publicado en {published} canales.",
+    "noticeFormNoAudience": "Enviar requiere una audiencia — añade destinatarios o selecciona una audiencia de marketing.",
+    "noticeFormBlocked": "No se puede enviar: {blockers}. Corrígelos antes de intentar de nuevo.",
+    "sendFailed": "No se pudo enviar el formulario.",
+    "postFailed": "No se pudo publicar el formulario.",
     "noticeIdeaUntitled": "Ponle un título a la idea antes de preguntar a la gente.",
     "noticeIdeaInterviewTitle": "Ponle un título a la idea para poder nombrar la entrevista.",
     "noticeIdeaInterviewPlanned": "Entrevista planificada. Ábrela en el tablero para elegir una hora.",
     "noticeIdeaFormTitle": "Ponle un título a la idea para poder nombrar el formulario.",
     "noticeIdeaFormCreated": "Formulario creado. Publícalo para obtener un enlace que puedas enviar.",
     "noticeIdeaActFailed": "No se pudo completar esa acción de la idea.",
+    "noticeIdeaNothingToReveal": "Nombre la entrevista, el experimento o el formulario que puso a prueba esta idea antes de calificarla.",
+    "noticeIdeaRevealMissing": "Ninguna de las evidencias nombradas está en este tablero: {refs}.",
+    "noticeIdeaRevealMet": "La evidencia respondió. Esta idea está validada.",
+    "noticeIdeaRevealMissed": "La evidencia nombrada está en el tablero pero aún no ha respondido. No es un sí — es un fallo hasta que lo haga.",
     "surface": {
       "chat": {
         "label": "Chat",
@@ -28119,6 +28189,9 @@
       },
       "reliability": {
         "description": "Monitores, incidentes, guardias y escalado en un único ciclo de detectar y responder."
+      },
+      "orchestration": {
+        "description": "Flujos de agentes en curso y el DAG en vivo. La autoría se queda en el canvas."
       },
       "knowledge": {
         "description": "SOP, procesos, documentos, habilidades, personas y prompts: la base versionada en la que se apoyan tus agentes."
@@ -31725,7 +31798,16 @@
     "closeFailed": "No se pudo cerrar el formulario.",
     "noticeCrmImported": "Contactos CRM: {added} añadidos, {updated} actualizados, {rejected} rechazados.",
     "crmFailed": "No se pudieron importar los contactos CRM.",
+    "noticeFormUnpublished": "Publique el formulario antes de enviarlo o cerrarlo.",
+    "noticeFormNoAudience": "Enviar requiere una audiencia — añada destinatarios o seleccione una audiencia de marketing.",
+    "noticeFormBlocked": "No se puede enviar: {blockers}. Corrígelos antes de volver a intentarlo.",
+    "noticeFormSent": "Formulario enviado a {queued} destinatarios.",
+    "sendFailed": "No se pudo enviar el formulario.",
+    "noticeFormPosted": "Formulario publicado en {published} canales.",
+    "postFailed": "No se pudo publicar el formulario.",
     "publish": "Publicar",
+    "send": "Enviar",
+    "post": "Publicar",
     "close": "Cerrar",
     "exit": "Volver al tablero",
     "unpublishedHint": "Publica este formulario para obtener una dirección desde la que se puede responder con el teléfono. No hace falta cuenta para responder.",

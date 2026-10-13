@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CardActContext } from '@/domains/canvas/application/CardAct';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import { closeForm, publishForm, summarizeForm } from '@/lib/founderOpsApi';
+import { postForm, sendForm } from '@/lib/formDistribution';
 import { formActs } from './founderOpsActs';
 
 vi.mock('@/lib/founderOpsApi', async (importOriginal) => {
@@ -14,9 +15,17 @@ vi.mock('@/lib/founderOpsApi', async (importOriginal) => {
   };
 });
 
+vi.mock('@/lib/formDistribution', () => ({
+  sendForm: vi.fn(),
+  postForm: vi.fn(),
+}));
+
 const t = ((key: string, values?: Record<string, unknown>) => {
   if (key === 'noticeFormPublished') return `open ${values?.url}`;
   if (key === 'noticeFormCollected') return `count ${values?.count}`;
+  if (key === 'noticeFormSent') return `queued ${values?.queued}`;
+  if (key === 'noticeFormPosted') return `posted ${values?.published}`;
+  if (key === 'noticeFormBlocked') return `blocked ${values?.blockers}`;
   return key;
 }) as CardActContext['t'];
 
@@ -41,6 +50,8 @@ describe('formActs', () => {
     vi.mocked(publishForm).mockReset();
     vi.mocked(summarizeForm).mockReset();
     vi.mocked(closeForm).mockReset();
+    vi.mocked(sendForm).mockReset();
+    vi.mocked(postForm).mockReset();
   });
 
   it('publish with no questions says so and sends nothing', async () => {
@@ -115,5 +126,49 @@ describe('formActs', () => {
     expect(closeForm).toHaveBeenCalledWith('qs-1');
     expect(result.patch).toEqual({ status: 'closed' });
     expect(result.notice).toBe('noticeFormClosed');
+  });
+
+  it('send on an unpublished form says so and does not call the campaign rail', async () => {
+    const result = await formActs.run({ object: form(), action: 'send', board, t });
+    expect(sendForm).not.toHaveBeenCalled();
+    expect(result.notice).toBe('noticeFormUnpublished');
+  });
+
+  it('send stamps the campaign id onto the card', async () => {
+    vi.mocked(sendForm).mockResolvedValue({ ok: true, campaignId: 7, queued: 2 });
+    const result = await formActs.run({
+      object: form({ questionSetId: 'qs-1', shareUrl: 'https://x/f/hello' }),
+      action: 'send',
+      board,
+      t,
+    });
+    expect(sendForm).toHaveBeenCalledOnce();
+    expect(result.patch).toEqual({ campaignId: 7 });
+    expect(result.notice).toBe('queued 2');
+  });
+
+  it('send surfaces campaign blockers without claiming a send', async () => {
+    vi.mocked(sendForm).mockResolvedValue({ ok: false, reason: 'blocked', blockers: ['sender'], campaignId: 7 });
+    const result = await formActs.run({
+      object: form({ questionSetId: 'qs-1', shareUrl: 'https://x/f/hello' }),
+      action: 'send',
+      board,
+      t,
+    });
+    expect(result.patch).toEqual({ campaignId: 7 });
+    expect(result.notice).toBe('blocked sender');
+  });
+
+  it('post stamps the social campaign id onto the card', async () => {
+    vi.mocked(postForm).mockResolvedValue({ ok: true, campaignId: 4, published: 1 });
+    const result = await formActs.run({
+      object: form({ questionSetId: 'qs-1', shareUrl: 'https://x/f/hello' }),
+      action: 'post',
+      board,
+      t,
+    });
+    expect(postForm).toHaveBeenCalledOnce();
+    expect(result.patch).toEqual({ socialCampaignId: 4 });
+    expect(result.notice).toBe('posted 1');
   });
 });

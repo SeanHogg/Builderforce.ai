@@ -61,6 +61,7 @@ export default function ShoppingCart() {
   const { isAuthenticated, tenant, user, webToken } = useAuth();
   const t = useTranslations('shoppingCart');
   const phoneT = useTranslations('pricing.phone');
+  const hostT = useTranslations('pricing.managedHost');
   const phonePageT = useTranslations('phonePage');
   const locale = useLocale();
   const money = (dollars: number): string => formatCents(toCents(dollars), { currency: 'USD' });
@@ -176,6 +177,7 @@ export default function ShoppingCart() {
   if (!isOpen || !mounted) return null;
 
   const phoneItem = items.find((item) => item.checkoutKind === 'business_phone');
+  const hostItem = items.find((item) => item.checkoutKind === 'managed_agent_host');
   const subscriptionItem = items.find((item) => item.checkoutKind === 'plan_subscription');
   const checkoutReturnPath = '/pricing?checkout=1';
   const registrationPath = `/tenants?next=${encodeURIComponent(checkoutReturnPath)}`;
@@ -191,7 +193,7 @@ export default function ShoppingCart() {
       // free entitlement. Agents check out through the workforce agent checkout.
       const marketplaceItems = items.filter((item): item is CartItem & { type: 'skill' | 'persona' } =>
         item.type === 'skill' || item.type === 'persona');
-      if ((phoneItem || subscriptionItem) && items.length > 1) throw new Error(t('mixedCheckout'));
+      if ((phoneItem || hostItem || subscriptionItem) && items.length > 1) throw new Error(t('mixedCheckout'));
 
       if (subscriptionItem) {
         if (!tenant?.id || !user?.email) throw new Error(t('workspaceRequired'));
@@ -220,6 +222,25 @@ export default function ShoppingCart() {
         } catch (cause) {
           if (cause instanceof ApiRequestError && cause.status === 403) throw new Error(phoneT('eligibility'));
           if (cause instanceof ApiRequestError && cause.status === 409) throw new Error(phonePageT('active'));
+          throw cause;
+        }
+        if (!body.checkoutUrl) throw new Error(t('checkoutFailed'));
+        window.location.href = body.checkoutUrl;
+        return;
+      }
+
+      if (hostItem) {
+        if (!tenant?.id || !user?.email) throw new Error(t('workspaceRequired'));
+        let body: { checkoutUrl?: string };
+        try {
+          body = await apiRequest<{ checkoutUrl?: string }>(`/api/tenants/${tenant.id}/add-ons/managed-agent-host/checkout`, {
+            method: 'POST',
+            body: JSON.stringify({ billingEmail: user.email, quantity: hostItem.seats ?? 1 }),
+            expectedErrors: [403, 409],
+          });
+        } catch (cause) {
+          if (cause instanceof ApiRequestError && cause.status === 403) throw new Error(hostT('eligibility'));
+          if (cause instanceof ApiRequestError && cause.status === 409) throw new Error(hostT('active'));
           throw cause;
         }
         if (!body.checkoutUrl) throw new Error(t('checkoutFailed'));

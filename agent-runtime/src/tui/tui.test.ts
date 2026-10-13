@@ -33,6 +33,8 @@ describe("tui slash commands", () => {
     const commands = getSlashCommands({});
     expect(commands.some((command) => command.name === "context")).toBe(true);
     expect(commands.some((command) => command.name === "commands")).toBe(true);
+    expect(commands.some((command) => command.name === "fork")).toBe(true);
+    expect(commands.some((command) => command.name === "undo")).toBe(true);
   });
 });
 

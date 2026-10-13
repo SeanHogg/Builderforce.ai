@@ -10,6 +10,8 @@ public enum ErrorCode: String, Codable, Sendable {
     case agentTimeout = "AGENT_TIMEOUT"
     case invalidRequest = "INVALID_REQUEST"
     case unavailable = "UNAVAILABLE"
+    case methodNotFound = "METHOD_NOT_FOUND"
+    case internalError = "INTERNAL_ERROR"
 }
 
 public struct ConnectParams: Codable, Sendable {
@@ -1181,6 +1183,19 @@ public struct SessionsResetParams: Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case key
         case reason
+    }
+}
+
+public struct SessionsForkParams: Codable, Sendable {
+    public let key: String
+
+    public init(
+        key: String
+    ) {
+        self.key = key
+    }
+    private enum CodingKeys: String, CodingKey {
+        case key
     }
 }
 
@@ -2736,6 +2751,7 @@ public struct ChatSendParams: Codable, Sendable {
     public let attachments: [AnyCodable]?
     public let timeoutms: Int?
     public let idempotencykey: String
+    public let workspacedir: String?
 
     public init(
         sessionkey: String,
@@ -2744,7 +2760,8 @@ public struct ChatSendParams: Codable, Sendable {
         deliver: Bool?,
         attachments: [AnyCodable]?,
         timeoutms: Int?,
-        idempotencykey: String
+        idempotencykey: String,
+        workspacedir: String?
     ) {
         self.sessionkey = sessionkey
         self.message = message
@@ -2753,6 +2770,7 @@ public struct ChatSendParams: Codable, Sendable {
         self.attachments = attachments
         self.timeoutms = timeoutms
         self.idempotencykey = idempotencykey
+        self.workspacedir = workspacedir
     }
     private enum CodingKeys: String, CodingKey {
         case sessionkey = "sessionKey"
@@ -2762,6 +2780,7 @@ public struct ChatSendParams: Codable, Sendable {
         case attachments
         case timeoutms = "timeoutMs"
         case idempotencykey = "idempotencyKey"
+        case workspacedir = "workspaceDir"
     }
 }
 

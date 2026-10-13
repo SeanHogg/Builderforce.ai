@@ -649,6 +649,7 @@
       "monitoring": "Surveillance",
       "reliability": "Fiabilité",
       "agentOps": "Ops des agents",
+      "orchestration": "Orchestration",
       "sales": "Centre des ventes",
       "challenges": "Défis",
       "growth": "Croissance",
@@ -6483,7 +6484,7 @@
           },
           {
             "question": "Qu’est-ce qu’un AgentHost géré ?",
-            "answer": "Un AgentHost géré est une instance hébergée de BuilderForce Agents exploitée par Builderforce. Son prix en vigueur est fourni par le contrat tarifaire public affiché sur la page des tarifs."
+            "answer": "Un AgentHost géré est une instance hébergée de BuilderForce Agents exploitée par Builderforce, facturée mensuellement par AgentHost hébergé. Ajoutez-le depuis la page des tarifs avec un forfait Pro ou Teams actif, puis demandez un hôte dans Workforce. Le provisionnement démarre lorsque vous demandez un hôte. Son prix en vigueur est fourni par le contrat tarifaire public."
           },
           {
             "question": "Proposez-vous une facturation annuelle ?",
@@ -10199,6 +10200,21 @@
     "teamsCostNoteYear": "{perSeat} $/poste/an — facturé {total} $/an",
     "teamsCostNoteMonth": "{perSeat} $/poste/mois — facturé {total} $/mois",
     "managedAddon": "Module complémentaire : <b>AgentHost géré</b> — {price} $/mois par AgentHost hébergé. Nous exécutons votre instance BuilderForce Agents pour vous — sans Docker, sans DevOps.",
+    "managedHost": {
+      "eyebrow": "Module d’hébergement",
+      "title": "AgentHost géré",
+      "description": "Nous exécutons votre instance BuilderForce Agents pour vous — sans Docker, sans DevOps. Facturation mensuelle par AgentHost hébergé.",
+      "addonFor": "Module pour Pro et Teams",
+      "perMonth": "/mois par AgentHost hébergé",
+      "addToCart": "Ajouter au panier",
+      "viewCart": "Voir le panier",
+      "eligibility": "Nécessite un abonnement Pro ou Teams actif.",
+      "signIn": "Connectez-vous pour acheter",
+      "quantity": "AgentHosts hébergés",
+      "decrease": "Moins d’hôtes",
+      "increase": "Plus d’hôtes",
+      "active": "Cette quantité est déjà couverte par votre abonnement AgentHost géré."
+    },
     "phone": {
       "eyebrow": "Option de fidélisation",
       "title": "Téléphone professionnel",
@@ -17991,6 +18007,21 @@
     "failedDelete": "Échec de la suppression du flux de travail",
     "noticeRunPendingApproval": "« {name} » doit être approuvé avant de pouvoir s'exécuter. Une demande d'approbation a été envoyée."
   },
+  "orchestrationWorkspace": {
+    "title": "Orchestration en direct",
+    "subtitle": "Workflows d'agents en cours. Le DAG est l'espace de travail — l'édition reste sur le canvas.",
+    "loading": "Chargement des exécutions en cours…",
+    "error": "Impossible de charger les exécutions en cours.",
+    "empty": "Aucun workflow en cours. Lancez une exécution depuis le canvas.",
+    "selectRun": "En cours",
+    "live": "En direct",
+    "loadingGraph": "Chargement du graphe…",
+    "noGraph": "Pas encore de graphe pour cette exécution.",
+    "openCanvas": "Ouvrir le canvas",
+    "authoringHint": "Pour concevoir un workflow, ouvrez le Creation Canvas.",
+    "refresh": "Actualiser",
+    "unnamed": "Exécution sans nom"
+  },
   "personalityUsage": {
     "title": "Utilisation de la personnalité",
     "activeTitle": "Personnalité active",
@@ -18622,6 +18653,34 @@
     "loading": "Chargement…",
     "loadFailed": "Impossible de charger vos informations de facturation.",
     "comparePlans": "Comparer les offres",
+    "managedHost": {
+      "title": "AgentHost géré",
+      "description": "Nous exécutons votre instance BuilderForce Agents pour vous — sans Docker, sans DevOps.",
+      "statusActive": "Actif",
+      "statusPastDue": "En retard",
+      "statusNone": "Non abonné",
+      "quantityCovered": "Hôtes couverts",
+      "requests": "Demandes d’hébergement",
+      "empty": "Aucune demande d’hébergement pour le moment.",
+      "name": "Nom de l’AgentHost",
+      "region": "Région",
+      "notes": "Notes",
+      "submit": "Demander un AgentHost hébergé",
+      "cancel": "Annuler la demande",
+      "busy": "Traitement…",
+      "unpaid": "Abonnez-vous à AgentHost géré sur la page des tarifs avant de demander un hôte.",
+      "exhausted": "Tous les AgentHosts hébergés de votre abonnement sont déjà demandés ou provisionnés.",
+      "loadFailed": "Impossible de charger les détails d’AgentHost géré.",
+      "requestFailed": "Impossible d’envoyer la demande d’hébergement.",
+      "cancelFailed": "Impossible d’annuler cette demande.",
+      "statusPending": "En attente",
+      "statusProvisioning": "Provisionnement",
+      "statusRequestActive": "Actif",
+      "statusCancelled": "Annulé",
+      "statusFailed": "Échec",
+      "provisionNote": "Le provisionnement démarre lorsque vous demandez un hôte.",
+      "cta": "Comparer les offres"
+    },
     "paymentMethodTitle": "Moyen de paiement",
     "paymentMethodIntro": "La carte débitée pour votre abonnement et votre usage mesuré. L'ajout déclenche une vérification à 0 $, jamais un débit.",
     "cardOnFile": "Carte enregistrée",
@@ -19134,7 +19193,8 @@
       "learning": "Parcours, prérequis et le LRS.",
       "marketplace": "Achetez et vendez agents, talents et modèles.",
       "developers": "Publiez sur la place de marché et gérez les installations.",
-      "sales": "Pipeline, campagnes, paiements et parrainages."
+      "sales": "Pipeline, campagnes, paiements et parrainages.",
+      "orchestration": "Exécutions en cours et le DAG en direct."
     }
   },
   "tutorials": {
@@ -25064,6 +25124,10 @@
     "noticeIdeaFormTitle": "Donnez un titre à l’idée pour nommer le formulaire.",
     "noticeIdeaFormCreated": "Formulaire créé. Publiez-le pour obtenir un lien à envoyer.",
     "noticeIdeaActFailed": "Cette action sur l’idée n’a pas pu aboutir.",
+    "noticeIdeaNothingToReveal": "Nommez l’entretien, l’expérience ou le formulaire qui a testé cette idée avant de la noter.",
+    "noticeIdeaRevealMissing": "Aucune des preuves nommées n’est sur ce tableau : {refs}.",
+    "noticeIdeaRevealMet": "Les preuves ont répondu. Cette idée est validée.",
+    "noticeIdeaRevealMissed": "Les preuves nommées sont sur le tableau mais n’ont pas encore répondu. Ce n’est pas un oui — un échec jusqu’à ce qu’elles le fassent.",
     "surface": {
       "chat": {
         "label": "Discussion",
@@ -26976,6 +27040,12 @@
       "leaveMessage": "Studio travaille encore sur votre demande. Aller à l’accueil de Studio l’interrompt ; votre app et tout ce qui a été construit restent sur ce canevas.",
       "leaveConfirm": "Quitter quand même"
     },
+    "noticeFormSent": "Formulaire envoyé à {queued} destinataires.",
+    "noticeFormPosted": "Formulaire publié sur {published} canaux.",
+    "noticeFormNoAudience": "L'envoi nécessite une audience — ajoutez des destinataires ou sélectionnez une audience marketing.",
+    "noticeFormBlocked": "Impossible d'envoyer: {blockers}. Corrigez-les avant de réessayer.",
+    "sendFailed": "Le formulaire n'a pas pu être envoyé.",
+    "postFailed": "Le formulaire n'a pas pu être publié.",
     "proof": {
       "title": "Tableau de bord de la preuve",
       "loading": "Chargement du tableau de bord…",
@@ -28119,6 +28189,9 @@
       },
       "reliability": {
         "description": "Supervision, incidents, astreinte et escalade dans une même boucle détecter-répondre."
+      },
+      "orchestration": {
+        "description": "Workflows d'agents en cours et le DAG en direct. L'édition reste sur le canvas."
       },
       "knowledge": {
         "description": "Procédures, processus, documents, compétences, personas et prompts : la base versionnée sur laquelle vos agents s'appuient."
@@ -31726,6 +31799,8 @@
     "noticeCrmImported": "Contacts CRM : {added} ajoutés, {updated} mis à jour, {rejected} rejetés.",
     "crmFailed": "Les contacts CRM n’ont pas pu être importés.",
     "publish": "Publier",
+    "send": "Envoyer",
+    "post": "Publier",
     "close": "Fermer",
     "exit": "Retour au tableau",
     "unpublishedHint": "Publiez ce formulaire pour obtenir une adresse depuis laquelle on peut répondre au téléphone. Aucun compte n’est requis pour répondre.",
@@ -31750,7 +31825,14 @@
       "draft": "Brouillon",
       "open": "Ouvert",
       "closed": "Fermé"
-    }
+    },
+    "noticeFormUnpublished": "Publiez le formulaire avant de l'envoyer ou de le fermer.",
+    "noticeFormNoAudience": "L'envoi nécessite une audience — ajoutez des destinataires ou sélectionnez une audience marketing.",
+    "noticeFormBlocked": "Impossible d'envoyer : {blockers}. Corrigez-les avant de réessayer.",
+    "noticeFormSent": "Formulaire envoyé à {queued} destinataires.",
+    "sendFailed": "Le formulaire n'a pas pu être envoyé.",
+    "noticeFormPosted": "Formulaire publié sur {published} canaux.",
+    "postFailed": "Le formulaire n'a pas pu être publié."
   },
   "calendar": {
     "regionLabel": "Calendrier",

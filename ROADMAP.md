@@ -21,45 +21,28 @@ Declared as spec data and ratcheted by `frontend/scripts/check-methodology.mjs`.
 
 Enabling work is legitimate but never outranks a broken Idea→Real journey.
 
-## The Buyer — the founder, then the team they hire
-
-- **First buyer:** a founder raising in the next few months. The arc is their company's arc; `DOMAIN_MANIFEST` gives them all seventeen seats from day one.
-- **Hook:** the fundraising pack (deck, model, metrics, data room) grounded on connected books — mostly built already in [`rfpService.ts`](./api/src/application/rfp/rfpService.ts) and [`dataRoomSharing.ts`](./api/src/application/investor/dataRoomSharing.ts).
-- **Retention:** a diligence document at `requested` is a hole in the raise; its `category` names the seat that closes it.
-- **Expansion:** a seat becomes a person. Pricing is fixed (2026-08-24); packaging is open — Pro caps `maxSeats: 1`, so the first teammate jumps $29 → five-seat Teams.
-- **Guardrail:** the pack is `🔄 Partial` until a release-gated journey test passes. No accounting adapter has run against live data, and no BurnRateOS rows have moved — copy must not say otherwise.
-
 ## Consolidated Feature Register
 
 | Feature | Area | P | Target | Status |
 |---|---|---|---|---|
-| Managed Agent hosting add-on ($49/mo/Agent) | Revenue | P0 | Q3 2026 | 🔄 In Progress |
-| Onboarding — first Agent in < 5 min | Revenue | P1 | Q3 2026 | 📋 Planned |
+| Managed Agent hosting add-on ($49/mo/Agent) | Revenue | P0 | Q3 2026 | ✅ Shipped |
+| Onboarding — first Agent in < 5 min | Revenue | P1 | Q3 2026 | ✅ Shipped |
 | Marketplace monetization (listing + tx fee, Stripe) | Revenue | P1 | Q3 2026 | 🔄 Partial — awaits Stripe secrets |
-| Enterprise license GA (on-prem Docker) | Revenue | P1 | Q4 2026 | 📋 Planned |
+| Enterprise license GA (on-prem Docker) | Revenue | P1 | Q4 2026 | ✅ Shipped |
 | SOC 2 Type I audit | Revenue | P1 | Q4 2026 | 📋 Planned |
-| Live orchestration workspace (real-time DAG) | Agents | P0 | Q3 2026 | 🔄 Partial |
-| Inline diff / pair-programming (TUI accept/reject) | Agents | P1 | Q3 2026 | 🔄 Partial |
-| Session auto-checkpoint (`/sessions`, `/undo`, `/fork`) | Agents | P1 | Q3 2026 | 🔄 Partial |
-| Remote task result streaming | Agents | P2 | Q3 2026 | 🔄 Partial — live `remote.task.chunk` + terminal assistant text |
-| Multi-model role routing | Agents | P2 | Q3 2026 | 📋 Planned |
-| Spec import from GitHub Issues / Linear / Jira | Agents | P2 | Q3 2026 | 📋 Planned |
-| Remaining Canvas actions onto the outcome contract | Analytics | P0 | Q3 2026 | 🔄 In Progress |
-| Rendered presentation export of the value brief | Revenue | P1 | Q3 2026 | 🔄 Partial |
+| Live orchestration workspace (real-time DAG) | Agents | P0 | Q3 2026 | ✅ Shipped |
+| Inline diff / pair-programming (TUI accept/reject) | Agents | P1 | Q3 2026 | ✅ Shipped |
+| Session auto-checkpoint (`/sessions`, `/undo`, `/fork`) | Agents | P1 | Q3 2026 | ✅ Shipped |
+| Remote task result streaming | Agents | P2 | Q3 2026 | ✅ Shipped — live `remote.task.chunk` + terminal assistant text |
+| Multi-model role routing | Agents | P2 | Q3 2026 | ✅ Shipped — resolver in `@builderforce/learned-routing` (`9f514a949`); wired into cloud engine (`c34d5084b`) and VS Code native Brain (`9689f3699`) |
+| Spec import from GitHub Issues / Linear / Jira | Agents | P2 | Q3 2026 | ✅ Shipped |
+| Remaining Canvas actions onto the outcome contract | Analytics | P0 | Q3 2026 | ✅ Shipped — cheap proofs on the ledger (epic #3077) |
+| Rendered presentation export of the value brief | Revenue | P1 | Q3 2026 | ✅ Shipped — `renderRfpDocPptx` from the same `rfpDocSections` as HTML/PDF; canvas PPTX + investor pack PPTX |
 | Phase 6 — activity/integration engines, scheduled reporting, PRD orchestration, analytics UI | 6 | P0–P1 | Q3–Q4 2026 | 📋 Planned |
-| Phase 7 — policy packs, governance-auditor, BLOCKER-gates-merge, SOC2 evidence ([PRD 08](./specs/builderforce/08-prd-agentic-governance.md)) | 7 | P1–P2 | Q3 2026 | 📋 Planned |
+| Phase 7 — policy packs, governance-auditor, BLOCKER-gates-merge, SOC2 evidence ([PRD 08](./docs/specs/08-prd-agentic-governance.md)) | 7 | P1–P2 | Q3 2026 | 📋 Planned |
 | Local LLM execution — native pure-Rust engine that replaces Ollama, in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) (`bfi`; Synapse supervises `bfi serve`; Ollama is not required), hybrid routing — [PRD](https://github.com/SeanHogg/builderforce-inference/blob/main/docs/PRD-native-engine.md); M1–M4 crates landed (tokenizer, sampler, prefix cache, grammar, embeddings, `mix_decode` concurrent batching); M5 Synapse cut-over shipped (`bf-local` no longer drives Ollama); M6 VSIX discovers Synapse via `~/.builderforce/desktop.json`. Remaining: GPU 70% tok/s vs llama-bench unmeasured (3762); live Bonsai 27B greedy vs PrismML fork not run (3764); unsigned GitHub Release binaries (3782) | 3 | P2–P3 | Q4 2026 | 🔄 Partial |
 | Multi-agent orchestration at scale (DAG UI, memory mesh) | 4 | P1–P2 | Q3–Q4 2026 | 📋 Planned |
 | Production hardening (self-hosted, fleet failover, SIEM export) | 5 | P1–P3 | Q4 2026 | 📋 Planned |
-
-## ARR Milestones
-
-| Period | Target ARR | Key driver |
-|---|---|---|
-| Q3 2026 | $50K | Teams plan + Agents LLM |
-| Q4 2026 | $200K | Enterprise pilots + marketplace |
-| Q1 2027 | $500K | Enterprise + marketplace |
-| Q2 2027 | $1M | Scale + enterprise contracts |
 
 ## Key Metrics
 
@@ -74,7 +57,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 | P | Promise | Honest position today | Proof required | Status |
 |---|---|---|---|---|
 | P0 | One canvas from idea to real | Connects supported artifacts into supported delivery | Release-gated journey test per marketed artifact | 🔄 Partial |
-| P0 | People control agent work | Policy gates on configured paths | Classify every mutating tool; CI fails on an unclassified one | 🔄 In Progress |
+| P0 | People control agent work | Policy gates on configured paths | Classify every mutating tool; CI fails on an unclassified one | ✅ Available |
 | P0 | Complete agent auditability | Supported workflows emit records | One audit envelope at every mutation entry point | 🔄 Partial |
 | P0 | Private, local AI work | WebGPU is local; collab/eval/publish transmit | Boundary manifest per action, shown before execution | 🔄 In Progress |
 | P1 | Evermind stays current | Keyed updates replace superseded facts | Provenance, contradiction detection, freshness budgets, stale-recall evals | 📋 Planned |
@@ -90,17 +73,8 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ## Programs
 
-- **hired.video absorption** ([PRD 18](./specs/builderforce/18-prd-hired-video-port.md)) — 100% deprecation to a redirect shell. Every remaining table maps to an existing primitive (`data-model/source-to-target.tsv`, 363/363); the rest is application code over existing tables. Affiliates = the Associate program.
-- **burnrateos.com shutdown** ([PRD 19](./specs/builderforce/19-prd-burnrateos-consolidation.md)) — a parity obligation: an unbuilt, unretired capability is LOST at shutdown. Held by `check:burnrate-parity`, `check:no-burnrate-runtime`, `check:burnrate-policy`. No row migration (2026-09-05). B1/B2 founder loop shipped 2026-09-15. PRD 19 §2 governs twelve capabilities both programs claim. *Operator work:* provider customer actions, identity-cutover comms, redirect verification.
-
-## Risk Register
-
-| Risk | Prob | Impact | Mitigation |
-|---|---|---|---|
-| Anthropic/OpenAI ships a multi-agent IDE | High | High | Self-hosting + open-source moat |
-| Cursor/Windsurf add MCP + multi-agent | Med | High | Live workflow DAG + agent mesh |
-| Free-tier model costs too high | Med | Med | Rate limiting + gateway margin |
-| Long enterprise sales cycle | High | Low | SMB Teams plan first |
+- **hired.video absorption** ([PRD 18](./docs/specs/18-prd-hired-video-port.md)) — 100% deprecation to a redirect shell. Every remaining table maps to an existing primitive (`data-model/source-to-target.tsv`, 363/363); the rest is application code over existing tables. Affiliates = the Associate program.
+- **burnrateos.com shutdown** ([PRD 19](./docs/specs/19-prd-burnrateos-consolidation.md)) — a parity obligation: an unbuilt, unretired capability is LOST at shutdown. Held by `check:burnrate-parity`, `check:no-burnrate-runtime`, `check:burnrate-policy`. No row migration (2026-09-05). B1/B2 founder loop shipped 2026-09-15. PRD 19 §2 governs twelve capabilities both programs claim. *Operator work:* provider customer actions, identity-cutover comms, redirect verification.
 
 ---
 
@@ -120,7 +94,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 ## 💡 Idea — Read · Prove
 
 - **[canvas] Ideas surface and Brain's "no data" reply read as unfinished.** Lede and empty body repeat; both point at "the prompt below" while the composer is in the right rail; the stepper stays on Make; Capture misses request-shaped text; the reply asks for an object ID instead of offering Paste / Upload / Plan an interview; header says "Brain" not the chat title. Mockup: frames 1–3 of https://claude.ai/artifact/KcEJGhrZaQMQWEMSHNJjyE. *Blocker: operator go-ahead (the 2026-10-04 pass was scoped to the chat panel).*
-- **[canvas] Validating an idea by asking the market is partial ([PRD 27](./specs/builderforce/27-prd-idea-validation-surveys.md), epic #3083).** B0 form loop is on main: `CanvasFormSurface` publish/close/`summarizeForm` poll, `CONNECTED_CANVAS_ACTIONS` `form:['publish','collect','close']`, public `/f/[slug]`. PRD §3.2 ("zero frontend callers") is stale. B1 Ask people (`formFromIdea`, Ideas row CTA, `IDEA_EVIDENCE_KINDS` includes `form`) is in the working tree uncommitted, not landed. Remaining product seam: B3 form → `marketing_campaign` Send and social Post (`sendForm` has 0 hits). B4 `addFromCrm` already exists on the form surface (`growthApi.addMembersFromCrm`). B5 founder stage select already exists (FR-8 is not auto-settle). `idea.reveal` is advertised in `CONNECTED_CANVAS_ACTIONS` but `ideaActs` only implements `explore`/`test`. Adjacent: `builtin_canvas_bind_ab_test` missing, no SMS/scheduled sends, clicks don't record the link, four unjoined contact stores, two survey stores, CSAT/NPS `question_set_id` unrendered, `newsletter_subscribers` siloed. Not blocked.
+- **[canvas] Validating an idea by asking the market is shipped for B0–B5 ([PRD 27](./docs/specs/27-prd-idea-validation-surveys.md), epic #3083).** B0 form loop on main: `CanvasFormSurface` publish/close/`summarizeForm` poll, public `/f/[slug]`. B1 Ask people (`formFromIdea`, Ideas row CTA, `IDEA_EVIDENCE_KINDS` includes `form`) landed. B3 form → `marketing_campaign` Send and social Post wired (`sendForm` / `postForm`, commit `ba9a3f2a4`). B4 `addFromCrm` on the form surface. B5 founder stage select exists (FR-8 is not auto-settle). `idea.reveal` grades named evidence onto `proof.grade`. Adjacent (not this epic): `builtin_canvas_bind_ab_test` missing, no SMS/scheduled sends, clicks don't record the link, four unjoined contact stores, two survey stores, CSAT/NPS `question_set_id` unrendered, `newsletter_subscribers` siloed.
 - **[canvas] Wizard-of-oz `/queue` and `/pilot-report` are public and expose participant contacts.** They ship `verify: 'none'`; a seeded blocking ticket is a request, not a control. Fix = per-realization read secret, signed link, or the console behind app auth. *Blocker: product decision on where an operator console lives.*
 - **[canvas] Instrumented `/api/creation-sessions/claim` failure not yet observed.** The catch now logs PG code, constraint, statement and id counts to tell the fixed case-collision cause from any other. *Blocker: a live occurrence.*
 
@@ -131,11 +105,11 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 ### Cloud and IDE agent runs `[agents]`
 
 
-- **Cloud agents only happy-path validated — 50-gap PRD ([09](./specs/builderforce/09-prd-cloud-agent-validation.md)).** P0: V2 runs `bypassPermissions` + Bash on shared infra with no documented sandbox (G1); Worker fallback ignores steering/cancel (S5/S6); errored runs leak the workspace (W2); a missing BYO key may fall to a platform key (B2).
+- **Cloud agents only happy-path validated — 50-gap PRD ([09](./docs/specs/09-prd-cloud-agent-validation.md)).** P0: V2 runs `bypassPermissions` + Bash on shared infra with no documented sandbox (G1); Worker fallback ignores steering/cancel (S5/S6); errored runs leak the workspace (W2); a missing BYO key may fall to a platform key (B2).
 - **`cloud-container` executor needs a live image.** Built; account is Containers-paid (2026-09-22). Until `wrangler deploy` builds it and `/health` passes, `chooseCloudExecutor` silently demotes container runs to durable — paid workspaces defaulting to container get serverless with no explanation. Bounds: `sleepAfter` 20m, clone token in shell, GitHub-only tokened clones, no `ask_human` on containers. *Blocker: image build + deploy.*
 - **Container / Actions runners still cap at `CONTAINER_MAX_STEPS` = 40.** Every other surface stops only on the kernel failure-streak breaker. The image (`api/container/server.mjs`, Actions template) must be rebuilt with the breaker; until then the launcher keeps sending 40. *Blocker: container build + deploy.*
-- **Durable cloud loop still has no local shell.** In-run verify is now branch-CI poll (`run_checks` + pre-finish, ticket #3092): combined commit status / GitHub check-runs on ticket-branch HEAD, block finish on red (3×) or pending (2×), green skips the honesty gate. Remaining: PR-only workflows (`on: pull_request`) report `none` until the PR exists — webhook auto-fix + `CLOUD_AUTOMERGE_REQUIRE_GREEN` stay the backstop. A real local `npm test` still needs Container or Actions (`CONTAINER_MAX_STEPS` = 40).
-- **Cloud execution doesn't clone/analyze the repo or write `PRD.md`.** Hoist the PRD-first step into `dispatchAndQueue`; PRD commit is GitHub-only; no agent task-mutation tool or agent identity; Auto runs carry no `cloudAgentRef`.
+- **Durable cloud loop still has no local shell.** In-run verify (ticket #3092): durable polls branch CI (`run_checks` + pre-finish, `164b177e2`); container / Actions / on-prem run `typecheck`/`type-check`/`test` in-run and durable records an honest skip (`5b0670e06`). Remaining: PR-only workflows (`on: pull_request`) report `none` until the PR exists — webhook auto-fix + `CLOUD_AUTOMERGE_REQUIRE_GREEN` stay the backstop. Actions still cap at `CONTAINER_MAX_STEPS` = 40.
+- **PRD commit is GitHub-only.** `ensureTaskPrd` now runs at `startDispatchedExecution` so host/on-prem runs draft too (ticket #3096, `54467a71d`). Remaining: PRD commit is GitHub-only; no agent task-mutation tool; Auto runs carry no `cloudAgentRef`.
 - **IDE agent calls tools one at a time.** Chat #115: 63 turns for 82 calls (8m41s model vs 5m45s tools); it can batch (turns 47–52) but nothing asks. *Blocker: an A/B over real runs.* Unblocks ~halving survey-run wall-clock.
 - **Staffed-chat dispatch and chat run-history not run end to end.** *Blocker: one deliberate cloud run on a staffed chat with a bound repo.*
 - **Grok (`xai-oauth/grok-4.6`) tool calling has no live verdict** (chat #104: 0 tool calls). *Blocker: an xAI credential in a shell* — then `node api/scripts/xai-tool-call-smoke.mjs --tools 2`, `5`, `67`, `67 --stream`, and `xaiOAuth.live.test.ts`.
@@ -170,7 +144,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ### Canvas runtimes and studio `[canvas]`
 
-- **Eight kinds have no editing runtime** (`video, voice, podcast, image, animation, comic, cad, model3d`, plus `drawing`) — they return a manifest ([PRD 18](./specs/builderforce/18-prd-hired-video-port.md)). Port from `C:\code\hired\hired.video\frontend\lib\studio` one kind per slice, dynamically importing heavy deps, through `creationObjectRegistry` data — never grow `CreationCanvas.tsx` (1,165 lines). Not blocked.
+- **Eight kinds have no editing runtime** (`video, voice, podcast, image, animation, comic, cad, model3d`, plus `drawing`) — they return a manifest ([PRD 18](./docs/specs/18-prd-hired-video-port.md)). Port from `C:\code\hired\hired.video\frontend\lib\studio` one kind per slice, dynamically importing heavy deps, through `creationObjectRegistry` data — never grow `CreationCanvas.tsx` (1,165 lines). Not blocked.
 - **One build-file write took 35.7s vs 38ms median** (session `local-148925cf`, `Layout.css`). *Blocker: a profile of a Studio build turn with preview running.*
 - **Knowledge editor has no `drawing` block.** Add a `BlockType` opened through the canvas drawing runtime once ported.
 - **Real-time co-editing live smoke.** *Blocker: next api deploy + a 2-client smoke.*
@@ -226,8 +200,8 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 ## 📊 Measure — grade the proof
 
 - **[platform] 14 of 17 seats write no domain metric.** `DOMAIN_MANIFEST` declares 45 keys; only `kernel/rollups/{finance,operations,legal}.ts` write `metric_facts`. Also missing: `channel_performance`, `site_traffic_daily`, `arr_projections`, `quota_attainment`, `rd_financials_quarterly`. Follows the PRD 20 data move. This is the open half of Measure.
-- **[finance] Vertical KPI Dashboards — Slice B next ([PRD 25](./specs/builderforce/25-prd-vertical-kpi-dashboards.md), build hand-off [25a](./specs/builderforce/25a-vertical-kpi-dashboards-implementation.md)).** Slice A shipped 2026-09-16. B: `growth.*` keys, LTV tranches, benchmark seeds for `saas`/`ai_ml` (kill: tiles read "Not measured"). C: `exitWaterfall.ts`, `exitScenario`/`marketSize` kinds (kill: disagrees with a hand spreadsheet). D: remaining eight verticals (kill per vertical: no design partner). No new tables.
-- **[growth] Insights (PRD 33) is built in code, but has never been compiled, test-run or live-validated.** All slices S0–S7, plus S8 content, landed on 2026-10-13 ([PRD 33 §0.1](./specs/builderforce/33-prd-session-replay.md)). Per operator instruction nothing was compiled or run, so CI on merge is the first type-check and test run. The §11 runbook is the live proof: CDN kill check, customer #1 dogfood, real-card pack purchase and refund, the method smoke test, prescriptions, and the page review. *Blocker: the operator. Needs Stripe secrets plus the webhook, `CLOUDFLARE_API_TOKEN` with R2/DNS/Routes, a published legal disclosure, `NEXT_PUBLIC_REPLAY_SITE_KEY` for the Builderforce workspace's site, and a provisioned QA runner (with ffmpeg; the image size has not been checked against the 2000 MB limit).*
+- **[finance] Vertical KPI Dashboards — Slice B next ([PRD 25](./docs/specs/25-prd-vertical-kpi-dashboards.md), build hand-off [25a](./docs/specs/25a-vertical-kpi-dashboards-implementation.md)).** Slice A shipped 2026-09-16. B: `growth.*` keys, LTV tranches, benchmark seeds for `saas`/`ai_ml` (kill: tiles read "Not measured"). C: `exitWaterfall.ts`, `exitScenario`/`marketSize` kinds (kill: disagrees with a hand spreadsheet). D: remaining eight verticals (kill per vertical: no design partner). No new tables.
+- **[growth] Insights (PRD 33) is built in code, but has never been compiled, test-run or live-validated.** All slices S0–S7, plus S8 content, landed on 2026-10-13 ([PRD 33 §0.1](./docs/specs/33-prd-session-replay.md)). Per operator instruction nothing was compiled or run, so CI on merge is the first type-check and test run. The §11 runbook is the live proof: CDN kill check, customer #1 dogfood, real-card pack purchase and refund, the method smoke test, prescriptions, and the page review. *Blocker: the operator. Needs Stripe secrets plus the webhook, `CLOUDFLARE_API_TOKEN` with R2/DNS/Routes, a published legal disclosure, `NEXT_PUBLIC_REPLAY_SITE_KEY` for the Builderforce workspace's site, and a provisioned QA runner (with ffmpeg; the image size has not been checked against the 2000 MB limit).*
 - **[growth] Insights scale-up: event lake (D18).** Funnels, flow, segments and AI digests run over kept recordings weighted by `sample_weight` (≈), not over every session. For sites far above the free allowance, add an event lake (Cloudflare Pipelines → R2 SQL) behind the same `replayFilterCompiler`, so funnels become exact. *Blocker: operator provisioning of the pipeline and a token for its SQL reads. A Pipelines binding with no pipeline fails the deploy.*
 - **[growth] `experiment` records results nothing produced.** It stores authored variants with no binding to `ab_tests`, no landing-page variant and no traffic split. Insights (PRD 33 S4e) built the traffic split for hosted sites. The sites Worker serves any running `ab_tests` row whose variants name an Insights site: it assigns a sticky `bf_ab_<testId>` cookie by `trafficPercent`, serves each arm's release, counts one exposure per first assignment, and writes `data-variant` on the loader. Ingest records conversions through `recordConversion`, and `variantResults` gives the verdict. Still missing: binding the canvas `experiment` object (and a variant field on `website`/`prototype`) to `ab_tests`, external sites, and `ab_test_segments` targeting. Not blocked.
 - **[delivery] hired.video `people_strategic_objectives` would fork the OKR store** — map onto `objectives`/`key_results` and invalidate `projectsList` on write.
@@ -248,13 +222,13 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Gigs:** fixed bids have no escrow/milestones; two publish paths could converge; eval scores aren't on an insights lens.
 - **Upwork parity:** escrow books are correct but money out rides the env-gated `PAYOUT_WEBHOOK_URL` stub; no 1099/W-8BEN/W-9; no payment-verified badge, bid economy, packages or agency accounts.
 - **Freelance/talent:** avatars full-size; payout and notify-email webhooks unset; `available_for_hire` schema drift needs a migration or allowlist.
-- **Advisor platform specified, not built ([PRD 26](./specs/builderforce/26-prd-advisor-platform.md))** — no Book on talent profiles, `/api/meetings/*` all authed, minutes don't create follow-ups.
+- **Advisor platform specified, not built ([PRD 26](./docs/specs/26-prd-advisor-platform.md))** — no Book on talent profiles, `/api/meetings/*` all authed, minutes don't create follow-ups.
 - **[integrations] Publishers can't list a canvas pack or prompt** — need `canvas`/`prompt` output kinds. *Blocker: product decision on what a purchased pack becomes.*
 - **[integrations] Developer Portal:** no live card run (Stripe secrets); hyperscaler listings need seller accounts; design-partner work is human.
 
 ### Marketing and campaigns `[growth]`
 
-- **Prompt-driven campaign ([PRD 30](./specs/builderforce/30-prd-guided-marketing-campaign.md))** — "run a marketing campaign" still maps to a portfolio table. Next: C1 `canvas_connect_mailbox`, C2 catalog use-case, C3 ICP on canvas, C4 campaign ROI. Don't clone HubSpot.
+- **Prompt-driven campaign ([PRD 30](./docs/specs/30-prd-guided-marketing-campaign.md))** — "run a marketing campaign" still maps to a portfolio table. Next: C1 `canvas_connect_mailbox`, C2 catalog use-case, C3 ICP on canvas, C4 campaign ROI. Don't clone HubSpot.
 - **Sales deck has zero customer proof.** *Blocker: one design partner and one measured result.*
 - **No ad adapter has run against a live account** (eight, all recorded-payload tested). *Blocker: a sandbox/live account + developer app per network.*
 - **Ad and social accounts connect by pasted token, not OAuth.** Code side is a registry entry + callback per network. *Blocker: a developer app and publishing/spend review per network.*
@@ -289,6 +263,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Project memory has no embedding fallback** (`vector(1536)` vs 1024-wide BGE). *Blocker: design decision* — second vector column or the same model from a second host.
 - **Vision gate skips `@cf/google/gemma-4-26b-a4b-it`** (declares `['tools']`). *Blocker: one live image request;* add `'vision'` if it works.
 - **`/incidents?tab=escalation` 404 in production** — likely an RSC prefetch miss. *Blocker: response headers from the deployed Worker.*
+- **Strategy content is still in the public repo's git history.** The files now in `docs/private/`, `ROADMAP.md`'s old ARR/Risk/Buyer lines, and the 40 `SECURITY-FINDINGS.local.md` headings in old `.builderforce/symbols.json` snapshots. The purge is built and dry-run verified (0 traces left across 9,296 commits): `docs/private/purge/purge.sh` (gitignored, with a pre-purge backup bundle). It rewrites all 848 branches on a fresh mirror and force-pushes each ref with a lease. `refs/pull/*` are read-only, so GitHub Support must purge those afterward. *Blocker: a quiet window.* No other session may commit or push during the ~30-minute run. Afterwards, every clone and worktree (`.claude/worktrees/cifix`, `C:/tmp/bf-wt`, the main checkout) must re-clone or hard-reset to the new `origin`. A plain `git pull` would merge the old history back in.
 
 ### LLM gateway, routing and cost `[agents]`
 

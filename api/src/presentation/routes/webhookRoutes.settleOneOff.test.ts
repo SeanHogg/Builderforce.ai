@@ -18,6 +18,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   completeListingCheckout: vi.fn(),
+  recordMarketplaceListingEvent: vi.fn(),
   completeKnowledgeCheckout: vi.fn(),
   completeSkillCheckout: vi.fn(),
   settleInvoiceCheckout: vi.fn(),
@@ -27,6 +28,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../application/marketplace/listingCommerce', () => ({
   completeListingCheckout: mocks.completeListingCheckout,
+  MARKETPLACE_LISTING_KIND: 'marketplace_listing',
+  recordMarketplaceListingEvent: mocks.recordMarketplaceListingEvent,
 }));
 vi.mock('../../application/knowledge/knowledgeCommerce', () => ({
   completeKnowledgeCheckout: mocks.completeKnowledgeCheckout,
@@ -175,6 +178,52 @@ describe('checkout.completed marketplace_skill — the close-the-tab path', () =
   it('acknowledges a refusal rather than asking for a redelivery loop', async () => {
     mocks.completeSkillCheckout.mockRejectedValue(new Error('You already own this'));
     const { status, body } = await deliver(SKILL);
+    expect(status).toBe(200);
+    expect(body).toEqual({ received: true, processed: false });
+    expect(mocks.reportCaughtError).toHaveBeenCalled();
+  });
+});
+
+const LISTING = {
+  type: 'checkout.completed',
+  purchaseKind: 'marketplace_listing',
+  checkoutSessionId: 'cs_listing',
+  metadata: {
+    purchaseKind: 'marketplace_listing',
+    listingSlug: 'onboarding',
+    buyerRef: 'u-buyer',
+    buyerTenantId: '7',
+    tenantId: '7',
+    quantity: '2',
+  },
+  externalCustomerId: 'cus_1',
+  externalSubscriptionId: '',
+  raw: {},
+};
+
+describe('checkout.completed marketplace_listing — the close-the-tab path', () => {
+  it('settles a listing purchase from signed metadata', async () => {
+    mocks.completeListingCheckout.mockResolvedValue({});
+    const { status, body } = await deliver(LISTING);
+    expect(status).toBe(200);
+    expect(body).toEqual({ received: true, processed: true });
+    expect(mocks.completeListingCheckout).toHaveBeenCalledWith(expect.anything(), expect.anything(), {
+      tenantId: 7, buyerRef: 'u-buyer', checkoutSessionId: 'cs_listing',
+    });
+  });
+
+  it('acknowledges without settling when the metadata names no buyer', async () => {
+    const { body } = await deliver({
+      ...LISTING,
+      metadata: { purchaseKind: 'marketplace_listing', listingSlug: 'onboarding', buyerTenantId: '7' },
+    });
+    expect(body).toEqual({ received: true, processed: false });
+    expect(mocks.completeListingCheckout).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges a refusal rather than asking for a redelivery loop', async () => {
+    mocks.completeListingCheckout.mockRejectedValue(new Error('You already own this'));
+    const { status, body } = await deliver(LISTING);
     expect(status).toBe(200);
     expect(body).toEqual({ received: true, processed: false });
     expect(mocks.reportCaughtError).toHaveBeenCalled();

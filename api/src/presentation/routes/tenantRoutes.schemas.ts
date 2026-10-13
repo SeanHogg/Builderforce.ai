@@ -23,6 +23,12 @@ export const NavigationFeaturesBody = z.object({ enabled: z.unknown().optional()
 /** `POST /:id/add-ons/business-phone/checkout`. */
 export const BusinessPhoneCheckoutBody = z.object({ billingEmail: z.string().nullish() });
 
+/** `POST /:id/add-ons/managed-agent-host/checkout`. Quantity is the hosted AgentHost count. */
+export const ManagedAgentHostCheckoutBody = z.object({
+  billingEmail: z.string().nullish(),
+  quantity: z.number().nullish(),
+});
+
 /** `POST /:id/subscription/checkout`. */
 export const SubscriptionCheckoutBody = z.object({
   targetPlan: z.enum(['pro', 'teams']).nullish(),

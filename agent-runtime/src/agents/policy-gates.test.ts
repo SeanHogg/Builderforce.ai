@@ -32,6 +32,13 @@ describe("on-prem governance — allowedToolsAfterGates", () => {
     expect(tools).toContain("Write");
   });
 
+  it("keeps a tool when the block is path-scoped (per-call canUseTool refuses matching paths)", () => {
+    const tools = allowedToolsAfterGates([
+      { id: "g1", effect: "block", tool: "Write", paths: ["secrets/**"], reason: "no secrets" },
+    ]);
+    expect(tools).toContain("Write");
+  });
+
   it("renderPolicyDirectives produces a binding governance block on-prem", () => {
     const block = renderPolicyDirectives([{ id: "g1", effect: "block", tool: "Bash", reason: "no shell in prod" }]);
     expect(block).toContain("Governance");

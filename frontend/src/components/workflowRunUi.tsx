@@ -1,6 +1,6 @@
 // No 'use client': pure style constants + a presentational component,
-// imported only by `WorkflowsContent.tsx` and `WorkflowRunHistoryPanel.tsx`,
-// both already inside their own client boundaries.
+// imported by `WorkflowsContent.tsx`, `WorkflowRunHistoryPanel.tsx`, and the
+// creation-canvas live-graph poll, all already inside their own client boundaries.
 /**
  * Shared vocabulary for every workflow-run surface — `WorkflowsContent.tsx`
  * (the definition list + its "view runs" flow) and `WorkflowRunHistoryPanel.tsx`

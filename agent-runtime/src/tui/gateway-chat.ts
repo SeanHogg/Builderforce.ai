@@ -215,6 +215,21 @@ export class GatewayChatClient {
     });
   }
 
+  async forkSession(key: string) {
+    return await this.client.request<{ ok: true; key: string; entry: unknown }>("sessions.fork", {
+      key,
+    });
+  }
+
+  async undoSession(key: string) {
+    return await this.client.request<{
+      ok: true;
+      undone: boolean;
+      key: string;
+      leafId: string | null;
+    }>("sessions.undo", { key });
+  }
+
   async getStatus() {
     return await this.client.request("status");
   }

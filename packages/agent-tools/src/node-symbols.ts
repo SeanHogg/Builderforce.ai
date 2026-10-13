@@ -21,6 +21,7 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import type { RepoSymbolsCapability, SymbolFindResult, SymbolMatch } from "./capabilities.js";
 import { isUnderScopeDir, normalizeScopeDir } from "./glob.js";
+import { gitIgnoredMatcher, gitIgnoredSubset } from "./node-git-ignore.js";
 import { extractSymbols, isSymbolIndexable, SYMBOL_KINDS, type CodeSymbol, type SymbolKind } from "./symbols.js";
 
 /** Directories never indexed — build output, dependencies, VCS and tool caches. */
@@ -241,7 +242,9 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
   private async refreshDirty(): Promise<void> {
     const batch = [...this.dirty];
     this.dirty.clear();
-    const results = await Promise.all(batch.map((rel) => this.update(rel)));
+    // A gitignored file never enters the snapshot — it may be committed (see node-git-ignore).
+    const ignored = await gitIgnoredSubset(this.root, batch);
+    const results = await Promise.all(batch.map((rel) => (ignored.has(rel) ? this.files.delete(rel) : this.update(rel))));
     if (results.some(Boolean)) void this.saveSnapshot();
   }
 
@@ -260,8 +263,14 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
     return true;
   }
 
-  /** Breadth-first walk of indexable files (shallow files first, so a cap drops the deep tail). */
+  /**
+   * Breadth-first walk of indexable files (shallow files first, so a cap drops the deep tail).
+   * Gitignored paths are skipped: the snapshot can be committed, and a file the repository
+   * refuses to track must not reach it.
+   */
   private async walk(): Promise<{ paths: string[]; truncated: boolean }> {
+    const isIgnored = await gitIgnoredMatcher(this.root);
+    const toRel = (abs: string) => path.relative(this.root, abs).split(path.sep).join("/");
     const out: string[] = [];
     const queue: string[] = [this.root];
     while (queue.length > 0) {
@@ -273,12 +282,15 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
         continue;
       }
       for (const entry of entries) {
+        const abs = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-          if (entry.name.startsWith(".") || this.skipDirs.has(entry.name)) continue;
-          queue.push(path.join(dir, entry.name));
+          if (entry.name.startsWith(".") || this.skipDirs.has(entry.name) || isIgnored(toRel(abs))) continue;
+          queue.push(abs);
         } else if (entry.isFile() && isSymbolIndexable(entry.name)) {
+          const rel = toRel(abs);
+          if (isIgnored(rel)) continue;
           if (out.length >= this.maxFiles) return { paths: out, truncated: true };
-          out.push(path.relative(this.root, path.join(dir, entry.name)).split(path.sep).join("/"));
+          out.push(rel);
         }
       }
     }

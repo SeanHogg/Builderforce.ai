@@ -36,6 +36,112 @@
 **Not compiled or run (operator instruction).** Tests were written alongside the code, so CI on merge is the first run. The §11 live runbook needs the operator; it is logged on the ROADMAP with its blockers.
 
 ---
+## ✅ RESOLVED 2026-10-13 — Multi-model role routing (ticket #3073)
+
+`resolveModelForRole` / `parseRoleModelConfig` in `@builderforce/learned-routing` (`9f514a949`) now pin a catalog model from `ROLE_MODELS` / `ROLE_MODEL_DEFAULT` on both remaining surfaces. Explicit user/run model still wins; undefined pin leaves the ranker/plan seed unchanged.
+
+- **Cloud.** `api/src/application/runtime/cloudAgent/routing.ts` + `cloudAgentEngine.ts` (`c34d5084b`). Tests: `routing.roleModels.test.ts`.
+- **VS Code.** `clients/vscode/src/roleModelPin.ts` over `process.env`; `modelState.resolveEffectiveModelChoice` after explicit pick and Evermind; child runs pin by `req.role` (`9689f3699`). Tests: `roleModelPin.test.ts`.
+
+## ✅ RESOLVED 2026-10-13 — Remote task result streaming (ticket #3071)
+
+Live `remote.task.chunk` events plus terminal assistant text. Ticket closed; ROADMAP row moved to Shipped.
+
+## ✅ RESOLVED 2026-10-13 — Rendered presentation export of the value brief (ticket #3079)
+
+`renderRfpDocPptx` emits the RFP/value-brief as PPTX from the same `rfpDocSections` as HTML/PDF (`rfpBranding.ts`, `rfpRoutes.ts`). Canvas artifact PPTX (`useCanvasArtifactExport`) and investor pack PPTX (`PackView`) share the office writer. Tests: `rfpBranding.test.ts`.
+
+## ✅ RESOLVED 2026-10-13 — Live orchestration workspace (real-time DAG) (ticket #3688, epic #3066)
+
+Dedicated `/orchestration` Run-stage workspace lists in-flight workflows and paints the live DAG as the main surface (not a run-history drill-down). Authoring stays on Creation Canvas.
+
+- **Route.** `src/app/orchestration/page.tsx` — edge + `pageMetadata` (incidents-style, no teaser). Destination `orchestration` in `NAV_GROUPS` (Brain, stage `run`). Declared in `APP_ROUTE_SEGMENTS` so middleware does not hard-404 it.
+- **Live list + poll.** `useLiveOrchestration` lists `pending` and `running` (two `workflows.list({ status })` calls), merges newest-first, then polls `workflows.get` + `getGraph` at `LIVE_WORKFLOW_POLL_MS` (2s) while the selection is live. Same poll as WorkflowRunHistoryPanel / canvas flow-step status. No workflow WebSocket.
+- **DAG.** Reuses `WorkflowDagView`, `isLiveWorkflowStatus`, `StatusPill`. Open-canvas CTA to `/create`.
+- **i18n.** `orchestrationWorkspace` + `nav.group.orchestration` + `marketingNav.tagline.orchestration` + `routeMarketing.destination.orchestration` in en/de/es/fr/zh.
+- **Tests:** `useLiveOrchestration.test.ts`, `LiveOrchestrationWorkspace.test.tsx` (list in-flight, map graph onto DAG, select another run, stop poll on complete). Destinations / architecture / methodology / i18n / root-routes / edge-runtime checks pass.
+
+## ✅ RESOLVED 2026-10-13 — TUI `/undo` rewinds the last conversation turn (ticket #3231, epic #3070)
+
+`/sessions` and `/fork` already existed; `/undo` now rewinds the last completed user+assistant turn (including tool results) on the **same** session key so the next prompt continues from the prior leaf. Does not revert filesystem or git.
+
+- **Persist.** `SessionManager.persistLeaf()` rewrites the JSONL to header + root→leaf. In-memory `branch()` alone is not enough: `chat.history` reads every jsonl message line.
+- **RPC.** Admin-scope `sessions.undo` `{ key }` aborts an in-flight run (same cleanup as reset/delete) then `rewindLastTurn`. Same store key; no new jsonl; no archive. Empty/root → `{ ok: true, undone: false }` (no throw).
+- **TUI.** `/undo` in the slash registry + help; handler calls `client.undoSession`, then `loadHistory()` on success (`undid last turn`) or `nothing to undo` at the root. Failures: `undo failed:`.
+- **Tests:** `sessions-undo.test.ts`, `session-manager.test.ts` persistLeaf, TUI handler tests, e2e `sessions.undo rewinds the last turn on the same session key`.
+
+## ✅ RESOLVED 2026-10-13 — Managed Agent hosting add-on ($49/mo/Agent) (epic #3056)
+
+Self-serve add-on for hosting Managed Agents on BuilderForce infrastructure, priced at $49/host/month.
+
+- **Stripe checkout.** Recurring subscription `$49/host/mo`, `purchaseKind: 'managed_agent_host'`, recorded via `ADDON_RECORDERS` in `purchaseRegistry.ts`. No `TenantPlan` mutation.
+- **Waitlist + ops PATCH.** `POST /api/managed-agent-hosts` returns 403 if unpaid, 409 if qty exhausted. `DELETE` returns 409 for non-pending. Admin `PATCH /api/admin/managed-agent-hosts/:id` calls `provisionManagedAgentHostRequest(db, {requestId, status, agentHostId})` and maps `{error}`.
+- **Tenant UI.** Pricing CTA + cart checkout, `ManagedAgentHostPanel` on WorkforceAgents, i18n in en/de/es/fr/zh.
+- **Tests:** `managedAgentHostSubscription.test.ts`, `managedAgentHostRoutes.test.ts`, `tenantRoutes.managedHost.test.ts`, `adminRoutes.managedHost.test.ts`, StripeProvider tests.
+- **Commits:** `dff067555`, `48e80c44c`, `ab226fdef`.
+
+**Stretch not done:** #3343 auto-provision/VM deprovision (out of MVP scope).
+
+## ✅ RESOLVED 2026-10-13 — Validate idea by asking the market: form send/post (epic #3083)
+
+PRD 27 B3: form send → marketing_campaign, post → social_campaign.
+
+- **Form send.** `CanvasFormSurface.tsx` "Send" button calls `sendForm()` which creates a `marketing_campaign` via the campaign API. Notice keys `form.noticeFormUnpublished`, `form.noticeFormNoAudience`, `form.noticeFormBlocked`, `form.noticeFormSent`, `form.sendFailed` in all five catalogs.
+- **Form post.** "Post" button calls `postForm()` which creates a `social_campaign`. Notice keys `form.noticeFormPosted`, `form.postFailed`.
+- **Ask people flow.** `formFromIdea` (`formObject.ts`), "Ask people" button in Ideas row (`IdeaLogRow.tsx`), `IDEA_EVIDENCE_KINDS` includes `form`.
+- **Tests:** CanvasFormSurface + canvasIdeasSurface (16 pass).
+- **Commit:** `ba9a3f2a4`.
+
+## ✅ RESOLVED 2026-10-13 — Remaining Canvas acts onto the outcome contract (epic #3077)
+
+Connected canvas acts now emit correlated ledger events instead of applying a patch and stopping. Draft objects are still not proofs.
+
+- **Mapping is data.** `packages/creation-canvas-contract/src/canvasActionOutcomes.ts` maps `kind.action` onto proof-lifecycle / delivery verbs. Missing keys fall back to `{kind}.{action}`. Methodology check 8 ratchets `idea.reveal` → `proof.grade` and `form.publish`/`poll.publish` → `artifact.publish`. The eight-proofs lock on `website.publish` is unchanged.
+- **One writer.** `frontend/src/lib/recordCanvasActOutcome.ts` emits `started` then one terminal, same `correlationId` (`act:{objectId}:{kind}.{action}`). The runner POSTs after a real mutation (`patch`/`add`/`download`/`ledger`); notice-only refusals do not start a correlation. Poll publish/open/close/reveal and `testPlan.gate` use the same helper. No `recordOutcome` under `domains/` or `components/creation-canvas/actions`.
+- **Cheap idea path.** `idea.explore` → `idea.read`; `idea.test` → `proof.choose`; `idea.reveal` (was advertised, unimplemented) grades named interview / experiment / form evidence as `proof.grade` with `metricValue` 1 (met) or 0 (missed). `form.publish` / `poll.publish` are `artifact.publish` + `proof.build` with `metadata.reachable` from `/f/{slug}` / `/p/{slug}`.
+- **Not this ticket.** Experiment stays unclaimed (`CONNECTED_CANVAS_ACTIONS` unchanged; no `bind_ab_test`). PRD 27 B3–B5 (form send/post, CRM, founder stage) are adjacent.
+- **Tests:** `canvasActionOutcomes.test.ts`, `recordCanvasActOutcome.test.ts`, `ideaActs.test.ts` (reveal met/missed/missing).
+
+## ✅ RESOLVED 2026-10-13 — VSIX chat ticket rail: expanded grid scrolls (VSIX 2026.10.32)
+
+A chat with 60+ linked tickets expanded the ring grid past the host's clipped container, so later tickets could not be seen or scrolled to.
+
+- **`panelStyles.ticketGrid`** (`packages/brain-ui/src/chatTickets/`): the expanded grid is now a scroll region capped at `min(320px, 45vh)` with `overflowY: auto` and `overscrollBehavior: contain`. `ChatTicketsPanel` uses it instead of an inline style. brain-ui 2026.10.9.
+- **Verified:** brain-ui typecheck + build + `src/chatTickets` tests (21 pass); VSIX full type-check, package, and install of 2026.10.32 confirmed.
+
+## ✅ RESOLVED 2026-10-12 — Spec import from GitHub Issues, Linear, and Jira (ticket #3075)
+
+One-shot import of an external issue as a Spec (not a Task). No two-way sync, no auto-import, no UI.
+
+- **`POST /api/specs/import`** and MCP `specs.import`. `BoardProvider.fetchTicket` for GitHub / Jira / Linear. Upsert keyed by `(tenantId, sourceProvider, sourceExternalId)` (migration `1215_specs_source_fields.sql`); re-import is idempotent. Optional `taskId` links the spec as the task's primary PRD.
+- **Live credentials.** Import uses the project's board connection secrets (`98c77a6c7`); missing worker env refuses instead of forwarding `{}`. Connection tokens stay in credentials — they are never written onto spec rows, and HTTP/MCP output is projected to a public field list (`publicSpecImportResult`).
+- **Tests:** `importSpec.test.ts`, `specRoutes.import.test.ts`, `builtinMcpService.specsImport.test.ts` (including the no-env refusal).
+- **Commits:** `cb79a532c`, `98c77a6c7`, `bb3a4d9d7`, `ffd6eeb98`.
+
+## ✅ RESOLVED 2026-10-12 — PRD-first at dispatch so host runs draft too (ticket #3096)
+
+Host-delivered runs (On-Prem / pinned agent host) never entered `prepareCloudRun`, which used to be the only caller of `ensureTaskPrd`, so a host run started against a ticket with no PRD.
+
+- **`startDispatchedExecution`** now calls `ensureTaskPrd` before `dispatchToAgentHost`. Rehearsal never enters this function, so `readOnly` is always false here. Best-effort: a draft miss still starts the run (the agent can write a PRD later via `update_prd`).
+- **Still on the ROADMAP:** PRD commit is GitHub-only; no agent task-mutation tool; Auto runs carry no `cloudAgentRef`.
+- **Tests:** `dispatchCloudRun.prd.test.ts` (called before host dispatch; a draft failure still starts the run); `ensureTaskPrdReadOnly.test.ts`.
+- **Commit:** `54467a71d`.
+
+## ✅ RESOLVED 2026-10-12 — Role→model resolver in `@builderforce/learned-routing` (ticket #3073)
+
+Pin spawn/delegation roles to catalog model ids from `ROLE_MODELS` / `ROLE_MODEL_DEFAULT`. Unknown, empty, or unmapped roles use the documented default (no pin unless `defaultModel` is set). Pure, no I/O.
+
+- **Still on the ROADMAP** (row stays 🔄 Partial): not wired into the cloud engine yet.
+- **Tests:** `packages/learned-routing/src/roleModels.test.ts`.
+- **Commit:** `9f514a949`.
+
+## ✅ RESOLVED 2026-10-12 — Docs consolidated under `docs/`; strategy docs and gitignored files kept out of the public repo
+
+- **One docs home.** `specs/builderforce/` → `docs/specs/`; root `PRD.md` (task #295's PRD) → `specs/tasks/task-295.md`; `LIGHT_THEME_BURNRATE.md` → `docs/design/light-theme-burnrate.md`. [`docs/README.md`](./docs/README.md) says what goes where. Every path reference (data-model guard scripts, code comments, ROADMAP/DONE, task PRDs) was rewritten. `specs/tasks/` stays at the root: `commitPrdToRepo.ts` writes task PRDs there in every bound repo.
+- **Strategy is operator-only.** The pitch-deck source, SXSW pitch brief, distribution-channel GTM research, the Cursor/Continue feature-gap analysis and the zero-cost-hosting research moved to gitignored `docs/private/`. `ROADMAP.md`'s Buyer, ARR Milestones and Risk Register sections moved to `docs/private/strategy.md`. Dead `BUSINESS_ROADMAP.md` / `FEATURE_GAP_ANALYSIS.md` links in `agent-runtime/docs` were removed.
+- **Gitignored files leaked into committed grounding.** The workspace symbol index and the VS Code codebase scan walked the disk with only a skip list. They wrote the 40 headings of `SECURITY-FINDINGS.local.md` (and `qa-e2e/test-results/`, `*.log`) into the committed `.builderforce/symbols.json`, `project-map.md` and `scan.json`. The fix is one primitive, `@builderforce/agent-tools/node-git-ignore` (`gitIgnoredMatcher` for full walks, `gitIgnoredSubset` for watcher batches; git is the authority, and outside a repo nothing is ignored). Both `WorkspaceSymbolIndex` (walk + dirty refresh) and `codebaseScan.ts` use it. The tracked artifacts were scrubbed. Test: `packages/agent-tools/src/node-git-ignore.test.ts`.
+- **Project-map tree misattributed children.** `renderTree` sorted raw strings, and `-` sorts before `/`, so `docs/api/` was drawn under `docs-site/`. It now sorts by path segment.
+- **Not done by this entry:** the history purge (ROADMAP, OTHER → Production ops). The deck stays a public download on `/media` by operator decision (2026-10-13).
 
 ## ✅ RESOLVED 2026-10-12 — Synapse→bfi cut-over: Ollama is not required (tickets #3766, #3767)
 
@@ -62,7 +168,8 @@ The VS Code roster already listed live children through `ChatTicketsPanel`'s `su
 - **`run_checks`:** after static source/config validation, polls CI. Red fails the tool. Pending/none stay `ok` with a note that forbids claiming tests passed. Green explicitly allows the claim.
 - **Pre-finish gate:** after static validation, `ciFinishDecision` blocks red (cap 3) and pending (cap 2). Caps persist on `CloudLoopState` across durable ticks. Green sets `ciVerified` and skips the honesty gate. `none` (including PR-only workflows) does not block; webhook auto-fix + `CLOUD_AUTOMERGE_REQUIRE_GREEN` remain the backstop.
 - **PR annotation:** when `ciVerified`, the PR body and run summary say in-run CI was green and to re-check CI on the PR; otherwise the unverified caveat stays.
-- Tests: `api/src/application/ci/pollCommitCiStatus.test.ts`.
+- **Container / Actions / on-prem (`5b0670e06`):** `inRunVerify.ts` plans `typecheck` / `type-check` / `test` from the nearest `package.json` and the image runs them via `run_command` after code changes, before `finish`. Durable records an honest skip (`DURABLE_IN_RUN_VERIFY_NOTE`) and must not claim those checks passed. Finish may proceed on a durable skip; a container that wrote code and has not verified may not.
+- Tests: `api/src/application/ci/pollCommitCiStatus.test.ts`, `api/src/application/runtime/cloudAgent/inRunVerify.test.ts`.
 
 ## ✅ RESOLVED 2026-10-12 — Studio Brain turns stop repeating work: batched build-file reads, no Brain-trace undo steps, readable trace rows (ui 2026.10.47)
 
@@ -1827,7 +1934,7 @@ Closes gap-list rows G1 (acting in native apps), G2 (vault + takeover), G3 (rout
 - **4. `companyId` (W8) was required on `ProjectProps` and persisted nowhere.** `ProjectRepository` neither read nor wrote it (so "company → project in one step" created projects with no company), three fixtures lacked it, and `UpsertProjectBody` / `ScaffoldProjectBody` did not declare the field their handlers read. Repository maps it in `toDomain`/`save`/`update` (null persists so it can be cleared); one `companyField` is spread into all three schemas.
 - **5. Frontend ratchets.** Seven files had added 29 literal font sizes (`AgentHostProjectsContent` 14, `CredentialKeyForm` 4, `LivePreviewPanel.module.css` 4, `integrationStyles` 3, `LateSteerNote` 2, `ContentManagerRedirect` 1, `CanvasLibraryClient` 1) — every one now names its role token (10 → field-label, 11 → eyebrow, 12/13 → small, 14 and 0.95rem → body); floor 3459 → **3434** (closes Gap Register "Room stations" item 4, which had been waiting on exactly this). `'use client'` 1002 → **998**: `lib/appVersions.ts`, `lib/guestChatApi.ts`, `lib/guestPromptCapture.ts`, `lib/visitorJourney.ts` export functions, not components — the directive marked no boundary (the `domainExtras.tsx` rule, stated in each file); `ImportStatCard` keeps its directive because `ImportProgressBar`'s docblock already argues for it.
 - **Also closed while here.** `webdit/converter/pnpm-lock.yaml` still pinned vitest 2.1.9 against the `^4.0.18` manifest (commit `43b94a797` bumped the manifest without the lock), so CI's frozen install failed and silently fell back to a non-frozen one — and a `--lockfile-only` refresh kept a stale `vite@5.4.21` entry that nothing requests, so vitest 4 could not even start (`./module-runner` is not exported by vite 5). The lockfile AND `node_modules` were deleted and re-resolved from scratch (deleting the lockfile alone re-adopts the cached vite 5 from `node_modules`); `webdit/shared` and `webdit/torch` had the identical stale pin against their own `^4.1.11` manifests and got the same treatment (`webdit/runtime` is on vitest ^2 consistently and was left alone). `packages/agent-tools` had no `typecheck` script and could not be type-checked standalone: no `@types/node` or `typescript` devDependency for its `node:*` modules, five "possibly undefined" index reads in tests, and `semantic-tools.test.ts` building a hit with `source: 'both'` against a `'embedding' | 'keyword' | 'hybrid'` union. It now has `typecheck`, both devDependencies at the repo's common specs (`@types/node ^24.7.2`, `typescript ^6.0.3`), `"types": ["node"]` in its tsconfig (TS 6 does not auto-include `@types/node` there), narrowed tests, and a fixture on `'hybrid'`. That last one uncovered a REAL drift — the Rust index emits `keyword | vector | both` and `desktopContext.ts` passes it through unmapped — which is logged in the Gap Register (Desktop section) with its blocker: those files are held uncommitted by a concurrent session.
-- **Where:** `api/src/application/blueprint/{blueprintDetection,blueprintSources,blueprintOverrides,detectBlueprintForProject}.ts` (+ tests), `blueprint/detectors/{index,builderforceJsonDetector}.ts`, `llm/appBlueprintToolCatalog.ts`, `repos/resolveDefaultRepo.ts`, `contributors/activityIngest.ts` (+ test), `integrations/integrationCatalog.ts`, `infrastructure/repositories/ProjectRepository.ts`, `presentation/routes/{githubWebhookRoutes,projectRoutes.schemas}.ts`; `packages/agent-tools/src/{edit,capabilities}.ts` (+ test); `frontend/src/lib/integrationCatalog.ts`, seven styled files, four `lib/*.ts`, five message catalogs, `scripts/check-design-scale.mjs`, `scripts/.frontend-architecture-baseline.json`, `scripts/check-frontend-architecture.mjs`; `webdit/converter/pnpm-lock.yaml`; `specs/builderforce/31-prd-customer-app-platform.md` (the override row).
+- **Where:** `api/src/application/blueprint/{blueprintDetection,blueprintSources,blueprintOverrides,detectBlueprintForProject}.ts` (+ tests), `blueprint/detectors/{index,builderforceJsonDetector}.ts`, `llm/appBlueprintToolCatalog.ts`, `repos/resolveDefaultRepo.ts`, `contributors/activityIngest.ts` (+ test), `integrations/integrationCatalog.ts`, `infrastructure/repositories/ProjectRepository.ts`, `presentation/routes/{githubWebhookRoutes,projectRoutes.schemas}.ts`; `packages/agent-tools/src/{edit,capabilities}.ts` (+ test); `frontend/src/lib/integrationCatalog.ts`, seven styled files, four `lib/*.ts`, five message catalogs, `scripts/check-design-scale.mjs`, `scripts/.frontend-architecture-baseline.json`, `scripts/check-frontend-architecture.mjs`; `webdit/converter/pnpm-lock.yaml`; `docs/specs/31-prd-customer-app-platform.md` (the override row).
 - **Verified (Sonnet passes):** `api` type-check GREEN on tsgo and tsc (all 17 gone); targeted suites 110/110 (`integrationCatalog`, `blueprintOverrides`, `blueprintSources`, `detectBlueprintForProject`, `resolveDefaultRepo`, `activityIngest`, `epicDecomposition`, `listTasksArchived`, `ProjectService`, `builtinMcpService`) and `application/blueprint` + `application/repos` 333/333; `agent-tools` `pnpm run typecheck` clean (first time it has been possible), `edit.test.ts` 14/14 and the package 145/145; frontend `tsgo` clean, `pnpm run check` **23/23** with design-scale and architecture both exactly at baseline, `integrationCatalog.test.ts` 8/8; `webdit/converter` 113/113, `webdit/shared` 19/19, `webdit/torch` 61/61, each on vite 8.3.1 with `pnpm install --frozen-lockfile` passing afterwards; `api` type-check re-run green after the agent-tools lockfile change. **On `main` (`12a264286`):** Deploy frontend GREEN and live (23/23 guards, worker deployed); Deploy API was one guard short — its step runs the FULL api `pnpm run check` (36 guards), not `type-check` alone, and `check:silent-catches` caught two pre-existing empty `catch {}` bodies in `capacitorConfigDetector.ts` / `expoConfigDetector.ts` (from the original blueprint merge). Both now state their fallback (`77afdd2ce`, verified with the 36-guard `pnpm run check`) — and that push was STILL red, because the step's command is `npm test` = `check && vitest run`, the whole api suite, and `entityCatalog.test.ts`'s table-coverage ratchet sat exactly at its ceiling with `project_app_blueprints` (the blueprint merge's migration) neither catalogued nor adjudicated. Adjudicated per the `brain_chat_diagnostics` precedent (`68814c19d`). Lesson, recorded twice over: verify with the deploy step's exact command (`npm test` in `api/`), not `type-check`, not `check`.
 - **Versions:** api 2026.9.43, frontend 2026.9.38, agent-tools 2026.9.27.
 
@@ -1899,7 +2006,7 @@ Closes gap-list rows G1 (acting in native apps), G2 (vault + takeover), G3 (rout
   - Spec #400b7152 - complete
 - **Why:** All P0/P1 child tickets merged; epic complete; roadmap ready to ship
 - **Where:** 
-  - Specs: `specs/builderforce/26-prd-advisor-platform.md`, `specs/builderforce/26-implementation-notes-advisor-platform.md`
+  - Specs: `docs/specs/26-prd-advisor-platform.md`, `docs/specs/26-implementation-notes-advisor-platform.md`
   - Task specs: `specs/tasks/task-2527.md`, `specs/tasks/task-2532.md`, `specs/tasks/task-2581.md`
 - **Verify:** All PRs merged to main (#844, #845, #846)
 
@@ -1909,7 +2016,7 @@ Closes gap-list rows G1 (acting in native apps), G2 (vault + takeover), G3 (rout
 
 - **What:** PRD 27 delivered five changes: (1) a versioned `bfk` auth-cache key so the VSIX owner resolves as their actual role instead of an anonymous DEVELOPER — the root cause of `403 manager role required` on chat #113; (2) `ReplayRouteError` so a replayed 4xx surfaces as 403, not 502; (3) migration 1177 + `coordinationGate.ts` making ticket coordination developer-tier with a per-project opt-in (`coordination_requires_manager`); (4) migration 1178 + the persisted `ChatDiagnosticsReport` with the `work-filed-not-staffed` verdict; and (5) persona sub-agents (`spawn_agent as_agent=<Ada>`) end to end across agent-tools, agent-loop, brain-embedded, and the VSIX.
 - **Why:** A work-mode run filed 12 tickets and assigned nobody — every staffing call returned 403 masked as 502, and the diagnostics report had no line saying "work was filed but nobody is running it." The auth cache had been resolving the workspace owner as an anonymous DEVELOPER for 365 days.
-- **Where:** `api/` (migrations 1177/1178, `coordinationGate.ts`, `chatDiagnosticsStore.ts`, `chatDiagnosticsToolCatalog.ts`, `agentPersonaToolCatalog.ts`, `agentPersonaBrief.ts`, `staffingSummary.ts`, `chatDiagnosticsReport.ts`, `captureDiagnostics.ts`, plus eight test files), `packages/agent-tools/` (`subagent-tools.ts`), `packages/agent-loop/` (`SubagentRunArgs.persona`), `brain-embedded/` (`chatWorkDirective`, `brainTriage.ts`, `brainRunStore.ts`), `clients/vscode/` (VSIX 2026.9.75), `frontend/` (i18n keys in five catalogs). Spec: `specs/builderforce/27-prd-staffed-work-and-chat-diagnostics.md`.
+- **Where:** `api/` (migrations 1177/1178, `coordinationGate.ts`, `chatDiagnosticsStore.ts`, `chatDiagnosticsToolCatalog.ts`, `agentPersonaToolCatalog.ts`, `agentPersonaBrief.ts`, `staffingSummary.ts`, `chatDiagnosticsReport.ts`, `captureDiagnostics.ts`, plus eight test files), `packages/agent-tools/` (`subagent-tools.ts`), `packages/agent-loop/` (`SubagentRunArgs.persona`), `brain-embedded/` (`chatWorkDirective`, `brainTriage.ts`, `brainRunStore.ts`), `clients/vscode/` (VSIX 2026.9.75), `frontend/` (i18n keys in five catalogs). Spec: `docs/specs/27-prd-staffed-work-and-chat-diagnostics.md`.
 - **Verify:** R1–R4 verified locally 2026-09-16 (type-check, cross-package persona seam, version bumps, brain-embedded dist rebuild, VSIX package+install). R5 (migrations 1177/1178) tracked as gap #2573. R6 (live re-test) tracked as gap #2574. R7 (this DONE.md entry) closes out the set. Release notes are gated on an explicit user ask per §5 of the PRD — persona delegation is plausibly `category=new`, persisted diagnostics is `improvement`, and the 403 chain gets no note. No release notes were published; confirmation was not requested and not given.
 
 ## ✅ RESOLVED 2026-09-16 — #2568 R7 close-out

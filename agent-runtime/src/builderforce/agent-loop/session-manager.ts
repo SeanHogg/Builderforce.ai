@@ -619,6 +619,21 @@ export class SessionManager {
   }
 
   /**
+   * Persist the current leaf as the end of this transcript: rewrite the JSONL so it
+   * contains only the header plus the root→leaf path. Subsequent opens and
+   * `chat.history` then hide anything after the leaf. Does not create a new session
+   * file (that is `/fork` / createBranchedSession).
+   */
+  persistLeaf(): void {
+    const header = this.fileEntries.find((e): e is SessionHeader => e.type === "session");
+    const branch = this.getBranch();
+    this.fileEntries = header ? [header, ...branch] : [...branch];
+    this._buildIndex();
+    this._rewriteFile();
+    this.flushed = true;
+  }
+
+  /**
    * Write a new session file containing only the root→`leafId` path (labels recreated),
    * returning its path. Faithful to pi's `createBranchedSession`; returns undefined when
    * not persisting.

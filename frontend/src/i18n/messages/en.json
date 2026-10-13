@@ -649,6 +649,7 @@
       "monitoring": "Monitoring",
       "reliability": "Reliability",
       "agentOps": "Agent Ops",
+      "orchestration": "Orchestration",
       "sales": "Sales Hub",
       "challenges": "Challenges",
       "growth": "Growth",
@@ -6483,7 +6484,7 @@
           },
           {
             "question": "What is a Managed AgentHost?",
-            "answer": "A Managed AgentHost is a hosted BuilderForce Agents instance operated by Builderforce. Its current price is supplied by the public pricing contract on the pricing page."
+            "answer": "A Managed AgentHost is a hosted BuilderForce Agents instance operated by Builderforce, billed monthly per hosted AgentHost. Add it from the pricing page on an active Pro or Teams plan, then request a host from Workforce. Provisioning starts when you request a host. Its current price is supplied by the public pricing contract."
           },
           {
             "question": "Do you offer yearly billing?",
@@ -10199,6 +10200,21 @@
     "teamsCostNoteYear": "${perSeat}/seat/yr — billed as ${total}/yr",
     "teamsCostNoteMonth": "${perSeat}/seat/mo — billed as ${total}/mo",
     "managedAddon": "Add-on: <b>Managed AgentHost</b> — ${price}/mo per hosted AgentHost. We run your BuilderForce Agents instance for you — no Docker, no DevOps.",
+    "managedHost": {
+      "eyebrow": "Hosting add-on",
+      "title": "Managed AgentHost",
+      "description": "We run your BuilderForce Agents instance for you — no Docker, no DevOps. Billed monthly per hosted AgentHost.",
+      "addonFor": "Add-on for Pro and Teams",
+      "perMonth": "/month per hosted AgentHost",
+      "addToCart": "Add to cart",
+      "viewCart": "View cart",
+      "eligibility": "Requires an active Pro or Teams subscription.",
+      "signIn": "Sign in to purchase",
+      "quantity": "Hosted AgentHosts",
+      "decrease": "Fewer hosts",
+      "increase": "More hosts",
+      "active": "This quantity is already covered by your Managed AgentHost subscription."
+    },
     "phone": {
       "eyebrow": "Retention add-on",
       "title": "Business Phone",
@@ -17991,6 +18007,21 @@
     "failedDelete": "Failed to delete workflow",
     "noticeRunPendingApproval": "\"{name}\" needs approval before it can run. An approval request has been sent."
   },
+  "orchestrationWorkspace": {
+    "title": "Live orchestration",
+    "subtitle": "In-flight agent workflows. The DAG is the workspace — authoring stays on the canvas.",
+    "loading": "Loading in-flight runs…",
+    "error": "Could not load in-flight runs.",
+    "empty": "No workflows in flight. Start a run from the canvas.",
+    "selectRun": "In flight",
+    "live": "Live",
+    "loadingGraph": "Loading graph…",
+    "noGraph": "No graph data for this run yet.",
+    "openCanvas": "Open canvas",
+    "authoringHint": "To author a workflow, open the Creation Canvas.",
+    "refresh": "Refresh",
+    "unnamed": "Untitled run"
+  },
   "personalityUsage": {
     "title": "Personality usage",
     "activeTitle": "Active personality",
@@ -18622,6 +18653,34 @@
     "loading": "Loading…",
     "loadFailed": "We could not load your billing details.",
     "comparePlans": "Compare plans",
+    "managedHost": {
+      "title": "Managed AgentHost",
+      "description": "We run your BuilderForce Agents instance for you — no Docker, no DevOps.",
+      "statusActive": "Active",
+      "statusPastDue": "Past due",
+      "statusNone": "Not subscribed",
+      "quantityCovered": "Covered hosts",
+      "requests": "Hosting requests",
+      "empty": "No hosting requests yet.",
+      "name": "AgentHost name",
+      "region": "Region",
+      "notes": "Notes",
+      "submit": "Request hosted AgentHost",
+      "cancel": "Cancel request",
+      "busy": "Working…",
+      "unpaid": "Subscribe to Managed AgentHost on the pricing page before requesting a host.",
+      "exhausted": "All hosted AgentHosts in your subscription are already requested or provisioned.",
+      "loadFailed": "We could not load Managed AgentHost details.",
+      "requestFailed": "We could not submit the hosting request.",
+      "cancelFailed": "We could not cancel that request.",
+      "statusPending": "Pending",
+      "statusProvisioning": "Provisioning",
+      "statusRequestActive": "Active",
+      "statusCancelled": "Cancelled",
+      "statusFailed": "Failed",
+      "provisionNote": "Provisioning starts when you request a host.",
+      "cta": "Compare plans"
+    },
     "paymentMethodTitle": "Payment method",
     "paymentMethodIntro": "The card your subscription and any metered usage are charged to. Adding one runs a $0 verification, never a charge.",
     "cardOnFile": "Card on file",
@@ -19134,7 +19193,8 @@
       "learning": "Paths, prerequisites and the LRS.",
       "marketplace": "Buy and sell agents, talent and templates.",
       "developers": "Publish to the marketplace and manage installs.",
-      "sales": "Pipeline, campaigns, payouts and referrals."
+      "sales": "Pipeline, campaigns, payouts and referrals.",
+      "orchestration": "In-flight runs and the live DAG."
     }
   },
   "tutorials": {
@@ -25058,12 +25118,22 @@
     "noticeFormClosed": "The form is closed. No new responses will be recorded.",
     "noticeFormUnpublished": "Publish the form before collecting or closing it.",
     "noticeFormFailed": "That form action could not be completed.",
+    "noticeFormSent": "Form sent to {queued} recipients.",
+    "noticeFormPosted": "Form posted to {published} channels.",
+    "noticeFormNoAudience": "Send requires an audience — add recipients or select a marketing audience.",
+    "noticeFormBlocked": "Cannot send: {blockers}. Fix these before trying again.",
+    "sendFailed": "The form could not be sent.",
+    "postFailed": "The form could not be posted.",
     "noticeIdeaUntitled": "Untitled idea",
     "noticeIdeaInterviewTitle": "Interview: {idea}",
     "noticeIdeaInterviewPlanned": "Interview planned for {idea}.",
     "noticeIdeaFormTitle": "Ask: {idea}",
     "noticeIdeaFormCreated": "A form is ready to ask people about {idea}.",
     "noticeIdeaActFailed": "That idea action could not be completed.",
+    "noticeIdeaNothingToReveal": "Name the interview, experiment or form that tested this idea before grading it.",
+    "noticeIdeaRevealMissing": "None of the named evidence is on this board: {refs}.",
+    "noticeIdeaRevealMet": "The evidence answered. This idea is validated.",
+    "noticeIdeaRevealMissed": "The named evidence is on the board but has not answered yet. Not a grade of yes — a miss until it does.",
     "surface": {
       "chat": {
         "label": "Chat",
@@ -28119,6 +28189,9 @@
       },
       "reliability": {
         "description": "Monitors, incidents, on-call, and escalation in one detect-and-respond loop."
+      },
+      "orchestration": {
+        "description": "In-flight agent workflows and the live DAG. Authoring stays on the canvas."
       },
       "knowledge": {
         "description": "SOPs, processes, documents, skills, personas, and prompts — the versioned base your agents are grounded in."
@@ -31725,7 +31798,16 @@
     "closeFailed": "The form could not be closed.",
     "noticeCrmImported": "CRM contacts: {added} added, {updated} updated, {rejected} rejected.",
     "crmFailed": "CRM contacts could not be imported.",
+    "noticeFormUnpublished": "Publish the form before collecting, sending, or closing it.",
+    "noticeFormNoAudience": "Sending requires an audience — add recipients or select a marketing audience.",
+    "noticeFormBlocked": "Cannot send: {blockers}. Fix these before trying again.",
+    "noticeFormSent": "Form sent to {queued} recipients.",
+    "sendFailed": "The form could not be sent.",
+    "noticeFormPosted": "Form posted to {published} channels.",
+    "postFailed": "The form could not be posted.",
     "publish": "Publish",
+    "send": "Send",
+    "post": "Post",
     "close": "Close",
     "exit": "Back to the board",
     "unpublishedHint": "Publish this form to get an address people can answer from a phone. No account is needed to answer.",

@@ -11,6 +11,11 @@
  * looking for.
  */
 import { describe, it, expect } from 'vitest';
+import {
+  REALIZATION_CANVAS_DELIVERY,
+  REALIZATION_DELIVERY_KEYS,
+  realizationCanvasDelivery,
+} from '@builderforce/creation-canvas-contract';
 import type { ChallengeSpec } from '../challenge/parseBrief';
 import { INGRESS_EXPRESSION } from './proofShell';
 import { planRealization, strategyFor } from './planRealization';
@@ -47,6 +52,34 @@ describe('the catalog', () => {
   it('orders the registry by fidelity, because that is the order to walk them', () => {
     const fidelities = REALIZATION_TARGETS.map((t) => t.fidelity);
     expect([...fidelities].sort((a, b) => a - b)).toEqual(fidelities);
+  });
+});
+
+describe('canvas delivery', () => {
+  it('maps exactly the catalog keys onto a connected adapter', () => {
+    expect([...REALIZATION_DELIVERY_KEYS].sort()).toEqual([...REALIZATION_KEYS].sort());
+    expect(Object.keys(REALIZATION_CANVAS_DELIVERY).sort()).toEqual([...REALIZATION_KEYS].sort());
+  });
+
+  it('connects every proof to website.publish / artifact.publish', () => {
+    for (const key of REALIZATION_KEYS) {
+      expect(realizationCanvasDelivery(key), key).toEqual({
+        canvasKind: 'website',
+        deliveryAction: 'publish',
+        outcomeAction: 'artifact.publish',
+      });
+    }
+  });
+
+  it('every proof produces a page the site publisher can ship', () => {
+    // The mapping above is honest only if the plan actually contains HTML the
+    // canvas website can publish. A proof that only wrote a runbook would land
+    // a titled shell — the failure authoredWebsiteProblem exists to refuse.
+    for (const target of REALIZATION_TARGETS) {
+      const output = target.build({ spec: spec(), ingressUrl: INGRESS });
+      const publishable = Object.keys(output.files).filter(isPublishablePath);
+      expect(publishable.length, target.key).toBeGreaterThan(0);
+    }
   });
 });
 

@@ -95,6 +95,19 @@ export interface CardActOutcome {
    * read, and no act grows its own Blob-and-anchor dance.
    */
   download?: CardActDownload;
+  /**
+   * Optional measurement this act produced — a grade, a count — recorded on the
+   * outcome ledger by the runner. The act DESCRIBES the number; it does not
+   * POST it. A missed kill condition is a real grade (`metricValue` 0), so an
+   * act that measured and found nothing still returns this rather than only a
+   * notice.
+   */
+  ledger?: {
+    metricKey?: string;
+    metricValue?: number;
+    unit?: string;
+    metadata?: Record<string, unknown>;
+  };
 }
 
 export interface CardActDownload {

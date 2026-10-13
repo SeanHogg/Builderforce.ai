@@ -36,5 +36,8 @@ Currently connected delivery adapters:
 | Mockup / deliver | canonical project task | task resource linked to project/agent |
 | Document / Word | Office export service | downloaded `.docx` |
 | Slides / PowerPoint | Office export service | downloaded `.pptx` |
+| Idea → Real proof (`demo-video`, `clickable-prototype`, `smoke-test`, `wizard-of-oz`, `poc`, `pilot`, `phone-line`, `live-system`) / publish | IDE static-site publish (`website.publish` → `artifact.publish`) | versioned live URL, path URL, asset proof |
+
+Marketed proofs land as Website / publish via `realizationCanvasDelivery` in `@builderforce/creation-canvas-contract`. `canvas_realize` puts a WYSIWYG site (plus the generated runbook) on the board; it does not call `POST /api/realizations/:id/build` — that stays the human-reviewed step. Journey test: `api/src/application/outcomes/proofJourney.test.ts` (`marketed artifact %s reaches graded proof`).
 
 New operational actions are not complete until they have a real adapter, a terminal deliverable record, an outcome correlation, and a journey test.

@@ -19,9 +19,11 @@ import {
   closeForm, publishForm, summarizeForm, type FormSummary,
 } from '@/lib/founderOpsApi';
 import { growthApi, type Audience } from '@/lib/growthApi';
+import { postForm, sendForm } from '@/lib/formDistribution';
 import {
   FORM_AUDIENCE_VALUES, formAudienceOf, formJoinUrl, formPublishBody,
-  readFormQuestions, readFormRecipients, type FormCardData,
+  formShareUrl, readFormInvitations, readFormQuestions, readFormRecipients,
+  type FormCardData,
 } from '@/lib/formObject';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import type { CreationNodeData } from './types';
@@ -122,6 +124,68 @@ export function CanvasFormSurface({ data, objectId, onExit, onEdit }: CanvasForm
     }
   };
 
+  const send = async () => {
+    if (!onEdit || !shareUrl) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await sendForm({
+        title: typeof card.title === 'string' ? card.title : '',
+        shareUrl,
+        audience: formAudienceOf(card),
+        recipients: readFormRecipients(card.recipients),
+        invitations: readFormInvitations(card.invitations),
+        marketingAudienceId: typeof card.marketingAudienceId === 'number' ? card.marketingAudienceId : undefined,
+      });
+      if (!result.ok) {
+        if (result.reason === 'unpublished') {
+          setNotice(t('noticeFormUnpublished'));
+        } else if (result.reason === 'noAudience') {
+          setNotice(t('noticeFormNoAudience'));
+        } else {
+          onEdit({ campaignId: result.campaignId } as Partial<CreationNodeData>);
+          setNotice(t('noticeFormBlocked', { blockers: (result.blockers ?? []).join(', ') }));
+        }
+        setBusy(false);
+        return;
+      }
+      onEdit({ campaignId: result.campaignId } as Partial<CreationNodeData>);
+      setNotice(t('noticeFormSent', { queued: result.queued }));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : t('sendFailed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const post = async () => {
+    if (!onEdit || !shareUrl) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await postForm({
+        title: typeof card.title === 'string' ? card.title : '',
+        shareUrl,
+      });
+      if (!result.ok) {
+        if (result.reason === 'unpublished') {
+          setNotice(t('noticeFormUnpublished'));
+        } else {
+          onEdit({ socialCampaignId: result.campaignId } as Partial<CreationNodeData>);
+          setNotice(t('noticeFormBlocked', { blockers: (result.blockers ?? []).map((b: { code: string }) => b.code).join(', ') }));
+        }
+        setBusy(false);
+        return;
+      }
+      onEdit({ socialCampaignId: result.campaignId } as Partial<CreationNodeData>);
+      setNotice(t('noticeFormPosted', { published: result.published }));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : t('postFailed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const addFromCrm = async () => {
     if (!onEdit) return;
     setBusy(true);
@@ -178,9 +242,17 @@ export function CanvasFormSurface({ data, objectId, onExit, onEdit }: CanvasForm
             </button>
           )}
           {onEdit && questionSetId && status !== 'closed' && (
-            <button type="button" className={styles.danger} disabled={busy} onClick={() => void close()}>
-              {t('close')}
-            </button>
+            <>
+              <button type="button" className={styles.secondary} disabled={busy} onClick={() => void send()}>
+                {t('send')}
+              </button>
+              <button type="button" className={styles.secondary} disabled={busy} onClick={() => void post()}>
+                {t('post')}
+              </button>
+              <button type="button" className={styles.danger} disabled={busy} onClick={() => void close()}>
+                {t('close')}
+              </button>
+            </>
           )}
           <button type="button" className={styles.ghost} onClick={onExit}>{t('exit')}</button>
         </div>

@@ -21,6 +21,7 @@ export * from "./toolAliases.js";
 export * from "./engine.js";
 export * from "./spec.js";
 export * from "./core-tools.js";
+export * from "./writeOverwriteGuard.js";
 export * from "./psychometric-dims.js";
 export * from "./psychometrics.js";
 export * from "./knowledge-notes.js";

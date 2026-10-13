@@ -43,7 +43,7 @@ import {
 } from "@seanhogg/builderforce-brain-embedded";
 import { resolveToolAlias } from "@builderforce/agent-tools";
 import { describeTool, type ToolDef } from "./fileTools";
-import { evaluatePolicyGate, type PolicyGate } from "./policy";
+import { evaluatePolicyGate, toolCallPaths, type PolicyGate } from "./policy";
 import { withRunPreamble } from "./runPreamble";
 import type { RunDirectives, RunHooks } from "./hooks/runHooks";
 
@@ -237,8 +237,8 @@ export function nativeNeedsConfirm(
   permissionMode: "ask" | "acceptEdits",
   gates: readonly PolicyGate[] | undefined,
 ): (req: { name: string; args: unknown }) => boolean {
-  return ({ name }) => {
-    if (evaluatePolicyGate(gates, name).action === "require-approval") return true;
+  return ({ name, args }) => {
+    if (evaluatePolicyGate(gates, name, toolCallPaths(argsRecord(args))).action === "require-approval") return true;
     if (permissionMode === "acceptEdits") return false;
     const def = defs.find((candidate) => candidate.name === name);
     // Fail safe: a tool we don't recognise is treated as mutating.
@@ -254,7 +254,7 @@ export function approvalRequestFor(
   args: unknown,
 ): NativeApprovalRequest {
   const record = argsRecord(args);
-  const decision = evaluatePolicyGate(gates, name);
+  const decision = evaluatePolicyGate(gates, name, toolCallPaths(record));
   return {
     name,
     args: record,
@@ -300,7 +300,7 @@ export function createNativeRunTool(opts: {
     const resolved = resolveToolAlias(name);
     const record = argsRecord(args);
     const label = toolLabel(opts.defs, resolved, record);
-    const decision = evaluatePolicyGate(opts.gates, resolved);
+    const decision = evaluatePolicyGate(opts.gates, resolved, toolCallPaths(record));
     if (decision.action === "block") {
       const message = opts.labels.blockedByPolicy(decision.reason);
       opts.events.onToolResult(label, false);

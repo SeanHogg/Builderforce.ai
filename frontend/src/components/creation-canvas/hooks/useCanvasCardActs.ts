@@ -13,6 +13,7 @@ import type { Edge } from '@xyflow/react';
 import type { useTranslations } from 'next-intl';
 import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
+import { recordCanvasActOutcomes } from '@/lib/recordCanvasActOutcome';
 
 export interface UseCanvasCardActsDeps {
   canvasText: CanvasTextTranslator;
@@ -28,9 +29,10 @@ export interface UseCanvasCardActsDeps {
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
   tPoll: ReturnType<typeof useTranslations<'poll'>>;
   updateNodeData: (nodeId: string, patch: Partial<CreationNodeData>) => void;
+  sessionId?: string | null;
 }
 
-export function useCanvasCardActs({ canvasText, edges, nodes, nodesRef, persistence, requireAccount, setEdges, setNodes, setNotice, setSurface, t, tPoll, updateNodeData }: UseCanvasCardActsDeps) {
+export function useCanvasCardActs({ canvasText, edges, nodes, nodesRef, persistence, requireAccount, setEdges, setNodes, setNotice, setSurface, t, tPoll, updateNodeData, sessionId }: UseCanvasCardActsDeps) {
   /**
    * Evaluate a test plan's exit criteria against the evidence ON THE BOARD.
    *
@@ -63,7 +65,16 @@ export function useCanvasCardActs({ canvasText, edges, nodes, nodesRef, persiste
       }
       : node));
     setNotice(t('noticeGateEvaluated', { score: verdict.score }));
-  }, [edges, nodes, setNodes, setNotice, t]);
+    if (persistence === 'server' && sessionId) {
+      recordCanvasActOutcomes({
+        sessionId,
+        kind: 'testPlan',
+        action: 'gate',
+        objectId: planId,
+        patch: { gateVerdict: verdict },
+      });
+    }
+  }, [edges, nodes, persistence, sessionId, setNodes, setNotice, t]);
 
   /**
    * A CARD ACT — `invoice.issue`, `offer.hire`, `submission.mark`, and seven more.
@@ -91,7 +102,8 @@ export function useCanvasCardActs({ canvasText, edges, nodes, nodesRef, persiste
     setNotice,
     persistence,
     t: canvasText,
-  }), [setNodes, setEdges, setNotice, persistence, canvasText, nodesRef]);
+    sessionId,
+  }), [setNodes, setEdges, setNotice, persistence, canvasText, nodesRef, sessionId]);
   const runCardActOnObject = useCardActRunnerFor(cardActBoard);
 
   /**
@@ -115,13 +127,21 @@ export function useCanvasCardActs({ canvasText, edges, nodes, nodesRef, persiste
     try {
       if (action === 'publish') {
         const result = await publishPoll(pollPublishBody(target.data, nodeId));
+        const joinUrl = pollJoinUrl(result.slug);
         updateNodeData(nodeId, {
           questionSetId: result.questionSetId,
-          joinUrl: pollJoinUrl(result.slug),
+          joinUrl,
           status: tPoll('statusOpen'),
         } as Partial<CreationNodeData>);
         setSurface('facilitate', nodeId);
         setNotice(tPoll('noticePublished'));
+        recordCanvasActOutcomes({
+          sessionId,
+          kind: 'poll',
+          action: 'publish',
+          objectId: nodeId,
+          patch: { joinUrl },
+        });
         return;
       }
       const questionSetId = typeof target.data.questionSetId === 'string' ? target.data.questionSetId : '';
@@ -139,9 +159,16 @@ export function useCanvasCardActs({ canvasText, edges, nodes, nodesRef, persiste
         status: next.status === 'open' ? tPoll('statusOpen') : tPoll('statusClosed'),
       } as Partial<CreationNodeData>);
       setNotice(next.status === 'open' ? tPoll('noticeVotingOpen') : tPoll('noticeVotingClosed'));
+      recordCanvasActOutcomes({
+        sessionId,
+        kind: 'poll',
+        action,
+        objectId: nodeId,
+        patch: { showResultsLive: next.showResultsLive, status: next.status },
+      });
     } catch (error) {
       setNotice(faultText(error, tPoll('publishFailed')));
     }
-  }, [nodesRef, persistence, requireAccount, setNotice, setSurface, tPoll, updateNodeData]);
+  }, [nodesRef, persistence, requireAccount, sessionId, setNotice, setSurface, tPoll, updateNodeData]);
   return { runPollAction, evaluateReleaseGate, runCardActOnObject, cardActBoard };
 }

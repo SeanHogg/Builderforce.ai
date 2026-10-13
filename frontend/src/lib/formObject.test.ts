@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  formAudienceOf, formFromIdea, formJoinUrl, formPublishBody, questionsFromIdea,
-  readFormQuestions, readFormRecipients,
+  formAudienceOf, formFromIdea, formJoinUrl, formPublishBody, formRecipientUrl,
+  formShareUrl, questionsFromIdea, readFormInvitations, readFormQuestions, readFormRecipients,
 } from './formObject';
 
 describe('readFormQuestions', () => {
@@ -109,5 +109,22 @@ describe('formJoinUrl', () => {
   it('uses the origin the publisher is actually on', () => {
     vi.stubGlobal('window', { location: { origin: 'https://preview.example' } });
     expect(formJoinUrl('hello')).toBe('https://preview.example/f/hello');
+  });
+});
+
+describe('formRecipientUrl', () => {
+  it('appends the plaintext token as ?t= and leaves the public URL alone without one', () => {
+    expect(formRecipientUrl('https://x/f/hello')).toBe('https://x/f/hello');
+    expect(formRecipientUrl('https://x/f/hello', 'tok 1')).toBe('https://x/f/hello?t=tok%201');
+    expect(formRecipientUrl('https://x/f/hello?ref=idea', 'tok')).toBe('https://x/f/hello?ref=idea&t=tok');
+  });
+});
+
+describe('formShareUrl / readFormInvitations', () => {
+  it('prefers shareUrl and keeps invitation tokens for named send', () => {
+    expect(formShareUrl({ joinUrl: '/f/hello' })).toBe('/f/hello');
+    expect(formShareUrl({ shareUrl: 'https://x/f/hello', joinUrl: '/f/hello' })).toBe('https://x/f/hello');
+    expect(readFormInvitations([{ email: 'sam@x.com', token: 'tok-1' }, { email: 'nope' }]))
+      .toEqual([{ email: 'sam@x.com', token: 'tok-1' }]);
   });
 });

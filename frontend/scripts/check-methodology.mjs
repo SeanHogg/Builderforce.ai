@@ -15,7 +15,7 @@
  * different advice than the product gives — quietly, and in the direction that
  * sells better.
  *
- * Six checks:
+ * Eight checks:
  *   1. SAME EIGHT — no target in the API that the site cannot show, and none on
  *      the site that the product cannot build.
  *   2. SAME NUMBERS — fidelity and effort match, per key.
@@ -30,6 +30,13 @@
  *      undeclared custom property silently drops the declaration that uses it.
  *      A template literal is invisible to `check-design-tokens`; this closes it.
  *      (`--stage-expand` was missing for as long as the stage existed.)
+ *   7. SAME EIGHT ON THE CANVAS DELIVERY MAP — every API target has a row in
+ *      `REALIZATION_DELIVERY_KEYS`, and those proofs land as `website.publish`
+ *      (the connected canvas adapter). A proof the product can build but the
+ *      canvas cannot deliver is an unsold capability.
+ *   8. CHEAP CANVAS PROOFS USE THE SAME LEDGER VERBS — `canvasActionOutcomes.ts`
+ *      maps `idea.reveal` → `proof.grade` and `form.publish`/`poll.publish` →
+ *      `artifact.publish`. A founder who never left the board still counts.
  *
  * Run via `npm run check:methodology`; wired into `npm test`.
  */
@@ -125,6 +132,33 @@ for (const key of mirror.keys()) {
   }
 }
 
+// ── 7 · Same eight on the canvas delivery map ──────────────────────────────
+const deliverySourcePath = path.resolve(ROOT, '..', 'packages', 'creation-canvas-contract', 'src', 'realizationDelivery.ts');
+if (!fs.existsSync(deliverySourcePath)) {
+  fail('[delivery] packages/creation-canvas-contract/src/realizationDelivery.ts is missing — marketed proofs have no canvas delivery map.');
+} else {
+  const deliverySource = fs.readFileSync(deliverySourcePath, 'utf8');
+  const deliveryBlock = deliverySource.match(/export const REALIZATION_DELIVERY_KEYS[\s\S]*?as const/)?.[0] ?? '';
+  const deliveryKeys = [...deliveryBlock.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  const deliverySet = new Set(deliveryKeys);
+  for (const key of targets.keys()) {
+    if (!deliverySet.has(key)) {
+      fail(
+        `[delivery] The API builds \`${key}\` and REALIZATION_DELIVERY_KEYS does not list it.\n` +
+        '    A proof the product can run but the canvas cannot deliver is an unsold capability.',
+      );
+    }
+  }
+  for (const key of deliveryKeys) {
+    if (!targets.has(key)) {
+      fail(`[delivery] realizationDelivery.ts advertises \`${key}\`, which no API target declares.`);
+    }
+  }
+  if (!/canvasKind:\s*'website'/.test(deliverySource) || !/deliveryAction:\s*'publish'/.test(deliverySource)) {
+    fail('[delivery] Realization proofs must land as website.publish — the connected canvas adapter.');
+  }
+}
+
 // ── 2–4 · Same numbers, same posture, same words ───────────────────────────
 for (const [key, target] of targets) {
   const mirrored = mirror.get(key);
@@ -216,6 +250,23 @@ for (const hueVar of stepHueVars) {
   if (!declared(hueVar)) fail(`[steps] \`${hueVar}\` is not declared in globals.css.`);
 }
 
+// ── 8 · Cheap canvas proofs land on the same proof-lifecycle verbs ─────────
+const canvasOutcomesPath = path.resolve(ROOT, '..', 'packages', 'creation-canvas-contract', 'src', 'canvasActionOutcomes.ts');
+if (!fs.existsSync(canvasOutcomesPath)) {
+  fail('[canvas-outcomes] canvasActionOutcomes.ts is missing — remaining canvas acts have no ledger map.');
+} else {
+  const canvasOutcomes = fs.readFileSync(canvasOutcomesPath, 'utf8');
+  if (!/'idea.reveal':[\s\S]*?action:\s*'proof.grade'/.test(canvasOutcomes)) {
+    fail('[canvas-outcomes] idea.reveal must map to proof.grade so a founder who never left the board still grades.');
+  }
+  if (!/'form.publish':/.test(canvasOutcomes) || !/action:\s*'artifact.publish'/.test(canvasOutcomes)) {
+    fail('[canvas-outcomes] form.publish must map to artifact.publish.');
+  }
+  if (!/'poll.publish':/.test(canvasOutcomes)) {
+    fail('[canvas-outcomes] poll.publish must be mapped so a live poll is a reachable deliverable.');
+  }
+}
+
 // ── report ─────────────────────────────────────────────────────────────────
 if (failures.length > 0) {
   console.error(`\n❌ check-methodology — ${failures.length} problem(s):\n`);
@@ -225,5 +276,5 @@ if (failures.length > 0) {
 
 console.log(
   `✅ check-methodology OK — ${targets.size} proof forms mirrored from the API with matching ` +
-  `fidelity/effort and copy; ${steps.length} method steps and ${stages.length} stages all have copy and a hue.`,
+  `fidelity/effort, copy and canvas delivery; ${steps.length} method steps and ${stages.length} stages all have copy and a hue.`,
 );

@@ -32,10 +32,51 @@ export interface BillingSubscription {
   };
 }
 
+export type ManagedAgentHostStatus = 'active' | 'past_due' | 'cancelled';
+
+export interface ManagedAgentHostSubscription {
+  status: ManagedAgentHostStatus;
+  quantity: number;
+  externalSubscriptionId: string | null;
+  orderId: number | null;
+}
+
+export interface ManagedAgentHostRequest {
+  id: number;
+  agentHostName: string;
+  region: string | null;
+  notes: string | null;
+  status: 'pending' | 'provisioning' | 'active' | 'cancelled' | 'failed';
+  agentHostId: number | null;
+  provisionedAt: string | null;
+  createdAt: string;
+}
+
 export const billingApi = {
   subscription: (tenantId: number) =>
     apiRequest<BillingSubscription>(`/api/tenants/${tenantId}/subscription`),
   /** Drop to Free. The processor cancels at period end; the row flips now. */
   downgradeToFree: (tenantId: number) =>
     apiRequest<unknown>(`/api/tenants/${tenantId}/subscription/free`, { method: 'POST' }),
+  managedAgentHost: (tenantId: number) =>
+    apiRequest<{ subscription: ManagedAgentHostSubscription | null }>(
+      `/api/tenants/${tenantId}/add-ons/managed-agent-host`,
+    ),
+  checkoutManagedAgentHost: (tenantId: number, body: { billingEmail: string; quantity: number }) =>
+    apiRequest<{ checkoutUrl?: string; sessionId?: string }>(
+      `/api/tenants/${tenantId}/add-ons/managed-agent-host/checkout`,
+      { method: 'POST', body: JSON.stringify(body), expectedErrors: [403, 409] },
+    ),
+  listManagedAgentHostRequests: () =>
+    apiRequest<{ requests: ManagedAgentHostRequest[] }>('/api/managed-agent-hosts'),
+  requestManagedAgentHost: (body: { agentHostName: string; region?: string; notes?: string }) =>
+    apiRequest<{ request: ManagedAgentHostRequest; message?: string }>(
+      '/api/managed-agent-hosts',
+      { method: 'POST', body: JSON.stringify(body), expectedErrors: [403, 409] },
+    ),
+  cancelManagedAgentHostRequest: (id: number) =>
+    apiRequest<unknown>(`/api/managed-agent-hosts/${id}`, {
+      method: 'DELETE',
+      expectedErrors: [409],
+    }),
 };

@@ -649,6 +649,7 @@
       "monitoring": "监控",
       "reliability": "可靠性",
       "agentOps": "智能体运维",
+      "orchestration": "编排",
       "sales": "销售中心",
       "challenges": "挑战",
       "growth": "增长",
@@ -6483,7 +6484,7 @@
           },
           {
             "question": "什么是托管 AgentHost？",
-            "answer": "托管 AgentHost 是由 Builderforce 运营的托管版 BuilderForce Agents 实例。其当前价格由定价页面上的公开定价约定提供。"
+            "answer": "托管 AgentHost 是由 Builderforce 运营的托管版 BuilderForce Agents 实例，按每个托管 AgentHost 按月计费。在有效的 Pro 或 Teams 套餐下从定价页添加，然后在 Workforce 申请主机。申请主机后即开始开通。当前价格由公开定价约定提供。"
           },
           {
             "question": "你们提供按年计费吗？",
@@ -10199,6 +10200,21 @@
     "teamsCostNoteYear": "${perSeat}/席位/年 — 按 ${total}/年 计费",
     "teamsCostNoteMonth": "${perSeat}/席位/月 — 按 ${total}/月 计费",
     "managedAddon": "附加组件：<b>托管 AgentHost</b> — 每个托管 AgentHost ${price}/月。我们为您运行 BuilderForce Agents 实例 — 无需 Docker，无需 DevOps。",
+    "managedHost": {
+      "eyebrow": "托管附加组件",
+      "title": "托管 AgentHost",
+      "description": "我们为您运行 BuilderForce Agents 实例 — 无需 Docker，无需 DevOps。按每个托管 AgentHost 按月计费。",
+      "addonFor": "适用于 Pro 和 Teams 的附加组件",
+      "perMonth": "/月·每个托管 AgentHost",
+      "addToCart": "加入购物车",
+      "viewCart": "查看购物车",
+      "eligibility": "需要有效的 Pro 或 Teams 订阅。",
+      "signIn": "登录后购买",
+      "quantity": "托管 AgentHost 数量",
+      "decrease": "减少主机",
+      "increase": "增加主机",
+      "active": "该数量已由您的托管 AgentHost 订阅覆盖。"
+    },
     "phone": {
       "eyebrow": "客户留存附加服务",
       "title": "企业电话",
@@ -17991,6 +18007,21 @@
     "failedDelete": "无法删除工作流",
     "noticeRunPendingApproval": "“{name}”需要获得批准才能运行。审批请求已发送。"
   },
+  "orchestrationWorkspace": {
+    "title": "实时编排",
+    "subtitle": "进行中的智能体工作流。DAG 是工作台——编排设计仍在画布上完成。",
+    "loading": "正在加载进行中的运行…",
+    "error": "无法加载进行中的运行。",
+    "empty": "没有进行中的工作流。请从画布启动一次运行。",
+    "selectRun": "进行中",
+    "live": "实时",
+    "loadingGraph": "正在加载关系图…",
+    "noGraph": "此运行尚无关系图数据。",
+    "openCanvas": "打开画布",
+    "authoringHint": "要编写工作流，请打开 Creation Canvas。",
+    "refresh": "刷新",
+    "unnamed": "未命名运行"
+  },
   "personalityUsage": {
     "title": "人格使用情况",
     "activeTitle": "当前人格",
@@ -18622,6 +18653,34 @@
     "loading": "加载中…",
     "loadFailed": "无法加载账单信息。",
     "comparePlans": "比较套餐",
+    "managedHost": {
+      "title": "托管 AgentHost",
+      "description": "我们为您运行 BuilderForce Agents 实例 — 无需 Docker，无需 DevOps。",
+      "statusActive": "有效",
+      "statusPastDue": "逾期",
+      "statusNone": "未订阅",
+      "quantityCovered": "已覆盖主机",
+      "requests": "托管请求",
+      "empty": "尚无托管请求。",
+      "name": "AgentHost 名称",
+      "region": "区域",
+      "notes": "备注",
+      "submit": "申请托管 AgentHost",
+      "cancel": "取消请求",
+      "busy": "处理中…",
+      "unpaid": "请先在定价页订阅托管 AgentHost，然后再申请主机。",
+      "exhausted": "订阅中的托管 AgentHost 均已申请或已开通。",
+      "loadFailed": "无法加载托管 AgentHost 详情。",
+      "requestFailed": "无法提交托管请求。",
+      "cancelFailed": "无法取消该请求。",
+      "statusPending": "待处理",
+      "statusProvisioning": "开通中",
+      "statusRequestActive": "有效",
+      "statusCancelled": "已取消",
+      "statusFailed": "失败",
+      "provisionNote": "申请主机后即开始开通。",
+      "cta": "比较套餐"
+    },
     "paymentMethodTitle": "付款方式",
     "paymentMethodIntro": "用于扣取订阅费和计量用量的卡片。添加时仅执行 0 元验证，不会扣款。",
     "cardOnFile": "已保存卡片",
@@ -19134,7 +19193,8 @@
       "learning": "学习路径、先修条件与 LRS。",
       "marketplace": "买卖智能体、人才与模板。",
       "developers": "发布到市场并管理已安装项。",
-      "sales": "管道、营销活动、结算与推荐。"
+      "sales": "管道、营销活动、结算与推荐。",
+      "orchestration": "进行中的运行与实时 DAG。"
     }
   },
   "tutorials": {
@@ -25064,6 +25124,10 @@
     "noticeIdeaFormTitle": "先给想法起个标题，才能给表单命名。",
     "noticeIdeaFormCreated": "表单已创建。发布后即可获得可发送的链接。",
     "noticeIdeaActFailed": "该想法操作未能完成。",
+    "noticeIdeaNothingToReveal": "先点名测试过这个想法的访谈、实验或表单，再给它打分。",
+    "noticeIdeaRevealMissing": "点名的证据都不在这块画板上：{refs}。",
+    "noticeIdeaRevealMet": "证据已作答。这个想法已验证。",
+    "noticeIdeaRevealMissed": "点名的证据在画板上，但尚未作答。这不是通过——在作答之前是未达标。",
     "surface": {
       "chat": {
         "label": "对话",
@@ -26976,6 +27040,12 @@
       "leaveMessage": "Studio 仍在处理你的请求。前往 Studio 首页会停止它；你的应用和已构建的内容都会保留在这个画布上。",
       "leaveConfirm": "仍然离开"
     },
+    "noticeFormSent": "表单已发送给 {queued} 位收件人。",
+    "noticeFormPosted": "表单已发布到 {published} 个渠道。",
+    "noticeFormNoAudience": "发送需要受众——添加收件人以或选择营销受众。",
+    "noticeFormBlocked": "无法发送：{blockers}。修复后再试。",
+    "sendFailed": "无法发送表单。",
+    "postFailed": "无法发布表单。",
     "proof": {
       "title": "验证计分板",
       "loading": "正在加载计分板…",
@@ -28119,6 +28189,9 @@
       },
       "reliability": {
         "description": "监控、事件、值班与升级，构成同一个发现并响应的闭环。"
+      },
+      "orchestration": {
+        "description": "进行中的智能体工作流与实时 DAG。编排设计仍在画布上完成。"
       },
       "knowledge": {
         "description": "SOP、流程、文档、技能、人格与提示词——为智能体提供依据的版本化知识库。"
@@ -31726,6 +31799,8 @@
     "noticeCrmImported": "CRM 联系人：新增 {added}，更新 {updated}，拒绝 {rejected}。",
     "crmFailed": "无法导入 CRM 联系人。",
     "publish": "发布",
+    "send": "发送",
+    "post": "发布",
     "close": "关闭",
     "exit": "返回看板",
     "unpublishedHint": "发布此表单即可获得一个手机也能作答的地址。作答无需账号。",
@@ -31750,7 +31825,14 @@
       "draft": "草稿",
       "open": "开放",
       "closed": "已关闭"
-    }
+    },
+    "noticeFormUnpublished": "发布表单后再发送或关闭。",
+    "noticeFormNoAudience": "发送需要受众——添加收件人或选择营销受众。",
+    "noticeFormBlocked": "无法发送：{blockers}。请先修复后再试。",
+    "noticeFormSent": "表单已发送给 {queued} 位收件人。",
+    "sendFailed": "表单无法发送。",
+    "noticeFormPosted": "表单已发布到 {published} 个渠道。",
+    "postFailed": "表单无法发布。"
   },
   "calendar": {
     "regionLabel": "日历",

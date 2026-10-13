@@ -26,7 +26,15 @@ import type { WebhookEvent } from '../../infrastructure/payment/PaymentProvider'
 import { completeCommsTopUp, COMMS_TOPUP_KIND } from '../phone/commsTopUp';
 import { AGENT_PURCHASE_KIND, completeAgentCheckout } from '../marketplace/agentCommerce';
 import { SKILL_PURCHASE_KIND, completeSkillCheckout } from '../marketplace/skillCommerce';
+import {
+  MARKETPLACE_LISTING_KIND,
+  completeListingCheckout,
+  recordMarketplaceListingEvent,
+} from '../marketplace/listingCommerce';
 import { recordBusinessPhoneEvent } from '../tenant/businessPhoneSubscription';
+import { recordManagedAgentHostEvent, MANAGED_AGENT_HOST_KIND } from '../tenant/managedAgentHostSubscription';
+import { deprovisionOccupyingManagedAgentHosts } from '../tenant/managedAgentHostProvision';
+import { managedAgentHostContainerRuntime } from '../tenant/managedAgentHostRuntime';
 import { completeSpawnTopUp, SPAWN_TOKENS_KIND } from '../spawn/spawnTopUp';
 import { recordSpawnPlanEvent, SPAWN_PLAN_KIND } from '../spawn/spawnMembership';
 import { REPLAY_PACK_KIND } from '../commerce/replayPacks';
@@ -71,6 +79,13 @@ const ONE_OFF_SETTLERS: Readonly<Record<string, OneOffSettler>> = {
     await completeSkillCheckout(db, env, { buyerUserId, checkoutSessionId });
     return true;
   },
+  [MARKETPLACE_LISTING_KIND]: async (db, env, { checkoutSessionId, metadata }) => {
+    const tenantId = Number(metadata.buyerTenantId ?? metadata.tenantId);
+    const buyerRef = metadata.buyerRef;
+    if (!Number.isInteger(tenantId) || tenantId <= 0 || !buyerRef) return null;
+    await completeListingCheckout(db, env, { tenantId, buyerRef, checkoutSessionId });
+    return true;
+  },
   // Insights recording packs (PRD 33 D4): credits on the tenant's
   // `replay_recordings` ledger, keyed on the checkout so redirect + webhook = one row.
   [REPLAY_PACK_KIND]: (db, env, settlement) => settleReplayPack(db, env, settlement),
@@ -86,7 +101,21 @@ const ADDON_RECORDERS: Readonly<Record<string, AddonRecorder>> = {
     await recordBusinessPhoneEvent(db, event);
     return true;
   },
+  [MANAGED_AGENT_HOST_KIND]: async (db, env, event) => {
+    await recordManagedAgentHostEvent(db, event);
+    if (event.type === 'addon.cancelled' && event.tenantId) {
+      await deprovisionOccupyingManagedAgentHosts(db, event.tenantId, {
+        runtime: managedAgentHostContainerRuntime(env),
+        env,
+      });
+    }
+    return true;
+  },
   [SPAWN_PLAN_KIND]: recordSpawnPlanEvent,
+  // Pay-once listings settle on `checkout.completed` via the one-off settler.
+  // This recorder is the close-the-tab path for a leftover `listing.purchased`
+  // or `addon.*` event that still names the kind — same grant, re-read from Stripe.
+  [MARKETPLACE_LISTING_KIND]: recordMarketplaceListingEvent,
 };
 
 /** The settler for a pay-once kind, or null when it settles only on its redirect. */

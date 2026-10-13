@@ -31,6 +31,16 @@ const CODE_EXT = /\.(?:[cm]?[jt]sx?|py|rb|go|rs|java|kt|kts|swift|php|cs|cpp|cc|
 const CONFIG_EXT = /\.(?:json|jsonc|ya?ml|toml|ini|conf|config|properties)$/i;
 const ASSET_EXT = /\.(?:png|jpe?g|gif|webp|svg|ico|avif|mp[34]|wav|ogg|woff2?|ttf|otf|pdf)$/i;
 
+/** Deletions that dwarf additions, even on a docs-only green PR, need a human. */
+export const NET_DESTRUCTIVE_MIN_DELETIONS = 100;
+export const NET_DESTRUCTIVE_RATIO = 5;
+
+export function isNetDestructiveDiff(additions: number, deletions: number): boolean {
+  if (!Number.isFinite(additions) || !Number.isFinite(deletions)) return false;
+  if (deletions < NET_DESTRUCTIVE_MIN_DELETIONS) return false;
+  return deletions >= Math.max(additions, 0) * NET_DESTRUCTIVE_RATIO;
+}
+
 export function classifyDiffPath(path: string): DiffFileCategory {
   const normalized = path.replace(/\\/g, '/').toLowerCase();
   if (/(^|\/)(?:__tests__|tests?|test|spec)(\/|$)/.test(normalized)
@@ -71,6 +81,7 @@ export function summarizeDiffFiles(files: ProviderDiffFile[]) {
     totals: { files: categorized.length, additions, deletions, byCategory: counts },
     docsOnly: categorized.length > 0 && categorized.every((file) => file.category === 'docs'),
     codeChanged: categorized.some((file) => implementationCategories.includes(file.category)),
+    netDestructive: isNetDestructiveDiff(additions, deletions),
   };
 }
 

@@ -649,6 +649,7 @@
       "monitoring": "Überwachung",
       "reliability": "Zuverlässigkeit",
       "agentOps": "Agenten-Betrieb",
+      "orchestration": "Orchestrierung",
       "sales": "Vertriebs-Hub",
       "challenges": "Challenges",
       "growth": "Wachstum",
@@ -6483,7 +6484,7 @@
           },
           {
             "question": "Was ist ein Managed AgentHost?",
-            "answer": "Ein Managed AgentHost ist eine gehostete BuilderForce-Agents-Instanz, die von Builderforce betrieben wird. Den aktuellen Preis liefert der öffentliche Preisvertrag auf der Preisseite."
+            "answer": "Ein Managed AgentHost ist eine gehostete BuilderForce-Agents-Instanz, die von Builderforce betrieben und monatlich pro gehostetem AgentHost abgerechnet wird. Fügen Sie ihn auf der Preisseite mit einem aktiven Pro- oder Teams-Tarif hinzu und fragen Sie den Host unter Workforce an. Die Bereitstellung startet, sobald Sie einen Host anfordern. Den aktuellen Preis liefert der öffentliche Preisvertrag."
           },
           {
             "question": "Bieten Sie jährliche Abrechnung an?",
@@ -10199,6 +10200,21 @@
     "teamsCostNoteYear": "${perSeat}/Platz/J. — abgerechnet als ${total}/J.",
     "teamsCostNoteMonth": "${perSeat}/Platz/Mon. — abgerechnet als ${total}/Mon.",
     "managedAddon": "Add-on: <b>Verwalteter AgentHost</b> — ${price}/Mon. pro gehostetem AgentHost. Wir betreiben Ihre BuilderForce Agents-Instanz für Sie — kein Docker, kein DevOps.",
+    "managedHost": {
+      "eyebrow": "Hosting-Add-on",
+      "title": "Verwalteter AgentHost",
+      "description": "Wir betreiben Ihre BuilderForce Agents-Instanz für Sie — kein Docker, kein DevOps. Monatliche Abrechnung pro gehostetem AgentHost.",
+      "addonFor": "Add-on für Pro und Teams",
+      "perMonth": "/Monat pro gehostetem AgentHost",
+      "addToCart": "In den Warenkorb",
+      "viewCart": "Warenkorb anzeigen",
+      "eligibility": "Erfordert ein aktives Pro- oder Teams-Abonnement.",
+      "signIn": "Zum Kauf anmelden",
+      "quantity": "Gehostete AgentHosts",
+      "decrease": "Weniger Hosts",
+      "increase": "Mehr Hosts",
+      "active": "Diese Anzahl ist bereits durch Ihr Managed-AgentHost-Abonnement abgedeckt."
+    },
     "phone": {
       "eyebrow": "Kundenbindungs-Add-on",
       "title": "Geschäftstelefon",
@@ -17991,6 +18007,21 @@
     "failedDelete": "Workflow konnte nicht gelöscht werden",
     "noticeRunPendingApproval": "„{name}“ muss vor der Ausführung genehmigt werden. Eine Genehmigungsanfrage wurde gesendet."
   },
+  "orchestrationWorkspace": {
+    "title": "Live-Orchestrierung",
+    "subtitle": "Laufende Agenten-Workflows. Der DAG ist die Arbeitsfläche — die Erstellung bleibt auf der Canvas.",
+    "loading": "Laufende Runs werden geladen…",
+    "error": "Laufende Runs konnten nicht geladen werden.",
+    "empty": "Keine Workflows in Ausführung. Starte einen Run von der Canvas.",
+    "selectRun": "In Ausführung",
+    "live": "Live",
+    "loadingGraph": "Graph wird geladen…",
+    "noGraph": "Noch keine Graphdaten für diesen Run.",
+    "openCanvas": "Canvas öffnen",
+    "authoringHint": "Um einen Workflow zu erstellen, öffne die Creation Canvas.",
+    "refresh": "Aktualisieren",
+    "unnamed": "Unbenannter Run"
+  },
   "personalityUsage": {
     "title": "Persönlichkeitsnutzung",
     "activeTitle": "Aktive Persönlichkeit",
@@ -18622,6 +18653,34 @@
     "loading": "Wird geladen…",
     "loadFailed": "Ihre Abrechnungsdaten konnten nicht geladen werden.",
     "comparePlans": "Tarife vergleichen",
+    "managedHost": {
+      "title": "Verwalteter AgentHost",
+      "description": "Wir betreiben Ihre BuilderForce Agents-Instanz für Sie — kein Docker, kein DevOps.",
+      "statusActive": "Aktiv",
+      "statusPastDue": "Überfällig",
+      "statusNone": "Nicht abonniert",
+      "quantityCovered": "Abgedeckte Hosts",
+      "requests": "Hosting-Anfragen",
+      "empty": "Noch keine Hosting-Anfragen.",
+      "name": "AgentHost-Name",
+      "region": "Region",
+      "notes": "Notizen",
+      "submit": "Gehosteten AgentHost anfragen",
+      "cancel": "Anfrage stornieren",
+      "busy": "Wird bearbeitet…",
+      "unpaid": "Abonnieren Sie Managed AgentHost auf der Preisseite, bevor Sie einen Host anfragen.",
+      "exhausted": "Alle gehosteten AgentHosts Ihres Abonnements sind bereits angefragt oder bereitgestellt.",
+      "loadFailed": "Managed-AgentHost-Details konnten nicht geladen werden.",
+      "requestFailed": "Die Hosting-Anfrage konnte nicht gesendet werden.",
+      "cancelFailed": "Die Anfrage konnte nicht storniert werden.",
+      "statusPending": "Ausstehend",
+      "statusProvisioning": "Wird bereitgestellt",
+      "statusRequestActive": "Aktiv",
+      "statusCancelled": "Storniert",
+      "statusFailed": "Fehlgeschlagen",
+      "provisionNote": "Die Bereitstellung startet, sobald Sie einen Host anfordern.",
+      "cta": "Tarife vergleichen"
+    },
     "paymentMethodTitle": "Zahlungsmethode",
     "paymentMethodIntro": "Die Karte, über die Ihr Abonnement und die gemessene Nutzung abgerechnet werden. Beim Hinzufügen erfolgt eine 0-$-Prüfung, niemals eine Belastung.",
     "cardOnFile": "Hinterlegte Karte",
@@ -19134,7 +19193,8 @@
       "learning": "Lernpfade, Voraussetzungen und der LRS.",
       "marketplace": "Agenten, Talente und Vorlagen kaufen und verkaufen.",
       "developers": "Im Marktplatz veröffentlichen und Installationen verwalten.",
-      "sales": "Pipeline, Kampagnen, Auszahlungen und Empfehlungen."
+      "sales": "Pipeline, Kampagnen, Auszahlungen und Empfehlungen.",
+      "orchestration": "Laufende Runs und der Live-DAG."
     }
   },
   "tutorials": {
@@ -25058,12 +25118,22 @@
     "noticeFormClosed": "Das Formular ist geschlossen. Es werden keine neuen Antworten mehr erfasst.",
     "noticeFormUnpublished": "Veröffentliche das Formular, bevor du Antworten einsammelst oder es schließt.",
     "noticeFormFailed": "Diese Formularaktion konnte nicht abgeschlossen werden.",
+    "noticeFormSent": "Formular an {queued} Empfänger gesendet.",
+    "noticeFormPosted": "Formular auf {published} Kanälen gepostet.",
+    "noticeFormNoAudience": "Senden erfordert eine Zielgruppe — füge Empfänger hinzu oder wähle eine Marketing-Zielgruppe.",
+    "noticeFormBlocked": "Kann nicht senden: {blockers}. Behebe diese zuerst.",
+    "sendFailed": "Das Formular konnte nicht gesendet werden.",
+    "postFailed": "Das Formular konnte nicht gepostet werden.",
     "noticeIdeaUntitled": "Geben Sie der Idee einen Titel, bevor Sie Leute fragen.",
     "noticeIdeaInterviewTitle": "Geben Sie der Idee einen Titel, damit das Interview benannt werden kann.",
     "noticeIdeaInterviewPlanned": "Interview geplant. Öffnen Sie es auf dem Board, um einen Termin zu wählen.",
     "noticeIdeaFormTitle": "Geben Sie der Idee einen Titel, damit das Formular benannt werden kann.",
     "noticeIdeaFormCreated": "Formular erstellt. Veröffentlichen Sie es, um einen Link zu erhalten, den Sie versenden können.",
     "noticeIdeaActFailed": "Diese Ideenaktion konnte nicht abgeschlossen werden.",
+    "noticeIdeaNothingToReveal": "Nennen Sie das Interview, das Experiment oder das Formular, das diese Idee getestet hat, bevor Sie sie bewerten.",
+    "noticeIdeaRevealMissing": "Keine der genannten Nachweise ist auf diesem Board: {refs}.",
+    "noticeIdeaRevealMet": "Die Nachweise haben geantwortet. Diese Idee ist validiert.",
+    "noticeIdeaRevealMissed": "Die genannten Nachweise sind auf dem Board, haben aber noch nicht geantwortet. Kein Ja — ein Miss, bis sie es tun.",
     "surface": {
       "chat": {
         "label": "Chat",
@@ -28119,6 +28189,9 @@
       },
       "reliability": {
         "description": "Monitore, Incidents, Rufbereitschaft und Eskalation in einer Schleife aus Erkennen und Reagieren."
+      },
+      "orchestration": {
+        "description": "Laufende Agenten-Workflows und der Live-DAG. Die Erstellung bleibt auf der Canvas."
       },
       "knowledge": {
         "description": "SOPs, Prozesse, Dokumente, Skills, Personas und Prompts — die versionierte Basis, auf der Ihre Agenten stehen."
@@ -31725,7 +31798,16 @@
     "closeFailed": "Das Formular konnte nicht geschlossen werden.",
     "noticeCrmImported": "CRM-Kontakte: {added} hinzugefügt, {updated} aktualisiert, {rejected} abgelehnt.",
     "crmFailed": "CRM-Kontakte konnten nicht importiert werden.",
+    "noticeFormUnpublished": "Veröffentlichen Sie das Formular, bevor Sie es senden oder schließen.",
+    "noticeFormNoAudience": "Senden erfordert eine Zielgruppe — fügen Sie Empfänger hinzu oder wählen Sie eine Marketing-Zielgruppe.",
+    "noticeFormBlocked": "Kann nicht gesendet werden: {blockers}. Beheben Sie diese, bevor Sie es erneut versuchen.",
+    "noticeFormSent": "Formular an {queued} Empfänger gesendet.",
+    "sendFailed": "Das Formular konnte nicht gesendet werden.",
+    "noticeFormPosted": "Formular auf {published} Kanälen gepostet.",
+    "postFailed": "Das Formular konnte nicht gepostet werden.",
     "publish": "Veröffentlichen",
+    "send": "Senden",
+    "post": "Posten",
     "close": "Schließen",
     "exit": "Zurück zur Tafel",
     "unpublishedHint": "Veröffentliche dieses Formular, um eine Adresse zu erhalten, unter der man vom Telefon aus antworten kann. Zum Antworten ist kein Konto nötig.",

@@ -624,7 +624,7 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     icon: '✎',
     group: 'Insights',
     defaultStatus: 'captured',
-    actions: ['explore', 'test'],
+    actions: ['explore', 'test', 'reveal'],
     fields: [
       {
         name: 'stage', render: 'stat', label: 'stage', bookkeeping: true,
