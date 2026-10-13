@@ -265,9 +265,6 @@ if (!fs.existsSync(canvasOutcomesPath)) {
   if (!/'poll.publish':/.test(canvasOutcomes)) {
     fail('[canvas-outcomes] poll.publish must be mapped so a live poll is a reachable deliverable.');
   }
-  if (/canvasKind:\s*'website'/.test(canvasOutcomes) === false && !/website\.publish/.test(canvasOutcomes)) {
-    // Guard: this file must not steal the eight-proofs lock from realizationDelivery.
-  }
 }
 
 // ── report ─────────────────────────────────────────────────────────────────

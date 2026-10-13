@@ -54,8 +54,6 @@ export const CANVAS_ACTION_OUTCOMES: Record<string, readonly CanvasOutcomeEventS
     { action: 'artifact.publish', successPhase: 'succeeded', reachableField: 'joinUrl' },
     { action: 'proof.build', successPhase: 'succeeded', reachableField: 'joinUrl', targetKey: 'smoke-test' },
   ],
-  'form.collect': [{ action: 'form.collect', successPhase: 'succeeded' }],
-  'form.close': [{ action: 'form.close', successPhase: 'succeeded' }],
   'poll.publish': [
     { action: 'artifact.publish', successPhase: 'succeeded', reachableField: 'joinUrl' },
     { action: 'proof.build', successPhase: 'succeeded', reachableField: 'joinUrl' },

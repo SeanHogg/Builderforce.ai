@@ -79,6 +79,28 @@ describe('canvasActOutcomeBodies', () => {
     expect(reveal[1]).toMatchObject({ phase: 'validated', metricValue: 1 });
   });
 
+  it('marks a published poll reachable from its joinUrl', () => {
+    const bodies = canvasActOutcomeBodies({
+      sessionId: 'ses-1',
+      kind: 'poll',
+      action: 'publish',
+      objectId: 'poll-1',
+      patch: { joinUrl: '/p/abc' },
+    });
+    expect(bodies.map((body) => `${body.action}:${body.phase}`)).toEqual([
+      'artifact.publish:started',
+      'artifact.publish:succeeded',
+      'proof.build:started',
+      'proof.build:succeeded',
+    ]);
+    expect(bodies[0].metadata).toMatchObject({
+      kind: 'poll',
+      canvasAction: 'publish',
+      url: '/p/abc',
+      reachable: true,
+    });
+  });
+
   it('a missed grade still validates with metricValue 0', () => {
     const bodies = canvasActOutcomeBodies({
       sessionId: 's',
