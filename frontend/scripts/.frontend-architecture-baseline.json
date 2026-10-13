@@ -18,7 +18,7 @@
     "components/creation-canvas/CreationCanvas.tsx": 1159,
     "components/manager/ManagerContent.tsx": 1182,
     "components/reliability/MonitoringSections.tsx": 954,
-    "components/workforce/WorkforceAgents.tsx": 900,
+    "components/workforce/WorkforceAgents.tsx": 893,
     "lib/adminApi.ts": 1838,
     "lib/api.ts": 1030,
     "lib/builderforceApi.ts": 10424,
