@@ -31122,7 +31122,14 @@
             "draft": "Brouillon",
             "open": "Ouvert",
             "closed": "Fermé"
-        }
+        },
+        "noticeFormUnpublished": "Publiez le formulaire avant de l'envoyer ou de le fermer.",
+        "noticeFormNoAudience": "L'envoi nécessite une audience — ajoutez des destinataires ou sélectionnez une audience marketing.",
+        "noticeFormBlocked": "Impossible d'envoyer : {blockers}. Corrigez-les avant de réessayer.",
+        "noticeFormSent": "Formulaire envoyé à {queued} destinataires.",
+        "sendFailed": "Le formulaire n'a pas pu être envoyé.",
+        "noticeFormPosted": "Formulaire publié sur {published} canaux.",
+        "postFailed": "Le formulaire n'a pas pu être publié."
     },
     "calendar": {
         "regionLabel": "Calendrier",

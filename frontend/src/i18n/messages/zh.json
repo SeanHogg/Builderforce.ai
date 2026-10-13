@@ -31122,7 +31122,14 @@
             "draft": "草稿",
             "open": "开放",
             "closed": "已关闭"
-        }
+        },
+        "noticeFormUnpublished": "发布表单后再发送或关闭。",
+        "noticeFormNoAudience": "发送需要受众——添加收件人或选择营销受众。",
+        "noticeFormBlocked": "无法发送：{blockers}。请先修复后再试。",
+        "noticeFormSent": "表单已发送给 {queued} 位收件人。",
+        "sendFailed": "表单无法发送。",
+        "noticeFormPosted": "表单已发布到 {published} 个渠道。",
+        "postFailed": "表单无法发布。"
     },
     "calendar": {
         "regionLabel": "日历",
