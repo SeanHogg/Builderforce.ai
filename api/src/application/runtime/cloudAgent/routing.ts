@@ -38,13 +38,48 @@ import { resolveTenantPlan } from '../../tenant/tenantPlanSnapshot';
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { submittingUserId } from '../dispatcherLabel';
 import {
-  learnedRoutingEnabled, normalizeActionType,
+  learnedRoutingEnabled, normalizeActionType, parseRoleModelConfig, resolveModelForRole,
   type ActionModelRankStat, type ActionType,
 } from '@builderforce/learned-routing';
 import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
 
 const CODING_MODEL_POOL_SET: ReadonlySet<string> = RECOGNIZED_CODER_MODELS;
+
+/**
+ * Role string the engine already has on the run — spawn / call-purpose first
+ * (`CloudChildSpec.role`), then board delivery (`requiredSignoff.roleKey`), else
+ * the parent loop's existing `'code'`. Not a new vocabulary.
+ */
+export function cloudRunRoleForModelPin(args: {
+  spawnRole?: string | null;
+  deliveryRole?: string | null;
+}): string {
+  const spawn = typeof args.spawnRole === 'string' ? args.spawnRole.trim() : '';
+  if (spawn) return spawn;
+  const delivery = typeof args.deliveryRole === 'string' ? args.deliveryRole.trim() : '';
+  if (delivery) return delivery;
+  return 'code';
+}
+
+/**
+ * The model id to pass into {@link pickCloudModel} after folding operator
+ * `ROLE_MODELS` / `ROLE_MODEL_DEFAULT`.
+ *
+ * An explicit user / agent / Evermind pin always wins. Otherwise a catalog id
+ * from `resolveModelForRole` is preferred as the requested model *before* the
+ * learned ranker / plan coding seed. Undefined pin = existing behaviour
+ * (no `ROLE_MODELS` ⇒ no behaviour change).
+ */
+export function requestedModelForRole(
+  env: unknown,
+  role: string | undefined | null,
+  explicit?: string | null,
+): string | undefined {
+  const pin = typeof explicit === 'string' ? explicit.trim() : '';
+  if (pin) return pin;
+  return resolveModelForRole(role, parseRoleModelConfig(env));
+}
 
 /** The ONE agent commit-message convention (`<Verb> <path> — task #<id> (<agent>)`),
  *  so every write/edit/delete commit reads identically instead of re-inlining the
