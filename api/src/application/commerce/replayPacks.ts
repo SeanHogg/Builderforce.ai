@@ -1,6 +1,6 @@
 /**
  * BUYING SESSION-REPLAY RECORDING PACKS — the only door that puts paid
- * recordings on a tenant's ledger (PRD 33a §8 / D4).
+ * recordings on a tenant's ledger (PRD 33 §8 S6 / D4).
  *
  * Same three moves as `commsTopUp.ts` / `spawnTopUp.ts`:
  *

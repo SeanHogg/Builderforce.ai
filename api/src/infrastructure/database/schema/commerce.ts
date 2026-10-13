@@ -607,7 +607,7 @@ export const carts = pgTable('carts', {
 
 /** An order. The money movement is `ledger_entries`; this is the agreement.
  *
- * Session-replay recording packs settle here too (PRD 33a §8 / D4): one row
+ * Session-replay recording packs settle here too (PRD 33 §8 S6 / D4): one row
  * per paid pack (`status` paid, `provider_ref` the checkout session), a line
  * item describing the units, and a `ledger_entries` grant in denomination
  * `replay_recordings`. There is no parallel replay-balance table —

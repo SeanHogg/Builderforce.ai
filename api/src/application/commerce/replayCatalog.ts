@@ -1,5 +1,5 @@
 /**
- * Session-replay recording packs — the published ladder (PRD 33a §8 / D4).
+ * Session-replay recording packs — the published ladder (PRD 33 §8 S6 / D4).
  *
  * The unit is one visit of up to 2 MiB; a larger visit costs
  * `ceil(bytes / 2 MiB)` units, never less than one. Packs last twelve months

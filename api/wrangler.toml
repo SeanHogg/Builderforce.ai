@@ -175,7 +175,7 @@ binding = "UPLOADS"
 bucket_name = "builderforce-uploads"
 
 # Public CDN (`https://cdn.builderforce.ai`) for session-replay assets (PRD 33 D5,
-# 33a S2.2). Bucket `builderforce-cdn` is served on the custom domain
+# 33 §8 S2). Bucket `builderforce-cdn` is served on the custom domain
 # `cdn.builderforce.ai` by R2 itself — Cloudflare's edge caches it, and serving
 # MUST NOT invoke a Worker (kill check: 200, cache-control as below, a
 # `cf-cache-status` header, and NO `cf-worker` header).
