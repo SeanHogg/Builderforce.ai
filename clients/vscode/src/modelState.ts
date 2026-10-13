@@ -3,6 +3,7 @@ import { getProjectEvermindHead } from "./bfApi";
 import { getModels, isModelAllowed } from "./gateway";
 import { isLocalModelRef } from "./localModels";
 import { getSelectedProject } from "./projectState";
+import { NATIVE_RUN_ROLE, roleModelPin } from "./roleModelPin";
 
 /**
  * The gateway pin (`project_evermind:<projectId>`) that expands to a project's
@@ -58,6 +59,10 @@ export async function resolveEffectiveModelChoice(secrets: vscode.SecretStorage)
       return { model: `${PROJECT_EVERMIND_PIN}${project.id}`, routingMode: "auto" };
     }
   }
+  // Operator role pin (ROLE_MODELS / ROLE_MODEL_DEFAULT). Explicit user pick and
+  // the project's Evermind pin above still win; undefined pin falls through.
+  const rolePin = await entitled(secrets, roleModelPin(NATIVE_RUN_ROLE));
+  if (rolePin) return { model: rolePin, routingMode: "auto" };
   const model = await entitled(secrets, defaultModel());
   return { ...(model ? { model } : {}), routingMode: "auto" };
 }
