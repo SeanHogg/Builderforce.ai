@@ -19,6 +19,9 @@
  * owns only the IR and its lowering. See `PRD-agent-compile-primitive.md`.
  */
 
+import { matchGlob } from "./glob.js";
+import { inScope } from "./workstreamScope.js";
+
 /**
  * Execution levers an agent's persona/affect can set. Canonical shape shared
  * across surfaces; `agent-runtime`'s `PsychometricExecParams` is an alias of this,
@@ -115,6 +118,13 @@ export interface PolicyGate {
   id: string;
   /** Tool this gate governs; omit (or `"*"`) to govern every tool call. */
   tool?: string;
+  /**
+   * Optional path globs / directory prefixes this gate is scoped to. A path-scoped
+   * gate matches only when the tool call's path hits one of these (via the existing
+   * {@link matchGlob} / {@link inScope} helpers — not a second matcher). Omit to
+   * govern the tool regardless of path. Empty after coerce is treated as omitted.
+   */
+  paths?: string[];
   effect: "inject-directive" | "require-approval" | "block";
   /** The instruction injected (inject-directive) or the human-readable reason. */
   directive?: string;
@@ -131,23 +141,69 @@ export interface AgentSpecPolicy {
  * a known `effect`. Shared so every surface that reads gates off the wire (the cloud
  * payload parser, the on-prem relay) validates them identically.
  */
+function coerceGatePaths(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const paths = v.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((s) => s.trim());
+  return paths.length ? paths : undefined;
+}
+
 export function coercePolicyGates(raw: unknown): PolicyGate[] {
   if (!Array.isArray(raw)) return [];
   const out: PolicyGate[] = [];
   for (const g of raw) {
     if (!g || typeof g !== "object") continue;
-    const { id, tool, effect, directive, reason } = g as Record<string, unknown>;
+    const { id, tool, effect, directive, reason, paths } = g as Record<string, unknown>;
     if (typeof id !== "string") continue;
     if (effect !== "inject-directive" && effect !== "require-approval" && effect !== "block") continue;
+    const coercedPaths = coerceGatePaths(paths);
     out.push({
       id,
       effect,
       ...(typeof tool === "string" ? { tool } : {}),
+      ...(coercedPaths ? { paths: coercedPaths } : {}),
       ...(typeof directive === "string" ? { directive } : {}),
       ...(typeof reason === "string" ? { reason } : {}),
     });
   }
   return out;
+}
+
+/**
+ * Paths a tool call is acting on, extracted from the common arg shapes (`path`,
+ * `filePath`, `oldPath`, `newPath`, `paths[]`). The hook call sites pass into
+ * {@link evaluatePolicyGate} so a path-scoped gate can match without each engine
+ * re-implementing extraction.
+ */
+export function toolCallPaths(args: Record<string, unknown> | undefined): string[] {
+  if (!args) return [];
+  const out: string[] = [];
+  const add = (v: unknown) => {
+    if (typeof v === "string" && v.trim()) out.push(v.trim());
+  };
+  add(args.path);
+  add(args.filePath);
+  add(args.oldPath);
+  add(args.newPath);
+  if (Array.isArray(args.paths)) {
+    for (const p of args.paths) add(p);
+  }
+  return out;
+}
+
+function pathHitsPattern(path: string, pattern: string): boolean {
+  return matchGlob(path, pattern) || inScope(path, [pattern]);
+}
+
+function gateMatchesPath(g: PolicyGate, callPath?: string | readonly string[]): boolean {
+  const patterns = g.paths;
+  if (!patterns || patterns.length === 0) return true;
+  const callPaths = (Array.isArray(callPath) ? callPath : callPath ? [callPath] : [])
+    .map((p) => p.trim())
+    .filter(Boolean);
+  // Path-scoped but the seam did not pass a path: do not match. Existing call
+  // sites that only pass toolName keep today's tool-only behaviour.
+  if (callPaths.length === 0) return false;
+  return callPaths.some((p) => patterns.some((pat) => pathHitsPattern(p, pat)));
 }
 
 /**
@@ -225,13 +281,14 @@ export function bulletBlock(header: string, items: readonly string[]): string {
 /** Render one {@link PolicyGate} as a binding system-prompt line. */
 function policyGateDirective(g: PolicyGate): string {
   const scope = !g.tool || g.tool === "*" ? "any tool" : `the \`${g.tool}\` tool`;
+  const pathScope = g.paths?.length ? ` on ${g.paths.map((p) => `\`${p}\``).join(", ")}` : "";
   switch (g.effect) {
     case "inject-directive":
       return (g.directive ?? "").trim();
     case "require-approval":
-      return `Before using ${scope}, pause and request explicit human approval${g.reason ? ` (${g.reason})` : ""}.`;
+      return `Before using ${scope}${pathScope}, pause and request explicit human approval${g.reason ? ` (${g.reason})` : ""}.`;
     case "block":
-      return `Never use ${scope}${g.reason ? ` — ${g.reason}` : ""}. Refuse and explain instead.`;
+      return `Never use ${scope}${pathScope}${g.reason ? ` — ${g.reason}` : ""}. Refuse and explain instead.`;
   }
 }
 
@@ -257,13 +314,20 @@ export type PolicyDecision =
  * Hard-enforce the policy gates for a pending tool call. Pure and surface-agnostic
  * so every engine (cloud tick, on-prem loop, workflow node) enforces governance the
  * same way: call this before invoking a tool and honour the decision. `block` wins
- * over `require-approval` when both match. Gates with no `tool` (or `"*"`) match all.
+ * over `require-approval` when both match. Gates with no `tool` (or `"*"`) match all
+ * tools; gates with `paths` additionally require the call path to hit a configured
+ * glob or directory prefix. Pass `path` from {@link toolCallPaths} when the seam
+ * has args — omitting it leaves path-scoped gates unmatched (existing call sites
+ * keep tool-only behaviour).
  */
 export function evaluatePolicyGate(
   gates: readonly PolicyGate[] | undefined,
   toolName: string,
+  path?: string | readonly string[],
 ): PolicyDecision {
-  const matches = (gates ?? []).filter((g) => !g.tool || g.tool === "*" || g.tool === toolName);
+  const matches = (gates ?? []).filter(
+    (g) => (!g.tool || g.tool === "*" || g.tool === toolName) && gateMatchesPath(g, path),
+  );
   const blocked = matches.find((g) => g.effect === "block");
   if (blocked) return { action: "block", gateId: blocked.id, reason: blocked.reason ?? "blocked by policy" };
   const approval = matches.find((g) => g.effect === "require-approval");
