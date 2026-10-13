@@ -48,6 +48,7 @@ import { MemberConsolidationPanel } from '@/components/contributors/MemberConsol
 import { AgentOwnerActions } from './AgentOwnerActions';
 import { AgentTypePill } from '@/components/AgentTypePill';
 import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
+import { ManagedAgentHostPanel } from './ManagedAgentHostPanel';
 import { BuiltinKindBadge } from '@/components/BuiltinKindBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatAgentPrice } from '@/lib/agentPresentation';
@@ -439,6 +440,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       <div style={{ marginBottom: 16 }}>
         <ActiveRunsPanel />
       </div>
+      <ManagedAgentHostPanel tenantId={tenantId} />
 
       {error && !dialogOpen && (
         <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--error-text)' }}>{error}</div>

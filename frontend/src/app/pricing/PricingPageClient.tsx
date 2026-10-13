@@ -106,6 +106,7 @@ export default function PricingPageClient() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [discountCode, setDiscountCode] = useState('');
   const [seats, setSeats] = useState(1); // Clamped once the public entitlement contract loads.
+  const [hostQuantity, setHostQuantity] = useState(1);
   const [downgrading, setDowngrading] = useState(false);
 
   const fetchSub = async () => {
@@ -425,6 +426,36 @@ export default function PricingPageClient() {
                   else openCart();
                 }}>{hasItem('service:business-phone') ? t('phone.viewCart') : t('phone.addToCart')}</button>
                 <small>{t('phone.eligibility')}</small>
+              </div>
+            </section>
+          )}
+
+          {publicPricing?.pricing.managedAgentHost && (
+            <section className={styles.hostOffer} aria-labelledby="managed-agent-host-title">
+              <div className={styles.phoneOfferCopy}>
+                <p className={styles.eyebrow}>{t('managedHost.eyebrow')}</p>
+                <h2 id="managed-agent-host-title">{t('managedHost.title')}</h2>
+                <p>{t('managedHost.description')}</p>
+              </div>
+              <div className={styles.phonePriceCard}>
+                <span>{t('managedHost.addonFor')}</span>
+                <strong>{formatAddonPrice(publicPricing.pricing.managedAgentHost.perAgentHostMonthly)}<small>{t('managedHost.perMonth')}</small></strong>
+                <div className={styles.hostQuantity} role="group" aria-label={t('managedHost.quantity')}>
+                  <button type="button" className={styles.qtyButton} aria-label={t('managedHost.decrease')} onClick={() => setHostQuantity((n) => Math.max(1, n - 1))}>−</button>
+                  <span>{hostQuantity}</span>
+                  <button type="button" className={styles.qtyButton} aria-label={t('managedHost.increase')} onClick={() => setHostQuantity((n) => Math.min(99, n + 1))}>+</button>
+                </div>
+                {isAnon ? (
+                  <Link href="/login?next=/pricing" className={styles.primaryButton}>{t('managedHost.signIn')}</Link>
+                ) : (
+                  <button type="button" className={styles.primaryButton} onClick={() => {
+                    const id = 'service:managed-agent-host';
+                    const price = publicPricing.pricing.managedAgentHost.perAgentHostMonthly * hostQuantity;
+                    if (!hasItem(id)) addItem({ id, type: 'service', slug: 'managed-agent-host', name: t('managedHost.title'), price, pricingModel: 'subscription', priceUnit: t('managedHost.perMonth'), checkoutKind: 'managed_agent_host', seats: hostQuantity, emoji: 'host' });
+                    else openCart();
+                  }}>{hasItem('service:managed-agent-host') ? t('managedHost.viewCart') : t('managedHost.addToCart')}</button>
+                )}
+                <small>{t('managedHost.eligibility')}</small>
               </div>
             </section>
           )}

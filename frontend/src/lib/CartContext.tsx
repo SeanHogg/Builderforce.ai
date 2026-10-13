@@ -24,7 +24,7 @@ export interface CartItem {
   emoji?: string;
   image?: string;
   setupFee?: number;
-  checkoutKind?: 'business_phone' | 'plan_subscription';
+  checkoutKind?: 'business_phone' | 'plan_subscription' | 'managed_agent_host';
   targetPlan?: 'pro' | 'teams';
   billingCycle?: 'monthly' | 'yearly';
   seats?: number;

@@ -220,7 +220,10 @@ import { evaluateCronGate, readScheduleStall, signalPendingWork } from '../../ap
 import { createTickDispatchBudget } from '../../application/runtime/tickDispatchBudget';
 import { API_VERSION } from '../../version';
 import { getPricingDraft, publishPricing, savePricingDraft } from '../../application/tenant/pricingConfiguration';
-import { provisionManagedAgentHostRequest } from '../../application/tenant/managedAgentHostSubscription';
+import {
+  provisionManagedAgentHostRequest,
+  type ManagedAgentHostRequestStatus,
+} from '../../application/tenant/managedAgentHostSubscription';
 import { coerceStringArray } from '../../domain/shared/jsonColumn';
 import { daysParam, limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
@@ -439,22 +442,18 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid request id' }, 400);
     const body = await parseBody(c, ManagedAgentHostProvisionBody);
-    try {
-      const updated = await provisionManagedAgentHostRequest(db, id, {
-        status: body.status,
-        agentHostId: body.agentHostId ?? null,
-      });
-      const actorId = c.get('userId') as string;
-      await writeAudit(db, 'MANAGED_AGENT_HOST_PROVISIONED', actorId, {
-        metadata: { requestId: id, status: body.status, agentHostId: body.agentHostId ?? null },
-      });
-      return c.json({ request: updated });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Provision failed';
-      if (message === 'Managed AgentHost request not found') return c.json({ error: message }, 404);
-      if (message === 'Cannot provision a cancelled Managed AgentHost request') return c.json({ error: message }, 409);
-      return c.json({ error: message }, 400);
-    }
+    if (!body.status) return c.json({ error: 'status is required' }, 400);
+    const result = await provisionManagedAgentHostRequest(db, {
+      requestId: id,
+      status: body.status as ManagedAgentHostRequestStatus,
+      agentHostId: body.agentHostId ?? null,
+    });
+    if ('error' in result) return c.json({ error: result.error.error }, result.error.status);
+    const actorId = c.get('userId') as string;
+    await writeAdminAudit(db, 'MANAGED_AGENT_HOST_PROVISIONED', actorId, {
+      metadata: { requestId: id, status: body.status, agentHostId: body.agentHostId ?? null },
+    });
+    return c.json({ request: result.request });
   });
 
   // Draft saves never touch the public cache. Only the explicit publication

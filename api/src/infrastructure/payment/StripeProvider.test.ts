@@ -292,6 +292,34 @@ describe('Marketplace listing checkout', () => {
   });
 });
 
+describe('Managed AgentHost checkout', () => {
+  it('bills one monthly line at the requested host quantity and stamps purchaseKind on session and subscription metadata', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id: 'cs_host', url: 'https://checkout.stripe.test/host', customer: null }), { status: 200 })));
+    await makeProvider().createManagedAgentHostCheckoutSession({
+      tenantId: 11, cartId: 'cart-host', billingEmail: 'ops@example.com', currency: 'USD', monthlyCents: 4900, quantity: 3,
+      successUrl: 'https://builderforce.ai/pricing?managedHost=success', cancelUrl: 'https://builderforce.ai/pricing?managedHost=cancelled',
+    });
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const body = new URLSearchParams(String(init?.body));
+    expect(body.get('mode')).toBe('subscription');
+    expect(body.get('line_items[0][quantity]')).toBe('3');
+    expect(body.get('line_items[0][price_data][unit_amount]')).toBe('4900');
+    expect(body.get('line_items[0][price_data][recurring][interval]')).toBe('month');
+    expect(body.get('line_items[1][quantity]')).toBeNull();
+    expect(body.get('metadata[purchaseKind]')).toBe('managed_agent_host');
+    expect(body.get('metadata[quantity]')).toBe('3');
+    expect(body.get('subscription_data[metadata][purchaseKind]')).toBe('managed_agent_host');
+    expect(body.get('subscription_data[metadata][quantity]')).toBe('3');
+  });
+
+  it('normalizes checkout completion as an add-on event, not a base-plan activation', async () => {
+    const payload = JSON.stringify({ type: 'checkout.session.completed', data: { object: { mode: 'subscription', customer: 'cus_host', subscription: 'sub_host', customer_email: 'ops@example.com', metadata: { tenantId: '11', purchaseKind: 'managed_agent_host', cartId: 'cart-host', monthlyCents: '4900', quantity: '3' } } } });
+    const event = await makeProvider().parseWebhook(payload, await sign(payload));
+    expect(event).toMatchObject({ type: 'addon.activated', purchaseKind: 'managed_agent_host', tenantId: 11 });
+    expect(event?.type).not.toBe('subscription.activated');
+  });
+});
+
 describe('self-named purchases never activate the workspace plan', () => {
   const completed = (mode: string, metadata: Record<string, string>) => JSON.stringify({
     type: 'checkout.session.completed',
