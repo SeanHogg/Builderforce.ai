@@ -17,13 +17,11 @@
  * crowd, publish a form, grade what came back) maps onto the same four
  * proof-lifecycle actions the realization API writes, so the north-star
  * "ideas reaching a graded proof" counts a founder who never left the board.
- * Publishing a form is both a real deliverable (`artifact.publish`) and a
- * built proof (`proof.build`) because the join URL is an address a person
- * can open. Grading is `proof.grade` with `metricValue` 1 or 0.
- *
- * An experiment whose numbers were typed (`evidence.authored`) can still be
- * graded — that is a measurement of authored counts, and the metadata says
- * so. Binding live traffic is a different ticket.
+ * Publishing a form or poll is both a real deliverable (`artifact.publish`)
+ * and a built proof (`proof.build`) because the join URL is an address a
+ * person can open. Grading is `proof.grade` with `metricValue` 1 or 0.
+ * Binding live experiment traffic is a different ticket — an authored table
+ * is not a measured split.
  */
 
 export type CanvasOutcomeSuccessPhase = 'succeeded' | 'validated' | 'reused';
