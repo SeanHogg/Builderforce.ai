@@ -1082,6 +1082,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
           nodes={nodes} editable={cardsEditable} updateNodeData={updateNodeData} appendAtCenter={appendAtCenter} revealObject={revealObject}
           conversation={brainConversation} roster={rosterMembers} openGamePanel={openGamePanel} setShareOpen={setShareOpen} doors={{ prove: sessionActionHandlers.prove, publish: sessionActionHandlers.publish, openListing: openPublishPanel, openReleases: openReleasesPanel, openSocial: () => { if (connectedAccountGate(tSocial('title'))) setDockPanel('social'); } }}
           resume={{ tailorResumeFromNode, detachResumeFromNode, createResumeShare, listResumeShares, revokeResumeShare }}
+          composeDraft={(text: string) => { setPrompt(text); if (effectivePromptPlacement === 'closed') setPromptPlacement('float'); }}
           room={<CanvasRoomStage
             title={title} members={roomOccupants} speech={roomSpeechBySeat} onSelectSpeech={revealSpeechInChat} currentUserId={rosterSelfId} live={livePresence}
             onPresence={sendPresence} sceneInput={roomSceneInput} brainSurface={brainSurface} threeDNodes={threeDNodes} edges={edges} describe={describeThreeD}

@@ -1,5 +1,6 @@
 import { TenantPlan } from '../shared/types';
 import { PlanLimits, PLAN_LIMITS, getLimits } from './PlanLimits';
+import { capabilityForFeature } from './capabilityFeatures';
 
 /**
  * Plan-feature entitlement — the single, pure evaluator every paid-plan gate uses.
@@ -10,9 +11,12 @@ import { PlanLimits, PLAN_LIMITS, getLimits } from './PlanLimits';
  * order:
  *
  *   1. superadmin        → yes (platform operators never hit a plan wall)
- *   2. premiumOverride   → yes (comped / beta grant on the tenant)
+ *   2. premiumOverride   → yes (comped / beta grant on the tenant) — PLAN features only;
+ *                          a marketplace capability is installed, never comped
  *   3. plan grants it    → yes
- *   4. otherwise         → no, and it reports WHICH plan unlocks it
+ *   4. capability held   → yes (the tenant holds a live licence for a capability
+ *                          listing that grants it — `CAPABILITY_FEATURES`)
+ *   5. otherwise         → no, and it reports WHICH plan (or capability) unlocks it
  *
  * Pure + dependency-light (PlanLimits + the enum only) so the route gate, the
  * attach-decision helpers, and unit tests share ONE implementation and can never
@@ -45,6 +49,7 @@ export const PLAN_FEATURE_LABEL: Record<PlanFeature, string> = {
   containerRuntime: 'cloud agents with a real shell and a repo clone',
   removeBranding: 'removing the Builderforce badge from your published sites',
   serverVideoRender: 'rendering movies on the server',
+  sessionReplay: 'Insights (session replay, heatmaps and live visitors)',
 };
 
 /**
@@ -91,9 +96,14 @@ export interface FeatureEntitlementInput {
   premiumOverride: boolean;
   /** The CALLER is a platform superadmin — always bypasses the gate. */
   isSuperadmin: boolean;
+  /**
+   * Features the tenant holds through capability licences (`heldCapabilityFeatures`).
+   * Optional: a caller that never asks about a capability feature need not load them.
+   */
+  heldFeatures?: readonly PlanFeature[];
 }
 
-export type EntitlementReason = 'superadmin' | 'premium_override' | 'plan' | 'not_entitled';
+export type EntitlementReason = 'superadmin' | 'premium_override' | 'plan' | 'capability' | 'not_entitled';
 
 export interface FeatureEntitlement {
   entitled: boolean;
@@ -104,6 +114,8 @@ export interface FeatureEntitlement {
   currentPlan: TenantPlan;
   /** The lowest plan that unlocks `feature` — what to advertise on a miss. */
   requiredPlan: TenantPlan;
+  /** The capability listing (slug) that unlocks `feature`, or null for a plan feature. */
+  capability: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -224,14 +236,17 @@ export function premiumModelGateBody(access: PremiumModelAccess) {
 
 /** THE evaluator. Pure — same inputs always yield the same verdict. */
 export function evaluateFeatureEntitlement(input: FeatureEntitlementInput): FeatureEntitlement {
+  const capability = capabilityForFeature(input.feature);
   const base = {
     feature: input.feature,
     label: PLAN_FEATURE_LABEL[input.feature],
     currentPlan: input.effectivePlan,
     requiredPlan: requiredPlanForFeature(input.feature),
+    capability,
   };
   if (input.isSuperadmin) return { ...base, entitled: true, reason: 'superadmin' };
-  if (input.premiumOverride) return { ...base, entitled: true, reason: 'premium_override' };
+  if (input.premiumOverride && capability === null) return { ...base, entitled: true, reason: 'premium_override' };
   if (getLimits(input.effectivePlan)[input.feature]) return { ...base, entitled: true, reason: 'plan' };
+  if (input.heldFeatures?.includes(input.feature)) return { ...base, entitled: true, reason: 'capability' };
   return { ...base, entitled: false, reason: 'not_entitled' };
 }

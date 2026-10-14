@@ -53,6 +53,13 @@ export const TENANT_API_SCOPES = [
   'read:canvas',       // list/read boards and the objects on them
   'write:canvas',      // create/update/delete objects on a board
   'manage:widgets',    // register and update third-party canvas widgets
+  // ── Insights (PRD 33) ──────────────────────────────────────────────────────
+  // `replay:ingest` is the ONLY scope a site key (`bfr_*`) carries: the key is public
+  // (it is in the loader tag on every page), so it may send recordings from its
+  // allowed origins and nothing else. `replay:read` is the read/export API scope for
+  // a server-side `bfk_*` key.
+  'replay:ingest',     // POST /api/replay-ingest/v1/* from the site's origins
+  'replay:read',       // read recordings, issues and rollups through the export API
 ] as const;
 
 export type TenantApiScope = (typeof TENANT_API_SCOPES)[number];
@@ -82,6 +89,25 @@ export function keyHasScope(scopes: string[] | null, required: TenantApiScope): 
   return sharedHasScope(scopes, required);
 }
 
+/**
+ * May a key with these stored scopes be exchanged for a member session
+ * (`/api/auth/tenant-api-key-token`)? Only an UNRESTRICTED key may: a scoped key is a
+ * least-privilege service token, and minting a full tenant JWT from it would turn
+ * "may send recordings" into "may do anything the creator can" — fatal for a public
+ * `bfr_` site key.
+ */
+export function keyMayActAsMember(scopes: string[] | null): boolean {
+  return !scopes || scopes.length === 0;
+}
+
+/** The prefix of the public Insights site key — see `HashService.generateApiKey`. */
+export const SITE_KEY_PREFIX = 'bfr_';
+
+/** The `client` a site key is minted with (not a device-flow app). */
+export const REPLAY_KEY_CLIENT = 'replay';
+
+export type TenantApiKeyClient = DeviceClient | typeof REPLAY_KEY_CLIENT;
+
 export interface TenantApiKeyRow {
   id:               string;
   name:             string;
@@ -110,8 +136,13 @@ export interface MintTenantApiKeyInput {
   name:            string;
   /** User minting the key. Null for system / admin-on-behalf calls. */
   createdByUserId: string | null;
-  /** The device-flow app the key is minted for; null for a key made by hand. */
-  client?: DeviceClient | null;
+  /** The device-flow app the key is minted for (or `replay` for a site key); null for a key made by hand. */
+  client?: TenantApiKeyClient | null;
+  /**
+   * `bfk` (default) for a gateway/service key; `bfr` for a public Insights site key,
+   * which must be scoped to `replay:ingest` alone and bound to origins.
+   */
+  prefix?: 'bfk' | 'bfr';
   /**
    * Browser origin allowlist:
    *   - undefined / null  → server-only key (any request with `Origin` header is rejected at auth time)
@@ -144,7 +175,16 @@ export async function mintTenantApiKey(
   db: Db,
   input: MintTenantApiKeyInput,
 ): Promise<MintedTenantApiKey> {
-  const rawKey  = generateApiKey('bfk');
+  const prefix = input.prefix ?? 'bfk';
+  if (prefix === 'bfr') {
+    // A public key with any power beyond ingest, or with no origin binding, would be
+    // a credential published on a stranger's web page. Refuse to mint one.
+    const scopes = input.scopes ?? [];
+    if (scopes.length !== 1 || scopes[0] !== 'replay:ingest' || !input.allowedOrigins?.length) {
+      throw new Error('A bfr_ site key must carry only replay:ingest and at least one allowed origin');
+    }
+  }
+  const rawKey  = generateApiKey(prefix);
   const keyHash = await hashSecret(rawKey);
 
   const [row] = await db
@@ -405,6 +445,11 @@ export async function revokeTenantApiKeyByRawKey(
 ): Promise<boolean> {
   const raw = args.rawKey?.trim();
   if (!raw) return false;
+  // Possession authorizes revocation only for a SECRET key. A `bfr_` site key is
+  // public (it is in the page source of the customer's site), so holding it proves
+  // nothing — anyone could switch a customer's recording off. Site keys are revoked
+  // by a member, through the site.
+  if (raw.startsWith(SITE_KEY_PREFIX)) return false;
   const keyHash = await hashSecret(raw);
 
   const [row] = await db

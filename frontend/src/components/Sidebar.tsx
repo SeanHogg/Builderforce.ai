@@ -17,6 +17,7 @@ import { signInHref } from '@/lib/auth';
 import { ButtonLink } from '@/components/ui';
 import SessionList from './SessionList';
 import { NavIcon } from './navigation/NavIcon';
+import { InstalledAppsNav } from './navigation/InstalledAppsNav';
 import { isStageRoute } from '@/lib/workbenchPolicy';
 import { useNavGroups } from '@/lib/destinations/useDestinations';
 import { LegalStrip } from './legal/LegalStrip';
@@ -262,6 +263,8 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
               );
             })}
           </div>
+          {/* Capability apps this workspace installed from the marketplace. */}
+          {isAuthenticated && <InstalledAppsNav pathname={pathname} collapsed={collapsed} onNavigate={onMobileClose} />}
         </div>
 
         {/* THE BOTTOM OF THE RAIL — pinned there, not trailing the stage list.

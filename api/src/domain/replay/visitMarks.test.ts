@@ -1,66 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import { REPLAY_LIMITS, type ReplayMark } from '@builderforce/interaction-contract';
-import { marksToInsert } from './visitMarks';
+import { appendMarks, marksToAppend } from './visitMarks';
 
-function mark(kind: string, atMs: number): ReplayMark {
-  return { kind, key: `${kind}-${atMs}`, atMs };
-}
+const mark = (kind: ReplayMark['kind'], atMs: number, key = 'k'): ReplayMark => ({ kind, key, atMs });
+const CAP = REPLAY_LIMITS.maxMarksPerVisit;
 
-describe('marksToInsert', () => {
-  it('assigns ord after the existing count', () => {
-    const inserted = marksToInsert(4, {
-      visitId: 'v1',
-      seq: 0,
-      events: [],
-      marks: [mark('page', 0), mark('click', 10)],
-    });
-    expect(inserted.map((m) => m.ord)).toEqual([4, 5]);
-    expect(inserted[0]?.kind).toBe('page');
+describe('marksToAppend', () => {
+  it('appends everything while there is room', () => {
+    const marks = [mark('page', 0, '/'), mark('click', 1)];
+    expect(marksToAppend(0, marks)).toEqual(marks);
   });
 
-  it('inserts nothing once the visit is at the cap', () => {
-    expect(
-      marksToInsert(REPLAY_LIMITS.maxMarksPerVisit, {
-        visitId: 'v1',
-        seq: 0,
-        events: [],
-        marks: [mark('error', 1)],
-      }),
-    ).toEqual([]);
+  it('appends nothing once the visit is full', () => {
+    expect(marksToAppend(CAP, [mark('page', 0)])).toEqual([]);
+    expect(marksToAppend(CAP + 10, [mark('page', 0)])).toEqual([]);
   });
 
-  it('drops plain clicks first when the incoming batch would overflow', () => {
-    const room = 3;
-    const existing = REPLAY_LIMITS.maxMarksPerVisit - room;
-    const inserted = marksToInsert(existing, {
-      visitId: 'v1',
-      seq: 0,
-      events: [],
-      marks: [
-        mark('click', 1),
-        mark('page', 2),
-        mark('click', 3),
-        mark('error', 4),
-        mark('click', 5),
-        mark('rage', 6),
-      ],
-    });
-    expect(inserted.map((m) => m.kind)).toEqual(['page', 'error', 'rage']);
-    expect(inserted.map((m) => m.ord)).toEqual([existing, existing + 1, existing + 2]);
+  it('drops the latest plain clicks first when the chunk would overflow', () => {
+    const marks = [mark('click', 1, 'early'), mark('rage', 2), mark('click', 3, 'late'), mark('error', 4)];
+    const out = marksToAppend(CAP - 3, marks);
+    expect(out.map((m) => m.key)).toEqual(['early', 'k', 'k']);
+    expect(out.map((m) => m.kind)).toEqual(['click', 'rage', 'error']);
   });
 
-  it('still trims protected marks from the end if they alone exceed the room', () => {
-    const existing = REPLAY_LIMITS.maxMarksPerVisit - 1;
-    const inserted = marksToInsert(existing, {
-      visitId: 'v1',
-      seq: 0,
-      events: [],
-      marks: [mark('page', 1), mark('error', 2)],
-    });
-    expect(inserted.map((m) => m.kind)).toEqual(['page']);
+  it('truncates to the room left when there are no clicks to drop', () => {
+    const marks = [mark('page', 1), mark('rage', 2), mark('error', 3)];
+    expect(marksToAppend(CAP - 2, marks).map((m) => m.kind)).toEqual(['page', 'rage']);
   });
+});
 
-  it('returns [] when the chunk has no marks', () => {
-    expect(marksToInsert(0, { visitId: 'v1', seq: 0, events: [{ t: 0, kind: 'click' }] })).toEqual([]);
+describe('appendMarks', () => {
+  it('returns the stored timeline ordered by time', () => {
+    const out = appendMarks([mark('page', 50, '/b')], [mark('page', 10, '/a')]);
+    expect(out.map((m) => m.key)).toEqual(['/a', '/b']);
   });
 });

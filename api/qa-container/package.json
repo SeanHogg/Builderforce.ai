@@ -6,7 +6,8 @@
   "description": "Cloudflare Container runner for the Agentic Tester (heatmap-driven browser exploration).",
   "main": "server.mjs",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "playwright": "1.58.2"

@@ -1,0 +1,147 @@
+/*
+ * Heatmap palette and frame (PRD 33 §4.3, §8 S4).
+ *
+ * The colour ramp is ONLY these custom properties: `HeatmapOverlay` reads them
+ * with getComputedStyle and interpolates between them on its canvas, so a
+ * theme (or a buyer's palette) changes the heat by changing a token. Each is
+ * a design token, so both themes are covered with no literal colour.
+ */
+
+.palette {
+  --heat-cold: var(--accent);
+  --heat-hot: var(--error);
+  /* Difference mode: where the compare release had MORE than this one. */
+  --heat-drop: var(--success);
+}
+
+.frame {
+  position: relative;
+  width: 100%;
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.page {
+  position: relative;
+  transform-origin: top left;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+.legendRamp {
+  display: inline-block;
+  width: 96px;
+  height: 10px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(to right, var(--heat-cold), var(--heat-hot));
+}
+
+.legendRampDiff {
+  background: linear-gradient(to right, var(--heat-drop), var(--surface-card), var(--heat-hot));
+}
+
+.zone {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.zoneHighlight {
+  border-color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+}
+
+.zoneLabel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 2px 6px;
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  color: var(--text-on-accent);
+  background: var(--accent);
+  border-bottom-right-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.stages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.control {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.control select {
+  min-height: 44px;
+  max-width: 100%;
+}
+
+.tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.tabs button {
+  min-height: 44px;
+}
+
+.rowActive td {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.scrollRow {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-small);
+}
+
+.scrollTrack {
+  height: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.scrollFill {
+  height: 100%;
+  background: var(--accent);
+}

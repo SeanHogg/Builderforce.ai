@@ -4,11 +4,36 @@ const tenantHasFeature = vi.fn<(...args: unknown[]) => Promise<boolean>>();
 vi.mock('../tenant/featureEntitlements', () => ({ tenantHasFeature: (...args: unknown[]) => tenantHasFeature(...args) }));
 
 import type { Env } from '../../env';
-import { SITE_BADGE_LABEL, SITE_BADGE_URL, injectSiteBadge, withSiteBadge } from './siteAttribution';
+import { SITE_BADGE_LABEL, SITE_BADGE_URL, injectBeforeBodyClose, injectSiteBadge, withSiteBadge } from './siteAttribution';
 
 const env = {} as Env;
 const html = (body: string, headers: Record<string, string> = { 'content-type': 'text/html; charset=utf-8' }) =>
   new Response(body, { status: 200, headers: { ...headers, 'content-length': String(body.length) } });
+
+describe('injectBeforeBodyClose', () => {
+  it('inserts before the LAST </body>, case-insensitively', () => {
+    const out = injectBeforeBodyClose('<body><template></body></template><p>x</p></BODY>', 'm1', '<i id="m1"></i>');
+    expect(out).toBe('<body><template></body></template><p>x</p><i id="m1"></i></BODY>');
+  });
+
+  it('appends to a fragment that has no </body>', () => {
+    expect(injectBeforeBodyClose('<p>x</p>', 'm1', '<i id="m1"></i>')).toBe('<p>x</p><i id="m1"></i>');
+  });
+
+  it('is a no-op when the marker is already present as an id or a data-bf-marker', () => {
+    const withId = '<body><i id="m1"></i></body>';
+    expect(injectBeforeBodyClose(withId, 'm1', '<i id="m1"></i>')).toBe(withId);
+    const withAttr = '<body><script data-bf-marker="m2"></script></body>';
+    expect(injectBeforeBodyClose(withAttr, 'm2', '<script data-bf-marker="m2"></script>')).toBe(withAttr);
+  });
+
+  it('keeps two different markers independent (badge + loader on one page)', () => {
+    const once = injectBeforeBodyClose(injectSiteBadge('<body></body>'), 'bf-replay-loader', '<script data-bf-marker="bf-replay-loader"></script>');
+    expect(once).toContain('id="bf-made-with"');
+    expect(once).toContain('data-bf-marker="bf-replay-loader"');
+    expect(injectSiteBadge(once)).toBe(once);
+  });
+});
 
 describe('injectSiteBadge', () => {
   it('puts a plain, crawlable backlink before the last </body>', () => {

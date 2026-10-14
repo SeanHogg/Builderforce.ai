@@ -81,7 +81,15 @@ export async function recordSiteRelease(input: {
     .from(siteReleases)
     .where(scopedToTenant(siteReleases, tenantId, eq(siteReleases.siteId, siteId)))
     .orderBy(desc(siteReleases.publishedAt));
+  // The release the site is SERVING is never pruned: a run of preview releases
+  // (`publishPreviewRelease`, which does not move the pointer) can be newer than it.
+  const [live] = await apps
+    .select({ r2Prefix: projectSites.r2Prefix })
+    .from(projectSites)
+    .where(scopedToTenant(projectSites, tenantId, eq(projectSites.id, siteId)))
+    .limit(1);
   for (const stale of all.slice(MAX_RELEASES_PER_SITE)) {
+    if (live && stale.r2Prefix === live.r2Prefix) continue;
     for (const object of (await bucket.list({ prefix: stale.r2Prefix })).objects ?? []) {
       await bucket.delete(object.key!);
     }

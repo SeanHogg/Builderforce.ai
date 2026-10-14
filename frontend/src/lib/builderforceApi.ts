@@ -3227,8 +3227,8 @@ export const dashboardApi = {
 // Mirrors `api/src/application/consumption/meters.ts` exactly. A key the server
 // emits and this union omits used to reach the UI as `undefined` everywhere the
 // meter was looked up by key — see `UsageMeter.tsx`, which no longer trusts it.
-export type MeterKey = 'ai_tokens' | 'cloud_runs' | 'stage_sandbox_runs' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'feedback_submissions';
-export type MeterUnit = 'tokens' | 'runs' | 'sandbox_runs' | 'bytes' | 'events' | 'fetches' | 'submissions';
+export type MeterKey = 'ai_tokens' | 'cloud_runs' | 'stage_sandbox_runs' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'feedback_submissions' | 'replay_recordings';
+export type MeterUnit = 'tokens' | 'runs' | 'sandbox_runs' | 'bytes' | 'events' | 'fetches' | 'submissions' | 'recordings';
 
 export interface MeterSnapshot {
   key: MeterKey;
@@ -3253,7 +3253,7 @@ export type PlanFeatureKey =
   | 'approvalWorkflows' | 'fleetMesh' | 'fullTelemetry' | 'customAgentRoles'
   | 'psychometricPersona' | 'teamApprovalInbox' | 'seatCostControls'
   | 'voiceCloning' | 'advancedInsights' | 'evermindTraining' | 'livePreview'
-  | 'containerRuntime' | 'removeBranding' | 'serverVideoRender';
+  | 'containerRuntime' | 'removeBranding' | 'serverVideoRender' | 'sessionReplay';
 
 export interface ConsumptionSnapshot {
   period: { start: string; resetsAt: string };
@@ -3270,6 +3270,8 @@ export interface ConsumptionSnapshot {
     entitled: Partial<Record<PlanFeatureKey, boolean>>;
     requiredPlan: Partial<Record<PlanFeatureKey, 'free' | 'pro' | 'teams'>>;
   };
+  /** `tenants.settings.replayExcluded` (PRD 33 D9): never record this workspace's members. */
+  replayExcluded?: boolean;
 }
 
 export const consumptionApi = {
@@ -9444,144 +9446,6 @@ export const challengeApi = {
 
   blueprints: (): Promise<{ blueprints: BlueprintSummary[]; strategies: HostingStrategySummary[] }> =>
     request<{ blueprints: BlueprintSummary[]; strategies: HostingStrategySummary[] }>('/api/challenges/blueprints'),
-};
-
-// ---------------------------------------------------------------------------
-// Realizations — idea → something a person can open
-// ---------------------------------------------------------------------------
-
-/** The eight proof forms. Mirrors `REALIZATION_KEYS` on the API. */
-export type RealizationKey =
-  | 'demo-video'
-  | 'clickable-prototype'
-  | 'smoke-test'
-  | 'wizard-of-oz'
-  | 'poc'
-  | 'pilot'
-  | 'phone-line'
-  | 'live-system';
-
-export interface RealizationTargetSummary {
-  key: RealizationKey;
-  name: string;
-  summary: string;
-  /** The question a stakeholder is really asking when they ask for this one. */
-  answers: string;
-  /** 1 = a sketch of the idea, 5 = the thing itself. */
-  fidelity: number;
-  /** 1 = an afternoon, 5 = weeks. */
-  effort: number;
-  suits: string[];
-  hasBackend: boolean;
-  /** Only the live system lets you choose which cloud it runs in. */
-  allowsStrategyChoice: boolean;
-}
-
-export interface RealizationRecommendation {
-  key: RealizationKey;
-  score: number;
-  reasons: string[];
-  recommended: boolean;
-}
-
-/** What the success criteria decided. Mirrors `REALIZATION_VERDICTS` on the API. */
-export type RealizationVerdict = 'met' | 'missed' | 'abandoned';
-
-/** The number that decided it — shape varies by target (a signup count against
- *  a sample, a pass rate against a trial count), so this stays loose rather
- *  than forcing one schema onto every proof. */
-export interface RealizationVerdictMetric {
-  metricLabel?: string;
-  metricValue?: number;
-  target?: number;
-  note?: string;
-  [key: string]: unknown;
-}
-
-export interface Realization {
-  id: string;
-  challengeId: string | null;
-  projectId: number | null;
-  /** The Creation Session whose idea this proof is of, when it had one. */
-  sessionId: string | null;
-  targetKey: RealizationKey;
-  title: string;
-  strategy: BackendStrategyKey;
-  status: 'planned' | 'building' | 'built' | 'failed';
-  /** The address a person can open. Null until it has been built and published. */
-  liveUrl: string | null;
-  spec: ChallengeSpec;
-  plan: ChallengePlan;
-  error: string | null;
-  /** Null until a console has called it, or a person has parked the idea. */
-  verdict: RealizationVerdict | null;
-  verdictMetric: RealizationVerdictMetric | null;
-  decidedAt: string | null;
-  createdAt: string | null;
-  updatedAt: string | null;
-}
-
-export interface RealizationBuildResult extends ChallengeBuildResult {
-  liveUrl: string | null;
-  publishedAssets: number;
-  collections: string[];
-}
-
-export const realizationApi = {
-  targets: (): Promise<{ targets: RealizationTargetSummary[]; strategies: HostingStrategySummary[] }> =>
-    request<{ targets: RealizationTargetSummary[]; strategies: HostingStrategySummary[] }>('/api/realizations/targets'),
-
-  list: (sessionId?: string): Promise<Realization[]> =>
-    request<{ realizations: Realization[] }>(
-      sessionId ? `/api/realizations?sessionId=${encodeURIComponent(sessionId)}` : '/api/realizations',
-    ).then((r) => r.realizations),
-
-  get: (id: string): Promise<Realization> =>
-    request<{ realization: Realization }>(`/api/realizations/${encodeURIComponent(id)}`).then((r) => r.realization),
-
-  /** Read an idea and rank the proofs. Persists nothing. */
-  /** Reading an idea persists nothing — except, when the idea belongs to a
-   *  board, that a READ happened. That is what `readBeforeBuildRate` counts. */
-  plan: (idea: string, sessionId?: string | null): Promise<{
-    spec: ChallengeSpec;
-    recommendations: RealizationRecommendation[];
-    targets: RealizationTargetSummary[];
-  }> =>
-    request('/api/realizations/plan', { method: 'POST', body: JSON.stringify({ idea, ...(sessionId ? { sessionId } : {}) }) }),
-
-  /** Choose a proof and plan it. Still builds nothing. */
-  create: (input: {
-    idea?: string;
-    challengeId?: string;
-    projectId?: number;
-    /** The board whose idea this proves. Recorded on the row, and the reason the
-     *  loop's outcome events have a session to attach to. */
-    sessionId?: string | null;
-    targetKey: RealizationKey;
-    strategy?: BackendStrategyKey;
-  }): Promise<Realization> =>
-    request<{ realization: Realization }>('/api/realizations', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }).then((r) => r.realization),
-
-  /** Build it, publish it, wire its forms. Idempotent. */
-  build: (id: string): Promise<{ realization: Realization | null; result: RealizationBuildResult }> =>
-    request<{ realization: Realization | null; result: RealizationBuildResult }>(
-      `/api/realizations/${encodeURIComponent(id)}/build`,
-      { method: 'POST' },
-    ),
-
-  remove: (id: string): Promise<{ ok: boolean }> =>
-    request<{ ok: boolean }>(`/api/realizations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-
-  /** Park it. The one verdict typed by a person rather than read from a
-   *  console — met/missed only ever come from the proof's own console. */
-  abandon: (id: string, note?: string): Promise<Realization> =>
-    request<{ realization: Realization }>(`/api/realizations/${encodeURIComponent(id)}/verdict`, {
-      method: 'PATCH',
-      body: JSON.stringify({ verdict: 'abandoned', ...(note ? { note } : {}) }),
-    }).then((r) => r.realization),
 };
 
 // ---------------------------------------------------------------------------

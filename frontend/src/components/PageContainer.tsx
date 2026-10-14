@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { REPLAY_PRIVACY_ATTRS, type ReplayPrivacy } from '@/lib/replaySensitive';
 
 type PageWidth = 'full' | 'readable' | 'narrow';
 
@@ -27,6 +28,9 @@ type PageContainerProps = {
   /** Override the default page padding (and any other container style). */
   style?: CSSProperties;
   className?: string;
+  /** Session-replay privacy for the whole page (`lib/replaySensitive.ts`): a page of
+   *  keys or payment details is `block`ed, never recorded. */
+  privacy?: ReplayPrivacy;
   children: ReactNode;
 };
 
@@ -50,7 +54,7 @@ const MAX: Record<PageWidth, string> = {
  * Full-bleed routes (the IDE, the Brain page, the workflow builder canvas) manage
  * their own layout and intentionally do NOT use this.
  */
-export default function PageContainer({ width = 'full', style, className, children }: PageContainerProps) {
+export default function PageContainer({ width = 'full', style, className, privacy, children }: PageContainerProps) {
   return (
     <div
       // `.page-container` owns the padding so it can shrink on mobile (a media
@@ -59,6 +63,7 @@ export default function PageContainer({ width = 'full', style, className, childr
       // still wins — inline beats the class.
       className={`page-container${className ? ` ${className}` : ''}`}
       data-width={width}
+      {...(privacy ? REPLAY_PRIVACY_ATTRS[privacy] : {})}
       style={{
         width: '100%',
         // A custom property rather than `max-width` directly: an inline

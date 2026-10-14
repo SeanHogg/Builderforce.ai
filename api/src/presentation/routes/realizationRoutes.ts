@@ -2,12 +2,14 @@
  * `/api/realizations` — turn an idea into something a person can open.
  *
  *   GET    /api/realizations/targets          the catalog + hosting strategies
- *   POST   /api/realizations/plan             read an idea, rank the proofs (writes nothing)
+ *   POST   /api/realizations/plan             read an idea, rank the proofs (writes nothing);
+ *                                              `priorRealizationId` reads it again with that proof's grade
  *   GET    /api/realizations                  the workspace's proofs
  *   POST   /api/realizations                  choose a target and plan it
- *   GET    /api/realizations/:id               also rolls up the proof's own console's verdict
+ *   GET    /api/realizations/:id               also rolls up the proof's verdict (`verdictChanged`)
+ *   (journey-signal, :id/measure, :id/call-early and :id/verdict — the reads that grade
+ *    a proof and the two verdicts a person sets — live in `realizationMeasureRoutes.ts`)
  *   POST   /api/realizations/:id/build        build it, publish it, wire its forms
- *   PATCH  /api/realizations/:id/verdict      park it — the one verdict a person sets
  *   DELETE /api/realizations/:id
  *
  * ── THE LOOP RECORDS ITSELF ─────────────────────────────────────────────────
@@ -37,7 +39,6 @@ import { parseBrief, type ChallengeSpec } from '../../application/challenge/pars
 import type { ChallengePlan } from '../../application/challenge/planChallenge';
 import { planRealization } from '../../application/realization/planRealization';
 import {
-  abandonRealization,
   createRealization,
   deleteRealization,
   getRealization,
@@ -51,6 +52,9 @@ import { proofReachable, recordProofOutcome } from '../../application/realizatio
 import { resolveOutcomeSession } from '../../application/outcomes/outcomeLedger';
 import { ingressForPlanning, realize } from '../../application/realization/realizeService';
 import { REALIZATION_TARGETS, realizationTargetByKey, recommendRealizations } from '../../application/realization/targets';
+import { priorGradeContext, priorGradeFromRow, priorGradeMetadata, priorGradeRule } from '../../application/realization/priorGrade';
+import { bumpJourneySignal } from '../../application/realization/journeySignal';
+import { ensureProofReplaySite } from '../../application/realization/proofSite';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { parseOptionalBody, z } from './requestBody';
@@ -61,6 +65,7 @@ import { parseOptionalBody, z } from './requestBody';
 const PlanBody = z.object({
   idea: z.unknown().optional(),
   sessionId: z.unknown().optional(),
+  priorRealizationId: z.unknown().optional(),
 });
 const CreateRealizationBody = z.object({
   idea: z.unknown().optional(),
@@ -69,10 +74,6 @@ const CreateRealizationBody = z.object({
   targetKey: z.unknown().optional(),
   strategy: z.unknown().optional(),
   sessionId: z.unknown().optional(),
-});
-const VerdictBody = z.object({
-  verdict: z.unknown().optional(),
-  note: z.unknown().optional(),
 });
 
 /** Ideas longer than this are a brief, and belong in the challenge pipeline. */
@@ -151,12 +152,21 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
     }
 
     const subject = await proofSubject(c, body.sessionId);
+    // "Read again with what we learned": the prior proof's grade + evidence is
+    // context for the read and steers the recommender (PRD 33 §5.3.3).
+    const prior = typeof body.priorRealizationId === 'string' && body.priorRealizationId
+      ? await getRealization(db, subject.tenantId, body.priorRealizationId)
+      : null;
+    if (typeof body.priorRealizationId === 'string' && body.priorRealizationId && !prior) {
+      return c.json({ error: 'Prior realization not found' }, 404);
+    }
+    const priorGrade = prior ? priorGradeFromRow(prior) : null;
     const correlationId = `read:${crypto.randomUUID()}`;
     const startedAt = Date.now();
     await recordProofOutcome(db, { ...subject, correlationId, action: 'idea.read', phase: 'started' });
     try {
-      const spec = await readIdea(c.env as Env, idea);
-      const recommendations = recommendRealizations(spec);
+      const spec = await readIdea(c.env as Env, priorGrade ? `${idea}\n\n${priorGradeContext(priorGrade)}` : idea);
+      const recommendations = recommendRealizations(spec, priorGrade);
       await recordProofOutcome(db, {
         ...subject,
         correlationId,
@@ -170,7 +180,10 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
         // later `proof.choose` can be read back against what was actually advised —
         // otherwise "chose X" and "Y was the top pick" can never be compared after
         // the fact, because the ranked list itself was never written down anywhere.
-        metadata: { recommendations: recommendations.map((r) => ({ key: r.key, score: r.score, recommended: r.recommended })) },
+        metadata: {
+          recommendations: recommendations.map((r) => ({ key: r.key, score: r.score, recommended: r.recommended })),
+          ...(priorGrade ? { priorGrade: priorGradeMetadata(priorGrade, priorGradeRule(priorGrade)?.id ?? null) } : {}),
+        },
       });
       return c.json({ spec, recommendations, targets: targetCatalog() });
     } catch (error) {
@@ -236,7 +249,7 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
     // address into every page as it writes them.
     const ingressUrl = await ingressForPlanning(c.env as Env, db, tenantId, projectId);
 
-    const { plan } = planRealization(spec, target, ingressUrl, {
+    const { plan, measure } = planRealization(spec, target, ingressUrl, {
       strategy: typeof body.strategy === 'string' ? body.strategy : null,
       briefPlan,
     });
@@ -253,7 +266,9 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
       spec,
       plan,
       userId: subject.userId,
+      measure,
     });
+    await bumpJourneySignal(c.env as Env, tenantId);
     // PROVE. The single most consequential decision in the first month of an
     // idea is which proof is worth running, so it is recorded as an act in its
     // own right rather than inferred later from whatever got built.
@@ -281,43 +296,9 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
     // Rolled up here, not stored eagerly: a console's write is untrusted until
     // read back server-side, and a person opening this proof to check on it is
     // exactly the moment "what did it tell us?" should already be answered.
-    const synced = await syncRealizationVerdict(db, tenantId, row);
-    return c.json({ realization: toRealizationView(synced) });
-  });
-
-  /**
-   * Park it. The one verdict a person sets rather than the console: abandoning
-   * is a judgement call with no number to compute, so it does not go through
-   * the same rollup as `met`/`missed`.
-   */
-  router.patch('/:id/verdict', async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const body = await parseOptionalBody(c, VerdictBody);
-    if (body.verdict !== 'abandoned') {
-      return c.json(
-        { error: 'Only "abandoned" may be set here — met and missed are recorded from the proof\'s own console.' },
-        400,
-      );
-    }
-    const note = typeof body.note === 'string' ? body.note : undefined;
-    const updated = await abandonRealization(db, tenantId, c.req.param('id'), note);
-    if (!updated) return c.json({ error: 'Realization not found' }, 404);
-    // Terminates the grade correlation as FAILED, never validated: parking an
-    // idea is a judgement with no number behind it, and counting it as graded
-    // would let the north-star metric be satisfied by giving up.
-    await recordProofOutcome(db, {
-      tenantId,
-      userId: (c.get('userId') as string) ?? null,
-      projectId: updated.projectId,
-      sessionId: updated.sessionId,
-      correlationId: `grade:${updated.id}`,
-      action: 'proof.grade',
-      phase: 'failed',
-      realizationId: updated.id,
-      targetKey: updated.targetKey,
-      metadata: { verdict: 'abandoned' },
-    });
-    return c.json({ realization: toRealizationView(updated) });
+    const synced = await syncRealizationVerdict(c.env as Env, db, tenantId, row);
+    // The client emits its `proof.grade` method event only on a read that changed the grade.
+    return c.json({ realization: toRealizationView(synced), verdictChanged: synced.verdict !== row.verdict });
   });
 
   /**
@@ -404,7 +385,12 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
       // own console reports what its kill condition decided.
       if (reachable) {
         await recordProofOutcome(db, { ...built, correlationId: `grade:${row.id}`, action: 'proof.grade', phase: 'started' });
+        // A measured proof is graded by its visitors: its hosted site records with no install (D12).
+        if (row.measure && result.projectId) {
+          await ensureProofReplaySite(env, db, { tenantId, projectId: result.projectId, userId: subject.userId });
+        }
       }
+      await bumpJourneySignal(env, tenantId);
       return c.json({ realization: updated ? toRealizationView(updated) : null, result });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Build failed';

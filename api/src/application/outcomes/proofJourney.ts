@@ -70,6 +70,12 @@ export interface ProofJourneyAttempt {
   topRecommendation: ProofJourneyRecommendation | null;
   /** Null when there was no preceding read to compare against. */
   chosenWasTopRecommended: boolean | null;
+  /**
+   * The graded proof this attempt was read again from ("Read again with what we
+   * learned", PRD 33 §5.3.3) — `metadata.priorGrade.realizationId` on the read the
+   * chooser saw. Chains attempts: smoke test → missed → cheaper re-test → …
+   */
+  priorRealizationId: string | null;
   build: {
     startedAt: string | null;
     succeededAt: string | null;
@@ -160,6 +166,7 @@ export function shapeProofJourney(sessionId: string, events: readonly ProofJourn
         chosenAt: null,
         topRecommendation: null,
         chosenWasTopRecommended: null,
+        priorRealizationId: null,
         build: { startedAt: null, succeededAt: null, failedAt: null, reachable: null },
         grade: { startedAt: null, result: null, resultAt: null },
       };
@@ -194,6 +201,8 @@ export function shapeProofJourney(sessionId: string, events: readonly ProofJourn
         const top = recs.find((r) => r.recommended) ?? null;
         attempt.topRecommendation = top;
         attempt.chosenWasTopRecommended = top ? top.key === (targetKey ?? attempt.targetKey) : null;
+        const prior = asJsonRecord(preceding.metadata.priorGrade).realizationId;
+        attempt.priorRealizationId = typeof prior === 'string' && prior !== attempt.realizationId ? prior : null;
       }
     } else if (event.action === 'proof.build') {
       if (event.phase === 'started') attempt.build.startedAt = event.occurredAt;

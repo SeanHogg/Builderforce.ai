@@ -16,6 +16,15 @@
  */
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
+import { REPLAY_EXPORT_JOB, runReplayExport, validateReplayExportJob } from './replayExport.mjs';
+import {
+  PAGE_CAPTURE_JOB,
+  PAGE_RENDER_JOB,
+  runPageCapture,
+  runPageRender,
+  validatePageCaptureJob,
+  validatePageRenderJob,
+} from './pageCapture.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 const MAX_FINDINGS = 200;
@@ -331,6 +340,14 @@ async function runExploration(spec) {
 
 // ── HTTP server (the DO control plane talks to this) ─────────────────────────
 
+/** Non-exploration jobs, by `kind` (`dispatchQaRunnerJob`). A body with no kind is an exploration. */
+const JOBS = {
+  [REPLAY_EXPORT_JOB]: { validate: validateReplayExportJob, run: runReplayExport, id: (spec) => spec.exportId },
+  // PRD 33 §5.2 page review: one page × one size, and a fix's after render.
+  [PAGE_CAPTURE_JOB]: { validate: validatePageCaptureJob, run: runPageCapture, id: (spec) => `${spec.path}:${spec.device}` },
+  [PAGE_RENDER_JOB]: { validate: validatePageRenderJob, run: runPageRender, id: (spec) => spec.prescriptionId },
+};
+
 const server = createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -343,6 +360,15 @@ const server = createServer((req, res) => {
     req.on('end', () => {
       let spec;
       try { spec = JSON.parse(raw); } catch { res.writeHead(400); res.end('bad request'); return; }
+      const job = spec && typeof spec.kind === 'string' ? JOBS[spec.kind] : undefined;
+      if (job) {
+        const problem = job.validate(spec);
+        if (problem) { res.writeHead(400); res.end(problem); return; }
+        res.writeHead(202, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, accepted: job.id(spec) }));
+        job.run(spec).catch((e) => console.error(`[qa-runner] ${spec.kind} crashed`, e));
+        return;
+      }
       if (!spec || !spec.explorationId || !spec.agentToken || !spec.apiBaseUrl) {
         res.writeHead(400); res.end('missing run spec fields (explorationId, agentToken, apiBaseUrl)'); return;
       }

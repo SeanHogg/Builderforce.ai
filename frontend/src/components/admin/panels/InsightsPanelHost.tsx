@@ -1,35 +1,40 @@
 /**
- * Admin ▸ Growth ▸ Visitors — the ONE insights home.
+ * Admin ▸ Growth ▸ Visitors — builderforce.ai's own anonymous funnel.
  *
- * Flow and leads used to be sibling Growth views. They are two readings of the
- * same anonymous funnel, so they live on one page and open the same RecordingPanel.
- * The window control and refresh sit here because both halves share them.
+ * Flow and leads read builderforce.ai's `activity_log` journey; they are two
+ * readings of the same funnel, so they live on one page and open the same
+ * VisitorPanel. Recordings are NOT here (PRD 33 D17: Builderforce is
+ * customer #1 and reviews them in the Insights app like any workspace) — the
+ * header links there, carrying the `?panel=` a legacy admin address maps to.
  */
 
 import { useCallback, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { adminApi, type AdminGuestSession, type AdminGuestSessionsPage, type AdminVisitorFlow } from '@/lib/adminApi';
-import { AdminLoading, AdminPanelHeader, useAdminData } from '@/components/admin/adminShared';
+import { adminSubHref, resolveAdminRoute } from '@/lib/adminGroups';
+import { adminApi, type AdminGuestSession, type AdminGuestSessionsPage } from '@/lib/adminApi';
+import { AdminPanelHeader, useAdminData } from '@/components/admin/adminShared';
 import { FlowView } from '@/components/admin/visitors/FlowView';
 import { LeadsView } from '@/components/admin/visitors/LeadsView';
-import { RecordingPanel, type RecordingPanelTabId } from '@/components/visitors/RecordingPanel';
+import { VisitorPanel, type VisitorPanelTabId } from '@/components/visitors/VisitorPanel';
 
 const WINDOWS = [7, 30, 90] as const;
 
 export default function InsightsPanelHost() {
   const t = useTranslations('admin.insights');
   const tFlow = useTranslations('admin.visitorFlow');
+  const tOps = useTranslations('admin.insightsOps');
+  const searchParams = useSearchParams();
+  const legacyPanel = resolveAdminRoute(searchParams?.get('tab') ?? '', searchParams?.get('sub') ?? '').panel;
+  const insightsHref = legacyPanel ? `/apps/insights?panel=${encodeURIComponent(legacyPanel)}` : '/apps/insights';
   const [days, setDays] = useState<number>(30);
   const [openVisitorId, setOpenVisitorId] = useState<string | null>(null);
   const [openSession, setOpenSession] = useState<AdminGuestSession | null>(null);
-  const [tab, setTab] = useState<RecordingPanelTabId>('journey');
+  const [tab, setTab] = useState<VisitorPanelTabId>('journey');
 
-  const {
-    data: flowData,
-    loading: flowLoading,
-    error: flowError,
-    reload: reloadFlow,
-  } = useAdminData<AdminVisitorFlow>(() => adminApi.visitorFlow(days), [days]);
+  // The flow loads itself from its source (`FlowView`'s `FLOW_SOURCES`); refresh bumps its key.
+  const [flowReloadKey, setFlowReloadKey] = useState(0);
   const {
     data: leadsData,
     loading: leadsLoading,
@@ -38,9 +43,9 @@ export default function InsightsPanelHost() {
   } = useAdminData<AdminGuestSessionsPage>(() => adminApi.guestSessions());
 
   const refresh = useCallback(() => {
-    void reloadFlow();
+    setFlowReloadKey((n) => n + 1);
     void reloadLeads();
-  }, [reloadFlow, reloadLeads]);
+  }, [reloadLeads]);
 
   const openVisitor = useCallback((visitorId: string) => {
     const match = leadsData?.sessions.find((session) => session.visitorId === visitorId) ?? null;
@@ -60,8 +65,6 @@ export default function InsightsPanelHost() {
     setOpenSession(null);
   }, []);
 
-  if ((flowLoading && !flowData) && (leadsLoading && !leadsData)) return <AdminLoading />;
-
   return (
     <div>
       <AdminPanelHeader
@@ -70,6 +73,8 @@ export default function InsightsPanelHost() {
         onRefresh={refresh}
         actions={
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            <Link href={insightsHref} className="btn-secondary">{t('openApp')}</Link>
+            <Link href={adminSubHref('growth', 'insights-ops')} className="btn-ghost">{tOps('navLink')}</Link>
             {WINDOWS.map((window) => (
               <button
                 key={window}
@@ -86,9 +91,8 @@ export default function InsightsPanelHost() {
       />
 
       <FlowView
-        data={flowData}
-        loading={flowLoading}
-        error={flowError}
+        source={{ kind: 'admin', days }}
+        reloadKey={flowReloadKey}
         onOpenVisitor={openVisitor}
       />
       <LeadsView
@@ -97,7 +101,7 @@ export default function InsightsPanelHost() {
         error={leadsError}
         onOpenLead={openLead}
       />
-      <RecordingPanel
+      <VisitorPanel
         visitorId={openVisitorId}
         session={openSession}
         tab={tab}

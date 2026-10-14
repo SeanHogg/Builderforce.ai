@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { useBrainContext } from '@/lib/brain';
 import type { ProjectModality } from '@/lib/modality';
-import { previewPickContext, usePreviewPick } from '@/lib/workspace/previewPick';
+import { previewPicksContext, usePreviewPicks } from '@/lib/workspace/previewPick';
 
 /**
  * What the Brain is told about this workspace: the project, its type, the file
- * open in the editor, and the element picked in the preview (`previewPick`) — the
+ * open in the editor, and the elements picked in the preview (`previewPick`) — the
  * ONE way "Select to edit" reaches the Brain. One `extraSystem` feeds both the global Brain (via
  * the context) and the docked panel, so they speak with identical awareness.
  *
@@ -27,16 +27,16 @@ export function useWorkspaceBrainContext({ projectId, modality, activeFile, acti
 }) {
   const { setContext, setOpen } = useBrainContext();
 
-  const pick = usePreviewPick();
+  const picks = usePreviewPicks();
   const extraSystem = useMemo(() => {
     const parts = [
       activeFile
         ? `The user currently has the file \`${activeFile}\` open.${activeFileContent ? `\n\nCurrent content of that file:\n\`\`\`\n${activeFileContent.slice(0, 4000)}\n\`\`\`` : ''}`
         : null,
-      pick ? previewPickContext(pick) : null,
+      previewPicksContext(picks) || null,
     ].filter(Boolean);
     return parts.length ? parts.join('\n\n') : undefined;
-  }, [activeFile, activeFileContent, pick]);
+  }, [activeFile, activeFileContent, picks]);
 
   useEffect(() => {
     setContext({ projectId, modality, extraSystem });

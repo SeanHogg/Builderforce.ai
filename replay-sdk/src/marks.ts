@@ -1,6 +1,8 @@
 /**
- * Frustration marks — rage, dead click, quick-back, excessive scroll.
- * Detectors live on the interaction contract; this file only buffers samples.
+ * Mark derivation — page, click, rage, dead, quick back, excessive scroll,
+ * scroll depth. The thresholds and detectors are the contract's
+ * (`FRUSTRATION_THRESHOLDS`); this file only feeds them samples and shapes
+ * the marks.
  */
 
 import {
@@ -9,77 +11,139 @@ import {
   isExcessiveScroll,
   isQuickBack,
   isRageClick,
+  routeTemplate,
   type PageSample,
   type PointerSample,
   type ReplayMark,
   type ScrollSample,
-  type SelectorElement,
 } from '@builderforce/interaction-contract';
 
-const RAGE_KEEP = 12;
-const PAGE_KEEP = 8;
-const SCROLL_KEEP = 40;
+/** Calls `done(quiet)` after `ms`: quiet = no navigation and no DOM mutation meanwhile. */
+export type QuietWatcher = (ms: number, done: (quiet: boolean) => void) => void;
+
+/** A short-lived MutationObserver plus a URL check (PRD 33 §8 S2). */
+export const watchQuiet: QuietWatcher = (ms, done) => {
+  const startHref = location.href;
+  let mutated = false;
+  let observer: MutationObserver | null = null;
+  try {
+    observer = new MutationObserver(() => {
+      mutated = true;
+    });
+    observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+  } catch {
+    observer = null;
+  }
+  setTimeout(() => {
+    observer?.disconnect();
+    done(!mutated && location.href === startHref);
+  }, ms);
+};
+
+export interface ClickInput {
+  /** Viewport coordinates (rage radius). */
+  x: number;
+  y: number;
+  /** Grid cell over the document. */
+  gx: number;
+  gy: number;
+  el: Element;
+  selector: string;
+  label?: string;
+  href?: string;
+}
+
+export interface MarkTrackerOptions {
+  emit: (mark: ReplayMark) => void;
+  /** Visit-relative ms. */
+  now: () => number;
+  /** Last page entries carried over from earlier page loads of the visit. */
+  pages?: PageSample[];
+  /** Persist the page history (last three). */
+  onPages?: (pages: PageSample[]) => void;
+  watchQuiet?: QuietWatcher;
+}
+
+const CLICK_KEEP = 10;
+const PAGE_KEEP = 3;
 
 export class MarkTracker {
   private clicks: PointerSample[] = [];
-  private pages: PageSample[] = [];
   private scrolls: ScrollSample[] = [];
-  private readonly emit: (mark: ReplayMark) => void;
-  private readonly now: () => number;
+  private pages: PageSample[];
+  private lastClickT: number | null = null;
+  private route = '/';
+  private maxDepth = -1;
+  private readonly opts: MarkTrackerOptions;
 
-  constructor(opts: { emit: (mark: ReplayMark) => void; now?: () => number }) {
-    this.emit = opts.emit;
-    this.now = opts.now ?? (() => Date.now());
+  constructor(opts: MarkTrackerOptions) {
+    this.opts = opts;
+    this.pages = (opts.pages ?? []).slice(-PAGE_KEEP);
   }
 
-  click(sample: PointerSample, selector: string, el: SelectorElement | null): ReplayMark | null {
-    this.clicks.push(sample);
-    if (this.clicks.length > RAGE_KEEP) this.clicks.shift();
+  get currentRoute(): string {
+    return this.route;
+  }
+
+  page(path: string): void {
+    const t = this.opts.now();
+    this.route = routeTemplate(path);
+    this.maxDepth = -1;
+    this.scrolls = [];
+    this.opts.emit({ kind: 'page', key: this.route, atMs: t });
+    this.pages = [...this.pages, { path: this.route, t }].slice(-PAGE_KEEP);
+    this.opts.onPages?.(this.pages);
+    if (isQuickBack(this.pages)) this.opts.emit({ kind: 'quickback', key: this.route, atMs: t });
+  }
+
+  click(input: ClickInput): void {
+    const t = this.opts.now();
+    this.lastClickT = t;
+    const shape = {
+      key: input.selector,
+      atMs: t,
+      gx: input.gx,
+      gy: input.gy,
+      ...(input.label ? { label: input.label } : {}),
+    };
+    this.opts.emit({ kind: 'click', ...shape, ...(input.href ? { href: input.href } : {}) });
+
+    this.clicks = [...this.clicks, { t, x: input.x, y: input.y }].slice(-CLICK_KEEP);
     if (isRageClick(this.clicks)) {
-      const mark: ReplayMark = { kind: 'rage', key: selector, atMs: sample.t };
-      this.emit(mark);
       this.clicks = [];
-      return mark;
+      this.opts.emit({ kind: 'rage', ...shape });
+      return;
     }
-    if (el && isDeadClickCandidate(el)) {
-      const wait = FRUSTRATION_THRESHOLDS.deadClick.waitMs;
-      const started = sample.t;
-      const timer = setTimeout(() => {
-        if (this.now() - started >= wait) {
-          this.emit({ kind: 'dead', key: selector, atMs: sample.t });
-        }
-      }, wait);
-      if (typeof timer === 'object' && 'unref' in timer) (timer as { unref: () => void }).unref();
-    }
-    return null;
+    if (!isDeadClickCandidate(input.el)) return;
+    const watch = this.opts.watchQuiet ?? watchQuiet;
+    watch(FRUSTRATION_THRESHOLDS.dead.waitMs, (quiet) => {
+      if (quiet) this.opts.emit({ kind: 'dead', ...shape });
+    });
   }
 
-  page(sample: PageSample): ReplayMark | null {
-    this.pages.push(sample);
-    if (this.pages.length > PAGE_KEEP) this.pages.shift();
-    if (isQuickBack(this.pages)) {
-      const mark: ReplayMark = { kind: 'quickback', key: sample.path, atMs: sample.t };
-      this.emit(mark);
-      return mark;
+  /** A scroll sample: `y` = scroll offset, `depth` = (scrollY + viewport) / document height. */
+  scroll(y: number, viewportH: number, depth: number): void {
+    const t = this.opts.now();
+    if (Number.isFinite(depth)) {
+      const decile = Math.max(0, Math.min(9, Math.floor(depth * 10)));
+      if (decile > this.maxDepth) this.maxDepth = decile;
     }
-    return null;
-  }
-
-  scroll(sample: ScrollSample, viewportHeight: number): ReplayMark | null {
-    this.scrolls.push(sample);
-    if (this.scrolls.length > SCROLL_KEEP) this.scrolls.shift();
-    if (isExcessiveScroll(this.scrolls, { viewportHeight })) {
-      const mark: ReplayMark = { kind: 'excessive_scroll', key: 'scroll', atMs: sample.t };
-      this.emit(mark);
+    const windowMs = FRUSTRATION_THRESHOLDS.excessiveScroll.travelWindowMs;
+    this.scrolls = [...this.scrolls.filter((s) => t - s.t <= windowMs), { t, y }];
+    if (isExcessiveScroll(this.scrolls, viewportH, this.lastClickT)) {
       this.scrolls = [];
-      return mark;
+      this.opts.emit({ kind: 'excessive_scroll', key: this.route, atMs: t });
     }
-    return null;
   }
 
-  error(key: string, atMs: number): ReplayMark {
-    const mark: ReplayMark = { kind: 'error', key, atMs };
-    this.emit(mark);
-    return mark;
+  /** Leaving the page: the max scroll depth decile reached on it, once. */
+  leavePage(initialDepth: number): void {
+    if (Number.isFinite(initialDepth)) {
+      const decile = Math.max(0, Math.min(9, Math.floor(initialDepth * 10)));
+      if (decile > this.maxDepth) this.maxDepth = decile;
+    }
+    if (this.maxDepth < 0) return;
+    this.opts.emit({ kind: 'scroll', key: this.route, atMs: this.opts.now(), value: this.maxDepth });
+    this.maxDepth = -1;
   }
 }

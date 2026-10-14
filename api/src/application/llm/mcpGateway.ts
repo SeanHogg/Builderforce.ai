@@ -25,6 +25,7 @@
 
 import { callConnectorTool, CONNECTOR_EXTENSION_ID, listConnectorTools } from '../connectors/connectorTools';
 import { BUILTIN_EXTENSION_ID, callBuiltinTool, listBuiltinTools } from './builtinMcpService';
+import { entitledBuiltinTools } from './builtinToolEntitlements';
 import { callMcpTool, listToolsForTenant, type McpToolEntry } from './mcpExtensionService';
 import {
   applyToolSurface,
@@ -91,7 +92,10 @@ export async function listGatewayMcpTools(ctx: GatewayMcpContext): Promise<McpTo
       ? listToolsForTenant(db, ctx.tenantId, ctx.keyMaterial, ctx.fetchImpl ?? fetch, ctx.env)
       : [],
   ]);
-  const builtinTools = surfaceIncludesSource(surface, 'builtin') ? listBuiltinTools() : [];
+  // Feature-gated rows (the Insights tools) are shown only to a workspace holding the feature.
+  const builtinTools = surfaceIncludesSource(surface, 'builtin')
+    ? await entitledBuiltinTools(ctx.env, ctx.tenantId, null, listBuiltinTools())
+    : [];
   return applyToolSurface([...builtinTools, ...connectorTools, ...extensionTools], surface);
 }
 

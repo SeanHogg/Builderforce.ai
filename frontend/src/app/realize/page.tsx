@@ -5,19 +5,22 @@ import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import ProjectBackendPanel from '@/components/ProjectBackendPanel';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { ProofScoreboard } from '@/components/creation-canvas/ProofScoreboard';
 import {
   challengeApi,
-  realizationApi,
   type BackendStrategyKey,
   type ChallengeSetupStep,
   type ChallengeSpec,
   type HostingStrategySummary,
+} from '@/lib/builderforceApi';
+import {
+  realizationApi,
   type Realization,
   type RealizationBuildResult,
   type RealizationKey,
   type RealizationRecommendation,
   type RealizationTargetSummary,
-} from '@/lib/builderforceApi';
+} from '@/lib/realizationApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 /**
@@ -394,6 +397,8 @@ export default function RealizePage() {
    * without one still works; it simply never enters the ledger.
    */
   const [sessionId, setSessionId] = useState<string | null>(null);
+  /** "Read again with what we learned": the graded proof this read learns from (PRD 33 §5.3.3). */
+  const [priorId, setPriorId] = useState<string | null>(null);
   const [buildResult, setBuildResult] = useState<RealizationBuildResult | null>(null);
   const [history, setHistory] = useState<Realization[]>([]);
   const [reading, setReading] = useState(false);
@@ -431,6 +436,8 @@ export default function RealizePage() {
     const params = new URLSearchParams(window.location.search);
     const session = params.get('session');
     if (session) setSessionId(session);
+    const prior = params.get('prior');
+    if (prior) setPriorId(prior);
     const seeded = params.get('idea');
     if (seeded) setIdea(seeded.slice(0, 20_000));
   }, []);
@@ -465,7 +472,7 @@ export default function RealizePage() {
     // reading would ignore the edit.
     setChallengeId(null);
     try {
-      const result = await realizationApi.plan(idea.trim(), sessionId);
+      const result = await realizationApi.plan(idea.trim(), sessionId, { priorRealizationId: priorId });
       setSpec(result.spec);
       setTargets(result.targets);
       setRecommendations(result.recommendations);
@@ -694,6 +701,7 @@ export default function RealizePage() {
         {realization?.status === 'built' && (
           <VerdictCard realization={realization} onAbandon={() => void abandon()} abandoning={abandoning} t={t} />
         )}
+        {realization?.status === 'built' && <ProofScoreboard realization={realization} onRealizationChange={setRealization} />}
 
         {/* Once a project exists the panel is the live view: which endpoints are
             actually serving, the secret they fail closed without, and what has

@@ -169,8 +169,16 @@ export type ListingTrialPolicy = (typeof LISTING_TRIAL_POLICIES)[number];
  * KIND declares what it may offer and the seller picks from that set — exactly
  * how `trial` already works. A kind that lists only `copy` cannot be sold as a
  * subscription no matter what a client posts.
+ *
+ * ── THE THIRD SHAPE: `entitlement` ───────────────────────────────────────────
+ *  - `entitlement` the buyer receives A CAPABILITY of the platform itself
+ *             (Insights, PRD 33). There is no copy to land and nothing of the
+ *             seller's to reach: holding the licence IS the product, read by the
+ *             feature gate (`heldCapabilityFeatures`). Nothing is staged,
+ *             snapshotted or installed onto a board, so a kind that offers only
+ *             this is never published from a canvas (see `sessionListingKinds`).
  */
-export const LISTING_DELIVERIES = ['copy', 'hosted'] as const;
+export const LISTING_DELIVERIES = ['copy', 'hosted', 'entitlement'] as const;
 export type ListingDelivery = (typeof LISTING_DELIVERIES)[number];
 
 /**
@@ -428,6 +436,24 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     trial: 'preview',
     icon: '🏢',
   },
+  {
+    // A CAPABILITY of the platform, sold through the same shop window as everything
+    // else (PRD 33 D17: every workspace installs Insights through the Marketplace,
+    // Builderforce's own included). Published by the platform (a migration row), never
+    // from a canvas — `from` is empty and `sessionListingKinds` excludes it, because a
+    // board cannot BE a capability. The buyer gets no copy: holding the licence grants
+    // the capability (`deliveries: ['entitlement']`). `instrument` because what a buyer
+    // does with it is take measurements and read their own results.
+    id: 'capability',
+    launch: 'run',
+    from: [],
+    family: 'asset',
+    harness: 'instrument',
+    deliveries: ['entitlement'],
+    pricing: 'either',
+    trial: 'preview',
+    icon: '🎥',
+  },
 ] as const;
 
 export type MarketplaceListingKind = (typeof MARKETPLACE_LISTING_KINDS)[number]['id'];
@@ -461,9 +487,21 @@ export function isPublishableObjectKind(objectKind: string): boolean {
   return listingKindsForObjectKind(objectKind).length > 0;
 }
 
-/** The kinds a whole SESSION may be published as. */
+/**
+ * Is this kind a platform CAPABILITY — one whose only delivery is the licence itself?
+ *
+ * Such a kind has no source object and nothing to stage, so it is excluded from every
+ * canvas publish path; it is published by the platform and read by the feature gate.
+ */
+export function isEntitlementKind(kindId: string): boolean {
+  const deliveries = deliveriesForKind(kindId);
+  return deliveries.length > 0 && deliveries.every((delivery) => delivery === 'entitlement');
+}
+
+/** The kinds a whole SESSION may be published as. A capability has no source object
+ *  either, but it is not made on a board, so it is not offered here. */
 export function sessionListingKinds(): readonly MarketplaceListingKindSpec[] {
-  return MARKETPLACE_LISTING_KINDS.filter((spec) => spec.from.length === 0);
+  return MARKETPLACE_LISTING_KINDS.filter((spec) => spec.from.length === 0 && !isEntitlementKind(spec.id));
 }
 
 /**
@@ -536,7 +574,9 @@ export function resolveDelivery(kindId: string, requested?: string | null): List
  * whether somebody has to sign up.
  */
 export function requiresWorkspace(delivery: ListingDelivery): boolean {
-  return delivery === 'copy';
+  // An `entitlement` is a licence held BY a workspace — there is nobody to grant a
+  // capability to without one, exactly as a `copy` has nowhere to land without one.
+  return delivery !== 'hosted';
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { VISIT_IDLE_MS, VISITOR_ID_PATTERN } from '@builderforce/interaction-contract';
-import { getVisitId, getVisitorId, mintId } from './ids';
+import { idNamespace, mintId, resolveIdentity, storageKeys } from './ids';
+import { VisitStore } from './visitState';
 
 afterEach(() => {
   window.localStorage.clear();
@@ -10,36 +11,88 @@ afterEach(() => {
   });
 });
 
+describe('idNamespace', () => {
+  it('shares bf_* on builderforce.ai and its subdomains, bfr_* elsewhere', () => {
+    expect(idNamespace('builderforce.ai')).toBe('bf');
+    expect(idNamespace('app.builderforce.ai')).toBe('bf');
+    expect(idNamespace('shop.example.com')).toBe('bfr');
+    expect(idNamespace('notbuilderforce.ai')).toBe('bfr');
+    expect(storageKeys('bf')).toMatchObject({ visitor: 'bf_visitor_id', visit: 'bf_visit_id' });
+    expect(storageKeys('bfr')).toMatchObject({ visitor: 'bfr_visitor_id', visit: 'bfr_visit_id' });
+  });
+});
+
 describe('mintId', () => {
-  it('matches the ingest guard (8–64 url-safe chars)', () => {
-    for (let i = 0; i < 20; i++) {
-      expect(mintId()).toMatch(VISITOR_ID_PATTERN);
-    }
+  it('matches the ingest guard', () => {
+    for (let i = 0; i < 20; i++) expect(mintId()).toMatch(VISITOR_ID_PATTERN);
   });
 });
 
-describe('getVisitorId', () => {
-  it('is stable across calls and persisted', () => {
-    const a = getVisitorId();
-    const b = getVisitorId();
-    expect(a).toBe(b);
-    expect(a).toMatch(VISITOR_ID_PATTERN);
-    expect(window.localStorage.getItem('bf_visitor_id')).toBe(a);
+describe('resolveIdentity', () => {
+  it('mints a visitor once and reports it as new only then', () => {
+    const first = resolveIdentity('bfr', 1_000);
+    expect(first.newVisitor).toBe(true);
+    expect(window.localStorage.getItem('bfr_visitor_id')).toBe(first.visitorId);
+    expect(window.localStorage.getItem('bf_visitor_id')).toBeNull();
+    const second = resolveIdentity('bfr', 2_000);
+    expect(second.newVisitor).toBe(false);
+    expect(second.visitorId).toBe(first.visitorId);
   });
-});
 
-describe('getVisitId', () => {
-  it('reuses the visit inside the idle window and rotates after it', () => {
+  it('keeps the visit inside the idle gap and rotates after it', () => {
     const t0 = 1_700_000_000_000;
-    const first = getVisitId(t0);
-    expect(first).toMatch(VISITOR_ID_PATTERN);
-    // Inside the window: same visit — and the call itself refreshes "last seen",
-    // because the window is an idle GAP, not a fixed span from the first call.
+    const first = resolveIdentity('bfr', t0).visitId;
     const seen = t0 + VISIT_IDLE_MS;
-    expect(getVisitId(seen)).toBe(first);
-    // A gap just past the window since that last activity starts a new visit.
-    const next = getVisitId(seen + VISIT_IDLE_MS + 1);
-    expect(next).not.toBe(first);
-    expect(next).toMatch(VISITOR_ID_PATTERN);
+    expect(resolveIdentity('bfr', seen).visitId).toBe(first);
+    expect(resolveIdentity('bfr', seen + VISIT_IDLE_MS + 1).visitId).not.toBe(first);
+  });
+
+  it('reads a bf_ visitor the product minted within this visit as new', () => {
+    const t0 = 1_700_000_000_000;
+    // `frontend/src/lib/visitor.ts` minted the id moments before the recorder loaded.
+    window.localStorage.setItem('bf_visitor_id', 'productVisitor123');
+    window.localStorage.setItem('bf_visitor_minted_at', String(t0));
+    const identity = resolveIdentity('bf', t0 + 2_000);
+    expect(identity.visitorId).toBe('productVisitor123');
+    expect(identity.newVisitor).toBe(true);
+    expect(storageKeys('bf').minted).toBe('bf_visitor_minted_at');
+  });
+
+  it('reads a bf_ visitor minted before this visit, or with no mint time, as returning', () => {
+    const t0 = 1_700_000_000_000;
+    window.localStorage.setItem('bf_visitor_id', 'productVisitor123');
+    expect(resolveIdentity('bf', t0).newVisitor).toBe(false);
+
+    window.localStorage.setItem('bf_visitor_minted_at', String(t0));
+    expect(resolveIdentity('bf', t0 + VISIT_IDLE_MS + 1).newVisitor).toBe(false);
+
+    window.localStorage.setItem('bf_visitor_minted_at', 'garbage');
+    expect(resolveIdentity('bf', t0).newVisitor).toBe(false);
+  });
+
+  it('never reads the bf_ mint time for a customer site', () => {
+    window.localStorage.setItem('bfr_visitor_id', 'customerVisitor1');
+    window.localStorage.setItem('bf_visitor_minted_at', String(5_000));
+    expect(resolveIdentity('bfr', 6_000).newVisitor).toBe(false);
+  });
+
+  it('reuses the product visit on builderforce.ai', () => {
+    window.localStorage.setItem('bf_visit_id', 'productVisit123');
+    window.localStorage.setItem('bf_visit_last_seen', String(5_000));
+    expect(resolveIdentity('bf', 6_000).visitId).toBe('productVisit123');
+  });
+});
+
+describe('VisitStore', () => {
+  it('continues seq across page loads of the same visit and resets for a new one', () => {
+    const a = new VisitStore('bfr_replay_state', 'visitAAAA1', 100);
+    expect(a.nextSeq()).toBe(0);
+    expect(a.nextSeq()).toBe(1);
+    const reload = new VisitStore('bfr_replay_state', 'visitAAAA1', 900);
+    expect(reload.state.startedAt).toBe(100);
+    expect(reload.nextSeq()).toBe(2);
+    const next = new VisitStore('bfr_replay_state', 'visitBBBB2', 5_000);
+    expect(next.nextSeq()).toBe(0);
+    expect(next.state.startedAt).toBe(5_000);
   });
 });

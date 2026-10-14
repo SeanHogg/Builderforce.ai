@@ -42,8 +42,8 @@ zone_name = "builderforce.ai"
 CORS_ORIGINS = "*"
 ENVIRONMENT  = "production"
 APP_URL      = "https://builderforce.ai"
-# Public CDN origin. ReplayConfigService fetches REPLAY_MANIFEST_URL (10 min
-# in-process cache) to learn the latest hashed recorder. The hostname has NO
+# Public CDN origin. ReplayConfigService fetches REPLAY_MANIFEST_URL (10 min read-through
+# cache) to learn the latest hashed recorder. The hostname has NO
 # Worker route — see infra/cdn/README.md.
 REPLAY_CDN_ORIGIN   = "https://cdn.builderforce.ai"
 REPLAY_MANIFEST_URL = "https://cdn.builderforce.ai/replay/manifest.json"
@@ -175,7 +175,7 @@ binding = "UPLOADS"
 bucket_name = "builderforce-uploads"
 
 # Public CDN (`https://cdn.builderforce.ai`) for session-replay assets (PRD 33 D5,
-# 33a S2.2). Bucket `builderforce-cdn` is served on the custom domain
+# 33 §8 S2). Bucket `builderforce-cdn` is served on the custom domain
 # `cdn.builderforce.ai` by R2 itself — Cloudflare's edge caches it, and serving
 # MUST NOT invoke a Worker (kill check: 200, cache-control as below, a
 # `cf-cache-status` header, and NO `cf-worker` header).

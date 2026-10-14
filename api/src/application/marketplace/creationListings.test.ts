@@ -47,8 +47,10 @@ describe('listing kind registry', () => {
     const fromBoard = sessionListingKinds().map((spec) => spec.id);
     expect(fromBoard).toEqual(['pack']);
     // And the converse: nothing that needs an object claims to come from a board.
+    // `capability` has no source object either, but it is the platform's own product
+    // (an entitlement), so it is offered from neither a board nor an object.
     for (const spec of MARKETPLACE_LISTING_KINDS) {
-      if (spec.id !== 'pack') expect(spec.from.length).toBeGreaterThan(0);
+      if (spec.id !== 'pack' && spec.id !== 'capability') expect(spec.from.length).toBeGreaterThan(0);
     }
   });
 

@@ -13,6 +13,7 @@ import { realizations } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { ChallengePlan } from '../challenge/planChallenge';
 import type { ChallengeSpec } from '../challenge/parseBrief';
+import { parseProofMeasure, type ProofMeasure } from '@builderforce/interaction-contract';
 import type { RealizationKey } from './realizationTarget';
 
 /** The closed verdict vocabulary — what a proof's success criteria decided. */
@@ -46,6 +47,8 @@ export interface RealizationView {
   verdictMetric: Record<string, unknown> | null;
   /** When the verdict was recorded. Distinct from `updatedAt`. */
   decidedAt: string | null;
+  /** What visitor behaviour grades it (PRD 33 §5.3.1); null when the target declares none. */
+  measure: ProofMeasure | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -70,6 +73,7 @@ export function toRealizationView(row: Row): RealizationView {
     verdict: isRealizationVerdict(row.verdict) ? row.verdict : null,
     verdictMetric: (row.verdictMetric ?? null) as Record<string, unknown> | null,
     decidedAt: row.decidedAt ? new Date(row.decidedAt).toISOString() : null,
+    measure: parseProofMeasure(row.measure),
     createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
     updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
   };
@@ -123,6 +127,8 @@ export async function createRealization(
     spec: ChallengeSpec;
     plan: ChallengePlan;
     userId: string | null;
+    /** The target's `ProofMeasure`, persisted once here (PRD 33 §5.3.1); null when it declares none. */
+    measure?: ProofMeasure | null;
   },
 ): Promise<Row> {
   const [row] = await db
@@ -137,6 +143,7 @@ export async function createRealization(
       strategy: args.strategy,
       spec: args.spec,
       plan: args.plan,
+      measure: args.measure ?? null,
       status: 'planned',
       createdByUserId: args.userId,
     })
@@ -206,6 +213,25 @@ export async function setRealizationVerdict(
       decidedAt: args.decidedAt,
       updatedAt: new Date(),
     })
+    .where(scopedToTenant(realizations, tenantId, eq(realizations.id, id)))
+    .returning();
+  return row ?? null;
+}
+
+/**
+ * Hold a posted call that arrived before the sample did (PRD 33 §5.3.2): the
+ * numbers are written so the card can say why, the verdict is NOT — a call on
+ * thirty visits is not a grade, and only a written early-call reason makes it one.
+ */
+export async function holdRealizationVerdict(
+  db: Db,
+  tenantId: number,
+  id: string,
+  verdictMetric: Record<string, unknown>,
+): Promise<Row | null> {
+  const [row] = await db
+    .update(realizations)
+    .set({ verdictMetric, updatedAt: new Date() })
     .where(scopedToTenant(realizations, tenantId, eq(realizations.id, id)))
     .returning();
   return row ?? null;

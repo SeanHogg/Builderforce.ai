@@ -108,6 +108,34 @@ describe('ListingLaunch', () => {
     expect(screen.queryByText(t.guest.gate.reason.takeCopy)).toBeNull();
   });
 
+  it('sends a signed-out visitor taking a FREE listing to sign-up with the install intent kept', async () => {
+    launchMock.mockResolvedValue({ mode: 'open', entitled: false, title: 'x', url: 'https://acme.example' });
+    renderLaunch(listing({ kind: 'app', launch: 'open', delivery: 'hosted', priceCents: 0 }));
+    const link = await screen.findByRole('link', { name: /sign in to install/i });
+    const href = link.getAttribute('href') ?? '';
+    expect(href.startsWith('/register?')).toBe(true);
+    const params = new URLSearchParams(href.slice(href.indexOf('?') + 1));
+    expect(params.get('next')).toBe('/marketplace/listing/space-game');
+    expect(params.get('intent')).toBe('install:space-game');
+  });
+
+  it('routes a CAPABILITY listing to its app’s set-up page instead of a canvas copy', async () => {
+    launchMock.mockResolvedValue({ mode: 'open', entitled: false, title: 'x' });
+    renderLaunch(listing({ kind: 'capability', slug: 'session-replay', name: 'Insights', priceCents: 0, delivery: 'entitlement' }));
+    const link = await screen.findByRole('link', { name: en.marketplace.capability.startFree });
+    const href = link.getAttribute('href') ?? '';
+    const params = new URLSearchParams(href.slice(href.indexOf('?') + 1));
+    expect(href.startsWith('/register?')).toBe(true);
+    expect(params.get('next')).toBe('/apps/insights/setup');
+    expect(params.get('intent')).toBe('install:insights');
+
+    auth.current = { user: { id: 'u2' } };
+    launchMock.mockResolvedValue({ mode: 'open', entitled: true, title: 'x' });
+    renderLaunch(listing({ kind: 'capability', slug: 'session-replay', name: 'Insights', priceCents: 0, delivery: 'entitlement' }));
+    expect(await screen.findByRole('link', { name: /Open Insights/ })).toHaveAttribute('href', '/apps/insights');
+    expect(screen.queryByRole('button', { name: en.marketplaceListing.openInCanvas })).toBeNull();
+  });
+
   it('still launches for a logged-out visitor — a free listing runs for anyone', async () => {
     launchMock.mockResolvedValue({ mode: 'play', entitled: true, title: 'x', document: '<p>free</p>' });
     renderLaunch(listing());

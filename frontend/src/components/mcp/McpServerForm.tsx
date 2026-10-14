@@ -12,6 +12,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreateMcpExtensionInput, McpExtension, UpdateMcpExtensionInput } from '@/lib/mcpExtensionsApi';
+import { REPLAY_BLOCK } from '@/lib/replaySensitive';
 
 const field: React.CSSProperties = {
   width: '100%',
@@ -75,7 +76,7 @@ export function McpServerForm(props: McpServerFormProps) {
   };
 
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} {...REPLAY_BLOCK}>
       <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 16px' }}>{t('form.intro')}</p>
 
       <div style={row}>

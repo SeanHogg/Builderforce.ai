@@ -55,6 +55,14 @@ import {
   podcastOutreach,
   promoProjects,
   referralEntries,
+  replayExports,
+  replayFunnelSteps,
+  replayFunnels,
+  replayPageCaptures,
+  replayPrescriptions,
+  replaySegments,
+  replaySites,
+  replaySmartEvents,
   siteReleases,
   siteSubscriptions,
   siteUserSessions,
@@ -155,4 +163,20 @@ export const GROWTH_ENTITIES = defineDomainEntities('growth', [
   entity(marketingSessionPrompts, { readOnly: true }),
   entity(marketingHeatmapScreenshots, { readOnly: true }),
   entity(eventRemindersSent, { readOnly: true }),
+  /** An Insights site (PRD 33 §3.2). Read-only to the generic layer: its key, origins
+   *  and settings are written by `replaySiteAdmin`, which mints the `bfr_` key and
+   *  invalidates the ingest resolution cache — a generic PATCH would do neither. */
+  entity(replaySites, { readOnly: true }),
+  /** Insights definitions keyed by site (no tenant column; they inherit the site's
+   *  tenant through a cascading key), so the generic layer can neither list nor edit
+   *  them. Their writers are the S4c/S4e/S4f services. */
+  entity(replaySegments, { readOnly: true }),
+  entity(replaySmartEvents, { readOnly: true }),
+  entity(replayFunnels, { readOnly: true }),
+  entity(replayFunnelSteps, { readOnly: true }),
+  entity(replayPrescriptions, { readOnly: true }),
+  entity(replayPageCaptures, { readOnly: true }),
+  /** An MP4 export job (S4b). Read-only: its status moves only through the runner's
+   *  capability-token callbacks in `replayVideoExport`, which also meter the units. */
+  entity(replayExports, { readOnly: true }),
 ]);

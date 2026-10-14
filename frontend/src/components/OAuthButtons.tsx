@@ -1,5 +1,6 @@
 import { useSearchParams } from 'next/navigation';
 import { getOAuthUrl } from '@/lib/auth/credentials';
+import { readIntent, resumeIntent } from '@/lib/auth';
 
 const PROVIDERS = [
   { provider: 'google',    label: 'Continue with Google',    icon: 'G' },
@@ -15,7 +16,7 @@ const PROVIDERS = [
  */
 export default function OAuthButtons() {
   const searchParams = useSearchParams();
-  const destination = searchParams.get('next') || '/dashboard';
+  const destination = resumeIntent(readIntent(searchParams));
   const referralCode = searchParams.get('ref')?.trim();
   const next = referralCode
     ? `/sales/referral-claim?ref=${encodeURIComponent(referralCode)}&next=${encodeURIComponent(destination)}`

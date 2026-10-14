@@ -1,9 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ComponentType } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
+import { replaySnippets } from '@builderforce/interaction-contract';
 import { EmbeddedStackValue } from '@/components/embedded/EmbeddedStackValue';
+import { InsightsSiteNote } from '@/components/embedded/InsightsSiteNote';
+import { useInsightsSite } from '@/components/embedded/useInsightsSite';
 import { EmbedIntegrationSettings } from '@/components/settings/EmbedIntegrationSettings';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Icon } from '@/components/ui/Icon';
@@ -17,6 +20,19 @@ import styles from './EmbeddedCapabilities.module.css';
 import { useFormat } from "@/i18n/useFormat";
 
 const TABS = ['features', 'install', 'consent', 'surfaces'] as const;
+
+/**
+ * Capabilities whose runtime needs more than the toggle, with the note that says
+ * what. Heatmaps record only when the install tag carries an Insights site key.
+ */
+const CAPABILITY_NOTES: Partial<Record<CustomerEmbedFeatureKey, ComponentType<{ siteKey: string | null }>>> = {
+  heatmaps: InsightsSiteNote,
+};
+
+function CapabilityNote({ capability, siteKey }: { capability: CustomerEmbedFeatureKey; siteKey: string | null }) {
+  const Note = CAPABILITY_NOTES[capability];
+  return Note ? <Note siteKey={siteKey} /> : null;
+}
 type Tab = (typeof TABS)[number];
 type Filter = 'all' | EmbeddedCapabilityCategory;
 
@@ -33,6 +49,8 @@ export function EmbeddedCapabilities() {
   const [saving, setSaving] = useState<CustomerEmbedFeatureKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const copy = useCopyToClipboard();
+  const { siteKey } = useInsightsSite();
+  const installTag = unifiedEmbedSnippet(config?.publicKey ?? 'bf_WORKSPACE_KEY', siteKey);
 
   useEffect(() => {
     // /api/embed/config is tenant-scoped. A person-level session can exist for a
@@ -155,6 +173,7 @@ export function EmbeddedCapabilities() {
                 <span className={styles.badge}>{t(`categories.${item.category}`)}</span>
                 <span>{t('examples', { count: item.examples })}</span>
               </div>
+              <CapabilityNote capability={item.key} siteKey={siteKey} />
             </div>
             <button type="button" role="switch" aria-checked={state?.enabled ?? false} aria-label={t('toggleLabel', { feature: t(`features.${item.key}.name`) })} className={`${styles.switch} ${state?.enabled ? styles.switchOn : ''}`} disabled={!config || !canManage || saving === item.key} onClick={() => requestToggle(item.key)} />
           </article>;
@@ -164,9 +183,13 @@ export function EmbeddedCapabilities() {
 
     {tab === 'install' && <section className={styles.panel}>
       <h2>{t('install.title')}</h2><p className={styles.panelIntro}>{t('install.description')}</p>
-      <pre className={styles.code}>{unifiedEmbedSnippet(config?.publicKey ?? 'bf_WORKSPACE_KEY')}</pre>
-      <button type="button" className={styles.copy} onClick={() => void copy.copy(unifiedEmbedSnippet(config?.publicKey ?? 'bf_WORKSPACE_KEY'))}>{copy.copied ? t('copied') : t('copySnippet')}</button>
-      {config && EMBEDDED_CAPABILITIES.filter((item) => config.customerFeatures[item.key]?.enabled).map((item) => <div key={item.key} style={{ marginTop: 18 }}><h3>{t(`features.${item.key}.name`)}</h3><pre className={styles.code}>{capabilitySnippet(item.key)}</pre></div>)}
+      <pre className={styles.code}>{installTag}</pre>
+      <button type="button" className={styles.copy} onClick={() => void copy.copy(installTag)}>{copy.copied ? t('copied') : t('copySnippet')}</button>
+      <InsightsSiteNote siteKey={siteKey} />
+      {/* The same Insights site on its own, for a site that wants replay without the widgets. */}
+      {siteKey && <div style={{ marginTop: 18 }}><h3>{t('insights.standaloneTitle')}</h3><pre className={styles.code}>{replaySnippets({ siteKey }).scriptTag}</pre></div>}
+      {/* Only a capability whose runtime ships a page API has a snippet (`capabilitySnippet`). */}
+      {config && EMBEDDED_CAPABILITIES.filter((item) => config.customerFeatures[item.key]?.enabled && capabilitySnippet(item.key) !== null).map((item) => <div key={item.key} style={{ marginTop: 18 }}><h3>{t(`features.${item.key}.name`)}</h3><pre className={styles.code}>{capabilitySnippet(item.key)}</pre></div>)}
     </section>}
 
     {tab === 'consent' && <section className={styles.panel}>

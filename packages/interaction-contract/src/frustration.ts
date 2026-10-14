@@ -1,9 +1,10 @@
 /**
- * Frustration detectors — the ONE set of thresholds every surface uses.
+ * Frustration detectors — the ONE set of thresholds every surface uses (PRD 33 §3.4).
  *
- * Rage, dead-click, quick-back and excessive-scroll are product language, not
- * per-view heuristics. The recorder marks a visit with them, Insights filters
- * on them, and the QA heat ranking must not invent a second definition.
+ * Rage, dead click, quick back and excessive scroll are product language, not
+ * per-view heuristics. The recorder marks a visit with them, ingest folds the
+ * marks into issues, and Insights filters on them; nobody keeps a second
+ * definition.
  *
  * Pure: no DOM globals. Dead-click candidacy reads the same structural
  * `SelectorElement` the selector rule uses.
@@ -12,193 +13,163 @@
 import { implicitRole, type SelectorElement } from './selector';
 
 export const FRUSTRATION_THRESHOLDS = {
-  rage: { windowMs: 3_000, radiusPx: 24, minClicks: 3 },
-  deadClick: { waitMs: 500 },
-  quickBack: { windowMs: 7_000 },
-  excessiveScroll: {
-    reversals: 3,
-    reversalWindowMs: 5_000,
-    viewportHeights: 3,
-    heightWindowMs: 10_000,
-  },
+  /** ≥3 clicks inside 700 ms, each within 30 px of the latest. */
+  rage: { minClicks: 3, windowMs: 700, radiusPx: 30 },
+  /** A non-interactive click followed by no navigation and no DOM mutation for 500 ms. */
+  dead: { waitMs: 500 },
+  /** The last three pages are A→B→A and the visitor stayed on B under 7 s. */
+  quickBack: { maxDwellMs: 7_000 },
+  /**
+   * ≥3 direction reversals inside 5 s, or more than 3 viewport heights of
+   * scrolling inside 10 s with no click in that window.
+   */
+  excessiveScroll: { reversals: 3, reversalWindowMs: 5_000, viewportHeights: 3, travelWindowMs: 10_000 },
 } as const;
 
-const INTERACTIVE_TAGS = new Set([
-  'a',
-  'button',
-  'input',
-  'select',
-  'textarea',
-  'summary',
-  'option',
-  'details',
-]);
+const INTERACTIVE_TAGS = new Set(['a', 'button', 'input', 'select', 'textarea', 'summary', 'option', 'details', 'label']);
 
 const INTERACTIVE_ROLES = new Set([
-  'button',
-  'link',
-  'checkbox',
-  'radio',
-  'tab',
-  'menuitem',
-  'menuitemcheckbox',
-  'menuitemradio',
-  'switch',
-  'textbox',
-  'combobox',
-  'slider',
-  'spinbutton',
-  'searchbox',
-  'option',
-  'listbox',
+  'button', 'link', 'checkbox', 'radio', 'tab', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'switch',
+  'textbox', 'combobox', 'slider', 'spinbutton', 'searchbox', 'option', 'listbox',
 ]);
 
-/**
- * Whether an element is (or looks) interactive — tags, implicit/explicit
- * ARIA role, contenteditable, tabindex, or a click-handler hint (`onclick`
- * / `href`). Dead-click candidacy is the inverse.
- */
-export function isInteractiveElement(el: SelectorElement): boolean {
+function isInteractive(el: SelectorElement): boolean {
   const tag = el.tagName.toLowerCase();
   if (INTERACTIVE_TAGS.has(tag)) return true;
   const role = (el.getAttribute('role') ?? implicitRole(el) ?? '').toLowerCase();
   if (role && INTERACTIVE_ROLES.has(role)) return true;
   if ((el.getAttribute('contenteditable') ?? '').toLowerCase() === 'true') return true;
-  const ti = el.getAttribute('tabindex');
-  if (ti !== null && Number(ti) >= 0) return true;
+  const tabindex = el.getAttribute('tabindex');
+  if (tabindex !== null && Number(tabindex) >= 0) return true;
   if (el.getAttribute('onclick')) return true;
   if (el.getAttribute('href')) return true;
   return false;
 }
 
-/** A click that landed on a non-interactive element with no click-handler hint. */
+/**
+ * A click that landed on an element that does not look interactive — neither
+ * it nor any ancestor is a control, link, ARIA widget, editable region or
+ * carries a click-handler hint. The recorder still waits
+ * `FRUSTRATION_THRESHOLDS.dead.waitMs` for a navigation or DOM mutation
+ * before it marks the click dead.
+ */
 export function isDeadClickCandidate(el: SelectorElement): boolean {
-  return !isInteractiveElement(el);
+  let node: SelectorElement | null = el;
+  let depth = 0;
+  while (node && depth < 8) {
+    if (isInteractive(node)) return false;
+    node = node.parentElement;
+    depth += 1;
+  }
+  return true;
 }
 
 export interface PointerSample {
+  /** ms, any monotonic clock shared by the samples. */
   t: number;
   x: number;
   y: number;
 }
 
 /**
- * Three or more clicks inside 3 s and 24 px of each other. `clicks` need not
- * be sorted; a copy is ordered by `t`.
+ * Whether the LATEST click completes a rage burst: at least `minClicks`
+ * clicks (the latest included) inside `windowMs` before it and within
+ * `radiusPx` of it. `recent` is in arrival order.
  */
 export function isRageClick(
-  clicks: ReadonlyArray<PointerSample>,
-  opts: { windowMs?: number; radiusPx?: number; minClicks?: number } = {},
+  recent: ReadonlyArray<PointerSample>,
+  opts: { minClicks?: number; windowMs?: number; radiusPx?: number } = {},
 ): boolean {
+  const minClicks = opts.minClicks ?? FRUSTRATION_THRESHOLDS.rage.minClicks;
   const windowMs = opts.windowMs ?? FRUSTRATION_THRESHOLDS.rage.windowMs;
   const radiusPx = opts.radiusPx ?? FRUSTRATION_THRESHOLDS.rage.radiusPx;
-  const minClicks = opts.minClicks ?? FRUSTRATION_THRESHOLDS.rage.minClicks;
-  if (clicks.length < minClicks) return false;
-  const ordered = clicks.slice().sort((a, b) => a.t - b.t);
+  if (recent.length < minClicks) return false;
+  const last = recent[recent.length - 1]!;
   const r2 = radiusPx * radiusPx;
-  for (let i = 0; i < ordered.length; i++) {
-    const a = ordered[i]!;
-    let n = 1;
-    for (let j = i + 1; j < ordered.length; j++) {
-      const b = ordered[j]!;
-      if (b.t - a.t > windowMs) break;
-      const dx = a.x - b.x;
-      const dy = a.y - b.y;
-      if (dx * dx + dy * dy <= r2) n += 1;
-      if (n >= minClicks) return true;
-    }
+  let n = 0;
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const sample = recent[i]!;
+    if (last.t - sample.t > windowMs) break;
+    const dx = sample.x - last.x;
+    const dy = sample.y - last.y;
+    if (dx * dx + dy * dy <= r2) n += 1;
   }
-  return false;
+  return n >= minClicks;
 }
 
 export interface PageSample {
   path: string;
+  /** ms when the page was entered. */
   t: number;
 }
 
 /**
- * A→B→A where the return to A happened within 7 s of leaving it
- * (i.e. of arriving at B).
+ * A→B→A over the LAST three page entries, with the stay on B shorter than
+ * `maxDwellMs`. Earlier history is ignored, so the same bounce is reported
+ * once, when it happens.
  */
 export function isQuickBack(
   pages: ReadonlyArray<PageSample>,
-  windowMs: number = FRUSTRATION_THRESHOLDS.quickBack.windowMs,
+  opts: { maxDwellMs?: number } = {},
 ): boolean {
+  const maxDwellMs = opts.maxDwellMs ?? FRUSTRATION_THRESHOLDS.quickBack.maxDwellMs;
   if (pages.length < 3) return false;
-  for (let i = 2; i < pages.length; i++) {
-    const a = pages[i - 2]!;
-    const b = pages[i - 1]!;
-    const c = pages[i]!;
-    if (a.path === c.path && a.path !== b.path && c.t - b.t <= windowMs) return true;
-  }
-  return false;
+  const a = pages[pages.length - 3]!;
+  const b = pages[pages.length - 2]!;
+  const c = pages[pages.length - 1]!;
+  if (a.path !== c.path || a.path === b.path) return false;
+  const dwell = c.t - b.t;
+  return dwell >= 0 && dwell < maxDwellMs;
 }
 
 export interface ScrollSample {
   t: number;
+  /** Vertical scroll offset in px. */
   y: number;
 }
 
 /**
- * Either ≥3 direction reversals inside 5 s, or ≥3 viewport-heights of
- * travel inside 10 s. `viewportHeight` defaults to 800 so the height
- * check is well-defined without a window.
+ * Excessive scrolling, judged at the latest sample:
+ * - ≥ `reversals` direction changes inside the last `reversalWindowMs`; or
+ * - more than `viewportHeights` × `viewportH` px of scrolling inside the last
+ *   `travelWindowMs`, with no click in that window (`lastClickT` null = no
+ *   click yet).
  */
 export function isExcessiveScroll(
   samples: ReadonlyArray<ScrollSample>,
-  opts: {
-    reversals?: number;
-    windowMs?: number;
-    viewportHeights?: number;
-    heightWindowMs?: number;
-    viewportHeight?: number;
-  } = {},
+  viewportH: number,
+  lastClickT: number | null,
+  opts: { reversals?: number; reversalWindowMs?: number; viewportHeights?: number; travelWindowMs?: number } = {},
 ): boolean {
-  const reversalsNeeded = opts.reversals ?? FRUSTRATION_THRESHOLDS.excessiveScroll.reversals;
-  const reversalWindowMs = opts.windowMs ?? FRUSTRATION_THRESHOLDS.excessiveScroll.reversalWindowMs;
-  const vhNeeded = opts.viewportHeights ?? FRUSTRATION_THRESHOLDS.excessiveScroll.viewportHeights;
-  const heightWindowMs = opts.heightWindowMs ?? FRUSTRATION_THRESHOLDS.excessiveScroll.heightWindowMs;
-  const viewportHeight = opts.viewportHeight ?? 800;
+  const t = FRUSTRATION_THRESHOLDS.excessiveScroll;
+  const reversalsNeeded = opts.reversals ?? t.reversals;
+  const reversalWindowMs = opts.reversalWindowMs ?? t.reversalWindowMs;
+  const viewportHeights = opts.viewportHeights ?? t.viewportHeights;
+  const travelWindowMs = opts.travelWindowMs ?? t.travelWindowMs;
   if (samples.length < 2) return false;
-  const ordered = samples.slice().sort((a, b) => a.t - b.t);
+  const now = samples[samples.length - 1]!.t;
 
-  const turns: number[] = [];
+  let reversals = 0;
   let prevSign = 0;
-  for (let i = 1; i < ordered.length; i++) {
-    const dy = ordered[i]!.y - ordered[i - 1]!.y;
-    const sign = dy === 0 ? 0 : dy > 0 ? 1 : -1;
-    if (sign !== 0 && prevSign !== 0 && sign !== prevSign) {
-      turns.push(ordered[i]!.t);
-      if (countInWindow(turns, reversalWindowMs) >= reversalsNeeded) return true;
-    }
-    if (sign !== 0) prevSign = sign;
+  for (let i = 1; i < samples.length; i++) {
+    const prev = samples[i - 1]!;
+    const cur = samples[i]!;
+    const dy = cur.y - prev.y;
+    const sign = dy > 0 ? 1 : dy < 0 ? -1 : 0;
+    if (sign === 0) continue;
+    if (prevSign !== 0 && sign !== prevSign && now - cur.t <= reversalWindowMs) reversals += 1;
+    prevSign = sign;
   }
+  if (reversals >= reversalsNeeded) return true;
 
-  const travel = vhNeeded * viewportHeight;
-  let lo = 0;
-  let minY = ordered[0]!.y;
-  let maxY = ordered[0]!.y;
-  for (let hi = 0; hi < ordered.length; hi++) {
-    const tHi = ordered[hi]!.t;
-    while (lo < hi && tHi - ordered[lo]!.t > heightWindowMs) lo += 1;
-    minY = Infinity;
-    maxY = -Infinity;
-    for (let k = lo; k <= hi; k++) {
-      const y = ordered[k]!.y;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-    if (maxY - minY >= travel) return true;
+  const windowStart = now - travelWindowMs;
+  if (lastClickT !== null && lastClickT >= windowStart) return false;
+  if (!(viewportH > 0)) return false;
+  let travel = 0;
+  for (let i = 1; i < samples.length; i++) {
+    const cur = samples[i]!;
+    if (cur.t < windowStart) continue;
+    travel += Math.abs(cur.y - samples[i - 1]!.y);
   }
-  return false;
-}
-
-function countInWindow(times: readonly number[], windowMs: number): number {
-  const last = times[times.length - 1]!;
-  let n = 0;
-  for (let i = times.length - 1; i >= 0; i--) {
-    if (last - times[i]! > windowMs) break;
-    n += 1;
-  }
-  return n;
+  return travel > viewportHeights * viewportH;
 }

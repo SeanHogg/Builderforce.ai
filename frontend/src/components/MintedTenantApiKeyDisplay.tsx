@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import { AUTH_API_URL } from '@/lib/auth';
+import { REPLAY_BLOCK } from '@/lib/replaySensitive';
 
 /**
  * Shared "save this key now" banner used by both the owner self-service mint
@@ -86,7 +87,7 @@ const client = new BuilderforceClient({
 });`;
 
   return (
-    <div style={cardStyle}>
+    <div style={cardStyle} {...REPLAY_BLOCK}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
         {t('saveNow')}
       </div>

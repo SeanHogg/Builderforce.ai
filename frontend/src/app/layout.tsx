@@ -42,6 +42,7 @@ import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
 import { RANDOM_UUID_POLYFILL } from '@/lib/randomUuidPolyfill';
 import { QUALITY_INGEST_ENDPOINT } from '@/lib/reportError';
 import { VisitorJourneyTracker } from '@/components/VisitorJourneyTracker';
+import { ReplayLoader } from '@/components/ReplayLoader';
 import { DiscountCodeCapture } from '@/components/DiscountCodeCapture';
 import { CookieConsentManager } from '@/components/privacy/CookieConsentManager';
 import { SkipToContent } from '@/components/SkipToContent';
@@ -219,6 +220,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   `/embed` and every other surface exactly as it did before.
                 */}
                 <VisitorJourneyTracker />
+                {/* builderforce.ai records itself with the public snippet (PRD 33
+                    S3): nothing renders without a site key, and nothing before
+                    analytics consent. Inside the provider for the signed-in gate. */}
+                <ReplayLoader />
                 {/*
                   What is left at the ROOT is what EVERY route needs: the session,
                   the confirm/toast primitives any surface may call, and the locale

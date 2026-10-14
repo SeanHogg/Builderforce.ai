@@ -196,6 +196,14 @@ export interface PlanLimits {
    * the offline render is a paid convenience. See `presentation/routes/videoRoutes.ts`.
    */
   serverVideoRender: boolean;
+  /**
+   * Insights — session replay, heatmaps, live visitors (PRD 33). FALSE on every plan:
+   * this is a marketplace CAPABILITY, not a plan tier. A workspace gets it by holding
+   * a live licence for the `session-replay` capability listing (`CAPABILITY_FEATURES`
+   * in `capabilityFeatures.ts`, read by `heldCapabilityFeatures`). Recording volume is
+   * metered separately (5,000 free a month, then prepaid packs — D4).
+   */
+  sessionReplay: boolean;
 }
 
 export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
@@ -235,6 +243,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     containerRuntime: false,
     removeBranding: false,
     serverVideoRender: false,
+    sessionReplay: false,
   },
   [TenantPlan.PRO]: {
     maxCreationSessions: 500,
@@ -272,6 +281,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     containerRuntime: true,
     removeBranding: true,
     serverVideoRender: true,
+    sessionReplay: false,
   },
   [TenantPlan.TEAMS]: {
     maxCreationSessions: -1,
@@ -309,6 +319,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     containerRuntime: true,
     removeBranding: true,
     serverVideoRender: true,
+    sessionReplay: false,
   },
 };
 

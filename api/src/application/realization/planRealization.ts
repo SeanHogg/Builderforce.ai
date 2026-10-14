@@ -8,6 +8,7 @@
  * way of building it.
  */
 
+import type { ProofMeasure } from '@builderforce/interaction-contract';
 import type { BackendStrategyKey } from '../backend/hostingStrategy';
 import { isBackendStrategy } from '../backend/hostingStrategy';
 import type { ChallengePlan } from '../challenge/planChallenge';
@@ -61,6 +62,8 @@ export interface RealizationBuild {
   plan: ChallengePlan;
   /** Site collections the generated forms post to. Created by the service. */
   collections: string[];
+  /** The visitor behaviour that grades this proof, or null when its criteria are not visitor behaviour. */
+  measure: ProofMeasure | null;
 }
 
 /**
@@ -109,5 +112,5 @@ export function planRealization(
     successCriteria: distinctBy([...output.successCriteria, ...(base?.successCriteria ?? [])], (s) => s),
   };
 
-  return { plan, collections: [...output.requiredCollections] };
+  return { plan, collections: [...output.requiredCollections], measure: output.measure ?? null };
 }

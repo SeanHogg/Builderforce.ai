@@ -135,7 +135,9 @@ export async function launchListing(
   const row = await resolveListingBySlug(db, slug);
   if (!row) return null;
   const body = row.body as ListingBody | null;
-  if (!body) return null;
+  // A capability listing (`deliveries: ['entitlement']`) has no snapshot to launch:
+  // the licence IS the product, and its app is reached through the install path.
+  if (!body || !body.snapshotId) return null;
 
   // THE rule, called rather than restated. `resolveListingAccess` answers both
   // halves at once — may this caller see the listing, and do they get the product or

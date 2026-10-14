@@ -39,8 +39,11 @@ export async function verifySecret(value: string, storedHash: string): Promise<b
  *   - `bff` — Product Feedback ingest key, per project collector (`feedback_collectors.key_hash`)
  *   - `bfx` — xAPI LRS Basic credential, both halves (`connections.external_account`
  *             for the public key, `credentials` for the sealed secret)
+ *   - `bfr` — Insights site key (`tenant_api_keys`, scope `replay:ingest` only, bound to
+ *             the site's origins). PUBLIC by design: it sits in the loader tag on every
+ *             page of the customer's site, so its only power is ingest from those origins.
  */
-export function generateApiKey(prefix: 'bfa' | 'clk' | 'clu' | 'bfk' | 'whsec' | 'bfq' | 'bff' | 'bfx'): string {
+export function generateApiKey(prefix: 'bfa' | 'clk' | 'clu' | 'bfk' | 'whsec' | 'bfq' | 'bff' | 'bfx' | 'bfr'): string {
   return `${prefix}_${randomHex(16)}`;
 }
 

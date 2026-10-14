@@ -38,6 +38,7 @@ import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { rollUpToolAudit, TOOL_AUDIT_ROLLUP_AFTER_DAYS } from './toolAuditRollup';
 import { rollUpLlmUsage, LLM_USAGE_ROLLUP_AFTER_DAYS } from './llmUsageRollup';
 import { VISITOR_RETENTION_DAYS, purgeVisitorActivity } from '../marketing/visitorActivity';
+import { DAY_MS, MINUTE_MS } from '../../domain/shared/time';
 import {
   activitySignals,
   apiErrorLog,
@@ -55,9 +56,23 @@ import {
   prReconciliationItems,
   prReconciliationRuns,
   qaJourneyEvents,
+  replayBreakdownDaily,
+  replayHeatDaily,
+  replayIssueDaily,
+  replayIssues,
+  replayLive,
+  replayRecordings,
+  replayRouteDaily,
+  replayVitalsDaily,
   toolAuditDaily,
   toolAuditEvents,
 } from '../../infrastructure/database/schema';
+
+/** `YYYY-MM-DD` (UTC) for a `date` column cutoff. */
+const utcDay = (at: Date): string => at.toISOString().slice(0, 10);
+/** Insights daily rollups keep 13 months (PRD 33 D3). */
+const ROLLUP_DAYS = 400;
+const ROLLUP_RATIONALE = 'Insights daily rollup (13 months, D3): additive counts per route x day x release x device, with no visitor in them; nothing reads a day older than the 13-month comparison window.';
 
 /** Which Neon database a relation lives in — they are separate endpoints. */
 export type SweptConnection = 'primary' | 'transactional';
@@ -264,7 +279,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   {
     relation: 'ingestion_usage_log',
     connections: ['transactional', 'primary'],
-    retentionDays: 400,
+    retentionDays: ROLLUP_DAYS,
     pressureFloorDays: 45,
     rationale:
       'The non-token half of the consumption meter — bytes processed per repo import / '
@@ -385,7 +400,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
   {
     relation: 'tool_audit_daily',
     connections: ['transactional', 'primary'],
-    retentionDays: 400,
+    retentionDays: ROLLUP_DAYS,
     rationale:
       'The compliance record `tool_audit_events` becomes at 45 days. Retained far LONGER than its '
       + 'source on purpose — a full annual audit period plus the lookback an auditor asks for — '
@@ -497,6 +512,78 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     pressureFloorDays: 14,
     rationale: 'Per-sync connector run log, read only while diagnosing a failing integration. Aged by `started_at` — the row is written when the sync begins.',
     purge: (db, cutoff) => db.delete(integrationSyncLogs).where(acrossTenants(integrationSyncLogs, 'scheduled_sweep', lt(integrationSyncLogs.startedAt, cutoff))),
+  },
+  // ── Insights (PRD 33 D3) — the operational telemetry, mirrored on core (1217) ──
+  // The daily rollups keep 13 months; every one is an additive counter table with no
+  // visitor in it, so an age window is the whole policy.
+  {
+    relation: 'replay_route_daily',
+    connections: ['transactional', 'primary'],
+    retentionDays: ROLLUP_DAYS,
+    pressureFloorDays: 90,
+    rationale: ROLLUP_RATIONALE,
+    purge: (db, cutoff) => db.delete(replayRouteDaily).where(acrossTenants(replayRouteDaily, 'scheduled_sweep', lt(replayRouteDaily.day, utcDay(cutoff)))),
+  },
+  {
+    relation: 'replay_breakdown_daily',
+    connections: ['transactional', 'primary'],
+    retentionDays: ROLLUP_DAYS,
+    pressureFloorDays: 90,
+    rationale: ROLLUP_RATIONALE,
+    purge: (db, cutoff) => db.delete(replayBreakdownDaily).where(acrossTenants(replayBreakdownDaily, 'scheduled_sweep', lt(replayBreakdownDaily.day, utcDay(cutoff)))),
+  },
+  {
+    relation: 'replay_heat_daily',
+    connections: ['transactional', 'primary'],
+    retentionDays: ROLLUP_DAYS,
+    pressureFloorDays: 90,
+    rationale: ROLLUP_RATIONALE,
+    purge: (db, cutoff) => db.delete(replayHeatDaily).where(acrossTenants(replayHeatDaily, 'scheduled_sweep', lt(replayHeatDaily.day, utcDay(cutoff)))),
+  },
+  {
+    relation: 'replay_vitals_daily',
+    connections: ['transactional', 'primary'],
+    retentionDays: ROLLUP_DAYS,
+    pressureFloorDays: 90,
+    rationale: ROLLUP_RATIONALE,
+    purge: (db, cutoff) => db.delete(replayVitalsDaily).where(acrossTenants(replayVitalsDaily, 'scheduled_sweep', lt(replayVitalsDaily.day, utcDay(cutoff)))),
+  },
+  {
+    relation: 'replay_issue_daily',
+    connections: ['transactional', 'primary'],
+    retentionDays: ROLLUP_DAYS,
+    pressureFloorDays: 90,
+    rationale: 'Insights issue sessions per day (13 months, D3). Child of replay_issues; aged by its own day.',
+    purge: (db, cutoff) => db.delete(replayIssueDaily).where(lt(replayIssueDaily.day, utcDay(cutoff))),
+  },
+  {
+    relation: 'replay_issues',
+    connections: ['transactional', 'primary'],
+    retentionDays: ROLLUP_DAYS,
+    rationale: 'Insights issue groups not seen for 13 months — their daily rows are gone, so nothing could rank them.',
+    purge: (db, cutoff) => db.delete(replayIssues).where(acrossTenants(replayIssues, 'scheduled_sweep', lt(replayIssues.lastSeenAt, cutoff))),
+  },
+  {
+    relation: 'replay_recordings',
+    connections: ['transactional', 'primary'],
+    // The BACKSTOP at the longest site window (90 days). Each site's own window
+    // (30 by default) is applied by `replayRetention.purgeExpiredRecordings`, which
+    // also sweeps the R2 bytes; this entry catches rows whose site no longer exists
+    // and gives the relation its vacuum.
+    retentionDays: 90,
+    rationale: 'Kept Insights recordings: per-site retention (D3) is the replay retention pass; this is the 90-day ceiling and the vacuum.',
+    purge: (db, cutoff) => db.delete(replayRecordings).where(acrossTenants(replayRecordings, 'scheduled_sweep', lt(replayRecordings.startedAt, cutoff))),
+  },
+  {
+    relation: 'replay_live',
+    connections: ['transactional', 'primary'],
+    // A one-day window is the registry's smallest unit; presence is only "live" for
+    // five minutes, so the purge moves the cutoff up to now − 5 min (ingest also
+    // purges each site's stale rows once a minute).
+    retentionDays: 1,
+    rationale: 'Insights live presence: a row older than five minutes is not live and nothing reads it.',
+    purge: (db, cutoff) => db.delete(replayLive).where(acrossTenants(replayLive, 'scheduled_sweep',
+      lt(replayLive.lastSeenAt, new Date(cutoff.getTime() + DAY_MS - 5 * MINUTE_MS)))),
   },
 ];
 

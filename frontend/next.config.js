@@ -241,6 +241,8 @@ const nextConfig = {
             //   • WASM + blob workers (onnxruntime-web, Monaco, transformers.js, WebContainer)
             //   • the in-browser IDE preview frames (*.webcontainer-api.io / *.staticblitz.com)
             //   • WebRTC/relay sockets (wss:) for meetings, execution steering, live rooms
+            //   • cdn.builderforce.ai — the Insights loader/recorder on builderforce.ai
+            //     itself and the replay player bundle + stylesheet (PRD 33 D5, D17)
             // 'unsafe-inline' is required because the app styles via inline
             // style={} and injects inline <script> (theme anti-FOUC, GTM loader);
             // a nonce CSP is impractical across the statically-prerendered shell.
@@ -250,11 +252,12 @@ const nextConfig = {
               "base-uri 'self'",
               "object-src 'none'",
               "frame-ancestors 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://www.googletagmanager.com https://www.google-analytics.com https://ssl.google-analytics.com https://static.cloudflareinsights.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://www.googletagmanager.com https://www.google-analytics.com https://ssl.google-analytics.com https://static.cloudflareinsights.com https://cdn.builderforce.ai",
               // Fonts are system stacks (`--font-sans` in globals.css) plus
               // JetBrains Mono self-hosted by `next/font/google`, so 'self' is
               // the whole font surface — no third-party font origin is loaded.
-              "style-src 'self' 'unsafe-inline'",
+              // cdn.builderforce.ai serves the replay player's rrweb stylesheet.
+              "style-src 'self' 'unsafe-inline' https://cdn.builderforce.ai",
               "font-src 'self' data:",
               "img-src 'self' data: blob: https:",
               "media-src 'self' blob: data: https:",

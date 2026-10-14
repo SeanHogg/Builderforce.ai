@@ -3,45 +3,72 @@
 import { memo, useEffect, useRef, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
-import { clearPreviewPick, previewPickExcerpt, usePreviewPick } from '@/lib/workspace/previewPick';
+import {
+  previewPickExcerpt,
+  previewPickKey,
+  removePreviewPick,
+  usePreviewPicks,
+  type PreviewPick,
+} from '@/lib/workspace/previewPick';
 
 /**
- * The element picked in a live preview, as a chip in the composer's tool row — what the
- * next request is about. × withdraws it, and the request goes back to meaning the whole
- * app. Renders nothing while nothing is picked, so every composer that hosts a preview
- * can carry it unconditionally (the canvas prompt and the Studio workspace's Brain).
+ * The elements picked for the next request, as chips in the composer's tool row — one
+ * per pick: an element clicked in a live preview (source-anchored), or an element a
+ * fix changes (selector-anchored, from Insights' "Apply in composer"). Each chip's ×
+ * withdraws that one pick. Renders nothing while nothing is picked, so every composer
+ * that hosts a preview can carry it unconditionally (the canvas prompt and the Studio
+ * workspace's Brain).
  *
- * A new pick puts the caret in THIS chip's composer: the person just pointed at
- * something, and the next thing they do is say what to change about it.
+ * New picks put the caret in THIS composer: the person just pointed at something, and
+ * the next thing they do is say what to change about it.
  */
-export const PreviewPickChip = memo(function PreviewPickChip() {
-  const t = useTranslations('ide.previewPick');
-  const pick = usePreviewPick();
-  const chipRef = useRef<HTMLSpanElement>(null);
+export const PreviewPickChips = memo(function PreviewPickChips() {
+  const picks = usePreviewPicks();
+  const rowRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
-    if (!pick) return;
-    const box = chipRef.current?.closest('form')?.querySelector('textarea');
+    if (picks.length === 0) return;
+    const box = rowRef.current?.closest('form')?.querySelector('textarea');
     if (!box) return;
     box.focus();
     box.setSelectionRange(box.value.length, box.value.length);
-  }, [pick]);
-  if (!pick) return null;
-  const excerpt = previewPickExcerpt(pick.text, 28);
-  const label = excerpt ? t('labelWithText', { tag: pick.tag, text: excerpt }) : t('label', { tag: pick.tag });
-  const where = t('where', { file: pick.file, line: pick.line });
+  }, [picks]);
+  if (picks.length === 0) return null;
   return (
-    <span ref={chipRef} style={chipStyle} title={where} data-testid="preview-pick-chip">
+    <span ref={rowRef} style={rowStyle}>
+      {picks.map((pick) => <PreviewPickChip key={previewPickKey(pick)} pick={pick} />)}
+    </span>
+  );
+});
+
+function PreviewPickChip({ pick }: { pick: PreviewPick }) {
+  const t = useTranslations('ide.previewPick');
+  const a = pick.anchor;
+  let label: string;
+  let where: string;
+  if (a.kind === 'selector') {
+    label = previewPickExcerpt(a.label, 28) ?? previewPickExcerpt(a.selector, 28) ?? a.selector;
+    where = t('whereSelector', { selector: a.selector, page: a.pagePath });
+  } else {
+    const excerpt = previewPickExcerpt(a.text, 28);
+    label = excerpt ? t('labelWithText', { tag: a.tag, text: excerpt }) : t('label', { tag: a.tag });
+    where = t('where', { file: a.file, line: a.line });
+  }
+  return (
+    <span style={chipStyle} title={where} data-testid="preview-pick-chip" data-anchor={a.kind}>
       <Icon name="cursor" size={13} />
       <span style={labelStyle}>
         <span className="sr-only">{t('aria')} </span>
         {label}
       </span>
-      <button type="button" style={removeStyle} onClick={() => clearPreviewPick()} aria-label={t('remove')} title={t('remove')}>
+      <button type="button" style={removeStyle} onClick={() => removePreviewPick(pick)} aria-label={t('remove')} title={t('remove')}>
         <Icon name="close" size={12} />
       </button>
     </span>
   );
-});
+}
+
+/** The chips wrap rather than overflowing a phone row. */
+const rowStyle: CSSProperties = { display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' };
 
 /** Accent-tinted from theme tokens, so it reads in light and dark; it shrinks rather than overflowing a phone row. */
 const chipStyle: CSSProperties = {

@@ -288,8 +288,11 @@ const BASELINE = {
    * (Insights S0.2) and split into the panel and `UserDetailSections`. All eleven of
    * its literals named roles on the way: 10/11 = eyebrow, 12/13 = small, and the
    * 16/18 title and close glyph are the panel header's own now.
+   *
+   * 3370 → 3364 (2026-10-13): the dead `VisitorJourneyDrawer` (Insights S0, six
+   * literals, no importer) was deleted rather than migrated.
    */
-  offScaleFontSizes: 3370,
+  offScaleFontSizes: 3364,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

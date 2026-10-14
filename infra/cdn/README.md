@@ -10,52 +10,46 @@ so the catch-all cannot match.
 | Key | Cache-Control | Who fetches it |
 | --- | --- | --- |
 | `replay/v1/loader.js` | `public, max-age=300` | Customer pages (`<script src=…>`) |
-| `replay/r/recorder.<hash>.js` | `public, max-age=31536000, immutable` | Loader, after reading the manifest |
-| `replay/manifest.json` | `public, max-age=60` | Loader (browser) **and** `ReplayConfigService` (API, 10 min in-process cache) |
+| `replay/r/recorder.<hash>.js` | `public, max-age=31536000, immutable` | Loader, at the URL the config answer names |
+| `replay/manifest.json` | `public, max-age=60` | `ReplayConfigService` only (API, 10 min in-process cache) |
 | `embed/v1.js` | `public, max-age=300` | `unifiedEmbedSnippet()` in `frontend/src/lib/embeddedCapabilities.ts:80` |
 
 The loader is 5 minutes so a botched publish heals on the next page load. The
 hashed recorder is immutable because its URL is content-addressed. The manifest
-is 60 seconds so `ReplayConfigService` and the snippet see a new recorder
-within a minute of publish.
+is 60 seconds so `ReplayConfigService` sees a new recorder within a minute of
+publish (plus its own 10 min cache).
 
 ## Manifest contract
 
-`GET https://cdn.builderforce.ai/replay/manifest.json` returns both shapes:
+`GET https://cdn.builderforce.ai/replay/manifest.json`:
 
 ```json
 {
-  "version": 1,
-  "hash": "<8 hex>",
-  "loader": "/replay/v1/loader.js",
-  "recorder": "/replay/r/recorder.<hash>.js",
-  "embed": "/embed/v1.js",
-  "builtAt": "<ISO-8601>",
   "latest": {
     "version": "<package version>",
-    "url": "https://cdn.builderforce.ai/replay/r/recorder.<hash>.js",
-    "hash": "<8 hex>",
+    "url": "https://cdn.builderforce.ai/replay/r/recorder.<12 hex>.js",
+    "hash": "<12 hex>",
     "builtAt": "<ISO-8601>"
   }
 }
 ```
 
-- The snippet / npm loader reads `recorder` + `hash`.
-- `ReplayConfigService` reads `latest` (url, hash, version, builtAt) and
-  caches the response 10 minutes. The URL is public; CORS is `GET, HEAD`
-  from `*` so a browser can fetch it too. Worker-side `fetch` does not
-  need CORS.
+Only `ReplayConfigService` reads it (10 min in-process cache) and names the
+recorder in the config answer the loader fetches — the loader itself never
+reads the manifest, so its URL never changes (PRD 33 §3.5). A rollback is a
+pin in the site's `recorderChannel` or the platform setting. CORS is
+`GET, HEAD` from `*`; Worker-side `fetch` does not need it.
 
 `api/wrangler.toml` exposes `REPLAY_CDN_ORIGIN` and `REPLAY_MANIFEST_URL`
 so the API can point at this file without a hardcoded string.
 
 ## `embed/v1.js`
 
-The marketing snippet already points at `https://cdn.builderforce.ai/embed/v1.js`.
-S2 publishes the replay-sdk embed IIFE at that path (same `data-builderforce-key`
-contract as the loader). It boots session replay and installs
-`window.BuilderForce.session`. Hosted-app runtimes (flags, forms) can land
-later at the same URL; leaving it 404 is not an option.
+The unified embed snippet (`unifiedEmbedSnippet()`) points at
+`https://cdn.builderforce.ai/embed/v1.js`. Its replay part is the loader:
+when the tag carries `data-site` (a replay site key) it boots session replay
+exactly as `/replay/v1/loader.js` does. The workspace key on
+`data-builderforce-key` is never used as a replay key.
 
 ## Scripts
 
@@ -86,12 +80,12 @@ CORS policy lives at `infra/cdn/cors.json` (`GET`, `HEAD` from `*`).
 
 ## Release job
 
-The job YAML lives at [`publish-cdn.job.yml`](./publish-cdn.job.yml) so it
-can be spliced into `.github/workflows/release.yml` after `package-npm`
-and before `deploy-api`. S2 does not own that workflow file.
-
-Until the job is spliced, a maintainer publishes with the two scripts
-above. The live kill-check (`curl -I` the four URLs) is S8.
+`.github/workflows/release.yml` runs `publish-cdn` after `package-npm` (which
+also publishes `@seanhogg/builderforce-replay` to npm): it type-checks, tests,
+builds and size-checks `replay-sdk`, runs `cdn-ensure.sh`, then
+`cdn-publish.sh replay-sdk/dist/assets`. `deploy-api` waits for it but is not
+blocked by a CDN failure, because the API reads the live manifest. The live
+kill-check (`curl -I` the four URLs) is the runbook's step 1 (PRD 33 §11).
 
 ## Binding
 

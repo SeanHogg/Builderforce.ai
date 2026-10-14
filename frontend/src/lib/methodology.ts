@@ -35,14 +35,14 @@
  * ── WHY THE PROOF CATALOG IS MIRRORED AND NOT IMPORTED ──────────────────────
  * The eight targets are declared in the API (`realization/targets/*`), which a
  * static, signed-out marketing page cannot import and must not have to call.
- * `RealizationKey` is already mirrored in `lib/builderforceApi.ts`, so the KEYS
+ * `RealizationKey` is already mirrored in `lib/realizationApi.ts`, so the KEYS
  * are type-checked against that union here; the two numbers each row carries are
  * asserted equal to the API's own by `scripts/check-methodology.mjs`, wired into
  * `npm test`. A mirror with a ratchet is a mirror; a mirror without one is a
  * second source of truth.
  */
 
-import type { RealizationKey } from './builderforceApi';
+import type { RealizationKey } from './realizationApi';
 import { ARC_STAGES, type Stage } from './navGroups';
 
 /**

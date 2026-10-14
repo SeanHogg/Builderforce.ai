@@ -50,6 +50,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
+import { bumpSplitSitesForTest } from '../replay/abSplitVersion';
 
 /** `ab_tests.status`. */
 export const TEST_STATUSES = ['draft', 'running', 'stopped', 'concluded'] as const;
@@ -258,6 +259,9 @@ export async function stopTest(
     tenantId, actor, verb: concluded ? 'ab_test.concluded' : 'ab_test.stopped',
     targetType: 'ab_test', targetId: String(testId), metadata: { key: row.key },
   });
+  // A hosted site splitting on this test stops splitting on the next request, whichever
+  // path stopped it (PRD 33 §5.1.4).
+  await bumpSplitSitesForTest(env, db, tenantId, testId);
   return row;
 }
 

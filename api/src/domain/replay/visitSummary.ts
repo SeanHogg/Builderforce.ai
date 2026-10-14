@@ -1,155 +1,189 @@
 /**
- * Incremental visit fold.
+ * The kept recording's row, as an incremental fold (PRD 33 §3.2 `replay_recordings`).
  *
- * Each ingested chunk updates the recording's counters, paths, active time
- * and end marker. The Worker never re-reads earlier chunks to recompute
- * these — `foldVisit(prev, chunk, now)` is the whole state machine, so a
- * crash between chunks leaves a row that the next chunk can resume.
+ * Each KEPT chunk updates the row's counters, paths, active time, end marker and the
+ * capped arrays filters, funnels and flow read (`routes`, `events`, `frustrations`,
+ * `clicked`, `issue_fps`, `steps`). The Worker never re-reads earlier chunks:
+ * `foldVisit(prev, chunk, now, siteId)` is the whole state machine, so a crash
+ * between chunks leaves a row the next chunk can resume.
+ *
+ * `siteId` is needed for one thing — issue fingerprints are per site, and the row's
+ * `issue_fps` must equal the fingerprints the rollups write.
  */
 
-import type { ReplayChunk, ReplayChunkEvent, ReplayMark } from '@builderforce/interaction-contract';
-import { SECOND_MS } from '../shared/time';
+import {
+  REPLAY_LIMITS,
+  type ReplayChunk,
+  type ReplayDeviceClass,
+  type ReplayKeepReason,
+} from '@builderforce/interaction-contract';
+import { attributeRoutes, cap, eventNamesOf, isFrustrationKind, isGoalMark, issueOf } from './markWalk';
 
-/** Gaps longer than this are idle, not active time. */
-export const IDLE_GAP_MS = 30 * SECOND_MS;
+/** Distinct values kept per array column (`clicked` is ≤ 50 by the PRD). */
+export const VISIT_ARRAY_CAP = 50;
+/** Ordered route/event steps kept for funnels and flow. */
+export const VISIT_STEPS_CAP = 60;
 
-const ACTIVITY_KINDS = new Set(['click', 'input', 'scroll', 'change', 'submit', 'rage', 'dead']);
-const PAGE_KINDS = new Set(['pageview', 'nav', 'page']);
-const PATH_MAX = 512;
+const PATH_MAX = 400;
+const SELECTOR_MAX = 400;
 
 export interface VisitRow {
   visitId: string;
+  visitorId: string;
   startedAt: Date;
   lastEventAt: Date;
   endedAt: Date | null;
   durationMs: number;
+  activeMs: number;
   entryPath: string;
   exitPath: string;
   pageCount: number;
+  releaseKey: string;
+  recorderVersion: string;
+  deviceClass: ReplayDeviceClass;
+  viewportW: number;
+  viewportH: number;
+  browser: string | null;
+  os: string | null;
+  referrerHost: string | null;
   clickCount: number;
   rageCount: number;
   deadCount: number;
   errorCount: number;
   quickbackCount: number;
   excessiveScrollCount: number;
-  activeMs: number;
   converted: boolean;
+  keepReason: ReplayKeepReason;
+  sampleWeight: number;
+  variant: string | null;
+  identifiedId: string | null;
+  traits: Record<string, string> | null;
   chunkCount: number;
+  routes: string[];
+  events: string[];
+  frustrations: string[];
+  clicked: string[];
+  issueFps: string[];
+  steps: string[];
+  tags: Record<string, string>;
 }
 
-function capPath(value: string): string {
-  return value.length <= PATH_MAX ? value : value.slice(0, PATH_MAX);
-}
-
-function eventPath(event: ReplayChunkEvent): string | null {
-  const path = event.path;
-  return typeof path === 'string' && path.length > 0 ? capPath(path) : null;
-}
-
-function isEndMarker(event: ReplayChunkEvent): boolean {
-  if (event.kind === 'end' || event.kind === 'pagehide') return true;
-  if (event.kind !== 'visibility') return false;
-  return event.hidden === true || event.state === 'hidden';
-}
-
-function isConverted(event: ReplayChunkEvent): boolean {
-  return event.kind === 'goal' || event.converted === true;
-}
-
-function countKind(chunk: ReplayChunk, kind: string): number {
-  const marks = chunk.marks ?? [];
-  const fromMarks = marks.filter((mark) => mark.kind === kind).length;
-  if (fromMarks > 0) return fromMarks;
-  return chunk.events.filter((event) => event.kind === kind).length;
-}
-
-function pageEvents(chunk: ReplayChunk): Array<{ path: string }> {
-  const fromEvents = chunk.events
-    .filter((event) => PAGE_KINDS.has(event.kind))
-    .map((event) => {
-      const path = eventPath(event);
-      return path ? { path } : null;
-    })
-    .filter((row): row is { path: string } => row !== null);
-  if (fromEvents.length > 0) return fromEvents;
-  return (chunk.marks ?? [])
-    .filter((mark) => mark.kind === 'page' && mark.key.length > 0)
-    .map((mark) => ({ path: capPath(mark.key) }));
-}
-
-function activityOffsets(chunk: ReplayChunk): number[] {
-  const fromEvents = chunk.events
-    .filter((event) => ACTIVITY_KINDS.has(event.kind))
-    .map((event) => event.t);
-  const fromMarks = (chunk.marks ?? [])
-    .filter((mark: ReplayMark) => ACTIVITY_KINDS.has(mark.kind))
-    .map((mark) => mark.atMs);
-  return [...fromEvents, ...fromMarks].filter((t) => Number.isFinite(t) && t >= 0).sort((a, b) => a - b);
-}
-
-function activeMsDelta(prevLastActivityOffset: number | null, chunk: ReplayChunk): { add: number; lastOffset: number | null } {
-  const offsets = activityOffsets(chunk);
-  if (offsets.length === 0) return { add: 0, lastOffset: prevLastActivityOffset };
-  let add = 0;
-  let last = prevLastActivityOffset;
-  for (const t of offsets) {
-    if (last !== null) {
-      const gap = t - last;
-      if (gap > 0 && gap <= IDLE_GAP_MS) add += gap;
-    }
-    last = t;
+/** Append distinct values, keeping the first `max`. */
+function addDistinct(into: string[], values: Iterable<string>, max: number): string[] {
+  const out = into.slice();
+  const seen = new Set(out);
+  for (const value of values) {
+    if (out.length >= max) break;
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
   }
-  return { add, lastOffset: last };
+  return out;
 }
 
-function lastEventOffset(chunk: ReplayChunk): number {
-  let max = 0;
-  for (const event of chunk.events) {
-    if (event.t > max) max = event.t;
+/** Append steps in order, collapsing an immediate repeat, keeping the first `max`. */
+function addSteps(into: string[], values: readonly string[], max: number): string[] {
+  const out = into.slice();
+  for (const value of values) {
+    if (out.length >= max) break;
+    if (out[out.length - 1] === value) continue;
+    out.push(value);
   }
-  for (const mark of chunk.marks ?? []) {
-    if (mark.atMs > max) max = mark.atMs;
+  return out;
+}
+
+/** Sticky tags: last write wins for a known key; a new key only while under the cap. */
+function mergeTags(prev: Record<string, string>, next: Record<string, string> | undefined): Record<string, string> {
+  if (!next) return prev;
+  const out = { ...prev };
+  for (const [key, value] of Object.entries(next)) {
+    if (key in out || Object.keys(out).length < REPLAY_LIMITS.maxTagsPerVisit) out[key] = value;
   }
-  return max;
+  return out;
+}
+
+function count(chunk: ReplayChunk, kind: string): number {
+  let n = 0;
+  for (const mark of chunk.marks) if (mark.kind === kind) n += 1;
+  return n;
 }
 
 /**
- * Fold one ingested chunk into the visit row. `now` is ingest time of this
- * chunk: the first fold back-dates `startedAt` by the last event offset so
- * `lastEventAt` lands on `now` rather than in the future.
+ * Fold one kept chunk into the recording row. `now` is ingest time: `lastEventAt`
+ * never runs past it, and a chunk with no marks still proves the visit was alive.
  */
-export function foldVisit(prev: VisitRow | null, chunk: ReplayChunk, now: Date): VisitRow {
-  const offset = lastEventOffset(chunk);
-  const startedAt = prev?.startedAt ?? new Date(now.getTime() - offset);
-  const fromOffset = new Date(startedAt.getTime() + offset);
-  const lastEventAt =
-    prev && prev.lastEventAt.getTime() > fromOffset.getTime() ? prev.lastEventAt : fromOffset;
-  const pages = pageEvents(chunk);
-  const firstPath = pages[0]?.path ?? '';
-  const lastPath = pages[pages.length - 1]?.path ?? firstPath;
-  const prevActivityOffset = prev
-    ? Math.max(0, prev.lastEventAt.getTime() - prev.startedAt.getTime())
-    : null;
-  const activity = activeMsDelta(prevActivityOffset, chunk);
-  const ended = chunk.events.some(isEndMarker);
+export function foldVisit(prev: VisitRow | null, chunk: ReplayChunk, now: Date, siteId: string): VisitRow {
+  const startedAt = prev?.startedAt ?? new Date(Math.min(chunk.startedAt, now.getTime()));
+  const maxAt = chunk.marks.reduce((max, mark) => Math.max(max, mark.atMs), -1);
+  const candidate = maxAt >= 0 ? startedAt.getTime() + maxAt : now.getTime();
+  const floor = prev ? prev.lastEventAt.getTime() : startedAt.getTime();
+  const lastEventAt = new Date(Math.max(floor, Math.min(candidate, now.getTime())));
 
+  const { attributed, endRoute } = attributeRoutes(chunk.marks, prev?.exitPath ?? '');
+  const pages = attributed.filter((a) => a.mark.kind === 'page').map((a) => a.route);
+
+  const issueFps: string[] = [];
+  const events: string[] = [];
+  const steps: string[] = [];
+  const clicked: string[] = [];
+  const frustrations: string[] = [];
+  let goal = false;
+  for (const item of attributed) {
+    const { mark, route } = item;
+    const hit = issueOf(siteId, item);
+    if (hit) issueFps.push(hit.fingerprint);
+    if (isFrustrationKind(mark.kind)) frustrations.push(mark.kind);
+    if ((mark.kind === 'click' || mark.kind === 'rage' || mark.kind === 'dead') && mark.key) {
+      clicked.push(cap(mark.key, SELECTOR_MAX));
+    }
+    if (mark.kind === 'page') steps.push(`page:${route}`);
+    for (const name of eventNamesOf(mark)) {
+      events.push(name);
+      steps.push(`event:${name}`);
+    }
+    if (isGoalMark(mark)) goal = true;
+  }
+
+  const identify = chunk.identify;
   return {
     visitId: prev?.visitId ?? chunk.visitId,
+    visitorId: prev?.visitorId ?? chunk.visitorId,
     startedAt,
     lastEventAt,
-    endedAt: prev?.endedAt ?? (ended ? lastEventAt : null),
+    endedAt: prev?.endedAt ?? (chunk.end ? lastEventAt : null),
     durationMs: Math.max(0, lastEventAt.getTime() - startedAt.getTime()),
-    entryPath: prev?.entryPath || firstPath,
-    exitPath: lastPath || prev?.exitPath || firstPath,
+    activeMs: Math.max(prev?.activeMs ?? 0, Math.round(chunk.activeMs ?? 0)),
+    entryPath: prev?.entryPath || cap(pages[0] ?? '', PATH_MAX),
+    exitPath: cap(endRoute || prev?.exitPath || '', PATH_MAX),
     pageCount: (prev?.pageCount ?? 0) + pages.length,
-    clickCount: (prev?.clickCount ?? 0) + countKind(chunk, 'click'),
-    rageCount: (prev?.rageCount ?? 0) + countKind(chunk, 'rage'),
-    deadCount: (prev?.deadCount ?? 0) + countKind(chunk, 'dead'),
-    errorCount: (prev?.errorCount ?? 0) + countKind(chunk, 'error'),
-    quickbackCount: (prev?.quickbackCount ?? 0) + countKind(chunk, 'quickback'),
-    excessiveScrollCount: (prev?.excessiveScrollCount ?? 0) + countKind(chunk, 'excessive_scroll'),
-    activeMs: (prev?.activeMs ?? 0) + activity.add,
-    converted: (prev?.converted ?? false) || chunk.events.some(isConverted) || (chunk.marks ?? []).some((m) => m.kind === 'goal'),
+    releaseKey: prev?.releaseKey || chunk.release,
+    recorderVersion: chunk.recorderVersion || prev?.recorderVersion || '',
+    deviceClass: prev?.deviceClass ?? chunk.device.class,
+    viewportW: Math.round(chunk.device.w) || prev?.viewportW || 0,
+    viewportH: Math.round(chunk.device.h) || prev?.viewportH || 0,
+    browser: prev?.browser ?? chunk.browser ?? null,
+    os: prev?.os ?? chunk.os ?? null,
+    referrerHost: prev?.referrerHost ?? chunk.referrer ?? null,
+    clickCount: (prev?.clickCount ?? 0) + count(chunk, 'click'),
+    rageCount: (prev?.rageCount ?? 0) + count(chunk, 'rage'),
+    deadCount: (prev?.deadCount ?? 0) + count(chunk, 'dead'),
+    errorCount: (prev?.errorCount ?? 0) + count(chunk, 'error'),
+    quickbackCount: (prev?.quickbackCount ?? 0) + count(chunk, 'quickback'),
+    excessiveScrollCount: (prev?.excessiveScrollCount ?? 0) + count(chunk, 'excessive_scroll'),
+    converted: (prev?.converted ?? false) || goal || chunk.keep === 'goal',
+    // The FIRST reason a visit was kept is the one it is filed under.
+    keepReason: prev?.keepReason ?? chunk.keep ?? 'sample',
+    sampleWeight: prev?.sampleWeight ?? chunk.sampleWeight,
+    variant: chunk.variant ?? prev?.variant ?? null,
+    identifiedId: identify?.id ?? prev?.identifiedId ?? null,
+    traits: identify?.traits ? { ...(prev?.traits ?? {}), ...identify.traits } : prev?.traits ?? null,
     chunkCount: (prev?.chunkCount ?? 0) + 1,
+    routes: addDistinct(prev?.routes ?? [], pages, VISIT_ARRAY_CAP),
+    events: addDistinct(prev?.events ?? [], events, VISIT_ARRAY_CAP),
+    frustrations: addDistinct(prev?.frustrations ?? [], frustrations, VISIT_ARRAY_CAP),
+    clicked: addDistinct(prev?.clicked ?? [], clicked, VISIT_ARRAY_CAP),
+    issueFps: addDistinct(prev?.issueFps ?? [], issueFps, VISIT_ARRAY_CAP),
+    steps: addSteps(prev?.steps ?? [], steps, VISIT_STEPS_CAP),
+    tags: mergeTags(prev?.tags ?? {}, chunk.tags),
   };
 }

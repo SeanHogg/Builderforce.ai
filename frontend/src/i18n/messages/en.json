@@ -1505,7 +1505,8 @@
       "where": "Picked in the preview: {file}, line {line}",
       "aria": "Picked element:",
       "remove": "Remove the picked element",
-      "unresolved": "That element can't be traced to its source. Describe it in the prompt instead."
+      "unresolved": "That element can't be traced to its source. Describe it in the prompt instead.",
+      "whereSelector": "On {page}: {selector}"
     },
     "releases": {
       "title": "Previous versions",
@@ -2214,7 +2215,8 @@
       "ingestion": "Data",
       "error_events": "Errors",
       "outbound_fetches": "Outbound fetches",
-      "feedback_submissions": "Feedback"
+      "feedback_submissions": "Feedback",
+      "replay_recordings": "Recordings"
     },
     "unlimited": "Unlimited",
     "freePerMo": "{amount} free / mo",
@@ -2826,7 +2828,20 @@
       "link": "Link to",
       "linkNone": "No link",
       "linkProjects": "Projects",
-      "linkInitiatives": "Initiatives"
+      "linkInitiatives": "Initiatives",
+      "band": {
+        "aria": "Funnel",
+        "none": "No funnel yet.",
+        "create": "Create a funnel",
+        "openAria": "Open the funnel at {step}",
+        "approx": "≈ {value}",
+        "conversion": "{value} converted"
+      },
+      "tabs": {
+        "steps": "Steps",
+        "events": "Events",
+        "flow": "Flow"
+      }
     },
     "alloc": {
       "title": "Investment Allocation",
@@ -3515,6 +3530,248 @@
       "colDispatched": "Dispatched",
       "colExecutionRate": "Execution rate",
       "colCost": "Cost"
+    },
+    "overview": {
+      "title": "Insights",
+      "homeAria": "Insights home",
+      "periodLabel": "Period",
+      "window": "{days}d",
+      "windowAria": "Last {days} days",
+      "compare": "Compare release",
+      "compareNone": "No comparison",
+      "releaseOrdinal": "R{n}",
+      "live": "Live",
+      "goalLabel": "Goal",
+      "stageTitle": "Page stage",
+      "stageEmpty": "Pick an issue to see its page here.",
+      "lensesAria": "Page lenses",
+      "doNextTitle": "Do next",
+      "doNextEmpty": "Ranked fixes appear here once enough sessions have arrived to measure them."
+    },
+    "goals": {
+      "activation": "Activation",
+      "revenue": "Revenue",
+      "signups": "Sign-ups",
+      "retention": "Retention"
+    },
+    "kpi": {
+      "aria": "Headline numbers",
+      "error": "The numbers could not be loaded.",
+      "sessions": "Sessions",
+      "conversion": "Conversion",
+      "frustrated": "Frustrated sessions",
+      "errorsPer1k": "JS errors per 1k",
+      "lcp": "p75 LCP",
+      "score": "Site score",
+      "scorePending": "After the first page review",
+      "seconds": "{value} s",
+      "versus": "vs {value}",
+      "trendAria": "{label} trend",
+      "openAria": "Open {label}",
+      "approx": "≈ {value}"
+    },
+    "issues": {
+      "title": "Issues",
+      "viewAll": "View all",
+      "loading": "Loading issues…",
+      "error": "Issues could not be loaded.",
+      "empty": "No issues in this period.",
+      "loadMore": "Load more",
+      "statusAria": "Issue status",
+      "status": {
+        "all": "All",
+        "new": "New",
+        "regressed": "Regressed",
+        "ongoing": "Ongoing"
+      },
+      "statusName": {
+        "new": "new",
+        "ongoing": "ongoing",
+        "regressed": "regressed",
+        "proposed": "fix proposed",
+        "preview": "in preview",
+        "measuring": "measuring",
+        "verified": "verified",
+        "ignored": "ignored"
+      },
+      "colIssue": "Issue",
+      "colSessions": "Sessions",
+      "colShare": "Share",
+      "colTrend": "Trend",
+      "rowAria": "Open issue: {title}",
+      "trendAria": "Daily sessions for {title}",
+      "overview": {
+        "sessions": "Sessions affected",
+        "share": "Share of route",
+        "firstSeen": "First seen",
+        "lastSeen": "Last seen",
+        "byRelease": "By release",
+        "byDevice": "By device"
+      },
+      "representatives": "Representative recordings",
+      "repAria": "Open representative recording {rank}",
+      "recordingsOfIssue": "Recordings that hit this issue on {route}",
+      "approx": "≈ {value}",
+      "estimatedNote": "≈ Estimated from the recordings kept for this filter."
+    },
+    "panel": {
+      "crumbRoot": "Insights",
+      "crumbAria": "Panel path",
+      "backTo": "Back to {label}",
+      "loading": "Loading…",
+      "loadFailed": "This could not be loaded."
+    },
+    "kinds": {
+      "recording": "Recording",
+      "issue": "Issue",
+      "issues": "All issues",
+      "fix": "Fix",
+      "route": "Page review",
+      "metric": "Metric",
+      "funnel": "Funnel",
+      "live": "Live visitors",
+      "proof": "Proof",
+      "release": "Release",
+      "sites": "Sites",
+      "plan": "Plan and usage",
+      "tabs": {
+        "replay": "Replay",
+        "journey": "Journey",
+        "lead": "Lead",
+        "overview": "Overview",
+        "recordings": "Recordings"
+      },
+      "funnelEdit": "Edit funnel"
+    },
+    "lenses": {
+      "live": "Live",
+      "heat": "Heat",
+      "stuck": "Stuck",
+      "fixes": "Fixes"
+    },
+    "journey": {
+      "steps": "{count, plural, one {# page} other {# pages}}",
+      "entryExit": "{entry} → {exit}",
+      "signals": "Signals",
+      "noSignals": "No frustration or error signals in this recording."
+    },
+    "lead": {
+      "identifiedId": "Identified as",
+      "traits": "Traits",
+      "noTraits": "The site sent no traits for this visitor.",
+      "tags": "Tags"
+    },
+    "sites": {
+      "loading": "Loading sites…",
+      "empty": "No sites yet.",
+      "add": "Add a site",
+      "listLabel": "Sites",
+      "kind": {
+        "external": "Website",
+        "hosted": "Builderforce app"
+      },
+      "settings": "Settings",
+      "save": "Save",
+      "saved": "Saved.",
+      "saveFailed": "The settings could not be saved.",
+      "install": "Install",
+      "verify": "Install checks"
+    },
+    "plan": {
+      "loading": "Loading usage…",
+      "usageTitle": "This month",
+      "usedOfLimit": "{used} of {limit} recordings used in {period}",
+      "free": "Free allowance",
+      "freeUsed": "{used} of {allowance} used",
+      "credits": "Prepaid credits",
+      "packsTitle": "Buy recordings",
+      "receipts": "Payments and receipts",
+      "checkoutReturned": "Thanks. Your credits appear here as soon as the payment is confirmed."
+    },
+    "route": {
+      "kind": "Page",
+      "tabs": {
+        "heat": "Heat",
+        "review": "Review"
+      },
+      "openAria": "Open the page {route}",
+      "review": {
+        "open": "Open the page review"
+      }
+    },
+    "fix": {
+      "tabs": {
+        "change": "Change",
+        "measure": "Measure",
+        "prompt": "Prompt"
+      },
+      "issueTabs": {
+        "fix": "Fix",
+        "history": "History"
+      },
+      "noFix": "No fix has been prescribed for this issue yet.",
+      "measure": {
+        "acceptanceTitle": "Accepted when",
+        "acceptanceNone": "No acceptance test has been drafted yet.",
+        "resultTitle": "Result",
+        "notYet": "Not measured yet. The verdict arrives once the release that ships the fix reaches its sample."
+      },
+      "history": {
+        "title": "History",
+        "created": "Found",
+        "applied": "{action}",
+        "measured": "Measured: {verdict}",
+        "dismissed": "Dismissed: {reason}"
+      }
+    },
+    "fixes": {
+      "kind": "All fixes",
+      "findNow": "Find fixes now",
+      "finding": "Looking…",
+      "sweepResult": "{found, plural, one {# finding} other {# findings}}, {created} new",
+      "sweepLimited": "Fixes were looked for within the last hour. Try again later.",
+      "viewAll": "View all",
+      "error": "Could not load fixes.",
+      "loading": "Loading fixes…",
+      "empty": "No fix matches this filter.",
+      "areaAll": "All ({count})",
+      "areaChip": "{area} ({count})",
+      "areaAria": "Filter fixes by area",
+      "loadMore": "Show more",
+      "applyAll": "Apply all",
+      "applyAllTitle": "One prompt for {route}"
+    },
+    "release": {
+      "title": "Release {label}",
+      "firstSeen": "First seen {date}",
+      "empty": "This release shipped no fix.",
+      "notMeasured": "Not measured yet",
+      "openAria": "Open fix: {title}",
+      "strip": {
+        "title": "Score by release",
+        "aria": "Fixes shipped per release",
+        "label": "{label}: {count, plural, one {# fix} other {# fixes}}, {worked} worked, {worse} made it worse",
+        "empty": "No release has shipped a fix yet."
+      }
+    },
+    "pages": {
+      "kind": "Pages",
+      "open": "Pages",
+      "empty": "No key pages yet. They appear once the site has visits and its pages are captured.",
+      "openAria": "Open the review of {path}",
+      "thumbAlt": "The first screen of {path}",
+      "noFix": "No open fix",
+      "opportunity": "≈ {value} to win",
+      "noScore": "Not scored",
+      "score": "Score {score}"
+    },
+    "eraseVisitor": {
+      "action": "Erase this visitor",
+      "erasing": "Erasing…",
+      "confirmTitle": "Erase this visitor?",
+      "confirmMessage": "Every recording of this visitor on this site is deleted, with its AI summaries. This cannot be undone.",
+      "confirm": "Erase",
+      "done": "{count, plural, one {# recording erased.} other {# recordings erased.}}"
     }
   },
   "cloudAgentForm": {
@@ -11346,6 +11603,10 @@
       "your-private-evermind-on-your-machine": {
         "title": "Your private Evermind, on your machine — with local models, connectors and approvals from your phone",
         "description": "Synapse now runs local models sized to your computer and serves them to Claude Code and your scripts, hosts MCP connectors the Brain can use, lets you approve an agent's step from your phone, and gives you a private model to start from. Everything it learns stays on your machine unless you publish it."
+      },
+      "fix-what-visitors-tell-you": {
+        "title": "Insights tells you what to fix — and proves it worked",
+        "description": "Recordings and heatmaps showed you the problem and left the next step to you. Insights now names the change, renders it on your page, hands it to an AI as a prompt or applies it, and grades it on the next release."
       }
     }
   },
@@ -13165,6 +13426,271 @@
       "signIn": "Sign in to use",
       "empty": "No built-in agent matches your search.",
       "error": "The built-in agents could not be loaded. Try again shortly."
+    },
+    "landing": {
+      "insights": {
+        "hero": {
+          "eyebrow": "Insights for any website",
+          "title": "See what visitors do, and what to fix first",
+          "lead": "Insights records real visits, groups what went wrong into issues, and turns each one into a ranked fix you can apply, test and measure on your next release.",
+          "startFree": "Start free",
+          "freeNote": "5,000 recordings a month free. No card needed."
+        },
+        "install": {
+          "title": "Live in three steps",
+          "steps": {
+            "paste": {
+              "title": "Paste one tag",
+              "body": "Add the loader to your site once, or switch it on for an app you host on Builderforce. Recorder updates arrive on their own."
+            },
+            "verify": {
+              "title": "Watch it connect",
+              "body": "Set-up checks the tag, your domain and the first visit live, and tells you exactly which step needs attention."
+            },
+            "improve": {
+              "title": "Fix what matters",
+              "body": "Issues are ranked by their effect on your goal, each with a fix, a prompt for your AI tools and a verdict on the next release."
+            }
+          }
+        },
+        "pillars": {
+          "title": "Everything you need to improve a page",
+          "items": {
+            "fixes": {
+              "title": "Ranked fixes",
+              "body": "Every finding comes from measured behaviour, with the expected impact and one action: fix it, test it, follow up or file a ticket."
+            },
+            "recordings": {
+              "title": "Session recordings",
+              "body": "Replay any visit like a video, jump to the moment that matters and share a link to it."
+            },
+            "heatmaps": {
+              "title": "Heatmaps per release",
+              "body": "Click, scroll and area heatmaps for each release, so you can compare before and after a change."
+            },
+            "funnels": {
+              "title": "Funnels and flow",
+              "body": "See where visitors drop out of a journey and watch the visits that stopped at each step."
+            },
+            "live": {
+              "title": "Live visitors",
+              "body": "Who is on the site right now, which page they are on, and follow one as they browse."
+            },
+            "privacy": {
+              "title": "Private by default",
+              "body": "Inputs are masked in the browser, passwords and card numbers are never captured, and Do Not Track is honoured."
+            }
+          }
+        },
+        "compare": {
+          "title": "More than a recorder",
+          "lead": "Most session-replay tools stop at showing you what happened. Insights also tells you what to change and whether the change worked.",
+          "feature": "Capability",
+          "columns": {
+            "insights": "Insights",
+            "typical": "A typical replay tool"
+          },
+          "rows": {
+            "recordings": {
+              "feature": "Session recordings with masking",
+              "insights": "Included",
+              "typical": "Included"
+            },
+            "heatmaps": {
+              "feature": "Click and scroll heatmaps",
+              "insights": "Per release",
+              "typical": "Usually across all time"
+            },
+            "frustration": {
+              "feature": "Rage clicks, dead clicks and errors",
+              "insights": "Grouped into issues",
+              "typical": "Listed per session"
+            },
+            "fixes": {
+              "feature": "Ranked fixes with expected impact",
+              "insights": "Included",
+              "typical": "Not offered"
+            },
+            "releases": {
+              "feature": "Release compare",
+              "insights": "Detected automatically",
+              "typical": "Rarely offered"
+            },
+            "measured": {
+              "feature": "Measured verdict on each fix",
+              "insights": "On the next release",
+              "typical": "Not offered"
+            }
+          }
+        },
+        "pricing": {
+          "title": "Free to start, priced by what you keep",
+          "lead": "Every workspace gets {free} kept recordings a month free. Above that, prepaid packs that last 12 months.",
+          "visitorsLabel": "{count} visits a month",
+          "recordings": "Recordings a month",
+          "monthly": "Estimated monthly cost",
+          "free": "Free",
+          "packsOnSignup": "Packs are listed after sign-up",
+          "withinFree": "This fits inside the {free} free recordings a month.",
+          "packLine": "{count, plural, one {# pack} other {# packs}} of {units} recordings would cover the month.",
+          "overFree": "{over} recordings over the free allowance would need a pack.",
+          "estimateNote": "An estimate, assuming one kept recording per visit. You only pay for recordings you keep.",
+          "startFree": "Start free"
+        },
+        "faq": {
+          "title": "Questions",
+          "items": {
+            "what": {
+              "q": "What is Insights?",
+              "a": "A session-replay and analytics app for any website. It records visits, finds the problems that cost you visitors and recommends ranked fixes you can measure."
+            },
+            "install": {
+              "q": "How do I install it?",
+              "a": "Paste one script tag, install the npm package or add a Google Tag Manager tag. Apps hosted on Builderforce need only a switch."
+            },
+            "privacy": {
+              "q": "What about privacy?",
+              "a": "Inputs are masked in the browser before anything is sent, password and card fields are never captured, and Do Not Track and Global Privacy Control are honoured. You can require consent before recording."
+            },
+            "pricing": {
+              "q": "What does it cost?",
+              "a": "5,000 kept recordings a month are free for every workspace. Above that you buy prepaid packs; credits last 12 months and nothing renews on its own."
+            },
+            "builderforce": {
+              "q": "Do I need to build my site on Builderforce?",
+              "a": "No. Insights works on any website. If your app is hosted on Builderforce, you can switch recording on without pasting anything."
+            }
+          }
+        },
+        "proof": {
+          "title": "We use it on builderforce.ai",
+          "lead": "Builderforce runs Insights on its own site with the same public snippet you paste, and installs it through the marketplace like every other workspace.",
+          "startFree": "Start free"
+        }
+      }
+    },
+    "capability": {
+      "setupTitle": "Set up {app}",
+      "signUpFirst": "Create a free account to set up {app}. You come straight back here afterwards.",
+      "startFree": "Start free",
+      "loading": "Loading set-up…",
+      "stepsLabel": "Set-up steps",
+      "steps": {
+        "workspace": "Workspace",
+        "site": "Site",
+        "snippet": "Install",
+        "verify": "Verify",
+        "plan": "Plan"
+      },
+      "workspace": {
+        "choose": "Choose or create the workspace that will own {app}.",
+        "chooseAction": "Choose a workspace",
+        "installInto": "Install {app} in {workspace}. It is free, and you can remove it at any time.",
+        "install": "Install {app}",
+        "installing": "Installing…",
+        "another": "Use another workspace",
+        "failed": "The install did not finish. Try again."
+      },
+      "site": {
+        "label": "Site name",
+        "domains": "Allowed domains",
+        "removeDomain": "Remove {domain}",
+        "domainPlaceholder": "shop.example.com",
+        "addDomain": "Add domain",
+        "domainInvalid": "Enter a web address such as shop.example.com.",
+        "privacy": "Privacy",
+        "switches": {
+          "maskAllText": {
+            "label": "Mask all text",
+            "hint": "Hide every piece of text on the page, not only form inputs."
+          },
+          "consentRequired": {
+            "label": "Wait for consent",
+            "hint": "Record only after your site calls BFReplay.consent(true)."
+          },
+          "recordCanvas": {
+            "label": "Record canvas content",
+            "hint": "Capture canvas and WebGL frames at a low rate."
+          },
+          "identify": {
+            "label": "Allow identify",
+            "hint": "Let your site name signed-in visitors with BFReplay.identify."
+          }
+        },
+        "modeLabel": "Where is the site?",
+        "modes": {
+          "external": "My website",
+          "hosted": "A Builderforce app"
+        },
+        "externalLead": "Name the site and list the domains it runs on. Only these domains can send recordings.",
+        "create": "Create site",
+        "hostedLead": "Choose a published app from this workspace. Its loader is added for you.",
+        "loadingProjects": "Loading your published apps…",
+        "noProjects": "This workspace has no published apps yet.",
+        "record": "Record {name}",
+        "failed": "The site could not be created. Try again."
+      },
+      "snippet": {
+        "tabsLabel": "Ways to install",
+        "tabs": {
+          "script": "Script tag",
+          "npm": "npm",
+          "gtm": "Google Tag Manager",
+          "app": "Builderforce app"
+        },
+        "hostedOn": "Recording is switched on for this app. Nothing to paste.",
+        "appHint": "Apps hosted on Builderforce need no snippet: switch recording on for the app instead.",
+        "hints": {
+          "script": "Paste this into the head section of every page.",
+          "npm": "Install @seanhogg/builderforce-replay, then call this once when your app starts.",
+          "gtm": "Add a Custom HTML tag with this content and fire it on all pages."
+        },
+        "copy": "Copy",
+        "copied": "Copied",
+        "noKey": "This site has no key yet. Reload in a moment.",
+        "lead": "Add the loader to your site in one of these ways, then continue to verify it.",
+        "hostedLead": "Your app is hosted on Builderforce, so its loader is added automatically.",
+        "next": "Continue"
+      },
+      "verify": {
+        "lead": "Open your site in another tab. These checks update every few seconds.",
+        "checks": {
+          "loader": {
+            "label": "Loader seen",
+            "fix": "Make sure the tag is on the page and the page has been opened since you added it."
+          },
+          "origin": {
+            "label": "Domain allowed",
+            "fix": "Add the domain the page is served from to the allowed domains."
+          },
+          "firstEvent": {
+            "label": "First visit received",
+            "fix": "Browse a page for a few seconds. If you require consent, grant it."
+          },
+          "firstRecording": {
+            "label": "First recording kept",
+            "fix": "A recording appears once a visit ends or something worth keeping happens."
+          }
+        },
+        "passed": "passed",
+        "waiting": "waiting",
+        "unreachable": "The checks could not be read just now. Retrying.",
+        "stoppedAt": "Waiting on: {step}.",
+        "allPassed": "Everything is connected.",
+        "next": "Continue"
+      },
+      "plan": {
+        "lead": "Start on the free allowance, or buy a pack now for busier sites.",
+        "startFree": "Start with the free allowance",
+        "checkoutFailed": "The checkout could not be started. Try again.",
+        "loadingPacks": "Loading packs…",
+        "noPacks": "Packs are not available right now. The free allowance applies.",
+        "buyAria": "Buy {units} recordings for {price}",
+        "packUnits": "{units} recordings",
+        "redirecting": "Opening checkout…",
+        "packTerms": "Prepaid, one-off payment. Credits last 12 months and nothing renews."
+      },
+      "openApp": "Open {app}"
     }
   },
   "models": {
@@ -13954,7 +14480,8 @@
       "broadcasts": "Broadcasts",
       "llmRatings": "Ratings",
       "visitorFlow": "Visitor flow",
-      "visitors": "Visitors"
+      "visitors": "Visitors",
+      "insightsOps": "Insights operations"
     },
     "common": {
       "loading": "Loading…",
@@ -14425,7 +14952,8 @@
         "loading": "Loading history…",
         "empty": "No versions yet.",
         "publish": "Published",
-        "amend": "Amended"
+        "amend": "Amended",
+        "draft": "Draft (not published)"
       }
     },
     "newsletter": {
@@ -15017,7 +15545,14 @@
       "subtitle": "The anonymous funnel and the people in it — flow, leads, one recording.",
       "tabJourney": "Journey",
       "tabLead": "Lead",
-      "crumb": "Visitors"
+      "crumb": "Visitors",
+      "openApp": "Open Insights app",
+      "nodeStripAria": "Step {step}",
+      "nodeVisitors": "{count} visitors",
+      "nodeEvents": "{count} events",
+      "nodeExits": "{count} exits",
+      "watchStep": "Watch recordings on this step",
+      "nodeStripClose": "Close step details"
     },
     "visitorFlow": {
       "title": "Visitor flow",
@@ -15100,6 +15635,62 @@
         },
         "noteWarn": "Past 80%: the nightly maintenance sweep now purges every compressible log table on a shortened window and reclaims space immediately instead of waiting for the weekly rewrite.",
         "noteCritical": "Past 90%: every compressible log table is being purged at its shortest declared window. Compliance and billing windows are never shortened."
+      }
+    },
+    "insightsOps": {
+      "title": "Insights operations",
+      "subtitle": "Platform totals for Insights, plus one workspace's recording settings and credit grants. No sites, visitors or recordings are shown here.",
+      "navLink": "Insights operations",
+      "summary": {
+        "aria": "Insights platform totals",
+        "sessions7d": "Sessions (7 days)",
+        "keptRecordings7d": "Kept recordings (7 days)",
+        "bytes7d": "Stored (7 days)",
+        "sites": "Sites",
+        "tenants": "Workspaces",
+        "packRevenue30d": "Pack revenue (30 days)"
+      },
+      "workspace": {
+        "title": "Workspace",
+        "label": "Workspace",
+        "empty": "No workspaces yet."
+      },
+      "settings": {
+        "title": "Recording settings",
+        "excluded": "Exclude from builderforce.ai recording",
+        "excludedHint": "Members of this workspace are never recorded while signed in on builderforce.ai.",
+        "override": "Free recordings per month",
+        "overrideHint": "Overrides the catalog allowance for this workspace. Set 0 to test a real pack purchase. Leave empty for the default.",
+        "overridePlaceholder": "Catalog default",
+        "clear": "Clear",
+        "save": "Save settings",
+        "saving": "Saving…",
+        "saved": "Saved. The change is audited.",
+        "invalidOverride": "Enter a whole number of 0 or more, or leave it empty."
+      },
+      "grant": {
+        "title": "Grant recording credits",
+        "hint": "The grant is written to the audit log before it is credited.",
+        "units": "Recordings",
+        "reason": "Reason",
+        "reasonPlaceholder": "Why this workspace gets these recordings",
+        "submit": "Grant credits",
+        "granting": "Granting…",
+        "invalid": "Enter between 1 and {max} recordings and a reason of at least 3 characters.",
+        "confirmTitle": "Grant recording credits?",
+        "confirmMessage": "Grant {units} recordings to {tenant}? This is audited and cannot be undone from here.",
+        "confirmLabel": "Grant",
+        "done": "Granted {units} recordings. The workspace now has {credits} credits. Reference: {reference}"
+      },
+      "methodFunnel": {
+        "title": "Seed “The method” funnel",
+        "hint": "Creates the four method smart events and the funnel from the home page to a graded proof on Builderforce’s own Insights site. Safe to run twice.",
+        "siteLabel": "Builderforce Insights site id",
+        "invalid": "Enter a site id (a UUID).",
+        "submit": "Seed the funnel",
+        "seeding": "Seeding…",
+        "done": "Seeded — {events} smart events created.",
+        "already": "Already seeded — nothing to create."
       }
     }
   },
@@ -19146,7 +19737,7 @@
     },
     "install": {
       "title": "One script, every capability",
-      "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host."
+      "description": "Install this once on the customer site. Widget changes apply on the next page load without redeploying the host. Heatmaps and session replay start only when the tag also carries your Insights site key (data-site); it is added here once the workspace has an Insights site."
     },
     "consent": {
       "title": "Consent log",
@@ -19178,7 +19769,7 @@
       },
       "heatmaps": {
         "name": "Heatmaps",
-        "description": "Measure click locations and scroll depth to understand real customer behavior.",
+        "description": "Click, rage, dead-click and scroll heatmaps from Insights session replay. They record once the install script carries your Insights site key.",
         "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps."
       },
       "feature_management": {
@@ -19280,6 +19871,13 @@
         "title": "Put your idea inside your customers’ product",
         "body": "Create a free workspace to get your embed key, turn on the capabilities you want, and ship them to your own site today."
       }
+    },
+    "insights": {
+      "needsSite": "Needs an Insights site: switching this on alone records nothing.",
+      "siteReady": "Recording through your Insights site key.",
+      "setup": "Set up Insights",
+      "open": "Open Insights",
+      "standaloneTitle": "Session replay on its own (no widgets)"
     }
   },
   "embedInstall": {
@@ -24604,15 +25202,21 @@
         "noBoardMetric": "No metric on this board yet"
       },
       "sessions": {
-        "label": "Sessions",
-        "enter": "See who used this",
-        "active": "You are in Sessions",
-        "regionLabel": "Session recordings",
-        "emptyTitle": "No recordings of this canvas yet",
-        "emptyBody": "Once visitors use this canvas, their sessions appear here. Open Visitors to play them back.",
-        "openFull": "Open visitor recordings",
-        "listLabel": "Recorded visits",
-        "converted": "Converted"
+        "label": "Visitors",
+        "enter": "See who visited",
+        "active": "You are in Visitors",
+        "regionLabel": "Visitors",
+        "loadingTitle": "Loading visitors",
+        "loadingBody": "Checking this app’s recordings.",
+        "buyTitle": "See what visitors do",
+        "buyBody": "Install Insights to record visits to this app, find what goes wrong and get ranked fixes. It is free to start.",
+        "buyAction": "Get Insights",
+        "noAppTitle": "No app yet",
+        "noAppBody": "Visitors appear here once this board has an app that people can open.",
+        "offTitle": "Recording is off",
+        "offBody": "Switch recording on for this app. Nothing to paste: the loader is added to the hosted app for you.",
+        "enable": "Record this app",
+        "enableFailed": "Recording could not be switched on. Try again."
       },
       "room": {
         "label": "Room",
@@ -26441,6 +27045,40 @@
       "leaveTitle": "Leave while Studio is building?",
       "leaveMessage": "Studio is still working on your request. Going to the Studio home stops it; your app and everything built so far stay on this board.",
       "leaveConfirm": "Leave anyway"
+    },
+    "proof": {
+      "title": "Proof scoreboard",
+      "loading": "Loading the scoreboard…",
+      "loadFailed": "Could not load the scoreboard.",
+      "killAtLeast": "Build it only if “{event}” happens at least {target} times among {sample} sampled visits within {days} days.",
+      "killAtMost": "Build it only if “{event}” stays at or below {target} among {sample} sampled visits within {days} days.",
+      "sample": "Sample",
+      "sampleOf": "{n} of {min} visits",
+      "success": "Success",
+      "successOf": "{n} of {target}",
+      "daysLeft": "{days} days left",
+      "windowNotStarted": "The window starts with the first sampled visit.",
+      "windowClosed": "The window has closed.",
+      "status": {
+        "collecting": "Collecting",
+        "onTrack": "On track",
+        "atRisk": "At risk",
+        "met": "Met",
+        "missed": "Missed"
+      },
+      "watch": "Watch the visitors who didn’t",
+      "whyMissed": "Why it missed",
+      "noPatterns": "No cited pattern yet.",
+      "callEarly": "Call it early…",
+      "callEarlyTitle": "Call this proof early",
+      "callEarlyBody": "The verdict is decided now, against the measured numbers. Say why you are not waiting for the full sample — the reason is kept on the record.",
+      "reasonLabel": "Why call it now?",
+      "reasonPlaceholder": "For example: the traffic source is exhausted and will not refill.",
+      "reasonRequired": "An early call needs a written reason.",
+      "callEarlySubmit": "Call it now",
+      "calling": "Calling…",
+      "callEarlyFailed": "Could not record the call. Try again.",
+      "readAgain": "Read again with what we learned"
     }
   },
   "canvasCommands": {
@@ -29175,7 +29813,8 @@
       "course": "Course",
       "dataset": "Dataset",
       "tool": "Tool",
-      "creative": "Creative asset"
+      "creative": "Creative asset",
+      "capability": "Capability"
     }
   },
   "marketplaceCreations": {
@@ -29219,7 +29858,8 @@
       "creative": "Creative asset",
       "book": "Book",
       "survey": "Survey",
-      "room": "Room design"
+      "room": "Room design",
+      "capability": "Capability"
     },
     "launchVerb": {
       "play": "Play",
@@ -33407,5 +34047,904 @@
       "Hypotheses presented as measured results",
       "Opt-outs buried in fine print"
     ]
+  },
+  "replay": {
+    "list": {
+      "when": "When",
+      "where": "Where",
+      "release": "Release",
+      "pages": "Pages",
+      "duration": "Duration",
+      "signals": "Signals",
+      "keep": "Kept because",
+      "route": "{entry} → {exit}",
+      "noSignals": "None",
+      "signal": {
+        "rage": "{count, plural, one {# rage click} other {# rage clicks}}",
+        "dead": "{count, plural, one {# dead click} other {# dead clicks}}",
+        "errors": "{count, plural, one {# error} other {# errors}}",
+        "quickbacks": "{count, plural, one {# quick back} other {# quick backs}}"
+      },
+      "keepReason": {
+        "sample": "Sample",
+        "frustration": "Frustration",
+        "error": "Error",
+        "goal": "Goal reached",
+        "tag": "Tagged",
+        "manual": "Kept by the site"
+      },
+      "weighted": "≈ ×{weight}",
+      "sortBy": "Sort by {column}",
+      "error": "Recordings could not be loaded.",
+      "retry": "Try again",
+      "empty": "No recordings were kept for this view yet.",
+      "open": "Watch",
+      "openAria": "Watch the recording that entered on {path}",
+      "loading": "Loading recordings…",
+      "loadMore": "Load more"
+    },
+    "player": {
+      "loading": "Loading the recording…",
+      "empty": "This recording has nothing to play yet.",
+      "error": "The recording could not be played.",
+      "play": "Play",
+      "pause": "Pause",
+      "scrubber": "Playback position",
+      "markersAria": "Moments in this recording",
+      "markerAria": "{time} · {label}",
+      "speed": "Speed",
+      "speedOption": "{speed}×",
+      "skipInactive": "Skip inactivity",
+      "copyLink": "Copy link at {time}",
+      "copied": "Link copied.",
+      "copyFailed": "The link could not be copied.",
+      "following": "Following live — new activity appears as it arrives.",
+      "events": "Events",
+      "eventsEmpty": "No events were marked in this recording.",
+      "release": "Release",
+      "device": "Device",
+      "country": "Country",
+      "referrer": "Referrer",
+      "duration": "Duration",
+      "direct": "Direct",
+      "deviceClass": {
+        "desktop": "Desktop",
+        "tablet": "Tablet",
+        "phone": "Phone"
+      },
+      "mark": {
+        "page": "Page",
+        "click": "Click",
+        "event": "Event",
+        "rage": "Rage click",
+        "dead": "Dead click",
+        "quickback": "Quick back",
+        "excessive_scroll": "Excessive scrolling",
+        "error": "JavaScript error",
+        "vital": "Web vital",
+        "scroll": "Scroll depth"
+      }
+    },
+    "live": {
+      "loading": "Looking for live visitors…",
+      "error": "Live visitors could not be loaded.",
+      "active": "{count, plural, one {# visitor active now} other {# visitors active now}}",
+      "byRoute": "By page",
+      "empty": "Nobody is on this site right now.",
+      "lastSeen": "seen {time}",
+      "notRecorded": "Not recorded",
+      "watchAria": "Watch the visitor on {route} live"
+    },
+    "heat": {
+      "route": "Page",
+      "release": "Release",
+      "allReleases": "All releases",
+      "releaseOrdinal": "R{ordinal}",
+      "compare": "Compare with",
+      "noCompare": "No comparison",
+      "compareHint": "Pick a release to compare to see the two side by side or as a difference.",
+      "device": "Device",
+      "allDevices": "All devices",
+      "layersAria": "Heat layer",
+      "layers": {
+        "click": "Clicks",
+        "rage": "Rage clicks",
+        "dead": "Dead clicks",
+        "scroll": "Scroll depth",
+        "areas": "Areas"
+      },
+      "modesAria": "Comparison view",
+      "modes": {
+        "single": "This release",
+        "side": "Side by side",
+        "difference": "Difference"
+      },
+      "legendCold": "cold",
+      "legendHot": "hot",
+      "legendAria": "Colour scale from cold (few interactions) to hot (many)",
+      "legendLess": "fewer than compare",
+      "legendMore": "more than compare",
+      "legendDiffAria": "Colour scale from fewer interactions than the compare release to more",
+      "overlayAria": "Heatmap with {count} active cells",
+      "exactTotal": "{count} interactions, exact over every session",
+      "empty": "No interactions were recorded on this page in this window.",
+      "error": "Could not load the heatmap.",
+      "frameTitle": "Snapshot of {route}",
+      "pageLoading": "Rebuilding the page…",
+      "noBackground": "No kept recording visited this page in this window, so the heat is drawn without the page behind it.",
+      "pageError": "The page could not be rebuilt, so the heat is drawn without it.",
+      "sideCurrent": "This release: {release}",
+      "sideCompare": "Compare: {release}",
+      "differenceCaption": "{release} compared with {compare}",
+      "highlightAria": "Highlighted element {element}",
+      "playerToggle": "Heat overlay",
+      "areas": {
+        "aria": "Share of clicks by element",
+        "share": "{share} of clicks",
+        "zoneAria": "{element}: {share} of clicks"
+      },
+      "elements": {
+        "title": "Elements",
+        "element": "Element",
+        "clicks": "Clicks",
+        "rage": "Rage",
+        "dead": "Dead",
+        "delta": "Change vs compare",
+        "none": "—",
+        "sortBy": "Sort by {column}",
+        "empty": "No element was clicked on this page in this window.",
+        "open": "Replays",
+        "openAria": "Watch replays that clicked {element}"
+      },
+      "scroll": {
+        "title": "Scroll reach",
+        "loading": "Loading scroll depth…",
+        "error": "Could not load scroll depth.",
+        "empty": "No page view reported a scroll depth in this window.",
+        "sessions": "{count} page views reported a scroll depth",
+        "band": "{from}–{to}%",
+        "reachAria": "{share} of page views reach {band}"
+      }
+    },
+    "heatInsight": {
+      "title": "What the heat says",
+      "loading": "Reading the heat…",
+      "error": "Could not load the findings.",
+      "empty": "Nothing stands out on this page yet.",
+      "rage_spike": "Rage clicks on “{label}” jumped to {rage}, {ratio}× the compare release ({compareRage}) after adjusting for traffic.",
+      "dead_text": "{dead} dead clicks on “{label}”: it is text, not a control, but visitors expect it to do something.",
+      "buried_top_click": "The most-clicked element, “{label}” ({clicks} clicks), sits {depth}% down the page, which only {reach} of visitors reach.",
+      "quickback_doubled": "Quick backs on this page rose to {quickbacks} from {compareQuickbacks} in the compare release ({ratio}× after adjusting for traffic).",
+      "actions": {
+        "watch": "Watch replays",
+        "copyLink": "Copy link"
+      },
+      "copied": "Link copied. Paste it into the ticket.",
+      "copyFailed": "Could not copy the link."
+    },
+    "export": {
+      "button": "Export as video",
+      "requesting": "Requesting…",
+      "cost": "Renders this replay as a video. Costs 10 recordings from your allowance, once.",
+      "download": "Download video",
+      "downloadFailed": "The video could not be downloaded.",
+      "status": {
+        "queued": "Queued. Rendering starts shortly.",
+        "running": "Rendering the video…",
+        "done": "The video is ready."
+      },
+      "error": {
+        "runner_unavailable": "Video export is not available right now: no renderer is running.",
+        "insufficient_units": "Not enough recordings left in your allowance for a video (it costs 10). Buy a pack in Plan and usage.",
+        "no_chunks": "This recording has no stored data to render.",
+        "dispatch_failed": "The renderer could not be started. Try again shortly.",
+        "timed_out": "Rendering took too long and was stopped. Try again.",
+        "generic": "The export failed."
+      }
+    },
+    "filter": {
+      "aria": "Filter",
+      "add": "Add filter",
+      "full": "A filter holds at most 12 conditions.",
+      "fieldsAria": "Filter by",
+      "clear": "Clear filters",
+      "remove": "Remove {clause}",
+      "editorAria": "Filter on {field}",
+      "opAria": "Condition",
+      "valueAria": "Value",
+      "apply": "Apply",
+      "cancel": "Cancel",
+      "choose": "Choose…",
+      "field": {
+        "device": "Device",
+        "browser": "Browser",
+        "os": "Operating system",
+        "country": "Country",
+        "referrer": "Referrer",
+        "entryPath": "Entry page",
+        "exitPath": "Exit page",
+        "visitedPath": "Visited page",
+        "clickedSelector": "Clicked element",
+        "frustration": "Frustration signal",
+        "durationMs": "Duration",
+        "activeMs": "Active time",
+        "pageCount": "Pages viewed",
+        "release": "Release",
+        "smartEvent": "Smart event",
+        "tag": "Tag",
+        "converted": "Converted",
+        "variant": "Test variant",
+        "issue": "Issue"
+      },
+      "op": {
+        "eq": "is",
+        "neq": "is not",
+        "in": "is any of",
+        "contains": "contains",
+        "prefix": "starts with",
+        "gte": "at least",
+        "lte": "at most"
+      },
+      "value": {
+        "desktop": "Desktop",
+        "tablet": "Tablet",
+        "phone": "Phone",
+        "rage": "Rage click",
+        "dead": "Dead click",
+        "quickback": "Quick back",
+        "excessive_scroll": "Excessive scrolling",
+        "error": "JavaScript error",
+        "true": "Yes",
+        "false": "No"
+      },
+      "placeholder": {
+        "list": "Values, separated by commas",
+        "text": "Value",
+        "tagKey": "Tag name",
+        "tagValue": "Tag value"
+      },
+      "unit": {
+        "seconds": "s"
+      }
+    },
+    "segments": {
+      "button": "Segments",
+      "aria": "Saved segments",
+      "empty": "No saved segments yet. Filter the view, then save it here.",
+      "applyAria": "Apply segment {name}",
+      "renameAria": "Rename segment {name}",
+      "saveName": "Save",
+      "deleteAria": "Delete segment {name}",
+      "deleteTitle": "Delete segment",
+      "deleteConfirm": "Delete the segment “{name}”? The recordings are not affected.",
+      "delete": "Delete",
+      "namePlaceholder": "Name this filter",
+      "nameAria": "Segment name",
+      "save": "Save segment",
+      "saveNeedsFilter": "Add a filter first."
+    },
+    "overview": {
+      "approx": "≈ {value}",
+      "trafficAria": "Traffic",
+      "frustrationAria": "Frustration signals",
+      "notInWeighted": "Not known for a filtered view",
+      "frustrationOpen": "Show issues with {label}",
+      "ofSessions": "of sessions",
+      "tile": {
+        "sessions": "Sessions",
+        "newVisitors": "New visitors",
+        "pagesPerSession": "Pages per session",
+        "activeTime": "Average active time",
+        "scrollDepth": "Average scroll depth"
+      },
+      "frustration": {
+        "rage": "Rage clicks",
+        "dead": "Dead clicks",
+        "quickback": "Quick backs",
+        "excessiveScroll": "Excessive scrolling",
+        "error": "JavaScript errors"
+      },
+      "top": {
+        "pages": "Top pages",
+        "entryPages": "Entry pages",
+        "exitPages": "Exit pages",
+        "referrers": "Referrers",
+        "countries": "Countries",
+        "devices": "Devices",
+        "browsers": "Browsers",
+        "os": "Operating systems"
+      },
+      "topEmpty": "Nothing yet.",
+      "unknown": "Unknown",
+      "addFilterAria": "Filter to {field}: {label}",
+      "estimatedNote": "Filtered: numbers are estimated from kept recordings (≈).",
+      "trendTitle": "Last {days} days",
+      "trendSessionsAria": "Sessions per day",
+      "trendFrustrated": "Frustrated sessions",
+      "trendFrustratedAria": "Share of frustrated sessions per day",
+      "breakdownsTitle": "Breakdowns"
+    },
+    "funnels": {
+      "choose": "Funnel",
+      "edit": "Edit",
+      "new": "New funnel",
+      "empty": "No funnels yet. Create one to see where visitors drop off.",
+      "editTitle": "Edit funnel",
+      "newTitle": "New funnel",
+      "name": "Name",
+      "windowMinutes": "Finish within (minutes)",
+      "stepAria": "Step {n}",
+      "stepKindAria": "Step {n} type",
+      "matchModeAria": "Step {n} match",
+      "matchAria": "Step {n} value",
+      "stepKind": {
+        "page": "Page",
+        "click": "Click",
+        "event": "Event"
+      },
+      "matchPlaceholder": {
+        "page": "/pricing",
+        "click": "button.checkout",
+        "event": "signup"
+      },
+      "removeStep": "Remove step {n}",
+      "addStep": "Add step",
+      "save": "Save funnel",
+      "cancel": "Cancel",
+      "delete": "Delete funnel",
+      "deleteTitle": "Delete funnel",
+      "deleteConfirm": "Delete the funnel “{name}”?",
+      "approx": "≈ {value}",
+      "stepsAria": "Steps of {name}",
+      "estimatedNote": "Funnels are read from kept recordings, so counts and times are estimates (≈).",
+      "truncated": "Only the most recent 20,000 recordings were read.",
+      "chartAria": "Visits per step of {name}",
+      "visits": "{value} visits",
+      "conversion": "{value} from the step before",
+      "medianTime": "median {value} from the step before",
+      "watchDropped": "Watch the {count} who dropped",
+      "droppedGone": "These recordings are no longer kept."
+    },
+    "smartEvents": {
+      "new": "New event",
+      "empty": "No events yet.",
+      "editorAria": "Define a smart event",
+      "name": "Name",
+      "namePlaceholder": "Clicked the pricing CTA",
+      "ruleKindLabel": "Watch for",
+      "ruleKind": {
+        "page": "A page view",
+        "click": "A click",
+        "custom": "A named event"
+      },
+      "matchModeLabel": "Match",
+      "matchMode": {
+        "equals": "is exactly",
+        "prefix": "starts with",
+        "contains": "contains"
+      },
+      "match": "Value",
+      "matchPlaceholder": {
+        "page": "/pricing",
+        "click": "button.checkout",
+        "custom": "signup"
+      },
+      "save": "Save event",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "deleteTitle": "Delete smart event",
+      "deleteConfirm": "Delete the smart event “{name}”? Funnels that use it stop matching.",
+      "deleteAria": "Delete {name}",
+      "tableAria": "Smart events",
+      "col": {
+        "name": "Event",
+        "rule": "Rule",
+        "count": "Recordings, last {days} days",
+        "actions": "Actions"
+      },
+      "builtin": "Built in",
+      "ruleSummary": "{kind} {mode} {match}",
+      "approx": "≈ {value}",
+      "filter": "Filter",
+      "filterAria": "Filter to recordings with {name}",
+      "defineFromClick": "Define an event from this click",
+      "defineFromClickAria": "Define an event from the click on {label}",
+      "preview": {
+        "idle": "Type a value to see how many recordings match.",
+        "checking": "Counting matching recordings…",
+        "invalid": "That rule is not valid.",
+        "count": "≈ {value} recordings match in the last {days} days"
+      }
+    },
+    "summary": {
+      "title": "Summary",
+      "summarize": "Summarize",
+      "regenerate": "Summarize again",
+      "loading": "Summarizing…",
+      "limit": "The daily limit for AI summaries has been reached. Try again tomorrow.",
+      "uncited": "No grounded summary could be written for this. Watch the recording instead.",
+      "error": "The summary could not be made.",
+      "citeAria": "Go to {time}",
+      "segmentTitle": "What these visitors did",
+      "summarizeSegment": "Summarize these recordings",
+      "sampled": "From a sample of {count} recordings.",
+      "exampleAria": "Watch the example at {time}"
+    },
+    "ticket": {
+      "raise": "Raise a ticket at {time}",
+      "title": "Replay: {label} at {time}",
+      "body": "Raised from a visitor recording: “{label}” at {time} on {route}.",
+      "watchLink": "Watch this moment",
+      "created": "Ticket created.",
+      "failed": "Could not create the ticket.",
+      "effect": {
+        "waiting": "Effect on {metric} at {route}: waiting for {visits} visits on a newer release.",
+        "measured": "Effect on {metric} at {route}: {before} → {after} ({visits} visits on the new release).",
+        "metric": {
+          "frustrated": "frustrated visits",
+          "errors": "visits with errors",
+          "conversions": "conversions"
+        }
+      }
+    },
+    "prescription": {
+      "area": {
+        "funnel": "Funnel",
+        "ux": "Usability",
+        "site": "Site",
+        "sales": "Sales",
+        "seo": "SEO",
+        "content": "Content",
+        "performance": "Performance",
+        "accessibility": "Accessibility"
+      },
+      "status": {
+        "proposed": "Proposed",
+        "applied": "In progress",
+        "measuring": "Measuring",
+        "worked": "Worked",
+        "no_effect": "No effect",
+        "worse": "Made it worse",
+        "dismissed": "Dismissed"
+      },
+      "verdict": {
+        "worked": "Worked",
+        "no_effect": "No effect",
+        "worse": "Made it worse"
+      },
+      "rule": {
+        "fallback": "Finding {ruleId}",
+        "rage_on_element": {
+          "title": "{share}% of visits to {route} rage-click “{label}”",
+          "description": "{sessions} sessions clicked it again and again because it did not respond the way they expected."
+        },
+        "error_on_step": {
+          "title": "An error is behind {share}% of drops at “{step}” in {funnel}",
+          "description": "“{error}” appears in the sessions that left the funnel at this step."
+        },
+        "dead_click_heading": {
+          "title": "{share}% of visits to {route} click the heading “{label}”, which does nothing",
+          "description": "{sessions} sessions expected the heading to be a link or a button."
+        },
+        "cta_below_fold": {
+          "title": "Only {reach}% of visitors to {route} scroll far enough to see “{label}”",
+          "description": "The call to action sits below the point where most visitors stop scrolling."
+        },
+        "quickback_after_reveal": {
+          "title": "{share}% of visits to {route} come straight back after opening “{label}”",
+          "description": "{sessions} sessions returned within seconds: what they found did not match what they expected."
+        },
+        "excessive_scroll_missing_info": {
+          "title": "{share}% of visits to {route} scroll back and forth looking for something",
+          "description": "{sessions} sessions scrolled excessively: the information they look for is hard to find."
+        },
+        "device_gap": {
+          "title": "Phones convert at {phoneRate}%, desktops at {desktopRate}%",
+          "description": "{sessions} phone sessions convert at less than half the desktop rate."
+        },
+        "release_regression": {
+          "title": "Conversion fell from {before}% to {after}% in {release}",
+          "description": "That is {drop}% below {previous}, the release before it."
+        },
+        "pricing_hesitation": {
+          "title": "{visitors} known visitors viewed {route} and did not buy",
+          "description": "They are identified, so a follow-up can reach them."
+        },
+        "checkout_abandon_known": {
+          "title": "{visitors} known visitors left checkout on {route}",
+          "description": "They are identified, so a follow-up can reach them."
+        },
+        "objection_pattern": {
+          "title": "Visitors hesitate over: {pattern}",
+          "description": "Seen in {examples} cited recordings."
+        },
+        "proof_missed_reason": {
+          "title": "{proof} missed its target: {reason}",
+          "description": "{share}% of visits to {route} hit this issue while the proof was measured."
+        },
+        "seo_title_length": {
+          "title": "The title of {route} is {length} characters",
+          "description": "Search results show titles of {min} to {max} characters in full; a shorter one wastes the space, a longer one is cut off."
+        },
+        "seo_missing_meta_description": {
+          "title": "{route} has a {length}-character meta description",
+          "description": "Without a description of at least {min} characters, search engines write their own snippet from the page."
+        },
+        "seo_multiple_h1": {
+          "title": "{route} has {count} main headings",
+          "description": "One H1 tells search engines and screen readers what the page is about; several blur it."
+        },
+        "seo_no_structured_data": {
+          "title": "{route} has no structured data",
+          "description": "A page of {words} words with no JSON-LD cannot earn rich results in search."
+        },
+        "seo_low_ctr_high_impressions": {
+          "title": "{route} is seen in search but rarely clicked",
+          "description": "{impressions} impressions brought {clicks} clicks ({ctr}% against the site’s {siteCtr}%): the title and description do not earn the click."
+        },
+        "content_no_value_prop_above_fold": {
+          "title": "The first screen of {route} does not say what it offers",
+          "description": "On {device, select, phone {phones} other {desktops}} the {words} words above the fold carry no value proposition, so visitors leave before they learn why to stay."
+        },
+        "content_cta_vague": {
+          "title": "The call to action “{label}” on {route} does not say what happens",
+          "description": "A label that names the outcome gets more clicks than a generic one ({ctas} calls to action on the page)."
+        },
+        "content_readability": {
+          "title": "{route} reads at grade {grade}",
+          "description": "Text above grade {max} loses readers; shorter sentences and plainer words keep them."
+        },
+        "content_missing_trust": {
+          "title": "{route} asks visitors to act without proof",
+          "description": "The page has {ctas} calls to action and {fields} form fields but no testimonial, review, rating, logo or guarantee."
+        },
+        "perf_lcp_poor": {
+          "title": "The main content of {route} takes {p75} ms to appear",
+          "description": "Real visits on {device, select, phone {phones} other {desktops}} wait longer than the {max} ms line before the largest element shows."
+        },
+        "perf_cls_poor": {
+          "title": "The layout of {route} shifts while it loads ({p75})",
+          "description": "Content that moves after it appears (above {max} on {device, select, phone {phones} other {desktops}}) makes visitors click the wrong thing."
+        },
+        "perf_heavy_hero_image": {
+          "title": "The first image on {route} weighs {kb} KB",
+          "description": "An above-the-fold image over {maxKb} KB delays the first screen; compress it or serve a smaller size."
+        },
+        "a11y_contrast": {
+          "title": "{count, plural, one {# element on {route} fails} other {# elements on {route} fail}} colour contrast",
+          "description": "The weakest pair reaches {ratio}:1 where {required}:1 is needed — hard to read for many visitors, and in bright light for everyone."
+        },
+        "a11y_tap_targets": {
+          "title": "{count, plural, one {# tap target on {route} is} other {# tap targets on {route} are}} too small on phones",
+          "description": "Targets under {min} × {min} px are easy to miss with a thumb."
+        },
+        "a11y_missing_labels": {
+          "title": "{count, plural, one {# field on {route} has} other {# fields on {route} have}} no label",
+          "description": "A field without a label cannot be named by a screen reader, and is easy to fill in wrong."
+        },
+        "vision_observed": {
+          "title": "{observation}",
+          "description": "Observed on the captured page and kept because the page’s own numbers support it."
+        }
+      },
+      "observed": "Observed from the screen",
+      "rankAria": "Rank {rank}",
+      "evidenceTitle": "Seen in",
+      "evidenceItem": "Recording {n} at {time}",
+      "evidenceAria": "Watch recording {n} at {time}",
+      "prescriptionTitle": "What to change",
+      "drafting": "The wording of this fix is being drafted.",
+      "change": {
+        "title": "Drafted change",
+        "before": "Now",
+        "after": "Change",
+        "target": "On {target}",
+        "unknown": "A change is drafted for this fix."
+      },
+      "changeKind": {
+        "copy": "Copy",
+        "layout": "Layout",
+        "code": "Code",
+        "content": "Content"
+      },
+      "impact": {
+        "estimateApprox": "≈ +{value} {unit} in {days} days ({low}–{high})",
+        "estimateExact": "+{value} {unit} in {days} days ({low}–{high})",
+        "pointApprox": "≈ +{value} {unit} in {days} days",
+        "pointExact": "+{value} {unit} in {days} days",
+        "rangeApprox": "≈ {low}–{high} {unit} in {days} days",
+        "rangeExact": "{low}–{high} {unit} in {days} days",
+        "none": "Not enough visits to estimate the impact yet"
+      },
+      "confidence": {
+        "low": "low confidence",
+        "medium": "medium confidence",
+        "high": "high confidence"
+      },
+      "unit": {
+        "conversions": "conversions",
+        "visits": "visits",
+        "sessions": "sessions"
+      },
+      "measured": {
+        "beforeAfter": "Before {before} → after {after}",
+        "onRelease": "on release {release}",
+        "source": {
+          "ticket_effect": "measured on the release that shipped it",
+          "ab_test": "measured by an A/B test",
+          "follow_up": "measured against visitors not followed up"
+        }
+      },
+      "dismissedBecause": "Dismissed: {reason}",
+      "acceptance": {
+        "text": "{metric} goes {direction}, over at least {minVisits} visits",
+        "direction": {
+          "up": "up",
+          "down": "down"
+        }
+      },
+      "metric": {
+        "rage_rate": "Rage-click rate",
+        "step_conversion": "Step conversion",
+        "dead_click_rate": "Dead-click rate",
+        "conversion_rate": "Conversion rate",
+        "quickback_rate": "Quick-back rate",
+        "excessive_scroll_rate": "Excessive-scroll rate",
+        "phone_conversion_rate": "Phone conversion rate",
+        "known_conversion_rate": "Known-visitor conversion rate",
+        "proof_metric": "The proof’s metric"
+      },
+      "actionsAria": "Actions for this fix",
+      "actions": {
+        "fix": "Fix it",
+        "test": "Test it",
+        "start-test": "Start the test",
+        "follow-up": "Follow up",
+        "ticket": "Ticket",
+        "publish-preview": "Publish",
+        "revert": "Revert",
+        "dismiss": "Dismiss",
+        "copy-prompt": "Copy prompt",
+        "apply-page": "Apply to the page",
+        "apply-in-composer": "Apply in composer"
+      },
+      "confirm": {
+        "start-test": {
+          "title": "Start the test?",
+          "message": "Visitors will be split between the live site and the preview until the test is decided.",
+          "confirm": "Start test"
+        },
+        "publish-preview": {
+          "title": "Publish the preview?",
+          "message": "The preview with this fix becomes the live site for every visitor.",
+          "confirm": "Publish"
+        },
+        "revert": {
+          "title": "Revert this fix?",
+          "message": "The site goes back to the release before this fix was published.",
+          "confirm": "Revert"
+        }
+      },
+      "dismiss": {
+        "title": "Dismiss this fix",
+        "reasonLabel": "Why dismiss it? (required)",
+        "reasonPlaceholder": "For example: the page was redesigned",
+        "submit": "Dismiss",
+        "cancel": "Cancel"
+      },
+      "followUp": {
+        "title": "Who would be followed up",
+        "none": "No known contact matches this finding.",
+        "unmatched": "{count, plural, one {# identified visitor has} other {# identified visitors have}} no matching contact",
+        "enrolled": "{count, plural, one {# contact enrolled} other {# contacts enrolled}}",
+        "draftTitle": "Drafted first touch (sent only from the sequence, after you edit it)",
+        "sequenceLabel": "Sequence to enrol into",
+        "enrol": "{count, plural, one {Enrol # contact} other {Enrol # contacts}}",
+        "cancel": "Cancel",
+        "contactAria": "Enrol {name}",
+        "noSequences": "This workspace has no sequence yet. Create one on a canvas to follow up.",
+        "sequencesLoading": "Loading sequences…",
+        "sequenceChoose": "Choose a sequence",
+        "modeLabel": "Sequence",
+        "modeExisting": "Use an existing sequence",
+        "modeNew": "Draft a new sequence",
+        "createAndEnrol": "{count, plural, one {Create sequence and enrol # contact} other {Create sequence and enrol # contacts}}",
+        "newSequence": {
+          "hint": "Drafted from the objection this fix cites. Edit it now: it is created as a draft sequence, and nothing is sent until you start it on its board.",
+          "nameLabel": "Sequence name",
+          "stepTitle": "Step {n}",
+          "delayLabel": "Days after enrolment",
+          "subjectLabel": "Subject",
+          "bodyLabel": "Message",
+          "drafting": "Drafting a sequence from the finding…",
+          "retry": "Draft the sequence"
+        }
+      },
+      "project": {
+        "label": "Project",
+        "none": "Choose a project"
+      },
+      "result": {
+        "refusal": "{reason}",
+        "run": "A coding agent is working on ticket #{taskId}.",
+        "ticket": "Ticket #{taskId} created.",
+        "test": "A/B test drafted. Start it when you are ready.",
+        "enrolled": "{count, plural, one {# contact enrolled} other {# contacts enrolled}}",
+        "done": "Done.",
+        "composer": "The prompt is in the composer. Review it and press send.",
+        "page": "{count, plural, one {# fix bundled into one prompt.} other {# fixes bundled into one prompt.}}",
+        "sequenceCreated": "“{name}” created as a draft sequence with {count, plural, one {# contact} other {# contacts}}. Start it on its board to send."
+      },
+      "maker": {
+        "fix": "Made by a coding agent",
+        "test": "Proved by an A/B test",
+        "start-test": "Proved by an A/B test",
+        "follow-up": "Made by a sales follow-up",
+        "ticket": "Made by your team (ticket)",
+        "publish-preview": "Ready to publish",
+        "revert": "Ready to revert"
+      },
+      "openAria": "Open fix: {title}",
+      "agent": {
+        "label": "Coding agent",
+        "none": "No coding agent can work on this site, so Fix it creates a ticket only.",
+        "ticketOnly": "Ticket only"
+      },
+      "applyPage": {
+        "title": "Apply every fix on this page",
+        "body": "Every accepted fix on the page goes into one prompt and is marked applied. Choose who the prompt is for.",
+        "submit": "Apply to the page",
+        "cancel": "Cancel"
+      }
+    },
+    "fixes": {
+      "overviewTitle": "Top fixes",
+      "stepTitle": "Prescribed fix",
+      "playerTitle": "Fixes for {route}",
+      "proofTitle": "The prescribed fix",
+      "empty": "No fix prescribed for this page yet."
+    },
+    "prompt": {
+      "audienceAria": "Who the prompt is for",
+      "audience": {
+        "composer": "Builderforce composer",
+        "coding_agent": "Coding agent",
+        "site_builder": "Site builder"
+      },
+      "textAria": "Improvement prompt",
+      "copy": "Copy prompt",
+      "copied": "Copied",
+      "copyFailed": "The clipboard is not available here. Select the text and copy it.",
+      "markedApplied": "Copied, and marked as applied. The next release is measured against it.",
+      "noneChosen": "Choose at least one fix to build a prompt.",
+      "pageTitle": "One prompt for this page",
+      "loading": "Writing the prompt…",
+      "bundled": "{count, plural, one {# fix in this prompt} other {# fixes in this prompt}}",
+      "applyInComposer": "Apply in composer",
+      "intro": "Hand this fix to any AI: the prompt says what to change, why, what must not change and how the result is measured.",
+      "pageBody": "Bundle every accepted fix on {route} into one prompt instead.",
+      "applyPage": "Apply to the page"
+    },
+    "page": {
+      "noCapture": "No capture of this page yet.",
+      "imageFailed": "The screenshot could not be loaded.",
+      "imageLoading": "Loading the screenshot…",
+      "calloutAria": "Change {n}: {element}",
+      "beforeAfter": {
+        "title": "Before and after",
+        "beforeAlt": "The page as it is now, with the changes numbered",
+        "afterAlt": "The page with the changes applied",
+        "afterPending": "The page with this fix applied has not been rendered yet.",
+        "sliderAria": "Slide between before and after",
+        "toggleAria": "Show before or after",
+        "before": "Before",
+        "after": "After",
+        "modeAria": "How to compare",
+        "mode": {
+          "slider": "Slider",
+          "toggle": "Toggle",
+          "side": "Side by side"
+        }
+      },
+      "device": {
+        "aria": "Device",
+        "desktop": "Desktop",
+        "phone": "Phone"
+      },
+      "serp": {
+        "title": "In search results",
+        "before": "Now",
+        "after": "With the fix",
+        "jsonLdTitle": "Structured data to add",
+        "jsonLdAria": "Proposed JSON-LD"
+      },
+      "score": {
+        "title": "Page score",
+        "none": "Not scored yet.",
+        "ringAria": "{label}: {score} out of 100",
+        "ringNone": "{label}: no data",
+        "part": {
+          "total": "Total",
+          "conversion": "Conversion",
+          "frustration": "Frustration",
+          "seo": "SEO",
+          "performance": "Performance",
+          "accessibility": "Accessibility"
+        },
+        "byRelease": "Score by release",
+        "releaseRow": "{release}: {score}"
+      },
+      "facts": {
+        "title": "What the capture found",
+        "none": "The capture carries no facts yet.",
+        "pass": "OK",
+        "fail": "Fix",
+        "group": {
+          "seo": "SEO",
+          "content": "Content",
+          "performance": "Performance",
+          "accessibility": "Accessibility"
+        },
+        "titleLength": "Title: {value} characters",
+        "metaDescriptionLength": "Meta description: {value} characters",
+        "h1Count": "Main headings: {value}",
+        "structuredData": "Structured data types: {value}",
+        "imagesWithoutAlt": "Images without alt text: {value}",
+        "aboveFoldWords": "Words above the fold: {value}",
+        "ctaAboveFold": "Calls to action above the fold: {value}",
+        "readabilityGrade": "Reading grade: {value}",
+        "trustSignals": "Trust signals: {value}",
+        "lcp": "Largest content (lab): {value} ms",
+        "cls": "Layout shift (lab): {value}",
+        "pageWeight": "Page weight: {value} KB",
+        "contrastFailures": "Contrast failures: {value}",
+        "smallTapTargets": "Small tap targets: {value}",
+        "missingLabels": "Fields without labels: {value}"
+      },
+      "capture": {
+        "request": "Request a capture now",
+        "requesting": "Requesting…",
+        "queued": "{count, plural, one {# capture queued.} other {# captures queued.}} The review updates when the runner is done.",
+        "limited": "Pages were captured less than an hour ago. Try again later.",
+        "unavailable": {
+          "runner_unavailable": "Captures need the page runner, which is not available on this deploy.",
+          "page_kit_unavailable": "The page runner’s kit is not published yet, so nothing was captured.",
+          "no_pages": "No key pages to capture yet: the site needs visits first.",
+          "no_origin": "The site has no address to capture from. Add an allowed domain first.",
+          "other": "Nothing was captured."
+        }
+      },
+      "loadFailed": "Could not load the page review.",
+      "loading": "Loading the page review…",
+      "noCaptures": "This page has not been captured yet. Captures run on each new release and weekly.",
+      "screenTitle": "The first screen",
+      "release": "release {release}",
+      "foldAlt": "The first screen of {path} on {device}",
+      "noDeviceCapture": "No {device} capture of this release.",
+      "fixesTitle": "Fixes for this page",
+      "noFixes": "No fixes for this page.",
+      "includeInPrompt": "Include in one prompt for this page",
+      "promptTitle": "One prompt for this page"
+    }
+  },
+  "apps": {
+    "loading": "Loading…",
+    "notEntitled": "This workspace has not installed {app} yet. Install it from the marketplace; it is free to start.",
+    "getIt": "Get {app}",
+    "needsSetup": "{app} is installed. Add your first site to start recording.",
+    "setUp": "Set up",
+    "navTitle": "Apps",
+    "insights": {
+      "name": "Insights",
+      "loading": "Loading sites…",
+      "noSiteTitle": "No sites yet",
+      "noSiteBody": "Add a website or switch recording on for a Builderforce app.",
+      "setUp": "Add a site",
+      "siteLabel": "Site",
+      "usageChip": "{used} / {limit} recordings",
+      "usageAria": "Usage: {used} of {limit} recordings this month. Open plan.",
+      "sites": "Sites",
+      "addSite": "Add site"
+    }
   }
 }

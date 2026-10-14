@@ -64,6 +64,32 @@ describe('CRON_SWEEPS registry', () => {
     ]);
   });
 
+  /** PRD 33 §5.2: the weekly floor of the page review's captures (a new release captures on first sight). */
+  it('registers the weekly replay-page-captures sweep, non-dispatching (runner jobs, no agent runs)', () => {
+    const sweep = CRON_SWEEPS.find((s) => s.key === 'replay-page-captures');
+    expect(sweep?.cadence).toBe('weekly-mon');
+    expect(sweep?.dispatches).toBeFalsy();
+  });
+
+  /** PRD 33 §5.3.2: window-end proof verdicts are written by the daily runner, after the replay rollup. */
+  it('registers the daily proof-verdicts sweep after replay-rollup, as a non-dispatching sweep', () => {
+    const keys = CRON_SWEEPS.map((s) => s.key);
+    const sweep = CRON_SWEEPS.find((s) => s.key === 'proof-verdicts');
+    expect(sweep?.cadence).toBe('daily');
+    expect(sweep?.dispatches).toBeFalsy();
+    expect(keys.indexOf('proof-verdicts')).toBeGreaterThan(keys.indexOf('replay-rollup'));
+  });
+
+  /** PRD 33 §5.1: the prescription rules read what the rollup and the proof verdicts just wrote. */
+  it('registers the daily replay-prescriptions sweep after replay-rollup and proof-verdicts, non-dispatching', () => {
+    const keys = CRON_SWEEPS.map((s) => s.key);
+    const sweep = CRON_SWEEPS.find((s) => s.key === 'replay-prescriptions');
+    expect(sweep?.cadence).toBe('daily');
+    expect(sweep?.dispatches).toBeFalsy();
+    expect(keys.indexOf('replay-prescriptions')).toBeGreaterThan(keys.indexOf('proof-verdicts'));
+    expect(keys.indexOf('proof-verdicts')).toBeGreaterThan(keys.indexOf('replay-rollup'));
+  });
+
   it('resolves the frequent group to the KV-gated tick sweeps', () => {
     const frequent = resolveCronTarget(CRON_SWEEPS, 'frequent');
     expect(frequent?.kind).toBe('cadence');

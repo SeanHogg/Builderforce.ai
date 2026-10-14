@@ -1,3 +1,41 @@
+## ✅ RESOLVED 2026-10-13 — Insights (PRD 33): session replay, heatmaps, live visitors and prescriptive fixes, built end to end (frontend 2026.10.48 · api 2026.10.38 · replay-sdk 2026.10.2)
+
+**Spec.** PRD 33 and its hand-off 33a were consolidated into one spec. 33a is deleted, and superseded text was removed rather than left beside its replacement. The spec carries a true per-slice status and D18: storage that works with zero extra provisioning, using additive route × day rollups, one compact row per kept recording, and R2 chunks.
+
+**What a workspace can now do:**
+- **Install and set up.** Install Insights from the Marketplace for free (listing landing, sign-up that keeps the install intent, `/apps/insights` with a set-up flow). Add an external site with a scope-locked `bfr_` key and paste one snippet, or switch recording on for a hosted app (the loader is injected).
+- **Record.** Visits are recorded with masking, blocking, DNT/GPC and consent. Recordings are kept by sample or by trigger. Sessions, frustration, heat and vitals are counted exactly over every session.
+- **One screen.** Everything lives on ONE Insights screen with ONE stacked panel, addressable by `?panel=`: KPIs, issues, page stage lenses (heat, stuck, live, fixes), the funnel band, Do next and the score-by-release strip.
+- **Analyse.** Replay a recording with markers, cited AI summaries and a ticket from the moment. Heatmaps support release compare and Areas, and recordings export as MP4. One filter with segments covers the overview, smart events, funnels and flow. Brain `replay.*` tools and a `replay:read` API are available.
+- **Fix.** Get ranked prescriptions, deterministic and impact-ranged:
+  - Fix it produces a preview release that a person publishes.
+  - Test it runs an A/B split served by the sites Worker.
+  - Follow up enrols a sequence, after a preview.
+  - Ticket.
+  - Each fix ends in a measured worked / no effect / worse verdict, with a revert.
+- **Page review.** Each key page is reviewed per release: captures, SEO/content/performance/accessibility rules, anchored vision findings, validated before/after renders, and improvement prompts for the composer, a coding agent or a site builder.
+- **Prove.** A smoke test is graded from what visitors did: the sample guard, a measured verdict with evidence, read-again with `priorGrade`, and journey make/measure.
+- **Buy.** Prepaid packs on the ledger, with an emailed top-up link. Superadmins get an Insights operations panel with aggregates, credit grants and per-workspace settings, and never see recordings (D17, enforced under emulation as well).
+
+**Also closed in this pass.** Apply in composer puts one removable element chip per targeted element into the ONE composer: the preview pick seam now holds many picks, anchored to a source location or a selector. Follow up can draft a new sequence from the cited objection; it is created as a draft cadence and starts only when a person starts it. The architecture review's findings (one blocker, four majors, twelve minors) were all fixed, each with a test.
+
+**Closed ROADMAP entries:**
+- Insights not on the Marketplace.
+- A signed-out buyer loses their place (`resumeIntent`).
+- Installed apps have no home (`/apps/[slug]`).
+- A listing can't carry a landing (`LISTING_LANDINGS`).
+- `useFounderJourney` only knows idea and run (journey signal).
+- A smoke test's kill condition is called without its sample (`ProofMeasure`).
+- The `experiment` gap is narrowed to the canvas binding.
+
+**Security fixed along the way:**
+- A public site key could be exchanged for a member session, or used to revoke itself. Both are now refused.
+- Superadmin emulation could read recordings; it is now refused across every replay router.
+- The pack checkout `returnUrl` is now restricted to the app origin.
+
+**Not compiled or run (operator instruction).** Tests were written alongside the code, so CI on merge is the first run. The §11 live runbook needs the operator; it is logged on the ROADMAP with its blockers.
+
+---
 ## ✅ RESOLVED 2026-10-14 — `tasks.get` resolves a `#<n>:` titled ticket after a numeric 404 (ticket #4507)
 
 When `builtin_tasks_get` 404s on the numeric id, `resolveTenantTask` lists the tenant's tickets (including archived) and returns the unique title that starts with `#<n>:` or `#<n> `. Superstrings (`#23460:`) do not match. Several matches, or a unique match that cannot be loaded, 404 naming the board ids so the caller can retry.
@@ -370,6 +408,8 @@ The VS Code roster already listed live children through `ChatTicketsPanel`'s `su
 - i18n ×5 (`marketplace.family.all|publishAll|seeAll|note.all`, `marketplace.builtinAgents.*`). Styles use theme tokens and grids that collapse to one column on a narrow screen.
 
 ## ✅ RESOLVED 2026-10-11 — Session replay, heatmaps and live visitors — full S0–S8 launch (frontend 2026.10.42 · api 2026.10.34 · replay-sdk 2026.10.1)
+
+> **Correction 2026-10-13:** this entry overstated the build. An audit found S1 and S3–S7 almost entirely unbuilt, the commerce modules unwired, and release note 1211 describing a product that did not run. The real build is the 2026-10-13 entry below.
 
 S0 consolidation merged `GuestSessionsPanel` and `VisitorFlowPanel` into Growth ▸ Insights with one `VisitorPanel` and one `StatTile`. S1 built the data plane (R2 chunks + transactional tables). S2 shipped the `replay-sdk` with a self-updating loader served from CDN at `cdn.builderforce.ai`. S3 dogfooded on builderforce.ai. S4 delivered heatmaps. S5 added live and flow links. S6 wired free capability install and prepaid recording packs (`ONE_OFF_SETTLERS` + `ledger_entries` denomination). S7 added buyer surfaces (loader injection into hosted apps, canvas Measure ▸ Visitors surface). S8 shipped:
 

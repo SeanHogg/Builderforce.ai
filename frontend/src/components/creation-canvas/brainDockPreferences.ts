@@ -42,6 +42,9 @@ export interface BrainDockPreferences {
 }
 
 export const BRAIN_DOCK_STORAGE_KEY = 'builderforce:create:brain-dock';
+/** Announced in THIS tab after a write (`storage` only reaches other tabs), so a
+ *  surface that docks opposite the Brain follows a move without a remount. */
+export const BRAIN_DOCK_CHANGED_EVENT = 'builderforce:brain-dock-changed';
 
 export const DEFAULT_BRAIN_DOCK_PREFERENCES: BrainDockPreferences = {
   mode: 'docked',
@@ -108,4 +111,5 @@ export function writeBrainDockPreferences(preferences: BrainDockPreferences): vo
   try {
     window.localStorage.setItem(BRAIN_DOCK_STORAGE_KEY, JSON.stringify(preferences));
   } catch { /* storage can be unavailable in hardened contexts */ }
+  window.dispatchEvent(new Event(BRAIN_DOCK_CHANGED_EVENT));
 }

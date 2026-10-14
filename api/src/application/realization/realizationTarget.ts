@@ -30,6 +30,7 @@
  * and states it before the thing is built rather than after the result is in.
  */
 
+import type { ProofMeasure } from '@builderforce/interaction-contract';
 import type { BackendStrategyKey } from '../backend/hostingStrategy';
 import type { Capability, BlueprintTask, RequiredConnector, RequiredSecret } from '../challenge/blueprint';
 import type { ChallengeSpec } from '../challenge/parseBrief';
@@ -88,6 +89,14 @@ export interface RealizationOutput {
   requiredCollections: string[];
   /** What must be demonstrably true for this proof to have paid for itself. */
   successCriteria: string[];
+  /**
+   * The visitor behaviour that grades this proof (PRD 33 §5.3.1), filled ONLY from
+   * numbers the target's own charter states. Undefined where the criteria are not
+   * visitor behaviour — a survey answer, a trial pass rate, a phone call — because
+   * a measure invented for those would grade the wrong thing. Persisted once, at
+   * create time, into `realizations.measure`.
+   */
+  measure?: ProofMeasure;
 }
 
 export interface RealizationTarget {

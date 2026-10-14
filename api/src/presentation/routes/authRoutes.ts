@@ -46,7 +46,7 @@ import {
   parseTokenTimeToDate,
   verifyTotpCode,
 } from '../../infrastructure/auth/MfaService';
-import { revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
+import { deserializeScopes, keyMayActAsMember, revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
 import { issueVerificationCode, verifyVerificationCode, type VerifyResult } from '../../application/auth/EmailVerificationService';
 import { checkTermsAcceptance, invalidateAcceptedTermsVersion, recordAcceptance } from '../../application/legal/termsAcceptance';
 import { getActiveLegalDoc } from '../../application/legal/legalDocsService';
@@ -432,12 +432,16 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
         revokedAt: tenantApiKeys.revokedAt,
         createdByUserId: tenantApiKeys.createdByUserId,
         client: tenantApiKeys.client,
+        scopes: tenantApiKeys.scopes,
       })
       .from(tenantApiKeys)
       .where(eq(tenantApiKeys.keyHash, keyHash))
       .limit(1);
 
     if (!row || row.revokedAt) return c.json({ error: 'Invalid or revoked API key' }, 401);
+    // A scoped key (a public `bfr_` Insights site key above all) is a least-privilege
+    // service token; it never becomes a member session. Same answer as an unknown key.
+    if (!keyMayActAsMember(deserializeScopes(row.scopes))) return c.json({ error: 'Invalid or revoked API key' }, 401);
     // The token is minted AS the key's creator (human-in-the-loop) and MUST be a real
     // user: signJwt always stamps a `jti`, and authMiddleware rejects any jti without a
     // matching persisted authTokens row — so we persist it below (FK → users.id).

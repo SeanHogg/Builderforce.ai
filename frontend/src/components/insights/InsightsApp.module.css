@@ -1,0 +1,18 @@
+/* The Insights app header — tokens only, wraps at phone width. */
+.app { display: grid; gap: 12px; min-width: 0; }
+.header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; min-width: 0; }
+.title { margin: 0; font-family: var(--font-display); font-weight: 700; color: var(--text-primary);
+  font-size: var(--font-size-card-title); margin-right: auto; }
+.select { min-height: 44px; max-width: 100%; padding: 0 12px; border-radius: var(--radius-md);
+  border: 1px solid var(--border); background: var(--surface-card); color: var(--text-primary);
+  font-size: var(--font-size-body); }
+.select option { background: var(--surface-card); color: var(--text-primary); }
+.chip { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px;
+  border-radius: var(--radius-full); border: 1px solid var(--border); background: var(--surface-card);
+  color: var(--text-primary); font-size: var(--font-size-small); cursor: pointer; }
+.chipWarn { border-color: var(--warning); }
+.state { display: grid; gap: 12px; justify-items: start; padding: 24px; border-radius: var(--radius-lg);
+  border: 1px solid var(--border); background: var(--surface-card); max-width: 640px; }
+.stateTitle { margin: 0; color: var(--text-primary); font-size: var(--font-size-card-title); font-weight: 700; }
+.stateBody { margin: 0; color: var(--text-secondary); font-size: var(--font-size-body); line-height: 1.55; }
+.page { padding: clamp(16px, 3vw, 32px); display: grid; gap: 16px; min-width: 0; }

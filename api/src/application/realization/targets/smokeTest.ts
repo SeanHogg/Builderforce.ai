@@ -25,6 +25,7 @@
 import { esc, renderProofShell, INGRESS_PRELUDE } from '../proofShell';
 import { audienceOf, capabilityLabel, criteriaFrom, goalHeadline, verdictRecorderScript, VERDICT_COLLECTION } from './shared';
 import type { RealizationTarget, RealizeContext, RealizationOutput } from '../realizationTarget';
+import { SMOKE_SOURCE_TAG, SMOKE_SUCCESS_EVENT, SMOKE_UNNAMED_SOURCE, SMOKE_WINDOW_DAYS, smokeTestMeasure } from './smokeTestMeasure';
 
 const COLLECTION = 'waitlist';
 
@@ -77,6 +78,9 @@ ${benefits.map((benefit) => `      <div class="card">
   const script = `  var form = document.getElementById('signup');
   var status = document.getElementById('status');
   var submit = document.getElementById('submit');
+  var query = new URLSearchParams(location.search);
+  var source = query.get('utm_source') || query.get('ref') || query.get('src') || '${SMOKE_UNNAMED_SOURCE}';
+  window.BFReplay && BFReplay.tag('${SMOKE_SOURCE_TAG}', source);
 
   form.addEventListener('submit', function (event) {
     event.preventDefault();
@@ -98,10 +102,11 @@ ${benefits.map((benefit) => `      <div class="card">
         context: document.getElementById('context').value.trim(),
         company_website: document.getElementById('company_website').value,
         referrer: document.referrer || '',
-        source: new URLSearchParams(location.search).get('src') || 'direct',
+        source: source,
       }),
     }).then(function (res) {
       if (!res.ok) throw new Error('rejected');
+      window.BFReplay && BFReplay.event('${SMOKE_SUCCESS_EVENT}');
       // Told the truth, immediately. A fake door that leaves someone believing
       // they have bought something is not a test.
       document.getElementById('signup-card').innerHTML =
@@ -268,7 +273,7 @@ ${goalHeadline(spec)}
 |---|---|
 | Signups needed | **${target}** |
 | Out of at least | **${sample}** unique visitors |
-| Window | **14 days** from first traffic |
+| Window | **${SMOKE_WINDOW_DAYS} days** from first traffic |
 
 ## The decision
 
@@ -356,6 +361,7 @@ not in a purchase somebody thinks they made.
         `The signup count is recorded against the ${target} threshold, and a build-or-park decision is written down.`,
         'Every person who signed up was told, at the moment of signing up, that it is not built yet.',
       ]),
+      measure: smokeTestMeasure(target, sample),
     };
   },
 };

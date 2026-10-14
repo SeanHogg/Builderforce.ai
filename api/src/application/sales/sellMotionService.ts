@@ -38,7 +38,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { requireSessionRole, type SessionAccess } from '../creation/sessionAccess';
 import { computeControlCoverage } from '../finops/socControls';
-import { condenseTranscript } from '../meetings/meetingIntelligence';
+import { condenseTranscript } from '../llm/condense';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 const text = (value: unknown, max: number): string =>

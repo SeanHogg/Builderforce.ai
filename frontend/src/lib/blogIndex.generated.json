@@ -1,5 +1,19 @@
 [
   {
+    "slug": "fix-what-visitors-tell-you",
+    "title": "Insights tells you what to fix — and proves it worked",
+    "date": "2026-10-13",
+    "description": "Recordings and heatmaps showed you the problem and left the next step to you. Insights now names the change, renders it on your page, hands it to an AI as a prompt or applies it, and grades it on the next release.",
+    "tags": [
+      "methodology",
+      "idea-to-real",
+      "validation",
+      "product-strategy",
+      "metrics"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "synapse-runs-models-itself",
     "title": "Synapse now runs models itself",
     "date": "2026-10-12",

@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
+import { readIntent, resumeIntent } from '@/lib/auth';
 import { hasSession, useRequireSession } from '@/lib/useRequireSession';
 import { autoSelectTenant, rememberWorkspaceChoice, saveDefaultTenant } from '@/lib/auth/credentials';
 import { workspacesApi } from '@/lib/auth/session';
@@ -83,7 +84,7 @@ export default function TenantsPage() {
     autoSelectAttempted.current = true;
     selectTenant(target)
       .then(() => {
-        const next = searchParams.get('next') || '/dashboard';
+        const next = resumeIntent(readIntent(searchParams));
         router.replace(next);
       })
       .catch(() => {
@@ -97,7 +98,7 @@ export default function TenantsPage() {
     try {
       await selectTenant(tenant);
       if (webToken) await rememberWorkspaceChoice(webToken, tenant, tenants);
-      const next = searchParams.get('next') || '/dashboard';
+      const next = resumeIntent(readIntent(searchParams));
       router.push(next);
     } catch (err) {
       setError(errorMessage(err));
@@ -152,7 +153,7 @@ export default function TenantsPage() {
       // If user had no tenants, auto-select the new one and redirect to dashboard
       if (hadNoTenants) {
         await selectTenant(newTenant);
-        const next = searchParams.get('next') || '/dashboard';
+        const next = resumeIntent(readIntent(searchParams));
         router.replace(next);
       }
     } catch (err) {

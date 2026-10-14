@@ -1,37 +1,29 @@
 /**
- * Release fingerprint — SHA-256 of the sorted hashed asset URLs on the page,
- * truncated to 12 hex chars.
+ * Release fingerprint (PRD 33 §3.1, step 4) — the release key of a page that
+ * names none: the first 12 hex of SHA-256 over the sorted asset URLs whose
+ * path carries a build hash.
  *
- * "Hashed" means the URL's pathname contains an 8+ hex run, which is how
- * webpack / vite / most CDNs fingerprint a build. Unhashed URLs (a favicon,
- * an unversioned CSS file) are dropped so a one-off asset swap does not
- * mint a new release.
+ * "Carries a build hash" means a `[.-][0-9a-f]{6,}[.-]` segment
+ * (`app.3f9a1c2b.js`, `chunk-8d7e6f.css`), which is how webpack, vite and most
+ * CDNs fingerprint a build. Unhashed URLs (a favicon, an unversioned
+ * stylesheet) are ignored so swapping one does not mint a release.
  *
- * WebCrypto (`crypto.subtle`) is on the global in Workers, Node 18+ and
- * the browser, so there is no platform branch here.
+ * WebCrypto (`crypto.subtle`) is global in Workers, Node 18+ and the browser.
  */
 
-const HASH_LIKE = /[a-f0-9]{8,}/i;
+const BUILD_HASH = /[.-][0-9a-f]{6,}[.-]/i;
 
-function pathnameOf(url: string): string {
-  try {
-    return new URL(url, 'https://example.invalid').pathname;
-  } catch {
-    return url;
-  }
+function pathOf(url: string): string {
+  const cut = url.search(/[?#]/);
+  return cut === -1 ? url : url.slice(0, cut);
 }
 
-/** URLs whose pathname contains a hash-like segment, sorted for stability. */
-export function hashedAssetUrls(urls: readonly string[]): string[] {
-  return urls.filter((url) => HASH_LIKE.test(pathnameOf(url))).slice().sort();
-}
-
-/** 12-char hex SHA-256 of the sorted hashed asset URLs, joined by newline. */
-export async function releaseKeyFromAssets(urls: readonly string[]): Promise<string> {
-  const hashed = hashedAssetUrls(urls);
-  const payload = hashed.join('\n');
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload)));
+/** Null when no URL carries a build hash. */
+export async function releaseKeyFromAssets(urls: readonly string[]): Promise<string | null> {
+  const hashed = urls.filter((url) => BUILD_HASH.test(pathOf(url))).slice().sort();
+  if (hashed.length === 0) return null;
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(hashed.join('\n'))));
   let hex = '';
-  for (let i = 0; i < digest.length; i++) hex += digest[i]!.toString(16).padStart(2, '0');
-  return hex.slice(0, 12);
+  for (let i = 0; i < 6; i++) hex += digest[i]!.toString(16).padStart(2, '0');
+  return hex;
 }

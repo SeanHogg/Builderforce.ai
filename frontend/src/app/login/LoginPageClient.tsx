@@ -6,9 +6,8 @@ import Link from 'next/link';
 import { BrandLockup } from '@/components/BrandLockup';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
-import { getStoredWebToken } from '@/lib/auth';
+import { getStoredWebToken, readIntent, registerHref, resumeIntent, workspaceChoiceHref } from '@/lib/auth';
 import { getSsoStartUrl, resolveAndSelectTenant, requestMagicLink } from '@/lib/auth/credentials';
-import { safeRedirectPath } from '@/lib/safeRedirect';
 import { isPasskeyCancellation, isPasskeySupported } from '@/lib/passkeys';
 import { Icon } from '@/components/ui/Icon';
 import { ThemeToggleButton } from '@/components/ThemeToggleButton';
@@ -79,7 +78,7 @@ export default function LoginPageClient() {
 
   const finishAndRedirect = async () => {
     // Open-redirect guard (M5): only same-origin relative paths are honoured.
-    const next = safeRedirectPath(searchParams.get('next'));
+    const next = resumeIntent(readIntent(searchParams));
     const token = getStoredWebToken();
     if (!token) { router.push('/tenants'); return; }
     const selected = await resolveAndSelectTenant(token);
@@ -99,7 +98,7 @@ export default function LoginPageClient() {
   // Do NOT redirect during form submission — handleSubmit does tenant resolution and redirect.
   useEffect(() => {
     if (!isAuthenticated || isLoading) return;
-    const next = safeRedirectPath(searchParams.get('next'));
+    const next = resumeIntent(readIntent(searchParams));
     if (hasTenant) {
       router.replace(next);
       return;
@@ -108,7 +107,7 @@ export default function LoginPageClient() {
     const token = getStoredWebToken();
     if (!token) { router.replace('/tenants'); return; }
     resolveAndSelectTenant(token).then((selected) => {
-      router.replace(selected ? next : '/tenants');
+      router.replace(selected ? next : workspaceChoiceHref({ next }));
     });
   }, [isAuthenticated, hasTenant, isLoading, router, searchParams]);
 
@@ -158,7 +157,7 @@ export default function LoginPageClient() {
     setError(null);
     setMagicLinkLoading(true);
     try {
-      const next = safeRedirectPath(searchParams.get('next'));
+      const next = resumeIntent(readIntent(searchParams));
       await requestMagicLink(email, next);
       setMagicLinkSent(true);
     } catch (err) {
@@ -224,7 +223,7 @@ export default function LoginPageClient() {
           </BrandLockup>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ThemeToggleButton />
-            <Link href={`/register${searchParams.get('next') ? `?next=${encodeURIComponent(safeRedirectPath(searchParams.get('next')))}` : ''}`} style={{
+            <Link href={registerHref(searchParams.get('next') ? resumeIntent(readIntent(searchParams)) : '', searchParams.get('intent') ?? undefined)} style={{
               padding: '7px 16px', borderRadius: 'var(--radius-lg)',
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
               color: 'var(--text-on-accent)', textDecoration: 'none',
@@ -304,7 +303,7 @@ export default function LoginPageClient() {
               {ssoLabel && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <a
-                    href={getSsoStartUrl(email, safeRedirectPath(searchParams.get('next')))}
+                    href={getSsoStartUrl(email, resumeIntent(readIntent(searchParams)))}
                     style={{
                       width: '100%',
                       boxSizing: 'border-box',
@@ -433,7 +432,7 @@ export default function LoginPageClient() {
 
           <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: 20 }}>
             {t('noAccount')}{' '}
-            <Link href={`/register${searchParams.get('next') ? `?next=${encodeURIComponent(safeRedirectPath(searchParams.get('next')))}` : ''}`} style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
+            <Link href={registerHref(searchParams.get('next') ? resumeIntent(readIntent(searchParams)) : '', searchParams.get('intent') ?? undefined)} style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
               {t('signUpLink')}
             </Link>
           </p>

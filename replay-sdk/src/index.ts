@@ -1,30 +1,12 @@
 /**
- * `@seanhogg/builderforce-replay` — npm entry.
+ * `@seanhogg/builderforce-replay` — npm entry (global `BuilderforceReplay`).
  *
- * `init()` starts recording (CDN self-update when a newer hashed recorder is
- * published). `window.BuilderForce.session` is the same API as the snippet.
+ *   import { startReplay } from '@seanhogg/builderforce-replay';
+ *   startReplay({ site: 'bfr_…' });
+ *
+ * It injects the CDN loader, so the recorder updates without a reinstall.
+ * `window.BFReplay` is the runtime API either way.
  */
 
-export { VISIT_IDLE_MS, VISITOR_ID_PATTERN, getVisitId, getVisitorId, mintId } from './ids';
-export { unmask, shouldMask, maskInputFn } from './masking';
-export { session, installGlobal, type ReplayInit, type ReplaySessionApi } from './publicApi';
-export { initFromCdn as init } from './npm';
-export { startRecorder } from './recorder';
-export { boot as bootLoader } from './loader';
-export { bootEmbed } from './embed';
-
-import { initFromCdn } from './npm';
-import { installGlobal, session } from './publicApi';
-
-if (typeof window !== 'undefined') installGlobal();
-
-const api = {
-  init: initFromCdn,
-  identify: session.identify,
-  setTag: session.setTag,
-  track: session.track,
-  stop: session.stop,
-  unmask: session.unmask,
-};
-
-export default api;
+export { startReplay, type StartReplayOptions } from './npm';
+export type { BFReplayApi } from './handoff';

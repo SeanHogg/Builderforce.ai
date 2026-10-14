@@ -1,0 +1,34 @@
+/*
+ * The Insights home's one breakpoint (PRD 33 §4.1, D16).
+ *
+ * The desktop grid — areas, the 38 / 34 / 28 body, the no-scroll height — is
+ * set inline from `HOME_ROWS` so the band registry decides it. At 900 px and
+ * below it stacks into one column and the page may scroll; that override has
+ * to beat the inline declarations, hence `!important` here and only here.
+ */
+
+.root {
+  box-sizing: border-box;
+}
+
+.bodyCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  padding: var(--space-3);
+}
+
+@media (max-width: 900px) {
+  .root {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-areas: none !important;
+    grid-template-rows: none !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .area {
+    grid-area: auto !important;
+    overflow: visible !important;
+  }
+}

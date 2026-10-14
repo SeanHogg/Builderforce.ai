@@ -1505,7 +1505,8 @@
       "where": "In der Vorschau ausgewählt: {file}, Zeile {line}",
       "aria": "Ausgewähltes Element:",
       "remove": "Ausgewähltes Element entfernen",
-      "unresolved": "Dieses Element lässt sich nicht im Quellcode finden. Beschreib es stattdessen im Eingabefeld."
+      "unresolved": "Dieses Element lässt sich nicht im Quellcode finden. Beschreib es stattdessen im Eingabefeld.",
+      "whereSelector": "Auf {page}: {selector}"
     },
     "releases": {
       "title": "Frühere Versionen",
@@ -2214,7 +2215,8 @@
       "ingestion": "Daten",
       "error_events": "Fehler",
       "outbound_fetches": "Ausgehende Abrufe",
-      "feedback_submissions": "Feedback"
+      "feedback_submissions": "Feedback",
+      "replay_recordings": "Aufzeichnungen"
     },
     "unlimited": "Unbegrenzt",
     "freePerMo": "{amount} kostenlos / Mon.",
@@ -2826,7 +2828,20 @@
       "link": "Verknüpfen mit",
       "linkNone": "Keine Verknüpfung",
       "linkProjects": "Projekte",
-      "linkInitiatives": "Initiativen"
+      "linkInitiatives": "Initiativen",
+      "band": {
+        "aria": "Trichter",
+        "none": "Noch kein Trichter.",
+        "create": "Trichter anlegen",
+        "openAria": "Trichter bei {step} öffnen",
+        "approx": "≈ {value}",
+        "conversion": "{value} konvertiert"
+      },
+      "tabs": {
+        "steps": "Schritte",
+        "events": "Ereignisse",
+        "flow": "Fluss"
+      }
     },
     "alloc": {
       "title": "Investitionsverteilung",
@@ -3515,6 +3530,248 @@
       "colDispatched": "Übergeben",
       "colExecutionRate": "Ausführungsquote",
       "colCost": "Kosten"
+    },
+    "overview": {
+      "title": "Insights",
+      "homeAria": "Insights-Startseite",
+      "periodLabel": "Zeitraum",
+      "window": "{days} T",
+      "windowAria": "Letzte {days} Tage",
+      "compare": "Release vergleichen",
+      "compareNone": "Kein Vergleich",
+      "releaseOrdinal": "R{n}",
+      "live": "Live",
+      "goalLabel": "Ziel",
+      "stageTitle": "Seitenbühne",
+      "stageEmpty": "Wähle ein Problem, um seine Seite hier zu sehen.",
+      "lensesAria": "Seitenansichten",
+      "doNextTitle": "Als Nächstes",
+      "doNextEmpty": "Priorisierte Korrekturen erscheinen hier, sobald genug Sitzungen eingegangen sind, um sie zu messen."
+    },
+    "goals": {
+      "activation": "Aktivierung",
+      "revenue": "Umsatz",
+      "signups": "Anmeldungen",
+      "retention": "Bindung"
+    },
+    "kpi": {
+      "aria": "Kennzahlen",
+      "error": "Die Kennzahlen konnten nicht geladen werden.",
+      "sessions": "Sitzungen",
+      "conversion": "Conversion",
+      "frustrated": "Frustrierte Sitzungen",
+      "errorsPer1k": "JS-Fehler pro 1.000",
+      "lcp": "p75 LCP",
+      "score": "Website-Score",
+      "scorePending": "Nach der ersten Seitenprüfung",
+      "seconds": "{value} s",
+      "versus": "vs. {value}",
+      "trendAria": "Verlauf: {label}",
+      "openAria": "{label} öffnen",
+      "approx": "≈ {value}"
+    },
+    "issues": {
+      "title": "Probleme",
+      "viewAll": "Alle anzeigen",
+      "loading": "Probleme werden geladen…",
+      "error": "Die Probleme konnten nicht geladen werden.",
+      "empty": "Keine Probleme in diesem Zeitraum.",
+      "loadMore": "Mehr laden",
+      "statusAria": "Problemstatus",
+      "status": {
+        "all": "Alle",
+        "new": "Neu",
+        "regressed": "Regressionen",
+        "ongoing": "Laufend"
+      },
+      "statusName": {
+        "new": "neu",
+        "ongoing": "laufend",
+        "regressed": "Regression",
+        "proposed": "Korrektur vorgeschlagen",
+        "preview": "in Vorschau",
+        "measuring": "wird gemessen",
+        "verified": "bestätigt",
+        "ignored": "ignoriert"
+      },
+      "colIssue": "Problem",
+      "colSessions": "Sitzungen",
+      "colShare": "Anteil",
+      "colTrend": "Verlauf",
+      "rowAria": "Problem öffnen: {title}",
+      "trendAria": "Tägliche Sitzungen für {title}",
+      "overview": {
+        "sessions": "Betroffene Sitzungen",
+        "share": "Anteil der Route",
+        "firstSeen": "Zuerst gesehen",
+        "lastSeen": "Zuletzt gesehen",
+        "byRelease": "Nach Release",
+        "byDevice": "Nach Gerät"
+      },
+      "representatives": "Repräsentative Aufzeichnungen",
+      "repAria": "Repräsentative Aufzeichnung {rank} öffnen",
+      "recordingsOfIssue": "Aufzeichnungen mit diesem Problem auf {route}",
+      "approx": "≈ {value}",
+      "estimatedNote": "≈ Geschätzt aus den für diesen Filter gespeicherten Aufzeichnungen."
+    },
+    "panel": {
+      "crumbRoot": "Insights",
+      "crumbAria": "Panelpfad",
+      "backTo": "Zurück zu {label}",
+      "loading": "Wird geladen…",
+      "loadFailed": "Dies konnte nicht geladen werden."
+    },
+    "kinds": {
+      "recording": "Aufzeichnung",
+      "issue": "Problem",
+      "issues": "Alle Probleme",
+      "fix": "Korrektur",
+      "route": "Seitenprüfung",
+      "metric": "Kennzahl",
+      "funnel": "Trichter",
+      "live": "Live-Besucher",
+      "proof": "Nachweis",
+      "release": "Release",
+      "sites": "Websites",
+      "plan": "Tarif und Nutzung",
+      "tabs": {
+        "replay": "Wiedergabe",
+        "journey": "Verlauf",
+        "lead": "Lead",
+        "overview": "Überblick",
+        "recordings": "Aufzeichnungen"
+      },
+      "funnelEdit": "Funnel bearbeiten"
+    },
+    "lenses": {
+      "live": "Live",
+      "heat": "Heatmap",
+      "stuck": "Hänger",
+      "fixes": "Korrekturen"
+    },
+    "journey": {
+      "steps": "{count, plural, one {# Seite} other {# Seiten}}",
+      "entryExit": "{entry} → {exit}",
+      "signals": "Signale",
+      "noSignals": "Keine Frustrations- oder Fehlersignale in dieser Aufzeichnung."
+    },
+    "lead": {
+      "identifiedId": "Identifiziert als",
+      "traits": "Merkmale",
+      "noTraits": "Die Website hat keine Merkmale für diesen Besucher gesendet.",
+      "tags": "Tags"
+    },
+    "sites": {
+      "loading": "Websites werden geladen…",
+      "empty": "Noch keine Websites.",
+      "add": "Website hinzufügen",
+      "listLabel": "Websites",
+      "kind": {
+        "external": "Website",
+        "hosted": "Builderforce-App"
+      },
+      "settings": "Einstellungen",
+      "save": "Speichern",
+      "saved": "Gespeichert.",
+      "saveFailed": "Die Einstellungen konnten nicht gespeichert werden.",
+      "install": "Installieren",
+      "verify": "Installationsprüfungen"
+    },
+    "plan": {
+      "loading": "Nutzung wird geladen…",
+      "usageTitle": "Dieser Monat",
+      "usedOfLimit": "{used} von {limit} Aufzeichnungen im Zeitraum {period} genutzt",
+      "free": "Freikontingent",
+      "freeUsed": "{used} von {allowance} genutzt",
+      "credits": "Prepaid-Guthaben",
+      "packsTitle": "Aufzeichnungen kaufen",
+      "receipts": "Zahlungen und Belege",
+      "checkoutReturned": "Danke. Ihr Guthaben erscheint hier, sobald die Zahlung bestätigt ist."
+    },
+    "route": {
+      "kind": "Seite",
+      "tabs": {
+        "heat": "Heatmap",
+        "review": "Prüfung"
+      },
+      "openAria": "Seite {route} öffnen",
+      "review": {
+        "open": "Seitenprüfung öffnen"
+      }
+    },
+    "fix": {
+      "tabs": {
+        "change": "Änderung",
+        "measure": "Messung",
+        "prompt": "Prompt"
+      },
+      "issueTabs": {
+        "fix": "Korrektur",
+        "history": "Verlauf"
+      },
+      "noFix": "Für dieses Problem ist noch keine Korrektur verordnet.",
+      "measure": {
+        "acceptanceTitle": "Angenommen, wenn",
+        "acceptanceNone": "Es wurde noch kein Abnahmetest entworfen.",
+        "resultTitle": "Ergebnis",
+        "notYet": "Noch nicht gemessen. Das Urteil kommt, sobald das Release mit der Korrektur seine Stichprobe erreicht."
+      },
+      "history": {
+        "title": "Verlauf",
+        "created": "Gefunden",
+        "applied": "{action}",
+        "measured": "Gemessen: {verdict}",
+        "dismissed": "Verworfen: {reason}"
+      }
+    },
+    "fixes": {
+      "kind": "Alle Korrekturen",
+      "findNow": "Jetzt Korrekturen finden",
+      "finding": "Suche läuft…",
+      "sweepResult": "{found, plural, one {# Befund} other {# Befunde}}, {created} neu",
+      "sweepLimited": "Innerhalb der letzten Stunde wurde bereits gesucht. Bitte später erneut versuchen.",
+      "viewAll": "Alle anzeigen",
+      "error": "Korrekturen konnten nicht geladen werden.",
+      "loading": "Korrekturen werden geladen…",
+      "empty": "Keine Korrektur passt zu diesem Filter.",
+      "areaAll": "Alle ({count})",
+      "areaChip": "{area} ({count})",
+      "areaAria": "Korrekturen nach Bereich filtern",
+      "loadMore": "Mehr anzeigen",
+      "applyAll": "Alle anwenden",
+      "applyAllTitle": "Ein Prompt für {route}"
+    },
+    "release": {
+      "title": "Release {label}",
+      "firstSeen": "Zuerst gesehen am {date}",
+      "empty": "Dieses Release hat keine Korrektur ausgeliefert.",
+      "notMeasured": "Noch nicht gemessen",
+      "openAria": "Korrektur öffnen: {title}",
+      "strip": {
+        "title": "Bilanz pro Release",
+        "aria": "Ausgelieferte Korrekturen pro Release",
+        "label": "{label}: {count, plural, one {# Korrektur} other {# Korrekturen}}, {worked} wirksam, {worse} verschlechtert",
+        "empty": "Noch kein Release hat eine Korrektur ausgeliefert."
+      }
+    },
+    "pages": {
+      "kind": "Seiten",
+      "open": "Seiten",
+      "empty": "Noch keine Schlüsselseiten. Sie erscheinen, sobald die Website Besuche hat und ihre Seiten erfasst sind.",
+      "openAria": "Prüfung von {path} öffnen",
+      "thumbAlt": "Der erste Bildschirm von {path}",
+      "noFix": "Kein offener Fix",
+      "opportunity": "≈ {value} zu gewinnen",
+      "noScore": "Nicht bewertet",
+      "score": "Bewertung {score}"
+    },
+    "eraseVisitor": {
+      "action": "Diesen Besucher löschen",
+      "erasing": "Wird gelöscht…",
+      "confirmTitle": "Diesen Besucher löschen?",
+      "confirmMessage": "Alle Aufzeichnungen dieses Besuchers auf dieser Website werden samt KI-Zusammenfassungen gelöscht. Das kann nicht rückgängig gemacht werden.",
+      "confirm": "Löschen",
+      "done": "{count, plural, one {# Aufzeichnung gelöscht.} other {# Aufzeichnungen gelöscht.}}"
     }
   },
   "cloudAgentForm": {
@@ -11346,6 +11603,10 @@
       "your-private-evermind-on-your-machine": {
         "title": "Ihr privates Evermind auf Ihrem Rechner — mit lokalen Modellen, Konnektoren und Freigaben vom Handy",
         "description": "Synapse betreibt jetzt lokale Modelle passend zu Ihrem Computer und stellt sie Claude Code und Ihren Skripten bereit, hostet MCP-Konnektoren, die das Brain nutzen kann, lässt Sie den Schritt eines Agenten vom Handy aus freigeben und gibt Ihnen ein privates Modell zum Start. Alles, was es lernt, bleibt auf Ihrem Rechner, solange Sie es nicht veröffentlichen."
+      },
+      "fix-what-visitors-tell-you": {
+        "title": "Insights sagt Ihnen, was Sie beheben sollen — und beweist, dass es gewirkt hat",
+        "description": "Aufnahmen und Heatmaps zeigten Ihnen das Problem und überließen Ihnen den nächsten Schritt. Insights benennt jetzt die Änderung, rendert sie auf Ihrer Seite, übergibt sie als Prompt an eine KI oder wendet sie an und benotet sie beim nächsten Release."
       }
     }
   },
@@ -13165,6 +13426,271 @@
       "signIn": "Zum Nutzen anmelden",
       "empty": "Kein integrierter Agent passt zu deiner Suche.",
       "error": "Die integrierten Agenten konnten nicht geladen werden. Versuche es gleich noch einmal."
+    },
+    "landing": {
+      "insights": {
+        "hero": {
+          "eyebrow": "Insights für jede Website",
+          "title": "Sehen Sie, was Besucher tun – und was Sie zuerst beheben sollten",
+          "lead": "Insights zeichnet echte Besuche auf, fasst Probleme zu Themen zusammen und macht aus jedem eine priorisierte Korrektur, die Sie im nächsten Release anwenden, testen und messen können.",
+          "startFree": "Kostenlos starten",
+          "freeNote": "5.000 Aufzeichnungen pro Monat kostenlos. Keine Karte nötig."
+        },
+        "install": {
+          "title": "In drei Schritten live",
+          "steps": {
+            "paste": {
+              "title": "Ein Tag einfügen",
+              "body": "Fügen Sie den Loader einmal in Ihre Website ein oder schalten Sie ihn für eine auf Builderforce gehostete App ein. Recorder-Updates kommen von selbst."
+            },
+            "verify": {
+              "title": "Verbindung live prüfen",
+              "body": "Die Einrichtung prüft Tag, Domain und ersten Besuch live und sagt Ihnen genau, welcher Schritt Aufmerksamkeit braucht."
+            },
+            "improve": {
+              "title": "Das Wichtige beheben",
+              "body": "Probleme werden nach ihrer Wirkung auf Ihr Ziel gereiht, jeweils mit Korrektur, einem Prompt für Ihre KI-Tools und einem Urteil zum nächsten Release."
+            }
+          }
+        },
+        "pillars": {
+          "title": "Alles, was Sie brauchen, um eine Seite zu verbessern",
+          "items": {
+            "fixes": {
+              "title": "Priorisierte Korrekturen",
+              "body": "Jeder Befund beruht auf gemessenem Verhalten, mit erwarteter Wirkung und einer Aktion: beheben, testen, nachfassen oder Ticket anlegen."
+            },
+            "recordings": {
+              "title": "Sitzungsaufzeichnungen",
+              "body": "Spielen Sie jeden Besuch wie ein Video ab, springen Sie zum entscheidenden Moment und teilen Sie einen Link darauf."
+            },
+            "heatmaps": {
+              "title": "Heatmaps pro Release",
+              "body": "Klick-, Scroll- und Bereichs-Heatmaps für jedes Release, damit Sie vor und nach einer Änderung vergleichen können."
+            },
+            "funnels": {
+              "title": "Funnels und Pfade",
+              "body": "Sehen Sie, wo Besucher aussteigen, und schauen Sie sich die Besuche an, die an jedem Schritt abgebrochen haben."
+            },
+            "live": {
+              "title": "Live-Besucher",
+              "body": "Wer gerade auf der Website ist, auf welcher Seite – und folgen Sie einem Besucher beim Surfen."
+            },
+            "privacy": {
+              "title": "Standardmäßig privat",
+              "body": "Eingaben werden im Browser maskiert, Passwörter und Kartennummern nie erfasst, und Do Not Track wird respektiert."
+            }
+          }
+        },
+        "compare": {
+          "title": "Mehr als ein Recorder",
+          "lead": "Die meisten Session-Replay-Tools zeigen nur, was passiert ist. Insights sagt Ihnen außerdem, was Sie ändern sollten und ob die Änderung gewirkt hat.",
+          "feature": "Funktion",
+          "columns": {
+            "insights": "Insights",
+            "typical": "Ein typisches Replay-Tool"
+          },
+          "rows": {
+            "recordings": {
+              "feature": "Sitzungsaufzeichnungen mit Maskierung",
+              "insights": "Enthalten",
+              "typical": "Enthalten"
+            },
+            "heatmaps": {
+              "feature": "Klick- und Scroll-Heatmaps",
+              "insights": "Pro Release",
+              "typical": "Meist über den gesamten Zeitraum"
+            },
+            "frustration": {
+              "feature": "Wutklicks, tote Klicks und Fehler",
+              "insights": "Zu Problemen gruppiert",
+              "typical": "Pro Sitzung aufgelistet"
+            },
+            "fixes": {
+              "feature": "Priorisierte Korrekturen mit erwarteter Wirkung",
+              "insights": "Enthalten",
+              "typical": "Nicht angeboten"
+            },
+            "releases": {
+              "feature": "Release-Vergleich",
+              "insights": "Automatisch erkannt",
+              "typical": "Selten angeboten"
+            },
+            "measured": {
+              "feature": "Gemessenes Urteil zu jeder Korrektur",
+              "insights": "Im nächsten Release",
+              "typical": "Nicht angeboten"
+            }
+          }
+        },
+        "pricing": {
+          "title": "Kostenlos starten, bezahlt wird, was Sie behalten",
+          "lead": "Jeder Workspace erhält {free} behaltene Aufzeichnungen pro Monat kostenlos. Darüber hinaus gibt es Prepaid-Pakete, die 12 Monate gültig sind.",
+          "visitorsLabel": "{count} Besuche pro Monat",
+          "recordings": "Aufzeichnungen pro Monat",
+          "monthly": "Geschätzte monatliche Kosten",
+          "free": "Kostenlos",
+          "packsOnSignup": "Pakete werden nach der Registrierung angezeigt",
+          "withinFree": "Das passt in die {free} kostenlosen Aufzeichnungen pro Monat.",
+          "packLine": "{count, plural, one {# Paket} other {# Pakete}} mit {units} Aufzeichnungen würden den Monat abdecken.",
+          "overFree": "{over} Aufzeichnungen über dem Freikontingent bräuchten ein Paket.",
+          "estimateNote": "Eine Schätzung, ausgehend von einer behaltenen Aufzeichnung pro Besuch. Sie zahlen nur für behaltene Aufzeichnungen.",
+          "startFree": "Kostenlos starten"
+        },
+        "faq": {
+          "title": "Fragen",
+          "items": {
+            "what": {
+              "q": "Was ist Insights?",
+              "a": "Eine Session-Replay- und Analyse-App für jede Website. Sie zeichnet Besuche auf, findet die Probleme, die Sie Besucher kosten, und empfiehlt priorisierte, messbare Korrekturen."
+            },
+            "install": {
+              "q": "Wie installiere ich es?",
+              "a": "Fügen Sie ein Script-Tag ein, installieren Sie das npm-Paket oder legen Sie ein Google-Tag-Manager-Tag an. Auf Builderforce gehostete Apps brauchen nur einen Schalter."
+            },
+            "privacy": {
+              "q": "Wie steht es um den Datenschutz?",
+              "a": "Eingaben werden im Browser maskiert, bevor etwas gesendet wird, Passwort- und Kartenfelder werden nie erfasst, und Do Not Track sowie Global Privacy Control werden respektiert. Sie können vor der Aufzeichnung eine Einwilligung verlangen."
+            },
+            "pricing": {
+              "q": "Was kostet es?",
+              "a": "5.000 behaltene Aufzeichnungen pro Monat sind für jeden Workspace kostenlos. Darüber hinaus kaufen Sie Prepaid-Pakete; Guthaben gilt 12 Monate, und nichts verlängert sich automatisch."
+            },
+            "builderforce": {
+              "q": "Muss meine Website auf Builderforce gebaut sein?",
+              "a": "Nein. Insights funktioniert auf jeder Website. Ist Ihre App auf Builderforce gehostet, schalten Sie die Aufzeichnung ein, ohne etwas einzufügen."
+            }
+          }
+        },
+        "proof": {
+          "title": "Wir nutzen es auf builderforce.ai",
+          "lead": "Builderforce betreibt Insights auf der eigenen Website mit demselben öffentlichen Snippet, das Sie einfügen, und installiert es wie jeder andere Workspace über den Marktplatz.",
+          "startFree": "Kostenlos starten"
+        }
+      }
+    },
+    "capability": {
+      "setupTitle": "{app} einrichten",
+      "signUpFirst": "Erstellen Sie ein kostenloses Konto, um {app} einzurichten. Danach kommen Sie direkt hierher zurück.",
+      "startFree": "Kostenlos starten",
+      "loading": "Einrichtung wird geladen…",
+      "stepsLabel": "Einrichtungsschritte",
+      "steps": {
+        "workspace": "Workspace",
+        "site": "Website",
+        "snippet": "Installieren",
+        "verify": "Prüfen",
+        "plan": "Tarif"
+      },
+      "workspace": {
+        "choose": "Wählen oder erstellen Sie den Workspace, dem {app} gehören soll.",
+        "chooseAction": "Workspace wählen",
+        "installInto": "{app} in {workspace} installieren. Es ist kostenlos und lässt sich jederzeit entfernen.",
+        "install": "{app} installieren",
+        "installing": "Wird installiert…",
+        "another": "Anderen Workspace verwenden",
+        "failed": "Die Installation wurde nicht abgeschlossen. Versuchen Sie es erneut."
+      },
+      "site": {
+        "label": "Name der Website",
+        "domains": "Erlaubte Domains",
+        "removeDomain": "{domain} entfernen",
+        "domainPlaceholder": "shop.example.com",
+        "addDomain": "Domain hinzufügen",
+        "domainInvalid": "Geben Sie eine Webadresse wie shop.example.com ein.",
+        "privacy": "Datenschutz",
+        "switches": {
+          "maskAllText": {
+            "label": "Gesamten Text maskieren",
+            "hint": "Jeden Text auf der Seite verbergen, nicht nur Formulareingaben."
+          },
+          "consentRequired": {
+            "label": "Auf Einwilligung warten",
+            "hint": "Erst aufzeichnen, nachdem Ihre Website BFReplay.consent(true) aufruft."
+          },
+          "recordCanvas": {
+            "label": "Canvas-Inhalte aufzeichnen",
+            "hint": "Canvas- und WebGL-Frames mit niedriger Rate erfassen."
+          },
+          "identify": {
+            "label": "Identifizieren erlauben",
+            "hint": "Ihre Website darf angemeldete Besucher mit BFReplay.identify benennen."
+          }
+        },
+        "modeLabel": "Wo läuft die Website?",
+        "modes": {
+          "external": "Meine Website",
+          "hosted": "Eine Builderforce-App"
+        },
+        "externalLead": "Benennen Sie die Website und listen Sie die Domains auf, auf denen sie läuft. Nur diese Domains dürfen Aufzeichnungen senden.",
+        "create": "Website anlegen",
+        "hostedLead": "Wählen Sie eine veröffentlichte App aus diesem Workspace. Der Loader wird für Sie eingefügt.",
+        "loadingProjects": "Ihre veröffentlichten Apps werden geladen…",
+        "noProjects": "Dieser Workspace hat noch keine veröffentlichten Apps.",
+        "record": "{name} aufzeichnen",
+        "failed": "Die Website konnte nicht angelegt werden. Versuchen Sie es erneut."
+      },
+      "snippet": {
+        "tabsLabel": "Installationswege",
+        "tabs": {
+          "script": "Script-Tag",
+          "npm": "npm",
+          "gtm": "Google Tag Manager",
+          "app": "Builderforce-App"
+        },
+        "hostedOn": "Die Aufzeichnung ist für diese App eingeschaltet. Nichts einzufügen.",
+        "appHint": "Auf Builderforce gehostete Apps brauchen kein Snippet: Schalten Sie stattdessen die Aufzeichnung für die App ein.",
+        "hints": {
+          "script": "Fügen Sie dies in den Head-Bereich jeder Seite ein.",
+          "npm": "Installieren Sie @seanhogg/builderforce-replay und rufen Sie dies einmal beim Start Ihrer App auf.",
+          "gtm": "Legen Sie ein benutzerdefiniertes HTML-Tag mit diesem Inhalt an und lösen Sie es auf allen Seiten aus."
+        },
+        "copy": "Kopieren",
+        "copied": "Kopiert",
+        "noKey": "Diese Website hat noch keinen Schlüssel. Laden Sie gleich neu.",
+        "lead": "Fügen Sie den Loader auf eine dieser Arten in Ihre Website ein und prüfen Sie ihn dann.",
+        "hostedLead": "Ihre App ist auf Builderforce gehostet, daher wird der Loader automatisch eingefügt.",
+        "next": "Weiter"
+      },
+      "verify": {
+        "lead": "Öffnen Sie Ihre Website in einem anderen Tab. Diese Prüfungen aktualisieren sich alle paar Sekunden.",
+        "checks": {
+          "loader": {
+            "label": "Loader erkannt",
+            "fix": "Stellen Sie sicher, dass das Tag auf der Seite ist und die Seite seitdem geöffnet wurde."
+          },
+          "origin": {
+            "label": "Domain erlaubt",
+            "fix": "Fügen Sie die Domain, von der die Seite ausgeliefert wird, zu den erlaubten Domains hinzu."
+          },
+          "firstEvent": {
+            "label": "Erster Besuch empfangen",
+            "fix": "Bleiben Sie ein paar Sekunden auf einer Seite. Wenn Sie eine Einwilligung verlangen, erteilen Sie sie."
+          },
+          "firstRecording": {
+            "label": "Erste Aufzeichnung behalten",
+            "fix": "Eine Aufzeichnung erscheint, sobald ein Besuch endet oder etwas Behaltenswertes passiert."
+          }
+        },
+        "passed": "bestanden",
+        "waiting": "ausstehend",
+        "unreachable": "Die Prüfungen konnten gerade nicht gelesen werden. Neuer Versuch läuft.",
+        "stoppedAt": "Ausstehend: {step}.",
+        "allPassed": "Alles ist verbunden.",
+        "next": "Weiter"
+      },
+      "plan": {
+        "lead": "Starten Sie mit dem Freikontingent oder kaufen Sie jetzt ein Paket für stärker besuchte Websites.",
+        "startFree": "Mit dem Freikontingent starten",
+        "checkoutFailed": "Der Bezahlvorgang konnte nicht gestartet werden. Versuchen Sie es erneut.",
+        "loadingPacks": "Pakete werden geladen…",
+        "noPacks": "Pakete sind gerade nicht verfügbar. Es gilt das Freikontingent.",
+        "buyAria": "{units} Aufzeichnungen für {price} kaufen",
+        "packUnits": "{units} Aufzeichnungen",
+        "redirecting": "Bezahlvorgang wird geöffnet…",
+        "packTerms": "Vorausbezahlt, einmalige Zahlung. Guthaben gilt 12 Monate, nichts verlängert sich."
+      },
+      "openApp": "{app} öffnen"
     }
   },
   "models": {
@@ -13954,7 +14480,8 @@
       "broadcasts": "Ankündigungen",
       "llmRatings": "Bewertungen",
       "visitorFlow": "Besucherfluss",
-      "visitors": "Besucher"
+      "visitors": "Besucher",
+      "insightsOps": "Insights-Betrieb"
     },
     "common": {
       "loading": "Wird geladen…",
@@ -14425,7 +14952,8 @@
         "loading": "Verlauf wird geladen…",
         "empty": "Noch keine Versionen.",
         "publish": "Veröffentlicht",
-        "amend": "Geändert"
+        "amend": "Geändert",
+        "draft": "Entwurf (nicht veröffentlicht)"
       }
     },
     "newsletter": {
@@ -15017,7 +15545,14 @@
       "subtitle": "Der anonyme Trichter und die Menschen darin — Fluss, Leads, eine Aufzeichnung.",
       "tabJourney": "Weg",
       "tabLead": "Lead",
-      "crumb": "Besucher"
+      "crumb": "Besucher",
+      "openApp": "Insights-App öffnen",
+      "nodeStripAria": "Schritt {step}",
+      "nodeVisitors": "{count} Besucher",
+      "nodeEvents": "{count} Ereignisse",
+      "nodeExits": "{count} Abgänge",
+      "watchStep": "Aufzeichnungen zu diesem Schritt ansehen",
+      "nodeStripClose": "Schrittdetails schließen"
     },
     "visitorFlow": {
       "title": "Besucherfluss",
@@ -15100,6 +15635,62 @@
         },
         "noteWarn": "Über 80 %: Der nächtliche Wartungslauf bereinigt jetzt alle komprimierbaren Protokolltabellen mit verkürzter Aufbewahrung und gibt Speicher sofort frei, statt auf das wöchentliche Umschreiben zu warten.",
         "noteCritical": "Über 90 %: Alle komprimierbaren Protokolltabellen werden mit ihrer kürzesten deklarierten Aufbewahrung bereinigt. Compliance- und Abrechnungsfenster werden niemals verkürzt."
+      }
+    },
+    "insightsOps": {
+      "title": "Insights-Betrieb",
+      "subtitle": "Plattformsummen für Insights sowie die Aufzeichnungseinstellungen und Guthabenvergaben eines Workspaces. Hier werden keine Websites, Besucher oder Aufzeichnungen angezeigt.",
+      "navLink": "Insights-Betrieb",
+      "summary": {
+        "aria": "Insights-Plattformsummen",
+        "sessions7d": "Sitzungen (7 Tage)",
+        "keptRecordings7d": "Behaltene Aufzeichnungen (7 Tage)",
+        "bytes7d": "Gespeichert (7 Tage)",
+        "sites": "Websites",
+        "tenants": "Workspaces",
+        "packRevenue30d": "Paketumsatz (30 Tage)"
+      },
+      "workspace": {
+        "title": "Workspace",
+        "label": "Workspace",
+        "empty": "Noch keine Workspaces."
+      },
+      "settings": {
+        "title": "Aufzeichnungseinstellungen",
+        "excluded": "Von der Aufzeichnung auf builderforce.ai ausschließen",
+        "excludedHint": "Mitglieder dieses Workspaces werden nie aufgezeichnet, während sie auf builderforce.ai angemeldet sind.",
+        "override": "Kostenlose Aufzeichnungen pro Monat",
+        "overrideHint": "Ersetzt das Katalogkontingent für diesen Workspace. Mit 0 lässt sich ein echter Paketkauf testen. Leer lassen für den Standardwert.",
+        "overridePlaceholder": "Katalogstandard",
+        "clear": "Leeren",
+        "save": "Einstellungen speichern",
+        "saving": "Wird gespeichert…",
+        "saved": "Gespeichert. Die Änderung wird protokolliert.",
+        "invalidOverride": "Geben Sie eine ganze Zahl ab 0 ein oder lassen Sie das Feld leer."
+      },
+      "grant": {
+        "title": "Aufzeichnungsguthaben vergeben",
+        "hint": "Die Vergabe wird ins Audit-Protokoll geschrieben, bevor sie gutgeschrieben wird.",
+        "units": "Aufzeichnungen",
+        "reason": "Grund",
+        "reasonPlaceholder": "Warum dieser Workspace diese Aufzeichnungen erhält",
+        "submit": "Guthaben vergeben",
+        "granting": "Wird vergeben…",
+        "invalid": "Geben Sie 1 bis {max} Aufzeichnungen und einen Grund mit mindestens 3 Zeichen ein.",
+        "confirmTitle": "Aufzeichnungsguthaben vergeben?",
+        "confirmMessage": "{units} Aufzeichnungen an {tenant} vergeben? Der Vorgang wird protokolliert und kann hier nicht rückgängig gemacht werden.",
+        "confirmLabel": "Vergeben",
+        "done": "{units} Aufzeichnungen vergeben. Der Workspace hat jetzt {credits} Guthaben. Referenz: {reference}"
+      },
+      "methodFunnel": {
+        "title": "Trichter „Die Methode“ anlegen",
+        "hint": "Legt die vier Smart Events der Methode und den Trichter von der Startseite bis zum bewerteten Proof auf Builderforces eigener Insights-Site an. Mehrfaches Ausführen ist unbedenklich.",
+        "siteLabel": "ID der Builderforce-Insights-Site",
+        "invalid": "Geben Sie eine Site-ID (eine UUID) ein.",
+        "submit": "Trichter anlegen",
+        "seeding": "Wird angelegt…",
+        "done": "Angelegt – {events} Smart Events erstellt.",
+        "already": "Bereits angelegt – nichts zu erstellen."
       }
     }
   },
@@ -19146,7 +19737,7 @@
     },
     "install": {
       "title": "One script, every capability",
-      "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host."
+      "description": "Einmal auf der Kundenseite installieren. Änderungen an Widgets gelten beim nächsten Seitenaufruf, ohne die Seite neu zu deployen. Heatmaps und Sitzungsaufzeichnung starten nur, wenn das Tag zusätzlich Ihren Insights-Site-Schlüssel (data-site) trägt; er wird hier ergänzt, sobald der Workspace eine Insights-Site hat."
     },
     "consent": {
       "title": "Consent log",
@@ -19178,7 +19769,7 @@
       },
       "heatmaps": {
         "name": "Heatmaps",
-        "description": "Measure click locations and scroll depth to understand real customer behavior.",
+        "description": "Heatmaps für Klicks, Wutklicks, tote Klicks und Scrolltiefe aus der Insights-Sitzungsaufzeichnung. Sie zeichnen auf, sobald das Installationsskript Ihren Insights-Site-Schlüssel trägt.",
         "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps."
       },
       "feature_management": {
@@ -19280,6 +19871,13 @@
         "title": "Bringen Sie Ihre Idee in das Produkt Ihrer Kunden",
         "body": "Legen Sie einen kostenlosen Workspace an, holen Sie sich Ihren Embed-Key, aktivieren Sie die gewünschten Funktionen und bringen Sie sie noch heute auf Ihre eigene Website."
       }
+    },
+    "insights": {
+      "needsSite": "Benötigt eine Insights-Site: Nur das Einschalten zeichnet nichts auf.",
+      "siteReady": "Aufzeichnung über Ihren Insights-Site-Schlüssel.",
+      "setup": "Insights einrichten",
+      "open": "Insights öffnen",
+      "standaloneTitle": "Nur Sitzungsaufzeichnung (ohne Widgets)"
     }
   },
   "embedInstall": {
@@ -24528,10 +25126,10 @@
     "postFailed": "Das Formular konnte nicht gepostet werden.",
     "noticeIdeaUntitled": "Geben Sie der Idee einen Titel, bevor Sie Leute fragen.",
     "noticeIdeaInterviewTitle": "Geben Sie der Idee einen Titel, damit das Interview benannt werden kann.",
-        "noticeIdeaInterviewPlanned": "Interview geplant. Öffnen Sie es auf dem Board, um einen Termin zu wählen.",
-        "noticeIdeaFormTitle": "Geben Sie der Idee einen Titel, damit das Formular benannt werden kann.",
-        "noticeIdeaFormCreated": "Formular erstellt. Veröffentlichen Sie es, um einen Link zu erhalten, den Sie versenden können.",
-        "noticeIdeaActFailed": "Diese Ideenaktion konnte nicht abgeschlossen werden.",
+    "noticeIdeaInterviewPlanned": "Interview geplant. Öffnen Sie es auf dem Board, um einen Termin zu wählen.",
+    "noticeIdeaFormTitle": "Geben Sie der Idee einen Titel, damit das Formular benannt werden kann.",
+    "noticeIdeaFormCreated": "Formular erstellt. Veröffentlichen Sie es, um einen Link zu erhalten, den Sie versenden können.",
+    "noticeIdeaActFailed": "Diese Ideenaktion konnte nicht abgeschlossen werden.",
     "noticeIdeaNothingToReveal": "Nennen Sie das Interview, das Experiment oder das Formular, das diese Idee getestet hat, bevor Sie sie bewerten.",
     "noticeIdeaRevealMissing": "Keine der genannten Nachweise ist auf diesem Board: {refs}.",
     "noticeIdeaRevealMet": "Die Nachweise haben geantwortet. Diese Idee ist validiert.",
@@ -24604,15 +25202,21 @@
         "noBoardMetric": "Noch keine Kennzahl auf diesem Board"
       },
       "sessions": {
-        "label": "Sitzungen",
-        "enter": "Sehen, wer das genutzt hat",
-        "active": "Du bist in Sitzungen",
-        "regionLabel": "Sitzungsaufzeichnungen",
-        "emptyTitle": "Noch keine Aufzeichnungen dieser Leinwand",
-        "emptyBody": "Sobald Besucher diese Leinwand nutzen, erscheinen ihre Sitzungen hier. Öffnen Sie Besucher, um sie abzuspielen.",
-        "openFull": "Besucheraufzeichnungen öffnen",
-        "listLabel": "Aufgezeichnete Besuche",
-        "converted": "Konvertiert"
+        "label": "Besucher",
+        "enter": "Sehen, wer zu Besuch war",
+        "active": "Sie sind in Besucher",
+        "regionLabel": "Besucher",
+        "loadingTitle": "Besucher werden geladen",
+        "loadingBody": "Die Aufzeichnungen dieser App werden geprüft.",
+        "buyTitle": "Sehen, was Besucher tun",
+        "buyBody": "Installieren Sie Insights, um Besuche dieser App aufzuzeichnen, Probleme zu finden und priorisierte Korrekturen zu erhalten. Der Einstieg ist kostenlos.",
+        "buyAction": "Insights holen",
+        "noAppTitle": "Noch keine App",
+        "noAppBody": "Besucher erscheinen hier, sobald dieses Board eine App hat, die andere öffnen können.",
+        "offTitle": "Aufzeichnung ist aus",
+        "offBody": "Schalten Sie die Aufzeichnung für diese App ein. Nichts einzufügen: Der Loader wird der gehosteten App für Sie hinzugefügt.",
+        "enable": "Diese App aufzeichnen",
+        "enableFailed": "Die Aufzeichnung konnte nicht eingeschaltet werden. Versuchen Sie es erneut."
       },
       "room": {
         "label": "Raum",
@@ -26441,6 +27045,40 @@
       "leaveTitle": "Verlassen, während Studio baut?",
       "leaveMessage": "Studio arbeitet noch an deiner Anfrage. Der Wechsel zur Studio-Startseite bricht sie ab; deine App und alles bisher Gebaute bleiben auf diesem Canvas.",
       "leaveConfirm": "Trotzdem verlassen"
+    },
+    "proof": {
+      "title": "Proof-Anzeigetafel",
+      "loading": "Anzeigetafel wird geladen…",
+      "loadFailed": "Die Anzeigetafel konnte nicht geladen werden.",
+      "killAtLeast": "Nur bauen, wenn „{event}“ bei {sample} Stichprobenbesuchen innerhalb von {days} Tagen mindestens {target}-mal eintritt.",
+      "killAtMost": "Nur bauen, wenn „{event}“ bei {sample} Stichprobenbesuchen innerhalb von {days} Tagen höchstens {target} bleibt.",
+      "sample": "Stichprobe",
+      "sampleOf": "{n} von {min} Besuchen",
+      "success": "Erfolg",
+      "successOf": "{n} von {target}",
+      "daysLeft": "Noch {days} Tage",
+      "windowNotStarted": "Das Zeitfenster beginnt mit dem ersten Stichprobenbesuch.",
+      "windowClosed": "Das Zeitfenster ist geschlossen.",
+      "status": {
+        "collecting": "Sammelt",
+        "onTrack": "Auf Kurs",
+        "atRisk": "Gefährdet",
+        "met": "Erreicht",
+        "missed": "Verfehlt"
+      },
+      "watch": "Besucher ansehen, die nicht konvertiert haben",
+      "whyMissed": "Warum es verfehlt wurde",
+      "noPatterns": "Noch kein belegtes Muster.",
+      "callEarly": "Vorzeitig entscheiden…",
+      "callEarlyTitle": "Diesen Proof vorzeitig entscheiden",
+      "callEarlyBody": "Das Urteil fällt jetzt, anhand der gemessenen Zahlen. Begründen Sie, warum Sie nicht auf die volle Stichprobe warten – die Begründung wird festgehalten.",
+      "reasonLabel": "Warum jetzt entscheiden?",
+      "reasonPlaceholder": "Zum Beispiel: Die Traffic-Quelle ist erschöpft und füllt sich nicht wieder auf.",
+      "reasonRequired": "Eine vorzeitige Entscheidung braucht eine schriftliche Begründung.",
+      "callEarlySubmit": "Jetzt entscheiden",
+      "calling": "Wird entschieden…",
+      "callEarlyFailed": "Die Entscheidung konnte nicht gespeichert werden. Bitte erneut versuchen.",
+      "readAgain": "Mit dem Gelernten neu lesen"
     }
   },
   "canvasCommands": {
@@ -29175,7 +29813,8 @@
       "course": "Kurs",
       "dataset": "Datensatz",
       "tool": "Werkzeug",
-      "creative": "Kreativ-Asset"
+      "creative": "Kreativ-Asset",
+      "capability": "Funktion"
     }
   },
   "marketplaceCreations": {
@@ -29219,7 +29858,8 @@
       "creative": "Kreativ-Asset",
       "book": "Buch",
       "survey": "Umfrage",
-      "room": "Raumgestaltung"
+      "room": "Raumgestaltung",
+      "capability": "Funktion"
     },
     "launchVerb": {
       "play": "Spielen",
@@ -33407,5 +34047,904 @@
       "Hypothesen, die als gemessene Ergebnisse auftreten",
       "Abmeldungen im Kleingedruckten"
     ]
+  },
+  "replay": {
+    "list": {
+      "when": "Wann",
+      "where": "Wo",
+      "release": "Release",
+      "pages": "Seiten",
+      "duration": "Dauer",
+      "signals": "Signale",
+      "keep": "Behalten wegen",
+      "route": "{entry} → {exit}",
+      "noSignals": "Keine",
+      "signal": {
+        "rage": "{count, plural, one {# Wutklick} other {# Wutklicks}}",
+        "dead": "{count, plural, one {# toter Klick} other {# tote Klicks}}",
+        "errors": "{count, plural, one {# Fehler} other {# Fehler}}",
+        "quickbacks": "{count, plural, one {# schnelle Rückkehr} other {# schnelle Rückkehren}}"
+      },
+      "keepReason": {
+        "sample": "Stichprobe",
+        "frustration": "Frustration",
+        "error": "Fehler",
+        "goal": "Ziel erreicht",
+        "tag": "Markiert",
+        "manual": "Von der Website behalten"
+      },
+      "weighted": "≈ ×{weight}",
+      "sortBy": "Nach {column} sortieren",
+      "error": "Die Aufzeichnungen konnten nicht geladen werden.",
+      "retry": "Erneut versuchen",
+      "empty": "Für diese Ansicht wurden noch keine Aufzeichnungen behalten.",
+      "open": "Ansehen",
+      "openAria": "Aufzeichnung ansehen, die auf {path} eingestiegen ist",
+      "loading": "Aufzeichnungen werden geladen…",
+      "loadMore": "Mehr laden"
+    },
+    "player": {
+      "loading": "Aufzeichnung wird geladen…",
+      "empty": "Diese Aufzeichnung hat noch nichts zum Abspielen.",
+      "error": "Die Aufzeichnung konnte nicht abgespielt werden.",
+      "play": "Abspielen",
+      "pause": "Pausieren",
+      "scrubber": "Wiedergabeposition",
+      "markersAria": "Momente dieser Aufzeichnung",
+      "markerAria": "{time} · {label}",
+      "speed": "Geschwindigkeit",
+      "speedOption": "{speed}×",
+      "skipInactive": "Inaktivität überspringen",
+      "copyLink": "Link bei {time} kopieren",
+      "copied": "Link kopiert.",
+      "copyFailed": "Der Link konnte nicht kopiert werden.",
+      "following": "Live-Verfolgung – neue Aktivität erscheint, sobald sie eintrifft.",
+      "events": "Ereignisse",
+      "eventsEmpty": "In dieser Aufzeichnung wurden keine Ereignisse markiert.",
+      "release": "Release",
+      "device": "Gerät",
+      "country": "Land",
+      "referrer": "Verweis",
+      "duration": "Dauer",
+      "direct": "Direkt",
+      "deviceClass": {
+        "desktop": "Desktop",
+        "tablet": "Tablet",
+        "phone": "Smartphone"
+      },
+      "mark": {
+        "page": "Seite",
+        "click": "Klick",
+        "event": "Ereignis",
+        "rage": "Wutklick",
+        "dead": "Toter Klick",
+        "quickback": "Schnelle Rückkehr",
+        "excessive_scroll": "Übermäßiges Scrollen",
+        "error": "JavaScript-Fehler",
+        "vital": "Web Vital",
+        "scroll": "Scrolltiefe"
+      }
+    },
+    "live": {
+      "loading": "Live-Besucher werden gesucht…",
+      "error": "Live-Besucher konnten nicht geladen werden.",
+      "active": "{count, plural, one {# Besucher gerade aktiv} other {# Besucher gerade aktiv}}",
+      "byRoute": "Nach Seite",
+      "empty": "Gerade ist niemand auf dieser Website.",
+      "lastSeen": "gesehen {time}",
+      "notRecorded": "Nicht aufgezeichnet",
+      "watchAria": "Besucher auf {route} live ansehen"
+    },
+    "heat": {
+      "route": "Seite",
+      "release": "Release",
+      "allReleases": "Alle Releases",
+      "releaseOrdinal": "R{ordinal}",
+      "compare": "Vergleichen mit",
+      "noCompare": "Kein Vergleich",
+      "compareHint": "Wählen Sie ein Vergleichsrelease, um beide nebeneinander oder als Differenz zu sehen.",
+      "device": "Gerät",
+      "allDevices": "Alle Geräte",
+      "layersAria": "Heatmap-Ebene",
+      "layers": {
+        "click": "Klicks",
+        "rage": "Wutklicks",
+        "dead": "Tote Klicks",
+        "scroll": "Scrolltiefe",
+        "areas": "Bereiche"
+      },
+      "modesAria": "Vergleichsansicht",
+      "modes": {
+        "single": "Dieses Release",
+        "side": "Nebeneinander",
+        "difference": "Differenz"
+      },
+      "legendCold": "kalt",
+      "legendHot": "heiß",
+      "legendAria": "Farbskala von kalt (wenige Interaktionen) bis heiß (viele)",
+      "legendLess": "weniger als Vergleich",
+      "legendMore": "mehr als Vergleich",
+      "legendDiffAria": "Farbskala von weniger Interaktionen als im Vergleichsrelease bis mehr",
+      "overlayAria": "Heatmap mit {count} aktiven Zellen",
+      "exactTotal": "{count} Interaktionen, exakt über alle Sitzungen",
+      "empty": "Auf dieser Seite wurden in diesem Zeitraum keine Interaktionen aufgezeichnet.",
+      "error": "Die Heatmap konnte nicht geladen werden.",
+      "frameTitle": "Momentaufnahme von {route}",
+      "pageLoading": "Seite wird nachgebaut…",
+      "noBackground": "Keine aufbewahrte Aufzeichnung hat diese Seite in diesem Zeitraum besucht, daher wird die Heatmap ohne die Seite dahinter gezeichnet.",
+      "pageError": "Die Seite konnte nicht nachgebaut werden, daher wird die Heatmap ohne sie gezeichnet.",
+      "sideCurrent": "Dieses Release: {release}",
+      "sideCompare": "Vergleich: {release}",
+      "differenceCaption": "{release} im Vergleich zu {compare}",
+      "highlightAria": "Hervorgehobenes Element {element}",
+      "playerToggle": "Heatmap-Overlay",
+      "areas": {
+        "aria": "Klickanteil je Element",
+        "share": "{share} der Klicks",
+        "zoneAria": "{element}: {share} der Klicks"
+      },
+      "elements": {
+        "title": "Elemente",
+        "element": "Element",
+        "clicks": "Klicks",
+        "rage": "Wut",
+        "dead": "Tot",
+        "delta": "Änderung zum Vergleich",
+        "none": "—",
+        "sortBy": "Sortieren nach {column}",
+        "empty": "Auf dieser Seite wurde in diesem Zeitraum kein Element angeklickt.",
+        "open": "Aufzeichnungen",
+        "openAria": "Aufzeichnungen ansehen, die {element} angeklickt haben"
+      },
+      "scroll": {
+        "title": "Scroll-Reichweite",
+        "loading": "Scrolltiefe wird geladen…",
+        "error": "Die Scrolltiefe konnte nicht geladen werden.",
+        "empty": "In diesem Zeitraum hat kein Seitenaufruf eine Scrolltiefe gemeldet.",
+        "sessions": "{count} Seitenaufrufe haben eine Scrolltiefe gemeldet",
+        "band": "{from}–{to} %",
+        "reachAria": "{share} der Seitenaufrufe erreichen {band}"
+      }
+    },
+    "heatInsight": {
+      "title": "Was die Heatmap zeigt",
+      "loading": "Heatmap wird ausgewertet…",
+      "error": "Die Befunde konnten nicht geladen werden.",
+      "empty": "Auf dieser Seite fällt noch nichts auf.",
+      "rage_spike": "Wutklicks auf „{label}“ sind auf {rage} gestiegen, {ratio}× so viele wie im Vergleichsrelease ({compareRage}), bereinigt um den Traffic.",
+      "dead_text": "{dead} tote Klicks auf „{label}“: Es ist Text und kein Bedienelement, doch Besucher erwarten, dass etwas passiert.",
+      "buried_top_click": "Das meistgeklickte Element „{label}“ ({clicks} Klicks) liegt bei {depth} % der Seitenhöhe, die nur {reach} der Besucher erreichen.",
+      "quickback_doubled": "Schnelle Rücksprünge auf dieser Seite sind von {compareQuickbacks} im Vergleichsrelease auf {quickbacks} gestiegen ({ratio}×, bereinigt um den Traffic).",
+      "actions": {
+        "watch": "Aufzeichnungen ansehen",
+        "copyLink": "Link kopieren"
+      },
+      "copied": "Link kopiert. Fügen Sie ihn in das Ticket ein.",
+      "copyFailed": "Der Link konnte nicht kopiert werden."
+    },
+    "export": {
+      "button": "Als Video exportieren",
+      "requesting": "Wird angefordert…",
+      "cost": "Rendert diese Aufzeichnung als Video. Kostet einmalig 10 Aufzeichnungen aus Ihrem Kontingent.",
+      "download": "Video herunterladen",
+      "downloadFailed": "Das Video konnte nicht heruntergeladen werden.",
+      "status": {
+        "queued": "In der Warteschlange. Das Rendern beginnt in Kürze.",
+        "running": "Video wird gerendert…",
+        "done": "Das Video ist fertig."
+      },
+      "error": {
+        "runner_unavailable": "Der Videoexport ist derzeit nicht verfügbar: Es läuft kein Renderer.",
+        "insufficient_units": "Ihr Kontingent reicht nicht für ein Video (es kostet 10 Aufzeichnungen). Kaufen Sie ein Paket unter Tarif und Nutzung.",
+        "no_chunks": "Diese Aufzeichnung hat keine gespeicherten Daten zum Rendern.",
+        "dispatch_failed": "Der Renderer konnte nicht gestartet werden. Versuchen Sie es gleich noch einmal.",
+        "timed_out": "Das Rendern hat zu lange gedauert und wurde abgebrochen. Versuchen Sie es erneut.",
+        "generic": "Der Export ist fehlgeschlagen."
+      }
+    },
+    "filter": {
+      "aria": "Filter",
+      "add": "Filter hinzufügen",
+      "full": "Ein Filter hat höchstens 12 Bedingungen.",
+      "fieldsAria": "Filtern nach",
+      "clear": "Filter zurücksetzen",
+      "remove": "{clause} entfernen",
+      "editorAria": "Nach {field} filtern",
+      "opAria": "Bedingung",
+      "valueAria": "Wert",
+      "apply": "Anwenden",
+      "cancel": "Abbrechen",
+      "choose": "Auswählen…",
+      "field": {
+        "device": "Gerät",
+        "browser": "Browser",
+        "os": "Betriebssystem",
+        "country": "Land",
+        "referrer": "Herkunft",
+        "entryPath": "Einstiegsseite",
+        "exitPath": "Ausstiegsseite",
+        "visitedPath": "Besuchte Seite",
+        "clickedSelector": "Geklicktes Element",
+        "frustration": "Frustrationssignal",
+        "durationMs": "Dauer",
+        "activeMs": "Aktive Zeit",
+        "pageCount": "Aufgerufene Seiten",
+        "release": "Release",
+        "smartEvent": "Smart Event",
+        "tag": "Tag",
+        "converted": "Konvertiert",
+        "variant": "Testvariante",
+        "issue": "Problem"
+      },
+      "op": {
+        "eq": "ist",
+        "neq": "ist nicht",
+        "in": "ist eines von",
+        "contains": "enthält",
+        "prefix": "beginnt mit",
+        "gte": "mindestens",
+        "lte": "höchstens"
+      },
+      "value": {
+        "desktop": "Desktop",
+        "tablet": "Tablet",
+        "phone": "Smartphone",
+        "rage": "Wutklick",
+        "dead": "Toter Klick",
+        "quickback": "Schnelle Rückkehr",
+        "excessive_scroll": "Übermäßiges Scrollen",
+        "error": "JavaScript-Fehler",
+        "true": "Ja",
+        "false": "Nein"
+      },
+      "placeholder": {
+        "list": "Werte, durch Kommas getrennt",
+        "text": "Wert",
+        "tagKey": "Tag-Name",
+        "tagValue": "Tag-Wert"
+      },
+      "unit": {
+        "seconds": "s"
+      }
+    },
+    "segments": {
+      "button": "Segmente",
+      "aria": "Gespeicherte Segmente",
+      "empty": "Noch keine gespeicherten Segmente. Filtern Sie die Ansicht und speichern Sie sie hier.",
+      "applyAria": "Segment {name} anwenden",
+      "renameAria": "Segment {name} umbenennen",
+      "saveName": "Speichern",
+      "deleteAria": "Segment {name} löschen",
+      "deleteTitle": "Segment löschen",
+      "deleteConfirm": "Segment „{name}“ löschen? Die Aufzeichnungen bleiben unberührt.",
+      "delete": "Löschen",
+      "namePlaceholder": "Diesen Filter benennen",
+      "nameAria": "Segmentname",
+      "save": "Segment speichern",
+      "saveNeedsFilter": "Fügen Sie zuerst einen Filter hinzu."
+    },
+    "overview": {
+      "approx": "≈ {value}",
+      "trafficAria": "Traffic",
+      "frustrationAria": "Frustrationssignale",
+      "notInWeighted": "In einer gefilterten Ansicht nicht bekannt",
+      "frustrationOpen": "Probleme mit {label} anzeigen",
+      "ofSessions": "der Sitzungen",
+      "tile": {
+        "sessions": "Sitzungen",
+        "newVisitors": "Neue Besucher",
+        "pagesPerSession": "Seiten pro Sitzung",
+        "activeTime": "Durchschnittliche aktive Zeit",
+        "scrollDepth": "Durchschnittliche Scrolltiefe"
+      },
+      "frustration": {
+        "rage": "Wutklicks",
+        "dead": "Tote Klicks",
+        "quickback": "Schnelle Rückkehr",
+        "excessiveScroll": "Übermäßiges Scrollen",
+        "error": "JavaScript-Fehler"
+      },
+      "top": {
+        "pages": "Top-Seiten",
+        "entryPages": "Einstiegsseiten",
+        "exitPages": "Ausstiegsseiten",
+        "referrers": "Herkünfte",
+        "countries": "Länder",
+        "devices": "Geräte",
+        "browsers": "Browser",
+        "os": "Betriebssysteme"
+      },
+      "topEmpty": "Noch nichts.",
+      "unknown": "Unbekannt",
+      "addFilterAria": "{field} filtern: {label}",
+      "estimatedNote": "Gefiltert: Die Zahlen sind aus den behaltenen Aufzeichnungen geschätzt (≈).",
+      "trendTitle": "Letzte {days} Tage",
+      "trendSessionsAria": "Sitzungen pro Tag",
+      "trendFrustrated": "Frustrierte Sitzungen",
+      "trendFrustratedAria": "Anteil frustrierter Sitzungen pro Tag",
+      "breakdownsTitle": "Aufschlüsselungen"
+    },
+    "funnels": {
+      "choose": "Trichter",
+      "edit": "Bearbeiten",
+      "new": "Neuer Trichter",
+      "empty": "Noch keine Trichter. Legen Sie einen an, um zu sehen, wo Besucher abspringen.",
+      "editTitle": "Trichter bearbeiten",
+      "newTitle": "Neuer Trichter",
+      "name": "Name",
+      "windowMinutes": "Abschluss innerhalb von (Minuten)",
+      "stepAria": "Schritt {n}",
+      "stepKindAria": "Typ von Schritt {n}",
+      "matchModeAria": "Abgleich von Schritt {n}",
+      "matchAria": "Wert von Schritt {n}",
+      "stepKind": {
+        "page": "Seite",
+        "click": "Klick",
+        "event": "Ereignis"
+      },
+      "matchPlaceholder": {
+        "page": "/pricing",
+        "click": "button.checkout",
+        "event": "signup"
+      },
+      "removeStep": "Schritt {n} entfernen",
+      "addStep": "Schritt hinzufügen",
+      "save": "Trichter speichern",
+      "cancel": "Abbrechen",
+      "delete": "Trichter löschen",
+      "deleteTitle": "Trichter löschen",
+      "deleteConfirm": "Trichter „{name}“ löschen?",
+      "approx": "≈ {value}",
+      "stepsAria": "Schritte von {name}",
+      "estimatedNote": "Trichter werden aus behaltenen Aufzeichnungen gelesen, Zahlen und Zeiten sind daher Schätzungen (≈).",
+      "truncated": "Nur die neuesten 20.000 Aufzeichnungen wurden gelesen.",
+      "chartAria": "Besuche pro Schritt von {name}",
+      "visits": "{value} Besuche",
+      "conversion": "{value} gegenüber dem vorherigen Schritt",
+      "medianTime": "Median {value} seit dem vorherigen Schritt",
+      "watchDropped": "Die {count} Abgesprungenen ansehen",
+      "droppedGone": "Diese Aufzeichnungen werden nicht mehr aufbewahrt."
+    },
+    "smartEvents": {
+      "new": "Neues Ereignis",
+      "empty": "Noch keine Ereignisse.",
+      "editorAria": "Smart Event definieren",
+      "name": "Name",
+      "namePlaceholder": "Preis-Button geklickt",
+      "ruleKindLabel": "Erkennen",
+      "ruleKind": {
+        "page": "Einen Seitenaufruf",
+        "click": "Einen Klick",
+        "custom": "Ein benanntes Ereignis"
+      },
+      "matchModeLabel": "Abgleich",
+      "matchMode": {
+        "equals": "ist genau",
+        "prefix": "beginnt mit",
+        "contains": "enthält"
+      },
+      "match": "Wert",
+      "matchPlaceholder": {
+        "page": "/pricing",
+        "click": "button.checkout",
+        "custom": "signup"
+      },
+      "save": "Ereignis speichern",
+      "cancel": "Abbrechen",
+      "delete": "Löschen",
+      "deleteTitle": "Smart Event löschen",
+      "deleteConfirm": "Smart Event „{name}“ löschen? Trichter, die es verwenden, treffen dann nicht mehr zu.",
+      "deleteAria": "{name} löschen",
+      "tableAria": "Smart Events",
+      "col": {
+        "name": "Ereignis",
+        "rule": "Regel",
+        "count": "Aufzeichnungen, letzte {days} Tage",
+        "actions": "Aktionen"
+      },
+      "builtin": "Integriert",
+      "ruleSummary": "{kind} {mode} {match}",
+      "approx": "≈ {value}",
+      "filter": "Filtern",
+      "filterAria": "Aufzeichnungen mit {name} filtern",
+      "defineFromClick": "Ereignis aus diesem Klick definieren",
+      "defineFromClickAria": "Ereignis aus dem Klick auf {label} definieren",
+      "preview": {
+        "idle": "Geben Sie einen Wert ein, um zu sehen, wie viele Aufzeichnungen passen.",
+        "checking": "Passende Aufzeichnungen werden gezählt…",
+        "invalid": "Diese Regel ist ungültig.",
+        "count": "≈ {value} Aufzeichnungen passen in den letzten {days} Tagen"
+      }
+    },
+    "summary": {
+      "title": "Zusammenfassung",
+      "summarize": "Zusammenfassen",
+      "regenerate": "Erneut zusammenfassen",
+      "loading": "Wird zusammengefasst…",
+      "limit": "Das tägliche Limit für KI-Zusammenfassungen ist erreicht. Versuchen Sie es morgen erneut.",
+      "uncited": "Es ließ sich keine belegte Zusammenfassung schreiben. Sehen Sie sich stattdessen die Aufzeichnung an.",
+      "error": "Die Zusammenfassung konnte nicht erstellt werden.",
+      "citeAria": "Zu {time} springen",
+      "segmentTitle": "Was diese Besucher getan haben",
+      "summarizeSegment": "Diese Aufzeichnungen zusammenfassen",
+      "sampled": "Aus einer Stichprobe von {count} Aufzeichnungen.",
+      "exampleAria": "Beispiel bei {time} ansehen"
+    },
+    "ticket": {
+      "raise": "Ticket bei {time} anlegen",
+      "title": "Replay: {label} bei {time}",
+      "body": "Aus einer Besucheraufzeichnung angelegt: „{label}“ bei {time} auf {route}.",
+      "watchLink": "Diesen Moment ansehen",
+      "created": "Ticket angelegt.",
+      "failed": "Das Ticket konnte nicht angelegt werden.",
+      "effect": {
+        "waiting": "Wirkung auf {metric} auf {route}: wartet auf {visits} Besuche in einem neueren Release.",
+        "measured": "Wirkung auf {metric} auf {route}: {before} → {after} ({visits} Besuche im neuen Release).",
+        "metric": {
+          "frustrated": "frustrierte Besuche",
+          "errors": "Besuche mit Fehlern",
+          "conversions": "Conversions"
+        }
+      }
+    },
+    "prescription": {
+      "area": {
+        "funnel": "Funnel",
+        "ux": "Bedienbarkeit",
+        "site": "Website",
+        "sales": "Vertrieb",
+        "seo": "SEO",
+        "content": "Inhalt",
+        "performance": "Leistung",
+        "accessibility": "Barrierefreiheit"
+      },
+      "status": {
+        "proposed": "Vorgeschlagen",
+        "applied": "In Arbeit",
+        "measuring": "Wird gemessen",
+        "worked": "Hat gewirkt",
+        "no_effect": "Ohne Wirkung",
+        "worse": "Verschlechtert",
+        "dismissed": "Verworfen"
+      },
+      "verdict": {
+        "worked": "Hat gewirkt",
+        "no_effect": "Ohne Wirkung",
+        "worse": "Verschlechtert"
+      },
+      "rule": {
+        "fallback": "Befund {ruleId}",
+        "rage_on_element": {
+          "title": "{share} % der Besuche auf {route} klicken wütend auf „{label}“",
+          "description": "{sessions} Sitzungen klickten immer wieder darauf, weil es nicht wie erwartet reagierte."
+        },
+        "error_on_step": {
+          "title": "Ein Fehler steckt hinter {share} % der Abbrüche bei „{step}“ in {funnel}",
+          "description": "„{error}“ tritt in den Sitzungen auf, die den Funnel an diesem Schritt verlassen haben."
+        },
+        "dead_click_heading": {
+          "title": "{share} % der Besuche auf {route} klicken auf die Überschrift „{label}“, die nichts tut",
+          "description": "{sessions} Sitzungen erwarteten, dass die Überschrift ein Link oder eine Schaltfläche ist."
+        },
+        "cta_below_fold": {
+          "title": "Nur {reach} % der Besucher von {route} scrollen weit genug, um „{label}“ zu sehen",
+          "description": "Die Handlungsaufforderung liegt unterhalb der Stelle, an der die meisten Besucher aufhören zu scrollen."
+        },
+        "quickback_after_reveal": {
+          "title": "{share} % der Besuche auf {route} kehren nach dem Öffnen von „{label}“ sofort zurück",
+          "description": "{sessions} Sitzungen kamen binnen Sekunden zurück: Was sie fanden, entsprach nicht ihrer Erwartung."
+        },
+        "excessive_scroll_missing_info": {
+          "title": "{share} % der Besuche auf {route} scrollen suchend hin und her",
+          "description": "{sessions} Sitzungen scrollten übermäßig: Die gesuchte Information ist schwer zu finden."
+        },
+        "device_gap": {
+          "title": "Smartphones konvertieren mit {phoneRate} %, Desktops mit {desktopRate} %",
+          "description": "{sessions} Smartphone-Sitzungen konvertieren mit weniger als der Hälfte der Desktop-Rate."
+        },
+        "release_regression": {
+          "title": "Die Konversion fiel in {release} von {before} % auf {after} %",
+          "description": "Das sind {drop} % weniger als in {previous}, dem Release davor."
+        },
+        "pricing_hesitation": {
+          "title": "{visitors} bekannte Besucher haben {route} angesehen und nicht gekauft",
+          "description": "Sie sind identifiziert, also kann ein Follow-up sie erreichen."
+        },
+        "checkout_abandon_known": {
+          "title": "{visitors} bekannte Besucher haben den Checkout auf {route} verlassen",
+          "description": "Sie sind identifiziert, also kann ein Follow-up sie erreichen."
+        },
+        "objection_pattern": {
+          "title": "Besucher zögern bei: {pattern}",
+          "description": "Gesehen in {examples} zitierten Aufzeichnungen."
+        },
+        "proof_missed_reason": {
+          "title": "{proof} hat sein Ziel verfehlt: {reason}",
+          "description": "{share} % der Besuche auf {route} trafen während der Messung auf dieses Problem."
+        },
+        "seo_title_length": {
+          "title": "Der Titel von {route} hat {length} Zeichen",
+          "description": "Suchergebnisse zeigen Titel mit {min} bis {max} Zeichen vollständig; ein kürzerer verschenkt Platz, ein längerer wird abgeschnitten."
+        },
+        "seo_missing_meta_description": {
+          "title": "{route} hat eine Meta-Beschreibung mit {length} Zeichen",
+          "description": "Ohne eine Beschreibung von mindestens {min} Zeichen schreiben Suchmaschinen ihr eigenes Snippet aus der Seite."
+        },
+        "seo_multiple_h1": {
+          "title": "{route} hat {count} Hauptüberschriften",
+          "description": "Eine H1 sagt Suchmaschinen und Screenreadern, worum es auf der Seite geht; mehrere verwischen das."
+        },
+        "seo_no_structured_data": {
+          "title": "{route} hat keine strukturierten Daten",
+          "description": "Eine Seite mit {words} Wörtern ohne JSON-LD kann in der Suche keine Rich Results erhalten."
+        },
+        "seo_low_ctr_high_impressions": {
+          "title": "{route} wird in der Suche gesehen, aber selten angeklickt",
+          "description": "{impressions} Impressionen brachten {clicks} Klicks ({ctr} % gegenüber {siteCtr} % der Website): Titel und Beschreibung verdienen den Klick nicht."
+        },
+        "content_no_value_prop_above_fold": {
+          "title": "Der erste Bildschirm von {route} sagt nicht, was er bietet",
+          "description": "Auf {device, select, phone {Smartphones} other {Desktops}} enthalten die {words} Wörter im sichtbaren Bereich kein Nutzenversprechen, also gehen Besucher, bevor sie erfahren, warum sie bleiben sollten."
+        },
+        "content_cta_vague": {
+          "title": "Der Call-to-Action „{label}“ auf {route} sagt nicht, was passiert",
+          "description": "Eine Beschriftung, die das Ergebnis nennt, bekommt mehr Klicks als eine allgemeine ({ctas} Calls-to-Action auf der Seite)."
+        },
+        "content_readability": {
+          "title": "{route} liest sich auf Stufe {grade}",
+          "description": "Text über Stufe {max} verliert Leser; kürzere Sätze und einfachere Wörter halten sie."
+        },
+        "content_missing_trust": {
+          "title": "{route} fordert zum Handeln auf, ohne Belege zu zeigen",
+          "description": "Die Seite hat {ctas} Calls-to-Action und {fields} Formularfelder, aber kein Testimonial, keine Bewertung, kein Logo und keine Garantie."
+        },
+        "perf_lcp_poor": {
+          "title": "Der Hauptinhalt von {route} braucht {p75} ms bis zur Anzeige",
+          "description": "Echte Besuche auf {device, select, phone {Smartphones} other {Desktops}} warten länger als die Grenze von {max} ms, bis das größte Element erscheint."
+        },
+        "perf_cls_poor": {
+          "title": "Das Layout von {route} verschiebt sich beim Laden ({p75})",
+          "description": "Inhalte, die sich nach dem Erscheinen bewegen (über {max} auf {device, select, phone {Smartphones} other {Desktops}}), lassen Besucher das Falsche anklicken."
+        },
+        "perf_heavy_hero_image": {
+          "title": "Das erste Bild auf {route} wiegt {kb} KB",
+          "description": "Ein Bild im sichtbaren Bereich über {maxKb} KB verzögert den ersten Bildschirm; komprimieren Sie es oder liefern Sie eine kleinere Größe aus."
+        },
+        "a11y_contrast": {
+          "title": "{count, plural, one {# Element auf {route} hat} other {# Elemente auf {route} haben}} zu wenig Farbkontrast",
+          "description": "Das schwächste Paar erreicht {ratio}:1, wo {required}:1 nötig ist — für viele Besucher schwer lesbar, bei hellem Licht für alle."
+        },
+        "a11y_tap_targets": {
+          "title": "{count, plural, one {# Tippziel auf {route} ist} other {# Tippziele auf {route} sind}} auf Smartphones zu klein",
+          "description": "Ziele unter {min} × {min} px verfehlt man mit dem Daumen leicht."
+        },
+        "a11y_missing_labels": {
+          "title": "{count, plural, one {# Feld auf {route} hat} other {# Felder auf {route} haben}} keine Beschriftung",
+          "description": "Ein Feld ohne Beschriftung kann ein Screenreader nicht benennen, und es wird leicht falsch ausgefüllt."
+        },
+        "vision_observed": {
+          "title": "{observation}",
+          "description": "Auf der erfassten Seite beobachtet und behalten, weil die eigenen Zahlen der Seite es stützen."
+        }
+      },
+      "observed": "Auf dem Bildschirm beobachtet",
+      "rankAria": "Rang {rank}",
+      "evidenceTitle": "Gesehen in",
+      "evidenceItem": "Aufzeichnung {n} bei {time}",
+      "evidenceAria": "Aufzeichnung {n} bei {time} ansehen",
+      "prescriptionTitle": "Was zu ändern ist",
+      "drafting": "Der Wortlaut dieser Korrektur wird gerade entworfen.",
+      "change": {
+        "title": "Entworfene Änderung",
+        "before": "Jetzt",
+        "after": "Änderung",
+        "target": "An {target}",
+        "unknown": "Für diese Korrektur ist eine Änderung entworfen."
+      },
+      "changeKind": {
+        "copy": "Text",
+        "layout": "Layout",
+        "code": "Code",
+        "content": "Inhalt"
+      },
+      "impact": {
+        "estimateApprox": "≈ +{value} {unit} in {days} Tagen ({low}–{high})",
+        "estimateExact": "+{value} {unit} in {days} Tagen ({low}–{high})",
+        "pointApprox": "≈ +{value} {unit} in {days} Tagen",
+        "pointExact": "+{value} {unit} in {days} Tagen",
+        "rangeApprox": "≈ {low}–{high} {unit} in {days} Tagen",
+        "rangeExact": "{low}–{high} {unit} in {days} Tagen",
+        "none": "Noch zu wenige Besuche, um die Wirkung zu schätzen"
+      },
+      "confidence": {
+        "low": "geringe Sicherheit",
+        "medium": "mittlere Sicherheit",
+        "high": "hohe Sicherheit"
+      },
+      "unit": {
+        "conversions": "Konversionen",
+        "visits": "Besuche",
+        "sessions": "Sitzungen"
+      },
+      "measured": {
+        "beforeAfter": "Vorher {before} → nachher {after}",
+        "onRelease": "im Release {release}",
+        "source": {
+          "ticket_effect": "gemessen am Release, das sie ausgeliefert hat",
+          "ab_test": "gemessen durch einen A/B-Test",
+          "follow_up": "gemessen an Besuchern ohne Follow-up"
+        }
+      },
+      "dismissedBecause": "Verworfen: {reason}",
+      "acceptance": {
+        "text": "{metric} geht {direction}, über mindestens {minVisits} Besuche",
+        "direction": {
+          "up": "nach oben",
+          "down": "nach unten"
+        }
+      },
+      "metric": {
+        "rage_rate": "Rage-Klick-Rate",
+        "step_conversion": "Schrittkonversion",
+        "dead_click_rate": "Dead-Klick-Rate",
+        "conversion_rate": "Konversionsrate",
+        "quickback_rate": "Schnell-zurück-Rate",
+        "excessive_scroll_rate": "Rate übermäßigen Scrollens",
+        "phone_conversion_rate": "Smartphone-Konversionsrate",
+        "known_conversion_rate": "Konversionsrate bekannter Besucher",
+        "proof_metric": "Die Kennzahl des Beweises"
+      },
+      "actionsAria": "Aktionen für diese Korrektur",
+      "actions": {
+        "fix": "Beheben",
+        "test": "Testen",
+        "start-test": "Test starten",
+        "follow-up": "Nachfassen",
+        "ticket": "Ticket",
+        "publish-preview": "Veröffentlichen",
+        "revert": "Zurücksetzen",
+        "dismiss": "Verwerfen",
+        "copy-prompt": "Prompt kopieren",
+        "apply-page": "Auf die Seite anwenden",
+        "apply-in-composer": "Im Editor anwenden"
+      },
+      "confirm": {
+        "start-test": {
+          "title": "Test starten?",
+          "message": "Besucher werden zwischen der Live-Website und der Vorschau aufgeteilt, bis der Test entschieden ist.",
+          "confirm": "Test starten"
+        },
+        "publish-preview": {
+          "title": "Vorschau veröffentlichen?",
+          "message": "Die Vorschau mit dieser Korrektur wird für alle Besucher zur Live-Website.",
+          "confirm": "Veröffentlichen"
+        },
+        "revert": {
+          "title": "Diese Korrektur zurücksetzen?",
+          "message": "Die Website kehrt zu dem Release zurück, das vor der Veröffentlichung dieser Korrektur live war.",
+          "confirm": "Zurücksetzen"
+        }
+      },
+      "dismiss": {
+        "title": "Diese Korrektur verwerfen",
+        "reasonLabel": "Warum verwerfen? (Pflichtfeld)",
+        "reasonPlaceholder": "Zum Beispiel: Die Seite wurde neu gestaltet",
+        "submit": "Verwerfen",
+        "cancel": "Abbrechen"
+      },
+      "followUp": {
+        "title": "Wer nachgefasst würde",
+        "none": "Kein bekannter Kontakt passt zu diesem Befund.",
+        "unmatched": "{count, plural, one {# identifizierter Besucher hat} other {# identifizierte Besucher haben}} keinen passenden Kontakt",
+        "enrolled": "{count, plural, one {# Kontakt aufgenommen} other {# Kontakte aufgenommen}}",
+        "draftTitle": "Entworfener Erstkontakt (wird nur aus der Sequenz gesendet, nachdem Sie ihn bearbeitet haben)",
+        "sequenceLabel": "Sequenz für die Aufnahme",
+        "enrol": "{count, plural, one {# Kontakt aufnehmen} other {# Kontakte aufnehmen}}",
+        "cancel": "Abbrechen",
+        "contactAria": "{name} aufnehmen",
+        "noSequences": "Dieser Workspace hat noch keine Sequenz. Erstellen Sie eine auf einem Canvas, um nachzufassen.",
+        "sequencesLoading": "Sequenzen werden geladen…",
+        "sequenceChoose": "Sequenz wählen",
+        "modeLabel": "Sequenz",
+        "modeExisting": "Vorhandene Sequenz verwenden",
+        "modeNew": "Neue Sequenz entwerfen",
+        "createAndEnrol": "{count, plural, one {Sequenz erstellen und # Kontakt aufnehmen} other {Sequenz erstellen und # Kontakte aufnehmen}}",
+        "newSequence": {
+          "hint": "Entworfen aus dem Einwand, den diese Korrektur belegt. Jetzt bearbeiten: Sie wird als Entwurfssequenz erstellt, und nichts wird gesendet, bevor Sie sie auf ihrem Board starten.",
+          "nameLabel": "Name der Sequenz",
+          "stepTitle": "Schritt {n}",
+          "delayLabel": "Tage nach der Aufnahme",
+          "subjectLabel": "Betreff",
+          "bodyLabel": "Nachricht",
+          "drafting": "Sequenz wird aus dem Befund entworfen…",
+          "retry": "Sequenz entwerfen"
+        }
+      },
+      "project": {
+        "label": "Projekt",
+        "none": "Projekt wählen"
+      },
+      "result": {
+        "refusal": "{reason}",
+        "run": "Ein Coding-Agent arbeitet an Ticket #{taskId}.",
+        "ticket": "Ticket #{taskId} erstellt.",
+        "test": "A/B-Test entworfen. Starten Sie ihn, wenn Sie bereit sind.",
+        "enrolled": "{count, plural, one {# Kontakt aufgenommen} other {# Kontakte aufgenommen}}",
+        "done": "Erledigt.",
+        "composer": "Der Prompt steht im Composer. Prüfen Sie ihn und senden Sie ihn ab.",
+        "page": "{count, plural, one {# Fix in einem Prompt gebündelt.} other {# Fixes in einem Prompt gebündelt.}}",
+        "sequenceCreated": "„{name}“ als Entwurfssequenz mit {count, plural, one {# Kontakt} other {# Kontakten}} erstellt. Starten Sie sie auf ihrem Board, um zu senden."
+      },
+      "maker": {
+        "fix": "Umgesetzt von einem Coding-Agenten",
+        "test": "Belegt durch einen A/B-Test",
+        "start-test": "Belegt durch einen A/B-Test",
+        "follow-up": "Umgesetzt durch ein Vertriebs-Follow-up",
+        "ticket": "Umgesetzt von Ihrem Team (Ticket)",
+        "publish-preview": "Bereit zur Veröffentlichung",
+        "revert": "Bereit zum Zurücksetzen"
+      },
+      "openAria": "Korrektur öffnen: {title}",
+      "agent": {
+        "label": "Coding-Agent",
+        "none": "Kein Coding-Agent kann an dieser Website arbeiten, daher erstellt „Beheben“ nur ein Ticket.",
+        "ticketOnly": "Nur Ticket"
+      },
+      "applyPage": {
+        "title": "Alle Fixes auf dieser Seite anwenden",
+        "body": "Jeder akzeptierte Fix auf der Seite kommt in einen Prompt und wird als angewendet markiert. Wählen Sie, für wen der Prompt ist.",
+        "submit": "Auf die Seite anwenden",
+        "cancel": "Abbrechen"
+      }
+    },
+    "fixes": {
+      "overviewTitle": "Wichtigste Korrekturen",
+      "stepTitle": "Verordnete Korrektur",
+      "playerTitle": "Korrekturen für {route}",
+      "proofTitle": "Die verordnete Korrektur",
+      "empty": "Für diese Seite ist noch keine Korrektur verordnet."
+    },
+    "prompt": {
+      "audienceAria": "Für wen der Prompt ist",
+      "audience": {
+        "composer": "Builderforce-Composer",
+        "coding_agent": "Coding-Agent",
+        "site_builder": "Website-Baukasten"
+      },
+      "textAria": "Verbesserungs-Prompt",
+      "copy": "Prompt kopieren",
+      "copied": "Kopiert",
+      "copyFailed": "Die Zwischenablage ist hier nicht verfügbar. Markieren Sie den Text und kopieren Sie ihn.",
+      "markedApplied": "Kopiert und als angewendet markiert. Das nächste Release wird daran gemessen.",
+      "noneChosen": "Wählen Sie mindestens einen Fix, um einen Prompt zu erstellen.",
+      "pageTitle": "Ein Prompt für diese Seite",
+      "loading": "Der Prompt wird geschrieben…",
+      "bundled": "{count, plural, one {# Fix in diesem Prompt} other {# Fixes in diesem Prompt}}",
+      "applyInComposer": "Im Composer anwenden",
+      "intro": "Geben Sie diesen Fix an eine beliebige KI: Der Prompt sagt, was zu ändern ist, warum, was gleich bleiben muss und wie das Ergebnis gemessen wird.",
+      "pageBody": "Stattdessen jeden akzeptierten Fix auf {route} in einem Prompt bündeln.",
+      "applyPage": "Auf die Seite anwenden"
+    },
+    "page": {
+      "noCapture": "Noch keine Erfassung dieser Seite.",
+      "imageFailed": "Der Screenshot konnte nicht geladen werden.",
+      "imageLoading": "Screenshot wird geladen…",
+      "calloutAria": "Änderung {n}: {element}",
+      "beforeAfter": {
+        "title": "Vorher und nachher",
+        "beforeAlt": "Die Seite, wie sie jetzt ist, mit nummerierten Änderungen",
+        "afterAlt": "Die Seite mit angewendeten Änderungen",
+        "afterPending": "Die Seite mit diesem Fix wurde noch nicht gerendert.",
+        "sliderAria": "Zwischen vorher und nachher schieben",
+        "toggleAria": "Vorher oder nachher zeigen",
+        "before": "Vorher",
+        "after": "Nachher",
+        "modeAria": "Vergleichsart",
+        "mode": {
+          "slider": "Schieberegler",
+          "toggle": "Umschalten",
+          "side": "Nebeneinander"
+        }
+      },
+      "device": {
+        "aria": "Gerät",
+        "desktop": "Desktop",
+        "phone": "Smartphone"
+      },
+      "serp": {
+        "title": "In den Suchergebnissen",
+        "before": "Jetzt",
+        "after": "Mit dem Fix",
+        "jsonLdTitle": "Hinzuzufügende strukturierte Daten",
+        "jsonLdAria": "Vorgeschlagenes JSON-LD"
+      },
+      "score": {
+        "title": "Seitenbewertung",
+        "none": "Noch nicht bewertet.",
+        "ringAria": "{label}: {score} von 100",
+        "ringNone": "{label}: keine Daten",
+        "part": {
+          "total": "Gesamt",
+          "conversion": "Conversion",
+          "frustration": "Frustration",
+          "seo": "SEO",
+          "performance": "Performance",
+          "accessibility": "Barrierefreiheit"
+        },
+        "byRelease": "Bewertung nach Release",
+        "releaseRow": "{release}: {score}"
+      },
+      "facts": {
+        "title": "Was die Erfassung gefunden hat",
+        "none": "Die Erfassung enthält noch keine Fakten.",
+        "pass": "OK",
+        "fail": "Beheben",
+        "group": {
+          "seo": "SEO",
+          "content": "Inhalt",
+          "performance": "Performance",
+          "accessibility": "Barrierefreiheit"
+        },
+        "titleLength": "Titel: {value} Zeichen",
+        "metaDescriptionLength": "Meta-Beschreibung: {value} Zeichen",
+        "h1Count": "Hauptüberschriften: {value}",
+        "structuredData": "Typen strukturierter Daten: {value}",
+        "imagesWithoutAlt": "Bilder ohne Alt-Text: {value}",
+        "aboveFoldWords": "Wörter im sichtbaren Bereich: {value}",
+        "ctaAboveFold": "Calls-to-Action im sichtbaren Bereich: {value}",
+        "readabilityGrade": "Lesestufe: {value}",
+        "trustSignals": "Vertrauenssignale: {value}",
+        "lcp": "Größter Inhalt (Labor): {value} ms",
+        "cls": "Layoutverschiebung (Labor): {value}",
+        "pageWeight": "Seitengewicht: {value} KB",
+        "contrastFailures": "Kontrastfehler: {value}",
+        "smallTapTargets": "Kleine Tippziele: {value}",
+        "missingLabels": "Felder ohne Beschriftung: {value}"
+      },
+      "capture": {
+        "request": "Jetzt eine Erfassung anfordern",
+        "requesting": "Wird angefordert…",
+        "queued": "{count, plural, one {# Erfassung in der Warteschlange.} other {# Erfassungen in der Warteschlange.}} Die Prüfung aktualisiert sich, wenn der Runner fertig ist.",
+        "limited": "Die Seiten wurden vor weniger als einer Stunde erfasst. Versuchen Sie es später erneut.",
+        "unavailable": {
+          "runner_unavailable": "Erfassungen brauchen den Seiten-Runner, der in diesem Deployment nicht verfügbar ist.",
+          "page_kit_unavailable": "Das Kit des Seiten-Runners ist noch nicht veröffentlicht, daher wurde nichts erfasst.",
+          "no_pages": "Noch keine Schlüsselseiten zu erfassen: Die Website braucht zuerst Besuche.",
+          "no_origin": "Die Website hat keine Adresse zum Erfassen. Fügen Sie zuerst eine erlaubte Domain hinzu.",
+          "other": "Es wurde nichts erfasst."
+        }
+      },
+      "loadFailed": "Die Seitenprüfung konnte nicht geladen werden.",
+      "loading": "Seitenprüfung wird geladen…",
+      "noCaptures": "Diese Seite wurde noch nicht erfasst. Erfassungen laufen bei jedem neuen Release und wöchentlich.",
+      "screenTitle": "Der erste Bildschirm",
+      "release": "Release {release}",
+      "foldAlt": "Der erste Bildschirm von {path} auf {device}",
+      "noDeviceCapture": "Keine Erfassung für {device} in diesem Release.",
+      "fixesTitle": "Fixes für diese Seite",
+      "noFixes": "Keine Fixes für diese Seite.",
+      "includeInPrompt": "In einen Prompt für diese Seite aufnehmen",
+      "promptTitle": "Ein Prompt für diese Seite"
+    }
+  },
+  "apps": {
+    "loading": "Wird geladen…",
+    "notEntitled": "Dieser Workspace hat {app} noch nicht installiert. Installieren Sie es über den Marktplatz; der Einstieg ist kostenlos.",
+    "getIt": "{app} holen",
+    "needsSetup": "{app} ist installiert. Fügen Sie Ihre erste Website hinzu, um mit der Aufzeichnung zu beginnen.",
+    "setUp": "Einrichten",
+    "navTitle": "Apps",
+    "insights": {
+      "name": "Insights",
+      "loading": "Websites werden geladen…",
+      "noSiteTitle": "Noch keine Websites",
+      "noSiteBody": "Fügen Sie eine Website hinzu oder schalten Sie die Aufzeichnung für eine Builderforce-App ein.",
+      "setUp": "Website hinzufügen",
+      "siteLabel": "Website",
+      "usageChip": "{used} / {limit} Aufzeichnungen",
+      "usageAria": "Nutzung: {used} von {limit} Aufzeichnungen in diesem Monat. Tarif öffnen.",
+      "sites": "Websites",
+      "addSite": "Website hinzufügen"
+    }
   }
 }

@@ -23,11 +23,32 @@ describe('embedded capability catalog', () => {
     const snippet = unifiedEmbedSnippet('bf_42');
     expect(snippet).toContain('embed/v1.js');
     expect(snippet).toContain('data-builderforce-key="bf_42"');
+    // No Insights site, no replay key: the embed boots replay only from `data-site`.
+    expect(snippet).not.toContain('data-site');
   });
 
-  it('provides an activation example for every capability', () => {
+  it('carries the Insights site key when the workspace has a site, so heatmaps actually record', () => {
+    const snippet = unifiedEmbedSnippet('bf_42', 'bfr_site');
+    expect(snippet).toContain('data-builderforce-key="bf_42"');
+    expect(snippet).toContain('data-site="bfr_site"');
+  });
+
+  /**
+   * A snippet is a promise about the customer's page. Only session replay ships a
+   * page API (`window.BFReplay`, installed by the replay loader the embed boots), so
+   * only it gets one — and nothing advertises the `window.BuilderForce` global that
+   * no runtime defines.
+   */
+  it('advertises only the page API a runtime actually ships', () => {
+    const replay = capabilitySnippet('heatmaps');
+    expect(replay).not.toBeNull();
+    for (const method of ['event', 'tag', 'identify', 'keep', 'consent']) {
+      expect(replay).toContain(`window.BFReplay?.${method}(`);
+    }
     for (const capability of EMBEDDED_CAPABILITIES) {
-      expect(capabilitySnippet(capability.key).trim().length).toBeGreaterThan(10);
+      const snippet = capabilitySnippet(capability.key);
+      if (capability.key !== 'heatmaps') expect(snippet, capability.key).toBeNull();
+      expect(snippet ?? '', capability.key).not.toContain('BuilderForce.');
     }
   });
 });

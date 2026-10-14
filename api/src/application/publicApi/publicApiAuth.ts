@@ -22,10 +22,14 @@
 import type { Context } from 'hono';
 
 import type { Db } from '../../infrastructure/database/connection';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { hashSecret } from '../../infrastructure/auth/HashService';
+import { JWT_TTL_SECONDS } from '../../infrastructure/auth/keyResolutionCache';
 import {
   originAllowed,
   resolveTenantApiKey,
+  type ResolvedTenantApiKey,
   type TenantApiScope,
 } from '../llm/tenantApiKeyService';
 
@@ -70,10 +74,14 @@ export async function requirePublicApiKey(
   origin: string | null,
   required: TenantApiScope,
 ): Promise<PublicApiAuth> {
-  if (!authHeader?.startsWith('Bearer ')) {
-    return { ok: false, error: 'Missing or malformed Authorization header', status: 401 };
-  }
-  const resolved = await resolveTenantApiKey(db, authHeader.slice(7), required);
+  if (!authHeader?.startsWith('Bearer ')) return MALFORMED;
+  return verdict(await resolveTenantApiKey(db, authHeader.slice(7), required), origin);
+}
+
+const MALFORMED: PublicApiAuth = { ok: false, error: 'Missing or malformed Authorization header', status: 401 };
+
+/** The one answer for a resolution, whichever path resolved it. */
+function verdict(resolved: Pick<ResolvedTenantApiKey, 'keyId' | 'tenantId' | 'allowedOrigins'> | null, origin: string | null): PublicApiAuth {
   // One message for unknown, revoked AND under-scoped, deliberately: a caller must
   // not be able to tell which of the three it was, or an invalid key becomes a
   // probe for which scopes a valid one carries.
@@ -82,4 +90,42 @@ export async function requirePublicApiKey(
     return { ok: false, error: 'This key is not allowed from this origin', status: 403 };
   }
   return { ok: true, keyId: resolved.keyId, tenantId: resolved.tenantId };
+}
+
+/** The cache key of one key's resolution for one scope (`sha256(raw key)`, never the key). */
+export const publicApiKeyCacheKey = (required: TenantApiScope, keyHash: string): string =>
+  `auth:public-key:${required}:${keyHash}`;
+
+/**
+ * {@link requirePublicApiKey} with the resolution cached by key hash — the pattern
+ * the gateway's `resolveKeyCached` uses, through the ONE read-through cache — for a
+ * door polled by integrations (the Insights read API). A rejection is cached too,
+ * so a dead key hammered costs one database read per window, not one per request.
+ *
+ * The entry lives in its own namespace and on the SHORT self-heal regime
+ * (`JWT_TTL_SECONDS`): key revocation invalidates the gateway's `auth:bfk:*` entry,
+ * not this one, so a revoked key is refused here within that window. The origin
+ * check runs per request against the cached allowlist.
+ */
+export async function requirePublicApiKeyCached(
+  env: Env,
+  db: Db,
+  authHeader: string | undefined,
+  origin: string | null,
+  required: TenantApiScope,
+): Promise<PublicApiAuth> {
+  if (!authHeader?.startsWith('Bearer ')) return MALFORMED;
+  const raw = authHeader.slice(7).trim();
+  if (!raw) return verdict(null, origin);
+  const keyHash = await hashSecret(raw);
+  const cached = await getOrSetCached(
+    env,
+    publicApiKeyCacheKey(required, keyHash),
+    async (): Promise<{ key: Pick<ResolvedTenantApiKey, 'keyId' | 'tenantId' | 'allowedOrigins'> | null }> => {
+      const key = await resolveTenantApiKey(db, raw, required);
+      return { key: key ? { keyId: key.keyId, tenantId: key.tenantId, allowedOrigins: key.allowedOrigins } : null };
+    },
+    { kvTtlSeconds: JWT_TTL_SECONDS, l1TtlMs: 15_000 },
+  );
+  return verdict(cached.key, origin);
 }

@@ -226,6 +226,9 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'grade-the-proof-and-close-the-loop',
     // Measure's grade is a visit you can watch, not a dashboard.
     'see-why-visitors-leave',
+    // And what Measure hands back to Make: a cited fix, applied, graded on the
+    // next release — a missed proof's reason becoming the next Read.
+    'fix-what-visitors-tell-you',
   ],
   // Per-competitor leaf pages — keyed by the competitor column key. Each points
   // at its dedicated head-to-head post first, then the roundup for context.

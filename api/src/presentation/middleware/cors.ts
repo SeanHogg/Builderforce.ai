@@ -43,7 +43,7 @@ export const EXPOSED_HEADERS = [
  *  for creation-session commands. Omitting either makes the browser reject the
  *  preflight before the request reaches its route. */
 export const ALLOWED_REQUEST_HEADERS =
-  'Content-Type,Authorization,Idempotency-Key,If-Match,X-Emulation-Token,X-AgentHost-Signature,X-Builderforce-Locale';
+  'Content-Type,Content-Encoding,Authorization,Idempotency-Key,If-Match,X-Emulation-Token,X-AgentHost-Signature,X-Builderforce-Locale';
 
 /** Methods the preflight admits — shared with index.ts's OPTIONS short-circuit. */
 export const ALLOWED_METHODS = 'GET,POST,PUT,PATCH,DELETE,OPTIONS';
@@ -71,7 +71,7 @@ function isEditorWebviewOrigin(origin: string): boolean {
  * customer embedding the quality snippet on their own domain got a silent
  * preflight rejection unless the deployment set CORS_ORIGINS=*.
  */
-const PUBLIC_INGEST_PREFIXES = ['/api/quality-ingest', '/api/feedback-ingest'];
+const PUBLIC_INGEST_PREFIXES = ['/api/quality-ingest', '/api/feedback-ingest', '/api/replay-ingest'];
 
 function isPublicIngestPath(path: string): boolean {
   return PUBLIC_INGEST_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));

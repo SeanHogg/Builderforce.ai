@@ -48,7 +48,9 @@ export type LegalDocVersion = {
   version: string;
   title: string;
   content: string;
-  changeKind: 'publish' | 'amend';
+  /** `draft` is a reviewed-but-unpublished version (e.g. migration 1219's
+   *  session-recording disclosure): never active, never accepted. */
+  changeKind: 'publish' | 'amend' | 'draft';
   changedBy: string | null;
   createdAt: string;
 };
@@ -99,7 +101,7 @@ export async function getLegalHistory(db: Db, docType?: LegalDocType, limit = 10
     version: r.version,
     title: r.title,
     content: r.content,
-    changeKind: r.changeKind === 'amend' ? 'amend' : 'publish',
+    changeKind: r.changeKind === 'amend' || r.changeKind === 'draft' ? r.changeKind : 'publish',
     changedBy: r.changedBy ?? null,
     createdAt: r.createdAt ? r.createdAt.toISOString() : new Date().toISOString(),
   }));

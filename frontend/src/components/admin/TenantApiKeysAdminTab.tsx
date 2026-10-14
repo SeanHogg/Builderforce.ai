@@ -17,6 +17,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { REPLAY_BLOCK } from '@/lib/replaySensitive';
 /**
  * Superadmin tab for minting / listing / revoking tenant `bfk_*` keys
  * on behalf of any tenant. Renders nothing unless its parent tab is active —
@@ -127,7 +128,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
   const fmtDate = (iso: string | null | undefined) => iso ? fmt.dateTime(iso) : '—';
 
   return (
-    <div>
+    <div {...REPLAY_BLOCK}>
       <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
         <label htmlFor="apikeys-tenant" style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('apikeys.tenantLabel')}</label>
         <Select

@@ -1,19 +1,41 @@
 /**
- * Web vitals as `webvital` interaction events (LCP, CLS, INP/FID, TTFB).
+ * Core Web Vitals as `vital` marks, one per metric, taken at pagehide
+ * (PRD 33 §8 S2). Values are in the `VITAL_BUCKETS` unit: LCP and INP in
+ * ms, CLS × 1000.
+ *
+ * - LCP: the last `largest-contentful-paint` entry.
+ * - CLS: the largest session window of `layout-shift` entries without recent
+ *   input (gap < 1 s, window < 5 s).
+ * - INP: the longest `event` entry with an interaction id.
  */
 
-import type { ReplayChunkEvent } from '@builderforce/interaction-contract';
+import type { ReplayMark, VitalMetric } from '@builderforce/interaction-contract';
 
-export function observeVitals(emit: (event: ReplayChunkEvent) => void): () => void {
-  if (typeof PerformanceObserver === 'undefined') return () => {};
+export interface VitalsHandle {
+  /** The marks for this page load, once; later calls return only metrics that changed. */
+  take(atMs: number): ReplayMark[];
+  stop(): void;
+}
+
+type ShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: boolean };
+type EventEntry = PerformanceEntry & { interactionId?: number };
+
+export function observeVitals(): VitalsHandle {
+  const values: Partial<Record<VitalMetric, number>> = {};
+  const sent: Partial<Record<VitalMetric, number>> = {};
   const observers: PerformanceObserver[] = [];
 
-  function observe(type: string, handler: (entry: PerformanceEntry) => void): void {
+  let windowValue = 0;
+  let windowStart = 0;
+  let lastShift = 0;
+
+  function observe(type: string, handler: (entry: PerformanceEntry) => void, extra: Record<string, unknown> = {}): void {
+    if (typeof PerformanceObserver === 'undefined') return;
     try {
       const obs = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) handler(entry);
       });
-      obs.observe({ type, buffered: true } as PerformanceObserverInit);
+      obs.observe({ type, buffered: true, ...extra } as PerformanceObserverInit);
       observers.push(obs);
     } catch {
       /* unsupported entry type */
@@ -21,31 +43,47 @@ export function observeVitals(emit: (event: ReplayChunkEvent) => void): () => vo
   }
 
   observe('largest-contentful-paint', (entry) => {
-    emit({ t: Math.round(entry.startTime), kind: 'webvital', key: 'LCP', value: entry.startTime });
+    values.LCP = entry.startTime;
   });
   observe('layout-shift', (entry) => {
-    const shift = entry as PerformanceEntry & { value?: number; hadRecentInput?: boolean };
-    if (shift.hadRecentInput) return;
-    emit({ t: Math.round(entry.startTime), kind: 'webvital', key: 'CLS', value: shift.value ?? 0 });
+    const shift = entry as ShiftEntry;
+    if (shift.hadRecentInput || typeof shift.value !== 'number') return;
+    const t = entry.startTime;
+    if (windowValue > 0 && t - lastShift < 1_000 && t - windowStart < 5_000) {
+      windowValue += shift.value;
+    } else {
+      windowValue = shift.value;
+      windowStart = t;
+    }
+    lastShift = t;
+    values.CLS = Math.max(values.CLS ?? 0, windowValue);
   });
-  observe('event', (entry) => {
-    const e = entry as PerformanceEntry & { duration?: number };
-    emit({ t: Math.round(entry.startTime), kind: 'webvital', key: 'INP', value: e.duration ?? 0 });
-  });
-  observe('first-input', (entry) => {
-    const e = entry as PerformanceEntry & { processingStart?: number };
-    const delay = (e.processingStart ?? entry.startTime) - entry.startTime;
-    emit({ t: Math.round(entry.startTime), kind: 'webvital', key: 'FID', value: delay });
-  });
+  observe(
+    'event',
+    (entry) => {
+      const e = entry as EventEntry;
+      if (!e.interactionId) return;
+      values.INP = Math.max(values.INP ?? 0, entry.duration);
+    },
+    { durationThreshold: 40 },
+  );
 
-  const nav = performance.getEntriesByType?.('navigation')[0] as
-    | (PerformanceNavigationTiming & { responseStart?: number })
-    | undefined;
-  if (nav && typeof nav.responseStart === 'number') {
-    emit({ t: 0, kind: 'webvital', key: 'TTFB', value: nav.responseStart });
-  }
-
-  return () => {
-    for (const obs of observers) obs.disconnect();
+  return {
+    take(atMs) {
+      const marks: ReplayMark[] = [];
+      for (const metric of ['LCP', 'CLS', 'INP'] as const) {
+        const raw = values[metric];
+        if (typeof raw !== 'number' || !Number.isFinite(raw)) continue;
+        const value = Math.round(metric === 'CLS' ? raw * 1000 : raw);
+        if (sent[metric] === value) continue;
+        sent[metric] = value;
+        marks.push({ kind: 'vital', key: metric, atMs, value });
+      }
+      return marks;
+    },
+    stop() {
+      for (const obs of observers) obs.disconnect();
+      observers.length = 0;
+    },
   };
 }
