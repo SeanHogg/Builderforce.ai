@@ -83,6 +83,28 @@ export const SYNC_TO_MERGE_LIVELOCK_RATIO = 20;
 /** An open PR older than this is not "in review", it is stranded. */
 export const STALE_PR_DAYS = 3;
 
+/** In-review row the deliverable check consults. */
+export interface ReviewDeliverableRow {
+  taskType: string | null;
+  actionType: string | null;
+  title?: string | null;
+  gitBranch: string | null;
+  githubPrUrl: string | null;
+}
+
+/**
+ * How the wiring audit classifies an in-review ticket's deliverable.
+ *
+ * Spec-shaped titles (and other non-code kinds) are `non_code` — they are a
+ * document, not a missing branch. Only work that `expectsCodeDeliverable` and
+ * has neither a branch nor a PR is `missing_code`.
+ */
+export function classifyReviewDeliverable(t: ReviewDeliverableRow): 'missing_code' | 'non_code' | 'has_code' {
+  if (!expectsCodeDeliverable(t.taskType, t.actionType, t.title)) return 'non_code';
+  if (t.gitBranch || t.githubPrUrl) return 'has_code';
+  return 'missing_code';
+}
+
 function check(c: WiringCheck): WiringCheck { return c; }
 
 /**
@@ -288,8 +310,7 @@ export async function auditAutonomyWiring(db: Db, args: { tenantId: number }): P
         eq(tasks.archived, false),
       ))
     : [];
-  const noDeliverable = reviewRows.filter((t) =>
-    expectsCodeDeliverable(t.taskType, t.actionType, t.title) && !t.gitBranch && !t.githubPrUrl);
+  const noDeliverable = reviewRows.filter((t) => classifyReviewDeliverable(t) === 'missing_code');
 
   checks.push(check({
     id: 'review_has_deliverable',
