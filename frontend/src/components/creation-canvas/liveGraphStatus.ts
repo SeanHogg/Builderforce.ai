@@ -35,13 +35,14 @@ export function normalizeLiveStepStatus(status: string | undefined | null): Live
 /** Same dots the legacy workflow card uses, so a live step and a card step agree. */
 export function liveStepDotClass(
   status: string,
-  styles: { failDot: string; doneDot: string; liveDot: string; idleDot: string },
+  // A CSS module's typing — an index signature, not the four named classes.
+  styles: { readonly [key: string]: string | undefined },
 ): string {
   const n = status.toLowerCase();
-  if (n.startsWith('fail') || n.startsWith('error')) return styles.failDot;
-  if (n.startsWith('complete') || n.startsWith('done') || n === 'delivered') return styles.doneDot;
-  if (n.startsWith('run') || n.startsWith('progress')) return styles.liveDot;
-  return styles.idleDot;
+  if (n.startsWith('fail') || n.startsWith('error')) return styles.failDot ?? '';
+  if (n.startsWith('complete') || n.startsWith('done') || n === 'delivered') return styles.doneDot ?? '';
+  if (n.startsWith('run') || n.startsWith('progress')) return styles.liveDot ?? '';
+  return styles.idleDot ?? '';
 }
 
 function titlesMatch(stepTitle: string, graphLabel: string): boolean {
@@ -178,7 +179,7 @@ export function applyLiveGraphToNodes(
     const stepMapped = mapGraphNodesToFlowSteps(asSteps, args.graphNodes);
     if (stepMapped.size === 0) return node;
     const nextSteps = authored.map((step, index) => {
-      const rec = step && typeof step === 'object' ? { ...(step as Record<string, unknown>) } : { title: String(step) };
+      const rec: Record<string, unknown> = step && typeof step === 'object' ? { ...(step as Record<string, unknown>) } : { title: String(step) };
       const id = String(rec.id ?? `${node.id}:step:${index}`);
       const status = stepMapped.get(id);
       return status ? { ...rec, status } : rec;
@@ -228,7 +229,7 @@ export function startCanvasWorkflowLivePoll(opts: {
       if (!isLiveWorkflowStatus(snapshot.status)) return;
       ticks += 1;
       if (ticks >= maxTicks) return;
-      timer = window.setTimeout(tick, interval);
+      timer = setTimeout(tick, interval);
     }).catch((error: unknown) => {
       void reportBackgroundFailure({
         message: error instanceof Error ? error.message : String(error),
@@ -238,13 +239,13 @@ export function startCanvasWorkflowLivePoll(opts: {
       if (stopped) return;
       ticks += 1;
       if (ticks >= maxTicks) return;
-      timer = window.setTimeout(tick, interval);
+      timer = setTimeout(tick, interval);
     });
   };
 
   tick();
   return () => {
     stopped = true;
-    if (timer !== undefined) window.clearTimeout(timer);
+    if (timer !== undefined) clearTimeout(timer);
   };
 }

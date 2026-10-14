@@ -80,7 +80,8 @@ export function useLiveOrchestration(projectId?: number | null): LiveOrchestrati
     const timer = setInterval(() => {
       void refreshList().catch((err: unknown) => {
         void reportBackgroundFailure({
-          error: err,
+          message: err instanceof Error ? err.message : String(err),
+          level: 'warning',
           context: { operation: 'liveOrchestration.listPoll' },
         });
       });
@@ -125,7 +126,8 @@ export function useLiveOrchestration(projectId?: number | null): LiveOrchestrati
         if (!reported) {
           reported = true;
           void reportBackgroundFailure({
-            error,
+            message: error instanceof Error ? error.message : String(error),
+            level: 'warning',
             context: { operation: 'liveOrchestration.livePoll', workflowId: selectedId },
           });
         }
