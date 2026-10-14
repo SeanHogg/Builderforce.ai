@@ -16,6 +16,7 @@ import { canvasSpecSource, releaseGateEvidence } from '../canvasReleaseEvidence'
 import { normalizeExitCriteria, releaseEvidence } from '@/lib/canvasQa';
 import { buildScormPackage, courseFromNode } from '@/lib/courseLms';
 import { type CreationDeliverable, withCreationDeliverable } from '@/lib/creationDeliverables';
+import { recordCanvasActOutcomes } from '@/lib/recordCanvasActOutcome';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { useTranslations } from 'next-intl';
 import type { Edge } from '@xyflow/react';
@@ -23,12 +24,14 @@ import type { Edge } from '@xyflow/react';
 export interface UseCanvasArtifactExportDeps {
   edges: Edge[];
   nodes: CanvasObject[];
+  persistence: 'local' | 'server';
+  sessionId?: string | null;
   setNodes: Dispatch<SetStateAction<CanvasObject[]>>;
   setNotice: (text: string) => void;
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
 }
 
-export function useCanvasArtifactExport({ edges, nodes, setNodes, setNotice, t }: UseCanvasArtifactExportDeps) {
+export function useCanvasArtifactExport({ edges, nodes, persistence, sessionId, setNodes, setNotice, t }: UseCanvasArtifactExportDeps) {
   /**
    * The one export path for an authored object. The inspector's buttons, Brain's
    * `export` action, and the Files library all call this, so the file that lands
@@ -186,6 +189,17 @@ export function useCanvasArtifactExport({ edges, nodes, setNodes, setNotice, t }
         validation: { status: 'passed', detail: 'Export generated and download started' },
       };
       setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, deliverables: withCreationDeliverable(node.data, delivered) } } : node));
+      // After a real download (or print) lands — never on a confidentiality /
+      // use-policy refusal, and never on a thrown export. artifact.export is the
+      // fallback {kind}.{action} spelling, not a fourth DELIVERY_ACTION.
+      if (persistence === 'server' && sessionId) {
+        recordCanvasActOutcomes({
+          sessionId,
+          kind: 'artifact',
+          action: 'export',
+          objectId: nodeId,
+        });
+      }
       if (printed) return t('printOpened');
       // A guest session cannot reach the authenticated Office renderer, so say
       // what actually landed in Downloads and point at the export that DOES work
@@ -194,6 +208,6 @@ export function useCanvasArtifactExport({ edges, nodes, setNodes, setNotice, t }
     } catch (error) {
       return error instanceof Error ? error.message : t('exportFailed');
     }
-  }, [edges, nodes, setNodes, setNotice, t]);
+  }, [edges, nodes, persistence, sessionId, setNodes, setNotice, t]);
   return { exportArtifact };
 }
