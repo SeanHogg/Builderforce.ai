@@ -129,4 +129,21 @@ describe("buildNodeCapabilityProvider", () => {
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/outside the workspace/);
   });
+
+  it("unconfined scope lets readFile and writeFile reach the same out-of-tree path", async () => {
+    // write_file probes the target through readFile before writing. If read is confined
+    // tighter than write, the probe reports "outside the workspace" and the guard
+    // refuses every legitimate unconfined write.
+    const outside = await mkdtemp(join(tmpdir(), "bf-node-cap-out-"));
+    try {
+      const provider = buildNodeCapabilityProvider({ workspaceRoot: root, scope: "unconfined" });
+      const target = join(outside, "note.txt");
+      const w = await provider.repoWrite!.writeFile(target, "hello\n");
+      expect(w).toEqual({ ok: true, change: "created" });
+      const r = await provider.repoRead!.readFile(target);
+      expect(r).toEqual({ ok: true, path: target, content: "hello\n" });
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { NotFoundError } from '../../domain/shared/errors';
-import { resolveTenantTask, titleStartsWithHashRef, type BuiltinCtx } from './builtinToolContext';
+import { resolveTenantTask, titleStartsWithHashRef, type TenantTaskLookup } from './resolveTenantTask';
 
 function taskRow(id: number, title: string, projectId = 4) {
   return {
@@ -12,12 +12,11 @@ function taskRow(id: number, title: string, projectId = 4) {
 function ctxWith(tasks: {
   getTask: (id: number) => Promise<unknown>;
   listTasks: (...args: unknown[]) => Promise<unknown>;
-}): BuiltinCtx {
+}): TenantTaskLookup {
   return {
-    db: {} as never,
     tenantId: 7,
-    projects: { getProject: vi.fn(async () => ({ id: 4 })) } as never,
-    tasks: tasks as never,
+    projects: { getProject: vi.fn(async () => ({ id: 4 })) },
+    tasks: tasks as TenantTaskLookup['tasks'],
   };
 }
 
@@ -79,7 +78,7 @@ describe('resolveTenantTask', () => {
         2346,
       ),
     ).rejects.toThrow(
-      /Task '2346' not found\. Matching titled ticket\(s\): 99 "#2346: first"; 100 "#2346: second"/,
+      /Task '2346' not found\. Matching titled ticket\(s\): 99 "#2346: first"; 100 "#2346: second"\. Retry builtin_tasks_get with that id\./,
     );
   });
 

@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-10-13 — `tasks.create` no longer inserts a dangling `assigned_user_id` (ticket #2650)
+
+Default coordinator for `tasks.create` with no assignee: project Delivery Manager → requesting human only if that id is a `users` row → else NULL. A ghost `u:` manager is treated as no manager instead of violating `tasks_assigned_user_id_fkey`. Cloud-agent (`c:`) managers still pass through.
+
+- **Resolver.** `api/src/application/task/resolveCreateTaskAssignee.ts`, wired from `builtinMcpService.ts`.
+- **Tests.** `resolveCreateTaskAssignee.test.ts` (9 passed).
+- **Commit.** `1c4ab3691` on `main`.
+
 ## ✅ RESOLVED 2026-10-13 — Multi-model role routing (ticket #3073)
 
 `resolveModelForRole` / `parseRoleModelConfig` in `@builderforce/learned-routing` (`9f514a949`) now pin a catalog model from `ROLE_MODELS` / `ROLE_MODEL_DEFAULT` on both remaining surfaces. Explicit user/run model still wins; undefined pin leaves the ranker/plan seed unchanged.
