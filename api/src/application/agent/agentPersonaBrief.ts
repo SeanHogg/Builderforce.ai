@@ -22,9 +22,10 @@
  * The parent model is asking for a teammate it saw in a chat roster or a list, so it has a
  * NAME far more often than an `ide_agents.id`. Resolving only ids would make the feature
  * unreachable from the surface that motivates it. Both spellings go through one
- * tenant-scoped query; the name match is case-insensitive and exact (a fuzzy match would
- * silently hand the work to the wrong teammate, which is worse than a refusal the parent
- * can read and retry).
+ * tenant-scoped query; the name match is case-insensitive and exact, plus a parenthetical
+ * runtime-suffix strip so "Bob Developer" hits the roster row "Bob Developer (V2 (Container))"
+ * (ticket #4506). A fuzzy / prefix match would silently hand the work to the wrong teammate,
+ * which is worse than a refusal the parent can read and retry.
  */
 import { and, eq, sql as dsql } from 'drizzle-orm';
 import type { Env } from '../../env';
@@ -49,8 +50,61 @@ export interface AgentPersonaBrief {
 }
 
 /**
- * Resolve `agent` (an id OR a case-insensitive exact name) to that tenant's agent row —
- * the id plus the fields role capability reads.
+ * Drop trailing parenthetical groups from a display name — the runtime suffix a roster
+ * appends (" (V2 (Container))", " (V2) (Durable)"). Nested parens count as one group.
+ * Requires whitespace before `(` so a name like `fn()` is left alone. Empty after a strip
+ * is refused (the whole string was parenthetical).
+ */
+export function stripAgentRuntimeSuffix(name: string): string {
+  let out = name.trim();
+  while (true) {
+    const next = stripOneTrailingParenthetical(out);
+    if (next === out || !next) return out;
+    out = next;
+  }
+}
+
+function stripOneTrailingParenthetical(s: string): string {
+  const t = s.trimEnd();
+  if (!t.endsWith(')')) return t;
+  let depth = 0;
+  for (let i = t.length - 1; i >= 0; i--) {
+    const c = t[i];
+    if (c === ')') depth++;
+    else if (c === '(') {
+      depth--;
+      if (depth === 0) {
+        if (i > 0 && /\s/.test(t[i - 1]!)) return t.slice(0, i).trimEnd();
+        return t;
+      }
+    }
+  }
+  return t;
+}
+
+/**
+ * Pick the unique row `ref` names — exact id, then case-insensitive exact name, then a
+ * unique match after {@link stripAgentRuntimeSuffix} on both sides. Several suffix-stripped
+ * hits is a miss (do not pick the wrong teammate). Prefix matches ("Bob" vs "Bob Developer")
+ * are not hits.
+ */
+export function pickResolvedAgentRow<T extends { id: string; name: string }>(rows: T[], ref: string): T | null {
+  const needle = ref.trim();
+  if (!needle) return null;
+  const byId = rows.find((r) => r.id === needle);
+  if (byId) return byId;
+  const lower = needle.toLowerCase();
+  const byName = rows.find((r) => r.name.toLowerCase() === lower);
+  if (byName) return byName;
+  const stripped = stripAgentRuntimeSuffix(needle).toLowerCase();
+  if (!stripped) return null;
+  const hits = rows.filter((r) => stripAgentRuntimeSuffix(r.name).toLowerCase() === stripped);
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/**
+ * Resolve `agent` (an id OR a case-insensitive name, with or without a trailing runtime
+ * suffix) to that tenant's agent row — the id plus the fields role capability reads.
  *
  * ONE query for both spellings rather than "try the id, then try the name": two reads to
  * answer one question, and the miss path — the one a wrong guess always takes — would pay
@@ -60,21 +114,28 @@ export interface AgentPersonaBrief {
 async function resolveAgentRow(env: Env, tenantId: number, agent: string): Promise<RoleCapableAgentRow | null> {
   const ref = agent.trim();
   if (!ref) return null;
+  const stripped = stripAgentRuntimeSuffix(ref);
   return getOrSetCached(
     env,
     // Lower-cased in the KEY as well as the query: "Ada" and "ada" are the same lookup,
-    // and caching them separately would double the keyspace for one agent.
-    `agent_persona:resolve:v2:${tenantId}:${ref.toLowerCase()}`,
+    // and caching them separately would double the keyspace for one agent. v3: suffix
+    // match — a v2 miss for "Bob Developer" must not stick after this ships.
+    `agent_persona:resolve:v3:${tenantId}:${ref.toLowerCase()}`,
     async (): Promise<RoleCapableAgentRow | null> => {
-      const [row] = await buildDatabase(env)
+      const rows = await buildDatabase(env)
         .select(ROLE_ROW_COLUMNS)
         .from(ideAgents)
         .where(and(
           eq(ideAgents.tenantId, tenantId),
-          dsql`(${ideAgents.id} = ${ref} OR lower(${ideAgents.name}) = lower(${ref}))`,
+          dsql`(
+            ${ideAgents.id} = ${ref}
+            OR lower(${ideAgents.name}) = lower(${ref})
+            OR lower(${ideAgents.name}) = lower(${stripped})
+            OR lower(${ideAgents.name}) LIKE lower(${stripped}) || ' (%'
+          )`,
         ))
-        .limit(1);
-      return row ?? null;
+        .limit(20);
+      return pickResolvedAgentRow(rows, ref);
     },
     { kvTtlSeconds: 300, l1TtlMs: 60_000 },
   );
@@ -92,7 +153,7 @@ const ROLE_ROW_COLUMNS = {
 
 /**
  * The persona brief for one of this workspace's agents, or null when no agent in the
- * tenant carries that id or name.
+ * tenant carries that id or name (with or without a trailing runtime suffix).
  *
  * Null rather than a throw: a delegation naming an agent that does not exist is
  * INFORMATION for the parent model ("there is no Kevin here; these are the agents there

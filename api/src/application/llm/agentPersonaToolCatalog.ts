@@ -51,7 +51,7 @@ export const AGENT_PERSONA_TOOLS: BuiltinTool[] = [
     mutates: false,
     description:
       'The persona of one of this workspace\'s agents — its name, title and the compiled brief (role, bio, skills, personality) it runs under. '
-      + '`agent` accepts the agent id OR its name ("Ada"), matched case-insensitively. '
+      + '`agent` accepts the agent id OR its name ("Ada"), matched case-insensitively — including the name without a trailing runtime suffix, so "Bob Developer" matches "Bob Developer (V2 (Container))". '
       + 'Read this to decide WHICH teammate should take a piece of work, or to see what a child would inherit before delegating with spawn_agent { as_agent }. '
       + 'The result carries `roleKeys` — the board roles it can act as (developer, qa-tester, …). A code slice runs AS a developer and a verify slice AS a qa-tester. '
       + 'Pass `role` (e.g. "developer") to require it: an agent without that role comes back as { ok: false } listing the agents that DO hold it. '
