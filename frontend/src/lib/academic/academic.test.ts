@@ -12,7 +12,10 @@ import {
   learnersFromCohort, markFromSubmission,
 } from './gradebook';
 import { looksLikeTex, renderTex } from './mathTex';
-import { assistantShare, buildIntegrityLedger, disclosureDraft, integrityVerdict } from './integrity';
+import {
+  assistantShare, authorshipSourceFromActor, authorshipSourceFromPatch, buildIntegrityLedger,
+  disclosureDraft, integrityFromNode, integrityFromSubmission, integrityVerdict, patchWithIntegrity,
+} from './integrity';
 import { accessibilityVerdict, accommodationNeeds, auditAccessibility } from './accessibility';
 import { assessmentGate, boardAssessmentMode, effectiveDeadline, extraTimeFor, windowState } from './assessment';
 
@@ -447,6 +450,56 @@ describe('integrity', () => {
 
   it('drafts a disclosure for the learner to edit rather than writing one', () => {
     expect(disclosureDraft(buildIntegrityLedger(events))).toMatchObject({ usedAssistant: true, assistantEdits: 1, assistantPercent: 20 });
+  });
+
+  it('appends a ledger event onto a content patch so a verdict is no longer noRecord', () => {
+    const before = { kind: 'submission', artifacts: [] };
+    const patch = patchWithIntegrity(before, { artifacts: [{ title: 'Essay', detail: 'document' }] }, 'learner', '2026-03-01T09:00:00Z', 's1');
+    if (!('integrity' in patch)) throw new Error('expected an integrity ledger');
+    const rows = integrityFromNode(patch.integrity);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ source: 'learner', edits: 1, firstAt: '2026-03-01T09:00:00Z' });
+    expect(rows[0]!.characters).toBeGreaterThan(0);
+    expect(integrityVerdict(rows, '', 'open')).toBe('ownWork');
+  });
+
+  it('does not treat a mark or a rename as authorship', () => {
+    const before = { kind: 'submission', artifacts: [{ title: 'Essay' }] };
+    expect('integrity' in patchWithIntegrity(before, { mark: 72 }, 'learner', '2026-03-01T09:00:00Z')).toBe(false);
+    expect('integrity' in patchWithIntegrity(before, { title: 'Essay (final)' }, 'learner', '2026-03-01T09:00:00Z')).toBe(false);
+  });
+
+  it('extends an existing ledger rather than replacing it', () => {
+    const first = patchWithIntegrity({ kind: 'submission' }, { declaration: 'Draft' }, 'learner', '2026-03-01T09:00:00Z');
+    const second = patchWithIntegrity({ kind: 'submission', ...first }, { declaration: 'Draft with more words' }, 'assistant', '2026-03-01T10:00:00Z');
+    if (!('integrity' in second)) throw new Error('expected an integrity ledger');
+    const rows = integrityFromNode(second.integrity);
+    expect(rows.map((row) => row.source)).toEqual(['learner', 'assistant']);
+    expect(rows[0]!.edits).toBe(1);
+    expect(rows[1]!.edits).toBe(1);
+  });
+
+  it('drops an authored integrity write that moved no work', () => {
+    const before = { kind: 'submission', integrity: [{ source: 'learner', edits: 2, characters: 40, firstAt: 'a', lastAt: 'b' }] };
+    const patch = patchWithIntegrity(before, { integrity: [{ source: 'assistant', edits: 9, characters: 999 }] }, 'learner', '2026-03-01T09:00:00Z');
+    expect('integrity' in patch).toBe(false);
+  });
+
+  it('maps actors onto authorship sources', () => {
+    expect(authorshipSourceFromActor('brain')).toBe('assistant');
+    expect(authorshipSourceFromActor('agent')).toBe('assistant');
+    expect(authorshipSourceFromActor('human')).toBe('learner');
+    expect(authorshipSourceFromActor('system')).toBe('imported');
+    expect(authorshipSourceFromPatch({ provenance: [{ by: { kind: 'agent' } }] })).toBe('assistant');
+    expect(authorshipSourceFromPatch({})).toBe('learner');
+  });
+
+  it('joins artifact ledgers onto a submission so a document edit is visible', () => {
+    const rows = integrityFromSubmission(
+      { kind: 'submission', artifacts: [{ title: 'Essay' }] },
+      [{ id: 'd1', data: { kind: 'document', title: 'Essay', integrity: [{ source: 'assistant', edits: 1, characters: 80, firstAt: 't', lastAt: 't' }] } }],
+    );
+    expect(integrityVerdict(rows, '', 'assisted')).toBe('undeclaredAssistance');
   });
 });
 

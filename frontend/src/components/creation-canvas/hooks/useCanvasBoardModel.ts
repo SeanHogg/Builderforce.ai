@@ -17,6 +17,7 @@ import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
 import type { CanvasLayoutViewport } from '@/lib/canvasGridFit';
 import type { useTranslations } from 'next-intl';
+import { authorshipSourceFromPatch, patchWithIntegrity } from '@/lib/academic/integrity';
 import { useLatestRef } from './useLatestRef';
 
 export interface UseCanvasBoardModelDeps {
@@ -121,7 +122,18 @@ export function useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edg
     if (!cardsEditable) return;
     setNodes((current) => current.map((node) => {
       if (node.id !== nodeId) return node;
-      const data = { ...node.data, ...patch };
+      // Authorship ledger: `edits.patch` IS this function. A content patch that
+      // did not stamp `integrity` here is why every verdict read "no record"
+      // while the composer claimed turns were recorded. Provenance already on
+      // the patch (a widget) names the actor; a person typing is the learner.
+      const stamped = patchWithIntegrity(
+        node.data as unknown as Record<string, unknown>,
+        patch as unknown as Record<string, unknown>,
+        authorshipSourceFromPatch(patch as unknown as Record<string, unknown>),
+        new Date().toISOString(),
+        nodeId,
+      );
+      const data = { ...node.data, ...stamped };
       // A frame putting itself away is not only a fact ABOUT the frame — it is a
       // different-sized object on the board, and size lives on the node, not in its
       // data. Handled here rather than through a second callback so that every route

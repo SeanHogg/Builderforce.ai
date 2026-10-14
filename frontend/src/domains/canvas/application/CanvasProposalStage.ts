@@ -40,6 +40,7 @@ import type { Edge } from '@xyflow/react';
 import type { CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 import type { CanvasLayoutViewport } from '@/lib/canvasGridFit';
 import { patchWithProvenance, type Actor } from '@/lib/canvasApprovalGate';
+import { authorshipSourceFromActor, patchWithIntegrity } from '@/lib/academic/integrity';
 import type { CanvasObject, CanvasObjectData, CreationObjectKind } from '../domain/canvasObject';
 import type { ProposedCanvasChange } from '../domain/canvasChange';
 
@@ -201,18 +202,24 @@ export class CanvasProposalStage {
   }
 
   /**
-   * Stage a patch — WITH its provenance. Every attributed field the patch moves
-   * (see `ATTRIBUTED_FIELDS`) extends the object's trail, attributed to this
-   * stage's actor and sourced from the change's own label, so an approver reads
-   * "Brain moved plannedTotal from 120,000 to 150,000 — Rebalance the Q3 budget"
-   * rather than an empty ledger under a changed number. The comparison is against
-   * the object AS IT STANDS THIS TURN — the board value plus every patch already
-   * staged for it — so two patches to one field in one turn record two moves, and
-   * the second does not overwrite the first's entry.
+   * Stage a patch — WITH its provenance and its academic integrity event.
+   * Every attributed field the patch moves (see `ATTRIBUTED_FIELDS`) extends
+   * the object's trail, attributed to this stage's actor and sourced from the
+   * change's own label, so an approver reads "Brain moved plannedTotal from
+   * 120,000 to 150,000 — Rebalance the Q3 budget" rather than an empty ledger
+   * under a changed number. Authored content also appends an integrity row
+   * (Brain/agent → assistant), which is how a verdict stops reading "no record"
+   * after a tool turn. The comparison is against the object AS IT STANDS THIS
+   * TURN — the board value plus every patch already staged for it — so two
+   * patches to one field in one turn record two moves, and the second does not
+   * overwrite the first's entry.
    */
   updateObject(label: string, objectId: string, patch: Partial<CanvasObjectData>): void {
     const before = this.current(objectId);
-    const stamped = before ? patchWithProvenance(before, patch, this.actor, this.now(), label) : patch;
+    const withProvenance = before ? patchWithProvenance(before, patch, this.actor, this.now(), label) : patch;
+    const stamped = before
+      ? patchWithIntegrity(before, withProvenance, authorshipSourceFromActor(this.actor.kind), this.now(), objectId)
+      : withProvenance;
     this.buffer.push({ id: this.nextId(), type: 'object.update', label, objectId, patch: stamped });
   }
 
