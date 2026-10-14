@@ -44,6 +44,31 @@ export const CEREMONY_ACTION_RESOURCE_TYPE = 'ceremony_action';
 export const CEREMONY_HELD_STATUS = 'Held';
 /** The status a new follow-up starts in — the board's own default for a task card. */
 const FOLLOW_UP_STATUS = 'Ready';
+/** Content key for the list of deleted action-item resource ids (tombstones). */
+export const DELETED_ACTION_ITEMS_KEY = 'deletedActionItemResourceIds';
+
+/**
+ * Adds a tombstone for a deleted ceremony_action follow-up to the card's content.
+ * This prevents the follow-up from being re-created on the next minutes sync.
+ *
+ * @param cardContent - The current content of the ceremony card (with resourceId: ceremony:<id>)
+ * @param deletedResourceId - The resource id of the deleted action item (e.g., "ceremonyId:1")
+ * @returns Updated content with the tombstone added (if not already present)
+ */
+export function addDeletedActionItemTombstone(
+  cardContent: Record<string, unknown>,
+  deletedResourceId: string,
+): Record<string, unknown> {
+  const existing = Array.isArray(cardContent[DELETED_ACTION_ITEMS_KEY])
+    ? (cardContent[DELETED_ACTION_ITEMS_KEY] as string[])
+    : [];
+  if (existing.includes(deletedResourceId)) {
+    // Already in the tombstone list, no change needed
+    return cardContent;
+  }
+  return { ...cardContent, [DELETED_ACTION_ITEMS_KEY]: [...existing, deletedResourceId] };
+}
+
 /** Where follow-ups go relative to the card: one column to its right. */
 const FOLLOW_UP_OFFSET_X = 420;
 const FOLLOW_UP_STEP_Y = 170;
@@ -115,6 +140,13 @@ export function applyCeremonyMinutesToBoard(
   const anchor = graph.objects.find(isCard);
   if (!anchor) return null;
 
+  // Tombstones: resource ids of action items the user manually deleted.
+  // These are stored in the card's content so they persist across syncs.
+  const anchorContent = contentOf(anchor);
+  const deletedActionItemResourceIds = Array.isArray(anchorContent[DELETED_ACTION_ITEMS_KEY])
+    ? (anchorContent[DELETED_ACTION_ITEMS_KEY] as string[])
+    : [];
+
   const followUpPrefix = `${ceremonyId}:`;
   const isOwnFollowUp = (object: GraphObjectInput) =>
     object.resourceType === CEREMONY_ACTION_RESOURCE_TYPE && typeof object.resourceId === 'string'
@@ -153,12 +185,17 @@ export function applyCeremonyMinutesToBoard(
     if (minutes.summary) after.summary = minutes.summary;
     else delete after.summary;
     if (input.generatedAt) after.minutesGeneratedAt = input.generatedAt;
+    // Preserve the tombstone list (it may be empty, which is fine).
+    after[DELETED_ACTION_ITEMS_KEY] = deletedActionItemResourceIds;
     if (!sameContent(before, after)) { replaced.set(card.id, { ...card, content: after }); cards += 1; }
   }
 
   // 2. The follow-ups: update in place by ref, adopt a legacy card by title, else place.
+  // Skip any item whose resource id is in the tombstone list (manually deleted by user).
   open.forEach((item, index) => {
     const resourceId = ceremonyActionResourceId(ceremonyId, index);
+    // Skip tombstones: user deleted this action item, do not re-create it.
+    if (deletedActionItemResourceIds.includes(resourceId)) return;
     const title = actionItemTitle(item);
     const ref = formatResourceRef(CEREMONY_ACTION_RESOURCE_TYPE, resourceId);
     const existing = owned.get(resourceId) ?? legacy.get(titleKey(title));

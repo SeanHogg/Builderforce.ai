@@ -6,6 +6,7 @@ import {
   CEREMONY_ACTION_RESOURCE_TYPE,
   CEREMONY_HELD_STATUS,
   ceremonyActionResourceId,
+  DELETED_ACTION_ITEMS_KEY,
 } from './ceremonyMinutesBoard';
 
 const CEREMONY = '9f2c0000-0000-4000-8000-000000000001';
@@ -139,5 +140,41 @@ describe('applyCeremonyMinutesToBoard', () => {
     const result = apply(graph)!;
     expect(result.graph.objects.find((o) => o.id === 'other')).toEqual(graph.objects.find((o) => o.id === 'other'));
     expect(result.removed).toBe(0);
+  });
+
+  it('skips action items whose resourceIds are in the card\'s deletedActionItemResourceIds tombstone list', () => {
+    const graph = board();
+    // Add a tombstone to the card content for the first action item
+    const card = graph.objects.find((o) => o.id === 'card')!;
+    card.content = { ...card.content, [DELETED_ACTION_ITEMS_KEY]: [ceremonyActionResourceId(CEREMONY, 0)] };
+    // Add the corresponding action item object to the board
+    graph.objects.push({
+      id: 'tombstoned-task', kind: 'task', resourceType: CEREMONY_ACTION_RESOURCE_TYPE, resourceId: ceremonyActionResourceId(CEREMONY, 0),
+      canvasData: { x: 520, y: 200 }, content: { kind: 'task', title: 'Ana — Update the release notes', status: 'Ready', sourceCeremonyId: CEREMONY },
+    });
+    graph.connections.push({ id: 'tombstoned-edge', sourceObjectId: 'card', targetObjectId: 'tombstoned-task', kind: 'reference', label: 'action item' });
+
+    const result = apply(graph)!;
+    // The tombstoned item should be removed (not placed as new), but the non-tombstoned item should still be placed
+    const tasks = result.graph.objects.filter((o) => o.kind === 'task');
+    // Only the non-tombstoned item remains
+    expect(tasks.map((o) => (o.content as { title: string }).title)).toEqual(['Write up the retro']);
+    expect(result.removed).toBe(1); // The tombstoned task was removed
+    expect(result.placed).toBe(1);   // The non-tombstoned item was placed
+  });
+
+  it('preserves existing tombstones in the card content after applying minutes', () => {
+    const graph = board();
+    // Pre-existing tombstone for an item that was previously deleted
+    const card = graph.objects.find((o) => o.id === 'card')!;
+    card.content = { ...card.content, [DELETED_ACTION_ITEMS_KEY]: ['some-old-deleted:1', 'some-old-deleted:2'] };
+
+    const result = apply(graph)!;
+    const updatedCard = result.graph.objects.find((o) => o.id === 'card')!;
+    // The existing tombstones should be preserved
+    expect(updatedCard.content).toHaveProperty(DELETED_ACTION_ITEMS_KEY);
+    const tombstones = (updatedCard.content as Record<string, unknown>)[DELETED_ACTION_ITEMS_KEY];
+    expect(tombstones).toContain('some-old-deleted:1');
+    expect(tombstones).toContain('some-old-deleted:2');
   });
 });

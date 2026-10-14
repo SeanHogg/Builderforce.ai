@@ -151,6 +151,11 @@ import {
   readProspectEngagement, revokeProspectShare, SHAREABLE_CANVAS_KINDS,
   type ProspectShareSettings,
 } from '../../application/sales/prospectShare';
+import {
+  CEREMONY_ACTION_RESOURCE_TYPE,
+  CEREMONY_RESOURCE_TYPE,
+  addDeletedActionItemTombstone,
+} from '../../application/ceremony/ceremonyMinutesBoard';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 
 type SessionRole = SharedSessionRole;
@@ -2150,6 +2155,46 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     }
     const userId = c.get('userId') as string;
     const nextRevision = access.session.canvasRevision + 1;
+
+    // Tombstone deleted ceremony_action follow-ups: when a user deletes a follow-up
+    // from the board, we record its resourceId in the card's content so it doesn't
+    // get re-created on the next minutes sync.
+    const currentObjects = await db
+      .select({ id: creationSessionObjects.id, resourceType: creationSessionObjects.resourceType, resourceId: creationSessionObjects.resourceId, content: creationSessionObjects.content })
+      .from(creationSessionObjects)
+      .where(eq(creationSessionObjects.sessionId, access.session.id));
+    const incomingIds = new Set(objects.map((o) => o.id));
+    const deletedCeremonyActions = currentObjects.filter(
+      (o) => o.resourceType === CEREMONY_ACTION_RESOURCE_TYPE && !incomingIds.has(o.id),
+    );
+    if (deletedCeremonyActions.length > 0) {
+      // Group deleted items by ceremonyId (extracted from resourceId like "ceremonyId:1")
+      const deletedByCeremony = new Map<string, string[]>();
+      for (const deleted of deletedCeremonyActions) {
+        if (!deleted.resourceId) continue;
+        const colonIdx = deleted.resourceId.lastIndexOf(':');
+        if (colonIdx <= 0) continue;
+        const ceremonyId = deleted.resourceId.slice(0, colonIdx);
+        const existing = deletedByCeremony.get(ceremonyId) || [];
+        existing.push(deleted.resourceId);
+        deletedByCeremony.set(ceremonyId, existing);
+      }
+      // For each ceremony, find the card and add tombstones
+      for (const [ceremonyId, deletedResourceIds] of deletedByCeremony) {
+        // Find the ceremony card (resourceType=ceremony, resourceId=ceremony:<id>)
+        const card = objects.find(
+          (o) => o.resourceType === CEREMONY_RESOURCE_TYPE && o.resourceId === `ceremony:${ceremonyId}`,
+        );
+        if (card && card.content && typeof card.content === 'object') {
+          let updatedContent = card.content as Record<string, unknown>;
+          for (const resourceId of deletedResourceIds) {
+            updatedContent = addDeletedActionItemTombstone(updatedContent, resourceId);
+          }
+          card.content = updatedContent;
+        }
+      }
+    }
+
     // D1 batch is atomic: replacement graph + revision/event commit together, so
     // a failed insert cannot leave the session empty after the deletes. The seven
     // statements themselves are `creationGraphWriter`'s — see that module for why
