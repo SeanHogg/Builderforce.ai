@@ -44,6 +44,10 @@ import {
   resolveCompactionReserveTokensFloor,
 } from "../agent-settings.js";
 import { createBuilderForceAgentsCodingTools } from "../coding-tools.js";
+import {
+  catalogDesktopSemantic,
+  setDesktopClientName,
+} from "@builderforce/agent-tools/node-desktop.js";
 import { resolveSandboxContext } from "../sandbox.js";
 import { repairSessionFileIfNeeded } from "../session-file-repair.js";
 import { guardSessionManager } from "../session-tool-result-guard-wrapper.js";
@@ -366,6 +370,8 @@ export async function compactEmbeddedSessionDirect(
       warn: makeBootstrapWarn({ sessionLabel, warn: (message) => log.warn(message) }),
     });
     const runAbortController = new AbortController();
+    setDesktopClientName("on-prem");
+    const semantic = await catalogDesktopSemantic(effectiveWorkspace);
     const toolsRaw = createBuilderForceAgentsCodingTools({
       exec: {
         elevated: params.bashElevated,
@@ -387,6 +393,7 @@ export async function compactEmbeddedSessionDirect(
       modelId,
       modelContextWindowTokens: model.contextWindow,
       modelAuthMode: await resolveModelAuthMode(model.provider, params.config),
+      semantic,
     });
     const tools = sanitizeToolsForGoogle({ tools: toolsRaw, provider });
     logToolSchemasForGoogle({ tools, provider });

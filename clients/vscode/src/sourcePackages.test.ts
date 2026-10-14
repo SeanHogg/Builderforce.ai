@@ -45,6 +45,7 @@ describe('source-only shared packages', () => {
     // Subpath exports are entries of their own — an alias for the package root
     // does not reach them.
     expect(specifiers).toContain('@builderforce/agent-tools/node-path');
+    expect(specifiers).toContain('@builderforce/agent-tools/node-desktop');
     // A BUILT package resolves through its own `exports`; aliasing it at source
     // would bypass its entry point.
     expect(specifiers).not.toContain('@seanhogg/builderforce-brain-ui');

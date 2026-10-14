@@ -16,7 +16,11 @@ export const YOUTUBE_PROVIDER = {
   name: 'google', capability: 'youtube', label: 'YouTube',
   authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
   tokenUrl: 'https://oauth2.googleapis.com/token',
-  scopes: ['openid', 'email', 'profile', 'https://www.googleapis.com/auth/youtube.upload'],
+  scopes: [
+    'openid', 'email', 'profile',
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/youtube.readonly',
+  ],
   clientIdKey: 'GOOGLE_CLIENT_ID', clientSecretKey: 'GOOGLE_CLIENT_SECRET',
   extraAuthParams: { access_type: 'offline', prompt: 'consent', include_granted_scopes: 'true' },
 } as const;

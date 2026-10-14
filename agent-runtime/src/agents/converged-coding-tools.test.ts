@@ -1,8 +1,14 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildConvergedFileTools, CONVERGED_TOOL_NAMES } from "./converged-coding-tools.js";
+import { setDesktopFetchForTests } from "@builderforce/agent-tools/node-desktop.js";
+import {
+  buildConvergedFileTools,
+  catalogConvergedFileTools,
+  CONVERGED_TOOL_NAMES,
+} from "./converged-coding-tools.js";
 
 /** The model reads the first text block of an AgentToolResult (JSON-stringified `data`). */
 async function runTool(
@@ -76,5 +82,57 @@ describe("buildConvergedFileTools", () => {
     const write = await runTool(tools, "write", { path: "../escape.ts", content: "nope" });
     expect(write.ok).toBe(false);
     expect(String(write.error)).toMatch(/outside the workspace/);
+  });
+});
+
+function fakeDesktop() {
+  return async (url: string, init?: RequestInit): Promise<Response> => {
+    const op = url.split("/v1/")[1] ?? "";
+    if ((init?.headers as Record<string, string>)?.Authorization !== "Bearer tok") {
+      return new Response("{}", { status: 401 });
+    }
+    if (op === "health") return new Response(JSON.stringify({ version: "x" }), { status: 200 });
+    return new Response(JSON.stringify({ error: `unknown '${op}'` }), { status: 400 });
+  };
+}
+
+describe("catalogConvergedFileTools — repo.semantic probe", () => {
+  let root: string;
+  let dir: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "bf-converged-sem-"));
+    dir = fs.mkdtempSync(join(tmpdir(), "bf-desktop-"));
+    process.env.BUILDERFORCE_DESKTOP_DISCOVERY = join(dir, "desktop.json");
+  });
+  afterEach(async () => {
+    setDesktopFetchForTests(null);
+    delete process.env.BUILDERFORCE_DESKTOP_DISCOVERY;
+    fs.rmSync(dir, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("withholds semantic_search/repo_map when the desktop probe is absent", async () => {
+    setDesktopFetchForTests(fakeDesktop());
+    const tools = await catalogConvergedFileTools({ workspaceRoot: root });
+    expect(tools.map((t) => t.name).toSorted()).toEqual([
+      "ask_human",
+      "delete_file",
+      "edit",
+      "list_files",
+      "write",
+    ]);
+  });
+
+  it("includes semantic_search and repo_map when the desktop probe succeeds", async () => {
+    fs.writeFileSync(
+      process.env.BUILDERFORCE_DESKTOP_DISCOVERY!,
+      JSON.stringify({ port: 4999, token: "tok", pid: 1, version: "x" }),
+    );
+    setDesktopFetchForTests(fakeDesktop());
+    const tools = await catalogConvergedFileTools({ workspaceRoot: root });
+    const names = tools.map((t) => t.name);
+    expect(names).toContain("semantic_search");
+    expect(names).toContain("repo_map");
   });
 });

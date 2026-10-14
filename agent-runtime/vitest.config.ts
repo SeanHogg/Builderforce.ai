@@ -32,6 +32,11 @@ export default defineConfig({
         find: "@builderforce/agent-tools/node-symbols.js",
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-symbols.ts"),
       },
+      {
+        // Desktop loopback client (repo.semantic probe), same NodeNext `.js` form.
+        find: "@builderforce/agent-tools/node-desktop.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-desktop.ts"),
+      },
       // Every source-only package under `packages/`, derived from their manifests.
       // These were six hand-written entries and had already fallen behind the
       // registry: `canvas-widget-protocol`, `creation-canvas-contract`,

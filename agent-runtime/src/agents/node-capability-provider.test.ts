@@ -1,8 +1,15 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildNodeCapabilityProvider, NODE_FILE_SURFACE_CAPS, NODE_SURFACE_CAPS } from "./node-capability-provider.js";
+import { setDesktopFetchForTests } from "@builderforce/agent-tools/node-desktop.js";
+import {
+  buildNodeCapabilityProvider,
+  catalogNodeCapabilityProvider,
+  NODE_FILE_SURFACE_CAPS,
+  NODE_SURFACE_CAPS,
+} from "./node-capability-provider.js";
 
 describe("buildNodeCapabilityProvider", () => {
   let root: string;
@@ -145,5 +152,66 @@ describe("buildNodeCapabilityProvider", () => {
     } finally {
       await rm(outside, { recursive: true, force: true });
     }
+  });
+});
+
+function fakeDesktop(routes: Record<string, (body: Record<string, unknown>) => unknown> = {}) {
+  return async (url: string, init?: RequestInit): Promise<Response> => {
+    const op = url.split("/v1/")[1] ?? "";
+    if ((init?.headers as Record<string, string>)?.Authorization !== "Bearer tok") {
+      return new Response("{}", { status: 401 });
+    }
+    if (op === "health") return new Response(JSON.stringify({ version: "x" }), { status: 200 });
+    const handler = routes[op];
+    if (!handler) return new Response(JSON.stringify({ error: `unknown '${op}'` }), { status: 400 });
+    return new Response(JSON.stringify(handler(JSON.parse(String(init?.body ?? "{}")))), { status: 200 });
+  };
+}
+
+describe("catalogNodeCapabilityProvider — repo.semantic probe", () => {
+  let root: string;
+  let dir: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "bf-node-cap-sem-"));
+    dir = fs.mkdtempSync(join(tmpdir(), "bf-desktop-"));
+    process.env.BUILDERFORCE_DESKTOP_DISCOVERY = join(dir, "desktop.json");
+  });
+  afterEach(async () => {
+    setDesktopFetchForTests(null);
+    delete process.env.BUILDERFORCE_DESKTOP_DISCOVERY;
+    fs.rmSync(dir, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("does not advertise repo.semantic when the desktop probe is absent", async () => {
+    setDesktopFetchForTests(fakeDesktop());
+    const provider = await catalogNodeCapabilityProvider({ workspaceRoot: root });
+    expect(provider.capabilities.has("repo.semantic")).toBe(false);
+    expect(provider.semantic).toBeUndefined();
+  });
+
+  it("advertises repo.semantic and backs it when the desktop probe succeeds", async () => {
+    fs.writeFileSync(
+      process.env.BUILDERFORCE_DESKTOP_DISCOVERY!,
+      JSON.stringify({ port: 4999, token: "tok", pid: 1, version: "x" }),
+    );
+    setDesktopFetchForTests(
+      fakeDesktop({
+        search: () => ({ results: [], status: { phase: { state: "ready" }, files: 0 } }),
+      }),
+    );
+    const provider = await catalogNodeCapabilityProvider({ workspaceRoot: root });
+    expect(provider.capabilities.has("repo.semantic")).toBe(true);
+    expect(provider.semantic).toBeDefined();
+    const r = await provider.semantic!.search("x");
+    expect(r.ok).toBe(true);
+  });
+
+  it("does not advertise repo.semantic on the sync builder (not always-on)", () => {
+    const provider = buildNodeCapabilityProvider({ workspaceRoot: root });
+    expect(provider.capabilities.has("repo.semantic")).toBe(false);
+    expect(provider.capabilities).toBe(NODE_SURFACE_CAPS);
+    expect(provider.semantic).toBeUndefined();
   });
 });

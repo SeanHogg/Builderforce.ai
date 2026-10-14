@@ -56,6 +56,10 @@ import {
   createBuilderForceAgentsCodingTools,
   resolveToolLoopDetectionConfig,
 } from "../../coding-tools.js";
+import {
+  catalogDesktopSemantic,
+  setDesktopClientName,
+} from "@builderforce/agent-tools/node-desktop.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveBuilderForceAgentsDocsPath } from "../../docs-path.js";
 import {
@@ -434,6 +438,10 @@ export async function runEmbeddedAttempt(
 
     // Check if the model supports native image input
     const modelHasVision = params.model.input?.includes("image") ?? false;
+    if (!params.disableTools) setDesktopClientName("on-prem");
+    const semantic = params.disableTools
+      ? undefined
+      : await catalogDesktopSemantic(effectiveWorkspace);
     const toolsRaw = params.disableTools
       ? []
       : createBuilderForceAgentsCodingTools({
@@ -472,6 +480,7 @@ export async function runEmbeddedAttempt(
           requireExplicitMessageTarget:
             params.requireExplicitMessageTarget ?? isSubagentSessionKey(params.sessionKey),
           disableMessageTool: params.disableMessageTool,
+          semantic,
         });
     const tools = sanitizeToolsForGoogle({ tools: toolsRaw, provider: params.provider });
     logToolSchemasForGoogle({ tools, provider: params.provider });
