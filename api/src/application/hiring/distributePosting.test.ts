@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../env';
 import { atsDbStub } from './__fixtures__/atsDbStub';
 import { HIRING_CONNECTORS } from '../connectors/defaults/hiring';
-import type { ConnectorCallResult } from '../connectors/connectorRuntime';
+import type { ConnectionContext, ConnectorCallResult } from '../connectors/connectorRuntime';
 import type { PostingDistributionView } from './postingDistributionStore';
 
 vi.mock('../connectors/connectorRegistry', async () => {
@@ -31,8 +31,10 @@ vi.mock('./postingDistributionStore', () => ({
 
 import { readPostingDistributions, recordPostingDistribution } from './postingDistributionStore';
 import {
+  connectionBackedInput,
   distributableAction,
   distributePosting,
+  missingConnectionParams,
   postingInputFor,
   publicUrl,
   type DistributeDeps,
@@ -60,6 +62,7 @@ const db = (posting: Record<string, unknown> | null = POSTING) => atsDbStub({
       { id: 'conn-lever', connectorKey: 'lever-postings', name: 'Lever' },
       { id: 'conn-indeed', connectorKey: 'indeed-jobs', name: 'Indeed' },
       { id: 'conn-feed', connectorKey: 'job-feed', name: 'Careers feed' },
+      { id: 'conn-linkedin', connectorKey: 'linkedin-jobs', name: 'LinkedIn Jobs' },
     ],
   ],
 });
@@ -74,6 +77,14 @@ const deps = (results: Record<string, ConnectorCallResult | Error>): DistributeD
     return result;
   }),
 }) as DistributeDeps & { execute: ReturnType<typeof vi.fn> };
+
+const linkedinConnection = (auth: Record<string, string>): ConnectionContext => ({
+  id: 'conn-linkedin',
+  connectorKey: 'linkedin-jobs',
+  name: 'LinkedIn Jobs',
+  auth,
+  baseUrlOverride: null,
+});
 
 const posted = (connectorKey: string): PostingDistributionView => ({
   postingId: 'posting-a', connectorKey, board: connectorKey, connectionId: 'conn', externalId: 'ext-1',
@@ -148,6 +159,44 @@ describe('distributePosting', () => {
     expect(recorded).toHaveBeenCalledTimes(3);
   });
 
+  it('does not publish to LinkedIn when the connection has no company_id', async () => {
+    const run = deps({});
+    run.loadConnection = vi.fn(async () => linkedinConnection({ client_id: 'abc', client_secret: 's' }));
+    const { db: stub } = db();
+
+    const result = await distributePosting(stub, ENV, {
+      tenantId: 7, postingId: 'posting-a', connectorKeys: ['linkedin-jobs'],
+    }, run);
+
+    expect(result.outcomes[0]).toMatchObject({ outcome: 'failed', externalId: null });
+    expect(result.outcomes[0]?.error).toMatch(/company_id/);
+    expect(result.outcomes[0]?.error).toMatch(/Integrations/);
+    expect(run.execute).not.toHaveBeenCalled();
+    expect(recorded).toHaveBeenCalledWith(stub, expect.objectContaining({ status: 'failed', externalId: null }));
+  });
+
+  it('supplies the connection company_id when publishing to LinkedIn', async () => {
+    const run = deps({
+      'linkedin-jobs': answered({ data: { elements: [{ id: 'urn:li:simpleJobPostingTask:3', status: 201 }] } }),
+    });
+    run.loadConnection = vi.fn(async () => linkedinConnection({
+      client_id: 'abc', client_secret: 's', company_id: 'urn:li:organization:42',
+    }));
+    const { db: stub } = db();
+
+    const result = await distributePosting(stub, ENV, {
+      tenantId: 7, postingId: 'posting-a', connectorKeys: ['linkedin-jobs'],
+    }, run);
+
+    expect(result.outcomes[0]).toMatchObject({
+      outcome: 'posted', externalId: 'urn:li:simpleJobPostingTask:3',
+    });
+    expect(run.execute).toHaveBeenCalledWith(expect.objectContaining({
+      connectorKey: 'linkedin-jobs',
+      input: expect.objectContaining({ company_id: 'urn:li:organization:42' }),
+    }));
+  });
+
   it('does not call a board that already confirmed the posting', async () => {
     existing.mockResolvedValue(new Map([['posting-a', [posted('lever-postings')]]]));
     const run = deps({});
@@ -204,6 +253,29 @@ describe('what a board is sent', () => {
   it('leaves out what nobody stated rather than defaulting it', () => {
     const input = postingInputFor({ ...POSTING, description: null, requirements: null, experienceLevel: null });
     expect(input).toEqual({ title: 'Senior React Engineer', description: 'Senior React Engineer', external_id: 'posting-a' });
+  });
+
+  it('never puts company_id on the posting body — that is a connection fact', () => {
+    expect(postingInputFor(POSTING).company_id).toBeUndefined();
+  });
+});
+
+describe('connection-backed board params', () => {
+  const linkedin = HIRING_CONNECTORS.find((m) => m.key === 'linkedin-jobs')!;
+  const create = linkedin.actions.find((a) => a.key === 'create_posting')!;
+
+  it('stores LinkedIn company_id on the connection and defaults the posting param from it', () => {
+    expect(linkedin.auth.fields?.some((f) => f.key === 'company_id' && f.required && !f.secret)).toBe(true);
+    expect(create.params.company_id?.default).toBe('{{auth.company_id}}');
+  });
+
+  it('fills company_id from auth and reports it missing when the connection has none', () => {
+    expect(connectionBackedInput(create, { company_id: 'urn:li:organization:42' })).toEqual({
+      company_id: 'urn:li:organization:42',
+    });
+    expect(connectionBackedInput(create, {})).toEqual({});
+    expect(missingConnectionParams(create, {})).toEqual(['company_id']);
+    expect(missingConnectionParams(create, { company_id: 'urn:li:organization:42' })).toEqual([]);
   });
 });
 

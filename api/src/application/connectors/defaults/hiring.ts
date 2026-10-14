@@ -218,13 +218,30 @@ const linkedinJobs: ConnectorManifest = {
     fields: [
       { key: 'client_id', label: 'Client ID', secret: false, required: true },
       { key: 'client_secret', label: 'Client secret', secret: true, required: true },
+      // A LinkedIn job is posted UNDER an organisation. The URN is a connection
+      // fact, not a requisition fact — the same company for every role this
+      // connection publishes — so it is collected here (Gusto's company_id, the
+      // same pattern) rather than asked of each distribute call. `create_posting`
+      // defaults `company_id` from it; `distributePosting` passes that value and
+      // refuses to publish when it is absent, instead of posting with no company.
+      {
+        key: 'company_id',
+        label: 'Organisation URN',
+        secret: false,
+        required: true,
+        placeholder: 'urn:li:organization:123456',
+        help: 'The LinkedIn organisation the job is posted under (Jobs → Company). A posting cannot go out without it.',
+      },
     ],
   },
   actions: [
     {
       key: 'create_posting', label: 'Publish posting', description: 'Publish a job to LinkedIn Jobs.',
       method: 'POST', path: '/simpleJobPostings', mutates: true, required: ['title', 'description'],
-      params: { ...POSTING_PARAMS, company_id: b('LinkedIn organisation URN the job is posted under') },
+      params: {
+        ...POSTING_PARAMS,
+        company_id: b('LinkedIn organisation URN the job is posted under', { default: '{{auth.company_id}}' }),
+      },
       // A batch create: `{ elements: [{ id, status, error? }] }`, one element per job,
       // with the per-job failure inside an element of a `200`. Rest.li also carries a
       // single created id in `x-restli-id`, kept as the fallback.

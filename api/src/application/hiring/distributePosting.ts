@@ -35,10 +35,10 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { connectorConnections, jobPostings } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import type { ConnectorAction, ConnectorManifest } from '../connectors/connectorManifest';
+import { fillTemplate, type ConnectorAction, type ConnectorManifest } from '../connectors/connectorManifest';
 import { listPublishedConnectors } from '../connectors/connectorRegistry';
 import { mapConnectorResponse, responseHeaderNames } from '../connectors/connectorResponseMapping';
-import { executeConnectorAction } from '../connectors/connectorRuntime';
+import { executeConnectorAction, loadConnection } from '../connectors/connectorRuntime';
 import { AtsError } from './atsError';
 import {
   readPostingDistributions,
@@ -116,9 +116,15 @@ export interface DistributePostingResult {
 /** The seam a test replaces; production is the one connector executor. */
 export interface DistributeDeps {
   execute: typeof executeConnectorAction;
+  /**
+   * Decrypt one connection. Injected so a test can supply the organisation URN
+   * (and any other connection-backed param) without standing up encryption.
+   * Production uses {@link loadConnection}.
+   */
+  loadConnection?: typeof loadConnection;
 }
 
-const DEFAULT_DEPS: DistributeDeps = { execute: executeConnectorAction };
+const DEFAULT_DEPS: DistributeDeps = { execute: executeConnectorAction, loadConnection };
 
 /**
  * Every board this workspace can publish to, oldest connection per board.
@@ -248,6 +254,44 @@ export function postingInputFor(posting: DistributablePosting, listing: Distribu
   return input;
 }
 
+/**
+ * Action params that a posting does not own — they live on the connection.
+ *
+ * A default of `{{auth.x}}` is the declaration: the value is a connection fact,
+ * not a requisition fact. LinkedIn's organisation URN is the one today; a board
+ * that needs a similar tenant-level id declares the same default and is filled
+ * the same way, so this file still names no vendor.
+ *
+ * Empty after substitution is omitted: the caller then sees the param as missing
+ * and refuses to publish, rather than sending `company_id: ''` upstream.
+ */
+export function connectionBackedInput(
+  action: ConnectorAction,
+  auth: Record<string, string>,
+): Record<string, unknown> {
+  const extra: Record<string, unknown> = {};
+  for (const [name, param] of Object.entries(action.params)) {
+    if (typeof param.default !== 'string' || !/\{\{\s*auth\./.test(param.default)) continue;
+    const filled = fillTemplate(param.default, auth).trim();
+    if (filled) extra[name] = filled;
+  }
+  return extra;
+}
+
+/** Connection-backed params that are still empty after filling from auth. */
+export function missingConnectionParams(
+  action: ConnectorAction,
+  body: Record<string, unknown>,
+): string[] {
+  const missing: string[] = [];
+  for (const [name, param] of Object.entries(action.params)) {
+    if (typeof param.default !== 'string' || !/\{\{\s*auth\./.test(param.default)) continue;
+    const value = body[name];
+    if (typeof value !== 'string' || !value.trim()) missing.push(name);
+  }
+  return missing;
+}
+
 const clip = (message: string): string => message.slice(0, 600);
 
 /**
@@ -344,6 +388,34 @@ async function publishToBoard(
   deps: DistributeDeps,
   args: { tenantId: number; connectorKey: string; connectionId: string; action: ConnectorAction; body: Record<string, unknown> },
 ): Promise<{ externalId: string | null; url: string | null; error: string | null }> {
+  const body = { ...args.body };
+  const needsConnection = missingConnectionParams(args.action, body);
+  if (needsConnection.length) {
+    // Only decrypt when a param is declared as `{{auth.x}}` and the posting
+    // body does not already carry it. Lever / Indeed never hit this.
+    let auth: Record<string, string> = {};
+    try {
+      const connection = await (deps.loadConnection ?? loadConnection)(db, env, args.tenantId, args.connectionId);
+      auth = connection.auth;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The job board could not be reached.';
+      return { externalId: null, url: null, error: clip(message) };
+    }
+    Object.assign(body, connectionBackedInput(args.action, auth));
+    const missing = missingConnectionParams(args.action, body);
+    if (missing.length) {
+      const detail = missing.map((name) => {
+        const description = args.action.params[name]?.description;
+        return description ? `${name} (${description})` : name;
+      }).join(', ');
+      return {
+        externalId: null,
+        url: null,
+        error: clip(`This job board is missing ${detail} on its connection. Set it under Integrations before publishing.`),
+      };
+    }
+  }
+
   let result;
   try {
     result = await deps.execute({
@@ -352,7 +424,7 @@ async function publishToBoard(
       tenantId: args.tenantId,
       connectorKey: args.connectorKey,
       actionKey: args.action.key,
-      input: args.body,
+      input: body,
       connectionId: args.connectionId,
       actorKind: 'user',
       captureHeaders: responseHeaderNames(args.action.response),
