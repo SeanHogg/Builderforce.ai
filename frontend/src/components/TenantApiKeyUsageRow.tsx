@@ -1,16 +1,14 @@
-import { Select } from '@/components/Select';
-
 import { useEffect, useState } from 'react';
-import { useFormat } from "@/i18n/useFormat";
+import { Select } from '@/components/Select';
+import { StatTile } from '@/components/admin/adminShared';
+import { useFormat } from '@/i18n/useFormat';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 /**
  * Per-key usage, rendered inline under an expanded key row — not a drawer —
  * shared between the owner self-service flow (`/settings/api-keys`) and the
  * superadmin mint-on-behalf tab. Both render exactly the same block when a
  * row is expanded; only the `load` callback differs (owner-tenant scoped vs
- * admin-can-see-any-tenant). The row
- * decides its own visibility (caller passes `expanded` and `onClose`); no
- * prop-drilled state machine.
+ * admin-can-see-any-tenant). The row decides its own visibility via `expanded`.
  */
 
 export interface UsageRow {
@@ -57,20 +55,12 @@ const cardWrap: React.CSSProperties = {
   borderRadius: 'var(--radius-lg)',
 };
 
-const summaryGrid: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 120px), 1fr))',
-  gap: 12,
+const summaryRow: React.CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 10,
   marginBottom: 14,
 };
-
-const summaryCell: React.CSSProperties = {
-  padding: '10px 12px',
-  background: 'var(--bg-elevated)',
-  borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--border-subtle)',
-};
-
 
 export function TenantApiKeyUsageRow({ expanded, load }: Props) {
   const errorMessage = useErrorMessage();
@@ -118,19 +108,10 @@ export function TenantApiKeyUsageRow({ expanded, load }: Props) {
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
       ) : !data ? null : (
         <>
-          <div style={summaryGrid}>
-            <div style={summaryCell}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Requests</div>
-              <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{fmt.number(data.summary.total)}</div>
-            </div>
-            <div style={summaryCell}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total tokens</div>
-              <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{fmt.number(data.summary.totalTokens)}</div>
-            </div>
-            <div style={summaryCell}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Distinct models</div>
-              <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{fmt.number(data.summary.modelCount)}</div>
-            </div>
+          <div style={summaryRow}>
+            <StatTile label="Requests" value={fmt.number(data.summary.total)} />
+            <StatTile label="Total tokens" value={fmt.number(data.summary.totalTokens)} />
+            <StatTile label="Distinct models" value={fmt.number(data.summary.modelCount)} />
           </div>
 
           {data.rows.length === 0 ? (

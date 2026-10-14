@@ -100,7 +100,7 @@ describe('UserDetailDrawer', () => {
     const spy = vi.spyOn(adminApi, 'effectivePermissions').mockResolvedValue(perms);
     renderDrawer();
     await screen.findByRole('dialog');
-    fireEvent.click(screen.getByRole('button', { name: 'admin.users.drawer.tabPermissions' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'admin.users.drawer.tabPermissions' }));
     await waitFor(() => expect(spy).toHaveBeenCalledWith('user-1', 7));
     expect(await screen.findByText('tasks.read')).toBeTruthy();
   });
