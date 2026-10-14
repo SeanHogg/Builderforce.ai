@@ -207,7 +207,6 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **[growth] A smoke test's kill condition is called without its sample being measured.** `realization/targets/smokeTest.ts` writes "N signups from M unique visitors from a named source" into the charter, but the demand console counts only signups and prints M as a constant. `syncRealizationVerdict` then trusts the console's self-reported count, so a `met` can be graded on 30 visitors. The same applies to every live target whose criteria name a visitor sample. Planned fix: session replay S4d.1–2 (`ProofMeasure` on the realization, a measured sample and success, `met` held until the sample is reached, evidence on `proof.grade`). *Blocker: the S4d build. Visits per named source are only captured once the replay recorder ships (operator go-ahead on PRD 33).*
 - **[delivery] hired.video `people_strategic_objectives` would fork the OKR store** — map onto `objectives`/`key_results` and invalidate `projectsList` on write.
 - **[canvas] Phone surface switcher isn't phase-gated** — a phone user reaches Insights from Idea; desktop withholds it until Measure. *Blocker: a phone design for the phase control.*
-- **[canvas] Academic integrity ledger is never written,** so every verdict reads "no record" while the composer says turns "are recorded". Append events on the `edits.patch` → `updateNodeData` path. Not blocked.
 
 ---
 
@@ -291,10 +290,6 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Per-tenant rate limiting has never run** — `TENANT_RATE_LIMITER` isn't bound. *Blocker: operator decision* — bind as-is, raise caps, or gateway-only.
 
 ### Brain chat `[agents]`
-
-- **Git tools fail at a multi-repo workspace root.** `git_status` and `git_diff` with no `repo` return "not a git repository at the workspace root" when the open folder contains checkouts. The remedy then sends the model to call `list_files`. Chat #141 hit this in five sub-agents. Fix in `packages/agent-tools/src/git-tools.ts` `runGitTool`: infer `repo` from a `path` argument's first segment, or name the candidate repositories in the error. Unblocked.
-- **`builtin_cloud_agents_persona_brief` misses display names.** "Bob Developer" fails even though the roster lists "Bob Developer (V2 (Container))" (chat #141, a17). Match on the name without the runtime suffix, as `spawn_agent`'s `as_agent` does. Unblocked.
-- **`builtin_tasks_get` 404s on gap numbers.** Tickets titled `#2346: …` lead the model to pass the gap number as the id ("Task '2346' not found"; chat #141, five sub-agents). Fix: have the 404 name the matching ticket when one's title starts with `#<n>:`. Unblocked.
 
 - **No cross-turn guard against re-deriving a finished analysis.** `seedFrom` drops tool rows, so a guard must re-serve prior results with a staleness rule. *Blocker: a captured repro.*
 - **Ask-the-Manager zero tool calls — suspect the vendor path.** Instrument `buildResponsesBody` with a real 102-tool payload. *Blocker: a live turn on a known vendor.*
