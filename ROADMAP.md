@@ -127,7 +127,6 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Board columns are hardcoded `TASK_STATUSES`, not the board's swimlanes** — custom lanes show no column; needs lane merge/reassign and per-lane automation flags.
 - **Teams/assignee scoping:** lane picker not team-scoped; all-projects board can't scope per-task; agent chips are a load-time snapshot; no epic parent/child tree; three "assign an agent" notions (`assignedAgentHostId`, `project_agents`, `project_agent_id`) want unifying; template sales are free grants.
 - **Capability guardrail** only enforces an explicit `required_capabilities` (no capability-aware routing or lane default).
-- **`autonomyWiringAudit.ts` has no test** — it now counts spec-shaped tickets as non-code deliverables, and nothing pins that. Not blocked.
 - **A reviewer's `changes_requested` doesn't reopen the producer slot itself** — the manager return path does (`reopenProducerSlots.ts`). Design call: should a verdict alone spend a run (needs a loop-safe "asked since" marker)?
 - **Role participation:** PRD per-role sections aren't audit-verified; outbound stakeholder notifications aren't all routed through the Coordinator identity ([PRD](./PRD-coordinated-role-participation.md)).
 - **Manager pass still carries the mechanical PR loop** — move it to its own registry sweep; if `notReached` stays near `projects`, use a per-project DO alarm, not a bigger pool. Sequenced behind one `notReached` capture.
@@ -136,7 +135,6 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ### Ceremonies and meetings `[delivery]`
 
-- **Deleted follow-up cards come back** — minutes write-back re-places action-item task objects on every sync over the same minutes; there is no tombstone for a card someone removed. Not blocked.
 - **Ceremonies:** presence not re-verified per frame; client-driven `changed` and auto-dispatch; no session history or retro/poker integration; drag has no ghost; no turn pause/resume.
 - **Mesh WebRTC caps at ~4–5 cameras.** *Blocker: a Cloudflare Calls app + server-side track push/pull.*
 - **TURN relay not provisioned** (~10–15% of symmetric-NAT pairs fail). *Blocker: create the TURN key and `wrangler secret put CLOUDFLARE_TURN_KEY_ID` / `CLOUDFLARE_TURN_API_TOKEN`.*
@@ -185,8 +183,6 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ## ⚙️ Run — operate the company
 
-- **[finance] A report schedule's report, subject and board-pack frame can't be edited** — `PATCH /api/reports/schedules/:id` sets delivery hour, recipients and enabled only, so a change means delete and re-create. Not blocked.
-- **[hiring] LinkedIn publishes without a `company_id`** — the manifest declares the organisation URN as a param, but the connection stores none and `distributePosting` never supplies one. Add it as a connection field and pass it. Not blocked.
 - **[hiring] Greenhouse, Indeed and LinkedIn confirm a posting with no public URL** — their `response` mappings carry an id only, so the card shows it live with nothing to open. Indeed returns none for a sourced posting; the others can be built from the id. Not blocked.
 - **[hiring] Source attribution is exact-match on connector key, and no applicants are imported** from the boards a posting went to. Not blocked.
 - **[hiring] No Workable connector** — `defaults/hiring.ts` has Greenhouse, Lever, Ashby, Indeed, LinkedIn and `job-feed`. Not blocked.
@@ -233,8 +229,6 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **No ad adapter has run against a live account** (eight, all recorded-payload tested). *Blocker: a sandbox/live account + developer app per network.*
 - **Ad and social accounts connect by pasted token, not OAuth.** Code side is a registry entry + callback per network. *Blocker: a developer app and publishing/spend review per network.*
 - **LinkedIn rows retired by 1102 (`retired:li-*`)** — needs a reconciler to re-point them, or an operator call to drop.
-- **YouTube processing status is read once, at upload completion** — nothing polls `videos.list` afterwards, so a campaign post reads posted while YouTube may still be processing or later reject it. Not blocked.
-
 ### Public surfaces, copy and SEO `[growth]`
 
 - **Wordmark spelled two ways** (`Builderforce.ai` ×84, `BuilderForce.ai` ×7; logo says BuilderForce.ai). *Blocker: operator picks one.*
@@ -320,7 +314,6 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **No measured proof the index improves runs.** *Blocker: live VS Code runs on real tickets with and without the app* — gates phase 3.
 - **~3.3 GB memory after indexing one small package.** *Blocker: an idle-vs-embedding memory profile.*
 - **Phase 3 local browser/VM agent host.** *Blocker: content guardrails + prompt-injection defence first.*
-- **On-prem runtime doesn't back `repo.semantic`** — move `desktopContext.ts` into an `agent-tools` node subpath and probe at catalog time. Not blocked.
 - **Native apps:** no Evermind recall or agent invite in phone chat; no Approvals screen in `apps/android` / `apps/shared/BuilderforceKit`.
 - **Two plain-Node runners duplicate the loop skeleton** (`server.mjs`, `githubActionsRunner.ts`). Fix = bundle the kernel into both. *Blocker: a container build and an Actions dispatch to verify.*
 - **pi-tui is the last `@mariozechner/pi-*` dependency** — migrate `src/tui/*` to Ink, then remove.
@@ -341,12 +334,10 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Legacy routes register into `objects` only on the sweep,** not at write.
 - **`marketing_sessions` sits in `schema/identity.ts`;** moving it adds a counted `growth → identity` edge.
 - **54 table families straddle schema modules** — needs an ownership manifest, not a prefix heuristic.
-- **Drop `calendar_connections` plaintext token columns** (0 rows) and the fallback read. Not blocked.
 - **Migration numbering:** grandfathered prefix collisions; five ledger rows with no file; ~75 push-only tables in the drift allowlist. Renumber + backfill creates.
 
 ### Frontend, i18n and code health `[platform]`
 
-- **Two admin overlays break the SlideOutPanel convention.** `UserDetailDrawer.tsx` is a hand-rolled fixed overlay (`.user-drawer*`, `globals.css:4520-4537`, z-index 900, no portal, no Esc or width control); `TenantApiKeyUsageDrawer` renders inline but is named a drawer. Rebuild on `SlideOutPanel`, delete the CSS, rename the inline one. Not blocked — slice 0 of the Visitors consolidation (Measure), with the `StatTile` extraction.
 - **Layering ratchet at 126;** 110 presentation modules import the schema (286 selects inline). Worst: `adminRoutes`, `agentHostRoutes`, `qaRoutes`, `knowledgeRoutes`.
 - **271 unscoped tenant queries** — each needs a per-chain decision (thread `tenantId` or record the parent check).
 - **15 of 38 permissions advisory for structural reasons:** no surface (`project:archive`), a non-member caller (`marketplace:*`), a machine caller (`agentHost:*`, `workflow:execute`).
