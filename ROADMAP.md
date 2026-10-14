@@ -127,6 +127,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Board columns are hardcoded `TASK_STATUSES`, not the board's swimlanes** — custom lanes show no column; needs lane merge/reassign and per-lane automation flags.
 - **Teams/assignee scoping:** lane picker not team-scoped; all-projects board can't scope per-task; agent chips are a load-time snapshot; no epic parent/child tree; three "assign an agent" notions (`assignedAgentHostId`, `project_agents`, `project_agent_id`) want unifying; template sales are free grants.
 - **Capability guardrail** only enforces an explicit `required_capabilities` (no capability-aware routing or lane default).
+- **`autonomyWiringAudit.ts` has no test** — it now counts spec-shaped tickets as non-code deliverables, and nothing pins that. Not blocked.
 - **A reviewer's `changes_requested` doesn't reopen the producer slot itself** — the manager return path does (`reopenProducerSlots.ts`). Design call: should a verdict alone spend a run (needs a loop-safe "asked since" marker)?
 - **Role participation:** PRD per-role sections aren't audit-verified; outbound stakeholder notifications aren't all routed through the Coordinator identity ([PRD](./PRD-coordinated-role-participation.md)).
 - **Manager pass still carries the mechanical PR loop** — move it to its own registry sweep; if `notReached` stays near `projects`, use a per-project DO alarm, not a bigger pool. Sequenced behind one `notReached` capture.
