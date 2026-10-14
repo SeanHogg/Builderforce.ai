@@ -46,8 +46,13 @@ import type {
   RepoListResult,
   RepoReadResult,
   RepoSearchResult,
+  RepoSemanticCapability,
   RepoWriteResult,
 } from "@builderforce/agent-tools";
+import {
+  catalogDesktopSemantic,
+  setDesktopClientName,
+} from "@builderforce/agent-tools/node-desktop.js";
 import { IGNORED_DIRS, runCodebaseSearch } from "../builderforce/shared-tools/node-code-tools.js";
 import { requestHumanInput, type HumanInputRequest, type HumanInputResult } from "../infra/approval-gate.js";
 
@@ -150,6 +155,14 @@ export interface NodeProviderOptions {
    *  process-wide {@link requestHumanInput} approval gate, which blocks until a human
    *  answers in the Builderforce portal (or auto-answers in standalone mode). */
   requestHuman?: (req: HumanInputRequest) => Promise<HumanInputResult>;
+  /**
+   * Desktop-backed `repo.semantic` (search + repo map). Catalog-time only:
+   * {@link catalogNodeCapabilityProvider} probes Builderforce Desktop and
+   * attaches this when the service answers. The sync builder never always-on
+   * advertises the cap — a run without a live desktop must not see
+   * `semantic_search` / `repo_map`.
+   */
+  semantic?: RepoSemanticCapability;
 }
 
 /**
@@ -177,8 +190,13 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
     cachePath: join(root, ".builderForceAgents", "symbols.json"),
   });
 
+  const capabilities: ReadonlySet<Capability> = options.semantic
+    ? new Set<Capability>([...NODE_SURFACE_CAPS, "repo.semantic"])
+    : NODE_SURFACE_CAPS;
+
   return {
-    capabilities: NODE_SURFACE_CAPS,
+    capabilities,
+    ...(options.semantic ? { semantic: options.semantic } : {}),
     symbols,
     human: {
       async ask(question, context): Promise<HumanAskResult> {
@@ -341,4 +359,18 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
       },
     },
   };
+}
+
+/**
+ * Catalog-time builder: probes Builderforce Desktop and advertises `repo.semantic`
+ * only when the health probe succeeds. The sync {@link buildNodeCapabilityProvider}
+ * stays always-off for that cap so callers that skip the catalog probe cannot
+ * leak `semantic_search` / `repo_map` into a run with no backing.
+ */
+export async function catalogNodeCapabilityProvider(
+  options: NodeProviderOptions,
+): Promise<CapabilityProvider> {
+  setDesktopClientName("on-prem");
+  const semantic = options.semantic ?? (await catalogDesktopSemantic(options.workspaceRoot));
+  return buildNodeCapabilityProvider({ ...options, semantic });
 }

@@ -223,6 +223,11 @@ export function createBuilderForceAgentsCodingTools(options?: {
    * flow through the same normalize/hook/abort/policy pipeline below.
    */
   convergedFileTools?: boolean;
+  /**
+   * Catalog-time Desktop backing for `repo.semantic`. Set only when the health probe
+   * succeeded; omitted (the common case) withholds `semantic_search` / `repo_map`.
+   */
+  semantic?: import("@builderforce/agent-tools").RepoSemanticCapability;
 }): AnyAgentTool[] {
   const sandbox = options?.sandbox?.enabled ? options.sandbox : undefined;
   const {
@@ -431,6 +436,7 @@ export function createBuilderForceAgentsCodingTools(options?: {
         // The converged pair inherits exactly that, so convergence swaps the
         // implementation and never the security boundary.
         scope: workspaceOnly ? "workspace" : "unconfined",
+        semantic: options?.semantic,
       }).map((tool) =>
         // …and the same outer guard native gets, so the path normalization and
         // `assertSandboxPath` check are identical on both sides of the flag too.
