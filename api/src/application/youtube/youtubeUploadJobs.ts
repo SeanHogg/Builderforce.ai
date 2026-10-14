@@ -41,7 +41,39 @@ import {
   type YouTubeUploadTick,
 } from './youtubeResumableUpload';
 import { r2UploadSource, urlUploadSource } from './youtubeUploadSources';
-import { freshYouTubeToken } from './youtubePublishing';
+import { freshYouTubeToken, YOUTUBE_PROVIDER } from './youtubePublishing';
+
+/**
+ * Poll YouTube's `videos.list` to get the current processing status of an uploaded video.
+ * Returns the processing status string from YouTube, or null if the video cannot be found.
+ *
+ * YouTube processing statuses:
+ *   - 'uploaded'    — processing not started yet (still uploading)
+ *   - 'processing'  — YouTube is processing the video
+ *   - 'processed'   — processing complete, video is ready
+ *   - 'failed'      — processing failed
+ *   - 'rejected'    — video was rejected (policy violation)
+ *   - 'terminated'  — video was terminated
+ */
+export async function fetchYouTubeVideoProcessingStatus(
+  accessToken: string,
+  videoId: string,
+  fetchImpl?: typeof fetch,
+): Promise<string | null> {
+  const baseUrl = YOUTUBE_PROVIDER.baseUrl ?? 'https://www.googleapis.com/youtube/v3';
+  const url = `${baseUrl}/videos?part=status,processingDetails&id=${encodeURIComponent(videoId)}`;
+  const response = await (fetchImpl ?? fetch)(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) return null;
+  const data = await response.json() as {
+    items?: Array<{ status: { uploadStatus?: string }; processingDetails?: { processingStatus?: string } }>;
+  };
+  const item = data.items?.[0];
+  if (!item) return null;
+  // processingDetails.processingStatus takes precedence once upload is complete
+  return item.processingDetails?.processingStatus ?? item.status?.uploadStatus ?? null;
+}
 
 export type YouTubeUploadRow = typeof youtubeUploads.$inferSelect;
 
@@ -87,7 +119,7 @@ const claimable = or(
 export interface YouTubeUploadView {
   id: string;
   /** `uploading` covers "between ticks with progress" too: a person reads progress, not lease state. */
-  state: 'queued' | 'uploading' | 'succeeded' | 'failed';
+  state: 'queued' | 'uploading' | 'processing' | 'succeeded' | 'failed';
   percent: number;
   bytesSent: number;
   byteSize: number;
@@ -104,7 +136,7 @@ export function youtubeWatchUrl(videoId: string): string {
 export function youtubeUploadView(row: YouTubeUploadRow): YouTubeUploadView {
   const state: YouTubeUploadView['state'] = row.state === 'succeeded' || row.state === 'failed'
     ? row.state
-    : row.state === 'uploading' || row.bytesSent > 0 || row.uploadUrl ? 'uploading' : 'queued';
+    : row.state === 'uploading' || row.state === 'processing' || row.bytesSent > 0 || row.uploadUrl ? 'uploading' : 'queued';
   return {
     id: row.id,
     state,
@@ -274,6 +306,33 @@ export async function advanceYouTubeUpload(
     .returning();
   const next = updated ?? claimed;
 
+  // If the upload succeeded, poll YouTube for processing status and transition to 'processing' if needed
+  if (next.state === 'succeeded' && next.videoId) {
+    try {
+      const accessToken = await freshYouTubeToken(db, env, next.tenantId, next.userId, next.connectionId);
+      const processingStatus = await fetchYouTubeVideoProcessingStatus(accessToken, next.videoId, opts.fetchImpl);
+      if (processingStatus === 'processing') {
+        // Transition to 'processing' state to keep the post 'uploading' until YouTube finishes
+        await db.update(youtubeUploads)
+          .set({ state: 'processing', processingStatus, updatedAt: new Date() })
+          .where(scopedToTenant(youtubeUploads, next.tenantId, eq(youtubeUploads.id, next.id)));
+        return { ...next, state: 'processing', processingStatus };
+      } else if (processingStatus === 'processed' || processingStatus === 'failed' || processingStatus === 'rejected' || processingStatus === 'terminated') {
+        // Update the processing status and keep state as succeeded (terminal)
+        await db.update(youtubeUploads)
+          .set({ processingStatus, updatedAt: new Date() })
+          .where(scopedToTenant(youtubeUploads, next.tenantId, eq(youtubeUploads.id, next.id)));
+      }
+    } catch (error) {
+      // If polling fails, leave the upload as succeeded (terminal) and log the error
+      reportCaughtError(error, {
+        source: 'application/youtube/youtubeUploadJobs.ts',
+        operation: 'fetchYouTubeVideoProcessingStatus',
+        context: { uploadId: next.id, videoId: next.videoId },
+      });
+    }
+  }
+
   if (next.state === 'succeeded') {
     await db.update(credentials).set({ lastUsedAt: new Date(), updatedAt: new Date() })
       .where(and(eq(credentials.connectionId, next.connectionId), eq(credentials.tenantId, next.tenantId)));
@@ -328,7 +387,7 @@ export async function dueYouTubeUploads(db: Db, limit = 3): Promise<YouTubeUploa
   return db.select().from(youtubeUploads)
     // Cross-tenant by design: the sweep serves every workspace. Each row carries its
     // own tenant, and every write after this read is scoped to it.
-    .where(acrossTenants(youtubeUploads, 'scheduled_sweep', inArray(youtubeUploads.state, ['queued', 'uploading']), claimable))
+    .where(acrossTenants(youtubeUploads, 'scheduled_sweep', inArray(youtubeUploads.state, ['queued', 'uploading', 'processing']), claimable))
     .orderBy(asc(youtubeUploads.updatedAt))
     .limit(limit);
 }
