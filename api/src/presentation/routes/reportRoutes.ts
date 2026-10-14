@@ -43,6 +43,7 @@ import { computePortfolioRollup } from '../../application/pmo/portfolioRollup';
 import { buildExecutiveSummary } from '../../application/reports/executiveSummary';
 import { generateProjectStatusReport } from '../../application/reports/projectStatusReport';
 import { boardPackSubjectRef, buildBoardPackReport, listSchedulableFrames, parseBoardPackSubject } from '../../application/finance/boardPackReport';
+import { boardPackSubjectToVerify, reportSchedulePatchSet } from '../../application/reports/schedulePatch';
 import { TenantRole } from '../../domain/shared/types';
 import { DONE_CLASS_STATUSES } from '../../domain/shared/doneClass';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
@@ -65,6 +66,9 @@ const CreateScheduleBody = z.object({
   subjectRef: z.string().nullish(),
 });
 const UpdateScheduleBody = z.object({
+  reportType: z.string().optional(),
+  subjectKind: z.string().nullish(),
+  subjectRef: z.string().nullish(),
   deliveryHour: z.number().optional(),
   recipients: z.array(z.string()).optional(),
   isEnabled: z.boolean().optional(),
@@ -815,12 +819,26 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
 
     const body = await parseBody(c, UpdateScheduleBody);
 
+    const [existing] = await db.select().from(reportSchedules)
+      .where(and(eq(reportSchedules.id, id), eq(reportSchedules.tenantId, tenantId)))
+      .limit(1);
+    if (!existing) return c.json({ error: 'Schedule not found' }, 404);
+
+    const patched = reportSchedulePatchSet(existing, body);
+    if ('error' in patched) return c.json({ error: patched.error }, 400);
+
+    const frame = boardPackSubjectToVerify(patched.set);
+    if (frame) {
+      const frames = await listSchedulableFrames(db, tenantId, frame.sessionId);
+      if (!frames.some((f) => f.id === frame.frameId)) {
+        return c.json({ error: 'That frame is not on a board this workspace can read' }, 400);
+      }
+    }
+
     const [updated] = await db.update(reportSchedules)
       .set({
-        deliveryHour: body.deliveryHour,
-        recipients:   body.recipients ? JSON.stringify(body.recipients) : undefined,
-        isEnabled:    body.isEnabled,
-        updatedAt:    new Date(),
+        ...patched.set,
+        updatedAt: new Date(),
       })
       .where(and(eq(reportSchedules.id, id), eq(reportSchedules.tenantId, tenantId)))
       .returning();
