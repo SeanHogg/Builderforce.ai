@@ -13,10 +13,10 @@
  *      removes consent, and retrying it every batch would turn one revocation
  *      into a stream of identical failures with no signal to reconnect.
  *
- * Sealing uses the shared per-tenant AES-256-GCM credential crypto rather than
- * the plaintext columns `calendar_connections` (0292) uses. That table is the
- * outlier; a mailbox grant can read a company's entire correspondence and send
- * as them, so it gets the same treatment as any other stored credential.
+ * Sealing uses the shared per-tenant AES-256-GCM credential crypto
+ * (`oauthTokenVault`) — the same vault calendar and drive grants use. A mailbox
+ * grant can read a company's entire correspondence and send as them, so the
+ * blob never leaves this module.
  */
 
 import { and, asc, eq, sql } from 'drizzle-orm';

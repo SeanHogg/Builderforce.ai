@@ -978,15 +978,10 @@ export const calendarConnections = pgTable('calendar_connections', {
   provider:      varchar('provider', { length: 16 }).notNull(),                        // google|microsoft
   accountEmail:  varchar('account_email', { length: 255 }),
   /** The grant, sealed by `oauthTokenVault` with the tenant's key — the same
-   *  storage every other per-user connection uses (mailbox, drive). NULL only for
-   *  a row written before migration 1107 and not yet touched since. */
+   *  storage every other per-user connection uses (mailbox, drive). A missing
+   *  blob is treated as no grant (the user must reconnect). */
   tokenEnc:      text('token_enc'),
   tokenIv:       text('token_iv'),
-  /** LEGACY plaintext grant (pre-1107). Read-only fallback: the first refresh
-   *  after 1107 seals the row and clears these. Dropped once the backfill drains
-   *  — see the migration note. Never write to them. */
-  accessToken:   text('access_token'),
-  refreshToken:  text('refresh_token'),
   expiresAt:     timestamp('expires_at', { withTimezone: true }),
   scope:         text('scope'),
   calendarId:    varchar('calendar_id', { length: 255 }).notNull().default('primary'),
