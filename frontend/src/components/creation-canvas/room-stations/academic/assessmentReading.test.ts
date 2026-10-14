@@ -66,4 +66,28 @@ describe('readAssessments', () => {
   it('offers to mark only what is handed in, placed on the rubric and not yet marked', () => {
     expect(read().readyToMark).toEqual([{ id: 's1', learner: 'Ada', assignment: 'Essay 1' }]);
   });
+
+  it('joins an artifact object\'s ledger onto a submission that named it', () => {
+    const board: AcademicNode[] = [
+      { id: 'a1', data: { kind: 'assignment', title: 'Essay 1', assessmentMode: 'assisted' } },
+      {
+        id: 's3',
+        data: {
+          kind: 'submission', assignmentRef: 'Essay 1', learnerRef: 'l3', learnerName: 'Ivy',
+          artifacts: [{ title: 'Essay' }],
+        },
+      },
+      {
+        id: 'd1',
+        data: {
+          kind: 'document', title: 'Essay',
+          integrity: [{ source: 'assistant', edits: 2, characters: 120, firstAt: 't', lastAt: 't' }],
+        },
+      },
+    ];
+    const reading = readAssessments(board, makeSpecDeriveBoard(board.map((node) => node.data)), NOW);
+    expect(reading.flagged).toEqual([
+      { id: 's3', learner: 'Ivy', assignment: 'Essay 1', verdict: 'undeclaredAssistance', assistantPercent: 100 },
+    ]);
+  });
 });

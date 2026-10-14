@@ -114,14 +114,20 @@ async function walkFiles(
 }
 
 /**
- * How far a WRITE may reach.
+ * How far a PATH-ADDRESSED file op (read/write/edit/delete of one named file) may reach.
  *
- * `read`/`list`/`search` are always confined to the root — they are additive on-prem (the
+ * `list`/`search` are always confined to the root — they are additive on-prem (the
  * native loop has no converged equivalent), so confining them changes nothing. Writes are
  * different: the converged `write`/`edit` REPLACE native tools whose confinement is
  * governed by `tools.fs.workspaceOnly`, so the provider has to be able to express BOTH
  * settings — otherwise turning convergence on would silently re-scope every write, which
  * is a security-boundary move disguised as an implementation swap.
+ *
+ * `readFile` follows the SAME scope because shared `write_file` probes the target through
+ * it before writing (the overwrite guard). A probe confined tighter than the write sees an
+ * out-of-tree target as "outside the workspace" — not "not found" — and the guard refuses
+ * every legitimate unconfined write. The native `read` is likewise confined only under
+ * `tools.fs.workspaceOnly`, so this is parity, not a widening.
  */
 export type NodeWriteScope =
   /** Every write path must resolve inside the workspace root. */
@@ -131,10 +137,10 @@ export type NodeWriteScope =
   | "unconfined";
 
 export interface NodeProviderOptions {
-  /** Absolute working-tree root; reads are scoped inside it, writes per {@link scope}. */
+  /** Absolute working-tree root; list/search are scoped inside it, per-file ops per {@link scope}. */
   workspaceRoot: string;
   /**
-   * Confinement for WRITE operations. Defaults to `"workspace"` — secure by default for
+   * Confinement for per-file read/write/edit/delete. Defaults to `"workspace"` — secure by default for
    * any caller that does not think about it. The converged on-prem tool set passes the
    * agent's own `tools.fs.workspaceOnly` here, so enabling convergence swaps the
    * IMPLEMENTATION without moving the boundary. See {@link NodeWriteScope}.
@@ -147,8 +153,8 @@ export interface NodeProviderOptions {
 }
 
 /**
- * Build the on-prem disk-backed {@link CapabilityProvider}. Read/list/search the working
- * tree (always confined to {@link NodeProviderOptions.workspaceRoot}), write/edit/delete
+ * Build the on-prem disk-backed {@link CapabilityProvider}. List/search the working tree
+ * (always confined to {@link NodeProviderOptions.workspaceRoot}), read/write/edit/delete
  * files in place (confined per {@link NodeProviderOptions.scope}), and escalate to a
  * human via the shared
  * `human` capability (so the on-prem coding agent can run the SAME shared `ask_human`
@@ -158,8 +164,9 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
   const root = resolvePath(options.workspaceRoot);
   const escaped = (path: string) => `'${path}' is outside the workspace`;
   const askHuman = options.requestHuman ?? requestHumanInput;
-  // Writes resolve through this; reads always use the confined `resolveInside`.
-  const resolveForWrite =
+  // Per-file read/write/edit/delete resolve through this (one scope, so the write guard's
+  // probe sees the same file the write lands on); list/search always use `resolveInside`.
+  const resolveFile =
     (options.scope ?? "workspace") === "workspace"
       ? (p: string) => resolveInside(root, p)
       : (p: string) => resolvePath(root, p);
@@ -217,7 +224,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         return { ok: true, paths: glob ? filterByGlob(paths, glob) : paths, truncated };
       },
       async readFile(path): Promise<RepoReadResult> {
-        const abs = resolveInside(root, path);
+        const abs = resolveFile(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }
@@ -262,7 +269,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
     },
     repoWrite: {
       async writeFile(path, content): Promise<RepoWriteResult> {
-        const abs = resolveForWrite(path);
+        const abs = resolveFile(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }
@@ -282,7 +289,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         }
       },
       async editFile(path, oldString, newString, replaceAll): Promise<RepoEditResult> {
-        const abs = resolveForWrite(path);
+        const abs = resolveFile(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }
@@ -310,7 +317,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         }
       },
       async deleteFile(path): Promise<RepoDeleteResult> {
-        const abs = resolveForWrite(path);
+        const abs = resolveFile(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }

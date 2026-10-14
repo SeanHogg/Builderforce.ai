@@ -23,40 +23,21 @@ import { getCalendarProvider, type CalendarProviderName, type CalendarEventInput
 type Connection = typeof calendarConnections.$inferSelect;
 
 /**
- * The grant behind a row, whichever way it is stored.
- *
- * Migration 1107 moved calendar grants into the sealed vault every other per-user
- * connection already used. It is a ROLLING migration: a row written before it
- * still carries the plaintext `access_token` / `refresh_token`, so this prefers
- * the sealed blob and falls back to the legacy columns. Returning them through one
- * shape means the callers below never learn which era a row is from — the only
- * place that knows is {@link persistGrant}, which always writes sealed.
+ * The grant behind a row — always the sealed blob.
  *
  * Null means "cannot be read" — a sealed blob that will not open, or a row with
- * neither form. Treated as a grant that must be reconnected, never as an empty
+ * no blob. Treated as a grant that must be reconnected, never as an empty
  * token that would 401 on every call.
  */
 async function readGrant(env: Env, conn: Connection): Promise<SealedOAuthTokens | null> {
   if (conn.tokenEnc && conn.tokenIv) {
     return unsealOAuthTokens(env, conn.tenantId, conn.tokenEnc, conn.tokenIv);
   }
-  if (!conn.accessToken) return null;
-  return {
-    accessToken: conn.accessToken,
-    refreshToken: conn.refreshToken ?? undefined,
-    expiresAtMs: conn.expiresAt ? conn.expiresAt.getTime() : undefined,
-    scope: conn.scope ?? undefined,
-  };
+  return null;
 }
 
 /**
- * Seal a grant onto its row, clearing the legacy plaintext in the same statement.
- *
- * Clearing is the point: a refresh that sealed the new token but left the old
- * plaintext behind would leave a working refresh token in the clear indefinitely,
- * which is the defect 1107 exists to close. Anything that touches a legacy row
- * therefore also finishes migrating it, so the backfill drains through ordinary
- * use rather than needing a sweep.
+ * Seal a grant onto its row. Tokens live only in `token_enc` / `token_iv`.
  */
 export async function persistGrant(
   db: Db,
@@ -69,8 +50,6 @@ export async function persistGrant(
     .set({
       tokenEnc: sealed.enc,
       tokenIv: sealed.iv,
-      accessToken: null,
-      refreshToken: null,
       expiresAt: tokens.expiresAtMs ? new Date(tokens.expiresAtMs) : null,
       scope: tokens.scope ?? null,
       updatedAt: new Date(),
@@ -100,12 +79,7 @@ export async function freshAccessToken(db: Db, env: Env, conn: Connection): Prom
   // `oauthTokensStale` carries the shared refresh margin, so a calendar grant and
   // a Drive grant answer "is this token good enough for the tail of a batch" the
   // same way instead of with two hand-rolled expiry checks.
-  if (!oauthTokensStale(grant)) {
-    // A legacy row that is still valid is sealed here rather than on next refresh:
-    // a long-lived grant could otherwise sit in plaintext for months.
-    if (!conn.tokenEnc) await persistGrant(db, env, conn, grant);
-    return grant.accessToken;
-  }
+  if (!oauthTokensStale(grant)) return grant.accessToken;
 
   if (!grant.refreshToken) return grant.accessToken; // best-effort; may already be valid
   const creds = providerCreds(env, conn.provider as CalendarProviderName);
@@ -134,8 +108,7 @@ export async function freshAccessToken(db: Db, env: Env, conn: Connection): Prom
  * the refresh path. Sealing a blob without it would leave a grant that works until
  * the access token expires and then silently becomes unrefreshable.
  *
- * Writes sealed and clears the legacy plaintext columns, so a re-consent also
- * finishes migrating a pre-1107 row.
+ * Writes sealed. There is no plaintext column to clear.
  */
 export async function upsertCalendarGrant(
   db: Db,
@@ -173,10 +146,6 @@ export async function upsertCalendarGrant(
     set: {
       tokenEnc: sealed.enc,
       tokenIv: sealed.iv,
-      // Cleared, not left behind: a re-consent that sealed the new grant but kept
-      // the old plaintext would leave a working refresh token in the clear.
-      accessToken: null,
-      refreshToken: null,
       accountEmail: input.accountEmail,
       expiresAt,
       scope: merged.scope ?? null,

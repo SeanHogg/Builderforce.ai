@@ -36,6 +36,54 @@
 **Not compiled or run (operator instruction).** Tests were written alongside the code, so CI on merge is the first run. The §11 live runbook needs the operator; it is logged on the ROADMAP with its blockers.
 
 ---
+## ✅ RESOLVED 2026-10-14 — `tasks.get` resolves a `#<n>:` titled ticket after a numeric 404 (ticket #4507)
+
+When `builtin_tasks_get` 404s on the numeric id, `resolveTenantTask` lists the tenant's tickets (including archived) and returns the unique title that starts with `#<n>:` or `#<n> `. Superstrings (`#23460:`) do not match. Several matches, or a unique match that cannot be loaded, 404 naming the board ids so the caller can retry.
+
+- **Module.** `api/src/application/llm/resolveTenantTask.ts` (kept out of `builtinToolContext` so MCP tests keep their mocks). `tasks.get` in `builtinMcpService.ts` calls it.
+- **Tests.** `resolveTenantTask.test.ts` (8 passed).
+- **Commits.** `4cf08e9e4`, `0dcf7da59` on `main`.
+
+## ✅ RESOLVED 2026-10-14 — `persona_brief` matches names without the runtime suffix (ticket #4506)
+
+`builtin_cloud_agents_persona_brief` now matches `"Bob Developer"` to `"Bob Developer (V2 (Container))"`. Case-insensitive; trailing parenthetical runtime suffix stripped. Exact id still wins. Two teammates with the same stripped name is a miss (no fuzzy/prefix). Cache key `agent_persona:resolve:v3:…`.
+
+- **Resolver.** `api/src/application/agent/agentPersonaBrief.ts` (`stripAgentRuntimeSuffix`, `pickResolvedAgentRow`).
+- **Tests.** `agentPersonaBrief.test.ts`.
+- **Commit.** `98483a668` on `main`.
+
+## ✅ RESOLVED 2026-10-14 — Git tools infer `repo` at a multi-checkout workspace root (ticket #4505)
+
+`git_status` / `git_diff` with no `repo` no longer die with "not a git repository at the workspace root" when the open folder contains checkouts. `runGitTool` infers `repo` from a path's first segment and retries scoped. If still not a repo, the error names candidate checkouts and never mentions `list_files`. Explicit `repo` still wins.
+
+- **Fix.** `packages/agent-tools/src/git-tools.ts`.
+- **Tests.** `git-repo-scope.test.ts`.
+- **Commit.** `604aec17c` on `main`.
+
+## ✅ RESOLVED 2026-10-14 — Academic integrity ledger writes on canvas edits (ticket #4508)
+
+`edits.patch` → `updateNodeData` now appends derived `IntegrityRow`s via `patchWithIntegrity`. Brain/agent turns stamp `assistant`; learner edits stamp `learner`. Proposal apply does not go through `updateNodeData`, so it is not double-counted. Marker read joins named artifact-object ledgers. Chrome fields (title/status/mark/provenance/integrity) are skipped. Unchanged ledgers are not rewritten.
+
+- **Writer.** `frontend/src/lib/academic/integrity.ts`; call sites `useCanvasBoardModel.updateNodeData`, `CanvasProposalStage.updateObject`.
+- **Tests.** `academic.test.ts`, `assessmentReading.test.ts`, `CanvasProposalStage.test.ts` (86 passed).
+- **Commit.** `308815b9e` on `main`.
+
+## ✅ RESOLVED 2026-10-14 — Canvas artifact export records on the outcome ledger (ticket #3627)
+
+`useCanvasArtifactExport` records started + succeeded|failed via `recordCanvasActOutcomes` (`artifact.export` is the `{kind}.{action}` fallback, not a fourth `DELIVERY_ACTION`). Copy, policy refusals, and thrown errors do not record. Only when `persistence === 'server'` and `sessionId` is set.
+
+- **Hook.** `frontend/src/components/creation-canvas/hooks/useCanvasArtifactExport.ts`; `CreationCanvas.tsx` passes persistence + sessionId.
+- **Tests.** `useCanvasArtifactExport.test.ts` (11 passed).
+- **Commit.** `ac508fcc7` on `main`.
+
+## ✅ RESOLVED 2026-10-13 — `tasks.create` no longer inserts a dangling `assigned_user_id` (ticket #2650)
+
+Default coordinator for `tasks.create` with no assignee: project Delivery Manager → requesting human only if that id is a `users` row → else NULL. A ghost `u:` manager is treated as no manager instead of violating `tasks_assigned_user_id_fkey`. Cloud-agent (`c:`) managers still pass through.
+
+- **Resolver.** `api/src/application/task/resolveCreateTaskAssignee.ts`, wired from `builtinMcpService.ts`.
+- **Tests.** `resolveCreateTaskAssignee.test.ts` (9 passed).
+- **Commit.** `1c4ab3691` on `main`.
+
 ## ✅ RESOLVED 2026-10-13 — Multi-model role routing (ticket #3073)
 
 `resolveModelForRole` / `parseRoleModelConfig` in `@builderforce/learned-routing` (`9f514a949`) now pin a catalog model from `ROLE_MODELS` / `ROLE_MODEL_DEFAULT` on both remaining surfaces. Explicit user/run model still wins; undefined pin leaves the ranker/plan seed unchanged.

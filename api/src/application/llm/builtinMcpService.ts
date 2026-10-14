@@ -153,7 +153,7 @@ type Json = Record<string, unknown>;
 // this file. Re-exported here so every existing importer is unaffected.
 export type { BuiltinCtx, BuiltinTool } from './builtinToolContext';
 export { replayRoute, resolveReplayAuth, ReplayRouteError } from './builtinToolContext';
-import { getTenantTask, replayRoute, requireEnv, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
+import { getTenantTask, resolveTenantTask, replayRoute, requireEnv, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
 import { assertMayRunBuiltinTool } from './builtinToolAuthority';
 import { maskSecurityTasks } from './builtinTaskVisibility';
 import { taskCreatedHook } from '../task/taskCreationHook';
@@ -991,9 +991,10 @@ const CATALOG: BuiltinTool[] = [
       return { tasks: projected, total: rows.length, returned: projected.length, truncated: rows.length > projected.length, scope };
     },
   },
-  { tool: 'tasks.get', mutates: false, description: 'Get a task by id, including implementer activity and stale-delivery evidence.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {
-    const id = num(a.id);
-    const plain = (await getTenantTask(ctx, id)).toPlain() as unknown as Record<string, unknown>;
+  { tool: 'tasks.get', mutates: false, description: 'Get a task by id, including implementer activity and stale-delivery evidence. If the numeric id is missing, a ticket whose title starts with `#<id>:` (or `#<id> `) in this workspace is returned instead.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {
+    const resolved = await resolveTenantTask(ctx, num(a.id));
+    const plain = resolved.toPlain() as unknown as Record<string, unknown>;
+    const id = Number(plain.id);
     // A SECURITY ticket is returned MASKED (restricted: true) for a caller without
     // clearance — surfaced, not hidden. Same shared gate as the board.
     const [masked] = await maskSecurityTasks(ctx, [plain]);

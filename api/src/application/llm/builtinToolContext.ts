@@ -254,6 +254,8 @@ export async function getTenantTask(ctx: BuiltinCtx, id: number) {
   return task;
 }
 
+export { resolveTenantTask, titleStartsWithHashRef } from './resolveTenantTask';
+
 export function requireEnv(ctx: BuiltinCtx, unavailableMessage?: string): Env {
   if (!ctx.env) {
     throw new Error(unavailableMessage

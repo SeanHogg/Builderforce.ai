@@ -209,11 +209,10 @@ export const driveConnections = pgTable('drive_connections', {
  * not implicitly have granted the other. Separate rows make the consent the user
  * actually gave auditable.
  *
- * Two deliberate differences from the calendar table, which is the older shape:
- *   • tokens are SEALED (`tokenEnc`/`tokenIv`) with the shared per-tenant
- *     AES-256-GCM credential crypto rather than stored in plaintext columns;
- *   • `expiresAt` is mirrored OUTSIDE the sealed blob so the refresher can find
- *     stale rows without decrypting every one of them.
+ * Tokens are SEALED (`tokenEnc`/`tokenIv`) with the shared per-tenant
+ * AES-256-GCM credential crypto — the same vault calendar grants use.
+ * `expiresAt` is mirrored OUTSIDE the sealed blob so the refresher can find
+ * stale rows without decrypting every one of them.
  *
  * This file imports only from identity, and growth.ts imports it, so the schema
  * barrel stays acyclic. See migration 0414.

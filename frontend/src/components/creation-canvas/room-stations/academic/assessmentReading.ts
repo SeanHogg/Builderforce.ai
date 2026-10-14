@@ -3,7 +3,7 @@ import {
   type AssessmentGate, type AssessmentMode, type WindowState,
 } from '@/lib/academic/assessment';
 import { identifies } from '@/lib/academic/derivations';
-import { assistantShare, integrityFromNode, integrityVerdict, type IntegrityVerdict } from '@/lib/academic/integrity';
+import { assistantShare, integrityFromSubmission, integrityVerdict, type IntegrityVerdict } from '@/lib/academic/integrity';
 import { rubricFromNode, rubricProblems, type RubricProblem } from '@/lib/academic/marking';
 import type { SpecDeriveBoard } from '@/lib/specObjects';
 import type { AcademicNode } from './academicBoard';
@@ -94,7 +94,7 @@ export function readAssessments(nodes: readonly AcademicNode[], board: SpecDeriv
 
     for (const submission of own) {
       const learner = text(submission.data.learnerName) || text(submission.data.learnerRef);
-      const rows = integrityFromNode(submission.data.integrity);
+      const rows = integrityFromSubmission(submission.data, nodes);
       const verdict = integrityVerdict(rows, submission.data.declaration, mode);
       if (verdict === 'declaredAssistance') declaredCount += 1;
       if (verdict === 'undeclaredAssistance' || verdict === 'closedBookViolation') {

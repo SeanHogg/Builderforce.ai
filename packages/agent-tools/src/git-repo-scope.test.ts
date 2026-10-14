@@ -1,5 +1,37 @@
 import { describe, it, expect } from "vitest";
-import { buildGitCommand } from "./git-tools.js";
+import {
+  buildGitCommand,
+  buildListCheckoutsCommand,
+  gitDiffTool,
+  gitStatusTool,
+  inferRepoFromPath,
+} from "./git-tools.js";
+import type { ToolResult } from "./tool.js";
+
+const NOT_A_REPO = "fatal: not a git repository (or any of the parent directories): .git";
+
+function mockShell(handler: (command: string) => { ok: boolean; stdout?: string; exitCode?: number; error?: string }) {
+  const scripts: string[] = [];
+  return {
+    scripts,
+    caps: {
+      shell: {
+        async run(command: string) {
+          scripts.push(command);
+          return handler(command);
+        },
+      },
+    },
+  };
+}
+
+const data = (r: ToolResult) => r.data as {
+  ok?: boolean;
+  error?: string;
+  repo?: string;
+  candidates?: string[];
+  output?: string;
+};
 
 /**
  * The workspace root is not always the repository root. A folder holding several
@@ -60,5 +92,69 @@ describe("buildGitCommand repo scoping", () => {
       // `set -e` follows the cd, so the guard has to be on the cd itself.
       expect(buildGitCommand("sync_latest", { repo: "app" })).toContain("|| exit 1");
     });
+  });
+});
+
+describe("inferRepoFromPath", () => {
+  it("takes the first nested segment", () => {
+    expect(inferRepoFromPath("Builderforce.ai/packages/x.ts")).toBe("Builderforce.ai");
+    expect(inferRepoFromPath("app\\src\\a.ts")).toBe("app");
+  });
+
+  it("rejects a bare filename, traversal, and empty", () => {
+    expect(inferRepoFromPath("README.md")).toBeNull();
+    expect(inferRepoFromPath("../elsewhere/x.ts")).toBeNull();
+    expect(inferRepoFromPath("")).toBeNull();
+    expect(inferRepoFromPath(undefined)).toBeNull();
+  });
+});
+
+describe("runGitTool at a multi-checkout workspace root", () => {
+  it("infers repo from a path's first segment and retries scoped", async () => {
+    const sh = mockShell((cmd) => {
+      if (cmd.startsWith('cd "Builderforce.ai"')) {
+        return { ok: true, exitCode: 0, stdout: "M packages/x.ts" };
+      }
+      return { ok: false, exitCode: 128, stdout: NOT_A_REPO };
+    });
+    const r = await gitDiffTool.execute({ path: "Builderforce.ai/packages/x.ts" }, sh as never);
+    expect(data(r).ok).toBe(true);
+    expect(data(r).repo).toBe("Builderforce.ai");
+    expect(sh.scripts[0]).toBe('git --no-pager diff -- "Builderforce.ai/packages/x.ts"');
+    expect(sh.scripts[1]).toBe('cd "Builderforce.ai" && git --no-pager diff -- "packages/x.ts"');
+  });
+
+  it("names candidate checkouts in the error and never mentions list_files", async () => {
+    const sh = mockShell((cmd) => {
+      if (cmd === buildListCheckoutsCommand()) {
+        return { ok: true, exitCode: 0, stdout: "Builderforce.ai\nbuilderforce-inference\n" };
+      }
+      return { ok: false, exitCode: 128, stdout: NOT_A_REPO };
+    });
+    const r = await gitStatusTool.execute({}, sh as never);
+    expect(data(r).ok).toBe(false);
+    expect(data(r).error).toMatch(/Builderforce\.ai/);
+    expect(data(r).error).toMatch(/builderforce-inference/);
+    expect(data(r).error).not.toMatch(/list_files/);
+    expect(data(r).candidates).toEqual(["Builderforce.ai", "builderforce-inference"]);
+    expect(sh.scripts[0]).toBe("git status --short --branch");
+    expect(sh.scripts[1]).toBe(buildListCheckoutsCommand());
+  });
+
+  it("lets an explicit repo win over a path that would infer a different checkout", async () => {
+    const sh = mockShell((cmd) => {
+      if (cmd.startsWith('cd "other-project"')) {
+        return { ok: true, exitCode: 0, stdout: "M foo" };
+      }
+      return { ok: false, exitCode: 128, stdout: NOT_A_REPO };
+    });
+    const r = await gitDiffTool.execute(
+      { path: "Builderforce.ai/foo.ts", repo: "other-project" },
+      sh as never,
+    );
+    expect(sh.scripts).toHaveLength(1);
+    expect(sh.scripts[0]).toBe('cd "other-project" && git --no-pager diff -- "Builderforce.ai/foo.ts"');
+    expect(data(r).ok).toBe(true);
+    expect(data(r).repo).toBe("other-project");
   });
 });

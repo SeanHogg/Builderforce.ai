@@ -199,3 +199,31 @@ describe('CanvasProposalStage provenance', () => {
     expect((change.patch.provenance as Array<{ by: unknown }>)[0]?.by).toEqual(human);
   });
 });
+
+describe('CanvasProposalStage integrity', () => {
+  const at = '2026-09-07T12:00:00.000Z';
+  const submission = (): CanvasObject => ({
+    ...object('s1', 'submission'),
+    data: { kind: 'submission' as CreationObjectKind, title: 'Ada', artifacts: [] },
+  });
+  function stageWithClock(nodes: CanvasObject[]) {
+    let counter = 0;
+    return new CanvasProposalStage({ nodes: () => nodes, edges: () => [] }, factory, () => `id-${++counter}`, BRAIN_ACTOR, () => at);
+  }
+
+  it('stamps an authorship event on a content patch, attributed to the Brain as assistant', () => {
+    const stage = stageWithClock([submission()]);
+    stage.updateObject('Draft the essay', 's1', { artifacts: [{ title: 'Essay', detail: 'document' }] });
+    const [change] = stage.list();
+    if (change?.type !== 'object.update') throw new Error('expected an object.update');
+    expect(change.patch.integrity).toEqual([expect.objectContaining({ source: 'assistant', edits: 1, lastAt: at })]);
+  });
+
+  it('leaves a patch untouched when it moves no authored work', () => {
+    const stage = stageWithClock([submission()]);
+    stage.updateObject('Rename', 's1', { title: 'Ada (final)' });
+    const [change] = stage.list();
+    if (change?.type !== 'object.update') throw new Error('expected an object.update');
+    expect('integrity' in change.patch).toBe(false);
+  });
+});

@@ -68,6 +68,22 @@ function safeRepoArg(repo: unknown): string | null {
 }
 
 /**
+ * Infer a `repo` subdirectory from a workspace-relative `path`.
+ *
+ * File tools speak in workspace-root paths (`Builderforce.ai/packages/…`). When the
+ * open folder CONTAINS checkouts rather than being one, that first segment is the
+ * checkout — but only when there is a nested path to take a segment FROM (a bare
+ * `README.md` is a file, not a repo). `..` / absolute segments are rejected by
+ * {@link safeRepoArg}.
+ */
+export function inferRepoFromPath(path?: string): string | null {
+  if (typeof path !== "string" || !path.trim()) return null;
+  const parts = path.split(/[\\/]/).filter((s) => s.length > 0 && s !== ".");
+  if (parts.length < 2) return null;
+  return safeRepoArg(parts[0]);
+}
+
+/**
  * Scope a multi-line script into a repository subdirectory.
  *
  * A multi-line script cannot take the `cd X && Y` prefix — that would scope only its
@@ -81,6 +97,29 @@ function repoScopedScript(script: string, repo: unknown): string {
 }
 
 /**
+ * POSIX one-liner that prints top-level checkout directory names, one per line.
+ *
+ * `$d` from a directory glob (`foo/`) so `$d.git` is `foo/.git` (a directory, or a file
+ * for a worktree/submodule). Routed to bash on Windows the same way the other multi-line
+ * git scripts are (`[ … ]` is a POSIX-only form).
+ */
+export function buildListCheckoutsCommand(): string {
+  return 'for d in */; do [ -e "$d.git" ] && printf "%s\\n" "${d%/}"; done';
+}
+
+function parseCheckoutList(stdout?: string): string[] {
+  if (!stdout) return [];
+  const names: string[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const name = line.trim().replace(/\/+$/, "");
+    if (!name || name === "*" || name === "." || name === "..") continue;
+    const safe = safeRepoArg(name);
+    if (safe) names.push(safe);
+  }
+  return names;
+}
+
+/**
  * The remedy for "fatal: not a git repository", shared by every git tool.
  *
  * Returning git's raw fatal is what makes this look like the end of the road. It happens
@@ -89,23 +128,32 @@ function repoScopedScript(script: string, repo: unknown): string {
  * the agent — handed a bare fatal with no next step — concludes the tool is unusable and
  * gives up, or asks the user a question it could have answered itself.
  *
- * So the failure carries its own remedy: the tools take a `repo` subdirectory, and this
- * says so, names the tool that finds it, and shows the exact retry. Discovery is left to
- * `list_files` rather than a shell one-liner because that tool already works identically
- * on every surface, whereas a directory scan would need writing three ways for sh, cmd
- * and PowerShell.
+ * So the failure carries its own remedy: name the candidate checkouts that ARE sitting
+ * at the top level, and show the exact retry with `repo`. Do not send the model to
+ * `list_files` — that is a round trip it already failed to take (chat #141).
  */
-function notARepoResult(action: string): ToolResult {
+function notARepoResult(action: string, candidates: string[] = []): ToolResult {
+  const named = candidates.filter(Boolean);
+  const extra = named.length
+    ? `Candidate repositories: ${named.map((c) => `"${c}"`).join(", ")}. Re-run this tool with \`repo\` set to the one holding the code you are working on (e.g. { "repo": "${named[0]}" }).`
+    : "No git checkouts were found at the top level of the open folder. File edits still work; only the git tools need a repository.";
   return {
     data: {
       ok: false,
       action,
       error:
         "not a git repository at the workspace root — this usually means the open folder CONTAINS the repositories rather than being one (several checkouts side by side). "
-        + "Do not conclude git is unavailable: call `list_files` to see the top-level directories, then re-run this tool with `repo` set to the one holding the code you are working on "
-        + `(e.g. { "repo": "my-project" }). If none of them is a checkout, say so plainly — file edits still work, only the git tools need a repository.`,
+        + extra,
+      ...(named.length ? { candidates: named } : {}),
     },
   };
+}
+
+type GitShellCtx = { caps: { shell?: { run(c: string): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }> } } };
+
+async function notARepoWithCandidates(action: string, ctx: GitShellCtx): Promise<ToolResult> {
+  const listed = await ctx.caps.shell!.run(buildListCheckoutsCommand());
+  return notARepoResult(action, parseCheckoutList(listed.stdout));
 }
 
 /** Resolve the remote's default branch into `$BASE`, falling back to `main`. Shared so
@@ -196,26 +244,30 @@ function isNotARepo(r: { stdout?: string; error?: string }): boolean {
   return NOT_A_REPO.test(`${r.stdout ?? ""} ${r.error ?? ""}`);
 }
 
-async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?: string; limit?: number; repo?: string }, ctx: { caps: { shell?: { run(c: string): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }> } } }): Promise<ToolResult> {
-  const r = await ctx.caps.shell!.run(buildGitCommand(action, opts));
-  // "fatal: not a git repository" is not the end of the road, and returning it raw is
-  // what makes it look like one. It happens routinely when the OPEN FOLDER holds
-  // several checkouts side by side (`/code/`, with `/code/app` and `/code/api` each a
-  // repo): git is run at the root, finds no `.git`, and the agent — handed a bare
-  // fatal with no next step — concludes the tool is unusable and gives up, or asks the
-  // user a question it could have answered itself.
-  //
-  // So the failure carries its own remedy: the tools take a `repo` subdirectory, and
-  // this says so, names the tool that finds it, and shows the exact retry. Discovery
-  // is left to `list_files` rather than a shell one-liner because that tool already
-  // works identically on every surface, whereas a directory-scan command would have to
-  // be written three ways for sh, cmd and PowerShell.
-  if (isNotARepo(r) && !opts.repo) return notARepoResult(action);
+async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?: string; limit?: number; repo?: string }, ctx: GitShellCtx): Promise<ToolResult> {
+  const explicitRepo = opts.repo;
+  let repo = explicitRepo;
+  let path = opts.path;
+  let r = await ctx.caps.shell!.run(buildGitCommand(action, { ...opts, repo, path }));
+  // "fatal: not a git repository" is not the end of the road. An explicit `repo` still
+  // wins (the caller already chose). Otherwise: if a workspace-relative `path` starts
+  // with a checkout, retry scoped there; if we still cannot, NAME the candidate
+  // checkouts — never send the model to `list_files` for a list we can produce here.
+  if (isNotARepo(r) && !explicitRepo) {
+    const inferred = inferRepoFromPath(opts.path);
+    if (inferred) {
+      const inner = commitPathCandidates(opts.path ?? "", inferred);
+      path = inner.length > 0 ? inner[inner.length - 1] : undefined;
+      r = await ctx.caps.shell!.run(buildGitCommand(action, { ...opts, repo: inferred, path }));
+      if (!isNotARepo(r)) repo = inferred;
+    }
+    if (isNotARepo(r)) return notARepoWithCandidates(action, ctx);
+  }
   const result = gitToolResult(action, r);
   // Say WHERE it ran whenever that was not the obvious place, so a later command in
   // the same run does not have to rediscover the scope.
-  if (opts.repo && (result.data as { ok?: boolean }).ok) {
-    (result.data as Record<string, unknown>).repo = opts.repo;
+  if (repo && (result.data as { ok?: boolean }).ok) {
+    (result.data as Record<string, unknown>).repo = repo;
   }
   return result;
 }
@@ -544,7 +596,7 @@ async function runPublishTool(
 ): Promise<ToolResult> {
   const scoped = repoScopedScript(command, repo);
   const r = await ctx.caps.shell!.run(scoped);
-  if (isNotARepo(r) && !repo) return notARepoResult(action);
+  if (isNotARepo(r) && !repo) return notARepoWithCandidates(action, ctx);
   const result = publishToolResult(action, r);
   if (repo && (result.data as { ok?: boolean }).ok) (result.data as Record<string, unknown>).repo = repo;
   return result;
