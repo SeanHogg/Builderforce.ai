@@ -42,7 +42,8 @@ import { notSystemTask } from '../../application/task/taskScope';
 import { computePortfolioRollup } from '../../application/pmo/portfolioRollup';
 import { buildExecutiveSummary } from '../../application/reports/executiveSummary';
 import { generateProjectStatusReport } from '../../application/reports/projectStatusReport';
-import { boardPackSubjectRef, buildBoardPackReport, listSchedulableFrames, parseBoardPackSubject } from '../../application/finance/boardPackReport';
+import { boardPackSubjectRef, buildBoardPackReport, listSchedulableFrames } from '../../application/finance/boardPackReport';
+import { boardPackScheduleError, reportOrSubjectChanging, reportSchedulePatchSet, resolvedReportSubject } from '../../application/reports/schedulePatch';
 import { TenantRole } from '../../domain/shared/types';
 import { DONE_CLASS_STATUSES } from '../../domain/shared/doneClass';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
@@ -68,6 +69,9 @@ const UpdateScheduleBody = z.object({
   deliveryHour: z.number().optional(),
   recipients: z.array(z.string()).optional(),
   isEnabled: z.boolean().optional(),
+  reportType: z.string().optional(),
+  subjectKind: z.string().nullish(),
+  subjectRef: z.string().nullish(),
 });
 const SubscriptionsBody = z.array(z.object({ reportType: z.string(), isSubscribed: z.boolean() }));
 /** `status` stays optional so the handler's own "status must be one of" wins. */
@@ -785,12 +789,13 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
     // and the frame it names has to be one this workspace can actually read.
     let subject: { subjectKind: string; subjectRef: string } | null = null;
     if (body.reportType === 'board_pack') {
-      const parsed = parseBoardPackSubject(body.subjectKind ?? null, body.subjectRef ?? null);
-      if (!parsed) return c.json({ error: 'A board_pack schedule needs subjectKind "canvas_frame" and subjectRef "<sessionId>:<frameId>"' }, 400);
-      const frames = await listSchedulableFrames(db, tenantId, parsed.sessionId);
-      if (!frames.some((frame) => frame.id === parsed.frameId)) {
-        return c.json({ error: 'That frame is not on a board this workspace can read' }, 400);
-      }
+      const error = await boardPackScheduleError(
+        body.reportType,
+        body.subjectKind,
+        body.subjectRef,
+        (sessionId) => listSchedulableFrames(db, tenantId, sessionId),
+      );
+      if (error) return c.json({ error }, 400);
       subject = { subjectKind: 'canvas_frame', subjectRef: body.subjectRef as string };
     }
 
@@ -815,13 +820,23 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
 
     const body = await parseBody(c, UpdateScheduleBody);
 
+    if (reportOrSubjectChanging(body)) {
+      const [existing] = await db.select().from(reportSchedules)
+        .where(and(eq(reportSchedules.id, id), eq(reportSchedules.tenantId, tenantId)));
+      if (!existing) return c.json({ error: 'Schedule not found' }, 404);
+
+      const resolved = resolvedReportSubject(body, existing);
+      const error = await boardPackScheduleError(
+        resolved.reportType,
+        resolved.subjectKind,
+        resolved.subjectRef,
+        (sessionId) => listSchedulableFrames(db, tenantId, sessionId),
+      );
+      if (error) return c.json({ error }, 400);
+    }
+
     const [updated] = await db.update(reportSchedules)
-      .set({
-        deliveryHour: body.deliveryHour,
-        recipients:   body.recipients ? JSON.stringify(body.recipients) : undefined,
-        isEnabled:    body.isEnabled,
-        updatedAt:    new Date(),
-      })
+      .set(reportSchedulePatchSet(body))
       .where(and(eq(reportSchedules.id, id), eq(reportSchedules.tenantId, tenantId)))
       .returning();
 
