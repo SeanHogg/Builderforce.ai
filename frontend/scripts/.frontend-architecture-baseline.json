@@ -12,7 +12,7 @@
     "app/marketplace/MarketplacePageClient.tsx": 1316,
     "components/AITrainingPanel.tsx": 1016,
     "components/ObservabilityContent.tsx": 1033,
-    "components/ProviderKeysSettings.tsx": 1442,
+    "components/ProviderKeysSettings.tsx": 1438,
     "components/TaskMgmtContent.tsx": 2762,
     "components/agent/AgentExecutionPanel.tsx": 1091,
     "components/creation-canvas/CreationCanvas.tsx": 1159,

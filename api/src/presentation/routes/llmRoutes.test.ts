@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { createCacheIdempotencyStore } from '../../infrastructure/cache/idempotencyReplayStore';
+import { createCacheIdempotencyStore } from '../../application/shared/idempotencyReplayStore';
 import type { Context } from 'hono';
 import type { HonoEnv } from '../../env';
 import type { LlmProvider, TenantLlmCredentials } from '../../application/llm/tenantProviderKeyService';

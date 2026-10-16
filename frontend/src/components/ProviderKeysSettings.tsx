@@ -20,13 +20,13 @@ import {
   type OpenRouterConnection,
   type ProviderAuthAlert,
   type ProviderAuthType,
-  type ProviderDiagnostic, type LlmProvider,
+  type ProviderDiagnostic,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { REPLAY_BLOCK } from '@/lib/replaySensitive';
-import { LLM_PROVIDER_INFO, isLlmProvider, llmProviderInfo, type LlmProviderInfo } from '@builderforce/model-catalog';
+import { LLM_PROVIDER_INFO, isLlmProvider, llmProviderInfo, type LlmProvider, type LlmProviderInfo } from '@builderforce/model-catalog';
 /**
  * BYO (bring-your-own-provider) credentials. A workspace owner connects their OWN
  * frontier-model accounts — Anthropic, OpenAI, and/or Google — and the platform
@@ -120,11 +120,6 @@ function formatUsd(millicents: number): string {
  */
 function providerLabel(info: LlmProviderInfo, t: TFn): string {
   return info.credential === 'local_runtime' ? t('selfHostedLabel', { brand: info.label }) : info.label;
-}
-
-/** {@link providerLabel} as a card config — the shared data with its display label. */
-function providerConfig(info: LlmProviderInfo, t: TFn): ProviderConfig {
-  return { ...info, label: providerLabel(info, t) };
 }
 
 /**
@@ -1143,7 +1138,7 @@ export function ProviderKeysSettings({
   const visibleProviders = PROVIDERS.filter(matchesSearch);
   // Self-hosted runtimes keep their own form (base URL + model), but their names and
   // search match come from the same shared provider data as every other card.
-  const localRuntimes = LOCAL_RUNTIMES.map((p) => providerConfig(p, t));
+  const localRuntimes = LOCAL_RUNTIMES.map((p) => ({ ...p, label: providerLabel(p, t) }));
   const visibleLocalRuntimes = localRuntimes.filter(matchesSearch);
   const activeLocalRuntime = localRuntimes.find((p) => p.id === openLocalRuntime) ?? null;
 

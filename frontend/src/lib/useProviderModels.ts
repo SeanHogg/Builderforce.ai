@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { LlmProvider, ProviderAuthType } from './builderforceApi';
+import type { ProviderAuthType } from './builderforceApi';
+import type { LlmProvider } from '@builderforce/model-catalog';
 import { providerModelsApi, type ProviderModelsView } from './providerModelsApi';
 
 /**

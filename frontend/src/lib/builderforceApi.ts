@@ -3587,9 +3587,6 @@ export const empMetricsApi = {
  * and meters them. The key is write-only: we only ever read which providers are
  * configured, never the secret.
  */
-// The provider ids are the shared vocabulary (`@builderforce/model-catalog`), never
-// restated here — a hand copy had already lost `freetoken`.
-export type { LlmProvider };
 
 /** How a configured provider authenticates: a pasted API key, or a connected
  *  Claude Pro/Max subscription via OAuth. */

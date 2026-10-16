@@ -1,3 +1,4 @@
+import type { LlmProvider } from '@builderforce/model-catalog';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ProviderKeysSettings } from './ProviderKeysSettings';
@@ -34,7 +35,7 @@ const alert = (over: Partial<ProviderAuthAlert> = {}): ProviderAuthAlert => ({
 });
 
 function mockApi(details: Array<Parameters<typeof api.providerKeysApi.list> extends never ? never : {
-  provider: api.LlmProvider; authType: api.ProviderAuthType; priority: number | null; authAlert?: ProviderAuthAlert;
+  provider: LlmProvider; authType: api.ProviderAuthType; priority: number | null; authAlert?: ProviderAuthAlert;
   usage?: { periodDays: number; requests: number; tokens: number; lastUsedAt: string | null };
 }>) {
   vi.spyOn(api.providerKeysApi, 'list').mockResolvedValue({

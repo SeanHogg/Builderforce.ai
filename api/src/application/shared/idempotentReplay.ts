@@ -11,7 +11,7 @@
  * This module is the policy (key grammar, TTL, what is stored, when a replay is a
  * conflict) plus the storage PORT. The HTTP middleware lives in presentation
  * (`presentation/middleware/idempotentReplay.ts`); the store adapter lives in
- * infrastructure (`infrastructure/cache/idempotencyReplayStore.ts`).
+ * `./idempotencyReplayStore.ts` (over the canonical read-through cache).
  *
  * Endpoints whose writes already carry their own natural key reuse it instead of this
  * layer: chat messages (`eventKey`, `uq_brain_chat_messages_event`) and client run

@@ -88,7 +88,7 @@ import {
   type ActionType,
 } from '@builderforce/learned-routing';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { createCacheIdempotencyStore } from '../../infrastructure/cache/idempotencyReplayStore';
+import { createCacheIdempotencyStore } from '../../application/shared/idempotencyReplayStore';
 import {
   decideReplay,
   IDEMPOTENCY_KEY_HEADER,

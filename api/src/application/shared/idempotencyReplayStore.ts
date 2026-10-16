@@ -9,8 +9,8 @@ import {
   IDEMPOTENCY_TTL_SECONDS,
   type IdempotencyStore,
   type StoredIdempotentResponse,
-} from '../../application/shared/idempotentReplay';
-import { peekCached, setCached, type CacheEnv } from './readThroughCache';
+} from './idempotentReplay';
+import { peekCached, setCached, type CacheEnv } from '../../infrastructure/cache/readThroughCache';
 
 /** Tenant-scoped, so one tenant's key can never answer another tenant's request. */
 export function idempotencyReplayCacheKey(tenantId: number, key: string): string {

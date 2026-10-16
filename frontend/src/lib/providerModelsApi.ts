@@ -1,4 +1,5 @@
-import { request, type LlmProvider } from './builderforceApi';
+import { request } from './builderforceApi';
+import type { LlmProvider } from '@builderforce/model-catalog';
 
 /**
  * Typed client for a connected provider's MODEL SELECTION — the models its public catalog

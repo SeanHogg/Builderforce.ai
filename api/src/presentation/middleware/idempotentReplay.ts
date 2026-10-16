@@ -29,7 +29,7 @@ import {
 } from '../../application/shared/idempotentReplay';
 import { deferPastResponse } from '../../application/shared/requestScope';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
-import { createCacheIdempotencyStore } from '../../infrastructure/cache/idempotencyReplayStore';
+import { createCacheIdempotencyStore } from '../../application/shared/idempotencyReplayStore';
 
 const SOURCE = 'presentation/middleware/idempotentReplay.ts';
 

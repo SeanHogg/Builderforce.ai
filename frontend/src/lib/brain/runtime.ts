@@ -13,7 +13,6 @@ import type { BrainConfig } from '@seanhogg/builderforce-brain-embedded';
 import { AUTH_API_URL, getStoredTenantToken, checkUnauthorizedAndRedirect } from '../auth';
 import { brain, parseLlmError } from '../builderforceApi';
 import { getModality } from '../modality';
-import { installBrowserStepDurability } from './stepDurability';
 
 export const brainConfig: BrainConfig = {
   transport: {
@@ -28,4 +27,8 @@ export const brainConfig: BrainConfig = {
 };
 
 // Run steps survive offline + reload (IndexedDB-backed step outbox). Browser-only, once.
-installBrowserStepDurability();
+// Loaded lazily: this module sits in the root layout's static closure, and the outbox
+// wiring has no business on every route's first paint.
+if (typeof window !== 'undefined') {
+  void import('./stepDurability').then((m) => m.installBrowserStepDurability());
+}

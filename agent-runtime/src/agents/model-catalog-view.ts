@@ -27,6 +27,7 @@
 import type { CatalogView, ModelPrice, ModelResidency, ModelTier } from "@builderforce/model-catalog";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import type { ModelApi } from "../config/types.models.js";
+import { logDebug } from "../logger.js";
 import { resolveBuilderForceAgentsAgentDir } from "./agent-paths.js";
 import { discoverAuthStorage, discoverModels } from "./model-discovery.js";
 import { modelKey, normalizeProviderId } from "./model-selection.js";
@@ -231,8 +232,9 @@ export function loadOnPremCatalogView(params?: {
   const entries = configuredEntries(params?.cfg);
   try {
     entries.push(...registryEntries(params?.agentDir ?? resolveBuilderForceAgentsAgentDir()));
-  } catch {
+  } catch (err) {
     // models.json is optional — the configured rows still answer.
+    logDebug(`[model-catalog-view] models.json unreadable, configured rows only: ${String(err)}`);
   }
   return catalogViewFromEntries(entries);
 }

@@ -1,3 +1,4 @@
+import type { LlmProvider } from '@builderforce/model-catalog';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ProviderKeysSettings } from './ProviderKeysSettings';
@@ -17,7 +18,7 @@ import type { ProviderDiagnostic } from '@/lib/builderforceApi';
  * Copy is the passthrough key under the global next-intl mock (see src/test/setup.ts); the
  * global confirm stub answers "confirmed", so the disconnect path runs to completion.
  */
-function mockApi(details: Array<{ provider: api.LlmProvider; authType: api.ProviderAuthType; priority: number | null }>) {
+function mockApi(details: Array<{ provider: LlmProvider; authType: api.ProviderAuthType; priority: number | null }>) {
   vi.spyOn(api.providerKeysApi, 'list').mockResolvedValue({
     providers: details.map((d) => d.provider),
     details,
