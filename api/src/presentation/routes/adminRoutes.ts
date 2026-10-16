@@ -123,7 +123,6 @@ import {
   tenants,
   tenantMembers,
   agentHosts,
-  managedAgentHostRequests,
   llmUsageLog,
   userMfaRecoveryCodes,
   projects,
@@ -219,6 +218,7 @@ import { createTickDispatchBudget } from '../../application/runtime/tickDispatch
 import { API_VERSION } from '../../version';
 import { getPricingDraft, publishPricing, savePricingDraft } from '../../application/tenant/pricingConfiguration';
 import {
+  listManagedAgentHostRequests,
   provisionManagedAgentHostRequest,
   type ManagedAgentHostRequestStatus,
 } from '../../application/tenant/managedAgentHostSubscription';
@@ -422,17 +422,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.get('/pricing', async (c) => c.json(await getPricingDraft(requestDb(c))));
 
   router.get('/managed-agent-hosts', async (c) => {
-    const db = requestDb(c);
-    const status = c.req.query('status');
-    const rows = status
-      ? await db.select().from(managedAgentHostRequests)
-        .where(eq(managedAgentHostRequests.status, status))
-        .orderBy(desc(managedAgentHostRequests.createdAt))
-        .limit(200)
-      : await db.select().from(managedAgentHostRequests)
-        .orderBy(desc(managedAgentHostRequests.createdAt))
-        .limit(200);
-    return c.json({ requests: rows });
+    return c.json({ requests: await listManagedAgentHostRequests(requestDb(c), c.req.query('status')) });
   });
 
   router.patch('/managed-agent-hosts/:id', async (c) => {
@@ -1441,10 +1431,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await writeAdminAudit(db, 'GUEST_PROMPTS_ERASED', c.get('userId') as string, {
       metadata: { visitorId, ...erased },
     });
-    // `erased` stays the headline number the drawer reports, and it now counts
-    // the journey rows too — an erasure that reported only prompts would have
-    // understated what it did the moment the journey stream landed.
-    return c.json({ erased: erased.prompts + erased.events, ...erased });
+    // `erased` is the headline number the drawer reports: the total across EVERY
+    // registered eraser (prompts, journey, Insights recordings), not prompts alone.
+    return c.json(erased);
   });
 
   // -------------------------------------------------------------------------

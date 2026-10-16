@@ -48,12 +48,12 @@ export function SeedMethodFunnelForm() {
       aria-labelledby="insights-ops-method-funnel"
       onSubmit={(e) => { e.preventDefault(); void submit(); }}
     >
-      <h4 id="insights-ops-method-funnel" style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: 'var(--text-strong)' }}>
+      <h4 id="insights-ops-method-funnel" style={{ margin: '0 0 4px', fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)' }}>
         {t('title')}
       </h4>
-      <p className="text-muted" style={{ fontSize: 12, margin: '0 0 12px' }}>{t('hint')}</p>
+      <p className="text-muted" style={{ fontSize: 'var(--font-size-small)', margin: '0 0 12px' }}>{t('hint')}</p>
       <AdminError message={error} />
-      <label htmlFor="insights-ops-method-site" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+      <label htmlFor="insights-ops-method-site" style={{ display: 'block', fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
         {t('siteLabel')}
       </label>
       <input
@@ -70,7 +70,7 @@ export function SeedMethodFunnelForm() {
           {busy ? t('seeding') : t('submit')}
         </button>
         {result && (
-          <span role="status" style={{ fontSize: 12, color: 'var(--success)', overflowWrap: 'anywhere' }}>
+          <span role="status" style={{ fontSize: 'var(--font-size-small)', color: 'var(--success)', overflowWrap: 'anywhere' }}>
             {created ? t('done', { events: result.createdSmartEvents.length }) : t('already')}
           </span>
         )}

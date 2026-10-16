@@ -146,7 +146,7 @@ describe('applyCeremonyMinutesToBoard', () => {
     const graph = board();
     // Add a tombstone to the card content for the first action item
     const card = graph.objects.find((o) => o.id === 'card')!;
-    card.content = { ...card.content, [DELETED_ACTION_ITEMS_KEY]: [ceremonyActionResourceId(CEREMONY, 0)] };
+    card.content = { ...(card.content as Record<string, unknown>), [DELETED_ACTION_ITEMS_KEY]: [ceremonyActionResourceId(CEREMONY, 0)] };
     // Add the corresponding action item object to the board
     graph.objects.push({
       id: 'tombstoned-task', kind: 'task', resourceType: CEREMONY_ACTION_RESOURCE_TYPE, resourceId: ceremonyActionResourceId(CEREMONY, 0),
@@ -167,7 +167,7 @@ describe('applyCeremonyMinutesToBoard', () => {
     const graph = board();
     // Pre-existing tombstone for an item that was previously deleted
     const card = graph.objects.find((o) => o.id === 'card')!;
-    card.content = { ...card.content, [DELETED_ACTION_ITEMS_KEY]: ['some-old-deleted:1', 'some-old-deleted:2'] };
+    card.content = { ...(card.content as Record<string, unknown>), [DELETED_ACTION_ITEMS_KEY]: ['some-old-deleted:1', 'some-old-deleted:2'] };
 
     const result = apply(graph)!;
     const updatedCard = result.graph.objects.find((o) => o.id === 'card')!;

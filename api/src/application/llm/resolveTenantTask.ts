@@ -79,7 +79,7 @@ export async function resolveTenantTask(ctx: TenantTaskLookup, id: number) {
     const listed = (await ctx.tasks.listTasks(ctx.tenantId, undefined, true)) ?? [];
     const matches = hashRefMatches(listed, id);
     if (matches.length === 1) {
-      const matchId = Number((matches[0].toPlain() as { id: unknown }).id);
+      const matchId = Number((matches[0]!.toPlain() as { id: unknown }).id);
       if (Number.isFinite(matchId) && matchId !== id) {
         try {
           return await loadTenantTask(ctx, matchId);

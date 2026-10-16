@@ -20,8 +20,7 @@ import {
   type OpenRouterConnection,
   type ProviderAuthAlert,
   type ProviderAuthType,
-  type ProviderDiagnostic,
-  type LlmProvider,
+  type ProviderDiagnostic, type LlmProvider,
 } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';

@@ -41,7 +41,10 @@ import {
   type YouTubeUploadTick,
 } from './youtubeResumableUpload';
 import { r2UploadSource, urlUploadSource } from './youtubeUploadSources';
-import { freshYouTubeToken, YOUTUBE_PROVIDER } from './youtubePublishing';
+import { freshYouTubeToken } from './youtubePublishing';
+
+/** The YouTube Data API v3 — the processing-status read after an upload. */
+const YOUTUBE_DATA_API = 'https://www.googleapis.com/youtube/v3';
 
 /**
  * Poll YouTube's `videos.list` to get the current processing status of an uploaded video.
@@ -60,8 +63,7 @@ export async function fetchYouTubeVideoProcessingStatus(
   videoId: string,
   fetchImpl?: typeof fetch,
 ): Promise<string | null> {
-  const baseUrl = YOUTUBE_PROVIDER.baseUrl ?? 'https://www.googleapis.com/youtube/v3';
-  const url = `${baseUrl}/videos?part=status,processingDetails&id=${encodeURIComponent(videoId)}`;
+  const url = `${YOUTUBE_DATA_API}/videos?part=status,processingDetails&id=${encodeURIComponent(videoId)}`;
   const response = await (fetchImpl ?? fetch)(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });

@@ -75,8 +75,11 @@ beforeEach(() => {
 
 describe('VERIFIERS', () => {
   it('measures each action by its own instrument', () => {
-    expect(Object.keys(VERIFIERS).sort()).toEqual(['fix', 'follow_up', 'test', 'ticket']);
+    expect(Object.keys(VERIFIERS).sort()).toEqual(['apply_in_composer', 'apply_page', 'copy_prompt', 'fix', 'follow_up', 'test', 'ticket']);
     expect(VERIFIERS.fix).toBe(VERIFIERS.ticket);
+    // Every hand-applied page fix is measured by the release that shipped it.
+    expect(VERIFIERS.apply_page).toBe(VERIFIERS.copy_prompt);
+    expect(VERIFIERS.apply_in_composer).toBe(VERIFIERS.copy_prompt);
   });
 });
 

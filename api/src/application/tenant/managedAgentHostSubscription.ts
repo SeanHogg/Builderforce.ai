@@ -8,10 +8,11 @@
  * unpaid tenants cannot keep a queue. Occupying (provisioning/active) hosts are
  * deprovisioned by the purchase recorder on addon.cancelled.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, carts, managedAgentHostRequests, settings } from '../../infrastructure/database/schema';
 import type { WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 
 export const MANAGED_AGENT_HOST_KIND = 'managed_agent_host';
 export const MANAGED_AGENT_HOST_FEATURE = 'managed_agent_host';
@@ -28,7 +29,12 @@ export interface ManagedAgentHostEntitlement {
   updatedAt: Date | null;
 }
 
+export const MANAGED_AGENT_HOST_REQUEST_STATUSES: readonly ManagedAgentHostRequestStatus[] = ['pending', 'provisioning', 'active', 'cancelled', 'failed'];
+
 const OCCUPYING: ManagedAgentHostRequestStatus[] = ['pending', 'provisioning', 'active'];
+
+const isRequestStatus = (raw: string): raw is ManagedAgentHostRequestStatus =>
+  (MANAGED_AGENT_HOST_REQUEST_STATUSES as readonly string[]).includes(raw);
 
 const PROVISION_NEXT: Record<string, ManagedAgentHostRequestStatus[]> = {
   pending: ['provisioning'],
@@ -184,7 +190,10 @@ export async function provisionManagedAgentHostRequest(
   db: Db,
   input: { requestId: number; status: ManagedAgentHostRequestStatus; agentHostId?: number | null },
 ): Promise<{ request: typeof managedAgentHostRequests.$inferSelect } | { error: { status: 400 | 404 | 409; error: string } }> {
-  const [row] = await db.select().from(managedAgentHostRequests).where(eq(managedAgentHostRequests.id, input.requestId)).limit(1);
+  // The operator's provisioning queue spans every workspace (superadmin route).
+  const [row] = await db.select().from(managedAgentHostRequests)
+    .where(acrossTenants(managedAgentHostRequests, 'platform_admin', eq(managedAgentHostRequests.id, input.requestId)))
+    .limit(1);
   if (!row) return { error: { status: 404, error: 'Not found' } };
   let hostTenantId: number | null | undefined;
   if (input.status === 'active' && input.agentHostId) {
@@ -209,7 +218,21 @@ export async function provisionManagedAgentHostRequest(
     patch.provisionedAt = new Date();
     patch.agentHostId = input.agentHostId ?? null;
   }
-  const [updated] = await db.update(managedAgentHostRequests).set(patch).where(eq(managedAgentHostRequests.id, input.requestId)).returning();
+  const [updated] = await db.update(managedAgentHostRequests).set(patch)
+    .where(acrossTenants(managedAgentHostRequests, 'platform_admin', eq(managedAgentHostRequests.id, input.requestId)))
+    .returning();
   if (!updated) return { error: { status: 404, error: 'Not found' } };
   return { request: updated };
+}
+
+/**
+ * The operator's provisioning queue across every workspace, newest first, optionally
+ * one status. An unknown status reads as "every status" rather than an empty list.
+ */
+export async function listManagedAgentHostRequests(db: Db, status?: string): Promise<Array<typeof managedAgentHostRequests.$inferSelect>> {
+  const statuses = status && isRequestStatus(status) ? [status] : [...MANAGED_AGENT_HOST_REQUEST_STATUSES];
+  return db.select().from(managedAgentHostRequests)
+    .where(acrossTenants(managedAgentHostRequests, 'platform_admin', inArray(managedAgentHostRequests.status, statuses)))
+    .orderBy(desc(managedAgentHostRequests.createdAt))
+    .limit(200);
 }

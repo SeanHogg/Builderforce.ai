@@ -1,6 +1,5 @@
-'use client';
-
 import type { CSSProperties } from 'react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { WorkflowDagView } from '@/components/WorkflowDagView';
 import { StatusPill, cardStyle, subtleBtn } from '@/components/workflowRunUi';
@@ -76,19 +75,19 @@ export function LiveOrchestrationWorkspace({ projectId }: { projectId?: number |
     <div data-testid="live-orchestration-workspace" style={wrap}>
       <header style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div style={{ minWidth: 0, flex: '1 1 240px' }}>
-          <h1 style={{ margin: 0, fontSize: 'var(--font-size-title)', color: 'var(--text-primary)' }}>{t('title')}</h1>
+          <h1 style={{ margin: 0, fontSize: 'var(--font-size-page-title)', color: 'var(--text-primary)' }}>{t('title')}</h1>
           <p style={{ margin: '6px 0 0', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('subtitle')}</p>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <button type="button" onClick={() => { void refresh(); }} style={{ ...subtleBtn, minHeight: 44 }}>
             {t('refresh')}
           </button>
-          <a
+          <Link
             href="/create"
             style={{ ...subtleBtn, display: 'inline-flex', alignItems: 'center', textDecoration: 'none', minHeight: 44 }}
           >
             {t('openCanvas')}
-          </a>
+          </Link>
         </div>
       </header>
       <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('authoringHint')}</p>

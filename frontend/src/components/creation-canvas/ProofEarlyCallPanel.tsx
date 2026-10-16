@@ -50,8 +50,8 @@ export function ProofEarlyCallPanel({ realizationId, open, onClose, onCalled }: 
         style={{ display: 'grid', gap: 'var(--space-3, 12px)' }}
         onSubmit={(event) => { event.preventDefault(); void submit(); }}
       >
-        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.5 }}>{t('callEarlyBody')}</p>
-        <label htmlFor={`proof-early-${realizationId}`} style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
+        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-size-body)', lineHeight: 1.5 }}>{t('callEarlyBody')}</p>
+        <label htmlFor={`proof-early-${realizationId}`} style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 'var(--font-size-small)' }}>
           {t('reasonLabel')}
         </label>
         <textarea
@@ -64,12 +64,12 @@ export function ProofEarlyCallPanel({ realizationId, open, onClose, onCalled }: 
           placeholder={t('reasonPlaceholder')}
           onChange={(event) => setReason(event.target.value)}
           style={{
-            width: '100%', resize: 'vertical', padding: 10, fontFamily: 'inherit', fontSize: 14,
+            width: '100%', resize: 'vertical', padding: 10, fontFamily: 'inherit', fontSize: 'var(--font-size-body)',
             background: 'var(--surface)', color: 'var(--text-primary)',
             border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
           }}
         />
-        {error && <p role="alert" style={{ margin: 0, color: 'var(--error)', fontSize: 13 }}>{error}</p>}
+        {error && <p role="alert" style={{ margin: 0, color: 'var(--error)', fontSize: 'var(--font-size-small)' }}>{error}</p>}
         <div>
           <button type="submit" className="btn-primary" style={{ minHeight: 44 }} disabled={busy || !reason.trim()}>
             {busy ? t('calling') : t('callEarlySubmit')}

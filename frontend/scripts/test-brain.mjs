@@ -6,8 +6,9 @@
  * this wrapper only looks under `frontend/src`.
  *
  * Presence detection (union of the three globs; first match is enough to run):
- *   - src/**/*[Bb]rain*.test.{ts,tsx}
- *   - src/**/brain/**/*.{test,spec}.{ts,tsx}
+ *   (written without the double-star-slash, which would close this comment)
+ *   - any `*[Bb]rain*.test.{ts,tsx}` under src
+ *   - any `*.{test,spec}.{ts,tsx}` under a `brain` directory in src
  *   - colocated same-stem `Brain*.test.{ts,tsx}` next to a `Brain*.tsx`
  *
  * Same-stem is deliberate: `BrainBackdrop.tsx` lives in `src/components/`, and

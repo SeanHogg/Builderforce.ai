@@ -328,7 +328,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 ### Data model — PRD 20 `[platform]`
 
 - **The 25 kernel primitives await acceptance (PRD 20 §6)** — and the winner of nine contested areas. Coverage map: 1,130 source tables, 0 unaccounted. Primitive adoption today: `activity_log` 18, `connections` 6, `runs`/`work_items`/`annotations`/`revisions` 0. *Blocker: operator decision.*
-- **214 open ratchet violations:** 187 tables reachable only via the entity layer, 22 cross-module imports, 3 polymorphic refs without FK, 2 duplicate clusters (`drive`=`mailbox_connections`, `initiatives`=`portfolios`). `domain-boundary` at 34.
+- **214 open ratchet violations:** 187 tables reachable only via the entity layer, 22 cross-module imports, 3 polymorphic refs without FK, 2 duplicate clusters (`calendar`=`drive`=`mailbox_connections` — the three connected-account stores share one encrypted-token shape since calendar dropped its plaintext columns (2026-10-14) and should fold into one table with a `kind` column; `initiatives`=`portfolios`). `domain-boundary` at 34.
 - **Step 5: 95 legacy shape tables hold live rows** — backfill → read cutover → drop, per family.
 - **Steps 6–7 moving the wrong way:** 129 application folders (target 16), 237 route files, 166 `page.tsx`; layering at 126. Needs a lane that owns the migration.
 - **Behaviour of the two merged products isn't here yet** (ATS funnel, finance/investor/growth workflows) — the entity layer is the floor.

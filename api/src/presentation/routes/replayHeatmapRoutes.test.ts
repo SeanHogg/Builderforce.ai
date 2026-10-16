@@ -5,6 +5,9 @@
  * the service and the site lookup are mocked.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The gate's proof-site clause: no workspace here reads its own live proof site.
+vi.mock('../../application/replay/proofSiteRead', () => ({ readsOwnProofSite: async () => false }));
 import type { MiddlewareHandler } from 'hono';
 import type { HonoEnv } from '../../env';
 import { ForbiddenError } from '../../domain/shared/errors';

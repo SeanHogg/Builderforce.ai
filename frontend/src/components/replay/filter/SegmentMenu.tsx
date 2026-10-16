@@ -34,7 +34,7 @@ const popoverStyle = {
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius-md)',
   background: 'var(--surface-card)',
-  boxShadow: 'var(--shadow-md, none)',
+  boxShadow: 'var(--shadow-sm)',
 } as const;
 
 export function SegmentMenu({ siteId, filter, onApply }: SegmentMenuProps) {

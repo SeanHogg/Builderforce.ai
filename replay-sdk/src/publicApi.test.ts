@@ -1,14 +1,16 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { createPublicApi, isValidEventName, looksSensitive, replayQueue, type ReplayController } from './publicApi';
 
-function controller(): ReplayController & { [K in keyof ReplayController]: ReturnType<typeof vi.fn> } {
+type SpiedController = { [K in keyof ReplayController]: Mock<ReplayController[K]> };
+
+function controller(): SpiedController {
   return {
-    consent: vi.fn(),
-    event: vi.fn(),
-    tag: vi.fn(),
-    identify: vi.fn(),
-    keep: vi.fn(),
-    stop: vi.fn(),
+    consent: vi.fn<ReplayController['consent']>(),
+    event: vi.fn<ReplayController['event']>(),
+    tag: vi.fn<ReplayController['tag']>(),
+    identify: vi.fn<ReplayController['identify']>(),
+    keep: vi.fn<ReplayController['keep']>(),
+    stop: vi.fn<ReplayController['stop']>(),
   };
 }
 

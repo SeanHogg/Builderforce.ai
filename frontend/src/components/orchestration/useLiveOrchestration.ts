@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useState } from 'react';
 import { workflows, type Workflow, type WorkflowGraph } from '@/lib/builderforceApi';
 import { reportBackgroundFailure } from '@/lib/reportError';
@@ -47,34 +45,45 @@ export interface LiveOrchestrationState {
  */
 export function useLiveOrchestration(projectId?: number | null): LiveOrchestrationState {
   const [runs, setRuns] = useState<Workflow[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Loading flags are derived from WHICH read last finished, never set at the top of an
+  // effect: the list is loading until a read for this project lands, the graph until
+  // the first tick for this selection does.
+  const projectKey = projectId == null ? '' : String(projectId);
+  const [listLoadedFor, setListLoadedFor] = useState<string | null>(null);
+  const loading = listLoadedFor !== projectKey;
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Workflow | null>(null);
   const [graph, setGraph] = useState<WorkflowGraph | null>(null);
-  const [graphLoading, setGraphLoading] = useState(false);
+  const [graphLoadedFor, setGraphLoadedFor] = useState<string | null>(null);
+  const graphLoading = selectedId != null && graphLoadedFor !== selectedId;
 
-  const refreshList = useCallback(async () => {
-    const list = await fetchInFlightWorkflows(projectId);
+  /** Apply one list read: the runs, a cleared error, and a selection that still exists. */
+  const applyList = useCallback((list: Workflow[]) => {
     setRuns(list);
     setError(null);
     setSelectedId((prev) => {
       if (prev && list.some((r) => r.id === prev)) return prev;
       return list[0]?.id ?? null;
     });
-  }, [projectId]);
+  }, []);
+
+  const refreshList = useCallback(async () => {
+    applyList(await fetchInFlightWorkflows(projectId));
+  }, [projectId, applyList]);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    void refreshList()
+    // The first read sets state only in its callbacks, never in the effect body.
+    void fetchInFlightWorkflows(projectId)
+      .then((list) => { if (!cancelled) applyList(list); })
       .catch((err: unknown) => {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : String(err));
         setRuns([]);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setListLoadedFor(projectKey);
       });
 
     const timer = setInterval(() => {
@@ -91,19 +100,14 @@ export function useLiveOrchestration(projectId?: number | null): LiveOrchestrati
       cancelled = true;
       clearInterval(timer);
     };
-  }, [refreshList]);
+  }, [refreshList, applyList, projectId, projectKey]);
 
   useEffect(() => {
-    if (!selectedId) {
-      setSelected(null);
-      setGraph(null);
-      return;
-    }
+    if (!selectedId) return;
     let cancelled = false;
     let reported = false;
     let stop = false;
     let timer: ReturnType<typeof setInterval> | undefined;
-    setGraphLoading(true);
 
     const tick = async () => {
       if (cancelled || stop) return;
@@ -132,7 +136,7 @@ export function useLiveOrchestration(projectId?: number | null): LiveOrchestrati
           });
         }
       } finally {
-        if (!cancelled) setGraphLoading(false);
+        if (!cancelled) setGraphLoadedFor(selectedId);
       }
     };
 
@@ -171,8 +175,9 @@ export function useLiveOrchestration(projectId?: number | null): LiveOrchestrati
     loading,
     error,
     selectedId,
-    selected,
-    graph,
+    // No selection shows nothing, whatever the last poll left behind.
+    selected: selectedId ? selected : null,
+    graph: selectedId ? graph : null,
     graphLoading,
     select,
     refresh,

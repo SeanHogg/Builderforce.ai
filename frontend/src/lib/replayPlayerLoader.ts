@@ -3,8 +3,8 @@
  * rrweb is not a frontend dependency: the replay-sdk publishes the Replayer as
  * a hashed bundle named in `replay/manifest.json` (`player`), so the recorder
  * and the player always run the same pinned rrweb and no page carries it until
- * a recording is opened. The network half lives here (components never
- * `fetch`); `components/replay/rrwebLoader.ts` builds Replayers from it.
+ * a recording is opened. The network half lives here, on the one API transport
+ * (components never `fetch`); `components/replay/rrwebLoader.ts` builds Replayers from it.
  *
  * No Subresource Integrity: `ReplayManifest.player` names the hashed URLs but
  * carries no integrity digests, so there is nothing to put in `integrity=`.
@@ -17,6 +17,7 @@ import {
   type ReplayManifest,
 } from '@builderforce/interaction-contract';
 import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
+import { apiRequest } from '@/lib/apiClient';
 
 /** rrweb's `Replayer` constructor as the bundle exposes it (typed by the caller). */
 export type ReplayerBundleCtor<T> = new (events: unknown[], config: Record<string, unknown>) => T;
@@ -24,15 +25,17 @@ export type ReplayerBundleCtor<T> = new (events: unknown[], config: Record<strin
 /** Manifest freshness matches its CDN cache class (max-age 60). */
 const MANIFEST_TTL_MS = 60_000;
 
-export const REPLAY_MANIFEST_URL = `${REPLAY_CDN_ORIGIN}${REPLAY_MANIFEST_PATH}`;
-
 function loadManifestPlayer(): Promise<NonNullable<ReplayManifest['player']>> {
   return getOrSetClientCached(
     'replay:player-manifest',
     async (signal) => {
-      const res = await fetch(REPLAY_MANIFEST_URL, { credentials: 'omit', signal });
-      if (!res.ok) throw new Error(`replay manifest ${res.status}`);
-      const manifest = (await res.json()) as ReplayManifest;
+      // The CDN is another origin and public: no credential, no cookies.
+      const manifest = await apiRequest<ReplayManifest>(REPLAY_MANIFEST_PATH, {
+        baseUrl: REPLAY_CDN_ORIGIN,
+        auth: 'none',
+        credentials: 'omit',
+        signal,
+      });
       if (!manifest.player?.url) throw new Error('replay manifest has no player');
       return manifest.player;
     },

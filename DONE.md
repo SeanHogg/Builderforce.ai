@@ -1,3 +1,24 @@
+## ✅ RESOLVED 2026-10-16 — Main release unblocked after the Insights merge (frontend 2026.10.49 · api 2026.10.39 · replay-sdk 2026.10.3)
+
+From 2026-10-14 every main release failed in verify, so nothing deployed. The cause was the Insights merge, which was never compiled, landing beside other sessions' commits. Each failure was fixed at its cause:
+
+- **Insights gate.** The proof-site read (`application/replay/proofSiteRead.ts`) is its own port now. The gated route tests mock it, so a missing Insights install answers 403 again instead of 500.
+- **Tests that were wrong.** The VERIFIERS registry now covers the three page-fix actions. The prior-grade "lower effort" pick is `demo-video`, the closest cheaper form, not `clickable-prototype`. The page prompt test passes the explicit `ids`. `replay_funnel_steps` orders by `ord`.
+- **Type errors.** The `replay_recordings` usage-meter tile was missing. The guest erase now returns the eraser total once instead of a duplicate `erased`. The replay-sdk controller spies are typed. Errors from other commits were fixed as well: managed-host tests, the persona brief, `resolveTenantTask`, the YouTube API base, and the ceremony test spreads.
+- **Guards.**
+  - Calendar migration `1216` was renumbered to `1218`, because it collided with `1216_replay_core`.
+  - The superadmin managed-host queue moved into the application layer as a declared `acrossTenants('platform_admin')` read.
+  - `replay_visit_summaries` now shows the tenant scope it inherits.
+  - Two empty catches became explicit helpers.
+  - The Insights components name type roles instead of literal font sizes (ratchet lowered to 3357).
+  - The replay manifest reads through `apiRequest`.
+  - `ReplayLoader` and the installed-apps rail are loaded with `dynamic()`, and the founder journey imports the realization client inside its effect.
+  - The three remaining tiny first-paint modules are argued in `check-root-closure`.
+  - The set-state-in-effect sites are now derived state.
+  - The live-orchestration page uses `Link`.
+  - A block comment in `scripts/test-brain.mjs` was closing on a glob and broke lint.
+- **Carried as debt, logged.** `calendar_connections` now has the same shape as the drive and mailbox stores. That cluster is in the ROADMAP ratchet entry.
+
 ## ✅ RESOLVED 2026-10-13 — Insights (PRD 33): session replay, heatmaps, live visitors and prescriptive fixes, built end to end (frontend 2026.10.48 · api 2026.10.38 · replay-sdk 2026.10.2)
 
 **Spec.** PRD 33 and its hand-off 33a were consolidated into one spec. 33a is deleted, and superseded text was removed rather than left beside its replacement. The spec carries a true per-slice status and D18: storage that works with zero extra provisioning, using additive route × day rollups, one compact row per kept recording, and R2 chunks.

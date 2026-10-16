@@ -10,11 +10,12 @@ import { errorHandler } from '../middleware/errorHandler';
 import { fakeDb } from '../../../test/fakeDb';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { TenantRole } from '../../domain/shared/types';
 
 const stubAuth: MiddlewareHandler<HonoEnv> = async (c, next) => {
   c.set('userId', 'user-abc');
   c.set('tenantId', 7);
-  c.set('role', 'owner');
+  c.set('role', TenantRole.OWNER);
   await next();
 };
 

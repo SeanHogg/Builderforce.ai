@@ -23,7 +23,7 @@ import {
   type Approval,
   type Execution,
   type SwimlaneAgent,
-  type BoardDispatch,
+  type BoardDispatch, type MemberKind,
 } from '@/lib/builderforceApi';
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
@@ -42,7 +42,6 @@ import { BoardConfigPanel, type ConfigTab } from './board/BoardConfigPanel';
 import { AssigneeProfilesProvider } from './workforce/AssigneeProfilesContext';
 import AssigneeHovercard, { AssigneePersonalityInline } from './workforce/AssigneeHovercard';
 import { MemberProfileEditor } from './workforce/MemberProfileEditor';
-import type { MemberKind } from '@/lib/builderforceApi';
 import { AgentChip, ACTIVE_EXECUTION_STATUSES } from './board/AgentChip';
 import { hasActiveExecution } from './board/taskDeleteGuard';
 import { SwimlaneTriageButton } from './board/SwimlaneTriageButton';

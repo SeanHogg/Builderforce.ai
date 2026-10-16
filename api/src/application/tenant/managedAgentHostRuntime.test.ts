@@ -47,7 +47,7 @@ describe('managedAgentHostContainerRuntime', () => {
   });
 
   it('stops via the existing preview-control stop path', async () => {
-    const fetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const fetch = vi.fn(async (_req: Request) => new Response(null, { status: 204 }));
     const runtime = managedAgentHostContainerRuntime({
       AGENT_CONTAINER: {
         get: () => ({ fetch }),
@@ -55,7 +55,7 @@ describe('managedAgentHostContainerRuntime', () => {
       } as never,
     });
     await runtime.stop({ requestId: 4 });
-    const req = fetch.mock.calls[0]?.[0] as Request;
+    const req = fetch.mock.calls[0]![0];
     expect(new URL(req.url).pathname).toBe(PREVIEW_CONTROL_STOP_PATH);
     expect(req.method).toBe('POST');
   });

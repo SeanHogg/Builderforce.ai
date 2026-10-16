@@ -64,13 +64,13 @@ export function ReplayGrantForm({ tenantId, tenantName }: { tenantId: number; te
       aria-labelledby={`insights-ops-grant-${tenantId}`}
       onSubmit={(e) => { e.preventDefault(); void submit(); }}
     >
-      <h4 id={`insights-ops-grant-${tenantId}`} style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: 'var(--text-strong)' }}>
+      <h4 id={`insights-ops-grant-${tenantId}`} style={{ margin: '0 0 4px', fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)' }}>
         {t('title')}
       </h4>
-      <p className="text-muted" style={{ fontSize: 12, margin: '0 0 12px' }}>{t('hint')}</p>
+      <p className="text-muted" style={{ fontSize: 'var(--font-size-small)', margin: '0 0 12px' }}>{t('hint')}</p>
       <AdminError message={error} />
 
-      <label htmlFor={`insights-ops-units-${tenantId}`} style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+      <label htmlFor={`insights-ops-units-${tenantId}`} style={{ display: 'block', fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
         {t('units')}
       </label>
       <input
@@ -86,7 +86,7 @@ export function ReplayGrantForm({ tenantId, tenantName }: { tenantId: number; te
         style={{ ...insightsOpsInputStyle, width: '100%', marginBottom: 12 }}
       />
 
-      <label htmlFor={`insights-ops-reason-${tenantId}`} style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+      <label htmlFor={`insights-ops-reason-${tenantId}`} style={{ display: 'block', fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
         {t('reason')}
       </label>
       <textarea
@@ -105,7 +105,7 @@ export function ReplayGrantForm({ tenantId, tenantName }: { tenantId: number; te
           {busy ? t('granting') : t('submit')}
         </button>
         {result && (
-          <span role="status" style={{ fontSize: 12, color: 'var(--success)', overflowWrap: 'anywhere' }}>
+          <span role="status" style={{ fontSize: 'var(--font-size-small)', color: 'var(--success)', overflowWrap: 'anywhere' }}>
             {t('done', { units: fmt.number(result.units), credits: fmt.number(result.credits), reference: result.reference })}
           </span>
         )}

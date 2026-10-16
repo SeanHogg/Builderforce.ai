@@ -4,6 +4,9 @@
  * the job's capability token. The application use cases and the site lookup are mocked.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The gate's proof-site clause: no workspace here reads its own live proof site.
+vi.mock('../../application/replay/proofSiteRead', () => ({ readsOwnProofSite: async () => false }));
 import type { MiddlewareHandler } from 'hono';
 import type { HonoEnv } from '../../env';
 import { ForbiddenError, UnauthorizedError } from '../../domain/shared/errors';
@@ -139,7 +142,7 @@ describe('member routes', () => {
     mocks.captureNow.mockResolvedValue({ status: 'unavailable', releaseKey: null, queued: 0, pages: [], reason: 'runner_unavailable' });
     const res = await call(`/pages/capture?site=${OWN_SITE}`, { method: 'POST' });
     expect(res.status).toBe(200);
-    expect((await res.json()).reason).toBe('runner_unavailable');
+    expect(((await res.json()) as { reason: string }).reason).toBe('runner_unavailable');
   });
 
   it('streams a capture asset privately', async () => {
@@ -154,7 +157,7 @@ describe('member routes', () => {
     await call(`/prescriptions/${RX}/prompt?site=${OWN_SITE}&audience=site_builder`);
     expect(mocks.prescriptionPrompt).toHaveBeenCalledWith({}, {}, { tenantId: 7, siteId: OWN_SITE }, RX, 'site_builder');
     await call(`/pages/prompt?site=${OWN_SITE}&path=%2Fpricing`);
-    expect(mocks.pagePrompt).toHaveBeenCalledWith({}, {}, { tenantId: 7, siteId: OWN_SITE }, '/pricing', 'coding_agent');
+    expect(mocks.pagePrompt).toHaveBeenCalledWith({}, {}, { tenantId: 7, siteId: OWN_SITE }, '/pricing', 'coding_agent', []);
     expect((await call(`/pages/prompt?site=${OWN_SITE}&path=%2F&audience=robot`)).status).toBe(400);
   });
 
@@ -180,7 +183,7 @@ describe('runner callbacks', () => {
   it('stores an asset under the token’s own capture key', async () => {
     const res = await call('/page-runner/capture/assets/fold', { method: 'POST', body: 'jpeg', headers: { 'content-type': 'image/jpeg', Authorization: 'Bearer good' } });
     expect(res.status).toBe(200);
-    const [, key, input] = mocks.putObject.mock.calls[0]!;
+    const [, key, input] = mocks.putObject.mock.calls[0]! as unknown[];
     expect(key).toMatch(new RegExp(`^replay/pages/t7/${OWN_SITE}/r1/[0-9a-f]+-phone-fold\\.jpg$`));
     expect(input).toMatchObject({ expected: 'image/jpeg' });
     expect((await call('/page-runner/capture/assets/video', { method: 'POST', body: 'x', headers: { Authorization: 'Bearer good' } })).status).toBe(404);

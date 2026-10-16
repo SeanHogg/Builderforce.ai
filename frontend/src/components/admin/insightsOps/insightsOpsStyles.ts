@@ -19,7 +19,7 @@ export const insightsOpsInputStyle: CSSProperties = {
   maxWidth: '100%',
   boxSizing: 'border-box',
   padding: '8px 10px',
-  fontSize: 13,
+  fontSize: 'var(--font-size-small)',
   background: 'var(--surface)',
   color: 'var(--text-primary)',
   border: '1px solid var(--border)',

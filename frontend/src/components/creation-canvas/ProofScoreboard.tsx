@@ -53,7 +53,7 @@ const card: React.CSSProperties = {
 function Bar({ label, valueText, pct }: { label: string; valueText: string; pct: number }) {
   return (
     <div style={{ display: 'grid', gap: 4, minWidth: 0 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 13 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 'var(--font-size-small)' }}>
         <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
         <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{valueText}</span>
       </div>
@@ -63,7 +63,7 @@ function Bar({ label, valueText, pct }: { label: string; valueText: string; pct:
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={pct}
-        style={{ height: 8, borderRadius: 4, background: 'var(--surface)', overflow: 'hidden', border: '1px solid var(--border)' }}
+        style={{ height: 8, borderRadius: 'var(--radius-sm)', background: 'var(--surface)', overflow: 'hidden', border: '1px solid var(--border)' }}
       >
         <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)' }} />
       </div>
@@ -102,16 +102,16 @@ export function ProofScoreboard({ realization, onRealizationChange }: ProofScore
   return (
     <section style={card} aria-labelledby={`proof-scoreboard-${realization.id}`} data-testid="proof-scoreboard">
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <h3 id={`proof-scoreboard-${realization.id}`} style={{ margin: 0, fontSize: 15, color: 'var(--text-primary)' }}>{t('title')}</h3>
+        <h3 id={`proof-scoreboard-${realization.id}`} style={{ margin: 0, fontSize: 'var(--font-size-card-title)', color: 'var(--text-primary)' }}>{t('title')}</h3>
         <span
           data-status={status}
-          style={{ padding: '2px 10px', borderRadius: 'var(--radius-full)', border: `1px solid ${STATUS_TONE[status]}`, color: STATUS_TONE[status], fontSize: 12, fontWeight: 700 }}
+          style={{ padding: '2px 10px', borderRadius: 'var(--radius-full)', border: `1px solid ${STATUS_TONE[status]}`, color: STATUS_TONE[status], fontSize: 'var(--font-size-small)', fontWeight: 700 }}
         >
           {t(`status.${status}`)}
         </span>
       </div>
 
-      <p style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5 }}>
+      <p style={{ margin: 0, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)', lineHeight: 1.5 }}>
         {t(evaluation.threshold.op === '>=' ? 'killAtLeast' : 'killAtMost', {
           event: evaluation.measure.success.ref,
           target: asValue(evaluation.threshold.value),
@@ -131,7 +131,7 @@ export function ProofScoreboard({ realization, onRealizationChange }: ProofScore
         pct={percentOf(evaluation.value, evaluation.threshold.value)}
       />
 
-      <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>
+      <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
         {left === null ? t('windowNotStarted') : left === 0 ? t('windowClosed') : t('daysLeft', { days: fmt.number(left) })}
       </p>
 
@@ -179,11 +179,11 @@ function WhyItMissed({ evaluation }: { evaluation: ProofEvaluationDto }) {
   });
   return (
     <div style={{ display: 'grid', gap: 6 }}>
-      <h4 style={{ margin: 0, fontSize: 13, color: 'var(--text-primary)' }}>{t('whyMissed')}</h4>
+      <h4 style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>{t('whyMissed')}</h4>
       {evaluation.patterns.length === 0 ? (
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>{t('noPatterns')}</p>
+        <p style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>{t('noPatterns')}</p>
       ) : (
-        <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4, fontSize: 13, color: 'var(--text-primary)' }}>
+        <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4, fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>
           {evaluation.patterns.map((pattern) => (
             <li key={pattern.text} style={{ overflowWrap: 'anywhere' }}>{pattern.text}</li>
           ))}
@@ -191,7 +191,7 @@ function WhyItMissed({ evaluation }: { evaluation: ProofEvaluationDto }) {
       )}
       {evaluation.siteId && fixes.length > 0 && (
         <section aria-label={tFixes('proofTitle')} style={{ display: 'grid', gap: 6 }}>
-          <h5 style={{ margin: 0, fontSize: 13, color: 'var(--text-primary)' }}>{tFixes('proofTitle')}</h5>
+          <h5 style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>{tFixes('proofTitle')}</h5>
           {fixes.map((p) => <PrescriptionCard key={p.id} compact siteId={evaluation.siteId ?? ''} prescription={p} />)}
         </section>
       )}

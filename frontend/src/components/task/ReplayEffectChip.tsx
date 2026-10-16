@@ -22,24 +22,26 @@ const LOWER_IS_BETTER: Readonly<Record<ReplayTicketEffectDto['metric'], boolean>
 export function ReplayEffectChip({ taskId, siteId }: { taskId: number; siteId: string }) {
   const t = useTranslations('replay.ticket.effect');
   const fmt = useFormat();
-  const [effect, setEffect] = useState<ReplayTicketEffectDto | null>(null);
+  // Keyed by the read it answers, so a stale effect from the previous ticket never shows.
+  const readKey = `${taskId}:${siteId}`;
+  const [answer, setAnswer] = useState<{ key: string; effect: ReplayTicketEffectDto | null } | null>(null);
 
   useEffect(() => {
     let live = true;
-    setEffect(null);
     replayApi.ticketEffect(taskId, siteId)
-      .then((found) => { if (live) setEffect(found); })
-      .catch(() => { if (live) setEffect(null); });
+      .then((found) => { if (live) setAnswer({ key: readKey, effect: found }); })
+      .catch(() => { if (live) setAnswer({ key: readKey, effect: null }); });
     return () => { live = false; };
-  }, [taskId, siteId]);
+  }, [taskId, siteId, readKey]);
 
+  const effect = answer?.key === readKey ? answer.effect : null;
   if (!effect) return null;
   const pct = (n: number | null) => (n === null ? '—' : fmt.number(n, { style: 'percent', maximumFractionDigits: 1 }));
   const metric = t(`metric.${effect.metric}`);
 
   if (effect.status === 'waiting' || effect.delta === null || !effect.after) {
     return (
-      <p role="status" data-testid="replay-effect" data-effect="waiting" style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>
+      <p role="status" data-testid="replay-effect" data-effect="waiting" style={{ margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
         {t('waiting', { metric, route: effect.route, visits: fmt.number(effect.minVisits) })}
       </p>
     );
@@ -47,7 +49,7 @@ export function ReplayEffectChip({ taskId, siteId }: { taskId: number; siteId: s
   const better = LOWER_IS_BETTER[effect.metric] ? effect.delta < 0 : effect.delta > 0;
   const tone = effect.delta === 0 ? 'var(--text-secondary)' : better ? 'var(--success)' : 'var(--error)';
   return (
-    <p role="status" data-testid="replay-effect" data-effect={better ? 'better' : 'worse'} style={{ margin: 0, fontSize: 13, color: tone }}>
+    <p role="status" data-testid="replay-effect" data-effect={better ? 'better' : 'worse'} style={{ margin: 0, fontSize: 'var(--font-size-small)', color: tone }}>
       {t('measured', { metric, route: effect.route, before: pct(effect.before.rate), after: pct(effect.after.rate), visits: fmt.number(effect.after.sessions) })}
     </p>
   );

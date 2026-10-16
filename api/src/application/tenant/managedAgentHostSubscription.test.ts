@@ -16,7 +16,6 @@ import {
 
 function event(over: Partial<WebhookEvent> & Pick<WebhookEvent, 'type'>): WebhookEvent {
   return {
-    type: over.type,
     purchaseKind: 'managed_agent_host',
     tenantId: 7,
     externalCustomerId: 'cus_host',

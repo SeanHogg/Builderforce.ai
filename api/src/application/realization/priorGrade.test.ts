@@ -48,8 +48,9 @@ describe('PRIOR_GRADE_RULES', () => {
   });
 
   it('missed with a full sample → a lower-effort form testing the first cited pattern', () => {
+    // smoke-test is effort 2; demo-video (effort 1) is the closest cheaper form.
     const steered = top(grade());
-    expect(steered.key).toBe('clickable-prototype');
+    expect(steered.key).toBe('demo-video');
     expect(steered.reasons[0]).toContain('Visitors left when the price appeared');
   });
 

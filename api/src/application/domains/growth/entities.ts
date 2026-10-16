@@ -173,7 +173,7 @@ export const GROWTH_ENTITIES = defineDomainEntities('growth', [
   entity(replaySegments, { readOnly: true }),
   entity(replaySmartEvents, { readOnly: true }),
   entity(replayFunnels, { readOnly: true }),
-  entity(replayFunnelSteps, { readOnly: true }),
+  entity(replayFunnelSteps, { readOnly: true, order: 'ord' }),
   entity(replayPrescriptions, { readOnly: true }),
   entity(replayPageCaptures, { readOnly: true }),
   /** An MP4 export job (S4b). Read-only: its status moves only through the runner's

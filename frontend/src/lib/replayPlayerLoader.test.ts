@@ -4,15 +4,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { REPLAY_PLAYER_GLOBAL } from '@builderforce/interaction-contract';
 import { invalidateClientCache } from '@/infrastructure/http/readThrough';
-import { appendOnce, loadReplayerBundle, REPLAY_MANIFEST_URL } from './replayPlayerLoader';
+import { appendOnce, loadReplayerBundle } from './replayPlayerLoader';
+
+const apiRequest = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/apiClient', () => ({ apiRequest }));
 
 const PLAYER = { url: 'https://cdn.builderforce.ai/replay/player.abc.js', cssUrl: 'https://cdn.builderforce.ai/replay/player.abc.css', rrweb: '2.0.0' };
 
 class FakeReplayer {}
-
-function manifestResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-}
 
 /** jsdom never loads a script/link: fire `load` once appended, registering the bundle for the script. */
 function autoLoadAppends(): void {
@@ -36,27 +35,25 @@ describe('replayPlayerLoader', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.unstubAllGlobals();
+    apiRequest.mockReset();
   });
 
-  it('fetches the CDN manifest without credentials and appends the bundle script and stylesheet once', async () => {
-    const fetchSpy = vi.fn().mockResolvedValue(manifestResponse({ latest: { version: '1', url: 'x', hash: 'h', builtAt: 'now' }, player: PLAYER }));
-    vi.stubGlobal('fetch', fetchSpy);
+  it('reads the CDN manifest without credentials and appends the bundle script and stylesheet once', async () => {
+    apiRequest.mockResolvedValue({ latest: { version: '1', url: 'x', hash: 'h', builtAt: 'now' }, player: PLAYER });
     autoLoadAppends();
 
     const Replayer = await loadReplayerBundle<unknown>();
 
     expect(Replayer).toBe(FakeReplayer);
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy.mock.calls[0]?.[0]).toBe(REPLAY_MANIFEST_URL);
-    expect(REPLAY_MANIFEST_URL).toBe('https://cdn.builderforce.ai/replay/manifest.json');
-    expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({ credentials: 'omit' });
+    expect(apiRequest).toHaveBeenCalledTimes(1);
+    expect(apiRequest.mock.calls[0]?.[0]).toBe('/replay/manifest.json');
+    expect(apiRequest.mock.calls[0]?.[1]).toMatchObject({ baseUrl: 'https://cdn.builderforce.ai', auth: 'none', credentials: 'omit' });
     expect(document.head.querySelectorAll(`script[src="${PLAYER.url}"]`)).toHaveLength(1);
     expect(document.head.querySelectorAll(`link[href="${PLAYER.cssUrl}"]`)).toHaveLength(1);
 
     // A second load reuses the bundle: no second fetch, no second element.
     await loadReplayerBundle<unknown>();
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(apiRequest).toHaveBeenCalledTimes(1);
     expect(document.head.querySelectorAll('script')).toHaveLength(1);
     expect(document.head.querySelectorAll('link')).toHaveLength(1);
   });
@@ -73,13 +70,13 @@ describe('replayPlayerLoader', () => {
   });
 
   it('rejects when the manifest names no player', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(manifestResponse({ latest: { version: '1', url: 'x', hash: 'h', builtAt: 'now' } })));
+    apiRequest.mockResolvedValue({ latest: { version: '1', url: 'x', hash: 'h', builtAt: 'now' } });
     await expect(loadReplayerBundle<unknown>()).rejects.toThrow('replay manifest has no player');
     expect(document.head.querySelector('script')).toBeNull();
   });
 
   it('rejects when the manifest request fails', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(manifestResponse({}, 503)));
-    await expect(loadReplayerBundle<unknown>()).rejects.toThrow('replay manifest 503');
+    apiRequest.mockRejectedValue(new Error('Request failed: 503'));
+    await expect(loadReplayerBundle<unknown>()).rejects.toThrow('503');
   });
 });

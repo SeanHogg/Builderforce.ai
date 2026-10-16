@@ -173,11 +173,8 @@ export function loadEntriesFromFile(filePath: string): FileEntry[] {
   const entries: FileEntry[] = [];
   for (const line of content.trim().split("\n")) {
     if (!line.trim()) continue;
-    try {
-      entries.push(JSON.parse(line) as FileEntry);
-    } catch {
-      // skip malformed lines
-    }
+    const entry = parseFileEntry(line);
+    if (entry) entries.push(entry);
   }
   if (entries.length === 0) return entries;
   const header = entries[0] as SessionHeader;
@@ -690,4 +687,13 @@ function defaultSessionDir(cwd: string): string {
     "sessions",
     encoded,
   );
+}
+
+/** One transcript line, or null for a malformed one — a torn write must not lose the rest. */
+function parseFileEntry(line: string): FileEntry | null {
+  try {
+    return JSON.parse(line) as FileEntry;
+  } catch {
+    return null;
+  }
 }

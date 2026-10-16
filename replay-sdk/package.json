@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-replay",
-  "version": "2026.10.2",
+  "version": "2026.10.3",
   "description": "Session-replay recorder for Builderforce.ai — CDN loader + hashed recorder, or the npm entry that self-updates from cdn.builderforce.ai.",
   "license": "MIT",
   "author": "Sean Hogg",

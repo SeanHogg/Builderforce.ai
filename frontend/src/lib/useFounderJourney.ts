@@ -24,7 +24,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { creationSessionsApi } from './builderforceApi';
-import { realizationApi } from './realizationApi';
 import { investorApi } from './investorApi';
 import type { Stage } from './navGroups';
 import type { MethodStep } from './methodology';
@@ -57,6 +56,9 @@ export function useFounderJourney(): FounderJourney {
     setJourney((prev) => ({ ...prev, loading: true }));
 
     (async () => {
+      // Loaded on demand: the journey read is effect work, so the realization client
+      // (and the method-event emitter behind it) stays out of the root layout's closure.
+      const { realizationApi } = await import('./realizationApi');
       const [companies, signal, sessions] = await Promise.all([
         investorApi.companies.list().catch(() => []),
         realizationApi.journeySignal().catch(() => null),

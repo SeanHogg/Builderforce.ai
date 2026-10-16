@@ -291,8 +291,13 @@ const BASELINE = {
    *
    * 3370 → 3364 (2026-10-13): the dead `VisitorJourneyDrawer` (Insights S0, six
    * literals, no importer) was deleted rather than migrated.
+   *
+   * 3364 → 3357 (2026-10-16): the Insights merge (ProofScoreboard, ProofEarlyCallPanel,
+   * the insightsOps admin forms, ReplayEffectChip) had taken the tree to 3393 and
+   * turned the deploy red. All thirty-six literals name roles now (12/13 = small,
+   * 14 = body, 15 = card-title); the net is lower because other surfaces shrank too.
    */
-  offScaleFontSizes: 3364,
+  offScaleFontSizes: 3357,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

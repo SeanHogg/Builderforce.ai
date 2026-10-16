@@ -12,11 +12,12 @@ function stubRuntime(over: Partial<ManagedAgentHostRuntime> = {}): ManagedAgentH
   start: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
 } {
+  // An override replaces the spy, so the result is typed as the spies the tests read.
   return {
     start: vi.fn(async () => ({ ok: true as const })),
     stop: vi.fn(async () => {}),
     ...over,
-  };
+  } as ManagedAgentHostRuntime & { start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> };
 }
 
 const pendingRow = {

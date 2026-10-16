@@ -52,13 +52,19 @@ export async function loadReplayPacks(env: Env | undefined, db: Db): Promise<rea
 function appOrigins(env: Pick<Env, 'APP_URL'>): Set<string> {
   const origins = new Set<string>();
   for (const entry of (env.APP_URL ?? 'https://builderforce.ai').split(',')) {
-    try {
-      origins.add(new URL(entry.trim()).origin);
-    } catch {
-      // A malformed entry names no origin.
-    }
+    const origin = originOf(entry.trim());
+    if (origin) origins.add(origin);
   }
   return origins;
+}
+
+/** The origin of an absolute URL; null for a malformed entry, which names no origin. */
+function originOf(raw: string): string | null {
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
 }
 
 /**

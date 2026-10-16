@@ -4,6 +4,9 @@
  * member auth). The export use cases and the site lookup are mocked.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The gate's proof-site clause: no workspace here reads its own live proof site.
+vi.mock('../../application/replay/proofSiteRead', () => ({ readsOwnProofSite: async () => false }));
 import type { MiddlewareHandler } from 'hono';
 import type { HonoEnv } from '../../env';
 import { ForbiddenError, UnauthorizedError } from '../../domain/shared/errors';
@@ -104,7 +107,7 @@ describe('member routes', () => {
     mocks.requestExport.mockResolvedValue({ ...queued, status: 'unavailable', error: 'runner_unavailable' });
     const res = await call(`/recordings/${REC}/export?site=${OWN_SITE}`, { method: 'POST' });
     expect(res.status).toBe(200);
-    expect((await res.json()).status).toBe('unavailable');
+    expect(((await res.json()) as { status: string }).status).toBe('unavailable');
   });
 
   it('answers 403 for another workspace’s site', async () => {

@@ -132,7 +132,7 @@ export function ReplayFilterBar({ filter, onChange, options = [], trailing }: Re
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-md)',
                 background: 'var(--surface-card)',
-                boxShadow: 'var(--shadow-md, none)',
+                boxShadow: 'var(--shadow-sm)',
               }}
             >
               {FILTER_FIELDS.map((field) => (

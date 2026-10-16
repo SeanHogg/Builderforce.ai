@@ -1,5 +1,6 @@
 import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
@@ -17,11 +18,13 @@ import { signInHref } from '@/lib/auth';
 import { ButtonLink } from '@/components/ui';
 import SessionList from './SessionList';
 import { NavIcon } from './navigation/NavIcon';
-import { InstalledAppsNav } from './navigation/InstalledAppsNav';
 import { isStageRoute } from '@/lib/workbenchPolicy';
 import { useNavGroups } from '@/lib/destinations/useDestinations';
 import { LegalStrip } from './legal/LegalStrip';
 import UsageMeter from './UsageMeter';
+
+// Signed-in only, and it reads the workspace's installs: kept out of the first-paint closure.
+const InstalledAppsNav = dynamic(() => import('./navigation/InstalledAppsNav').then((m) => m.InstalledAppsNav), { ssr: false });
 
 /**
  * The left panel — the ARC (PRD 21 §3.2, §11.4.1).

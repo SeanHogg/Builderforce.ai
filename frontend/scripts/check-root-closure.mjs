@@ -45,6 +45,17 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   +3 files (2026-10-16, Insights) — each tiny, import-free or near it, and each answers a
+ *     question the shell itself asks on first paint:
+ *     `lib/safeRedirect.ts` (~36 lines): `lib/auth.ts` (already here) sanitises every
+ *       post-sign-in `next=` through it — the open-redirect fix has to sit where sign-in does.
+ *     `lib/analyticsConsent.ts` (~53 lines): `CookieConsentManager` (mounted by the root
+ *       layout) reads and writes the analytics consent through it; the banner is first paint.
+ *     `lib/replaySensitive.ts` (~16 lines, one attribute constant): `PageContainer` stamps
+ *       `data-bf-replay="block"` on sensitive pages so the recorder never captures them; it
+ *       must be on the markup before any recording could start, so an `import()` would race.
+ *     The recorder's own gate (`ReplayLoader`) and the installed-apps rail are `dynamic()`,
+ *     and `useFounderJourney` imports the realization client inside its effect.
  *   +1 file (2026-10-10, kept-board release) — `lib/canvas/boardRetention.ts` (~76 lines,
  *     pure, no imports beyond types). `ActiveCanvasContext` is mounted by the persistent shell
  *     and now bounds how many boards stay mounted, so the decision it calls is root work by

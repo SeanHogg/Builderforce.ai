@@ -5,7 +5,7 @@ export type AgentKind = 'cloud' | 'host';
 // "Invite" (a person) — secondary to the coral "+ Agent" split button.
 export const inviteBtn: React.CSSProperties = {
   padding: '8px 14px',
-  fontSize: 13,
+  fontSize: 'var(--font-size-small)',
   fontWeight: 600,
   background: 'transparent',
   color: 'var(--accent)',

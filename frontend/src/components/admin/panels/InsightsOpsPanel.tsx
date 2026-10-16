@@ -11,7 +11,7 @@
  * in `components/admin/insightsOps/*`, every call in `lib/replayOpsApi.ts`.
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { ReplayOpsSummaryDto } from '@builderforce/interaction-contract';
 import { Select } from '@/components/Select';
@@ -44,11 +44,9 @@ export default function InsightsOpsPanel() {
   const fmt = useFormat();
   const summary = useAdminData<ReplayOpsSummaryDto>(() => replayOpsApi.summary());
   const tenants = useAdminData<AdminTenant[]>(() => adminApi.tenants());
-  const [tenantId, setTenantId] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (tenantId == null && tenants.data && tenants.data.length > 0) setTenantId(tenants.data[0]!.id);
-  }, [tenantId, tenants.data]);
+  // The picked workspace, defaulting to the first one listed — derived, not synced by an effect.
+  const [chosenTenantId, setTenantId] = useState<number | null>(null);
+  const tenantId = chosenTenantId ?? tenants.data?.[0]?.id ?? null;
 
   const picked = tenants.data?.find((row) => row.id === tenantId) ?? null;
 
@@ -76,12 +74,12 @@ export default function InsightsOpsPanel() {
       <div style={{ maxWidth: 480, marginBottom: 24 }}><SeedMethodFunnelForm /></div>
 
       <section aria-labelledby="insights-ops-workspace">
-        <h3 id="insights-ops-workspace" style={{ fontSize: 15, fontWeight: 700, margin: '0 0 8px', color: 'var(--text-strong)' }}>
+        <h3 id="insights-ops-workspace" style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, margin: '0 0 8px', color: 'var(--text-strong)' }}>
           {t('workspace.title')}
         </h3>
         <AdminError message={tenants.error} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-          <label htmlFor="insights-ops-tenant" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+          <label htmlFor="insights-ops-tenant" style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
             {t('workspace.label')}
           </label>
           <Select
@@ -90,7 +88,7 @@ export default function InsightsOpsPanel() {
             disabled={!tenants.data || tenants.data.length === 0}
             onChange={(e) => setTenantId(Number(e.target.value))}
             style={{
-              minHeight: 44, maxWidth: '100%', padding: '6px 10px', fontSize: 13,
+              minHeight: 44, maxWidth: '100%', padding: '6px 10px', fontSize: 'var(--font-size-small)',
               background: 'var(--surface-card)', color: 'var(--text-primary)',
               border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
             }}
@@ -101,7 +99,7 @@ export default function InsightsOpsPanel() {
           </Select>
         </div>
         {tenants.data && tenants.data.length === 0 && (
-          <p className="text-muted" style={{ fontSize: 13 }}>{t('workspace.empty')}</p>
+          <p className="text-muted" style={{ fontSize: 'var(--font-size-small)' }}>{t('workspace.empty')}</p>
         )}
 
         {picked && (

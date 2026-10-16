@@ -76,6 +76,7 @@ const METER_PRESENTATION: Record<MeterSnapshot['key'], MeterPresentation> = {
   error_events: { icon: '🐞', configHref: '/quality?tab=collectors', insightHref: '/quality' },
   outbound_fetches: { icon: '🌐', configHref: '/insights/finance', insightHref: '/insights/finance' },
   feedback_submissions: { icon: '💬', configHref: '/quality?tab=feedback', insightHref: '/quality?tab=feedback' },
+  replay_recordings: { icon: '🎬', configHref: '/apps/insights/setup', insightHref: '/apps/insights' },
 };
 
 /**

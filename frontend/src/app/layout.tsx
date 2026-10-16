@@ -27,6 +27,7 @@ const jetbrainsMono = localFont({
   variable: '--font-jetbrains-mono',
   display: 'swap',
 });
+import dynamic from 'next/dynamic';
 import ThemeProvider from './ThemeProvider';
 import { ConfirmProvider } from '@/components/ConfirmProvider';
 import { ToastProvider } from '@/components/ToastProvider';
@@ -42,10 +43,13 @@ import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
 import { RANDOM_UUID_POLYFILL } from '@/lib/randomUuidPolyfill';
 import { QUALITY_INGEST_ENDPOINT } from '@/lib/reportError';
 import { VisitorJourneyTracker } from '@/components/VisitorJourneyTracker';
-import { ReplayLoader } from '@/components/ReplayLoader';
 import { DiscountCodeCapture } from '@/components/DiscountCodeCapture';
 import { CookieConsentManager } from '@/components/privacy/CookieConsentManager';
 import { SkipToContent } from '@/components/SkipToContent';
+
+// Code-split: the recorder's gate (consent, entitlement, sensitive routes) is not
+// first-paint work, so it stays out of the root layout's static closure.
+const ReplayLoader = dynamic(() => import('@/components/ReplayLoader').then((m) => m.ReplayLoader));
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
 

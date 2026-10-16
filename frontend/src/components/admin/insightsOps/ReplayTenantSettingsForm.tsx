@@ -8,7 +8,7 @@
  * Saved with one PATCH, which the API audits (`REPLAY_TENANT_SETTINGS_CHANGED`).
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { ReplayTenantSettings } from '@builderforce/interaction-contract';
 import { replayOpsApi } from '@/lib/replayOpsApi';
@@ -30,17 +30,16 @@ export function ReplayTenantSettingsForm({ tenantId }: { tenantId: number }) {
     () => replayOpsApi.tenantSettings(tenantId),
     [tenantId],
   );
-  const [excluded, setExcluded] = useState(false);
-  const [override, setOverride] = useState('');
+  // The operator's unsaved edits over the loaded values — derived, never copied into state.
+  const [edits, setEdits] = useState<{ excluded?: boolean; override?: string }>({});
+  const excluded = edits.excluded ?? data?.replayExcluded ?? false;
+  const override = edits.override
+    ?? (data?.replayFreeAllowanceOverride == null ? '' : String(data.replayFreeAllowanceOverride));
+  const setExcluded = (value: boolean) => setEdits((prev) => ({ ...prev, excluded: value }));
+  const setOverride = (value: string) => setEdits((prev) => ({ ...prev, override: value }));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    if (!data) return;
-    setExcluded(data.replayExcluded);
-    setOverride(data.replayFreeAllowanceOverride == null ? '' : String(data.replayFreeAllowanceOverride));
-  }, [data]);
 
   const parsed = parseOverride(override);
   const dirty = data != null && (excluded !== data.replayExcluded || parsed !== data.replayFreeAllowanceOverride);
@@ -59,6 +58,7 @@ export function ReplayTenantSettingsForm({ tenantId }: { tenantId: number }) {
         replayFreeAllowanceOverride: parsed,
       });
       setData(next);
+      setEdits({});
       setSaved(true);
     } catch (e) {
       setSaveError(errText(e));
@@ -75,7 +75,7 @@ export function ReplayTenantSettingsForm({ tenantId }: { tenantId: number }) {
       aria-labelledby={`insights-ops-settings-${tenantId}`}
       onSubmit={(e) => { e.preventDefault(); void save(); }}
     >
-      <h4 id={`insights-ops-settings-${tenantId}`} style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: 'var(--text-strong)' }}>
+      <h4 id={`insights-ops-settings-${tenantId}`} style={{ margin: '0 0 12px', fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)' }}>
         {t('title')}
       </h4>
       <AdminError message={error || saveError} />
@@ -91,15 +91,15 @@ export function ReplayTenantSettingsForm({ tenantId }: { tenantId: number }) {
           style={{ marginTop: 3, width: 18, height: 18 }}
         />
         <span>
-          <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t('excluded')}</span>
-          <span className="text-muted" style={{ display: 'block', fontSize: 12 }}>{t('excludedHint')}</span>
+          <span style={{ display: 'block', fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)' }}>{t('excluded')}</span>
+          <span className="text-muted" style={{ display: 'block', fontSize: 'var(--font-size-small)' }}>{t('excludedHint')}</span>
         </span>
       </label>
 
-      <label htmlFor={`insights-ops-override-${tenantId}`} style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+      <label htmlFor={`insights-ops-override-${tenantId}`} style={{ display: 'block', fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)' }}>
         {t('override')}
       </label>
-      <p className="text-muted" style={{ fontSize: 12, margin: '2px 0 6px' }}>{t('overrideHint')}</p>
+      <p className="text-muted" style={{ fontSize: 'var(--font-size-small)', margin: '2px 0 6px' }}>{t('overrideHint')}</p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
         <input
           id={`insights-ops-override-${tenantId}`}
@@ -129,7 +129,7 @@ export function ReplayTenantSettingsForm({ tenantId }: { tenantId: number }) {
         <button type="submit" className="btn-primary" style={{ minHeight: 44 }} disabled={!dirty || saving}>
           {saving ? t('saving') : t('save')}
         </button>
-        {saved && <span role="status" style={{ fontSize: 12, color: 'var(--success)' }}>{t('saved')}</span>}
+        {saved && <span role="status" style={{ fontSize: 'var(--font-size-small)', color: 'var(--success)' }}>{t('saved')}</span>}
       </div>
     </form>
   );

@@ -99,7 +99,7 @@ export function pickResolvedAgentRow<T extends { id: string; name: string }>(row
   const stripped = stripAgentRuntimeSuffix(needle).toLowerCase();
   if (!stripped) return null;
   const hits = rows.filter((r) => stripAgentRuntimeSuffix(r.name).toLowerCase() === stripped);
-  return hits.length === 1 ? hits[0] : null;
+  return hits.length === 1 ? (hits[0] ?? null) : null;
 }
 
 /**

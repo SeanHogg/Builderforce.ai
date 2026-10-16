@@ -2415,7 +2415,8 @@ export const replayIssueRepresentatives = pgTable('replay_issue_representatives'
 // LIVES ON THE OPERATIONAL ENDPOINT (transactional-migrations/0015). See replayRecordings.
 /** A cited AI summary of one recording (S4c). */
 export const replayVisitSummaries = pgTable('replay_visit_summaries', {
-  recordingId: uuid('recording_id').primaryKey().references(() => replayRecordings.id, { onDelete: 'cascade' }),
+  // NOT NULL spelled out: the PK implies it, and the tenant-column guard reads it to see the inherited scope.
+  recordingId: uuid('recording_id').notNull().primaryKey().references(() => replayRecordings.id, { onDelete: 'cascade' }),
   summary:     text('summary').notNull(),
   citations:   jsonb('citations').notNull().default(sql`'[]'::jsonb`),
   model:       varchar('model', { length: 120 }),

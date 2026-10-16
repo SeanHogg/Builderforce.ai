@@ -9,8 +9,8 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import type { HonoEnv } from '../../env';
 import { requestDb } from '../../application/shared/dbHandle';
-import { getSite, getSiteForTenant } from '../../application/replay/replaySites';
-import { isProofSite } from '../../application/realization/proofSite';
+import { getSiteForTenant } from '../../application/replay/replaySites';
+import { readsOwnProofSite } from '../../application/replay/proofSiteRead';
 import type { ReplayScope } from '../../domain/replay/replayScope';
 import { ValidationError } from '../../domain/shared/errors';
 import { requireFeature } from '../middleware/featureGate';
@@ -21,24 +21,22 @@ import { optionalTenantId, requireTenantId } from '../middleware/tenantContext';
  * 403 `capability_required` unless the workspace holds Insights — or the `?site=` it
  * reads is its own live proof site (D12, §5.3.1): a proof is recorded with no install,
  * so its founder can watch the visitors it is graded on. Same clause as
- * `replayEntitledForSite`, read through the same cached `isProofSite`.
+ * `replayEntitledForSite` (`proofSiteRead.ts`).
  *
  * 403 before anything else under superadmin emulation (D17: no superadmin data path).
  */
 export const insightsGate: MiddlewareHandler<HonoEnv> = async (c, next) => {
   refuseInsightsDuringEmulation(c);
   const gate = await requireFeature(c, 'sessionReplay');
-  if (gate && !(await readsOwnProofSite(c))) return gate;
+  if (gate && !(await readsOwnProofSiteOf(c))) return gate;
   await next();
 };
 
-async function readsOwnProofSite(c: Context<HonoEnv>): Promise<boolean> {
+async function readsOwnProofSiteOf(c: Context<HonoEnv>): Promise<boolean> {
   const tenantId = optionalTenantId(c);
   const siteId = c.req.query('site');
   if (tenantId == null || !siteId) return false;
-  const db = requestDb(c);
-  const site = await getSite(c.env, db, siteId);
-  return !!site && site.tenantId === tenantId && isProofSite(c.env, db, site);
+  return readsOwnProofSite(c.env, requestDb(c), tenantId, siteId);
 }
 
 /**
