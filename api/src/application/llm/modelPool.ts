@@ -33,6 +33,7 @@ import {
   byoVendorIdsFromCredentials,
 } from './tenantProviderKeyService';
 import type { EffectivePlan } from '../../domain/tenant/effectivePlan';
+import { tierRank } from '@builderforce/model-catalog';
 
 // ---------------------------------------------------------------------------
 // Pool composition (derived from vendor catalogs — single source of truth)
@@ -306,57 +307,6 @@ export const RECOGNIZED_CODER_MODELS: ReadonlySet<string> = new Set<string>([
   ...BYO_FRONTIER_CODERS,
 ]);
 
-/** Best-first rank of a model's catalog tier (ULTRA → PREMIUM → STANDARD → FREE),
- *  used to order the connected providers' flagships by frontier strength from catalog
- *  DATA rather than a hardcoded vendor hierarchy. Unknown tier sorts last. */
-function frontierTierRank(model: string): number {
-  const order: Record<string, number> = { ULTRA: 0, PREMIUM: 1, STANDARD: 2, FREE: 3 };
-  return order[tierForModel(model)] ?? 4;
-}
-
-/** The BALANCED band: an objective this close to 0 leaves the tenant's own order
- *  alone rather than reordering on a barely-there preference. */
-const BALANCED_OBJECTIVE_THRESHOLD = 0.15;
-
-/** Is this objective BALANCED — i.e. the tenant's own order stands rather than the
- *  system choosing by tier or by learned evidence? Pure. */
-export function isBalancedObjective(objective: number): boolean {
-  return Math.abs(objective) < BALANCED_OBJECTIVE_THRESHOLD;
-}
-
-/**
- * Order a BYO seed for what the call is FOR (see `modelRoles.ts`): a quality-first
- * objective (writing code) leads with the tenant's STRONGEST connected tier, a
- * cost-first one (exploring, mechanical work) with its CHEAPEST, and a balanced one
- * (planning, chat) keeps the tenant's precedence exactly as given.
- *
- * Across vendors, not just within one — a role that only reordered inside a provider
- * could never move a connected Claude ahead of a precedence-first Qwen for a coding
- * turn, which is the whole point. Upstream HEALTH stays the outermost key: a vendor
- * known to be failing never leads because a role asked for its tier. Stable, so equal
- * tiers keep precedence order; never adds, drops or invents a model. Pure.
- */
-export function orderForRole(
-  models: readonly string[],
-  objective: number,
-  demotedVendors?: ReadonlySet<string>,
-): string[] {
-  const byTier = !isBalancedObjective(objective);
-  if (!byTier && !demotedVendors?.size) return [...models];
-  const health = (m: string): number => (demotedVendors?.has(vendorForModel(m)) ? 1 : 0);
-  const tier = (m: string): number => {
-    if (!byTier) return 0;
-    const rank = frontierTierRank(m);
-    // Cost-first reads the ladder upside down; an UNKNOWN tier (4) is not evidence of
-    // cheapness, so it sorts with the top tier rather than jumping to the lead.
-    return objective > 0 ? rank : rank >= 4 ? 0 : -rank;
-  };
-  return models
-    .map((m, i) => ({ m, i }))
-    .sort((a, b) => health(a.m) - health(b.m) || tier(a.m) - tier(b.m) || a.i - b.i)
-    .map(({ m }) => m);
-}
-
 /**
  * The connected owner's OWN premium frontier models to lead auto-select with — ONE
  * flagship per connected provider, so an auto-select turn (no explicit model) uses the
@@ -445,7 +395,7 @@ export function byoAutoSeedModels(
     if (h !== 0) return h;
     const p = priorityRank(a) - priorityRank(b);
     if (p !== 0) return p;
-    return frontierTierRank(a) - frontierTierRank(b);
+    return tierRank(tierForModel(a)) - tierRank(tierForModel(b));
   }).flat();
 }
 

@@ -134,8 +134,12 @@ import {
   resolveVendorTimeoutOverride,
 } from './modelPool';
 export * from './modelPool';
-import { isArcStage, isModelRole, rankConnectedForRole, type ArcStage, type ModelRole } from './modelRoles';
-export type { ArcStage, ModelRole } from './modelRoles';
+import type { ModelRole } from '@builderforce/agent-tools';
+import type { ArcStage } from '@builderforce/workload';
+import { rankConnectedForRole } from './modelRoles';
+import { orderPoolForWorkload } from '@builderforce/model-router';
+import { profileWorkload } from '@builderforce/workload';
+import { registryCatalogView, type PriceBook } from './catalogView';
 // ---------------------------------------------------------------------------
 // Public types — kept stable for callers (llmRoutes, ideAiRoutes)
 // ---------------------------------------------------------------------------
@@ -712,6 +716,10 @@ export class LlmProxyService {
       /** Learned per-model stats for `body.role` (see `roleRoutingStats`) — reorders the
        *  connected-account seed by what each model actually delivered in that role. */
       roleStats?: ReadonlyArray<ActionModelRankStat>;
+      /** Per-token prices (see `catalogView.loadPriceBook`). Only a COST-FIRST call
+       *  (explore / utility / verify — `poolOrderIsCostFirst`) reads them, so a caller
+       *  loads them only then. Absent → the pool keeps its order and BYO orders by tier. */
+      prices?: PriceBook;
     },
   ): Promise<ProxyResult> {
     const startedAt = Date.now();
@@ -799,7 +807,20 @@ export class LlmProxyService {
     //    → OpenRouter) because `autoRoutableModelsByTier` walks the registry's MODULES
     //    array in priority order. Shape-based reorder then floats capable
     //    models (tools / structured / vision) to the head within that order.
-    const reorderedPool = reorderPoolByShape(body, this.modelPool);
+    //
+    //    A COST-FIRST call (exploring, verifying, mechanical work) first orders the pool
+    //    by expected cost for THIS workload — price × estimated tokens, local and FREE at
+    //    zero. Every reorder below is a stable sort, so capability (shape, coding
+    //    drivers, context fit) still decides the buckets and cost only orders WITHIN
+    //    them: a cheap model never jumps a capable one. Any other call: unchanged.
+    const workload = profileWorkload({
+      role: body.role,
+      arcStage: body.arcStage,
+      inputTokens: opts?.estimatedTokens,
+      maxOutputTokens: body.max_tokens,
+    });
+    const catalogView = registryCatalogView(opts?.prices);
+    const reorderedPool = reorderPoolByShape(body, orderPoolForWorkload(this.modelPool, workload, catalogView));
 
     // 1b) Quality-critical useCase (resume tailoring, cover letters, …): re-rank
     //     the shape-sorted pool so the best models the PLAN unlocks lead (premium
@@ -935,11 +956,11 @@ export class LlmProxyService {
     // model — or, once there is evidence, the one that has delivered best in that role;
     // a planning turn keeps the tenant's order.
     const byoSeeds = rankConnectedForRole(rankMerged, {
-      role: isModelRole(body.role) ? body.role : undefined,
-      arcStage: isArcStage(body.arcStage) ? body.arcStage : undefined,
+      role: workload.role,
+      arcStage: workload.arcStage,
       demotedVendors,
       ...(opts?.roleStats ? { stats: opts.roleStats } : {}),
-    });
+    }, catalogView);
     // An honoured caller model LEADS, but it never stands alone: the tenant's OTHER
     // connected accounts follow it as failover. BYO is an execution boundary — the
     // chain composer below drops every operator-funded model — so a lead-only head

@@ -27,7 +27,7 @@ import {
   type TerminalStatus,
 } from "@builderforce/learned-routing";
 import { logDebug } from "../../../logger.js";
-import { classifyRunAction } from "./action-classifier.js";
+import { classifyRunAction } from "@builderforce/workload";
 import { alignStatsToCandidates, candidateKey, type ModelCandidate } from "./candidate-keys.js";
 import { computeLocalBias } from "./local-bias.js";
 import { readLocalOutcomes, recordLocalOutcome } from "./local-history.js";
@@ -35,7 +35,6 @@ import { buildRunOutcomeReport, reportRunOutcome } from "./outcome-reporter.js";
 import { fetchScopeRanking } from "./routing-table-client.js";
 import { learnedSeedingOn, resolveScopeTokens } from "./settings.js";
 
-export { classifyRunAction, type ActionClassification } from "./action-classifier.js";
 export { alignStatsToCandidates, candidateKey, type ModelCandidate } from "./candidate-keys.js";
 export { computeLocalBias, type LocalOutcome } from "./local-bias.js";
 export { clearLocalOutcomes, readLocalOutcomes, recordLocalOutcome } from "./local-history.js";

@@ -17,6 +17,7 @@ import type { ReasoningParamOpts } from '../reasoningCapability';
 import { parseSseDataLine, readUsageFields } from '@seanhogg/builderforce-memory/wire';
 
 import type { AgentExecParams } from '@builderforce/agent-tools';
+import type { ModelTier } from '@builderforce/model-catalog';
 import { needsMessageShapeSanitizing, sanitizeMessageShape, type ChatMessageLike } from '../messageShapeSanitizer';
 
 export type VendorId =
@@ -59,8 +60,11 @@ export type VendorId =
  *   STANDARD — paid, low-cost
  *   PREMIUM  — paid, mid-cost (e.g. Claude Sonnet, GPT-4o)
  *   ULTRA    — paid, high-cost (e.g. Claude Opus, GPT-o3)
+ *
+ * The ladder itself is `@builderforce/model-catalog`'s `ModelTier`, shared with every
+ * routing host; this name is the api's spelling of it.
  */
-export type AiModelTier = 'FREE' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
+export type AiModelTier = ModelTier;
 
 /**
  * Subset of bindings the vendor modules read. The proxy service is responsible

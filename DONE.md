@@ -1,3 +1,30 @@
+## ✅ RESOLVED 2026-10-16 — Workload-aware routing, phase 1: `model-catalog` · `workload` · `model-router` (Rovr program)
+
+**Why.** The router picked models without reading the work or its price. Price lived only in the `/models` browser and was read *after* the call, and the plan/code/explore role reordered only a tenant's own connected accounts. The cloud and on-prem hosts each classified work their own way.
+
+**Three pure, source-only packages**, shared by the Worker, the editor and on-prem:
+- **`@builderforce/model-catalog`**: the tier ladder (`ModelTier`, `tierRank`), per-token `ModelPrice` with `estimateCostUsd`, residency (`local` | `cloud`), and the `CatalogView` port each host binds to its own registry. `AiModelTier` is now an alias of `ModelTier`.
+- **`@builderforce/workload`**: `profileWorkload` reads one `WorkloadProfile` (role, arc stage, action type, estimated input/output tokens, agentic). It now holds the lexical action classifier, moved from `agent-runtime`, the `ArcStage` vocabulary, moved from the api, and the one chars-per-token heuristic. The api's `tokenUsage`, `spawnBuild` and three on-prem context guards now use it.
+- **`@builderforce/model-router`**: role objectives, `orderForRole` (with price as the within-tier key for cost-first roles), `rankConnectedForRole`, `expectedCostUsd`, `orderByExpectedCost` and `orderPoolForWorkload`. The copies in `modelPool.ts` and `modelRoles.ts` were deleted. `modelRoles.ts` now only binds the router to the registry.
+
+**Behaviour:**
+- **Cost-first calls (explore / utility / verify) order the Free/Paid plan pool by expected cost** (price × estimated tokens; local and FREE models at zero).
+  - Cost ordering runs *before* the stable capability reorders (shape, coding drivers, context fit), so it only orders models *within* a capability bucket. A cheap model never jumps ahead of a capable one.
+  - Connected-account seeds order by price within a tier too.
+- **Only cost-first calls read prices.** `catalogView.ts` (`pricesForCall`, `loadPriceBook`) builds the price book once per cached catalog snapshot, and every other call skips the catalog read.
+- **The usage ledger reads the same price book**, replacing a per-row linear scan, so expected cost and recorded cost come from one lookup with one id normalization.
+- **The cloud ticket classifier is lexical-first.** A confident lexical label returns with no model call; the free pool is asked only when a ticket is ambiguous.
+
+**Verified:**
+- `check:source-package-graph` passes.
+- 191 targeted api tests pass, including the new `catalogView.test.ts` and the three packages' own tests.
+- `agent-runtime` `tsc --noEmit` passes, and so do its learned-routing and context-guard tests.
+
+**Closed ROADMAP entries** (Workload-aware routing):
+- "No price on the routing catalog"
+- "No workload anticipation"
+- "Role only reorders the BYO seed"
+
 ## ✅ RESOLVED 2026-10-16 — BuilderForce WebContainers used throughout; StackBlitz residue gone; agent build gate wired
 
 **Audit.** `@webcontainer/api` was already out of every package. What remained was StackBlitz-era residue, and one place our own runtime should have been used and was not.

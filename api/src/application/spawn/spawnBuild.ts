@@ -21,10 +21,9 @@ import { assertSpawnMember } from './spawnMembership';
 import { readSpawnOps, type RejectedOp, type SpawnOp } from './spawnOps';
 import { readBuildRequest, renderBuildUserMessage, SPAWN_SYSTEM_PROMPT } from './spawnPrompt';
 import { spawnWallet } from './spawnWallet';
+import { estimateTokensFromChars } from '@builderforce/workload';
 
 const MAX_OUTPUT_TOKENS = 12_000;
-/** A reply's characters per token, for the rare upstream that reports no usage. */
-const CHARS_PER_TOKEN = 4;
 
 export interface SpawnBuildResult {
   buildId: string;
@@ -103,7 +102,7 @@ export async function runSpawnBuild(
   const usage = out.result?.usage;
   const tokensUsed = usage?.totalTokens
     || (usage ? usage.promptTokens + usage.completionTokens : 0)
-    || Math.ceil((SPAWN_SYSTEM_PROMPT.length + userMessage.length + JSON.stringify(answer).length) / CHARS_PER_TOKEN);
+    || estimateTokensFromChars(SPAWN_SYSTEM_PROMPT.length + userMessage.length + JSON.stringify(answer).length);
 
   if (!answer.refused) {
     await spawnWallet.debit(db, env, {

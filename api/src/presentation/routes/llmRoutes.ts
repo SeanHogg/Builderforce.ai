@@ -146,7 +146,9 @@ import { resolveProviderKeyHealth } from '../../application/llm/providerKeyHealt
 import { buildHostEgress } from '../../application/llm/hostEgress';
 import { byoModelsFor } from '../../application/llm/byoModelRouting';
 import { byoRoutingOptions, type ByoRoutingOptions } from '../../application/llm/tenantProxy';
-import { isArcStage, isModelRole } from '../../application/llm/modelRoles';
+import { isModelRole } from '@builderforce/agent-tools';
+import { isArcStage } from '@builderforce/workload';
+import { pricesForCall } from '../../application/llm/catalogView';
 import { listProviderModelSelections } from '../../application/llm/providerModelSelection';
 import { mountProviderModelRoutes } from './providerModelRoutes';
 import {
@@ -2312,7 +2314,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // a model it would immediately overflow (and the client now also bounds what
     // it sends; see brainRunStore windowing + tool-result trimming).
     const estimatedTokens = estimateRequestTokens(body.messages, (body as { tools?: unknown }).tools);
-    const result = await service.complete(body, undefined, traceId, undefined, { estimatedTokens, ...(roleStats ? { roleStats } : {}) });
+    // A cost-first call (explore / utility / verify) orders the pool by expected cost;
+    // only that call pays for the (cached) price-book read.
+    const prices = await pricesForCall(c.env, bodyRole, bodyAny.arcStage);
+    const result = await service.complete(body, undefined, traceId, undefined, {
+      estimatedTokens,
+      ...(roleStats ? { roleStats } : {}),
+      ...(prices ? { prices } : {}),
+    });
 
     // Did the PREMIUM model the tenant selected actually serve this turn? Only then
     // does the flat 1¢ surcharge apply — if the cascade failed over to a plan-pool

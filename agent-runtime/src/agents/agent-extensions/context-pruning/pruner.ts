@@ -3,8 +3,8 @@ import type { ImageContent, TextContent, ToolResultMessage } from "../../../buil
 import type { ExtensionContext } from "../types.js";
 import type { EffectiveContextPruningSettings } from "./settings.js";
 import { makeToolPrunablePredicate } from "./tools.js";
+import { CHARS_PER_TOKEN } from "@builderforce/workload";
 
-const CHARS_PER_TOKEN_ESTIMATE = 4;
 // We currently skip pruning tool results that contain images. Still, we count them (approx.) so
 // we start trimming prunable tool results earlier when image-heavy context is consuming the window.
 const IMAGE_CHAR_ESTIMATE = 8_000;
@@ -240,7 +240,7 @@ export function pruneContextMessages(params: {
     return messages;
   }
 
-  const charWindow = contextWindowTokens * CHARS_PER_TOKEN_ESTIMATE;
+  const charWindow = contextWindowTokens * CHARS_PER_TOKEN;
   if (charWindow <= 0) {
     return messages;
   }

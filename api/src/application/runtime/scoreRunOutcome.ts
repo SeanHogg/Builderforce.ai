@@ -33,7 +33,7 @@ import { clamp01 } from '../../domain/shared/numbers';
 export type { NormalizedRunOutcome, OutcomeSource, TerminalStatus };
 import { classifyRunFailure } from './runFailureReasons';
 import { applyOutcomeToRoutingTable } from '../llm/routingTable';
-import { isModelRole, type ModelRole } from '../llm/modelRoles';
+import { isModelRole, type ModelRole } from '@builderforce/agent-tools';
 
 /** The role a CLOUD run's outcome scores. The primary loop is the run's coding work
  *  (`pickCloudModel` is called with role 'code'), so its merge/CI/completion outcome is
