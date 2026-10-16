@@ -87,7 +87,7 @@ describe("model routing is centralized", () => {
     const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
     // An explicit pick / Evermind pin / default model / BYO pool names what the user
     // wants; only gateway-auto may be served on this machine first.
-    expect(routing).toContain('if (choice.model || choice.routingMode !== "auto") return choice;');
+    expect(routing).toContain("if (!localFirstApplies(choice)) return choice;");
     // Signed out, a local-first route needs no account (it just has no cloud fallback).
     expect(routing).toContain("route.localFirst === undefined");
     // Both completion surfaces honour it.

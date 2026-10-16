@@ -14,7 +14,7 @@
  * the rows that are genuinely its own, and never claims tool support for an Ollama model.
  */
 import {
-  LOCAL_RUNTIMES,
+  HTTP_LOCAL_RUNTIMES,
   normalizeLocalBaseUrl,
   type LocalEndpoints,
   type LocalRuntimeProbe,
@@ -23,10 +23,12 @@ import {
 /** Where `bfi serve` listens first (Ollama's port; it walks upward when that is taken). */
 export const SYNAPSE_DEFAULT_URL = 'http://127.0.0.1:11434';
 
-/** The endpoints to probe: every on-device runtime's default, Synapse's override. */
+/** The endpoints to probe: every on-device HTTP runtime's default, Synapse's override.
+ *  The browser's built-in model is not among them — it is asked through the page (see
+ *  `route.ts`), not probed over HTTP. */
 export function loopbackEndpoints(synapseUrl?: string | null): LocalEndpoints {
   const endpoints: Record<string, { baseUrl: string }> = {};
-  for (const runtime of LOCAL_RUNTIMES) {
+  for (const runtime of HTTP_LOCAL_RUNTIMES) {
     if (!runtime.onDevice) continue;
     if (runtime.defaultBaseUrl) endpoints[runtime.id] = { baseUrl: runtime.defaultBaseUrl };
   }

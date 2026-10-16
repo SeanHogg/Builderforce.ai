@@ -245,9 +245,9 @@ declare function reasoningForRun(o: {
  * directly, as data.
  *
  * Membership means "the CLIENT performs this call itself", not "the weights are on this
- * disk". Three entries are on-device engines (Synapse's native `bfi`, Ollama,
- * FreeToken): no account, no metering, available offline, and the only ones local-first
- * routing will try. `kimi-code` is Kimi's hosted API and belongs here anyway: its edge
+ * disk". Four entries are on-device engines (Synapse's native `bfi`, Ollama, FreeToken,
+ * and the browser's own built-in model): no account, no metering, available offline, and
+ * the only ones local-first routing will try. `kimi-code` is Kimi's hosted API and belongs here anyway: its edge
  * refuses a hosted gateway before reading a credential, while the identical request
  * from the developer's own machine is the personal client the subscription is licensed
  * for. Same mechanism, different reason — hence `onDevice`.
@@ -255,7 +255,7 @@ declare function reasoningForRun(o: {
  * Kept as DATA so a host never branches on a runtime id: the picker, the probe, the
  * plan and the catalog binding all read the fields below.
  */
-type LocalRuntimeId = 'synapse' | 'ollama' | 'freetoken' | 'kimi-code';
+type LocalRuntimeId = 'synapse' | 'ollama' | 'freetoken' | 'browser' | 'kimi-code';
 /**
  * Where a runtime's calls go, and what (if anything) authenticates them. An on-device
  * engine normally leaves `token` unset; `bfi serve --api-key` and a signed-in Kimi
@@ -1682,6 +1682,727 @@ declare class RepetitionLoopError extends StreamInterruptedError {
 declare function streamChatCompletion(opts: StreamChatOptions, handlers?: StreamHandlers): Promise<StreamChatResult>;
 
 /**
+ * What a settled code-changing run reports to learned routing — so a run in the editor
+ * teaches the router the way a cloud run does.
+ *
+ * Before this, only cloud runs were ever scored: an IDE run changed code, shipped it or
+ * failed, and the router never heard. Now a run that changed code reports how its CODER
+ * did — the model that made the edits (after an analysis→code hand-off, the coding model;
+ * under a pin, the pinned one) — under the `code` role, which is exactly the evidence the
+ * gateway reads when it picks the coder for the next run.
+ *
+ * Field names are the `POST /llm/v1/run-outcome` wire contract (`RunOutcomeRequest` in
+ * `@builderforce/learned-routing`); the host owns the transport. Pure.
+ */
+
+interface BrainRunOutcome {
+    /** Idempotency key — one outcome per run. */
+    clientRunId: string;
+    /** The model that made this run's code changes. */
+    model: string;
+    role: 'code';
+    source: 'ide';
+    terminalStatus: 'completed' | 'failed';
+    /** The change landed on the base branch (the run's own push). */
+    merged: boolean;
+    /** Completed model turns — the efficiency half of the score. */
+    steps: number;
+    projectId?: number;
+}
+
+/**
+ * STOP HOOKS — a host's say over whether a run may end.
+ *
+ * The loop's own end-of-run gates (`selfReviewShip.ts`, `previewReview.ts`, …) are the
+ * platform's contracts. This is the seam for the WORKSPACE's: a host (the VS Code
+ * extension reads them from a committed `.builderforce/hooks.json`) can hold a run that
+ * is about to settle and hand it one more instruction — "update README and DONE with what
+ * you completed", or "the lint you were told to keep green failed, here is its output".
+ *
+ * The loop owns only the BOUND and the re-prompt; what the hook says is the host's. Asked
+ * every time the run is about to end, so a hook that re-checks (a failing command) gets
+ * to see the run's fix — but never more than {@link MAX_STOP_HOOK_ROUNDS} times per run:
+ * a command that can never pass must not keep a run alive on the tenant's money.
+ *
+ * Runs BEFORE the ship gate on purpose: whatever a stop hook asks for (docs, a changelog
+ * line, a formatter's fixes) is part of the change, so it lands in the same commit
+ * instead of being left dirty after the push.
+ */
+/** What the host is told about a run that is about to end. */
+interface RunStopInput {
+    /** The run changed code in this turn (or a resumed turn). */
+    codeChanged: boolean;
+    /** Workspace-relative files the run touched, in order. */
+    touchedFiles: readonly string[];
+    /** The user's request that started the run. */
+    requestText: string;
+    /** How many stop-hook re-prompts this run has already had. */
+    round: number;
+}
+/**
+ * A host's stop hook: a non-empty string holds the run and becomes its next user turn;
+ * null / undefined / '' lets it settle.
+ */
+type RunStopHook = (input: RunStopInput) => Promise<string | null | undefined>;
+/** Re-prompts one run can receive from stop hooks before it is allowed to settle. */
+declare const MAX_STOP_HOOK_ROUNDS = 4;
+/**
+ * Ask the host's stop hook whether the run may end. Returns the nudge to re-prompt with,
+ * or null to let it settle. Best-effort: a throwing hook never fails or holds the run.
+ */
+declare function askStopHook(hook: RunStopHook | undefined, input: RunStopInput): Promise<string | null>;
+
+/**
+ * A run with an OWNER — what makes a sub-agent a sub-agent, and nothing else.
+ *
+ * A delegated child is not a second kind of loop. It is an ordinary run of THIS store —
+ * the same tools, gates, ticket backstop, failure-streak breaker and persistence as the
+ * run that spawned it — given its own run key (its own transcript, Stop and approval
+ * prompt) and this pointer back to who spawned it. Everything a child does differently
+ * follows from the pointer:
+ *
+ *   • it lives in its OWNER'S conversation: every message it persists goes to the root
+ *     chat, attributed to the child (`authoredBy`) and marked as whose sub-agent it is
+ *     (`subagentOf`), so the chat reads as Owner and Agent (name), never as one voice;
+ *   • its messages are progress inside someone else's work, so they are marked mid-turn
+ *     (Evermind does not learn a child's report as the chat's answer);
+ *   • it can itself spawn children — the pointer nests, which is all recursion needs.
+ */
+
+/** Who a child run is, and whose. */
+interface RunLineage {
+    /** The server chat the whole tree persists into — the top-level owner's chat. */
+    rootChatId: number;
+    /** The run key of the run that spawned this one (the root chat id for a top-level owner). */
+    ownerKey: number;
+    /** The owner's display name, as the chat shows it. */
+    ownerName: string;
+    /** Short handle the owner and the person address this child by (`a1`, `a2`, …). */
+    handle: string;
+    /** A few words naming the slice. */
+    label: string;
+    /** Who the child IS in the chat — a workspace agent it runs as, or a named helper. */
+    agent: {
+        ref: string;
+        name: string;
+    };
+    /** 1 for a child of a top-level run, 2 for a grandchild, … */
+    depth: number;
+}
+/** Metadata key under which a child's message names its owner. */
+declare const SUBAGENT_OF_META_KEY = "subagentOf";
+/** What a persisted message says about the run that wrote it. */
+interface SubagentOrigin {
+    handle: string;
+    owner: string;
+    label: string;
+}
+/** The owner a persisted message was written for, or null for anything not a child's. */
+declare function parseSubagentOrigin(msg: {
+    metadata?: string | null;
+}): SubagentOrigin | null;
+
+/**
+ * Chat MODE — "am I being asked a question, or being asked to get something done?"
+ *
+ * Two modes, one per conversation:
+ *
+ *   • `chat` — CONVERSATIONAL. The Brain reads, reasons and answers. It may look
+ *     anything up, but it does not mint board work, staff it, or start runs off
+ *     its own back. This is the default and the surface's resting state.
+ *
+ *   • `work`  — EXECUTIONAL. The Brain turns what it concludes into real work: it
+ *     creates the ticket, scopes the resources, links it to the conversation,
+ *     advances its status, and DISPATCHES an agent to run it. The conversation is
+ *     the front end of an execution, not a discussion about one.
+ *
+ * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────────
+ * The work-linking directive ({@link chatWorkLinkingDirective}) used to ride EVERY
+ * run unconditionally — so "what does this error mean?" was answered by a model that
+ * had also been instructed to open, staff and status a ticket about it. There was no
+ * way to just ask a question, and no way to tell an execution apart from a chat after
+ * the fact. Mode is the discriminator for both: it gates the directive at runtime and
+ * it is recorded on the conversation, so usage can finally be read as
+ * "conversations vs executions" rather than one undifferentiated pile.
+ *
+ * The value is persisted on the conversation (`brain_chats.mode`, `creation_sessions.mode`,
+ * migration 0409) rather than in the browser, so the choice follows the conversation
+ * across surfaces and devices — the same reasoning as `capability` (0345).
+ *
+ * Kept framework-free (pure strings + unions) so it is safe in every bundle: the web
+ * Brain, the VS Code webview, and the shared agent loop all import from here.
+ */
+/** The modes a conversation can be in. Order is display order. */
+declare const CHAT_MODES: readonly ["chat", "work"];
+type ChatMode = (typeof CHAT_MODES)[number];
+/**
+ * The mode a NEW conversation opens in.
+ *
+ * Work, because that is what people come here to do: the measured reality is that a
+ * conversation which cannot dispatch produces a plan and stops, and the user is then
+ * asked to find a control they did not know existed to get the work started. Opening
+ * in Work makes the product's actual promise the resting state; a user who only wants
+ * to ask a question flips one switch in the composer's `/` menu.
+ *
+ * This is NOT the coercion fallback — see {@link RESTING_CHAT_MODE}. The two were one
+ * constant, which meant "what does a new chat start as" and "what does an unreadable
+ * stored value mean" could not be answered differently, and changing one silently
+ * re-armed every legacy row that had never stored a mode at all.
+ */
+declare const NEW_CHAT_MODE: ChatMode;
+/**
+ * What an unset or unrecognised stored value resolves to: a conversation. A row that
+ * never recorded a mode (or a client ahead of the server) must not be granted execution
+ * authority by a default it never opted into.
+ */
+declare const RESTING_CHAT_MODE: ChatMode;
+/**
+ * The glyph for a mode. Decorative — the label always carries the meaning — but it
+ * lives HERE, beside the mode vocabulary, because both composers render it: the web
+ * `/` menu and the VS Code webview's `/` menu. A second copy in one host is how the
+ * two surfaces end up showing a different icon for the same conversation state.
+ */
+declare const CHAT_MODE_ICON: Readonly<Record<ChatMode, string>>;
+/** True for a value that is one of the known modes. */
+declare function isChatMode(value: unknown): value is ChatMode;
+/**
+ * Coerce an inbound/stored value to a mode, falling back to {@link RESTING_CHAT_MODE}.
+ * Tolerant by design: an unknown value (an older row, a client ahead of the server)
+ * resolves to a conversation rather than silently granting execution authority.
+ */
+declare function normalizeChatMode(value: unknown): ChatMode;
+/**
+ * The system-prompt block for CHAT mode.
+ *
+ * Deliberately a positive instruction rather than only a prohibition: a model told
+ * merely "do not create tickets" tends to hedge and offer to create one every turn,
+ * which is the same interruption in a politer costume. This tells it what its job IS
+ * — answer the question — and makes the ONE escape hatch explicit (the user asking
+ * outright), so the mode is a default rather than a cage.
+ */
+declare function chatConversationDirective(): string;
+/**
+ * One agent invited into the chat, as the Work directive names it.
+ *
+ * Deliberately the three facts a dispatch decision needs and nothing else: the NAME the
+ * human knows them by, the REF `chats.dispatch_agent` takes, and the ROLE that says
+ * which work is theirs. Kept structural (no import from the chat-tickets view model) so
+ * this module stays framework-free and every host can satisfy it from whatever it
+ * already holds.
+ */
+interface ChatRosterAgent {
+    ref: string;
+    name: string;
+    role?: string;
+}
+/**
+ * The agent half of a chat's addressable participants, as the Work directive wants it.
+ *
+ * Every host that renders a recipient picker or an @-mention typeahead already holds
+ * the participant list (agents AND humans, each with a ref and a display name). Rather
+ * than have each of them fetch the roster a SECOND time to tell the run about it — two
+ * reads of one endpoint on every chat open — they derive it from what they have. One
+ * mapping, here, so the agents the user can @-mention are exactly the agents the run is
+ * told it may dispatch to.
+ *
+ * Typed structurally (`{ kind, ref, name }`) rather than against `DirectedRecipient` so
+ * this module keeps its no-dependency posture; the shapes are checked by the call sites.
+ */
+declare function chatRosterFromParticipants(participants: readonly {
+    kind: string;
+    ref: string;
+    name: string;
+}[] | undefined): ChatRosterAgent[];
+/** What the Work directive needs to know about the surface and the chat it rides. */
+interface ChatWorkDirectiveOptions {
+    /** Does this run hold the workspace file tools (see `./localWorkspaceTools`)? */
+    canEditHere?: boolean;
+    /** Does the catalog carry `spawn_agent`, so persona delegation may be named? */
+    canDelegate?: boolean;
+    /** Does the catalog carry `spawn_agents`, so fan-out delegation may be named? */
+    canFanOut?: boolean;
+    /** The agents invited into this chat. Non-empty INVERTS the do-it-here ordering. */
+    roster?: readonly ChatRosterAgent[];
+}
+/**
+ * The system-prompt block for WORK mode: the existing chat⇄work linking contract
+ * PLUS the dispatch obligation that makes the mode mean execution rather than
+ * paperwork.
+ *
+ * The dispatch half exists because creating a well-staffed ticket and stopping is
+ * indistinguishable, from the user's side, from doing nothing: the measured reality
+ * is that tickets opened and never dispatched sit in backlog indefinitely. So the
+ * mode's closing obligation is to REPORT the dispatch verdict truthfully — `tasks.create`
+ * and `tasks.update` already return `autoRun: { dispatched, reason, detail }`, and
+ * `chats.dispatch_agent` starts a run directly when autonomy declined.
+ *
+ * ── WHY `canEditHere` EXISTS ───────────────────────────────────────────
+ * "Finish by dispatching" is the right obligation on the web Brain, which has no file
+ * tools and can only get code changed by asking someone else to change it. On the IDE
+ * surface it is not: that session HAS the workspace, and read as an unconditional rule
+ * it sends the agent to open a ticket and hire a remote builder for a one-line fix it
+ * was already looking at — measured, on a small UI defect, as a whole turn spent
+ * fighting a dispatch with the file untouched at the end of it.
+ *
+ * So the ordering is stated where the surface actually differs, driven by whether this
+ * run was given code-change tools ({@link ./localWorkspaceTools}'s `CODE_CHANGE_TOOLS`,
+ * which is the same set the "a code change is always tied to a ticket" backstop reads).
+ * Doing the work still ends in a ticket — recording is not optional, it is just not a
+ * substitute for doing.
+ *
+ * ── WHY `roster` OVERRIDES THAT ORDERING ─────────────────────────────────────────
+ * `canEditHere` answers "could this session make the change", which is not the same
+ * question as "whose change is it". A chat with agents INVITED INTO IT has already
+ * answered the second one: a human opened the Agents panel and put Bob, John and the
+ * Manager in this conversation, which is the platform's only way of saying "these are
+ * the people I want on this work". Read without that fact, the do-it-here rule
+ * quietly overrides the staffing the human just did — measured on chat #103, where
+ * three invited agents watched an IDE session make every code change itself and the
+ * run's staffing summary read `1 ticket filed · 0 dispatched`, with ZERO dispatch
+ * attempts: the model never asked, because nothing had told it there was anyone to ask.
+ *
+ * Two things follow, and they are separate. First, the roster is NAMED in the prompt,
+ * because "pick a capable agent" costs a discovery tool call that the do-it-here rule
+ * gives the model no reason to spend — the agents were in the chat and invisible to the
+ * run. Second, when the roster is non-empty the ordering INVERTS: the invited agents own
+ * the work and this session dispatches to them. The do-it-here rule survives only for a
+ * chat nobody has staffed, which is the case it was written for.
+ *
+ * Tool names here are the ADVERTISED (`builtin_*`) names the model actually sees on
+ * the gateway relay — never the catalog ids, which appear nowhere in its tool list.
+ * The roster is rendered as names AND refs because the model reads the name and
+ * `builtin_chats_dispatch_agent` takes the ref.
+ */
+declare function chatWorkDirective(chatId: number, opts?: ChatWorkDirectiveOptions): string;
+/**
+ * The system-prompt block for a mode. This is the ONE place a mode becomes model-facing
+ * behaviour, so the two surfaces (web Brain, VS Code webview) and the shared agent loop
+ * cannot drift on what a mode means.
+ */
+declare function chatModeDirective(mode: ChatMode, chatId: number, opts?: ChatWorkDirectiveOptions): string;
+
+/**
+ * Evermind memory hooks for the Brain run loop — the client half of "recall +
+ * learn + reconcile, visible in the chat".
+ *
+ * A project-scoped Brain conversation now (a) RECALLS the project's learned
+ * memories before answering and injects them into the prompt, and (b) surfaces
+ * that its turn will be CONTRIBUTED back (and which recalled memories it
+ * RECONCILES) — each as its own timeline step, the same way a Claude Code
+ * `memory_recall` shows as a step. The heavy lifting (the corpus + the ranker)
+ * lives server-side; the host injects a single {@link EvermindRunHooks.recall}
+ * callback bound to the active chat's project, and the run loop
+ * ({@link ./brainRunStore}) turns the result into the injected memory block plus
+ * the recall/learn/reconcile trace events.
+ *
+ * The recall CONTRACT, the memory block and the reconcile rule are the Evermind
+ * module's (`@seanhogg/builderforce-memory/evermind`); what lives here is the Brain's
+ * own port — the hooks a host injects and the one server-backed implementation of them.
+ */
+
+/**
+ * A memory-first answer that lets the run loop SKIP the paid model entirely — either
+ * an exact-repeat Q&A cache hit or the project's Evermind SSM. Returned by the opt-in
+ * {@link EvermindRunHooks.answer} hook; null means "memory can't answer, run the LLM".
+ */
+interface MemoryFirstAnswer {
+    /** The answer text to adopt as the assistant turn. */
+    text: string;
+    /** Where it came from — drives the "no LLM" provenance/step. */
+    source: 'qa-cache' | 'evermind';
+    /** Evermind head version, when `source === 'evermind'`. */
+    evermindVersion?: number;
+    /**
+     * WHICH Evermind answered (project id), when `source === 'evermind'`. A project can
+     * target several heads (its own plus the IDE builds grouped under it), so without
+     * this the timeline could not say which one served — and a chat whose OWN project
+     * reports inference OFF could still be answered by a sibling head with no way to
+     * tell. Recorded on the trace step so a memory hit is triageable.
+     */
+    evermindProjectId?: number;
+}
+/**
+ * The hooks a host injects into the run loop. Bound to the active chat's project.
+ * `recall` grounds the answer (RAG); the OPTIONAL `answer`/`cacheAnswer` pair adds the
+ * memory-first short-circuit — answer from the project's own memory (Q&A cache or
+ * Evermind) BEFORE spending a model call, and remember a fresh (question→answer) pair
+ * so the next exact repeat is free. All return null / no-op when the chat isn't
+ * project-scoped or memory is unavailable, so the loop simply falls through to the LLM.
+ */
+interface EvermindRunHooks {
+    /** Recall the project's learned memories most relevant to `query`. */
+    recall(query: string): Promise<EvermindRecallResult | null>;
+    /**
+     * Try to answer `query` from memory WITHOUT the LLM; null → run the model.
+     *
+     * `opts.toolsAvailable` tells the resolver whether THIS run can call tools. It must
+     * be honest: the Evermind SSM has no tool-calling, so when tools are available the
+     * server serves only the Q&A cache (a replay of an answer a real model produced) and
+     * never a fresh SSM generation — otherwise a request whose answer lives behind a tool
+     * call ("which tickets are in the backlog?") gets answered from stale weights while
+     * the tools that could answer it are never called.
+     */
+    answer?(query: string, opts: {
+        toolsAvailable: boolean;
+    }): Promise<MemoryFirstAnswer | null>;
+    /** Remember a (question → answer) pair so an exact repeat short-circuits next time. */
+    cacheAnswer?(query: string, answer: string): void | Promise<void>;
+}
+/**
+ * The host's authenticated JSON transport, as a port. Both Brain hosts already have
+ * one (`apiRequest` on the web, the webview's `authedFetch`); this is the intersection
+ * the memory hooks need, so neither has to hand it a bespoke wrapper.
+ */
+type ProjectMemoryRequest = <T>(path: string, init?: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+}) => Promise<T>;
+/**
+ * The project's SERVER-side memory hooks, built once for every host.
+ *
+ * The three calls — recall, memory-first answer, write-through — are the same routes
+ * with the same query parameters and the same "a failure is not an error, it is just
+ * no memory" contract wherever the Brain runs. They were hand-written per host, and
+ * the copies had drifted: the web surfaces passed only `recall` (one of them plus a
+ * `learn` callback this interface has never had, so it was dead), while only the VS
+ * Code webview had the memory-first pair at all. Same loop, three different memories.
+ *
+ * `toolsAvailable` is threaded through honestly, because the server uses it to decide
+ * whether the Evermind SSM leg may run: it cannot call a tool, so on a run that could
+ * fetch the real answer it must never pre-empt the model from stale weights.
+ */
+declare function projectMemoryHooks(projectId: number, request: ProjectMemoryRequest, 
+/**
+ * The chat these hooks are bound to, when the host knows it.
+ *
+ * Recall is TIERED on it: this conversation's own memories come first, then the
+ * wider project's. Without it the server ranks project-wide, which is what made a
+ * reopened chat "remember" turns from other conversations. Optional because a global
+ * (project-less) chat and the non-chat callers genuinely have none — those recall
+ * project-wide exactly as before.
+ */
+chatId?: number | null): EvermindRunHooks;
+
+/**
+ * Module-level Brain run engine — the agent tool-loop, hoisted OUT of React so a
+ * run survives the unmount of the component that started it.
+ *
+ * Why this exists: the Brain UI (BrainPanel) is mounted per-route — the full
+ * page `/brainstorm`, the IDE-embedded panel, the floating drawer. When the
+ * Brain navigates the user mid-run (a `navigate_to` tool call), the route-scoped
+ * panel unmounts. Previously the loop's state (rich transcript, trace, streaming
+ * delta, the human-in-the-loop confirm resolver) lived in that component's refs,
+ * so the run was orphaned: its React state updates went nowhere, the freshly
+ * mounted instance lost all grounding, and — worst — it re-answered the trailing
+ * user message, spawning a SECOND concurrent loop (duplicate writes).
+ *
+ * The fix: one run per chat lives here, keyed by chatId, single-flight. Any
+ * mounted Brain instance subscribes to its chat's cell and renders the live run;
+ * a second instance that tries to start the same chat is a no-op. Every turn
+ * that produces visible text — both intermediate tool-call narration and the
+ * final answer — is persisted as its own message; mounted instances pick each
+ * one up via `messagesEpoch`, so a turn's narration is a durable block instead
+ * of transient streaming text the next turn overwrites. The confirm gate also
+ * lives here, so a navigation that swaps which panel is mounted can still
+ * resolve a pending confirmation.
+ *
+ * This module owns NO React — `useBrainConversation` is the thin binding.
+ */
+
+/** Streaming fn shape (matches BrainRuntime.stream). */
+type BrainStreamFn = (opts: Omit<StreamChatOptions, 'transport'>, handlers?: StreamHandlers) => Promise<StreamChatResult>;
+/** Persistence subset the loop needs (matches BrainPersistenceAdapter). */
+interface BrainRunPersistence {
+    sendMessages(chatId: number, messages: Array<{
+        role: string;
+        content: string;
+        metadata?: string;
+    }>): Promise<BrainMessage[]>;
+}
+/** Everything a single run needs, captured at start time (survives navigation). */
+interface BrainRunRequest {
+    resolvedSystemPrompt: string;
+    tools?: BrainToolSpec[];
+    model?: string;
+    /** Hard-pin a deliberate user-selected model. */
+    modelStrict?: boolean;
+    /** Explicit routing choice when no model is pinned. */
+    routingMode?: 'auto' | 'byo_pool';
+    /**
+     * Pick the next model to try when the current one has burned its whole stall budget
+     * without emitting a single tool call — i.e. re-prompting it is spent and only a
+     * DIFFERENT model can finish the request.
+     *
+     * The loop is deliberately surface-agnostic here: the host holds the cached
+     * `/llm/v1/models` surface and answers with `nextFallbackModel(surface, tried)`, so
+     * the ordering (own account + tool-calling pool first) lives in ONE shared function
+     * rather than in each host. Return undefined — or omit the callback — to keep the
+     * previous behaviour: stop and explain, instead of switching.
+     *
+     * `tried` holds every model already attempted this run, requested and resolved.
+     */
+    pickFallbackModel?: (tried: readonly string[]) => string | undefined;
+    runTool?: (name: string, args: unknown) => Promise<unknown>;
+    /** Pure predicate: true → pause the loop for an explicit user confirmation. */
+    needsConfirm?: (req: {
+        name: string;
+        args: unknown;
+    }) => boolean;
+    stream: BrainStreamFn;
+    /**
+     * `max_tokens` for this run's completions — the composer's Effort level (see
+     * `effort.ts`). Absent keeps `streamChatCompletion`'s 4096 default.
+     */
+    maxTokens?: number;
+    /**
+     * Vendor-neutral reasoning intent for this run (the composer's Thinking toggle,
+     * at the Effort level's intensity). Absent ⇒ no `reasoning` key on the wire.
+     * Applies to the MODEL-FACING turns only — the internal transcript summarizer
+     * is a mechanical compaction, never a "think harder" job.
+     */
+    reasoning?: ReasoningIntent;
+    persistence: BrainRunPersistence;
+    onActivity?: (chatId: number) => void;
+    /** Seed the rich transcript from prior persisted history (first turn only). */
+    seed?: ChatCompletionMessage[];
+    /**
+     * What earlier turns of this chat already READ and DID, as a system-prompt block
+     * (`priorResearch.ts`) — the counterpart to {@link seed}, which cannot carry tool
+     * results (an orphaned tool message 400s strict vendors). Applied only when the run
+     * seeds its transcript from history; a transcript still in memory already holds the
+     * real tool rows. Without it a "continue" after a reload started its research over.
+     */
+    priorResearch?: string | null;
+    /** The user turn that triggered this run, appended to the transcript. */
+    userTurn?: string | ContentPart[];
+    /**
+     * The chat's project. Enables the post-run "a code change is always tied to a
+     * ticket" backstop: when an IDE run changed code but never recorded a ticket, the
+     * loop mints one via `builtin_tickets_from_delta` for THIS project, linked to the
+     * chat. Omit (or null) for a non-project chat / the web Brain (which has no file
+     * tools, so the backstop never fires there anyway).
+     */
+    projectId?: number | null;
+    /**
+     * Project-Evermind memory hooks (bound to the active chat's project by the
+     * host). When present, the loop recalls learned memories before answering,
+     * injects them into the system prompt, and records recall/learn/reconcile
+     * steps into the trace so the chat SHOWS the project memory being used. Omit
+     * for a non-project chat (nothing memory-related happens).
+     */
+    evermind?: EvermindRunHooks;
+    /**
+     * Optional per-turn system-prompt augmentation — the LIMBIC parity seam.
+     *
+     * Called once at loop start (alongside Evermind recall) with the latest user
+     * text; a non-empty return is appended to the system prompt with a leading
+     * `\n\n`. This lets a host inject a per-turn dynamic block (e.g. a limbic /
+     * affective state fetched from the gateway) that the synchronous
+     * `resolvedSystemPrompt` resolver cannot produce. Best-effort: a throw is
+     * swallowed and the turn proceeds without the augmentation, exactly like a
+     * failed Evermind recall.
+     */
+    augmentSystemPrompt?: (userText: string) => Promise<string | undefined>;
+    /**
+     * The conversation's MODE (migration 0409) — whether this run is a CONVERSATION
+     * (`chat`: read, reason, answer) or an EXECUTION (`work`: create + staff + link the
+     * ticket, then dispatch an agent to run it). Decides which directive is folded into
+     * the system prompt; see `chatMode.ts`.
+     *
+     * Optional, and absent means `work`: hosts that predate the mode (the VS Code
+     * webview, any embed) keep the always-execute behaviour they shipped with rather
+     * than silently losing their ticket lineage.
+     */
+    chatMode?: ChatMode;
+    /**
+     * The agents INVITED INTO this chat, which is the platform's record of who the human
+     * wants on this work. Folded into the WORK directive: naming them saves the model a
+     * discovery call it had no reason to spend, and a non-empty roster inverts the
+     * do-it-here ordering so the invited agents get dispatched rather than watched
+     * (see `chatMode.ts`). Absent or empty leaves the prior behaviour exactly as it was —
+     * a host that does not know the roster must not accidentally assert there is none, so
+     * an UNRESOLVED roster and an EMPTY one are both simply "nobody named here".
+     */
+    chatRoster?: readonly ChatRosterAgent[];
+    /**
+     * Report a settled code-changing run's outcome to learned routing (the host POSTs it
+     * to `/llm/v1/run-outcome`). Omit and nothing is reported. Best-effort: a rejection is
+     * swallowed and never affects the run.
+     */
+    reportOutcome?: (outcome: BrainRunOutcome) => Promise<unknown>;
+    /**
+     * The host's STOP HOOK (`stopHooks.ts`) — asked each time the run is about to end; a
+     * returned instruction holds it for another turn (bounded per run). The VS Code host
+     * feeds it from the workspace's committed `.builderforce/hooks.json`. Omit for none.
+     */
+    onStop?: RunStopHook;
+    /**
+     * This run has an OWNER — it is a sub-agent another run spawned (`runLineage.ts`).
+     * Nothing about the loop changes: the run keeps its own key (its own transcript, Stop
+     * and approval prompt) while everything it persists or asks the server about goes to
+     * the root chat, attributed to the child. Absent for a top-level run.
+     */
+    lineage?: RunLineage;
+}
+/** Live, observable snapshot of a chat's run (what the hook renders). */
+interface BrainRunSnapshot {
+    running: boolean;
+    streamingText: string;
+    error: string;
+    /**
+     * What the user can DO about {@link error}, when the failure was actionable —
+     * an expired session (reconnect), a plan that doesn't cover the request
+     * (upgrade), or billing that needs a card (validate_card). Derived ONCE here
+     * from the thrown error's structured gateway fields via {@link chatErrorAction},
+     * so a mounted view renders the right button without re-parsing error prose.
+     * Null when nothing but dismissing applies.
+     */
+    errorAction: ChatErrorAction | null;
+    pendingConfirm: {
+        name: string;
+        args: unknown;
+    } | null;
+    /** Bumped whenever a new assistant message is persisted. */
+    messagesEpoch: number;
+    /**
+     * Every assistant message this run has persisted, in order (narration turns +
+     * the final answer). Delivered as a list — not a single "last" value — so a
+     * mounted view merges them all by id even when React coalesces the rapid
+     * mid-run emits into one render and never sees the intermediate snapshots.
+     */
+    appended: BrainMessage[];
+    hasTrace: boolean;
+    /**
+     * The live execution trace (LLM turns + tool calls + errors), in order. The
+     * same array `getRunTrace` returns — exposed on the snapshot so a mounted view
+     * (e.g. the timeline transcript) can render each step AS IT HAPPENS. The
+     * snapshot object identity changes on every `emit` (including every
+     * `pushTrace`), so consumers re-render even though the array reference is
+     * stable; they read it fresh each render. Bounded by {@link MAX_TRACE_EVENTS}.
+     */
+    trace: BrainTraceEvent[];
+    /**
+     * What the run is doing RIGHT NOW — the in-flight step, published as it is
+     * ENTERED rather than when it settles. The `trace` records a step only once it
+     * has completed, which is the wrong moment for a progress indicator: a search
+     * that takes a minute emits nothing at all until it is over, so a working agent
+     * and a hung one look identical. Null while idle. See `runActivity.ts`.
+     */
+    activity: BrainRunActivity | null;
+    /**
+     * Providers the tenant CONNECTED but the gateway could NOT resolve on any turn of
+     * this run (from `x-builderforce-byo-unresolved`) — e.g. a connected Claude
+     * subscription whose token expired, so the run silently used the shared pool
+     * instead of the tenant's own Opus. A mounted view shows a passive "reconnect your
+     * account" banner off this, so the degrade is visible WITHOUT copying triage. Empty
+     * when everything resolved (or nothing is connected).
+     */
+    byoUnresolved: string[];
+    /**
+     * BYO providers whose key hit a usage/capacity cap on any turn of this run
+     * (from `x-builderforce-provider-cap`) — e.g. the tenant's Anthropic key hit its
+     * monthly spend limit, or Meta MUSE quota was exhausted. A mounted view shows a
+     * "manage your API keys" banner so the user knows to top up or switch providers.
+     * Accumulated across turns; reset fresh each run. Empty when no cap was hit.
+     */
+    providerCap: string[];
+}
+/**
+ * A snapshot of which chats are live right now, split by whether they are actively
+ * executing (`running`) or paused on a human-in-the-loop confirm (`awaiting` — the
+ * actionable one: the loop cannot proceed until the user answers). The two lists
+ * are disjoint (an awaiting chat is omitted from `running`).
+ */
+interface GlobalRunState {
+    running: number[];
+    awaiting: number[];
+}
+/**
+ * Drop all run state. For tests/teardown only — there's no per-chat eviction in
+ * normal operation (transcripts are session-lived grounding, as before).
+ */
+declare function resetBrainRunStore(): void;
+/**
+ * Subscribe to ANY run-state change across all chats (a run starting, finishing,
+ * or pausing on a confirm — in any chat, mounted or not). Returns an unsubscribe
+ * fn. Pair with {@link getGlobalRunState} to render a cross-chat live indicator.
+ */
+declare function subscribeRunStore(listener: () => void): () => void;
+/**
+ * Which chats are live right now, split into actively-executing (`running`) and
+ * paused-on-a-confirm (`awaiting`). Disjoint: a chat paused on a confirm is in
+ * `awaiting` only. Recomputed from the current cells on each call — cheap (a scan
+ * of the bounded cell map); callers debounce via a stable key of the two lists.
+ */
+declare function getGlobalRunState(): GlobalRunState;
+/** Subscribe to a chat's run state. Returns an unsubscribe fn. */
+declare function subscribeRun(chatId: number, listener: () => void): () => void;
+/**
+ * The cancel signal of a chat's IN-FLIGHT run, or undefined when nothing is running.
+ *
+ * Exists for the same reason {@link requestRunConfirm} is callable from outside the
+ * cell: work the run starts that is not the loop itself — a delegated sub-agent running
+ * its own nested loop inside one tool call — must stop when the user presses Stop, and
+ * the controller is created by {@link startRun}, after the host has already assembled the
+ * catalog that carries that tool. So the tool reads it at CALL time, by chat.
+ */
+declare function runAbortSignal(chatId: number): AbortSignal | undefined;
+/**
+ * Splice a message persisted OUTSIDE the loop into a chat's live view — a delegated
+ * child's report, posted while its parent run is still going. Persisting alone put it in
+ * the chat store, but the panel showed it only after a reload: mounted views merge the
+ * run's `appended` buffer, and nothing had told the buffer.
+ */
+declare function appendRunMessage(chatId: number, msg: BrainMessage): void;
+/** Current snapshot (referentially stable until something changes). */
+declare function getRunSnapshot(chatId: number | null): BrainRunSnapshot;
+declare function isRunning(chatId: number | null): boolean;
+/** The accumulated execution trace for a chat (for the capture/triage report). */
+declare function getRunTrace(chatId: number | null): BrainTraceEvent[];
+/**
+ * Stop a chat's in-flight run. Aborts the streaming LLM request (which rejects
+ * the in-flight `stream()` — the loop treats an aborted signal as a clean exit,
+ * surfacing no error) and resolves any paused human-in-the-loop confirmation as
+ * declined so a loop waiting on the gate can also unwind. Records a `stopped`
+ * trace step for triage. No-op if nothing is running for this chat.
+ *
+ * What the model was streaming, and which model it was, are captured FIRST — a Stop
+ * is pressed exactly when a model has gone wrong, and clearing the bubble used to
+ * destroy the only evidence of what it did. The unwinding run persists both
+ * ({@link keepStoppedTurn}); see `stoppedTurn.ts`.
+ *
+ * `running` flips to false when `runLoop` unwinds and `startRun`'s `finally`
+ * fires; we emit here too so the Stop is reflected immediately.
+ */
+declare function stopRun(chatId: number): void;
+/**
+ * Clear a chat's surfaced run error so the UI's error banner can be dismissed.
+ * The error lives on the run cell (set when the LLM stream / tool loop threw),
+ * so the hook's local `setError('')` can't reach it — this is the store-side
+ * companion `clearError()` calls. No-op when there's no cell or no error.
+ */
+declare function clearRunError(chatId: number | null): void;
+/** Resolve a pending human-in-the-loop confirmation. No-op if none is pending. */
+declare function resolveRunConfirm(chatId: number, ok: boolean): void;
+/**
+ * Mirror a run that is executing in ANOTHER process into this store's cell, so every
+ * local reader — the conversation hook, the timeline, `getGlobalRunState` — sees it
+ * exactly as it would see an in-process run. The only writer of a cell that no local
+ * loop owns; a locally running cell is never overwritten (the local loop is the
+ * truth for it). `trace` is taken as sent: the remote side decides how much of its
+ * bounded trace to ship (see the VS Code host's delta relay).
+ */
+declare function applyRemoteRun(chatId: number, snapshot: BrainRunSnapshot): void;
+/**
+ * Start (or no-op join) the agent loop for a chat. Single-flight per chat: if a
+ * run is already in flight the call returns immediately, so a second mounted
+ * Brain instance can never spawn a duplicate loop. The claim is synchronous
+ * (set before any await), so two callers in the same tick can't both pass it.
+ */
+declare function startRun(runKey: number, request: BrainRunRequest): Promise<void>;
+
+/**
  * Chat/message persistence the host provides. Mirrors the Builderforce
  * `/api/brain` client surface; any backend conforming to these signatures works.
  */
@@ -1768,14 +2489,29 @@ interface BrainConfig {
     persistence: BrainPersistenceAdapter;
     /** Map a modality string to its default system prompt. Defaults to a generic prompt. */
     resolveSystemPrompt?: (modality: string) => string;
+    /**
+     * The streaming fn every Brain turn runs through. Omitted = the shared streamer over
+     * {@link BrainConfig.transport}. A host supplies one to change WHERE turns run without
+     * forking the hooks — builderforce.ai serves tool-free turns on the browser's own model
+     * first (`createLocalFirstStream`). A call that must reach a NAMED cloud model (a model
+     * comparison) uses `transport` directly and never passes through here.
+     */
+    stream?: BrainStreamFn;
 }
+/**
+ * The streaming fn a config resolves to — the host's own, else the shared streamer over
+ * its transport. The ONE resolution: BrainProvider and any surface that streams from a
+ * config outside React (the canvas turn loop) read it here, so they cannot disagree on
+ * where a turn runs.
+ */
+declare function resolveBrainStream(config: Pick<BrainConfig, 'transport' | 'stream'>): BrainStreamFn;
 /** Resolved runtime: config plus a transport-bound streaming function. */
 interface BrainRuntime {
     transport: BrainTransport;
     persistence: BrainPersistenceAdapter;
     resolveSystemPrompt: (modality: string) => string;
-    /** Stream a completion through the configured transport. */
-    stream(opts: Omit<StreamChatOptions, 'transport'>, handlers?: StreamHandlers): Promise<StreamChatResult>;
+    /** Stream a completion — the config's own stream, else the configured transport. */
+    stream: BrainStreamFn;
 }
 declare function BrainProvider({ config, children, }: {
     config: BrainConfig;
@@ -1884,6 +2620,17 @@ declare function localFirstWorkload(call: {
     role?: string;
     maxTokens?: number;
 }): LocalFirstWorkload;
+/**
+ * Whether a call is OPEN to local-first. Any model choice — an explicit pick, a
+ * project's or role's pin, a configured default — names what the user wants and wins
+ * outright, and so does an explicit "use my connected accounts" (`byo_pool`); only "let
+ * the gateway route" may be served on this device first. The ONE statement of the rule:
+ * the editor's route and the web app's stream both read it.
+ */
+declare function localFirstApplies(call: {
+    model?: string;
+    routingMode?: 'auto' | 'byo_pool';
+}): boolean;
 /** What {@link createLocalFirstStream} needs from its host. */
 interface LocalFirstStreamInput {
     /** The runtimes as probed WITH capabilities (`createLocalRuntimeProber({ capabilities: true })`). */
@@ -1939,6 +2686,154 @@ declare function completeLocalFirst(input: {
     fetch?: LocalFetch;
     onAttempt?: (record: LocalFirstAttemptRecord) => void;
 }): Promise<string>;
+
+/**
+ * Chrome's built-in model, reached through the Prompt API — the ONE detection of it.
+ *
+ * Two surfaces drive the same browser engine: the Brain's local-first path (the in-page
+ * shim in `browserEngine.ts`) and the web app's `PromptApiModelProvider`. Both need the
+ * same three answers — is the surface there at all, is the model ready, and how does a
+ * stream of output become deltas — so they live here once, structurally typed so no host
+ * depends on an ambient DOM lib that may not have caught up with the API yet.
+ *
+ * The current surface is the `LanguageModel` global (Chrome 138+); older builds exposed
+ * `self.ai.languageModel` with a `capabilities()` probe instead of `availability()`. Both
+ * are read, and both answers normalise to the current vocabulary.
+ */
+/** One message of a session's seeded conversation. */
+interface PromptApiMessage {
+    role: 'system' | 'user' | 'assistant';
+    content: string;
+}
+/** A live session — minimal structural typing of what the hosts call. */
+interface PromptApiSession {
+    prompt(input: string, opts?: {
+        signal?: AbortSignal;
+    }): Promise<string>;
+    promptStreaming(input: string, opts?: {
+        signal?: AbortSignal;
+    }): ReadableStream<string>;
+    /** Forks the conversation, PRESERVING the original session's initial prompts —
+     *  it takes only `{ signal }`, so it can never install a different system
+     *  prompt. Changing the system prompt therefore requires a fresh `create()`. */
+    clone(opts?: {
+        signal?: AbortSignal;
+    }): Promise<PromptApiSession>;
+    destroy(): void;
+    readonly inputUsage?: number;
+    readonly inputQuota?: number;
+    /** Legacy (pre-138) name of the session's token budget. */
+    readonly maxTokens?: number;
+    /** Tokens `input` would add to the session (138+). */
+    measureInputUsage?(input: string, opts?: {
+        signal?: AbortSignal;
+    }): Promise<number>;
+    /** Legacy (pre-138) token accounting; guarded because newer builds drop it. */
+    countPromptTokens?(input: string): Promise<number>;
+}
+/** The current availability vocabulary. */
+type PromptApiAvailability = 'unavailable' | 'downloadable' | 'downloading' | 'available';
+interface PromptApiFactory {
+    availability?(): Promise<PromptApiAvailability | 'readily'>;
+    /** Legacy (pre-138) readiness probe. */
+    capabilities?(): Promise<{
+        available?: 'readily' | 'after-download' | 'no';
+    }>;
+    create(opts?: {
+        temperature?: number;
+        topK?: number;
+        initialPrompts?: PromptApiMessage[];
+        signal?: AbortSignal;
+        monitor?: (m: EventTarget) => void;
+    }): Promise<PromptApiSession>;
+}
+/** Resolve the Prompt API factory across the current global (`LanguageModel`) and
+ *  the legacy `self.ai.languageModel` surface, or null when the browser lacks it. */
+declare function promptApiFactory(): PromptApiFactory | null;
+/** True when this browser exposes the built-in Prompt API surface at all.
+ *  (Actual model availability is async — see {@link promptApiAvailability}.) */
+declare function hasPromptApi(): boolean;
+/**
+ * What the browser says about its model, in the current vocabulary. Asking NEVER starts
+ * a download — only `create()` does — so a router may ask freely. Any failure reads as
+ * `unavailable`.
+ */
+declare function promptApiAvailability(factory?: PromptApiFactory | null): Promise<PromptApiAvailability>;
+/** The session's input budget in tokens, under either generation's name. */
+declare function promptApiInputQuota(session: PromptApiSession): number | undefined;
+/** Tokens `input` would add to the session, or undefined when the build cannot say. */
+declare function promptApiMeasure(session: PromptApiSession, input: string, signal?: AbortSignal): Promise<number | undefined>;
+/**
+ * The deltas of a `promptStreaming` stream. Chrome ≥138 yields incremental deltas; older
+ * builds yielded the full cumulative string — normalised here so a consumer never
+ * double-counts. Releases the reader however iteration ends.
+ */
+declare function promptStreamDeltas(stream: ReadableStream<string>): AsyncGenerator<string>;
+
+/**
+ * The browser's OWN model as a local-first runtime — Chrome's built-in model (Gemini
+ * Nano) behind the Prompt API, answering the same OpenAI chat route every other local
+ * runtime answers.
+ *
+ * Nothing about local-first changes for it. The registry knows it as the `browser`
+ * runtime (`reach: 'page'`, so no HTTP prober ever contacts it); {@link
+ * browserEngineProbe} reports its one model the way an HTTP probe reports a runtime's
+ * catalog; and {@link browserEngineFetch} is a `fetch` that answers
+ * `POST <browser root>/v1/chat/completions` from the Prompt API as OpenAI SSE. Handed to
+ * `createLocalFirstStream` as its local fetch, the shared streamer drives it exactly
+ * like Ollama: same plan (a tool turn never goes to it — the Prompt API has no tool-call
+ * protocol), same failover (a refusal, an oversized prompt or an unavailable model is a
+ * non-2xx BEFORE anything streamed, so the gateway answers invisibly), same Stop.
+ *
+ * Readiness is asked WITHOUT starting a download: a model that is `downloadable` or
+ * `downloading` is not offered — a chat turn must never be the thing that pulls a
+ * multi-gigabyte model onto someone's machine.
+ */
+
+/** The id the browser engine's one model goes by (`local/browser/gemini-nano`). */
+declare const BROWSER_ENGINE_MODEL = "gemini-nano";
+/** The window assumed when the browser will not say (Gemini Nano's smallest shipped
+ *  input quota, rounded down) — conservative, so the plan sends a long call to the cloud
+ *  rather than discovering the overflow at the engine. */
+declare const BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS = 4096;
+/** How long an availability answer is trusted. It changes only when the browser finishes
+ *  a download or an admin flips a policy, so asking per turn would be pure overhead. */
+declare const BROWSER_ENGINE_PROBE_TTL_MS = 30000;
+interface BrowserEngineProber {
+    /** The browser runtime's probe, or null when the model is not ready on this browser. */
+    probe(options?: {
+        fresh?: boolean;
+    }): Promise<LocalRuntimeProbe | null>;
+    invalidate(): void;
+}
+/**
+ * A memoizing prober for the browser engine — the twin of `createLocalRuntimeProber`.
+ * Concurrent callers share one in-flight answer; the input quota, once learned, is kept
+ * for the prober's lifetime (it is a property of the installed model).
+ */
+declare function createBrowserEngineProber(config?: {
+    ttlMs?: number;
+    now?: () => number;
+}): BrowserEngineProber;
+/** The browser runtime's probe on this page, or null when its model is not ready. SSR
+ *  safe: without the Prompt API (a server, any non-Chrome browser) it is simply null. */
+declare function browserEngineProbe(options?: {
+    fresh?: boolean;
+}): Promise<LocalRuntimeProbe | null>;
+/** The request messages as the Prompt API takes them: a seeded conversation plus the
+ *  prompt — or why this request cannot be served here. */
+declare function toPromptApiTurn(messages: unknown): {
+    initialPrompts: PromptApiMessage[];
+    prompt: string;
+} | {
+    error: string;
+};
+/**
+ * A `fetch` that answers the browser runtime's chat route in the page and passes every
+ * other request to `base`. Lend it to `createLocalFirstStream` (or `completeLocalFirst`)
+ * as the local fetch; the HTTP runtimes keep reaching their servers through `base`.
+ */
+declare function browserEngineFetch(base?: LocalFetch): LocalFetch;
 
 /** A `run_command` whose every segment only reads — `git log`, `ls`, a `for` loop of `git rev-list`. */
 declare function isReadOnlyShellCall(tool: string, args: unknown): boolean;
@@ -2125,109 +3020,6 @@ interface PreparedImage {
  * after max compression, or `null` for non-raster / non-DOM inputs.
  */
 declare function prepareImageDataUrl(file: File): Promise<PreparedImage | null>;
-
-/**
- * Evermind memory hooks for the Brain run loop — the client half of "recall +
- * learn + reconcile, visible in the chat".
- *
- * A project-scoped Brain conversation now (a) RECALLS the project's learned
- * memories before answering and injects them into the prompt, and (b) surfaces
- * that its turn will be CONTRIBUTED back (and which recalled memories it
- * RECONCILES) — each as its own timeline step, the same way a Claude Code
- * `memory_recall` shows as a step. The heavy lifting (the corpus + the ranker)
- * lives server-side; the host injects a single {@link EvermindRunHooks.recall}
- * callback bound to the active chat's project, and the run loop
- * ({@link ./brainRunStore}) turns the result into the injected memory block plus
- * the recall/learn/reconcile trace events.
- *
- * The recall CONTRACT, the memory block and the reconcile rule are the Evermind
- * module's (`@seanhogg/builderforce-memory/evermind`); what lives here is the Brain's
- * own port — the hooks a host injects and the one server-backed implementation of them.
- */
-
-/**
- * A memory-first answer that lets the run loop SKIP the paid model entirely — either
- * an exact-repeat Q&A cache hit or the project's Evermind SSM. Returned by the opt-in
- * {@link EvermindRunHooks.answer} hook; null means "memory can't answer, run the LLM".
- */
-interface MemoryFirstAnswer {
-    /** The answer text to adopt as the assistant turn. */
-    text: string;
-    /** Where it came from — drives the "no LLM" provenance/step. */
-    source: 'qa-cache' | 'evermind';
-    /** Evermind head version, when `source === 'evermind'`. */
-    evermindVersion?: number;
-    /**
-     * WHICH Evermind answered (project id), when `source === 'evermind'`. A project can
-     * target several heads (its own plus the IDE builds grouped under it), so without
-     * this the timeline could not say which one served — and a chat whose OWN project
-     * reports inference OFF could still be answered by a sibling head with no way to
-     * tell. Recorded on the trace step so a memory hit is triageable.
-     */
-    evermindProjectId?: number;
-}
-/**
- * The hooks a host injects into the run loop. Bound to the active chat's project.
- * `recall` grounds the answer (RAG); the OPTIONAL `answer`/`cacheAnswer` pair adds the
- * memory-first short-circuit — answer from the project's own memory (Q&A cache or
- * Evermind) BEFORE spending a model call, and remember a fresh (question→answer) pair
- * so the next exact repeat is free. All return null / no-op when the chat isn't
- * project-scoped or memory is unavailable, so the loop simply falls through to the LLM.
- */
-interface EvermindRunHooks {
-    /** Recall the project's learned memories most relevant to `query`. */
-    recall(query: string): Promise<EvermindRecallResult | null>;
-    /**
-     * Try to answer `query` from memory WITHOUT the LLM; null → run the model.
-     *
-     * `opts.toolsAvailable` tells the resolver whether THIS run can call tools. It must
-     * be honest: the Evermind SSM has no tool-calling, so when tools are available the
-     * server serves only the Q&A cache (a replay of an answer a real model produced) and
-     * never a fresh SSM generation — otherwise a request whose answer lives behind a tool
-     * call ("which tickets are in the backlog?") gets answered from stale weights while
-     * the tools that could answer it are never called.
-     */
-    answer?(query: string, opts: {
-        toolsAvailable: boolean;
-    }): Promise<MemoryFirstAnswer | null>;
-    /** Remember a (question → answer) pair so an exact repeat short-circuits next time. */
-    cacheAnswer?(query: string, answer: string): void | Promise<void>;
-}
-/**
- * The host's authenticated JSON transport, as a port. Both Brain hosts already have
- * one (`apiRequest` on the web, the webview's `authedFetch`); this is the intersection
- * the memory hooks need, so neither has to hand it a bespoke wrapper.
- */
-type ProjectMemoryRequest = <T>(path: string, init?: {
-    method?: string;
-    headers?: Record<string, string>;
-    body?: string;
-}) => Promise<T>;
-/**
- * The project's SERVER-side memory hooks, built once for every host.
- *
- * The three calls — recall, memory-first answer, write-through — are the same routes
- * with the same query parameters and the same "a failure is not an error, it is just
- * no memory" contract wherever the Brain runs. They were hand-written per host, and
- * the copies had drifted: the web surfaces passed only `recall` (one of them plus a
- * `learn` callback this interface has never had, so it was dead), while only the VS
- * Code webview had the memory-first pair at all. Same loop, three different memories.
- *
- * `toolsAvailable` is threaded through honestly, because the server uses it to decide
- * whether the Evermind SSM leg may run: it cannot call a tool, so on a run that could
- * fetch the real answer it must never pre-empt the model from stale weights.
- */
-declare function projectMemoryHooks(projectId: number, request: ProjectMemoryRequest, 
-/**
- * The chat these hooks are bound to, when the host knows it.
- *
- * Recall is TIERED on it: this conversation's own memories come first, then the
- * wider project's. Without it the server ranks project-wide, which is what made a
- * reopened chat "remember" turns from other conversations. Optional because a global
- * (project-less) chat and the non-chat callers genuinely have none — those recall
- * project-wide exactly as before.
- */
-chatId?: number | null): EvermindRunHooks;
 
 /**
  * ON-DEVICE memory for the shared Brain — a memory tier that answers from the user's
@@ -2594,185 +3386,6 @@ declare function useBrainContext(): BrainContextValue;
  * Returns null instead of throwing when no provider is present.
  */
 declare function useOptionalBrainContext(): BrainContextValue | null;
-
-/**
- * Chat MODE — "am I being asked a question, or being asked to get something done?"
- *
- * Two modes, one per conversation:
- *
- *   • `chat` — CONVERSATIONAL. The Brain reads, reasons and answers. It may look
- *     anything up, but it does not mint board work, staff it, or start runs off
- *     its own back. This is the default and the surface's resting state.
- *
- *   • `work`  — EXECUTIONAL. The Brain turns what it concludes into real work: it
- *     creates the ticket, scopes the resources, links it to the conversation,
- *     advances its status, and DISPATCHES an agent to run it. The conversation is
- *     the front end of an execution, not a discussion about one.
- *
- * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────────
- * The work-linking directive ({@link chatWorkLinkingDirective}) used to ride EVERY
- * run unconditionally — so "what does this error mean?" was answered by a model that
- * had also been instructed to open, staff and status a ticket about it. There was no
- * way to just ask a question, and no way to tell an execution apart from a chat after
- * the fact. Mode is the discriminator for both: it gates the directive at runtime and
- * it is recorded on the conversation, so usage can finally be read as
- * "conversations vs executions" rather than one undifferentiated pile.
- *
- * The value is persisted on the conversation (`brain_chats.mode`, `creation_sessions.mode`,
- * migration 0409) rather than in the browser, so the choice follows the conversation
- * across surfaces and devices — the same reasoning as `capability` (0345).
- *
- * Kept framework-free (pure strings + unions) so it is safe in every bundle: the web
- * Brain, the VS Code webview, and the shared agent loop all import from here.
- */
-/** The modes a conversation can be in. Order is display order. */
-declare const CHAT_MODES: readonly ["chat", "work"];
-type ChatMode = (typeof CHAT_MODES)[number];
-/**
- * The mode a NEW conversation opens in.
- *
- * Work, because that is what people come here to do: the measured reality is that a
- * conversation which cannot dispatch produces a plan and stops, and the user is then
- * asked to find a control they did not know existed to get the work started. Opening
- * in Work makes the product's actual promise the resting state; a user who only wants
- * to ask a question flips one switch in the composer's `/` menu.
- *
- * This is NOT the coercion fallback — see {@link RESTING_CHAT_MODE}. The two were one
- * constant, which meant "what does a new chat start as" and "what does an unreadable
- * stored value mean" could not be answered differently, and changing one silently
- * re-armed every legacy row that had never stored a mode at all.
- */
-declare const NEW_CHAT_MODE: ChatMode;
-/**
- * What an unset or unrecognised stored value resolves to: a conversation. A row that
- * never recorded a mode (or a client ahead of the server) must not be granted execution
- * authority by a default it never opted into.
- */
-declare const RESTING_CHAT_MODE: ChatMode;
-/**
- * The glyph for a mode. Decorative — the label always carries the meaning — but it
- * lives HERE, beside the mode vocabulary, because both composers render it: the web
- * `/` menu and the VS Code webview's `/` menu. A second copy in one host is how the
- * two surfaces end up showing a different icon for the same conversation state.
- */
-declare const CHAT_MODE_ICON: Readonly<Record<ChatMode, string>>;
-/** True for a value that is one of the known modes. */
-declare function isChatMode(value: unknown): value is ChatMode;
-/**
- * Coerce an inbound/stored value to a mode, falling back to {@link RESTING_CHAT_MODE}.
- * Tolerant by design: an unknown value (an older row, a client ahead of the server)
- * resolves to a conversation rather than silently granting execution authority.
- */
-declare function normalizeChatMode(value: unknown): ChatMode;
-/**
- * The system-prompt block for CHAT mode.
- *
- * Deliberately a positive instruction rather than only a prohibition: a model told
- * merely "do not create tickets" tends to hedge and offer to create one every turn,
- * which is the same interruption in a politer costume. This tells it what its job IS
- * — answer the question — and makes the ONE escape hatch explicit (the user asking
- * outright), so the mode is a default rather than a cage.
- */
-declare function chatConversationDirective(): string;
-/**
- * One agent invited into the chat, as the Work directive names it.
- *
- * Deliberately the three facts a dispatch decision needs and nothing else: the NAME the
- * human knows them by, the REF `chats.dispatch_agent` takes, and the ROLE that says
- * which work is theirs. Kept structural (no import from the chat-tickets view model) so
- * this module stays framework-free and every host can satisfy it from whatever it
- * already holds.
- */
-interface ChatRosterAgent {
-    ref: string;
-    name: string;
-    role?: string;
-}
-/**
- * The agent half of a chat's addressable participants, as the Work directive wants it.
- *
- * Every host that renders a recipient picker or an @-mention typeahead already holds
- * the participant list (agents AND humans, each with a ref and a display name). Rather
- * than have each of them fetch the roster a SECOND time to tell the run about it — two
- * reads of one endpoint on every chat open — they derive it from what they have. One
- * mapping, here, so the agents the user can @-mention are exactly the agents the run is
- * told it may dispatch to.
- *
- * Typed structurally (`{ kind, ref, name }`) rather than against `DirectedRecipient` so
- * this module keeps its no-dependency posture; the shapes are checked by the call sites.
- */
-declare function chatRosterFromParticipants(participants: readonly {
-    kind: string;
-    ref: string;
-    name: string;
-}[] | undefined): ChatRosterAgent[];
-/** What the Work directive needs to know about the surface and the chat it rides. */
-interface ChatWorkDirectiveOptions {
-    /** Does this run hold the workspace file tools (see `./localWorkspaceTools`)? */
-    canEditHere?: boolean;
-    /** Does the catalog carry `spawn_agent`, so persona delegation may be named? */
-    canDelegate?: boolean;
-    /** Does the catalog carry `spawn_agents`, so fan-out delegation may be named? */
-    canFanOut?: boolean;
-    /** The agents invited into this chat. Non-empty INVERTS the do-it-here ordering. */
-    roster?: readonly ChatRosterAgent[];
-}
-/**
- * The system-prompt block for WORK mode: the existing chat⇄work linking contract
- * PLUS the dispatch obligation that makes the mode mean execution rather than
- * paperwork.
- *
- * The dispatch half exists because creating a well-staffed ticket and stopping is
- * indistinguishable, from the user's side, from doing nothing: the measured reality
- * is that tickets opened and never dispatched sit in backlog indefinitely. So the
- * mode's closing obligation is to REPORT the dispatch verdict truthfully — `tasks.create`
- * and `tasks.update` already return `autoRun: { dispatched, reason, detail }`, and
- * `chats.dispatch_agent` starts a run directly when autonomy declined.
- *
- * ── WHY `canEditHere` EXISTS ───────────────────────────────────────────
- * "Finish by dispatching" is the right obligation on the web Brain, which has no file
- * tools and can only get code changed by asking someone else to change it. On the IDE
- * surface it is not: that session HAS the workspace, and read as an unconditional rule
- * it sends the agent to open a ticket and hire a remote builder for a one-line fix it
- * was already looking at — measured, on a small UI defect, as a whole turn spent
- * fighting a dispatch with the file untouched at the end of it.
- *
- * So the ordering is stated where the surface actually differs, driven by whether this
- * run was given code-change tools ({@link ./localWorkspaceTools}'s `CODE_CHANGE_TOOLS`,
- * which is the same set the "a code change is always tied to a ticket" backstop reads).
- * Doing the work still ends in a ticket — recording is not optional, it is just not a
- * substitute for doing.
- *
- * ── WHY `roster` OVERRIDES THAT ORDERING ─────────────────────────────────────────
- * `canEditHere` answers "could this session make the change", which is not the same
- * question as "whose change is it". A chat with agents INVITED INTO IT has already
- * answered the second one: a human opened the Agents panel and put Bob, John and the
- * Manager in this conversation, which is the platform's only way of saying "these are
- * the people I want on this work". Read without that fact, the do-it-here rule
- * quietly overrides the staffing the human just did — measured on chat #103, where
- * three invited agents watched an IDE session make every code change itself and the
- * run's staffing summary read `1 ticket filed · 0 dispatched`, with ZERO dispatch
- * attempts: the model never asked, because nothing had told it there was anyone to ask.
- *
- * Two things follow, and they are separate. First, the roster is NAMED in the prompt,
- * because "pick a capable agent" costs a discovery tool call that the do-it-here rule
- * gives the model no reason to spend — the agents were in the chat and invisible to the
- * run. Second, when the roster is non-empty the ordering INVERTS: the invited agents own
- * the work and this session dispatches to them. The do-it-here rule survives only for a
- * chat nobody has staffed, which is the case it was written for.
- *
- * Tool names here are the ADVERTISED (`builtin_*`) names the model actually sees on
- * the gateway relay — never the catalog ids, which appear nowhere in its tool list.
- * The roster is rendered as names AND refs because the model reads the name and
- * `builtin_chats_dispatch_agent` takes the ref.
- */
-declare function chatWorkDirective(chatId: number, opts?: ChatWorkDirectiveOptions): string;
-/**
- * The system-prompt block for a mode. This is the ONE place a mode becomes model-facing
- * behaviour, so the two surfaces (web Brain, VS Code webview) and the shared agent loop
- * cannot drift on what a mode means.
- */
-declare function chatModeDirective(mode: ChatMode, chatId: number, opts?: ChatWorkDirectiveOptions): string;
 
 /** The placeholder title `create()` stamps on an untitled chat. A chat still carrying
  *  it has never been named, so {@link deriveChatTitle}-based auto-titling may replace it
@@ -3334,445 +3947,6 @@ declare function createBrainRestPersistence(opts: BrainRestOptions): {
 };
 /** The precise shape {@link createBrainRestPersistence} returns. */
 type BrainRestPersistence = ReturnType<typeof createBrainRestPersistence>;
-
-/**
- * What a settled code-changing run reports to learned routing — so a run in the editor
- * teaches the router the way a cloud run does.
- *
- * Before this, only cloud runs were ever scored: an IDE run changed code, shipped it or
- * failed, and the router never heard. Now a run that changed code reports how its CODER
- * did — the model that made the edits (after an analysis→code hand-off, the coding model;
- * under a pin, the pinned one) — under the `code` role, which is exactly the evidence the
- * gateway reads when it picks the coder for the next run.
- *
- * Field names are the `POST /llm/v1/run-outcome` wire contract (`RunOutcomeRequest` in
- * `@builderforce/learned-routing`); the host owns the transport. Pure.
- */
-
-interface BrainRunOutcome {
-    /** Idempotency key — one outcome per run. */
-    clientRunId: string;
-    /** The model that made this run's code changes. */
-    model: string;
-    role: 'code';
-    source: 'ide';
-    terminalStatus: 'completed' | 'failed';
-    /** The change landed on the base branch (the run's own push). */
-    merged: boolean;
-    /** Completed model turns — the efficiency half of the score. */
-    steps: number;
-    projectId?: number;
-}
-
-/**
- * STOP HOOKS — a host's say over whether a run may end.
- *
- * The loop's own end-of-run gates (`selfReviewShip.ts`, `previewReview.ts`, …) are the
- * platform's contracts. This is the seam for the WORKSPACE's: a host (the VS Code
- * extension reads them from a committed `.builderforce/hooks.json`) can hold a run that
- * is about to settle and hand it one more instruction — "update README and DONE with what
- * you completed", or "the lint you were told to keep green failed, here is its output".
- *
- * The loop owns only the BOUND and the re-prompt; what the hook says is the host's. Asked
- * every time the run is about to end, so a hook that re-checks (a failing command) gets
- * to see the run's fix — but never more than {@link MAX_STOP_HOOK_ROUNDS} times per run:
- * a command that can never pass must not keep a run alive on the tenant's money.
- *
- * Runs BEFORE the ship gate on purpose: whatever a stop hook asks for (docs, a changelog
- * line, a formatter's fixes) is part of the change, so it lands in the same commit
- * instead of being left dirty after the push.
- */
-/** What the host is told about a run that is about to end. */
-interface RunStopInput {
-    /** The run changed code in this turn (or a resumed turn). */
-    codeChanged: boolean;
-    /** Workspace-relative files the run touched, in order. */
-    touchedFiles: readonly string[];
-    /** The user's request that started the run. */
-    requestText: string;
-    /** How many stop-hook re-prompts this run has already had. */
-    round: number;
-}
-/**
- * A host's stop hook: a non-empty string holds the run and becomes its next user turn;
- * null / undefined / '' lets it settle.
- */
-type RunStopHook = (input: RunStopInput) => Promise<string | null | undefined>;
-/** Re-prompts one run can receive from stop hooks before it is allowed to settle. */
-declare const MAX_STOP_HOOK_ROUNDS = 4;
-/**
- * Ask the host's stop hook whether the run may end. Returns the nudge to re-prompt with,
- * or null to let it settle. Best-effort: a throwing hook never fails or holds the run.
- */
-declare function askStopHook(hook: RunStopHook | undefined, input: RunStopInput): Promise<string | null>;
-
-/**
- * A run with an OWNER — what makes a sub-agent a sub-agent, and nothing else.
- *
- * A delegated child is not a second kind of loop. It is an ordinary run of THIS store —
- * the same tools, gates, ticket backstop, failure-streak breaker and persistence as the
- * run that spawned it — given its own run key (its own transcript, Stop and approval
- * prompt) and this pointer back to who spawned it. Everything a child does differently
- * follows from the pointer:
- *
- *   • it lives in its OWNER'S conversation: every message it persists goes to the root
- *     chat, attributed to the child (`authoredBy`) and marked as whose sub-agent it is
- *     (`subagentOf`), so the chat reads as Owner and Agent (name), never as one voice;
- *   • its messages are progress inside someone else's work, so they are marked mid-turn
- *     (Evermind does not learn a child's report as the chat's answer);
- *   • it can itself spawn children — the pointer nests, which is all recursion needs.
- */
-
-/** Who a child run is, and whose. */
-interface RunLineage {
-    /** The server chat the whole tree persists into — the top-level owner's chat. */
-    rootChatId: number;
-    /** The run key of the run that spawned this one (the root chat id for a top-level owner). */
-    ownerKey: number;
-    /** The owner's display name, as the chat shows it. */
-    ownerName: string;
-    /** Short handle the owner and the person address this child by (`a1`, `a2`, …). */
-    handle: string;
-    /** A few words naming the slice. */
-    label: string;
-    /** Who the child IS in the chat — a workspace agent it runs as, or a named helper. */
-    agent: {
-        ref: string;
-        name: string;
-    };
-    /** 1 for a child of a top-level run, 2 for a grandchild, … */
-    depth: number;
-}
-/** Metadata key under which a child's message names its owner. */
-declare const SUBAGENT_OF_META_KEY = "subagentOf";
-/** What a persisted message says about the run that wrote it. */
-interface SubagentOrigin {
-    handle: string;
-    owner: string;
-    label: string;
-}
-/** The owner a persisted message was written for, or null for anything not a child's. */
-declare function parseSubagentOrigin(msg: {
-    metadata?: string | null;
-}): SubagentOrigin | null;
-
-/**
- * Module-level Brain run engine — the agent tool-loop, hoisted OUT of React so a
- * run survives the unmount of the component that started it.
- *
- * Why this exists: the Brain UI (BrainPanel) is mounted per-route — the full
- * page `/brainstorm`, the IDE-embedded panel, the floating drawer. When the
- * Brain navigates the user mid-run (a `navigate_to` tool call), the route-scoped
- * panel unmounts. Previously the loop's state (rich transcript, trace, streaming
- * delta, the human-in-the-loop confirm resolver) lived in that component's refs,
- * so the run was orphaned: its React state updates went nowhere, the freshly
- * mounted instance lost all grounding, and — worst — it re-answered the trailing
- * user message, spawning a SECOND concurrent loop (duplicate writes).
- *
- * The fix: one run per chat lives here, keyed by chatId, single-flight. Any
- * mounted Brain instance subscribes to its chat's cell and renders the live run;
- * a second instance that tries to start the same chat is a no-op. Every turn
- * that produces visible text — both intermediate tool-call narration and the
- * final answer — is persisted as its own message; mounted instances pick each
- * one up via `messagesEpoch`, so a turn's narration is a durable block instead
- * of transient streaming text the next turn overwrites. The confirm gate also
- * lives here, so a navigation that swaps which panel is mounted can still
- * resolve a pending confirmation.
- *
- * This module owns NO React — `useBrainConversation` is the thin binding.
- */
-
-/** Streaming fn shape (matches BrainRuntime.stream). */
-type BrainStreamFn = (opts: Omit<StreamChatOptions, 'transport'>, handlers?: StreamHandlers) => Promise<StreamChatResult>;
-/** Persistence subset the loop needs (matches BrainPersistenceAdapter). */
-interface BrainRunPersistence {
-    sendMessages(chatId: number, messages: Array<{
-        role: string;
-        content: string;
-        metadata?: string;
-    }>): Promise<BrainMessage[]>;
-}
-/** Everything a single run needs, captured at start time (survives navigation). */
-interface BrainRunRequest {
-    resolvedSystemPrompt: string;
-    tools?: BrainToolSpec[];
-    model?: string;
-    /** Hard-pin a deliberate user-selected model. */
-    modelStrict?: boolean;
-    /** Explicit routing choice when no model is pinned. */
-    routingMode?: 'auto' | 'byo_pool';
-    /**
-     * Pick the next model to try when the current one has burned its whole stall budget
-     * without emitting a single tool call — i.e. re-prompting it is spent and only a
-     * DIFFERENT model can finish the request.
-     *
-     * The loop is deliberately surface-agnostic here: the host holds the cached
-     * `/llm/v1/models` surface and answers with `nextFallbackModel(surface, tried)`, so
-     * the ordering (own account + tool-calling pool first) lives in ONE shared function
-     * rather than in each host. Return undefined — or omit the callback — to keep the
-     * previous behaviour: stop and explain, instead of switching.
-     *
-     * `tried` holds every model already attempted this run, requested and resolved.
-     */
-    pickFallbackModel?: (tried: readonly string[]) => string | undefined;
-    runTool?: (name: string, args: unknown) => Promise<unknown>;
-    /** Pure predicate: true → pause the loop for an explicit user confirmation. */
-    needsConfirm?: (req: {
-        name: string;
-        args: unknown;
-    }) => boolean;
-    stream: BrainStreamFn;
-    /**
-     * `max_tokens` for this run's completions — the composer's Effort level (see
-     * `effort.ts`). Absent keeps `streamChatCompletion`'s 4096 default.
-     */
-    maxTokens?: number;
-    /**
-     * Vendor-neutral reasoning intent for this run (the composer's Thinking toggle,
-     * at the Effort level's intensity). Absent ⇒ no `reasoning` key on the wire.
-     * Applies to the MODEL-FACING turns only — the internal transcript summarizer
-     * is a mechanical compaction, never a "think harder" job.
-     */
-    reasoning?: ReasoningIntent;
-    persistence: BrainRunPersistence;
-    onActivity?: (chatId: number) => void;
-    /** Seed the rich transcript from prior persisted history (first turn only). */
-    seed?: ChatCompletionMessage[];
-    /**
-     * What earlier turns of this chat already READ and DID, as a system-prompt block
-     * (`priorResearch.ts`) — the counterpart to {@link seed}, which cannot carry tool
-     * results (an orphaned tool message 400s strict vendors). Applied only when the run
-     * seeds its transcript from history; a transcript still in memory already holds the
-     * real tool rows. Without it a "continue" after a reload started its research over.
-     */
-    priorResearch?: string | null;
-    /** The user turn that triggered this run, appended to the transcript. */
-    userTurn?: string | ContentPart[];
-    /**
-     * The chat's project. Enables the post-run "a code change is always tied to a
-     * ticket" backstop: when an IDE run changed code but never recorded a ticket, the
-     * loop mints one via `builtin_tickets_from_delta` for THIS project, linked to the
-     * chat. Omit (or null) for a non-project chat / the web Brain (which has no file
-     * tools, so the backstop never fires there anyway).
-     */
-    projectId?: number | null;
-    /**
-     * Project-Evermind memory hooks (bound to the active chat's project by the
-     * host). When present, the loop recalls learned memories before answering,
-     * injects them into the system prompt, and records recall/learn/reconcile
-     * steps into the trace so the chat SHOWS the project memory being used. Omit
-     * for a non-project chat (nothing memory-related happens).
-     */
-    evermind?: EvermindRunHooks;
-    /**
-     * Optional per-turn system-prompt augmentation — the LIMBIC parity seam.
-     *
-     * Called once at loop start (alongside Evermind recall) with the latest user
-     * text; a non-empty return is appended to the system prompt with a leading
-     * `\n\n`. This lets a host inject a per-turn dynamic block (e.g. a limbic /
-     * affective state fetched from the gateway) that the synchronous
-     * `resolvedSystemPrompt` resolver cannot produce. Best-effort: a throw is
-     * swallowed and the turn proceeds without the augmentation, exactly like a
-     * failed Evermind recall.
-     */
-    augmentSystemPrompt?: (userText: string) => Promise<string | undefined>;
-    /**
-     * The conversation's MODE (migration 0409) — whether this run is a CONVERSATION
-     * (`chat`: read, reason, answer) or an EXECUTION (`work`: create + staff + link the
-     * ticket, then dispatch an agent to run it). Decides which directive is folded into
-     * the system prompt; see `chatMode.ts`.
-     *
-     * Optional, and absent means `work`: hosts that predate the mode (the VS Code
-     * webview, any embed) keep the always-execute behaviour they shipped with rather
-     * than silently losing their ticket lineage.
-     */
-    chatMode?: ChatMode;
-    /**
-     * The agents INVITED INTO this chat, which is the platform's record of who the human
-     * wants on this work. Folded into the WORK directive: naming them saves the model a
-     * discovery call it had no reason to spend, and a non-empty roster inverts the
-     * do-it-here ordering so the invited agents get dispatched rather than watched
-     * (see `chatMode.ts`). Absent or empty leaves the prior behaviour exactly as it was —
-     * a host that does not know the roster must not accidentally assert there is none, so
-     * an UNRESOLVED roster and an EMPTY one are both simply "nobody named here".
-     */
-    chatRoster?: readonly ChatRosterAgent[];
-    /**
-     * Report a settled code-changing run's outcome to learned routing (the host POSTs it
-     * to `/llm/v1/run-outcome`). Omit and nothing is reported. Best-effort: a rejection is
-     * swallowed and never affects the run.
-     */
-    reportOutcome?: (outcome: BrainRunOutcome) => Promise<unknown>;
-    /**
-     * The host's STOP HOOK (`stopHooks.ts`) — asked each time the run is about to end; a
-     * returned instruction holds it for another turn (bounded per run). The VS Code host
-     * feeds it from the workspace's committed `.builderforce/hooks.json`. Omit for none.
-     */
-    onStop?: RunStopHook;
-    /**
-     * This run has an OWNER — it is a sub-agent another run spawned (`runLineage.ts`).
-     * Nothing about the loop changes: the run keeps its own key (its own transcript, Stop
-     * and approval prompt) while everything it persists or asks the server about goes to
-     * the root chat, attributed to the child. Absent for a top-level run.
-     */
-    lineage?: RunLineage;
-}
-/** Live, observable snapshot of a chat's run (what the hook renders). */
-interface BrainRunSnapshot {
-    running: boolean;
-    streamingText: string;
-    error: string;
-    /**
-     * What the user can DO about {@link error}, when the failure was actionable —
-     * an expired session (reconnect), a plan that doesn't cover the request
-     * (upgrade), or billing that needs a card (validate_card). Derived ONCE here
-     * from the thrown error's structured gateway fields via {@link chatErrorAction},
-     * so a mounted view renders the right button without re-parsing error prose.
-     * Null when nothing but dismissing applies.
-     */
-    errorAction: ChatErrorAction | null;
-    pendingConfirm: {
-        name: string;
-        args: unknown;
-    } | null;
-    /** Bumped whenever a new assistant message is persisted. */
-    messagesEpoch: number;
-    /**
-     * Every assistant message this run has persisted, in order (narration turns +
-     * the final answer). Delivered as a list — not a single "last" value — so a
-     * mounted view merges them all by id even when React coalesces the rapid
-     * mid-run emits into one render and never sees the intermediate snapshots.
-     */
-    appended: BrainMessage[];
-    hasTrace: boolean;
-    /**
-     * The live execution trace (LLM turns + tool calls + errors), in order. The
-     * same array `getRunTrace` returns — exposed on the snapshot so a mounted view
-     * (e.g. the timeline transcript) can render each step AS IT HAPPENS. The
-     * snapshot object identity changes on every `emit` (including every
-     * `pushTrace`), so consumers re-render even though the array reference is
-     * stable; they read it fresh each render. Bounded by {@link MAX_TRACE_EVENTS}.
-     */
-    trace: BrainTraceEvent[];
-    /**
-     * What the run is doing RIGHT NOW — the in-flight step, published as it is
-     * ENTERED rather than when it settles. The `trace` records a step only once it
-     * has completed, which is the wrong moment for a progress indicator: a search
-     * that takes a minute emits nothing at all until it is over, so a working agent
-     * and a hung one look identical. Null while idle. See `runActivity.ts`.
-     */
-    activity: BrainRunActivity | null;
-    /**
-     * Providers the tenant CONNECTED but the gateway could NOT resolve on any turn of
-     * this run (from `x-builderforce-byo-unresolved`) — e.g. a connected Claude
-     * subscription whose token expired, so the run silently used the shared pool
-     * instead of the tenant's own Opus. A mounted view shows a passive "reconnect your
-     * account" banner off this, so the degrade is visible WITHOUT copying triage. Empty
-     * when everything resolved (or nothing is connected).
-     */
-    byoUnresolved: string[];
-    /**
-     * BYO providers whose key hit a usage/capacity cap on any turn of this run
-     * (from `x-builderforce-provider-cap`) — e.g. the tenant's Anthropic key hit its
-     * monthly spend limit, or Meta MUSE quota was exhausted. A mounted view shows a
-     * "manage your API keys" banner so the user knows to top up or switch providers.
-     * Accumulated across turns; reset fresh each run. Empty when no cap was hit.
-     */
-    providerCap: string[];
-}
-/**
- * A snapshot of which chats are live right now, split by whether they are actively
- * executing (`running`) or paused on a human-in-the-loop confirm (`awaiting` — the
- * actionable one: the loop cannot proceed until the user answers). The two lists
- * are disjoint (an awaiting chat is omitted from `running`).
- */
-interface GlobalRunState {
-    running: number[];
-    awaiting: number[];
-}
-/**
- * Drop all run state. For tests/teardown only — there's no per-chat eviction in
- * normal operation (transcripts are session-lived grounding, as before).
- */
-declare function resetBrainRunStore(): void;
-/**
- * Subscribe to ANY run-state change across all chats (a run starting, finishing,
- * or pausing on a confirm — in any chat, mounted or not). Returns an unsubscribe
- * fn. Pair with {@link getGlobalRunState} to render a cross-chat live indicator.
- */
-declare function subscribeRunStore(listener: () => void): () => void;
-/**
- * Which chats are live right now, split into actively-executing (`running`) and
- * paused-on-a-confirm (`awaiting`). Disjoint: a chat paused on a confirm is in
- * `awaiting` only. Recomputed from the current cells on each call — cheap (a scan
- * of the bounded cell map); callers debounce via a stable key of the two lists.
- */
-declare function getGlobalRunState(): GlobalRunState;
-/** Subscribe to a chat's run state. Returns an unsubscribe fn. */
-declare function subscribeRun(chatId: number, listener: () => void): () => void;
-/**
- * The cancel signal of a chat's IN-FLIGHT run, or undefined when nothing is running.
- *
- * Exists for the same reason {@link requestRunConfirm} is callable from outside the
- * cell: work the run starts that is not the loop itself — a delegated sub-agent running
- * its own nested loop inside one tool call — must stop when the user presses Stop, and
- * the controller is created by {@link startRun}, after the host has already assembled the
- * catalog that carries that tool. So the tool reads it at CALL time, by chat.
- */
-declare function runAbortSignal(chatId: number): AbortSignal | undefined;
-/**
- * Splice a message persisted OUTSIDE the loop into a chat's live view — a delegated
- * child's report, posted while its parent run is still going. Persisting alone put it in
- * the chat store, but the panel showed it only after a reload: mounted views merge the
- * run's `appended` buffer, and nothing had told the buffer.
- */
-declare function appendRunMessage(chatId: number, msg: BrainMessage): void;
-/** Current snapshot (referentially stable until something changes). */
-declare function getRunSnapshot(chatId: number | null): BrainRunSnapshot;
-declare function isRunning(chatId: number | null): boolean;
-/** The accumulated execution trace for a chat (for the capture/triage report). */
-declare function getRunTrace(chatId: number | null): BrainTraceEvent[];
-/**
- * Stop a chat's in-flight run. Aborts the streaming LLM request (which rejects
- * the in-flight `stream()` — the loop treats an aborted signal as a clean exit,
- * surfacing no error) and resolves any paused human-in-the-loop confirmation as
- * declined so a loop waiting on the gate can also unwind. Records a `stopped`
- * trace step for triage. No-op if nothing is running for this chat.
- *
- * What the model was streaming, and which model it was, are captured FIRST — a Stop
- * is pressed exactly when a model has gone wrong, and clearing the bubble used to
- * destroy the only evidence of what it did. The unwinding run persists both
- * ({@link keepStoppedTurn}); see `stoppedTurn.ts`.
- *
- * `running` flips to false when `runLoop` unwinds and `startRun`'s `finally`
- * fires; we emit here too so the Stop is reflected immediately.
- */
-declare function stopRun(chatId: number): void;
-/**
- * Clear a chat's surfaced run error so the UI's error banner can be dismissed.
- * The error lives on the run cell (set when the LLM stream / tool loop threw),
- * so the hook's local `setError('')` can't reach it — this is the store-side
- * companion `clearError()` calls. No-op when there's no cell or no error.
- */
-declare function clearRunError(chatId: number | null): void;
-/** Resolve a pending human-in-the-loop confirmation. No-op if none is pending. */
-declare function resolveRunConfirm(chatId: number, ok: boolean): void;
-/**
- * Mirror a run that is executing in ANOTHER process into this store's cell, so every
- * local reader — the conversation hook, the timeline, `getGlobalRunState` — sees it
- * exactly as it would see an in-process run. The only writer of a cell that no local
- * loop owns; a locally running cell is never overwritten (the local loop is the
- * truth for it). `trace` is taken as sent: the remote side decides how much of its
- * bounded trace to ship (see the VS Code host's delta relay).
- */
-declare function applyRemoteRun(chatId: number, snapshot: BrainRunSnapshot): void;
-/**
- * Start (or no-op join) the agent loop for a chat. Single-flight per chat: if a
- * run is already in flight the call returns immediately, so a second mounted
- * Brain instance can never spawn a duplicate loop. The claim is synchronous
- * (set before any await), so two callers in the same tick can't both pass it.
- */
-declare function startRun(runKey: number, request: BrainRunRequest): Promise<void>;
 
 /**
  * Direction for a run that is ALREADY running — redirecting it without stopping it.
@@ -7160,4 +7334,4 @@ interface PromptInputProps {
 }
 declare function PromptInput({ value, onChange, onSubmit, placeholder, submitLabel, ariaLabel, disabled, busy, onStop, stopLabel, leading, secondaryContent, rows, className, submitOnEnter, }: PromptInputProps): react.JSX.Element;
 
-export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type BuildChatDiagnosticsReportInput, type ByoUnresolvedEntry, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type ChatRosterAgent, type ChatTicket, type ChatWorkDirectiveOptions, type CompletionMetadata, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DispatchRefusal, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, HISTORY_TOKEN_BUDGET, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageUrlContentPart, type IndexedDbStepDurabilityOptions, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalChatMessage, type LocalFetch, type LocalFirstAttemptSummary, type LocalFirstStreamInput, MAX_STOP_HOOK_ROUNDS, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelScore, type ModelTurn, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PersonaSubagent, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PreparedImage, type ProjectMemoryRequest, PromptInput, type PromptInputProps, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RoutedProduct, type RunLineage, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, type RunStopHook, type RunStopInput, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, SUBAGENT_OF_META_KEY, type StaffingSummary, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamIdleError, StreamInterruptedError, type SubagentDiagnosticsInput, type SubagentOrigin, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, TransportError, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, type UnreviewedChangeInput, type UnshippedChangeInput, type UpstreamTurnEvidence, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askStopHook, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, brainPersonaAgents, buildBrainTriageReport, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatRosterFromParticipants, chatWorkDirective, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, completeLocal, completeLocalFirst, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, createBrainRestPersistence, createComposingActivity, createLocalFirstStream, createLocalStream, createPayloadBudget, declinesReview, declinesShipping, deriveChatTitle, describeLiveStep, describeNetworkError, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, effortProfile, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatBytes, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatDispatchRefusals, formatEvermindLearnStep, formatModelScorecard, formatModelTurnLog, formatRunProgress, formatStaffingSummary, formatSubagentDiagnostics, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, installIndexedDbStepDurability, installRunDriver, installStepDurability, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isDispatchTool, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isMutationTool, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStepMessage, isStoppedTurn, isTicketRecordingTool, isTicketWriteTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, localFallbackTrace, localFirstWorkload, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, onDeviceMemoryHooks, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, parseSubagentOrigin, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, productForPlan, productModelName, progressDuration, projectMemoryHooks, queueRunSteering, ratedTurnContext, ratedTurnTool, readWithIdleWatchdog, reasoningForRun, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, retryOnConnectFailure, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, staffingSummaryInTrace, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, stoppedTurnMetadata, streamChatCompletion, stripAskUser, studioToolsIn, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeLocalFirstAttempt, takePendingPrompt, ticketsReviewedInPreview, toolActivity, toolCallArgBytes, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, transcriptSeedFrom, trimToolResult, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, utf8ByteLength, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, workFiledNotStaffedVerdict, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS, BROWSER_ENGINE_MODEL, BROWSER_ENGINE_PROBE_TTL_MS, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BrowserEngineProber, type BuildBrainTriageOptions, type BuildChatDiagnosticsReportInput, type ByoUnresolvedEntry, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type ChatRosterAgent, type ChatTicket, type ChatWorkDirectiveOptions, type CompletionMetadata, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DispatchRefusal, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, HISTORY_TOKEN_BUDGET, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageUrlContentPart, type IndexedDbStepDurabilityOptions, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalChatMessage, type LocalFetch, type LocalFirstAttemptSummary, type LocalFirstStreamInput, MAX_STOP_HOOK_ROUNDS, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelScore, type ModelTurn, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PersonaSubagent, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PreparedImage, type ProjectMemoryRequest, type PromptApiAvailability, type PromptApiFactory, type PromptApiMessage, type PromptApiSession, PromptInput, type PromptInputProps, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RoutedProduct, type RunLineage, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, type RunStopHook, type RunStopInput, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, SUBAGENT_OF_META_KEY, type StaffingSummary, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamIdleError, StreamInterruptedError, type SubagentDiagnosticsInput, type SubagentOrigin, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, TransportError, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, type UnreviewedChangeInput, type UnshippedChangeInput, type UpstreamTurnEvidence, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askStopHook, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, brainPersonaAgents, browserEngineFetch, browserEngineProbe, buildBrainTriageReport, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatRosterFromParticipants, chatWorkDirective, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, completeLocal, completeLocalFirst, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, createBrainRestPersistence, createBrowserEngineProber, createComposingActivity, createLocalFirstStream, createLocalStream, createPayloadBudget, declinesReview, declinesShipping, deriveChatTitle, describeLiveStep, describeNetworkError, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, effortProfile, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatBytes, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatDispatchRefusals, formatEvermindLearnStep, formatModelScorecard, formatModelTurnLog, formatRunProgress, formatStaffingSummary, formatSubagentDiagnostics, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, hasPromptApi, installIndexedDbStepDurability, installRunDriver, installStepDurability, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isDispatchTool, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isMutationTool, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStepMessage, isStoppedTurn, isTicketRecordingTool, isTicketWriteTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, localFallbackTrace, localFirstApplies, localFirstWorkload, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, onDeviceMemoryHooks, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, parseSubagentOrigin, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, productForPlan, productModelName, progressDuration, projectMemoryHooks, promptApiAvailability, promptApiFactory, promptApiInputQuota, promptApiMeasure, promptStreamDeltas, queueRunSteering, ratedTurnContext, ratedTurnTool, readWithIdleWatchdog, reasoningForRun, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resolveBrainStream, resolveRecipient, resolveRunConfirm, retryOnConnectFailure, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, staffingSummaryInTrace, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, stoppedTurnMetadata, streamChatCompletion, stripAskUser, studioToolsIn, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeLocalFirstAttempt, takePendingPrompt, ticketsReviewedInPreview, toPromptApiTurn, toolActivity, toolCallArgBytes, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, transcriptSeedFrom, trimToolResult, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, utf8ByteLength, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, workFiledNotStaffedVerdict, workItemLinkFromCreate };

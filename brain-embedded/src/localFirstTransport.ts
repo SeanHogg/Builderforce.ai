@@ -109,6 +109,17 @@ export function localFirstWorkload(call: {
   });
 }
 
+/**
+ * Whether a call is OPEN to local-first. Any model choice — an explicit pick, a
+ * project's or role's pin, a configured default — names what the user wants and wins
+ * outright, and so does an explicit "use my connected accounts" (`byo_pool`); only "let
+ * the gateway route" may be served on this device first. The ONE statement of the rule:
+ * the editor's route and the web app's stream both read it.
+ */
+export function localFirstApplies(call: { model?: string; routingMode?: 'auto' | 'byo_pool' }): boolean {
+  return !call.model && (call.routingMode ?? 'auto') === 'auto';
+}
+
 /** What {@link createLocalFirstStream} needs from its host. */
 export interface LocalFirstStreamInput {
   /** The runtimes as probed WITH capabilities (`createLocalRuntimeProber({ capabilities: true })`). */

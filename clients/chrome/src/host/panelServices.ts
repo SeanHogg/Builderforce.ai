@@ -7,7 +7,11 @@
  */
 import { createLocalRuntimeProber, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import { createOnlineSignal } from '@builderforce/write-outbox';
-import { installIndexedDbStepDurability } from '@seanhogg/builderforce-brain-embedded';
+import {
+  browserEngineFetch,
+  browserEngineProbe,
+  installIndexedDbStepDurability,
+} from '@seanhogg/builderforce-brain-embedded';
 import { createApiClient, type ApiClient } from '../api/apiClient';
 import { createSession, type Session } from '../auth/session';
 import { DEFAULT_BASE_URL, LOCAL_DB, STEP_OUTBOX_DB } from '../config';
@@ -133,6 +137,8 @@ export async function createPanelServices(): Promise<PanelServices> {
     prober,
     endpoints,
     key: () => session.key(),
+    // The browser's own model, asked through the page (the panel has the Prompt API).
+    page: { probe: () => browserEngineProbe(), fetch: browserEngineFetch(fetchImpl) },
     onAttempt: (record: LocalFirstAttemptRecord) => {
       if (record.outcome !== 'served' && record.attempt.kind === 'local') {
         console.warn(`Rovr local-first: ${record.attempt.ref} ${record.outcome}${record.detail ? ` (${record.detail})` : ''}`);
@@ -194,7 +200,13 @@ export async function createPanelServices(): Promise<PanelServices> {
     allowedOrigins: () => allowed,
     safety,
     addTask,
-    probeLocal: async () => resolveLoopbackProbes(await prober.probe(await endpoints(), { fresh: true })),
+    probeLocal: async () => {
+      const [probes, page] = await Promise.all([
+        prober.probe(await endpoints(), { fresh: true }),
+        browserEngineProbe({ fresh: true }),
+      ]);
+      return [...resolveLoopbackProbes(probes), ...(page ? [page] : [])];
+    },
     sendRuntime,
     reportError,
   };

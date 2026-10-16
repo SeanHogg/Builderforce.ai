@@ -9,6 +9,11 @@
  * streamer are brain-embedded's `createLocalFirstStream`, the same one the VS Code host
  * uses. Rovr supplies the probes, the gateway stream and its log hook.
  *
+ * The browser's own model (Chrome's built-in Gemini Nano) is one more local runtime here:
+ * extension pages have the Prompt API, so its probe joins the loopback ones and its
+ * in-page fetch answers its chat route. The registry ranks it after every installed
+ * runtime, and the plan never hands it a tool turn.
+ *
  * Signed out with nothing local that fits, the stream throws `not_signed_in` — the panel
  * answers it with "sign in, or start a local model".
  */
@@ -18,7 +23,12 @@ import {
   type BrainStreamFn,
   type BrainTransport,
 } from '@seanhogg/builderforce-brain-embedded';
-import type { LocalEndpoints, LocalFirstAttemptRecord, LocalRuntimeProber } from '@builderforce/local-inference';
+import type {
+  LocalEndpoints,
+  LocalFirstAttemptRecord,
+  LocalRuntimeProbe,
+  LocalRuntimeProber,
+} from '@builderforce/local-inference';
 import { resolveLoopbackProbes } from './localRuntimes';
 
 export type RouteFetch = (input: string, init: RequestInit) => Promise<Response>;
@@ -30,6 +40,12 @@ export interface RovrRouteDeps {
   endpoints(): Promise<LocalEndpoints>;
   /** The gateway credential, or null signed out. */
   key(): Promise<string | null>;
+  /**
+   * The in-page engine — the browser's own model (brain-embedded's `browserEngineProbe`
+   * and `browserEngineFetch`). Its probe joins the HTTP runtimes' and its fetch carries
+   * the local attempts; absent = HTTP runtimes only.
+   */
+  page?: { probe(): Promise<LocalRuntimeProbe | null>; fetch: RouteFetch };
   onAttempt?(record: LocalFirstAttemptRecord): void;
 }
 
@@ -46,11 +62,15 @@ export function gatewayStream(baseUrl: string, key: string, fetchImpl: RouteFetc
  */
 export function createRovrStream(deps: RovrRouteDeps): BrainStreamFn {
   return async (opts, handlers) => {
-    const [probes, key] = await Promise.all([deps.endpoints().then((e) => deps.prober.probe(e)), deps.key()]);
+    const [probes, page, key] = await Promise.all([
+      deps.endpoints().then((e) => deps.prober.probe(e)),
+      deps.page ? deps.page.probe() : Promise.resolve(null),
+      deps.key(),
+    ]);
     const stream = createLocalFirstStream({
-      probes: resolveLoopbackProbes(probes),
+      probes: [...resolveLoopbackProbes(probes), ...(page ? [page] : [])],
       cloud: key ? gatewayStream(deps.baseUrl, key, deps.fetch) : null,
-      fetch: deps.fetch,
+      fetch: deps.page?.fetch ?? deps.fetch,
       ...(deps.onAttempt ? { onAttempt: deps.onAttempt } : {}),
     });
     return stream(opts, handlers);

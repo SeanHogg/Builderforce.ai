@@ -7,7 +7,7 @@
  * them unchanged — the whole adaptation is a URL rewrite plus the endpoint's own token.
  */
 
-import { LOCAL_RUNTIME_IDS, type LocalEndpoint, type LocalEndpoints, type LocalRuntimeId } from './runtimes.js';
+import { HTTP_LOCAL_RUNTIMES, type LocalEndpoint, type LocalEndpoints, type LocalRuntimeId } from './runtimes.js';
 
 /**
  * Normalize a configured base to the runtime's ROOT, tolerating the two forms a user is
@@ -68,13 +68,14 @@ export function localAuthHeaders(endpoint: LocalEndpoint): Record<string, string
  * wrong origin or sends none to the right one.
  *
  * Exact match on the chat route only: `/v1/models`, `/api/pull` and any other path on a
- * configured origin are refused.
+ * configured origin are refused. A `page` runtime is never matched — it has no server
+ * for a host to proxy to; its route is answered inside the page.
  */
 export function matchLocalChatEndpoint(
   endpoints: LocalEndpoints,
   url: string,
 ): { provider: LocalRuntimeId; endpoint: LocalEndpoint } | null {
-  for (const provider of LOCAL_RUNTIME_IDS) {
+  for (const { id: provider } of HTTP_LOCAL_RUNTIMES) {
     const endpoint = endpoints[provider];
     if (endpoint && endpoint.baseUrl.trim().length > 0 && localChatCompletionsUrl(endpoint.baseUrl) === url) {
       return { provider, endpoint };

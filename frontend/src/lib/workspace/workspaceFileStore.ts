@@ -44,7 +44,8 @@ export interface WorkspaceFileStore {
   readonly id: WorkspaceId;
   /** `server` = a durable storage project (history, database, publish, collaboration). */
   readonly kind: 'server' | 'local';
-  /** Every file, with its content. */
+  /** Every file. A `local` store returns content too; a `server` store returns paths with
+   *  empty content — use `readStoreFiles` when the bodies are needed. */
   list(): Promise<FileEntry[]>;
   /** One file's content. Rejects when the file does not exist. */
   read(path: string): Promise<string>;

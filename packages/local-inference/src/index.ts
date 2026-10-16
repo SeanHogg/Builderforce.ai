@@ -6,8 +6,8 @@
  * serve, which model may take this turn, and when do we fall back to the cloud" is
  * answered once:
  *
- *  - the runtime REGISTRY (Synapse/bfi, Ollama, FreeToken, Kimi Code) and the
- *    `local/<runtime>/<model>` ref grammar;
+ *  - the runtime REGISTRY (Synapse/bfi, Ollama, FreeToken, the browser's built-in
+ *    model, Kimi Code) and the `local/<runtime>/<model>` ref grammar;
  *  - a never-throwing PROBE of what each runtime serves and can do;
  *  - the `CatalogView` binding that makes `@builderforce/model-router` price local at 0;
  *  - the PLAN (capable local model first, then the cloud) and the FAILOVER rule that
@@ -20,6 +20,8 @@
  */
 
 export {
+  BROWSER_ENGINE_BASE_URL,
+  HTTP_LOCAL_RUNTIMES,
   LOCAL_RUNTIMES,
   LOCAL_RUNTIME_IDS,
   isLocalRuntimeId,
@@ -28,6 +30,7 @@ export {
   type LocalEndpoints,
   type LocalRuntime,
   type LocalRuntimeId,
+  type LocalRuntimeReach,
   type LocalToolSupport,
 } from './runtimes.js';
 export { LOCAL_MODEL_PREFIX, formatLocalModelRef, isLocalModelRef, parseLocalModelRef } from './ref.js';

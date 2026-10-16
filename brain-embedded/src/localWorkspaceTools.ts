@@ -142,6 +142,9 @@ export const STUDIO_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
   'canvas_read_build_diagnostics',
   'canvas_list_build_file_history',
   'canvas_restore_build_file',
+  // Install / build / type-check / test in the browser runtime: "does it build?" shares
+  // no stem with the tool's name, the same miss that dropped `run_command` on the IDE.
+  'canvas_run_build_command',
   PREVIEW_REVIEW_TOOL,
 ]);
 
@@ -157,6 +160,10 @@ export const STUDIO_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
  */
 export const UNSCOPED_MUTATION_TOOLS: ReadonlySet<string> = new Set([
   'run_command',
+  // The Studio's twin: the same shell, run in the browser runtime, whose changed files
+  // are saved back to the workspace — so a cached `canvas_read_build_file` is as stale
+  // after it as a `read_file` is after `run_command`.
+  'canvas_run_build_command',
   'git_sync_latest',
   'git_undo',
   'git_redo',

@@ -283,9 +283,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ### Workload-aware routing and model hand-off `[agents]`
 
-- **Web app has no local-first inference.** VSIX and Rovr (Chrome) try the user's own runtime (Synapse/bfi, Ollama, FreeToken) first via brain-embedded `createLocalFirstStream`; the web Brain panel and Canvas still go straight to the gateway. A page on builderforce.ai can only reach `http://127.0.0.1` if the runtime allows that origin (Ollama `OLLAMA_ORIGINS`, bfi's CORS list), and no in-browser (WebGPU) engine exists. *Blocker: operator decision — ship a localhost-CORS path (needs bfi to allow builderforce.ai) or an in-browser engine.*
-- **Memory package versions drift.** Lockfiles resolve `@seanhogg/builderforce-memory` 2026.9.30 (clients/vscode), 2026.9.31 (frontend, brain-embedded) and 2026.9.33 (api, agent-runtime). Raise all floors to `^2026.9.33` and regenerate those three lockfiles. *Blocker: lockfile regeneration (`pnpm install --no-frozen-lockfile` in the three dirs) was refused by this session's auto-mode guard — run it in an interactive session.*
-- **Rovr is not in the Chrome Web Store, and has no icon art of its own.** `clients/chrome` builds and packages `dist/builderforce-rovr-*.zip` (load-unpacked works); the build reuses the web app's icons. *Blocker: a Chrome Web Store developer account + listing, and Rovr icon art.*
+- **Rovr is not in the Chrome Web Store.** `clients/chrome` builds and packages `dist/builderforce-rovr-*.zip` (load-unpacked works); its icons are the web app's own logos by decision (2026-10-16). *Blocker: a Chrome Web Store developer account + listing.*
 
 ### Brain chat `[agents]`
 
@@ -374,7 +372,6 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ### Infrastructure, CI/CD and cost `[platform]`
 
-- **`api` `npm run type-check` fails on HEAD (17 errors, 11 files, found 2026-10-16).** `resolveTenantTask.ts:82` (possibly-undefined index), `agentPersonaBrief.ts:102`, `youtubeUploadJobs.ts:63` (`baseUrl`), `adminRoutes.ts:429,1447`, plus test-only typing in `ceremonyMinutesBoard`, `managedAgentHost{Provision,Runtime,Subscription}`, `managedAgentHostRoutes`, `replayExportRoutes`, `replayPageRoutes`. All committed code, none touched by the routing work. Blocks the deploy step's type-check.
 
 - **🟠 esbuild < 0.28.1 (GHSA) still locked in 6 packages — Dependabot reports `security_update_not_possible`.** Fixed 2026-10-11 in replay-sdk + the 8 tsup packages via `pnpm.overrides.esbuild ^0.28.2` (tsup 8.5.1 pins `^0.27.0`, so no in-range fix exists). Remaining, each with a different source that needs its own check before forcing 0.28: `api` (0.18.20/0.19.12 via drizzle-kit's `@esbuild-kit` — forcing may break `drizzle-kit push` in CI), `frontend` (0.14.47/0.15.18/0.27.3 — find the old-pin consumers first), `clients/vscode` (0.24.2/0.25.12 — the VSIX bundler), `agent-runtime` (0.27.3), `webdit/runtime` (0.21.5), `docs-site` (0.27.3, npm lockfile → `overrides`). All dev/build-time only. Fix = per package: override → regenerate lockfile → typecheck/build/test (+ `drizzle-kit` run for api, VSIX package for vscode). Not blocked — scoped out of the 2026-10-11 pass pending operator go-ahead on the riskier api/vscode overrides.
 

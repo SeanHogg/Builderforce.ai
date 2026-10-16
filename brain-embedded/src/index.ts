@@ -12,7 +12,7 @@
  */
 
 // Injection seam
-export { BrainProvider, useBrainConfig } from './config';
+export { BrainProvider, resolveBrainStream, useBrainConfig } from './config';
 export type { BrainConfig, BrainRuntime, BrainPersistenceAdapter } from './config';
 
 // Streaming client + tool/message types
@@ -29,12 +29,40 @@ export {
   completeLocalFirst,
   createLocalFirstStream,
   createLocalStream,
+  localFirstApplies,
   localFirstWorkload,
   localTransport,
 } from './localFirstTransport';
 export type { LocalChatMessage, LocalFetch, LocalFirstStreamInput } from './localFirstTransport';
 export { localFallbackTrace, summarizeLocalFirstAttempt } from './localFirstTraces';
 export type { LocalFirstAttemptSummary } from './localFirstTraces';
+// The browser's own model (Chrome's Prompt API) as a local-first runtime: its probe and
+// the in-page fetch that answers its OpenAI chat route. `promptApi` is the ONE detection
+// of the surface, shared with the web app's PromptApiModelProvider.
+export {
+  BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
+  BROWSER_ENGINE_MODEL,
+  BROWSER_ENGINE_PROBE_TTL_MS,
+  browserEngineFetch,
+  browserEngineProbe,
+  createBrowserEngineProber,
+  toPromptApiTurn,
+} from './browserEngine';
+export type { BrowserEngineProber } from './browserEngine';
+export {
+  hasPromptApi,
+  promptApiAvailability,
+  promptApiFactory,
+  promptApiInputQuota,
+  promptApiMeasure,
+  promptStreamDeltas,
+} from './promptApi';
+export type {
+  PromptApiAvailability,
+  PromptApiFactory,
+  PromptApiMessage,
+  PromptApiSession,
+} from './promptApi';
 // Does this shell call only READ? Shared by the read guard and a read-only sub-agent's gate.
 export { isReadOnlyShellCall } from './readOnlyShell';
 export type {

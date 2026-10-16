@@ -122,7 +122,7 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
   },
   icons: {
-    icon: [{ url: '/icon.png', type: 'image/png', sizes: '32x32' }, { url: '/icon-192.png', type: 'image/png', sizes: '192x192' }],
+    icon: [{ url: '/icon.png', type: 'image/png', sizes: '64x64' }, { url: '/icon-192.png', type: 'image/png', sizes: '192x192' }],
     shortcut: '/icon.png',
     apple: [{ url: '/apple-touch-icon.png', type: 'image/png', sizes: '180x180' }],
   },

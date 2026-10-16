@@ -13,6 +13,9 @@ vi.mock('@seanhogg/builderforce-brain-embedded', async (importOriginal) => ({
   fetchMcpToolEntries: vi.fn(async () => []),
   mcpActionsFrom: vi.fn(() => []),
   streamChatCompletion: mocks.streamChatCompletion,
+  // The mocked configs carry no `stream`, so every round trip reaches the mocked streamer
+  // with the request (transport included) exactly as the runner built it.
+  resolveBrainStream: (config: { stream?: unknown }) => config.stream ?? mocks.streamChatCompletion,
 }));
 vi.mock('@/lib/brain/runtime', () => ({ brainConfig: { transport: {} } }));
 vi.mock('@/lib/brain/guestRuntime', () => ({ guestBrainConfig: { transport: {} } }));

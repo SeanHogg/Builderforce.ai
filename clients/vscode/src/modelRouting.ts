@@ -33,6 +33,7 @@ import {
   completeLocalFirst,
   createLocalFirstStream,
   createLocalStream,
+  localFirstApplies,
   type BrainStreamFn,
 } from "@seanhogg/builderforce-brain-embedded";
 import {
@@ -102,11 +103,12 @@ export async function resolveModelRoute(secrets: vscode.SecretStorage): Promise<
  * LOCAL FIRST for an unpinned turn. Any model choice — an explicit pick, the project's
  * Evermind pin, a role pin, the configured default — names what the user wants and wins
  * outright, and so does an explicit "use my connected accounts" (`byo_pool`); only "let
- * the gateway route" is open to being served on this machine first. Probing is memoized
- * in `localModels`, so asking per turn costs nothing while nothing changed.
+ * the gateway route" is open to being served on this machine first (`localFirstApplies`,
+ * the rule the web app's stream reads too). Probing is memoized in `localModels`, so
+ * asking per turn costs nothing while nothing changed.
  */
 async function withLocalFirst(choice: ModelRoute, config: LocalModelsConfig): Promise<ModelRoute> {
-  if (choice.model || choice.routingMode !== "auto") return choice;
+  if (!localFirstApplies(choice)) return choice;
   const probes = await probeLocalFirstRuntimes(config);
   if (!probes.some((p) => p.models.length > 0)) return choice;
   return { ...choice, localFirst: { probes } };

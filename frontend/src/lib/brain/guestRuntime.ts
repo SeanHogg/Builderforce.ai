@@ -21,7 +21,8 @@
  * Kept as a module constant so BrainProvider's memoized runtime stays stable.
  */
 
-import type { BrainConfig, BrainPersistenceAdapter, BrainChat, BrainMessage } from '@seanhogg/builderforce-brain-embedded';
+import type { BrainConfig, BrainPersistenceAdapter, BrainChat, BrainMessage, BrainTransport } from '@seanhogg/builderforce-brain-embedded';
+import { lazyLocalFirstStream } from './runtime';
 import { AUTH_API_URL } from '../auth';
 import { parseLlmError } from '../builderforceApi';
 import { guestLimitRefusal, noteGuestLimit } from '../guestLimit';
@@ -288,24 +289,29 @@ const dispatchingGuestPersistence: BrainPersistenceAdapter = {
   uploadUrl: (...args) => activeGuestPersistence().uploadUrl(...args),
 };
 
-export const guestBrainConfig: BrainConfig = {
-  transport: {
-    baseUrl: AUTH_API_URL,
-    getToken: getStoredGuestToken,
-    // A guest 401 means the token lapsed — drop it so the next send re-mints.
-    onUnauthorized: () => { clearGuestToken(); },
-    // The gateway's refusal keeps its structured fields (parseLlmError), and a
-    // spent allowance is ANNOUNCED on the way past: the local "messages left"
-    // counter is not the only way to run out — the per-device and per-room caps
-    // refuse while this browser still believes it has turns — and without this a
-    // guest met those walls as a bare English error line with nothing to click.
-    mapError: async (res) => {
-      const error = await parseLlmError(res);
-      const refusal = guestLimitRefusal(error);
-      if (refusal) noteGuestLimit(refusal);
-      return error;
-    },
+const guestTransport: BrainTransport = {
+  baseUrl: AUTH_API_URL,
+  getToken: getStoredGuestToken,
+  // A guest 401 means the token lapsed — drop it so the next send re-mints.
+  onUnauthorized: () => { clearGuestToken(); },
+  // The gateway's refusal keeps its structured fields (parseLlmError), and a
+  // spent allowance is ANNOUNCED on the way past: the local "messages left"
+  // counter is not the only way to run out — the per-device and per-room caps
+  // refuse while this browser still believes it has turns — and without this a
+  // guest met those walls as a bare English error line with nothing to click.
+  mapError: async (res) => {
+    const error = await parseLlmError(res);
+    const refusal = guestLimitRefusal(error);
+    if (refusal) noteGuestLimit(refusal);
+    return error;
   },
+};
+
+export const guestBrainConfig: BrainConfig = {
+  transport: guestTransport,
+  // The same local-first stream a tenant gets: a guest's tool-free, unpinned turn may be
+  // answered on the browser's own model without a gateway round trip.
+  stream: lazyLocalFirstStream(guestTransport),
   persistence: dispatchingGuestPersistence,
   resolveSystemPrompt: (modality) => getModality(modality).brainSystemPrompt,
 };

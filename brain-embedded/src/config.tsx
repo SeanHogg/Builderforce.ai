@@ -13,13 +13,8 @@
 
 import { createContext, useContext, useMemo } from 'react';
 import type { BrainChat, BrainMessage } from './types';
-import {
-  streamChatCompletion,
-  type BrainTransport,
-  type StreamChatOptions,
-  type StreamHandlers,
-  type StreamChatResult,
-} from './streamChatCompletion';
+import { streamChatCompletion, type BrainTransport } from './streamChatCompletion';
+import type { BrainStreamFn } from './brainRunStore';
 
 /**
  * Chat/message persistence the host provides. Mirrors the Builderforce
@@ -84,6 +79,24 @@ export interface BrainConfig {
   persistence: BrainPersistenceAdapter;
   /** Map a modality string to its default system prompt. Defaults to a generic prompt. */
   resolveSystemPrompt?: (modality: string) => string;
+  /**
+   * The streaming fn every Brain turn runs through. Omitted = the shared streamer over
+   * {@link BrainConfig.transport}. A host supplies one to change WHERE turns run without
+   * forking the hooks — builderforce.ai serves tool-free turns on the browser's own model
+   * first (`createLocalFirstStream`). A call that must reach a NAMED cloud model (a model
+   * comparison) uses `transport` directly and never passes through here.
+   */
+  stream?: BrainStreamFn;
+}
+
+/**
+ * The streaming fn a config resolves to — the host's own, else the shared streamer over
+ * its transport. The ONE resolution: BrainProvider and any surface that streams from a
+ * config outside React (the canvas turn loop) read it here, so they cannot disagree on
+ * where a turn runs.
+ */
+export function resolveBrainStream(config: Pick<BrainConfig, 'transport' | 'stream'>): BrainStreamFn {
+  return config.stream ?? ((opts, handlers) => streamChatCompletion({ ...opts, transport: config.transport }, handlers));
 }
 
 const DEFAULT_SYSTEM_PROMPT =
@@ -94,11 +107,8 @@ export interface BrainRuntime {
   transport: BrainTransport;
   persistence: BrainPersistenceAdapter;
   resolveSystemPrompt: (modality: string) => string;
-  /** Stream a completion through the configured transport. */
-  stream(
-    opts: Omit<StreamChatOptions, 'transport'>,
-    handlers?: StreamHandlers,
-  ): Promise<StreamChatResult>;
+  /** Stream a completion — the config's own stream, else the configured transport. */
+  stream: BrainStreamFn;
 }
 
 const BrainConfigContext = createContext<BrainRuntime | null>(null);
@@ -115,8 +125,7 @@ export function BrainProvider({
       transport: config.transport,
       persistence: config.persistence,
       resolveSystemPrompt: config.resolveSystemPrompt ?? (() => DEFAULT_SYSTEM_PROMPT),
-      stream: (opts, handlers) =>
-        streamChatCompletion({ ...opts, transport: config.transport }, handlers),
+      stream: resolveBrainStream(config),
     }),
     [config],
   );

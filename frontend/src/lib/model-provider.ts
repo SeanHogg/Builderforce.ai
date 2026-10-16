@@ -13,6 +13,13 @@
 import type { MambaModel, MambaTrainer, BPETokenizer } from '@seanhogg/builderforce-memory-engine';
 import { sendAIMessage } from './api';
 import { hasWebGPU, withSemanticResponseCache } from './semantic-cache';
+import {
+  hasPromptApi,
+  promptApiAvailability,
+  promptApiFactory,
+  promptStreamDeltas,
+  type PromptApiSession,
+} from '@seanhogg/builderforce-brain-embedded';
 
 /** The dynamically-imported engine module + the device type it hands back. */
 type MambaEngineModule = typeof import('@seanhogg/builderforce-memory-engine');
@@ -507,48 +514,11 @@ export class ExternalLLMProvider implements ModelProvider {
 // browser), no VRAM budget to manage, and real token streaming. Feature-detected
 // so it silently no-ops where unavailable (every non-Chrome browser today).
 
-/** Minimal structural typing for the Chrome Prompt API (`window.LanguageModel`,
- *  Chrome 138+). Kept local so we don't depend on ambient DOM-lib updates. */
-interface PromptApiSession {
-  prompt(input: string, opts?: { signal?: AbortSignal }): Promise<string>;
-  promptStreaming(input: string, opts?: { signal?: AbortSignal }): ReadableStream<string>;
-  /** Forks the conversation, PRESERVING the original session's initial prompts —
-   *  it takes only `{ signal }`, so it can never install a different system
-   *  prompt. Changing the system prompt therefore requires a fresh `create()`. */
-  clone(opts?: { signal?: AbortSignal }): Promise<PromptApiSession>;
-  destroy(): void;
-  readonly inputUsage?: number;
-  readonly inputQuota?: number;
-  /** Legacy (pre-138) token accounting; guarded because newer builds drop it. */
-  countPromptTokens?(input: string): Promise<number>;
-}
-interface PromptApiFactory {
-  availability(): Promise<'unavailable' | 'downloadable' | 'downloading' | 'available'>;
-  create(opts?: {
-    temperature?: number;
-    topK?: number;
-    initialPrompts?: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-    signal?: AbortSignal;
-    monitor?: (m: EventTarget) => void;
-  }): Promise<PromptApiSession>;
-}
-
-/** Resolve the Prompt API factory across the current global (`LanguageModel`) and
- *  the legacy `self.ai.languageModel` surface, or null when the browser lacks it. */
-function promptApiFactory(): PromptApiFactory | null {
-  if (typeof globalThis === 'undefined') return null;
-  const g = globalThis as unknown as {
-    LanguageModel?: PromptApiFactory;
-    ai?: { languageModel?: PromptApiFactory };
-  };
-  return g.LanguageModel ?? g.ai?.languageModel ?? null;
-}
-
-/** True when this browser exposes the built-in Prompt API surface at all.
- *  (Actual model availability is async — see {@link PromptApiModelProvider.init}.) */
-export function hasPromptApi(): boolean {
-  return promptApiFactory() !== null;
-}
+// The Prompt API detection, readiness vocabulary and stream normalisation are
+// brain-embedded's (`promptApi.ts`) — shared with the Brain's local-first browser
+// engine, so there is one reading of the surface. Re-exported for this module's
+// existing callers.
+export { hasPromptApi };
 
 export interface PromptApiProviderConfig {
   /** Default system instruction, used for any turn that doesn't carry its own
@@ -637,22 +607,10 @@ export class PromptApiModelProvider implements ModelProvider {
       if (onToken) await wordStream(msg, onToken);
       return msg;
     }
-    const stream = session.promptStreaming(this.buildInput(input, context));
-    const reader = stream.getReader();
     let full = '';
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (typeof value !== 'string') continue;
-        // Chrome ≥138 yields incremental deltas; older builds yielded the full
-        // cumulative string. Normalise to a delta so onToken never double-counts.
-        const delta = value.startsWith(full) ? value.slice(full.length) : value;
-        full = value.startsWith(full) ? value : full + value;
-        if (delta) onToken?.(delta);
-      }
-    } finally {
-      reader.releaseLock();
+    for await (const delta of promptStreamDeltas(session.promptStreaming(this.buildInput(input, context)))) {
+      full += delta;
+      onToken?.(delta);
     }
     return full;
   }
@@ -718,7 +676,7 @@ export class PromptApiModelProvider implements ModelProvider {
     if (!factory) {
       throw new Error('Chrome Prompt API (built-in AI) is not available in this browser');
     }
-    const status = await factory.availability();
+    const status = await promptApiAvailability(factory);
     if (status === 'unavailable') {
       throw new Error('Built-in model is unavailable on this device');
     }

@@ -49,6 +49,9 @@ import { exportedSymbols } from '@builderforce/agent-tools/symbols';
 import { formatBuildFailures } from '@/lib/buildDiagnostics';
 import { MODALITIES, type ProjectModality } from '@/lib/modality';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
+import { readStoreFiles } from '@/lib/workspace/readStoreFiles';
+import { isGeneratedPath } from '@/lib/workspace/generatedPaths';
+import { canvasRunBuildCommandAction } from '@/lib/canvasBuildCommandAction';
 import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import { undeclaredDependencies } from '@/lib/undeclaredDependencies';
@@ -119,9 +122,6 @@ export function appModalityFor(modality: unknown, durable: boolean): ProjectModa
     : 'designer';
 }
 
-/** Files whose content is never useful to a model and costly to page through. */
-const SKIP_DIRECTORIES = ['node_modules/', 'dist/', '.git/'];
-
 /** What the history tools answer for a workspace held in this browser, which keeps none. */
 const NO_HISTORY = 'This workspace is held in this browser and keeps no file history yet. Saving the board to an account turns on history and restore.';
 
@@ -163,10 +163,6 @@ export function workspacePathArg(value: unknown): string {
     .replace(/\/{2,}/g, '/')    // `src//App.jsx` is `src/App.jsx`
     .replace(/^(?:\.\/)+/, '')  // `./src/App.jsx` is relative already
     .replace(/^\/+/, '');       // `/src/App.jsx` is workspace-relative, not absolute
-}
-
-function isSkipped(path: string): boolean {
-  return SKIP_DIRECTORIES.some((prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix) || path.includes(`/${prefix}`));
 }
 
 /**
@@ -282,11 +278,14 @@ export function summarizeWorkspace(files: { path: string; content: string }[]): 
  * through the shared content guard.
  */
 export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] {
-  /** Files worth showing a model: the workspace minus build output and deps. */
-  const workspaceFiles = async (store: WorkspaceFileStore) => {
+  /** Paths worth showing a model: the workspace minus build output and deps. */
+  const workspacePaths = async (store: WorkspaceFileStore) => {
     const entries = await store.list();
-    return entries.filter((entry) => entry.type !== 'directory' && !isSkipped(entry.path));
+    return entries.filter((entry) => entry.type !== 'directory' && !isGeneratedPath(entry.path)).map((entry) => entry.path);
   };
+  /** Those files WITH their content — a durable store lists paths only, so they are read. */
+  const workspaceFiles = async (store: WorkspaceFileStore) =>
+    Object.entries(await readStoreFiles(store, (path) => !isGeneratedPath(path))).map(([path, content]) => ({ path, content }));
   /** Every committed file change reports through here: the open editor re-reads, the
    *  host learns which app is being built, and a source file that imports a package the
    *  manifest does not declare says so (`undeclaredDependencies`) — the preview's
@@ -325,13 +324,13 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         const modality = appModalityFor(args.modality, false);
         try {
           const build = await ctx.createBuild({ title, modality });
-          const files = await workspaceFiles(build.store).catch(() => []);
+          const paths = await workspacePaths(build.store).catch((): string[] => []);
           return {
             ok: true,
             applied: true,
             object: { id: build.objectId, kind: 'build', title: build.title },
             modality,
-            files: files.map((file) => file.path),
+            files: paths,
             next: 'The workspace is seeded and runnable. Edit the starter files with canvas_edit_build_file (or canvas_write_build_file for a new file) to build what the user asked for.',
           };
         } catch (error) {
@@ -618,6 +617,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         }
       },
     },
+    canvasRunBuildCommandAction(ctx, (objectId) => resolveCanvasBuild(ctx.builds(), objectId)),
   ];
 }
 
@@ -666,6 +666,7 @@ export const CANVAS_BUILD_TOOL_NAMES = [
   'canvas_read_build_diagnostics',
   'canvas_list_build_file_history',
   'canvas_restore_build_file',
+  'canvas_run_build_command',
 ] as const;
 
 /**

@@ -1,5 +1,20 @@
 [
   {
+    "slug": "agents-that-run-their-own-code",
+    "title": "The Brain now runs its own code — install, test and build, right in your browser",
+    "date": "2026-10-16",
+    "description": "An agent that writes code but cannot run it hands you unverified work. The Brain on the canvas and in Studio now installs packages, runs tests, builds and type-checks in your own browser, fixes what fails, and shows you a change that has already passed.",
+    "tags": [
+      "creation-canvas",
+      "webcontainers",
+      "testing",
+      "local-models",
+      "app-development",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "builderforce-webcontainers-open-source",
     "title": "BuilderForce WebContainers is open source — the in-browser dev runtime you can fork",
     "date": "2026-10-16",

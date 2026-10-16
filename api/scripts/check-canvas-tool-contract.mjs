@@ -98,6 +98,9 @@ const CANVAS_FILES = [
   // The Studio's live-preview review probe (`canvas_inspect_preview`). Listed the same
   // day it was written, for the reason the note above `canvasLegalRecordTools.ts` gives.
   path.resolve(repoRoot, 'frontend', 'src', 'lib', 'previewProbe', 'inspectPreviewAction.ts'),
+  // The build vocabulary's shell (`canvas_run_build_command`), its own module beside
+  // `canvasBuildTools.ts`. Listed the same day it was written, for the same reason.
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasBuildCommandAction.ts'),
 ];
 const CONTRACT_FILE = path.resolve(repoRoot, 'packages', 'creation-canvas-contract', 'src', 'canvasTools.ts');
 

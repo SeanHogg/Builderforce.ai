@@ -11619,6 +11619,10 @@
       "rovr-your-assistant-in-the-browser": {
         "title": "Das ist Rovr – ein privater Assistent im Browser, der sich merkt, was er getan hat",
         "description": "Ihr Builderforce-Agent konnte im Editor programmieren und auf einem Canvas bauen, aber nicht in dem Tab helfen, in dem der Großteil Ihres Tages stattfindet. Rovr ist eine Chrome-Erweiterung, die die Seite liest, Aufgaben auf erlaubten Websites erledigt, zuerst auf Ihrem eigenen Rechner läuft, offline funktioniert und jede Aktion und Aufgabe mit Ihrem Chat synchronisiert."
+      },
+      "agents-that-run-their-own-code": {
+        "title": "Das Brain führt jetzt seinen eigenen Code aus — installieren, testen und bauen, direkt in Ihrem Browser",
+        "description": "Ein Agent, der Code schreibt, ihn aber nicht ausführen kann, übergibt Ihnen ungeprüfte Arbeit. Das Brain auf dem Canvas und in Studio installiert jetzt Pakete, führt Tests aus, baut und prüft Typen in Ihrem eigenen Browser, behebt, was fehlschlägt, und zeigt Ihnen eine Änderung, die bereits bestanden hat."
       }
     }
   },

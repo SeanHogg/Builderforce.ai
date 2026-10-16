@@ -1,0 +1,1 @@
+import{l as s,b as i,a as n,c as b,s as f}from"./index.js";function m(a){const t=(r,e)=>f({...r,transport:a},e);return async(r,e)=>{if(!s(r))return t(r,e);const c=await i();if(!c)return t(r,e);const o=n(a.fetch);return b({probes:[c],cloud:t,fetch:o})(r,e)}}export{m as createBrowserLocalFirstStream};

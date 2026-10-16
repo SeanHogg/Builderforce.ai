@@ -11619,6 +11619,10 @@
       "rovr-your-assistant-in-the-browser": {
         "title": "Voici Rovr : un assistant privé dans votre navigateur qui se souvient de ce qu’il a fait",
         "description": "Votre agent Builderforce savait coder dans votre éditeur et construire sur un canevas, mais pas vous aider dans l’onglet où se passe l’essentiel de votre journée. Rovr est une extension Chrome qui lit la page, mène des tâches sur les sites que vous autorisez, tourne d’abord sur votre propre machine, fonctionne hors ligne et synchronise chaque action et chaque tâche avec votre conversation."
+      },
+      "agents-that-run-their-own-code": {
+        "title": "Le Brain exécute désormais son propre code : installer, tester et construire, directement dans votre navigateur",
+        "description": "Un agent qui écrit du code sans pouvoir l’exécuter vous remet un travail non vérifié. Le Brain du canevas et de Studio installe désormais des paquets, lance les tests, construit et vérifie les types dans votre propre navigateur, corrige ce qui échoue et vous présente une modification qui a déjà passé les vérifications."
       }
     }
   },

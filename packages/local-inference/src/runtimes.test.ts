@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  BROWSER_ENGINE_BASE_URL,
   GATEWAY_COMPLETIONS_PATH,
+  HTTP_LOCAL_RUNTIMES,
   LOCAL_MODEL_PREFIX,
   LOCAL_RUNTIMES,
   LOCAL_RUNTIME_IDS,
@@ -29,8 +31,22 @@ const json = (body: unknown, status = 200): Response => new Response(JSON.string
 
 describe('registry', () => {
   it('lists every runtime once, on-device engines first', () => {
-    expect(LOCAL_RUNTIME_IDS).toEqual(['synapse', 'ollama', 'freetoken', 'kimi-code']);
-    expect(LOCAL_RUNTIMES.filter((r) => r.onDevice).map((r) => r.id)).toEqual(['synapse', 'ollama', 'freetoken']);
+    expect(LOCAL_RUNTIME_IDS).toEqual(['synapse', 'ollama', 'freetoken', 'browser', 'kimi-code']);
+    expect(LOCAL_RUNTIMES.filter((r) => r.onDevice).map((r) => r.id)).toEqual([
+      'synapse',
+      'ollama',
+      'freetoken',
+      'browser',
+    ]);
+  });
+
+  it('marks the in-page engine as reached by the page, never over HTTP', () => {
+    expect(LOCAL_RUNTIMES.filter((r) => r.reach === 'page').map((r) => r.id)).toEqual(['browser']);
+    expect(HTTP_LOCAL_RUNTIMES.map((r) => r.id)).toEqual(['synapse', 'ollama', 'freetoken', 'kimi-code']);
+    expect(LOCAL_RUNTIMES.find((r) => r.id === 'browser')).toMatchObject({
+      defaultBaseUrl: BROWSER_ENGINE_BASE_URL,
+      tools: 'unknown',
+    });
   });
 
   it('names runtimes with brand tokens', () => {
@@ -38,6 +54,7 @@ describe('registry', () => {
       synapse: 'Synapse',
       ollama: 'Ollama',
       freetoken: 'FreeToken',
+      browser: 'Gemini Nano',
       'kimi-code': 'Kimi Code',
     });
   });
@@ -109,6 +126,11 @@ describe('endpoint URLs', () => {
       expect(matchLocalChatEndpoint(endpoints, url), url).toBeNull();
     }
   });
+
+  it('never fences a proxy to the in-page engine — it has no server', () => {
+    const endpoints = { browser: { baseUrl: BROWSER_ENGINE_BASE_URL } };
+    expect(matchLocalChatEndpoint(endpoints, `${BROWSER_ENGINE_BASE_URL}/v1/chat/completions`)).toBeNull();
+  });
 });
 
 describe('bfi discovery', () => {
@@ -151,6 +173,13 @@ describe('probeLocalRuntimes', () => {
         models: [{ ref: 'local/synapse/qwen3-8b', provider: 'synapse', model: 'qwen3-8b', tools: true }],
       },
     ]);
+  });
+
+  it('never probes the in-page engine over HTTP, even with an endpoint', async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => json({ data: [{ id: 'gemini-nano' }] }));
+    const probes = await probeLocalRuntimes(fetchImpl, { browser: { baseUrl: BROWSER_ENGINE_BASE_URL } });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(probes).toEqual([]);
   });
 
   it('reads a dead, failing or malformed runtime as unreachable, never throwing', async () => {

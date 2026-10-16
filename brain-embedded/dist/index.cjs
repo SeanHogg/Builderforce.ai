@@ -30,6 +30,9 @@ __export(src_exports, {
   BACK_TO_BACK_AT: () => BACK_TO_BACK_AT,
   BASE_BRANCHES: () => BASE_BRANCHES,
   BRAIN_AGENT_ASSIGNMENTS_PATH: () => BRAIN_AGENT_ASSIGNMENTS_PATH,
+  BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS: () => BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
+  BROWSER_ENGINE_MODEL: () => BROWSER_ENGINE_MODEL,
+  BROWSER_ENGINE_PROBE_TTL_MS: () => BROWSER_ENGINE_PROBE_TTL_MS,
   BUILDERFORCE_PRODUCT_NAME: () => BUILDERFORCE_PRODUCT_NAME,
   BrainActionsProvider: () => BrainActionsProvider,
   BrainContextProvider: () => BrainContextProvider,
@@ -119,6 +122,8 @@ __export(src_exports, {
   attemptedPublish: () => attemptedPublish,
   brainPersonaAgents: () => brainPersonaAgents,
   brainRequestError: () => brainRequestError,
+  browserEngineFetch: () => browserEngineFetch,
+  browserEngineProbe: () => browserEngineProbe,
   buildBrainTriageReport: () => buildBrainTriageReport,
   buildChatDiagnosticsReport: () => buildChatDiagnosticsReport,
   buildComposerDirectives: () => buildComposerDirectives,
@@ -155,6 +160,7 @@ __export(src_exports, {
   consolidationMetadata: () => consolidationMetadata,
   countReconciledMemories: () => import_evermind2.countReconciledMemories,
   createBrainRestPersistence: () => createBrainRestPersistence,
+  createBrowserEngineProber: () => createBrowserEngineProber,
   createComposingActivity: () => createComposingActivity,
   createLocalFirstStream: () => createLocalFirstStream,
   createLocalStream: () => createLocalStream,
@@ -206,6 +212,7 @@ __export(src_exports, {
   getRunTrace: () => getRunTrace,
   handleRouterCall: () => handleRouterCall,
   hasEditIntent: () => hasEditIntent,
+  hasPromptApi: () => hasPromptApi,
   installIndexedDbStepDurability: () => installIndexedDbStepDurability,
   installRunDriver: () => installRunDriver,
   installStepDurability: () => installStepDurability,
@@ -245,6 +252,7 @@ __export(src_exports, {
   loadAgentPoolVia: () => loadAgentPoolVia,
   loadBrainPersonaAgentsVia: () => loadBrainPersonaAgentsVia,
   localFallbackTrace: () => localFallbackTrace,
+  localFirstApplies: () => localFirstApplies,
   localFirstWorkload: () => localFirstWorkload,
   localStorageConfirmationPersistence: () => localStorageConfirmationPersistence,
   localToolsIn: () => localToolsIn,
@@ -293,6 +301,11 @@ __export(src_exports, {
   productModelName: () => productModelName,
   progressDuration: () => progressDuration,
   projectMemoryHooks: () => projectMemoryHooks,
+  promptApiAvailability: () => promptApiAvailability,
+  promptApiFactory: () => promptApiFactory,
+  promptApiInputQuota: () => promptApiInputQuota,
+  promptApiMeasure: () => promptApiMeasure,
+  promptStreamDeltas: () => promptStreamDeltas,
   queueRunSteering: () => queueRunSteering,
   ratedTurnContext: () => ratedTurnContext,
   ratedTurnTool: () => ratedTurnTool,
@@ -301,6 +314,7 @@ __export(src_exports, {
   repeatedFailureAdvisory: () => repeatedFailureAdvisory,
   resetApiVersionCache: () => resetApiVersionCache,
   resetBrainRunStore: () => resetBrainRunStore,
+  resolveBrainStream: () => resolveBrainStream,
   resolveRecipient: () => resolveRecipient,
   resolveRunConfirm: () => resolveRunConfirm,
   retryOnConnectFailure: () => retryOnConnectFailure,
@@ -338,6 +352,7 @@ __export(src_exports, {
   summarizeLocalFirstAttempt: () => summarizeLocalFirstAttempt,
   takePendingPrompt: () => takePendingPrompt,
   ticketsReviewedInPreview: () => ticketsReviewedInPreview,
+  toPromptApiTurn: () => toPromptApiTurn,
   toolActivity: () => toolActivity,
   toolCallArgBytes: () => toolCallArgBytes,
   toolExposureInTrace: () => toolExposureInTrace,
@@ -1805,6 +1820,9 @@ function assemble(acc) {
 
 // src/config.tsx
 var import_jsx_runtime = require("react/jsx-runtime");
+function resolveBrainStream(config) {
+  return config.stream ?? ((opts, handlers) => streamChatCompletion({ ...opts, transport: config.transport }, handlers));
+}
 var DEFAULT_SYSTEM_PROMPT = "You are Brain, a helpful AI assistant. Be concise and use markdown when helpful.";
 var BrainConfigContext = (0, import_react.createContext)(null);
 function BrainProvider({
@@ -1816,7 +1834,7 @@ function BrainProvider({
       transport: config.transport,
       persistence: config.persistence,
       resolveSystemPrompt: config.resolveSystemPrompt ?? (() => DEFAULT_SYSTEM_PROMPT),
-      stream: (opts, handlers) => streamChatCompletion({ ...opts, transport: config.transport }, handlers)
+      stream: resolveBrainStream(config)
     }),
     [config]
   );
@@ -1829,15 +1847,17 @@ function useBrainConfig() {
 }
 
 // ../packages/local-inference/src/runtimes.ts
+var BROWSER_ENGINE_BASE_URL = "http://browser.local";
 var LOCAL_RUNTIMES = [
-  { id: "synapse", label: "Synapse", onDevice: true, catalog: "probe", tools: "all", ownedBy: "bfi" },
+  { id: "synapse", label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
   {
     id: "ollama",
     label: "Ollama",
     onDevice: true,
     defaultBaseUrl: "http://127.0.0.1:11434",
     catalog: "probe",
-    tools: "probe"
+    tools: "probe",
+    reach: "http"
   },
   {
     id: "freetoken",
@@ -1845,11 +1865,33 @@ var LOCAL_RUNTIMES = [
     onDevice: true,
     defaultBaseUrl: "http://127.0.0.1:1919",
     catalog: "probe",
-    tools: "unknown"
+    tools: "unknown",
+    reach: "http"
   },
-  { id: "kimi-code", label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all" }
+  // Chrome's built-in model (Prompt API). Its single model is declared by the page probe,
+  // and it cannot take a tool turn: the Prompt API has no tool-call protocol.
+  {
+    id: "browser",
+    label: "Gemini Nano",
+    onDevice: true,
+    defaultBaseUrl: BROWSER_ENGINE_BASE_URL,
+    catalog: "declared",
+    tools: "unknown",
+    reach: "page"
+  },
+  { id: "kimi-code", label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http" }
 ];
+var HTTP_LOCAL_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.reach === "http");
 var LOCAL_RUNTIME_IDS = LOCAL_RUNTIMES.map((r) => r.id);
+function localRuntime(id) {
+  return LOCAL_RUNTIMES.find((r) => r.id === id);
+}
+
+// ../packages/local-inference/src/ref.ts
+var LOCAL_MODEL_PREFIX = "local/";
+function formatLocalModelRef(runtime, model) {
+  return `${LOCAL_MODEL_PREFIX}${runtime}/${model}`;
+}
 
 // ../packages/local-inference/src/endpoint.ts
 function normalizeLocalBaseUrl(raw) {
@@ -3259,8 +3301,8 @@ var writeFileTool = defineTool({
           }
         };
       }
-      const refusal = refuseWriteOverwrite(probeFromRepoRead(existing), content);
-      if (refusal) return { data: { ok: false, error: refusal } };
+      const refusal2 = refuseWriteOverwrite(probeFromRepoRead(existing), content);
+      if (refusal2) return { data: { ok: false, error: refusal2 } };
     }
     const r = await ctx.caps.repoWrite.writeFile(path, content, summary);
     return { data: r.ok ? { ok: true, branch: r.branch, commitUrl: r.commitUrl } : { ok: false, error: r.error } };
@@ -4019,6 +4061,9 @@ function localFirstWorkload(call2) {
     ...call2.maxTokens ? { maxOutputTokens: call2.maxTokens } : {}
   });
 }
+function localFirstApplies(call2) {
+  return !call2.model && (call2.routingMode ?? "auto") === "auto";
+}
 function committingHandlers(handlers, commit, servedAs) {
   if (servedAs) handlers.onModel?.(servedAs, void 0);
   return {
@@ -4091,6 +4136,275 @@ async function completeLocalFirst(input) {
     }
   );
   return result;
+}
+
+// src/promptApi.ts
+function promptApiFactory() {
+  if (typeof globalThis === "undefined") return null;
+  const g = globalThis;
+  return g.LanguageModel ?? g.ai?.languageModel ?? null;
+}
+function hasPromptApi() {
+  return promptApiFactory() !== null;
+}
+async function promptApiAvailability(factory = promptApiFactory()) {
+  if (!factory) return "unavailable";
+  try {
+    if (factory.availability) {
+      const status2 = await factory.availability();
+      return status2 === "readily" ? "available" : status2;
+    }
+    if (factory.capabilities) {
+      const { available } = await factory.capabilities();
+      return available === "readily" ? "available" : available === "after-download" ? "downloadable" : "unavailable";
+    }
+  } catch {
+  }
+  return "unavailable";
+}
+function promptApiInputQuota(session) {
+  const quota = session.inputQuota ?? session.maxTokens;
+  return typeof quota === "number" && Number.isFinite(quota) && quota > 0 ? quota : void 0;
+}
+async function promptApiMeasure(session, input, signal) {
+  if (session.measureInputUsage) return session.measureInputUsage(input, signal ? { signal } : void 0);
+  if (session.countPromptTokens) return session.countPromptTokens(input);
+  return void 0;
+}
+async function* promptStreamDeltas(stream) {
+  const reader = stream.getReader();
+  let full = "";
+  try {
+    for (; ; ) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      if (typeof value !== "string") continue;
+      const cumulative = value.startsWith(full);
+      const delta = cumulative ? value.slice(full.length) : value;
+      full = cumulative ? value : full + value;
+      if (delta) yield delta;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+// src/browserEngine.ts
+var BROWSER_ENGINE_MODEL = "gemini-nano";
+var BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS = 4096;
+var BROWSER_ENGINE_PROBE_TTL_MS = 3e4;
+var globalFetch2 = (input, init) => fetch(input, init);
+async function readInputQuota() {
+  const factory = promptApiFactory();
+  if (!factory) return void 0;
+  try {
+    const session = await factory.create();
+    try {
+      return promptApiInputQuota(session);
+    } finally {
+      session.destroy();
+    }
+  } catch {
+    return void 0;
+  }
+}
+async function probeOnce(knownQuota, learnQuota) {
+  if (await promptApiAvailability() !== "available") return null;
+  let contextTokens = knownQuota();
+  if (contextTokens === void 0) {
+    contextTokens = await readInputQuota();
+    if (contextTokens !== void 0) learnQuota(contextTokens);
+  }
+  const probe = {
+    provider: "browser",
+    endpoint: { baseUrl: BROWSER_ENGINE_BASE_URL },
+    reachable: true,
+    models: [
+      {
+        ref: formatLocalModelRef("browser", BROWSER_ENGINE_MODEL),
+        provider: "browser",
+        model: BROWSER_ENGINE_MODEL,
+        label: localRuntime("browser").label,
+        tools: false,
+        contextTokens: contextTokens ?? BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS
+      }
+    ]
+  };
+  return probe;
+}
+function createBrowserEngineProber(config = {}) {
+  const ttlMs = config.ttlMs ?? BROWSER_ENGINE_PROBE_TTL_MS;
+  const now = config.now ?? (() => Date.now());
+  let memo;
+  let quota;
+  return {
+    probe(options = {}) {
+      const at = now();
+      if (!options.fresh && memo && at - memo.at < ttlMs) return memo.value;
+      const value = probeOnce(
+        () => quota,
+        (q) => {
+          quota = q;
+        }
+      ).catch(() => null);
+      memo = { at, value };
+      return value;
+    },
+    invalidate() {
+      memo = void 0;
+    }
+  };
+}
+var sharedProber = createBrowserEngineProber();
+function browserEngineProbe(options) {
+  return sharedProber.probe(options);
+}
+function toPromptApiTurn(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return { error: "no_messages" };
+  const system = [];
+  const turns = [];
+  for (const raw of messages) {
+    const { role, content, tool_calls } = raw ?? {};
+    if (Array.isArray(tool_calls) && tool_calls.length > 0) return { error: "tool_messages_unsupported" };
+    const text = textOf(content);
+    if (text === null) return { error: "non_text_content_unsupported" };
+    if (role === "system") system.push(text);
+    else if (role === "user" || role === "assistant") turns.push({ role, content: text });
+    else return { error: "tool_messages_unsupported" };
+  }
+  const last = turns.pop();
+  if (!last || last.role !== "user") return { error: "last_message_not_user" };
+  const joined = system.filter((s) => s.trim().length > 0).join("\n\n");
+  return {
+    initialPrompts: [...joined ? [{ role: "system", content: joined }] : [], ...turns],
+    prompt: last.content
+  };
+}
+function textOf(content) {
+  if (content === null || content === void 0) return "";
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return null;
+  const parts = [];
+  for (const part of content) {
+    const { type, text } = part ?? {};
+    if (type !== "text" || typeof text !== "string") return null;
+    parts.push(text);
+  }
+  return parts.join("\n");
+}
+function refusal(status2, code, message = code) {
+  return new Response(JSON.stringify({ error: { code, message } }), {
+    status: status2,
+    headers: { "content-type": "application/json" }
+  });
+}
+var isQuotaError = (e) => e?.name === "QuotaExceededError";
+var messageOf = (e) => e instanceof Error ? e.message : String(e);
+var abortReason = (signal) => signal.reason ?? new DOMException("Aborted", "AbortError");
+var encoder = new TextEncoder();
+var sseFrame = (data) => encoder.encode(`data: ${JSON.stringify(data)}
+
+`);
+var deltaFrame = (content) => ({
+  model: BROWSER_ENGINE_MODEL,
+  choices: [{ index: 0, delta: { content }, finish_reason: null }]
+});
+function sseBody(first, deltas, session, signal) {
+  let pending = first;
+  let destroyed = false;
+  const release = () => {
+    if (destroyed) return;
+    destroyed = true;
+    session.destroy();
+  };
+  return new ReadableStream({
+    async pull(controller) {
+      try {
+        const next = pending ?? await deltas.next();
+        pending = null;
+        if (next.done) {
+          const stop = { index: 0, delta: {}, finish_reason: "stop" };
+          controller.enqueue(sseFrame({ model: BROWSER_ENGINE_MODEL, choices: [stop] }));
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+          release();
+          return;
+        }
+        controller.enqueue(sseFrame(deltaFrame(next.value)));
+      } catch (e) {
+        release();
+        if (signal?.aborted) {
+          controller.error(e);
+          return;
+        }
+        controller.enqueue(sseFrame({ error: { message: messageOf(e) } }));
+        controller.close();
+      }
+    },
+    cancel() {
+      release();
+      void deltas.return(void 0);
+    }
+  });
+}
+async function answerFromPromptApi(init) {
+  const signal = init.signal ?? void 0;
+  if (signal?.aborted) throw abortReason(signal);
+  let body;
+  try {
+    body = JSON.parse(typeof init.body === "string" ? init.body : "");
+  } catch {
+    return refusal(400, "invalid_request");
+  }
+  if (Array.isArray(body.tools) && body.tools.length > 0) return refusal(400, "tools_unsupported");
+  const turn = toPromptApiTurn(body.messages);
+  if ("error" in turn) return refusal(400, turn.error);
+  const factory = promptApiFactory();
+  if (!factory || await promptApiAvailability(factory) !== "available") {
+    return refusal(503, "browser_engine_unavailable");
+  }
+  let session;
+  try {
+    session = await factory.create({
+      ...turn.initialPrompts.length > 0 ? { initialPrompts: turn.initialPrompts } : {},
+      ...signal ? { signal } : {}
+    });
+  } catch (e) {
+    if (signal?.aborted) throw e;
+    return isQuotaError(e) ? refusal(413, "context_exceeded", messageOf(e)) : refusal(503, "browser_engine_unavailable", messageOf(e));
+  }
+  try {
+    const quota = promptApiInputQuota(session);
+    const needed = await promptApiMeasure(session, turn.prompt, signal).catch(() => void 0);
+    if (quota !== void 0 && needed !== void 0 && (session.inputUsage ?? 0) + needed > quota) {
+      session.destroy();
+      return refusal(413, "context_exceeded");
+    }
+    const deltas = promptStreamDeltas(session.promptStreaming(turn.prompt, signal ? { signal } : void 0));
+    if (body.stream !== true) {
+      let text = "";
+      for await (const delta of deltas) text += delta;
+      session.destroy();
+      const choice = { index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" };
+      return new Response(JSON.stringify({ model: BROWSER_ENGINE_MODEL, choices: [choice] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }
+    const first = await deltas.next();
+    return new Response(sseBody(first, deltas, session, signal), {
+      status: 200,
+      headers: { "content-type": "text/event-stream" }
+    });
+  } catch (e) {
+    session.destroy();
+    if (signal?.aborted) throw e;
+    return isQuotaError(e) ? refusal(413, "context_exceeded", messageOf(e)) : refusal(500, "browser_engine_failed", messageOf(e));
+  }
+}
+function browserEngineFetch(base = globalFetch2) {
+  const route = localChatCompletionsUrl(BROWSER_ENGINE_BASE_URL);
+  return (input, init) => input === route && (init.method ?? "GET").toUpperCase() === "POST" ? answerFromPromptApi(init) : base(input, init);
 }
 
 // src/readOnlyShell.ts
@@ -6135,10 +6449,17 @@ var STUDIO_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
   "canvas_read_build_diagnostics",
   "canvas_list_build_file_history",
   "canvas_restore_build_file",
+  // Install / build / type-check / test in the browser runtime: "does it build?" shares
+  // no stem with the tool's name, the same miss that dropped `run_command` on the IDE.
+  "canvas_run_build_command",
   PREVIEW_REVIEW_TOOL
 ]);
 var UNSCOPED_MUTATION_TOOLS = /* @__PURE__ */ new Set([
   "run_command",
+  // The Studio's twin: the same shell, run in the browser runtime, whose changed files
+  // are saved back to the workspace — so a cached `canvas_read_build_file` is as stale
+  // after it as a `read_file` is after `run_command`.
+  "canvas_run_build_command",
   "git_sync_latest",
   "git_undo",
   "git_redo",
@@ -9001,7 +9322,7 @@ function completionAdvisory(open) {
 // src/restatedReply.ts
 var RESTATED_MIN_WORDS = 40;
 var RESTATED_CONTAINMENT = 0.6;
-function textOf(content) {
+function textOf2(content) {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ");
@@ -9015,7 +9336,7 @@ function previousReplyText(convo) {
     const m = convo[i];
     if (m.role === "user") return "";
     if (m.role === "assistant") {
-      const text = textOf(m.content).trim();
+      const text = textOf2(m.content).trim();
       if (text) return text;
     }
   }
@@ -12846,6 +13167,9 @@ function PromptInput({
   BACK_TO_BACK_AT,
   BASE_BRANCHES,
   BRAIN_AGENT_ASSIGNMENTS_PATH,
+  BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
+  BROWSER_ENGINE_MODEL,
+  BROWSER_ENGINE_PROBE_TTL_MS,
   BUILDERFORCE_PRODUCT_NAME,
   BrainActionsProvider,
   BrainContextProvider,
@@ -12935,6 +13259,8 @@ function PromptInput({
   attemptedPublish,
   brainPersonaAgents,
   brainRequestError,
+  browserEngineFetch,
+  browserEngineProbe,
   buildBrainTriageReport,
   buildChatDiagnosticsReport,
   buildComposerDirectives,
@@ -12971,6 +13297,7 @@ function PromptInput({
   consolidationMetadata,
   countReconciledMemories,
   createBrainRestPersistence,
+  createBrowserEngineProber,
   createComposingActivity,
   createLocalFirstStream,
   createLocalStream,
@@ -13022,6 +13349,7 @@ function PromptInput({
   getRunTrace,
   handleRouterCall,
   hasEditIntent,
+  hasPromptApi,
   installIndexedDbStepDurability,
   installRunDriver,
   installStepDurability,
@@ -13061,6 +13389,7 @@ function PromptInput({
   loadAgentPoolVia,
   loadBrainPersonaAgentsVia,
   localFallbackTrace,
+  localFirstApplies,
   localFirstWorkload,
   localStorageConfirmationPersistence,
   localToolsIn,
@@ -13109,6 +13438,11 @@ function PromptInput({
   productModelName,
   progressDuration,
   projectMemoryHooks,
+  promptApiAvailability,
+  promptApiFactory,
+  promptApiInputQuota,
+  promptApiMeasure,
+  promptStreamDeltas,
   queueRunSteering,
   ratedTurnContext,
   ratedTurnTool,
@@ -13117,6 +13451,7 @@ function PromptInput({
   repeatedFailureAdvisory,
   resetApiVersionCache,
   resetBrainRunStore,
+  resolveBrainStream,
   resolveRecipient,
   resolveRunConfirm,
   retryOnConnectFailure,
@@ -13154,6 +13489,7 @@ function PromptInput({
   summarizeLocalFirstAttempt,
   takePendingPrompt,
   ticketsReviewedInPreview,
+  toPromptApiTurn,
   toolActivity,
   toolCallArgBytes,
   toolExposureInTrace,

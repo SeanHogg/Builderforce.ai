@@ -13,6 +13,7 @@
 import { formatLocalModelRef } from './ref.js';
 import { localAuthHeaders, localModelsUrl, normalizeLocalBaseUrl } from './endpoint.js';
 import {
+  HTTP_LOCAL_RUNTIMES,
   LOCAL_RUNTIMES,
   localRuntime,
   type LocalEndpoint,
@@ -173,7 +174,8 @@ async function probeRuntime(
 /**
  * Probe every PROBED runtime that has an endpoint, concurrently (localhost round trips
  * must not queue behind one another). A runtime with a blank or absent endpoint is not
- * contacted at all; a `declared` runtime (Kimi) is the host's to list. Never throws.
+ * contacted at all; a `declared` runtime (Kimi) is the host's to list, and a `page`
+ * runtime (the browser's built-in model) has no HTTP surface to ask. Never throws.
  *
  * One de-duplication: a model whose `owned_by` names ANOTHER configured runtime is that
  * runtime's, not this one's — `bfi serve` on the Ollama port must not list each Synapse
@@ -189,7 +191,7 @@ export async function probeLocalRuntimes(
     timeoutMs: options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
     capabilities: options.capabilities ?? false,
   };
-  const targets = LOCAL_RUNTIMES.filter(
+  const targets = HTTP_LOCAL_RUNTIMES.filter(
     (r) => r.catalog === 'probe' && (endpoints[r.id]?.baseUrl.trim().length ?? 0) > 0,
   );
   const results = await Promise.all(targets.map((r) => probeRuntime(fetchImpl, r.id, endpoints[r.id]!, resolved)));

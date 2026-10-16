@@ -54,6 +54,32 @@ describe('Rovr model route — local first, failover to the gateway', () => {
     expect(seen.map((s) => s.url)).toEqual([`${BASE}/llm/v1/chat/completions`]);
   });
 
+  it("serves a chat turn on the browser's own model through the page fetch, never a tool turn", async () => {
+    const page: LocalRuntimeProbe = {
+      provider: 'browser',
+      endpoint: { baseUrl: 'http://browser.local' },
+      reachable: true,
+      models: [{ ref: 'local/browser/gemini-nano', provider: 'browser', model: 'gemini-nano', tools: false }],
+    };
+    const pageFetch = vi.fn(async (url: string) => sse(url.startsWith('http://browser.local') ? 'from-page' : 'from-cloud'));
+    const gateway = vi.fn(async () => sse('from-cloud'));
+    const stream = createRovrStream({
+      baseUrl: BASE,
+      fetch: gateway,
+      prober: prober(nothing),
+      endpoints: async () => loopbackEndpoints(null),
+      key: async () => 'bfk_test',
+      page: { probe: async () => page, fetch: pageFetch },
+    });
+    const chat = await stream(hello);
+    expect(chat.text).toBe('from-page');
+    expect(chat.resolvedModel).toBe('local/browser/gemini-nano');
+    expect(pageFetch).toHaveBeenCalledWith('http://browser.local/v1/chat/completions', expect.anything());
+    const tool = await stream({ ...hello, tools: [{ type: 'function', function: { name: 'browser_click', description: 'click', parameters: {} } }] });
+    expect(tool.text).toBe('from-cloud');
+    expect(pageFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('asks for sign-in when signed out with nothing local that fits', async () => {
     const { stream } = route(nothing, null);
     await expect(stream(hello)).rejects.toThrow('not_signed_in');

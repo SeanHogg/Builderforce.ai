@@ -1,6 +1,7 @@
 import {
   fetchMcpToolEntries,
   mcpActionsFrom,
+  resolveBrainStream,
   streamChatCompletion,
   RepetitionLoopError,
   formatEvermindMemoryBlock,
@@ -180,6 +181,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   }
   const config = options.persistence === 'server' ? brainConfig : guestBrainConfig;
   const transport = config.transport;
+  // Where each round trip runs is the config's — the Brain's own stream, so an unpinned,
+  // tool-free turn may be served on the browser's model first and anything else (a pin,
+  // `byo_pool`, a tool turn) reaches the gateway exactly as before.
+  const stream = resolveBrainStream(config);
   const guestTurnId = options.guestTurnId ?? crypto.randomUUID();
   let mcpActions: BrainAction[] = [];
   if (options.persistence === 'server') {
@@ -398,7 +403,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         const ask = nextTurn(policy, { hasTools: selection.tools.length > 0 });
         let result: CanvasTurn;
         try {
-          result = await streamBoundedByActivity(streamChatCompletion, {
+          result = await streamBoundedByActivity(stream, {
             transport,
             messages,
             tools: selection.tools,

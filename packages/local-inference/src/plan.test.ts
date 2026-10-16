@@ -31,6 +31,12 @@ const OLLAMA: LocalRuntimeProbe = {
     { ref: 'local/ollama/qwen3:8b', provider: 'ollama', model: 'qwen3:8b', tools: true, contextTokens: 8_000 },
   ],
 };
+const BROWSER: LocalRuntimeProbe = {
+  provider: 'browser',
+  endpoint: { baseUrl: 'http://browser.local' },
+  reachable: true,
+  models: [{ ref: 'local/browser/gemini-nano', provider: 'browser', model: 'gemini-nano', tools: false, contextTokens: 6_000 }],
+};
 const CHAT = { agentic: false, inputTokens: 1_000, outputTokens: 800 };
 const TOOL_TURN = { agentic: true, inputTokens: 1_000, outputTokens: 800 };
 
@@ -63,6 +69,23 @@ describe('localFirstPlan', () => {
     expect(
       refs(localFirstPlan({ probes: [SYNAPSE, OLLAMA], workload: CHAT, cloud: {}, preferred: 'local/ollama/qwen3:8b' })),
     ).toEqual(['local/ollama/qwen3:8b', 'cloud:auto']);
+  });
+
+  it("takes the browser's built-in model for a chat turn, after the installed runtimes", () => {
+    expect(refs(localFirstPlan({ probes: [BROWSER], workload: CHAT, cloud: {} }))).toEqual([
+      'local/browser/gemini-nano',
+      'cloud:auto',
+    ]);
+    expect(refs(localFirstPlan({ probes: [BROWSER, OLLAMA], workload: CHAT, cloud: {} }))).toEqual([
+      'local/ollama/gemma:2b',
+      'cloud:auto',
+    ]);
+  });
+
+  it("never hands the browser's built-in model a tool turn or an oversized one", () => {
+    expect(refs(localFirstPlan({ probes: [BROWSER], workload: TOOL_TURN, cloud: {} }))).toEqual(['cloud:auto']);
+    const long = { agentic: false, inputTokens: 5_800, outputTokens: 800 };
+    expect(refs(localFirstPlan({ probes: [BROWSER], workload: long, cloud: {} }))).toEqual(['cloud:auto']);
   });
 
   it('ignores unreachable and hosted runtimes, and plans local-only without a cloud', () => {
