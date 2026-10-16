@@ -284,8 +284,14 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
     return entries.filter((entry) => entry.type !== 'directory' && !isGeneratedPath(entry.path)).map((entry) => entry.path);
   };
   /** Those files WITH their content — a durable store lists paths only, so they are read. */
-  const workspaceFiles = async (store: WorkspaceFileStore) =>
-    Object.entries(await readStoreFiles(store, (path) => !isGeneratedPath(path))).map(([path, content]) => ({ path, content }));
+  const workspaceFiles = async (store: WorkspaceFileStore) => {
+    const { files, unreadable } = await readStoreFiles(store, (path) => !isGeneratedPath(path));
+    return {
+      files: Object.entries(files).map(([path, content]) => ({ path, content })),
+      /** Spread into a tool result so the model knows a listed file was not seen. */
+      unreadable: unreadable.length ? { unreadableFiles: unreadable } : {},
+    };
+  };
   /** Every committed file change reports through here: the open editor re-reads, the
    *  host learns which app is being built, and a source file that imports a package the
    *  manifest does not declare says so (`undeclaredDependencies`) — the preview's
@@ -350,13 +356,14 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
         if ('error' in resolved) return resolved;
         try {
-          const files = await workspaceFiles(resolved.build.store);
+          const { files, unreadable } = await workspaceFiles(resolved.build.store);
           return {
             ok: true,
             objectId: resolved.build.objectId,
             modality: resolved.build.modality,
             fileCount: files.length,
             map: summarizeWorkspace(files),
+            ...unreadable,
           };
         } catch (error) {
           return { error: toolErrorMessage(error, 'The workspace file list could not be read.') };
@@ -430,7 +437,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
         if ('error' in resolved) return resolved;
         try {
-          const files = await workspaceFiles(resolved.build.store);
+          const { files, unreadable } = await workspaceFiles(resolved.build.store);
           const matches: { path: string; line: number; text: string }[] = [];
           for (const file of files) {
             matches.push(...searchFileLines(file.path, file.content, query, args.caseSensitive === true));
@@ -442,6 +449,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
             matchCount: matches.length,
             truncated: matches.length >= MAX_SEARCH_MATCHES,
             matches: matches.slice(0, MAX_SEARCH_MATCHES),
+            ...unreadable,
           };
         } catch (error) {
           return { error: toolErrorMessage(error, 'The workspace could not be searched.') };

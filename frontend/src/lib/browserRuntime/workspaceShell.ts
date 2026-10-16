@@ -54,6 +54,8 @@ export interface WorkspaceShellResult extends ShellResult {
   removedFiles?: string[];
   /** Files the command changed that were NOT saved, and why. */
   unsavedFiles?: Array<{ path: string; reason: string }>;
+  /** Workspace files whose read failed, so the command ran without them. */
+  unloadedFiles?: string[];
   timedOut?: boolean;
 }
 
@@ -108,8 +110,10 @@ function collectTail(output: ReadableStream<string>): { done: Promise<void>; tex
           dropped = true;
         }
       }
-    } catch {
-      /* a killed process may error its stream; what arrived is still the answer */
+    } catch (error) {
+      // A killed process may error its stream; what arrived is still the answer, and the
+      // tail says the stream ended early rather than passing a cut-off as complete.
+      buffer += `\n[output stream ended early: ${toolErrorMessage(error, 'the stream errored')}]`;
     }
   })();
   return {
@@ -220,8 +224,9 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
     }
 
     let mounted: Record<string, string>;
+    let unreadable: string[];
     try {
-      mounted = await readStoreFiles(store);
+      ({ files: mounted, unreadable } = await readStoreFiles(store));
       replaceProjectFiles(runtime, mounted);
     } catch (error) {
       return { ok: false, error: `The workspace files could not be loaded into the runtime: ${toolErrorMessage(error, 'the read failed')}` };
@@ -250,6 +255,7 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
       ...(ran.exitCode !== undefined ? { exitCode: ran.exitCode } : {}),
       ...(error ? { error } : {}),
       ...(ran.timedOut ? { timedOut: true } : {}),
+      ...(unreadable.length ? { unloadedFiles: unreadable } : {}),
       ...saved,
     };
   };
