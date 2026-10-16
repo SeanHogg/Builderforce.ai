@@ -32,7 +32,7 @@
  * holding every action inline. Adding seven more there would be the cheapest
  * thing to write and the most expensive thing to own. These are pure functions
  * over an injected context, so they are unit-testable without React, a canvas,
- * or a WebContainer.
+ * or an in-browser runtime.
  *
  * ── THE ONE RULE ────────────────────────────────────────────────────────────
  * Every write goes through {@link validateFileContentForPath}, the SAME guard

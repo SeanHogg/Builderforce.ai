@@ -16,7 +16,7 @@
   <!-- window -->
   <rect x="120" y="230" width="1360" height="560" rx="20" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
   <circle cx="156" cy="264" r="7" fill="#F0574A"/><circle cx="180" cy="264" r="7" fill="#FFCE6B"/><circle cx="204" cy="264" r="7" fill="#5BF0BC"/>
-  <text x="232" y="270" font-family="Consolas, ui-monospace, monospace" font-size="16" fill="#8891AE">freelance-tool — WebContainers</text>
+  <text x="232" y="270" font-family="Consolas, ui-monospace, monospace" font-size="16" fill="#8891AE">freelance-tool — BuilderForce WebContainers</text>
   <line x1="120" y1="292" x2="1480" y2="292" stroke="rgba(255,255,255,0.08)"/>
 
   <!-- pane dividers -->
@@ -68,7 +68,7 @@
   <text x="1114" y="616" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#5BF0BC">✓ edit applied — with your approval</text>
   <text x="1114" y="700" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#8891AE"><tspan x="1114" dy="0">Agent edits arrive here as</tspan><tspan x="1114" dy="22">live changes, too</tspan></text>
 
-  <text x="800" y="768" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#8891AE">WebContainers runtime · real Node.js in the tab · Yjs real-time collaboration</text>
+  <text x="800" y="768" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#8891AE">BuilderForce WebContainers · open-source runtime in the tab · Yjs real-time collaboration</text>
 
   <g opacity="0.85">
     <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>

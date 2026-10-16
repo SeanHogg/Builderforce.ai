@@ -2,7 +2,8 @@
  * runCodingDispatch — the in-browser coding flow for a `browser` dispatch whose
  * task targets a repo. The agent proposes file changes (via its own model), and
  * this orchestration clones the repo (through the git-proxy), branches, writes
- * the changes, optionally builds/tests them in a WebContainer, then commits and
+ * the changes, type-checks and builds them in the browser (BuilderForce
+ * WebContainers, `buildGate.ts`), then commits and
  * pushes — so the agent actually edits code in the browser, not just reasons.
  *
  * A FAILED build does NOT push (no broken branches); the dispatch is reported
@@ -29,8 +30,12 @@ export interface CodingDeps {
   git: BrowserGitClient;
   /** Ask the agent's model to propose concrete file edits for the task. */
   propose: (args: { role: string; input: string }) => Promise<ProposedChanges>;
-  /** Optional WebContainer build/test gate; if it fails, we do NOT push. */
-  build?: () => Promise<{ ok: boolean; output: string }>;
+  /**
+   * Build gate over the working tree, told which paths the agent wrote; if it
+   * fails, we do NOT push. `skipped` means it could not judge this project
+   * (see `buildGate.ts`) — the change pushes, with `buildOk` left unknown.
+   */
+  build?: (changedPaths: readonly string[]) => Promise<{ ok: boolean; output: string; skipped?: boolean }>;
   /** Optional: open a PR server-side after a successful push. Returns null when
    *  the provider does not support automated PRs (branch is still pushed). */
   openPr?: (args: {
@@ -150,8 +155,8 @@ export async function runCodingDispatch(
   // Optional build/test gate — never push broken code.
   let buildOk: boolean | undefined;
   if (deps.build) {
-    const result = await deps.build();
-    buildOk = result.ok;
+    const result = await deps.build(changes.files.map((f) => f.path));
+    buildOk = result.skipped ? undefined : result.ok;
     if (!result.ok) {
       return {
         pushed: false,

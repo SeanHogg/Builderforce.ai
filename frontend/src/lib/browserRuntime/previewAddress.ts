@@ -32,3 +32,15 @@ export function previewDisplayAddress(url: string, projectName: string): string 
 export function projectSlug(name: string): string {
   return slugify(name, { maxLength: SLUG_MAX, fallback: 'app', foldDiacritics: true });
 }
+
+/**
+ * Open the running app in its own tab — the ONE way both preview toolbars do it.
+ *
+ * Always without an opener: the preview is AI-written code on the preview origin,
+ * and `window.opener` would let it navigate the builder's own tab. Nothing needs
+ * the opener either: the tab is answered by the preview origin's service worker
+ * through the relay this tab already holds (same site, so the same registration).
+ */
+export function openPreviewInTab(url: string): void {
+  window.open(url, '_blank', 'noopener,noreferrer');
+}

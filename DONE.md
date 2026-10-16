@@ -1,3 +1,22 @@
+## ✅ RESOLVED 2026-10-16 — BuilderForce WebContainers used throughout; StackBlitz residue gone; agent build gate wired
+
+**Audit.** `@webcontainer/api` was already out of every package. What remained was StackBlitz-era residue, and one place our own runtime should have been used and was not.
+
+**Our runtime, used where it was missing:**
+- **Browser coding dispatch build gate.** `CodingDeps.build` existed, but `createCodingDeps` never supplied it, so a browser agent pushed code nobody had built. It is now `runBuildGate` (`lib/browserRuntime/buildGate.ts`). The gate reads the cloned working tree (`workingTree.ts`, text plus binary assets), then type-checks and builds it on BuilderForce WebContainers through the same `runProjectChecks` the workspace Check runs. Type errors count only in files the agent wrote, plus global errors when it edited a tsconfig. A project the runtime cannot build (Next.js, a Node server) or a tree too large for a tab is **skipped**: it pushes as before, with `buildOk` unknown. It is never failed.
+- **Workspace Check no longer fails the build step for Next.js and similar projects.** `CheckPorts.build` takes `{ skip }`, and `buildCheckPort` asks the runtime's `detectProject` first, so the runtime's own decline reason shows as a skip.
+
+**Residue removed:**
+- CSP `frame-src` dropped `*.webcontainer-api.io` / `*.staticblitz.com`.
+- `_headers` no longer blames the runtime for COOP/COEP. Isolation is for the onnxruntime-web WASM threads only.
+- The dead `/webcontainer` route was removed from the middleware root segments and from robots.
+- About 30 source comments now name the in-browser runtime.
+- The README, the in-browser IDE blog post and its SVG were corrected. They had claimed WASM Node, native modules, Next.js templates and Chrome-only.
+
+**Preview "Open in a new tab".** Both toolbars now go through ONE `openPreviewInTab`, which is always `noopener,noreferrer`. `PreviewPane` had handed the AI-written preview a `window.opener` onto the builder tab.
+
+**Closed ROADMAP entry:** Repo-backed Designer — "WebContainer new-tab preview loses `window.opener` under COOP". That was `@webcontainer/api`'s opener handshake. Our preview has no handshake. The tab is served by the preview origin's service worker, which is same-site with the app and so uses the same registration, through the relay the builder tab already holds.
+
 ## ✅ RESOLVED 2026-10-13 — Insights (PRD 33): session replay, heatmaps, live visitors and prescriptive fixes, built end to end (frontend 2026.10.48 · api 2026.10.38 · replay-sdk 2026.10.2)
 
 **Spec.** PRD 33 and its hand-off 33a were consolidated into one spec. 33a is deleted, and superseded text was removed rather than left beside its replacement. The spec carries a true per-slice status and D18: storage that works with zero extra provisioning, using additive route × day rollups, one compact row per kept recording, and R2 chunks.

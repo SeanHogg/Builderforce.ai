@@ -1,7 +1,8 @@
 /**
  * factory.ts — wires the REAL in-browser coding stack: isomorphic-git over the
- * git-proxy (with LightningFS) and a model-driven change proposer. Thin glue
- * around the unit-tested orchestration in gitClient/coding.
+ * git-proxy (with LightningFS), a model-driven change proposer, and the build
+ * gate (type-check + build on BuilderForce WebContainers). Thin glue around the
+ * unit-tested orchestration in gitClient/coding/buildGate.
  */
 import * as gitMod from 'isomorphic-git';
 import http from 'isomorphic-git/http/web';
@@ -10,6 +11,9 @@ import { slugify } from '@builderforce/creation-canvas-contract';
 import { BrowserGitClient, type GitOps, type FsLike } from './gitClient';
 import { parseProposedChanges, type CodingDeps, type RepoContext } from './coding';
 import { DEFAULT_BROWSER_MODEL, type ModelCall } from './runner';
+import { runBuildGate } from './buildGate';
+import { buildCheckPort, hasTypeScript, typecheckFiles } from './siteTools';
+import { readWorkingTree, type TreeFs } from './workingTree';
 
 /** Adapt isomorphic-git to our small GitOps port (binds fs + http). */
 export function makeIsomorphicGitOps(fs: unknown): GitOps {
@@ -74,7 +78,7 @@ export function createCodingDeps(opts: {
    *  dispatchId). Omitted → branch is pushed without a PR. */
   openPr?: CodingDeps['openPr'];
 }): CodingDeps {
-  const { git } = createBrowserGitClient({
+  const { git, fs, dir } = createBrowserGitClient({
     repoId: opts.repo.repoId,
     apiBase: opts.apiBase,
     authHeaders: opts.authHeaders,
@@ -86,5 +90,12 @@ export function createCodingDeps(opts: {
     return parseProposedChanges(text, { fallbackBranch: `agentHost/${slug(input)}` });
   };
 
-  return { git, propose, openPr: opts.openPr };
+  const build: CodingDeps['build'] = (changedPaths) => runBuildGate(changedPaths, {
+    readTree: () => readWorkingTree(fs as unknown as TreeFs, dir),
+    hasTypeScript,
+    typecheck: typecheckFiles,
+    buildPort: buildCheckPort,
+  });
+
+  return { git, propose, build, openPr: opts.openPr };
 }

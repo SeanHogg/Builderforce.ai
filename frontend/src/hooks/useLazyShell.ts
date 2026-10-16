@@ -38,7 +38,7 @@ export function useLazyShell(startShell: StartShell, onOutput: (data: string) =>
       })
       .catch((error: unknown) => {
         // Shown where the user is typing; the next keystroke tries again (a
-        // transient boot failure, or a browser that cannot run WebContainers).
+        // transient boot failure, or a browser without service workers).
         startingRef.current = null;
         pendingRef.current = [];
         outputRef.current(`\r\n\x1b[31m${error instanceof Error ? error.message : String(error)}\x1b[0m\r\n`);

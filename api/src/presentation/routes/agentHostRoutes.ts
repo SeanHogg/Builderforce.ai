@@ -1578,7 +1578,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     // tree instead of letting it degrade to reasoning-only. See the decision note
     // in application/ide/taskWorkspaceTarget.ts: a Brain-created project has no
     // connected repo AND usually no connected provider to create one through, but
-    // it always has this workspace — the same tree the IDE and the WebContainer
+    // it always has this workspace — the same tree the IDE and the in-browser runtime
     // preview build against. Only when BOTH are absent does the runtime fall back
     // to prose, and it then says so.
     const workspace = repo || d.taskId == null

@@ -23,7 +23,7 @@
  * an app comes through. The registry stays the registry.
  *
  * ── WHY THE BUILD ARRIVES FROM THE BROWSER ──────────────────────────────────
- * The same reason publishing does: the app is built in the WebContainer, in the
+ * The same reason publishing does: the app is built in the in-browser runtime, in the
  * tab, and there is no server-side bundler. This takes the emitted `dist/`
  * exactly as `publishStaticSite` takes it, so the thing packaged into the APK is
  * byte-for-byte the thing that was previewed and published.

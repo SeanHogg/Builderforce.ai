@@ -21,7 +21,12 @@ export interface CheckResult {
 export interface CheckPorts {
   /** Null when there is no TypeScript to check. */
   typecheck: (() => Promise<TypecheckOutcome>) | null;
-  build: () => Promise<unknown>;
+  /**
+   * The in-browser build, or why this runtime cannot build the project at all
+   * (Next.js, a Node server): that is a skip, not a failure — the project may
+   * build fine with its own toolchain.
+   */
+  build: (() => Promise<unknown>) | { skip: string };
   /** Null when the project defines no `lint` script. Install first, then run it; reports the step that failed. */
   lint: (() => Promise<{ step: 'npm install' | 'lint'; code: number; output: string }>) | null;
   /** A step is starting (the terminal prints a section header). */

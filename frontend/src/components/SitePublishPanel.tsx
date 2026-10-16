@@ -3,7 +3,7 @@
  *
  * The heavy lifting (mount → install → `npm run build` → capture dist) is the
  * `onBuild` callback supplied by the IDE (it owns the file contents + the
- * WebContainer). This panel owns the subdomain UI, the upload, and the result.
+ * in-browser runtime). This panel owns the subdomain UI, the upload, and the result.
  */
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';

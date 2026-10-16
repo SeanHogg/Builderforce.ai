@@ -177,7 +177,7 @@ export function withVisualEditor(files: Record<string, string>): Record<string, 
 /**
  * Normalise the filename React reports to a workspace-relative path.
  *
- * In a WebContainer the dev server's cwd is the project root, so `fileName` is
+ * In an in-browser runtime the dev server's cwd is the project root, so `fileName` is
  * either already relative or an absolute path under it. Both are reduced to the
  * form the file API addresses.
  */

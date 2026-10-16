@@ -7,7 +7,7 @@
  *
  * The HTTP primitive is injected (defaults to the app's authenticated apiRequest)
  * so this is unit-testable with a fake — and so the same transport works in a
- * WebContainer or a plain tab.
+ * in-browser runtime or a plain tab.
  */
 import { apiRequest } from '../apiClient';
 import type { BrowserRuntimeTransport, ClaimedDispatch, ModelCall } from './runner';

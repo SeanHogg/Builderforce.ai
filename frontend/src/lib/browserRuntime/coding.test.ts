@@ -78,9 +78,18 @@ describe('runCodingDispatch', () => {
     const git = fakeGit();
     const build = vi.fn(async () => ({ ok: true, output: 'tests pass' }));
     const res = await runCodingDispatch(dispatch, repo, { git, propose: async () => changes(), build });
-    expect(build).toHaveBeenCalled();
+    expect(build).toHaveBeenCalledWith(changes().files.map((f) => f.path));
     expect(git.push).toHaveBeenCalled();
     expect(res).toMatchObject({ pushed: true, buildOk: true });
+  });
+
+  it('PUSHES with an unknown build verdict when the gate skips (a project it cannot judge)', async () => {
+    const git = fakeGit();
+    const build = vi.fn(async () => ({ ok: true, skipped: true, output: 'Build gate skipped: Next.js needs its Node server.' }));
+    const res = await runCodingDispatch(dispatch, repo, { git, propose: async () => changes(), build });
+    expect(git.push).toHaveBeenCalled();
+    expect(res.pushed).toBe(true);
+    expect(res.buildOk).toBeUndefined();
   });
 
   it('does NOT push when the build gate fails (no broken branches)', async () => {

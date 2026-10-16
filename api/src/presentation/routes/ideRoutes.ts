@@ -716,7 +716,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   // ---------- Package a built app as something installable ----------
   // The built `dist/` arrives exactly as it does for publishing (it is built in
-  // the WebContainer, in the tab), so what goes into the APK is byte-for-byte
+  // the in-browser runtime, in the tab), so what goes into the APK is byte-for-byte
   // what was previewed and published. The packaging itself is the shared game
   // adapters — see `application/ide/packageApp.ts` for why that is reuse rather
   // than a category error.

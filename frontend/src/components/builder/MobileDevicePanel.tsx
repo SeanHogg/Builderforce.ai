@@ -11,7 +11,7 @@
  *   2. The PUBLISHED build — the last publish, served from R2. Always there once you have
  *      published, never reflects unsaved work.
  *
- * The simulator in the centre pane is neither: it runs against the WebContainer dev
+ * The simulator in the centre pane is neither: it runs against the in-browser runtime dev
  * server inside this browser tab, which no other device can reach. So the panel mints a
  * live preview first, falls back to the published build, and — the part that matters —
  * SAYS which of the two the code points at, because a QR that silently switched between

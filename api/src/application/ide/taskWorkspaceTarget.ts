@@ -19,7 +19,7 @@
  * work for tenants that already solved the problem it is trying to solve; for
  * everyone else it would fail at create time and leave exactly the degrade we are
  * removing. The R2 workspace, by contrast, always exists — it is the same tree the
- * IDE and the WebContainer preview already build against (which is why the
+ * IDE and the in-browser preview already build against (which is why the
  * single-prompt→app demo path sidesteps this today) — needs no OAuth, no token and
  * no external call, and its writes are visible in the IDE the moment they land.
  *

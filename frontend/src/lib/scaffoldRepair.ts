@@ -1,6 +1,6 @@
 /**
  * Scaffold repair — make a project's file set RUNNABLE before it is mounted into
- * the WebContainer, regardless of how the on-disk copy got damaged.
+ * the in-browser runtime, regardless of how the on-disk copy got damaged.
  *
  * A Designer/Mobile workspace can reach Run in a broken state: a scaffold file
  * empty (never seeded, or a 0-byte placeholder) or STRUCTURALLY CROSS-WIRED —
@@ -10,7 +10,7 @@
  *
  * This is the single source of truth for that repair, shared by Run/Check/publish
  * (the component used to inline the loop). It is a PURE function so it can be unit
- * tested exhaustively without a WebContainer or React: given the gathered file
+ * tested exhaustively without an in-browser runtime or React: given the gathered file
  * map and the modality, it returns a repaired map plus the paths it restored, so
  * the caller can both mount the repaired set AND persist the corrections back.
  *

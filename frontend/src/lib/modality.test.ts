@@ -46,7 +46,7 @@ describe('project modalities', () => {
     }
   });
 
-  // Mobile reuses the Designer's whole WebContainer pipeline and differs only in
+  // Mobile reuses the Designer's whole in-browser runtime pipeline and differs only in
   // how the centre pane frames the preview.
   it('configures mobile as a runnable, checked, device-framed modality', () => {
     const mobile = getModality('mobile');

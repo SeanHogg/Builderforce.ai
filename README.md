@@ -30,7 +30,7 @@ Builderforce.ai is a **human-in-the-loop, fully agentic cloud** where ideas beco
 
 | Role | What it does |
 |---|---|
-| **Enterprise IDE** | Full Node.js runtime in the browser (WebContainers + Monaco + xterm.js); real-time collaboration; AI pair programming |
+| **Enterprise IDE** | An in-browser dev runtime ([BuilderForce WebContainers](https://github.com/SeanHogg/builderforce-webcontainers), our own MIT runtime) + Monaco + xterm.js; real-time collaboration; AI pair programming |
 | **AI Training Studio** | In-browser LoRA fine-tuning on instruction datasets; WebGPU-accelerated; models up to 2B parameters; no cloud GPU required |
 | **Orchestration Portal** | BuilderForce Agent fleet management; task assignment; heartbeat monitoring; agent-to-agent mesh relay; approval gates |
 
@@ -39,11 +39,12 @@ Builderforce.ai is a **human-in-the-loop, fully agentic cloud** where ideas beco
 ## Key Capabilities
 
 ### In-Browser IDE
-- **Full Node.js runtime** via WebContainers — run `npm install`, Vite dev servers, and interactive shells without leaving the browser
+- **In-browser dev runtime** via [BuilderForce WebContainers](https://github.com/SeanHogg/builderforce-webcontainers) ([`@seanhogg/builderforce-webcontainers`](https://www.npmjs.com/package/@seanhogg/builderforce-webcontainers)) — our own open-source (MIT) runtime. Previews Vite (React, Vue, Svelte), Create React App and static projects by compiling each file on request with esbuild-wasm and loading packages from esm.sh; runs Node programs, `npm install` from the real registry and a `jsh` shell, one Web Worker per process. No COOP/COEP headers and no session caps. Previews and processes are served from `preview.builderforce.ai`, isolated from your Builderforce session. Next.js/Nuxt/SvelteKit/Remix/Astro dev servers, native addons and install scripts are not supported — they are detected and declined with a reason.
 - **Monaco Editor** with syntax highlighting, IntelliSense, multi-file tabs, and real-time collaborative editing via Yjs CRDT
-- **xterm.js terminal** connected directly to the WebContainer shell — full PTY, shared across collaborators
+- **xterm.js terminal** connected to the runtime's `jsh` shell (line editing, history, pipes, `npm`, `npx`), shared across collaborators
 - **AI Chat Panel** — streaming AI assistant with full project file context; can apply code changes and create files directly
-- **Live Preview** — iFrame running the Vite dev server; updates on save
+- **Live Preview** — iframe served by the in-browser dev server; every open preview reloads on save
+- **Check and Publish in the tab** — type-check (`createChecker()`) and production build (`runtime.build()`) run in the browser with no install, so Check and Publish work on the files themselves
 
 ### AI Training Studio
 - **In-browser LoRA fine-tuning** — uses [@seanhogg/builderforce-memory](https://www.npmjs.com/package/@seanhogg/builderforce-memory) / Transformers.js with WebGPU; trains Mamba-1/2/3 and GPT-style models up to 2B parameters entirely client-side
@@ -517,17 +518,30 @@ See the write-up: [The AI Agent Tech Stack, Built](https://builderforce.ai/blog/
 
 ---
 
+## Open source
+
+The runtimes Builderforce.ai is built on are open source under MIT, and built to be forked. Overview: [builderforce.ai/open-source](https://builderforce.ai/open-source).
+
+| Package | What it brings |
+|---|---|
+| [builderforce-webcontainers](https://github.com/SeanHogg/builderforce-webcontainers) | The in-browser dev runtime behind the IDE and canvas previews: live preview, production build, type-check, Node processes, `npm install` and a shell, with no COOP/COEP and no session caps. npm: `@seanhogg/builderforce-webcontainers`. |
+| [builderforce-memory](https://github.com/SeanHogg/builderforce-memory) | Persistent, browser-trainable SSM memory for any agent: WebGPU Mamba engine, runtime, semantic cache and the Evermind write-through memory, plus an MCP server. npm: `@seanhogg/builderforce-memory`. |
+| [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) | Synapse, the desktop app and local AI runtime: runs models on your own machine with the native `bfi` engine, keeps a private Evermind memory and hosts MCP connectors. |
+| [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn) | Spawn, the desktop app that builds Roblox games by talking, with a Roblox Studio bridge. |
+
+---
+
 ## Architecture
 
 ```
 ┌─────────────────────────── Browser ──────────────────────────────┐
 │                                                                   │
-│  Next.js (App Router)           WebContainer                      │
+│  Next.js (App Router)           BuilderForce WebContainers        │
 │  ┌─────────────────────┐        ┌──────────────────────────────┐ │
-│  │  Monaco Editor      │◄──────►│  Node.js (in-browser)        │ │
-│  │  xterm.js Terminal  │        │  npm install                 │ │
-│  │  Preview <iframe>   │        │  Vite dev server             │ │
-│  │  AI Chat Panel      │        │  File system (OPFS-backed)   │ │
+│  │  Monaco Editor      │◄──────►│  Dev server (esbuild-wasm)   │ │
+│  │  xterm.js Terminal  │        │  Node processes · npm · jsh  │ │
+│  │  Preview <iframe>   │        │  Service worker on preview.* │ │
+│  │  AI Chat Panel      │        │  Virtual FS (synced to R2)   │ │
 │  │  Train Panel        │        └──────────────────────────────┘ │
 │  │  Agent Publish      │                                          │
 │  └──────────┬──────────┘                                          │
@@ -621,12 +635,12 @@ cd api && npm run secrets:from-env && npm run deploy
 
 | Feature | Required |
 |---|---|
-| WebContainers (in-browser Node.js) | Chrome 90+, Edge 90+ (COOP + COEP headers) |
+| In-browser IDE runtime ([BuilderForce WebContainers](https://github.com/SeanHogg/builderforce-webcontainers)) | Any modern browser with service workers, in a secure context (https or localhost). No COOP/COEP headers. |
 | WebGPU LoRA training | Chrome 113+ |
 | Collaborative editing | Any modern browser |
 | CPU fallback training | Any browser (via `forceFallbackAdapter`) |
 
-Chrome is the recommended browser. Firefox and Safari do not support WebContainers.
+The IDE runtime works in current Chrome, Edge, Firefox and Safari. Only the WebGPU features (training, on-device inference) carry their own browser requirements, listed above.
 
 ---
 

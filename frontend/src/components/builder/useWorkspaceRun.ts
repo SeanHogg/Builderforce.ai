@@ -9,7 +9,7 @@ import { useProjectRuntime } from '@/hooks/useProjectRuntime';
 import { useInstantPreview } from '@/hooks/useInstantPreview';
 import { useToast } from '@/components/ToastProvider';
 import { sendWorkspaceCommand } from '@/lib/workspace/workspaceCommands';
-import { buildSite, hasTypeScript, typecheckFiles } from '@/lib/browserRuntime/siteTools';
+import { buildCheckPort, buildSite, hasTypeScript, typecheckFiles } from '@/lib/browserRuntime/siteTools';
 import { runProjectChecks, type CheckResult } from '@/lib/browserRuntime/projectChecks';
 import { clearBuildFailures, markBuildSourceChanged, recordBuildFailure, teeOutput, withPreviewErrorReporter } from '@/lib/buildDiagnostics';
 import { withVisualEditor } from '@/lib/visualEditor';
@@ -362,7 +362,7 @@ export function useWorkspaceRun({ store, modality, files, setFiles, fileContents
 
       const { results, failures } = await runProjectChecks({
         typecheck: hasTypeScript(mount) ? () => typecheckFiles(mount) : null,
-        build: () => buildSite(mount),
+        build: await buildCheckPort(mount),
         lint: scripts['lint']
           ? async () => {
             await mountFiles(mount);

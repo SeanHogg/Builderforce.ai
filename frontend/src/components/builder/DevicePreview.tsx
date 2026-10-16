@@ -7,7 +7,7 @@
  * device picker change the viewport the app lays out against, which is the whole
  * point — the app re-flows exactly as it would on the device.
  *
- * The preview URL is a WebContainer dev server running in THIS browser tab, so
+ * The preview URL is an in-browser runtime dev server running in THIS browser tab, so
  * it is reachable here and nowhere else. Getting the app onto a real handset is
  * a separate path (publish, then scan) which `onOpenDevicePanel` leads to.
  */
@@ -18,6 +18,7 @@ import { Select } from '@/components/Select';
 import { DEVICE_PRESETS, getDevicePreset, DEFAULT_DEVICE_ID } from '@/lib/devicePresets';
 import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 import { Icon } from '@/components/ui/Icon';
+import { openPreviewInTab } from '@/lib/browserRuntime/previewAddress';
 
 interface DevicePreviewProps {
   /** Dev-server URL, or undefined before the first successful run. */
@@ -104,7 +105,7 @@ export function DevicePreview({ url, onOpenDevicePanel }: DevicePreviewProps) {
         <ToolbarButton onClick={() => setLandscape((v) => !v)} label={t('device.rotate')} icon="⟳" />
         <ToolbarButton onClick={reload} label={t('device.reload')} icon="↻" disabled={!url} />
         <ToolbarButton
-          onClick={() => url && window.open(url, '_blank', 'noopener,noreferrer')}
+          onClick={() => url && openPreviewInTab(url)}
           label={t('device.openInTab')}
           icon="↗"
           disabled={!url}
