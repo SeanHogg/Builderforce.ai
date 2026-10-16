@@ -62,7 +62,7 @@ const PROTECTED_PATHS = [
  * not on this list leaves with exactly the response it had before.
  */
 const MIDDLEWARE_ROOT_SEGMENTS = new Set<string>([
-  'webcontainer', 'embed', 'logs', 'timeline', 'observability', 'create', 'ide', 'tenants', 'studio',
+  'embed', 'logs', 'timeline', 'observability', 'create', 'ide', 'tenants', 'studio',
   ...PROTECTED_PATHS.map((p) => p.slice(1)),
 ]);
 

@@ -6,7 +6,7 @@ import { Icon, type IconName } from '@/components/ui/Icon';
 import { PreviewFrame } from '@/components/PreviewFrame';
 import { useFormat } from '@/i18n/useFormat';
 import { navigatePreview } from '@/lib/visualEditor';
-import { previewDisplayAddress } from '@/lib/browserRuntime/previewAddress';
+import { openPreviewInTab, previewDisplayAddress } from '@/lib/browserRuntime/previewAddress';
 import { DevicePreview } from './DevicePreview';
 import { PreviewStatus, type PreviewStatusState } from './PreviewStatus';
 import { PreviewChangeToast } from './PreviewChangeToast';
@@ -108,7 +108,7 @@ export function PreviewPane({ projectId, projectName, url, phase, step, runnable
           </div>
         )}
         {!bezel && (
-          <ToolbarIcon icon="external-link" label={t('workspace.openInTab')} disabled={!url} onClick={() => { if (url) window.open(url, '_blank'); }} />
+          <ToolbarIcon icon="external-link" label={t('workspace.openInTab')} disabled={!url} onClick={() => { if (url) openPreviewInTab(url); }} />
         )}
       </div>
 

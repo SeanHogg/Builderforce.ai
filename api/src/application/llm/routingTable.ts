@@ -37,7 +37,9 @@ import {
   type ActionType,
   type RoutingScope,
 } from '@builderforce/learned-routing';
-import { isModelRole, roleUsesLearnedRanking, type ArcStage, type ModelRole } from './modelRoles';
+import { isModelRole, type ModelRole } from '@builderforce/agent-tools';
+import { roleUsesLearnedRanking } from '@builderforce/model-router';
+import type { ArcStage } from '@builderforce/workload';
 
 // The scope type + its token are the shared contract (an on-prem host reads the same
 // `?scope=` token), so they live in `@builderforce/learned-routing`. Re-exported here

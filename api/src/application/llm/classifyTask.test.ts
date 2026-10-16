@@ -58,6 +58,12 @@ describe('classifyTaskAction', () => {
     expect(await classifyTaskAction(env, { title: 'x' })).toEqual({ actionType: 'other', confidence: 0 });
   });
 
+  it('a confident lexical verdict answers without calling the gateway', async () => {
+    const r = await classifyTaskAction(env, { title: 'Write a SQL migration: create table invoices with a foreign key' });
+    expect(r.actionType).toBe('sql');
+    expect(completeMock).not.toHaveBeenCalled();
+  });
+
   it('the kill switch short-circuits without calling the gateway', async () => {
     const r = await classifyTaskAction({ LEARNED_ROUTING_ENABLED: '0' } as never, { title: 'x' });
     expect(r).toEqual({ actionType: 'other', confidence: 0 });

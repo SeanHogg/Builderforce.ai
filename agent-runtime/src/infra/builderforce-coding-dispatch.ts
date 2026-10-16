@@ -34,7 +34,7 @@ export interface DispatchRepoDetail {
  * PROVIDER either (zero-setup onboarding creates a workspace + project before any
  * OAuth). So "auto-provision a scratch repo at project-create" cannot run for the
  * exact projects that need it. The IDE workspace, in contrast, ALWAYS exists — it
- * is the same tree the Designer and the WebContainer preview build against — needs
+ * is the same tree the Designer and the in-browser preview build against — needs
  * no credential and no external call. So a repo-less coding dispatch gets the
  * workspace as its working tree and writes REAL FILES; reasoning-only is now only
  * reached when there is neither a repo nor a workspace, and says which.

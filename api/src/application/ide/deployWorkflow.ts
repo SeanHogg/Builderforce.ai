@@ -2,7 +2,7 @@
  * The GitHub Actions workflow Builderforce writes into a user's project repo.
  *
  * This is the "pipeline uses GitHub" path: instead of the browser building in a
- * WebContainer and uploading `dist/` itself, the repo builds on a GitHub runner
+ * in-browser runtime and uploading `dist/` itself, the repo builds on a GitHub runner
  * and posts the result back. That buys the things a browser build can't give —
  * a real build log, a build per commit, history, and a deploy that happens even
  * when nobody has the IDE open.

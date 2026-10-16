@@ -1,6 +1,6 @@
 /**
  * Browser agent runner — the portable, transport-injected agent loop that runs
- * INSIDE the browser tab (the PWA / WebContainer). It claims a pending `browser`
+ * INSIDE the browser tab (the PWA / in-browser runtime). It claims a pending `browser`
  * dispatch from the platform, runs the agent step against the user's OWN model
  * (the LLM call routes through the BuilderForce gateway), and reports the
  * terminal result — which drives autonomous swimlane advancement server-side.

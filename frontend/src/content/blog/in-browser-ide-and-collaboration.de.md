@@ -1,21 +1,25 @@
 Eine Entwicklungsumgebung einzurichten gehört zu den Aufgaben, die zwischen 20 Minuten und mehreren Tagen dauern und einem dabei herzlich wenig beibringen. Repo klonen, die richtige Node-Version installieren, Umgebungsvariablen setzen, mit nativen Abhängigkeiten kämpfen, feststellen, dass die README drei Jahre alt ist.
 
-Die In-Browser-IDE von Builderforce macht all das überflüssig. Browser öffnen, Projekt öffnen – und Sie arbeiten in einer echten Node.js-Umgebung, mit Dateisystem, Paketmanager, Dev-Server, Terminal und KI-Pair-Programmer, ohne irgendetwas zu installieren.
+Die In-Browser-IDE von Builderforce macht all das überflüssig. Browser öffnen, Projekt öffnen – und Sie arbeiten in einer echten Entwicklungsumgebung, mit Dateisystem, Paketmanager, Dev-Server, Terminal und KI-Pair-Programmer, ohne irgendetwas zu installieren.
 
 ![Mockup einer dreigeteilten Browser-IDE mit einem Datei-Explorer, dem Monaco-Code-Editor und einem rechten Bereich, der zwischen Vorschau, Terminal und KI-Chat umschaltet](/blog/in-browser-ide.svg)
 
 ---
 
-## So funktioniert es: WebContainers
+## So funktioniert es: BuilderForce WebContainers
 
-Die IDE basiert auf **WebContainers** – einer WebAssembly-basierten Node.js-Runtime, die vollständig im Browser-Tab läuft. WebContainers bietet:
+Die IDE läuft auf **BuilderForce WebContainers** – unserer eigenen Entwicklungs-Runtime im Browser, Open Source unter MIT-Lizenz ([Quellcode auf GitHub](https://github.com/SeanHogg/builderforce-webcontainers) · [was sie ist](/open-source/builderforce-webcontainers)). Sie gibt der IDE:
 
-- Ein echtes, POSIX-kompatibles Dateisystem (im Arbeitsspeicher, mit Persistenz in R2)
-- Eine vollständige Node.js-Runtime mit Unterstützung für native Module
-- Die Möglichkeit, `npm install`, `npm run dev`, `npm test` auszuführen – genau wie lokal
-- Eine localhost-Netzwerkschicht, die der Browser erreichen kann – Port 3000 Ihres Dev-Servers ist direkt im Vorschaubereich zugänglich
+- **Einen Dev-Server im Tab.** Jede Datei wird bei Anfrage mit esbuild-wasm kompiliert und als natives ES-Modul ausgeliefert, so wie der Dev-Server von Vite arbeitet – der Start ist sofort da, und eine Änderung kompiliert genau eine Datei neu. Vite-Projekte (React, Vue, Svelte), Create React App und statische Websites haben alle eine Vorschau.
+- **Pakete ohne Wartezeit.** Imports werden zu esm.sh aufgelöst, auf die Versionen in Ihrer `package.json` festgelegt und dedupliziert – die Vorschau wartet nie auf eine Installation.
+- **Node, wenn Sie es brauchen.** Das Terminal führt Node-Programme, `npm install` aus der echten npm-Registry und eine interaktive Shell aus, ein Web Worker pro Prozess – eine Endlosschleife friert den Editor also nie ein. Ein Server, der auf einem Port lauscht, erscheint in der Vorschau wie jede andere Seite.
+- **Prüfen und Veröffentlichen im Browser.** Typprüfung und Produktions-Build laufen direkt auf den Dateien, ohne Installation und ohne Server.
+- **Getrennt von Ihrem Konto.** Vorschauen und Prozesse werden von `preview.builderforce.ai` ausgeliefert, einem eigenen Origin – Code, den Sie oder ein Agent ausführen, teilt nie Ihre Builderforce-Session.
+- **Keine besondere Browser-Einrichtung.** Nötig sind ein sicherer Kontext und ein Service Worker. Keine Cross-Origin-Isolation-Header, Einbettungen und Skripte von Drittanbietern funktionieren also weiter.
 
-Das ist keine Simulation und keine entfernte VM. Der Code läuft in Ihrem Browser. Der Dev-Server läuft in Ihrem Browser. An der Ausführung selbst ist keinerlei serverseitige Rechenleistung beteiligt.
+Was sie nicht kann, offen gesagt: Native Addons und Installationsskripte von Paketen laufen in keinem Browser, und die Dev-Server von Next.js, Nuxt, SvelteKit, Remix und Astro brauchen native Binärdateien. Die Runtime erkennt solche Projekte und sagt Ihnen warum, statt eine kaputte Vorschau zu zeigen. WebSockets und Streaming-Antworten von einem Server im Browser werden noch nicht unterstützt.
+
+Das ist keine Simulation und keine entfernte VM. Der Code läuft in Ihrem Browser. Der Dev-Server läuft in Ihrem Browser. Ihre Dateien werden in Builderforce gespeichert, sodass ein Projekt dort weitergeht, wo Sie aufgehört haben.
 
 ---
 
@@ -39,7 +43,7 @@ Die IDE hat ein dreigeteiltes Layout:
 
 ### Linker Bereich – Datei-Explorer
 
-Dateien durchsuchen, anlegen, umbenennen und löschen. Der Dateibaum spiegelt das Live-Dateisystem von WebContainers wider – Ihre Änderungen im Editor erscheinen sofort, und Änderungen von Agents (über BuilderForce Agents) erscheinen, sobald sie geschrieben werden.
+Dateien durchsuchen, anlegen, umbenennen und löschen. Der Dateibaum spiegelt das Live-Dateisystem der Runtime wider – Ihre Änderungen im Editor erscheinen sofort, und Änderungen von Agents (über BuilderForce Agents) erscheinen, sobald sie geschrieben werden.
 
 ### Mittlerer Bereich – Monaco-Editor
 
@@ -57,8 +61,8 @@ Der rechte Bereich wechselt über den Umschalter oben zwischen drei Ansichten:
 
 | Ansicht | Inhalt |
 |---|---|
-| **Vorschau** | Live-iframe, verbunden mit dem localhost des WebContainers; aktualisiert sich automatisch, wenn Ihr Dev-Server per Hot Reload neu lädt |
-| **Terminal** | Vollständiges Terminal, verbunden mit der Shell des WebContainers – führen Sie jeden beliebigen Befehl aus |
+| **Vorschau** | Live-iframe, ausgeliefert vom Dev-Server im Browser; jede offene Vorschau lädt neu, sobald sich eine Datei ändert |
+| **Terminal** | Eine `jsh`-Shell in der Runtime – `npm`, `npx`, `node`, Pipes und die üblichen Dateibefehle |
 | **KI-Chat** | Der KI-Pair-Programmer (siehe unten) |
 
 ---
@@ -95,7 +99,7 @@ Die Zusammenarbeit basiert auf **Yjs** – einer CRDT-basierten Bibliothek für 
 - **Chat** – ein Chat-Kanal in der Seitenleiste der IDE-Session
 - **Gemeinsames Terminal** – Befehle, die eine Person ausführt, sind für alle sichtbar
 
-Es gibt keinen „Owner“ – alle Beteiligten haben gleichberechtigten Zugriff auf Dateisystem, Terminal und Editor. Der zugrunde liegende Zustand des WebContainers ist für alle Teilnehmenden konsistent.
+Es gibt keinen „Owner“ – alle Beteiligten haben gleichberechtigten Zugriff auf Dateisystem, Terminal und Editor. Die Dateien des Projekts sind für alle Teilnehmenden dieselben.
 
 An Collaboration-Sessions können sowohl Menschen als auch Agents teilnehmen. Arbeitet ein BuilderForce Agents-Agent am selben Projekt, kommen seine Dateiänderungen als Live-Änderungen im Editor an – Sie sehen dem Agent beim Schreiben von Code zu, im selben Fenster, in dem Sie ihn reviewen.
 
@@ -118,11 +122,11 @@ Die IDE ist also nicht bloß ein Code-Editor – sie ist ein **Fenster in die Ar
 Ein neues Projekt von Grund auf starten:
 
 1. Legen Sie unter [/projects](/projects) ein Projekt an → **Neues Projekt**
-2. Wählen Sie eine Vorlage (Next.js, Vite + React, Node + Express, leer)
-3. Öffnen Sie das Projekt in der IDE – WebContainers initialisiert sich, die Abhängigkeiten werden installiert, der Dev-Server startet
+2. Wählen Sie eine Vorlage (Web: Vite + React; Web + Mobile: eine einzige React-Native-for-Web-Codebasis auf Vite)
+3. Öffnen Sie das Projekt in der IDE – die Runtime startet im Tab, und der Dev-Server läuft an
 4. Der Vorschaubereich zeigt Ihre laufende App
 
-Vorlagen führen `npm install` automatisch aus, wenn der Container zum ersten Mal initialisiert wird. Bei jedem weiteren Öffnen wird der letzte Stand des Dateisystems aus R2 wiederhergestellt – Ihre Session macht also genau dort weiter, wo Sie aufgehört haben.
+Die Vorschau braucht keinen Installationsschritt: Pakete werden in den Versionen, die Ihre `package.json` verlangt, von esm.sh geladen. Führen Sie `npm install` im Terminal aus, wenn ein Node-Programm ein echtes `node_modules` braucht. Dateien werden in R2 gespeichert, sodass jedes weitere Öffnen das Projekt genau dort wiederherstellt, wo Sie aufgehört haben.
 
 ---
 
@@ -168,6 +172,7 @@ Beide sind dafür gemacht, zusammen genutzt zu werden – starten Sie ein Featur
 ## Nächste Schritte
 
 - Öffnen Sie ein Projekt in der [IDE](/ide) und erkunden Sie das dreigeteilte Layout
+- Lesen Sie [BuilderForce WebContainers ist Open Source](/blog/builderforce-webcontainers-open-source), um zu sehen, was die Runtime unter der IDE allein kann
 - Laden Sie jemanden aus Ihrem Team zur Zusammenarbeit ein – teilen Sie die Session-URL aus dem IDE-Header
 - Lesen Sie [BuilderForce Agents und Agent-Integration](/blog/agents-and-agent-integration), um zu verstehen, wie BuilderForce Agents erweitert, was Sie in der IDE bauen
 - Lesen Sie [WebGPU- und LoRA-Training](/blog/webgpu-lora-explained), wenn Sie Modelle direkt im Browser auf Ihre Codebasis feinabstimmen möchten

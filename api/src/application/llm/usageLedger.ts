@@ -17,7 +17,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { llmUsageLog, tenantLlmProviderKeys } from '../../infrastructure/database/schema';
 import type { LlmUsage } from './LlmProxyService';
-import { getCatalogCached } from './modelCatalog';
+import { loadPriceBook } from './catalogView';
 import { buildDatabase, buildTransactionalDatabase, hasSiblingDatabase, siblingDatabaseOf } from '../../infrastructure/database/connection';
 import { clearProviderAuthAlertAfterByoSuccess } from './providerAuthAlerts';
 import { providerForVendor } from './llmProviderCatalog';
@@ -501,15 +501,11 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     let pricing: { prompt: number; completion: number } | undefined;
     if (!row.byo) {
       try {
-        const catalog = await getCatalogCached(env);
-        // Registered OpenRouter connections use an explicit `openrouter/` routing
-        // prefix while the public catalog stores OpenRouter's bare `<org>/<model>`
-        // id. Normalize only for the pricing lookup; keep the explicit ref in the
-        // ledger so provenance remains unambiguous.
-        const catalogModel = row.model.startsWith('openrouter/')
-          ? row.model.slice('openrouter/'.length)
-          : row.model;
-        pricing = catalog.find((m) => m.id === catalogModel)?.pricing;
+        // The SAME price book the router orders cost-first calls by (`catalogView.ts`),
+        // so what a call was expected to cost and what it is recorded as costing come
+        // from one lookup — including its `openrouter/` prefix normalization.
+        const price = (await loadPriceBook(env)).priceOf(row.model);
+        pricing = price ? { prompt: price.input, completion: price.output } : undefined;
       } catch (error) { /* pricing unavailable — record tokens with cost 0 */ 
         reportCaughtError(error, { source: "application/llm/usageLedger.ts", operation: "recordUsageRow" });
       }

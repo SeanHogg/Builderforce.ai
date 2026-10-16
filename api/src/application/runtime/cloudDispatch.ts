@@ -52,7 +52,7 @@
 import { coercePolicyGates, type PolicyGate } from '@builderforce/agent-tools';
 import { ExecutionStatus } from '../../domain/shared/types';
 import { canonicalModelId } from '../llm/modelPool';
-import { isArcStage, type ArcStage } from '../llm/modelRoles';
+import { isArcStage, type ArcStage } from '@builderforce/workload';
 
 export type CloudSurface = 'durable' | 'container' | 'github_actions';
 

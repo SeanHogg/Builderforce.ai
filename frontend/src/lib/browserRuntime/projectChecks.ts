@@ -21,7 +21,12 @@ export interface CheckResult {
 export interface CheckPorts {
   /** Null when there is no TypeScript to check. */
   typecheck: (() => Promise<TypecheckOutcome>) | null;
-  build: () => Promise<unknown>;
+  /**
+   * The in-browser build, or why this runtime cannot build the project at all
+   * (Next.js, a Node server): that is a skip, not a failure — the project may
+   * build fine with its own toolchain.
+   */
+  build: (() => Promise<unknown>) | { skip: string };
   /** Null when the project defines no `lint` script. Install first, then run it; reports the step that failed. */
   lint: (() => Promise<{ step: 'npm install' | 'lint'; code: number; output: string }>) | null;
   /** A step is starting (the terminal prints a section header). */
@@ -55,15 +60,20 @@ export async function runProjectChecks(ports: CheckPorts): Promise<ChecksOutcome
     }
   }
 
-  ports.onStep('build');
-  try {
-    await ports.build();
-    results.push({ label: 'build', status: 'pass' });
-  } catch (error) {
-    const message = errorText(error);
-    ports.onOutput(`${message.replace(/\n/g, '\r\n')}\r\n`);
-    results.push({ label: 'build', status: 'fail', detail: message.split('\n')[0] });
-    failures.push({ source: 'build', command: 'npm run build', message: `build failed: ${message.split('\n')[0]}`, detail: message });
+  const build = ports.build;
+  if (typeof build !== 'function') {
+    results.push({ label: 'build', status: 'skip', detail: build.skip });
+  } else {
+    ports.onStep('build');
+    try {
+      await build();
+      results.push({ label: 'build', status: 'pass' });
+    } catch (error) {
+      const message = errorText(error);
+      ports.onOutput(`${message.replace(/\n/g, '\r\n')}\r\n`);
+      results.push({ label: 'build', status: 'fail', detail: message.split('\n')[0] });
+      failures.push({ source: 'build', command: 'npm run build', message: `build failed: ${message.split('\n')[0]}`, detail: message });
+    }
   }
 
   if (!ports.lint) {

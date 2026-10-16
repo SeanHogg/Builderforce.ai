@@ -7,6 +7,7 @@ import type { AnyAgentTool } from "./coding-tools.types.js";
 import { assertSandboxPath } from "./sandbox-paths.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import { sanitizeToolResultImages } from "./tool-images.js";
+import { CHARS_PER_TOKEN } from "@builderforce/workload";
 
 // NOTE(steipete): Upstream read now does file-magic MIME detection; we keep the wrapper
 // to normalize payloads and sanitize oversized images before they hit providers.
@@ -17,7 +18,6 @@ type TextContentBlock = Extract<ToolContentBlock, { type: "text" }>;
 const DEFAULT_READ_PAGE_MAX_BYTES = 50 * 1024;
 const MAX_ADAPTIVE_READ_MAX_BYTES = 512 * 1024;
 const ADAPTIVE_READ_CONTEXT_SHARE = 0.2;
-const CHARS_PER_TOKEN_ESTIMATE = 4;
 const MAX_ADAPTIVE_READ_PAGES = 8;
 
 type BuilderForceAgentsReadToolOptions = {
@@ -49,7 +49,7 @@ function resolveAdaptiveReadMaxBytes(options?: BuilderForceAgentsReadToolOptions
     return DEFAULT_READ_PAGE_MAX_BYTES;
   }
   const fromContext = Math.floor(
-    contextWindowTokens * CHARS_PER_TOKEN_ESTIMATE * ADAPTIVE_READ_CONTEXT_SHARE,
+    contextWindowTokens * CHARS_PER_TOKEN * ADAPTIVE_READ_CONTEXT_SHARE,
   );
   return clamp(fromContext, DEFAULT_READ_PAGE_MAX_BYTES, MAX_ADAPTIVE_READ_MAX_BYTES);
 }

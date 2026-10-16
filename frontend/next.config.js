@@ -238,8 +238,10 @@ const nextConfig = {
             //     auto-injected by Cloudflare into responses from the deployed Worker,
             //     so it is never in our source and must be allowlisted here or every
             //     page logs a CSP violation. Its RUM POST is covered by `connect-src https:`.
-            //   • WASM + blob workers (onnxruntime-web, Monaco, transformers.js, WebContainer)
-            //   • the in-browser IDE preview frames (*.webcontainer-api.io / *.staticblitz.com)
+            //   • WASM + blob workers (onnxruntime-web, Monaco, transformers.js, BuilderForce
+            //     WebContainers' esbuild-wasm and type-check workers)
+            //   • the in-browser app preview — BuilderForce WebContainers' relay and preview
+            //     frames on preview.builderforce.ai, covered by `frame-src https:`
             //   • WebRTC/relay sockets (wss:) for meetings, execution steering, live rooms
             //   • cdn.builderforce.ai — the Insights loader/recorder on builderforce.ai
             //     itself and the replay player bundle + stylesheet (PRD 33 D5, D17)
@@ -268,7 +270,7 @@ const nextConfig = {
               // board", so no allowlist can express it. Each frame is sandboxed
               // and cross-origin, so it reads nothing of ours; our own
               // clickjacking protection is `frame-ancestors`, which is unchanged.
-              "frame-src 'self' blob: https: https://www.googletagmanager.com https://*.webcontainer-api.io https://*.staticblitz.com",
+              "frame-src 'self' blob: https: https://www.googletagmanager.com",
               `connect-src 'self' https: wss:${developmentConnectOrigins}`,
               "manifest-src 'self'",
             ].join('; '),

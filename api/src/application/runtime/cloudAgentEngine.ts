@@ -65,7 +65,7 @@ import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { pollBranchCi, ciFinishDecision } from '../ci/pollCommitCiStatus';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
 import { CODING_BACKSTOP_MODELS, RECOGNIZED_CODER_MODELS, codingModelsForPlan, estimateRequestTokens, isPremiumModelSelection, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
-import type { ArcStage, ModelRole } from '../llm/modelRoles';
+import type { ArcStage } from '@builderforce/workload';
 import { byoRoutingOptions } from '../llm/tenantProxy';
 import { evaluatePremiumModelAccess } from '../../domain/tenant/planFeatures';
 import { TenantPlan } from '../../domain/shared/types';
@@ -92,7 +92,7 @@ import {
 import {
   CURRENT_ENGINE_ID, evaluatePolicyGate, toolCallPaths, filterByGlob, applyStringEdit, editFacts,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type PolicyGate, type AgentExecParams, type Capability,
-  type PrdWriteCapability, type PrdUpdateResult, type ToolSchema,
+  type PrdWriteCapability, type PrdUpdateResult, type ToolSchema, type ModelRole,
 } from '@builderforce/agent-tools';
 import {
   appraiseTask, buildLimbicBlock, compileLimbicState, neutralLimbicState,

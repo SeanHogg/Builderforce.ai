@@ -24,7 +24,7 @@ const MAX_IMPORT_BYTES = 5_000_000;
 /** Concurrency for the per-file reads (keeps the fan-out civil for rate limits). */
 const READ_CONCURRENCY = 8;
 
-/** Binary/asset files the text editor + WebContainer mount can't use as source. */
+/** Binary/asset files the text editor + in-browser runtime mount can't use as source. */
 const SKIP_BINARY_EXT =
   /\.(png|jpe?g|gif|ico|webp|bmp|tiff?|woff2?|ttf|eot|otf|mp[34]|mov|avi|webm|wav|ogg|flac|pdf|zip|gz|tgz|tar|rar|7z|wasm|bin|exe|dll|so|dylib|class|jar|psd|ai|sketch|node)$/i;
 /** Heavy, machine-generated files worth skipping on import (regen locally). */

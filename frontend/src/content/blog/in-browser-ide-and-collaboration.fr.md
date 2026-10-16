@@ -1,21 +1,25 @@
 Configurer un environnement de développement fait partie de ces tâches qui prennent entre 20 minutes et plusieurs jours, et qui ne vous apprennent pas grand-chose. Cloner le dépôt, installer la bonne version de Node, définir les variables d'environnement, se battre avec les dépendances natives, s'apercevoir que le README a trois ans de retard.
 
-L'IDE dans le navigateur de Builderforce supprime tout cela. Ouvrez un navigateur, ouvrez un projet, et vous voilà dans un véritable environnement Node.js — avec un système de fichiers, un gestionnaire de paquets, un serveur de développement, un terminal et un binôme IA — sans rien installer.
+L'IDE dans le navigateur de Builderforce supprime tout cela. Ouvrez un navigateur, ouvrez un projet, et vous voilà dans un véritable environnement de développement — avec un système de fichiers, un gestionnaire de paquets, un serveur de développement, un terminal et un binôme IA — sans rien installer.
 
 ![Maquette d'IDE en trois volets dans le navigateur, avec un explorateur de fichiers, l'éditeur de code Monaco et un panneau droit qui bascule entre Aperçu, Terminal et Chat IA](/blog/in-browser-ide.svg)
 
 ---
 
-## Comment ça marche : WebContainers
+## Comment ça marche : BuilderForce WebContainers
 
-L'IDE repose sur **WebContainers** — un runtime Node.js basé sur WebAssembly qui s'exécute entièrement dans l'onglet du navigateur. WebContainers fournit :
+L'IDE tourne sur **BuilderForce WebContainers** — notre propre runtime de développement dans le navigateur, open source sous licence MIT ([code source sur GitHub](https://github.com/SeanHogg/builderforce-webcontainers) · [de quoi il s'agit](/open-source/builderforce-webcontainers)). Il apporte à l'IDE :
 
-- Un véritable système de fichiers compatible POSIX (en mémoire, avec persistance vers R2)
-- Un runtime Node.js complet avec prise en charge des modules natifs
-- La possibilité d'exécuter `npm install`, `npm run dev`, `npm test` — exactement comme en local
-- Une couche réseau localhost accessible depuis le navigateur — le port 3000 de votre serveur de développement est directement accessible dans le volet d'aperçu
+- **Un serveur de développement dans l'onglet.** Chaque fichier est compilé à la demande avec esbuild-wasm et servi comme module ES natif, comme le fait le serveur de développement de Vite : le démarrage est immédiat et une modification ne recompile qu'un fichier. Les projets Vite (React, Vue, Svelte), Create React App et les sites statiques ont tous un aperçu.
+- **Des paquets sans attente.** Les imports sont résolus vers esm.sh, épinglés aux versions de votre `package.json` et dédoublonnés : l'aperçu n'attend jamais une installation.
+- **Node quand vous en avez besoin.** Le terminal exécute des programmes Node, `npm install` depuis le vrai registre npm et un shell interactif, avec un Web Worker par processus, si bien qu'une boucle infinie ne fige jamais l'éditeur. Un serveur qui écoute sur un port s'affiche en aperçu comme n'importe quelle page.
+- **Vérifier et publier dans le navigateur.** La vérification de types et le build de production s'exécutent sur les fichiers eux-mêmes, sans installation ni serveur.
+- **Isolé de votre compte.** Les aperçus et les processus sont servis depuis `preview.builderforce.ai`, une origine distincte : le code que vous ou un agent exécutez ne partage jamais votre session Builderforce.
+- **Aucune configuration spéciale du navigateur.** Il faut un contexte sécurisé et un service worker. Aucun en-tête d'isolation cross-origin, donc les intégrations et les scripts tiers continuent de fonctionner.
 
-Ce n'est ni une simulation ni une VM distante. Le code s'exécute dans votre navigateur. Le serveur de développement tourne dans votre navigateur. Aucune ressource de calcul côté serveur n'intervient dans l'exécution elle-même.
+Ce qu'il ne fait pas, clairement : les modules natifs et les scripts d'installation de paquets ne peuvent pas tourner dans un navigateur, et les serveurs de développement de Next.js, Nuxt, SvelteKit, Remix et Astro exigent des binaires natifs. Le runtime reconnaît ces projets et vous explique pourquoi, au lieu d'afficher un aperçu cassé. Les WebSockets et les réponses en streaming depuis un serveur dans le navigateur ne sont pas encore pris en charge.
+
+Ce n'est ni une simulation ni une VM distante. Le code s'exécute dans votre navigateur. Le serveur de développement tourne dans votre navigateur. Vos fichiers sont enregistrés dans Builderforce : un projet s'ouvre là où vous l'aviez laissé.
 
 ---
 
@@ -39,7 +43,7 @@ L'IDE adopte une disposition en trois volets :
 
 ### Panneau gauche — Explorateur de fichiers
 
-Parcourez, créez, renommez et supprimez des fichiers. L'arborescence reflète en direct le système de fichiers WebContainers — les modifications que vous faites dans l'éditeur apparaissent immédiatement, et celles des agents (via BuilderForce Agents) apparaissent au fur et à mesure de leur écriture.
+Parcourez, créez, renommez et supprimez des fichiers. L'arborescence reflète en direct le système de fichiers du runtime — les modifications que vous faites dans l'éditeur apparaissent immédiatement, et celles des agents (via BuilderForce Agents) apparaissent au fur et à mesure de leur écriture.
 
 ### Panneau central — Éditeur Monaco
 
@@ -57,8 +61,8 @@ Le panneau droit bascule entre trois vues grâce au sélecteur situé en haut :
 
 | Vue | Contenu |
 |---|---|
-| **Aperçu** | Iframe en direct connectée au localhost du WebContainer ; se rafraîchit automatiquement quand votre serveur de développement recharge à chaud |
-| **Terminal** | Terminal complet connecté au shell du WebContainer — exécutez n'importe quelle commande |
+| **Aperçu** | Iframe en direct servie par le serveur de développement du navigateur ; chaque aperçu ouvert se recharge quand un fichier change |
+| **Terminal** | Un shell `jsh` dans le runtime — `npm`, `npx`, `node`, les pipes et les commandes de fichiers habituelles |
 | **Chat IA** | Le binôme IA (voir ci-dessous) |
 
 ---
@@ -95,7 +99,7 @@ La collaboration repose sur **Yjs** — une bibliothèque de synchronisation en 
 - **Chat** — un canal de discussion latéral au sein de la session IDE
 - **Terminal partagé** — les commandes lancées par un utilisateur sont visibles par tous
 
-Il n'y a pas de « propriétaire » — chaque collaborateur dispose d'un accès égal au système de fichiers, au terminal et à l'éditeur. L'état du WebContainer sous-jacent est cohérent pour tous les participants.
+Il n'y a pas de « propriétaire » — chaque collaborateur dispose d'un accès égal au système de fichiers, au terminal et à l'éditeur. Les fichiers du projet sont les mêmes pour tous les participants.
 
 Les sessions de collaboration peuvent réunir des humains et des agents. Si un agent BuilderForce Agents travaille sur le même projet, ses modifications de fichiers arrivent comme des changements en direct dans l'éditeur — vous regardez l'agent écrire du code dans la fenêtre même où vous le relisez.
 
@@ -118,11 +122,11 @@ Autrement dit, l'IDE n'est pas qu'un éditeur de code — c'est une **fenêtre s
 Pour démarrer un nouveau projet de zéro :
 
 1. Créez un projet dans [/projects](/projects) → **Nouveau projet**
-2. Choisissez un modèle (Next.js, Vite + React, Node + Express, vierge)
-3. Ouvrez le projet dans l'IDE — WebContainers s'initialise, les dépendances s'installent, le serveur de développement démarre
+2. Choisissez un modèle (Web : Vite + React ; Web + Mobile : une seule base de code React Native for Web sur Vite)
+3. Ouvrez le projet dans l'IDE — le runtime démarre dans l'onglet et le serveur de développement se lance
 4. Le volet d'aperçu affiche votre application en cours d'exécution
 
-Les modèles lancent `npm install` automatiquement lors de la première initialisation du conteneur. Les ouvertures suivantes restaurent le dernier état du système de fichiers depuis R2 : votre session reprend exactement là où vous l'aviez laissée.
+L'aperçu ne demande aucune installation : les paquets se chargent depuis esm.sh aux versions demandées par votre `package.json`. Lancez `npm install` dans le terminal quand un programme Node a besoin d'un vrai `node_modules`. Les fichiers sont enregistrés dans R2 : les ouvertures suivantes restaurent le projet exactement là où vous l'aviez laissé.
 
 ---
 
@@ -168,6 +172,7 @@ Les deux sont conçus pour être utilisés ensemble — démarrez une fonctionna
 ## Prochaines étapes
 
 - Ouvrez un projet dans l'[IDE](/ide) et explorez la disposition en trois volets
+- Lisez [BuilderForce WebContainers est open source](/blog/builderforce-webcontainers-open-source) pour voir ce que le runtime sous l'IDE sait faire seul
 - Invitez un coéquipier à collaborer — partagez l'URL de la session depuis l'en-tête de l'IDE
 - Lisez [BuilderForce Agents et l'intégration des agents](/blog/agents-and-agent-integration) pour comprendre comment BuilderForce Agents prolonge ce que vous construisez dans l'IDE
 - Découvrez [WebGPU et l'entraînement LoRA](/blog/webgpu-lora-explained) si vous voulez affiner des modèles pour votre propre base de code, directement dans le navigateur

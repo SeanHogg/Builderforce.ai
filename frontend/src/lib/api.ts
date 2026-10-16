@@ -481,7 +481,7 @@ export interface PackageAppResult {
  * Package the built `dist/` as a PWA, an Android project, or an iOS project.
  *
  * Takes the same asset shape as {@link publishSite} — the build happens in the
- * WebContainer, so what is packaged is byte-for-byte what was previewed.
+ * in-browser runtime, so what is packaged is byte-for-byte what was previewed.
  */
 export async function packageApp(
   projectId: number | string,

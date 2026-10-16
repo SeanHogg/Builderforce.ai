@@ -1,5 +1,6 @@
 /**
- * Learned Model Routing (PRD 13) — the on-prem ACTION-TYPE classifier.
+ * Learned Model Routing (PRD 13) — the LEXICAL action-type classifier, shared by every
+ * host.
  *
  * Labels a run with one {@link ActionType} from the SHARED taxonomy
  * (`@builderforce/learned-routing`) — the same closed vocabulary the cloud
@@ -8,15 +9,16 @@
  * in `normalizeActionType`'s `other` on the way into the ledger and quietly teach
  * the fleet nothing.
  *
- * ── WHY LEXICAL AND NOT AN LLM CALL ──────────────────────────────────────────
- * The cloud classifier (`api/src/application/llm/classifyTask.ts`) spends a free-pool
- * completion per TASK and caches the verdict on `tasks.action_type`, so its cost
- * amortizes across every re-run of that ticket. This host has neither half of that
- * bargain: an embedded run is a prompt, not a durable ticket row, so there is nothing
- * to cache the verdict ON, and the call would repeat for every turn — paying latency
- * on the critical path of a run whose whole point is that it executes locally.
+ * ── WHERE IT RUNS ────────────────────────────────────────────────────────────
+ * • On-prem / editor / offline: the ONLY classifier. An embedded run is a prompt, not
+ *   a durable ticket row, so there is nothing to cache an LLM verdict ON and the call
+ *   would repeat every turn — latency on the critical path of a run that executes
+ *   locally, and impossible with no network at all.
+ * • Cloud tickets: the FIRST pass. `api/.../classifyTask.ts` asks the free pool only
+ *   when this verdict is below {@link MIN_CONFIDENCE} — a confident lexical label
+ *   spends nothing.
  *
- * So the label is derived lexically from the prompt. That is weaker, and the design
+ * The label is derived lexically from the prompt. That is weaker, and the design
  * accounts for it honestly: a low-confidence verdict resolves to `other` rather than
  * guessing, because a WRONG bucket is worse than the fallback one — it credits a
  * model's success to work it never did, and that lie outlives the run by the full

@@ -29,7 +29,7 @@ import { noindexTeaserRoutes } from '@/lib/routeMarketing';
  * Capabilities destination, a real marketing page — which is the exact
  * swallow-the-neighbour bug `underPrefix()` exists to prevent in `shellRouting`.
  */
-const NON_PUBLIC_PATHS = ['/api/', '/auth/', '/activate', '/webcontainer', '/embed/', '/embed$', '/debug',
+const NON_PUBLIC_PATHS = ['/api/', '/auth/', '/activate', '/embed/', '/embed$', '/debug',
   // `/deal/<token>` — a prospect share. The URL IS the credential, so a crawler that
   // fetched one would publish a priced offer, a security packet or a joint plan to the
   // internet. The page also carries its own `noindex`, and that is deliberately not

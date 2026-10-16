@@ -4,7 +4,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * a subdomain", shared by both publish paths.
  *
  * There are two producers of a build and they must land identically:
- *   - the browser: the IDE builds in the WebContainer and POSTs `dist/` to
+ *   - the browser: the IDE builds in the in-browser runtime and POSTs `dist/` to
  *     `/api/ide/projects/:id/publish` (tenant-JWT authenticated);
  *   - GitHub Actions: a workflow in the user's own repo builds on a runner and
  *     POSTs `dist/` to `/api/deploy/github` (OIDC authenticated).

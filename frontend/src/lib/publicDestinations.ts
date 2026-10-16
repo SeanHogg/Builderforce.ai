@@ -154,6 +154,9 @@ export const PUBLIC_DESTINATIONS: PublicDestination[] = [
   // route cannot be both a panel over the board and a destination in it.
   { id: 'models', seat: 'CTO', icon: '🧮', marketingHref: '/models', appHref: '/marketplace?family=asset&kind=model', kind: 'link', placement: 'buildWith', panel: false },
   { id: 'prompts', seat: 'Support', icon: '📚', marketingHref: '/prompts', appHref: '/prompts', kind: 'link', placement: 'buildWith', panel: false },
+  // The MIT repositories the product stands on (`lib/openSourcePackages.ts`).
+  // Not a panel: it is a page you read and leave for GitHub, not a lookup.
+  { id: 'openSource', seat: 'CTO', icon: '🧩', marketingHref: '/open-source', appHref: '/open-source', kind: 'link', placement: 'buildWith', panel: false },
   // ── The flat bar ─────────────────────────────────────────────────────────
   { id: 'features', seat: 'platform', icon: '✨', marketingHref: '/features', appHref: '/create', kind: 'link', placement: 'bar', panel: true },
   // Studio (`studio.builderforce.ai`, served by this app at `/studio` — see
@@ -352,7 +355,7 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
   // already use" is a question asked while choosing the product, alongside
   // Pricing — not an article you go and read afterwards.
   { titleKey: 'colProduct', ids: ['canvas', 'studio', 'spawn', 'marketplace', 'features', 'pricing', 'compare', 'about'] },
-  { titleKey: 'colPlatform', ids: ['evermind', 'ref.integrations', 'embedded', 'models', 'prompts'] },
+  { titleKey: 'colPlatform', ids: ['evermind', 'ref.integrations', 'embedded', 'models', 'prompts', 'openSource'] },
   { titleKey: 'colLearn', ids: ['method', 'blog', 'tutorials', 'diagnostics', 'soc2', 'media'] },
   { titleKey: 'colGetStarted', ids: ['demo', 'sell', 'signIn'] },
 ];

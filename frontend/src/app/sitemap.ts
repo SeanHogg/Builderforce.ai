@@ -17,6 +17,7 @@ import {
 import { detailRoutes, indexableTeaserRoutes, marketedRoutes } from '@/lib/routeMarketing';
 import { getSalaryDirectory } from '@/lib/salary';
 import { legalDocHref } from '@/lib/legalDocs';
+import { OPEN_SOURCE_PACKAGES, openSourcePath } from '@/lib/openSourcePackages';
 
 const BASE = 'https://builderforce.ai';
 
@@ -56,6 +57,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/tools/security-posture`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${BASE}/tools/tech-debt-estimator`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${BASE}/tools/build-buy-agent`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE}/open-source`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE}/agents`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
     // /agents sub-pages — each is a real, crawlable marketing surface in
     // PUBLIC_SHELL_PREFIXES (shellRouting.ts), so they belong here alongside
@@ -142,6 +144,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     lastModified: now,
     changeFrequency: 'monthly' as const,
     priority: 0.7,
+  }));
+
+  // One detail page per open-source repository, from the same registry the
+  // /open-source pages render.
+  const openSourcePages: MetadataRoute.Sitemap = OPEN_SOURCE_PACKAGES.map((entry) => ({
+    url: `${BASE}${openSourcePath(entry)}`,
+    lastModified: now,
+    changeFrequency: 'monthly' as const,
+    priority: 0.6,
   }));
 
   const integrationPages: MetadataRoute.Sitemap = SEO_INTEGRATIONS.map((i) => ({
@@ -266,7 +277,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   return [
-    ...staticPages, ...teaserPages, ...catalogIndexPages, ...blogPages, ...comparePages,
+    ...staticPages, ...teaserPages, ...catalogIndexPages, ...blogPages, ...comparePages, ...openSourcePages,
     ...integrationPages, ...marketplacePages, ...catalogPages, ...talentPages,
     ...startupPages, ...salaryPages,
   ];

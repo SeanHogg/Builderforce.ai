@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/model-catalog",
+  "version": "2026.10.16",
+  "private": true,
+  "type": "module",
+  "description": "The model catalog VOCABULARY every routing host shares: tier ladder, per-token price, residency (local | cloud) and the CatalogView port a host binds to its own registry. Pure, dependency-free and I/O-free by contract.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

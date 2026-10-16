@@ -12,7 +12,7 @@ import { render, screen, cleanup } from '@testing-library/react';
  *   finetune → <FinetuneStudioPanel>    (no active file → the studio panel, not code)
  *   designer → preview/code view        (the Preview/Code toggle chrome)
  *
- * BuilderWorkspace pulls in WebContainer / collaboration / brain / a dozen side panels —
+ * BuilderWorkspace pulls in in-browser runtime / collaboration / brain / a dozen side panels —
  * all irrelevant to the center-panel decision — so we mock them to sentinels
  * and assert ONLY which center component renders for each `project.modality`.
  */

@@ -8,7 +8,7 @@
  * origin — a custom domain or a platform subdomain, never `builderforce.ai`. A
  * component rendered by this repo's own Next app cannot read that cookie or post
  * to that origin; nothing served from anywhere else can. The published app itself
- * is arbitrary bytes a creator's WebContainer build emitted (`publishStaticSite`
+ * is arbitrary bytes a creator's in-browser runtime build emitted (`publishStaticSite`
  * takes `dist/` verbatim) — Builderforce controls none of its markup, so there is
  * nowhere to inject a mounted component even if one could run there.
  *

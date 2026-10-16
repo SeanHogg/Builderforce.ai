@@ -21,7 +21,7 @@
  * coherently in a stream that interleaves the two.
  *
  * Pure and DOM-free (it only calls the `write` it is handed), so the whole log
- * vocabulary is unit-testable without a WebContainer or an xterm instance.
+ * vocabulary is unit-testable without an in-browser runtime or an xterm instance.
  */
 
 /** Minimal shape of a next-intl translator — kept structural so this module has

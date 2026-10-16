@@ -1,21 +1,25 @@
 搭建开发环境这件事，少则 20 分钟，多则好几天，而且几乎学不到什么东西。克隆仓库，装对 Node 版本，配好环境变量，跟原生依赖较劲，然后发现 README 已经三年没更新了。
 
-Builderforce 的浏览器内 IDE 把这一切都省掉了。打开浏览器，打开项目，你就已经在运行一个真正的 Node.js 环境——文件系统、包管理器、开发服务器、终端，外加一位 AI 结对编程伙伴——什么都不用安装。
+Builderforce 的浏览器内 IDE 把这一切都省掉了。打开浏览器，打开项目，你就已经在一个真正的开发环境里工作——文件系统、包管理器、开发服务器、终端，外加一位 AI 结对编程伙伴——什么都不用安装。
 
 ![三栏式浏览器 IDE 示意图：左侧文件浏览器、中间 Monaco 代码编辑器，右侧面板可在预览、终端和 AI 聊天之间切换](/blog/in-browser-ide.svg)
 
 ---
 
-## 工作原理：WebContainers
+## 工作原理：BuilderForce WebContainers
 
-IDE 由 **WebContainers** 驱动——这是一个基于 WebAssembly 的 Node.js 运行时，完全运行在浏览器标签页内。WebContainers 提供：
+IDE 运行在 **BuilderForce WebContainers** 之上——这是我们自己的浏览器内开发运行时，以 MIT 许可开源（[GitHub 源码](https://github.com/SeanHogg/builderforce-webcontainers) · [项目介绍](/open-source/builderforce-webcontainers)）。它为 IDE 提供：
 
-- 一个真正的、兼容 POSIX 的文件系统（在内存中运行，并持久化到 R2）
-- 一个完整的 Node.js 运行时，支持原生模块
-- 能够运行 `npm install`、`npm run dev`、`npm test`——和在本地完全一样
-- 一个浏览器可以访问的 localhost 网络层——你的开发服务器的 3000 端口可以直接在预览窗格中访问
+- **标签页里的开发服务器。** 每个文件在被请求时用 esbuild-wasm 编译，并作为原生 ES 模块提供，与 Vite 开发服务器的工作方式相同，因此启动是即时的，一次修改只重新编译一个文件。Vite 项目（React、Vue、Svelte）、Create React App 和静态网站都可以预览。
+- **无需等待的依赖包。** 导入会解析到 esm.sh，版本锁定为 `package.json` 中的版本并去重，因此预览从不需要等待安装。
+- **需要时就有 Node。** 终端可以运行 Node 程序、从真实的 npm 仓库执行 `npm install`，并提供交互式 shell；每个进程一个 Web Worker，所以死循环也不会卡住编辑器。监听端口的服务器可以像其他页面一样预览。
+- **在浏览器里检查与发布。** 类型检查和生产构建直接基于文件运行，无需安装，也无需服务器。
+- **与你的账户隔离。** 预览和进程由独立源 `preview.builderforce.ai` 提供，你或智能体运行的代码永远不会共享你的 Builderforce 会话。
+- **无需特殊的浏览器设置。** 只需要安全上下文和 Service Worker。不需要跨源隔离响应头，因此嵌入内容和第三方脚本照常工作。
 
-这不是模拟，也不是远程虚拟机。代码在你的浏览器里运行，开发服务器也在你的浏览器里运行。执行本身不涉及任何服务器端计算。
+坦白说它做不到的事：原生插件和包的安装脚本无法在浏览器中运行；Next.js、Nuxt、SvelteKit、Remix 和 Astro 的开发服务器需要原生二进制文件。运行时会识别这些项目并告诉你原因，而不是显示一个坏掉的预览。浏览器内服务器的 WebSocket 和流式响应暂不支持。
+
+这不是模拟，也不是远程虚拟机。代码在你的浏览器里运行，开发服务器也在你的浏览器里运行。你的文件会保存到 Builderforce，下次打开项目时就从上次离开的地方继续。
 
 ---
 
@@ -39,7 +43,7 @@ IDE 采用三栏布局：
 
 ### 左侧面板——文件浏览器
 
-浏览、创建、重命名和删除文件。文件树实时反映 WebContainers 的文件系统——你在编辑器中做的修改会立即出现，智能体（通过 BuilderForce Agents）做的修改也会在写入时同步出现。
+浏览、创建、重命名和删除文件。文件树实时反映运行时的文件系统——你在编辑器中做的修改会立即出现，智能体（通过 BuilderForce Agents）做的修改也会在写入时同步出现。
 
 ### 中间面板——Monaco 编辑器
 
@@ -57,8 +61,8 @@ IDE 采用三栏布局：
 
 | 视图 | 内容 |
 |---|---|
-| **预览** | 连接到 WebContainer localhost 的实时 iframe；开发服务器热重载时自动刷新 |
-| **终端** | 连接到 WebContainer shell 的完整终端——可以运行任何命令 |
+| **预览** | 由浏览器内开发服务器提供的实时 iframe；文件一改动，所有打开的预览都会重新加载 |
+| **终端** | 运行时中的 `jsh` shell——支持 `npm`、`npx`、`node`、管道和常用文件命令 |
 | **AI 聊天** | AI 结对编程伙伴（见下文） |
 
 ---
@@ -95,7 +99,7 @@ AI 可以直接编辑你的文件（需要你的批准），在终端中运行�
 - **聊天**——IDE 会话内的侧边栏聊天频道
 - **共享终端**——一位用户运行的命令，所有人都能看到
 
-这里没有“所有者”——每位协作者对文件系统、终端和编辑器都拥有同等的访问权限。底层的 WebContainer 状态对所有参与者都保持一致。
+这里没有“所有者”——每位协作者对文件系统、终端和编辑器都拥有同等的访问权限。项目文件对所有参与者都保持一致。
 
 协作会话中既可以有人，也可以有智能体。如果一个 BuilderForce Agents 智能体正在同一个项目上工作，它的文件修改会作为实时变更出现在编辑器里——你可以在自己审阅代码的同一个窗口中，看着智能体写代码。
 
@@ -118,11 +122,11 @@ IDE 和 BuilderForce Agents 是与同一个项目交互的两种方式。IDE 是
 从零开始创建一个新项目：
 
 1. 在 [/projects](/projects) → **New Project** 中创建项目
-2. 选择一个模板（Next.js、Vite + React、Node + Express、空白）
-3. 在 IDE 中打开项目——WebContainers 完成初始化，依赖安装完毕，开发服务器随即启动
+2. 选择一个模板（Web：Vite + React；Web + 移动端：基于 Vite 的同一套 React Native for Web 代码）
+3. 在 IDE 中打开项目——运行时在标签页中启动，开发服务器随即运行
 4. 预览窗格中会显示你正在运行的应用
 
-模板会在容器首次初始化时自动运行 `npm install`。之后再次打开时，会从 R2 恢复上一次的文件系统状态，让你的会话从上次离开的地方无缝继续。
+预览不需要安装步骤：依赖包按 `package.json` 要求的版本从 esm.sh 加载。当某个 Node 程序需要真正的 `node_modules` 时，在终端里运行 `npm install` 即可。文件保存在 R2 中，之后再次打开时，项目会从上次离开的地方无缝继续。
 
 ---
 
@@ -168,6 +172,7 @@ IDE 和 BuilderForce Agents 是与同一个项目交互的两种方式。IDE 是
 ## 后续步骤
 
 - 在 [IDE](/ide) 中打开一个项目，探索三栏布局
+- 阅读 [BuilderForce WebContainers 开源了](/blog/builderforce-webcontainers-open-source)，了解 IDE 底层的运行时单独能做什么
 - 邀请一位队友协作——从 IDE 顶部栏分享会话 URL
 - 阅读 [BuilderForce Agents 与智能体集成](/blog/agents-and-agent-integration)，了解 BuilderForce Agents 如何扩展你在 IDE 中构建的内容
 - 如果你想直接在浏览器中针对自己的代码库微调模型，请探索 [WebGPU 与 LoRA 训练](/blog/webgpu-lora-explained)

@@ -1,4 +1,4 @@
-## ✅ RESOLVED 2026-10-16 — Main release unblocked after the Insights merge (frontend 2026.10.49 · api 2026.10.39 · replay-sdk 2026.10.3)
+## ✅ RESOLVED 2026-10-16 — Main release unblocked after the Insights merge (frontend 2026.10.50 · api 2026.10.39 · replay-sdk 2026.10.3)
 
 From 2026-10-14 every main release failed in verify, so nothing deployed. The cause was the Insights merge, which was never compiled, landing beside other sessions' commits. Each failure was fixed at its cause:
 
@@ -18,6 +18,56 @@ From 2026-10-14 every main release failed in verify, so nothing deployed. The ca
   - The live-orchestration page uses `Link`.
   - A block comment in `scripts/test-brain.mjs` was closing on a glob and broke lint.
 - **Carried as debt, logged.** `calendar_connections` now has the same shape as the drive and mailbox stores. That cluster is in the ROADMAP ratchet entry.
+## ✅ RESOLVED 2026-10-16 — Workload-aware routing, phase 1: `model-catalog` · `workload` · `model-router` (Rovr program)
+
+**Why.** The router picked models without reading the work or its price. Price lived only in the `/models` browser and was read *after* the call, and the plan/code/explore role reordered only a tenant's own connected accounts. The cloud and on-prem hosts each classified work their own way.
+
+**Three pure, source-only packages**, shared by the Worker, the editor and on-prem:
+- **`@builderforce/model-catalog`**: the tier ladder (`ModelTier`, `tierRank`), per-token `ModelPrice` with `estimateCostUsd`, residency (`local` | `cloud`), and the `CatalogView` port each host binds to its own registry. `AiModelTier` is now an alias of `ModelTier`.
+- **`@builderforce/workload`**: `profileWorkload` reads one `WorkloadProfile` (role, arc stage, action type, estimated input/output tokens, agentic). It now holds the lexical action classifier, moved from `agent-runtime`, the `ArcStage` vocabulary, moved from the api, and the one chars-per-token heuristic. The api's `tokenUsage`, `spawnBuild` and three on-prem context guards now use it.
+- **`@builderforce/model-router`**: role objectives, `orderForRole` (with price as the within-tier key for cost-first roles), `rankConnectedForRole`, `expectedCostUsd`, `orderByExpectedCost` and `orderPoolForWorkload`. The copies in `modelPool.ts` and `modelRoles.ts` were deleted. `modelRoles.ts` now only binds the router to the registry.
+
+**Behaviour:**
+- **Cost-first calls (explore / utility / verify) order the Free/Paid plan pool by expected cost** (price × estimated tokens; local and FREE models at zero).
+  - Cost ordering runs *before* the stable capability reorders (shape, coding drivers, context fit), so it only orders models *within* a capability bucket. A cheap model never jumps ahead of a capable one.
+  - Connected-account seeds order by price within a tier too.
+- **Only cost-first calls read prices.** `catalogView.ts` (`pricesForCall`, `loadPriceBook`) builds the price book once per cached catalog snapshot, and every other call skips the catalog read.
+- **The usage ledger reads the same price book**, replacing a per-row linear scan, so expected cost and recorded cost come from one lookup with one id normalization.
+- **The cloud ticket classifier is lexical-first.** A confident lexical label returns with no model call; the free pool is asked only when a ticket is ambiguous.
+
+**Verified:**
+- `check:source-package-graph` passes.
+- 191 targeted api tests pass, including the new `catalogView.test.ts` and the three packages' own tests.
+- `agent-runtime` `tsc --noEmit` passes, and so do its learned-routing and context-guard tests.
+
+**Closed ROADMAP entries** (Workload-aware routing):
+- "No price on the routing catalog"
+- "No workload anticipation"
+- "Role only reorders the BYO seed"
+
+## ✅ RESOLVED 2026-10-16 — BuilderForce WebContainers used throughout; StackBlitz residue gone; agent build gate wired
+
+**Audit.** `@webcontainer/api` was already out of every package. What remained was StackBlitz-era residue, and one place our own runtime should have been used and was not.
+
+**Our runtime, used where it was missing:**
+- **Browser coding dispatch build gate.** `CodingDeps.build` existed, but `createCodingDeps` never supplied it, so a browser agent pushed code nobody had built. It is now `runBuildGate` (`lib/browserRuntime/buildGate.ts`). The gate reads the cloned working tree (`workingTree.ts`, text plus binary assets), then type-checks and builds it on BuilderForce WebContainers through the same `runProjectChecks` the workspace Check runs. Type errors count only in files the agent wrote, plus global errors when it edited a tsconfig. A project the runtime cannot build (Next.js, a Node server) or a tree too large for a tab is **skipped**: it pushes as before, with `buildOk` unknown. It is never failed.
+- **Workspace Check no longer fails the build step for Next.js and similar projects.** `CheckPorts.build` takes `{ skip }`, and `buildCheckPort` asks the runtime's `detectProject` first, so the runtime's own decline reason shows as a skip.
+
+**Residue removed:**
+- CSP `frame-src` dropped `*.webcontainer-api.io` / `*.staticblitz.com`.
+- `_headers` no longer blames the runtime for COOP/COEP. Isolation is for the onnxruntime-web WASM threads only.
+- The dead `/webcontainer` route was removed from the middleware root segments and from robots.
+- About 30 source comments now name the in-browser runtime.
+- The README, the in-browser IDE blog post and its SVG were corrected. They had claimed WASM Node, native modules, Next.js templates and Chrome-only.
+
+**Preview "Open in a new tab".** Both toolbars now go through ONE `openPreviewInTab`, which is always `noopener,noreferrer`. `PreviewPane` had handed the AI-written preview a `window.opener` onto the builder tab.
+
+**Open source, shown and shared (frontend 2026.10.49):**
+- **Pages.** `/open-source` and `/open-source/<slug>` cover four packages: webcontainers, memory, inference and spawn. They read from ONE registry, `lib/openSourcePackages.ts`, with copy in `openSource.*` in all five locales. Each page has a comparison table (WebContainers vs StackBlitz, taken from the README), a quick start, how Builderforce uses the package, and its limits. The pages are in the sitemap, the footer and Learn ▸ Build with.
+- **Blog posts.** Two new posts in all five languages: `builderforce-webcontainers-open-source` and `open-source-at-builderforce`. Each sibling README now has a "Part of Builderforce open source" line.
+- **Blog topics.** Two existing posts sat in the "more" bucket with no topic. They now map through `campaigns` → business and `games` → canvas.
+
+**Closed ROADMAP entry:** Repo-backed Designer — "WebContainer new-tab preview loses `window.opener` under COOP". That was `@webcontainer/api`'s opener handshake. Our preview has no handshake. The tab is served by the preview origin's service worker, which is same-site with the app and so uses the same registration, through the relay the builder tab already holds.
 
 ## ✅ RESOLVED 2026-10-13 — Insights (PRD 33): session replay, heatmaps, live visitors and prescriptive fixes, built end to end (frontend 2026.10.48 · api 2026.10.38 · replay-sdk 2026.10.2)
 

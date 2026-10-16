@@ -2,7 +2,7 @@
  * Project modality — the mode Canvas Builder uses for a single project.
  *
  * One project, many modalities. A project named "BuilderForce Agents" is built across:
- *   - designer : the default app/agent builder (Preview + Code + WebContainer)
+ *   - designer : the default app/agent builder (Preview + Code + in-browser runtime)
  *   - mobile   : the same builder, framed for phones (device simulator + scan-to-phone)
  *   - evermind : grow a living, self-teaching Evermind model (teach + Knowledge Map)
  *   - finetune : design datasets and train a classic LoRA model, then ship it
@@ -71,13 +71,13 @@ export interface ModalityDef {
   /** Brain empty-state hint for this modality. */
   /** Right-panel tabs relevant to this modality, in display order. */
   rightTabs: RightTab[];
-  /** Whether the green run button applies. Designer runs the WebContainer dev
+  /** Whether the green run button applies. Designer runs the in-browser runtime dev
    *  server; Voice generates speech. Evermind/fine-tune drive generation from their
    *  own panels, so they hide it. */
   showRunButton: boolean;
   /** Label for the green run button (e.g. "Run" for Designer, "Generate" for Voice). */
   runLabel: string;
-  /** Whether the WebContainer Check + "Gate Run" controls apply — only the
+  /** Whether the in-browser Check + "Gate Run" controls apply — only the
    *  code-running Designer/Mobile modalities validate with type-check/lint/build. */
   showChecks: boolean;
   /** Which component fills the centre pane. */

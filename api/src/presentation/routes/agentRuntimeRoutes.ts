@@ -12,7 +12,7 @@
  *                                                 advances the ticket (or routes
  *                                                 it to needs_attention).
  *
- * A browser PWA/WebContainer runs the agent loop in src/application/browserRuntime
+ * A browser PWA / in-browser runtime runs the agent loop in src/application/browserRuntime
  * and drives these endpoints. A non-browser executor (an on-prem agent host, a
  * container run) drives the SAME endpoints with its agent-host API key — see
  * {@link hostOrTenantAuth} — so both executors close the loop through one surface

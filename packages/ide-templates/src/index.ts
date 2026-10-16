@@ -7,7 +7,7 @@
  *    missing/empty file on file-list (`api/src/application/project/projectTemplate.ts`);
  *  · the legacy worker's file router seeds them for its own create path
  *    (`worker/src/routes/projects.ts`);
- *  · the Next app MOUNTS them in the WebContainer as the Run fallback, and uses
+ *  · the Next app MOUNTS them in the in-browser runtime as the Run fallback, and uses
  *    the same path set to avoid posting a zero-byte write the API would refuse
  *    (`frontend/src/components/BuilderWorkspace.tsx`, `lib/scaffoldRepair.ts`).
  *
@@ -50,7 +50,7 @@ export const TEMPLATES: Record<string, Record<string, string>> = {
 };
 
 /**
- * Modalities that run code in the WebContainer, mapped to their starter.
+ * Modalities that run code in the in-browser runtime, mapped to their starter.
  *
  * `webmobile` (Web + Mobile) ships ONE react-native-web codebase that renders
  * full-width as a site and inside the phone simulator, so it takes the mobile

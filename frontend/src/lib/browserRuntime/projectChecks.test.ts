@@ -45,6 +45,14 @@ describe('runProjectChecks', () => {
     expect(failures[0]).toMatchObject({ command: 'npm run build', message: 'build failed: Could not resolve "./Missing"' });
   });
 
+  it('skips, never fails, a build the runtime declines (Next.js) — and records no failure for the agent', async () => {
+    const onStep = vi.fn();
+    const { results, failures } = await runProjectChecks(ports({ build: { skip: 'Next.js needs its Node server.' }, onStep }));
+    expect(results[1]).toEqual({ label: 'build', status: 'skip', detail: 'Next.js needs its Node server.' });
+    expect(failures).toEqual([]);
+    expect(onStep).not.toHaveBeenCalledWith('build');
+  });
+
   it('names the install, not lint, when installing for lint fails', async () => {
     const { results, failures } = await runProjectChecks(ports({
       lint: async () => ({ step: 'npm install', code: 1, output: 'ETARGET' }),

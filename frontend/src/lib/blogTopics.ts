@@ -107,7 +107,7 @@ export const BLOG_TOPICS: readonly BlogTopic[] = [
     tags: [
       'founder-ops', 'finance', 'invoicing', 'cap-table', 'equity', 'legal',
       'crm', 'quotes', 'mutual-action-plan', 'escrow', 'milestones', 'contracts',
-      'freelance', 'hrms',
+      'freelance', 'hrms', 'campaigns',
     ],
   },
   {
@@ -116,7 +116,7 @@ export const BLOG_TOPICS: readonly BlogTopic[] = [
     tags: [
       'creation-canvas', 'creative-canvas', 'diagrams', 'drawio', 'mermaid',
       'excalidraw', 'visio', 'lucidchart', 'miro', 'bpmn', 'uml', 'mockups',
-      'prototyping', 'presentations', 'templates', 'marketplace-templates',
+      'prototyping', 'presentations', 'templates', 'marketplace-templates', 'games',
       'versioning', 'brainstorm', 'customer-feedback', 'product-design',
     ],
   },

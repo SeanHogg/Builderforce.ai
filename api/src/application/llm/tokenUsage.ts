@@ -58,15 +58,9 @@ const billableRow: SQL = and(notMediaRow, notFreeByoRow)!;
 // coercion clampTokenCount's numeric signature doesn't.
 const toInt = (v: unknown): number => clampTokenCount(Number(v ?? 0));
 
-/**
- * The "~4 chars per token" heuristic — the ONE definition shared by the
- * cost-forecast estimate and the LlmProxy model-fit estimate. Cheap and for
- * estimation only (NOT billing): accurate to ~15% for English/code and errs
- * slightly high (JSON punctuation), the safe direction for a context-fit check.
- */
-export function estimateTokensFromChars(charCount: number): number {
-  return Math.ceil(charCount / 4);
-}
+/** The "~4 chars per token" heuristic — defined ONCE in `@builderforce/workload` and
+ *  shared with the router, the editor and the on-prem context guards. */
+export { estimateTokensFromChars } from '@builderforce/workload';
 
 /** Start of the current UTC day — the daily-cap reset boundary. */
 export function utcDayStart(now: Date = new Date()): Date {

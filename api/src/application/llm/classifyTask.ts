@@ -1,11 +1,16 @@
 /**
  * Learned Model Routing (PRD 13) — the action-type CLASSIFIER.
  *
- * A first-pass FREE-model call that labels a task with one {@link ActionType}. Run
- * ONCE per task and cached on `tasks.action_type` (the column IS the cache), so
- * every re-run of the same ticket reuses the label — the cost amortizes to ~nothing.
- * Uses the free pool (`ideProxy`), so it spends nothing on paid vendors, and a
- * strict `json_schema` response_format to keep the output a clean enum.
+ * Labels a task with one {@link ActionType}. Run ONCE per task and cached on
+ * `tasks.action_type` (the column IS the cache), so every re-run of the same ticket
+ * reuses the label.
+ *
+ * Two passes, cheapest first:
+ *   1. The LEXICAL classifier every host shares (`@builderforce/workload`). A verdict
+ *      at or above its confidence floor is the answer — no model call at all.
+ *   2. Only an ambiguous ticket asks the free pool (`ideProxy`, spends nothing on paid
+ *      vendors) with a strict `json_schema` response_format to keep the output a
+ *      clean enum.
  *
  * Best-effort by contract: ANY failure (gateway error, garbage output, kill switch)
  * resolves to 'other' and NEVER blocks or fails the run. The caller persists the
@@ -14,6 +19,7 @@
 
 import type { Env } from '../../env';
 import { ACTION_TYPES, type ActionType, normalizeActionType, learnedRoutingEnabled } from '@builderforce/learned-routing';
+import { classifyRunAction, MIN_CONFIDENCE } from '@builderforce/workload';
 import { completeJson, jsonSchemaFormat } from './completeJson';
 
 export interface TaskClassification {
@@ -59,6 +65,10 @@ export async function classifyTaskAction(
   task: { title: string; description?: string | null },
 ): Promise<TaskClassification> {
   if (!learnedRoutingEnabled(env)) return { actionType: 'other', confidence: 0 };
+
+  // The title is the instruction; the description is context the classifier discounts.
+  const lexical = classifyRunAction([task.title, task.description ?? ''].join('\n\n'));
+  if (lexical.actionType !== 'other' && lexical.confidence >= MIN_CONFIDENCE) return lexical;
 
   try {
     const userPrompt =

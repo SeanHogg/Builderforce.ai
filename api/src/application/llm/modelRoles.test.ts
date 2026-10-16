@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { delegationRole } from '@builderforce/agent-tools';
 import { pickCloudModel } from './LlmProxyService';
-import { orderForRole } from './modelPool';
-import { rankConnectedForRole, resolveRoleObjective, roleUsesLearnedRanking } from './modelRoles';
+import { orderForRole as orderForRoleIn, resolveRoleObjective, roleUsesLearnedRanking } from '@builderforce/model-router';
+import { REGISTRY_CATALOG_VIEW } from './catalogView';
+import { rankConnectedForRole } from './modelRoles';
+
+/** The router bound to this Worker's registry — exactly what the gateway ranks with. */
+const orderForRole = (models: readonly string[], objective: number, demoted?: ReadonlySet<string>): string[] =>
+  orderForRoleIn(models, objective, REGISTRY_CATALOG_VIEW, demoted);
 import { parseModelShorthand } from './vendors/openaiCompatibleVendors';
 import { tierForModel } from './vendors';
 import { vendorFlagship } from './vendors';

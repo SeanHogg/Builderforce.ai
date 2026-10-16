@@ -3,10 +3,9 @@
 # `next.config.js` headers() are honoured by `next dev`, but @cloudflare/next-on-pages
 # does NOT reliably emit them for the deployed worker/assets. Without these the
 # Canvas Builder document is not cross-origin isolated, so `self.crossOriginIsolated` is
-# false, SharedArrayBuffer can't be transferred to the WebContainer worker, and
-# clicking Run fails with:
-#   DataCloneError: SharedArrayBuffer transfer requires self.crossOriginIsolated
-#   Error: Unable to create more instances   (failed boot, then retried)
+# false and the in-page WASM runtimes (onnxruntime-web) lose SharedArrayBuffer and
+# their threads. The app runtime itself (BuilderForce WebContainers) does NOT need
+# isolation: it runs on preview.builderforce.ai, whose documents opt into COEP.
 #
 # COOP=same-origin + COEP=credentialless enables cross-origin isolation while
 # still allowing cross-origin fonts/images to load without CORP headers.
