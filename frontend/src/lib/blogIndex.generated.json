@@ -1,5 +1,35 @@
 [
   {
+    "slug": "builderforce-webcontainers-open-source",
+    "title": "BuilderForce WebContainers is open source — the in-browser dev runtime you can fork",
+    "date": "2026-10-16",
+    "description": "The runtime behind every Builderforce canvas preview, Publish and Check is now MIT on GitHub and npm. It previews, builds and type-checks Vite, React, Vue and Svelte apps and runs Node, npm and a shell in the tab, with no COOP/COEP headers and no session caps.",
+    "tags": [
+      "open-source",
+      "webcontainers",
+      "developer-tools",
+      "ide",
+      "browser",
+      "preview"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "open-source-at-builderforce",
+    "title": "Open source at Builderforce — four projects you can run, read and fork",
+    "date": "2026-10-16",
+    "description": "Builderforce stands on four MIT projects anyone can use without us. An in-browser dev runtime, browser-trainable agent memory, a local inference engine with its desktop app, and a Roblox game builder. What each one does, and what it is worth to you.",
+    "tags": [
+      "open-source",
+      "developer-tools",
+      "webcontainers",
+      "evermind",
+      "local-models",
+      "roblox"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "fix-what-visitors-tell-you",
     "title": "Insights tells you what to fix — and proves it worked",
     "date": "2026-10-13",
@@ -2201,7 +2231,7 @@
     "slug": "in-browser-ide-and-collaboration",
     "title": "The In-Browser IDE — Full-Stack Development Without a Local Setup",
     "date": "2026-03-15",
-    "description": "How Builderforce's in-browser IDE works — WebContainers, Monaco editor, real-time collaboration, AI-pair programming, and how it connects to your BuilderForce Agents agents for seamless human-AI co-authorship.",
+    "description": "How Builderforce's in-browser IDE works — BuilderForce WebContainers (our open-source runtime), Monaco editor, real-time collaboration, AI-pair programming, and how it connects to your BuilderForce Agents agents for seamless human-AI co-authorship.",
     "tags": [
       "ide",
       "webcontainers",

@@ -42,6 +42,11 @@
 
 **Preview "Open in a new tab".** Both toolbars now go through ONE `openPreviewInTab`, which is always `noopener,noreferrer`. `PreviewPane` had handed the AI-written preview a `window.opener` onto the builder tab.
 
+**Open source, shown and shared (frontend 2026.10.49):**
+- **Pages.** `/open-source` and `/open-source/<slug>` cover four packages: webcontainers, memory, inference and spawn. They read from ONE registry, `lib/openSourcePackages.ts`, with copy in `openSource.*` in all five locales. Each page has a comparison table (WebContainers vs StackBlitz, taken from the README), a quick start, how Builderforce uses the package, and its limits. The pages are in the sitemap, the footer and Learn ▸ Build with.
+- **Blog posts.** Two new posts in all five languages: `builderforce-webcontainers-open-source` and `open-source-at-builderforce`. Each sibling README now has a "Part of Builderforce open source" line.
+- **Blog topics.** Two existing posts sat in the "more" bucket with no topic. They now map through `campaigns` → business and `games` → canvas.
+
 **Closed ROADMAP entry:** Repo-backed Designer — "WebContainer new-tab preview loses `window.opener` under COOP". That was `@webcontainer/api`'s opener handshake. Our preview has no handshake. The tab is served by the preview origin's service worker, which is same-site with the app and so uses the same registration, through the relay the builder tab already holds.
 
 ## ✅ RESOLVED 2026-10-13 — Insights (PRD 33): session replay, heatmaps, live visitors and prescriptive fixes, built end to end (frontend 2026.10.48 · api 2026.10.38 · replay-sdk 2026.10.2)

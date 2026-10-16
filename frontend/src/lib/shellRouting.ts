@@ -144,7 +144,7 @@ export function isFramedEmbed(pathname: string): boolean {
 // to be client components to fetch at all. So: index → teaser (indexed once),
 // detail → real page (indexed per entity). Sitemap and teaser registry agree
 // because neither list changed for the index routes.
-const PUBLIC_SHELL_PREFIXES = ['/about', '/legal', '/product', '/blog', '/tutorials', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/diagnostics', '/tools', '/evermind', '/media', '/sell-builderforce', '/book-demo', '/demo', '/creation-canvas', '/crm/phone', '/salary', '/skills/', '/personas/'];
+const PUBLIC_SHELL_PREFIXES = ['/about', '/legal', '/product', '/blog', '/tutorials', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/diagnostics', '/tools', '/evermind', '/media', '/sell-builderforce', '/book-demo', '/demo', '/creation-canvas', '/crm/phone', '/salary', '/skills/', '/personas/', '/open-source'];
 
 /**
  * Public pages matched EXACTLY, never as a prefix.

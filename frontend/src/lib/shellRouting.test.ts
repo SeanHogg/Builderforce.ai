@@ -55,6 +55,9 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
     expect(classifyShell('/sell-builderforce')).toBe('public');
     // Guided demo deck (the 5-scenario walkthrough) is a public marketing route.
     expect(classifyShell('/demo')).toBe('public');
+    // The open-source index and every package page under it.
+    expect(classifyShell('/open-source')).toBe('public');
+    expect(classifyShell('/open-source/builderforce-webcontainers')).toBe('public');
   });
 
   it('does not treat a prefix collision as public', () => {

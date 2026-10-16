@@ -11607,6 +11607,14 @@
       "fix-what-visitors-tell-you": {
         "title": "Insights 告诉你该修复什么——并证明它有效",
         "description": "录像和热图让你看到问题，却把下一步留给了你。现在，Insights 会指出该做的改动，把它渲染在你的页面上，作为提示词交给 AI 或直接应用，并在下一个版本上给它打分。"
+      },
+      "builderforce-webcontainers-open-source": {
+        "title": "BuilderForce WebContainers 开源了——一个可以复刻的浏览器内开发运行时",
+        "description": "Builderforce 每个画布预览、发布和检查背后的运行时，现在以 MIT 许可发布在 GitHub 和 npm 上。它能在标签页里预览、构建 Vite、React、Vue 和 Svelte 应用并做类型检查，还能运行 Node、npm 和 shell，无需 COOP/COEP 响应头，也没有会话上限。"
+      },
+      "open-source-at-builderforce": {
+        "title": "Builderforce 的开源项目——四个你可以运行、阅读和复刻的项目",
+        "description": "Builderforce 构建在四个任何人都能脱离我们使用的 MIT 项目之上：一个浏览器内开发运行时、可在浏览器中训练的智能体记忆、一个本地推理引擎及其桌面应用，以及一个 Roblox 游戏构建器。每个项目做什么，对你有什么价值。"
       }
     }
   },
@@ -19177,6 +19185,10 @@
       "spawn": {
         "title": "Spawn",
         "tagline": "动动嘴就能做 Roblox 游戏。"
+      },
+      "openSource": {
+        "title": "开源",
+        "tagline": "基础组件，采用 MIT 许可。"
       }
     },
     "tagline": {
@@ -34945,6 +34957,179 @@
       "usageAria": "用量：本月 {used} / {limit} 条录制。打开方案。",
       "sites": "站点",
       "addSite": "添加站点"
+    }
+  },
+  "openSource": {
+    "seo": {
+      "title": "开源 — Builderforce 采用 MIT 许可的基础组件",
+      "description": "支撑 Builderforce 画布每一次预览的浏览器内开发运行时、我们智能体使用的持久记忆、在你自己电脑上运行模型的原生引擎，以及 Spawn。全部采用 MIT 许可。",
+      "ogTitle": "Builderforce 开源"
+    },
+    "hero": {
+      "eyebrow": "开源",
+      "title": "Builderforce 的基础组件，开放源代码，采用 MIT 许可",
+      "subtitle": "支撑每一次画布预览的浏览器内运行时、我们智能体调取的记忆，以及在你自己电脑上运行模型的引擎。阅读源码、Fork 它们，并在其上构建你自己的产品。"
+    },
+    "why": {
+      "title": "我们为什么开源基础组件",
+      "points": [
+        {
+          "title": "运行的代码你都能读到",
+          "desc": "在你的浏览器和电脑上执行的运行时是公开的，你可以准确审计它们做了什么，而不必只听我们的说法。"
+        },
+        {
+          "title": "没有锁定",
+          "desc": "这里的每个仓库都采用 MIT 许可。无论是否商用，都可以使用、Fork 并在你自己的产品中发布。"
+        },
+        {
+          "title": "用于生产环境",
+          "desc": "这些都不是演示。每一个都每天在 Builderforce 中运行，所以真正重要的问题，我们总是最先遇到。"
+        },
+        {
+          "title": "限制提前说明",
+          "desc": "每个 README 都写明了尚不支持的内容，而弥补差距的路线图就在仓库里。"
+        }
+      ]
+    },
+    "packagesTitle": "软件包",
+    "packagesIntro": "每个仓库都是独立的：只安装你需要的那一个，无需 Builderforce 的其他部分。",
+    "card": {
+      "license": "许可",
+      "language": "语言",
+      "packages": "软件包",
+      "install": "安装",
+      "details": "详情",
+      "source": "在 GitHub 上查看源码"
+    },
+    "detail": {
+      "eyebrow": "Builderforce 开源",
+      "notFound": "未找到该软件包",
+      "seoTitle": "{name} — 开源，MIT 许可",
+      "source": "在 GitHub 上查看源码",
+      "back": "全部开源软件包",
+      "problemTitle": "它解决的问题",
+      "getsTitle": "你能得到什么",
+      "statusLabel": "当前限制：",
+      "aspect": "对比项",
+      "quickStartTitle": "快速开始",
+      "usageTitle": "Builderforce 如何使用它",
+      "linksTitle": "链接",
+      "repository": "仓库",
+      "fromSource": "从源码安装，未发布到软件包注册表",
+      "blog": "相关文章",
+      "licenseNote": "无论是否商用，都可以使用、Fork 和发布"
+    },
+    "cta": {
+      "title": "看看它们如何协同工作",
+      "desc": "打开画布：你构建的一切，其实时预览都运行在 BuilderForce WebContainers 上，就在你自己的浏览器里。",
+      "primary": "打开画布",
+      "secondary": "阅读博客"
+    },
+    "packages": {
+      "webcontainers": {
+        "tagline": "StackBlitz WebContainers 的开放替代品，采用 MIT 许可：完全在浏览器中运行的开发运行时。",
+        "summary": "以文件形式交给它一个项目，它就会在 iframe 中提供实时预览、为部署构建项目并进行类型检查，无需 COOP/COEP 响应头，也没有会话上限。",
+        "problem": "浏览器内的开发运行时在显示第一个预览之前就要求很多：免费版不可商用的专有许可、每月 API 会话上限，以及会破坏宿主页面上的嵌入内容和第三方脚本的跨源隔离响应头（COOP/COEP）。对于一个会预览自己所构建一切的产品，这些都在限制核心流程。",
+        "gets": [
+          "前端应用的实时预览（使用 React、Vue 或 Svelte 的 Vite 项目、Create React App 和静态站点），TypeScript、JSX、CSS、JSON 和 npm 包的表现与在 Vite 下一致。",
+          "在页面中完成生产构建：runtime.build() 使用 esbuild-wasm 打包和压缩，并返回一个可以上传到任何地方的静态站点。",
+          "在 Web Worker 中按照项目自身的 tsconfig 进行类型检查，依赖的类型从 esm.sh 获取并缓存。",
+          "Node 程序：从真实的 npm 注册表执行 npm install、在虚拟端口上运行 Express 风格的服务器，以及交互式 Shell，每个进程都在独立的 Web Worker 中运行。",
+          "中继模式：从独立的源提供预览，让 AI 编写的代码和任意 npm 包永远不会共享你应用的 Cookie 或存储。",
+          "可替换的编译器和软件包 CDN 端口：把 esbuild 换成 SWC，或把 esm.sh 换成你自己的镜像。预览中未捕获的错误会发送给宿主页面。"
+        ],
+        "status": "尚不支持原生插件、流式响应和 WebSocket、execSync 和 spawnSync，以及 Next.js 和 Nuxt 的开发服务器。需要原生二进制文件的框架会被识别并附上原因予以拒绝，这样宿主可以改用其他方案，而不是显示一个损坏的预览。",
+        "quickStartNote": "在 /__bfwc/sw.js 提供软件包中的 dist/sw.js，然后启动运行时、挂载项目，并将 iframe 指向它。唯一的要求是安全上下文（https 或 localhost）。",
+        "usage": "它是 Builderforce 中每一次画布预览背后的运行时。当画布编写或修改一个应用时，其文件会挂载到运行时中，所有打开的预览都会就地重新加载，就在访问者自己的浏览器里。",
+        "comparison": {
+          "title": "与 StackBlitz WebContainers 的对比",
+          "intro": "项目 README 中的对比，逐行列出。",
+          "ours": "BuilderForce WebContainers",
+          "theirs": "StackBlitz WebContainers",
+          "rows": [
+            {
+              "aspect": "许可",
+              "ours": "MIT。可以 Fork、发布、出售。默认显示一个小标识，可以关闭。",
+              "theirs": "专有。免费版不可商用，并要求署名。"
+            },
+            {
+              "aspect": "会话上限",
+              "ours": "无",
+              "theirs": "免费版每月 25,000 次 API 会话"
+            },
+            {
+              "aspect": "跨源隔离（COOP/COEP）",
+              "ours": "不需要：嵌入内容和第三方脚本照常工作",
+              "theirs": "需要"
+            },
+            {
+              "aspect": "编译器与软件包来源",
+              "ours": "可替换端口：esbuild 换 SWC，esm.sh 换你自己的镜像",
+              "theirs": "固定"
+            },
+            {
+              "aspect": "错误",
+              "ours": "预览中未捕获的错误会发送给宿主页面",
+              "theirs": "—"
+            },
+            {
+              "aspect": "生产构建与类型检查",
+              "ours": "在浏览器中：runtime.build() 和 createChecker()",
+              "theirs": "在容器内通过 npm run build 或 tsc"
+            },
+            {
+              "aspect": "Node.js 程序和服务器、npm install、Shell",
+              "ours": "支持：每个进程一个 Web Worker，依然无需 COOP/COEP",
+              "theirs": "支持"
+            }
+          ],
+          "note": "预览标识并不是许可条件：使用 attribution: false 即可关闭。如果这个运行时为你省了钱，保留它就是对项目的资助。"
+        }
+      },
+      "memory": {
+        "tagline": "为编程智能体提供节省 token 的持久记忆：一个 MCP 服务器、一个 Claude Code 插件，以及它们背后的库。",
+        "summary": "你的智能体只调取真正重要的少量事实，而不是每次会话都重新读取文件和聊天记录。一个本地存储，由你电脑上的所有 MCP 宿主共享。",
+        "problem": "编程智能体在会话之间会忘记一切，所以每次都要重新读取同样的文件、重新了解同样的决定。把整份记忆文件塞进每个提示并不能解决问题：它消耗的 token 比节省的还多。只有调取是有选择的，记忆才划算。",
+        "gets": [
+          "一个 MCP 服务器，提供 memory_recall、memory_get、memory_recall_by_tag、memory_remember 和 memory_forget。调取返回排序后的前 K 条结果，每条都会截断，这由服务器端强制执行，并且刻意不提供返回全部内容的工具。",
+          "一个 Claude Code 插件，它的四个钩子让记忆自动运转：会话开始时注入摘要、每个提示注入相关记忆、在会话结束前保存持久的纠正，并在压缩上下文之前写入所学内容。",
+          "一条命令即可完成的安装器，可将服务器注册到 Claude Code、Claude Desktop、Cursor、Windsurf、VS Code、Cline、Gemini CLI 和 Codex CLI，可重复执行并保留 .bak 备份，全部共享 ~/.builderforce-memory/memory.json。",
+          "开箱即用的词法（BM25）调取。指向一个 Evermind 检查点后，排序会把 SSM 嵌入相似度与词法得分融合，在 CPU 上运行，无需 GPU。",
+          "运行时库：语义响应缓存、直写式认知（替换过时的信念，而不是在旁边追加一条新的）、企业级 RAG 端口、智能体图编排、遥测以及评估工具。",
+          "引擎：零依赖的 WebGPU Mamba SSM 内核、自动微分、训练器和 BPE 分词器。"
+        ],
+        "status": "未配置模型时，stdio 和 HTTP 服务器使用词法方式对调取结果排序，每条结果都会注明所用的排序方式。面向 Qdrant、Pinecone 和 Vertex AI 的向量存储方言已有单元测试覆盖，但尚未在真实服务上验证。",
+        "quickStartNote": "在 Claude Code 中安装插件，或运行安装器，把同一个记忆服务器注册到它找到的每个 MCP 宿主中。",
+        "usage": "它是 Builderforce 的记忆子系统。画布借助引擎在浏览器中训练 Evermind，云端和本地部署的智能体在工作中通过运行时库调取和保存记忆，而 Builderforce 的 VS Code 扩展与 MCP 服务器使用同一个磁盘存储。"
+      },
+      "inference": {
+        "tagline": "Synapse，Builderforce 的桌面应用，以及 bfi，它用 Rust 编写的原生引擎，可在你自己的电脑上运行 LLM。",
+        "summary": "下载适合你硬件规格的 GGUF 模型，并通过兼容 OpenAI、Anthropic 和 Ollama 的 API 提供服务，你现有的客户端无需修改即可使用。无需另外安装 Ollama。",
+        "problem": "在本地运行模型通常意味着安装别家的运行时、指望它在 PATH 中、猜测模型能否装进内存，并只能接受那个运行时支持的 GGUF 类型。标准的 llama.cpp 不支持 PrismML 的 Ternary Bonsai 模型所采用的 2 位 PQ2_0 和 PTQ1_0 格式。",
+        "gets": [
+          "bfi，一个纯 Rust 引擎，其 GGUF v2/v3 读取器支持 PrismML 的 PQ2_0 和 PTQ1_0 类型。",
+          "一个同时支持 OpenAI、Anthropic 和 Ollama 接口规范的 HTTP 服务器，默认端口 11434，可选 Bearer 密钥。",
+          "bfi fit：在下载之前读取文件头，对比模型所需内存（权重、KV 缓存、循环状态和额外开销）与本机的情况。",
+          "可断点续传的 Hugging Face 下载并进行 sha256 校验，以及 import-ollama，可直接复用现有的 Ollama 模型库而无需重新下载。",
+          "Synapse，负责管理 bfi serve 的桌面应用，同时承载 MCP 连接器、私有的 Evermind 记忆和本地代码索引。"
+        ],
+        "status": "CPU 路径已发布。GPU 后端（CUDA、ROCm、Metal、Vulkan）可以编译，但尚未测量与 llama-bench 相比的 GPU 吞吐量，发布的二进制文件也尚未签名。",
+        "quickStartNote": "用 Cargo 从源码安装 CLI，检查模型是否适合这台电脑，下载模型并启动服务器。",
+        "usage": "Synapse 就是桌面上的 Builderforce。它为 Claude Code、你的脚本以及 Builderforce 的 VS Code 扩展提供本地模型，扩展通过 ~/.builderforce/desktop.json 找到这些模型，而它的上下文服务和代码索引也为扩展提供支持。"
+      },
+      "spawn": {
+        "tagline": "用对话制作 Roblox 游戏：一个桌面应用和一个连接 Roblox Studio 的桥接组件。",
+        "summary": "描述你想要的游戏，Spawn 就会在 Roblox Studio 中构建部件、Luau 脚本和界面。只需安装一个应用，Studio 插件会自动连接。",
+        "problem": "面向 Roblox 的 AI 工具要求年轻的创作者在输入第一个提示之前，先下载一个应用、安装 Studio 插件、启动本地服务器、连接同步工具，并让这四样东西一直保持运行。",
+        "gets": [
+          "一个与 Roblox Studio 并行运行的 Tauri 桌面应用。",
+          "bf-roblox 桥接组件：它安装 Spawn 的 Studio 插件，并提供插件轮询构建结果所用的本地回环桥接，因此机器外部无法访问任何内容。",
+          "通过 bf-cloud 登录 Builderforce 并访问 API，该组件与 builderforce-inference 仓库中的 Synapse 共用。"
+        ],
+        "status": "发布的二进制文件尚未签名。",
+        "quickStartNote": "克隆仓库，并用 Cargo 构建整个工作区。",
+        "usage": "Spawn 是 Builderforce 面向 13 岁及以上创作者的 Roblox 游戏构建工具，作为独立产品提供。开源仓库包含桌面应用和 Studio 桥接组件；登录和模型调用都通过 Builderforce 完成。"
+      }
     }
   }
 }

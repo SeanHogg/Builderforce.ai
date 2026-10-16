@@ -60,15 +60,20 @@ export async function runProjectChecks(ports: CheckPorts): Promise<ChecksOutcome
     }
   }
 
-  ports.onStep('build');
-  try {
-    await ports.build();
-    results.push({ label: 'build', status: 'pass' });
-  } catch (error) {
-    const message = errorText(error);
-    ports.onOutput(`${message.replace(/\n/g, '\r\n')}\r\n`);
-    results.push({ label: 'build', status: 'fail', detail: message.split('\n')[0] });
-    failures.push({ source: 'build', command: 'npm run build', message: `build failed: ${message.split('\n')[0]}`, detail: message });
+  const build = ports.build;
+  if (typeof build !== 'function') {
+    results.push({ label: 'build', status: 'skip', detail: build.skip });
+  } else {
+    ports.onStep('build');
+    try {
+      await build();
+      results.push({ label: 'build', status: 'pass' });
+    } catch (error) {
+      const message = errorText(error);
+      ports.onOutput(`${message.replace(/\n/g, '\r\n')}\r\n`);
+      results.push({ label: 'build', status: 'fail', detail: message.split('\n')[0] });
+      failures.push({ source: 'build', command: 'npm run build', message: `build failed: ${message.split('\n')[0]}`, detail: message });
+    }
   }
 
   if (!ports.lint) {

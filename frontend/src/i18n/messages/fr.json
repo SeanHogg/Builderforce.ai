@@ -11607,6 +11607,14 @@
       "fix-what-visitors-tell-you": {
         "title": "Insights vous dit quoi corriger — et prouve que ça a marché",
         "description": "Les enregistrements et les cartes de chaleur vous montraient le problème et vous laissaient l’étape suivante. Insights nomme désormais le changement, le rend sur votre page, le confie à une IA sous forme de prompt ou l’applique, et le note à la version suivante."
+      },
+      "builderforce-webcontainers-open-source": {
+        "title": "BuilderForce WebContainers est open source — le runtime de développement dans le navigateur que vous pouvez forker",
+        "description": "Le runtime derrière chaque aperçu de canvas, chaque Publier et chaque Vérifier de Builderforce est désormais sous MIT sur GitHub et npm. Il prévisualise, construit et vérifie les types des apps Vite, React, Vue et Svelte, et exécute Node, npm et un shell dans l'onglet, sans en-têtes COOP/COEP ni plafond de sessions."
+      },
+      "open-source-at-builderforce": {
+        "title": "L'open source chez Builderforce — quatre projets à exécuter, lire et forker",
+        "description": "Builderforce repose sur quatre projets MIT que chacun peut utiliser sans nous : un runtime de développement dans le navigateur, une mémoire d'agent entraînable dans le navigateur, un moteur d'inférence local avec son app de bureau, et un créateur de jeux Roblox. Ce que fait chacun, et ce qu'il vous apporte."
       }
     }
   },
@@ -19177,6 +19185,10 @@
       "spawn": {
         "title": "Spawn",
         "tagline": "Crée des jeux Roblox en parlant."
+      },
+      "openSource": {
+        "title": "Open source",
+        "tagline": "Les fondations, sous licence MIT."
       }
     },
     "tagline": {
@@ -34945,6 +34957,179 @@
       "usageAria": "Utilisation : {used} sur {limit} enregistrements ce mois-ci. Ouvrir l’offre.",
       "sites": "Sites",
       "addSite": "Ajouter un site"
+    }
+  },
+  "openSource": {
+    "seo": {
+      "title": "Open source — les fondations de Builderforce sous licence MIT",
+      "description": "L'environnement de développement dans le navigateur derrière chaque aperçu du canvas Builderforce, la mémoire persistante de nos agents, le moteur natif qui exécute les modèles sur votre machine, et Spawn. Le tout sous licence MIT.",
+      "ogTitle": "Builderforce en open source"
+    },
+    "hero": {
+      "eyebrow": "Open source",
+      "title": "Les fondations de Builderforce, ouvertes et sous licence MIT",
+      "subtitle": "L'environnement d'exécution dans le navigateur derrière chaque aperçu du canvas, la mémoire dans laquelle puisent nos agents et le moteur qui exécute les modèles sur votre propre machine. Lisez-les, forkez-les et construisez vos propres produits dessus."
+    },
+    "why": {
+      "title": "Pourquoi nous ouvrons nos fondations",
+      "points": [
+        {
+          "title": "Vous pouvez lire ce qui s'exécute",
+          "desc": "Les environnements d'exécution qui tournent dans votre navigateur et sur votre machine sont publics : vous pouvez vérifier exactement ce qu'ils font au lieu de nous croire sur parole."
+        },
+        {
+          "title": "Aucun verrouillage",
+          "desc": "Chaque dépôt présenté ici est sous licence MIT. Utilisez-le, forkez-le et livrez-le dans votre propre produit, commercial ou non."
+        },
+        {
+          "title": "Utilisés en production",
+          "desc": "Aucun n'est une démo. Chacun tourne chaque jour dans Builderforce : les bugs qui comptent, nous les rencontrons en premier."
+        },
+        {
+          "title": "Des limites annoncées d'emblée",
+          "desc": "Chaque README indique ce qui n'est pas encore pris en charge, et la feuille de route qui comble l'écart se trouve dans le dépôt."
+        }
+      ]
+    },
+    "packagesTitle": "Les paquets",
+    "packagesIntro": "Chaque dépôt est indépendant : installez celui dont vous avez besoin, sans le reste de Builderforce.",
+    "card": {
+      "license": "Licence",
+      "language": "Langage",
+      "packages": "Paquets",
+      "install": "Installation",
+      "details": "Détails",
+      "source": "Code source sur GitHub"
+    },
+    "detail": {
+      "eyebrow": "Builderforce open source",
+      "notFound": "Paquet introuvable",
+      "seoTitle": "{name} — open source, sous licence MIT",
+      "source": "Code source sur GitHub",
+      "back": "Tous les paquets open source",
+      "problemTitle": "Le problème résolu",
+      "getsTitle": "Ce que vous obtenez",
+      "statusLabel": "Limites actuelles :",
+      "aspect": "Critère",
+      "quickStartTitle": "Démarrage rapide",
+      "usageTitle": "Comment Builderforce l'utilise",
+      "linksTitle": "Liens",
+      "repository": "Dépôt",
+      "fromSource": "installé depuis les sources, non publié dans un registre",
+      "blog": "Article associé",
+      "licenseNote": "utilisez-le, forkez-le et livrez-le, commercial ou non"
+    },
+    "cta": {
+      "title": "Voyez-les fonctionner ensemble",
+      "desc": "Ouvrez le canvas : l'aperçu en direct de tout ce que vous construisez tourne sur BuilderForce WebContainers, dans votre propre navigateur.",
+      "primary": "Ouvrir le canvas",
+      "secondary": "Lire le blog"
+    },
+    "packages": {
+      "webcontainers": {
+        "tagline": "Une alternative ouverte, sous licence MIT, à StackBlitz WebContainers : un environnement de développement qui s'exécute entièrement dans le navigateur.",
+        "summary": "Donnez-lui un projet sous forme de fichiers : il sert un aperçu en direct dans une iframe, le compile pour le déploiement et vérifie ses types, sans en-têtes COOP/COEP ni plafond de sessions.",
+        "problem": "Les environnements de développement dans le navigateur exigeaient beaucoup avant d'afficher le moindre aperçu : une licence propriétaire dont l'offre gratuite est non commerciale, un plafond mensuel de sessions d'API et des en-têtes d'isolation cross-origin (COOP/COEP) qui cassent les intégrations et les scripts tiers de la page hôte. Pour un produit qui prévisualise tout ce qu'il construit, chacune de ces contraintes pèse sur la boucle principale.",
+        "gets": [
+          "Des aperçus en direct d'applications frontend (Vite avec React, Vue ou Svelte, Create React App et sites statiques), où TypeScript, JSX, CSS, JSON et les paquets npm fonctionnent comme sous Vite.",
+          "Un build de production dans la page : runtime.build() regroupe et minifie avec esbuild-wasm et renvoie un site statique que vous pouvez déposer n'importe où.",
+          "Une vérification des types dans un Web Worker selon le tsconfig du projet, avec les types des dépendances récupérés sur esm.sh et mis en cache.",
+          "Des programmes Node : npm install depuis le vrai registre, des serveurs de style Express sur des ports virtuels et un shell interactif, chaque processus dans son propre Web Worker.",
+          "Le mode relais : servez les aperçus depuis une origine distincte, pour que le code écrit par l'IA et les paquets npm arbitraires ne partagent jamais les cookies ni le stockage de votre application.",
+          "Des ports interchangeables pour le compilateur et le CDN de paquets : remplacez esbuild par SWC, ou esm.sh par votre propre miroir. Les erreurs non interceptées de l'aperçu sont transmises à la page hôte."
+        ],
+        "status": "Les modules natifs, les réponses en streaming et les WebSockets, execSync et spawnSync, ainsi que les serveurs de développement de Next.js et Nuxt ne sont pas encore pris en charge. Les frameworks qui exigent des binaires natifs sont détectés et refusés avec une raison, pour que l'hôte puisse basculer au lieu d'afficher un aperçu cassé.",
+        "quickStartNote": "Servez le fichier dist/sw.js du paquet à l'adresse /__bfwc/sw.js, puis démarrez l'environnement, montez un projet et pointez une iframe dessus. Un contexte sécurisé (https ou localhost) est la seule exigence.",
+        "usage": "C'est l'environnement d'exécution derrière chaque aperçu du canvas de Builderforce. Quand le canvas écrit ou modifie une application, ses fichiers sont montés dans l'environnement et chaque aperçu ouvert se recharge sur place, dans le navigateur du visiteur.",
+        "comparison": {
+          "title": "Comparaison avec StackBlitz WebContainers",
+          "intro": "La comparaison du README du projet, ligne par ligne.",
+          "ours": "BuilderForce WebContainers",
+          "theirs": "StackBlitz WebContainers",
+          "rows": [
+            {
+              "aspect": "Licence",
+              "ours": "MIT. Forkez-le, livrez-le, vendez-le. Un petit badge est activé par défaut et peut être désactivé.",
+              "theirs": "Propriétaire. Offre gratuite non commerciale ; attribution obligatoire."
+            },
+            {
+              "aspect": "Plafond de sessions",
+              "ours": "Aucun",
+              "theirs": "25 000 sessions d'API par mois dans l'offre gratuite"
+            },
+            {
+              "aspect": "Isolation cross-origin (COOP/COEP)",
+              "ours": "Non requise : les intégrations et les scripts tiers continuent de fonctionner",
+              "theirs": "Requise"
+            },
+            {
+              "aspect": "Compilateur et source des paquets",
+              "ours": "Ports interchangeables : esbuild contre SWC, esm.sh contre votre propre miroir",
+              "theirs": "Imposés"
+            },
+            {
+              "aspect": "Erreurs",
+              "ours": "Les erreurs non interceptées de l'aperçu sont transmises à la page hôte",
+              "theirs": "—"
+            },
+            {
+              "aspect": "Build de production et vérification des types",
+              "ours": "Dans le navigateur : runtime.build() et createChecker()",
+              "theirs": "Via npm run build ou tsc dans le conteneur"
+            },
+            {
+              "aspect": "Programmes et serveurs Node.js, npm install, shell",
+              "ours": "Oui : un Web Worker par processus, toujours sans COOP/COEP",
+              "theirs": "Oui"
+            }
+          ],
+          "note": "Le badge de l'aperçu n'est pas une condition de licence : désactivez-le avec attribution: false. Si l'environnement vous fait économiser de l'argent, le laisser activé est ce qui finance le projet."
+        }
+      },
+      "memory": {
+        "tagline": "Une mémoire persistante et économe en tokens pour les agents de code : un serveur MCP, un plugin Claude Code et les bibliothèques qui les sous-tendent.",
+        "summary": "Votre agent retrouve les quelques faits qui comptent au lieu de relire fichiers et historique de chat à chaque session. Un seul magasin local, partagé par tous les hôtes MCP de votre machine.",
+        "problem": "Un agent de code oublie tout d'une session à l'autre : il relit les mêmes fichiers et réapprend les mêmes décisions à chaque fois. Injecter tout un fichier de mémoire dans chaque prompt ne règle rien : cela coûte plus de tokens que cela n'en économise. La mémoire n'est rentable que si le rappel est sélectif.",
+        "gets": [
+          "Un serveur MCP avec memory_recall, memory_get, memory_recall_by_tag, memory_remember et memory_forget. Le rappel renvoie un top-K classé avec chaque entrée tronquée, appliqué côté serveur, et il n'existe volontairement aucun outil qui renvoie tout.",
+          "Un plugin Claude Code dont les quatre hooks rendent la mémoire autonome : un résumé au démarrage de la session, les souvenirs pertinents injectés à chaque prompt, les corrections durables capturées avant la fin de la session et les apprentissages enregistrés avant la compaction du contexte.",
+          "Un installeur en une commande qui enregistre le serveur dans Claude Code, Claude Desktop, Cursor, Windsurf, VS Code, Cline, Gemini CLI et Codex CLI, de façon idempotente et avec des sauvegardes .bak, tous partageant ~/.builderforce-memory/memory.json.",
+          "Un rappel lexical (BM25) prêt à l'emploi. Pointez-le vers un checkpoint Evermind et le classement combine la similarité des embeddings SSM au score lexical, sur CPU, sans GPU.",
+          "La bibliothèque d'exécution : un cache sémantique des réponses, une cognition write-through qui remplace une croyance périmée au lieu d'en ajouter une à côté, des ports RAG pour l'entreprise, l'orchestration d'agents en graphe, la télémétrie et un banc d'évaluation.",
+          "Le moteur : des noyaux WebGPU pour SSM Mamba sans dépendance, l'autograd, un entraîneur et un tokenizer BPE."
+        ],
+        "status": "Sans modèle configuré, les serveurs stdio et HTTP classent le rappel de façon lexicale, et chaque résultat indique le classement utilisé. Les dialectes de base vectorielle pour Qdrant, Pinecone et Vertex AI sont couverts par des tests unitaires mais n'ont pas été éprouvés contre les services réels.",
+        "quickStartNote": "Installez le plugin dans Claude Code, ou lancez l'installeur pour enregistrer le même serveur de mémoire dans chaque hôte MCP qu'il trouve.",
+        "usage": "C'est le sous-système de mémoire de Builderforce. Le canvas entraîne Evermind dans le navigateur avec le moteur, les agents cloud et sur site mémorisent et se souviennent via la bibliothèque d'exécution pendant leur travail, et l'extension VS Code de Builderforce utilise le même magasin sur disque que le serveur MCP."
+      },
+      "inference": {
+        "tagline": "Synapse, l'application de bureau de Builderforce, et bfi, son moteur natif en Rust pour exécuter des LLM sur votre propre machine.",
+        "summary": "Téléchargez un modèle GGUF dimensionné pour votre matériel et servez-le via des API compatibles OpenAI, Anthropic et Ollama, pour que vos clients actuels fonctionnent sans changement. Aucune installation d'Ollama séparée.",
+        "problem": "Exécuter des modèles en local voulait souvent dire installer l'environnement d'un autre éditeur, espérer qu'il soit dans le PATH, deviner si un modèle tiendrait en mémoire et faire avec les types GGUF que cet environnement accepte. llama.cpp standard refuse les formats 2 bits PQ2_0 et PTQ1_0 dans lesquels sont publiés les modèles Ternary Bonsai de PrismML.",
+        "gets": [
+          "bfi, un moteur entièrement en Rust avec un lecteur GGUF v2/v3 qui inclut les types PQ2_0 et PTQ1_0 de PrismML.",
+          "Un serveur HTTP qui parle les dialectes OpenAI, Anthropic et Ollama, sur le port 11434 par défaut, avec une clé bearer facultative.",
+          "bfi fit : la mémoire qu'exige un modèle comparée à cette machine (poids, cache KV, état récurrent et surcoût), lue dans l'en-tête du fichier avant le téléchargement.",
+          "Des téléchargements Hugging Face reprenables avec vérification sha256, et import-ollama pour réutiliser une bibliothèque Ollama existante sans la retélécharger.",
+          "Synapse, l'application de bureau qui supervise bfi serve et héberge les connecteurs MCP, une mémoire Evermind privée et un index de code local."
+        ],
+        "status": "Le chemin CPU est livré. Les backends GPU (CUDA, ROCm, Metal, Vulkan) compilent, mais le débit GPU face à llama-bench n'a pas été mesuré, et les binaires de version ne sont pas encore signés.",
+        "quickStartNote": "Installez la CLI depuis les sources avec Cargo, vérifiez qu'un modèle tient sur cette machine, téléchargez-le et démarrez le serveur.",
+        "usage": "Synapse, c'est Builderforce sur le bureau. Il sert les modèles locaux à Claude Code, à vos scripts et à l'extension VS Code de Builderforce, qui les trouve via ~/.builderforce/desktop.json, et son service de contexte et son index de code alimentent aussi l'extension."
+      },
+      "spawn": {
+        "tagline": "Créez des jeux Roblox en parlant : une application de bureau et un pont vers Roblox Studio.",
+        "summary": "Décrivez le jeu et Spawn construit les pièces, le Luau et l'interface dans Roblox Studio. Une seule installation ; le plugin Studio se connecte tout seul.",
+        "problem": "Les outils d'IA pour Roblox demandent à un jeune créateur de télécharger une application, d'installer un plugin Studio, de démarrer un serveur local et de connecter un outil de synchronisation, puis de garder les quatre en marche, avant même le premier prompt.",
+        "gets": [
+          "Une application de bureau Tauri qui tourne à côté de Roblox Studio.",
+          "bf-roblox, le pont : il installe le plugin Spawn pour Studio et sert le pont en boucle locale que le plugin interroge pour récupérer les builds, si bien que rien n'est accessible depuis l'extérieur de la machine.",
+          "La connexion à Builderforce et l'accès à l'API via bf-cloud, partagé avec Synapse depuis le dépôt builderforce-inference."
+        ],
+        "status": "Les binaires de version ne sont pas encore signés.",
+        "quickStartNote": "Clonez le dépôt et compilez l'espace de travail avec Cargo.",
+        "usage": "Spawn est le créateur de jeux Roblox de Builderforce pour les créateurs de 13 ans et plus, proposé comme un produit à part entière. Le dépôt ouvert contient l'application de bureau et le pont Studio ; la connexion et les appels aux modèles passent par Builderforce."
+      }
     }
   }
 }
