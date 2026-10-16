@@ -1241,6 +1241,28 @@ describe('runCreationCanvasAi', () => {
           vi.useRealTimers();
         }
       });
+
+      it('asks the gateway for analysis until the turn starts building, then for a coding model', async () => {
+        mocks.streamChatCompletion
+          .mockResolvedValueOnce(wroteIndex)
+          .mockResolvedValueOnce({ text: 'I built the marketing site.', resolvedModel: 'free/model', finishReason: 'stop', toolCalls: [] });
+
+        await runTurn({ prompt: 'build a marketing site for phones', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [writeFile] });
+
+        expect(mocks.streamChatCompletion.mock.calls[0][0]).toMatchObject({ role: 'plan', model: undefined });
+        // The run-policy lock keeps the turn on the model that began it.
+        expect(mocks.streamChatCompletion.mock.calls[1][0]).toMatchObject({ role: 'code', model: 'free/model', modelStrict: false });
+        // No chosen phase → no arc stage on the wire.
+        expect(mocks.streamChatCompletion.mock.calls[0][0]).not.toHaveProperty('arcStage');
+      });
+
+      it('sends the canvas’s chosen phase as the arc stage on every round-trip', async () => {
+        mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Here is the plan.', resolvedModel: 'free/model', finishReason: 'stop', toolCalls: [] });
+
+        await runTurn({ prompt: 'What should we measure?', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [], arcStage: 'measure' });
+
+        expect(mocks.streamChatCompletion.mock.calls[0][0]).toMatchObject({ arcStage: 'measure' });
+      });
     });
 
     it('leaves a streaming answer alone — length is never the thing that trips it', async () => {

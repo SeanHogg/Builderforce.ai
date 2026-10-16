@@ -62,8 +62,6 @@ import {
   } from '../../application/runtime/cloudAgentEngine';
 import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
-import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
-import { MIN_RESUMED_CONTAINER_STEPS } from '../../application/runtime/containerRunLauncher';
 import { clearPauseState, loadPauseState } from '../../application/runtime/executionPause';
 import { executions, projectRepositories } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -236,9 +234,9 @@ export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService
       return c.json({
         systemPrompt,
         userContent,
-        // A resumed job gets the REMAINING budget (with a floor), never a fresh
-        // allowance — the same rule the container relaunch applies.
-        maxSteps: resume ? Math.max(MIN_RESUMED_CONTAINER_STEPS, CONTAINER_MAX_STEPS - resume.step) : CONTAINER_MAX_STEPS,
+        // No step budget: the runner drives the shared agent-loop kernel, whose
+        // failure-streak breaker is the only limit (served with this Worker, so the
+        // runner and this spec always ship together).
         repo: repo.ok ? { baseBranch: repo.ctx.base, headBranch: repo.ctx.branch } : null,
         ...(resume ? { resume: { messages: resume.messages, writtenPaths: resume.writtenPaths } } : {}),
       });

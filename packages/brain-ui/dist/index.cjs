@@ -78,6 +78,7 @@ __export(src_exports, {
   buildSettledTimeline: () => buildSettledTimeline,
   buildTimeline: () => buildTimeline,
   byoVendorLabel: () => import_builderforce_brain_embedded13.byoVendorLabel,
+  chatActivityLabelsFrom: () => chatActivityLabelsFrom,
   chatDiagnosticsReads: () => chatDiagnosticsReads,
   chatSwitcherLabel: () => chatSwitcherLabel,
   commandOf: () => commandOf,
@@ -94,6 +95,7 @@ __export(src_exports, {
   healthRingColor: () => healthRingColor,
   initialsOf: () => initialsOf,
   isManagerRole: () => import_builderforce_brain_embedded14.isManagerRole,
+  liveActivityLabelsFrom: () => liveActivityLabelsFrom,
   loadEvermindBuilds: () => loadEvermindBuilds,
   modelCategoryLabel: () => import_builderforce_brain_embedded13.modelCategoryLabel,
   modelInUse: () => import_builderforce_brain_embedded13.modelInUse,
@@ -117,6 +119,8 @@ __export(src_exports, {
   strandedReplyKey: () => strandedReplyKey,
   streamingNode: () => streamingNode,
   stripAskUser: () => import_builderforce_brain_embedded.stripAskUser,
+  timelineCatalogLookup: () => timelineCatalogLookup,
+  timelineLabelsFrom: () => timelineLabelsFrom,
   toolPreview: () => toolPreview,
   toolStepView: () => toolStepView,
   useChatActivitySignal: () => useChatActivitySignal,
@@ -1595,6 +1599,56 @@ function OriginTag({ message, owner, labels }) {
     return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__origin", children: `${labels.subagentOf.replace("{owner}", origin.owner)} \xB7 ${origin.handle}` });
   }
   return owner ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "bf-tl__origin", children: labels.ownerTag }) : null;
+}
+
+// src/timelineCatalog.ts
+function timelineCatalogLookup(namespace) {
+  return (path) => {
+    let node = namespace;
+    for (const part of path.split(".")) {
+      if (!node || typeof node !== "object") return void 0;
+      node = node[part];
+    }
+    return typeof node === "string" && node.length > 0 ? node : void 0;
+  };
+}
+function stringsFrom(defaults, lookup, prefix = "") {
+  const out = { ...defaults };
+  for (const [key, fallback] of Object.entries(defaults)) {
+    if (typeof fallback === "string") out[key] = lookup(`${prefix}${key}`) ?? fallback;
+  }
+  return out;
+}
+function liveActivityLabelsFrom(lookup, overrides) {
+  return { ...stringsFrom(DEFAULT_LIVE_ACTIVITY_LABELS, lookup, "live."), ...overrides };
+}
+function chatActivityLabelsFrom(lookup) {
+  const d = DEFAULT_TIMELINE_LABELS.activity;
+  return {
+    milestoneStarted: lookup("activityStarted") ?? d.milestoneStarted,
+    milestoneCompleted: lookup("activityCompleted") ?? d.milestoneCompleted,
+    milestoneCompletedWithLane: lookup("activityCompletedWithLane") ?? d.milestoneCompletedWithLane,
+    milestoneFailed: lookup("activityFailed") ?? d.milestoneFailed,
+    milestonePaused: lookup("activityPaused") ?? d.milestonePaused,
+    milestonePausedWithQuestion: lookup("activityPausedWithQuestion") ?? d.milestonePausedWithQuestion,
+    milestoneResumed: lookup("activityResumed") ?? d.milestoneResumed,
+    milestoneCancelled: lookup("activityCancelled") ?? d.milestoneCancelled,
+    agentDispatched: lookup("activityDispatched") ?? d.agentDispatched
+  };
+}
+function timelineLabelsFrom(lookup, overrides) {
+  const d = DEFAULT_TIMELINE_LABELS;
+  return {
+    ...stringsFrom(d, lookup),
+    live: liveActivityLabelsFrom(lookup),
+    learnSkipReason: {
+      "not-attached": lookup("learnSkipReasonNotAttached") ?? d.learnSkipReason["not-attached"],
+      "not-seeded": lookup("learnSkipReasonNotSeeded") ?? d.learnSkipReason["not-seeded"],
+      frozen: lookup("learnSkipReasonFrozen") ?? d.learnSkipReason.frozen
+    },
+    activity: chatActivityLabelsFrom(lookup),
+    ...overrides
+  };
 }
 
 // src/ChatErrorBanner.tsx
@@ -6565,6 +6619,7 @@ function Row2({ item, onAction }) {
   buildSettledTimeline,
   buildTimeline,
   byoVendorLabel,
+  chatActivityLabelsFrom,
   chatDiagnosticsReads,
   chatSwitcherLabel,
   commandOf,
@@ -6581,6 +6636,7 @@ function Row2({ item, onAction }) {
   healthRingColor,
   initialsOf,
   isManagerRole,
+  liveActivityLabelsFrom,
   loadEvermindBuilds,
   modelCategoryLabel,
   modelInUse,
@@ -6604,6 +6660,8 @@ function Row2({ item, onAction }) {
   strandedReplyKey,
   streamingNode,
   stripAskUser,
+  timelineCatalogLookup,
+  timelineLabelsFrom,
   toolPreview,
   toolStepView,
   useChatActivitySignal,

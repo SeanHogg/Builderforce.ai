@@ -27,6 +27,21 @@ importers:
       '@builderforce/agent-tools':
         specifier: link:../packages/agent-tools
         version: link:../packages/agent-tools
+      '@builderforce/learned-routing':
+        specifier: link:../packages/learned-routing
+        version: link:../packages/learned-routing
+      '@builderforce/local-inference':
+        specifier: link:../packages/local-inference
+        version: link:../packages/local-inference
+      '@builderforce/model-catalog':
+        specifier: link:../packages/model-catalog
+        version: link:../packages/model-catalog
+      '@builderforce/run-policy':
+        specifier: link:../packages/run-policy
+        version: link:../packages/run-policy
+      '@builderforce/workload':
+        specifier: link:../packages/workload
+        version: link:../packages/workload
       '@builderforce/write-outbox':
         specifier: link:../packages/write-outbox
         version: link:../packages/write-outbox
@@ -48,6 +63,9 @@ importers:
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260627.2
         version: 7.0.0-dev.20260627.2
+      fake-indexeddb:
+        specifier: 6.2.5
+        version: 6.2.5
       jsdom:
         specifier: ^28.1.0
         version: 28.1.0
@@ -815,6 +833,10 @@ packages:
   expect-type@1.4.0:
     resolution: {integrity: sha512-KfYbmpRm0VbLjEvVa9yGwCi9GI34xvi7A/HXYWQO65CSD2u3MczUJSuwXKFIxlGsgBQizV9q5J9NHj4VG0n+pA==}
     engines: {node: '>=12.0.0'}
+
+  fake-indexeddb@6.2.5:
+    resolution: {integrity: sha512-CGnyrvbhPlWYMngksqrSSUT1BAVP49dZocrHuK0SvtR0D5TMs5wP0o3j7jexDJW01KSadjBp1M/71o/KR3nD1w==}
+    engines: {node: '>=18'}
 
   fdir@6.5.0:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
@@ -1820,6 +1842,8 @@ snapshots:
       '@types/estree': 1.0.9
 
   expect-type@1.4.0: {}
+
+  fake-indexeddb@6.2.5: {}
 
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:

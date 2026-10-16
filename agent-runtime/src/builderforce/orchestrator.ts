@@ -632,9 +632,11 @@ export class AgentOrchestrator {
           : "";
         task.agentRole = `remote:${remoteId}${caps}`;
       }
-      // local/cloud routing is informational at this layer — the embedded runner
-      // respects the model configured per-agent; a future enhancement can pass
-      // the resolved provider directly to spawnSubagentDirect.
+      // local/cloud routing is informational at this layer. The MODEL a local task
+      // runs on is chosen at spawn: the role's call purpose
+      // (`AGENT_ROLE_MODEL_ROLES`) goes to the shared router, which picks the lead
+      // of the configured chain unless the operator pinned one
+      // (`agents/model-routing.ts` → `resolveSubagentSpawnModel`).
     }
 
     // Pre-dispatch: fetch remote-context bundle so the target agentNode sees this

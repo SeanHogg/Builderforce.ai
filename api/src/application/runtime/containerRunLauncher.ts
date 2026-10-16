@@ -41,8 +41,11 @@ export interface ContainerRunTarget {
  * would otherwise resume with two steps — not enough to read the answer, act on it
  * and finish, so the run would burn the human's answer and then die on the step
  * cap. Small enough that repeated pausing cannot mint unlimited budget.
+ *
+ * LEGACY with {@link CONTAINER_MAX_STEPS}: read only by an image built before the
+ * shared kernel; a current image has no step cap.
  */
-export const MIN_RESUMED_CONTAINER_STEPS = 8;
+const MIN_RESUMED_CONTAINER_STEPS = 8;
 
 export type ContainerLaunchResult =
   | { ok: true }

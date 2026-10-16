@@ -21,7 +21,9 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import {
   DEFAULT_PROMPT_OPTIONS_LABELS,
+  timelineLabelsFrom,
   type BrainTimelineLabels,
+  type TimelineCatalogLookup,
   type ModelChoiceLabels,
   type PersonaModalityOption,
   type PersonaPickerLabels,
@@ -35,84 +37,27 @@ export function makeT(labels: LabelBundle) {
   return (key: string, fallback: string): string => labels[key] ?? fallback;
 }
 
-/** The subset of the host bundle the shared <BrainTimeline> consumes. */
-export function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
-  const t = makeT(labels);
-  return {
-    thinking: t('tl.thinking', 'Thinking…'),
-    // The ANIMATED in-flight row: which tool is running, on what, for how long.
-    // Localized here like every other visible string — the phase lines are the
-    // only thing on screen during a long tool call.
-    live: {
-      starting: t('tl.liveStarting', 'Starting…'),
-      thinking: t('tl.thinking', 'Thinking…'),
-      writing: t('tl.liveWriting', 'Writing the reply…'),
-      composing: t('tl.liveComposing', 'Composing a {tool} call…'),
-      composed: t('tl.liveComposed', ' — {bytes} so far'),
-      tool: t('tl.liveTool', 'Running {tool}'),
-      awaiting: t('tl.liveAwaiting', 'Waiting for you to approve {tool}'),
-      finishing: t('tl.liveFinishing', 'Wrapping up…'),
-      on: t('tl.liveOn', ' on {target}'),
-      step: t('tl.liveStep', 'step {step}'),
-      slow: t('tl.liveSlow', 'Still working — {elapsed} elapsed'),
-      ariaLabel: t('tl.liveAria', 'Current activity'),
-    },
-    thoughtFor: t('tl.thoughtFor', 'Thought for {duration}'),
-    thought: t('tl.thought', 'Thought'),
-    replyFromThought: t('tl.replyFromThought', "Recovered from the model's reasoning — the turn ended without a separate reply."),
-    stoppedReply: t('tl.stoppedReply', 'Stopped by you — this is what the model had written when you pressed Stop.'),
-    you: t('tl.you', 'You'),
-    assistant: t('tl.assistant', 'BuilderForce'),
-    subagentOf: t('tl.subagentOf', 'sub-agent of {owner}'),
-    ownerTag: t('tl.ownerTag', 'owner'),
-    input: t('tl.input', 'Input'),
-    output: t('tl.output', 'Output'),
-    // Shell steps: the terminal panel's non-zero exit chip and its "printed nothing"
-    // note. `{code}` is substituted by <ToolStep>, not by the host's l10n.
-    noOutput: t('tl.noOutput', 'No output'),
-    exitCode: t('tl.exitCode', 'Exit {code}'),
-    error: t('tl.error', 'Error'),
-    loading: t('tl.loading', 'Loading…'),
-    empty: t('tl.empty', 'Ask BuilderForce to build or change something.'),
-    copy: t('tl.copy', 'Copy'),
-    copied: t('tl.copied', 'Copied'),
-    replay: t('tl.replay', 'Send again'),
-    rateUp: t('tl.rateUp', 'Good response'),
-    rateDown: t('tl.rateDown', 'Bad response'),
-    apply: t('tl.apply', 'Apply'),
-    createFile: t('tl.createFile', 'Create file'),
-    preview: t('tl.preview', 'Preview'),
-    askSubmit: t('tl.askSubmit', 'Send'),
-    askAnswered: t('tl.askAnswered', 'Answered'),
-    accountOwn: t('tl.accountOwn', 'Your account'),
-    accountShared: t('tl.accountShared', 'Shared pool'),
-    accountByoUnused: t('tl.accountByoUnused', "Your connected account wasn't used"),
-    recallTitle: t('tl.recallTitle', 'Recalled {count} memories from Evermind v{version}'),
-    recallHint: t('tl.recallHint', "This project's self-learning Evermind recalled these prior learnings and grounded the answer on them."),
-    memoryAnswerCache: t('tl.memoryAnswerCache', 'Answered from a saved reply — no model was called'),
-    memoryAnswerEvermind: t('tl.memoryAnswerEvermind', 'Answered by Evermind v{version} — no other model was called'),
-    memoryAnswerHint: t('tl.memoryAnswerHint', "This project's memory already held an answer to this exact question, so it was replayed instead of running a model."),
-    learnTitle: t('tl.learnTitle', 'Contributed this turn to Evermind v{version}'),
-    learnHint: t('tl.learnHint', 'This turn was contributed back to the project Evermind — it will be merged into the learned model.'),
-    learnTargetContributed: t('tl.learnTargetContributed', 'Contributed to {name} (project #{projectId} v{version})'),
-    learnTargetSkipped: t('tl.learnTargetSkipped', 'Skipped {name} (project #{projectId}) — {reason}'),
-    reconcileTitle: t('tl.reconcileTitle', 'Reconciled {count} learned memories in Evermind v{version}'),
-    reconcileHint: t('tl.reconcileHint', 'The answer restated these recalled learnings, so it updates them (write-through cognition).'),
-    // Run milestones / agent dispatch — rendered as system activity lines, composed from
-    // the message's structured metadata so the wording comes from the host's l10n bundle
-    // rather than from the English sentence the server stored.
-    activity: {
-      milestoneStarted: t('tl.activityStarted', '{agent} started working on {kind} #{ref}'),
-      milestoneCompleted: t('tl.activityCompleted', '{agent} finished {kind} #{ref}'),
-      milestoneCompletedWithLane: t('tl.activityCompletedWithLane', '{agent} finished {kind} #{ref} — moved to {lane}'),
-      milestoneFailed: t('tl.activityFailed', "{agent}'s run on {kind} #{ref} failed"),
-      milestonePaused: t('tl.activityPaused', '{agent} paused on {kind} #{ref} — waiting on a human answer'),
-      milestonePausedWithQuestion: t('tl.activityPausedWithQuestion', '{agent} paused on {kind} #{ref} — needs an answer: {question}'),
-      milestoneResumed: t('tl.activityResumed', '{agent} resumed work on {kind} #{ref}'),
-      milestoneCancelled: t('tl.activityCancelled', "{agent}'s run on {kind} #{ref} was cancelled"),
-      agentDispatched: t('tl.activityDispatched', '{agent} was assigned to {kind} #{ref}'),
-    },
+/**
+ * The host bundle's `tl.*` keys, addressed by the CANONICAL transcript key paths that
+ * brain-ui's one catalog → label table (`timelineLabelsFrom`) reads — `live.starting` is
+ * `tl.liveStarting`, the live `thinking` line shares `tl.thinking`, `live.ariaLabel` is
+ * `tl.liveAria`; every other path is `tl.<path>`. A key the bundle lacks falls back to the
+ * package's English default.
+ */
+export function timelineCatalogFromBundle(labels: LabelBundle): TimelineCatalogLookup {
+  const bundleKey = (path: string): string => {
+    if (!path.startsWith('live.')) return `tl.${path}`;
+    const field = path.slice('live.'.length);
+    if (field === 'thinking') return 'tl.thinking';
+    if (field === 'ariaLabel') return 'tl.liveAria';
+    return `tl.live${field.charAt(0).toUpperCase()}${field.slice(1)}`;
   };
+  return (path) => labels[bundleKey(path)] || undefined;
+}
+
+/** The shared <BrainTimeline>'s copy, from the host bundle through the shared table. */
+export function timelineLabels(labels: LabelBundle): BrainTimelineLabels {
+  return timelineLabelsFrom(timelineCatalogFromBundle(labels));
 }
 
 /**

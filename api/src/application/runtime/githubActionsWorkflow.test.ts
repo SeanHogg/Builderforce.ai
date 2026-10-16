@@ -113,8 +113,13 @@ describe('renderAgentRunnerScript', () => {
     for (const spec of imports) expect(spec.startsWith('node:')).toBe(true);
   });
 
-  it('honours a step limit and adopts compacted history', () => {
-    expect(script).toContain('const maxSteps = Number(spec.maxSteps) || 20;');
+  it('drives the shared agent-loop kernel — no step cap — and adopts compacted history', () => {
+    // The kernel and the image semantics are inlined from the same two files the
+    // container imports; the failure-streak breaker is the only limit.
+    expect(script).toContain('function runAgentLoop(');
+    expect(script).toContain('function runImageLoop(');
+    expect(script).toContain('await runImageLoop({');
+    expect(script).not.toContain('spec.maxSteps');
     expect(script).toContain('Array.isArray(turn.compactedMessages)');
   });
 

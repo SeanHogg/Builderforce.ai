@@ -642,6 +642,8 @@ export interface StallFailoverInput {
   tried: string[];
   /** Failovers already spent this run. */
   failoversUsed: number;
+  /** The run's failover budget; {@link MAX_MODEL_FAILOVERS} unless the host configures one. */
+  maxFailovers?: number;
   /**
    * Where a replacement comes from. A caller that HOLDS the model surface passes
    * `surface`; a caller whose host owns the choice (the browser run loop, which is
@@ -678,7 +680,7 @@ export function chooseStallFailover(input: StallFailoverInput): string | undefin
   for (const m of [input.activeModel, input.resolvedModel]) {
     if (m && m !== 'default' && !input.tried.includes(m)) input.tried.push(m);
   }
-  if (input.failoversUsed >= MAX_MODEL_FAILOVERS) return undefined;
+  if (input.failoversUsed >= (input.maxFailovers ?? MAX_MODEL_FAILOVERS)) return undefined;
   const next = input.pick
     ? input.pick(input.tried)
     : nextFallbackModel(input.surface, input.tried);

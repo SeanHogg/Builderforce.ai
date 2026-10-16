@@ -24,6 +24,7 @@ import { otlpLogsToJson, otlpTracesToJson } from '../../application/quality/otlp
 import { ingestErrorEvents } from '../../application/quality/ingestEngine';
 import { parseClientErrorReport, resolveClientReportCollector } from '../../application/quality/clientErrorReport';
 import { resolveCallerTenant } from '../middleware/callerTenant';
+import { idempotentReplay } from '../middleware/idempotentReplay';
 import type { CollectorRef, MappingRule } from '../../application/quality/errorMapping';
 import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
 import type { HonoEnv, Env } from '../../env';
@@ -229,7 +230,11 @@ export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
    * itself. Everything after that is the shared pipeline: the same canonical
    * events, the same grouping, the same monthly cap.
    */
-  router.post('/client-report', async (c) => {
+  // Clients file from a durable outbox and replay on reconnect: the `Idempotency-Key`
+  // makes a replayed batch answer with its first response instead of filing twice.
+  router.post('/client-report', idempotentReplay({
+    tenantOf: async (c) => (await resolveCallerTenant(db, c))?.tenantId ?? null,
+  }), async (c) => {
     const caller = await resolveCallerTenant(db, c);
     if (!caller) return c.json({ error: 'Invalid or missing credential' }, 401);
 

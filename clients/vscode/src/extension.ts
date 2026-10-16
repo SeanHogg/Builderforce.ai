@@ -29,7 +29,7 @@ import { registerWorkspace } from "./desktopContext";
 import { onModelChange, setSelectedModel, setSelectedModelPool } from "./modelState";
 import { modelChoiceLabels } from "./modelChoiceLabels";
 // The model list itself: one builder for the composer `/` menu AND this picker.
-import { buildModelItems, modelCategoryLabel, type ChatModelSelection, type ModelCategory, type ModelChoiceLabels } from "@seanhogg/builderforce-brain-embedded";
+import { buildModelItems, installStepDurability, modelCategoryLabel, type ChatModelSelection, type ModelCategory, type ModelChoiceLabels } from "@seanhogg/builderforce-brain-embedded";
 import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject, type SelectedProject } from "./projectState";
 import { getProjectNames, invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
@@ -49,6 +49,7 @@ import { posixShellReport } from "./posixShell";
 import { editWorkspaceHooks } from "./hooks/editorDirectives";
 import { buildIdentityReport } from "./buildIdentityReport";
 import { initErrorReporter, reportExtensionError, surfaceError } from "./errorReporter";
+import { bindOutboxStorage, durableStepHost } from "./outboxStorage";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
 /**
@@ -253,6 +254,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const savedTenant = context.globalState.get<number>(SELECTED_TENANT_KEY);
   if (typeof savedTenant === "number") bfApi.setSelectedWorkspace(savedTenant);
   const auth = BuilderForceAuthProvider.register(context);
+  // Storage + credential for the durable write outboxes (activity, error reports,
+  // unsaved chat turns, run outcomes) — a backlog from the last session replays now.
+  bindOutboxStorage(context);
+  installStepDurability(durableStepHost(bfApi.sendQueuedBrainRows));
   // The ONE log surface, owned by errorReporter so any module can write to it and
   // so "log it" and "file it in Quality" can never drift apart.
   const output = initErrorReporter(context);
@@ -318,7 +323,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Editor activity capture — heartbeats + file-open navigation feed the billable
   // timecard pipeline (source 'vscode'). Best-effort; no-op when signed out.
-  context.subscriptions.push(initActivity(context.secrets));
+  context.subscriptions.push(initActivity());
 
   context.subscriptions.push(
     participant,

@@ -12,7 +12,7 @@ import {
 } from './brainRunStore';
 import type { BrainStreamFn } from './brainRunStore';
 import { StreamInterruptedError } from './streamChatCompletion';
-import { isCoderReask } from './roleHandoff';
+import { isCoderReask } from '@builderforce/run-policy';
 import { isStoppedTurn } from './stoppedTurn';
 import { parseMessageProvenance } from './provenance';
 import { queueRunSteering } from './runSteering';

@@ -17,7 +17,7 @@ import {
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { readTimelineTail } from '../../domain/shared/timelineTail';
 import { reconcileKeyedBatch, unwrittenKeys } from '../../domain/shared/keyedBatch';
-import { ideProxy, explicitModelPreemptsByo, readProxyChoice, codingModelsForPlan, byoAutoSeedModels, newTraceId, type ChatCompletionRequest, type LlmProxyService, type ProxyResult } from '../llm/LlmProxyService';
+import { ideProxy, explicitModelPreemptsByo, readProxyChoice, newTraceId, type ChatCompletionRequest, type LlmProxyService, type ProxyResult } from '../llm/LlmProxyService';
 import { logTrace } from '../llm/traceLogger';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { classifyReplyAccount, buildReplyProvenance, vendorAccountLabel } from '../llm/replyProvenance';
@@ -35,7 +35,8 @@ import { recordActionRating } from '../llm/actionRatings';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
-import { shouldRecoverStalledTurn, isExhaustedStall, stallShape, stallRecoveryNudge, stallExhaustedNotice, modelFailoverNotice, chooseStallFailover, MAX_ANNOUNCEMENT_RECOVERIES, MAX_MODEL_FAILOVERS, stallRecoveryToolChoice, type ModelFallbackSurface } from '@builderforce/agent-stall';
+import { initialRunPolicy, resolveStallStep, type RunPolicyState } from '@builderforce/run-policy';
+import { codingFallbackSurface } from '../llm/codingFallbackSurface';
 import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, trimRepetitionLoop, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, liftProseAskUser, stepRow, type StepRowInput } from '@builderforce/agent-loop';
 import {
   BRAIN_ORIGIN, TEAM_ORIGIN, MANAGER_ORIGIN, ACCESSIBLE_ORIGINS,
@@ -1310,18 +1311,19 @@ export class BrainService {
     // Brain run loop and the agent runtime via `@builderforce/agent-stall`).
     let announcementRecoveries = 0;
     let forceToolChoice: 'required' | undefined;
-    // The model this reply is currently talking to, plus every model already tried.
-    // A model that burns its whole stall budget without emitting a tool call is spent;
-    // the only remedy left is a DIFFERENT model, so the reply picks one itself.
-    let activeModel = pinnedModel;
-    const triedModels: string[] = [];
-    let modelFailovers = 0;
+    // THE model hand-off policy (`@builderforce/run-policy`), shared with every other
+    // agent loop: the model this reply is currently talking to, every model already
+    // tried, and the failover budget. A model that burns its whole stall budget without
+    // emitting a tool call is spent; the only remedy left is a DIFFERENT model, so the
+    // reply picks one itself. A base-model pin is not routed around on a transport
+    // failure — the proxy's own cascade handles those.
+    let policy: RunPolicyState = initialRunPolicy({ pinnedModel });
     /**
      * The models this reply may fail over ONTO, in the shared preference order —
      * the tenant's own connected flagships and the plan's curated coding pool.
      *
      * This loop previously had no such surface: its failover was "drop the model pin
-     * and let the cascade re-route", guarded by `if (… && activeModel)`. On the DEFAULT
+     * and let the cascade re-route", guarded by `if (… && pinned)`. On the DEFAULT
      * path that guard is false, because a tenant with a connected account is deliberately
      * left UNPINNED so `complete()` seeds their own flagship — so there was no pin to
      * drop and the branch was unreachable. Measured on project 11 / chat 86: 11 model
@@ -1329,17 +1331,10 @@ export class BrainService {
      * closing notice telling the user to go pick a different model by hand — which is
      * precisely the work this branch exists to do for them.
      *
-     * `data` (the general plan pool) is deliberately OMITTED: this is an agentic tool
-     * turn, and a tool loop that falls onto a non-coder flails and ships nothing — the
-     * same reason the proxy above is built `codingOnly`.
+     * Composed by the shared `codingFallbackSurface` (coding pool + BYO, never the
+     * general plan pool — the same reason the proxy above is built `codingOnly`).
      */
-    const byoSeeds = byoAutoSeedModels(byoVendors, { agentic: true });
-    const fallbackSurface: ModelFallbackSurface = {
-      // Fold BYO agentic flagships into codingModels so BYO ∩ coding is non-empty —
-      // codingModelsForPlan is the shared plan pool and correctly omits BYO-only ids.
-      codingModels: [...new Set([...byoSeeds, ...codingModelsForPlan(plan.effectivePlan, plan.premiumOverride)])],
-      byo: { models: byoSeeds.map((id) => ({ id })) },
-    };
+    const fallbackSurface = codingFallbackSurface(byoVendors, plan.effectivePlan, plan.premiumOverride);
     let lastModel = pinnedModel ?? '';
     let lastFinish = '';
     // Auto-compact the running transcript BEFORE each paid turn so a tool-heavy reply
@@ -1387,74 +1382,47 @@ export class BrainService {
           // The model ANNOUNCED an action and then ended the turn without taking it
           // ("I'll search the codebase…" → finish: stop, 0 tool calls) — or returned
           // nothing at all. Stopping here hands the user a promise, or a 400, as the
-          // answer. Re-prompt instead, bounded per reply by the shared budget. Same gate
-          // + wording as the Brain run loop and the cloud agent loop (`agent-stall`).
-          const stallInput = {
+          // answer. The SHARED stall step (`@builderforce/run-policy`, the same one the
+          // cloud loops and the on-prem runtime take) re-prompts it, then moves to a
+          // DIFFERENT model, then stops and says so. Its SHAPE makes the notices describe
+          // what actually happened: a blank turn is not "described tool calls instead of
+          // making them", and a HANDED-OFF turn ("you should run the build and push") is
+          // work this reply could have handed to its own runtime via
+          // `chats.execute_as_agent`, not a limit it reported.
+          const stall = resolveStallStep(policy, {
             text: content,
             toolCallCount: 0,
-            availableToolCount: tools.length,
-            recoveriesUsed: announcementRecoveries,
             availableToolNames: tools.map((t) => t.function.name),
             requestText: userRequest,
-          };
-          // Which SHAPE, so the notices describe what actually happened. A blank turn told
-          // the operator its model had "described tool calls instead of making them" —
-          // narration they could not find anywhere in the transcript, because there was none.
-          // A HANDED-OFF turn is the same misdescription in the other direction: this
-          // reply holds `chats.execute_as_agent`, so "you should run the build and push"
-          // is work it could have handed to its own runtime, not a limit it reported.
-          const shape = stallShape(stallInput);
-          if (shouldRecoverStalledTurn(stallInput)) {
-            announcementRecoveries += 1;
-            forceToolChoice = stallRecoveryToolChoice(stallInput);
-            convo.push({ role: 'assistant', content });
-            convo.push({
-              role: 'user',
-              content: stallRecoveryNudge(announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES, shape, stallInput),
-            });
-            return { action: 'continue' };
-          }
-          // Every recovery spent and the reply is STILL only a description of calls it
-          // never made. Re-prompting THIS model is finished — so move to a DIFFERENT one
-          // rather than hand the requester a promise dressed as an answer.
-          if (isExhaustedStall(stallInput)) {
-            // The SHARED decision — record both the asked-for and the resolved model, check
-            // the budget, pick a genuinely different route. Identical to the Brain run
-            // loop's, because it is the same function.
-            const next = chooseStallFailover({
-              activeModel,
-              resolvedModel: lastModel,
-              tried: triedModels,
-              failoversUsed: modelFailovers,
-              surface: fallbackSurface,
-            });
-            if (next) {
-              modelFailovers += 1;
+            ...(lastModel ? { resolvedModel: lastModel } : {}),
+          }, announcementRecoveries, { surface: fallbackSurface });
+          policy = stall.policy;
+          const step = stall.step;
+          if (step.kind === 'nudge' || step.kind === 'failover') {
+            if (step.kind === 'failover') {
               // Traced, because a chat that quietly changes model is its own support
               // ticket — and because the diagnostics report cannot otherwise tell a
-              // failover that happened from one that never ran.
-              // A DISTINCT kind, not another `llm` row: it records a decision, not a model
-              // turn, and counting it as one would corrupt the "every turn was toolless"
-              // rollup the diagnostics report computes.
+              // failover that happened from one that never ran. A DISTINCT kind, not
+              // another `llm` row: it records a decision, not a model turn, and counting
+              // it as one would corrupt the "every turn was toolless" rollup.
               record({
                 category: 'failover',
-                label: next,
-                args: { from: lastModel || activeModel || null, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
-                result: { notice: modelFailoverNotice(lastModel || activeModel, next, shape) },
+                label: step.to,
+                args: { from: step.from ?? null, to: step.to, attempt: step.attempt, of: step.of },
+                result: { notice: step.notice },
               });
-              activeModel = next;
-              // The new model starts with a full stall budget — the old one's failures say
-              // nothing about this one, and carrying the count over would give it no chance.
-              announcementRecoveries = 0;
-              forceToolChoice = stallRecoveryToolChoice(stallInput);
-              convo.push({ role: 'assistant', content });
-              convo.push({ role: 'user', content: stallRecoveryNudge(false, shape, stallInput) });
-              return { action: 'continue' };
             }
-            // A blank turn leaves no `content` to lead with, so the notice IS the reply —
-            // and it is a far better one than the 400 this used to fall through to.
-            const notice = stallExhaustedNotice(lastModel, triedModels, shape);
-            return { action: 'stop', ok: true, output: content ? `${content}\n\n${notice}` : notice };
+            // A failover hands the new model a full stall budget (`recoveriesUsed: 0`).
+            announcementRecoveries = step.recoveriesUsed;
+            forceToolChoice = step.toolChoice;
+            convo.push({ role: 'assistant', content });
+            convo.push({ role: 'user', content: step.nudge });
+            return { action: 'continue' };
+          }
+          // A blank turn leaves no `content` to lead with, so the notice IS the reply —
+          // and it is a far better one than the 400 this used to fall through to.
+          if (step.kind === 'exhausted') {
+            return { action: 'stop', ok: true, output: content ? `${content}\n\n${step.notice}` : step.notice };
           }
           // A question asked in prose instead of via `ask_user` still becomes the card.
           return { action: 'stop', ok: true, output: liftProseAskUser(content) };
@@ -1464,7 +1432,7 @@ export class BrainService {
         onRepetitionLoop: (_ctx, loop) => {
           record({
             category: 'repetition_loop',
-            label: lastModel || activeModel || '(gateway default)',
+            label: lastModel || policy.model || '(gateway default)',
             result: { copies: loop.copies, block: loop.block.trim().slice(0, 200) },
           });
         },
@@ -1514,7 +1482,7 @@ export class BrainService {
           const turnToolChoice = forceToolChoice;
           forceToolChoice = undefined;
           const result = await this.completeTraced(service, {
-            model: activeModel,
+            model: policy.model,
             messages: convo as never,
             tools,
             ...(turnToolChoice ? { tool_choice: turnToolChoice } : {}),
@@ -1535,7 +1503,7 @@ export class BrainService {
           // failed — the two have opposite fixes.
           record({
             category: 'llm',
-            label: readModel(result) || activeModel || '(gateway default)',
+            label: readModel(result) || policy.model || '(gateway default)',
             finishReason,
             textChars: content.length,
             result: {
@@ -1576,10 +1544,10 @@ export class BrainService {
     // the agent always speaks — a bounded extra call, not another tool round.
     if (!text) {
       const finalResult = await this.completeTraced(service, {
-        // `activeModel`, NOT the original pin: when the loop above failed over, the pin
+        // The policy's model, NOT the original pin: when the loop above failed over, the pin
         // names a model that has already proven it cannot do this turn, and re-pinning it
         // for the one call that must produce the user's answer throws the failover away.
-        model: activeModel,
+        model: policy.model,
         messages: [...convo, { role: 'user', content: `Now write your reply to the team AS ${agentName}: plain prose, first person, no tool calls. Summarise what you found or did.` }] as never,
         temperature: replyTemp,
         max_tokens: 1000,
@@ -1598,7 +1566,7 @@ export class BrainService {
       // produced HERE was invisible to the diagnostics report that exists to explain it.
       record({
         category: 'llm',
-        label: readModel(finalResult) || activeModel || '(gateway default)',
+        label: readModel(finalResult) || policy.model || '(gateway default)',
         finishReason: finalChoice.finishReason,
         textChars: finalChoice.content.length,
         args: { synthesis: true },

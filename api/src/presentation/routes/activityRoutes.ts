@@ -17,6 +17,7 @@ import { Hono } from 'hono';
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
+import { idempotentReplay } from '../middleware/idempotentReplay';
 import { resolveActiveMinutes, type ResolvableSignal } from '../../application/activity/resolveTime';
 import { notify } from '../../application/notifications/notify';
 import { isPayoutsConfigured, createPayout } from '../../application/integrations/payments';
@@ -203,7 +204,9 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
 
   // POST /ingest — batch-ingest from the VSIX (TENANT JWT). Same pipeline; source
   // defaults to 'vscode' and the tenant token backfills tenantId for attribution.
-  router.post('/ingest', authMiddleware, async (c) => {
+  // The VSIX replays batches from its durable outbox, so a batch is idempotent on its
+  // `Idempotency-Key` — a replay is answered, never billed twice.
+  router.post('/ingest', authMiddleware, idempotentReplay(), async (c) => {
     const userId = c.get('userId') as string;
     const tenantId = c.get('tenantId') as number;
     const body = await parseBody(c, SignalsBody);

@@ -3,8 +3,9 @@
  * the "GitHub Actions" execution surface (`githubActionsWorkflow.ts` is the
  * committed half that fetches and starts it).
  *
- * This is `api/container/server.mjs` ported to the Actions surface. The loop, the
- * tool set, and the op protocol are deliberately the same, because the Worker
+ * This is `api/container/server.mjs` ported to the Actions surface. The loop (the
+ * shared kernel + `agentImageLoop.mjs`, inlined), the tool set, and the op protocol
+ * are deliberately the same, because the Worker
  * stays the source of truth: every LLM step, file commit, memory verb, and the
  * finalize/PR is delegated back to us, so metering, commit, and PR logic is never
  * duplicated on the runner and no DB credentials ever leave the Worker.
@@ -33,6 +34,7 @@
  */
 
 import { AGENT_RELAY_INLINE } from './generated/agentRelaySource';
+import { AGENT_LOOP_INLINE } from './generated/agentLoopSource';
 
 /**
  * Render the runner script served at `/api/runtime/github-actions/runner.mjs`.
@@ -101,6 +103,14 @@ async function op(name, args) {
 // capability to lag the deployed image. \`check:agent-relay\` fails the build if this
 // copy and the module diverge.
 ${AGENT_RELAY_INLINE}
+
+// ── THE agent loop ─────────────────────────────────────────────────────────────
+// Inlined VERBATIM from api/container/agentLoop.mjs (the @builderforce/agent-loop kernel,
+// compiled by api/scripts/gen-agent-loop-bundle.mjs) and api/container/agentImageLoop.mjs
+// (the image semantics on its hooks) — the same two files the Cloudflare Container
+// imports, so both images run one loop. \`check:agent-loop\` fails the build if this
+// copy drifts from them or the kernel source.
+${AGENT_LOOP_INLINE}
 
 /** Run a shell command in \`cwd\`, capturing combined stdout/stderr and the exit
  *  code. \`proc\` (optional) is a holder whose \`.current\` is set to the live child so
@@ -383,69 +393,30 @@ async function runLoop() {
     if (resume && Array.isArray(resume.writtenPaths)) {
       for (const p of resume.writtenPaths) if (typeof p === 'string') writtenPaths.add(p);
     }
-    const maxSteps = Number(spec.maxSteps) || 20;
-
-    for (let step = 0; step < maxSteps; step++) {
-      // A heartbeat may have observed a cancel (and killed an in-flight command)
-      // since the last step — stop before spending another LLM call.
-      if (cancelled) break;
+    // THE agent loop — the shared kernel with the image semantics on its hooks,
+    // inlined above from the same two files the container imports. No step cap: the
+    // kernel's failure-streak breaker is the only limit. This runner makes NO model
+    // decision: the Worker's \`llm\` op owns the run's model hand-off policy, and a turn
+    // that only narrated comes back with a re-prompt in \`steering\`.
+    const outcome = await runImageLoop({
+      messages,
       // This runner's capability HANDSHAKE — see SUPPORTED_TOOL_NAMES in the relay
       // table above. The Worker advertises the intersection of what the surface's
       // capability set permits and what this script can actually dispatch, so a new
       // capability never has to wait for every runner to be redeployed.
-      const turn = await op('llm', { messages, supportedTools: SUPPORTED_TOOL_NAMES });
-      // A gateway LLM error (cascade exhausted: 429 / 413 context-too-big / etc.) is a
-      // FAILURE, not an orderly finish — the model produced no turn. Route it to the
-      // \`fail\` channel (self-heal/retry), NOT \`finalize\`, so the run is never marked
-      // COMPLETED on a gateway error.
-      if (turn.error) { crashed = 'gateway error: ' + turn.error; break; }
-      if (turn.cancelled) { cancelled = true; break; }
-      // The Worker compacted the history (summarized old turns into a builder-memory
-      // note) — adopt it as our loop state so we don't re-send (and re-summarize) the
-      // full history next turn. Pairing-safe: the Worker preserves tool-call pairing.
-      if (Array.isArray(turn.compactedMessages)) { messages.length = 0; messages.push(...turn.compactedMessages); }
-      const content = typeof turn.content === 'string' ? turn.content : '';
-      const toolCalls = Array.isArray(turn.toolCalls) ? turn.toolCalls : [];
-      // Mid-run steering: user follow-ups posted to this run since the last step.
-      // Splicing them in as user turns lets the user redirect the work mid-run.
-      const steering = Array.isArray(turn.steering) ? turn.steering.filter((s) => typeof s === 'string' && s.trim()) : [];
-      if (content) finalOutput = content;
-      // A bare final answer normally ends the run — but if the user just steered,
-      // keep going so the new direction is acted on instead of being dropped.
-      if (toolCalls.length === 0 && steering.length === 0) break;
-
-      if (toolCalls.length > 0) {
-        messages.push({ role: 'assistant', content, tool_calls: toolCalls });
-      } else if (content) {
-        messages.push({ role: 'assistant', content });
-      }
-      let finished = false;
-      for (const tc of toolCalls) {
-        const name = (tc.function && tc.function.name) || 'unknown';
-        let parsed = {};
-        try {
-          parsed = tc.function && tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
-        } catch (error) {
-          console.error('[bf-runner] malformed tool arguments; invoking with empty object', { toolName: name, toolCallId: tc.id, error });
-        }
-        let result;
-        if (name === 'finish') {
-          finalOutput = typeof parsed.summary === 'string' ? parsed.summary : finalOutput;
-          finished = true;
-          result = { ok: true };
-        } else {
-          result = await execTool(writtenPaths, name, parsed, proc, headBranch, { messages, step, toolCallId: tc.id ?? '', toolCallIds: toolCalls.map((c) => c.id ?? '') });
-        }
-        messages.push({ role: 'tool', tool_call_id: tc.id ?? '', content: JSON.stringify(result) });
-        // Parked on a human question — stop before spending anything else.
-        if (result && result.paused) { paused = true; break; }
-      }
-      if (paused) break;
-      // Apply steers AFTER this turn's tool results so the agent reacts to them next
-      // step. A steer also overrides a finish in the same turn: the user added work.
-      for (const steer of steering) { messages.push({ role: 'user', content: steer }); finished = false; }
-      if (finished) break;
-    }
+      llm: (transcript) => op('llm', { messages: transcript, supportedTools: SUPPORTED_TOOL_NAMES }),
+      execTool: (name, parsed, loop) => execTool(writtenPaths, name, parsed, proc, headBranch, loop),
+      // A heartbeat may have observed a cancel (and killed an in-flight command)
+      // since the last step — stop before spending another LLM call.
+      isCancelled: () => cancelled,
+    });
+    finalOutput = outcome.output;
+    if (outcome.cancelled) cancelled = true;
+    // A gateway error goes to the \`fail\` channel (self-heal/retry), never \`finalize\`.
+    if (outcome.crashed) crashed = outcome.crashed;
+    // Parked on a human question (a tool result reported \`result.paused\`): the
+    // \`ask_human\` op already parked the row, so this job exits without a terminal op.
+    if (outcome.paused) paused = true;
   } catch (e) {
     // The loop threw. Capture the REAL reason and report it on the dedicated \`fail\`
     // channel (NOT finalize, which implies an orderly finish) so the Worker can

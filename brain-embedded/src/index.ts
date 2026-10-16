@@ -21,6 +21,20 @@ export { streamChatCompletion, StreamInterruptedError, RepetitionLoopError, Tran
 // The reason behind Node's opaque `fetch failed` / `terminated`, read off the `cause` chain.
 export { describeNetworkError, isConnectFailure, retryOnConnectFailure, CONNECT_RETRY_DELAYS_MS } from './networkErrorDetail';
 export type { ConnectRetryOptions } from './networkErrorDetail';
+// Local first, failover to the cloud: the shared streamer bound to a runtime on the
+// user's machine (`@builderforce/local-inference`), for every client that runs the loop
+// there (the VS Code extension host, the Chrome extension).
+export {
+  completeLocal,
+  completeLocalFirst,
+  createLocalFirstStream,
+  createLocalStream,
+  localFirstWorkload,
+  localTransport,
+} from './localFirstTransport';
+export type { LocalChatMessage, LocalFetch, LocalFirstStreamInput } from './localFirstTransport';
+export { localFallbackTrace, summarizeLocalFirstAttempt } from './localFirstTraces';
+export type { LocalFirstAttemptSummary } from './localFirstTraces';
 // Does this shell call only READ? Shared by the read guard and a read-only sub-agent's gate.
 export { isReadOnlyShellCall } from './readOnlyShell';
 export type {
@@ -169,7 +183,7 @@ export { parseSubagentOrigin, SUBAGENT_OF_META_KEY } from './runLineage';
 export type { RunLineage, SubagentOrigin } from './runLineage';
 export { queueRunSteering, drainRunSteering } from './runSteering';
 export type { BrainRunOutcome } from './runOutcomeReport';
-export { isCoderReask } from './roleHandoff';
+export { isCoderReask } from '@builderforce/run-policy';
 // Planning ends in tasks: the `hand_off` tool, its executor, and the per-child chat report.
 export {
   HAND_OFF_TOOL,
@@ -189,6 +203,11 @@ export { codeChangesOf } from './codeChanges';
 export { placeholderAdvisory, placeholdersWritten } from './placeholderGuard';
 export type { PlaceholderHit } from './placeholderGuard';
 export { installRunDriver, getRunDriver, type BrainRunDriver } from './runDriver';
+export { installStepDurability, type StepDurability, type StepOutgoingMessage } from './stepOutbox';
+export { installIndexedDbStepDurability, type IndexedDbStepDurabilityOptions } from './indexedDbStepDurability';
+// The model-visible transcript a run continues from (history minus step rows and stopped
+// turns) — shared by the React hook and every non-React host that starts a run on history.
+export { transcriptSeedFrom } from './transcriptSeed';
 
 // Execution triage — capture the Brain run (LLM/tool/error trace) as a report.
 export {

@@ -10,6 +10,7 @@ import * as vscode from "vscode";
 import { attachEvermindLearn, type BrainMessage, type BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, postBrainMessages, projectEvermindHooks } from "./bfApi";
+import { scopeTenantId } from "./outboxStorage";
 import { brainToolCatalog } from "./brainToolCatalog";
 import { resolveModelRoute, routeStream } from "./modelRouting";
 import { refreshPendingChanges } from "./gitChanges";
@@ -50,16 +51,23 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     // on-device route can all change between turns, and a local credential can expire.
     stream: streamForRoute,
     persistence: {
-      async sendMessages(chatId, messages): Promise<BrainMessage[]> {
-        const r = await postBrainMessages(secrets, chatId, messages);
+      // `opts.scope` arrives on a queued step batch (the step outbox): it is sent AS the
+      // tenant it was queued for, or not at all.
+      async sendMessages(chatId, messages, opts?: { scope?: string }): Promise<BrainMessage[]> {
+        const r = await postBrainMessages(secrets, chatId, messages, { asTenant: scopeTenantId(opts?.scope) });
         // Say which failure it was. "Sign in again" is advice a person can only act on
         // when signing in is the problem; for a dropped connection it sends them to fix
         // something that was never broken, and hides the reason the turn was lost.
         if (!r.ok) {
-          throw new Error(
-            r.signedOut
-              ? "Could not save the turn — sign in again and retry."
-              : `Could not save the turn — ${r.reason}`,
+          // The status rides along so the step outbox can tell a refusal (4xx: dropped)
+          // from a connection that was not there (kept and replayed).
+          throw Object.assign(
+            new Error(
+              r.signedOut
+                ? "Could not save the turn — sign in again and retry."
+                : `Could not save the turn — ${r.reason}`,
+            ),
+            r.status !== undefined ? { status: r.status } : {},
           );
         }
         // The server's truthful learn-gate outcome rides on the assistant turn(s) so
@@ -68,7 +76,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       },
     },
     // How a code-changing run's coder did — so the next run's coder is picked on evidence.
-    reportOutcome: (outcome) => postRunOutcome(secrets, outcome),
+    reportOutcome: (outcome) => postRunOutcome(outcome),
     evermind: (projectId) => withWorkspaceStaleness(projectEvermindHooks(secrets, projectId), workspaceRoot() || undefined),
     // The ONE api `ContextSource` the native participant and the cloud engine read.
     // Continuity-scoped to the chat (a real server chat only — an unlinked run has a

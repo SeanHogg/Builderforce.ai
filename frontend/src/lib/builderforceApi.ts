@@ -15,6 +15,7 @@ import { apiRequest, apiRequestStream, apiRequestText, type RequestOptions } fro
 import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import type { SessionApp } from './embeddedApps';
 import type { OutcomeMetric, OutcomeMetricFamilyRef } from './outcomeMetrics';
+import type { LlmProvider } from '@builderforce/model-catalog';
 
 /**
  * `request` / `webRequest` are the two credential flavours this module's ~250
@@ -3586,7 +3587,9 @@ export const empMetricsApi = {
  * and meters them. The key is write-only: we only ever read which providers are
  * configured, never the secret.
  */
-export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta' | 'kimi' | 'moonshot' | 'qwen' | 'minimax' | 'xai' | 'ollama' | 'ollama-local';
+// The provider ids are the shared vocabulary (`@builderforce/model-catalog`), never
+// restated here — a hand copy had already lost `freetoken`.
+export type { LlmProvider };
 
 /** How a configured provider authenticates: a pasted API key, or a connected
  *  Claude Pro/Max subscription via OAuth. */
@@ -3839,12 +3842,12 @@ export const providerKeysApi = {
       body: JSON.stringify({ apiKey }),
     }),
 
-  /** `ollama-local` only: connect a self-hosted Ollama instance by base URL + the ONE
-   *  model this connection dispatches to (apiKey optional — self-hosted Ollama
-   *  commonly has no auth). See `ollamaLocal.ts` for the server-side sentinel this
-   *  composes into. */
-  setOllamaLocal: (baseUrl: string, model: string, apiKey?: string): Promise<{ ok: true; provider: LlmProvider }> =>
-    request<{ ok: true; provider: LlmProvider }>('/llm/provider-keys/ollama-local', {
+  /** A self-hosted runtime (`credential: 'local_runtime'` in the shared provider data —
+   *  self-hosted Ollama, FreeToken): connect it by base URL + the ONE model this
+   *  connection dispatches to (apiKey optional — a self-hosted runtime commonly has no
+   *  auth). The server composes the sentinel (`selfHostedCredential.ts`). */
+  setLocalRuntime: (provider: LlmProvider, baseUrl: string, model: string, apiKey?: string): Promise<{ ok: true; provider: LlmProvider }> =>
+    request<{ ok: true; provider: LlmProvider }>(`/llm/provider-keys/${provider}`, {
       method: 'PUT',
       body: JSON.stringify({ baseUrl, model, ...(apiKey ? { apiKey } : {}) }),
     }),

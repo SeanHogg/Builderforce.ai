@@ -11615,6 +11615,10 @@
       "open-source-at-builderforce": {
         "title": "Open source at Builderforce — four projects you can run, read and fork",
         "description": "Builderforce stands on four MIT projects anyone can use without us. An in-browser dev runtime, browser-trainable agent memory, a local inference engine with its desktop app, and a Roblox game builder. What each one does, and what it is worth to you."
+      },
+      "rovr-your-assistant-in-the-browser": {
+        "title": "Meet Rovr — a private assistant in your browser that remembers what it did",
+        "description": "Your Builderforce agent could code in your editor and build on a canvas, but not help in the tab where most of your day happens. Rovr is a Chrome extension that reads the page, carries out tasks on sites you allow, runs on your own machine first, works offline, and syncs every action and task back to your chat."
       }
     }
   },
@@ -15842,15 +15846,15 @@
         "blurb": "Paste an Ollama Cloud API key to run open-weight models (GPT-OSS, Kimi, GLM, DeepSeek, Qwen, Gemma) on your own Ollama account."
       }
     },
-    "ollamaLocal": {
-      "title": "Ollama (self-hosted)",
-      "cardBlurb": "Connect a self-hosted Ollama instance running on your own machine or network.",
-      "blurb": "Route cloud-agent runs to your own self-hosted Ollama instance instead of a hosted provider.",
-      "hostNote": "Requests are relayed through your connected Builderforce runtime, so the base URL below must be the Ollama address that runtime itself can reach (typically its own localhost) — and that runtime must already have Ollama configured for it to allow the call.",
+    "selfHostedLabel": "{brand} (self-hosted)",
+    "localRuntime": {
+      "cardBlurb": "Connect a self-hosted {brand} instance running on your own machine or network.",
+      "blurb": "Route cloud-agent runs to your own self-hosted {brand} instance instead of a hosted provider.",
+      "hostNote": "Requests are relayed through your connected Builderforce runtime, so the base URL below must be the {brand} address that runtime itself can reach (typically its own localhost) — and that runtime must already have {brand} configured for it to allow the call.",
       "baseUrlLabel": "Base URL",
-      "baseUrlPlaceholder": "http://127.0.0.1:11434",
       "modelLabel": "Model",
-      "modelPlaceholder": "e.g. llama3.1:8b",
+      "modelPlaceholder": "e.g. {model}",
+      "modelPlaceholderGeneric": "The model id your {brand} instance serves",
       "apiKeyLabel": "API key (optional)",
       "apiKeyPlaceholder": "Only if your instance requires one"
     },

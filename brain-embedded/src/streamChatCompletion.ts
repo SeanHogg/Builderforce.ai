@@ -26,6 +26,7 @@ import { brainRequestError } from './chatError';
 import { describeNetworkError, isConnectFailure, retryOnConnectFailure } from './networkErrorDetail';
 import { readWithIdleWatchdog, StreamIdleError, STREAM_IDLE_MS } from './streamIdleWatchdog';
 import type { ReasoningIntent } from './effort';
+import type { LocalFirstAttemptSummary } from './localFirstTraces';
 
 /** Injected auth + endpoint config. Built once by BrainProvider from BrainConfig.transport. */
 export interface BrainTransport {
@@ -176,6 +177,13 @@ export interface StreamChatOptions {
    * connected model. Omitted when unset, so the body stays byte-identical.
    */
   role?: string;
+  /**
+   * The launching canvas session's arc stage (idea/make/run/measure/reach), emitted as
+   * the body's `arcStage` — a nudge on top of {@link StreamChatOptions.role} that the
+   * gateway validates (`isArcStage`) and folds into its role/cost ordering. Omitted when
+   * unset, so the body stays byte-identical.
+   */
+  arcStage?: string;
   temperature?: number;
   maxTokens?: number;
   /**
@@ -314,6 +322,13 @@ export interface StreamChatResult {
   providerCap?: string;
   /** Token usage for this completion, when the gateway reported it. */
   usage?: CompletionUsage;
+  /**
+   * Set only by a LOCAL-FIRST stream (`localFirstTransport.ts`): every attempt this
+   * completion made, in order — the on-device model(s) tried and whichever served. The
+   * run loop turns a fallback into an `llm.local_fallback` step. Summaries only: no
+   * endpoint, no credential.
+   */
+  localFirst?: LocalFirstAttemptSummary[];
 }
 
 interface DeltaToolCall {
@@ -444,6 +459,7 @@ export async function streamChatCompletion(
   if (opts.routingMode) body.routingMode = opts.routingMode;
   if (opts.excludeModels && opts.excludeModels.length > 0) body.excludeModels = opts.excludeModels;
   if (opts.role) body.role = opts.role;
+  if (opts.arcStage) body.arcStage = opts.arcStage;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? 'auto';

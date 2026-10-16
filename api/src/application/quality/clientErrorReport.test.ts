@@ -40,6 +40,13 @@ describe('parseClientErrorReport', () => {
     expect(parsed.projectId).toBeNull();
   });
 
+  it('accepts the Chrome extension (Rovr) as its own surface', () => {
+    const parsed = parseClientErrorReport({ source: 'chrome-extension', events: [{ message: 'tab gone' }] });
+    if ('error' in parsed) throw new Error(parsed.error);
+    expect(parsed.events[0]?.type).toBe('RovrError');
+    expect(parsed.events[0]?.environment).toBe('chrome-extension');
+  });
+
   it.each([
     ['a non-object body', 'nope'],
     ['an unknown source', { source: 'curl', events: [validEvent] }],

@@ -18,7 +18,9 @@
  * that a Worker physically cannot perform (reading the peer TLS certificate, which
  * needs a socket). Same rule as above — this process OBSERVES, the Worker decides.
  *
- * Plain Node ESM (no build step) — node:22 ships global fetch + the APIs used here.
+ * Plain Node ESM (no build step) — node:22 ships global fetch + the APIs used here. The
+ * one shared package it runs, the agent-loop kernel, arrives pre-compiled and checked
+ * in as `agentLoop.mjs` (see `api/scripts/gen-agent-loop-bundle.mjs`).
  */
 import { createServer, request as httpRequest } from 'node:http';
 import { connect as netConnect } from 'node:net';
@@ -36,6 +38,10 @@ import { tmpdir } from 'node:os';
 // below that touches the clone or the shell stays here, because that half genuinely
 // differs between the two images.
 import { execRelayTool, SUPPORTED_TOOL_NAMES } from './agentRelay.mjs';
+// THE agent loop: the shared kernel (`@builderforce/agent-loop`, compiled into
+// `agentLoop.mjs` by `api/scripts/gen-agent-loop-bundle.mjs`) with the image semantics
+// on its hooks — the same file the GitHub Actions runner inlines.
+import { runImageLoop } from './agentImageLoop.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 // Live-preview passthrough: when a run starts a dev server on PREVIEW_PORT, the
@@ -561,68 +567,34 @@ async function runLoop(spec) {
     if (resume && Array.isArray(resume.writtenPaths)) {
       for (const p of resume.writtenPaths) if (typeof p === 'string') writtenPaths.add(p);
     }
-    const maxSteps = Number(spec.maxSteps) || 20;
-
-    for (let step = 0; step < maxSteps; step++) {
-      // A heartbeat may have observed a cancel (and killed an in-flight command)
-      // since the last step — stop before spending another LLM call.
-      if (cancelled) break;
+    // THE agent loop — the shared kernel with the image semantics on its hooks
+    // (`agentImageLoop.mjs`, which the Actions runner inlines too). No step cap: the
+    // kernel's failure-streak breaker is the only limit. This process makes NO model
+    // decision: the Worker's `llm` op owns the run's model hand-off policy
+    // (`@builderforce/run-policy`), and a turn that only narrated comes back with a
+    // re-prompt in `steering`, which the loop turns into "keep going".
+    const outcome = await runImageLoop({
+      messages,
       // `supportedTools` is this image's capability HANDSHAKE. The Worker advertises
       // the intersection of what the surface's capability set permits and what this
       // process can actually dispatch, which is what lets a capability be added to
       // `CONTAINER_SURFACE_CAPS` the moment its Worker-side op exists rather than only
       // after every image has been rebuilt and deployed. An older image simply omits
       // the new name and is never offered the tool.
-      const turn = await op(spec, { op: 'llm', args: { messages, supportedTools: SUPPORTED_TOOL_NAMES } });
-      // A gateway LLM error (cascade exhausted: 429 / 413 context-too-big / etc.) is a
-      // FAILURE, not an orderly finish — the model produced no turn. Route it to the
-      // `fail` channel (self-heal/retry) via `crashed`, NOT `finalize`, so the run is
-      // never marked COMPLETED on a gateway error.
-      if (turn.error) { crashed = `gateway error: ${turn.error}`; break; }
-      if (turn.cancelled) { cancelled = true; break; }
-      // The Worker compacted the history (summarized old turns into a builder-memory
-      // note) — adopt it as our loop state so we don't re-send (and re-summarize) the
-      // full history next turn. Pairing-safe: the Worker preserves tool-call pairing.
-      if (Array.isArray(turn.compactedMessages)) { messages.length = 0; messages.push(...turn.compactedMessages); }
-      const content = typeof turn.content === 'string' ? turn.content : '';
-      const toolCalls = Array.isArray(turn.toolCalls) ? turn.toolCalls : [];
-      // Mid-run steering: user follow-ups posted to this run since the last step.
-      // Splicing them in as user turns lets the user redirect the work mid-run.
-      const steering = Array.isArray(turn.steering) ? turn.steering.filter((s) => typeof s === 'string' && s.trim()) : [];
-      if (content) finalOutput = content;
-      // A bare final answer normally ends the run — but if the user just steered,
-      // keep going so the new direction is acted on instead of being dropped.
-      if (toolCalls.length === 0 && steering.length === 0) break;
-
-      if (toolCalls.length > 0) {
-        messages.push({ role: 'assistant', content, tool_calls: toolCalls });
-      } else if (content) {
-        messages.push({ role: 'assistant', content });
-      }
-      let finished = false;
-      for (const tc of toolCalls) {
-        const name = tc.function?.name ?? 'unknown';
-        let parsed = {};
-        try { parsed = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {}; } catch { /* empty */ }
-        let result;
-        if (name === 'finish') {
-          finalOutput = typeof parsed.summary === 'string' ? parsed.summary : finalOutput;
-          finished = true;
-          result = { ok: true };
-        } else {
-          result = await execTool(spec, workdir, writtenPaths, name, parsed, proc, { messages, step, toolCallId: tc.id ?? '', toolCallIds: toolCalls.map((c) => c.id ?? '') });
-        }
-        messages.push({ role: 'tool', tool_call_id: tc.id ?? '', content: JSON.stringify(result) });
-        // The run is parked on a human question. Stop immediately — running further
-        // tools would spend tokens against a row the Worker has already paused.
-        if (result && result.paused) { paused = true; break; }
-      }
-      if (paused) break;
-      // Apply steers AFTER this turn's tool results so the agent reacts to them next
-      // step. A steer also overrides a finish in the same turn: the user added work.
-      for (const steer of steering) { messages.push({ role: 'user', content: steer }); finished = false; }
-      if (finished) break;
-    }
+      llm: (transcript) => op(spec, { op: 'llm', args: { messages: transcript, supportedTools: SUPPORTED_TOOL_NAMES } }),
+      execTool: (name, parsed, loop) => execTool(spec, workdir, writtenPaths, name, parsed, proc, loop),
+      // A heartbeat may have observed a cancel (and killed an in-flight command)
+      // since the last step — stop before spending another LLM call.
+      isCancelled: () => cancelled,
+    });
+    finalOutput = outcome.output;
+    if (outcome.cancelled) cancelled = true;
+    // A gateway error is routed to the `fail` channel (self-heal/retry), never to
+    // `finalize`, so the run is never marked COMPLETED on a gateway error.
+    if (outcome.crashed) crashed = outcome.crashed;
+    // Parked on a human question (a tool result reported `result.paused`): the Worker
+    // already paused the row, so this process exits without a terminal op.
+    if (outcome.paused) paused = true;
   } catch (e) {
     // The loop threw. Capture the REAL reason and report it on the dedicated `fail`
     // channel (NOT finalize, which implies an orderly finish) so the Worker can

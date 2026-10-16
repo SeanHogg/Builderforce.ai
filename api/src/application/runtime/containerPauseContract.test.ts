@@ -33,6 +33,9 @@ const containerImage = read('container/server.mjs');
 // The pause itself now lives ONCE, in the dispatch table both images run — the
 // container by importing it, the Actions runner by inlining the generated copy of it.
 const relayModule = read('container/agentRelay.mjs');
+// The image LOOP is shared too: the kernel with the image semantics on its hooks,
+// imported by the container and inlined by the Actions runner.
+const imageLoop = read('container/agentImageLoop.mjs');
 const actionsRunner = read('src/application/runtime/githubActionsRunner.ts');
 const engine = read('src/application/runtime/cloudAgentEngine.ts');
 // The container op protocol is a DISPATCH TABLE now, not an `if (op === …)` chain
@@ -54,6 +57,20 @@ describe('container/agentRelay.mjs — the pause, implemented once for both imag
 
   it('returns `paused` so the calling image stops its loop', () => {
     expect(relayModule).toMatch(/if \(r && r\.paused\) return \{ ok: true, paused: true/);
+  });
+});
+
+describe('container/agentImageLoop.mjs — the pause, stopped once for both images', () => {
+  it('ends the loop on a paused tool result instead of running more tools', () => {
+    expect(imageLoop).toMatch(/if \(result && result\.paused\)/);
+    expect(imageLoop).toMatch(/paused = true/);
+    // The turn's remaining calls are skipped, never run.
+    expect(imageLoop).toContain('skipRemaining');
+  });
+
+  it('runs the shared kernel with no step cap', () => {
+    expect(imageLoop).toContain("from './agentLoop.mjs'");
+    expect(imageLoop).toContain('budget: {}');
   });
 });
 
@@ -94,9 +111,9 @@ describe('ask_human is wired end to end on the redispatch surfaces', () => {
         expect(source).toMatch(/writtenPaths,/);
       });
 
-      it('stops the loop on a paused tool result instead of running more tools', () => {
-        expect(source).toMatch(/result\.paused/);
-        expect(source).toMatch(/paused = true/);
+      it('drives the shared image loop and parks when it reports a pause', () => {
+        expect(source).toContain('await runImageLoop({');
+        expect(source).toMatch(/if \(outcome\.paused\) paused = true/);
       });
 
       it('exits WITHOUT a terminal op when paused — no finalize (no PR), no fail (not a failure)', () => {

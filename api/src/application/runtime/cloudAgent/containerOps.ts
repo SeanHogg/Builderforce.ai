@@ -70,6 +70,8 @@ import type { Db } from '../../../infrastructure/database/connection';
 import type { RuntimeService } from '../RuntimeService';
 import { heartbeatExecution, isExecutionCancelled, type ContainerRunContext } from './runContext';
 import { skillOp } from './skillOp';
+import { cloudStallStep, recordStallStep, type CloudRunModelState } from './cloudRunModelPolicy';
+import { loadContainerRunModelState, saveContainerRunModelState } from './containerRunModelStore';
 import {
   inRunVerifyOutcome,
   planInRunVerify,
@@ -467,10 +469,6 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       });
     }
     const tGen0 = Date.now();
-    // Route through the tenant's plan pool/key (not the fixed free pool) and apply
-    // the shared cloud model rule: explicit pick = hard pin, else the plan's best
-    // coding model. The container holds its own loop state, so per-op pinning is
-    // the caller's explicit `model`; the default lands on a strong coding model.
     // Repo/shell tools + the curated platform subset (create tasks / update OKRs /
     // read remaining) — parity with the durable loop. The container relays each
     // `builtin_*` call back via the `platform_tool` op below (it has no DB).
@@ -483,22 +481,47 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       [...CONTAINER_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas(ctx.originatingChatId)],
       readToolManifest(args.supportedTools),
     );
-    // ONE metered turn on the image's own transcript.
+    // THE model hand-off policy for this run, carried between ops Worker-side: which
+    // model the turn asks for (locked after turn 1, released on 429/413/503) and the
+    // stall budget. The image makes no model decision at all.
+    const modelState = await loadContainerRunModelState(env, executionId);
+    // ONE metered turn on the image's own transcript. The parent's own turn is always
+    // the primary coding work this run exists for.
     const turn = await engine.imageRunTurn(
-      // The parent's own turn is always the primary coding work this run exists for.
-      { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model, role: 'code' as const },
+      { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model, role: 'code' as const, ...(modelState ? { modelState } : {}) },
       { messages: sendMessages, tools: containerTools, notify: true, tGen0 },
     );
     // Heartbeat: a live container keeps the run out of the orphan reaper.
     await heartbeatExecution(db, executionId);
-    if (!turn.ok) return { status: 200, body: { error: turn.error, ...(turn.code ? { code: turn.code } : {}) } };
+    if (!turn.ok) {
+      if (turn.modelState) await saveContainerRunModelState(env, executionId, turn.modelState);
+      return { status: 200, body: { error: turn.error, ...(turn.code ? { code: turn.code } : {}) } };
+    }
+    const toolCalls = Array.isArray(turn.toolCalls) ? (turn.toolCalls as Array<{ function?: { name?: string } }>) : [];
+    // A turn that only DESCRIBED the work is not a finish: the shared stall step
+    // re-prompts it, then fails over to a model that acts, then stops and says why. The
+    // re-prompt rides back as a steer, which every image's loop already treats as "keep
+    // going" — so no image needs rebuilding for it.
+    const stall = cloudStallStep(turn.modelState as CloudRunModelState, {
+      text: String(turn.content ?? ''),
+      toolCallCount: toolCalls.length,
+      toolNames: containerTools.map((t) => t.function.name),
+      requestText: [ctx.taskTitle, ctx.taskDescription].filter(Boolean).join('\n\n'),
+      resolvedModel: turn.resolvedModel as string | undefined,
+    }, turn.fallbackSurface ?? null);
+    await recordStallStep(db, { tenantId, cloudAgentRef, executionId }, stall.step, turn.resolvedModel as string | undefined);
+    await saveContainerRunModelState(env, executionId, stall.state);
+    if (stall.step.kind === 'nudge' || stall.step.kind === 'failover') steering.push(stall.step.nudge);
+    const content = stall.step.kind === 'exhausted'
+      ? (turn.content ? `${turn.content}\n\n${stall.step.notice}` : stall.step.notice)
+      : turn.content;
     // An owner never ends with children still working. The image's loop treats a steer as
     // overriding a finish in the same turn, so the gate needs nothing from the image.
-    const finishing = Array.isArray(turn.toolCalls) && (turn.toolCalls as Array<{ function?: { name?: string } }>).some((c) => c.function?.name === 'finish');
+    const finishing = toolCalls.some((c) => c.function?.name === 'finish');
     const childBlock = finishing ? await liveChildrenFinishBlock(db, tenantId, executionId) : null;
     if (childBlock) steering.push(childBlock);
     return { status: 200, body: {
-      content: turn.content, toolCalls: turn.toolCalls, steering,
+      content, toolCalls: turn.toolCalls, steering,
       // When the history was compacted, hand the container the compacted form so it
       // adopts it as its new loop state (and doesn't re-send the full history next turn).
       ...(compaction.compacted ? { compactedMessages: compaction.messages } : {}),

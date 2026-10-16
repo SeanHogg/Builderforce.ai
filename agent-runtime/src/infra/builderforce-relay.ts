@@ -22,6 +22,7 @@ import {
 } from "@builderforce/agent-tools";
 import { WebSocket } from "ws";
 import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
+import { resolveRelayTaskModel } from "../agents/model-routing.js";
 import { type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
 import { loadProjectContext, updateProjectContextFields } from "../builderforce/project-context.js";
 import type { IRelayService } from "../builderforce/relay-service.js";
@@ -515,7 +516,9 @@ export class BuilderforceRelayService implements IRelayService {
           // engine folds it into the prompt); the task message is the user content.
           systemPrompt: appendSystemPrompt,
           userContent: prompt,
-          model: payload.model,
+          // A dispatch that pinned no model is routed here, on this host's chain,
+          // through the shared router (role `code`); none eligible → engine default.
+          model: payload.model ?? (await resolveRelayTaskModel({ prompt })),
           signal: abortController.signal,
           ...(payload.policyGates?.length ? { policy: { gates: payload.policyGates } } : {}),
         });

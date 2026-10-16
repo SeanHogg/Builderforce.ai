@@ -1,7 +1,14 @@
 /**
  * Developer-centric agent role definitions for builderForceAgents
+ *
+ * Built-in roles pin NO model. Which model a role runs on is a routing decision: the
+ * role's call purpose ({@link AGENT_ROLE_MODEL_ROLES}) is handed to the shared router,
+ * which picks the lead of the operator's configured chain (`agents/model-routing.ts`).
+ * An operator still pins explicitly — `agents.list[].model`, `subagents.model`, or a
+ * persona/hired agent that carries a `model`.
  */
 
+import type { ModelRole } from "@builderforce/agent-tools";
 import { globalPersonaRegistry } from "./personas.js";
 import type { PsychometricProfile } from "./psychometrics.js";
 import type { AgentRole, PersonaPlugin } from "./types.js";
@@ -60,7 +67,6 @@ Guidelines:
     requiredSections: ["## Implementation Summary", "## Files Changed", "## Next Steps"],
     outputPrefix: "CREATED:",
   },
-  model: "anthropic/claude-sonnet-4-20250514",
   thinking: "high",
 };
 
@@ -102,7 +108,6 @@ Provide specific, actionable feedback with examples when possible.`,
     requiredSections: ["## Review Summary", "## Issues Found", "## Recommendations"],
     outputPrefix: "REVIEW:",
   },
-  model: "anthropic/claude-sonnet-4-20250514",
   thinking: "high",
 };
 
@@ -144,7 +149,6 @@ Follow the project's testing framework and conventions.`,
     requiredSections: ["## Tests Written", "## Coverage Notes", "## Edge Cases Covered"],
     outputPrefix: "TESTS:",
   },
-  model: "anthropic/claude-sonnet-4-20250514",
   thinking: "medium",
 };
 
@@ -186,7 +190,6 @@ Focus on understanding WHY the bug occurs, not just patching symptoms.`,
     requiredSections: ["## Root Cause", "## Fix Applied", "## Verification"],
     outputPrefix: "BUG-FIX:",
   },
-  model: "anthropic/claude-sonnet-4-20250514",
   thinking: "high",
 };
 
@@ -228,7 +231,6 @@ Always validate that refactoring doesn't break functionality.`,
     requiredSections: ["## Changes Made", "## Behavior Preserved", "## Code Quality Improvements"],
     outputPrefix: "REFACTOR:",
   },
-  model: "anthropic/claude-sonnet-4-20250514",
   thinking: "medium",
   constraints: [
     "Must preserve all existing behavior",
@@ -276,7 +278,6 @@ Follow the project's documentation format and style guide.`,
     requiredSections: ["## What Was Documented", "## Files Created/Updated"],
     outputPrefix: "DOCS:",
   },
-  model: "anthropic/claude-sonnet-4-20250514",
   thinking: "low",
 };
 
@@ -319,7 +320,6 @@ Provide actionable recommendations with trade-off analysis.`,
     requiredSections: ["## Architectural Assessment", "## Recommendations", "## Trade-offs"],
     outputPrefix: "ARCH:",
   },
-  model: "anthropic/claude-sonnet-4-20250514",
   thinking: "high",
 };
 
@@ -373,7 +373,6 @@ Always ground your verdict in the code you actually inspected.`,
     requiredSections: ["## Acceptance Verdict", "## Requirements Coverage", "## Gaps Found"],
     outputPrefix: "VALIDATION:",
   },
-  model: "anthropic/claude-sonnet-4-20250514",
   thinking: "high",
 };
 
@@ -424,9 +423,42 @@ Each call mints an access-restricted SECURITY ticket. Do not put real finding de
     requiredSections: ["## SOC 2 Coverage", "## Findings by Criterion", "## Summary"],
     outputPrefix: "SECURITY:",
   },
-  model: "anthropic/claude-sonnet-4-20250514",
   thinking: "high",
 };
+
+/**
+ * THE mapping of orchestrator roles onto the shared call-purpose vocabulary
+ * (`ModelRole`, `@builderforce/agent-tools`) — what each role's turns are FOR, which is
+ * what the router orders models by (code → strongest, plan → the operator's order,
+ * verify / utility → cheapest capable).
+ *
+ *   code-creator, test-generator, refactor-agent  write or edit code         → code
+ *   code-reviewer, validator-agent, security-agent check work already done   → verify
+ *   bug-analyzer, architecture-advisor             decide an approach, no code → plan
+ *   documentation-agent                            low-stakes prose            → utility
+ *
+ * A role not listed here (a persona, a hired agent, a `remote:` target) declares no
+ * purpose and keeps the configured order.
+ */
+export const AGENT_ROLE_MODEL_ROLES = {
+  "code-creator": "code",
+  "test-generator": "code",
+  "refactor-agent": "code",
+  "code-reviewer": "verify",
+  "validator-agent": "verify",
+  "security-agent": "verify",
+  "bug-analyzer": "plan",
+  "architecture-advisor": "plan",
+  "documentation-agent": "utility",
+} as const satisfies Readonly<Record<string, ModelRole>>;
+
+/** The call purpose an orchestrator role runs as; `undefined` for a role with none. */
+export function modelRoleForAgentRole(name: string | undefined): ModelRole | undefined {
+  if (!name || !Object.hasOwn(AGENT_ROLE_MODEL_ROLES, name)) {
+    return undefined;
+  }
+  return AGENT_ROLE_MODEL_ROLES[name as keyof typeof AGENT_ROLE_MODEL_ROLES];
+}
 
 /**
  * Get all built-in agent roles

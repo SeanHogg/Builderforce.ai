@@ -13,6 +13,7 @@ import type { BrainConfig } from '@seanhogg/builderforce-brain-embedded';
 import { AUTH_API_URL, getStoredTenantToken, checkUnauthorizedAndRedirect } from '../auth';
 import { brain, parseLlmError } from '../builderforceApi';
 import { getModality } from '../modality';
+import { installBrowserStepDurability } from './stepDurability';
 
 export const brainConfig: BrainConfig = {
   transport: {
@@ -25,3 +26,6 @@ export const brainConfig: BrainConfig = {
   persistence: brain,
   resolveSystemPrompt: (modality) => getModality(modality).brainSystemPrompt,
 };
+
+// Run steps survive offline + reload (IndexedDB-backed step outbox). Browser-only, once.
+installBrowserStepDurability();

@@ -36,6 +36,7 @@ import { projectInTenant } from '../project/projectOwnership';
 export const CLIENT_REPORT_SOURCES = {
   'agent-runtime':     { environment: 'on-prem-runtime',  defaultType: 'AgentRuntimeError' },
   'vscode-extension':  { environment: 'vscode-extension', defaultType: 'ExtensionError' },
+  'chrome-extension':  { environment: 'chrome-extension', defaultType: 'RovrError' },
 } as const satisfies Record<string, { environment: string; defaultType: string }>;
 
 export type ClientReportSource = keyof typeof CLIENT_REPORT_SOURCES;

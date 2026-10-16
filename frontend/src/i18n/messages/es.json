@@ -11615,6 +11615,10 @@
       "open-source-at-builderforce": {
         "title": "Código abierto en Builderforce: cuatro proyectos que puedes ejecutar, leer y modificar",
         "description": "Builderforce se apoya en cuatro proyectos MIT que cualquiera puede usar sin nosotros: un runtime de desarrollo en el navegador, memoria para agentes entrenable en el navegador, un motor de inferencia local con su app de escritorio y un constructor de juegos de Roblox. Qué hace cada uno y qué te aporta."
+      },
+      "rovr-your-assistant-in-the-browser": {
+        "title": "Te presentamos Rovr: un asistente privado en tu navegador que recuerda lo que hizo",
+        "description": "Tu agente de Builderforce podía programar en tu editor y construir en un lienzo, pero no ayudarte en la pestaña donde pasa la mayor parte de tu día. Rovr es una extensión de Chrome que lee la página, realiza tareas en los sitios que permites, se ejecuta primero en tu propio equipo, funciona sin conexión y sincroniza cada acción y cada tarea con tu chat."
       }
     }
   },
@@ -15842,15 +15846,15 @@
         "blurb": "Pega una clave API de Ollama Cloud para ejecutar modelos de pesos abiertos (GPT-OSS, Kimi, GLM, DeepSeek, Qwen, Gemma) en tu propia cuenta de Ollama."
       }
     },
-    "ollamaLocal": {
-      "title": "Ollama (autoalojado)",
-      "cardBlurb": "Conecta una instancia de Ollama autoalojada que se ejecute en tu propia máquina o red.",
-      "blurb": "Enruta las ejecuciones de agentes en la nube a tu propia instancia de Ollama autoalojada en lugar de un proveedor gestionado.",
-      "hostNote": "Las solicitudes se retransmiten a través de tu runtime de Builderforce conectado, así que la URL base de abajo debe ser la dirección de Ollama que ese runtime pueda alcanzar (normalmente su propio localhost) — y ese runtime ya debe tener Ollama configurado para permitir la llamada.",
+    "selfHostedLabel": "{brand} (autoalojado)",
+    "localRuntime": {
+      "cardBlurb": "Conecta una instancia de {brand} autoalojada que se ejecute en tu propia máquina o red.",
+      "blurb": "Enruta las ejecuciones de agentes en la nube a tu propia instancia de {brand} autoalojada en lugar de un proveedor gestionado.",
+      "hostNote": "Las solicitudes se retransmiten a través de tu runtime de Builderforce conectado, así que la URL base de abajo debe ser la dirección de {brand} que ese runtime pueda alcanzar (normalmente su propio localhost) — y ese runtime ya debe tener {brand} configurado para permitir la llamada.",
       "baseUrlLabel": "URL base",
-      "baseUrlPlaceholder": "http://127.0.0.1:11434",
       "modelLabel": "Modelo",
-      "modelPlaceholder": "p. ej. llama3.1:8b",
+      "modelPlaceholder": "p. ej. {model}",
+      "modelPlaceholderGeneric": "El id del modelo que sirve tu instancia de {brand}",
       "apiKeyLabel": "Clave API (opcional)",
       "apiKeyPlaceholder": "Solo si tu instancia la requiere"
     },

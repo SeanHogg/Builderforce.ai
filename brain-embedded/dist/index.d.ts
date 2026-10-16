@@ -4,8 +4,6 @@ import { ChatErrorAction } from './chatError.js';
 export { BrainRequestError, ChatErrorActionKind, brainRequestError, chatErrorAction } from './chatError.js';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 export { EvermindRecallItem, EvermindRecallResult, countReconciledMemories, formatEvermindMemoryBlock } from '@seanhogg/builderforce-memory/evermind';
-export { stableStringify } from './capabilities.js';
-export { DEFAULT_TOOL_FAILURE_STREAK } from './types.js';
 
 /**
  * Shared data shapes for the brain core. These define the contract the host
@@ -243,6 +241,1076 @@ declare function reasoningForRun(o: {
 }): ReasoningIntent | undefined;
 
 /**
+ * The runtime REGISTRY — every runtime a client on the user's machine can drive
+ * directly, as data.
+ *
+ * Membership means "the CLIENT performs this call itself", not "the weights are on this
+ * disk". Three entries are on-device engines (Synapse's native `bfi`, Ollama,
+ * FreeToken): no account, no metering, available offline, and the only ones local-first
+ * routing will try. `kimi-code` is Kimi's hosted API and belongs here anyway: its edge
+ * refuses a hosted gateway before reading a credential, while the identical request
+ * from the developer's own machine is the personal client the subscription is licensed
+ * for. Same mechanism, different reason — hence `onDevice`.
+ *
+ * Kept as DATA so a host never branches on a runtime id: the picker, the probe, the
+ * plan and the catalog binding all read the fields below.
+ */
+type LocalRuntimeId = 'synapse' | 'ollama' | 'freetoken' | 'kimi-code';
+/**
+ * Where a runtime's calls go, and what (if anything) authenticates them. An on-device
+ * engine normally leaves `token` unset; `bfi serve --api-key` and a signed-in Kimi
+ * install carry one. Callers never branch on which — they pass the endpoint through.
+ */
+interface LocalEndpoint {
+    /** Runtime root (unnormalized is fine — every consumer normalizes). */
+    baseUrl: string;
+    /** Bearer credential, when this runtime needs one. */
+    token?: string;
+}
+
+/**
+ * What the runtimes on this machine serve RIGHT NOW, and what each model can do.
+ *
+ * A runtime that is not running is the NORMAL case — a developer with only Ollama still
+ * opens the picker — so every failure (refused, wedged, non-OK, malformed) reads as "no
+ * models" and the probe never throws. A short timeout keeps a wrong-port endpoint from
+ * stalling the caller: this is localhost, where a healthy answer is immediate.
+ *
+ * `fetch` is injected, never the global: the same probe runs in the editor's Node host,
+ * a web page and an MV3 service worker, and a test pins it without patching globals.
+ */
+
+/** One model a runtime serves. */
+interface LocalModel {
+    /** The full `local/<runtime>/<model>` ref. */
+    ref: string;
+    /** The runtime serving it (named `provider` because every stored ref and picker row
+     *  already says so). */
+    provider: LocalRuntimeId;
+    /** The bare id the runtime itself knows, e.g. `qwen3:8b`. */
+    model: string;
+    /** The runtime's own human label, when it publishes one (Kimi declares "K2.7 Coding");
+     *  a picker falls back to the id. */
+    label?: string;
+    /** May take a TOOL turn. Absent/false = no — see `LocalToolSupport`: unknown is never
+     *  read as capable. */
+    tools?: boolean;
+    /** Context window in tokens, when the runtime reports one. Absent = unknown. */
+    contextTokens?: number;
+}
+/** One runtime's answer. */
+interface LocalRuntimeProbe {
+    provider: LocalRuntimeId;
+    endpoint: LocalEndpoint;
+    /** Its catalog route answered OK. False = not running / wrong port / refused. */
+    reachable: boolean;
+    models: LocalModel[];
+}
+
+/**
+ * LOCAL FIRST — the ordered attempts for one call: capable on-device model(s), then the
+ * cloud gateway.
+ *
+ * "Capable" is decided from what the runtime REPORTED, conservatively:
+ *  - a TOOL turn goes only to a model the runtime says can take tools; unknown is no.
+ *    A model that ignores `tools` answers an agent turn with prose about calling one —
+ *    that is not a failure the failover can see, so it must never be attempted;
+ *  - a model whose reported context window cannot hold the prompt plus the expected
+ *    completion is skipped. An UNREPORTED window is not disqualifying: an overflow there
+ *    is an HTTP error from the runtime, which the failover does see and recovers from.
+ *
+ * Only `onDevice` runtimes take part — `kimi-code` is locally dispatched but hosted, so
+ * it is reachable by an explicit pin and never by local-first. Pure.
+ */
+
+/**
+ * The slice of `@builderforce/workload`'s `WorkloadProfile` this plan reads. Structural
+ * on purpose: a `WorkloadProfile` is assignable to it, and the package stays free of
+ * the workload package's own dependency graph — it is bundled into the editor's webview
+ * and a browser extension, where that graph would have to be resolved too.
+ */
+interface LocalFirstWorkload {
+    /** The call carries tools (an agent turn). */
+    agentic: boolean;
+    inputTokens: number;
+    outputTokens: number;
+}
+type LocalFirstAttempt = {
+    kind: 'local';
+    /** Full `local/<runtime>/<model>` ref — what a trace and a provenance chip show. */
+    ref: string;
+    provider: LocalRuntimeId;
+    /** The bare id the runtime knows. */
+    model: string;
+    endpoint: LocalEndpoint;
+} | {
+    kind: 'cloud';
+    /** The host's cloud choice; undefined = let the gateway route. */
+    model?: string;
+};
+
+/**
+ * Run a local-first plan: each attempt in order, falling over to the next when one fails
+ * BEFORE the user saw anything, and recording every attempt so a trace shows which
+ * served.
+ *
+ * The rule that makes the failover transparent rather than merely automatic is
+ * COMMITMENT. The moment an attempt has streamed output to the user (a text delta, a
+ * tool-call fragment) it owns the turn: replaying the turn elsewhere would show the user
+ * two answers spliced together, so a failure after that point is rethrown, not retried.
+ * Before it, a failure — refused connection, HTTP error, a runtime that rejects the
+ * model, an empty answer — is invisible, and the next attempt runs as if it were first.
+ *
+ * A Stop is never failed over: an aborted signal rethrows whatever the attempt threw.
+ * Transport-agnostic: the host supplies `run`, so the same rule drives the editor's
+ * transport seam and a browser extension's.
+ */
+
+type LocalFirstOutcome = 'served' | 'failed' | 'refused';
+interface LocalFirstAttemptRecord {
+    attempt: LocalFirstAttempt;
+    outcome: LocalFirstOutcome;
+    /** Why it did not serve (`failed`: the error's message; `refused`: an empty answer). */
+    detail?: string;
+}
+
+/**
+ * Did the run actually GET ANYWHERE?
+ *
+ * The A-vs-B triage in `brainTriage.ts` answers "why did a turn come back
+ * empty / degraded". It has no vocabulary at all for the failure this module
+ * names: a run where every single turn succeeded — no errors, no truncation, no
+ * empty finishes — and the agent still accomplished nothing, because it spent
+ * its whole budget re-reading the same file at overlapping offsets and re-running
+ * searches it had already run. That run scores clean on every existing signal,
+ * so the verdict falls through to whichever context/degradation heuristic happens
+ * to trip: a 33k-token prompt peak reports "CONTEXT EXHAUSTION" and sends the
+ * reader off to shrink the transcript, when the transcript was never the problem.
+ *
+ * The signals here are structural and cheap to compute, and they are the ones a
+ * human reads the transcript to find:
+ *
+ *  - **Repetition** — the same call made twice, and the same TARGET read over and
+ *    over. Seven reads of one 566-line CSS file is not research, it is a loop.
+ *  - **Reach** — how many distinct things the run touched, against how many calls
+ *    it made. A run with 26 calls over 3 distinct targets is spinning; one with
+ *    26 calls over 22 targets is working.
+ *  - **Effect** — whether an edit-shaped REQUEST produced any successful mutation.
+ *    "Reduce the height of the box" that ends with zero writes did not fail
+ *    halfway; it never started.
+ *  - **Time** — where the wall clock went (model vs tools), and the slowest step.
+ *    A minute inside one search is a fact about our tools, not about the model.
+ *
+ * Pure over the recorded trace + visible messages, exactly like `brainTriage.ts`,
+ * so every copy surface computes the identical block.
+ */
+
+/** One target the run went back to more than once. */
+interface RepeatedTarget {
+    /** `tool:subject`, e.g. `read_file:LandingCanvasHero.module.css`. */
+    label: string;
+    count: number;
+}
+/**
+ * The same call made again IMMEDIATELY — back to back, with no other tool call in
+ * between. The exact-duplicate counter above catches a call repeated anywhere in
+ * the run; this catches the tighter and more damning shape: `git_status` → same
+ * error → `git_status` → same error → `git_status`. Nothing was learned between
+ * the attempts because nothing else was tried.
+ */
+interface RepeatStreak {
+    /** The tool name, e.g. `git_status`. */
+    label: string;
+    /** Consecutive identical calls, including the first. */
+    count: number;
+    /** How many of those calls failed — a streak of failures is a stall on a known
+     *  error; a streak of successes is a stall on an answer it already has. */
+    failed: number;
+}
+/**
+ * Consecutive identical calls at which the streak becomes a verdict on its own.
+ * Two in a row is a retry; three is the model asking the same question a third time
+ * after hearing the same answer twice, whatever the rest of the run looks like.
+ */
+declare const BACK_TO_BACK_AT = 3;
+declare function isMutationTool(name: string): boolean;
+/**
+ * Whether the run was asked to CHANGE something. Reads the user turns only — the
+ * assistant's own restatement of the task would make this trivially self-fulfilling.
+ * Uses the first user turn (the request) plus any later one, since a follow-up can
+ * turn a question into a task.
+ *
+ * The per-message predicate is `asksForChange` from `@builderforce/agent-stall`: the
+ * SERVER needs the identical judgement to decide whether an answer may be replayed
+ * from cache (a change request must never be), so it cannot live here.
+ */
+declare function hasEditIntent(messages: BrainMessage[]): boolean;
+interface RunProgress {
+    /** Tool calls whose label AND arguments exactly repeated an earlier call. */
+    duplicateCalls: number;
+    /**
+     * The longest run of CONSECUTIVE identical calls, or null when no call was ever
+     * repeated back to back. See {@link RepeatStreak}.
+     */
+    longestStreak: RepeatStreak | null;
+    /** How many distinct back-to-back streaks (two or more in a row) the run had. */
+    streaks: number;
+    /**
+     * True when some call was repeated {@link BACK_TO_BACK_AT} or more times in a
+     * row. Unlike `spinning` this needs no minimum run size — three identical calls
+     * in a row is a stall in a 3-call run as surely as in a 300-call one.
+     */
+    stuckOnCall: boolean;
+    /** Targets hit more than once, most-repeated first. */
+    repeatedTargets: RepeatedTarget[];
+    /** Distinct targets the run touched (calls with no discernible target excluded). */
+    distinctTargets: number;
+    /** Calls that named a target — the denominator `distinctTargets` is measured against. */
+    targetedCalls: number;
+    /**
+     * Share of targeted calls that revisited a target already visited. 0 = every call
+     * broke new ground; 0.8 = four calls in five went back over old ground.
+     */
+    revisitRatio: number;
+    /** Mutation-tool calls attempted, and how many returned a success. */
+    mutationsAttempted: number;
+    mutationsSucceeded: number;
+    /** True when the user asked for a CHANGE (see {@link hasEditIntent}). */
+    editIntent: boolean;
+    /**
+     * The headline finding: an edit-shaped request, real work performed, and NOT ONE
+     * successful mutation to show for it. This is the verdict the pasted report was
+     * missing — the run was not starved of context, it never acted.
+     */
+    noEffect: boolean;
+    /**
+     * True when the run's calls are dominated by revisits — it is going back over
+     * ground it has already covered rather than advancing. Requires enough calls to
+     * be meaningful (a 3-call run that read one file twice is not a loop).
+     */
+    spinning: boolean;
+    /** Wall-clock span of the recorded run, first step to last (ms). */
+    wallClockMs: number;
+    /**
+     * Time inside that span the run was WAITING rather than working (ms): the user
+     * between two messages, or an `ask_user` answer. A chat's trace spans every message
+     * in it, so without this a follow-up sent hours later reported "191m wall clock ·
+     * 8m in the model", which reads as three hours lost inside the run.
+     */
+    idleMs: number;
+    /** Measured time inside model completions / inside tools (ms). */
+    modelMs: number;
+    toolMs: number;
+    /** The single slowest step, whatever kind — usually the one worth fixing. */
+    slowestStep: {
+        label: string;
+        ms: number;
+    } | null;
+}
+/** Compute the progress/repetition picture for a recorded run. Pure. */
+declare function computeRunProgress(events: BrainTraceEvent[], messages?: BrainMessage[]): RunProgress;
+/** Compact duration for a report line (0.4s / 12s / 3m 20s). */
+declare function progressDuration(ms: number): string;
+/**
+ * Render the progress picture as report lines. Emitted only when there is
+ * something to say — a run that advanced cleanly adds a single "Progress:" line
+ * rather than four sections of zeroes.
+ */
+declare function formatRunProgress(p: RunProgress): string[];
+/**
+ * The one-sentence verdict for a run that spun or had no effect. Returned
+ * separately from {@link formatRunProgress} because it belongs in the "Likely
+ * cause" header, above every other signal — a reader who acts on the header alone
+ * must be sent at the real fault. Null when neither condition holds.
+ */
+declare function runProgressVerdict(p: RunProgress): string | null;
+
+/**
+ * Which model did what: the per-model half of the Brain diagnostics.
+ *
+ * An auto-routed run is served by more than one model (the planner, the coder, a
+ * failover after a stall), and the report used to name them only as a set:
+ * "Models used: qwen3.8-max, grok-4.5". A run where one of them never made a single
+ * tool call read exactly like a run where both worked, so "why isn't Grok working"
+ * could not be answered from a copied report at all. This scores each model on the
+ * turns it actually served, from the `llm` steps the run loop records.
+ *
+ * Pure over the recorded trace, like `brainTriage.ts` and `runProgress.ts`, so every
+ * copy surface renders the identical lines.
+ *
+ * The ordered {@link modelTurnLog} answers a question the aggregate scorecard cannot:
+ * "which specific outputs were Grok rambling?" — each `llm.complete` in run order,
+ * with its model, toolCalls, and (when the vendor reported it) raw upstream calls.
+ *
+ * NOTE: clearer diagnostics do NOT fix Grok tool calling. A run whose client is
+ * ahead of the gateway (e.g. client 2026.9.63 / API 2026.9.32) still lacks the
+ * Responses adapter on the production API until that deploy lands.
+ */
+
+/** What one model did across the turns it served. */
+interface ModelScore {
+    model: string;
+    /** Completions this model answered. */
+    turns: number;
+    /** Structured tool calls it emitted across them. */
+    toolCalls: number;
+    /** Turns that produced text and no tool call: a final answer, or a narrated step. */
+    textOnlyTurns: number;
+    /**
+     * Turns whose text still held tool-call markup that no inline dialect lifted. The
+     * model tried to call a tool and the parser missed it, so the call never ran.
+     */
+    unliftedMarkupTurns: number;
+    /** Completions against this model that failed outright. */
+    failures: number;
+    /**
+     * Turns the USER stopped while this model was streaming — the reader's own verdict
+     * that it had gone wrong (looping, narrating, counting). The one failure the model
+     * never reports itself, so without this a run ended by Stop named no culprit at all.
+     */
+    stopped: number;
+    /**
+     * Turns whose vendor reported its RAW response (`upstreamFunctionCalls` recorded) —
+     * the Responses vendors (Grok, Codex) do. Zero means the fields below say nothing.
+     */
+    upstreamReportedTurns: number;
+    /** Structured function calls those raw responses carried, before any translation. */
+    upstreamFunctionCalls: number;
+    /** Of those, calls the gateway rebuilt from the final frame rather than the stream. */
+    upstreamRecovered: number;
+    /** Reported turns where the vendor returned MORE calls than reached the loop. */
+    adapterLossTurns: number;
+}
+/** Score every model that served (or failed) a turn, first-seen order. */
+declare function modelScorecard(events: BrainTraceEvent[]): ModelScore[];
+/**
+ * Render the scorecard as report lines. Emitted when it says something the "Models
+ * used" line does not: more than one model served the run, some turn wrote call
+ * markup the parser missed, a returned call never reached the loop, or the user
+ * stopped a model mid-stream.
+ */
+declare function formatModelScorecard(scores: ModelScore[]): string[];
+/** One `llm.complete` (or failed completion) in run order — the per-output half of the scorecard. */
+interface ModelTurn {
+    /** 1-based index across this run's completions. */
+    index: number;
+    /** Model that answered (resolved). */
+    model: string;
+    /** What was requested when it differed from {@link model} (failover / downgrade). */
+    requestedModel?: string;
+    toolCalls: number;
+    /** True when the turn produced text and no tool call. */
+    textOnly: boolean;
+    /** Present when the vendor reported its raw response (Responses vendors). */
+    upstreamFunctionCalls?: number;
+    upstreamRecovered?: number;
+    /**
+     * UTF-8 bytes of tool-call ARGUMENTS the turn emitted. The missing half of a long
+     * turn: `16. xai-oauth/grok-4.6 · 1 tool call(s) · 202509ms` gave no clue that those
+     * 202 seconds were a 21 KB `write_file` call being streamed a fragment at a time.
+     */
+    argBytes?: number;
+    /** Completion tokens the gateway reported for the turn — the other reason a turn is long. */
+    completionTokens?: number;
+    durationMs?: number;
+    /** Completions that failed outright. */
+    failed?: boolean;
+    /** Call markup present that no dialect lifted. */
+    unliftedCallMarkup?: boolean;
+}
+/**
+ * Every `llm.complete` in first-seen order — including failures — so a pasted report
+ * attributes each output without reconstructing from the aggregate "Per model" counts.
+ */
+declare function modelTurnLog(events: BrainTraceEvent[]): ModelTurn[];
+/**
+ * Ordered per-turn model/toolCalls log. Emitted whenever the run had at least one
+ * named completion — the scorecard aggregates; this lists each output so a multi-model
+ * run is attributable without counting.
+ */
+declare function formatModelTurnLog(turns: ModelTurn[]): string[];
+
+/**
+ * staffingSummary — "work was filed; is anybody actually running it?"
+ *
+ * Measured on chat #113: a Work-mode run made 141 tool calls, filed 12 tickets
+ * (epics + tasks) and staffed NOBODY. Its `kanban.coordinate`,
+ * `kanban.materialize_work_items` and `kanban.assess_resource` calls all came back
+ * `403 manager role required`, nothing compensated, and every other diagnostic signal
+ * read clean — no exhaustion, no truncation, no narrated calls, tokens fine. The report
+ * a user copied said the run was healthy, because by every signal we measured it was:
+ * twelve successful creates and a wall of green tool steps.
+ *
+ * The missing fact is structural, not statistical: filing work and STARTING it are two
+ * different outcomes, and a report that counts tool calls cannot tell them apart. This
+ * module counts the second one — how many dispatch/coordination attempts were made, how
+ * many of them actually put someone on the work, which ones were refused and why, and
+ * whether any slice the Brain did itself was done in a real team agent's persona (a
+ * `spawn_agent` carrying `as_agent`). From those four numbers the verdict falls out:
+ * a ticket with nobody on it has not started, however many calls it took to create.
+ *
+ * Pure over the recorded trace, like the rest of `brainTriage`, so the web report, the
+ * VS Code transcript and the persisted JSON report all state the same thing.
+ */
+
+/** True when this tool call was an attempt to put somebody on the work. */
+declare function isDispatchTool(label: string): boolean;
+/** One `spawn_agent` delegation that ran in a named team agent's persona. */
+interface PersonaSubagent {
+    /** The agent the parent asked for, exactly as it passed it (`as_agent`). */
+    agent: string;
+    /** The delegation's own label, so a reader can see WHAT that persona was given. */
+    label: string;
+    /** Whether the child came back with an answer. */
+    ok: boolean;
+}
+/** One refused staffing attempt: which tool, and the reason it gave. */
+interface DispatchRefusal {
+    label: string;
+    message: string;
+}
+/**
+ * What this run FILED versus what it STAFFED. Every field is a count of observed trace
+ * steps — nothing here is inferred from prose.
+ */
+interface StaffingSummary {
+    /**
+     * Board work items this run filed — created or linked. Counted with the SAME predicate
+     * {@link isTicketWriteTool} that the unbacked-ticket-claim honesty check uses, so
+     * "what counts as filing work" is one list in one place rather than two that drift.
+     * (An Epic is a `tasks.create` with `taskType: "epic"`, so it is counted here too.)
+     */
+    ticketsCreated: number;
+    /** Calls that tried to put somebody on work — see {@link isDispatchTool}. */
+    dispatchAttempts: number;
+    /** Of those, the ones that actually did: no error, and any `autoRun.dispatched` true. */
+    dispatched: number;
+    /** The refused ones, with the reason each gave (this is where `403 manager role required` lands). */
+    dispatchRefusals: DispatchRefusal[];
+    /** Delegations carrying `as_agent` — work the Brain did HERE, in a team agent's persona. */
+    personaSubagents: PersonaSubagent[];
+    /**
+     * The one-word answer:
+     *  - `no-work-filed`     — nothing was filed and nothing was staffed; there is no gap.
+     *  - `staffed`           — somebody (or some persona) is on the work.
+     *  - `filed-not-staffed` — work exists, and nobody was even ASKED to run it.
+     *  - `staffing-refused`  — somebody was asked and the platform said no.
+     */
+    verdict: 'no-work-filed' | 'staffed' | 'filed-not-staffed' | 'staffing-refused';
+}
+/** Derive the staffing picture from a recorded trace. Pure — no clock, no I/O. */
+declare function staffingSummaryInTrace(events: BrainTraceEvent[]): StaffingSummary;
+/**
+ * The refusals, grouped by reason with counts — "manager role required ×5" rather than
+ * the same sentence printed five times. Five identical refusals are ONE fact about the
+ * run, and spelling them out individually buries it.
+ */
+declare function formatDispatchRefusals(refusals: readonly DispatchRefusal[]): string;
+/**
+ * The "Likely cause" sentence for a run that filed work and staffed nobody. Lives here,
+ * beside the numbers it quotes, so `brainTriage` reaches it in one call rather than
+ * growing a second copy of this reasoning.
+ */
+declare function workFiledNotStaffedVerdict(s: StaffingSummary): string;
+/**
+ * Render the staffing picture as report lines (empty when the run neither filed nor
+ * staffed anything — a plain question does not need a staffing paragraph).
+ */
+declare function formatStaffingSummary(s: StaffingSummary): string[];
+
+/**
+ * What the run is doing RIGHT NOW — the live activity value.
+ *
+ * The trace records steps once they have COMPLETED, which is exactly the wrong
+ * moment for a progress indicator: a `search_code` that takes 67 seconds emits
+ * nothing at all until it is over, so the user sits in front of a static
+ * "Thinking…" line for a minute with no way to tell a working agent from a hung
+ * one. This module is the other half — the in-flight phase, published as it is
+ * entered and cleared when the run ends, so a surface can render the CURRENT
+ * step (which tool, on what, for how long) instead of only the settled past.
+ *
+ * Pure data + pure derivation: no React, no DOM, no clock of its own (callers
+ * pass `startedAt`), so the web app, the VS Code webview and any future surface
+ * render the same activity from the same value.
+ */
+/**
+ * The phase a run is in. Ordered roughly as a turn moves through them, though a
+ * run loops back to `thinking` for every iteration of the agent loop.
+ *
+ * - `starting`  — the run was accepted; the first completion hasn't opened yet.
+ * - `thinking`  — a completion is open and no token has arrived (this is the
+ *                 phase that used to look identical to a hang).
+ * - `writing`   — tokens are streaming; the reply is visibly forming.
+ * - `composing` — the model is emitting a TOOL CALL's arguments; `label` is the tool
+ *                 name and `bytes` the argument bytes received so far. The run loop
+ *                 only ever watched text deltas, so a turn that streamed a 21 KB
+ *                 `write_file` call showed "streaming the reply" and then nothing at
+ *                 all for three minutes (chat #113) — indistinguishable from a hang
+ *                 while the model was in fact working the whole time.
+ * - `tool`      — a tool call is executing. Carries which one and on what.
+ * - `awaiting`  — paused on a human-in-the-loop confirm; the loop cannot advance
+ *                 until the user answers, so this must NOT read as "busy".
+ * - `finishing` — the answer is delivered and the run is doing its post-run work
+ *                 (minting the ticket for a code change, advancing linked tickets).
+ *                 Real calls that take real time, and previously showed nothing.
+ */
+type BrainRunPhase = 'starting' | 'thinking' | 'writing' | 'composing' | 'tool' | 'awaiting' | 'finishing';
+/** A live, in-flight step. `null` on the snapshot means the run is idle. */
+interface BrainRunActivity {
+    phase: BrainRunPhase;
+    /** The tool being executed or composed (`composing` / `tool` / `awaiting` phases). */
+    label?: string;
+    /**
+     * Bytes of tool-call ARGUMENTS received so far (`composing` phase only). The one
+     * number that separates "the model is writing a large file" from "the stream died":
+     * it climbs, visibly, for every second the phase lasts.
+     */
+    bytes?: number;
+    /**
+     * The concrete THING being worked on, derived from the call's arguments — a
+     * file path, a search query, a record id. "Reading LandingCanvasHero.module.css"
+     * tells a user the agent is making progress; "Running a tool" does not.
+     */
+    detail?: string;
+    /** Epoch ms when this phase began. The renderer ticks its own elapsed clock off it. */
+    startedAt: number;
+    /** 1-based agent-loop iteration, so a long run shows it is still advancing. */
+    step: number;
+}
+/**
+ * Shorten a target for a one-line indicator. A path elides from the LEFT (the
+ * basename is what identifies it); anything else elides from the right.
+ */
+declare function shortenTarget(value: string, max?: number): string;
+/**
+ * Derive the human "on what" for a live tool step from its arguments. Returns
+ * undefined when the call has no recognizable target — the indicator then names
+ * the tool alone rather than inventing a subject for it.
+ */
+declare function activityTarget(args: unknown): string | undefined;
+/** Build the live activity for a tool step about to execute. */
+declare function toolActivity(label: string, args: unknown, step: number, startedAt: number): BrainRunActivity;
+/**
+ * Human-readable byte size — `812 B`, `12.4 KB`. THE size formatter for this package:
+ * the triage report's tool-result sizes, the turn log's argument bytes and the live
+ * composing indicator all render a size the same way, so a reader who learns to read
+ * "21.1 KB" in one place reads the same number in the other two.
+ */
+declare function formatBytes(bytes: number): string;
+/**
+ * One English clause describing an in-flight step, for a copied triage report —
+ * "running `search_code` on frontend/src (67s so far, loop step 4)".
+ *
+ * Report prose, deliberately NOT localized: a triage capture is pasted into an issue
+ * or handed to an engineer, and it is a single artifact in one language by design —
+ * the same reason every other line in that report is English. The LIVE indicator, which
+ * a user reads in their own editor, is fully localized; see `LiveActivity.tsx`.
+ *
+ * Shared by both copy surfaces (the web triage report and the VS Code transcript) so a
+ * mid-run capture describes itself identically wherever it was taken.
+ */
+declare function describeLiveStep(step: BrainRunActivity, capturedAtMs: number): string;
+/**
+ * The mid-run banner both copy surfaces emit. One sentence, one place: the fact that a
+ * report was taken mid-flight has to be stated identically everywhere, or a reader who
+ * learns to look for it on one surface will not find it on the other.
+ */
+declare function midRunNotice(activity: BrainRunActivity | null | undefined, capturedAtMs: number): string;
+
+/**
+ * Brain execution triage — capture the Brain's run (LLM steps, tool chain,
+ * intermediate assistant messages, and errors) as a single paste-able report.
+ *
+ * This mirrors the "Copy triage info" report the Observability/Logs view emits
+ * for host & cloud agents, but for the in-browser Brain agent loop. The loop
+ * (useBrainConversation) records a BrainTraceEvent per step; this module turns
+ * the recorded trace + the visible conversation into one report a user can drop
+ * straight into a bug report.
+ */
+
+/** One step of the Brain agent loop, recorded as it runs. */
+interface BrainTraceEvent {
+    /** ISO timestamp of when the step completed. */
+    ts: string;
+    /**
+     * Category, matching the host/cloud triage vocabulary:
+     * - `llm`       — a streamed completion (model, step, tool-call count)
+     * - `tool`      — a client action the model invoked (args + result)
+     * - `message`   — assistant text emitted on a turn
+     * - `error`     — a thrown exception or a tool result that failed
+     * - `recall`    — the project Evermind recalled learned memories before answering
+     * - `learn`     — the turn was contributed back to the project Evermind
+     * - `reconcile` — the turn superseded (updated) recalled memories (write-through)
+     */
+    category: 'llm' | 'tool' | 'message' | 'error' | 'recall' | 'learn' | 'reconcile';
+    /** Display label — the tool name, or `llm.complete` / `agent.message`. */
+    label: string;
+    /** Wall-clock duration of the step, when measured. */
+    durationMs?: number;
+    /**
+     * `llm` steps: time-to-first-token (ms) — the delay from issuing the
+     * completion request to the FIRST streamed text delta of the turn. Undefined
+     * when no token arrived (a pure tool-call / empty turn). The timeline uses it
+     * for the "Thought for Xs" thinking node so it reflects latency-to-first-token
+     * rather than the full-turn duration.
+     */
+    ttftMs?: number;
+    /** Tool arguments / completion request summary. */
+    args?: unknown;
+    /** Tool result / completion summary / error message. */
+    result?: unknown;
+    /** True when this step represents a failure (thrown, or `{ ok: false }`). */
+    isError?: boolean;
+    /** `llm` steps: token usage the gateway reported for this completion. */
+    usage?: {
+        prompt?: number;
+        completion?: number;
+        total?: number;
+    };
+    /** `llm` steps: OpenAI finish_reason (`stop` | `length` | `tool_calls` | …). */
+    finishReason?: string | null;
+    /** `llm` steps: length of the assistant text this turn produced. */
+    textChars?: number;
+    /**
+     * `tool` steps: byte length of the FULL result the tool returned, before any
+     * transcript trimming — so a diagnostics reader sees which tool flooded the
+     * context even though the model only ever saw a truncated copy.
+     */
+    resultBytes?: number;
+    /** `tool` steps: true when the result sent to the model was truncated. */
+    truncated?: boolean;
+    /**
+     * True when this event was RECONSTRUCTED from a durable step row rather than
+     * recorded live this session (see `persistedSteps.traceWithPersistedSteps`).
+     * Diagnostics uses it to tell a fully-observed run from a partially-recovered
+     * one, so mismatched coverage is labelled instead of silently averaged in.
+     */
+    recovered?: boolean;
+}
+/**
+ * Did a tool result represent a failure?
+ *
+ * Tool results in this codebase signal failure by SHAPE, not prose: the platform
+ * actions return `{ ok: false }` or `{ error: "<message>" }` (the tenant guard,
+ * the dispatcher's unknown-capability, a thrown handler). We inspect that shape
+ * instead of regex-scanning the whole stringified payload — the old
+ * `\b(error|failed|exception)\b` scan misfired on any legit data that merely
+ * CONTAINED the word "error" (e.g. a task titled "Fix login error", an audit
+ * row, a search result), mis-marking a successful run as ERROR in the report.
+ *
+ * For a STRING result we only flag an embedded `{ ok: false }` / `"error":`
+ * envelope (a stringified error object), never a free-text occurrence of the
+ * word — a plain-string success like `"done"` or `"No errors found"` is not a
+ * failure.
+ */
+declare function isFailedToolResult(result: unknown): boolean;
+/** THE honesty-flag lines, shared by every copy surface so they cannot drift apart. */
+declare const UNBACKED_WRITE_CLAIM_NOTICE = "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (write_file / edit_file / attachments.write / project_files.save) succeeded in this run. The file was NOT modified.";
+declare const UNBACKED_TICKET_CLAIM_NOTICE = "\u26A0 UNBACKED TICKET CLAIM \u2014 an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.";
+/** Did this tool call FILE board work (create or link)? THE predicate — the honesty check
+ *  below and `staffingSummary.ts` both read it, so "what counts as filing work" is one list. */
+declare function isTicketWriteTool(label: string): boolean;
+/**
+ * Structural honesty check for the "it said it updated the file but didn't" failure:
+ * an assistant message that CLAIMS a file/attachment write while NO file-write tool
+ * call succeeded in the run. Pure over the recorded trace + visible messages, so the
+ * web report and the VS Code transcript flag it identically. The Brain system prompt
+ * tells the model not to fake a save; this makes a violation visible in every triage
+ * capture (and is reusable by a run-loop guard).
+ */
+declare function detectUnbackedWriteClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
+/**
+ * The ticket twin of {@link detectUnbackedWriteClaim}: an assistant turn that CLAIMS it
+ * created/filed/linked a ticket, gap, or task while NO create/link tool call succeeded
+ * this run — the "it said it linked the gap to the chat, but the chat shows no link"
+ * failure. The run loop links a REAL create deterministically (autoLinkCreatedItem), so
+ * a claim with no successful create/link tool means nothing was actually filed or
+ * linked. Pure over the recorded trace + visible messages, so both copy surfaces flag
+ * it identically.
+ */
+declare function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
+/**
+ * The "it doesn't execute, it just dies" signature: an assistant turn that NARRATES a
+ * tool call — announcing it in prose, or writing the bare call as text — while the run
+ * recorded ZERO tool steps.
+ *
+ * This is a model fault, not a user one: the agent loop only runs structured
+ * `toolCalls` (plus the inline dialects `xmlToolCalls` lifts), so a model that writes
+ * its intent as plain text achieves nothing. Without this detector the triage block
+ * scores such a run "healthy" (no errors, no truncation, no context pressure), which
+ * is exactly backwards.
+ *
+ * Deliberately reuses `announcesUntakenAction` — the SAME detector the run loop gates
+ * its stall recovery on. Diagnostics that disagreed with the loop about what counts as
+ * a stall would be worse than none: a report could call a run healthy while the loop
+ * had spent three recovery turns on it.
+ *
+ * Pure over the merged trace + visible messages, so both copy surfaces flag it
+ * identically.
+ */
+declare function detectAnnouncedButUnmadeToolCall(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
+/** How many times this run re-prompted a model that announced a call without making one. */
+declare function stallRecoveriesInTrace(events: BrainTraceEvent[]): number;
+/** How many times this run switched MODELS because one wouldn't emit tool calls. */
+declare function modelFailoversInTrace(events: BrainTraceEvent[]): number;
+/** True when the stall survived every recovery AND every failover this run. */
+declare function stallUnrecoveredInTrace(events: BrainTraceEvent[]): boolean;
+/** Tool-catalog exposure for a run, read off the `llm` turns the loop records. */
+interface ToolExposure {
+    /** Tools advertised on the LAST measured turn (what the model could call at the end). */
+    lastTurn: number | null;
+    /** Fewest tools advertised on any measured turn — a zero here explains everything. */
+    min: number | null;
+    /** Size of the whole registered catalog the selection drew from. */
+    catalog: number | null;
+}
+/**
+ * How many tools the model was actually OFFERED, per turn, versus how many exist.
+ *
+ * The registry-wide total is not the same question: a turn that was handed ZERO tools
+ * and a turn that was handed sixty-four and ignored them produce byte-identical reports,
+ * and only one of them is the model's fault. The loop records the real per-turn number
+ * and this reads it back. Nulls when the run predates the field.
+ *
+ * This is now the SINGLE source of the per-turn figure: the chat-diagnostics header used
+ * to render a ceiling derived from the registry size while the Diagnostics block below it
+ * rendered this measurement, so one report answered one question two ways. Both lines
+ * read this function now (via `gatherChatDiagnostics`).
+ */
+declare function toolExposureInTrace(events: BrainTraceEvent[]): ToolExposure;
+/**
+ * Tools the model WROTE OUT by name on a turn that made no call, which it had never been
+ * advertised — recorded per-turn by the run loop (only it holds both halves).
+ *
+ * This is the signal that separates two failures the old report collapsed into one
+ * "the model won't emit tool calls, try another":
+ *   - the model narrated a tool it COULD see  ⇒ genuinely a model/provider fault;
+ *   - the model narrated a tool it could NOT see ⇒ our per-turn tool selection dropped
+ *     the tool the prompt told it to call, and no model can emit a call for a function
+ *     it was never given. Swapping models does nothing.
+ * De-duplicated, first-seen order.
+ */
+declare function narratedUnadvertisedInTrace(events: BrainTraceEvent[]): string[];
+/** One turn the memory-first short-circuit answered — the LLM was never called. */
+interface MemoryAnsweredTurn {
+    /** `evermind` = the project's SSM GENERATED the reply; `qa-cache` = a stored answer was replayed. */
+    source: 'evermind' | 'qa-cache';
+    /** Evermind head version that served it (evermind source only). */
+    version?: number;
+    /** WHICH project's Evermind served it — a project can target several heads. */
+    projectId?: number;
+}
+/**
+ * An `evermind/…` (or project-/tenant-pinned) model id means a tenant's own
+ * Evermind artifact answered the turn rather than a stock pool model. Matches the
+ * `evermind/` vendor prefix and the `project_evermind:` / `tenant_model:` pin refs.
+ */
+declare function isEvermindModel(model: string): boolean;
+/**
+ * The distinct models the gateway ACTUALLY used across a run, read from the `llm`
+ * trace events (brainRunStore records the resolved model in `args.model`). First-
+ * seen order, so a mid-run failover swap stays visible. The placeholder `default`
+ * (caller pinned nothing ⇒ gateway auto-selected, and it reported no model) is
+ * dropped so it never masquerades as a real model id. A user Stop counts too: the
+ * model it cut off streamed, even though that turn never completed.
+ */
+declare function modelsUsedInTrace(events: BrainTraceEvent[]): string[];
+/**
+ * Which account served the run, from the `account` the loop recorded per `llm`
+ * step (the gateway's `x-builderforce-account`). Last-seen wins so a mid-run swap
+ * is reflected. Undefined when the gateway reported none. Values: `own` (tenant's
+ * connected frontier account) · `shared` (shared pool, nothing connected) ·
+ * `shared_byo_unused` (shared pool DESPITE a connected account).
+ */
+declare function accountUsedInTrace(events: BrainTraceEvent[]): string | undefined;
+/**
+ * Connected-BYO providers the gateway could NOT resolve on any turn (from
+ * `x-builderforce-byo-unresolved`) — e.g. a connected Claude subscription whose
+ * token expired, so the run silently used the shared pool instead of the tenant's
+ * own Opus. Union across turns, first-seen order. Empty when everything resolved.
+ * This is the signal that turns a mysterious weak-model run into "reconnect your
+ * Claude account" — the exact context a "should have used Opus" triage lacked.
+ */
+declare function byoUnresolvedInTrace(events: BrainTraceEvent[]): string[];
+/** One connected-but-unresolved provider + WHY (the gateway encodes `provider:reason`
+ *  in `x-builderforce-byo-unresolved`, e.g. `anthropic:revoked`). `reason` is '' when the
+ *  gateway sent a bare provider (older gateway). */
+interface ByoUnresolvedEntry {
+    provider: string;
+    reason: string;
+}
+/** Parse the run's `provider:reason` unresolved entries into structured form. Accepts the
+ *  bare-provider form too (reason ''), so an older gateway still renders. */
+declare function parseByoUnresolved(entries: readonly string[]): ByoUnresolvedEntry[];
+/** An actionable hint for a {@link ByoUnresolvedEntry} reason — the SINGLE source both the
+ *  triage report and the live webview banner render, so "what do I do about it" never drifts. */
+declare function byoReasonHint(reason: string): string;
+/** A one-line summary of an unresolved provider: `anthropic (revoked): <hint>`. */
+declare function byoUnresolvedSummary(entry: ByoUnresolvedEntry): string;
+/**
+ * The model + account provenance header lines, derived from the trace. The SINGLE
+ * source both copy surfaces use (the web {@link buildBrainTriageReport} and the VS
+ * Code `transcript.ts`) so "which surface / model / account served this, and was a
+ * connected account left unused" is rendered identically — no drift, no surface
+ * missing the account/BYO context (the "vsix copy missing info" gap). `surface`
+ * names WHERE the run happened (e.g. `VS Code (VSIX)` / `Web`); omit when unknown.
+ */
+declare function formatBrainProvenance(events: BrainTraceEvent[], opts?: {
+    configuredModel?: string;
+    surface?: string;
+}): string[];
+/**
+ * Structured run diagnostics derived from the trace — the numbers a reader needs
+ * to tell WHY a Brain run died, without eyeballing a wall of JSON.
+ *
+ * The two failure modes we discriminate:
+ *  - **context-exhaustion** (case A): prompt tokens climb turn over turn (big
+ *    tool dumps in the transcript), the gateway fails over to a smaller-window
+ *    model, and a turn ends on `finish_reason: length` or empty. The context
+ *    starved the model.
+ *  - **model-degradation** (case B): a tenant Evermind/SSM model answered and a
+ *    turn came back empty/failed while token counts stayed LOW — the model
+ *    itself produced nothing, not the context.
+ */
+interface BrainDiagnostics {
+    turns: number;
+    toolCalls: number;
+    errors: number;
+    loopExhausted: boolean;
+    /** True when at least one llm step reported token usage. */
+    tokensMeasured: boolean;
+    /** Largest prompt-token count seen on any single turn. */
+    promptTokenPeak: number;
+    /** Sum of completion tokens across turns. */
+    completionTokenTotal: number;
+    /** Prompt tokens on the LAST turn (the one nearest any overflow). */
+    lastPromptTokens: number;
+    /** Total bytes of tool results returned this run (pre-trim). */
+    toolResultBytes: number;
+    /** Count of tool results trimmed to the per-result budget before hitting the model —
+     *  LOSSY cuts only; a paged `read_file` window is counted in {@link pagedReadWindows}.
+     *  A trim is the budget WORKING: it is evidence of pressure, never of a failure. */
+    truncatedToolResults: number;
+    /** `read_file` results handed over as one window of a larger file, with the offset
+     *  that continues it. The budget working as designed, not lost context. */
+    pagedReadWindows: number;
+    /** The single largest tool result (label + pre-trim bytes). */
+    largestToolResult: {
+        label: string;
+        bytes: number;
+    } | null;
+    /**
+     * The steps that FAILED, most recent first — label plus the message the tool
+     * actually returned. `Errors: 1` on its own tells a reader that something went
+     * wrong and nothing about what, so the only way to act on it was to scroll the
+     * whole transcript hunting for the failure. Capped, because a run that fails
+     * repeatedly should not push everything else out of the report.
+     */
+    errorSteps: {
+        label: string;
+        message: string;
+        model?: string;
+    }[];
+    /** Distinct models that actually answered, first-seen order. */
+    modelsUsed: string[];
+    /** What each of those models did with the turns it served — see `modelScorecard.ts`. */
+    modelScores: ModelScore[];
+    /** Each `llm.complete` in run order — which model produced which output. */
+    modelTurns: ModelTurn[];
+    /** Distinct Evermind/SSM artifacts among them. */
+    evermindUsed: string[];
+    /** Turns where the resolved model differed from what was requested. */
+    downgradeEvents: number;
+    /** Turns that ended on `length` or produced empty text. */
+    emptyOrLengthFinishes: number;
+    /**
+     * True when a turn NARRATED a tool call ("I'll call the tool…", `builtin_…`) while
+     * the run made none — the model isn't emitting structured `toolCalls`, so nothing
+     * ever executes. See {@link detectAnnouncedButUnmadeToolCall}.
+     */
+    announcedUnmadeToolCall: boolean;
+    /** How many times the loop re-prompted a model that announced a call without making one. */
+    stallRecoveries: number;
+    /** How many times the loop switched MODELS after one burned its whole stall budget. */
+    modelFailovers: number;
+    /** True when the stall survived every recovery and every failover — the run gave up. */
+    stallUnrecovered: boolean;
+    /** A tool step ran after the last re-prompt — see {@link stallRecoveredInTrace}. */
+    stallRecovered: boolean;
+    /** Models whose stream broke mid-turn and were retried on another — see {@link streamRetriesInTrace}. */
+    streamRetries: string[];
+    /** How many tools the model was offered on the last measured turn (null ⇒ not recorded). */
+    advertisedToolsLastTurn: number | null;
+    /** Fewest tools offered on any measured turn — a 0 explains a whole run by itself. */
+    advertisedToolsMin: number | null;
+    /** Size of the registered catalog the per-turn selection drew from. */
+    catalogTools: number | null;
+    /**
+     * Tools the model named in prose on a call-less turn that it was never advertised.
+     * Non-empty means the request was impossible as framed — see
+     * {@link narratedUnadvertisedInTrace}.
+     */
+    narratedUnadvertisedTools: string[];
+    /**
+     * Turns the memory-first short-circuit answered WITHOUT calling a model (see
+     * {@link memoryAnswersInTrace}). A run made only of these has no turns, no tokens
+     * and no tool calls — the exact shape of a "the model won't call tools" run, which
+     * is why it must be named rather than left to inference.
+     */
+    memoryAnswers: MemoryAnsweredTurn[];
+    /**
+     * True when tool steps were RECOVERED from durable history but no `llm` turn
+     * covers them — i.e. the chat predates durable turn records (or was reopened),
+     * so the turn/token figures describe only this session while the tool figures
+     * describe the whole conversation. Reported so the two aren't read as one run's
+     * totals: "Turns: 2 · Tool calls: 44" is nonsense unless the mismatch is named.
+     */
+    turnCoveragePartial: boolean;
+    /**
+     * Repetition / reach / effect / timing for the run — see `runProgress.ts`. This
+     * is what separates "every turn succeeded and nothing got done" from a genuine
+     * context or model failure, and it is the only signal that fires on the most
+     * common real-world stall: an agent re-reading one file until its budget is gone.
+     */
+    progress: RunProgress;
+    /**
+     * The run showed context PRESSURE (a big prompt, trimmed tool results) but nothing was
+     * cut short by it — no truncated turn, no downgrade, no exhausted loop, no failed
+     * completion. Reported as an advisory line so the numbers are still visible, while the
+     * verdict stays whatever the rest of the run says (usually `healthy`).
+     */
+    contextPressureOnly: boolean;
+    /**
+     * What this run FILED versus what it STAFFED — see `staffingSummary.ts`. The signal
+     * that separates "twelve tickets and a hundred green tool calls" from "somebody is
+     * actually working on it": every other field here can read clean on a run that left
+     * every ticket it created with nobody on it.
+     */
+    staffing: StaffingSummary;
+    /**
+     * Build/runtime failures the run's LAST diagnostics read still reported — the app the
+     * run was working on was broken when it stopped looking. 0 when no read reported any,
+     * or a later read came back clean. See {@link unresolvedAppFailuresInTrace}.
+     */
+    unresolvedAppFailures: number;
+    /**
+     * Best-effort verdict — the header a triager reads first. `healthy` is distinct
+     * from `inconclusive`: the former means there is no failure to explain, the
+     * latter that there IS one but the signals don't separate A from B. Collapsing
+     * both into "inconclusive" made a clean run read as an unsolved problem.
+     *
+     * `tool-calls-not-emitted` outranks the rest: a run that narrated its calls did
+     * nothing at all, and every other signal on it reads clean.
+     *
+     * `no-tools-advertised` and `tool-not-advertised` outrank even that, because they are
+     * OUR fault rather than the model's, and the remedy ("pick a different model") that
+     * `tool-calls-not-emitted` prescribes is actively wrong for them.
+     *
+     * `no-progress` sits above `context-exhaustion` and `model-degradation` for the same
+     * reason: a run that re-read one file until its budget was gone will ALSO show a high
+     * prompt peak and truncated tool results, so the context signals fire — but they are a
+     * CONSEQUENCE of the loop, and acting on them (shrink the transcript, swap the model)
+     * changes nothing. The loop has to be named first or it is never seen.
+     *
+     * `work-filed-not-staffed` sits LAST among the causes, above only `healthy`/`inconclusive`:
+     * it is a verdict about the run's OUTCOME, not its mechanics, so any genuine exhaustion,
+     * model fault or narrated-call failure explains the missing dispatch better and outranks it.
+     */
+    likelyCause: 'memory-answered' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'no-progress' | 'context-exhaustion' | 'model-degradation' | 'app-errors-unresolved' | 'work-filed-not-staffed' | 'inconclusive' | 'healthy';
+}
+/**
+ * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O
+ * — so both the web report and the VS Code transcript compute the identical
+ * block from the same events (single source of truth for A-vs-B triage).
+ *
+ * `messages` is the visible conversation. It is optional only so older callers keep
+ * compiling; without it the narrated-tool-call verdict can't be reached, so every
+ * surface should pass it.
+ */
+interface BrainDiagnosticsContext {
+    /**
+     * True when the run was STILL EXECUTING at the moment the report was captured.
+     * The trace cannot know this — it only holds settled steps — yet it changes how
+     * every "and then nothing happened" signal should be read: a run captured
+     * mid-flight has not failed to write the file, it has not reached the write yet.
+     * Without it, copying a report while the agent is working reports the agent as
+     * broken.
+     */
+    running?: boolean;
+}
+declare function computeBrainDiagnostics(events: BrainTraceEvent[], requestedModel?: string, messages?: BrainMessage[], ctx?: BrainDiagnosticsContext): BrainDiagnostics;
+/**
+ * Render {@link BrainDiagnostics} as transcript lines. Shared by both copy
+ * surfaces so the "Diagnostics" block is identical on web and in VS Code. Emits
+ * a leading `--- Diagnostics ---` header and returns the lines (caller joins).
+ */
+declare function formatBrainDiagnostics(d: BrainDiagnostics): string[];
+interface BuildBrainTriageOptions {
+    /** ISO capture time (caller supplies it so the module stays clock-free). */
+    capturedAt: string;
+    /** The trace recorded by the agent loop for the active chat. */
+    events: BrainTraceEvent[];
+    /** The visible conversation, included as a transcript section. */
+    messages?: BrainMessage[];
+    /** The chat being captured. */
+    chatId?: number | null;
+    chatTitle?: string;
+    /** The persona / agent the Brain ran as. */
+    agentLabel?: string;
+    /** The model this surface was CONFIGURED with (empty ⇒ gateway auto-selects).
+     *  Distinct from what actually answered, which is derived from the trace. */
+    configuredModel?: string;
+    /** Where the run happened (e.g. `VS Code (VSIX)` / `Web`), for provenance. */
+    surface?: string;
+    /** The current top-level error surfaced to the user, if any. */
+    error?: string;
+    /**
+     * True when the run was STILL EXECUTING at capture time. The trace cannot know it,
+     * and it changes how every "and then nothing happened" signal reads: a report taken
+     * mid-flight describes an UNFINISHED run, not a failed one.
+     */
+    running?: boolean;
+    /** The in-flight step at capture time (which tool, on what, since when). */
+    activity?: BrainRunActivity | null;
+}
+/**
+ * Assemble the Brain triage report. Same shape as the host/cloud report:
+ * header → errors-first → full event log → derived log lines → transcript.
+ */
+declare function buildBrainTriageReport(opts: BuildBrainTriageOptions): string;
+
+/**
+ * The timeline step the Brain run loop records when a LOCAL-FIRST turn did not end
+ * where it started — an on-device model was tried and the turn fell over to the next
+ * attempt (usually the cloud gateway).
+ *
+ * The served model already reaches the provenance chip as the turn's `resolvedModel`
+ * (`local/<runtime>/<model>` for a local answer). What would otherwise be invisible is
+ * the fallback itself: "why did this turn go to the cloud when I have Synapse running?"
+ * must have an answer in a copied diagnostics report and a reopened chat. Same shape and
+ * category as the other `llm.*` self-reports (see `runPolicyTraces.ts`). Pure: the
+ * caller stamps `ts`.
+ *
+ * Attempts are carried as SUMMARIES (`target` + outcome), never as the plan's attempts:
+ * those hold the runtime endpoint, and its bearer must never reach a persisted step.
+ */
+
+/** One attempt as a trace may record it — no endpoint, no credential. */
+interface LocalFirstAttemptSummary {
+    /** `local/<runtime>/<model>` for a local attempt; `gateway` (or the cloud model) otherwise. */
+    target: string;
+    outcome: LocalFirstAttemptRecord['outcome'];
+    detail?: string;
+}
+/** Project a runner record onto what a trace may hold. */
+declare function summarizeLocalFirstAttempt(record: LocalFirstAttemptRecord): LocalFirstAttemptSummary;
+/**
+ * The `llm.local_fallback` step for a turn's attempts, or null when the first attempt
+ * served (nothing fell over, so there is nothing to explain).
+ */
+declare function localFallbackTrace(ts: string, step: number, attempts: readonly LocalFirstAttemptSummary[] | undefined): BrainTraceEvent | null;
+
+/**
  * The single tool-capable, streaming chat-completion client for the Brain.
  *
  * Targets the OpenAI-compatible gateway `POST {baseUrl}/llm/v1/chat/completions`
@@ -419,6 +1487,13 @@ interface StreamChatOptions {
      * connected model. Omitted when unset, so the body stays byte-identical.
      */
     role?: string;
+    /**
+     * The launching canvas session's arc stage (idea/make/run/measure/reach), emitted as
+     * the body's `arcStage` — a nudge on top of {@link StreamChatOptions.role} that the
+     * gateway validates (`isArcStage`) and folds into its role/cost ordering. Omitted when
+     * unset, so the body stays byte-identical.
+     */
+    arcStage?: string;
     temperature?: number;
     maxTokens?: number;
     /**
@@ -538,6 +1613,13 @@ interface StreamChatResult {
     providerCap?: string;
     /** Token usage for this completion, when the gateway reported it. */
     usage?: CompletionUsage;
+    /**
+     * Set only by a LOCAL-FIRST stream (`localFirstTransport.ts`): every attempt this
+     * completion made, in order — the on-device model(s) tried and whichever served. The
+     * run loop turns a fallback into an `llm.local_fallback` step. Summaries only: no
+     * endpoint, no credential.
+     */
+    localFirst?: LocalFirstAttemptSummary[];
 }
 /**
  * The stream broke AFTER the gateway committed to a model: an in-band `error` frame, or
@@ -746,6 +1828,117 @@ interface ConnectRetryOptions {
  * repeating it is safe. A Stop during a wait rejects with the abort reason.
  */
 declare function retryOnConnectFailure<T>(send: () => Promise<T>, opts?: ConnectRetryOptions): Promise<T>;
+
+/**
+ * The SHARED streamer pointed at a runtime on the user's own machine — pinned, or LOCAL
+ * FIRST with failover to the cloud gateway.
+ *
+ * Every client that runs the Brain loop on the user's machine (the VS Code extension
+ * host, the Chrome extension's service worker) drives the same `streamChatCompletion`,
+ * so the binding of `@builderforce/local-inference` to it lives here, once: the URL
+ * rewrite, the endpoint's own token, commit-on-first-delta, and the fail-fast that keeps
+ * a dead localhost runtime from riding the gateway's connect-retry. Host-neutral: `fetch`
+ * and the probed runtimes are injected; nothing here touches Node, `vscode` or `chrome`.
+ *
+ * All runtimes speak the OpenAI wire format, which is why the whole adaptation is a URL
+ * rewrite plus the endpoint's token — the agent loop, tool-call protocol and error
+ * mapping are exactly the ones a gateway turn uses.
+ */
+
+/** The `fetch` a host lends the local path (the global in every host by default). */
+type LocalFetch = (input: string, init: RequestInit) => Promise<Response>;
+/** A Brain streaming fn — structurally `BrainStreamFn`, restated to keep this module
+ *  off the run store's import graph. */
+type StreamFn = (opts: Omit<StreamChatOptions, 'transport'>, handlers?: StreamHandlers) => Promise<StreamChatResult>;
+/**
+ * The transport that points the shared streamer at a local runtime.
+ *
+ * `getToken` returns the endpoint's own credential or null. Null is the on-device case
+ * and is load-bearing: the streamer omits `Authorization` for a null token, so a
+ * signed-out client can still run a local turn.
+ *
+ * `failFast` is for a local-first attempt. The streamer re-sends a request whose
+ * connection never opened for about half a minute (`retryOnConnectFailure` — right for
+ * the gateway over a flaky network), but a localhost runtime that refuses the connection
+ * is NOT running, and the cloud fallback is waiting. So the refusal is re-thrown as a
+ * plain error — deliberately with NO `cause`, because the retry walks the cause chain
+ * for a connect-failure code and would find it there.
+ */
+declare function localTransport(endpoint: LocalEndpoint, fetchImpl?: LocalFetch, options?: {
+    failFast?: boolean;
+}): BrainTransport;
+/**
+ * The streaming fn for a PINNED local model — the local twin of a gateway stream. The
+ * loop pins the full `local/<runtime>/<model>` ref, but the runtime knows only its bare
+ * id, so `model` is overridden with it. Gateway-only fields (`strict`, `routingMode`,
+ * `metadata`) ride through; the runtimes ignore them rather than reject them.
+ */
+declare function createLocalStream(endpoint: LocalEndpoint, model: string, fetchImpl?: LocalFetch): StreamFn;
+/**
+ * Read a call into what the local-first plan needs, through THE workload profile — so a
+ * client sizes a call exactly the way the gateway and the model router do.
+ */
+declare function localFirstWorkload(call: {
+    messages: readonly unknown[];
+    tools?: readonly unknown[];
+    role?: string;
+    maxTokens?: number;
+}): LocalFirstWorkload;
+/** What {@link createLocalFirstStream} needs from its host. */
+interface LocalFirstStreamInput {
+    /** The runtimes as probed WITH capabilities (`createLocalRuntimeProber({ capabilities: true })`). */
+    probes: readonly LocalRuntimeProbe[];
+    /** The gateway stream, or null when signed out (local-only). */
+    cloud: StreamFn | null;
+    /** Lent to the local attempts; the global `fetch` by default. */
+    fetch?: LocalFetch;
+    /** Each settled attempt, as it settles — a host's log hook. The same attempts also
+     *  ride on the result as `localFirst` for the run's trace. */
+    onAttempt?: (record: LocalFirstAttemptRecord) => void;
+}
+/**
+ * LOCAL FIRST, failover to the gateway — one streaming fn the agent loop drives exactly
+ * like the gateway's.
+ *
+ * The plan is made PER CALL, because what a call needs is only known then: a tool turn
+ * goes only to a model whose runtime says it can take tools, so one run can answer its
+ * plain turns locally and hand its tool turns to the cloud. A local attempt that fails
+ * before the user saw any output (runtime down, HTTP error, empty answer) falls over
+ * invisibly; one that already streamed owns the turn; a Stop is never failed over.
+ *
+ * The served attempt shows as `resolvedModel` (`local/<runtime>/<model>` for a local
+ * answer) and every attempt rides on `result.localFirst`, from which the run loop
+ * records `llm.local_fallback`. Signed out with nothing local that fits, it throws
+ * `not_signed_in` — the contract a gateway route without a credential already has.
+ */
+declare function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn;
+/** The message shape a non-streaming local call puts on the wire — structural, because it
+ *  only ever JSON-serializes it (hosts hold differently-typed message arrays). */
+interface LocalChatMessage {
+    role: 'system' | 'user' | 'assistant' | 'tool';
+    content: unknown;
+    tool_calls?: unknown;
+    tool_call_id?: string;
+}
+/**
+ * A non-streaming completion against a local runtime (a summarizer, a scanner). Returns
+ * the assistant text ('' when none) and throws on a non-OK response.
+ */
+declare function completeLocal(endpoint: LocalEndpoint, model: string, messages: readonly LocalChatMessage[], signal?: AbortSignal, fetchImpl?: LocalFetch): Promise<string>;
+/**
+ * LOCAL FIRST for a non-streaming completion — the twin of {@link createLocalFirstStream}.
+ * Nothing streams, so nothing commits: any local failure or empty answer falls over to
+ * `cloud`, the host's own gateway completion (null when signed out). Throws
+ * `not_signed_in` when nothing local fits and there is no cloud.
+ */
+declare function completeLocalFirst(input: {
+    probes: readonly LocalRuntimeProbe[];
+    messages: readonly LocalChatMessage[];
+    cloud: (() => Promise<string>) | null;
+    signal?: AbortSignal;
+    fetch?: LocalFetch;
+    onAttempt?: (record: LocalFirstAttemptRecord) => void;
+}): Promise<string>;
 
 /** A `run_command` whose every segment only reads — `git log`, `ls`, a `for` loop of `git rev-list`. */
 declare function isReadOnlyShellCall(tool: string, args: unknown): boolean;
@@ -1805,911 +2998,6 @@ declare function activeTicketToken(text: string, caret: number): TicketToken | n
  */
 declare function filterTicketCandidates(tickets: ChatTicket[], query: string): ChatTicket[];
 
-/**
- * Did the run actually GET ANYWHERE?
- *
- * The A-vs-B triage in `brainTriage.ts` answers "why did a turn come back
- * empty / degraded". It has no vocabulary at all for the failure this module
- * names: a run where every single turn succeeded — no errors, no truncation, no
- * empty finishes — and the agent still accomplished nothing, because it spent
- * its whole budget re-reading the same file at overlapping offsets and re-running
- * searches it had already run. That run scores clean on every existing signal,
- * so the verdict falls through to whichever context/degradation heuristic happens
- * to trip: a 33k-token prompt peak reports "CONTEXT EXHAUSTION" and sends the
- * reader off to shrink the transcript, when the transcript was never the problem.
- *
- * The signals here are structural and cheap to compute, and they are the ones a
- * human reads the transcript to find:
- *
- *  - **Repetition** — the same call made twice, and the same TARGET read over and
- *    over. Seven reads of one 566-line CSS file is not research, it is a loop.
- *  - **Reach** — how many distinct things the run touched, against how many calls
- *    it made. A run with 26 calls over 3 distinct targets is spinning; one with
- *    26 calls over 22 targets is working.
- *  - **Effect** — whether an edit-shaped REQUEST produced any successful mutation.
- *    "Reduce the height of the box" that ends with zero writes did not fail
- *    halfway; it never started.
- *  - **Time** — where the wall clock went (model vs tools), and the slowest step.
- *    A minute inside one search is a fact about our tools, not about the model.
- *
- * Pure over the recorded trace + visible messages, exactly like `brainTriage.ts`,
- * so every copy surface computes the identical block.
- */
-
-/** One target the run went back to more than once. */
-interface RepeatedTarget {
-    /** `tool:subject`, e.g. `read_file:LandingCanvasHero.module.css`. */
-    label: string;
-    count: number;
-}
-/**
- * The same call made again IMMEDIATELY — back to back, with no other tool call in
- * between. The exact-duplicate counter above catches a call repeated anywhere in
- * the run; this catches the tighter and more damning shape: `git_status` → same
- * error → `git_status` → same error → `git_status`. Nothing was learned between
- * the attempts because nothing else was tried.
- */
-interface RepeatStreak {
-    /** The tool name, e.g. `git_status`. */
-    label: string;
-    /** Consecutive identical calls, including the first. */
-    count: number;
-    /** How many of those calls failed — a streak of failures is a stall on a known
-     *  error; a streak of successes is a stall on an answer it already has. */
-    failed: number;
-}
-/**
- * Consecutive identical calls at which the streak becomes a verdict on its own.
- * Two in a row is a retry; three is the model asking the same question a third time
- * after hearing the same answer twice, whatever the rest of the run looks like.
- */
-declare const BACK_TO_BACK_AT = 3;
-declare function isMutationTool(name: string): boolean;
-/**
- * Whether the run was asked to CHANGE something. Reads the user turns only — the
- * assistant's own restatement of the task would make this trivially self-fulfilling.
- * Uses the first user turn (the request) plus any later one, since a follow-up can
- * turn a question into a task.
- *
- * The per-message predicate is `asksForChange` from `@builderforce/agent-stall`: the
- * SERVER needs the identical judgement to decide whether an answer may be replayed
- * from cache (a change request must never be), so it cannot live here.
- */
-declare function hasEditIntent(messages: BrainMessage[]): boolean;
-interface RunProgress {
-    /** Tool calls whose label AND arguments exactly repeated an earlier call. */
-    duplicateCalls: number;
-    /**
-     * The longest run of CONSECUTIVE identical calls, or null when no call was ever
-     * repeated back to back. See {@link RepeatStreak}.
-     */
-    longestStreak: RepeatStreak | null;
-    /** How many distinct back-to-back streaks (two or more in a row) the run had. */
-    streaks: number;
-    /**
-     * True when some call was repeated {@link BACK_TO_BACK_AT} or more times in a
-     * row. Unlike `spinning` this needs no minimum run size — three identical calls
-     * in a row is a stall in a 3-call run as surely as in a 300-call one.
-     */
-    stuckOnCall: boolean;
-    /** Targets hit more than once, most-repeated first. */
-    repeatedTargets: RepeatedTarget[];
-    /** Distinct targets the run touched (calls with no discernible target excluded). */
-    distinctTargets: number;
-    /** Calls that named a target — the denominator `distinctTargets` is measured against. */
-    targetedCalls: number;
-    /**
-     * Share of targeted calls that revisited a target already visited. 0 = every call
-     * broke new ground; 0.8 = four calls in five went back over old ground.
-     */
-    revisitRatio: number;
-    /** Mutation-tool calls attempted, and how many returned a success. */
-    mutationsAttempted: number;
-    mutationsSucceeded: number;
-    /** True when the user asked for a CHANGE (see {@link hasEditIntent}). */
-    editIntent: boolean;
-    /**
-     * The headline finding: an edit-shaped request, real work performed, and NOT ONE
-     * successful mutation to show for it. This is the verdict the pasted report was
-     * missing — the run was not starved of context, it never acted.
-     */
-    noEffect: boolean;
-    /**
-     * True when the run's calls are dominated by revisits — it is going back over
-     * ground it has already covered rather than advancing. Requires enough calls to
-     * be meaningful (a 3-call run that read one file twice is not a loop).
-     */
-    spinning: boolean;
-    /** Wall-clock span of the recorded run, first step to last (ms). */
-    wallClockMs: number;
-    /**
-     * Time inside that span the run was WAITING rather than working (ms): the user
-     * between two messages, or an `ask_user` answer. A chat's trace spans every message
-     * in it, so without this a follow-up sent hours later reported "191m wall clock ·
-     * 8m in the model", which reads as three hours lost inside the run.
-     */
-    idleMs: number;
-    /** Measured time inside model completions / inside tools (ms). */
-    modelMs: number;
-    toolMs: number;
-    /** The single slowest step, whatever kind — usually the one worth fixing. */
-    slowestStep: {
-        label: string;
-        ms: number;
-    } | null;
-}
-/** Compute the progress/repetition picture for a recorded run. Pure. */
-declare function computeRunProgress(events: BrainTraceEvent[], messages?: BrainMessage[]): RunProgress;
-/** Compact duration for a report line (0.4s / 12s / 3m 20s). */
-declare function progressDuration(ms: number): string;
-/**
- * Render the progress picture as report lines. Emitted only when there is
- * something to say — a run that advanced cleanly adds a single "Progress:" line
- * rather than four sections of zeroes.
- */
-declare function formatRunProgress(p: RunProgress): string[];
-/**
- * The one-sentence verdict for a run that spun or had no effect. Returned
- * separately from {@link formatRunProgress} because it belongs in the "Likely
- * cause" header, above every other signal — a reader who acts on the header alone
- * must be sent at the real fault. Null when neither condition holds.
- */
-declare function runProgressVerdict(p: RunProgress): string | null;
-
-/**
- * Which model did what: the per-model half of the Brain diagnostics.
- *
- * An auto-routed run is served by more than one model (the planner, the coder, a
- * failover after a stall), and the report used to name them only as a set:
- * "Models used: qwen3.8-max, grok-4.5". A run where one of them never made a single
- * tool call read exactly like a run where both worked, so "why isn't Grok working"
- * could not be answered from a copied report at all. This scores each model on the
- * turns it actually served, from the `llm` steps the run loop records.
- *
- * Pure over the recorded trace, like `brainTriage.ts` and `runProgress.ts`, so every
- * copy surface renders the identical lines.
- *
- * The ordered {@link modelTurnLog} answers a question the aggregate scorecard cannot:
- * "which specific outputs were Grok rambling?" — each `llm.complete` in run order,
- * with its model, toolCalls, and (when the vendor reported it) raw upstream calls.
- *
- * NOTE: clearer diagnostics do NOT fix Grok tool calling. A run whose client is
- * ahead of the gateway (e.g. client 2026.9.63 / API 2026.9.32) still lacks the
- * Responses adapter on the production API until that deploy lands.
- */
-
-/** What one model did across the turns it served. */
-interface ModelScore {
-    model: string;
-    /** Completions this model answered. */
-    turns: number;
-    /** Structured tool calls it emitted across them. */
-    toolCalls: number;
-    /** Turns that produced text and no tool call: a final answer, or a narrated step. */
-    textOnlyTurns: number;
-    /**
-     * Turns whose text still held tool-call markup that no inline dialect lifted. The
-     * model tried to call a tool and the parser missed it, so the call never ran.
-     */
-    unliftedMarkupTurns: number;
-    /** Completions against this model that failed outright. */
-    failures: number;
-    /**
-     * Turns the USER stopped while this model was streaming — the reader's own verdict
-     * that it had gone wrong (looping, narrating, counting). The one failure the model
-     * never reports itself, so without this a run ended by Stop named no culprit at all.
-     */
-    stopped: number;
-    /**
-     * Turns whose vendor reported its RAW response (`upstreamFunctionCalls` recorded) —
-     * the Responses vendors (Grok, Codex) do. Zero means the fields below say nothing.
-     */
-    upstreamReportedTurns: number;
-    /** Structured function calls those raw responses carried, before any translation. */
-    upstreamFunctionCalls: number;
-    /** Of those, calls the gateway rebuilt from the final frame rather than the stream. */
-    upstreamRecovered: number;
-    /** Reported turns where the vendor returned MORE calls than reached the loop. */
-    adapterLossTurns: number;
-}
-/** Score every model that served (or failed) a turn, first-seen order. */
-declare function modelScorecard(events: BrainTraceEvent[]): ModelScore[];
-/**
- * Render the scorecard as report lines. Emitted when it says something the "Models
- * used" line does not: more than one model served the run, some turn wrote call
- * markup the parser missed, a returned call never reached the loop, or the user
- * stopped a model mid-stream.
- */
-declare function formatModelScorecard(scores: ModelScore[]): string[];
-/** One `llm.complete` (or failed completion) in run order — the per-output half of the scorecard. */
-interface ModelTurn {
-    /** 1-based index across this run's completions. */
-    index: number;
-    /** Model that answered (resolved). */
-    model: string;
-    /** What was requested when it differed from {@link model} (failover / downgrade). */
-    requestedModel?: string;
-    toolCalls: number;
-    /** True when the turn produced text and no tool call. */
-    textOnly: boolean;
-    /** Present when the vendor reported its raw response (Responses vendors). */
-    upstreamFunctionCalls?: number;
-    upstreamRecovered?: number;
-    /**
-     * UTF-8 bytes of tool-call ARGUMENTS the turn emitted. The missing half of a long
-     * turn: `16. xai-oauth/grok-4.6 · 1 tool call(s) · 202509ms` gave no clue that those
-     * 202 seconds were a 21 KB `write_file` call being streamed a fragment at a time.
-     */
-    argBytes?: number;
-    /** Completion tokens the gateway reported for the turn — the other reason a turn is long. */
-    completionTokens?: number;
-    durationMs?: number;
-    /** Completions that failed outright. */
-    failed?: boolean;
-    /** Call markup present that no dialect lifted. */
-    unliftedCallMarkup?: boolean;
-}
-/**
- * Every `llm.complete` in first-seen order — including failures — so a pasted report
- * attributes each output without reconstructing from the aggregate "Per model" counts.
- */
-declare function modelTurnLog(events: BrainTraceEvent[]): ModelTurn[];
-/**
- * Ordered per-turn model/toolCalls log. Emitted whenever the run had at least one
- * named completion — the scorecard aggregates; this lists each output so a multi-model
- * run is attributable without counting.
- */
-declare function formatModelTurnLog(turns: ModelTurn[]): string[];
-
-/**
- * staffingSummary — "work was filed; is anybody actually running it?"
- *
- * Measured on chat #113: a Work-mode run made 141 tool calls, filed 12 tickets
- * (epics + tasks) and staffed NOBODY. Its `kanban.coordinate`,
- * `kanban.materialize_work_items` and `kanban.assess_resource` calls all came back
- * `403 manager role required`, nothing compensated, and every other diagnostic signal
- * read clean — no exhaustion, no truncation, no narrated calls, tokens fine. The report
- * a user copied said the run was healthy, because by every signal we measured it was:
- * twelve successful creates and a wall of green tool steps.
- *
- * The missing fact is structural, not statistical: filing work and STARTING it are two
- * different outcomes, and a report that counts tool calls cannot tell them apart. This
- * module counts the second one — how many dispatch/coordination attempts were made, how
- * many of them actually put someone on the work, which ones were refused and why, and
- * whether any slice the Brain did itself was done in a real team agent's persona (a
- * `spawn_agent` carrying `as_agent`). From those four numbers the verdict falls out:
- * a ticket with nobody on it has not started, however many calls it took to create.
- *
- * Pure over the recorded trace, like the rest of `brainTriage`, so the web report, the
- * VS Code transcript and the persisted JSON report all state the same thing.
- */
-
-/** True when this tool call was an attempt to put somebody on the work. */
-declare function isDispatchTool(label: string): boolean;
-/** One `spawn_agent` delegation that ran in a named team agent's persona. */
-interface PersonaSubagent {
-    /** The agent the parent asked for, exactly as it passed it (`as_agent`). */
-    agent: string;
-    /** The delegation's own label, so a reader can see WHAT that persona was given. */
-    label: string;
-    /** Whether the child came back with an answer. */
-    ok: boolean;
-}
-/** One refused staffing attempt: which tool, and the reason it gave. */
-interface DispatchRefusal {
-    label: string;
-    message: string;
-}
-/**
- * What this run FILED versus what it STAFFED. Every field is a count of observed trace
- * steps — nothing here is inferred from prose.
- */
-interface StaffingSummary {
-    /**
-     * Board work items this run filed — created or linked. Counted with the SAME predicate
-     * {@link isTicketWriteTool} that the unbacked-ticket-claim honesty check uses, so
-     * "what counts as filing work" is one list in one place rather than two that drift.
-     * (An Epic is a `tasks.create` with `taskType: "epic"`, so it is counted here too.)
-     */
-    ticketsCreated: number;
-    /** Calls that tried to put somebody on work — see {@link isDispatchTool}. */
-    dispatchAttempts: number;
-    /** Of those, the ones that actually did: no error, and any `autoRun.dispatched` true. */
-    dispatched: number;
-    /** The refused ones, with the reason each gave (this is where `403 manager role required` lands). */
-    dispatchRefusals: DispatchRefusal[];
-    /** Delegations carrying `as_agent` — work the Brain did HERE, in a team agent's persona. */
-    personaSubagents: PersonaSubagent[];
-    /**
-     * The one-word answer:
-     *  - `no-work-filed`     — nothing was filed and nothing was staffed; there is no gap.
-     *  - `staffed`           — somebody (or some persona) is on the work.
-     *  - `filed-not-staffed` — work exists, and nobody was even ASKED to run it.
-     *  - `staffing-refused`  — somebody was asked and the platform said no.
-     */
-    verdict: 'no-work-filed' | 'staffed' | 'filed-not-staffed' | 'staffing-refused';
-}
-/** Derive the staffing picture from a recorded trace. Pure — no clock, no I/O. */
-declare function staffingSummaryInTrace(events: BrainTraceEvent[]): StaffingSummary;
-/**
- * The refusals, grouped by reason with counts — "manager role required ×5" rather than
- * the same sentence printed five times. Five identical refusals are ONE fact about the
- * run, and spelling them out individually buries it.
- */
-declare function formatDispatchRefusals(refusals: readonly DispatchRefusal[]): string;
-/**
- * The "Likely cause" sentence for a run that filed work and staffed nobody. Lives here,
- * beside the numbers it quotes, so `brainTriage` reaches it in one call rather than
- * growing a second copy of this reasoning.
- */
-declare function workFiledNotStaffedVerdict(s: StaffingSummary): string;
-/**
- * Render the staffing picture as report lines (empty when the run neither filed nor
- * staffed anything — a plain question does not need a staffing paragraph).
- */
-declare function formatStaffingSummary(s: StaffingSummary): string[];
-
-/**
- * What the run is doing RIGHT NOW — the live activity value.
- *
- * The trace records steps once they have COMPLETED, which is exactly the wrong
- * moment for a progress indicator: a `search_code` that takes 67 seconds emits
- * nothing at all until it is over, so the user sits in front of a static
- * "Thinking…" line for a minute with no way to tell a working agent from a hung
- * one. This module is the other half — the in-flight phase, published as it is
- * entered and cleared when the run ends, so a surface can render the CURRENT
- * step (which tool, on what, for how long) instead of only the settled past.
- *
- * Pure data + pure derivation: no React, no DOM, no clock of its own (callers
- * pass `startedAt`), so the web app, the VS Code webview and any future surface
- * render the same activity from the same value.
- */
-/**
- * The phase a run is in. Ordered roughly as a turn moves through them, though a
- * run loops back to `thinking` for every iteration of the agent loop.
- *
- * - `starting`  — the run was accepted; the first completion hasn't opened yet.
- * - `thinking`  — a completion is open and no token has arrived (this is the
- *                 phase that used to look identical to a hang).
- * - `writing`   — tokens are streaming; the reply is visibly forming.
- * - `composing` — the model is emitting a TOOL CALL's arguments; `label` is the tool
- *                 name and `bytes` the argument bytes received so far. The run loop
- *                 only ever watched text deltas, so a turn that streamed a 21 KB
- *                 `write_file` call showed "streaming the reply" and then nothing at
- *                 all for three minutes (chat #113) — indistinguishable from a hang
- *                 while the model was in fact working the whole time.
- * - `tool`      — a tool call is executing. Carries which one and on what.
- * - `awaiting`  — paused on a human-in-the-loop confirm; the loop cannot advance
- *                 until the user answers, so this must NOT read as "busy".
- * - `finishing` — the answer is delivered and the run is doing its post-run work
- *                 (minting the ticket for a code change, advancing linked tickets).
- *                 Real calls that take real time, and previously showed nothing.
- */
-type BrainRunPhase = 'starting' | 'thinking' | 'writing' | 'composing' | 'tool' | 'awaiting' | 'finishing';
-/** A live, in-flight step. `null` on the snapshot means the run is idle. */
-interface BrainRunActivity {
-    phase: BrainRunPhase;
-    /** The tool being executed or composed (`composing` / `tool` / `awaiting` phases). */
-    label?: string;
-    /**
-     * Bytes of tool-call ARGUMENTS received so far (`composing` phase only). The one
-     * number that separates "the model is writing a large file" from "the stream died":
-     * it climbs, visibly, for every second the phase lasts.
-     */
-    bytes?: number;
-    /**
-     * The concrete THING being worked on, derived from the call's arguments — a
-     * file path, a search query, a record id. "Reading LandingCanvasHero.module.css"
-     * tells a user the agent is making progress; "Running a tool" does not.
-     */
-    detail?: string;
-    /** Epoch ms when this phase began. The renderer ticks its own elapsed clock off it. */
-    startedAt: number;
-    /** 1-based agent-loop iteration, so a long run shows it is still advancing. */
-    step: number;
-}
-/**
- * Shorten a target for a one-line indicator. A path elides from the LEFT (the
- * basename is what identifies it); anything else elides from the right.
- */
-declare function shortenTarget(value: string, max?: number): string;
-/**
- * Derive the human "on what" for a live tool step from its arguments. Returns
- * undefined when the call has no recognizable target — the indicator then names
- * the tool alone rather than inventing a subject for it.
- */
-declare function activityTarget(args: unknown): string | undefined;
-/** Build the live activity for a tool step about to execute. */
-declare function toolActivity(label: string, args: unknown, step: number, startedAt: number): BrainRunActivity;
-/**
- * Human-readable byte size — `812 B`, `12.4 KB`. THE size formatter for this package:
- * the triage report's tool-result sizes, the turn log's argument bytes and the live
- * composing indicator all render a size the same way, so a reader who learns to read
- * "21.1 KB" in one place reads the same number in the other two.
- */
-declare function formatBytes(bytes: number): string;
-/**
- * One English clause describing an in-flight step, for a copied triage report —
- * "running `search_code` on frontend/src (67s so far, loop step 4)".
- *
- * Report prose, deliberately NOT localized: a triage capture is pasted into an issue
- * or handed to an engineer, and it is a single artifact in one language by design —
- * the same reason every other line in that report is English. The LIVE indicator, which
- * a user reads in their own editor, is fully localized; see `LiveActivity.tsx`.
- *
- * Shared by both copy surfaces (the web triage report and the VS Code transcript) so a
- * mid-run capture describes itself identically wherever it was taken.
- */
-declare function describeLiveStep(step: BrainRunActivity, capturedAtMs: number): string;
-/**
- * The mid-run banner both copy surfaces emit. One sentence, one place: the fact that a
- * report was taken mid-flight has to be stated identically everywhere, or a reader who
- * learns to look for it on one surface will not find it on the other.
- */
-declare function midRunNotice(activity: BrainRunActivity | null | undefined, capturedAtMs: number): string;
-
-/**
- * Brain execution triage — capture the Brain's run (LLM steps, tool chain,
- * intermediate assistant messages, and errors) as a single paste-able report.
- *
- * This mirrors the "Copy triage info" report the Observability/Logs view emits
- * for host & cloud agents, but for the in-browser Brain agent loop. The loop
- * (useBrainConversation) records a BrainTraceEvent per step; this module turns
- * the recorded trace + the visible conversation into one report a user can drop
- * straight into a bug report.
- */
-
-/** One step of the Brain agent loop, recorded as it runs. */
-interface BrainTraceEvent {
-    /** ISO timestamp of when the step completed. */
-    ts: string;
-    /**
-     * Category, matching the host/cloud triage vocabulary:
-     * - `llm`       — a streamed completion (model, step, tool-call count)
-     * - `tool`      — a client action the model invoked (args + result)
-     * - `message`   — assistant text emitted on a turn
-     * - `error`     — a thrown exception or a tool result that failed
-     * - `recall`    — the project Evermind recalled learned memories before answering
-     * - `learn`     — the turn was contributed back to the project Evermind
-     * - `reconcile` — the turn superseded (updated) recalled memories (write-through)
-     */
-    category: 'llm' | 'tool' | 'message' | 'error' | 'recall' | 'learn' | 'reconcile';
-    /** Display label — the tool name, or `llm.complete` / `agent.message`. */
-    label: string;
-    /** Wall-clock duration of the step, when measured. */
-    durationMs?: number;
-    /**
-     * `llm` steps: time-to-first-token (ms) — the delay from issuing the
-     * completion request to the FIRST streamed text delta of the turn. Undefined
-     * when no token arrived (a pure tool-call / empty turn). The timeline uses it
-     * for the "Thought for Xs" thinking node so it reflects latency-to-first-token
-     * rather than the full-turn duration.
-     */
-    ttftMs?: number;
-    /** Tool arguments / completion request summary. */
-    args?: unknown;
-    /** Tool result / completion summary / error message. */
-    result?: unknown;
-    /** True when this step represents a failure (thrown, or `{ ok: false }`). */
-    isError?: boolean;
-    /** `llm` steps: token usage the gateway reported for this completion. */
-    usage?: {
-        prompt?: number;
-        completion?: number;
-        total?: number;
-    };
-    /** `llm` steps: OpenAI finish_reason (`stop` | `length` | `tool_calls` | …). */
-    finishReason?: string | null;
-    /** `llm` steps: length of the assistant text this turn produced. */
-    textChars?: number;
-    /**
-     * `tool` steps: byte length of the FULL result the tool returned, before any
-     * transcript trimming — so a diagnostics reader sees which tool flooded the
-     * context even though the model only ever saw a truncated copy.
-     */
-    resultBytes?: number;
-    /** `tool` steps: true when the result sent to the model was truncated. */
-    truncated?: boolean;
-    /**
-     * True when this event was RECONSTRUCTED from a durable step row rather than
-     * recorded live this session (see `persistedSteps.traceWithPersistedSteps`).
-     * Diagnostics uses it to tell a fully-observed run from a partially-recovered
-     * one, so mismatched coverage is labelled instead of silently averaged in.
-     */
-    recovered?: boolean;
-}
-/**
- * Did a tool result represent a failure?
- *
- * Tool results in this codebase signal failure by SHAPE, not prose: the platform
- * actions return `{ ok: false }` or `{ error: "<message>" }` (the tenant guard,
- * the dispatcher's unknown-capability, a thrown handler). We inspect that shape
- * instead of regex-scanning the whole stringified payload — the old
- * `\b(error|failed|exception)\b` scan misfired on any legit data that merely
- * CONTAINED the word "error" (e.g. a task titled "Fix login error", an audit
- * row, a search result), mis-marking a successful run as ERROR in the report.
- *
- * For a STRING result we only flag an embedded `{ ok: false }` / `"error":`
- * envelope (a stringified error object), never a free-text occurrence of the
- * word — a plain-string success like `"done"` or `"No errors found"` is not a
- * failure.
- */
-declare function isFailedToolResult(result: unknown): boolean;
-/** THE honesty-flag lines, shared by every copy surface so they cannot drift apart. */
-declare const UNBACKED_WRITE_CLAIM_NOTICE = "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (write_file / edit_file / attachments.write / project_files.save) succeeded in this run. The file was NOT modified.";
-declare const UNBACKED_TICKET_CLAIM_NOTICE = "\u26A0 UNBACKED TICKET CLAIM \u2014 an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.";
-/** Did this tool call FILE board work (create or link)? THE predicate — the honesty check
- *  below and `staffingSummary.ts` both read it, so "what counts as filing work" is one list. */
-declare function isTicketWriteTool(label: string): boolean;
-/**
- * Structural honesty check for the "it said it updated the file but didn't" failure:
- * an assistant message that CLAIMS a file/attachment write while NO file-write tool
- * call succeeded in the run. Pure over the recorded trace + visible messages, so the
- * web report and the VS Code transcript flag it identically. The Brain system prompt
- * tells the model not to fake a save; this makes a violation visible in every triage
- * capture (and is reusable by a run-loop guard).
- */
-declare function detectUnbackedWriteClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
-/**
- * The ticket twin of {@link detectUnbackedWriteClaim}: an assistant turn that CLAIMS it
- * created/filed/linked a ticket, gap, or task while NO create/link tool call succeeded
- * this run — the "it said it linked the gap to the chat, but the chat shows no link"
- * failure. The run loop links a REAL create deterministically (autoLinkCreatedItem), so
- * a claim with no successful create/link tool means nothing was actually filed or
- * linked. Pure over the recorded trace + visible messages, so both copy surfaces flag
- * it identically.
- */
-declare function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
-/**
- * The "it doesn't execute, it just dies" signature: an assistant turn that NARRATES a
- * tool call — announcing it in prose, or writing the bare call as text — while the run
- * recorded ZERO tool steps.
- *
- * This is a model fault, not a user one: the agent loop only runs structured
- * `toolCalls` (plus the inline dialects `xmlToolCalls` lifts), so a model that writes
- * its intent as plain text achieves nothing. Without this detector the triage block
- * scores such a run "healthy" (no errors, no truncation, no context pressure), which
- * is exactly backwards.
- *
- * Deliberately reuses `announcesUntakenAction` — the SAME detector the run loop gates
- * its stall recovery on. Diagnostics that disagreed with the loop about what counts as
- * a stall would be worse than none: a report could call a run healthy while the loop
- * had spent three recovery turns on it.
- *
- * Pure over the merged trace + visible messages, so both copy surfaces flag it
- * identically.
- */
-declare function detectAnnouncedButUnmadeToolCall(events: BrainTraceEvent[], messages: BrainMessage[]): boolean;
-/** How many times this run re-prompted a model that announced a call without making one. */
-declare function stallRecoveriesInTrace(events: BrainTraceEvent[]): number;
-/** How many times this run switched MODELS because one wouldn't emit tool calls. */
-declare function modelFailoversInTrace(events: BrainTraceEvent[]): number;
-/** True when the stall survived every recovery AND every failover this run. */
-declare function stallUnrecoveredInTrace(events: BrainTraceEvent[]): boolean;
-/** Tool-catalog exposure for a run, read off the `llm` turns the loop records. */
-interface ToolExposure {
-    /** Tools advertised on the LAST measured turn (what the model could call at the end). */
-    lastTurn: number | null;
-    /** Fewest tools advertised on any measured turn — a zero here explains everything. */
-    min: number | null;
-    /** Size of the whole registered catalog the selection drew from. */
-    catalog: number | null;
-}
-/**
- * How many tools the model was actually OFFERED, per turn, versus how many exist.
- *
- * The registry-wide total is not the same question: a turn that was handed ZERO tools
- * and a turn that was handed sixty-four and ignored them produce byte-identical reports,
- * and only one of them is the model's fault. The loop records the real per-turn number
- * and this reads it back. Nulls when the run predates the field.
- *
- * This is now the SINGLE source of the per-turn figure: the chat-diagnostics header used
- * to render a ceiling derived from the registry size while the Diagnostics block below it
- * rendered this measurement, so one report answered one question two ways. Both lines
- * read this function now (via `gatherChatDiagnostics`).
- */
-declare function toolExposureInTrace(events: BrainTraceEvent[]): ToolExposure;
-/**
- * Tools the model WROTE OUT by name on a turn that made no call, which it had never been
- * advertised — recorded per-turn by the run loop (only it holds both halves).
- *
- * This is the signal that separates two failures the old report collapsed into one
- * "the model won't emit tool calls, try another":
- *   - the model narrated a tool it COULD see  ⇒ genuinely a model/provider fault;
- *   - the model narrated a tool it could NOT see ⇒ our per-turn tool selection dropped
- *     the tool the prompt told it to call, and no model can emit a call for a function
- *     it was never given. Swapping models does nothing.
- * De-duplicated, first-seen order.
- */
-declare function narratedUnadvertisedInTrace(events: BrainTraceEvent[]): string[];
-/** One turn the memory-first short-circuit answered — the LLM was never called. */
-interface MemoryAnsweredTurn {
-    /** `evermind` = the project's SSM GENERATED the reply; `qa-cache` = a stored answer was replayed. */
-    source: 'evermind' | 'qa-cache';
-    /** Evermind head version that served it (evermind source only). */
-    version?: number;
-    /** WHICH project's Evermind served it — a project can target several heads. */
-    projectId?: number;
-}
-/**
- * An `evermind/…` (or project-/tenant-pinned) model id means a tenant's own
- * Evermind artifact answered the turn rather than a stock pool model. Matches the
- * `evermind/` vendor prefix and the `project_evermind:` / `tenant_model:` pin refs.
- */
-declare function isEvermindModel(model: string): boolean;
-/**
- * The distinct models the gateway ACTUALLY used across a run, read from the `llm`
- * trace events (brainRunStore records the resolved model in `args.model`). First-
- * seen order, so a mid-run failover swap stays visible. The placeholder `default`
- * (caller pinned nothing ⇒ gateway auto-selected, and it reported no model) is
- * dropped so it never masquerades as a real model id. A user Stop counts too: the
- * model it cut off streamed, even though that turn never completed.
- */
-declare function modelsUsedInTrace(events: BrainTraceEvent[]): string[];
-/**
- * Which account served the run, from the `account` the loop recorded per `llm`
- * step (the gateway's `x-builderforce-account`). Last-seen wins so a mid-run swap
- * is reflected. Undefined when the gateway reported none. Values: `own` (tenant's
- * connected frontier account) · `shared` (shared pool, nothing connected) ·
- * `shared_byo_unused` (shared pool DESPITE a connected account).
- */
-declare function accountUsedInTrace(events: BrainTraceEvent[]): string | undefined;
-/**
- * Connected-BYO providers the gateway could NOT resolve on any turn (from
- * `x-builderforce-byo-unresolved`) — e.g. a connected Claude subscription whose
- * token expired, so the run silently used the shared pool instead of the tenant's
- * own Opus. Union across turns, first-seen order. Empty when everything resolved.
- * This is the signal that turns a mysterious weak-model run into "reconnect your
- * Claude account" — the exact context a "should have used Opus" triage lacked.
- */
-declare function byoUnresolvedInTrace(events: BrainTraceEvent[]): string[];
-/** One connected-but-unresolved provider + WHY (the gateway encodes `provider:reason`
- *  in `x-builderforce-byo-unresolved`, e.g. `anthropic:revoked`). `reason` is '' when the
- *  gateway sent a bare provider (older gateway). */
-interface ByoUnresolvedEntry {
-    provider: string;
-    reason: string;
-}
-/** Parse the run's `provider:reason` unresolved entries into structured form. Accepts the
- *  bare-provider form too (reason ''), so an older gateway still renders. */
-declare function parseByoUnresolved(entries: readonly string[]): ByoUnresolvedEntry[];
-/** An actionable hint for a {@link ByoUnresolvedEntry} reason — the SINGLE source both the
- *  triage report and the live webview banner render, so "what do I do about it" never drifts. */
-declare function byoReasonHint(reason: string): string;
-/** A one-line summary of an unresolved provider: `anthropic (revoked): <hint>`. */
-declare function byoUnresolvedSummary(entry: ByoUnresolvedEntry): string;
-/**
- * The model + account provenance header lines, derived from the trace. The SINGLE
- * source both copy surfaces use (the web {@link buildBrainTriageReport} and the VS
- * Code `transcript.ts`) so "which surface / model / account served this, and was a
- * connected account left unused" is rendered identically — no drift, no surface
- * missing the account/BYO context (the "vsix copy missing info" gap). `surface`
- * names WHERE the run happened (e.g. `VS Code (VSIX)` / `Web`); omit when unknown.
- */
-declare function formatBrainProvenance(events: BrainTraceEvent[], opts?: {
-    configuredModel?: string;
-    surface?: string;
-}): string[];
-/**
- * Structured run diagnostics derived from the trace — the numbers a reader needs
- * to tell WHY a Brain run died, without eyeballing a wall of JSON.
- *
- * The two failure modes we discriminate:
- *  - **context-exhaustion** (case A): prompt tokens climb turn over turn (big
- *    tool dumps in the transcript), the gateway fails over to a smaller-window
- *    model, and a turn ends on `finish_reason: length` or empty. The context
- *    starved the model.
- *  - **model-degradation** (case B): a tenant Evermind/SSM model answered and a
- *    turn came back empty/failed while token counts stayed LOW — the model
- *    itself produced nothing, not the context.
- */
-interface BrainDiagnostics {
-    turns: number;
-    toolCalls: number;
-    errors: number;
-    loopExhausted: boolean;
-    /** True when at least one llm step reported token usage. */
-    tokensMeasured: boolean;
-    /** Largest prompt-token count seen on any single turn. */
-    promptTokenPeak: number;
-    /** Sum of completion tokens across turns. */
-    completionTokenTotal: number;
-    /** Prompt tokens on the LAST turn (the one nearest any overflow). */
-    lastPromptTokens: number;
-    /** Total bytes of tool results returned this run (pre-trim). */
-    toolResultBytes: number;
-    /** Count of tool results trimmed to the per-result budget before hitting the model —
-     *  LOSSY cuts only; a paged `read_file` window is counted in {@link pagedReadWindows}.
-     *  A trim is the budget WORKING: it is evidence of pressure, never of a failure. */
-    truncatedToolResults: number;
-    /** `read_file` results handed over as one window of a larger file, with the offset
-     *  that continues it. The budget working as designed, not lost context. */
-    pagedReadWindows: number;
-    /** The single largest tool result (label + pre-trim bytes). */
-    largestToolResult: {
-        label: string;
-        bytes: number;
-    } | null;
-    /**
-     * The steps that FAILED, most recent first — label plus the message the tool
-     * actually returned. `Errors: 1` on its own tells a reader that something went
-     * wrong and nothing about what, so the only way to act on it was to scroll the
-     * whole transcript hunting for the failure. Capped, because a run that fails
-     * repeatedly should not push everything else out of the report.
-     */
-    errorSteps: {
-        label: string;
-        message: string;
-        model?: string;
-    }[];
-    /** Distinct models that actually answered, first-seen order. */
-    modelsUsed: string[];
-    /** What each of those models did with the turns it served — see `modelScorecard.ts`. */
-    modelScores: ModelScore[];
-    /** Each `llm.complete` in run order — which model produced which output. */
-    modelTurns: ModelTurn[];
-    /** Distinct Evermind/SSM artifacts among them. */
-    evermindUsed: string[];
-    /** Turns where the resolved model differed from what was requested. */
-    downgradeEvents: number;
-    /** Turns that ended on `length` or produced empty text. */
-    emptyOrLengthFinishes: number;
-    /**
-     * True when a turn NARRATED a tool call ("I'll call the tool…", `builtin_…`) while
-     * the run made none — the model isn't emitting structured `toolCalls`, so nothing
-     * ever executes. See {@link detectAnnouncedButUnmadeToolCall}.
-     */
-    announcedUnmadeToolCall: boolean;
-    /** How many times the loop re-prompted a model that announced a call without making one. */
-    stallRecoveries: number;
-    /** How many times the loop switched MODELS after one burned its whole stall budget. */
-    modelFailovers: number;
-    /** True when the stall survived every recovery and every failover — the run gave up. */
-    stallUnrecovered: boolean;
-    /** A tool step ran after the last re-prompt — see {@link stallRecoveredInTrace}. */
-    stallRecovered: boolean;
-    /** Models whose stream broke mid-turn and were retried on another — see {@link streamRetriesInTrace}. */
-    streamRetries: string[];
-    /** How many tools the model was offered on the last measured turn (null ⇒ not recorded). */
-    advertisedToolsLastTurn: number | null;
-    /** Fewest tools offered on any measured turn — a 0 explains a whole run by itself. */
-    advertisedToolsMin: number | null;
-    /** Size of the registered catalog the per-turn selection drew from. */
-    catalogTools: number | null;
-    /**
-     * Tools the model named in prose on a call-less turn that it was never advertised.
-     * Non-empty means the request was impossible as framed — see
-     * {@link narratedUnadvertisedInTrace}.
-     */
-    narratedUnadvertisedTools: string[];
-    /**
-     * Turns the memory-first short-circuit answered WITHOUT calling a model (see
-     * {@link memoryAnswersInTrace}). A run made only of these has no turns, no tokens
-     * and no tool calls — the exact shape of a "the model won't call tools" run, which
-     * is why it must be named rather than left to inference.
-     */
-    memoryAnswers: MemoryAnsweredTurn[];
-    /**
-     * True when tool steps were RECOVERED from durable history but no `llm` turn
-     * covers them — i.e. the chat predates durable turn records (or was reopened),
-     * so the turn/token figures describe only this session while the tool figures
-     * describe the whole conversation. Reported so the two aren't read as one run's
-     * totals: "Turns: 2 · Tool calls: 44" is nonsense unless the mismatch is named.
-     */
-    turnCoveragePartial: boolean;
-    /**
-     * Repetition / reach / effect / timing for the run — see `runProgress.ts`. This
-     * is what separates "every turn succeeded and nothing got done" from a genuine
-     * context or model failure, and it is the only signal that fires on the most
-     * common real-world stall: an agent re-reading one file until its budget is gone.
-     */
-    progress: RunProgress;
-    /**
-     * The run showed context PRESSURE (a big prompt, trimmed tool results) but nothing was
-     * cut short by it — no truncated turn, no downgrade, no exhausted loop, no failed
-     * completion. Reported as an advisory line so the numbers are still visible, while the
-     * verdict stays whatever the rest of the run says (usually `healthy`).
-     */
-    contextPressureOnly: boolean;
-    /**
-     * What this run FILED versus what it STAFFED — see `staffingSummary.ts`. The signal
-     * that separates "twelve tickets and a hundred green tool calls" from "somebody is
-     * actually working on it": every other field here can read clean on a run that left
-     * every ticket it created with nobody on it.
-     */
-    staffing: StaffingSummary;
-    /**
-     * Build/runtime failures the run's LAST diagnostics read still reported — the app the
-     * run was working on was broken when it stopped looking. 0 when no read reported any,
-     * or a later read came back clean. See {@link unresolvedAppFailuresInTrace}.
-     */
-    unresolvedAppFailures: number;
-    /**
-     * Best-effort verdict — the header a triager reads first. `healthy` is distinct
-     * from `inconclusive`: the former means there is no failure to explain, the
-     * latter that there IS one but the signals don't separate A from B. Collapsing
-     * both into "inconclusive" made a clean run read as an unsolved problem.
-     *
-     * `tool-calls-not-emitted` outranks the rest: a run that narrated its calls did
-     * nothing at all, and every other signal on it reads clean.
-     *
-     * `no-tools-advertised` and `tool-not-advertised` outrank even that, because they are
-     * OUR fault rather than the model's, and the remedy ("pick a different model") that
-     * `tool-calls-not-emitted` prescribes is actively wrong for them.
-     *
-     * `no-progress` sits above `context-exhaustion` and `model-degradation` for the same
-     * reason: a run that re-read one file until its budget was gone will ALSO show a high
-     * prompt peak and truncated tool results, so the context signals fire — but they are a
-     * CONSEQUENCE of the loop, and acting on them (shrink the transcript, swap the model)
-     * changes nothing. The loop has to be named first or it is never seen.
-     *
-     * `work-filed-not-staffed` sits LAST among the causes, above only `healthy`/`inconclusive`:
-     * it is a verdict about the run's OUTCOME, not its mechanics, so any genuine exhaustion,
-     * model fault or narrated-call failure explains the missing dispatch better and outranks it.
-     */
-    likelyCause: 'memory-answered' | 'no-tools-advertised' | 'tool-not-advertised' | 'tool-calls-not-emitted' | 'no-progress' | 'context-exhaustion' | 'model-degradation' | 'app-errors-unresolved' | 'work-filed-not-staffed' | 'inconclusive' | 'healthy';
-}
-/**
- * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O
- * — so both the web report and the VS Code transcript compute the identical
- * block from the same events (single source of truth for A-vs-B triage).
- *
- * `messages` is the visible conversation. It is optional only so older callers keep
- * compiling; without it the narrated-tool-call verdict can't be reached, so every
- * surface should pass it.
- */
-interface BrainDiagnosticsContext {
-    /**
-     * True when the run was STILL EXECUTING at the moment the report was captured.
-     * The trace cannot know this — it only holds settled steps — yet it changes how
-     * every "and then nothing happened" signal should be read: a run captured
-     * mid-flight has not failed to write the file, it has not reached the write yet.
-     * Without it, copying a report while the agent is working reports the agent as
-     * broken.
-     */
-    running?: boolean;
-}
-declare function computeBrainDiagnostics(events: BrainTraceEvent[], requestedModel?: string, messages?: BrainMessage[], ctx?: BrainDiagnosticsContext): BrainDiagnostics;
-/**
- * Render {@link BrainDiagnostics} as transcript lines. Shared by both copy
- * surfaces so the "Diagnostics" block is identical on web and in VS Code. Emits
- * a leading `--- Diagnostics ---` header and returns the lines (caller joins).
- */
-declare function formatBrainDiagnostics(d: BrainDiagnostics): string[];
-interface BuildBrainTriageOptions {
-    /** ISO capture time (caller supplies it so the module stays clock-free). */
-    capturedAt: string;
-    /** The trace recorded by the agent loop for the active chat. */
-    events: BrainTraceEvent[];
-    /** The visible conversation, included as a transcript section. */
-    messages?: BrainMessage[];
-    /** The chat being captured. */
-    chatId?: number | null;
-    chatTitle?: string;
-    /** The persona / agent the Brain ran as. */
-    agentLabel?: string;
-    /** The model this surface was CONFIGURED with (empty ⇒ gateway auto-selects).
-     *  Distinct from what actually answered, which is derived from the trace. */
-    configuredModel?: string;
-    /** Where the run happened (e.g. `VS Code (VSIX)` / `Web`), for provenance. */
-    surface?: string;
-    /** The current top-level error surfaced to the user, if any. */
-    error?: string;
-    /**
-     * True when the run was STILL EXECUTING at capture time. The trace cannot know it,
-     * and it changes how every "and then nothing happened" signal reads: a report taken
-     * mid-flight describes an UNFINISHED run, not a failed one.
-     */
-    running?: boolean;
-    /** The in-flight step at capture time (which tool, on what, since when). */
-    activity?: BrainRunActivity | null;
-}
-/**
- * Assemble the Brain triage report. Same shape as the host/cloud report:
- * header → errors-first → full event log → derived log lines → transcript.
- */
-declare function buildBrainTriageReport(opts: BuildBrainTriageOptions): string;
-
 interface UseBrainConversationOptions {
     chatId: number | null;
     modality?: BrainModality;
@@ -3508,16 +3796,173 @@ declare function queueRunSteering(runKey: number, text: string): void;
 declare function drainRunSteering(runKey: number): string[];
 
 /**
- * The analysis→code hand-off, as it appears on the wire.
+ * Deterministic JSON — object keys sorted at every depth — for anything KEYED on a
+ * value whose key order is incidental: a tool call's arguments, a cache key's request
+ * fields, a trace fingerprint. Two values a caller means identically (`{path, offset}`
+ * vs `{offset, path}`) must produce one string; `JSON.stringify` keeps insertion order,
+ * so it cannot.
+ *
+ * JSON-faithful for JSON values: an object entry whose value is `undefined` is dropped
+ * (as `JSON.stringify` drops it), a top-level `undefined` reads as `null`. Values JSON
+ * cannot express still get a stable, distinct form instead of collapsing: a non-finite
+ * number and a bigint as their string, an `Error` as its name/message/stack, bytes as
+ * their numbers.
+ *
+ * NOT for fingerprints that are stored and later re-compared (boardsync content
+ * hashes, sandbox verification stamps) — those keep `domain/shared/stableStringify`'s
+ * format until their stored hashes are migrated.
+ *
+ * Pure and dependency-free (this package's root is imported by the Worker).
+ */
+declare function stableStringify(value: unknown): string;
+
+/**
+ * Untaken tool call — detection + recovery, shared by every agent loop.
+ *
+ * Recovery has two halves and BOTH live in this file: the re-prompt budget with its
+ * user-facing notices, and the MODEL FAILOVER section at the bottom. They were split
+ * across two packages once — the selector lived in a React package — and the server
+ * reply loop, unable to import it, hand-rolled its own and shipped a failover branch
+ * that could not run. See {@link chooseStallFailover}.
+ *
+ * The failure it fixes: a turn ends with `stopReason: stop` and ZERO tool calls while
+ * tools were available, and a loop that treats "no tool calls" as "done" hands the user
+ * words instead of a result. It wears five faces, all of them observed in production and
+ * all of them a model-behaviour class rather than a vendor bug:
+ *
+ *   1. the PROMISE — `"I'll search the codebase for the handler."`
+ *   2. the PSEUDO-CALL — `"run tool builtin_chats_list_tickets with chatId is 85"`
+ *   3. the MISSING-DATA CLAIM — `"The required tools have not returned results yet."`
+ *   4. the BLANK TURN — nothing at all: no call, no words.
+ *   5. the HANDOFF — `"Now run `pnpm type-check`, then commit and push."` (`handoff.ts`)
+ *   6. the PERMISSION MENU — `"Would you like me to: open PRs? cancel the tickets?"`
+ *      (`permissionMenu.ts`)
+ *
+ * The third is the one that reads like an answer, and it is why the manager's
+ * accountability chat shipped "I have no data" to a person asking it to account for a
+ * dead board (project 11 / chat 86, 2026-07-28: 7 turns, 102 tools, 0 calls). The
+ * fourth is the one that reads like a blip, and it is why the same chat answered a
+ * 400 saying "this usually clears on a retry" four days running (2026-07-31). The
+ * fifth is the one that reads like a FINISHED answer — it is well written, correct,
+ * and complete except for the part where somebody has to do it — and it is the shape
+ * a coding agent in the user's own workspace fails with most: it edits the files, then
+ * writes out the verification and the commit for the user to run. Every other detector
+ * here is first-person by construction and scores it a clean finish.
+ *
+ * The sixth is the one that reads like GOOD MANNERS. It does the reading, writes a
+ * correct report, and closes by offering to do the work — so the user, who asked for
+ * that work one message earlier, spends a turn granting permission that was implicit in
+ * the request. It defeats every detector above at once: too long to be empty, too
+ * deferential to be a promise, too well-sourced to be a missing-data claim, and it names
+ * platform actions rather than shell commands so the handoff gate's "is a command within
+ * reach" test never fires.
+ *
+ * Deliberately zero-dependency, framework-free and free of Node builtins: the Brain
+ * run loop imports this into a BROWSER bundle (VS Code webview / Next.js client)
+ * while the on-prem + cloud agent loop imports it into Node and the Worker.
+ */
+
+/**
+ * Every advertised tool identifier appearing in `text`, de-duplicated, in order.
+ *
+ * Two callers, one pattern — which is the point of putting it here. The stall
+ * detector below uses it to recognise a call written as prose; the per-turn tool
+ * SELECTOR uses it to find the tools a system prompt instructs the model to call, so
+ * a relevance filter can never drop a tool the prompt just promised. Those two must
+ * agree on what a tool name looks like, or the loop recovers from a stall the
+ * selector caused.
+ */
+declare function toolNamesMentionedIn(text: string): string[];
+/**
+ * Does this reply PROMISE a tool call rather than make one?
+ *
+ * A false positive costs one extra model turn; a false negative strands the user
+ * holding a promise — so the bias runs toward catching the stall.
+ */
+declare function announcesUntakenAction(text: string): boolean;
+/**
+ * Every CATALOG-style tool id in `text` (`manager.digest`), de-duplicated, in order —
+ * the counterpart to {@link toolNamesMentionedIn}, which finds the ADVERTISED form.
+ *
+ * The pair is a DIAGNOSIS, not a curiosity, and it is the distinction a shipped report
+ * got wrong. A stalled reply naming `manager.digest` was told to call a string the model
+ * never had (the prompt / persisted-persona name mismatch, fixed by migration 0379). A
+ * stalled reply naming `builtin_manager_digest` was told correctly and could not comply —
+ * the tool list is fine and the MODEL is the problem. Identical transcripts, opposite
+ * fixes; a report that asserts the first while the evidence says the second sends the
+ * reader to re-audit prompts and migrations that were already right.
+ */
+declare function catalogToolNamesMentionedIn(text: string): string[];
+/**
+ * Does this reply blame MISSING TOOL DATA on a turn that called nothing?
+ *
+ * Exported alongside {@link announcesUntakenAction} because the two are different
+ * failure shapes with the same remedy, and a caller reporting WHY it re-prompted
+ * should be able to tell them apart.
+ */
+declare function claimsMissingToolData(text: string): boolean;
+/**
+ * The gateway model surface, as `/llm/v1/models` returns it and both browser hosts
+ * cache it. Structurally a superset of what `classifyModelFunding` takes, so one
+ * cached object feeds both. A SERVER caller composes the same shape from the pool
+ * constants it already has (see `BrainService.agentReply`).
+ */
+interface ModelFallbackSurface {
+    /** The plan pool — every model this tenant may select. */
+    data?: Array<{
+        id?: string;
+    }>;
+    /** The curated tool-calling / coding subset of the pool. */
+    codingModels?: string[];
+    /** Models reachable through the tenant's OWN connected accounts (BYO). */
+    byo?: {
+        models?: Array<{
+            id?: string;
+            vendor?: string;
+        }>;
+    };
+}
+/**
+ * The next model to try, or undefined when nothing untried is left.
+ *
+ * Preference order, and why:
+ *  1. **BYO ∩ coding pool** — the tenant's own connected account (so the retry costs
+ *     nothing against the plan allowance) AND curated for tool calling, which is the
+ *     capability that just failed. Best on both axes.
+ *  2. **Remaining BYO** — another connected account, before the shared free pool. A
+ *     stall on BYO Grok that falls straight onto a shared coder surfaces as
+ *     `shared_byo_unused` even though Claude/Codex/etc. were connected and free to
+ *     try; preferring BYO here keeps the retry on the tenant's own keys.
+ *  3. **Coding pool** — curated for tool calling, plan-funded (shared).
+ *  4. **Rest of the plan pool.**
+ *
+ * A caller driving an AGENTIC turn should leave `data` unset: tier 4 is the general
+ * plan pool, and falling a tool-loop onto a non-coder produces a run that flails and
+ * ships nothing (the same reasoning as the gateway's coding-only backstop chain).
+ *
+ * `tried` holds every model already attempted this run, including the original pin.
+ * A caller that pinned nothing (gateway auto-select) should pass its resolved model,
+ * so the failover cannot hand back the model that just failed.
+ */
+declare function nextFallbackModel(surface: ModelFallbackSurface | null | undefined, tried: readonly string[]): string | undefined;
+
+/**
+ * The analysis→code hand-off, as it appears on the wire and as the coder is told it.
  *
  * When an auto-routed run's planning turn reaches for its first code change, the loop
  * discards that turn and re-asks the SAME turn, from the same transcript, with role
- * `code` (see `brainRunStore.ts`). A request with role `code` straight after one with
- * role `plan` is that re-ask — a run's role only ever moves from plan to code there.
+ * `code` (the `code_change_attempted` event in `./policy.ts` decides when). Every host
+ * that plans before it codes makes that re-ask, so both halves of it live here rather
+ * than in whichever loop happened to write them first (the browser Brain's run store).
+ * Pure.
+ */
+/**
+ * A request with role `code` straight after one with role `plan` is the re-ask — a
+ * run's role only ever moves from plan to code there.
  *
  * Exported so a scripted gateway can recognise the re-ask and replay the current step
  * instead of advancing its script: a real coding model, handed the same transcript,
- * makes the same move. Pure.
+ * makes the same move.
  */
 declare function isCoderReask(role: string | undefined, previousRole: string | undefined): boolean;
 
@@ -3675,6 +4120,137 @@ interface BrainRunDriver {
 /** Route this process's runs through `driver`; `null` restores in-process execution. */
 declare function installRunDriver(driver: BrainRunDriver | null): void;
 declare function getRunDriver(): BrainRunDriver | null;
+
+/** One queued item, as a {@link OutboxStore} persists it. JSON-serialisable when `T` and `K` are. */
+interface OutboxEntry<T, K> {
+    /** The entry's idempotency key — unique, minted when it was queued. */
+    id: string;
+    key: K;
+    item: T;
+    /** Monotonic queue position; FIFO order across restarts. */
+    seq: number;
+    /** Set once the entry has been sealed into a batch: that batch's idempotency key. */
+    batch?: string;
+    /** The scope (e.g. tenant id) it was queued under; absent = sendable under any scope. */
+    scope?: string;
+}
+/**
+ * Where queued entries live between being queued and being acknowledged. Calls are
+ * serialised by the outbox (never two at once, always in order), and `put`/`remove`
+ * never run before `load` has settled.
+ */
+interface OutboxStore<T, K> {
+    load(): Promise<OutboxEntry<T, K>[]> | OutboxEntry<T, K>[];
+    /** Insert or replace by `id`. */
+    put(entries: OutboxEntry<T, K>[]): Promise<void> | void;
+    remove(ids: string[]): Promise<void> | void;
+}
+/** The host's connectivity. `subscribe` returns an unsubscribe. */
+interface OutboxOnlineSignal {
+    isOnline(): boolean;
+    subscribe(listener: (online: boolean) => void): () => void;
+}
+
+/**
+ * stepOutbox — the run's durable step rows, sent in batches instead of one POST each.
+ *
+ * Every tool call, LLM turn and memory step a run takes is persisted as a `role:'tool'`
+ * message (see `persistedSteps.ts`). Sent one at a time that was a full
+ * `POST /chats/:id/messages` per step — measured on chat #142: 57 tool calls over 22
+ * turns, ~80 requests, each costing the API an access check, a membership upsert, the
+ * insert, the seq update, the chat touch and a learn-gate read. The endpoint writes an
+ * ARRAY in one insert; nothing about a step row needs its own request.
+ *
+ * So step rows go through the shared write outbox (`@builderforce/write-outbox`), one
+ * lane per chat, and leave:
+ *   - riding along with the next conversational send for that chat (assistant text, a
+ *     stopped turn, a run failure) — the same request, zero extra calls;
+ *   - when {@link STEP_BATCH_MAX} rows are queued;
+ *   - {@link STEP_BATCH_WAIT_MS} after the first queued row, at the latest;
+ *   - when the run ends ({@link StepBatchingPersistence.flush}).
+ *
+ * ORDER holds by construction: a chat's lane has one request in flight at a time, and a
+ * conversational send waits its turn in that lane, so nothing it writes can overtake a
+ * step batch already on the wire.
+ *
+ * DURABLE: the outbox runs in its durable mode. A step batch that fails to send (offline,
+ * a redeploy, a dropped connection) is kept at the head of its chat's lane and retried
+ * with backoff — or the moment the host's `online` signal comes back — instead of being
+ * dropped; a failed conversational send hands its piggybacked rows back to the lane and
+ * still throws to its caller. Only a batch the server REFUSED (a 4xx) is dropped. Every
+ * row carries an `eventKey` minted from its outbox entry id, so a replay of a batch the
+ * server already wrote is recognised (`uq_brain_chat_messages_event`) and writes nothing
+ * twice. With a host `store` the queue also survives a restart.
+ */
+
+/** A row as the step outbox queues and persists it. */
+type StepOutgoingMessage = {
+    role: string;
+    content: string;
+    metadata?: string;
+    eventKey?: string;
+};
+/**
+ * How a HOST makes step rows work fully offline: where each queue is stored, the host's
+ * connectivity + identity, and a RUN-INDEPENDENT sender. Installed once by the host (the
+ * web app over IndexedDB, the VS Code extension host over its workspace state).
+ *
+ * With `sendRows` + `storedKeys`, every stored queue is drained on install (startup) and
+ * again whenever the host comes back online — no run in that chat is needed, because a
+ * step row is just a POST to its chat's messages endpoint (idempotent on `eventKey`).
+ * Without durability a run's rows are still retried, for the life of the process.
+ */
+interface StepDurability {
+    /** The store for one queue. `key` names the chat (and, for a sub-agent, its run). */
+    storeFor(key: string): OutboxStore<StepOutgoingMessage, number>;
+    /** Every key that currently holds a stored queue. */
+    storedKeys?(): Promise<string[]> | string[];
+    /** POST rows to a chat (the base persistence port), AS `scope` when given. Throws on
+     *  failure, with the HTTP `status` when there was one (a 4xx is dropped). */
+    sendRows?(chatId: number, rows: StepOutgoingMessage[], scope?: string): Promise<unknown>;
+    online?: OutboxOnlineSignal;
+    scope?(): string | null;
+}
+/** Install (or with `null`, remove) the host's step durability, and drain what is stored. */
+declare function installStepDurability(next: StepDurability | null): void;
+
+/**
+ * Durable Brain run steps over IndexedDB — the ONE installer for every host that has
+ * IndexedDB: a browser tab (the web app) and an MV3 service worker / extension page
+ * (the Chrome extension, Rovr).
+ *
+ * A run's step rows go through the step outbox (`stepOutbox.ts`); installed with this,
+ * each chat's queue is kept in ONE IndexedDB database, one partition per queue, so rows
+ * a run could not save — the host went offline, the API redeployed, the worker was put
+ * to sleep — survive a reload. Every stored queue is drained on install and again each
+ * time the host comes back online, straight to its chat's messages endpoint (no run in
+ * that chat needed), under the event keys the rows were first sent with (no duplicates).
+ *
+ * Rows are SCOPED to the identity they were written under (`scope()`): a queue written in
+ * one workspace is parked, never replayed into another. `sendRows` re-checks the scope at
+ * send time, which closes the window where the identity switches mid-send.
+ *
+ * Host-neutral: the IndexedDB factory, the connectivity signal, the identity and the
+ * sender are injected; nothing here reads `window`, `self` or `chrome`.
+ */
+
+interface IndexedDbStepDurabilityOptions {
+    /** `indexedDB` in a tab, `self.indexedDB` in a service worker. */
+    indexedDB: IDBFactory;
+    /** One database per host, e.g. `builderforce-outbox:brain-steps`. */
+    dbName: string;
+    /** The host's connectivity — rows wait while offline and replay on reconnect. */
+    online: OutboxOnlineSignal;
+    /** The identity rows are sent as right now (e.g. `tenant:7`); null = nobody yet. */
+    scope(): string | null;
+    /** POST rows to a chat's messages endpoint. Throws on failure, with the HTTP `status`
+     *  when there was one (a 4xx is dropped, anything else is retried). */
+    sendRows(chatId: number, rows: StepOutgoingMessage[]): Promise<unknown>;
+}
+/** Install IndexedDB-backed step durability for this host and drain what is stored. */
+declare function installIndexedDbStepDurability(opts: IndexedDbStepDurabilityOptions): void;
+
+declare function transcriptSeedFrom(history: BrainMessage[]): ChatCompletionMessage[];
 
 /**
  * The `composing` phase — a turn that is streaming a TOOL CALL, made visible.
@@ -4535,134 +5111,22 @@ declare function fetchApiVersionVia(read: () => Promise<{
 } | null>, now?: () => number, timeoutMs?: number): Promise<string | null>;
 
 /**
- * Untaken tool call — detection + recovery, shared by every agent loop.
+ * Consecutive failed tool dispatches after which a run is stopped, when the surface
+ * names no other number. ONE value, owned here, so every surface stops for the same
+ * reason at the same point.
  *
- * Recovery has two halves and BOTH live in this file: the re-prompt budget with its
- * user-facing notices, and the MODEL FAILOVER section at the bottom. They were split
- * across two packages once — the selector lived in a React package — and the server
- * reply loop, unable to import it, hand-rolled its own and shipped a failover branch
- * that could not run. See {@link chooseStallFailover}.
- *
- * The failure it fixes: a turn ends with `stopReason: stop` and ZERO tool calls while
- * tools were available, and a loop that treats "no tool calls" as "done" hands the user
- * words instead of a result. It wears five faces, all of them observed in production and
- * all of them a model-behaviour class rather than a vendor bug:
- *
- *   1. the PROMISE — `"I'll search the codebase for the handler."`
- *   2. the PSEUDO-CALL — `"run tool builtin_chats_list_tickets with chatId is 85"`
- *   3. the MISSING-DATA CLAIM — `"The required tools have not returned results yet."`
- *   4. the BLANK TURN — nothing at all: no call, no words.
- *   5. the HANDOFF — `"Now run `pnpm type-check`, then commit and push."` (`handoff.ts`)
- *   6. the PERMISSION MENU — `"Would you like me to: open PRs? cancel the tickets?"`
- *      (`permissionMenu.ts`)
- *
- * The third is the one that reads like an answer, and it is why the manager's
- * accountability chat shipped "I have no data" to a person asking it to account for a
- * dead board (project 11 / chat 86, 2026-07-28: 7 turns, 102 tools, 0 calls). The
- * fourth is the one that reads like a blip, and it is why the same chat answered a
- * 400 saying "this usually clears on a retry" four days running (2026-07-31). The
- * fifth is the one that reads like a FINISHED answer — it is well written, correct,
- * and complete except for the part where somebody has to do it — and it is the shape
- * a coding agent in the user's own workspace fails with most: it edits the files, then
- * writes out the verification and the commit for the user to run. Every other detector
- * here is first-person by construction and scores it a clean finish.
- *
- * The sixth is the one that reads like GOOD MANNERS. It does the reading, writes a
- * correct report, and closes by offering to do the work — so the user, who asked for
- * that work one message earlier, spends a turn granting permission that was implicit in
- * the request. It defeats every detector above at once: too long to be empty, too
- * deferential to be a promise, too well-sourced to be a missing-data claim, and it names
- * platform actions rather than shell commands so the handoff gate's "is a command within
- * reach" test never fires.
- *
- * Deliberately zero-dependency, framework-free and free of Node builtins: the Brain
- * run loop imports this into a BROWSER bundle (VS Code webview / Next.js client)
- * while the on-prem + cloud agent loop imports it into Node and the Worker.
+ * ── WHY A FAILURE STREAK, AND NOT A STEP COUNT ──────────────────────────────────
+ * A run is not wrong for being long. A bulk ticket clean-up, a rename across a
+ * repository, a review of forty branches — each is a hundred honest tool calls, and a
+ * step ceiling stopped every one of them mid-task with "kept calling tools without
+ * finishing". The ceiling existed to catch a run that had stopped making progress, and
+ * that condition has a direct signal: tool calls that keep FAILING. So the only limit
+ * the kernel applies is this one — a run whose last N dispatches all failed is stuck,
+ * and stopping it is what the step cap was always trying to do by proxy. Five is past
+ * the point where the repeat-failure advisories (nudge at 2, instruct at 3) have had
+ * their say and been ignored.
  */
-
-/**
- * Every advertised tool identifier appearing in `text`, de-duplicated, in order.
- *
- * Two callers, one pattern — which is the point of putting it here. The stall
- * detector below uses it to recognise a call written as prose; the per-turn tool
- * SELECTOR uses it to find the tools a system prompt instructs the model to call, so
- * a relevance filter can never drop a tool the prompt just promised. Those two must
- * agree on what a tool name looks like, or the loop recovers from a stall the
- * selector caused.
- */
-declare function toolNamesMentionedIn(text: string): string[];
-/**
- * Does this reply PROMISE a tool call rather than make one?
- *
- * A false positive costs one extra model turn; a false negative strands the user
- * holding a promise — so the bias runs toward catching the stall.
- */
-declare function announcesUntakenAction(text: string): boolean;
-/**
- * Every CATALOG-style tool id in `text` (`manager.digest`), de-duplicated, in order —
- * the counterpart to {@link toolNamesMentionedIn}, which finds the ADVERTISED form.
- *
- * The pair is a DIAGNOSIS, not a curiosity, and it is the distinction a shipped report
- * got wrong. A stalled reply naming `manager.digest` was told to call a string the model
- * never had (the prompt / persisted-persona name mismatch, fixed by migration 0379). A
- * stalled reply naming `builtin_manager_digest` was told correctly and could not comply —
- * the tool list is fine and the MODEL is the problem. Identical transcripts, opposite
- * fixes; a report that asserts the first while the evidence says the second sends the
- * reader to re-audit prompts and migrations that were already right.
- */
-declare function catalogToolNamesMentionedIn(text: string): string[];
-/**
- * Does this reply blame MISSING TOOL DATA on a turn that called nothing?
- *
- * Exported alongside {@link announcesUntakenAction} because the two are different
- * failure shapes with the same remedy, and a caller reporting WHY it re-prompted
- * should be able to tell them apart.
- */
-declare function claimsMissingToolData(text: string): boolean;
-/**
- * The gateway model surface, as `/llm/v1/models` returns it and both browser hosts
- * cache it. Structurally a superset of what `classifyModelFunding` takes, so one
- * cached object feeds both. A SERVER caller composes the same shape from the pool
- * constants it already has (see `BrainService.agentReply`).
- */
-interface ModelFallbackSurface {
-    /** The plan pool — every model this tenant may select. */
-    data?: Array<{
-        id?: string;
-    }>;
-    /** The curated tool-calling / coding subset of the pool. */
-    codingModels?: string[];
-    /** Models reachable through the tenant's OWN connected accounts (BYO). */
-    byo?: {
-        models?: Array<{
-            id?: string;
-            vendor?: string;
-        }>;
-    };
-}
-/**
- * The next model to try, or undefined when nothing untried is left.
- *
- * Preference order, and why:
- *  1. **BYO ∩ coding pool** — the tenant's own connected account (so the retry costs
- *     nothing against the plan allowance) AND curated for tool calling, which is the
- *     capability that just failed. Best on both axes.
- *  2. **Remaining BYO** — another connected account, before the shared free pool. A
- *     stall on BYO Grok that falls straight onto a shared coder surfaces as
- *     `shared_byo_unused` even though Claude/Codex/etc. were connected and free to
- *     try; preferring BYO here keeps the retry on the tenant's own keys.
- *  3. **Coding pool** — curated for tool calling, plan-funded (shared).
- *  4. **Rest of the plan pool.**
- *
- * A caller driving an AGENTIC turn should leave `data` unset: tier 4 is the general
- * plan pool, and falling a tool-loop onto a non-coder produces a run that flails and
- * ships nothing (the same reasoning as the gateway's coding-only backstop chain).
- *
- * `tried` holds every model already attempted this run, including the original pin.
- * A caller that pinned nothing (gateway auto-select) should pass its resolved model,
- * so the failover cannot hand back the model that just failed.
- */
-declare function nextFallbackModel(surface: ModelFallbackSurface | null | undefined, tried: readonly string[]): string | undefined;
+declare const DEFAULT_TOOL_FAILURE_STREAK = 5;
 
 interface AskUserOption {
     label: string;
@@ -6696,4 +7160,4 @@ interface PromptInputProps {
 }
 declare function PromptInput({ value, onChange, onSubmit, placeholder, submitLabel, ariaLabel, disabled, busy, onStop, stopLabel, leading, secondaryContent, rows, className, submitOnEnter, }: PromptInputProps): react.JSX.Element;
 
-export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type BuildChatDiagnosticsReportInput, type ByoUnresolvedEntry, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type ChatRosterAgent, type ChatTicket, type ChatWorkDirectiveOptions, type CompletionMetadata, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DispatchRefusal, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, HISTORY_TOKEN_BUDGET, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageUrlContentPart, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, MAX_STOP_HOOK_ROUNDS, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelScore, type ModelTurn, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PersonaSubagent, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PreparedImage, type ProjectMemoryRequest, PromptInput, type PromptInputProps, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RoutedProduct, type RunLineage, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, type RunStopHook, type RunStopInput, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, SUBAGENT_OF_META_KEY, type StaffingSummary, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamIdleError, StreamInterruptedError, type SubagentDiagnosticsInput, type SubagentOrigin, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, TransportError, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, type UnreviewedChangeInput, type UnshippedChangeInput, type UpstreamTurnEvidence, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askStopHook, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, brainPersonaAgents, buildBrainTriageReport, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatRosterFromParticipants, chatWorkDirective, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, createBrainRestPersistence, createComposingActivity, createPayloadBudget, declinesReview, declinesShipping, deriveChatTitle, describeLiveStep, describeNetworkError, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, effortProfile, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatBytes, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatDispatchRefusals, formatEvermindLearnStep, formatModelScorecard, formatModelTurnLog, formatRunProgress, formatStaffingSummary, formatSubagentDiagnostics, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, installRunDriver, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isDispatchTool, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isMutationTool, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStepMessage, isStoppedTurn, isTicketRecordingTool, isTicketWriteTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, localStorageConfirmationPersistence, localToolsIn, mcpActionsFrom, mentionRecipient, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, onDeviceMemoryHooks, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, parseSubagentOrigin, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, productForPlan, productModelName, progressDuration, projectMemoryHooks, queueRunSteering, ratedTurnContext, ratedTurnTool, readWithIdleWatchdog, reasoningForRun, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, retryOnConnectFailure, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, staffingSummaryInTrace, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, stoppedTurnMetadata, streamChatCompletion, stripAskUser, studioToolsIn, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, ticketsReviewedInPreview, toolActivity, toolCallArgBytes, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, trimToolResult, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, utf8ByteLength, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, workFiledNotStaffedVerdict, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type BuildChatDiagnosticsReportInput, type ByoUnresolvedEntry, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type ChatRosterAgent, type ChatTicket, type ChatWorkDirectiveOptions, type CompletionMetadata, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DispatchRefusal, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, HISTORY_TOKEN_BUDGET, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageUrlContentPart, type IndexedDbStepDurabilityOptions, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalChatMessage, type LocalFetch, type LocalFirstAttemptSummary, type LocalFirstStreamInput, MAX_STOP_HOOK_ROUNDS, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelScore, type ModelTurn, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PersonaSubagent, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PreparedImage, type ProjectMemoryRequest, PromptInput, type PromptInputProps, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RoutedProduct, type RunLineage, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, type RunStopHook, type RunStopInput, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, SUBAGENT_OF_META_KEY, type StaffingSummary, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamIdleError, StreamInterruptedError, type SubagentDiagnosticsInput, type SubagentOrigin, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, TransportError, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, type UnreviewedChangeInput, type UnshippedChangeInput, type UpstreamTurnEvidence, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askStopHook, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, brainPersonaAgents, buildBrainTriageReport, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatRosterFromParticipants, chatWorkDirective, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, completeLocal, completeLocalFirst, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, createBrainRestPersistence, createComposingActivity, createLocalFirstStream, createLocalStream, createPayloadBudget, declinesReview, declinesShipping, deriveChatTitle, describeLiveStep, describeNetworkError, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, effortProfile, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatBytes, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatDispatchRefusals, formatEvermindLearnStep, formatModelScorecard, formatModelTurnLog, formatRunProgress, formatStaffingSummary, formatSubagentDiagnostics, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, installIndexedDbStepDurability, installRunDriver, installStepDurability, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isDispatchTool, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isMutationTool, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStepMessage, isStoppedTurn, isTicketRecordingTool, isTicketWriteTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, localFallbackTrace, localFirstWorkload, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, onDeviceMemoryHooks, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, parseSubagentOrigin, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, productForPlan, productModelName, progressDuration, projectMemoryHooks, queueRunSteering, ratedTurnContext, ratedTurnTool, readWithIdleWatchdog, reasoningForRun, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, retryOnConnectFailure, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, staffingSummaryInTrace, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, stoppedTurnMetadata, streamChatCompletion, stripAskUser, studioToolsIn, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeLocalFirstAttempt, takePendingPrompt, ticketsReviewedInPreview, toolActivity, toolCallArgBytes, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, transcriptSeedFrom, trimToolResult, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, utf8ByteLength, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, workFiledNotStaffedVerdict, workItemLinkFromCreate };

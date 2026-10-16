@@ -2,8 +2,9 @@
  * WHO takes over when a self-hosted model burns its whole stall budget — the on-prem
  * answer to a question the gateway loops already answered.
  *
- * The Brain run loop and the server addressed-reply loop both swap models through the
- * shared `chooseStallFailover`: a turn that ends with zero tool calls while tools were
+ * Every agent loop swaps models through THE shared hand-off policy
+ * (`@builderforce/run-policy`), which this picker feeds as its `pick` source: a turn
+ * that ends with zero tool calls while tools were
  * available is a model-behaviour failure, and once the re-prompt budget is spent the
  * only remedy that works is a DIFFERENT model. Those loops pick one from the tenant's
  * gateway catalog. This loop has no catalog: its `Model` is an operator's explicit pin

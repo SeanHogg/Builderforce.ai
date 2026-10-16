@@ -10,6 +10,8 @@ import {
 } from "./local-history.js";
 import { buildRunOutcomeReport, clientRunIdFor } from "./outcome-reporter.js";
 import { toRankStat, toScopeRanking } from "./routing-table-client.js";
+import { catalogViewFromEntries } from "../../model-catalog-view.js";
+import { seedLearnedModel } from "./index.js";
 import { learnedSeedingOn, SEED_FLAG_ENV } from "./settings.js";
 
 describe("computeLocalBias", () => {
@@ -266,5 +268,48 @@ describe("seeding flag", () => {
     }
     process.env[SEED_FLAG_ENV] = "0";
     expect(learnedSeedingOn()).toBe(false);
+  });
+});
+
+describe("seedLearnedModel — the shared workload reading + router order", () => {
+  const prev = process.env[SEED_FLAG_ENV];
+  beforeEach(() => {
+    delete process.env[SEED_FLAG_ENV];
+  });
+  afterEach(() => {
+    if (prev === undefined) {
+      delete process.env[SEED_FLAG_ENV];
+    } else {
+      process.env[SEED_FLAG_ENV] = prev;
+    }
+  });
+
+  const candidates = [
+    { provider: "builderforcellm", model: "auto" },
+    { provider: "anthropic", model: "claude-opus-5-5" },
+  ];
+  const view = catalogViewFromEntries([
+    { provider: "builderforcellm", id: "auto", cost: { input: 0, output: 0 } },
+    { provider: "anthropic", id: "claude-opus-5-5", cost: { input: 5, output: 25 } },
+  ]);
+
+  it("profiles the call with the shared workload reading", async () => {
+    const seed = await seedLearnedModel({ candidates, prompt: "Add vitest unit tests for the parser" });
+    expect(seed.actionType).toBe(seed.workload.actionType);
+    expect(seed.workload.inputTokens).toBeGreaterThan(0);
+    expect(seed.workload.role).toBeUndefined();
+  });
+
+  it("with no declared role, the configured order stands (seeding off)", async () => {
+    const seed = await seedLearnedModel({ candidates, prompt: "anything" });
+    expect(seed.ranked).toEqual(candidates);
+    expect(seed.reordered).toBe(false);
+  });
+
+  it("a declared role orders the chain through the shared router even with seeding off", async () => {
+    const seed = await seedLearnedModel({ candidates, prompt: "implement it", routing: { role: "code", view } });
+    expect(candidateKey(seed.ranked[0])).toBe("anthropic/claude-opus-5-5");
+    expect(seed.reordered).toBe(true);
+    expect(seed.workload.role).toBe("code");
   });
 });

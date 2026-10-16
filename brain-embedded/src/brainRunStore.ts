@@ -27,7 +27,7 @@
  */
 
 import type { BrainMessage } from './types';
-import { batchStepPersistence } from './stepOutbox';
+import { batchStepPersistence, stepDurabilityFor } from './stepOutbox';
 import { getRunDriver } from './runDriver';
 import {
   StreamInterruptedError,
@@ -50,7 +50,9 @@ import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel, withObservedModel, forgetResolvedModels } from './lastResolvedModel';
 import { isTicketRecordingTool, workItemLinkFromCreate, linkedTicketsToAdvance, linkedTicketsToComplete, linkedTicketsReviewedComplete, isReadOnlyPlatformTool, type LinkedTicketToAdvance } from './chatWorkLinking';
 import { isCodeChangeTool, isRepoStateReadTool, canChangeCodeHere, canShipHere, canReviewInPreview, localToolsIn, memoryToolsIn, studioToolsIn } from './localWorkspaceTools';
-import { coderHandoffBrief } from './roleHandoff';
+import { coderHandoffBrief, initialRunPolicy, nextTurn, offersHandOff, reduceRunPolicy, type RunPolicyEvent, type RunPolicyState } from '@builderforce/run-policy';
+import { coderReaskTrace, handOffTrace, modelFailoverTrace, transportRetryTrace } from './runPolicyTraces';
+import { localFallbackTrace } from './localFirstTraces';
 import { HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, executeHandOff, parseHandOff } from './planHandoff';
 import { codeChangesOf, isDelegationTool } from './codeChanges';
 import { delegationPlaceholders, placeholderAdvisory, placeholdersWritten, placeholderTraceEvent } from './placeholderGuard';
@@ -79,10 +81,7 @@ import {
   stallShape,
   stallRecoveryNudge,
   stallExhaustedNotice,
-  modelFailoverNotice,
-  chooseStallFailover,
   MAX_ANNOUNCEMENT_RECOVERIES,
-  MAX_MODEL_FAILOVERS,
   toolNamesMentionedIn,
   isContinuationDirective,
   promisesUnfinishedWork,
@@ -1189,13 +1188,17 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
   // persists is attributed to the child and spliced into the owner's live view.
   const lineage = request.lineage;
   const chatId = lineage?.rootChatId ?? runKey;
-  // Step rows are batched (see `stepOutbox.ts`) — outside the lineage wrap, so a queued
-  // row is still attributed to the child when its batch is sent.
-  const steps = batchStepPersistence(
-    lineage ? lineagePersistence(request.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) : request.persistence,
-  );
-  const req: BrainRunRequest = { ...request, persistence: steps.persistence };
-  c.persistStep = (ev) => persistStep(chatId, steps.persistence, ev);
+  // Step rows are batched (see `stepOutbox.ts`) INSIDE the lineage wrap: a row is
+  // attributed to the child before it is queued, so a queue replayed after a restart —
+  // by the host's run-independent sender, with no run and no lineage in hand — still
+  // lands attributed. With the host's step durability installed the queue is stored per
+  // chat and drained on startup / reconnect.
+  const steps = batchStepPersistence(request.persistence, stepDurabilityFor(chatId, runKey));
+  const runPersistence = lineage
+    ? lineagePersistence(steps.persistence, lineage, (msg) => appendRunMessage(chatId, msg))
+    : steps.persistence;
+  const req: BrainRunRequest = { ...request, persistence: runPersistence };
+  c.persistStep = (ev) => persistStep(chatId, runPersistence, ev);
   c.running = true;
   c.error = '';
   c.errorAction = null;
@@ -1313,14 +1316,19 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
       failed: c.error !== '', shipped, trace: runTrace(c), projectId: req.projectId,
     });
     if (outcome) void req.reportOutcome!(outcome).catch(() => undefined);
-    // The run's last step rows leave now, not on the batch timer. Not awaited — like
-    // every step write, it must never hold the run open.
     c.persistStep = null;
-    void steps.flush();
     // The run is over: nothing is in flight, so no indicator may claim otherwise.
     // Cleared LAST, after the backstops above, so `finishing` stays visible for them.
     c.activity = null;
     emit(c);
+    // The run's last step rows — the terminal `agent.run` failure, `agent.stopped` —
+    // leave now, not on the batch timer, and the run settles only once they have been
+    // handed to the server: a caller awaiting the run must see its durable record. The
+    // durable outbox queues a lane's flush behind its tail, so a fire-and-forget flush
+    // landed AFTER the run resolved. Bounded: `flush` makes one send attempt per batch
+    // (a failure stays queued for the outbox's own retry) and never throws. The live
+    // view is already settled above, so nothing visible waits on it.
+    await steps.flush();
   }
 }
 
@@ -1596,9 +1604,6 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
   // Tools this run has actually called — pinned into every later turn's selection
   // so a multi-step task never loses a tool it is mid-way through using.
   const usedTools = new Set<string>();
-  // Models that broke mid-turn under auto-routing this run — routed around on every later
-  // turn, not just the one retry (see the StreamInterruptedError handling in `complete`).
-  const brokenModels = new Set<string>();
   // Caller provenance for the gateway's audit emit — this is what makes the
   // DEFAULT agent's turn show WHICH MODEL served it in the activity log (the
   // server no-ops without a chat id). Built once and shared by every
@@ -1831,12 +1836,23 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
   // run has no iteration ceiling to fall back on.
   let forceToolChoice: 'required' | undefined;
   let announcementRecoveries = 0;
-  // ANALYSIS first, then the CODE: under auto-routing each turn tells the gateway what
-  // kind of call it is. Until the run reaches its first code change the turns are
+  // THE model hand-off policy (`@builderforce/run-policy`), shared with every other agent
+  // loop. ANALYSIS first, then the CODE: under auto-routing each turn tells the gateway
+  // what kind of call it is. Until the run reaches its first code change the turns are
   // analysis (`plan` — the tenant's own precedence decides who plans); from then on they
   // are `code`, which the gateway leads with the strongest connected model. A run that
-  // already changed code (a resumed turn) starts as `code`.
-  let phase: 'plan' | 'code' = c.codeChanged || c.codePhaseReached ? 'code' : 'plan';
+  // already changed code (a resumed turn) starts as `code`. The policy also holds the
+  // model this run is CURRENTLY talking to, every model it has already tried, and the
+  // models that broke mid-turn: a model that burns its whole stall budget fails over to
+  // another one rather than handing the user a promise (see the failover branch below),
+  // and one that breaks mid-stream is routed around for the rest of the run. A pinned
+  // model is the user's own choice and is never routed around.
+  let policy: RunPolicyState = initialRunPolicy({
+    pinnedModel: model,
+    strictPin: modelStrict,
+    startPhase: c.codeChanged || c.codePhaseReached ? 'code' : 'plan',
+  });
+  const reportToPolicy = (event: RunPolicyEvent): RunPolicyState => (policy = reduceRunPolicy(policy, event));
   // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
   // One, not a budget: the second time the model stops short it has read the contract
   // twice, and its answer — including "I cannot ship this because…" — is the answer.
@@ -1853,13 +1869,6 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
   // (see `restatedReply.ts`). Captured before the loop: the transcript grows as it runs.
   const priorReply = previousReplyText(convo);
   let restateRecoveryUsed = false;
-  // The model this run is CURRENTLY talking to, and every model it has already tried.
-  // Both change when a model burns its whole stall budget without emitting a single
-  // tool call: re-prompting such a model is spent, so the run fails over to another
-  // one rather than handing the user a promise (see the failover branch below).
-  let activeModel = model;
-  const triedModels: string[] = [];
-  let modelFailovers = 0;
   // The user's ACTUAL request for this run, resolved once. Every turn's tool
   // selection scores against this and nothing else — see the `query` note below.
   const requestQuery = routingQueryForTurn(convo);
@@ -2104,21 +2113,15 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       // the host can fan out and the tasks own disjoint paths; otherwise in order, by the
       // coder this run becomes. The result tells the coder which (see `planHandoff.ts`).
       if (call.name === HAND_OFF_TOOL) {
-        if (phase === 'code') {
+        if (!offersHandOff(policy)) {
           return { result: { data: { ok: false, error: 'The plan was already handed off — you are the coding model now. Implement the tasks; do not re-plan.' } } };
         }
         const plan = parseHandOff(call.args);
         if (typeof plan === 'string') return { result: { data: { ok: false, error: plan } } };
         // The role flips BEFORE the children start: they and every later turn are code.
-        phase = 'code';
+        reportToPolicy({ type: 'hand_off' });
         c.codePhaseReached = true;
-        pushTrace(c, {
-          ts: nowIso(),
-          category: 'message',
-          label: 'llm.role_handoff',
-          args: { step: ctx.step, tasks: plan.tasks.length, via: HAND_OFF_TOOL },
-          result: `Planning handed off ${plan.tasks.length} task${plan.tasks.length === 1 ? '' : 's'} to the coding model.`,
-        });
+        pushTrace(c, handOffTrace(nowIso(), ctx.step, plan.tasks.length, HAND_OFF_TOOL));
         const outcome = await executeHandOff(plan, {
           runTool: (name, args) => runTool!(name, args),
           toolNames: new Set(catalogToolNames),
@@ -2513,23 +2516,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         // gateway auto-select run pinned nothing, so `resolved` is the only id that
         // identifies the model to skip), check the budget, pick a different route. The
         // server-side addressed-reply loop calls the same function.
-        const next = chooseStallFailover({
-          activeModel,
-          resolvedModel: resolved,
-          tried: triedModels,
-          failoversUsed: modelFailovers,
-          pick: pickFallbackModel,
-        });
-        if (next) {
-          modelFailovers += 1;
-          pushTrace(c, {
-            ts: nowIso(),
-            category: 'message',
-            label: 'loop.model_failover',
-            args: { step: iter, from: resolved, to: next, attempt: modelFailovers, of: MAX_MODEL_FAILOVERS },
-            result: modelFailoverNotice(resolved, next, shape),
-          });
-          activeModel = next;
+        const { outcome } = reportToPolicy({ type: 'stalled', resolvedModel: resolved, pick: pickFallbackModel });
+        if (outcome.kind === 'failed_over') {
+          pushTrace(c, modelFailoverTrace(nowIso(), iter, resolved, outcome, shape));
           // The new model starts with a full stall budget — the old one's failures say
           // nothing about this one, and carrying the count over would give it no chance.
           announcementRecoveries = 0;
@@ -2539,12 +2528,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
           emit(c);
           return { action: 'continue' };
         }
-        const notice = stallExhaustedNotice(resolved, triedModels, shape);
+        const notice = stallExhaustedNotice(resolved, policy.tried, shape);
         pushTrace(c, {
           ts: nowIso(),
           category: 'error',
           label: 'loop.stall_unrecovered',
-          args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: triedModels, advertisedTools: advertised, shape },
+          args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: policy.tried, advertisedTools: advertised, shape },
           result: notice,
           isError: true,
         });
@@ -2574,7 +2563,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       const working = await buildWorkingTranscript(
         c,
         systemPrompt,
-        (msgs) => summarizeMiddle(stream, activeModel, msgs, c.abort?.signal),
+        (msgs) => summarizeMiddle(stream, policy.model, msgs, c.abort?.signal),
         (dropped) => {
           pushTrace(c, {
             ts: nowIso(),
@@ -2618,11 +2607,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         // edit can never silently desync from this list — plus the local workspace
         // tools, which the prompt names in prose the pattern cannot see.
         // While planning, the planner's deliverable is never off-topic either.
-        required: phase === 'plan' && canAskUser ? [...alwaysAdvertised, HAND_OFF_TOOL] : alwaysAdvertised,
+        required: offersHandOff(policy) && canAskUser ? [...alwaysAdvertised, HAND_OFF_TOOL] : alwaysAdvertised,
       });
       // Once the run is coding, the plan is handed off: `hand_off` is gone from the menu,
       // so a coder can never re-plan the work it was just given.
-      const selected = phase === 'code' ? selection.tools.filter((t) => t.function.name !== HAND_OFF_TOOL) : selection.tools;
+      const selected = offersHandOff(policy) ? selection.tools : selection.tools.filter((t) => t.function.name !== HAND_OFF_TOOL);
       // The ROUTER rides along whenever selection actually trimmed something, so the
       // tools that missed the cut stay REACHABLE instead of silently ceasing to exist.
       // Three fixed schemas buy back the whole catalog; see toolRouter.ts.
@@ -2677,23 +2666,28 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
           composing.onDelta(index, partial);
         },
       };
-      // A tool-less turn is conversation, not analysis or code.
-      let turnRole: 'plan' | 'code' | 'chat' = tools ? phase : 'chat';
+      // The role, model and exclusions this turn asks for — a tool-less turn is
+      // conversation, not analysis or code. Re-read per request: a retry or the coder
+      // re-ask below asks for what the policy says AFTER the event that caused it.
+      let turnRole = nextTurn(policy, { hasTools: !!tools }).role;
       // Consume a one-shot forced tool_choice from stall recovery (if any).
       const turnToolChoice = forceToolChoice;
       forceToolChoice = undefined;
       // `extra` rides THIS request only (the hand-off brief); it never enters the transcript.
-      const request = (role: string, excludeModels: string[], extra: ChatCompletionMessage[] = []): Promise<StreamChatResult> => asLiveTurn(c, () => stream(
-        {
-          messages: extra.length > 0 ? [...working, ...extra] : working, tools, tool_choice: tools ? (turnToolChoice ?? 'auto') : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict,
-          // Raised to the tool-turn floor when tools are on offer: a file write is
-          // output, and the Effort ceiling cut every one of them off mid-JSON.
-          routingMode, maxTokens: turnMaxTokens(maxTokens, !!tools), reasoning, metadata, role,
-          ...(excludeModels.length > 0 ? { excludeModels } : {}),
-          signal: c.abort?.signal,
-        },
-        handlers,
-      ));
+      const request = (extra: ChatCompletionMessage[] = []): Promise<StreamChatResult> => {
+        const ask = nextTurn(policy, { hasTools: !!tools });
+        return asLiveTurn(c, () => stream(
+          {
+            messages: extra.length > 0 ? [...working, ...extra] : working, tools, tool_choice: tools ? (turnToolChoice ?? 'auto') : undefined, model: ask.model, modelStrict: ask.strict,
+            // Raised to the tool-turn floor when tools are on offer: a file write is
+            // output, and the Effort ceiling cut every one of them off mid-JSON.
+            routingMode, maxTokens: turnMaxTokens(maxTokens, !!tools), reasoning, metadata, role: ask.role,
+            ...(ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {}),
+            signal: c.abort?.signal,
+          },
+          handlers,
+        ));
+      };
       /** Record a failed completion on the timeline and hand the error back to rethrow. */
       const turnError = (e: unknown): unknown => {
         pushTrace(c, {
@@ -2702,7 +2696,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
           label: 'llm.complete',
           durationMs: nowMs() - llmStart,
           // The model that broke, not the requested one: under auto-routing that is 'default'.
-          args: { model: (e instanceof StreamInterruptedError && e.model) || activeModel || 'default', step: iter },
+          args: { model: (e instanceof StreamInterruptedError && e.model) || policy.model || 'default', step: iter },
           result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
           isError: true,
         });
@@ -2716,49 +2710,30 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         emit(c);
       };
       try {
-        result = await request(turnRole, [...brokenModels]);
+        result = await request();
       } catch (e) {
         // Aborting the fetch rejects the stream — that's a user Stop; the kernel
         // reports it as `cancelled` (no error trace, no error message).
         if (c.abort?.signal.aborted) throw e;
         // The model broke AFTER the gateway committed to it (an in-band failure, or the
-        // connection dropping) — which the gateway cannot fail over from. Under
-        // auto-routing, retry the turn ONCE on another connected model instead of ending
-        // the run: this is the "Grok starts and then stops" failure. A pinned model is the
-        // user's own choice, so it is not routed around.
-        // A TransportError where the gateway was reached (a reset or timeout before the
-        // response) retries too. One where it was NEVER reached has already been retried with
-        // backoff inside the stream (`retryOnConnectFailure`) — no model was asked, so another
-        // one cannot help, and the outage is reported as it is.
-        const unreachable = e instanceof TransportError && e.unreachable;
-        const isRetryableError = e instanceof StreamInterruptedError || (e instanceof TransportError && !unreachable);
-        if (!isRetryableError || activeModel) throw turnError(e);
-        // Out of every LATER turn too, not only this retry. Excluding it for the retry alone
-        // sent the next turn straight back to it: chat #105 broke on the same model and was
-        // retried on eighteen separate turns — a wasted, often looping, attempt per step.
-        // For StreamInterruptedError, we know which model failed. For TransportError, we don't
-        // (the fetch never reached the gateway), so we retry without excluding any specific model.
-        if (e instanceof StreamInterruptedError && e.model) {
-          brokenModels.add(e.model);
-          pushTrace(c, {
-            ts: nowIso(),
-            category: 'message',
-            label: 'llm.stream_interrupted',
-            args: { model: e.model, step: iter },
-            result: `${e.message} — retrying this turn on another connected model. ${e.model} is left out for the rest of this run.`,
-          });
-        } else {
-          pushTrace(c, {
-            ts: nowIso(),
-            category: 'message',
-            label: 'llm.transport_error',
-            args: { step: iter },
-            result: `${e.message} — retrying this turn on another connected model.`,
-          });
-        }
+        // connection dropping) — which the gateway cannot fail over from — or the gateway
+        // was reached and the request reset or timed out. The run policy decides whether
+        // to retry the turn ONCE on another connected model instead of ending the run
+        // (the "Grok starts and then stops" failure) and leaves a model that broke out of
+        // every later turn. One where the gateway was NEVER reached has already been
+        // retried with backoff inside the stream (`retryOnConnectFailure`); anything else
+        // is not a transport failure at all, and is reported as it is.
+        const failure = e instanceof StreamInterruptedError
+          ? { kind: 'interrupted' as const, ...(e.model ? { model: e.model } : {}) }
+          : e instanceof TransportError
+            ? { kind: e.unreachable ? 'unreachable' as const : 'transport' as const }
+            : null;
+        const outcome = failure ? reportToPolicy({ type: 'transport_failed', ...failure }).outcome : null;
+        if (!outcome || outcome.kind !== 'retry_turn') throw turnError(e);
+        pushTrace(c, transportRetryTrace(nowIso(), iter, outcome, (e as Error).message));
         restartTurn();
         try {
-          result = await request(turnRole, [...brokenModels]);
+          result = await request();
         } catch (retryError) {
           if (c.abort?.signal.aborted) throw retryError;
           throw turnError(retryError);
@@ -2769,27 +2744,24 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       // re-asked of the coding model rather than written by the model that planned it.
       // The coder gets the transcript AND a brief naming the change the planner was
       // about to make (`coderHandoffBrief`) — given the transcript alone, it started the
-      // analysis over. A pinned model is the user's choice for the whole run.
-      if (turnRole === 'plan' && !activeModel && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))) {
-        phase = 'code';
-        turnRole = 'code';
+      // analysis over. A pinned model is the user's choice for the whole run (the policy
+      // declines the re-ask under one), and a tool-less chat turn is never re-asked.
+      if (turnRole === 'plan' && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))
+        && reportToPolicy({ type: 'code_change_attempted' }).outcome.kind === 'reask_as_coder') {
+        turnRole = nextTurn(policy, { hasTools: !!tools }).role;
         c.codePhaseReached = true;
         const brief = coderHandoffBrief(replayTextOf(result.text), result.toolCalls);
-        pushTrace(c, {
-          ts: nowIso(),
-          category: 'message',
-          label: 'llm.role_handoff',
-          args: { from: result.resolvedModel ?? 'default', step: iter },
-          result: `Analysis on ${result.resolvedModel ?? 'the planning model'} reached its first code change — handing the edit to the strongest connected coding model.`,
-        });
+        pushTrace(c, coderReaskTrace(nowIso(), iter, result.resolvedModel));
         restartTurn();
         try {
-          result = await request('code', [...brokenModels], [{ role: 'user', content: brief }]);
+          result = await request([{ role: 'user', content: brief }]);
         } catch (e) {
           if (c.abort?.signal.aborted) throw e;
           throw turnError(e);
         }
       }
+      // The turn answered: the policy's per-turn retry allowance starts over.
+      reportToPolicy({ type: 'turn_succeeded', ...(result.resolvedModel ? { model: result.resolvedModel } : {}) });
       // The stall-recovery budget covers a STREAK of narration-only turns, not the whole
       // run. As a run-wide count, a 134-turn run's fourth narrated step anywhere was
       // silently accepted as the final answer — the run just stopped mid-task. A turn
@@ -2807,8 +2779,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       // different (often smaller-window) model than we requested. That's a prime
       // context-exhaustion symptom, so surface it as its own warning step instead
       // of leaving it buried in the model field — the diagnostics block counts it.
-      const resolved = result.resolvedModel ?? activeModel ?? 'default';
-      const requested = activeModel ?? 'default';
+      const resolved = result.resolvedModel ?? policy.model ?? 'default';
+      const requested = policy.model ?? 'default';
       // Record what ACTUALLY served this turn so `builtin_session_current_model` can
       // report the exact model (an MCP call is a separate request and can't see it).
       // Keyed by CHAT: runs are concurrent on a host that owns them, so one slot would
@@ -2823,6 +2795,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
           result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) — a smaller context window can truncate long transcripts.`,
         });
       }
+      // A local-first turn that fell over (on-device model down/refused → the cloud).
+      const localFallback = localFallbackTrace(nowIso(), iter, result.localFirst);
+      if (localFallback) pushTrace(c, localFallback);
       // Tool names this turn WROTE OUT as prose while emitting no structured call, that
       // were never advertised to it. Computed here because this is the only place that
       // holds BOTH the turn's text and the exact set the turn was offered — after the
@@ -3095,9 +3070,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         },
       ];
       let closeFirstTokenAt: number | undefined;
+      const closeAsk = nextTurn(policy, { hasTools: false });
       const closing = await asLiveTurn(c, () => stream(
         // No `tools` → the model can't call another tool and must produce text.
-        { messages: working, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
+        { messages: working, model: closeAsk.model, modelStrict: closeAsk.strict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         {
           onModel: liveTurnModel(c),
           onConnectRetry: connectRetryStep(c, loop.step),
@@ -3112,7 +3088,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         label: 'llm.complete',
         durationMs: nowMs() - closeStart,
         ttftMs: closeFirstTokenAt !== undefined ? closeFirstTokenAt - closeStart : undefined,
-        args: { model: closing.resolvedModel ?? activeModel ?? 'default', requestedModel: activeModel ?? 'default', step: loop.step, toolCalls: 0, forcedFinish: true, failureStreak: streak, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        args: { model: closing.resolvedModel ?? closeAsk.model ?? 'default', requestedModel: closeAsk.model ?? 'default', step: loop.step, toolCalls: 0, forcedFinish: true, failureStreak: streak, account: closing.account, byoUnresolved: closing.byoUnresolved },
         usage: closing.usage,
         finishReason: closing.finishReason,
         textChars: closing.text.length,
@@ -3121,7 +3097,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       const closingText = canonicalTurnText(closing.text);
       if (closingText) {
         convo.push({ role: 'assistant', content: replayTextOf(closingText) });
-        const meta = provenanceMetadata(closing, activeModel);
+        const meta = provenanceMetadata(closing, closeAsk.model);
         const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: closingText, ...(meta ? { metadata: meta } : {}) }]);
         c.streamingText = '';
         recordAppended(c, assistantMsg);

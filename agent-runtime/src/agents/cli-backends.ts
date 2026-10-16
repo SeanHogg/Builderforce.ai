@@ -4,6 +4,7 @@ import {
   CLI_FRESH_WATCHDOG_DEFAULTS,
   CLI_RESUME_WATCHDOG_DEFAULTS,
 } from "./cli-watchdog-defaults.js";
+import { anthropicFamilyAliases } from "./anthropic-models.js";
 import { normalizeProviderId } from "./model-selection.js";
 
 export type ResolvedCliBackend = {
@@ -11,27 +12,16 @@ export type ResolvedCliBackend = {
   config: CliBackendConfig;
 };
 
-const CLAUDE_MODEL_ALIASES: Record<string, string> = {
-  opus: "opus",
-  "opus-4.6": "opus",
-  "opus-4.5": "opus",
-  "opus-4": "opus",
-  "claude-opus-4-6": "opus",
-  "claude-opus-4-5": "opus",
-  "claude-opus-4": "opus",
-  sonnet: "sonnet",
-  "sonnet-4.6": "sonnet",
-  "sonnet-4.5": "sonnet",
-  "sonnet-4.1": "sonnet",
-  "sonnet-4.0": "sonnet",
-  "claude-sonnet-4-6": "sonnet",
-  "claude-sonnet-4-5": "sonnet",
-  "claude-sonnet-4-1": "sonnet",
-  "claude-sonnet-4-0": "sonnet",
-  haiku: "haiku",
-  "haiku-3.5": "haiku",
-  "claude-haiku-3-5": "haiku",
-};
+/**
+ * The Claude Code CLI takes a FAMILY word for `--model` (`opus` = that family's newest),
+ * so every spelling of every release maps onto its family — derived from the one
+ * release list (`anthropic-models.ts`), not spelled out here. Only the families the CLI
+ * documents a word for; any other Claude id is passed through as the full id.
+ */
+const CLI_MODEL_FAMILIES: ReadonlySet<string> = new Set(["opus", "sonnet", "haiku"]);
+const CLAUDE_MODEL_ALIASES: Record<string, string> = Object.fromEntries(
+  Object.entries(anthropicFamilyAliases()).filter(([, family]) => CLI_MODEL_FAMILIES.has(family)),
+);
 
 const DEFAULT_CLAUDE_BACKEND: CliBackendConfig = {
   command: "claude",

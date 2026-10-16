@@ -24,10 +24,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { replayTextOf } from '@builderforce/agent-loop';
 import { useBrainConfig } from './config';
-import { isStepMessage, type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
-import { isStoppedTurn } from './stoppedTurn';
+import type { BrainMessage, BrainModality, ChatInputAttachment } from './types';
+import { transcriptSeedFrom } from './transcriptSeed';
 import { mergeTranscript } from './mergeTranscript';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
 import type { EvermindRunHooks } from './evermindMemory';
@@ -242,28 +241,6 @@ export interface UseBrainConversation {
    * host/cloud "Copy triage info" report.
    */
   buildTriageReport(agentLabel?: string, surface?: string): string;
-}
-
-/**
- * The model-visible transcript a run continues from: the persisted history scoped to
- * the last consolidation marker (a consolidated chat sends its summary as base context
- * instead of the full history), WITHOUT the durable tool/memory STEP rows — those are
- * timeline records, not model turns, and re-sending an orphaned tool message 400s
- * strict vendors. Nor a reply the user STOPPED mid-stream (`stoppedTurn.ts`): that is a
- * record of a model going wrong, kept for the reader — replayed, the next model reads a
- * loop as its own last word and continues it. Assistant turns go back as `replayTextOf`
- * reads them: without the `<think>` blocks they were persisted with, which a model copies
- * as markup instead of calling tools. One builder for the send path and the
- * trailing-message auto-reply.
- */
-function seedFrom(history: BrainMessage[]): ChatCompletionMessage[] {
-  return scopeToConsolidation(history)
-    .filter((m) => !isStepMessage(m) && !isStoppedTurn(m))
-    .flatMap((m) => {
-      if (m.role !== 'assistant') return [{ role: m.role as ChatCompletionMessage['role'], content: m.content }];
-      const content = replayTextOf(m.content);
-      return content ? [{ role: 'assistant' as const, content }] : [];
-    });
 }
 
 export function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation {
@@ -560,7 +537,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           }
           return true;
         }
-        await startRun(id, buildRequest(seedFrom(messages), modelContent, priorResearchDigest(scopeToConsolidation(messages))));
+        await startRun(id, buildRequest(transcriptSeedFrom(messages), modelContent, priorResearchDigest(scopeToConsolidation(messages))));
         return true;
       } catch (e) {
         // Persisting the user turn failed (commonly an expired token) — the turn
@@ -593,7 +570,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError('');
-    void startRun(chatId, buildRequest(seedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
+    void startRun(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
 
   const rateMessage = useCallback(async (msg: BrainMessage, rating: 1 | -1 | 0) => {

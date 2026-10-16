@@ -1,0 +1,442 @@
+{
+  "extName": {
+    "message": "Rovr — Builderforce browser assistant",
+    "description": "Extension name (store + toolbar)"
+  },
+  "extDescription": {
+    "message": "A private assistant in your browser that works offline, records every action and syncs tasks to Builderforce.",
+    "description": "Extension description (≤132 chars)"
+  },
+  "actionTitle": {
+    "message": "Open Rovr",
+    "description": "Toolbar button tooltip"
+  },
+  "commandOpen": {
+    "message": "Open Rovr",
+    "description": "Keyboard shortcut description"
+  },
+  "startFailed": {
+    "message": "Rovr could not start. Close the panel and open it again.",
+    "description": "Panel failed to start"
+  },
+  "loading": {
+    "message": "Loading…",
+    "description": "Loading state"
+  },
+  "viewsLabel": {
+    "message": "Rovr views",
+    "description": "Accessible name of the view switcher"
+  },
+  "tabChat": {
+    "message": "Chat",
+    "description": "View tab"
+  },
+  "tabTasks": {
+    "message": "Tasks",
+    "description": "View tab"
+  },
+  "tabActions": {
+    "message": "Actions",
+    "description": "View tab"
+  },
+  "tabPlaybooks": {
+    "message": "Playbooks",
+    "description": "View tab"
+  },
+  "tabSettings": {
+    "message": "Settings",
+    "description": "View tab"
+  },
+  "statusOffline": {
+    "message": "Offline",
+    "description": "Header status"
+  },
+  "statusConnected": {
+    "message": "Connected",
+    "description": "Header status"
+  },
+  "statusDeviceOnly": {
+    "message": "This device only",
+    "description": "Header status: not signed in"
+  },
+  "statusWaiting": {
+    "message": "$1 waiting to sync",
+    "description": "Header: $1 = count of writes waiting to sync"
+  },
+  "newChatTitle": {
+    "message": "New chat",
+    "description": "Default title of a new chat"
+  },
+  "newChat": {
+    "message": "New chat",
+    "description": "Button"
+  },
+  "noChats": {
+    "message": "No chats yet",
+    "description": "Chat picker when empty"
+  },
+  "chatPickerLabel": {
+    "message": "Conversation",
+    "description": "Accessible label of the chat picker"
+  },
+  "chatEmpty": {
+    "message": "Tell Rovr what you need — it can read this page, fill in forms and keep track of what it did.",
+    "description": "Empty transcript"
+  },
+  "needModelOrSignIn": {
+    "message": "No model is available. Sign in to Builderforce, or start a model on this device (Synapse, Ollama or FreeToken).",
+    "description": "No model available"
+  },
+  "runFailed": {
+    "message": "Something went wrong: $1",
+    "description": "Run error; $1 = the error"
+  },
+  "signIn": {
+    "message": "Sign in",
+    "description": "Button"
+  },
+  "dismiss": {
+    "message": "Dismiss",
+    "description": "Button"
+  },
+  "composerLabel": {
+    "message": "Message to Rovr",
+    "description": "Accessible label of the message box"
+  },
+  "composerPlaceholder": {
+    "message": "Tell Rovr what to do…",
+    "description": "Message box placeholder"
+  },
+  "send": {
+    "message": "Send",
+    "description": "Button"
+  },
+  "stop": {
+    "message": "Stop",
+    "description": "Button"
+  },
+  "confirmTitle": {
+    "message": "Confirm: $1",
+    "description": "Confirmation title; $1 = the action"
+  },
+  "confirmTyping": {
+    "message": "Text:",
+    "description": "Label before the text Rovr would type"
+  },
+  "reasonSiteNotAllowed": {
+    "message": "Rovr is not allowed on this site yet.",
+    "description": "Why confirmation is needed"
+  },
+  "reasonSiteNotAllowedNamed": {
+    "message": "Rovr is not allowed on $1 yet.",
+    "description": "Why confirmation is needed; $1 = site"
+  },
+  "reasonSubmit": {
+    "message": "This submits a form.",
+    "description": "Why confirmation is needed"
+  },
+  "reasonPurchase": {
+    "message": "This looks like a purchase or payment.",
+    "description": "Why confirmation is needed"
+  },
+  "reasonSend": {
+    "message": "This sends or publishes a message.",
+    "description": "Why confirmation is needed"
+  },
+  "reasonDestructive": {
+    "message": "This deletes or cancels something.",
+    "description": "Why confirmation is needed"
+  },
+  "reasonSensitiveField": {
+    "message": "This touches a password, payment or identity field.",
+    "description": "Why confirmation is needed"
+  },
+  "reasonUnknownElement": {
+    "message": "Rovr has not looked at this element yet.",
+    "description": "Why confirmation is needed"
+  },
+  "allowOnce": {
+    "message": "Allow",
+    "description": "Button"
+  },
+  "allowSite": {
+    "message": "Allow on $1",
+    "description": "Button; $1 = site"
+  },
+  "deny": {
+    "message": "Deny",
+    "description": "Button"
+  },
+  "toolRead": {
+    "message": "Read the page",
+    "description": "Action name"
+  },
+  "toolFind": {
+    "message": "Find elements",
+    "description": "Action name"
+  },
+  "toolClick": {
+    "message": "Click",
+    "description": "Action name"
+  },
+  "toolType": {
+    "message": "Type",
+    "description": "Action name"
+  },
+  "toolScroll": {
+    "message": "Scroll",
+    "description": "Action name"
+  },
+  "toolNavigate": {
+    "message": "Open a page",
+    "description": "Action name"
+  },
+  "toolWait": {
+    "message": "Wait for the page",
+    "description": "Action name"
+  },
+  "toolScreenshot": {
+    "message": "Take a screenshot",
+    "description": "Action name"
+  },
+  "toolListTabs": {
+    "message": "List tabs",
+    "description": "Action name"
+  },
+  "toolSwitchTab": {
+    "message": "Switch tabs",
+    "description": "Action name"
+  },
+  "toolAddTask": {
+    "message": "Add a task",
+    "description": "Action name"
+  },
+  "toolOther": {
+    "message": "Use a tool",
+    "description": "Action name for anything else"
+  },
+  "taskQueued": {
+    "message": "Waiting to sync",
+    "description": "Task sync state"
+  },
+  "taskSynced": {
+    "message": "Synced to Builderforce",
+    "description": "Task sync state"
+  },
+  "taskLocalOnly": {
+    "message": "On this device only — pick a project in Settings to sync tasks",
+    "description": "Task sync state"
+  },
+  "taskAddLabel": {
+    "message": "New task",
+    "description": "Accessible label"
+  },
+  "taskAddPlaceholder": {
+    "message": "Add a task to this chat",
+    "description": "Placeholder"
+  },
+  "taskAdd": {
+    "message": "Add",
+    "description": "Button"
+  },
+  "refresh": {
+    "message": "Refresh",
+    "description": "Button"
+  },
+  "tasksEmpty": {
+    "message": "No tasks in this chat yet.",
+    "description": "Empty state"
+  },
+  "actionsEmpty": {
+    "message": "Rovr has not acted on a page in this chat yet.",
+    "description": "Empty state"
+  },
+  "actionsLabel": {
+    "message": "Actions Rovr took",
+    "description": "Accessible label of the action list"
+  },
+  "outcomeDone": {
+    "message": "Done",
+    "description": "Action outcome"
+  },
+  "outcomeFailed": {
+    "message": "Failed",
+    "description": "Action outcome"
+  },
+  "outcomeDeclined": {
+    "message": "Declined",
+    "description": "Action outcome"
+  },
+  "screenshotAlt": {
+    "message": "Screenshot of $1",
+    "description": "Image alt text; $1 = site"
+  },
+  "playbooksIntro": {
+    "message": "Tell Rovr how you want things done. When a request matches, Rovr follows your steps. Playbooks sync through your Chrome profile.",
+    "description": "Playbooks explanation"
+  },
+  "playbookTrigger": {
+    "message": "When I say…",
+    "description": "Field label"
+  },
+  "playbookTriggerPlaceholder": {
+    "message": "file my expenses",
+    "description": "Field placeholder (an example request)"
+  },
+  "playbookSteps": {
+    "message": "Do this…",
+    "description": "Field label"
+  },
+  "playbookStepsPlaceholder": {
+    "message": "Open the expenses site, add each receipt from my inbox, and stop before submitting.",
+    "description": "Field placeholder (example steps)"
+  },
+  "playbookSite": {
+    "message": "Only on this site (optional)",
+    "description": "Field label"
+  },
+  "playbookSitePlaceholder": {
+    "message": "example.com",
+    "description": "Field placeholder (a domain)"
+  },
+  "playbookInvalid": {
+    "message": "A playbook needs both a trigger and steps.",
+    "description": "Validation error"
+  },
+  "playbookSave": {
+    "message": "Save playbook",
+    "description": "Button"
+  },
+  "playbookUpdate": {
+    "message": "Update playbook",
+    "description": "Button"
+  },
+  "cancel": {
+    "message": "Cancel",
+    "description": "Button"
+  },
+  "playbooksEmpty": {
+    "message": "No playbooks yet.",
+    "description": "Empty state"
+  },
+  "playbookEnabled": {
+    "message": "On",
+    "description": "Toggle label"
+  },
+  "edit": {
+    "message": "Edit",
+    "description": "Button"
+  },
+  "delete": {
+    "message": "Delete",
+    "description": "Button"
+  },
+  "accountHeading": {
+    "message": "Builderforce account",
+    "description": "Section heading"
+  },
+  "signedIn": {
+    "message": "Signed in. Chats, actions and tasks sync to your workspace.",
+    "description": "Account state"
+  },
+  "signedOutHint": {
+    "message": "Not signed in. Rovr still works with a model on this device; sign in to use cloud models and sync your chats.",
+    "description": "Account state"
+  },
+  "signInCode": {
+    "message": "Your code: $1",
+    "description": "Device code; $1 = the code"
+  },
+  "signInWaiting": {
+    "message": "Approve it in the tab that just opened.",
+    "description": "Sign-in in progress"
+  },
+  "signOut": {
+    "message": "Sign out",
+    "description": "Button"
+  },
+  "signInUnavailable": {
+    "message": "Sign-in is not available right now. Check your connection and try again.",
+    "description": "Sign-in error"
+  },
+  "signInDenied": {
+    "message": "Sign-in was declined.",
+    "description": "Sign-in error"
+  },
+  "signInExpired": {
+    "message": "The sign-in code expired. Try again.",
+    "description": "Sign-in error"
+  },
+  "signInCancelled": {
+    "message": "Sign-in cancelled.",
+    "description": "Sign-in state"
+  },
+  "signInFailed": {
+    "message": "Sign-in failed. Try again.",
+    "description": "Sign-in error"
+  },
+  "sitesHeading": {
+    "message": "Allowed sites",
+    "description": "Section heading"
+  },
+  "sitesIntro": {
+    "message": "Rovr can only read and act on sites you allow. It asks the first time it needs one.",
+    "description": "Section text"
+  },
+  "sitesEmpty": {
+    "message": "No sites allowed yet.",
+    "description": "Empty state"
+  },
+  "remove": {
+    "message": "Remove",
+    "description": "Button"
+  },
+  "removeSiteLabel": {
+    "message": "Remove $1",
+    "description": "Accessible label; $1 = site"
+  },
+  "localHeading": {
+    "message": "Models on this device",
+    "description": "Section heading"
+  },
+  "localIntro": {
+    "message": "Rovr uses a model running on your computer first and falls back to Builderforce's cloud models when it needs to.",
+    "description": "Section text"
+  },
+  "localProbing": {
+    "message": "Looking for local models…",
+    "description": "Loading state"
+  },
+  "localModels": {
+    "message": "$1 models",
+    "description": "Runtime state; $1 = model count"
+  },
+  "localNotRunning": {
+    "message": "Not running",
+    "description": "Runtime state"
+  },
+  "synapseAddress": {
+    "message": "Synapse address",
+    "description": "Field label"
+  },
+  "tasksHeading": {
+    "message": "Tasks",
+    "description": "Section heading"
+  },
+  "taskProjectLabel": {
+    "message": "File new tasks in",
+    "description": "Field label"
+  },
+  "taskProjectNone": {
+    "message": "Keep tasks on this device",
+    "description": "Option"
+  },
+  "reportErrors": {
+    "message": "Send error reports to Builderforce",
+    "description": "Toggle label"
+  },
+  "reportErrorsHint": {
+    "message": "Only the error and where it happened — never page content or your messages.",
+    "description": "Toggle hint"
+  }
+}

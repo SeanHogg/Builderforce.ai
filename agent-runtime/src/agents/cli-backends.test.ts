@@ -34,3 +34,19 @@ describe("resolveCliBackendConfig reliability merge", () => {
     expect(resolved?.config.reliability?.watchdog?.fresh?.noOutputTimeoutRatio).toBe(0.8);
   });
 });
+
+describe("claude-cli model aliases", () => {
+  it("maps every spelling of a release onto the family word the CLI accepts, current flagships included", () => {
+    const aliases = resolveCliBackendConfig("claude-cli")?.config.modelAliases ?? {};
+    expect(aliases["claude-opus-5-5"]).toBe("opus");
+    expect(aliases["opus-5.5"]).toBe("opus");
+    expect(aliases["claude-sonnet-5-5"]).toBe("sonnet");
+    expect(aliases["claude-haiku-5-5"]).toBe("haiku");
+    // Older spellings the table always carried still resolve.
+    expect(aliases["claude-opus-4-6"]).toBe("opus");
+    expect(aliases["sonnet-4.0"]).toBe("sonnet");
+    expect(aliases["haiku-3.5"]).toBe("haiku");
+    // A family the CLI documents no word for is passed through as the full id.
+    expect(aliases["claude-fable-5-1"]).toBeUndefined();
+  });
+});

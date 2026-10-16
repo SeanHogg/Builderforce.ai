@@ -1,0 +1,332 @@
+{
+  "extName": {
+    "message": "Rovr: asistente de navegador de Builderforce"
+  },
+  "extDescription": {
+    "message": "Un asistente privado en tu navegador que funciona sin conexión, registra cada acción y sincroniza tareas con Builderforce."
+  },
+  "actionTitle": {
+    "message": "Abrir Rovr"
+  },
+  "commandOpen": {
+    "message": "Abrir Rovr"
+  },
+  "startFailed": {
+    "message": "Rovr no pudo iniciarse. Cierra el panel y vuelve a abrirlo."
+  },
+  "loading": {
+    "message": "Cargando…"
+  },
+  "viewsLabel": {
+    "message": "Vistas de Rovr"
+  },
+  "tabChat": {
+    "message": "Chat"
+  },
+  "tabTasks": {
+    "message": "Tareas"
+  },
+  "tabActions": {
+    "message": "Acciones"
+  },
+  "tabPlaybooks": {
+    "message": "Playbooks"
+  },
+  "tabSettings": {
+    "message": "Ajustes"
+  },
+  "statusOffline": {
+    "message": "Sin conexión"
+  },
+  "statusConnected": {
+    "message": "Conectado"
+  },
+  "statusDeviceOnly": {
+    "message": "Solo este dispositivo"
+  },
+  "statusWaiting": {
+    "message": "$1 pendientes de sincronizar"
+  },
+  "newChatTitle": {
+    "message": "Nuevo chat"
+  },
+  "newChat": {
+    "message": "Nuevo chat"
+  },
+  "noChats": {
+    "message": "Aún no hay chats"
+  },
+  "chatPickerLabel": {
+    "message": "Conversación"
+  },
+  "chatEmpty": {
+    "message": "Dile a Rovr lo que necesitas: puede leer esta página, rellenar formularios y llevar la cuenta de lo que hizo."
+  },
+  "needModelOrSignIn": {
+    "message": "No hay ningún modelo disponible. Inicia sesión en Builderforce o inicia un modelo en este dispositivo (Synapse, Ollama o FreeToken)."
+  },
+  "runFailed": {
+    "message": "Algo salió mal: $1"
+  },
+  "signIn": {
+    "message": "Iniciar sesión"
+  },
+  "dismiss": {
+    "message": "Descartar"
+  },
+  "composerLabel": {
+    "message": "Mensaje para Rovr"
+  },
+  "composerPlaceholder": {
+    "message": "Dile a Rovr qué hacer…"
+  },
+  "send": {
+    "message": "Enviar"
+  },
+  "stop": {
+    "message": "Detener"
+  },
+  "confirmTitle": {
+    "message": "Confirmar: $1"
+  },
+  "confirmTyping": {
+    "message": "Texto:"
+  },
+  "reasonSiteNotAllowed": {
+    "message": "Rovr aún no tiene permiso en este sitio."
+  },
+  "reasonSiteNotAllowedNamed": {
+    "message": "Rovr aún no tiene permiso en $1."
+  },
+  "reasonSubmit": {
+    "message": "Esto envía un formulario."
+  },
+  "reasonPurchase": {
+    "message": "Esto parece una compra o un pago."
+  },
+  "reasonSend": {
+    "message": "Esto envía o publica un mensaje."
+  },
+  "reasonDestructive": {
+    "message": "Esto elimina o cancela algo."
+  },
+  "reasonSensitiveField": {
+    "message": "Esto afecta a un campo de contraseña, pago o identidad."
+  },
+  "reasonUnknownElement": {
+    "message": "Rovr aún no ha examinado este elemento."
+  },
+  "allowOnce": {
+    "message": "Permitir"
+  },
+  "allowSite": {
+    "message": "Permitir en $1"
+  },
+  "deny": {
+    "message": "Denegar"
+  },
+  "toolRead": {
+    "message": "Leer la página"
+  },
+  "toolFind": {
+    "message": "Buscar elementos"
+  },
+  "toolClick": {
+    "message": "Hacer clic"
+  },
+  "toolType": {
+    "message": "Escribir"
+  },
+  "toolScroll": {
+    "message": "Desplazar"
+  },
+  "toolNavigate": {
+    "message": "Abrir una página"
+  },
+  "toolWait": {
+    "message": "Esperar a la página"
+  },
+  "toolScreenshot": {
+    "message": "Hacer una captura"
+  },
+  "toolListTabs": {
+    "message": "Listar pestañas"
+  },
+  "toolSwitchTab": {
+    "message": "Cambiar de pestaña"
+  },
+  "toolAddTask": {
+    "message": "Añadir una tarea"
+  },
+  "toolOther": {
+    "message": "Usar una herramienta"
+  },
+  "taskQueued": {
+    "message": "Pendiente de sincronizar"
+  },
+  "taskSynced": {
+    "message": "Sincronizada con Builderforce"
+  },
+  "taskLocalOnly": {
+    "message": "Solo en este dispositivo: elige un proyecto en Ajustes para sincronizar las tareas"
+  },
+  "taskAddLabel": {
+    "message": "Nueva tarea"
+  },
+  "taskAddPlaceholder": {
+    "message": "Añade una tarea a este chat"
+  },
+  "taskAdd": {
+    "message": "Añadir"
+  },
+  "refresh": {
+    "message": "Actualizar"
+  },
+  "tasksEmpty": {
+    "message": "Aún no hay tareas en este chat."
+  },
+  "actionsEmpty": {
+    "message": "Rovr aún no ha actuado en ninguna página en este chat."
+  },
+  "actionsLabel": {
+    "message": "Acciones que realizó Rovr"
+  },
+  "outcomeDone": {
+    "message": "Hecho"
+  },
+  "outcomeFailed": {
+    "message": "Falló"
+  },
+  "outcomeDeclined": {
+    "message": "Rechazada"
+  },
+  "screenshotAlt": {
+    "message": "Captura de $1"
+  },
+  "playbooksIntro": {
+    "message": "Dile a Rovr cómo quieres que se hagan las cosas. Cuando una petición coincide, Rovr sigue tus pasos. Los playbooks se sincronizan con tu perfil de Chrome."
+  },
+  "playbookTrigger": {
+    "message": "Cuando diga…"
+  },
+  "playbookTriggerPlaceholder": {
+    "message": "registra mis gastos"
+  },
+  "playbookSteps": {
+    "message": "Haz esto…"
+  },
+  "playbookStepsPlaceholder": {
+    "message": "Abre el sitio de gastos, añade cada recibo de mi bandeja de entrada y detente antes de enviar."
+  },
+  "playbookSite": {
+    "message": "Solo en este sitio (opcional)"
+  },
+  "playbookSitePlaceholder": {
+    "message": "ejemplo.com"
+  },
+  "playbookInvalid": {
+    "message": "Un playbook necesita un desencadenante y pasos."
+  },
+  "playbookSave": {
+    "message": "Guardar playbook"
+  },
+  "playbookUpdate": {
+    "message": "Actualizar playbook"
+  },
+  "cancel": {
+    "message": "Cancelar"
+  },
+  "playbooksEmpty": {
+    "message": "Aún no hay playbooks."
+  },
+  "playbookEnabled": {
+    "message": "Activado"
+  },
+  "edit": {
+    "message": "Editar"
+  },
+  "delete": {
+    "message": "Eliminar"
+  },
+  "accountHeading": {
+    "message": "Cuenta de Builderforce"
+  },
+  "signedIn": {
+    "message": "Sesión iniciada. Los chats, las acciones y las tareas se sincronizan con tu espacio de trabajo."
+  },
+  "signedOutHint": {
+    "message": "Sin sesión iniciada. Rovr sigue funcionando con un modelo en este dispositivo; inicia sesión para usar modelos en la nube y sincronizar tus chats."
+  },
+  "signInCode": {
+    "message": "Tu código: $1"
+  },
+  "signInWaiting": {
+    "message": "Apruébalo en la pestaña que se acaba de abrir."
+  },
+  "signOut": {
+    "message": "Cerrar sesión"
+  },
+  "signInUnavailable": {
+    "message": "El inicio de sesión no está disponible ahora. Comprueba tu conexión e inténtalo de nuevo."
+  },
+  "signInDenied": {
+    "message": "Se rechazó el inicio de sesión."
+  },
+  "signInExpired": {
+    "message": "El código de inicio de sesión caducó. Inténtalo de nuevo."
+  },
+  "signInCancelled": {
+    "message": "Inicio de sesión cancelado."
+  },
+  "signInFailed": {
+    "message": "No se pudo iniciar sesión. Inténtalo de nuevo."
+  },
+  "sitesHeading": {
+    "message": "Sitios permitidos"
+  },
+  "sitesIntro": {
+    "message": "Rovr solo puede leer y actuar en los sitios que permitas. Te pregunta la primera vez que necesita uno."
+  },
+  "sitesEmpty": {
+    "message": "Aún no hay sitios permitidos."
+  },
+  "remove": {
+    "message": "Quitar"
+  },
+  "removeSiteLabel": {
+    "message": "Quitar $1"
+  },
+  "localHeading": {
+    "message": "Modelos en este dispositivo"
+  },
+  "localIntro": {
+    "message": "Rovr usa primero un modelo que se ejecuta en tu ordenador y recurre a los modelos en la nube de Builderforce cuando lo necesita."
+  },
+  "localProbing": {
+    "message": "Buscando modelos locales…"
+  },
+  "localModels": {
+    "message": "$1 modelos"
+  },
+  "localNotRunning": {
+    "message": "No está en ejecución"
+  },
+  "synapseAddress": {
+    "message": "Dirección de Synapse"
+  },
+  "tasksHeading": {
+    "message": "Tareas"
+  },
+  "taskProjectLabel": {
+    "message": "Guardar las tareas nuevas en"
+  },
+  "taskProjectNone": {
+    "message": "Mantener las tareas en este dispositivo"
+  },
+  "reportErrors": {
+    "message": "Enviar informes de errores a Builderforce"
+  },
+  "reportErrorsHint": {
+    "message": "Solo el error y dónde ocurrió; nunca el contenido de la página ni tus mensajes."
+  }
+}

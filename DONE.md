@@ -1,3 +1,83 @@
+## ✅ RESOLVED 2026-10-16 — Rovr program, phases 2–4: one hand-off policy, local-first, offline sync, Rovr for Chrome (api 2026.10.40 · frontend 2026.10.51 · VSIX 2026.10.33 · brain-embedded 2026.10.23 · brain-ui 2026.10.10 · agent-runtime 2026.10.3 · Rovr 2026.10.2)
+
+**`@builderforce/run-policy` — one model hand-off policy for every loop.** A pure reducer (`initialRunPolicy` / `nextTurn` / `reduceRunPolicy` + `resolveStallStep`) owns phase (plan→code→verify), pin/lock/release on 429/413/503, broken-model exclusion, stall re-prompt → failover → explained stop, and the Evermind-400 decline cascade (`decliningModelPrefixes`). It now drives:
+- the Brain loop (VSIX + web);
+- the cloud durable loop (`cloudRunModelPolicy.ts`, state persisted on the loop; new stall recovery; `cloudAgentEngine.ts` 2827→2494 lines);
+- container and Actions turns (state in the read-through cache);
+- `BrainService.agentReply`;
+- Canvas (`CanvasModelRouter` deleted; now sends `role` and `arcStage`);
+- on-prem stall recovery.
+
+**One loop kernel everywhere.** The container image and the GitHub Actions runner now drive `runAgentLoop` through a generated, drift-checked bundle (`api/scripts/gen-agent-loop-bundle.mjs` → `container/agentLoop.mjs` + `generated/agentLoopSource.ts`, `check:agent-loop`). `agentImageLoop.mjs` maps steering, pause, compaction and cancel onto `LoopHooks`. There is no step cap; the failure-streak breaker is the limit. On-prem relay tasks keep the Claude Agent SDK loop by design; their model choice goes through the router.
+
+**Routing parity.**
+- `pickCloudModel` orders cost-first roles by expected cost.
+- Learned role stats now re-rank the plan pool too, so tenants with no connected account get them.
+- The gateway fetches role stats regardless of BYO.
+
+**On-prem joined the shared vocabulary.**
+- `model-catalog-view.ts` binds the CatalogView port. Prices are converted per-million → per-token, and a placeholder zero price on a cloud model is "unknown", not free.
+- `candidate-ranking.ts` routes through the router, and `AGENT_ROLE_MODEL_ROLES` maps orchestrator roles onto `ModelRole`.
+- 2025 model pins are removed, and Claude ids derive from `anthropic-models.ts`.
+- Bug fixes found along the way: un-awaited credential writes in several auth commands, and a role with no model wiping the agent's model.
+
+**One BYO provider list.** `@builderforce/model-catalog` `providers.ts` is the single source for api + frontend. FreeToken is now configurable from the web: one self-hosted-runtime form for every `local_runtime` provider, and `selfHostedCredential.ts` is shared by the save route and the vendor.
+
+**Local-first inference.**
+- `@builderforce/local-inference` holds the runtime registry (Synapse/bfi, Ollama, FreeToken), probing with capabilities, the local CatalogView, `localFirstPlan` and `runLocalFirst`.
+- brain-embedded `createLocalFirstStream` / `localTransport` serve VSIX and Rovr from one implementation.
+- When local is enabled and nothing is pinned, a turn tries a capable on-device model first. It fails over to the cloud pool only before any output has streamed.
+- Fallbacks are recorded as an `llm.local_fallback` step.
+
+**Work offline, then sync.**
+- `@builderforce/write-outbox` gained a durable mode with:
+  - store ports (memory, IndexedDB, VS Code);
+  - sealed idempotent batches with retry and backoff;
+  - an online signal;
+  - a size cap that drops oldest entries and counts them;
+  - a tenant `scope` that parks entries instead of replaying them under another tenant.
+- An api `Idempotency-Key` middleware (24h, read-through cache) protects:
+  - activity ingest;
+  - client error reports;
+  - chat↔ticket links;
+  - `POST /api/tasks` and `POST /api/brain/chats`.
+  
+  `/v1/chat/completions` shares the same key grammar and store.
+- VSIX activity, error reports, run outcomes and unsaved turns go through durable outboxes. Brain step rows survive a restart and replay on startup or reconnect without a new run, in VSIX and on the web.
+
+**Rovr for Chrome (new).** `clients/chrome` is an MV3 side-panel assistant on the same brain-embedded loop:
+- device-code sign-in;
+- local-first inference;
+- browser tools over a ref-addressed page agent, with page content fenced as untrusted data;
+- an action ledger synced as chat steps;
+- user playbooks ("when I say X, do Y on site Z");
+- a safety gate: confirm before submit/purchase/send/delete or sensitive fields, plus a per-site allow list;
+- an offline IndexedDB outbox;
+- tasks linked to the chat;
+- errors on the shared client-report path (`chrome-extension` source);
+- five locales, light and dark themes, works down to about 300px.
+
+Ships with release-note migration `1225_release_note_rovr_browser_assistant.sql` and the blog post `rovr-your-assistant-in-the-browser` in five locales.
+
+**DRY cleanups across hosts:**
+- `transcriptSeedFrom` (brain-embedded) is shared by web and Rovr.
+- One `brain.timeline` label mapper lives in brain-ui, used by web, VSIX and Rovr.
+- The IndexedDB step-durability installer is shared by web and Rovr.
+- `replayPacks.ts` no longer uses an empty catch.
+
+**Closed ROADMAP entries:**
+- Workload-aware routing:
+  - Learned role stats only for BYO
+  - Hand-off policy only in brain-embedded
+  - Two loops outside the kernel
+  - Second model universe on-prem
+  - Provider lists restated in the frontend
+  - Local-first opt-in only (VSIX)
+  - No offline sync
+  - No Chrome extension client
+- "Overlapping router in builderforce-memory": closed as not a defect. Builderforce.ai never imports `InferenceRouter`, so it is the memory package's own SSM-vs-LLM gate.
+- Cloud runs: "Container/Actions cap at `CONTAINER_MAX_STEPS`" (code done; legacy constant stays until the rebuilt image is deployed).
+
 ## ✅ RESOLVED 2026-10-16 — Main release unblocked after the Insights merge (frontend 2026.10.50 · api 2026.10.39 · replay-sdk 2026.10.3)
 
 From 2026-10-14 every main release failed in verify, so nothing deployed. The cause was the Insights merge, which was never compiled, landing beside other sessions' commits. Each failure was fixed at its cause:

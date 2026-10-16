@@ -11,6 +11,8 @@ export const DEVICE_CLIENTS = {
   android: 'Builderforce for Android',
   ios: 'Builderforce for iPhone',
   macos: 'Builderforce for Mac',
+  // Rovr, the Chrome extension (`clients/chrome`). A brand, like every name here.
+  chrome: 'Rovr for Chrome',
 } as const;
 
 export type DeviceClient = keyof typeof DEVICE_CLIENTS;

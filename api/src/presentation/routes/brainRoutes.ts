@@ -14,6 +14,7 @@ import { isValidRoomCode } from '../../application/guest/guestToken';
 import { isValidVisitorId } from '../../application/marketing/MarketingService';
 import { claimGuestRoom } from '../../application/guest/guestRoomClient';
 import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
+import { idempotentReplay } from '../middleware/idempotentReplay';
 import { fetchWebDocumentCached } from '../../application/web/webFetch';
 import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
 import { agentHosts, users, chatTicketLinks } from '../../infrastructure/database/schema';
@@ -112,7 +113,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   });
 
   // POST /chats
-  router.post('/chats', async (c) => {
+  // Replayable from a client's durable outbox (Rovr creates the chat when it first syncs):
+  // idempotent on `Idempotency-Key`, so a lost answer never yields a second chat.
+  router.post('/chats', idempotentReplay(), async (c) => {
     const body = await parseBody(c, CreateChatBody);
     const result = await brainService.createChat({
       tenantId: c.get('tenantId') as number,
@@ -478,7 +481,8 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   });
 
   // POST /chats/:id/tickets — link this chat to a ticket. { kind, ref, linkType? }
-  router.post('/chats/:id/tickets', async (c) => {
+  // Replayable from a client's durable outbox: idempotent on `Idempotency-Key`.
+  router.post('/chats/:id/tickets', idempotentReplay(), async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
     const body = await parseOptionalBody(c, LinkTicketBody);

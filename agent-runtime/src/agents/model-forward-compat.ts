@@ -1,4 +1,9 @@
 import type { Api, Model } from "../builderforce/model/types.js";
+import {
+  ANTHROPIC_RELEASES,
+  anthropicModelId,
+  olderAnthropicTemplateIds,
+} from "./anthropic-models.js";
 import { DEFAULT_CONTEXT_TOKENS } from "./defaults.js";
 import { normalizeModelCompat } from "./model-compat.js";
 import { normalizeProviderId } from "./model-selection.js";
@@ -7,39 +12,8 @@ import type { ModelRegistry } from "./model-discovery.js";
 const OPENAI_CODEX_GPT_53_MODEL_ID = "gpt-5.3-codex";
 const OPENAI_CODEX_TEMPLATE_MODEL_IDS = ["gpt-5.2-codex"] as const;
 
-const ANTHROPIC_OPUS_46_MODEL_ID = "claude-opus-4-6";
-const ANTHROPIC_OPUS_46_DOT_MODEL_ID = "claude-opus-4.6";
-const ANTHROPIC_OPUS_TEMPLATE_MODEL_IDS = ["claude-opus-4-5", "claude-opus-4.5"] as const;
-const ANTHROPIC_SONNET_46_MODEL_ID = "claude-sonnet-4-6";
-const ANTHROPIC_SONNET_46_DOT_MODEL_ID = "claude-sonnet-4.6";
-const ANTHROPIC_SONNET_TEMPLATE_MODEL_IDS = ["claude-sonnet-4-5", "claude-sonnet-4.5"] as const;
-
 const ZAI_GLM5_MODEL_ID = "glm-5";
 const ZAI_GLM5_TEMPLATE_MODEL_IDS = ["glm-4.7"] as const;
-
-const ANTIGRAVITY_OPUS_46_MODEL_ID = "claude-opus-4-6";
-const ANTIGRAVITY_OPUS_46_DOT_MODEL_ID = "claude-opus-4.6";
-const ANTIGRAVITY_OPUS_TEMPLATE_MODEL_IDS = ["claude-opus-4-5", "claude-opus-4.5"] as const;
-const ANTIGRAVITY_OPUS_46_THINKING_MODEL_ID = "claude-opus-4-6-thinking";
-const ANTIGRAVITY_OPUS_46_DOT_THINKING_MODEL_ID = "claude-opus-4.6-thinking";
-const ANTIGRAVITY_OPUS_THINKING_TEMPLATE_MODEL_IDS = [
-  "claude-opus-4-5-thinking",
-  "claude-opus-4.5-thinking",
-] as const;
-
-export const ANTIGRAVITY_OPUS_46_FORWARD_COMPAT_CANDIDATES = [
-  {
-    id: ANTIGRAVITY_OPUS_46_THINKING_MODEL_ID,
-    templatePrefixes: [
-      "google-antigravity/claude-opus-4-5-thinking",
-      "google-antigravity/claude-opus-4.5-thinking",
-    ],
-  },
-  {
-    id: ANTIGRAVITY_OPUS_46_MODEL_ID,
-    templatePrefixes: ["google-antigravity/claude-opus-4-5", "google-antigravity/claude-opus-4.5"],
-  },
-] as const;
 
 function cloneFirstTemplateModel(params: {
   normalizedProvider: string;
@@ -104,82 +78,68 @@ function resolveOpenAICodexGpt53FallbackModel(
   } as Model<Api>);
 }
 
-function resolveAnthropic46ForwardCompatModel(params: {
-  provider: string;
-  modelId: string;
-  modelRegistry: ModelRegistry;
-  dashModelId: string;
-  dotModelId: string;
-  dashTemplateId: string;
-  dotTemplateId: string;
-  fallbackTemplateIds: readonly string[];
-}): Model<Api> | undefined {
-  const { provider, modelId, modelRegistry, dashModelId, dotModelId } = params;
+/**
+ * Providers that serve Claude under Anthropic's own ids. A Claude release this host has
+ * no `models.json` row for yet borrows its metadata from the newest OLDER release of the
+ * same family that it does have (`olderAnthropicTemplateIds` — derived from the one
+ * release list in `anthropic-models.ts`), keeping the requested spelling and suffix
+ * (`-thinking`, a date). So every new flagship works the day it ships, without a
+ * per-release table here.
+ */
+const CLAUDE_FORWARD_COMPAT_PROVIDERS: ReadonlySet<string> = new Set(["anthropic", "google-antigravity"]);
+
+function resolveClaudeForwardCompatModel(
+  provider: string,
+  modelId: string,
+  modelRegistry: ModelRegistry,
+): Model<Api> | undefined {
   const normalizedProvider = normalizeProviderId(provider);
-  if (normalizedProvider !== "anthropic") {
+  if (!CLAUDE_FORWARD_COMPAT_PROVIDERS.has(normalizedProvider)) {
     return undefined;
   }
-
-  const trimmedModelId = modelId.trim();
-  const lower = trimmedModelId.toLowerCase();
-  const is46Model =
-    lower === dashModelId ||
-    lower === dotModelId ||
-    lower.startsWith(`${dashModelId}-`) ||
-    lower.startsWith(`${dotModelId}-`);
-  if (!is46Model) {
+  const templateIds = olderAnthropicTemplateIds(modelId);
+  if (templateIds.length === 0) {
     return undefined;
   }
-
-  const templateIds: string[] = [];
-  if (lower.startsWith(dashModelId)) {
-    templateIds.push(lower.replace(dashModelId, params.dashTemplateId));
-  }
-  if (lower.startsWith(dotModelId)) {
-    templateIds.push(lower.replace(dotModelId, params.dotTemplateId));
-  }
-  templateIds.push(...params.fallbackTemplateIds);
-
   return cloneFirstTemplateModel({
     normalizedProvider,
-    trimmedModelId,
+    trimmedModelId: modelId.trim(),
     templateIds,
     modelRegistry,
   });
 }
 
-function resolveAnthropicOpus46ForwardCompatModel(
-  provider: string,
-  modelId: string,
-  modelRegistry: ModelRegistry,
-): Model<Api> | undefined {
-  return resolveAnthropic46ForwardCompatModel({
-    provider,
-    modelId,
-    modelRegistry,
-    dashModelId: ANTHROPIC_OPUS_46_MODEL_ID,
-    dotModelId: ANTHROPIC_OPUS_46_DOT_MODEL_ID,
-    dashTemplateId: "claude-opus-4-5",
-    dotTemplateId: "claude-opus-4.5",
-    fallbackTemplateIds: ANTHROPIC_OPUS_TEMPLATE_MODEL_IDS,
-  });
+/** A Claude id `models list` synthesizes for a provider whose catalog lags, with the
+ *  template keys whose availability it inherits. */
+export interface ClaudeForwardCompatCandidate {
+  id: string;
+  templateKeys: readonly string[];
 }
 
-function resolveAnthropicSonnet46ForwardCompatModel(
-  provider: string,
-  modelId: string,
-  modelRegistry: ModelRegistry,
-): Model<Api> | undefined {
-  return resolveAnthropic46ForwardCompatModel({
-    provider,
-    modelId,
-    modelRegistry,
-    dashModelId: ANTHROPIC_SONNET_46_MODEL_ID,
-    dotModelId: ANTHROPIC_SONNET_46_DOT_MODEL_ID,
-    dashTemplateId: "claude-sonnet-4-5",
-    dotTemplateId: "claude-sonnet-4.5",
-    fallbackTemplateIds: ANTHROPIC_SONNET_TEMPLATE_MODEL_IDS,
+const ANTIGRAVITY_PROVIDER = "google-antigravity";
+/** Antigravity serves Opus from 4.6 on, plain and `-thinking`, ahead of its catalog. */
+const ANTIGRAVITY_SYNTHESIZED_SINCE: readonly [number, number] = [4, 6];
+const ANTIGRAVITY_SUFFIXES = ["-thinking", ""] as const;
+
+/**
+ * The Opus ids `models list` synthesizes for Google Antigravity — every Opus release from
+ * 4.6 on (the one release list, `anthropic-models.ts`), plain and `-thinking` — each with
+ * the older same-suffix template keys {@link resolveClaudeForwardCompatModel} would clone.
+ * Derived, so a new Opus is listed the day it is added there. Pure.
+ */
+export function antigravityForwardCompatCandidates(): ClaudeForwardCompatCandidate[] {
+  const [sinceMajor, sinceMinor] = ANTIGRAVITY_SYNTHESIZED_SINCE;
+  const releases = ANTHROPIC_RELEASES.opus.filter((v) => {
+    const [major, minor] = v.split(".").map(Number);
+    return major > sinceMajor || (major === sinceMajor && (minor ?? 0) >= sinceMinor);
   });
+  return releases.flatMap((version) =>
+    ANTIGRAVITY_SUFFIXES.map((suffix) => {
+      const id = `${anthropicModelId("opus", version)}${suffix}`;
+      const templates = olderAnthropicTemplateIds(id).filter((t) => (suffix ? t.endsWith(suffix) : true));
+      return { id, templateKeys: templates.map((t) => `${ANTIGRAVITY_PROVIDER}/${t}`) };
+    }),
+  );
 }
 
 // Z.ai's GLM-5 may not be present in pi-ai's built-in model catalog yet.
@@ -224,60 +184,6 @@ function resolveZaiGlm5ForwardCompatModel(
   } as Model<Api>);
 }
 
-function resolveAntigravityOpus46ForwardCompatModel(
-  provider: string,
-  modelId: string,
-  modelRegistry: ModelRegistry,
-): Model<Api> | undefined {
-  const normalizedProvider = normalizeProviderId(provider);
-  if (normalizedProvider !== "google-antigravity") {
-    return undefined;
-  }
-
-  const trimmedModelId = modelId.trim();
-  const lower = trimmedModelId.toLowerCase();
-  const isOpus46 =
-    lower === ANTIGRAVITY_OPUS_46_MODEL_ID ||
-    lower === ANTIGRAVITY_OPUS_46_DOT_MODEL_ID ||
-    lower.startsWith(`${ANTIGRAVITY_OPUS_46_MODEL_ID}-`) ||
-    lower.startsWith(`${ANTIGRAVITY_OPUS_46_DOT_MODEL_ID}-`);
-  const isOpus46Thinking =
-    lower === ANTIGRAVITY_OPUS_46_THINKING_MODEL_ID ||
-    lower === ANTIGRAVITY_OPUS_46_DOT_THINKING_MODEL_ID ||
-    lower.startsWith(`${ANTIGRAVITY_OPUS_46_THINKING_MODEL_ID}-`) ||
-    lower.startsWith(`${ANTIGRAVITY_OPUS_46_DOT_THINKING_MODEL_ID}-`);
-  if (!isOpus46 && !isOpus46Thinking) {
-    return undefined;
-  }
-
-  const templateIds: string[] = [];
-  if (lower.startsWith(ANTIGRAVITY_OPUS_46_MODEL_ID)) {
-    templateIds.push(lower.replace(ANTIGRAVITY_OPUS_46_MODEL_ID, "claude-opus-4-5"));
-  }
-  if (lower.startsWith(ANTIGRAVITY_OPUS_46_DOT_MODEL_ID)) {
-    templateIds.push(lower.replace(ANTIGRAVITY_OPUS_46_DOT_MODEL_ID, "claude-opus-4.5"));
-  }
-  if (lower.startsWith(ANTIGRAVITY_OPUS_46_THINKING_MODEL_ID)) {
-    templateIds.push(
-      lower.replace(ANTIGRAVITY_OPUS_46_THINKING_MODEL_ID, "claude-opus-4-5-thinking"),
-    );
-  }
-  if (lower.startsWith(ANTIGRAVITY_OPUS_46_DOT_THINKING_MODEL_ID)) {
-    templateIds.push(
-      lower.replace(ANTIGRAVITY_OPUS_46_DOT_THINKING_MODEL_ID, "claude-opus-4.5-thinking"),
-    );
-  }
-  templateIds.push(...ANTIGRAVITY_OPUS_TEMPLATE_MODEL_IDS);
-  templateIds.push(...ANTIGRAVITY_OPUS_THINKING_TEMPLATE_MODEL_IDS);
-
-  return cloneFirstTemplateModel({
-    normalizedProvider,
-    trimmedModelId,
-    templateIds,
-    modelRegistry,
-  });
-}
-
 export function resolveForwardCompatModel(
   provider: string,
   modelId: string,
@@ -285,9 +191,7 @@ export function resolveForwardCompatModel(
 ): Model<Api> | undefined {
   return (
     resolveOpenAICodexGpt53FallbackModel(provider, modelId, modelRegistry) ??
-    resolveAnthropicOpus46ForwardCompatModel(provider, modelId, modelRegistry) ??
-    resolveAnthropicSonnet46ForwardCompatModel(provider, modelId, modelRegistry) ??
-    resolveZaiGlm5ForwardCompatModel(provider, modelId, modelRegistry) ??
-    resolveAntigravityOpus46ForwardCompatModel(provider, modelId, modelRegistry)
+    resolveClaudeForwardCompatModel(provider, modelId, modelRegistry) ??
+    resolveZaiGlm5ForwardCompatModel(provider, modelId, modelRegistry)
   );
 }

@@ -17,4 +17,4 @@ export {
 export { orderForRole } from './orderForRole.js';
 export { rankConnectedForRole, type RankConnectedOptions } from './rankConnected.js';
 export { expectedCostUsd, orderByExpectedCost, type CostWorkload } from './expectedCost.js';
-export { orderPoolForWorkload, poolOrderIsCostFirst, type PoolWorkload } from './orderPool.js';
+export { orderPoolForWorkload, poolOrderIsCostFirst, type PoolEvidence, type PoolWorkload } from './orderPool.js';

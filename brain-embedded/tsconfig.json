@@ -18,9 +18,25 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "outDir": "dist",
-    "rootDir": "src",
-    "types": ["@types/node"]
+    "types": ["@types/node"],
+    // The source-only packages, resolved by `paths` rather than the `link:` symlinks:
+    // a linked package that imports another (`run-policy` -> `agent-stall`) is resolved
+    // from its REAL path under `packages/`, which has no install, and tsgo cannot find
+    // the edge. No `rootDir` and no `outDir`: these files live outside `src`, and either
+    // option makes tsc hold every compiled file to one root (TS6059) even under
+    // `--noEmit`. This program never emits — `type-check` is `--noEmit` and the build
+    // is tsup, which sets its own `dist` and declaration root (`tsup.config.ts`).
+    "paths": {
+      "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
+      "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"],
+      "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
+      "@builderforce/learned-routing": ["../packages/learned-routing/src/index.ts"],
+      "@builderforce/local-inference": ["../packages/local-inference/src/index.ts"],
+      "@builderforce/model-catalog": ["../packages/model-catalog/src/index.ts"],
+      "@builderforce/run-policy": ["../packages/run-policy/src/index.ts"],
+      "@builderforce/workload": ["../packages/workload/src/index.ts"],
+      "@builderforce/write-outbox": ["../packages/write-outbox/src/index.ts"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]

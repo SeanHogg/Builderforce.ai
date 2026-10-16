@@ -8,6 +8,7 @@ describe('device clients', () => {
     expect(deviceClientName('android')).toBe('Builderforce for Android');
     expect(deviceClientName('ios')).toBe('Builderforce for iPhone');
     expect(deviceClientName('macos')).toBe('Builderforce for Mac');
+    expect(deviceClientName('chrome')).toBe('Rovr for Chrome');
     expect(deviceClientName(null)).toBe(DEVICE_CLIENTS.vscode);
     expect(deviceClientName('something-else')).toBe(DEVICE_CLIENTS.vscode);
   });

@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { formatThinkingLevels, normalizeThinkLevel } from "../auto-reply/thinking.js";
+import { modelRoleForAgentRole } from "../builderforce/agent-roles.js";
 import { buildPersonaSystemBlock } from "../builderforce/personas.js";
 import type { AgentRole } from "../builderforce/types.js";
 import { loadConfig } from "../config/config.js";
@@ -8,7 +9,7 @@ import { normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.j
 import { normalizeDeliveryContext } from "../utils/delivery-context.js";
 import { resolveAgentConfig } from "./agent-scope.js";
 import { AGENT_LANE_SUBAGENT } from "./lanes.js";
-import { resolveSubagentSpawnModelSelection } from "./model-selection.js";
+import { resolveSubagentSpawnModel } from "./model-routing.js";
 import { buildSubagentSystemPrompt } from "./subagent-announce.js";
 import { getSubagentDepthFromSessionStore } from "./subagent-depth.js";
 import { countActiveRunsForSession, registerSubagentRun } from "./subagent-registry.js";
@@ -162,10 +163,11 @@ export async function spawnSubagentDirect(
     const agentsList = cfg.agents.list ?? (cfg.agents.list = []);
     const existingIdx = agentsList.findIndex((e) => normalizeAgentId(e.id) === targetAgentId);
     const role = params.roleConfig;
+    // A role without a model pin must not erase the agent's own configured model.
     const newEntry = {
       id: targetAgentId,
       skills: role.tools,
-      model: role.model,
+      ...(role.model ? { model: role.model } : {}),
     };
     if (existingIdx >= 0) {
       agentsList[existingIdx] = { ...agentsList[existingIdx], ...newEntry };
@@ -186,10 +188,12 @@ export async function spawnSubagentDirect(
   const childDepth = callerDepth + 1;
   const spawnedByKey = requesterInternalKey;
   const targetAgentConfig = resolveAgentConfig(cfg, targetAgentId);
-  const resolvedModel = resolveSubagentSpawnModelSelection({
+  const resolvedModel = await resolveSubagentSpawnModel({
     cfg,
     agentId: targetAgentId,
     modelOverride,
+    role: modelRoleForAgentRole(params.roleConfig?.name),
+    task,
   });
 
   const resolvedThinkingDefaultRaw =

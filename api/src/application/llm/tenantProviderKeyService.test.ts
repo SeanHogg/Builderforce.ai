@@ -87,7 +87,7 @@ describe('BYO provider routing map', () => {
     expect(PROVIDER_VENDOR_MAP.moonshot).toMatchObject({ vendorId: 'moonshot', envKey: 'MOONSHOT_API_KEY' });
     expect(PROVIDER_VENDOR_MAP.qwen).toMatchObject({ vendorId: 'qwen', envKey: 'QWEN_API_KEY' });
     expect(PROVIDER_VENDOR_MAP.minimax).toMatchObject({ vendorId: 'minimax', envKey: 'MINIMAX_API_KEY' });
-    expect(PROVIDER_VENDOR_MAP.xai).toMatchObject({ vendorId: 'xai', envKey: 'XAI_API_KEY', oauth: true });
+    expect(PROVIDER_VENDOR_MAP.xai).toMatchObject({ vendorId: 'xai', envKey: 'XAI_API_KEY' });
   });
 
   it('maps OpenAI OAuth priority to the Codex subscription vendor', () => {

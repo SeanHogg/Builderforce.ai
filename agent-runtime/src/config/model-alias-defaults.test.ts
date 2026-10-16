@@ -9,7 +9,10 @@ describe("applyModelDefaults", () => {
       agents: {
         defaults: {
           models: {
-            "anthropic/claude-opus-4-6": {},
+            "anthropic/claude-opus-5-5": {},
+            "anthropic/claude-sonnet-5-5": {},
+            "anthropic/claude-haiku-5-5": {},
+            "anthropic/claude-fable-5-1": {},
             "openai/gpt-5.2": {},
           },
         },
@@ -17,8 +20,20 @@ describe("applyModelDefaults", () => {
     } satisfies BuilderForceAgentsConfig;
     const next = applyModelDefaults(cfg);
 
-    expect(next.agents?.defaults?.models?.["anthropic/claude-opus-4-6"]?.alias).toBe("opus");
+    expect(next.agents?.defaults?.models?.["anthropic/claude-opus-5-5"]?.alias).toBe("opus");
+    expect(next.agents?.defaults?.models?.["anthropic/claude-sonnet-5-5"]?.alias).toBe("sonnet");
+    expect(next.agents?.defaults?.models?.["anthropic/claude-haiku-5-5"]?.alias).toBe("haiku");
+    expect(next.agents?.defaults?.models?.["anthropic/claude-fable-5-1"]?.alias).toBe("fable");
     expect(next.agents?.defaults?.models?.["openai/gpt-5.2"]?.alias).toBe("gpt");
+  });
+
+  it("does not hand a family word to a superseded release", () => {
+    const cfg = {
+      agents: { defaults: { models: { "anthropic/claude-opus-4-6": {} } } },
+    } satisfies BuilderForceAgentsConfig;
+    const next = applyModelDefaults(cfg);
+
+    expect(next.agents?.defaults?.models?.["anthropic/claude-opus-4-6"]?.alias).toBeUndefined();
   });
 
   it("does not override existing aliases", () => {

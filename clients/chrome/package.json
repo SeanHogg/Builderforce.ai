@@ -1,0 +1,37 @@
+{
+  "name": "builderforce-rovr",
+  "displayName": "Rovr — Builderforce browser assistant",
+  "version": "2026.10.2",
+  "private": true,
+  "type": "module",
+  "description": "Rovr, Builderforce's own browser assistant, as a Chrome (MV3) extension: the shared Brain agent loop running in the side panel, local-first inference (Synapse/bfi, Ollama, FreeToken on this machine) with failover to the Builderforce gateway, browser tools on the active tab behind a per-site allow list and an explicit confirm for anything that submits, buys, sends or touches a sensitive field, an action ledger that syncs to the chat as steps, user-authored playbooks, tasks linked to the chat, and durable offline sync through the shared write outbox.",
+  "license": "MIT",
+  "author": "Sean Hogg",
+  "scripts": {
+    "postinstall": "node ../../scripts/ensure-linked-deps.mjs",
+    "build": "node build.mjs",
+    "build:production": "node build.mjs --production",
+    "type-check": "tsgo -p ./ && tsc -p ./",
+    "typecheck": "pnpm run type-check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "package": "node build.mjs --production && node package.mjs"
+  },
+  "devDependencies": {
+    "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
+    "@seanhogg/builderforce-brain-ui": "link:../../packages/brain-ui",
+    "@types/chrome": "^0.1.4",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@typescript/native-preview": "7.0.0-dev.20260627.2",
+    "esbuild": "^0.24.0",
+    "fflate": "^0.8.2",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.0.3"
+  }
+}

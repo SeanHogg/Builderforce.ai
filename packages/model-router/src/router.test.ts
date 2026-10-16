@@ -100,4 +100,22 @@ describe('orderPoolForWorkload', () => {
     expect(orderPoolForWorkload(pool, { ...base, role: 'code' }, VIEW)).toEqual(pool);
     expect(orderPoolForWorkload(pool, { ...base, role: undefined }, VIEW)).toEqual(pool);
   });
+
+  it('re-ranks by learned evidence where the role lets the system choose', () => {
+    const stats = [
+      { model: 'mini', n: 20, avgScore: 0.95, avgCostMc: 10 },
+      { model: 'sonnet', n: 20, avgScore: 0.4, avgCostMc: 50 },
+    ];
+    // Quality-first: no price order, but the evidence leads.
+    expect(orderPoolForWorkload(pool, { ...base, role: 'code' }, VIEW, { stats })[0]).toBe('mini');
+    // Cost-first: cost orders first, then the evidence re-ranks the eligible models.
+    expect(orderPoolForWorkload(pool, { ...base, role: 'explore' }, VIEW, { stats })[0]).toBe('mini');
+    // A balanced role keeps the pool's own order whatever the evidence says.
+    expect(orderPoolForWorkload(pool, { ...base, role: 'plan' }, VIEW, { stats })).toEqual(pool);
+  });
+
+  it('keeps the cost order when the evidence is cold', () => {
+    const cold = [{ model: 'sonnet', n: 1, avgScore: 1, avgCostMc: 1 }];
+    expect(orderPoolForWorkload(pool, { ...base, role: 'explore' }, VIEW, { stats: cold })).toEqual(['nemo', 'flash', 'mini', 'sonnet']);
+  });
 });

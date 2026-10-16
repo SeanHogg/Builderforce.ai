@@ -1,0 +1,332 @@
+{
+  "extName": {
+    "message": "Rovr — Builderforce 浏览器助手"
+  },
+  "extDescription": {
+    "message": "浏览器中的私人助手：可离线工作，记录每一个操作，并将任务同步到 Builderforce。"
+  },
+  "actionTitle": {
+    "message": "打开 Rovr"
+  },
+  "commandOpen": {
+    "message": "打开 Rovr"
+  },
+  "startFailed": {
+    "message": "Rovr 无法启动。请关闭面板后重新打开。"
+  },
+  "loading": {
+    "message": "正在加载…"
+  },
+  "viewsLabel": {
+    "message": "Rovr 视图"
+  },
+  "tabChat": {
+    "message": "对话"
+  },
+  "tabTasks": {
+    "message": "任务"
+  },
+  "tabActions": {
+    "message": "操作"
+  },
+  "tabPlaybooks": {
+    "message": "操作手册"
+  },
+  "tabSettings": {
+    "message": "设置"
+  },
+  "statusOffline": {
+    "message": "离线"
+  },
+  "statusConnected": {
+    "message": "已连接"
+  },
+  "statusDeviceOnly": {
+    "message": "仅限本设备"
+  },
+  "statusWaiting": {
+    "message": "$1 项待同步"
+  },
+  "newChatTitle": {
+    "message": "新对话"
+  },
+  "newChat": {
+    "message": "新对话"
+  },
+  "noChats": {
+    "message": "暂无对话"
+  },
+  "chatPickerLabel": {
+    "message": "对话"
+  },
+  "chatEmpty": {
+    "message": "告诉 Rovr 你需要什么——它可以阅读当前页面、填写表单，并记录它做过的每一步。"
+  },
+  "needModelOrSignIn": {
+    "message": "当前没有可用的模型。请登录 Builderforce，或在本设备上启动一个模型（Synapse、Ollama 或 FreeToken）。"
+  },
+  "runFailed": {
+    "message": "出现问题：$1"
+  },
+  "signIn": {
+    "message": "登录"
+  },
+  "dismiss": {
+    "message": "关闭"
+  },
+  "composerLabel": {
+    "message": "发给 Rovr 的消息"
+  },
+  "composerPlaceholder": {
+    "message": "告诉 Rovr 要做什么…"
+  },
+  "send": {
+    "message": "发送"
+  },
+  "stop": {
+    "message": "停止"
+  },
+  "confirmTitle": {
+    "message": "确认：$1"
+  },
+  "confirmTyping": {
+    "message": "文本："
+  },
+  "reasonSiteNotAllowed": {
+    "message": "Rovr 尚未获准在此网站上使用。"
+  },
+  "reasonSiteNotAllowedNamed": {
+    "message": "Rovr 尚未获准在 $1 上使用。"
+  },
+  "reasonSubmit": {
+    "message": "这会提交表单。"
+  },
+  "reasonPurchase": {
+    "message": "这看起来是一笔购买或付款。"
+  },
+  "reasonSend": {
+    "message": "这会发送或发布一条消息。"
+  },
+  "reasonDestructive": {
+    "message": "这会删除或取消某些内容。"
+  },
+  "reasonSensitiveField": {
+    "message": "这涉及密码、支付或身份信息字段。"
+  },
+  "reasonUnknownElement": {
+    "message": "Rovr 还没有查看过这个元素。"
+  },
+  "allowOnce": {
+    "message": "允许"
+  },
+  "allowSite": {
+    "message": "在 $1 上允许"
+  },
+  "deny": {
+    "message": "拒绝"
+  },
+  "toolRead": {
+    "message": "阅读页面"
+  },
+  "toolFind": {
+    "message": "查找元素"
+  },
+  "toolClick": {
+    "message": "点击"
+  },
+  "toolType": {
+    "message": "输入"
+  },
+  "toolScroll": {
+    "message": "滚动"
+  },
+  "toolNavigate": {
+    "message": "打开页面"
+  },
+  "toolWait": {
+    "message": "等待页面"
+  },
+  "toolScreenshot": {
+    "message": "截图"
+  },
+  "toolListTabs": {
+    "message": "列出标签页"
+  },
+  "toolSwitchTab": {
+    "message": "切换标签页"
+  },
+  "toolAddTask": {
+    "message": "添加任务"
+  },
+  "toolOther": {
+    "message": "使用工具"
+  },
+  "taskQueued": {
+    "message": "等待同步"
+  },
+  "taskSynced": {
+    "message": "已同步到 Builderforce"
+  },
+  "taskLocalOnly": {
+    "message": "仅保存在本设备上——在设置中选择一个项目即可同步任务"
+  },
+  "taskAddLabel": {
+    "message": "新任务"
+  },
+  "taskAddPlaceholder": {
+    "message": "为此对话添加任务"
+  },
+  "taskAdd": {
+    "message": "添加"
+  },
+  "refresh": {
+    "message": "刷新"
+  },
+  "tasksEmpty": {
+    "message": "此对话中还没有任务。"
+  },
+  "actionsEmpty": {
+    "message": "在此对话中，Rovr 还没有在任何页面上执行操作。"
+  },
+  "actionsLabel": {
+    "message": "Rovr 执行过的操作"
+  },
+  "outcomeDone": {
+    "message": "已完成"
+  },
+  "outcomeFailed": {
+    "message": "失败"
+  },
+  "outcomeDeclined": {
+    "message": "已拒绝"
+  },
+  "screenshotAlt": {
+    "message": "$1 的截图"
+  },
+  "playbooksIntro": {
+    "message": "告诉 Rovr 你希望事情怎么做。当请求匹配时，Rovr 会按你的步骤执行。操作手册会通过你的 Chrome 个人资料同步。"
+  },
+  "playbookTrigger": {
+    "message": "当我说…"
+  },
+  "playbookTriggerPlaceholder": {
+    "message": "提交我的报销"
+  },
+  "playbookSteps": {
+    "message": "就这样做…"
+  },
+  "playbookStepsPlaceholder": {
+    "message": "打开报销网站，添加收件箱中的每张收据，并在提交前停下。"
+  },
+  "playbookSite": {
+    "message": "仅限此网站（可选）"
+  },
+  "playbookSitePlaceholder": {
+    "message": "example.cn"
+  },
+  "playbookInvalid": {
+    "message": "操作手册需要同时填写触发语和步骤。"
+  },
+  "playbookSave": {
+    "message": "保存操作手册"
+  },
+  "playbookUpdate": {
+    "message": "更新操作手册"
+  },
+  "cancel": {
+    "message": "取消"
+  },
+  "playbooksEmpty": {
+    "message": "还没有操作手册。"
+  },
+  "playbookEnabled": {
+    "message": "启用"
+  },
+  "edit": {
+    "message": "编辑"
+  },
+  "delete": {
+    "message": "删除"
+  },
+  "accountHeading": {
+    "message": "Builderforce 账户"
+  },
+  "signedIn": {
+    "message": "已登录。对话、操作和任务会同步到你的工作区。"
+  },
+  "signedOutHint": {
+    "message": "未登录。Rovr 仍可使用本设备上的模型工作；登录后即可使用云端模型并同步你的对话。"
+  },
+  "signInCode": {
+    "message": "你的验证码：$1"
+  },
+  "signInWaiting": {
+    "message": "请在刚打开的标签页中批准。"
+  },
+  "signOut": {
+    "message": "退出登录"
+  },
+  "signInUnavailable": {
+    "message": "目前无法登录。请检查网络连接后重试。"
+  },
+  "signInDenied": {
+    "message": "登录请求已被拒绝。"
+  },
+  "signInExpired": {
+    "message": "登录验证码已过期，请重试。"
+  },
+  "signInCancelled": {
+    "message": "已取消登录。"
+  },
+  "signInFailed": {
+    "message": "登录失败，请重试。"
+  },
+  "sitesHeading": {
+    "message": "允许的网站"
+  },
+  "sitesIntro": {
+    "message": "Rovr 只能读取和操作你允许的网站。首次需要某个网站时，它会先询问你。"
+  },
+  "sitesEmpty": {
+    "message": "还没有允许任何网站。"
+  },
+  "remove": {
+    "message": "移除"
+  },
+  "removeSiteLabel": {
+    "message": "移除 $1"
+  },
+  "localHeading": {
+    "message": "本设备上的模型"
+  },
+  "localIntro": {
+    "message": "Rovr 会优先使用你电脑上运行的模型，必要时再切换到 Builderforce 的云端模型。"
+  },
+  "localProbing": {
+    "message": "正在查找本地模型…"
+  },
+  "localModels": {
+    "message": "$1 个模型"
+  },
+  "localNotRunning": {
+    "message": "未运行"
+  },
+  "synapseAddress": {
+    "message": "Synapse 地址"
+  },
+  "tasksHeading": {
+    "message": "任务"
+  },
+  "taskProjectLabel": {
+    "message": "新任务保存到"
+  },
+  "taskProjectNone": {
+    "message": "将任务保留在本设备上"
+  },
+  "reportErrors": {
+    "message": "向 Builderforce 发送错误报告"
+  },
+  "reportErrorsHint": {
+    "message": "只包含错误本身及其发生位置——绝不包含页面内容或你的消息。"
+  }
+}

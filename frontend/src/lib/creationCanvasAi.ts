@@ -46,13 +46,15 @@ import {
   MAX_INTERRUPTED_TURN_RECOVERIES,
   MAX_MUTATION_RECOVERIES,
   MAX_NARROW_SEARCHES,
+  MAX_STALLED_STREAMS,
   RESERVED_AUTHORING_TURNS,
   TRUNCATED_ROUND_DIRECTIVE,
   TRUNCATED_TURN_DIRECTIVE,
 } from '@/lib/canvasAiTurnBudget';
 import { runAgentLoop, openAiChatCodec, malformedCallOutcome, malformedCallLabel } from '@builderforce/agent-loop';
+import { initialRunPolicy, nextTurn, reduceRunPolicy, type RunPolicyEvent, type RunPolicyState } from '@builderforce/run-policy';
+import type { CanvasPhase } from '@/lib/canvasPhases';
 import { executeCanvasTool, specsFor, type CanvasConfirmAction } from '@/lib/canvasAiToolExecution';
-import { CanvasModelRouter } from '@/lib/canvasAiModelRouting';
 import { composeTurnTail, documentShortfallAnswer, type CanvasUnansweredOutcome } from '@/lib/canvasAiTurnTail';
 import { learnFromCanvasAnswer, recallCanvasMemory, type CanvasEvermindPort } from '@/lib/canvasAiEvermind';
 
@@ -75,6 +77,9 @@ type CanvasAiOptions = {
   model?: string;
   modelStrict?: boolean;
   routingMode?: 'auto' | 'byo_pool';
+  /** The session's chosen phase (`canvasPhases`) — the arc stage the gateway nudges its
+   *  role/cost ordering by. Absent when the session has not chosen one. */
+  arcStage?: CanvasPhase;
   /** Uses the same persisted mode as the canonical Brain: mutating tenant tools run
    * without an additional browser confirmation and canvas proposals auto-apply. */
   autoApprove?: boolean;
@@ -166,10 +171,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // later turn died in 30ms without reaching a model at all. One weak turn permanently
   // ended the session (measured 2026-08-12, ui 2026.7.212).
   //
-  // The list is a ROUTING HINT now, not a veto: it rides the request as `excludeModels`,
-  // which the gateway honours only while another candidate remains. Worst case the same
-  // model answers again — strictly better than refusing to answer at all.
-  const excludeModels = options.model ? [] : (options.disabledModels ?? []);
+  // The list is a ROUTING HINT now, not a veto: it seeds the run policy's exclusions
+  // (below), which ride the request as `excludeModels` — honoured by the gateway only
+  // while another candidate remains. Worst case the same model answers again — strictly
+  // better than refusing to answer at all.
   if (options.persistence === 'local' && !(await ensureGuestToken())) {
     throw new GuestAiUnavailableError();
   }
@@ -242,22 +247,50 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
    * answer the model actually produced is unrecoverable by the time the loop ends.
    */
   let lastSpokenAnswer = '';
-  const router = new CanvasModelRouter(options.model, options.modelStrict, excludeModels, options.disabledModels ?? []);
+  // THE model hand-off policy (`@builderforce/run-policy`), shared with every other agent
+  // loop. One canvas turn is one logical agent turn, so its continuations stay on the
+  // model that began it (a LOCK — a preference, not a strict pin: the gateway may still
+  // substitute when the provider becomes unavailable), instead of asking Auto to reroute
+  // every tool result (which once moved research from MiniMax to Gemini just before the
+  // required Canvas write). A model that will not act hands the turn to one that already
+  // emitted valid tool calls in it, pinned strictly; models the session already proved
+  // will not execute a command are routed around from the first request.
+  let policy: RunPolicyState = initialRunPolicy({
+    pinnedModel: options.model,
+    strictPin: options.modelStrict,
+    lockAfterFirstSuccess: true,
+    preferProvenFailover: true,
+    strictFailover: true,
+    excludeModels: options.disabledModels ?? [],
+  });
+  const reportToPolicy = (event: RunPolicyEvent): RunPolicyState => (policy = reduceRunPolicy(policy, event));
+  /** Silent round-trips IN A ROW on the current model. A completion resets it: two stalls
+   *  minutes apart with a file written in between are two bad connections, not a dead
+   *  model. A stall is retried on the same model until {@link MAX_STALLED_STREAMS}. */
+  let consecutiveStalls = 0;
+  /** Round-trips this turn abandoned because the provider went silent — in total, for the
+   *  tail's "the provider stalled" verdict. */
+  let stalledStreams = 0;
   /** Labels this session's transcript uses, so a copied `Brain: ` prefix can be
    *  recognised and removed without touching an answer that legitimately opens with
    *  a colon. */
   const speakerLabels = conversationSpeakerLabels(options.conversation, [options.participant?.name]);
   /**
    * Retire the model that just failed to produce a usable turn and continue on one
-   * that already emitted valid tool calls in this same turn.
+   * that already emitted valid tool calls in this same turn — the policy's stall
+   * failover, drawing only on proven models.
    *
-   * Shared by BOTH give-up paths (a command the model would not execute, and an
-   * empty/echoed answer) — they differ only in what they tell the replacement model.
-   * Returns false when no proven model is left, which is the caller's signal to stop.
+   * Shared by every give-up path (a command the model would not execute, an
+   * empty/echoed answer, a stalled provider) — they differ only in what they tell the
+   * replacement model. Returns false when no proven model is left, which is the
+   * caller's signal to stop. With nothing to switch to the failure is NOT recorded: its
+   * only purpose is routing around the model on a later turn, and a session with no
+   * alternative gains nothing from it while paying the full price.
    */
   const switchToProvenModel = (failedModel: string | null | undefined, directive: string): boolean => {
-    const fallback = router.switchToProven(failedModel);
-    if (!fallback) return false;
+    const outcome = reportToPolicy({ type: 'stalled', ...(failedModel ? { resolvedModel: failedModel } : {}) }).outcome;
+    if (outcome.kind !== 'failed_over') return false;
+    const fallback = outcome.to;
     if (failedModel) options.onModelDisabled?.(failedModel);
     mutationRecoveries = 0;
     buildAuthoringRecoveries = 0;
@@ -360,6 +393,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           pinned: toolsUsedThisTurn,
           required: requiredTools,
         });
+        // What this round-trip asks for: the role (analysis until the turn starts
+        // building an app, then code), the model and how strictly, and the exclusions.
+        const ask = nextTurn(policy, { hasTools: selection.tools.length > 0 });
         let result: CanvasTurn;
         try {
           result = await streamBoundedByActivity(streamChatCompletion, {
@@ -369,10 +405,12 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             tool_choice: 'auto',
             maxTokens: workspaceTurn || truncatedOnce ? CANVAS_BUILD_RESPONSE_TOKENS : CANVAS_RESPONSE_TOKENS,
             reasoning: { level: 'low' },
-            model: router.model,
-            modelStrict: router.modelStrict,
+            model: ask.model,
+            modelStrict: ask.model ? ask.strict : undefined,
+            role: ask.role,
+            ...(options.arcStage ? { arcStage: options.arcStage } : {}),
             routingMode: options.routingMode,
-            ...router.exclusionField(),
+            ...(ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {}),
             metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
           }, (delta) => { finalText += delta; options.onText?.(finalText); }, options.signal);
         } catch (error) {
@@ -384,9 +422,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             throwIfStopped();
             options.onTrace?.({
               ts: new Date().toISOString(), category: 'error', label: 'model stuck repeating itself', isError: true,
-              result: { model: error.model ?? router.model ?? null, copies: error.copies },
+              result: { model: error.model ?? ask.model ?? null, copies: error.copies },
             });
-            const switched = switchToProvenModel(error.model ?? router.model, 'The prior model got stuck repeating the same sentence and has been disabled for this session.');
+            const switched = switchToProvenModel(error.model ?? ask.model, 'The prior model got stuck repeating the same sentence and has been disabled for this session.');
             finalText = switched ? '' : error.kept;
             options.onText?.(finalText);
             if (switched) return { skip: true };
@@ -400,21 +438,25 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           // exists to end, and by here the turn still delivers whatever it already has.
           if (!(error instanceof CanvasStreamStalledError)) throw error;
           throwIfStopped();
-          const stall = router.recordStall();
-          const stalledModel = stall.model;
+          stalledStreams += 1;
+          consecutiveStalls += 1;
+          const stalledModel = ask.model;
           options.onTrace?.({
             ts: new Date().toISOString(), category: 'error', label: 'provider stopped responding', isError: true,
-            result: { model: stalledModel ?? null, seconds: Math.round(CANVAS_STREAM_STALL_MS / 1_000), attempt: stall.attempt },
+            result: { model: stalledModel ?? null, seconds: Math.round(CANVAS_STREAM_STALL_MS / 1_000), attempt: consecutiveStalls },
           });
           finalText = '';
-          if (stall.retry) return { skip: true };
+          if (consecutiveStalls < MAX_STALLED_STREAMS) return { skip: true };
           if (switchToProvenModel(stalledModel, 'The prior model stopped responding mid-request and has been disabled for this session.')) {
-            router.resetStalls();
+            consecutiveStalls = 0;
             return { skip: true };
           }
-          // No PROVEN model to hand over to — ask the gateway's pool again with the stalled
-          // model excluded (auto routing only; a model the caller picked is their choice).
-          if (router.rerouteAfterStall(stalledModel)) {
+          // No PROVEN model to hand over to — the policy routes around the stalled model
+          // (auto routing or the turn's own lock; a model the caller picked is their
+          // choice) and asks the gateway's pool again, once per round-trip.
+          const reroute = reportToPolicy({ type: 'transport_failed', kind: 'interrupted', ...(stalledModel ? { model: stalledModel } : {}) }).outcome;
+          if (reroute.kind === 'retry_turn' && reroute.broken) {
+            consecutiveStalls = 0;
             options.onTrace?.({ ts: new Date().toISOString(), category: 'llm', label: 'rerouted after stall', result: { excluded: stalledModel } });
             messages.push({ role: 'system', content: 'The prior model stopped responding mid-request, so this turn now continues on a different model. Continue the user\'s request from where it left off, building on the work already done.' });
             return { skip: true };
@@ -426,7 +468,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         throwIfStopped();
         options.onCompletion?.({
           at: new Date().toISOString(), iteration: turn + 1,
-          requestedModel: router.model ?? null,
+          requestedModel: ask.model ?? null,
           resolvedModel: result.resolvedModel ?? null,
           resolvedVendor: result.resolvedVendor ?? null,
           account: result.account ?? null,
@@ -436,7 +478,12 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           finishReason: result.finishReason,
         });
         lastTurnInterruption = turnInterruption(result.finishReason);
-        router.recordCompletion(result.resolvedModel, result.toolCalls.length > 0);
+        consecutiveStalls = 0;
+        reportToPolicy({
+          type: 'turn_succeeded',
+          ...(result.resolvedModel ? { model: result.resolvedModel } : {}),
+          acted: result.toolCalls.length > 0,
+        });
         return {
           content: result.text,
           toolCalls: result.toolCalls.map((call) => ({ id: call.id, name: call.name, arguments: call.args })),
@@ -469,8 +516,11 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         toolsUsedThisTurn.add(call.name);
         if (!workspaceTurn && CANVAS_BUILD_TOOLS.has(call.name)) {
           // The turn is working in an app from here on (see CANVAS_BUILD_RESPONSE_TOKENS
-          // and MAX_CANVAS_BUILD_TURNS). Widened once; never narrowed back.
+          // and MAX_CANVAS_BUILD_TURNS). Widened once; never narrowed back. Building the
+          // app is the hand-off from analysis to code: every later round-trip asks the
+          // gateway for a coding model.
           workspaceTurn = true;
+          reportToPolicy({ type: 'hand_off' });
           budget.stepCap = Math.max(budget.stepCap, MAX_CANVAS_BUILD_TURNS);
         }
         const words = call.name === 'canvas_add_object' ? authoredDocumentWords(args) : null;
@@ -683,7 +733,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     lastToolError,
     canvasChanged,
     abandonedMidTurn,
-    stalledStreams: router.stalledStreams,
+    stalledStreams,
     stepsExhausted: loop.exhausted,
     workspaceTurn,
     buildTurn,

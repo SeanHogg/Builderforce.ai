@@ -55,6 +55,26 @@ describe("model-selection", () => {
       });
     });
 
+    it("derives the short version spelling for every release, current flagships included", () => {
+      expect(parseModelRef("anthropic/opus-5.5", "openai")).toEqual({
+        provider: "anthropic",
+        model: "claude-opus-5-5",
+      });
+      expect(parseModelRef("Sonnet-5.5", "anthropic")).toEqual({
+        provider: "anthropic",
+        model: "claude-sonnet-5-5",
+      });
+      expect(parseModelRef("fable-5.1", "anthropic")).toEqual({
+        provider: "anthropic",
+        model: "claude-fable-5-1",
+      });
+      // Not the short spelling → left exactly as written.
+      expect(parseModelRef("anthropic/opus", "openai")).toEqual({
+        provider: "anthropic",
+        model: "opus",
+      });
+    });
+
     it("should use default provider if none specified", () => {
       expect(parseModelRef("claude-3-5-sonnet", "anthropic")).toEqual({
         provider: "anthropic",

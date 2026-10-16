@@ -812,7 +812,11 @@ export class LlmProxyService {
     //    by expected cost for THIS workload — price × estimated tokens, local and FREE at
     //    zero. Every reorder below is a stable sort, so capability (shape, coding
     //    drivers, context fit) still decides the buckets and cost only orders WITHIN
-    //    them: a cheap model never jumps a capable one. Any other call: unchanged.
+    //    them: a cheap model never jumps a capable one. Where the role lets the system
+    //    choose, the role's learned evidence (`roleStats`) then re-ranks the pool the
+    //    same way it re-ranks connected accounts below — so a tenant with nothing
+    //    connected still gets the models that delivered in this role. Any other call:
+    //    unchanged.
     const workload = profileWorkload({
       role: body.role,
       arcStage: body.arcStage,
@@ -820,7 +824,9 @@ export class LlmProxyService {
       maxOutputTokens: body.max_tokens,
     });
     const catalogView = registryCatalogView(opts?.prices);
-    const reorderedPool = reorderPoolByShape(body, orderPoolForWorkload(this.modelPool, workload, catalogView));
+    const reorderedPool = reorderPoolByShape(body, orderPoolForWorkload(
+      this.modelPool, workload, catalogView, opts?.roleStats ? { stats: opts.roleStats } : undefined,
+    ));
 
     // 1b) Quality-critical useCase (resume tailoring, cover letters, …): re-rank
     //     the shape-sorted pool so the best models the PLAN unlocks lead (premium
@@ -2482,6 +2488,10 @@ export interface PickCloudModelOptions {
   /** The launching canvas session's arc stage, when known — a further nudge on
    *  top of `role`'s objective. Ephemeral (see `modelRoles.ts`), never persisted. */
   arcStage?: ArcStage;
+  /** Per-token prices (`catalogView.pricesForCall`) — read only by a COST-FIRST role,
+   *  which then orders the BYO candidates and the plan coding pool by expected cost,
+   *  exactly as the gateway completion seed does. Absent → tier / curated order. */
+  prices?: PriceBook;
 }
 
 /** Headroom over the prompt estimate to reserve for the model's OUTPUT tokens +
@@ -2661,7 +2671,7 @@ export function pickCloudModel(
       stats: opts?.actionStats,
       minSamples: opts?.minSamples,
       bias: byoBias,
-    });
+    }, registryCatalogView(opts?.prices));
     const byoSeed = byoRanked[0];
     if (byoSeed) {
       const seedStat = opts?.actionStats?.find((s) => s.model === byoSeed);
@@ -2679,7 +2689,14 @@ export function pickCloudModel(
   // Context-aware first pass: keep only models whose window fits this request, THEN
   // let the SSM learned routing rank the survivors. Small-window models stay in the
   // pool (great first pass for small tasks) but aren't seeded into an oversized one.
-  const fitting = modelsFittingContext(reachable, opts?.estimatedTokens);
+  // A cost-first role (explore / utility / verify) leads with the cheapest fitting
+  // coder by expected cost — the gateway seed's own pool order; any other role keeps
+  // the curated order. Learned evidence still re-ranks on top.
+  const fitting = orderPoolForWorkload(
+    modelsFittingContext(reachable, opts?.estimatedTokens),
+    profileWorkload({ role: opts?.role, arcStage: opts?.arcStage, inputTokens: opts?.estimatedTokens }),
+    registryCatalogView(opts?.prices),
+  );
   const bias = opts?.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
   const ranked = rankModelsForAction(fitting, opts?.actionStats, { minSamples: opts?.minSamples, bias });
   const seed = ranked[0] ?? reachable[0] ?? CODING_DEFAULT_MODEL;

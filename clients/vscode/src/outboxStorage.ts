@@ -1,0 +1,170 @@
+import type * as vscode from "vscode";
+import type { StepDurability, StepOutgoingMessage } from "@seanhogg/builderforce-brain-embedded";
+import {
+  createOnlineSignal,
+  createOutbox,
+  createSnapshotOutboxStore,
+  type Outbox,
+  type OutboxOptions,
+  type OutboxStore,
+} from "@builderforce/write-outbox";
+
+/**
+ * The extension's adapter for the shared write outbox's DURABLE mode — the one place a
+ * VS Code write that must survive being offline (or a reload) gets its storage and its
+ * connectivity signal.
+ *
+ * STORAGE: each durable outbox keeps its queue as ONE value in the extension's
+ * `workspaceState` Memento (a snapshot store — the queue is small and bounded). Workspace
+ * rather than global state because global state is shared by every open window: two
+ * windows rewriting the same snapshot would erase each other's queued writes. A write
+ * queued offline in a workspace is replayed the next time that workspace is reachable.
+ *
+ * The Memento — and the credential every durable outbox sends with — are bound once at
+ * activation ({@link bindOutboxStorage}); an outbox created at module load simply waits
+ * for them before it loads its backlog or sends anything, so a backlog left by the last
+ * session replays as soon as the extension is up, before any new write is made.
+ *
+ * TENANT: entries remember the tenant they were queued in ({@link setOutboxScope}) and are
+ * only sent as that tenant — the sender passes it as `asTenant`, and `bfApi` refuses to
+ * send with a token for any other tenant. Another tenant's entries wait, parked.
+ *
+ * CONNECTIVITY: {@link apiConnectivity} is driven by the API client itself — a request
+ * that got no answer at all marks the platform unreachable, any answer marks it reachable
+ * again — so a queue parked offline replays the moment ANY call gets through, rather than
+ * waiting out its backoff.
+ */
+
+const STORAGE_PREFIX = "builderforce.outbox.";
+
+type OutboxHost = Pick<vscode.ExtensionContext, "workspaceState" | "secrets">;
+
+let bindHost: (host: OutboxHost) => void = () => undefined;
+const host = new Promise<OutboxHost>((resolve) => {
+  bindHost = resolve;
+});
+
+/** Bind the storage and credential every durable outbox uses. Call once from activation. */
+export function bindOutboxStorage(context: OutboxHost): void {
+  bindHost(context);
+}
+
+/** The credential a durable outbox sends with — resolves once activation has bound it. */
+export async function outboxSecrets(): Promise<vscode.SecretStorage> {
+  return (await host).secrets;
+}
+
+/** A durable store named `name`, persisted in the bound Memento. */
+export function durableOutboxStore<T, K>(name: string): OutboxStore<T, K> {
+  const key = `${STORAGE_PREFIX}${name}`;
+  return createSnapshotOutboxStore<T, K>({
+    read: async () => (await host).workspaceState.get<unknown>(key),
+    write: async (value) => {
+      await (await host).workspaceState.update(key, value);
+    },
+  });
+}
+
+/** Is the platform API answering? Set by the API client's own requests. */
+export const apiConnectivity = createOnlineSignal(true);
+
+/** Await a request, recording whether the API answered at all. */
+export async function trackReachability(request: Promise<Response>): Promise<Response> {
+  try {
+    const res = await request;
+    apiConnectivity.set(true);
+    return res;
+  } catch (error) {
+    apiConnectivity.set(false);
+    throw error;
+  }
+}
+
+/**
+ * The identities durable writes are sent as; `null` = not known / parked.
+ *   - `workspace`: the tenant the API client's tenant JWT acts as (the selected workspace)
+ *     — every `/api/*` write.
+ *   - `key`: the editor key's own tenant — gateway (`/llm/*`) writes, which always act as
+ *     the key whatever workspace is selected.
+ */
+const scopes: Record<OutboxIdentity, string | null> = { workspace: null, key: null };
+
+export type OutboxIdentity = "workspace" | "key";
+
+/** Every durable outbox's flush, so an identity change can replay what was parked for it. */
+const replays = new Set<() => Promise<void>>();
+
+const toScope = (tenantId: number | undefined): string | null => (tenantId === undefined ? null : `tenant:${tenantId}`);
+
+/** The tenant id a scope names (`tenant:<id>`), or undefined. */
+export function scopeTenantId(scope: string | undefined): number | undefined {
+  const m = scope ? /^tenant:(\d+)$/.exec(scope) : null;
+  return m ? Number(m[1]) : undefined;
+}
+
+/**
+ * The tenants the API client now acts as (`undefined` = not known / signed out / parked).
+ * Durable writes are SCOPED to the tenant they were made in: a write queued in workspace A
+ * is parked while workspace B is selected — never replayed into B — and sent when A is
+ * current again. Called by `bfApi.ts` whenever its effective tenant changes.
+ */
+export function setOutboxScope(ids: { workspace: number | undefined; key: number | undefined }): void {
+  const next = { workspace: toScope(ids.workspace), key: toScope(ids.key) };
+  if (next.workspace === scopes.workspace && next.key === scopes.key) return;
+  scopes.workspace = next.workspace;
+  scopes.key = next.key;
+  if (next.workspace !== null || next.key !== null) for (const replay of replays) void replay();
+}
+
+/**
+ * The ONE way the extension builds a durable outbox: persisted under `name`, scoped to
+ * the tenant it was written in (`identity`), retried with backoff, paused while the API
+ * is unreachable and replayed when it answers again (or its tenant is current again).
+ * A sender should pass `scopeTenantId(ctx.scope)` as the tenant it must act as.
+ */
+export function createDurableOutbox<T, K = string>(
+  name: string,
+  opts: Omit<OutboxOptions<T, K>, "store" | "online" | "retry" | "scope">,
+  identity: OutboxIdentity = "workspace",
+): Outbox<T, K> {
+  const outbox = createOutbox<T, K>({
+    ...opts,
+    retry: {},
+    store: durableOutboxStore<T, K>(name),
+    online: apiConnectivity,
+    scope: () => scopes[identity],
+  });
+  replays.add(() => outbox.flush());
+  return outbox;
+}
+
+/** The persistence keys of the stored step queues (`steps:<key>`), by queue key. */
+const STEP_PREFIX = "steps:";
+
+/**
+ * Brain run step rows, durable the same way: one queue per chat in the workspace state,
+ * scoped to the tenant, paused while the API is unreachable. Installed at activation
+ * (`installStepDurability`), which drains every stored queue through `sendRows` right
+ * away and again on reconnect — no run in the chat is needed.
+ */
+export function durableStepHost(
+  sendRows: (chatId: number, rows: StepOutgoingMessage[], asTenant: number | undefined) => Promise<unknown>,
+): StepDurability {
+  return {
+    storeFor: (key) => durableOutboxStore(`${STEP_PREFIX}${key}`),
+    storedKeys: async () => {
+      const state = (await host).workspaceState;
+      const prefix = `${STORAGE_PREFIX}${STEP_PREFIX}`;
+      return state.keys()
+        .filter((k) => k.startsWith(prefix))
+        .filter((k) => {
+          const v = state.get<unknown>(k);
+          return Array.isArray(v) && v.length > 0;
+        })
+        .map((k) => k.slice(prefix.length));
+    },
+    sendRows: (chatId, rows, scope) => sendRows(chatId, rows, scopeTenantId(scope)),
+    online: apiConnectivity,
+    scope: () => scopes.workspace,
+  };
+}

@@ -1,5 +1,18 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'tsup';
 import { libraryConfig, REACT_EXTERNALS } from '../scripts/tsup.base.mjs';
+import { sourcePackageAliasMap } from '../scripts/sourcePackages.mjs';
+
+const root = path.dirname(fileURLToPath(import.meta.url));
+/**
+ * The source-only packages, derived from their manifests. esbuild resolves a bare
+ * import from the REAL path of the importing file, so a linked package that itself
+ * imports another (`@builderforce/run-policy` → `@builderforce/agent-stall`) is looked
+ * up under `packages/run-policy`, which has no install. Aliasing the whole set
+ * resolves every edge from anywhere — the JS bundle and the declaration program alike.
+ */
+const sourceAliases = sourcePackageAliasMap(path.resolve(root, '..'));
 
 export default defineConfig(libraryConfig({
   // `chatError` is a SECOND entry, not just a re-export off the root: it is pure
@@ -16,12 +29,23 @@ export default defineConfig(libraryConfig({
   // quiet. Anything under `@builderforce/` is source-only by construction, so the
   // pattern covers the next one too.
   //
-  // `rootDir` is widened for the declaration program only: resolving the package
-  // pulls `node_modules/@builderforce/agent-stall/src/index.ts` into it, and the
-  // package's own `rootDir: "src"` rejects that with TS6059. The declaration
-  // build emits nothing through this program — tsup rolls the types up itself —
-  // so the wider root costs nothing and the app's own `tsc --noEmit` keeps the
-  // narrow one.
-  dts: { resolve: [/^@builderforce\//], compilerOptions: { rootDir: '.' } },
+  // `rootDir` is widened for the declaration program only: resolving the packages
+  // pulls their `src` into it, and the package's own `rootDir: "src"` rejects that
+  // with TS6059. The declaration build emits nothing through this program — tsup
+  // rolls the types up itself — so the wider root costs nothing and the app's own
+  // `tsc --noEmit` keeps the narrow one. It is the repo root because the `paths`
+  // below point at `packages/*/src`, outside this package.
+  dts: {
+    resolve: [/^@builderforce\//],
+    compilerOptions: {
+      rootDir: '..',
+      paths: Object.fromEntries(Object.entries(sourceAliases).map(([specifier, entry]) => [specifier, [entry]])),
+    },
+  },
   external: REACT_EXTERNALS,
+  extra: {
+    esbuildOptions(options: { alias?: Record<string, string> }) {
+      options.alias = { ...(options.alias ?? {}), ...sourceAliases };
+    },
+  },
 }));

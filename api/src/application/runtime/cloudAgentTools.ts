@@ -234,8 +234,8 @@ export const CONTAINER_AGENT_TOOLS = cloudToolRegistry.schemasForCapabilities(CO
 // measures liveness from the heartbeat, never the step count — a long, healthy run
 // trips nothing. What ends a run that is NOT healthy is the loop kernel's
 // consecutive-tool-failure breaker (`@builderforce/agent-loop`), the same one every
-// other surface stops on. The Container image still carries its own ceiling
-// ({@link CONTAINER_MAX_STEPS}) because its loop is in the deployed image, not here.
+// other surface stops on — the Container image and the Actions runner included: both
+// drive the same kernel (`api/container/agentImageLoop.mjs`).
 
 // Anti-stub finish gate: how many finish attempts THIS RUN will have blocked for
 // still shipping placeholder/stub code before letting the PR open anyway (human-
@@ -245,8 +245,10 @@ export const CONTAINER_AGENT_TOOLS = cloudToolRegistry.schemasForCapabilities(CO
 // block-forever.
 export const MAX_PLACEHOLDER_FINISH_BLOCKS = 2;
 
-// The Container surface is a long-lived process (not a per-tick DO), and its
-// real-shell build/verify loop legitimately needs more turns than the durable
-// surface. The container heartbeats `executions.updated_at` on every LLM step so a
-// healthy long run never trips the orphan reaper.
+// LEGACY — the step ceiling a Container image built BEFORE the shared kernel
+// (`agentImageLoop.mjs`) still reads from its /run body (`spec.maxSteps || 20`).
+// A current image ignores it: no step cap, the failure-streak breaker is the limit.
+// Sent only so an image still deployed from before the kernel keeps its 40 rather
+// than falling back to 20; delete it (and the launcher's `maxSteps`) once every
+// deployed image runs `agentImageLoop.mjs`.
 export const CONTAINER_MAX_STEPS = 40;

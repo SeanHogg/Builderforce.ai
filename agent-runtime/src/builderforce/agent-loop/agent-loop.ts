@@ -30,7 +30,7 @@ import type {
 } from "../model/agent-types.js";
 import type { AssistantMessage, Message, Model, ToolResultMessage } from "../model/types.js";
 import { EventStream } from "./event-stream.js";
-import { modelRef, resolveStallOutcome } from "./stall-recovery.js";
+import { initialOnPremRunPolicy, modelRef, resolveStallOutcome } from "./stall-recovery.js";
 import type { StreamFn } from "./stream.js";
 
 export interface AgentLoopConfig {
@@ -199,13 +199,12 @@ async function runLoop(
   // Budget for the announced-but-untaken tool call recovery below, shared with the
   // Brain run loop via `@builderforce/agent-stall`.
   let announcementRecoveries = 0;
-  // MODEL FAILOVER state, the on-prem half of the same shared decision the Brain run
-  // loop and the server addressed-reply loop take (`chooseStallFailover`). `activeModel`
-  // is what the NEXT turn runs on; `triedModels` is every ref burned this run, which is
-  // both what the picker must avoid and what the exhausted notice names.
+  // MODEL FAILOVER state: THE model hand-off policy (`@builderforce/run-policy`), the
+  // same one every other agent loop drives — every ref burned this run (what the picker
+  // must avoid and the exhausted notice names) and the failover budget. `activeModel` is
+  // the resolved `Model` behind the policy's current ref: what the NEXT turn runs on.
   let activeModel: Model = config.model;
-  const triedModels: string[] = [];
-  let modelFailovers = 0;
+  let policy = initialOnPremRunPolicy(config.model);
   // The run's own tool NAMES and the request it was given — the two facts the HANDOFF
   // shape needs. Captured once, before the loop starts pushing its own recovery
   // messages in as `user` turns: reading the newest user message later would ask
@@ -334,7 +333,7 @@ async function runLoop(
       // or an explained stop — is `resolveStallOutcome`; this only performs it.
       // Nothing to do when steering already queued work.
       if (pendingMessages.length === 0) {
-        const outcome = resolveStallOutcome({
+        const decision = resolveStallOutcome({
           facts: {
             text: assistantText(message),
             availableToolCount: currentContext.tools?.length ?? 0,
@@ -342,18 +341,18 @@ async function runLoop(
             requestText: typeof userRequest === "string" ? userRequest : "",
           },
           activeModel,
-          triedModels,
+          policy,
           recoveriesUsed: announcementRecoveries,
-          failoversUsed: modelFailovers,
           pickFallbackModel: config.pickFallbackModel,
         });
+        policy = decision.policy;
+        const outcome = decision.outcome;
         if (outcome.kind === "nudge") {
           announcementRecoveries = outcome.recoveriesUsed;
           pendingMessages = [{ role: "user", content: outcome.nudge, timestamp: Date.now() }];
         } else if (outcome.kind === "failover") {
           const previous = activeModel;
           activeModel = outcome.model;
-          modelFailovers = outcome.failoversUsed;
           announcementRecoveries = 0;
           config.onModelFallback?.(previous, outcome.model, outcome.notice);
           // Visible, never silent: a run that quietly changes who is answering is its
@@ -367,7 +366,7 @@ async function runLoop(
             details: {
               from: modelRef(previous),
               to: modelRef(outcome.model),
-              attempt: modelFailovers,
+              attempt: outcome.failoversUsed,
               shape: outcome.shape,
             },
             timestamp: Date.now(),

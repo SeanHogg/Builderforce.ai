@@ -9,6 +9,9 @@
 
 export { BrainTimeline, DEFAULT_TIMELINE_LABELS } from './BrainTimeline';
 export type { BrainTimelineProps, BrainTimelineLabels, MessageRating } from './BrainTimeline';
+// The ONE catalog → label table every host reads its transcript copy through.
+export { timelineCatalogLookup, timelineLabelsFrom, liveActivityLabelsFrom, chatActivityLabelsFrom } from './timelineCatalog';
+export type { TimelineCatalogLookup } from './timelineCatalog';
 
 // ONE settled tool step — outcome, subject, and (for a shell call) the command and
 // its terminal output. Rendered by the timeline; exported with its own narrow label

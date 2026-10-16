@@ -20,14 +20,17 @@
  * the run unaffected.
  */
 
+import type { ModelRole } from "@builderforce/agent-tools";
+import { scopeHasSignal, type ActionType, type TerminalStatus } from "@builderforce/learned-routing";
+import type { CatalogView } from "@builderforce/model-catalog";
 import {
-  rankModelsForAction,
-  scopeHasSignal,
-  type ActionType,
-  type TerminalStatus,
-} from "@builderforce/learned-routing";
+  estimateTokensFromChars,
+  profileWorkload,
+  type ArcStage,
+  type WorkloadProfile,
+} from "@builderforce/workload";
 import { logDebug } from "../../../logger.js";
-import { classifyRunAction } from "@builderforce/workload";
+import { rankCandidates, type RankCandidatesOptions } from "../../candidate-ranking.js";
 import { alignStatsToCandidates, candidateKey, type ModelCandidate } from "./candidate-keys.js";
 import { computeLocalBias } from "./local-bias.js";
 import { readLocalOutcomes, recordLocalOutcome } from "./local-history.js";
@@ -56,6 +59,10 @@ export interface SeedInput {
   candidates: readonly ModelCandidate[];
   projectId?: number;
   now?: number;
+  /** What the call is FOR, when the caller declared it, plus this host's catalog. With
+   *  it the shared router orders the candidates by role (and arc stage) even when no
+   *  learned evidence exists; without it only learned evidence can reorder. */
+  routing?: { role: ModelRole; arcStage?: ArcStage; view: CatalogView };
 }
 
 export interface SeedResult {
@@ -63,10 +70,13 @@ export interface SeedResult {
    *  even when the read side is switched off. */
   actionType: ActionType;
   confidence: number;
+  /** The shared workload reading of this call (role · arc stage · action · tokens) —
+   *  the same profile every other host routes on. */
+  workload: WorkloadProfile;
   /** The candidates, best-first. ALWAYS a permutation of the input, never a new model
    *  and never a shorter list. Equal to the input when nothing was learned. */
   ranked: ModelCandidate[];
-  /** True when the fleet's evidence actually changed the order. */
+  /** True when the role or the fleet's evidence actually changed the order. */
   reordered: boolean;
   /** The scope whose ranking was used, when one had signal. */
   scope?: string;
@@ -84,9 +94,33 @@ export interface SeedResult {
  * by the platform average.
  */
 export async function seedLearnedModel(input: SeedInput): Promise<SeedResult> {
-  const { actionType, confidence } = classifyRunAction(input.prompt);
-  const ranked = [...input.candidates];
-  const base: SeedResult = { actionType, confidence, ranked, reordered: false, biasApplied: false };
+  const prompt = input.prompt ?? "";
+  const workload = profileWorkload({
+    role: input.routing?.role,
+    arcStage: input.routing?.arcStage,
+    instruction: prompt,
+    inputTokens: estimateTokensFromChars(prompt.length),
+  });
+  const { actionType, actionConfidence: confidence } = workload;
+  const keys = input.candidates.map(candidateKey);
+  const changedFrom = (list: readonly ModelCandidate[]) =>
+    list.some((c, i) => candidateKey(c) !== keys[i]);
+  const order = (learned: Pick<RankCandidatesOptions, "stats" | "bias">): ModelCandidate[] =>
+    rankCandidates(input.candidates, {
+      ...(input.routing ? { routing: input.routing } : {}),
+      ...learned,
+    });
+
+  // The role's own order — what stands when nothing has been learned (or seeding is off).
+  const roleOrdered = order({});
+  const base: SeedResult = {
+    actionType,
+    confidence,
+    workload,
+    ranked: roleOrdered,
+    reordered: changedFrom(roleOrdered),
+    biasApplied: false,
+  };
 
   if (!learnedSeedingOn() || input.candidates.length < 2) {
     return base;
@@ -103,34 +137,17 @@ export async function seedLearnedModel(input: SeedInput): Promise<SeedResult> {
 
       const bias = computeLocalBias(readLocalOutcomes(), { now, actionType });
       const biasApplied = Object.keys(bias).length > 0;
-      const keys = input.candidates.map(candidateKey);
-      const order = rankModelsForAction(keys, stats, biasApplied ? { bias } : undefined);
-      const byKey = new Map(input.candidates.map((c) => [candidateKey(c), c] as const));
-      // `rankModelsForAction` returns a permutation by contract; the filter is a belt
-      // on that brace, so a future change there can never silently drop a candidate
-      // this host is able to run.
-      const reorderedList = order.map((k) => byKey.get(k)).filter((c): c is ModelCandidate => !!c);
-      if (reorderedList.length !== input.candidates.length) {
-        return base;
-      }
-
-      const changed = reorderedList.some((c, i) => candidateKey(c) !== keys[i]);
+      const ranked = order({ stats, ...(biasApplied ? { bias } : {}) });
+      const changed = changedFrom(ranked);
       logDebug(
-        `[learned-routing] action=${actionType} scope=${scope} seed=${candidateKey(reorderedList[0])} reordered=${changed} bias=${biasApplied}`,
+        `[learned-routing] action=${actionType} role=${input.routing?.role ?? "none"} scope=${scope} seed=${candidateKey(ranked[0])} reordered=${changed} bias=${biasApplied}`,
       );
-      return {
-        actionType,
-        confidence,
-        ranked: reorderedList,
-        reordered: changed,
-        scope,
-        biasApplied,
-      };
+      return { actionType, confidence, workload, ranked, reordered: changed, scope, biasApplied };
     }
   } catch (err) {
     // Learned routing is an optimisation. Anything that goes wrong here means the run
-    // proceeds on the operator's configured order — which is what it would have done
-    // if the feature had never been switched on.
+    // proceeds on the role's order (or the operator's configured order when no role was
+    // declared) — which is what it would have done if the feature had never been on.
     logDebug(`[learned-routing] seeding failed, keeping configured order: ${String(err)}`);
   }
   return base;

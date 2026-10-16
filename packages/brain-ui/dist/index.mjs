@@ -1484,6 +1484,56 @@ function OriginTag({ message, owner, labels }) {
   return owner ? /* @__PURE__ */ jsx7("span", { className: "bf-tl__origin", children: labels.ownerTag }) : null;
 }
 
+// src/timelineCatalog.ts
+function timelineCatalogLookup(namespace) {
+  return (path) => {
+    let node = namespace;
+    for (const part of path.split(".")) {
+      if (!node || typeof node !== "object") return void 0;
+      node = node[part];
+    }
+    return typeof node === "string" && node.length > 0 ? node : void 0;
+  };
+}
+function stringsFrom(defaults, lookup, prefix = "") {
+  const out = { ...defaults };
+  for (const [key, fallback] of Object.entries(defaults)) {
+    if (typeof fallback === "string") out[key] = lookup(`${prefix}${key}`) ?? fallback;
+  }
+  return out;
+}
+function liveActivityLabelsFrom(lookup, overrides) {
+  return { ...stringsFrom(DEFAULT_LIVE_ACTIVITY_LABELS, lookup, "live."), ...overrides };
+}
+function chatActivityLabelsFrom(lookup) {
+  const d = DEFAULT_TIMELINE_LABELS.activity;
+  return {
+    milestoneStarted: lookup("activityStarted") ?? d.milestoneStarted,
+    milestoneCompleted: lookup("activityCompleted") ?? d.milestoneCompleted,
+    milestoneCompletedWithLane: lookup("activityCompletedWithLane") ?? d.milestoneCompletedWithLane,
+    milestoneFailed: lookup("activityFailed") ?? d.milestoneFailed,
+    milestonePaused: lookup("activityPaused") ?? d.milestonePaused,
+    milestonePausedWithQuestion: lookup("activityPausedWithQuestion") ?? d.milestonePausedWithQuestion,
+    milestoneResumed: lookup("activityResumed") ?? d.milestoneResumed,
+    milestoneCancelled: lookup("activityCancelled") ?? d.milestoneCancelled,
+    agentDispatched: lookup("activityDispatched") ?? d.agentDispatched
+  };
+}
+function timelineLabelsFrom(lookup, overrides) {
+  const d = DEFAULT_TIMELINE_LABELS;
+  return {
+    ...stringsFrom(d, lookup),
+    live: liveActivityLabelsFrom(lookup),
+    learnSkipReason: {
+      "not-attached": lookup("learnSkipReasonNotAttached") ?? d.learnSkipReason["not-attached"],
+      "not-seeded": lookup("learnSkipReasonNotSeeded") ?? d.learnSkipReason["not-seeded"],
+      frozen: lookup("learnSkipReasonFrozen") ?? d.learnSkipReason.frozen
+    },
+    activity: chatActivityLabelsFrom(lookup),
+    ...overrides
+  };
+}
+
 // src/ChatErrorBanner.tsx
 import { jsx as jsx8, jsxs as jsxs7 } from "react/jsx-runtime";
 var DEFAULT_CHAT_ERROR_LABELS = {
@@ -6490,6 +6540,7 @@ export {
   buildSettledTimeline,
   buildTimeline,
   byoVendorLabel,
+  chatActivityLabelsFrom,
   chatDiagnosticsReads,
   chatSwitcherLabel,
   commandOf,
@@ -6506,6 +6557,7 @@ export {
   healthRingColor,
   initialsOf,
   isManagerRole,
+  liveActivityLabelsFrom,
   loadEvermindBuilds,
   modelCategoryLabel2 as modelCategoryLabel,
   modelInUse2 as modelInUse,
@@ -6529,6 +6581,8 @@ export {
   strandedReplyKey,
   streamingNode,
   stripAskUser,
+  timelineCatalogLookup,
+  timelineLabelsFrom,
   toolPreview,
   toolStepView,
   useChatActivitySignal,

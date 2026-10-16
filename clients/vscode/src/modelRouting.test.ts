@@ -56,8 +56,13 @@ describe("model routing is centralized", () => {
     // second router, which is how the surfaces diverged before.
     const owners: Record<string, readonly string[]> = {
       createNativeStream: ["modelRouting.ts", "nativeBrainRun.ts"],
-      createLocalStream: ["modelRouting.ts", "localModels.ts"],
-      completeLocal: ["modelRouting.ts", "localModels.ts"],
+      // The local transports are brain-embedded's (shared with the Chrome extension);
+      // in the editor only the seam reaches for them. `completeLocal` also matches
+      // `completeLocalFirst` — local-first is a transport choice too.
+      createLocalStream: ["modelRouting.ts"],
+      completeLocal: ["modelRouting.ts"],
+      createLocalFirstStream: ["modelRouting.ts"],
+      probeLocalFirstRuntimes: ["modelRouting.ts", "localModels.ts"],
     };
     for (const [symbol, allowed] of Object.entries(owners)) {
       const offenders = sourceFiles()
@@ -75,6 +80,19 @@ describe("model routing is centralized", () => {
     const gateway = stripComments(fs.readFileSync(path.join(SRC, "gateway.ts"), "utf8"));
     expect(gateway).not.toContain("parseLocalModelRef");
     expect(gateway).not.toContain("completeLocal");
+    expect(gateway).not.toContain("localFirstPlan");
+  });
+
+  it("decides local-first in the seam, letting any model choice win over it", () => {
+    const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
+    // An explicit pick / Evermind pin / default model / BYO pool names what the user
+    // wants; only gateway-auto may be served on this machine first.
+    expect(routing).toContain('if (choice.model || choice.routingMode !== "auto") return choice;');
+    // Signed out, a local-first route needs no account (it just has no cloud fallback).
+    expect(routing).toContain("route.localFirst === undefined");
+    // Both completion surfaces honour it.
+    expect(routing).toContain("createLocalFirstStream(");
+    expect(routing).toContain("completeLocalFirst(");
   });
 
   it("reads the default-model setting in exactly one place", () => {

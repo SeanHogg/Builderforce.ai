@@ -8,7 +8,7 @@ import {
   resolveEnvApiKey,
 } from "../../agents/model-auth.js";
 import {
-  ANTIGRAVITY_OPUS_46_FORWARD_COMPAT_CANDIDATES,
+  antigravityForwardCompatCandidates,
   resolveForwardCompatModel,
 } from "../../agents/model-forward-compat.js";
 import { ensureBuilderForceAgentsModelsJson } from "../../agents/models-config.js";
@@ -115,7 +115,7 @@ export async function loadModelRegistry(cfg: BuilderForceAgentsConfig) {
     const availableModels = loadAvailableModels(registry);
     availableKeys = new Set(availableModels.map((model) => modelKey(model.provider, model.id)));
     for (const synthesized of synthesizedForwardCompat) {
-      if (hasAvailableTemplate(availableKeys, synthesized.templatePrefixes)) {
+      if (hasAvailableTemplate(availableKeys, synthesized.templateKeys)) {
         availableKeys.add(synthesized.key);
       }
     }
@@ -136,7 +136,7 @@ export async function loadModelRegistry(cfg: BuilderForceAgentsConfig) {
 
 type SynthesizedForwardCompat = {
   key: string;
-  templatePrefixes: readonly string[];
+  templateKeys: readonly string[];
 };
 
 function appendAntigravityForwardCompatModels(
@@ -146,7 +146,7 @@ function appendAntigravityForwardCompatModels(
   const nextModels = [...models];
   const synthesizedForwardCompat: SynthesizedForwardCompat[] = [];
 
-  for (const candidate of ANTIGRAVITY_OPUS_46_FORWARD_COMPAT_CANDIDATES) {
+  for (const candidate of antigravityForwardCompatCandidates()) {
     const key = modelKey("google-antigravity", candidate.id);
     const hasForwardCompat = nextModels.some((model) => modelKey(model.provider, model.id) === key);
     if (hasForwardCompat) {
@@ -161,19 +161,27 @@ function appendAntigravityForwardCompatModels(
     nextModels.push(fallback);
     synthesizedForwardCompat.push({
       key,
-      templatePrefixes: candidate.templatePrefixes,
+      templateKeys: candidate.templateKeys,
     });
   }
 
   return { models: nextModels, synthesizedForwardCompat };
 }
 
-function hasAvailableTemplate(
-  availableKeys: Set<string>,
-  templatePrefixes: readonly string[],
-): boolean {
+/** A template is available when its exact key is, or a dated snapshot of it
+ *  (`<template>-20260219`). Not a bare prefix match: `claude-opus-4` is a prefix of
+ *  every 4.x id, including the synthesized one itself. */
+const DATED_SNAPSHOT = /^-\d{8}$/;
+
+function hasAvailableTemplate(availableKeys: Set<string>, templateKeys: readonly string[]): boolean {
   for (const key of availableKeys) {
-    if (templatePrefixes.some((prefix) => key.startsWith(prefix))) {
+    if (
+      templateKeys.some(
+        (template) =>
+          key === template ||
+          (key.startsWith(template) && DATED_SNAPSHOT.test(key.slice(template.length))),
+      )
+    ) {
       return true;
     }
   }

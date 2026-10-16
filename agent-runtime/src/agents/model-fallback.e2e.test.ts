@@ -53,7 +53,7 @@ async function withTempAuthStore<T>(
   run: (tempDir: string) => Promise<T>,
 ): Promise<T> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "builderforce-auth-"));
-  saveAuthProfileStore(store, tempDir);
+  await saveAuthProfileStore(store, tempDir);
   try {
     return await run(tempDir);
   } finally {

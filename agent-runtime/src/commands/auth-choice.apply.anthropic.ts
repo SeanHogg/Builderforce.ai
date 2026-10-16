@@ -1,3 +1,4 @@
+import { currentAnthropicModelId } from "../agents/anthropic-models.js";
 import { upsertAuthProfile } from "../agents/auth-profiles.js";
 import {
   formatApiKeyPreview,
@@ -9,7 +10,8 @@ import { buildTokenProfileId, validateAnthropicSetupToken } from "./auth-token.j
 import { applyAgentDefaultModelPrimary } from "./onboard-auth.config-shared.js";
 import { applyAuthProfileConfig, setAnthropicApiKey } from "./onboard-auth.js";
 
-const DEFAULT_ANTHROPIC_MODEL = "anthropic/claude-sonnet-4-6";
+// The current Sonnet, from the one release list — never a literal that goes stale.
+const DEFAULT_ANTHROPIC_MODEL = `anthropic/${currentAnthropicModelId("sonnet")}`;
 
 export async function applyAuthChoiceAnthropic(
   params: ApplyAuthChoiceParams,
@@ -43,7 +45,7 @@ export async function applyAuthChoiceAnthropic(
       name: String(profileNameRaw ?? ""),
     });
 
-    upsertAuthProfile({
+    await upsertAuthProfile({
       profileId: namedProfileId,
       agentDir: params.agentDir,
       credential: {

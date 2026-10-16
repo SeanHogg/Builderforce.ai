@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-brain-embedded",
-  "version": "2026.10.22",
+  "version": "2026.10.23",
   "description": "Embeddable AI assistant ('Brain') for React — headless streaming chat core with an MCP-style action registry. Drop a BrainProvider into any React app, register tools the assistant can call, and stream tool-capable chat completions through the Builderforce gateway. Auth, persistence, and system prompts are injected, so the same core powers builderforce.ai and external embeds.",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -73,6 +73,7 @@
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@typescript/native-preview": "7.0.0-dev.20260627.2",
+    "fake-indexeddb": "6.2.5",
     "jsdom": "^28.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -82,6 +83,11 @@
     "@builderforce/agent-loop": "link:../packages/agent-loop",
     "@builderforce/agent-stall": "link:../packages/agent-stall",
     "@builderforce/agent-tools": "link:../packages/agent-tools",
+    "@builderforce/learned-routing": "link:../packages/learned-routing",
+    "@builderforce/local-inference": "link:../packages/local-inference",
+    "@builderforce/model-catalog": "link:../packages/model-catalog",
+    "@builderforce/run-policy": "link:../packages/run-policy",
+    "@builderforce/workload": "link:../packages/workload",
     "@builderforce/write-outbox": "link:../packages/write-outbox"
   },
   "pnpm": {

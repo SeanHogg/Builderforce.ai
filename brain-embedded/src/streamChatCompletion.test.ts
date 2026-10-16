@@ -355,6 +355,17 @@ describe('a model that breaks after the stream opened', () => {
     const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
     expect(JSON.parse(String(init.body)).excludeModels).toEqual(['xai-oauth/grok-4.5']);
   });
+
+  it('sends the role and the canvas arc stage the gateway orders by, and omits them when unset', async () => {
+    const fetchMock = vi.fn(async () => sseResponse(['data: [DONE]\n']));
+    vi.stubGlobal('fetch', fetchMock);
+    await streamChatCompletion({ messages: [], transport: baseTransport, role: 'code', arcStage: 'make' });
+    await streamChatCompletion({ messages: [], transport: baseTransport });
+    const bodyOf = (i: number) => JSON.parse(String((fetchMock.mock.calls[i] as unknown as [string, RequestInit])[1].body));
+    expect(bodyOf(0)).toMatchObject({ role: 'code', arcStage: 'make' });
+    expect(bodyOf(1)).not.toHaveProperty('arcStage');
+    expect(bodyOf(1)).not.toHaveProperty('role');
+  });
 });
 
 describe('caller metadata (gateway audit emit)', () => {

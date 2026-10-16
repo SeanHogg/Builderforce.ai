@@ -15,6 +15,7 @@
       "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"],
+      "@builderforce/run-policy": ["../packages/run-policy/src/index.ts"],
       "@builderforce/learned-routing": ["../packages/learned-routing/src/index.ts"],
       "@builderforce/model-catalog": ["../packages/model-catalog/src/index.ts"],
       "@builderforce/model-router": ["../packages/model-router/src/index.ts"],

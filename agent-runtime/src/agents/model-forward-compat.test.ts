@@ -56,4 +56,36 @@ describe("agents/model-forward-compat", () => {
     const model = resolveForwardCompatModel("openai", "claude-opus-4-6", registry);
     expect(model).toBeUndefined();
   });
+
+  it("resolves the current flagships from the newest older release of the family", () => {
+    const registry = createRegistry({
+      "anthropic/claude-opus-5": createTemplateModel("anthropic", "claude-opus-5"),
+      "anthropic/claude-sonnet-4-6": createTemplateModel("anthropic", "claude-sonnet-4-6"),
+      "anthropic/claude-fable-5": createTemplateModel("anthropic", "claude-fable-5"),
+    });
+    expect(resolveForwardCompatModel("anthropic", "claude-opus-5-5", registry)?.id).toBe("claude-opus-5-5");
+    expect(resolveForwardCompatModel("anthropic", "claude-sonnet-5-5", registry)?.id).toBe(
+      "claude-sonnet-5-5",
+    );
+    expect(resolveForwardCompatModel("anthropic", "claude-fable-5-1", registry)?.id).toBe("claude-fable-5-1");
+  });
+
+  it("keeps the thinking suffix when borrowing an antigravity template", () => {
+    const registry = createRegistry({
+      "google-antigravity/claude-opus-4-6-thinking": createTemplateModel(
+        "google-antigravity",
+        "claude-opus-4-6-thinking",
+      ),
+    });
+    const model = resolveForwardCompatModel("google-antigravity", "claude-opus-5-5-thinking", registry);
+    expect(model?.id).toBe("claude-opus-5-5-thinking");
+    expect(model?.provider).toBe("google-antigravity");
+  });
+
+  it("never borrows from a NEWER release", () => {
+    const registry = createRegistry({
+      "anthropic/claude-opus-5-5": createTemplateModel("anthropic", "claude-opus-5-5"),
+    });
+    expect(resolveForwardCompatModel("anthropic", "claude-opus-4-6", registry)).toBeUndefined();
+  });
 });

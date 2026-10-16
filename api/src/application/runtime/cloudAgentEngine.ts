@@ -1,5 +1,4 @@
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
-import { splitVendorReasoning, type ChoiceMessageLike } from '@builderforce/agent-loop';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { getLatestBlueprint } from '../blueprint/blueprintDetection';
 // The engine's identity and model-routing slices now live in their own modules —
@@ -26,6 +25,12 @@ export {
   cloudRunRoleForModelPin, requestedModelForRole,
 } from './cloudAgent/routing';
 export type { CloudRouting, LearnedRoutingInputs } from './cloudAgent/routing';
+import {
+  cloudRunRole, cloudStallStep, completeUnderRunPolicy, recordModelCascade,
+  recordStallStep, resumeCloudRunModelState, turnRequestFields, type CloudRunModelState,
+} from './cloudAgent/cloudRunModelPolicy';
+import { codingFallbackSurface } from '../llm/codingFallbackSurface';
+import { pricesForCall } from '../llm/catalogView';
 /**
  * Cloud agent EXECUTION ENGINE — "run a cloud agent against a ticket", extracted
  * from the runtime HTTP routes so the route file is thin wiring and this owns ONE
@@ -64,7 +69,7 @@ import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { pollBranchCi, ciFinishDecision } from '../ci/pollCommitCiStatus';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
-import { CODING_BACKSTOP_MODELS, RECOGNIZED_CODER_MODELS, codingModelsForPlan, estimateRequestTokens, isPremiumModelSelection, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
+import { CODING_BACKSTOP_MODELS, RECOGNIZED_CODER_MODELS, codingModelsForPlan, estimateRequestTokens, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
 import type { ArcStage } from '@builderforce/workload';
 import { byoRoutingOptions } from '../llm/tenantProxy';
 import { evaluatePremiumModelAccess } from '../../domain/tenant/planFeatures';
@@ -75,8 +80,7 @@ import { assertCloudRunByo, type CloudByoFailure } from '../llm/cloudByoPolicy';
 import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
 import { TenantRole } from '../../domain/shared/types';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
-import { recordUsageRow, clampTokenCount, normalizeByoProvider, usageDatabaseOf } from '../llm/usageLedger';
-import { logTrace } from '../llm/traceLogger';
+import { usageDatabaseOf } from '../llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision, editTaskPrdSection, findTaskPrimarySpec } from '../prd/taskPrd';
 import { loadCapabilityContext, loadPersonaSetpoints } from '../artifact/capabilityContext';
 import { recordPersonalityEvent, compilePersonalityApplication } from '../persona/recordPersonalityEvent';
@@ -87,12 +91,12 @@ import { coercePausedLoopState, pauseExecutionForQuestion, withPausedToolResults
 import {
   CONTAINER_AGENT_TOOLS, CONTAINER_SURFACE_CAPS, CLOUD_AGENT_TOOLS, CLOUD_SURFACE_CAPS, cloudToolRegistry,
   MAX_PLACEHOLDER_FINISH_BLOCKS,
-  assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey, type RawToolCall,
+  assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey,
 } from './cloudAgentTools';
 import {
   CURRENT_ENGINE_ID, evaluatePolicyGate, toolCallPaths, filterByGlob, applyStringEdit, editFacts,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type PolicyGate, type AgentExecParams, type Capability,
-  type PrdWriteCapability, type PrdUpdateResult, type ToolSchema, type ModelRole,
+  type PrdWriteCapability, type PrdUpdateResult,
 } from '@builderforce/agent-tools';
 import {
   appraiseTask, buildLimbicBlock, compileLimbicState, neutralLimbicState,
@@ -141,7 +145,7 @@ import { checkRunLimits } from '../../domain/containment/runLimits';
 import { isHumanOrExternalOutputTool, trustNotice } from '../../domain/trust/contentTrust';
 import { inspectOutboundContent, recordContextContribution } from '../trust/trustService';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
-import { boards, executionLimits, executions, llmUsageLog, tasks, usageSnapshots, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
+import { boards, executionLimits, executions, llmUsageLog, tasks, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
@@ -171,334 +175,8 @@ import { OP_HANDLERS } from './cloudAgent/containerOps';
 export { recordCloudToolEvent };
 
 
-export async function recordCloudUsage(
-  env: Env,
-  db: Db,
-  args: {
-    tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number;
-    projectId?: number | null; model: string; inputTokens: number; outputTokens: number;
-    byo?: boolean; byoProvider?: string | null;
-    /** What kind of call this turn was — the parent loop's own turn is `code`, a
-     *  `spawn_agent` child carries its delegation role. Stamped onto the usage row. */
-    role?: string | null;
-    /** The run's effective plan + premium override — used ONLY to price a PREMIUM
-     *  (any-paid-OpenRouter) turn, which adds the flat per-request surcharge on top of
-     *  the metered token cost. Omit and a premium cloud turn would be billed at plain
-     *  OpenRouter cost, i.e. the surcharge silently lost on this surface. */
-    effectivePlan?: 'free' | 'pro' | 'teams';
-    premiumOverride?: boolean;
-    platformSurcharge?: boolean;
-  },
-): Promise<void> {
-  // Clamp at the boundary so a bad-usage turn (NaN/negative tokens) can't poison the
-  // snapshot's context math or the billing ledger — same shared clamp recordUsageRow uses.
-  const inputTokens = clampTokenCount(args.inputTokens);
-  const outputTokens = clampTokenCount(args.outputTokens);
-  try {
-    await runTelemetryDatabase(db).insert(usageSnapshots).values({
-      tenantId:      args.tenantId,
-      agentHostId:   null,
-      cloudAgentRef: args.cloudAgentRef ?? null,
-      executionId:   args.executionId,
-      sessionKey:    `exec:${args.executionId}`,
-      inputTokens,
-      outputTokens,
-      contextTokens: inputTokens + outputTokens,
-    });
-  } catch (error) {
-    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "recordCloudUsage", context: { logMessage: '[cloud-usage] execution usage snapshot failed', details: {
-      tenantId: args.tenantId,
-      executionId: args.executionId,
-      model: args.model,
-      error,
-    } } });
-  }
-  await recordUsageRow(db, env, {
-    tenantId:   args.tenantId,
-    userId:     null,
-    llmProduct: 'builderforceLLM',
-    model:      args.model,
-    usage:      { promptTokens: inputTokens, completionTokens: outputTokens, totalTokens: inputTokens + outputTokens },
-    metadata:   { engine: 'cloud', executionId: args.executionId, taskId: args.taskId, projectId: args.projectId ?? null },
-    useCase:    'task_execution',
-    // Attribute the spend to the run's cloud agent + ticket + project so cost
-    // rolls up ticket → project → account (0104 / 0103).
-    attribution: { cloudAgentRef: args.cloudAgentRef ?? null, executionId: args.executionId, taskId: args.taskId, projectId: args.projectId ?? null, role: args.role ?? null },
-    // Cloud runs always execute on our infra: a BYO row here is $0 to us but STILL
-    // counts against the tenant's token allowance (free tenants are charged for
-    // cloud-agent usage), so surface is 'cloud' — never exempt. See tokenUsage.ts.
-    byo: args.byo ?? false, byoProvider: args.byoProvider ?? null, surface: 'cloud',
-    // Premium (any-paid-OpenRouter) turns carry the flat per-request surcharge on the
-    // cloud surface too — the same rule the gateway route applies, so a premium model
-    // costs the same whether a chat or an autonomous run drove it. BYO rows are $0 to
-    // us, so recordUsageRow skips the surcharge for them.
-    premiumSurcharge: args.platformSurcharge === true || (args.effectivePlan
-      ? isPremiumModelSelection(args.model, args.effectivePlan, args.premiumOverride ?? false)
-      : false),
-  });
-}
-
-/** Parse the assistant turn (content + reasoning + tool calls) off a gateway
- *  chat-completion response body. One reader for both the in-Worker loop and the
- *  container `llm` op. Reasoning comes through {@link splitVendorReasoning} so every
- *  vendor shape (Anthropic thinking, `reasoning_content`, OpenRouter `reasoning`,
- *  inline `<think>`) lands on the same `thinking` timeline row. */
-export function parseLlmChoice(json: unknown): { content: string; reasoning: string; toolCalls: RawToolCall[] } {
-  const j = json as { choices?: Array<{ message?: ChoiceMessageLike & { tool_calls?: unknown } }> } | null;
-  const choice = j?.choices?.[0]?.message;
-  const { content, reasoning } = splitVendorReasoning(choice);
-  const toolCalls = Array.isArray(choice?.tool_calls) ? (choice!.tool_calls as RawToolCall[]) : [];
-  return { content, reasoning, toolCalls };
-}
-
-type CloudLlmTurn =
-  | { ok: true; content: string; toolCalls: RawToolCall[]; resolvedModel: string }
-  | { ok: false; error: string; resolvedModel: string };
-
-interface CloudLlmTurnCtx {
-  env: Env; db: Db;
-  tenantId: number; cloudAgentRef?: string; executionId: number;
-  taskId: number; projectId?: number | null;
-  /** The run's seed/pin, for the coding-degraded comparison (NOT the resolved model). */
-  requestedModel?: string;
-  /** Model id to attribute when the gateway doesn't echo a resolved one. */
-  fallbackModel?: string;
-  /** The run's effective plan + premium override — needed to price a PREMIUM
-   *  (any-paid-OpenRouter) turn's flat per-request surcharge. */
-  effectivePlan?: 'free' | 'pro' | 'teams';
-  premiumOverride?: boolean;
-  /** What kind of call this turn was, for the usage row (see {@link recordCloudUsage}). */
-  role?: ModelRole;
-}
-
-/**
- * The post-`complete` half of one cloud LLM turn, shared by {@link runCloudToolLoop}
- * (in-Worker) and the container `llm` op so metering + the `llm.complete` /
- * coding-degraded / `agent.message` telemetry have ONE implementation (the
- * proxy.complete call + the loop-only 429 cascade stay at the call site). Records
- * usage, shapes a gateway error, parses the choice, and emits the timeline events;
- * `notify` surfaces the assistant message to live subscribers (the loop streams its
- * final turn separately, so it passes false).
- */
-async function recordCloudLlmTurn(
-  result: Awaited<ReturnType<ReturnType<typeof llmProxyForPlan>['complete']>>,
-  rc: CloudLlmTurnCtx,
-  opts: { tGen0: number; step?: number; notify: boolean },
-): Promise<CloudLlmTurn> {
-  const evtBase = { tenantId: rc.tenantId, cloudAgentRef: rc.cloudAgentRef, executionId: rc.executionId };
-  const resolvedModel = result.resolvedModel ?? rc.fallbackModel ?? 'default';
-  /**
-   * The run's OWN `llm_traces` row (0949).
-   *
-   * The `llm.complete` timeline event below has always carried `result.traceId` —
-   * and it resolved to nothing, because trace rows were written only by the gateway
-   * ROUTES and a cloud run calls `complete()` in-process. Writing it here is what
-   * turns that id into a link, and stamping `executionId` on it is what lets the run
-   * detail read its own turns' model + token facts as columns instead of parsing
-   * them back out of a JSON `args` blob.
-   *
-   * No `ExecutionContext` exists inside the engine (a run is driven from a DO alarm
-   * or a container callback, not a request), so this is a best-effort floating write
-   * — the trace logger's documented fallback. It can never fail the turn.
-   */
-  const writeCloudTrace = (responseBody: unknown, errorMessage: string | null): void => {
-    if (!result.traceId) return;
-    logTrace(rc.env, undefined, {
-      traceId: result.traceId,
-      surface: 'cloud',
-      tenantId: rc.tenantId,
-      executionId: rc.executionId,
-      result,
-      usage: result.usage ?? null,
-      streamed: false,
-      useCase: 'task_execution',
-      callerMetadata: {
-        taskId: rc.taskId,
-        ...(rc.projectId != null ? { projectId: rc.projectId } : {}),
-        ...(rc.cloudAgentRef ? { cloudAgentRef: rc.cloudAgentRef } : {}),
-        ...(opts.step != null ? { step: opts.step } : {}),
-      },
-      responseBody,
-      errorMessage,
-    });
-  };
-  if (result.usage) {
-    await recordCloudUsage(rc.env, rc.db, {
-      ...evtBase, taskId: rc.taskId, projectId: rc.projectId, model: resolvedModel,
-      ...(rc.role ? { role: rc.role } : {}),
-      ...(rc.effectivePlan ? { effectivePlan: rc.effectivePlan, premiumOverride: rc.premiumOverride ?? false } : {}),
-      inputTokens: result.usage.promptTokens ?? 0, outputTokens: result.usage.completionTokens ?? 0,
-      byo: result.byoFunded ?? false,
-      byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
-      platformSurcharge: result.platformSurcharge,
-    });
-  }
-  const durationMs = Date.now() - opts.tGen0;
-  if (result.response.status >= 400) {
-    const text = await result.response.text().catch(() => '');
-    // Name the model + the chain that was walked — "which model failed" is the first
-    // triage question (the raw upstream text alone, e.g. "[cloudflare] 413: …context
-    // window limit", doesn't say WHICH gateway model resolved to it).
-    const chain = result.candidateChain?.length ? ` · chain: ${result.candidateChain.join(' → ')}` : '';
-    await recordCloudToolEvent(rc.db, {
-      ...evtBase, toolName: 'llm.complete', category: 'llm',
-      detail: { model: resolvedModel, provider: result.resolvedVendor, byo: result.byoFunded ?? false, keySource: result.byoFunded ? 'byo' : 'builderforce-managed', traceId: result.traceId ?? null, status: result.response.status, step: opts.step, outcome: result.outcome ?? null, candidateChain: result.candidateChain ?? null },
-      result: `gateway ${result.response.status} on '${resolvedModel}' (${result.outcome ?? 'error'})`, durationMs,
-    });
-    // 600, not 300: a fail-closed BYO 503 spends its body naming the providers that
-    // were connected, which of them resolved, and every model the chain walked. At 300
-    // that list was cut off mid-sentence and the lifecycle report showed only the
-    // generic headline — the exact reason "no configured provider is usable" read as a
-    // lie next to four connected accounts.
-    writeCloudTrace(text || null, `gateway ${result.response.status} on '${resolvedModel}' (${result.outcome ?? 'error'})`);
-    return { ok: false, error: `Gateway ${result.response.status} on model '${resolvedModel}'${chain}: ${text.slice(0, 600)}`, resolvedModel };
-  }
-  const upstream = await result.response.json().catch(() => null);
-  writeCloudTrace(upstream, null);
-  const { content, reasoning, toolCalls } = parseLlmChoice(upstream);
-  await recordCloudToolEvent(rc.db, {
-    ...evtBase, toolName: 'llm.complete', category: 'llm',
-    detail: { model: resolvedModel, provider: result.resolvedVendor, byo: result.byoFunded ?? false, keySource: result.byoFunded ? 'byo' : 'builderforce-managed', traceId: result.traceId ?? null, step: opts.step, toolCalls: toolCalls.length, reasoningChars: reasoning.length },
-    result: `${toolCalls.length} tool call(s)${content ? ` · ${content.length} chars` : ''}`, durationMs,
-  });
-  await emitCodingModelDegraded(rc.db, { ...evtBase, resolvedModel, requestedModel: rc.requestedModel ?? '' });
-  if (reasoning) {
-    // The reasoning path, as its own timeline row — the `thinking` category the
-    // schema documented and no writer emitted. The Observability timeline renders it
-    // as a thought track ahead of the message/tool calls; the run drawer's Tools tab
-    // excludes it from the tool count. It spans the turn's generation time: without
-    // a duration the timeline drew it zero-width, i.e. invisible.
-    await recordCloudToolEvent(rc.db, {
-      ...evtBase, toolName: 'agent.thinking', category: 'thinking',
-      detail: { step: opts.step, model: resolvedModel, content: reasoning }, result: reasoning.slice(0, 280),
-      durationMs,
-    });
-  }
-  if (content) {
-    await recordCloudToolEvent(rc.db, {
-      ...evtBase, toolName: 'agent.message', category: 'message',
-      detail: { step: opts.step, content }, result: content.slice(0, 280),
-    });
-    if (opts.notify) notifyExecutionSubscribers(rc.executionId, { type: 'message', executionId: rc.executionId, role: 'assistant', text: content, ts: new Date().toISOString() });
-  }
-  return { ok: true, content, toolCalls, resolvedModel };
-}
-
-/**
- * ONE metered model turn on behalf of an IMAGE-run surface (the Cloudflare Container
- * or the GitHub Actions runner).
- *
- * Both places an image causes a completion go through here: the `llm` op that advances
- * its own loop, and the `spawn` op's CHILD loop. That is the point — a sub-agent
- * commissioned from a container used to be the easiest place for routing to drift
- * (a child funded from the wrong pool, or billed to nobody, is invisible until the
- * invoice), and sharing the primitive makes the two impossible to tell apart in the
- * ledger.
- *
- * Everything genuinely per-caller stays outside: the parent's steering drain and
- * history compaction belong to the `llm` op, and the child's transcript is its own.
- */
-async function imageRunTurn(
-  run: {
-    env: Env;
-    db: Db;
-    ctx: ContainerRunContext;
-    executionId: number;
-    tenantId: number;
-    projectId: number;
-    taskId: number;
-    cloudAgentRef: string | undefined;
-    /** The run's explicit model pin, if it has one. */
-    model: string | undefined;
-    /** What kind of call this turn is — 'code' for the parent's own turn, or the
-     *  `spawn` op's declared delegation role for a child's. Absent `model` + a
-     *  non-code role lets the BYO soft seed re-resolve tier-ranked toward that
-     *  role's objective instead of inheriting the parent's exact pin. */
-    role?: ModelRole;
-  },
-  args: {
-    messages: Array<Record<string, unknown>>;
-    tools: ToolSchema[];
-    /** Surface the assistant message to subscribers. TRUE for the parent's own turn
-     *  (an image has no separate output stream); FALSE for a child's, whose turns are
-     *  an implementation detail of one parent tool call. */
-    notify: boolean;
-    tGen0?: number;
-    signal?: AbortSignal;
-  },
-): Promise<{ ok: true; content: string; toolCalls: unknown[] } | { ok: false; error: string; code?: string }> {
-  const { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model, role } = run;
-  const tGen0 = args.tGen0 ?? Date.now();
-  // A connected Claude subscription powers a direct-Claude turn; BYO OpenAI/Google/
-  // Anthropic api-keys override the operator keys for their vendors (tenant-funded →
-  // byo). One round-trip (parallel reads); empty (operator-key floor) when the tenant
-  // has connected nothing. Resolved BEFORE the model pick so a free tenant may pin a
-  // BYO model (byoVendors lifts the free-plan choice gate).
-  const creds = await resolveTenantLlmCredentials(env, tenantId);
-  // Same fail-closed BYO rule as the in-Worker loop (GAP-B4) — an image is a cloud
-  // execution surface too, so it must not degrade onto the platform key.
-  const byoBlocked = await refuseCloudRunWithoutByo(db, { tenantId, cloudAgentRef, executionId }, creds);
-  if (byoBlocked) return { ok: false, error: byoBlocked.message, code: byoBlocked.code };
-  const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = creds;
-  // Evermind coding gate — undefined unless the pin is an `evermind/<ref>` route.
-  const evermindCoding = await resolveEvermindCodingRoute(env, db, tenantId, model);
-  // Operator ROLE_MODELS pin is the requested model when this turn has no explicit
-  // user/agent pin. Undefined pin = existing plan seed / learned ranker.
-  const requested = requestedModelForRole(env, role, model);
-  const pick = pickCloudModel(requested, ctx.effectivePlan, ctx.premiumOverride, {
-    ...(evermindCoding ? { evermindCoding } : {}),
-    role,
-    // Context-aware seed: a small-window model isn't picked for a big turn.
-    estimatedTokens: estimateRequestTokens(args.messages, args.tools),
-    byoVendors: byoVendorIdsFromCredentials(creds),
-    // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
-    byoVendorPriority: creds.vendorPriority,
-    byoAlertedVendors: creds.alertedVendors ?? [],
-    isSuperadmin: ctx.isSuperadmin,
-    registeredModels: creds.registeredModels,
-    preferredRegisteredModel: creds.preferredOpenRouterModel,
-    byoSelectedModels: creds.byoSelectedModels,
-    // Parity with the durable loop: a PREMIUM pin needs a validated billing card.
-    premiumEntitled: ctx.premiumEntitled,
-  });
-  const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, {
-    backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true,
-    ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}),
-    ...(openaiCodexAuth ? { openaiCodexAuth } : {}),
-    ...(xaiOAuthToken ? { xaiOAuthToken } : {}),
-    ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}),
-    ...byoRoutingOptions(creds),
-    ...(creds.configuredProviders.length ? { byoRequired: true } : {}),
-  }).complete({
-    messages: args.messages as unknown as ChatMessage[], tools: args.tools, tool_choice: 'auto',
-    ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
-    // Personality temperature — parity with the Worker/DO loop.
-    ...(ctx.execParams.temperature != null ? { temperature: ctx.execParams.temperature } : {}),
-    // Personality reasoning levers (thinkLevel/reasoningLevel) → the CORRECT vendor
-    // param for THIS model family (Anthropic `thinking` / OpenAI `reasoning_effort`),
-    // or nothing for a model that doesn't support one (reasoningCapability drops it).
-    // Only on a STRICT pin: an unpinned model may cascade to a different vendor that
-    // would reject the param, so we attach it solely when the resolved model is fixed.
-    // First-turn detection: no assistant turn yet in this slice.
-    ...(pick.strict
-      ? reasoningParamsForModel(pick.model, ctx.execParams, {
-          isFirstTurn: !args.messages.some((m) => (m as { role?: string }).role === 'assistant'),
-        }) ?? {}
-      : {}),
-    useCase: 'task_execution',
-  }, undefined, undefined, args.signal);
-  // Shared post-`complete` processing (metering + telemetry) — identical to the
-  // in-Worker loop, so a child's tokens are the tenant's tokens and a delegation that
-  // quietly billed to nobody cannot happen.
-  const turn = await recordCloudLlmTurn(result, {
-    env, db, tenantId, cloudAgentRef, executionId, taskId, projectId,
-    requestedModel: pick.model ?? model, fallbackModel: pick.model,
-    effectivePlan: ctx.effectivePlan, premiumOverride: ctx.premiumOverride,
-    ...(role ? { role } : {}),
-  }, { tGen0, notify: args.notify });
-  if (!turn.ok) return { ok: false, error: turn.error };
-  return { ok: true, content: turn.content, toolCalls: turn.toolCalls };
-}
+export { parseLlmChoice, recordCloudUsage } from './cloudAgent/cloudLlmTurn';
+import { imageRunTurn, recordCloudLlmTurn } from './cloudAgent/cloudLlmTurn';
 
 /**
  * Handle one container-op call from the long-lived Container executor. The container
@@ -555,9 +233,12 @@ export interface CloudLoopState {
   writtenPaths: string[];
   /** Next absolute step index to run. */
   step: number;
-  /** Model pinned for the whole run, resolved on the first tick. Persisted so the
-   *  durable (DO) surface keeps every tick on the SAME model instead of letting
-   *  the gateway's round-robin cursor hop models between steps of one task. */
+  /** The run's model hand-off state (`cloudAgent/cloudRunModelPolicy`): the locked
+   *  model, released pins, broken/tried models and the stall budget. Persisted so
+   *  every DO tick stays on the SAME model and the hand-off rules span the run. */
+  modelPolicy?: CloudRunModelState;
+  /** LEGACY — the locked model id a tick persisted before {@link modelPolicy} existed.
+   *  Read once to resume such a tick on the same model; never written. */
   pinnedModel?: string;
   /** The tenant's LLM routing, resolved on the first tick. Persisted so later DO
    *  ticks reuse it (which pool / vendor key) without re-querying the plan. */
@@ -1221,7 +902,10 @@ async function runCloudToolLoop(
   // is the only reason a project-Evermind pin survives for a BYO tenant (the composer
   // filters every non-connected vendor out of the chain, and `evermind` is nobody's
   // connected vendor). Now that the head can DECLINE a turn it isn't competent for,
-  // the graceful fallback rides the per-turn cascade below instead.
+  // the graceful fallback rides the run policy's per-turn cascade instead.
+  // Child durable runs carry CloudChildSpec.role; the parent loop is 'code' (the
+  // phase rule in cloudRunModelPolicy).
+  const runRole = cloudRunRole(opts?.delegation?.spec?.role);
   const pick = projectInferenceModel
     ? { model: projectInferenceModel, strict: true as const }
     : pickCloudModel(requested, routing.effectivePlan, routing.premiumOverride, {
@@ -1230,9 +914,10 @@ async function runCloudToolLoop(
         actionType: learned.actionType,
         actionStats: learned.actionStats,
         bias: opts?.routingBias,
-        // Child durable runs carry CloudChildSpec.role; the parent loop stays 'code'.
-        role: opts?.delegation?.spec?.role ?? 'code',
+        role: runRole,
         arcStage: opts?.arcStage,
+        // A cost-first role (explore / utility / verify) orders by expected cost.
+        prices: await pricesForCall(env, runRole, opts?.arcStage),
         // Context-aware seed: don't pick a small-window model for a big first turn.
         estimatedTokens: estimateRequestTokens(messages, cloudTools),
         // A free tenant may pin a model their connected provider (BYO) serves.
@@ -1248,10 +933,15 @@ async function runCloudToolLoop(
         // it's ignored and the run uses the plan's coding default.
         premiumEntitled: routing.premiumEntitled,
       });
-  // Mutable: a 429 on the pinned model drops the strict pin so the proxy cascades
-  // (see the per-turn cascade below); the run then stays unpinned for later turns.
-  let strictPin = pick.strict;
-  let activeModel: string = opts?.resume?.pinnedModel ?? pick.model;
+  // THE model hand-off policy for this run: locks onto what serves turn 1, releases a
+  // pin on 429/413/503 or an Evermind decline, fails over a model that only narrates.
+  // Carried across DO ticks in CloudLoopState.
+  let modelState: CloudRunModelState = resumeCloudRunModelState(
+    opts?.resume?.modelPolicy, opts?.resume?.pinnedModel, pick, opts?.delegation?.spec?.role,
+  );
+  const cloudToolNames = cloudTools.map((t) => t.function.name);
+  /** What answered the latest turn — the only id naming a spent model under auto-select. */
+  let lastResolvedModel: string | undefined;
 
   // Make the model choice legible on the timeline — once, at run start (resume ticks
   // already locked their pin). The companion to llm.complete + coding_model_degraded:
@@ -1377,7 +1067,7 @@ async function runCloudToolLoop(
       await recordCloudToolEvent(db, {
         ...evt,
         toolName: 'llm.repetition_loop', category: 'llm',
-        detail: { step: ctx.step, model: activeModel || null, copies: loop.copies },
+        detail: { step: ctx.step, model: lastResolvedModel ?? modelState.policy.model ?? null, copies: loop.copies },
         result: `the model repeated one block ${loop.copies} times — kept the first copy: "${loop.block.trim().slice(0, 120)}"`,
       });
     },
@@ -1424,7 +1114,7 @@ async function runCloudToolLoop(
       return undefined;
     },
 
-    onNoToolCalls: async (_ctx, turn) => {
+    onNoToolCalls: async (ctx, turn) => {
       // An owner never ends with children still working (their reports would strand).
       const childBlock = opts?.delegation ? await liveChildrenFinishBlock(db, tenantId, executionId) : null;
       if (childBlock) {
@@ -1443,6 +1133,22 @@ async function runCloudToolLoop(
           result: error,
         });
         return { action: 'continue' };
+      }
+      // A turn that only DESCRIBED the work (or said nothing) is not a finish: re-prompt
+      // it, then fail over to a model that acts, then stop and say why — the stall step
+      // every agent loop shares (`@builderforce/run-policy`).
+      const stall = cloudStallStep(modelState, {
+        text: turn.content, toolCallCount: 0, toolNames: cloudToolNames, requestText: userContent, resolvedModel: lastResolvedModel,
+      }, codingFallbackSurface(byoVendorIdsFromCredentials(loopCreds), routing.effectivePlan, routing.premiumOverride));
+      modelState = stall.state;
+      await recordStallStep(db, evt, stall.step, lastResolvedModel, ctx.step);
+      if (stall.step.kind === 'nudge' || stall.step.kind === 'failover') {
+        if (turn.content) messages.push({ role: 'assistant', content: turn.content });
+        messages.push({ role: 'user', content: stall.step.nudge });
+        return { action: 'continue' };
+      }
+      if (stall.step.kind === 'exhausted') {
+        return { action: 'finish', output: turn.content ? `${turn.content}\n\n${stall.step.notice}` : stall.step.notice };
       }
       return { action: 'finish' };
     },
@@ -1668,100 +1374,61 @@ async function runCloudToolLoop(
         : messages;
 
       const tGen0 = Date.now();
-      let result!: Awaited<ReturnType<typeof proxy.complete>>;
-      // Per-turn model cascade: a strict pin (or locked model) that the gateway
-      // rate-limits (429) would otherwise terminate the whole run. Instead, drop the
-      // strict pin ONCE and let the proxy walk its full chain (LlmProxyService already
-      // cascades); then lock onto whatever it resolves so later turns / DO ticks stay
-      // there. Benefits every surface (durable / Worker / container). A fetch the
-      // cancel watcher aborted mid-call throws here; the kernel reports it as
+      // ONE turn under the run policy: it asks for the locked/pinned model, and when the
+      // gateway answers 429/413/503 (or a project Evermind DECLINES with a 400) it drops
+      // the pin and re-asks once on the gateway's cascade — a pin gets NO in-proxy
+      // cascade, so this is what keeps one unavailable model from ending the run. A
+      // fetch the cancel watcher aborted mid-call throws here; the kernel reports it as
       // `cancelled` because the run's signal is the watcher's.
-      for (let attempt = 0; ; attempt++) {
-        result = await proxy.complete(
-          {
-            messages: requestMessages as unknown as ChatMessage[],
-            tools: cloudTools,
-            tool_choice: 'auto',
-            ...(activeModel ? { model: activeModel, ...(strictPin ? { modelStrict: true } : {}) } : {}),
-            // Sampling. Caller-configured `genParams` OUTRANK the personality-derived
-            // temperature: an operator who set a temperature on the published model
-            // meant that number, whereas the persona value is a derived default.
-            ...(genParams.temperature ?? opts?.execParams?.temperature) != null
-              ? { temperature: genParams.temperature ?? opts?.execParams?.temperature }
-              : {},
-            ...(genParams.topP != null ? { top_p: genParams.topP } : {}),
-            ...(genParams.maxTokens != null ? { max_tokens: genParams.maxTokens } : {}),
-            // Personality reasoning levers (thinkLevel/reasoningLevel) → the correct
-            // vendor param via reasoningCapability (Anthropic `thinking` / OpenAI
-            // `reasoning_effort`), surviving to the vendor as extraBody. Attached ONLY
-            // on a strict pin so it never rides a cascade onto a vendor that would 400
-            // on an unknown key; unsupported models return nothing (no change). Note the
-            // direct-Anthropic vendor enables `thinking` alongside tools on the FIRST
-            // (planning) turn — detected here as "no assistant turn yet in the persisted
-            // conversation" and threaded as the `isFirstTurn` hint — and keeps it off on
-            // continuation turns (whose thinking block was lost in the OpenAI round-trip);
-            // for a pinned OpenAI o-series/gpt-5 coder it lands `reasoning_effort`.
-            ...(strictPin
-              ? reasoningParamsForModel(activeModel, opts?.execParams, {
-                  isFirstTurn: !messages.some((m) => (m as { role?: string }).role === 'assistant'),
-                }) ?? {}
-              : {}),
-            useCase: 'task_execution',
-          },
-          undefined,
-          undefined,
-          abortController.signal,
-        );
-        // Retry a pinned/locked model that the gateway rate-limited (429), that the
-        // request overflowed (413 — context window too small), or that the gateway
-        // reported unavailable (503 — cooled / provider outage), and only once. All
-        // three need it because a pin gets NO in-proxy cascade: dropping the pin lets
-        // the proxy walk its chain — to a bigger-window model, or (for a BYO tenant,
-        // where the chain stays inside their own accounts) to another connected
-        // provider — instead of hard-failing the run on ONE unavailable model.
-        const retryStatus = result!.response.status;
-        // A project-Evermind pin additionally cascades on 400. That is the status the
-        // evermind vendor uses to DECLINE a turn it is not competent for — it ranked
-        // its tool choice no better than the alternatives, or its prose failed the
-        // coherence bar. Because the pin is strict (no in-proxy cascade), the run would
-        // otherwise die on the tenant's own under-trained head; dropping the pin here
-        // reproduces the graceful outcome the old blanket tool-capability gate gave by
-        // never pinning it at all. Scoped to `evermind/` so a genuine malformed-request
-        // 400 on a frontier model still fails fast instead of burning a second attempt.
-        const evermindDeclined = retryStatus === 400 && activeModel.startsWith('evermind/');
-        const retryable = retryStatus === 429 || retryStatus === 413 || retryStatus === 503 || evermindDeclined;
-        if (!retryable || attempt >= 1 || (!strictPin && !activeModel)) break;
-        await recordCloudToolEvent(db, {
-          ...evt,
-          toolName: 'model.cascade', category: 'llm',
-          detail: { step: ctx.step, from: activeModel || null, reason: String(retryStatus) },
-          result: retryStatus === 413
-            ? 'pinned model context window too small — dropping pin, walking the cascade to a bigger-window model'
-            : retryStatus === 503
-              ? 'pinned model unavailable (cooldown / provider outage) — dropping pin, walking the cascade'
-              : evermindDeclined
-                ? 'project Evermind declined this turn (low tool-choice confidence or incoherent output) — dropping pin, walking the cascade'
-                : 'pinned model rate-limited — dropping pin, walking the cascade',
-        });
-        // Unlock for this turn AND the rest of the run: don't re-pin after a cascade.
-        strictPin = false;
-        activeModel = '';
-      }
-      // Lock the non-strict run onto the model the gateway actually used on the
-      // first turn, so every later turn (and DO tick) stays on it. Strict pins
-      // already resolve to `activeModel`, so this is a no-op for them.
-      if (!strictPin && result.resolvedModel) activeModel = result.resolvedModel;
+      const turnRun = await completeUnderRunPolicy(modelState, (req) => proxy.complete(
+        {
+          messages: requestMessages as unknown as ChatMessage[],
+          tools: cloudTools,
+          ...turnRequestFields(req),
+          // Sampling. Caller-configured `genParams` OUTRANK the personality-derived
+          // temperature: an operator who set a temperature on the published model
+          // meant that number, whereas the persona value is a derived default.
+          ...(genParams.temperature ?? opts?.execParams?.temperature) != null
+            ? { temperature: genParams.temperature ?? opts?.execParams?.temperature }
+            : {},
+          ...(genParams.topP != null ? { top_p: genParams.topP } : {}),
+          ...(genParams.maxTokens != null ? { max_tokens: genParams.maxTokens } : {}),
+          // Personality reasoning levers (thinkLevel/reasoningLevel) → the correct
+          // vendor param via reasoningCapability (Anthropic `thinking` / OpenAI
+          // `reasoning_effort`), surviving to the vendor as extraBody. Attached ONLY
+          // on a strict pin so it never rides a cascade onto a vendor that would 400
+          // on an unknown key; unsupported models return nothing (no change). Note the
+          // direct-Anthropic vendor enables `thinking` alongside tools on the FIRST
+          // (planning) turn — detected here as "no assistant turn yet in the persisted
+          // conversation" and threaded as the `isFirstTurn` hint — and keeps it off on
+          // continuation turns (whose thinking block was lost in the OpenAI round-trip);
+          // for a pinned OpenAI o-series/gpt-5 coder it lands `reasoning_effort`.
+          ...(req.strict
+            ? reasoningParamsForModel(req.model, opts?.execParams, {
+                isFirstTurn: !messages.some((m) => (m as { role?: string }).role === 'assistant'),
+              }) ?? {}
+            : {}),
+          useCase: 'task_execution',
+        },
+        undefined,
+        undefined,
+        abortController.signal,
+      ), (outcome) => recordModelCascade(db, evt, outcome, ctx.step));
+      modelState = turnRun.state;
       // Shared post-`complete` processing (metering + `llm.complete`/degraded/agent.message
       // telemetry) — identical to the container `llm` op. `notify: false`: the loop streams
       // its own final turn. The degraded comparison is the seed/pin (`pick.model`), not the
-      // just-locked `activeModel`.
-      const turn = await recordCloudLlmTurn(result, {
+      // just-locked model.
+      const turn = await recordCloudLlmTurn(turnRun.result, {
         env, db, tenantId, cloudAgentRef, executionId: meterExecutionId, taskId: taskRow.id, projectId,
-        requestedModel: pick.model, fallbackModel: activeModel,
+        requestedModel: pick.model, fallbackModel: modelState.policy.model,
         effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
-        role: opts?.delegation?.spec?.role ?? 'code',
+        role: runRole,
       }, { tGen0, step: ctx.step, notify: false });
       if (!turn.ok) return { failed: turn.error };
+      lastResolvedModel = turn.resolvedModel;
+      // A turn that acted proves the model is working: its stall budget starts over.
+      if (turn.toolCalls.length > 0 && modelState.stallRecoveries > 0) modelState = { ...modelState, stallRecoveries: 0 };
       return { content: turn.content, toolCalls: readOpenAiToolCalls({ tool_calls: turn.toolCalls }) };
     },
 
@@ -1841,7 +1508,7 @@ async function runCloudToolLoop(
     messages,
     writtenPaths: [...writtenPaths],
     step,
-    pinnedModel: activeModel,
+    modelPolicy: modelState,
     routing,
     repoCtx,
     repoMiss,

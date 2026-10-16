@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { createCacheIdempotencyStore } from '../../infrastructure/cache/idempotencyReplayStore';
 import type { Context } from 'hono';
 import type { HonoEnv } from '../../env';
 import type { LlmProvider, TenantLlmCredentials } from '../../application/llm/tenantProviderKeyService';
@@ -757,7 +758,7 @@ describe('POST /provider-keys/:provider/test', () => {
   });
 });
 
-describe('PUT /provider-keys/ollama-local', () => {
+describe('PUT /provider-keys/<local runtime>', () => {
   beforeEach(() => {
     mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
     mocks.buildDatabase.mockReturnValue(mockDb({
@@ -766,8 +767,8 @@ describe('PUT /provider-keys/ollama-local', () => {
     }));
   });
 
-  const put = (body: unknown) => buildApp().request(
-    new Request('http://test.local/provider-keys/ollama-local', {
+  const put = (body: unknown, provider = 'ollama-local') => buildApp().request(
+    new Request(`http://test.local/provider-keys/${provider}`, {
       method: 'PUT',
       headers: { Authorization: 'Bearer bfk_test', 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -839,6 +840,30 @@ describe('PUT /provider-keys/ollama-local', () => {
       expect.anything(), 1, 'ollama-local', 'proxy-token::http://127.0.0.1:11434::llama3.1:8b', null,
     );
     spy.mockRestore();
+  });
+
+  // FreeToken used to fall through to the bare-key branch and store a value its vendor
+  // could not split — every `local_runtime` provider takes the same composed shape.
+  it('composes the same sentinel for FreeToken', async () => {
+    const realModule = await import('../../application/llm/tenantProviderKeyService');
+    const spy = vi.spyOn(realModule, 'setTenantProviderKey').mockResolvedValue(undefined);
+    vi.spyOn(await import('../../application/llm/providerAuthAlerts'), 'clearProviderAuthAlert')
+      .mockResolvedValue(undefined);
+
+    const res = await put({ baseUrl: 'http://127.0.0.1:1919', model: 'qwen3:8b' }, 'freetoken');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, provider: 'freetoken' });
+    expect(spy).toHaveBeenCalledWith(
+      expect.anything(), 1, 'freetoken', '::http://127.0.0.1:1919::qwen3:8b', null,
+    );
+    spy.mockRestore();
+  });
+
+  it('refuses FreeToken without a baseUrl rather than storing a bare key', async () => {
+    const res = await put({ apiKey: 'sk-anything' }, 'freetoken');
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'baseUrl is required' });
   });
 });
 
@@ -1426,10 +1451,13 @@ describe('POST /v1/chat/completions idempotency replay [1232]', () => {
       complete: async () => { throw new Error('proxy must NOT be called on idempotent replay'); },
     });
     const kv = makeKvMock();
-    await kv.put('idem:1:abc', JSON.stringify({
+    // Seeded through the shared idempotency store — the same port the handler reads.
+    await createCacheIdempotencyStore({ AUTH_CACHE_KV: kv } as never).put(1, 'abc', {
+      fingerprint: 'POST /v1/chat/completions',
       status: 200,
-      body: { choices: [{ message: { role: 'assistant', content: 'cached' } }], _builderforce: { traceId: 'llm-original' } },
-    }));
+      body: JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'cached' } }], _builderforce: { traceId: 'llm-original' } }),
+      contentType: 'application/json',
+    });
 
     const req = new Request('http://test.local/v1/chat/completions', {
       method: 'POST',

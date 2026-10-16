@@ -11,6 +11,8 @@ import { isManagerRole } from "@seanhogg/builderforce-brain-embedded";
 import { renderPlatformContextSection, type RunContextEnvelope } from "@builderforce/run-context";
 import { getApiKey, getBaseUrl } from "./gateway";
 import { ttlCache } from "./ttlCache";
+import { createDurableOutbox, outboxSecrets, scopeTenantId, setOutboxScope, trackReachability } from "./outboxStorage";
+import { isPermanentHttpFailure } from "@builderforce/write-outbox";
 import { isClosedTask } from "@builderforce/agent-loop";
 
 export interface BfProject {
@@ -123,6 +125,50 @@ export function setSelectedWorkspace(tenantId: number | undefined): void {
   selectedTenantId = tenantId;
   scopedJwt = undefined; // re-derive on next call
   workspaceCache = undefined;
+  syncOutboxScope();
+}
+
+/**
+ * The tenant calls actually act as: the selected workspace, unless re-scoping is not
+ * deployed (then the key's own tenant). `undefined` until known.
+ */
+function effectiveTenantId(): number | undefined {
+  if (!baseJwt) return selectedTenantId;
+  return rescopeUnsupported ? baseJwt.tenantId : selectedTenantId ?? baseJwt.tenantId;
+}
+
+/** Tell the durable outboxes which tenants writes now go to (see `outboxStorage.ts`). */
+function syncOutboxScope(): void {
+  setOutboxScope({ workspace: effectiveTenantId(), key: baseJwt?.tenantId });
+}
+
+/**
+ * Re-scoping to the selected workspace failed in a way that falls back to the key's own
+ * token: workspace writes PARK (they were queued for the selected tenant and must not
+ * land in the key's) until a re-scope succeeds; gateway writes carry on.
+ */
+function parkWorkspaceWrites(): void {
+  setOutboxScope({ workspace: undefined, key: baseJwt?.tenantId });
+}
+
+/** The tenant a token we minted acts as, or undefined when it is not one of ours. */
+function tenantOfToken(token: string): number | undefined {
+  if (scopedJwt?.token === token) return scopedJwt.tenantId;
+  if (baseJwt?.token === token) return baseJwt.tenantId;
+  return undefined;
+}
+
+/**
+ * A request init that may pin the tenant it must act as. A durable outbox replaying a
+ * write passes the tenant the write was queued for; if the token at hand acts as any
+ * other tenant the request is NOT sent — it fails (retriably) and the write waits.
+ */
+export type AuthedInit = RequestInit & { asTenant?: number };
+
+function assertActsAs(token: string, asTenant: number | undefined): void {
+  if (asTenant !== undefined && tenantOfToken(token) !== asTenant) {
+    throw new Error(`tenant ${asTenant} is not the current workspace — write parked`);
+  }
 }
 
 /**
@@ -141,11 +187,11 @@ type KeyExchange =
 /** One `tenant-api-key-token` round trip, classified — no caching, no side effects. */
 async function requestBaseJwt(key: string): Promise<KeyExchange> {
   try {
-    const res = await fetch(`${getBaseUrl()}/api/auth/tenant-api-key-token`, {
+    const res = await trackReachability(fetch(`${getBaseUrl()}/api/auth/tenant-api-key-token`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ apiKey: key }),
-    });
+    }));
     // 401 = invalid/revoked key; 400 = a key with no user (the route says "use device
     // sign-in"). Anything else non-OK is the gateway, not the key.
     if (res.status === 401 || res.status === 400) return { ok: false, rejected: true };
@@ -172,6 +218,7 @@ async function exchangeBaseJwt(
     return undefined;
   }
   baseJwt = result.jwt;
+  syncOutboxScope();
   return baseJwt;
 }
 
@@ -188,6 +235,7 @@ export async function probeEditorKey(
   const result = await requestBaseJwt(key);
   if (result.ok) {
     baseJwt = result.jwt;
+    syncOutboxScope();
     return "ok";
   }
   return result.rejected ? "rejected" : "unreachable";
@@ -210,18 +258,28 @@ async function exchangeJwt(secrets: vscode.SecretStorage, force = false): Promis
     });
     if (res.status === 404) {
       rescopeUnsupported = true;
+      syncOutboxScope();
       return base.token;
     }
     if (res.status === 403) {
       selectedTenantId = base.tenantId;
+      syncOutboxScope();
       return base.token;
     }
-    if (!res.ok) return base.token;
+    if (!res.ok) {
+      parkWorkspaceWrites();
+      return base.token;
+    }
     const body = (await res.json()) as { token?: string; expiresIn?: number };
-    if (!body.token) return base.token;
+    if (!body.token) {
+      parkWorkspaceWrites();
+      return base.token;
+    }
     scopedJwt = { token: body.token, exp: Date.now() + (body.expiresIn ?? 3600) * 1000, tenantId: target };
+    syncOutboxScope();
     return scopedJwt.token;
   } catch {
+    parkWorkspaceWrites();
     return base.token;
   }
 }
@@ -230,6 +288,8 @@ export function clearJwt(): void {
   baseJwt = undefined;
   scopedJwt = undefined;
   rescopeUnsupported = false;
+  // Signed out (or re-keying): durable writes hold until the next identity is known.
+  setOutboxScope({ workspace: undefined, key: undefined });
   workspaceCache = undefined;
   currentUserId = undefined;
   evermindHeadCache.invalidate();
@@ -318,15 +378,18 @@ export async function canManageActiveWorkspace(secrets: vscode.SecretStorage): P
 async function authed<T>(
   secrets: vscode.SecretStorage,
   path: string,
-  init?: RequestInit,
+  authedInit?: AuthedInit,
 ): Promise<T | undefined> {
+  const { asTenant, ...init } = authedInit ?? {};
   let token = await exchangeJwt(secrets);
   if (!token) return undefined;
-  const call = (t: string) =>
-    fetch(`${getBaseUrl()}${path}`, {
+  const call = (t: string) => {
+    assertActsAs(t, asTenant);
+    return trackReachability(fetch(`${getBaseUrl()}${path}`, {
       ...init,
-      headers: { ...(init?.headers ?? {}), authorization: `Bearer ${t}`, "content-type": "application/json" },
-    });
+      headers: { ...(init.headers ?? {}), authorization: `Bearer ${t}`, "content-type": "application/json" },
+    }));
+  };
   let res = await call(token);
   if (res.status === 401) {
     token = await exchangeJwt(secrets, true);
@@ -927,8 +990,9 @@ export async function createBrainChat(
  * read — the linked chat then carries the actual conversation, not just ticket
  * lineage. Returns the server's TRUTHFUL learn-gate outcome for the persisted turn
  * (the same `evermindLearn` the webview/web adapters attach) so the caller can surface
- * a learn/skip line + self-heal a project-less chat. Best-effort: returns null on any
- * failure so it never breaks the chat turn.
+ * a learn/skip line + self-heal a project-less chat. Never breaks the chat turn: on a
+ * failure it returns null and the turn goes to the durable {@link pendingTurns} queue,
+ * which replays it — under the SAME event keys — once the platform answers again.
  */
 export async function appendBrainMessages(
   secrets: vscode.SecretStorage,
@@ -936,8 +1000,53 @@ export async function appendBrainMessages(
   messages: Array<{ role: string; content: string }>,
 ): Promise<EvermindLearnOutcome | null> {
   if (messages.length === 0) return null;
-  const r = await postBrainMessages(secrets, chatId, messages);
-  return r.ok ? r.evermindLearn ?? null : null;
+  const keyed = messages.map((m) => ({ ...m, eventKey: `vsix:${crypto.randomUUID()}` }));
+  // Older turns of this chat are still waiting: this one queues behind them, so the
+  // transcript keeps the order the turns happened in.
+  if (pendingTurns.size(chatId) > 0) {
+    for (const m of keyed) pendingTurns.enqueue(chatId, m);
+    void pendingTurns.flush(chatId);
+    return null;
+  }
+  const r = await postBrainMessages(secrets, chatId, keyed);
+  if (r.ok) return r.evermindLearn ?? null;
+  // A refusal (deleted chat, no access) would be refused again; anything else replays.
+  if (!isPermanentHttpFailure(r)) for (const m of keyed) pendingTurns.enqueue(chatId, m);
+  return null;
+}
+
+/** One turn row as the messages endpoint takes it. `eventKey` is its idempotency key. */
+export interface BrainMessageInput {
+  role: string;
+  content: string;
+  metadata?: string;
+  eventKey?: string;
+}
+
+/**
+ * Chat turns that could not be saved when they happened, one lane per chat, replayed in
+ * order. Each row keeps the `eventKey` it was first sent with, so a replay of a write the
+ * server did take (only the answer was lost) returns the original rows instead of a
+ * duplicate. A chat the server refuses (deleted, no access) is dropped, not retried.
+ */
+const pendingTurns = createDurableOutbox<BrainMessageInput, number>("brain-turns", {
+  maxItems: 25,
+  maxWaitMs: 0,
+  send: (chatId, rows, ctx) => sendQueuedBrainRows(chatId, rows, scopeTenantId(ctx.scope)),
+});
+
+/**
+ * Replay queued rows (unsaved chat turns, durable run steps) to a chat, AS the tenant
+ * they were queued for. Throws on failure — with the HTTP `status` when the server
+ * answered — so the outbox drops a refusal and keeps everything else.
+ */
+export async function sendQueuedBrainRows(
+  chatId: number,
+  rows: BrainMessageInput[],
+  asTenant: number | undefined,
+): Promise<void> {
+  const r = await postBrainMessages(await outboxSecrets(), chatId, rows, { asTenant });
+  if (!r.ok) throw Object.assign(new Error(r.reason), r.status !== undefined ? { status: r.status } : {});
 }
 
 /**
@@ -951,6 +1060,8 @@ export interface BrainMessageWriteFailure {
   ok: false;
   signedOut: boolean;
   reason: string;
+  /** The HTTP status the server refused with; absent when no answer came back. */
+  status?: number;
 }
 
 export interface BrainMessageWriteSuccess {
@@ -975,22 +1086,26 @@ export type BrainMessageWrite = BrainMessageWriteSuccess | BrainMessageWriteFail
 export async function postBrainMessages(
   secrets: vscode.SecretStorage,
   chatId: number,
-  messages: Array<{ role: string; content: string; metadata?: string }>,
+  messages: BrainMessageInput[],
+  /** Replays only: the tenant the rows were queued for — never sent as another. */
+  opts: { asTenant?: number } = {},
 ): Promise<BrainMessageWrite> {
   // Minted ONCE, before the first attempt and outside the retry loop — the whole
   // safety of retrying rests on the second attempt carrying the SAME keys as the
   // first, so the server can recognise it (`uq_brain_chat_messages_event`) and hand
-  // back the original rows instead of writing the turn twice.
-  const keyed = messages.map((m) => ({ ...m, eventKey: `vsix:${crypto.randomUUID()}` }));
+  // back the original rows instead of writing the turn twice. A row that already
+  // carries a key (a step row from the outbox, a queued turn being replayed) keeps it.
+  const keyed = messages.map((m) => (m.eventKey ? m : { ...m, eventKey: `vsix:${crypto.randomUUID()}` }));
 
   let last = "";
+  let status: number | undefined;
   for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt += 1) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, WRITE_BACKOFF_MS[attempt - 1]));
     try {
       const r = await authed<{ messages?: BrainMessage[]; evermindLearn?: EvermindLearnOutcome }>(
         secrets,
         `/api/brain/chats/${chatId}/messages`,
-        { method: "POST", body: JSON.stringify({ messages: keyed }) },
+        { method: "POST", body: JSON.stringify({ messages: keyed }), asTenant: opts.asTenant },
       );
       // `authed` answers undefined only when there is no usable token to send. No
       // amount of retrying mints a credential, so this one stops here.
@@ -998,11 +1113,13 @@ export async function postBrainMessages(
       return { ok: true, messages: r.messages ?? [], ...(r.evermindLearn ? { evermindLearn: r.evermindLearn } : {}) };
     } catch (e) {
       last = e instanceof Error ? e.message : String(e);
+      const code = (e as { status?: unknown } | null)?.status;
+      status = typeof code === "number" ? code : undefined;
       if (!isRetriableWrite(e)) break;
     }
   }
   /* best-effort persistence — never blocks the chat turn */
-  return { ok: false, signedOut: false, reason: last };
+  return { ok: false, signedOut: false, reason: last, ...(status !== undefined ? { status } : {}) };
 }
 
 /** Three tries over ~2.5s: long enough to outlast a hibernate-wake or a redeploy,
@@ -1138,20 +1255,31 @@ export interface VsixActivitySignal {
 }
 
 /**
- * Push a batch of audited "click sense" signals from the editor (source 'vscode').
- * Best-effort: capture must never disrupt the editor, so errors are swallowed. The
- * server attributes each signal to the signed-in user + active tenant and resolves
- * it into billable time (see api/src/presentation/routes/activityRoutes.ts).
+ * Push a batch of audited "click sense" signals from the editor (source 'vscode'). The
+ * server attributes each signal to the signed-in user + active tenant and resolves it
+ * into billable time (see api/src/presentation/routes/activityRoutes.ts).
+ *
+ * THROWS on failure — its one caller is the durable activity outbox (`activity.ts`),
+ * which keeps the batch and replays it under the same `idempotencyKey`, so a batch the
+ * server already took is answered from its idempotency record instead of billed twice.
+ * No usable credential is a failure too (offline, the token exchange cannot succeed).
  */
 export async function postActivitySignals(
   secrets: vscode.SecretStorage,
   signals: VsixActivitySignal[],
+  idempotencyKey: string,
+  /** The tenant the batch was queued for — never sent as another. */
+  asTenant?: number,
 ): Promise<void> {
   if (signals.length === 0) return;
-  try {
-    await authed(secrets, `/api/activity/ingest`, { method: "POST", body: JSON.stringify({ signals }) });
-  } catch {
-    /* best-effort activity capture */
+  const r = await authedRaw<unknown>(secrets, `/api/activity/ingest`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify({ signals }),
+    asTenant,
+  });
+  if (r.status >= 400) {
+    throw Object.assign(new Error(`/api/activity/ingest → HTTP ${r.status} ${r.text.slice(0, 160)}`), { status: r.status });
   }
 }
 
@@ -1167,15 +1295,18 @@ export async function postActivitySignals(
 export async function authedRaw<T>(
   secrets: vscode.SecretStorage,
   path: string,
-  init?: RequestInit,
+  authedInit?: AuthedInit,
 ): Promise<{ status: number; body: T | undefined; text: string }> {
+  const { asTenant, ...init } = authedInit ?? {};
   let token = await exchangeJwt(secrets);
   if (!token) throw new Error("not_signed_in");
-  const call = (t: string) =>
-    fetch(`${getBaseUrl()}${path}`, {
+  const call = (t: string) => {
+    assertActsAs(t, asTenant);
+    return trackReachability(fetch(`${getBaseUrl()}${path}`, {
       ...init,
-      headers: { ...(init?.headers ?? {}), authorization: `Bearer ${t}`, "content-type": "application/json" },
-    });
+      headers: { ...(init.headers ?? {}), authorization: `Bearer ${t}`, "content-type": "application/json" },
+    }));
+  };
   let res = await call(token);
   if (res.status === 401) {
     token = await exchangeJwt(secrets, true);

@@ -1,0 +1,71 @@
+/**
+ * `@builderforce/local-inference` — LOCAL FIRST (CPU/GPU), failover to cloud inference.
+ *
+ * Shared by every client that runs the agent loop on the user's machine (the VS Code
+ * extension today, the Chrome extension next), so "which runtimes exist, what do they
+ * serve, which model may take this turn, and when do we fall back to the cloud" is
+ * answered once:
+ *
+ *  - the runtime REGISTRY (Synapse/bfi, Ollama, FreeToken, Kimi Code) and the
+ *    `local/<runtime>/<model>` ref grammar;
+ *  - a never-throwing PROBE of what each runtime serves and can do;
+ *  - the `CatalogView` binding that makes `@builderforce/model-router` price local at 0;
+ *  - the PLAN (capable local model first, then the cloud) and the FAILOVER rule that
+ *    runs it without ever splicing two answers together.
+ *
+ * Pure and host-neutral: `fetch` is injected, nothing touches Node, `vscode` or
+ * `chrome`. The binding to the shared streamer is brain-embedded's
+ * `localFirstTransport` (`createLocalFirstStream`, `completeLocalFirst`); settings and
+ * endpoint discovery stay with each host.
+ */
+
+export {
+  LOCAL_RUNTIMES,
+  LOCAL_RUNTIME_IDS,
+  isLocalRuntimeId,
+  localRuntime,
+  type LocalEndpoint,
+  type LocalEndpoints,
+  type LocalRuntime,
+  type LocalRuntimeId,
+  type LocalToolSupport,
+} from './runtimes.js';
+export { LOCAL_MODEL_PREFIX, formatLocalModelRef, isLocalModelRef, parseLocalModelRef } from './ref.js';
+export {
+  GATEWAY_COMPLETIONS_PATH,
+  LOCAL_COMPLETIONS_PATH,
+  localAuthHeaders,
+  localChatCompletionsUrl,
+  localModelsUrl,
+  matchLocalChatEndpoint,
+  normalizeLocalBaseUrl,
+  rewriteToLocalUrl,
+} from './endpoint.js';
+export { BFI_DISCOVERY_ENV, BFI_DISCOVERY_RELATIVE_PATH, parseBfiDiscovery } from './discovery.js';
+export {
+  DEFAULT_PROBE_TIMEOUT_MS,
+  createLocalRuntimeProber,
+  probeLocalRuntimes,
+  probedModels,
+  type FetchLike,
+  type LocalModel,
+  type LocalProbeOptions,
+  type LocalRuntimeProbe,
+  type LocalRuntimeProber,
+} from './probe.js';
+export { localCatalogView } from './catalogView.js';
+export {
+  localFirstPlan,
+  localModelUnfitReason,
+  type LocalFirstAttempt,
+  type LocalFirstInput,
+  type LocalFirstWorkload,
+} from './plan.js';
+export {
+  LocalFirstUnavailableError,
+  runLocalFirst,
+  type LocalFirstAttemptRecord,
+  type LocalFirstOutcome,
+  type LocalFirstRunOptions,
+  type LocalFirstRunResult,
+} from './failover.js';

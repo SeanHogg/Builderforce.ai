@@ -1,0 +1,332 @@
+{
+  "extName": {
+    "message": "Rovr – Builderforce-Browserassistent"
+  },
+  "extDescription": {
+    "message": "Ein privater Assistent im Browser, der offline arbeitet, jede Aktion protokolliert und Aufgaben mit Builderforce synchronisiert."
+  },
+  "actionTitle": {
+    "message": "Rovr öffnen"
+  },
+  "commandOpen": {
+    "message": "Rovr öffnen"
+  },
+  "startFailed": {
+    "message": "Rovr konnte nicht starten. Schließen Sie das Panel und öffnen Sie es erneut."
+  },
+  "loading": {
+    "message": "Wird geladen…"
+  },
+  "viewsLabel": {
+    "message": "Rovr-Ansichten"
+  },
+  "tabChat": {
+    "message": "Chat"
+  },
+  "tabTasks": {
+    "message": "Aufgaben"
+  },
+  "tabActions": {
+    "message": "Aktionen"
+  },
+  "tabPlaybooks": {
+    "message": "Playbooks"
+  },
+  "tabSettings": {
+    "message": "Einstellungen"
+  },
+  "statusOffline": {
+    "message": "Offline"
+  },
+  "statusConnected": {
+    "message": "Verbunden"
+  },
+  "statusDeviceOnly": {
+    "message": "Nur dieses Gerät"
+  },
+  "statusWaiting": {
+    "message": "$1 warten auf Synchronisierung"
+  },
+  "newChatTitle": {
+    "message": "Neuer Chat"
+  },
+  "newChat": {
+    "message": "Neuer Chat"
+  },
+  "noChats": {
+    "message": "Noch keine Chats"
+  },
+  "chatPickerLabel": {
+    "message": "Unterhaltung"
+  },
+  "chatEmpty": {
+    "message": "Sagen Sie Rovr, was Sie brauchen – es kann diese Seite lesen, Formulare ausfüllen und festhalten, was es getan hat."
+  },
+  "needModelOrSignIn": {
+    "message": "Kein Modell verfügbar. Melden Sie sich bei Builderforce an oder starten Sie ein Modell auf diesem Gerät (Synapse, Ollama oder FreeToken)."
+  },
+  "runFailed": {
+    "message": "Etwas ist schiefgelaufen: $1"
+  },
+  "signIn": {
+    "message": "Anmelden"
+  },
+  "dismiss": {
+    "message": "Schließen"
+  },
+  "composerLabel": {
+    "message": "Nachricht an Rovr"
+  },
+  "composerPlaceholder": {
+    "message": "Sagen Sie Rovr, was zu tun ist…"
+  },
+  "send": {
+    "message": "Senden"
+  },
+  "stop": {
+    "message": "Stoppen"
+  },
+  "confirmTitle": {
+    "message": "Bestätigen: $1"
+  },
+  "confirmTyping": {
+    "message": "Text:"
+  },
+  "reasonSiteNotAllowed": {
+    "message": "Rovr ist auf dieser Website noch nicht erlaubt."
+  },
+  "reasonSiteNotAllowedNamed": {
+    "message": "Rovr ist auf $1 noch nicht erlaubt."
+  },
+  "reasonSubmit": {
+    "message": "Damit wird ein Formular abgesendet."
+  },
+  "reasonPurchase": {
+    "message": "Das sieht nach einem Kauf oder einer Zahlung aus."
+  },
+  "reasonSend": {
+    "message": "Damit wird eine Nachricht gesendet oder veröffentlicht."
+  },
+  "reasonDestructive": {
+    "message": "Damit wird etwas gelöscht oder gekündigt."
+  },
+  "reasonSensitiveField": {
+    "message": "Das betrifft ein Passwort-, Zahlungs- oder Identitätsfeld."
+  },
+  "reasonUnknownElement": {
+    "message": "Rovr hat sich dieses Element noch nicht angesehen."
+  },
+  "allowOnce": {
+    "message": "Erlauben"
+  },
+  "allowSite": {
+    "message": "Auf $1 erlauben"
+  },
+  "deny": {
+    "message": "Ablehnen"
+  },
+  "toolRead": {
+    "message": "Seite lesen"
+  },
+  "toolFind": {
+    "message": "Elemente finden"
+  },
+  "toolClick": {
+    "message": "Klicken"
+  },
+  "toolType": {
+    "message": "Eingeben"
+  },
+  "toolScroll": {
+    "message": "Scrollen"
+  },
+  "toolNavigate": {
+    "message": "Seite öffnen"
+  },
+  "toolWait": {
+    "message": "Auf die Seite warten"
+  },
+  "toolScreenshot": {
+    "message": "Screenshot aufnehmen"
+  },
+  "toolListTabs": {
+    "message": "Tabs auflisten"
+  },
+  "toolSwitchTab": {
+    "message": "Tab wechseln"
+  },
+  "toolAddTask": {
+    "message": "Aufgabe hinzufügen"
+  },
+  "toolOther": {
+    "message": "Werkzeug verwenden"
+  },
+  "taskQueued": {
+    "message": "Wartet auf Synchronisierung"
+  },
+  "taskSynced": {
+    "message": "Mit Builderforce synchronisiert"
+  },
+  "taskLocalOnly": {
+    "message": "Nur auf diesem Gerät – wählen Sie in den Einstellungen ein Projekt, um Aufgaben zu synchronisieren"
+  },
+  "taskAddLabel": {
+    "message": "Neue Aufgabe"
+  },
+  "taskAddPlaceholder": {
+    "message": "Aufgabe zu diesem Chat hinzufügen"
+  },
+  "taskAdd": {
+    "message": "Hinzufügen"
+  },
+  "refresh": {
+    "message": "Aktualisieren"
+  },
+  "tasksEmpty": {
+    "message": "Noch keine Aufgaben in diesem Chat."
+  },
+  "actionsEmpty": {
+    "message": "Rovr hat in diesem Chat noch auf keiner Seite gehandelt."
+  },
+  "actionsLabel": {
+    "message": "Aktionen von Rovr"
+  },
+  "outcomeDone": {
+    "message": "Erledigt"
+  },
+  "outcomeFailed": {
+    "message": "Fehlgeschlagen"
+  },
+  "outcomeDeclined": {
+    "message": "Abgelehnt"
+  },
+  "screenshotAlt": {
+    "message": "Screenshot von $1"
+  },
+  "playbooksIntro": {
+    "message": "Sagen Sie Rovr, wie Dinge erledigt werden sollen. Passt eine Anfrage, folgt Rovr Ihren Schritten. Playbooks werden über Ihr Chrome-Profil synchronisiert."
+  },
+  "playbookTrigger": {
+    "message": "Wenn ich sage…"
+  },
+  "playbookTriggerPlaceholder": {
+    "message": "meine Spesen einreichen"
+  },
+  "playbookSteps": {
+    "message": "Tu Folgendes…"
+  },
+  "playbookStepsPlaceholder": {
+    "message": "Öffne die Spesen-Website, füge jeden Beleg aus meinem Posteingang hinzu und halte vor dem Absenden an."
+  },
+  "playbookSite": {
+    "message": "Nur auf dieser Website (optional)"
+  },
+  "playbookSitePlaceholder": {
+    "message": "beispiel.de"
+  },
+  "playbookInvalid": {
+    "message": "Ein Playbook braucht einen Auslöser und Schritte."
+  },
+  "playbookSave": {
+    "message": "Playbook speichern"
+  },
+  "playbookUpdate": {
+    "message": "Playbook aktualisieren"
+  },
+  "cancel": {
+    "message": "Abbrechen"
+  },
+  "playbooksEmpty": {
+    "message": "Noch keine Playbooks."
+  },
+  "playbookEnabled": {
+    "message": "Aktiv"
+  },
+  "edit": {
+    "message": "Bearbeiten"
+  },
+  "delete": {
+    "message": "Löschen"
+  },
+  "accountHeading": {
+    "message": "Builderforce-Konto"
+  },
+  "signedIn": {
+    "message": "Angemeldet. Chats, Aktionen und Aufgaben werden mit Ihrem Workspace synchronisiert."
+  },
+  "signedOutHint": {
+    "message": "Nicht angemeldet. Rovr funktioniert weiterhin mit einem Modell auf diesem Gerät; melden Sie sich an, um Cloud-Modelle zu nutzen und Ihre Chats zu synchronisieren."
+  },
+  "signInCode": {
+    "message": "Ihr Code: $1"
+  },
+  "signInWaiting": {
+    "message": "Bestätigen Sie ihn im gerade geöffneten Tab."
+  },
+  "signOut": {
+    "message": "Abmelden"
+  },
+  "signInUnavailable": {
+    "message": "Die Anmeldung ist gerade nicht möglich. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
+  },
+  "signInDenied": {
+    "message": "Die Anmeldung wurde abgelehnt."
+  },
+  "signInExpired": {
+    "message": "Der Anmeldecode ist abgelaufen. Versuchen Sie es erneut."
+  },
+  "signInCancelled": {
+    "message": "Anmeldung abgebrochen."
+  },
+  "signInFailed": {
+    "message": "Die Anmeldung ist fehlgeschlagen. Versuchen Sie es erneut."
+  },
+  "sitesHeading": {
+    "message": "Erlaubte Websites"
+  },
+  "sitesIntro": {
+    "message": "Rovr kann nur Websites lesen und bedienen, die Sie erlauben. Es fragt, wenn es eine zum ersten Mal braucht."
+  },
+  "sitesEmpty": {
+    "message": "Noch keine Websites erlaubt."
+  },
+  "remove": {
+    "message": "Entfernen"
+  },
+  "removeSiteLabel": {
+    "message": "$1 entfernen"
+  },
+  "localHeading": {
+    "message": "Modelle auf diesem Gerät"
+  },
+  "localIntro": {
+    "message": "Rovr nutzt zuerst ein Modell auf Ihrem Computer und greift bei Bedarf auf die Cloud-Modelle von Builderforce zurück."
+  },
+  "localProbing": {
+    "message": "Lokale Modelle werden gesucht…"
+  },
+  "localModels": {
+    "message": "$1 Modelle"
+  },
+  "localNotRunning": {
+    "message": "Läuft nicht"
+  },
+  "synapseAddress": {
+    "message": "Synapse-Adresse"
+  },
+  "tasksHeading": {
+    "message": "Aufgaben"
+  },
+  "taskProjectLabel": {
+    "message": "Neue Aufgaben ablegen in"
+  },
+  "taskProjectNone": {
+    "message": "Aufgaben auf diesem Gerät behalten"
+  },
+  "reportErrors": {
+    "message": "Fehlerberichte an Builderforce senden"
+  },
+  "reportErrorsHint": {
+    "message": "Nur der Fehler und wo er auftrat – niemals Seiteninhalte oder Ihre Nachrichten."
+  }
+}

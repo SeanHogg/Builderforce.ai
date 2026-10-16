@@ -1,10 +1,22 @@
 import * as vscode from "vscode";
 import nodeFs from "node:fs";
+import nodeOs from "node:os";
+import nodePath from "node:path";
 import { productForPlan, type ModelIdentityContext } from "@seanhogg/builderforce-brain-embedded";
-import { type LocalEndpoint, type LocalModelsConfig, type LocalProviderId } from "./localModels";
+import {
+  BFI_DISCOVERY_ENV,
+  BFI_DISCOVERY_RELATIVE_PATH,
+  localRuntime,
+  normalizeLocalBaseUrl,
+  parseBfiDiscovery,
+  type LocalEndpoint,
+  type LocalRuntimeId,
+} from "@builderforce/local-inference";
+import { type LocalModelsConfig } from "./localModels";
 import { readDesktopModelsEndpoint } from "./desktopContext";
 import { isKimiCodeInstall, loadKimiCodeInstall, type KimiCodeInstallResult } from "./kimiCodeInstall";
 import { ensureFreshKimiToken } from "./kimiCodeAuth";
+import { createDurableOutbox, outboxSecrets, trackReachability } from "./outboxStorage";
 
 /** Single source of truth for the SecretStorage key (DRY). */
 export const SECRET_KEY = "builderforce.apiKey";
@@ -42,12 +54,6 @@ export function getApiKey(secrets: vscode.SecretStorage): Thenable<string | unde
 }
 
 /**
- * The on-device runtime settings (`builderforce.localModels.*`), read HERE with the
- * other configuration accessors so `localModels.ts` stays free of `vscode` and testable
- * in the harness. Single source of truth: every surface that offers or dispatches a
- * local model reads this.
- */
-/**
  * The Kimi Code install, memoized for a short window. Discovery is synchronous disk
  * I/O (config.toml + the credential file), and three readers ask for it per proxied
  * request — the model list, the endpoint authorizer and the picker's unavailable-reason
@@ -71,6 +77,50 @@ export function invalidateKimiInstallMemo(): void {
   kimiInstallMemo = undefined;
 }
 
+/**
+ * Synapse's native engine (`bfi serve`), the third on-device runtime. Unlike Ollama and
+ * FreeToken it has no fixed port — it starts at 11434 and walks upward when Ollama holds
+ * it — so it is DISCOVERED, the way Kimi Code is:
+ *
+ *  1. the `builderforce.localModels.synapseUrl` setting, when set (a bfi on another
+ *     machine, or a non-default bind);
+ *  2. the desktop app's `desktop.json` `models.endpoint` (the app supervises `bfi serve`);
+ *  3. bfi's own announcement, `~/.builderforce/bfi.json` — a bare `bfi serve` with no
+ *     desktop app.
+ *
+ * The api key comes from discovery even when the URL comes from the setting, as long as
+ * both name the same server: a user who typed the URL should not also have to copy a
+ * key out of a file. A machine with none of the three contributes no endpoint.
+ */
+function resolveSynapseEndpoint(configuredUrl: string): LocalEndpoint | null {
+  const discovered = readDesktopModelsEndpoint() ?? readBfiDiscovery();
+  const configured = configuredUrl.trim();
+  if (!configured) return discovered;
+  const token =
+    discovered?.token && normalizeLocalBaseUrl(discovered.baseUrl) === normalizeLocalBaseUrl(configured)
+      ? discovered.token
+      : undefined;
+  return { baseUrl: configured, ...(token ? { token } : {}) };
+}
+
+/** `~/.builderforce/bfi.json` (or `$BFI_DISCOVERY`), parsed; null when absent/invalid.
+ *  Synchronous like `readDesktopModelsEndpoint`, so the config read stays synchronous. */
+function readBfiDiscovery(): LocalEndpoint | null {
+  const override = process.env[BFI_DISCOVERY_ENV]?.trim();
+  const file = override || nodePath.join(nodeOs.homedir(), ...BFI_DISCOVERY_RELATIVE_PATH.split("/"));
+  try {
+    return parseBfiDiscovery(JSON.parse(nodeFs.readFileSync(file, "utf8")));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The on-device runtime settings (`builderforce.localModels.*`), read HERE with the
+ * other configuration accessors so `localModels.ts` stays free of `vscode` and testable
+ * in the harness. Single source of truth: every surface that offers or dispatches a
+ * local model reads this.
+ */
 export function getLocalModelsConfig(): LocalModelsConfig {
   const cfg = vscode.workspace.getConfiguration("builderforce");
   // Kimi Code is not configured, it is DISCOVERED: the user already signed in with its
@@ -78,24 +128,22 @@ export function getLocalModelsConfig(): LocalModelsConfig {
   // them to re-enter any of that would be asking for something they have already given.
   // A machine without it simply contributes no endpoint and no rows.
   const kimi = currentKimiInstall();
-  // Synapse is DISCOVERED from desktop.json (`models.endpoint`), not a setting —
-  // same shape as Kimi Code, different file. A machine without it contributes
-  // no endpoint and is probed as empty.
-  const synapse = readDesktopModelsEndpoint();
+  const synapse = resolveSynapseEndpoint(cfg.get<string>("localModels.synapseUrl") ?? "");
   return {
     enabled: cfg.get<boolean>("localModels.enabled") === true,
+    // Default ON once local inference is enabled: "local first, failover to cloud" is
+    // the product behaviour, and an explicit model pick still wins over it.
+    localFirst: cfg.get<boolean>("localModels.localFirst") !== false,
     endpoints: {
-      ollama: { baseUrl: cfg.get<string>("localModels.ollamaUrl") || "http://127.0.0.1:11434" },
-      freetoken: { baseUrl: cfg.get<string>("localModels.freetokenUrl") || "http://127.0.0.1:1919" },
+      ollama: { baseUrl: cfg.get<string>("localModels.ollamaUrl") || localRuntime("ollama").defaultBaseUrl! },
+      freetoken: { baseUrl: cfg.get<string>("localModels.freetokenUrl") || localRuntime("freetoken").defaultBaseUrl! },
       // Endpoint only — deliberately NO token. Kimi's access tokens last fifteen minutes,
       // so a credential captured into this synchronous config would routinely be stale by
       // the time it was sent; it is resolved instead at the moment of the request by
       // {@link authorizeLocalEndpoint}. The happy side effect is that the credential never
       // sits inside a config object that gets passed around and logged.
       ...(isKimiCodeInstall(kimi) ? { "kimi-code": { baseUrl: kimi.baseUrl } } : {}),
-      ...(synapse
-        ? { synapse: { baseUrl: synapse.baseUrl, ...(synapse.token ? { token: synapse.token } : {}) } }
-        : {}),
+      ...(synapse ? { synapse } : {}),
     },
     ...(isKimiCodeInstall(kimi) ? { kimiCodeModels: kimi.models } : {}),
   };
@@ -113,7 +161,7 @@ export function getLocalModelsConfig(): LocalModelsConfig {
  * signed-out editor able to run a local turn.
  */
 export async function authorizeLocalEndpoint(
-  provider: LocalProviderId,
+  provider: LocalRuntimeId,
   endpoint: LocalEndpoint,
 ): Promise<{ ok: true; endpoint: LocalEndpoint } | { ok: false; detail: string }> {
   if (provider !== "kimi-code") return { ok: true, endpoint };
@@ -537,19 +585,37 @@ export async function complete(
 }
 
 /**
+ * Settled run outcomes waiting to reach learned routing — durable, so a run finished
+ * offline still teaches the router once the gateway answers. Replays are safe: the
+ * endpoint is idempotent on the outcome's `clientRunId`. A refusal (4xx) is dropped.
+ */
+const runOutcomes = createDurableOutbox<object>("run-outcomes", {
+  maxItems: 1,
+  maxWaitMs: 0,
+  send: async (_lane, [outcome]) => {
+    const key = await getApiKey(await outboxSecrets());
+    if (!key) throw new Error("no gateway key");
+    const res = await trackReachability(fetch(`${getBaseUrl()}/llm/v1/run-outcome`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+      body: JSON.stringify(outcome),
+    }));
+    if (!res.ok) throw Object.assign(new Error(`run-outcome → HTTP ${res.status}`), { status: res.status });
+  },
+  // Scoped to the editor KEY's tenant (gateway calls act as the key, whatever workspace
+  // is selected): outcomes queued under one key are parked, not sent with another.
+}, "key");
+
+/**
  * Report a settled run's outcome to learned routing (`POST /llm/v1/run-outcome`, the
  * `RUN_OUTCOME_PATH` of `@builderforce/learned-routing`), so a run in the editor teaches
  * the router which connected model codes best, exactly as a cloud run does. Same gateway
- * credential as a completion. Best-effort: resolves either way, never throws.
+ * credential as a completion. Queued in a durable outbox: resolves at once, never throws,
+ * and an outcome that cannot be sent now is sent when the gateway is reachable again,
+ * with the credential bound at activation.
  */
-export async function postRunOutcome(secrets: vscode.SecretStorage, outcome: object): Promise<void> {
-  const key = await getApiKey(secrets);
-  if (!key) return;
-  await fetch(`${getBaseUrl()}/llm/v1/run-outcome`, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-    body: JSON.stringify(outcome),
-  }).catch(() => undefined);
+export async function postRunOutcome(outcome: object): Promise<void> {
+  runOutcomes.enqueue("run", outcome);
 }
 
 /**

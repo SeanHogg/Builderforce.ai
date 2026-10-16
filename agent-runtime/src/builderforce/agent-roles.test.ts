@@ -1,5 +1,12 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { findAgentRole, CODE_CREATOR_ROLE } from "./agent-roles.js";
+import { isModelRole } from "@builderforce/agent-tools";
+import {
+  AGENT_ROLE_MODEL_ROLES,
+  CODE_CREATOR_ROLE,
+  findAgentRole,
+  getBuiltInAgentRoles,
+  modelRoleForAgentRole,
+} from "./agent-roles.js";
 import { globalPersonaRegistry } from "./personas.js";
 import type { AgentRole } from "./types.js";
 
@@ -113,5 +120,40 @@ describe("agent-roles", () => {
     expect(findAgentRole("temp-role")).toBeNull();
     // Built-in still works
     expect(findAgentRole("code-creator")).toBe(CODE_CREATOR_ROLE);
+  });
+});
+
+describe("orchestrator role → ModelRole (AGENT_ROLE_MODEL_ROLES)", () => {
+  it("maps EVERY built-in role onto a shared call purpose", () => {
+    for (const role of getBuiltInAgentRoles()) {
+      expect(isModelRole(modelRoleForAgentRole(role.name)), role.name).toBe(true);
+    }
+    // …and lists nothing that is not a built-in role.
+    const builtIns = new Set(getBuiltInAgentRoles().map((r) => r.name));
+    for (const name of Object.keys(AGENT_ROLE_MODEL_ROLES)) {
+      expect(builtIns.has(name), name).toBe(true);
+    }
+  });
+
+  it("writes code as code, reviews as verify, designs as plan", () => {
+    expect(modelRoleForAgentRole("code-creator")).toBe("code");
+    expect(modelRoleForAgentRole("refactor-agent")).toBe("code");
+    expect(modelRoleForAgentRole("code-reviewer")).toBe("verify");
+    expect(modelRoleForAgentRole("validator-agent")).toBe("verify");
+    expect(modelRoleForAgentRole("architecture-advisor")).toBe("plan");
+    expect(modelRoleForAgentRole("bug-analyzer")).toBe("plan");
+  });
+
+  it("declares no purpose for a persona, a remote target or nothing", () => {
+    expect(modelRoleForAgentRole("my-custom-agent")).toBeUndefined();
+    expect(modelRoleForAgentRole("remote:auto")).toBeUndefined();
+    expect(modelRoleForAgentRole("toString")).toBeUndefined();
+    expect(modelRoleForAgentRole(undefined)).toBeUndefined();
+  });
+
+  it("pins no model on a built-in role — the router chooses, the operator may override", () => {
+    for (const role of getBuiltInAgentRoles()) {
+      expect(role.model, role.name).toBeUndefined();
+    }
   });
 });

@@ -1,14 +1,21 @@
 /**
- * The analysis→code hand-off, as it appears on the wire.
+ * The analysis→code hand-off, as it appears on the wire and as the coder is told it.
  *
  * When an auto-routed run's planning turn reaches for its first code change, the loop
  * discards that turn and re-asks the SAME turn, from the same transcript, with role
- * `code` (see `brainRunStore.ts`). A request with role `code` straight after one with
- * role `plan` is that re-ask — a run's role only ever moves from plan to code there.
+ * `code` (the `code_change_attempted` event in `./policy.ts` decides when). Every host
+ * that plans before it codes makes that re-ask, so both halves of it live here rather
+ * than in whichever loop happened to write them first (the browser Brain's run store).
+ * Pure.
+ */
+
+/**
+ * A request with role `code` straight after one with role `plan` is the re-ask — a
+ * run's role only ever moves from plan to code there.
  *
  * Exported so a scripted gateway can recognise the re-ask and replay the current step
  * instead of advancing its script: a real coding model, handed the same transcript,
- * makes the same move. Pure.
+ * makes the same move.
  */
 export function isCoderReask(role: string | undefined, previousRole: string | undefined): boolean {
   return role === 'code' && previousRole === 'plan';

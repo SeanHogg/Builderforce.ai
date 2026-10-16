@@ -46,6 +46,7 @@ import { parseClientReasoningIntent } from '../../application/llm/reasoningCapab
 import { readUsageWorkHints, resolveUsageWorkHints, type UsageWorkHints } from '../../application/llm/usageWorkHints';
 import { normalizeByoProvider, resolvePaidOverflowCapMillicents, resolvePremiumDailyCapMillicents, isPremiumCapExhausted, PREMIUM_REQUEST_SURCHARGE_MILLICENTS } from '../../application/llm/usageLedger';
 import { classifyReplyAccount } from '../../application/llm/replyProvenance';
+import { composeSelfHostedCredential, isLocalRuntimeProvider } from '../../application/llm/selfHostedCredential';
 import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../../application/activity/activityLog';
 import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage, backfillTraceResponseBody, imageTraceResult } from '../../application/llm/traceLogger';
@@ -87,6 +88,15 @@ import {
   type ActionType,
 } from '@builderforce/learned-routing';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { createCacheIdempotencyStore } from '../../infrastructure/cache/idempotencyReplayStore';
+import {
+  decideReplay,
+  IDEMPOTENCY_KEY_HEADER,
+  IDEMPOTENT_REPLAY_HEADER,
+  isStorableStatus,
+  parseIdempotencyKey,
+  requestFingerprint,
+} from '../../application/shared/idempotentReplay';
 import {
   buildBuilderInsightsSnapshot,
   getCachedBuilderInsightsSnapshot,
@@ -273,9 +283,6 @@ function logProviderAuthAlerts(
  *  `llmProduct` accepts any product label — chat (`builderforceLLM*`) or
  *  image (`builderforceImage*`) — since the DB column is `varchar(32)` and
  *  this function is the single insert site shared by both surfaces. */
-/** KV key for an idempotency-replay cache entry [1232] — tenant-scoped so keys
- *  never collide across tenants. Value: `{ status, body }` of the original 2xx. */
-const idempotencyCacheKey = (tenantId: number, key: string): string => `idem:${tenantId}:${key}`;
 
 // Fire-and-forget usage write. Takes the RecordUsageRow object directly (named
 // fields) — was 14 positional params, refactored to an options object so adding
@@ -1544,25 +1551,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
     const body = await parseOptionalBody(c, ProviderKeyBody);
 
-    // `ollama-local` stores a composed `<apiKey>::<baseUrl>::<model>` sentinel (see
-    // `ollamaLocal.ts`) instead of a bare credential — baseUrl/model are REQUIRED
-    // (apiKey is not: self-hosted Ollama commonly has no auth), and neither may
-    // contain the `::` separator (a stray one would desync `splitSentinel`).
-    if (provider === 'ollama-local') {
-      const baseUrl = body.baseUrl?.trim();
-      const model = body.model?.trim();
-      const apiKey = body.apiKey?.trim() ?? '';
-      if (!baseUrl) return c.json({ error: 'baseUrl is required' }, 400);
-      if (!model) return c.json({ error: 'model is required' }, 400);
-      let parsedUrl: URL;
-      try { parsedUrl = new URL(baseUrl); } catch { return c.json({ error: 'baseUrl must be a valid URL' }, 400); }
-      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-        return c.json({ error: 'baseUrl must be http or https' }, 400);
-      }
-      if (baseUrl.includes('::') || model.includes('::') || apiKey.includes('::')) {
-        return c.json({ error: 'baseUrl, model, and apiKey may not contain "::"' }, 400);
-      }
-      await setTenantProviderKey(c.env, access.tenantId, provider, `${apiKey}::${baseUrl}::${model}`, access.userId);
+    // A self-hosted runtime (`credential: 'local_runtime'` in the shared provider data —
+    // self-hosted Ollama, FreeToken) stores the composed `<apiKey>::<baseUrl>::<model>`
+    // its vendor splits back apart, never a bare key. See `selfHostedCredential.ts`.
+    if (isLocalRuntimeProvider(provider)) {
+      const credential = composeSelfHostedCredential(body);
+      if (!credential.ok) return c.json({ error: credential.error }, 400);
+      await setTenantProviderKey(c.env, access.tenantId, provider, credential.value, access.userId);
       await clearProviderAuthAlert(c.env, access.tenantId, provider);
       return c.json({ ok: true, provider });
     }
@@ -2109,7 +2104,18 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // validated against THIS tenant (see `usageWorkHints`). Without it every gateway
     // and image row lands with a NULL ticket and vanishes from the cost rollups.
     const workHints = await resolveWorkHints(c, access, callerMetadata);
-    const idempotencyKey = c.req.header('Idempotency-Key') ?? null;
+    // The ONE key grammar (`application/shared/idempotentReplay.ts`) — the same the
+    // `idempotentReplay` middleware enforces on the outbox-replayed writes.
+    const parsedIdempotencyKey = parseIdempotencyKey(c.req.header(IDEMPOTENCY_KEY_HEADER));
+    if (parsedIdempotencyKey === 'invalid') {
+      return c.json({ error: `${IDEMPOTENCY_KEY_HEADER} must be 1-128 visible ASCII characters`, code: 'idempotency_key_invalid' }, 400);
+    }
+    const idempotencyKey = parsedIdempotencyKey;
+    // This handler cannot sit behind the middleware (a streamed answer is not storable,
+    // and an un-replayable retry must still meet the usage-log 409 guard below), so it
+    // uses the middleware's store PORT and policy directly — one implementation.
+    const idempotencyStore = createCacheIdempotencyStore(c.env);
+    const idempotencyFingerprint = requestFingerprint(c.req.method, c.req.path);
 
     // ── Strict-pin entitlement gate ─────────────────────────────────────────
     // Strict pin = dispatch ONLY the named `model`, NO substitution; an
@@ -2200,25 +2206,25 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if ('blocked' in capResult) return capResult.blocked;
     const { usageToday, planDailyLimit, usageMonth, planMonthlyLimit } = capResult;
 
-    // ── Idempotency-Key replay (10-min window) ──────────────────────────────
+    // ── Idempotency-Key replay (shared store; 10-min usage-log guard) ───────
     // First choice: REPLAY the cached original response body (200) so a cron
     // retry gets the original answer transparently [1232]. Fallback (no cached
     // body — e.g. the original was streamed, or is still in-flight, or KV is
     // unbound): the DB no-op guard returns 409 so the retry can't double-charge.
     if (idempotencyKey) {
-      const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
-      if (kv) {
-        try {
-          const cached = await kv.get(idempotencyCacheKey(access.tenantId, idempotencyKey), 'json') as
-            | { status: number; body: unknown } | null;
-          if (cached) {
-            return c.json(cached.body as Record<string, unknown>, (cached.status as 200), {
-              'x-builderforce-idempotent-replay': 'true',
-            });
-          }
-        } catch (error) { /* KV miss/error → fall through to the no-op guard */ 
-          reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
+      try {
+        const decision = decideReplay(await idempotencyStore.get(access.tenantId, idempotencyKey), idempotencyFingerprint);
+        if (decision.kind === 'replay') {
+          return new Response(decision.response.body, {
+            status: decision.response.status,
+            headers: {
+              'content-type': decision.response.contentType ?? 'application/json',
+              [IDEMPOTENT_REPLAY_HEADER]: 'true',
+            },
+          });
         }
+      } catch (error) { /* store miss/error → fall through to the no-op guard */
+        reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
       }
       const tenMinAgo = new Date(Date.now() - 10 * 60_000);
       const db = buildTransactionalDatabase(c.env);
@@ -2294,11 +2300,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // What kind of call this is, for the usage row — validated so a client can never write
     // an arbitrary string into the ledger. The proxy reads the same field to order the seed.
     const bodyRole = isModelRole(bodyAny.role) ? bodyAny.role : null;
-    // What each connected model has actually delivered in THIS role (finest scope with
-    // evidence). Read only when it can change the order: the tenant has an account to
-    // order, and the role is one the system chooses for — `roleRoutingStats` returns
-    // nothing for analysis and chat, which keep the tenant's order. Cached blob reads.
-    const roleStats = bodyRole && tenantCreds.configuredProviders.length > 0
+    // What each model has actually delivered in THIS role (finest scope with evidence).
+    // Orders the tenant's connected accounts AND the plan pool, so it is read with or
+    // without a connected provider — but only for a role the system chooses for:
+    // `roleRoutingStats` returns nothing for analysis and chat, which keep the tenant's
+    // order. Cached blob reads.
+    const roleStats = bodyRole
       ? await roleRoutingStats(c.env, requestDb(c), {
           tenantId: access.tenantId,
           projectId: workHints.projectId ?? null,
@@ -2602,21 +2609,20 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const responseStatus = result.response.status as 200;
     // Cache the successful body so a retry with the same Idempotency-Key REPLAYS
     // it (200) rather than getting a 409 [1232] — transparent cron retries.
-    // Non-streaming 2xx only; 10-min TTL matches the replay-guard window.
-    // Fire-and-forget — never delays the response; KV-absent → the 409 guard.
-    if (idempotencyKey && responseStatus < 300) {
-      const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
-      if (kv) {
-        c.executionCtx.waitUntil(
-          kv.put(
-            idempotencyCacheKey(access.tenantId, idempotencyKey),
-            JSON.stringify({ status: responseStatus, body: responseEnvelope }),
-            { expirationTtl: 600 },
-          ).catch((error) => { /* cache write is best-effort */ 
-            reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
-          }),
-        );
-      }
+    // Non-streaming 2xx only, through the shared idempotency store (TTL
+    // `IDEMPOTENCY_TTL_SECONDS`). Fire-and-forget — never delays the response;
+    // store-absent → the 409 guard.
+    if (idempotencyKey && isStorableStatus(responseStatus)) {
+      c.executionCtx.waitUntil(
+        idempotencyStore.put(access.tenantId, idempotencyKey, {
+          fingerprint: idempotencyFingerprint,
+          status: responseStatus,
+          body: JSON.stringify(responseEnvelope),
+          contentType: 'application/json',
+        }).catch((error) => { /* cache write is best-effort */
+          reportCaughtError(error, { source: "presentation/routes/llmRoutes.ts", operation: "createLlmRoutes" });
+        }),
+      );
     }
     return c.json(responseEnvelope, responseStatus);
   });

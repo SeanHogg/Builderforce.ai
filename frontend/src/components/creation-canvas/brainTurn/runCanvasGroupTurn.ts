@@ -4,6 +4,7 @@ import { canvasTranscriptForModel } from '@/lib/canvasTranscript';
 import { canvasProjectId, canvasProjectNodes } from '@/lib/canvasProjectRef';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
 import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
+import { readChosenCanvasPhase } from '@/lib/canvasPhases';
 import { projectMemoryHooks } from '@seanhogg/builderforce-brain-embedded';
 import { apiRequest } from '@/lib/apiClient';
 import { teachProjectEvermindFromText } from '@/lib/projectEvermindApi';
@@ -45,6 +46,9 @@ function canvasActionConfirmer({ confirm, t }: Pick<CanvasGroupTurnContext, 'con
 /** Run the turn's model loops and resolve with the Brain's answer. */
 export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<string> {
   const { appendTimeline, autoApplyRef, brainId, brainRuntimeRef, canvasActions, canvasNotices, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journalRef, memoryEnabled, modelSelection, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setBrainTrace, setModelSelection, setNodes, signal, stage, t, timeline, title, turnSnapshot, turnToolCallsRef, turnUnansweredRef } = ctx;
+  // The phase someone CHOSE for this canvas is the arc stage the gateway nudges its
+  // role/cost ordering by; undefined (never chosen) sends nothing rather than a default.
+  const arcStage = readChosenCanvasPhase(sessionId);
   const confirmCanvasAction = canvasActionConfirmer(ctx);
   // Stop is honoured between every phase of the turn, not only inside the model
   // stream: a run interrupted while the invited agents are replying must not go
@@ -111,6 +115,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
           guestTurnId: requestMessageId,
           guestTurnInput: request,
           persistence, canvasActions: persistence === 'server' ? [] : canvasActions, notices: canvasNotices, routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+          ...(arcStage ? { arcStage } : {}),
           autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
           disabledModels: brainRuntimeRef.current.disabledModels,
           onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
@@ -157,6 +162,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
     projectId: evermindProjectId,
     ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
     routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+    ...(arcStage ? { arcStage } : {}),
     autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
     disabledModels: brainRuntimeRef.current.disabledModels,
     onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,

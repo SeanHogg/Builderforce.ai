@@ -53,6 +53,10 @@
       "@builderforce/ide-templates": ["../../../packages/ide-templates/src/index.ts"],
       "@builderforce/canvas-widget-protocol": ["../../../packages/canvas-widget-protocol/src/index.ts"],
       "@builderforce/agent-tools/symbols": ["../../../packages/agent-tools/src/symbols.ts"],
+      "@builderforce/model-catalog": ["../../../packages/model-catalog/src/index.ts"],
+      "@builderforce/run-policy": ["../../../packages/run-policy/src/index.ts"],
+      "@builderforce/agent-stall": ["../../../packages/agent-stall/src/index.ts"],
+      "@builderforce/agent-tools": ["../../../packages/agent-tools/src/index.ts"],
       // The three Next couplings, resolved to the shims the bundler also uses —
       // so types and runtime agree on what `useTranslations` / `useRouter` are.
       "next-intl": ["./src/shims/next-intl.ts"],

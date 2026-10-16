@@ -1,6 +1,7 @@
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { logDebug, logWarn } from "../logger.js";
 import { resolveAgentConfig, resolveAgentModelPrimary } from "./agent-scope.js";
+import { resolveAnthropicShortAlias } from "./anthropic-models.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
 import type { ModelCatalogEntry } from "./model-catalog.js";
 import { normalizeGoogleModelId } from "./models-config.providers.js";
@@ -17,12 +18,6 @@ export type ModelAliasIndex = {
   byKey: Map<string, string[]>;
 };
 
-const ANTHROPIC_MODEL_ALIASES: Record<string, string> = {
-  "opus-4.6": "claude-opus-4-6",
-  "opus-4.5": "claude-opus-4-5",
-  "sonnet-4.6": "claude-sonnet-4-6",
-  "sonnet-4.5": "claude-sonnet-4-5",
-};
 const OPENAI_CODEX_OAUTH_MODEL_PREFIXES = ["gpt-5.3-codex"] as const;
 
 function normalizeAliasKey(value: string): string {
@@ -94,8 +89,8 @@ function normalizeAnthropicModelId(model: string): string {
   if (!trimmed) {
     return trimmed;
   }
-  const lower = trimmed.toLowerCase();
-  return ANTHROPIC_MODEL_ALIASES[lower] ?? trimmed;
+  // `opus-5.5` → `claude-opus-5-5`, by rule (see `anthropic-models.ts`).
+  return resolveAnthropicShortAlias(trimmed) ?? trimmed;
 }
 
 function normalizeProviderModelId(provider: string, model: string): string {

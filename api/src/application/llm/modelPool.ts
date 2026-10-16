@@ -32,6 +32,7 @@ import {
 import {
   byoVendorIdsFromCredentials,
 } from './tenantProviderKeyService';
+import { BYO_VENDOR_IDS } from './llmProviderCatalog';
 import type { EffectivePlan } from '../../domain/tenant/effectivePlan';
 import { tierRank } from '@builderforce/model-catalog';
 
@@ -264,20 +265,19 @@ export const CODING_DEFAULT_MODEL: string =
  *
  * This list names VENDORS, never models — a model release moves the vendor's `flagships`
  * and nothing here. It is the SINGLE SOURCE for both {@link providerFrontierFlagship} and
- * the coder-recognition superset {@link RECOGNIZED_CODER_MODELS}: adding a BYO vendor here
- * makes its flagship recognised as a coder automatically. That closes the drift that mislabelled
- * `direct/meta/muse-spark-1.1` (Meta MUSE, a coder) as a "degraded onto a non-coder
- * backstop" — only Anthropic's direct floor had been hand-added to CODING_MODEL_POOL.
+ * the coder-recognition superset {@link RECOGNIZED_CODER_MODELS}. That closes the drift that
+ * mislabelled `direct/meta/muse-spark-1.1` (Meta MUSE, a coder) as a "degraded onto a
+ * non-coder backstop" — only Anthropic's direct floor had been hand-added to CODING_MODEL_POOL.
+ *
+ * It is DERIVED from the BYO provider catalog ({@link BYO_VENDOR_IDS}: every vendor a
+ * connected account can dispatch on, both auth modes) rather than hand-listed beside it —
+ * the hand list had already needed `kimi-code` added after a Kimi-funded run reported as
+ * degraded. A vendor with no declared `flagships` (the self-hosted `ollama-local` /
+ * `freetoken`, Ollama Cloud) contributes nothing, because {@link vendorFlagship} answers
+ * null for it; so connecting a new provider whose vendor declares flagships makes them
+ * lead auto-select and count as coders with no edit here.
  */
-const BYO_FLAGSHIP_VENDORS: readonly string[] = [
-  'anthropic', 'openai', 'openai-codex', 'xai-oauth', 'googleai', 'meta', 'moonshot',
-  // A Kimi Code subscription funds a real coder, so a run on it must not report as
-  // "degraded onto a non-coder backstop" — which is what its absence here meant, since
-  // this list is also the source for RECOGNIZED_CODER_MODELS. It leads auto-select only
-  // for a tenant who connected Kimi; when their runtime is offline the edge 403 is a
-  // `not_entitled` failover like any other and the cascade moves on.
-  'kimi-code', 'qwen', 'minimax', 'xai',
-];
+const BYO_FLAGSHIP_VENDORS: readonly string[] = BYO_VENDOR_IDS;
 
 function providerFrontierFlagship(vendor: string, agentic: boolean): string | null {
   return BYO_FLAGSHIP_VENDORS.includes(vendor) ? vendorFlagship(vendor, agentic) : null;

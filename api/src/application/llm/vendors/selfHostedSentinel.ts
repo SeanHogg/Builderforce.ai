@@ -25,7 +25,8 @@ export interface SelfHostedConnection {
   model: string;
 }
 
-const SEPARATOR = '::';
+/** The separator between the three fields — exported so the WRITER (`selfHostedCredential.ts`) composes exactly what {@link splitSelfHostedSentinel} reads. */
+export const SELF_HOSTED_SEPARATOR = '::';
 
 /**
  * Split `<apiKey>::<baseUrl>::<model>` apart, or throw {@link VendorFatalError} when the
@@ -44,15 +45,15 @@ export function splitSelfHostedSentinel(vendorId: VendorId, raw: string): SelfHo
       `malformed ${vendorId} sentinel (expected "<apiKey>::<baseUrl>::<model>")`,
     );
   };
-  const i = raw.indexOf(SEPARATOR);
+  const i = raw.indexOf(SELF_HOSTED_SEPARATOR);
   if (i < 0) return malformed();
-  const rest = raw.slice(i + SEPARATOR.length);
-  const j = rest.indexOf(SEPARATOR);
+  const rest = raw.slice(i + SELF_HOSTED_SEPARATOR.length);
+  const j = rest.indexOf(SELF_HOSTED_SEPARATOR);
   if (j < 0) return malformed();
   return {
     apiKey: raw.slice(0, i),
     baseUrl: rest.slice(0, j),
-    model: rest.slice(j + SEPARATOR.length),
+    model: rest.slice(j + SELF_HOSTED_SEPARATOR.length),
   };
 }
 

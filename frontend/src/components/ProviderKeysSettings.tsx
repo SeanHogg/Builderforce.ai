@@ -26,6 +26,7 @@ import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { REPLAY_BLOCK } from '@/lib/replaySensitive';
+import { LLM_PROVIDER_INFO, isLlmProvider, llmProviderInfo, type LlmProviderInfo } from '@builderforce/model-catalog';
 /**
  * BYO (bring-your-own-provider) credentials. A workspace owner connects their OWN
  * frontier-model accounts — Anthropic, OpenAI, and/or Google — and the platform
@@ -41,40 +42,23 @@ import { REPLAY_BLOCK } from '@/lib/replaySensitive';
  * the `providerKeys` namespace; brand names + key formats stay literal.
  */
 
-interface ProviderConfig {
-  id: LlmProvider;
-  /** Display name of the provider — a brand, kept literal (not translated). */
-  label: string;
-  /** Placeholder / format hint for the API-key input — literal. */
-  keyPlaceholder: string;
-  /** Provider supports connecting a consumer subscription via OAuth. */
-  supportsOauth: boolean;
-  /**
-   * How that OAuth connect FINISHES. `paste` (the default) ends with the operator copying
-   * a code back from the provider's page; `device` has nothing to copy — the code rides in
-   * the URL — and is completed by polling.
-   *
-   * Declared here rather than read off the start response so the card renders the right
-   * affordance deterministically: a device provider ships no paste copy, so falling into
-   * that branch would render raw translation keys at the operator.
-   */
-  oauthGrant?: 'paste' | 'device';
-}
+/**
+ * One provider's card config — the SHARED provider data (`@builderforce/model-catalog`:
+ * brand, key placeholder, whether a subscription connect exists and how it finishes),
+ * never a list restated here. Only `label` is host-shaped: a self-hosted runtime's brand
+ * gets the localized "self-hosted" qualifier ({@link providerLabel}).
+ */
+type ProviderConfig = LlmProviderInfo;
 
-const PROVIDERS: ProviderConfig[] = [
-  { id: 'anthropic', label: 'Anthropic (Claude)', keyPlaceholder: 'sk-ant-…', supportsOauth: true },
-  { id: 'openai',    label: 'OpenAI',             keyPlaceholder: 'sk-…',     supportsOauth: true },
-  { id: 'google',    label: 'Google (Gemini)',    keyPlaceholder: 'AIza…',   supportsOauth: false },
-  { id: 'meta',      label: 'Meta AI (MUSE)',     keyPlaceholder: 'meta-…',  supportsOauth: false },
-  // Kimi Code issues no API key at all — its own config leaves `api_key` empty beside an
-  // OAuth record — so this connects by device-code redirect, never by paste.
-  { id: 'kimi',      label: 'Kimi',                keyPlaceholder: 'sk-…',    supportsOauth: true, oauthGrant: 'device' },
-  { id: 'moonshot',  label: 'Moonshot AI',         keyPlaceholder: 'sk-…',    supportsOauth: false },
-  { id: 'qwen',      label: 'Qwen',                keyPlaceholder: 'sk-…',    supportsOauth: false },
-  { id: 'minimax',   label: 'MiniMax',             keyPlaceholder: 'sk-…',    supportsOauth: false },
-  { id: 'xai',       label: 'xAI (Grok)',           keyPlaceholder: 'xai-…',   supportsOauth: true },
-  { id: 'ollama',    label: 'Ollama Cloud',         keyPlaceholder: 'sk-…',    supportsOauth: false },
-];
+/**
+ * The key-connect grid: every provider whose credential is a pasted key. Self-hosted
+ * runtimes (`local_runtime`) are configured by base URL + model, not a key, so they get
+ * their own form instead of a card here.
+ */
+const PROVIDERS: readonly ProviderConfig[] = LLM_PROVIDER_INFO.filter((p) => p.credential === 'api_key');
+
+/** The self-hosted runtimes — each gets the ONE {@link LocalRuntimeConnectionCard} form. */
+const LOCAL_RUNTIMES: readonly ProviderConfig[] = LLM_PROVIDER_INFO.filter((p) => p.credential === 'local_runtime');
 
 /**
  * How long the card waits for a device approval before giving up.
@@ -129,20 +113,19 @@ function formatUsd(millicents: number): string {
   return `$${usd >= 0.01 || usd === 0 ? usd.toFixed(2) : usd.toFixed(4)}`;
 }
 
-/** Provider display label by id — literal brand names (not translated). */
-const PROVIDER_LABEL: Record<LlmProvider, string> = {
-  anthropic: 'Anthropic (Claude)',
-  openai: 'OpenAI',
-  google: 'Google (Gemini)',
-  meta: 'Meta AI (MUSE)',
-  kimi: 'Kimi',
-  moonshot: 'Moonshot AI',
-  qwen: 'Qwen',
-  minimax: 'MiniMax',
-  xai: 'xAI (Grok)',
-  ollama: 'Ollama Cloud',
-  'ollama-local': 'Ollama (self-hosted)',
-};
+/**
+ * Display label for a provider — the literal brand, except a self-hosted runtime, whose
+ * brand alone would read as the hosted product ("Ollama" vs "Ollama Cloud"), so it carries
+ * the localized qualifier. THE one formatter every surface on this page uses.
+ */
+function providerLabel(info: LlmProviderInfo, t: TFn): string {
+  return info.credential === 'local_runtime' ? t('selfHostedLabel', { brand: info.label }) : info.label;
+}
+
+/** {@link providerLabel} as a card config — the shared data with its display label. */
+function providerConfig(info: LlmProviderInfo, t: TFn): ProviderConfig {
+  return { ...info, label: providerLabel(info, t) };
+}
 
 /**
  * Display label for ONE precedence entry — the single formatter the drawer list, the
@@ -154,9 +137,9 @@ const PROVIDER_LABEL: Record<LlmProvider, string> = {
  * tenant whose #1 was an OpenRouter connection saw the chip claim "Priority · Anthropic",
  * i.e. the account ranked SECOND.
  */
-function precedenceEntryLabel(entry: ByoPrecedenceEntry): string {
+function precedenceEntryLabel(entry: ByoPrecedenceEntry, t: TFn): string {
   return entry.kind === 'provider'
-    ? PROVIDER_LABEL[entry.provider]
+    ? providerLabel(llmProviderInfo(entry.provider), t)
     : `OpenRouter · ${entry.connection.label} (${entry.connection.models.length})`;
 }
 
@@ -166,12 +149,13 @@ function precedenceEntryLabel(entry: ByoPrecedenceEntry): string {
 function precedenceLeaderLabel(
   entries: readonly ByoPrecedenceEntry[],
   refs: readonly string[],
+  t: TFn,
 ): string | null {
   const leader = refs[0];
   if (!leader) return null;
   const entry = entries.find((e) => e.ref === leader);
-  if (entry) return precedenceEntryLabel(entry);
-  return PROVIDER_LABEL[leader as LlmProvider] ?? leader;
+  if (entry) return precedenceEntryLabel(entry, t);
+  return isLlmProvider(leader) ? providerLabel(llmProviderInfo(leader), t) : leader;
 }
 
 /**
@@ -368,7 +352,7 @@ function useProviderDisconnect(t: TFn) {
   const confirm = useConfirm();
   return async (config: ProviderConfig, authType: ProviderAuthType | null): Promise<boolean> => {
     const message = authType === 'oauth'
-      ? t('confirmRemoveSubscription', { subscription: config.supportsOauth ? t(`provider.${config.id}.subscription`) : config.label })
+      ? t('confirmRemoveSubscription', { subscription: config.subscription !== null ? t(`provider.${config.id}.subscription`) : config.label })
       : t('confirmRemoveKey', { label: config.label });
     if (!(await confirm({ message, destructive: true }))) return false;
     await providerKeysApi.remove(config.id);
@@ -440,7 +424,7 @@ function ProviderConnectionCard({
 
   const configured = authType !== null;
   const blurb = t(`provider.${config.id}.blurb`);
-  const subscription = config.supportsOauth ? t(`provider.${config.id}.subscription`) : '';
+  const subscription = config.subscription !== null ? t(`provider.${config.id}.subscription`) : '';
 
   const saveKey = async () => {
     const apiKey = draft.trim();
@@ -598,13 +582,13 @@ function ProviderConnectionCard({
       </div>
 
       {/* ── Subscription connect (OAuth) — Anthropic only ─────────────────── */}
-      {config.supportsOauth && (
+      {config.subscription !== null && (
         <>
           {!connecting ? (
             <button type="button" onClick={startConnect} disabled={busy} style={{ ...buttonPrimary, opacity: busy ? 0.5 : 1 }}>
               {busy ? t('working') : authType === 'oauth' ? t('reconnect', { subscription }) : t('connect', { subscription })}
             </button>
-          ) : config.oauthGrant === 'device' ? (
+          ) : config.subscription === 'device' ? (
             /* Device grant: the code already travelled in the URL, so there is nothing to
                paste. Show it so the operator can check the page they landed on shows the
                same one, and wait — the poll finishes the connect on its own. */
@@ -683,29 +667,36 @@ function ProviderConnectionCard({
 }
 
 /**
- * Self-hosted Ollama's connect card — a dedicated form (base URL + the ONE model this
- * connection dispatches to + an optional key) rather than the single-apiKey
- * {@link ProviderConnectionCard}, because a self-hosted instance has no fixed
- * catalog: the tenant names both where it lives and which model to call, exactly
- * like a `direct/azure-openai/<deployment>` connection names one Azure deployment.
+ * A self-hosted runtime's connect card — ONE form for every provider whose shared data
+ * says `credential: 'local_runtime'` (self-hosted Ollama, FreeToken): base URL + the ONE
+ * model this connection dispatches to + an optional key, rather than the single-apiKey
+ * {@link ProviderConnectionCard}, because a self-hosted instance has no fixed catalog —
+ * the tenant names both where it lives and which model to call, exactly like a
+ * `direct/azure-openai/<deployment>` connection names one Azure deployment. Copy is
+ * shared (`localRuntime.*`, parameterised by brand); the example address and model come
+ * from the provider's `localRuntime` hints.
  *
  * Reuses the same status chip / Test button / diagnostic plumbing as every other
- * provider card — `providerKeysApi.status('ollama-local')` and `.test('ollama-local')`
- * are generic over `LlmProvider` and need no special casing there.
+ * provider card — `providerKeysApi.status` and `.test` are generic over `LlmProvider`.
  */
-function OllamaLocalConnectionCard({
+function LocalRuntimeConnectionCard({
+  config,
   configured,
   onChange,
   onHealthChange,
   t,
 }: {
+  config: ProviderConfig;
   configured: boolean;
   onChange: (authType: ProviderAuthType | null) => void;
   onHealthChange: (alert: ProviderAuthAlert | null) => void;
   t: TFn;
 }) {
   const errorMessage = useErrorMessage();
-  const config: ProviderConfig = { id: 'ollama-local', label: t('ollamaLocal.title'), keyPlaceholder: '', supportsOauth: false };
+  // The bare brand for sentences ("your self-hosted Ollama instance"); `config.label`
+  // already carries the "(self-hosted)" qualifier for titles.
+  const brand = llmProviderInfo(config.id).label;
+  const hints = config.localRuntime;
   const [baseUrl, setBaseUrl] = useState('');
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -718,8 +709,8 @@ function OllamaLocalConnectionCard({
   const runProbe = useProbeRunner(t);
 
   const loadDiagnostic = useCallback(
-    () => providerKeysApi.status('ollama-local').then(setDiagnostic).catch((e: Error) => setError(errorMessage(e))),
-    [errorMessage],
+    () => providerKeysApi.status(config.id).then(setDiagnostic).catch((e: Error) => setError(errorMessage(e))),
+    [config.id, errorMessage],
   );
   // `configured` is a re-read trigger: saving or removing the endpoint changes the status.
   useEffect(() => { void loadDiagnostic(); }, [loadDiagnostic, configured]);
@@ -727,7 +718,7 @@ function OllamaLocalConnectionCard({
   const testConnection = async () => {
     setTesting(true); setTestResult(null); setError(null);
     try {
-      const { verdict, result } = await runProbe(config.label, () => providerKeysApi.test('ollama-local'));
+      const { verdict, result } = await runProbe(config.label, () => providerKeysApi.test(config.id));
       setTestResult(verdict);
       if (!result) return;
       onHealthChange(result.authAlert ?? null);
@@ -741,7 +732,7 @@ function OllamaLocalConnectionCard({
     if (!url || !modelId) return;
     setBusy(true); setError(null);
     try {
-      await providerKeysApi.setOllamaLocal(url, modelId, apiKey.trim() || undefined);
+      await providerKeysApi.setLocalRuntime(config.id, url, modelId, apiKey.trim() || undefined);
       onChange('api_key');
       setBaseUrl(''); setModel(''); setApiKey('');
     } catch (e) {
@@ -765,8 +756,8 @@ function OllamaLocalConnectionCard({
   return (
     <div style={cardStyle}>
       <div style={sectionTitle}>{config.label}</div>
-      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 8px' }}>{t('ollamaLocal.blurb')}</p>
-      <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('ollamaLocal.hostNote')}</p>
+      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 8px' }}>{t('localRuntime.blurb', { brand })}</p>
+      <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('localRuntime.hostNote', { brand })}</p>
 
       <div style={{ padding: 12, marginBottom: 14, borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
         <ProviderHealthHeader diagnostic={diagnostic} configured={configured} testing={testing} onTest={testConnection} t={t} />
@@ -795,34 +786,34 @@ function OllamaLocalConnectionCard({
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
-          {t('ollamaLocal.baseUrlLabel')}
+          {t('localRuntime.baseUrlLabel')}
           <input
             type="text"
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder={t('ollamaLocal.baseUrlPlaceholder')}
+            placeholder={hints?.defaultBaseUrl ?? ''}
             disabled={busy}
             style={{ ...inputStyle, marginTop: 5 }}
           />
         </label>
         <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
-          {t('ollamaLocal.modelLabel')}
+          {t('localRuntime.modelLabel')}
           <input
             type="text"
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            placeholder={t('ollamaLocal.modelPlaceholder')}
+            placeholder={hints?.exampleModel ? t('localRuntime.modelPlaceholder', { model: hints.exampleModel }) : t('localRuntime.modelPlaceholderGeneric', { brand })}
             disabled={busy}
             style={{ ...inputStyle, marginTop: 5 }}
           />
         </label>
         <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
-          {t('ollamaLocal.apiKeyLabel')}
+          {t('localRuntime.apiKeyLabel')}
           <input
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder={t('ollamaLocal.apiKeyPlaceholder')}
+            placeholder={t('localRuntime.apiKeyPlaceholder')}
             disabled={busy}
             style={{ ...inputStyle, marginTop: 5 }}
           />
@@ -1146,9 +1137,15 @@ export function ProviderKeysSettings({
   const [error, setError] = useState<string | null>(null);
   const [activeProvider, setActiveProvider] = useState<LlmProvider | null>(null);
   const [openRouterOpen, setOpenRouterOpen] = useState(false);
-  const [ollamaLocalOpen, setOllamaLocalOpen] = useState(false);
+  const [openLocalRuntime, setOpenLocalRuntime] = useState<LlmProvider | null>(null);
   const [usageByProvider, setUsageByProvider] = useState<Partial<Record<LlmProvider, { tokens: number }>>>({});
-  const visibleProviders = PROVIDERS.filter((p) => !search.trim() || `${p.label} ${p.id}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const matchesSearch = (p: ProviderConfig) => !search.trim() || `${p.label} ${p.id}`.toLowerCase().includes(search.trim().toLowerCase());
+  const visibleProviders = PROVIDERS.filter(matchesSearch);
+  // Self-hosted runtimes keep their own form (base URL + model), but their names and
+  // search match come from the same shared provider data as every other card.
+  const localRuntimes = LOCAL_RUNTIMES.map((p) => providerConfig(p, t));
+  const visibleLocalRuntimes = localRuntimes.filter(matchesSearch);
+  const activeLocalRuntime = localRuntimes.find((p) => p.id === openLocalRuntime) ?? null;
 
   // Rejected-account notices keyed by provider, from the LIST read — so an operator
   // sees "this account isn't being used" on the grid without having to open each
@@ -1189,7 +1186,7 @@ export function ProviderKeysSettings({
         setPrecedenceEntries(precedenceResult.entries);
         const refs = precedenceResult.entries.map((entry) => entry.ref);
         setOrder(refs);
-        onLeaderChange?.(precedenceLeaderLabel(precedenceResult.entries, refs));
+        onLeaderChange?.(precedenceLeaderLabel(precedenceResult.entries, refs, t));
       })
       .catch((e: Error) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
@@ -1208,7 +1205,7 @@ export function ProviderKeysSettings({
 
   const persistOrder = async (next: string[]) => {
     setOrder(next); // optimistic
-    onLeaderChange?.(precedenceLeaderLabel(precedenceEntries, next));
+    onLeaderChange?.(precedenceLeaderLabel(precedenceEntries, next, t));
     try {
       await providerKeysApi.setPriority(next);
     } catch (e) {
@@ -1242,7 +1239,7 @@ export function ProviderKeysSettings({
     const nextOrder = authType === null ? order.filter((id) => id !== provider)
       : order.includes(provider) ? order
       : [...order, provider];
-    onLeaderChange?.(precedenceLeaderLabel(precedenceEntries, nextOrder));
+    onLeaderChange?.(precedenceLeaderLabel(precedenceEntries, nextOrder, t));
   };
 
   /** Disconnect OpenRouter as a whole — the card states ONE connected/not-connected fact for
@@ -1257,7 +1254,7 @@ export function ProviderKeysSettings({
   const brokenConnections = openRouterConnections.filter((connection) => connection.authAlert).length;
 
   const precedenceLabels: Record<string, string> = Object.fromEntries(
-    precedenceEntries.map((entry) => [entry.ref, precedenceEntryLabel(entry)]),
+    precedenceEntries.map((entry) => [entry.ref, precedenceEntryLabel(entry, t)]),
   );
 
   return (
@@ -1304,36 +1301,36 @@ export function ProviderKeysSettings({
                 </div>
               </ClickableCard>
             )}
-            {(!search.trim() || 'ollama self-hosted local'.includes(search.trim().toLowerCase())) && (
-              <ClickableCard ariaLabel={t('ollamaLocal.title')} onClick={() => setOllamaLocalOpen(true)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
+            {visibleLocalRuntimes.map((runtime) => (
+              <ClickableCard key={runtime.id} ariaLabel={runtime.label} onClick={() => setOpenLocalRuntime(runtime.id)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={sectionTitle}>{t('ollamaLocal.title')}</div>
-                  <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('ollamaLocal.cardBlurb')}</div>
-                  {alertByProvider['ollama-local'] && <AuthAlertNotice alert={alertByProvider['ollama-local']!} t={t} />}
+                  <div style={sectionTitle}>{runtime.label}</div>
+                  <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('localRuntime.cardBlurb', { brand: llmProviderInfo(runtime.id).label })}</div>
+                  {alertByProvider[runtime.id] && <AuthAlertNotice alert={alertByProvider[runtime.id]!} t={t} />}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <ProviderStatusChip
-                    label={t('ollamaLocal.title')}
-                    subscription={t('ollamaLocal.title')}
-                    authType={authByProvider['ollama-local'] ?? null}
-                    {...(alertByProvider['ollama-local'] ? { alert: alertByProvider['ollama-local']! } : {})}
+                    label={runtime.label}
+                    subscription={runtime.label}
+                    authType={authByProvider[runtime.id] ?? null}
+                    {...(alertByProvider[runtime.id] ? { alert: alertByProvider[runtime.id]! } : {})}
                     t={t}
                     style={{ flex: 1, minWidth: 0, whiteSpace: 'normal' }}
                   />
                   <ConnectToggleButton
-                    connected={authByProvider['ollama-local'] != null}
-                    name={t('ollamaLocal.title')}
-                    onConnect={() => setOllamaLocalOpen(true)}
+                    connected={authByProvider[runtime.id] != null}
+                    name={runtime.label}
+                    onConnect={() => setOpenLocalRuntime(runtime.id)}
                     onDisconnect={async () => {
                       if (await disconnectProvider(
-                        { id: 'ollama-local', label: t('ollamaLocal.title'), keyPlaceholder: '', supportsOauth: false },
-                        authByProvider['ollama-local'] ?? null,
-                      )) applyAuthChange('ollama-local', null);
+                        runtime,
+                        authByProvider[runtime.id] ?? null,
+                      )) applyAuthChange(runtime.id, null);
                     }}
                   />
                 </div>
               </ClickableCard>
-            )}
+            ))}
             {visibleProviders.map((p) => (
               <ClickableCard key={p.id} ariaLabel={p.label} onClick={() => setActiveProvider(p.id)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 }}>
@@ -1362,7 +1359,7 @@ export function ProviderKeysSettings({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <ProviderStatusChip
                     label={p.label}
-                    subscription={p.supportsOauth ? t(`provider.${p.id}.subscription`) : p.label}
+                    subscription={p.subscription !== null ? t(`provider.${p.id}.subscription`) : p.label}
                     authType={authByProvider[p.id] ?? null}
                     {...(alertByProvider[p.id] ? { alert: alertByProvider[p.id]! } : {})}
                     t={t}
@@ -1414,20 +1411,24 @@ export function ProviderKeysSettings({
             </div>
           </SlideOutPanel>
 
-          <SlideOutPanel open={ollamaLocalOpen} onClose={() => setOllamaLocalOpen(false)} title={t('ollamaLocal.title')} widthStorageKey="provider-ollama-local">
-            <div style={{ padding: 20 }}>
-              <OllamaLocalConnectionCard
-                configured={authByProvider['ollama-local'] != null}
-                t={t}
-                onHealthChange={(alert) => setAlertByProvider((prev) => {
-                  const next = { ...prev };
-                  if (alert) next['ollama-local'] = alert; else delete next['ollama-local'];
-                  return next;
-                })}
-                onChange={(authType) => applyAuthChange('ollama-local', authType)}
-              />
-            </div>
-          </SlideOutPanel>
+          {activeLocalRuntime && (
+            <SlideOutPanel open onClose={() => setOpenLocalRuntime(null)} title={activeLocalRuntime.label} widthStorageKey="provider-local-runtime">
+              <div style={{ padding: 20 }}>
+                <LocalRuntimeConnectionCard
+                  key={activeLocalRuntime.id}
+                  config={activeLocalRuntime}
+                  configured={authByProvider[activeLocalRuntime.id] != null}
+                  t={t}
+                  onHealthChange={(alert) => setAlertByProvider((prev) => {
+                    const next = { ...prev };
+                    if (alert) next[activeLocalRuntime.id] = alert; else delete next[activeLocalRuntime.id];
+                    return next;
+                  })}
+                  onChange={(authType) => applyAuthChange(activeLocalRuntime.id, authType)}
+                />
+              </div>
+            </SlideOutPanel>
+          )}
 
           <SlideOutPanel open={priorityOpen} onClose={() => onPriorityClose?.()} title={t('precedence.title')} widthStorageKey="provider-precedence">
             <div style={{ padding: 20 }}>

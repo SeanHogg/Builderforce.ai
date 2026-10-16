@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.10.32",
+  "version": "2026.10.33",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -800,6 +800,16 @@
           "type": "string",
           "default": "http://127.0.0.1:1919",
           "markdownDescription": "%config.localModels.freetokenUrl.desc%"
+        },
+        "builderforce.localModels.synapseUrl": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "%config.localModels.synapseUrl.desc%"
+        },
+        "builderforce.localModels.localFirst": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.localModels.localFirst.desc%"
         },
         "builderforce.permissionMode": {
           "type": "string",

@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import { createOutbox } from "@builderforce/write-outbox";
 import * as bfApi from "./bfApi";
+import { createDurableOutbox, outboxSecrets, scopeTenantId } from "./outboxStorage";
 
 /**
  * Editor-side activity capture.
@@ -9,28 +9,29 @@ import * as bfApi from "./bfApi";
  * heartbeats while the editor is focused, file-open navigations, and any explicit
  * signal feature code emits via `trackVsix(...)`. Batched and flushed to
  * POST /api/activity/ingest (tenant-JWT), where they resolve into billable time.
- * Best-effort: capture never disrupts the editor.
+ * Capture never disrupts the editor, and it is not lost to a dropped connection: the
+ * queue is durable (see `outboxStorage.ts`), so time recorded offline is billed once the
+ * platform answers again — exactly once, because every batch replays under its own
+ * `Idempotency-Key`.
  */
-
-let secretsRef: vscode.SecretStorage | undefined;
 
 /** The editor's one activity stream. */
 const VSIX_STREAM = "vsix";
 
 /**
- * Signals go through the shared write outbox: a full queue (25) leaves at once, and
- * otherwise a batch waits up to five minutes. Every signal carries its own
- * `occurredAt`/`durationSeconds`, so five minutes of heartbeats in one POST records
- * exactly the same time — it only stops a focused editor from writing to the platform
- * every minute. {@link coalesceSignals} then folds the adjacent duplicates, so the
- * same five minutes is also one ROW.
+ * Signals go through the shared write outbox, in its durable mode: a full queue (25)
+ * leaves at once, and otherwise a batch waits up to five minutes. Every signal carries
+ * its own `occurredAt`/`durationSeconds`, so five minutes of heartbeats in one POST
+ * records exactly the same time — it only stops a focused editor from writing to the
+ * platform every minute. {@link coalesceSignals} then folds the adjacent duplicates, so
+ * the same five minutes is also one ROW. A batch that fails is kept and retried.
  */
-const signals = createOutbox<bfApi.VsixActivitySignal>({
+const signals = createDurableOutbox<bfApi.VsixActivitySignal>("activity", {
   maxItems: 25,
   maxWaitMs: 5 * 60_000,
   coalesce: (batch) => coalesceSignals(batch),
-  send: async (_stream, batch) => {
-    if (secretsRef) await bfApi.postActivitySignals(secretsRef, batch);
+  send: async (_stream, batch, ctx) => {
+    await bfApi.postActivitySignals(await outboxSecrets(), batch, ctx.idempotencyKey, scopeTenantId(ctx.scope));
   },
 });
 
@@ -86,11 +87,11 @@ export function coalesceSignals(signals: bfApi.VsixActivitySignal[]): bfApi.Vsix
 /**
  * Start editor activity capture. Emits a heartbeat every 60s WHILE the window is
  * focused (so idle time isn't billed) and a nav signal on the active file changing;
- * the outbox above owns batching and flushing. Returns a Disposable for the extension's
+ * the outbox above owns batching, flushing and replay, and sends with the credential
+ * bound at activation (`bindOutboxStorage`). Returns a Disposable for the extension's
  * subscriptions.
  */
-export function initActivity(secrets: vscode.SecretStorage): vscode.Disposable {
-  secretsRef = secrets;
+export function initActivity(): vscode.Disposable {
   const disposables: vscode.Disposable[] = [];
 
   // Heartbeat while focused — a 60s active-time span.
@@ -110,6 +111,8 @@ export function initActivity(secrets: vscode.SecretStorage): vscode.Disposable {
   return new vscode.Disposable(() => {
     clearInterval(heartbeat);
     disposables.forEach((d) => d.dispose());
-    void signals.flush();
+    // Deactivating: start every queued batch now. Whatever does not land stays in the
+    // durable store and replays next session.
+    void signals.flush(undefined, { final: true });
   });
 }

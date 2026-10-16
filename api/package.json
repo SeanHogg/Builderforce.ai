@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.10.39",
+  "version": "2026.10.40",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -57,7 +57,9 @@
     "backfill:byo-usage": "node scripts/backfill-byo-usage.mjs",
     "check:burnrate-parity": "node scripts/check-burnrate-parity.mjs",
     "gen:agent-relay": "node scripts/gen-agent-relay-source.mjs",
-    "check:agent-relay": "node scripts/gen-agent-relay-source.mjs --check"
+    "check:agent-relay": "node scripts/gen-agent-relay-source.mjs --check",
+    "gen:agent-loop": "node scripts/gen-agent-loop-bundle.mjs",
+    "check:agent-loop": "node scripts/gen-agent-loop-bundle.mjs --check"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",

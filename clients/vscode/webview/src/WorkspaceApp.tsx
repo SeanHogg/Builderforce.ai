@@ -26,7 +26,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { IntlProvider } from 'use-intl';
 import catalogs from 'virtual:bf-canvas-messages';
-import { BrainProvider, type BrainConfig, type BrainPersistenceAdapter, type BrainTransport } from '@seanhogg/builderforce-brain-embedded';
+import { BrainProvider, localTransport, type BrainConfig, type BrainPersistenceAdapter, type BrainTransport } from '@seanhogg/builderforce-brain-embedded';
 import { CreationCanvas } from '@/components/creation-canvas/CreationCanvas';
 import { ToastProvider } from '@/components/ToastProvider';
 import { ConfirmProvider } from '@/components/ConfirmProvider';
@@ -41,7 +41,6 @@ import { installHostRunDriver } from './hostRunDriver';
 import { CanvasBoundary } from './CanvasBoundary';
 import { HostScopeProviders } from './canvas/HostScopeProviders';
 import { buildIdeSystemPrompt } from './systemPrompt';
-import { rewriteToLocalUrl } from '../../src/localModels';
 import { onHostMessage } from './vscodeBridge';
 import { makeT } from './chat/chatLabels';
 import { VsCodeChatSurface } from './chat/VsCodeChatSurface';
@@ -290,13 +289,10 @@ function ChatRuntimeProvider({ init, children }: { init: InitData; children: Rea
       // produced the text has no bearing on where the text is kept. Signed out there is
       // no account to keep it in, so the conversation lives in this panel and nowhere
       // else — and is gone when it closes.
+      // The SHARED local transport (brain-embedded `localTransport`): the same rewrite
+      // and null-token rule the host's runs use, with the host's fetch lent to it.
       transport: init.localRoute
-        ? {
-            baseUrl: init.localRoute.baseUrl,
-            getToken: () => null,
-            defaultModel: init.localRoute.model,
-            fetch: (input: string, requestInit: RequestInit) => hostFetch(rewriteToLocalUrl(input), requestInit),
-          }
+        ? { ...localTransport({ baseUrl: init.localRoute.baseUrl }, hostFetch), defaultModel: init.localRoute.model }
         : gatewayTransport,
       persistence: signedOut
         ? memoryStore(makeT(init.labels))

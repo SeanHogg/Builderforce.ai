@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { delegationRole } from '@builderforce/agent-tools';
-import { pickCloudModel } from './LlmProxyService';
+import { codingModelsForPlan, pickCloudModel } from './LlmProxyService';
 import { orderForRole as orderForRoleIn, resolveRoleObjective, roleUsesLearnedRanking } from '@builderforce/model-router';
 import { REGISTRY_CATALOG_VIEW } from './catalogView';
 import { rankConnectedForRole } from './modelRoles';
@@ -116,6 +116,17 @@ describe('pickCloudModel — role over precedence', () => {
       actionStats: [{ model: OPUS, n: 40, avgScore: 0.95, avgCostMc: 10 }],
     });
     expect(pick.model).not.toBe(OPUS);
+  });
+
+  it('a priced cost-first role seeds the cheapest plan coder; a code role keeps the curated lead', () => {
+    const pool = codingModelsForPlan('pro');
+    expect(pool.length).toBeGreaterThan(1);
+    const cheapest = pool[pool.length - 1]!;
+    const prices = {
+      priceOf: (m: string) => (m === cheapest ? { input: 1e-9, output: 1e-9 } : { input: 1e-5, output: 4e-5 }),
+    };
+    expect(pickCloudModel(undefined, 'pro', false, { role: 'explore', prices }).model).toBe(cheapest);
+    expect(pickCloudModel(undefined, 'pro', false, { role: 'code', prices }).model).toBe(pool[0]);
   });
 });
 

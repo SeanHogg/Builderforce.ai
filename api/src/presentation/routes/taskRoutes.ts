@@ -6,6 +6,7 @@ import { TaskStatus, TaskType } from '../../domain/shared/types';
 import { ConflictError } from '../../domain/shared/errors';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requestActor, requireRole } from '../middleware/authMiddleware';
+import { idempotentReplay } from '../middleware/idempotentReplay';
 import { requirePermission } from '../middleware/requirePermission';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { TenantRole } from '../../domain/shared/types';
@@ -759,7 +760,9 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   });
 
   // POST /api/tasks
-  router.post('/', requirePermission(PERMISSIONS.TASK_WRITE), async (c) => {
+  // Replayable from a client's durable outbox (Rovr files tasks offline): idempotent on
+  // `Idempotency-Key`, so a create whose answer was lost is never made twice.
+  router.post('/', requirePermission(PERMISSIONS.TASK_WRITE), idempotentReplay(), async (c) => {
     const body = await parseBody(c, CreateTaskBody);
     // WHO opened it, resolved from the request and handed to the service — which is
     // where the ONE creation-attribution row is now written (`activity/taskCreated.ts`).

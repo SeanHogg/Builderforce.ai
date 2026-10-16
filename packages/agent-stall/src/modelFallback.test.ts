@@ -121,6 +121,15 @@ describe('chooseStallFailover', () => {
     expect(tried).toEqual(['grok']);
   });
 
+  it('honours a host-configured budget in place of the default', () => {
+    expect(chooseStallFailover({
+      resolvedModel: 'grok', tried: [], failoversUsed: 0, maxFailovers: 0, surface,
+    })).toBeUndefined();
+    expect(chooseStallFailover({
+      resolvedModel: 'grok', tried: [], failoversUsed: MAX_MODEL_FAILOVERS, maxFailovers: MAX_MODEL_FAILOVERS + 1, surface,
+    })).toBe('byo-coder');
+  });
+
   it('never offers a model the run already burned, even from a host-supplied picker', () => {
     // `pick` comes from outside this package; a host that ignores `tried` must not be
     // able to put the run back on the model that just failed.

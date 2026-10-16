@@ -11615,6 +11615,10 @@
       "open-source-at-builderforce": {
         "title": "Open Source bei Builderforce — vier Projekte, die Sie ausführen, lesen und forken können",
         "description": "Builderforce steht auf vier MIT-Projekten, die jeder ohne uns nutzen kann: eine Entwicklungs-Runtime im Browser, im Browser trainierbares Agenten-Gedächtnis, eine lokale Inferenz-Engine mit Desktop-App und ein Roblox-Spielebaukasten. Was jedes davon tut und was es Ihnen bringt."
+      },
+      "rovr-your-assistant-in-the-browser": {
+        "title": "Das ist Rovr – ein privater Assistent im Browser, der sich merkt, was er getan hat",
+        "description": "Ihr Builderforce-Agent konnte im Editor programmieren und auf einem Canvas bauen, aber nicht in dem Tab helfen, in dem der Großteil Ihres Tages stattfindet. Rovr ist eine Chrome-Erweiterung, die die Seite liest, Aufgaben auf erlaubten Websites erledigt, zuerst auf Ihrem eigenen Rechner läuft, offline funktioniert und jede Aktion und Aufgabe mit Ihrem Chat synchronisiert."
       }
     }
   },
@@ -15842,15 +15846,15 @@
         "blurb": "Fügen Sie einen Ollama-Cloud-API-Schlüssel ein, um Open-Weight-Modelle (GPT-OSS, Kimi, GLM, DeepSeek, Qwen, Gemma) über Ihr eigenes Ollama-Konto auszuführen."
       }
     },
-    "ollamaLocal": {
-      "title": "Ollama (selbst gehostet)",
-      "cardBlurb": "Verbinden Sie eine selbst gehostete Ollama-Instanz, die auf Ihrem eigenen Rechner oder Netzwerk läuft.",
-      "blurb": "Leiten Sie Cloud-Agent-Ausführungen an Ihre eigene, selbst gehostete Ollama-Instanz statt an einen gehosteten Anbieter weiter.",
-      "hostNote": "Anfragen werden über Ihre verbundene Builderforce-Runtime weitergeleitet — die Basis-URL unten muss daher die Ollama-Adresse sein, die diese Runtime selbst erreichen kann (in der Regel ihr eigener Localhost) — und diese Runtime muss Ollama bereits konfiguriert haben, damit der Aufruf zugelassen wird.",
+    "selfHostedLabel": "{brand} (selbst gehostet)",
+    "localRuntime": {
+      "cardBlurb": "Verbinden Sie eine selbst gehostete {brand}-Instanz, die auf Ihrem eigenen Rechner oder Netzwerk läuft.",
+      "blurb": "Leiten Sie Cloud-Agent-Ausführungen an Ihre eigene, selbst gehostete {brand}-Instanz statt an einen gehosteten Anbieter weiter.",
+      "hostNote": "Anfragen werden über Ihre verbundene Builderforce-Runtime weitergeleitet — die Basis-URL unten muss daher die {brand}-Adresse sein, die diese Runtime selbst erreichen kann (in der Regel ihr eigener Localhost) — und diese Runtime muss {brand} bereits konfiguriert haben, damit der Aufruf zugelassen wird.",
       "baseUrlLabel": "Basis-URL",
-      "baseUrlPlaceholder": "http://127.0.0.1:11434",
       "modelLabel": "Modell",
-      "modelPlaceholder": "z. B. llama3.1:8b",
+      "modelPlaceholder": "z. B. {model}",
+      "modelPlaceholderGeneric": "Die Modell-ID, die Ihre {brand}-Instanz bereitstellt",
       "apiKeyLabel": "API-Schlüssel (optional)",
       "apiKeyPlaceholder": "Nur falls Ihre Instanz einen benötigt"
     },
