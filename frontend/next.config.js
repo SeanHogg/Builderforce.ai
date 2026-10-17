@@ -184,6 +184,10 @@ const nextConfig = {
             'onnxruntime-web',
             '@huggingface/transformers',
             '@seanhogg/bfi-web',
+            // WebLLM (PRD 34 page engine, ~6 MB): no asset, but it sat in the one shared
+            // edge chunk every function carries — 165 copies, 1.3 GB of the ~2 GB of edge
+            // JS `vercel build` reads into memory.
+            '@mlc-ai/web-llm',
           ].map((specifier) => [specifier, false]))
         : {}),
     };
