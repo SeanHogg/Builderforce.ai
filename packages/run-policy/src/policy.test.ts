@@ -3,6 +3,7 @@ import { MAX_MODEL_FAILOVERS } from '@builderforce/agent-stall';
 import {
   PIN_RELEASE_STATUSES,
   initialRunPolicy,
+  isRequestRefusalStatus,
   nextTurn,
   offersHandOff,
   reduceRunPolicy,
@@ -336,5 +337,13 @@ describe('stall failover', () => {
     run(s0, { type: 'stalled', resolvedModel: 'grok', pick: pick(['claude']) });
     expect(s0.tried).toEqual([]);
     expect(s0.model).toBeUndefined();
+  });
+});
+
+describe('isRequestRefusalStatus — the line a host classifies a failed request by', () => {
+  it('a refused request is every 4xx but a timeout and the release statuses', () => {
+    for (const status of [400, 401, 402, 403, 404, 422]) expect(isRequestRefusalStatus(status)).toBe(true);
+    for (const status of [408, ...PIN_RELEASE_STATUSES, 500, 502, 504]) expect(isRequestRefusalStatus(status)).toBe(false);
+    expect(isRequestRefusalStatus(undefined)).toBe(false);
   });
 });

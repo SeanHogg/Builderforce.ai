@@ -3,7 +3,7 @@ import { WEBLLM_ENGINE_BASE_URL, type LocalRuntimeProbe } from '@builderforce/lo
 import { localTransport } from '../localFirstTransport';
 import { streamChatCompletion } from '../streamChatCompletion';
 import { pageEnginesFetch, probePageEngines } from './fetchShim';
-import { PageEngineError, type ChatCompletionChunk, type PageEngine } from './types';
+import { PageEngineError, memoizedProbe, type ChatCompletionChunk, type PageEngine } from './types';
 
 /**
  * THE page shim. Load-bearing for every page engine at once:
@@ -149,12 +149,16 @@ describe('pageEnginesFetch', () => {
 
 describe('probePageEngines', () => {
   it('keeps only engines with something to serve, and never lets one failure sink the rest', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const ready: LocalRuntimeProbe = { provider: 'webllm', endpoint: { baseUrl: WEBLLM_ENGINE_BASE_URL }, reachable: true, models: [] };
     const broken = fakeEngine(async () => chunks([]));
-    broken.probe = vi.fn(async () => {
+    // A failing probe is handled once, in `memoizedProbe`: null, with its reason reported.
+    broken.probe = memoizedProbe('bfi', async () => {
       throw new Error('boom');
-    });
+    }).probe;
     const probes = await probePageEngines([fakeEngine(async () => chunks([]), ready), fakeEngine(async () => chunks([])), broken]);
     expect(probes).toEqual([ready]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('bfi probe failed (boom)'));
+    warn.mockRestore();
   });
 });

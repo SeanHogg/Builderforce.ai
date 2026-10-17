@@ -16,6 +16,7 @@ import { resolveModelRoute } from "./modelRouting";
 import { resolveLocalChatEndpoint } from "./localModels";
 import { hostPageEngines } from "./pageEngineBridge";
 import { localModelLabels } from "./localModelLabels";
+import { chatTicketsLabels } from "./chatTicketsLabels";
 import { modelChoiceLabels } from "./modelChoiceLabels";
 import { getSelectedProject } from "./projectState";
 import { getProjectNames } from "./projectNames";
@@ -189,6 +190,16 @@ function buildLabels(): Record<string, string> {
     "tl.learnTargetSkipped": t("Skipped {name} (project #{projectId}) — {reason}"),
     "tl.reconcileTitle": t("Reconciled {count} learned memories in Evermind v{version}"),
     "tl.reconcileHint": t("The answer restated these recalled learnings, so it updates them (write-through cognition)."),
+    // A run that moved models: the conversation fitted to the next model's window, or a
+    // local-first turn that fell over. `{…}` are the renderer's tokens.
+    "tl.modelMovePacked": t("Conversation fitted to {models} — {dropped} earlier messages {how}, ~{tokens} tokens"),
+    "tl.modelMoveVerbatim": t("Conversation handed to {models} in full, ~{tokens} tokens"),
+    "tl.modelMoveOverWindow": t("It is still larger than the model’s context window."),
+    "tl.modelMoveHowSummarized": t("summarized"),
+    "tl.modelMoveHowRecalled": t("replaced by recalled memory"),
+    "tl.modelMoveHowElided": t("left out"),
+    "tl.modelMoveLocalFallback": t("{from} on this device could not take this turn — {to} answered it"),
+    "tl.modelMoveHint": t("The run moved to another model, so the conversation was fitted to that model’s context window."),
     // Run milestones + agent dispatch render as system ACTIVITY lines in the shared
     // transcript, composed client-side from each message's structured metadata. The
     // server records the FACTS in one language; these templates are what make the line
@@ -204,7 +215,6 @@ function buildLabels(): Record<string, string> {
     "tl.activityDispatched": t("{agent} was assigned to {kind} #{ref}"),
     // Composer + chrome (the sign-in / connecting states come from `authLabels`)
     "app.summarizeNeedsAccount": t("Summarizing a chat needs a BuilderForce account. This conversation is only on this machine."),
-    "app.beta": t("beta"),
     "app.newChat": t("New chat"),
     "app.conversation": t("Conversation"),
     "app.rename": t("Rename chat"),
@@ -214,6 +224,8 @@ function buildLabels(): Record<string, string> {
     "app.upgrade": t("Upgrade"),
     "app.upgradeToPlan": t("Upgrade to {plan}"),
     "app.addCard": t("Add a card"),
+    // The `sign_in` verdict: no model can serve the turn (signed out, nothing local).
+    "app.noModel": t("No model is available. Sign in, or start a model on this device."),
     "app.copyChat": t("Copy chat diagnostics (plan + usage + identity + Evermind state + transcript)"),
     // A copy that FAILED must read differently from one that never ran — the button
     // used to swallow every rejection, so a broken export looked like a dead control.
@@ -351,11 +363,20 @@ function buildLabels(): Record<string, string> {
     "app.queueSend": t("Queue message — sends when the current run finishes"),
     "app.queuedLabel": t("Queued messages"),
     "app.queuedHint": t("Queued — sends when the run finishes"),
+    // Fixed next-step chips over an empty composer (never a model call).
+    "app.suggestions": t("Suggested next steps"),
+    "app.suggestReview": t("Review my changes"),
+    "app.suggestReviewPrompt": t("Review my uncommitted changes and point out anything risky."),
+    "app.suggestTests": t("Write tests"),
+    "app.suggestTestsPrompt": t("Write tests for the file I have open."),
+    "app.suggestExplain": t("Explain this file"),
+    "app.suggestExplainPrompt": t("Explain how the file I have open works."),
     "app.placeholder": t("Ask BuilderForce to build or change something…"),
     "app.confirmRun": t("Run {name}?"),
     "app.approve": t("Approve"),
     "app.cancel": t("Cancel"),
     "app.always": t("Always"),
+    "app.confirmAria": t("Approve this action"),
     "app.dismiss": t("Dismiss"),
     "app.reconnect": t("Reconnect"),
     "app.byoUnused": t("Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys."),
@@ -1053,7 +1074,7 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
       personalityBlock,
       // BOTH label sets: one panel renders the chat surface AND the board, so both
       // have to be present whichever surface it opens at.
-      labels: { ...authLabels(), ...buildLabels(), ...canvasLabels(), ...subagentLabels(), ...localModelLabels(), ...workStatusLabels() },
+      labels: { ...authLabels(), ...buildLabels(), ...canvasLabels(), ...subagentLabels(), ...localModelLabels(), ...chatTicketsLabels(), ...workStatusLabels() },
       // The editor's display language: how the shared components format numbers,
       // money and relative times (the strings themselves are already translated above).
       locale: vscode.env.language,

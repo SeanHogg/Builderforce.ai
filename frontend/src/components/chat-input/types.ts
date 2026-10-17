@@ -1,6 +1,6 @@
 import type { ChatModeVocabulary } from '@/lib/brain/useChatModeCopy';
 import type { ReactNode } from 'react';
-import type { ChatModelOptions, ChatModelSelection, ModelIdentityContext } from '@seanhogg/builderforce-brain-ui';
+import type { ChatModelOptions, ChatModelSelection, ComposerSuggestion, ModelIdentityContext, QueuedTurns } from '@seanhogg/builderforce-brain-ui';
 import type { DirectedRecipient, TicketTag } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainEffort, ChatMode } from '@/lib/brain';
 import type { TemplateEntry } from '@/lib/templates/contract';
@@ -19,13 +19,9 @@ export interface ComposerAddMenuItem {
   onSelect: () => void;
 }
 
-/** One fixed suggestion: a chip above an empty composer, or a row leading the starting points. */
-export interface ComposerSuggestion {
-  id: string;
-  label: string;
-  /** Seeds the composer (the host's `onChange`). A suggestion never sends. */
-  onSelect: () => void;
-}
+/** One fixed suggestion: a chip above an empty composer, or a row leading the starting
+ *  points. The ONE shape, owned by brain-ui's `SuggestionRow`. */
+export type { ComposerSuggestion };
 
 /**
  * The composer's STARTING POINTS — the searchable catalogue (`PromptUseCaseCatalog`),
@@ -63,11 +59,10 @@ export interface ChatInputProps {
   onStop?: () => void;
   /**
    * Turns the user typed while a run was in flight and this composer is holding
-   * (see `useQueuedTurns`). Rendered as a receipt under the input — the composer
-   * owns this chrome so every host says the same sentence in the same place.
-   * Zero renders nothing.
+   * (the host's `useQueuedTurns`). Listed above the input as the shared
+   * `QueuedTurnChips`, each removable — the same chips on every surface.
    */
-  queuedCount?: number;
+  queued?: Pick<QueuedTurns<string>, 'items' | 'remove'>;
   /** Number of rows for the text area. Default 2. */
   rows?: number;
   /** If false, Enter does not submit (send only via button). Default true. */

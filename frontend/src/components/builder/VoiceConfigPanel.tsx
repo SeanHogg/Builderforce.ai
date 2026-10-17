@@ -10,7 +10,8 @@ import { Icon } from '@/components/ui/Icon';
 import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { MicRecorder, type PcmAudio } from '@/lib/captureAudio';
-import { hasWebGPU } from '@/lib/voiceEngine';
+// The on-device engine also runs on CPU; WebGPU is the "free + fast" story we badge.
+import { hasWebGPU } from '@seanhogg/builderforce-brain-embedded';
 import type { VoiceStudio } from '@/lib/voiceStudio';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
 import { faultMessage } from '@/lib/apiClient';

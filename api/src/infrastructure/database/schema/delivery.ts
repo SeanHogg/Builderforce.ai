@@ -544,8 +544,9 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
    * ran at all — and they are indistinguishable from the overview payload, so the
    * diagnostics report could only name the symptom (`last_run_stale`).
    *
-   * Written on EVERY visit, including the declining ones, so the ABSENCE of a run is
-   * itself a record rather than a silence.
+   * Written whenever the decision or reason CHANGES, including declining ones, and at
+   * least hourly as a heartbeat (application/manager/managerSweepCadence.ts), so the
+   * ABSENCE of a run is itself a record rather than a silence.
    */
   lastSweepDecision: varchar('last_sweep_decision', { length: 16 }),
   /** Null when it ran; otherwise the machine-readable cause — see

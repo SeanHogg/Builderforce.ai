@@ -1,11 +1,10 @@
 /**
  * Chrome's built-in model, reached through the Prompt API — the ONE detection of it.
  *
- * Two surfaces drive the same browser engine: the Brain's local-first path (the in-page
- * shim in `browserEngine.ts`) and the web app's `PromptApiModelProvider`. Both need the
- * same three answers — is the surface there at all, is the model ready, and how does a
- * stream of output become deltas — so they live here once, structurally typed so no host
- * depends on an ambient DOM lib that may not have caught up with the API yet.
+ * The Brain's local-first path (the in-page engine in `browserEngine.ts`) asks three
+ * questions of it — is the surface there at all, is the model ready, and how does a
+ * stream of output become deltas — and they are answered here once, structurally typed so
+ * no host depends on an ambient DOM lib that may not have caught up with the API yet.
  *
  * The current surface is the `LanguageModel` global (Chrome 138+); older builds exposed
  * `self.ai.languageModel` with a `capabilities()` probe instead of `availability()`. Both

@@ -60,7 +60,7 @@ const toInt = (v: unknown): number => clampTokenCount(Number(v ?? 0));
 
 /** The "~4 chars per token" heuristic — defined ONCE in `@builderforce/workload` and
  *  shared with the router, the editor and the on-prem context guards. */
-export { estimateTokensFromChars } from '@builderforce/workload';
+export { estimateTokensFromChars, estimateTokensFromText } from '@builderforce/workload';
 
 /** Start of the current UTC day — the daily-cap reset boundary. */
 export function utcDayStart(now: Date = new Date()): Date {

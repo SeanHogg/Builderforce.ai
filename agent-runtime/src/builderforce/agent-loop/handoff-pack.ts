@@ -19,13 +19,11 @@ import {
   tokensOf,
   type HandoffMessage,
 } from "@seanhogg/builderforce-memory/handoff";
+import { handoffReserveTokens, toolSchemaTokens } from "@builderforce/run-policy";
 import { resolveContextWindowTokens } from "../../agents/context-window.js";
 import type { AgentMessage, AgentTool } from "../model/agent-types.js";
 import type { Model } from "../model/types.js";
 import { modelRef } from "./stall-recovery.js";
-
-/** Reply reserve when the run names no `maxTokens`. */
-const DEFAULT_RESERVE_OUTPUT_TOKENS = 4_096;
 
 /** The hand-off view of one row. Rows the packer may drop but never pins (summaries,
  *  custom notices, bash output) are measured as assistant context. */
@@ -51,9 +49,8 @@ function toHandoff(m: AgentMessage): HandoffMessage {
 /** Tokens the advertised tool schemas cost, by the packer's own estimate. */
 // biome-ignore lint/suspicious/noExplicitAny: matches AgentContext.tools
 function toolsTokens(tools: readonly AgentTool<any>[] | undefined): number {
-  if (!tools || tools.length === 0) return 0;
-  const schemas = tools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
-  return defaultEstimateTokens(JSON.stringify(schemas));
+  const schemas = tools?.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
+  return toolSchemaTokens(schemas, defaultEstimateTokens);
 }
 
 export interface ModelHandoffInput {
@@ -86,7 +83,7 @@ export async function packContextForModel(input: ModelHandoffInput): Promise<Mod
   const pack = await packHandoff({
     messages: all,
     targetContextTokens: resolveContextWindowTokens(input.to),
-    reserveOutputTokens: input.maxTokens && input.maxTokens > 0 ? input.maxTokens : DEFAULT_RESERVE_OUTPUT_TOKENS,
+    reserveOutputTokens: handoffReserveTokens(input.maxTokens),
     toolsTokens: toolsTokens(input.tools),
     from: modelRef(input.from),
     to: modelRef(input.to),

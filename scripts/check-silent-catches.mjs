@@ -28,8 +28,18 @@ import { findSilentCatches, RULES, RULE_DESCRIPTIONS } from './lib/silentCatchRu
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const baselinePath = join(repoRoot, 'scripts', 'silent-catches.baseline.json');
 
-/** The source trees the guard covers. Adding a package is one line. */
-const ALL_TARGETS = ['api/src', 'frontend/src', 'agent-runtime/src', 'worker/src'];
+/**
+ * The source trees the guard covers. Adding a package is one line.
+ *
+ * `brain-embedded/src` joined on 2026-10-17, together with the `literal-promise-catch`
+ * rule (`.catch(() => null | false | undefined | …)` — the swallow the empty-body rules
+ * could not see). Both were SEEDED at the count they found rather than at zero: the
+ * in-page engines' sites (probe, cache lookup, unload, persist) were fixed in the same
+ * change — they report through `pageEngines/engineFailure.ts` or refuse with their
+ * reason — and what remains is pre-existing code (the run store's best-effort
+ * backstops, JSON-body fallbacks, stream-cancel settles) to work down, never up.
+ */
+const ALL_TARGETS = ['api/src', 'frontend/src', 'agent-runtime/src', 'worker/src', 'brain-embedded/src'];
 
 /**
  * `--target <tree>` (repeatable) narrows the sweep so a package's own `npm test`

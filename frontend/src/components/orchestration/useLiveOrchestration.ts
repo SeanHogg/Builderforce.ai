@@ -1,7 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { workflows, type Workflow, type WorkflowGraph } from '@/lib/builderforceApi';
 import { reportBackgroundFailure } from '@/lib/reportError';
 import { isLiveWorkflowStatus, LIVE_WORKFLOW_POLL_MS } from '@/components/workflowRunUi';
+import { usePolledResource } from '@/hooks/usePolledResource';
+
+/**
+ * In-flight LIST cadence. The selected run's detail is what moves at
+ * LIVE_WORKFLOW_POLL_MS; the list only discovers runs starting/finishing, so it is
+ * slower while something is live and lazy when nothing is (the list is two reads —
+ * pending + running — that used to fire every 2 s forever).
+ */
+const LIST_LIVE_MS = 10_000;
+const LIST_IDLE_MS = 60_000;
 
 /** Merge pending+running list responses: live only, newest `updatedAt` first. */
 export function mergeInFlightLists(pending: Workflow[], running: Workflow[]): Workflow[] {
@@ -51,6 +61,7 @@ export function useLiveOrchestration(projectId?: number | null): LiveOrchestrati
   const projectKey = projectId == null ? '' : String(projectId);
   const [listLoadedFor, setListLoadedFor] = useState<string | null>(null);
   const loading = listLoadedFor !== projectKey;
+  const listLoadedForRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Workflow | null>(null);
@@ -72,91 +83,61 @@ export function useLiveOrchestration(projectId?: number | null): LiveOrchestrati
     applyList(await fetchInFlightWorkflows(projectId));
   }, [projectId, applyList]);
 
-  useEffect(() => {
-    let cancelled = false;
-    // The first read sets state only in its callbacks, never in the effect body.
-    void fetchInFlightWorkflows(projectId)
-      .then((list) => { if (!cancelled) applyList(list); })
-      .catch((err: unknown) => {
-        if (cancelled) return;
+  // List poll — visibility-gated, non-overlapping, backs off on failure. The first
+  // read of a project surfaces its error inline; later failures are background noise.
+  usePolledResource(async (signal) => {
+    const first = listLoadedForRef.current !== projectKey;
+    try {
+      const list = await fetchInFlightWorkflows(projectId);
+      if (signal.aborted) return;
+      applyList(list);
+    } catch (err: unknown) {
+      if (signal.aborted) return;
+      if (first) {
         setError(err instanceof Error ? err.message : String(err));
         setRuns([]);
-      })
-      .finally(() => {
-        if (!cancelled) setListLoadedFor(projectKey);
-      });
-
-    const timer = setInterval(() => {
-      void refreshList().catch((err: unknown) => {
+      } else {
         void reportBackgroundFailure({
           message: err instanceof Error ? err.message : String(err),
           level: 'warning',
           context: { operation: 'liveOrchestration.listPoll' },
         });
-      });
-    }, LIVE_WORKFLOW_POLL_MS);
+      }
+      throw err;
+    } finally {
+      if (!signal.aborted && first) {
+        listLoadedForRef.current = projectKey;
+        setListLoadedFor(projectKey);
+      }
+    }
+  }, { intervalMs: runs.length > 0 ? LIST_LIVE_MS : LIST_IDLE_MS, restartKey: projectKey });
 
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [refreshList, applyList, projectId, projectKey]);
-
-  useEffect(() => {
+  // Selected-run poll: get + getGraph while the selection is live; it stops once the
+  // selected run has left pending/running (re-selecting another run restarts it).
+  const selectedSettled = selectedId != null && selected?.id === selectedId && !isLiveWorkflowStatus(selected.status);
+  const reportedFor = useRef<string | null>(null);
+  usePolledResource(async (signal) => {
     if (!selectedId) return;
-    let cancelled = false;
-    let reported = false;
-    let stop = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
-
-    const tick = async () => {
-      if (cancelled || stop) return;
-      try {
-        const [next, nextGraph] = await Promise.all([
-          workflows.get(selectedId),
-          workflows.getGraph(selectedId),
-        ]);
-        if (cancelled) return;
-        setSelected(next);
-        setGraph(nextGraph);
-        if (!isLiveWorkflowStatus(next.status)) {
-          stop = true;
-          if (timer) {
-            clearInterval(timer);
-            timer = undefined;
-          }
-        }
-      } catch (error) {
-        if (!reported) {
-          reported = true;
-          void reportBackgroundFailure({
-            message: error instanceof Error ? error.message : String(error),
-            level: 'warning',
-            context: { operation: 'liveOrchestration.livePoll', workflowId: selectedId },
-          });
-        }
-      } finally {
-        if (!cancelled) setGraphLoadedFor(selectedId);
+    const id = selectedId;
+    try {
+      const [next, nextGraph] = await Promise.all([workflows.get(id), workflows.getGraph(id)]);
+      if (signal.aborted) return;
+      setSelected(next);
+      setGraph(nextGraph);
+    } catch (error) {
+      if (reportedFor.current !== id) {
+        reportedFor.current = id;
+        void reportBackgroundFailure({
+          message: error instanceof Error ? error.message : String(error),
+          level: 'warning',
+          context: { operation: 'liveOrchestration.livePoll', workflowId: id },
+        });
       }
-    };
-
-    void tick();
-    timer = setInterval(() => {
-      if (stop) {
-        if (timer) {
-          clearInterval(timer);
-          timer = undefined;
-        }
-        return;
-      }
-      void tick();
-    }, LIVE_WORKFLOW_POLL_MS);
-
-    return () => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
-    };
-  }, [selectedId]);
+      throw error;
+    } finally {
+      if (!signal.aborted) setGraphLoadedFor(id);
+    }
+  }, { intervalMs: LIVE_WORKFLOW_POLL_MS, enabled: selectedId != null && !selectedSettled, restartKey: selectedId });
 
   const select = useCallback((id: string) => {
     setSelectedId(id);

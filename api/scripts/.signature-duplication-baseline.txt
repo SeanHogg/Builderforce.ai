@@ -3,5 +3,4 @@
 # A VERDICT DOES NOT BELONG HERE — this file is rewritten wholesale, so a '#' comment
 # explaining an accepted entry does not survive. Argue it in
 # scripts/adjudications/signature-duplication.mjs instead, where it is data and is counted separately.
-calendar_connections = drive_connections = mailbox_connections
 initiatives = portfolios

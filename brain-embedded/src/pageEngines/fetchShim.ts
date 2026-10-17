@@ -167,11 +167,13 @@ export function pageEnginesFetch(engines: readonly PageEngine[], base: LocalFetc
   };
 }
 
-/** Every engine's probe, concurrently, keeping the ones with something to serve. */
+/** Every engine's probe, concurrently, keeping the ones with something to serve. An
+ *  engine's probe never rejects — its failure is handled (and reported) in
+ *  `memoizedProbe` — so one engine's failure cannot sink the others'. */
 export async function probePageEngines(
   engines: readonly PageEngine[],
   options?: { fresh?: boolean },
 ): Promise<LocalRuntimeProbe[]> {
-  const probes = await Promise.all(engines.map((engine) => engine.probe(options).catch(() => null)));
+  const probes = await Promise.all(engines.map((engine) => engine.probe(options)));
   return probes.filter((p): p is LocalRuntimeProbe => p !== null);
 }

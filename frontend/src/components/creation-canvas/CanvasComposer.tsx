@@ -65,7 +65,7 @@ export type CanvasComposerInputProps = Pick<ChatInputProps,
   | 'onChange'
   | 'running'
   | 'onStop'
-  | 'queuedCount'
+  | 'queued'
   | 'contextControls'
   | 'onAttach'
   | 'onAddContext'

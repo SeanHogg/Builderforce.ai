@@ -14,13 +14,23 @@
  *     inside the product.
  *
  * Lives at the composition root (beside index.ts / buildRuntimeService.ts) rather
- * than under application/ because one entry needs `buildScheduledReport` from the
- * presentation layer — wiring, not domain logic. The runner it feeds
+ * than under application/ because it is wiring, not domain logic. The runner it feeds
  * (`application/runtime/cronSweepRunner.ts`) holds no imports of its own and is
  * where the invocation semantics (isolation, timeouts, logging) are tested.
  *
  * ADDING A SWEEP: append an entry with the right cadence. Nothing else changes —
  * the cron handler and the operator control both pick it up.
+ *
+ * ORDER: sweeps run CONCURRENTLY and their position in this list means nothing. A
+ * sweep that must start after another declares it with `after: '<key>'` (same
+ * cadence); the runner then chains the two inside one `waitUntil`. The current
+ * chains, all daily:
+ *   • object-registry → metric-rollups → canvas-triggers
+ *   • retention → db-vacuum → db-pressure
+ *   • retention → replay-rollup → proof-verdicts → replay-prescriptions
+ *   • phone-allowance-grant → phone-number-rent (skipped if the grant throws)
+ * `validateSweepOrdering` (asserted in cronSweeps.test.ts) rejects an `after` that
+ * is unknown, crosses cadences or forms a cycle.
  */
 import type { Env } from './env';
 import type { CronSweepDef } from './application/runtime/cronSweepRunner';
@@ -86,7 +96,7 @@ import { runPublisherDomainSweep } from './application/developer/domainVerificat
 import { runDueReports } from './application/reports/runDueReports';
 import { dueSnapshots } from './application/reports/lensSnapshots';
 import { runDueCeremonies, runCeremonyReaper } from './application/ceremony/runDueCeremonies';
-import { buildScheduledReport } from './presentation/routes/reportRoutes';
+import { buildScheduledReport } from './application/reports/scheduledReport';
 import { runPrReconciliationSweep } from './application/reconciliation/runPrReconciliationSweep';
 import { drainExecutionLifecycleOutbox } from './application/runtime/executionLifecycleOutbox';
 import { cronSweepEnabled } from './application/runtime/cronControls';
@@ -134,6 +144,7 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
   {
     key: 'metric-rollups',
     cadence: 'daily',
+    after: 'object-registry',
     // Runs AFTER `object-registry` and that ordering is load-bearing twice over:
     // every seat's surface reads `<domain>.items` beside these keys, and every
     // ATTRIBUTED fact resolves its `object_id` against the registry that sweep
@@ -166,6 +177,7 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
   {
     key: 'canvas-triggers',
     cadence: 'daily',
+    after: 'metric-rollups',
     // Runs AFTER `metric-rollups` deliberately: a `liveMetric` bound to `growth.leads`
     // or `finance.runway_months` is refreshed from the facts that pass writes, so
     // evaluating first would compare today's threshold against yesterday's number and
@@ -279,11 +291,14 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
   {
     key: 'db-vacuum',
     cadence: 'daily',
-    // Registered AFTER `retention` and that ordering is load-bearing: a vacuum run
+    after: 'retention',
+    // Chained AFTER `retention` and that ordering is load-bearing: a vacuum run
     // before the purge has nothing to reclaim and leaves the freed pages untracked
     // for a whole day. Deleting a row does not return its page to the OS — it only
     // becomes reusable once vacuumed — which is how manager_actions ended up holding
     // 46k live rows inside a 593 MB relation despite retention already being in force.
+    // It still runs when the purge threw: vacuuming whatever a partial purge freed is
+    // better than leaving it untracked for a day.
     description: 'VACUUM (ANALYZE) every retention-swept log table so the pages the purge freed are reused instead of the relation extending.',
     run: async ({ env, db }) => {
       const r = await runTableVacuum(env);
@@ -293,6 +308,7 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
   {
     key: 'db-pressure',
     cadence: 'daily',
+    after: 'db-vacuum',
     // LAST of the three maintenance sweeps, and the ordering is the whole point: it
     // measures what `retention` + `db-vacuum` have just left behind, so it escalates
     // only when the steady-state policy has demonstrably failed to keep the endpoint
@@ -310,6 +326,8 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'replay-rollup',
     cadence: 'daily',
     // AFTER `retention`: representatives must point at recordings the per-site window keeps.
+    // A sibling of `db-vacuum` under `retention`, so the two run concurrently once it settles.
+    after: 'retention',
     description: 'Insights: pick up to three representative recordings per open issue and flag issues that regressed after a release.',
     run: async ({ env, db }) => {
       const r = await runReplayRollup(env, db);
@@ -320,6 +338,7 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'proof-verdicts',
     cadence: 'daily',
     // AFTER `replay-rollup`: a proof graded "missed" cites the freshest recordings.
+    after: 'replay-rollup',
     description: 'Method link: grade every live, measured proof whose window has closed by what its visitors did (PRD 33 §5.3.2).',
     run: async ({ env, db }) => {
       const r = await runProofVerdictSweep(env, db);
@@ -330,7 +349,9 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'replay-prescriptions',
     cadence: 'daily',
     // AFTER `replay-rollup` and `proof-verdicts`: the rules read the representatives, the
-    // regressions and the proof grades those two just wrote.
+    // regressions and the proof grades those two just wrote. Chained behind
+    // `proof-verdicts`, which is itself chained behind `replay-rollup`.
+    after: 'proof-verdicts',
     description: 'Insights: run the prescription rules per site, draft the top fixes (shared AI budget), and measure the fixes people applied.',
     run: async ({ env, db }) => {
       const r = await runPrescriptionSweep(env, db);
@@ -600,9 +621,10 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
   {
     key: 'ledger-sync',
     cadence: 'daily',
-    // `metric-rollups` reads the rows this sweep writes, and the two are dispatched
-    // CONCURRENTLY — `dispatchCronSweeps` gives each its own `waitUntil` — so this
-    // is deliberately NOT relied on to land first. The consequence is bounded and
+    // `metric-rollups` reads the rows this sweep writes, and the two run
+    // CONCURRENTLY — `metric-rollups` is chained only behind `object-registry`, and
+    // this sweep declares no `after` — so this is deliberately NOT relied on to land
+    // first. The consequence is bounded and
     // acceptable: a book synced after a rollup pass is picked up by the next one,
     // so a figure is at worst one cycle behind. What is not acceptable is a person
     // connecting their books and seeing nothing change until tomorrow, and that is
@@ -688,10 +710,10 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     // paying customer silently got nothing; keyed on the month, this is
     // self-healing and idempotent whether it runs once a day or once a quarter.
     //
-    // It runs BEFORE the rent sweep in this list so a tenant whose credit is thin
-    // is topped up with what they already paid for before anything is charged
-    // against it — the ordering that stops a paid-up customer being suspended for
-    // an allowance that was sitting one entry further down.
+    // `phone-number-rent` is chained AFTER this sweep (its `after`), so a tenant
+    // whose credit is thin is topped up with what they already paid for before
+    // anything is charged against it — the ordering that stops a paid-up customer
+    // being suspended for an allowance that had not been granted yet.
     description:
       'Grant the monthly communications allowance included in every active Business Phone '
       + 'subscription, priced at the published overage rates.',
@@ -707,6 +729,12 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     // so without this a tenant pays once and holds a number the platform keeps
     // paying a carrier for. Idempotent per number per month, so running daily
     // charges once and a month the sweep missed is charged when it next runs.
+    //
+    // AFTER `phone-allowance-grant`, and SKIPPED when that grant threw: charging rent
+    // against credit the grant failed to top up is exactly what suspends a paid-up
+    // number, while skipping costs nothing — the month is charged on the next run.
+    after: 'phone-allowance-grant',
+    skipIfAfterFailed: true,
     description:
       'Charge monthly rent on every provisioned phone number, suspending a number whose '
       + 'workspace has run out of communications credit and reactivating it when they top up.',
@@ -1043,10 +1071,12 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
   {
     key: 'lens-snapshots',
     cadence: 'frequent',
-    description: 'Capture the rolling month/quarter/year lens snapshots per tenant.',
+    description: 'Capture the rolling month/quarter/year lens snapshots per tenant, most-owed tenants first; a failed capture backs its tenant off for one refresh interval.',
     run: async ({ env, db }) => {
       const r = await dueSnapshots(env, new Date(), db);
-      return r.captured > 0 ? `captured=${r.captured}` : null;
+      return r.captured > 0 || r.failedTenants > 0
+        ? `captured=${r.captured}${r.failedTenants ? ` failedTenants=${r.failedTenants}` : ''}`
+        : null;
     },
   },
   {

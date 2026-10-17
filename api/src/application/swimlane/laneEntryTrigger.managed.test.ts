@@ -6,6 +6,8 @@ import { requestRoleRun } from '../kanban/requestRoleRun';
 import { dispatchCloudRunForTask } from '../runtime/dispatchCloudRun';
 import { parseActAsRole } from '../runtime/cloudDispatch';
 import { evaluateExecutionApprovalGate } from '../runtime/executionApprovalGate';
+import { signalPendingWork } from '../runtime/cronWorkSignal';
+import { runInRequestScope } from '../shared/requestScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
@@ -45,6 +47,7 @@ const mockEval = vi.mocked(evaluateTaskAutoRun);
 const mockRoleRun = vi.mocked(requestRoleRun);
 const mockDispatch = vi.mocked(dispatchCloudRunForTask);
 const mockApproval = vi.mocked(evaluateExecutionApprovalGate);
+const mockSignal = vi.mocked(signalPendingWork);
 
 const env = {} as Env;
 const runtime = {} as RuntimeService;
@@ -143,5 +146,41 @@ describe('maybeAutoRunOnLaneEntry — a lifecycle-managed board', () => {
     expect(mockDispatch).toHaveBeenCalledTimes(1);
     const payload = (mockDispatch.mock.calls[0]?.[4] as { payload?: string }).payload;
     expect(parseActAsRole(payload)).toBeUndefined();
+  });
+});
+
+/**
+ * The KV work-gate signal means "new work since the fan-out last looked". Raised from
+ * the fan-out's own re-evaluation, one ticket the dispatcher kept refusing pinned the
+ * gate open and every 5-minute tick ran the full fan-out instead of the floor.
+ */
+describe('maybeAutoRunOnLaneEntry — the cron work-gate signal', () => {
+  it('signals for a runnable ticket entering a lane on a request path', async () => {
+    mockEval.mockResolvedValue(evaluation({}) as never);
+    await enter();
+    expect(mockSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not signal when the caller is the backstop sweep (signalCronGate: false)', async () => {
+    mockEval.mockResolvedValue(evaluation({}) as never);
+    await maybeAutoRunOnLaneEntry(env, db, runtime, {
+      tenantId: 1, projectId: 11, taskId: 1032, status: 'todo', submittedBy: 'system:auto-exec',
+      signalCronGate: false,
+    });
+    expect(mockSignal).not.toHaveBeenCalled();
+    // Opting out of the signal never opts out of the dispatch.
+    expect(mockDispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not signal from inside the scheduled invocation, whoever the cron-path caller is', async () => {
+    mockEval.mockResolvedValue(evaluation({}) as never);
+    await runInRequestScope({ env, method: 'CRON', path: 'cron:*/5 * * * *' }, () => enter());
+    expect(mockSignal).not.toHaveBeenCalled();
+  });
+
+  it('does not signal for a ticket that cannot run now', async () => {
+    mockEval.mockResolvedValue(evaluation({ canRunNow: false, reason: 'cooldown_active' }) as never);
+    await enter();
+    expect(mockSignal).not.toHaveBeenCalled();
   });
 });

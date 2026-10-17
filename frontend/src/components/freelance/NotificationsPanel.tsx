@@ -1,23 +1,20 @@
 import { Icon } from '@/components/ui/Icon';
-import { useEffect, useState, useCallback } from 'react';
-import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { listNotifications, markNotificationsRead, type Notification } from '@/lib/freelance/billing';
+import { useNotificationFeed } from '@/components/account/NotificationFeedContext';
 
 /**
  * Shared in-app notification feed for BOTH sides of the marketplace (worker gigs +
- * employer hires). Self-loads, shows the unread count, and marks read. Returns null
- * when there are no notifications so it never renders an empty box. DRY: one panel,
- * both surfaces.
+ * employer hires). Shows the unread count and marks read. Returns null when there
+ * are no notifications so it never renders an empty box. DRY: one panel, both
+ * surfaces.
  *
- * The feed is behind the person-level JWT, and this panel decides for itself whether
- * there is one — the same way it decides its own emptiness. Two of its three mount
- * points sit inside `/marketplace`, which anyone may browse, and the poll below
- * means an ungated read is not one 401 but a 401 every thirty seconds, each raising
- * the global error toast and filing a support ticket about a visitor who is simply
- * looking. Gating here rather than at the three call sites is also why a fourth
- * surface cannot reintroduce it.
+ * It reads the shell's ONE alert feed (`NotificationFeedContext`) rather than
+ * polling `/api/notifications` itself: a second 30 s poll of the same endpoint
+ * doubled the requests on every page it sat on, and two copies of one count can
+ * disagree. The shell's feed already gates on the person-level JWT, so a visitor
+ * browsing `/marketplace` costs nothing; this panel additionally renders nothing
+ * while signed out, and nothing outside the provider (an embed frame).
  */
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
@@ -26,28 +23,12 @@ const card: React.CSSProperties = {
 export default function NotificationsPanel() {
   const t = useTranslations('notifications');
   const { isAuthenticated } = useAuth();
-  const [items, setItems] = useState<Notification[]>([]);
-  const [unread, setUnread] = useState(0);
-  const [loaded, setLoaded] = useState(false);
+  const feed = useNotificationFeed();
+  const items = feed?.items ?? [];
+  const unread = feed?.unread ?? 0;
+  const markAll = () => { void feed?.markAllRead(); };
 
-  const load = useCallback(async () => {
-    if (!isAuthenticated) return;
-    try {
-      const res = await listNotifications();
-      setItems(res.items);
-      setUnread(res.unread);
-    } catch { /* best-effort */ }
-    finally { setLoaded(true); }
-  }, [isAuthenticated]);
-
-  // No token, no poll — not even the first one, and no timer left running.
-  usePolledResource(load, { intervalMs: 30_000, enabled: isAuthenticated });
-
-  const markAll = async () => {
-    try { await markNotificationsRead(); setItems((p) => p.map((n) => ({ ...n, read: true }))); setUnread(0); } catch { /* noop */ }
-  };
-
-  if (!loaded || items.length === 0) return null;
+  if (!isAuthenticated || items.length === 0) return null;
 
   return (
     <div style={{ ...card, marginBottom: 16 }}>

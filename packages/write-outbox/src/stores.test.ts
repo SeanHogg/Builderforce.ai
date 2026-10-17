@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { OutboxEntry } from "./outbox.js";
+import type { OutboxEntry } from "./types.js";
 import {
   createIndexedDbOutboxStore,
   listIndexedDbOutboxPartitions,

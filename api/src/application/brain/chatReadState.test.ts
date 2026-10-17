@@ -7,8 +7,9 @@ import type { Db } from '../../infrastructure/database/connection';
  * VSIX attention icons). Two behaviours:
  *   • markChatRead: advance a user's high-water mark to a seq (or to the chat's max
  *     when omitted), via an upsert whose SET uses GREATEST so it only moves forward.
- *   • unreadCountsForUser: one grouped read of messages past each read chat's mark →
- *     a {chatId: count} map, dropping non-positive counts.
+ *   • unreadCountsForUser: one read over the user's read-state rows, each counting
+ *     its messages past the mark via a correlated (chat_id, seq) subquery → a
+ *     {chatId: count} map, dropping non-positive counts.
  *
  * Driven against an operation-typed fake of the Drizzle chains the helper actually
  * calls — no live database (same approach as chatRunMilestones.test.ts).
@@ -16,6 +17,8 @@ import type { Db } from '../../infrastructure/database/connection';
 
 interface Captured {
   maxSeqQueried: boolean;
+  unreadProjection: Record<string, unknown> | null;
+  calls: string[];
   insertValues: Record<string, unknown> | null;
   conflictSet: Record<string, unknown> | null;
 }
@@ -26,7 +29,9 @@ let unreadRows: Array<{ chatId: number; unread: number }>;
 /** Thenable select builder that resolves to `result` after any chain of methods. */
 function selectBuilder(result: unknown[]) {
   const b: Record<string, unknown> = {};
-  for (const m of ['from', 'innerJoin', 'where', 'groupBy', 'orderBy', 'limit']) b[m] = () => b;
+  for (const m of ['from', 'innerJoin', 'where', 'groupBy', 'orderBy', 'limit']) {
+    b[m] = () => { captured.calls.push(m); return b; };
+  }
   (b as { then: unknown }).then = (resolve: (v: unknown[]) => void) => resolve(result);
   return b;
 }
@@ -34,9 +39,10 @@ function selectBuilder(result: unknown[]) {
 function makeDb(): Db {
   return {
     // The only two selects the helper issues: max(seq) (markChatRead) and the
-    // grouped unread read (unreadCountsForUser). Disambiguate by the projection.
+    // per-chat unread read (unreadCountsForUser). Disambiguate by the projection.
     select: (proj?: Record<string, unknown>) => {
       if (proj && 'maxSeq' in proj) { captured.maxSeqQueried = true; return selectBuilder(maxSeqRow); }
+      captured.unreadProjection = proj ?? null;
       return selectBuilder(unreadRows);
     },
     insert: () => ({
@@ -54,7 +60,7 @@ function makeDb(): Db {
 }
 
 beforeEach(() => {
-  captured = { maxSeqQueried: false, insertValues: null, conflictSet: null };
+  captured = { maxSeqQueried: false, unreadProjection: null, calls: [], insertValues: null, conflictSet: null };
   maxSeqRow = [{ maxSeq: 0 }];
   unreadRows = [];
 });
@@ -98,6 +104,21 @@ describe('markChatRead', () => {
 });
 
 describe('unreadCountsForUser', () => {
+  it('counts per chat with a correlated seq subquery — no messages join, no GROUP BY', async () => {
+    await unreadCountsForUser(makeDb(), 1, 'user-1');
+    // Joining messages and grouping made the planner seq-scan the whole table; the
+    // count must stay a per-chat subquery that an index range scan can answer.
+    expect(captured.calls).not.toContain('groupBy');
+    expect(captured.calls.filter((c) => c === 'innerJoin')).toHaveLength(1);
+    const unread = captured.unreadProjection?.unread as { queryChunks?: unknown[] } | undefined;
+    const literals = (unread?.queryChunks ?? [])
+      .map((ch) => (ch as { value?: string[] })?.value?.join('') ?? '')
+      .join(' ')
+      .toLowerCase();
+    expect(literals).toContain('select count(*)');
+    expect(literals).toContain('>');
+  });
+
   it('maps grouped rows to a {chatId: count} record', async () => {
     unreadRows = [{ chatId: 11, unread: 3 }, { chatId: 12, unread: 1 }];
     const out = await unreadCountsForUser(makeDb(), 1, 'user-1');

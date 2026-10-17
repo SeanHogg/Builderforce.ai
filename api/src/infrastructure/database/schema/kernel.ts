@@ -63,6 +63,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { NEWSLETTER_EVENT_TYPES } from '../../../domain/marketing/newsletterEvents';
+import { REPORT_CADENCES, REPORT_TYPES } from '../../../domain/reports/reportTypes';
 /**
  * Schema — the kernel (PRD 20 §2).
  *
@@ -1632,17 +1633,11 @@ export const activityEventTypeEnum = pgEnum('activity_event_type', [
 // 6f — Scheduled reports + subscriptions
 // ---------------------------------------------------------------------------
 
-export const reportTypeEnum = pgEnum('report_type', [
-  'standup', 'code_review', 'project_status', 'executive_summary', 'portfolio_rollup',
-  /** A canvas frame, rendered and delivered on a cadence (mig 0461). The first
-   *  report type that is ABOUT something — see `report_schedules.subject_ref`. */
-  'board_pack',
-]);
+/** Values live in the domain (`domain/reports/reportTypes.ts`) so validation and the column agree. */
+export const reportTypeEnum = pgEnum('report_type', REPORT_TYPES);
 
 
-export const reportScheduleEnum = pgEnum('report_schedule', [
-  'daily', 'weekly', 'monthly',
-]);
+export const reportScheduleEnum = pgEnum('report_schedule', REPORT_CADENCES);
 
 
 // ───────────────────────────────────────────────────────────────────────────

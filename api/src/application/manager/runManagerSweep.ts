@@ -1,7 +1,8 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * runManagerSweep — the always-on driver that runs the AI Manager pass for every
- * managed project, every tick. This is what "keeps the agents and team members
+ * managed project that is DUE — at most once per `MIN_PROJECT_PASS_INTERVAL_MS`
+ * (managerSweepCadence.ts), not on every 5-minute tick. This is what "keeps the agents and team members
  * moving": the mechanical autonomous sweep only dispatches already-owned work in
  * arrival order, whereas this sweep grooms value, ranks by priority, assigns unowned
  * work, conducts finished tickets into pull requests, and triages what is stuck — the
@@ -22,7 +23,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * fail the gateway anyway) — the same gate the autonomous executor + gateway use.
  * Best-effort + isolated: one bad tenant/project can't abort the sweep.
  */
-import { and, asc, eq, exists, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, exists, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { tasks, projects, boards, projectManagerConfigs, pullRequests } from '../../infrastructure/database/schema';
@@ -32,6 +33,7 @@ import { tenantMayRunAutonomously } from '../llm/tenantTokenAvailability';
 import { runManagerForProject } from './ManagerService';
 import { createTickDispatchBudget, type TickDispatchBudget } from '../runtime/tickDispatchBudget';
 import { runBoundedPool } from '../runtime/boundedPool';
+import { MIN_PROJECT_PASS_INTERVAL_MS, sweepDecisionNeedsWrite, type StoredSweepDecision } from './managerSweepCadence';
 import type { Env } from '../../env';
 
 
@@ -114,7 +116,7 @@ export interface ManagerSweepResult {
   notReached: number;
 }
 
-interface ManagedProject { projectId: number; tenantId: number; }
+interface ManagedProject extends StoredSweepDecision { projectId: number; tenantId: number; }
 
 /**
  * Projects that have OPTED IN to being managed and have something to manage.
@@ -136,7 +138,7 @@ interface ManagedProject { projectId: number; tenantId: number; }
  * rotation forever and starving every project behind it. The fairness fix and the opt-in
  * are the same fix: every project the sweep can now select is one it can also stamp.
  */
-export async function loadManagedProjects(db: Db, limit: number): Promise<ManagedProject[]> {
+export async function loadManagedProjects(db: Db, limit: number, now: number = Date.now()): Promise<ManagedProject[]> {
   // Something to manage. Open PRs count as work in their own right: a project whose
   // tickets are all closed can still have pull requests to CONDUCT, to reconcile and to
   // triage, and gating on tickets alone would strand a finished board's last branches.
@@ -158,7 +160,14 @@ export async function loadManagedProjects(db: Db, limit: number): Promise<Manage
   );
 
   const rows = await db
-    .select({ projectId: projects.id, tenantId: projects.tenantId })
+    .select({
+      projectId: projects.id, tenantId: projects.tenantId,
+      // The stored decision rides along so `recordSweepDecision` can skip a write that
+      // would only restate it — no extra read per project.
+      lastSweepDecision: projectManagerConfigs.lastSweepDecision,
+      lastSweepReason: projectManagerConfigs.lastSweepReason,
+      lastSweepAt: projectManagerConfigs.lastSweepAt,
+    })
     .from(projects)
     .innerJoin(projectManagerConfigs, and(
       eq(projectManagerConfigs.projectId, projects.id),
@@ -172,6 +181,13 @@ export async function loadManagedProjects(db: Db, limit: number): Promise<Manage
       // disabled project costs the sweep nothing at all, rather than a pass that loads
       // its policy only to return `skipped`.
       eq(projectManagerConfigs.enabled, true),
+      // DUE, not merely eligible: a project passed within MIN_PROJECT_PASS_INTERVAL_MS is
+      // filtered out HERE, so it costs the tick nothing — no token gate, no pass, no
+      // decision write. Never-run projects (NULL) are always due. See managerSweepCadence.ts.
+      or(
+        isNull(projectManagerConfigs.lastRunAt),
+        lt(projectManagerConfigs.lastRunAt, new Date(now - MIN_PROJECT_PASS_INTERVAL_MS)),
+      ),
       hasBoard,
       sql`(${hasWork} OR ${hasOpenPr})`,
     ))
@@ -220,6 +236,9 @@ export type ManagerSweepDecision = 'ran' | 'skipped';
  * is a single current-state fact ("what happened last time") sitting next to
  * `last_run_at`, which answers the adjacent question. Pass HISTORY has its own home in
  * `manager_runs` (1082).
+ *
+ * Skipped when it would only restate the stored decision and reason, unless
+ * `last_sweep_at` is older than the heartbeat — see {@link sweepDecisionNeedsWrite}.
  */
 async function recordSweepDecision(
   db: Db,
@@ -227,6 +246,7 @@ async function recordSweepDecision(
   decision: ManagerSweepDecision,
   reason: ManagerSweepSkipReason | null,
 ): Promise<void> {
+  if (!sweepDecisionNeedsWrite(p, decision, reason)) return;
   try {
     await db
       .update(projectManagerConfigs)

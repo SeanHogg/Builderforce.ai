@@ -20,6 +20,8 @@
  * the number somebody quotes in a meeting.
  */
 
+import { perMillionToPerToken } from '@builderforce/model-catalog';
+
 export interface LlmCostInputs {
   costPerMillionInput?: number | null;
   costPerMillionOutput?: number | null;
@@ -50,8 +52,6 @@ function positive(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-const PER_MILLION = 1_000_000;
-
 /**
  * Project monthly spend from a rate card and a volume.
  *
@@ -76,8 +76,8 @@ export function projectLlmCost(inputs: LlmCostInputs): LlmCostProjection {
   const incomplete = inputRate == null || outputRate == null || tokensIn == null || tokensOut == null || requests == null;
 
   const effectiveInputTokens = (tokensIn ?? 0) * (1 - cacheHitRate);
-  const inputCost = effectiveInputTokens * (inputRate ?? 0) / PER_MILLION;
-  const outputCost = (tokensOut ?? 0) * (outputRate ?? 0) / PER_MILLION;
+  const inputCost = effectiveInputTokens * perMillionToPerToken(inputRate ?? 0);
+  const outputCost = (tokensOut ?? 0) * perMillionToPerToken(outputRate ?? 0);
   const costPerRequest = inputCost + outputCost;
   const total = costPerRequest || 1;
 

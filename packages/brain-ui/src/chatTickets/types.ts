@@ -356,7 +356,7 @@ export interface ChatTicketsLabels {
   mergedN: (n: number) => string;
 }
 
-/** English defaults — the VS Code webview uses these; the web app overrides via next-intl. */
+/** English defaults — the fallback for any key a host catalog lacks (see `chatTicketsLabelsFromBundle`). */
 export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   none: 'No tickets linked yet.',
   spawned: 'spawned here',

@@ -73,7 +73,7 @@ export function BrainSurfaceMenu({
         <div role="menu" aria-label={t('brainMenu.label')} className={styles.brainMenu}>
           {row('steps', 'activity', t('brainMenu.executionSteps'), () => onExecutionDetailChange(!showExecutionDetail), showExecutionDetail)}
           {onUndockPrompt && row('float', 'external-link', t('floatPrompt'), onUndockPrompt)}
-          {boardAvailable && row(
+          {boardAvailable && onModeChange && row(
             'placement',
             inline ? 'collapse-horizontal' : 'canvas',
             inline ? t('dockBrainToEdge') : t('showBrainInObject'),

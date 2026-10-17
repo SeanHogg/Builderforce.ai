@@ -48,7 +48,16 @@ export interface WorkforcePresence {
 
 const POLL_MS = 30_000;
 
-export function useWorkforcePresence(): WorkforcePresence {
+export interface WorkforcePresenceOptions {
+  /**
+   * Keep the roster live (re-read every 30 s). `false` reads it ONCE (and again
+   * when the tab returns to view) — what a page wants when only a headline count
+   * is on screen and the live roster (the presence strip) is not. Default true.
+   */
+  live?: boolean;
+}
+
+export function useWorkforcePresence({ live = true }: WorkforcePresenceOptions = {}): WorkforcePresence {
   const { isAuthenticated, hasTenant, tenant, tenantToken } = useAuth();
 
   const [vscodeConns, setVscodeConns] = useState<VscodeConnection[]>([]);
@@ -93,7 +102,9 @@ export function useWorkforcePresence(): WorkforcePresence {
       setLoading(false);
     }
   }, [load]);
-  usePolledResource(loadOnce, { intervalMs: POLL_MS, enabled, restartKey: tenant?.id ?? null });
+  // Not live ⇒ the immediate read only (`maxTicks: 0`); flipping to live restarts
+  // the poll with a fresh read.
+  usePolledResource(loadOnce, { intervalMs: POLL_MS, enabled, maxTicks: live ? undefined : 0, restartKey: tenant?.id ?? null });
 
   return useMemo(() => {
     const membersById = new Map(members.map((m) => [m.id, m]));

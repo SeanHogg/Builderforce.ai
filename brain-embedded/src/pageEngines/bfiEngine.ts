@@ -28,7 +28,9 @@ import {
   type LocalDeviceSupport,
 } from '@builderforce/local-inference';
 import { catalogProbe } from './catalogProbe';
+import { reportPageEngineFailure } from './engineFailure';
 import type { HfModelStore } from './hfModelStore';
+import { createResidentModel } from './residentModel';
 import {
   PageEngineError,
   abortReason,
@@ -132,39 +134,33 @@ const UNSUPPORTED: LocalDeviceSupport = { supported: false, reason: 'bfi_unavail
 export function createBfiEngine(options: BfiEngineOptions): BfiPageEngine {
   let module: Promise<BfiModule> | undefined;
   const bfi = (): Promise<BfiModule> => (module ??= options.loadBfi());
+  // A wasm that will not load (or a support read that throws) is "this device cannot run
+  // bfi" for the picker — with the reason reported, not dropped.
   const support = (): Promise<LocalDeviceSupport> =>
     bfi()
       .then((m) => m.BfiEngine.support())
-      .catch(() => UNSUPPORTED);
+      .catch((e: unknown) => {
+        reportPageEngineFailure('bfi', 'support', e);
+        return UNSUPPORTED;
+      });
 
   // One engine, one resident model; loads are chained so two never race.
-  let engine: BfiEngineInstance | undefined;
-  let resident: string | undefined;
+  const resident = createResidentModel(async () => (await bfi()).BfiEngine.create());
   // What each load actually allocated — the probe's answer once a model has been loaded.
   const served = new Map<string, number>();
-  let queue: Promise<unknown> = Promise.resolve();
 
-  const residentEngine = (row: LocalCatalogModel): Promise<BfiEngineInstance> => {
-    const run = queue.then(async () => {
-      engine ??= await (await bfi()).BfiEngine.create();
-      if (resident !== row.ref) {
-        if (resident) engine.unload();
-        resident = undefined;
-        const { stream, bytes } = await options.store.open(row.ref);
-        const info = await engine.load(stream, bytes);
-        resident = row.ref;
-        if (info.contextTokens > 0 && served.get(row.ref) !== info.contextTokens) {
-          served.set(row.ref, info.contextTokens);
-          prober.invalidate();
-        }
+  const residentEngine = (row: LocalCatalogModel): Promise<BfiEngineInstance> =>
+    resident.acquire(row.ref, async (engine, previous) => {
+      if (previous) engine.unload();
+      const { stream, bytes } = await options.store.open(row.ref);
+      const info = await engine.load(stream, bytes);
+      if (info.contextTokens > 0 && served.get(row.ref) !== info.contextTokens) {
+        served.set(row.ref, info.contextTokens);
+        prober.invalidate();
       }
-      return engine;
     });
-    queue = run.catch(() => undefined);
-    return run;
-  };
 
-  const prober = memoizedProbe(async () => {
+  const prober = memoizedProbe('bfi', async () => {
     // Look in the store first: with nothing downloaded the wasm is never loaded.
     const rows = localCatalogFor('bfi');
     const states = await Promise.all(rows.map((row) => options.store.status(row.ref)));
@@ -253,8 +249,10 @@ async function* bfiChunks(
         try {
           queue.push(JSON.parse(json) as ChatCompletionChunk);
           notify();
-        } catch {
-          // A malformed chunk is dropped; the closing chunk still carries the outcome.
+        } catch (e) {
+          // A malformed chunk is dropped (the closing chunk still carries the outcome),
+          // and said so.
+          reportPageEngineFailure('bfi', 'chunk', e);
         }
       },
       controller.signal,

@@ -20,11 +20,11 @@ import {
 import { evaluateDatasetUse, normalizeClassifications, normalizeUsePolicy } from '@builderforce/creation-canvas-contract';
 import { getApiBaseUrl } from '@/lib/apiClient';
 import { downloadBlob } from '@/lib/download';
-import { hasWebGPUSupport } from '@seanhogg/builderforce-studio/capabilities';
+import { hasWebGPU } from '@seanhogg/builderforce-brain-embedded';
 import { WebGPUTrainer, canTrainInBrowser, type BrowserLoRAArtifact, type TrainingDataMode, type TrainingStep } from '@/lib/webgpu-trainer';
 import { benchmarkPublishedModel, listEvermindModels, publishEvermindModel, rollbackPublishedEvermindModel, testPublishedEvermindModel, type PublishedEvermindModel, type PublishedEvermindResult } from '@/lib/studioModelsApi';
 import { MambaEngine } from '@/lib/mamba-engine';
-import { MambaModelProvider, type MambaProviderConfig } from '@/lib/model-provider';
+import { initMambaProvider, type MambaProviderConfig, type MambaTrainingProvider } from '@/lib/mamba-worker-client';
 import type { HuggingFaceTokenizerSpec } from '@seanhogg/builderforce-memory-engine';
 import { useFormat } from "@/i18n/useFormat";
 import { useErrorText } from '@/i18n/useErrorMessage';
@@ -102,12 +102,12 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
   const [isGenerating, setIsGenerating] = useState(false);
   const [isTraining, setIsTraining] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [webgpuAvailable] = useState(hasWebGPUSupport);
-  const [mambaWebGPU] = useState(hasWebGPUSupport);
+  const [webgpuAvailable] = useState(hasWebGPU);
+  const [mambaWebGPU] = useState(hasWebGPU);
   const [memorySequences, setMemorySequences] = useState('');
   const trainerRef = useRef<WebGPUTrainer | null>(null);
   const mambaRef = useRef<MambaEngine | null>(null);
-  const mambaProviderRef = useRef<MambaModelProvider | null>(null);
+  const mambaProviderRef = useRef<MambaTrainingProvider | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   const selectedModel = SUPPORTED_MODELS.find(m => m.id === config.baseModel);
@@ -418,9 +418,9 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
     setIsTraining(true);
     appendLog(t('logMambaInit'));
     try {
-      const provider = new MambaModelProvider(mambaProviderConfig);
+      mambaProviderRef.current?.dispose();
+      const provider = await initMambaProvider(mambaProviderConfig);
       mambaProviderRef.current = provider;
-      await provider.init();
 
       if (!provider.isReady()) {
         appendLog(t('logMambaFailInit', { reason: provider.failureReason() ?? t('errUnknown') }));

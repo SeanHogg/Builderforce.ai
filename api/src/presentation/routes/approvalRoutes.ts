@@ -57,6 +57,7 @@ import {
   WORKFLOW_RUN_SUBJECT_KEY,
 } from '../../application/workflow/workflowRunApproval';
 import { TicketAuditService } from '../../application/audit/ticketAuditService';
+import { getPendingApprovalCount } from '../../application/approval/pendingApprovalCount';
 import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
 import { resolveMemberDisplayName } from '../../application/kanban/roleCapability';
 import { recordActivity, resolveHumanActor } from '../../application/activity/activityLog';
@@ -301,6 +302,14 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
     if (projectFilter != null) rows = rows.filter((r) => r.projectId === projectFilter);
 
     return c.json({ approvals: rows });
+  });
+
+  // GET /api/approvals/count — pending count + recent createdAt for the dashboard
+  // tile, read from pending rows only (the list reads every status up to a cap).
+  // Registered BEFORE '/:id' so 'count' is not read as an approval id.
+  router.get('/count', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    return c.json(await getPendingApprovalCount(db, c.env as Env, tenantId, c.get('userId') as string | undefined));
   });
 
   // GET /api/approvals/:id

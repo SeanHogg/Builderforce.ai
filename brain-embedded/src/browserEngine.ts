@@ -31,6 +31,7 @@ import {
   type ChatCompletionsRequest,
   type PageEngine,
 } from './pageEngines/types';
+import { reportPageEngineFailure } from './pageEngines/engineFailure';
 import { messageText } from './pageEngines/messages';
 import {
   promptApiAvailability,
@@ -109,6 +110,7 @@ export function createBrowserEngineProber(
 ): BrowserEngineProber {
   let quota: number | undefined;
   return memoizedProbe(
+    'browser',
     () =>
       probeOnce(
         () => quota,
@@ -202,7 +204,12 @@ async function promptApiCompletions(
   // Refuse an oversized prompt up front when the build can measure it — the failover
   // then hands it to the cloud without the engine ever starting.
   const quota = promptApiInputQuota(session);
-  const needed = await promptApiMeasure(session, turn.prompt, signal).catch(() => undefined);
+  // A build that cannot measure skips the up-front check (the engine still refuses an
+  // oversized prompt itself), and says why.
+  const needed = await promptApiMeasure(session, turn.prompt, signal).catch((e: unknown) => {
+    if (!signal?.aborted) reportPageEngineFailure('browser', 'measure', e);
+    return undefined;
+  });
   if (quota !== undefined && needed !== undefined && (session.inputUsage ?? 0) + needed > quota) {
     session.destroy();
     throw new PageEngineError(413, 'context_exceeded');

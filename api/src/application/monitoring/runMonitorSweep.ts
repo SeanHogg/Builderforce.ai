@@ -4,6 +4,10 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * monitors: heartbeat staleness, HTTP checks, and metric thresholds. Webhook/manual
  * monitors are signal-driven and skipped here. A breach opens an incident + pages
  * on-call via MonitoringService.applyResult. Best-effort per monitor.
+ *
+ * Every due monitor is EVALUATED each tick (the schema has no per-monitor check cadence,
+ * and a breach must page within one tick), but a healthy, unchanged monitor is no
+ * longer WRITTEN each tick — see monitorCheckStamp.ts.
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';

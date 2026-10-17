@@ -23,8 +23,10 @@ import {
 import {
   BrainComposer,
   PersonaPicker,
+  QueuedTurnChips,
   RecipientPicker,
   type ComposerOptions,
+  type QueuedItem,
   type RecipientPickerProps,
 } from '@seanhogg/builderforce-brain-ui';
 import type { AuthedFetch } from '../authedFetch';
@@ -34,11 +36,17 @@ import { webviewLocalModelStore } from '../pageEngines';
 import { post, request, type InitData } from '../vscodeBridge';
 import { makeT, personaModalityOptions, personaPickerLabels, recipientPickerLabels } from './chatLabels';
 import { brainComposerLabels } from './composerLabels';
-import { QueuedMessages, type QueuedMessage } from './QueuedMessages';
+import { steerRun } from './chatChildren';
 import type { useComposerModels } from './useComposerModels';
 import type { useRunShaping } from './useRunShaping';
 
 type ChatTicket = { id: number; title: string; status?: string; key?: string };
+
+/** What a held VS Code turn carries — its text and who it is addressed to. */
+export interface QueuedTurn {
+  text: string;
+  recipient: DirectedRecipient | null;
+}
 
 export interface VsCodeComposerProps {
   init: InitData;
@@ -65,7 +73,7 @@ export interface VsCodeComposerProps {
   persona: BrainPersonaChoice;
   onPersona: (p: BrainPersonaChoice) => void;
   personaAgents: BrainPersonaAgent[];
-  queue: readonly QueuedMessage[];
+  queue: readonly QueuedItem<QueuedTurn>[];
   onRemoveQueued: (id: number) => void;
   mode: { value: ChatMode; onChange: (mode: ChatMode) => void };
   memory: { enabled: boolean; onChange: (on: boolean) => void };
@@ -162,6 +170,15 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
 
   return (
     <BrainComposer
+      // Fixed next steps — a chip seeds the box; the person edits and sends it.
+      suggestions={{
+        label: t('app.suggestions', 'Suggested next steps'),
+        items: [
+          { id: 'review', label: t('app.suggestReview', 'Review my changes'), onSelect: () => onChange(t('app.suggestReviewPrompt', 'Review my uncommitted changes and point out anything risky.')) },
+          { id: 'tests', label: t('app.suggestTests', 'Write tests'), onSelect: () => onChange(t('app.suggestTestsPrompt', 'Write tests for the file I have open.')) },
+          { id: 'explain', label: t('app.suggestExplain', 'Explain this file'), onSelect: () => onChange(t('app.suggestExplainPrompt', 'Explain how the file I have open works.')) },
+        ],
+      }}
       className="bf-composer"
       value={value}
       onChange={onChange}
@@ -207,9 +224,26 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
       </>}
       // Messages queued behind the in-flight run — each sends on its own once the run
       // finishes, or is steered into it now.
-      above={queue.length > 0
-        ? <QueuedMessages queue={queue} runningChatId={conv.sending ? chatId : null} labels={init.labels} onRemove={onRemoveQueued} />
-        : undefined}
+      // Held turns — the shared chips; a turn addressed to the run (no participant) can be
+      // steered into it now instead of after it.
+      above={(
+        <QueuedTurnChips
+          items={queue}
+          textOf={(turn) => turn.text}
+          onRemove={onRemoveQueued}
+          {...(conv.sending && chatId != null ? {
+            onSteer: (item: QueuedItem<QueuedTurn>) => { steerRun(chatId, item.value.text); onRemoveQueued(item.id); },
+            canSteer: (item: QueuedItem<QueuedTurn>) => !item.value.recipient,
+          } : {})}
+          labels={{
+            list: t('app.queuedLabel', 'Queued messages'),
+            hint: t('app.queuedHint', 'Queued — sends when the run finishes'),
+            steer: t('app.steerNow', 'Steer now'),
+            steerHint: t('app.steerNowHint', 'Send it into the running turn now instead of after it'),
+            remove: t('app.remove', 'Remove'),
+          }}
+        />
+      )}
       labels={labels}
     />
   );

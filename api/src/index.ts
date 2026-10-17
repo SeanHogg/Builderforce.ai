@@ -532,7 +532,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
     return next();
   });
 
-  // Rate limiting applied after auth middleware resolves tenantId
+  // Per-tenant rate limiting. Mounted app-wide, BEFORE the routers (and their own
+  // authMiddleware), so tenantId is not in context yet: the middleware resolves it
+  // from the Bearer credential itself (JWT verify / cached key resolution) and the
+  // plan from the KV tenant snapshot. Inert unless TENANT_RATE_LIMITER is bound.
   app.use('/api/*', rateLimitMiddleware as Parameters<typeof app.use>[1]);
   // The metered LLM gateway (`/llm/*`) and the public `/v1/*` surface (seam +
   // semantic cache) carry per-tenant billable traffic just like `/api/*`, so they

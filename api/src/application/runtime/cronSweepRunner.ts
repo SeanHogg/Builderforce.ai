@@ -15,11 +15,20 @@
  * The fix is a REGISTRY, not a second call path: each sweep is declared once (see
  * `src/cronSweeps.ts`) with its cadence, and both callers consume the same list.
  *   • `scheduled()` → {@link dispatchCronSweeps}: fire-and-forget via `waitUntil`,
- *     one isolated branch per sweep so a failure in one can't poison the others.
+ *     one isolated branch per ordering chain (an unchained sweep is a chain of one)
+ *     so a failure in one can't poison the others.
  *   • `POST /api/admin/cron/:target` → {@link runCronSweeps}: awaited, so the
  *     operator sees per-sweep ok/duration/summary in the response.
  * Neither caller can drift from the other's sweep list, and a new sweep is one
  * registry entry rather than an edit to two handlers.
+ *
+ * ORDER IS DECLARED, NEVER IMPLIED BY POSITION. Sweeps run concurrently unless one
+ * names another in `after`; then it starts only once that one has SETTLED (ok or
+ * not — see `skipIfAfterFailed` for the exception). Registry position used to be
+ * described as load-bearing while every sweep actually got its own concurrent
+ * `waitUntil`, so the "retention → db-vacuum" and "grant allowance → charge rent"
+ * orderings the comments promised never held. {@link validateSweepOrdering} is the
+ * registry check that every `after` resolves, shares its cadence and has no cycle.
  *
  * TIMEOUTS NEVER CANCEL WORK. The awaited flavour races each sweep against a
  * deadline so an operator request always returns, and hands the still-running
@@ -82,6 +91,20 @@ export interface CronSweepDef {
    * operator control confirms before firing one of these.
    */
   dispatches?: boolean;
+  /**
+   * Key of a SAME-cadence sweep that must settle before this one starts. Both
+   * callers honour it whenever the predecessor is part of the same invocation; a
+   * forced run of this sweep alone simply runs it. Every sweep that shares a
+   * predecessor chain runs inside ONE `waitUntil` on the cron tick.
+   */
+  after?: string;
+  /**
+   * Skip this sweep (reported `skipped`, with `blockedBy`) when its `after`
+   * predecessor THREW. Default false: a later step runs once its predecessor has
+   * settled either way. Only for a step that is actively harmful on top of a failed
+   * predecessor, not merely less useful.
+   */
+  skipIfAfterFailed?: boolean;
   /** Env-gated sweeps (e.g. the demo reseed) are reported unavailable, not run. */
   available?: (env: Env) => boolean;
   /**
@@ -102,8 +125,10 @@ export interface CronSweepOutcome {
   error?: string;
   /** Still running when we answered — handed to `keepAlive`, NOT cancelled. */
   timedOut?: boolean;
-  /** `available(env)` said no — the sweep was not invoked. */
+  /** `available(env)` said no, or a failed predecessor blocked it — not invoked. */
   skipped?: boolean;
+  /** Set with `skipped` when a `skipIfAfterFailed` sweep's predecessor threw. */
+  blockedBy?: string;
 }
 
 /** Default per-sweep deadline for a forced (awaited) run. */
@@ -145,6 +170,56 @@ export function sweepsForCadence(defs: readonly CronSweepDef[], cadence: CronCad
 }
 
 /**
+ * Registry check for the `after` declarations: every target must exist, must not
+ * be the sweep itself, must share its cadence (a daily sweep can never wait on a
+ * frequent one — they are never dispatched together) and must not form a cycle.
+ * Returns one message per violation; an empty list is a valid registry. Enforced
+ * by `src/cronSweeps.test.ts`. At runtime an invalid `after` degrades to "no
+ * ordering" (see {@link scheduleSweeps}) rather than wedging a tick.
+ */
+export function validateSweepOrdering(defs: readonly CronSweepDef[]): string[] {
+  const byKey = new Map(defs.map((d) => [d.key, d]));
+  const errors: string[] = [];
+  for (const def of defs) {
+    if (def.after === undefined) {
+      if (def.skipIfAfterFailed) errors.push(`${def.key}: skipIfAfterFailed without an \`after\``);
+      continue;
+    }
+    const target = byKey.get(def.after);
+    if (def.after === def.key) errors.push(`${def.key}: \`after\` names itself`);
+    else if (!target) errors.push(`${def.key}: \`after\` names unknown sweep '${def.after}'`);
+    else if (target.cadence !== def.cadence) {
+      errors.push(`${def.key}: \`after\` '${def.after}' is ${target.cadence}, not ${def.cadence}`);
+    }
+  }
+  for (const def of defs) {
+    if (def.after === undefined || def.after === def.key) continue;
+    const seen = new Set<string>([def.key]);
+    for (let cur = byKey.get(def.after); cur; cur = cur.after === undefined ? undefined : byKey.get(cur.after)) {
+      if (seen.has(cur.key)) { errors.push(`${def.key}: \`after\` chain forms a cycle through '${cur.key}'`); break; }
+      seen.add(cur.key);
+    }
+  }
+  return errors;
+}
+
+/**
+ * The predecessor `def` waits on WITHIN this invocation, or undefined when it is
+ * unchained here — no `after`, a predecessor not selected (a forced single-sweep
+ * run), or an invalid self/cyclic reference, which runs unordered rather than
+ * deadlocking.
+ */
+function predecessorIn(def: CronSweepDef, byKey: ReadonlyMap<string, CronSweepDef>): CronSweepDef | undefined {
+  if (def.after === undefined) return undefined;
+  const seen = new Set<string>([def.key]);
+  for (let cur = byKey.get(def.after); cur; cur = cur.after === undefined ? undefined : byKey.get(cur.after)) {
+    if (seen.has(cur.key)) return undefined;
+    seen.add(cur.key);
+  }
+  return byKey.get(def.after);
+}
+
+/**
  * Run one sweep and describe what happened. Never throws: a sweep's failure is
  * data (an outcome with `ok: false`), because one broken sweep must not stop the
  * others — that isolation was the whole point of the per-branch `waitUntil` this
@@ -176,22 +251,77 @@ function logOutcome(outcome: CronSweepOutcome): void {
     console.error(`[cron:${outcome.key}] failed`, outcome.error);
     return;
   }
+  if (outcome.blockedBy) {
+    console.warn(`[cron:${outcome.key}] skipped — predecessor '${outcome.blockedBy}' failed`);
+    return;
+  }
   if (outcome.summary) console.log(`[cron:${outcome.key}] ${outcome.summary}`);
 }
 
+/** A started sweep: its settled (and already logged) outcome, plus its chain root. */
+interface ScheduledSweep {
+  def: CronSweepDef;
+  /** Key of the first sweep of the chain this one belongs to (itself when unchained). */
+  root: string;
+  outcome: Promise<CronSweepOutcome>;
+}
+
 /**
- * Fire-and-forget flavour used by `scheduled()`. Each sweep gets its own
- * `waitUntil` so the Worker keeps every branch alive independently and a slow or
- * failing sweep can neither delay nor poison its siblings.
+ * Start every sweep in `defs` at once, each either immediately or chained behind
+ * its in-invocation predecessor, and return them in registry order. The ONE place
+ * ordering is implemented — both callers go through it, so a forced run of a whole
+ * cadence observes exactly the ordering the cron tick does. Each outcome is logged
+ * as it settles; the returned promises never reject.
+ */
+function scheduleSweeps(defs: readonly CronSweepDef[], ctx: CronSweepContext): ScheduledSweep[] {
+  const byKey = new Map(defs.map((d) => [d.key, d]));
+  const started = new Map<string, ScheduledSweep>();
+  const start = (def: CronSweepDef): ScheduledSweep => {
+    const existing = started.get(def.key);
+    if (existing) return existing;
+    const before = predecessorIn(def, byKey);
+    let root = def.key;
+    let outcome: Promise<CronSweepOutcome>;
+    if (!before) {
+      outcome = executeSweep(def, ctx);
+    } else {
+      const prior = start(before);
+      root = prior.root;
+      outcome = prior.outcome.then((prev): CronSweepOutcome | Promise<CronSweepOutcome> =>
+        !prev.ok && def.skipIfAfterFailed
+          ? { key: def.key, cadence: def.cadence, ok: true, ms: 0, summary: null, skipped: true, blockedBy: before.key }
+          : executeSweep(def, ctx));
+    }
+    const scheduled: ScheduledSweep = {
+      def,
+      root,
+      outcome: outcome.then((o) => { logOutcome(o); return o; }),
+    };
+    started.set(def.key, scheduled);
+    return scheduled;
+  };
+  return defs.map(start);
+}
+
+/**
+ * Fire-and-forget flavour used by `scheduled()`. Each ordering CHAIN gets its own
+ * `waitUntil` — an unchained sweep is a chain of one — so the Worker keeps every
+ * branch alive independently and a slow or failing sweep can neither delay nor
+ * poison anything outside its own declared chain. Within a chain, a step starts
+ * only after the step it names in `after` has settled.
  */
 export function dispatchCronSweeps(
   defs: readonly CronSweepDef[],
   ctx: CronSweepContext,
   waitUntil: (p: Promise<unknown>) => void,
 ): void {
-  for (const def of defs) {
-    waitUntil(executeSweep(def, ctx).then(logOutcome));
+  const chains = new Map<string, Array<Promise<CronSweepOutcome>>>();
+  for (const s of scheduleSweeps(defs, ctx)) {
+    const chain = chains.get(s.root);
+    if (chain) chain.push(s.outcome);
+    else chains.set(s.root, [s.outcome]);
   }
+  for (const outcomes of chains.values()) waitUntil(Promise.all(outcomes));
 }
 
 export interface RunCronSweepsOptions {
@@ -208,9 +338,11 @@ export interface RunCronSweepsOptions {
 
 /**
  * Awaited flavour used by the operator force-run route. Runs the sweeps
- * CONCURRENTLY (as the cron tick does — they are independent) and returns one
- * outcome each. A sweep past its deadline is reported `timedOut` and handed to
- * `keepAlive`; it is never aborted.
+ * CONCURRENTLY, except where one declares `after` another in the same run — the
+ * same ordering the cron tick applies — and returns one outcome each. Deadlines
+ * are measured from the start of the request, so a chained sweep still waiting on
+ * its predecessor counts that wait against its own deadline. A sweep past its
+ * deadline is reported `timedOut` and handed to `keepAlive`; it is never aborted.
  */
 export async function runCronSweeps(
   defs: readonly CronSweepDef[],
@@ -218,14 +350,8 @@ export async function runCronSweeps(
   options: RunCronSweepsOptions = {},
 ): Promise<CronSweepOutcome[]> {
   const timeoutMs = clampForceTimeout(options.timeoutMs);
-  return Promise.all(defs.map(async (def) => {
-    const started = Date.now();
-    const inFlight = executeSweep(def, ctx).then((outcome) => {
-      // Log the real completion too, so `wrangler tail` shows a timed-out
-      // sweep's eventual result exactly as a cron tick would have.
-      logOutcome(outcome);
-      return outcome;
-    });
+  const started = Date.now();
+  return Promise.all(scheduleSweeps(defs, ctx).map(async ({ def, outcome: inFlight }) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<'timeout'>((resolve) => {
       timer = setTimeout(() => resolve('timeout'), timeoutMs);
@@ -233,6 +359,8 @@ export async function runCronSweeps(
     const settled = await Promise.race([inFlight, deadline]);
     if (timer !== undefined) clearTimeout(timer);
     if (settled === 'timeout') {
+      // scheduleSweeps logs every outcome as it lands, so `wrangler tail` still shows
+      // a timed-out sweep's eventual result exactly as a cron tick would have.
       options.keepAlive?.(inFlight);
       return {
         key: def.key,

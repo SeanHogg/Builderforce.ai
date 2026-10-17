@@ -16,7 +16,8 @@
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { MemoryAnswer } from './projectMemory';
-import { estimateTokens, recordAvoidedCall } from './savingsLedger';
+import { estimateTokensFromText } from '@builderforce/workload';
+import { recordAvoidedCall } from './savingsLedger';
 import type { UsageSurface } from './usageLedger';
 
 export interface MemoryAnswerSavingsInput {
@@ -54,8 +55,8 @@ export function recordMemoryAnswerSavings(env: Env, db: Db, input: MemoryAnswerS
     ...base,
     source: answer.source === 'evermind' ? 'evermind_answer' : 'memory_answer',
     model: input.model,
-    promptTokens: estimateTokens(input.question),
-    completionTokens: estimateTokens(answer.text),
+    promptTokens: estimateTokensFromText(input.question),
+    completionTokens: estimateTokensFromText(answer.text),
     estimated: true,
   });
 }

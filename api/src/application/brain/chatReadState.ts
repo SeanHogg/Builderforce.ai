@@ -50,33 +50,36 @@ export async function markChatRead(
 
 /**
  * Per-chat unread COUNT for every chat the user has read (has a read-state row)
- * that now holds newer messages. ONE grouped query joining read-state → messages →
- * chats (bounded by the number of chats the user has opened; no N+1). Archived
- * chats are excluded. Only chats with ≥1 unread message appear in the map.
+ * that now holds newer messages. Driven from the user's read-state rows (index
+ * `idx_chat_read_state_user`) joined to their non-archived chats; each chat's count
+ * is a correlated subquery over `brain_chat_messages` that the planner runs as an
+ * index range scan on `(chat_id, seq)` (migration 1231) — so the cost is bounded by
+ * the chats the user has opened and the messages actually unread, never a scan of
+ * the whole messages table. Only chats with ≥1 unread message appear in the map
+ * (read chats with nothing new come back as 0 and are dropped here).
  *
  * Not cached: unread is per-user live state that changes on every inbound message,
  * and it rides the already-uncached attention aggregator (same rationale as the
- * rest of that endpoint) — a bounded, indexed grouped read.
+ * rest of that endpoint).
  */
 export async function unreadCountsForUser(
   db: Db, tenantId: number, userId: string,
 ): Promise<Record<number, number>> {
   const rows = await db
     .select({
-      chatId: brainChatMessages.chatId,
-      unread: sql<number>`count(*)`,
+      chatId: chatReadState.chatId,
+      unread: sql<number>`(
+        select count(*)::int from ${brainChatMessages}
+        where ${brainChatMessages.chatId} = ${chatReadState.chatId}
+          and ${brainChatMessages.seq} > ${chatReadState.lastReadSeq}
+      )`,
     })
     .from(chatReadState)
-    .innerJoin(brainChatMessages, and(
-      eq(brainChatMessages.chatId, chatReadState.chatId),
-      sql`${brainChatMessages.seq} > ${chatReadState.lastReadSeq}`,
-    ))
     .innerJoin(brainChats, and(
       eq(brainChats.id, chatReadState.chatId),
       eq(brainChats.isArchived, false),
     ))
-    .where(and(eq(chatReadState.tenantId, tenantId), eq(chatReadState.userId, userId)))
-    .groupBy(brainChatMessages.chatId);
+    .where(and(eq(chatReadState.tenantId, tenantId), eq(chatReadState.userId, userId)));
 
   const out: Record<number, number> = {};
   for (const r of rows) {

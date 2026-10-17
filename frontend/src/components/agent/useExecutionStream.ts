@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { runtimeApi, type Execution, type ToolAuditEvent } from '@/lib/builderforceApi';
+import { usePolledResource } from '@/hooks/usePolledResource';
 
 /**
  * Live event stream for a single execution. Subscribes to the runtime WebSocket
@@ -59,6 +60,10 @@ type StreamEvent =
   | { type: 'error'; message: string };
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
+/** Row poll while the live socket is down — the poll IS the liveness path then. */
+const DISCONNECTED_POLL_MS = 3000;
+/** Row poll while the socket is up — a backstop for a dropped frame only. */
+const CONNECTED_RECONCILE_MS = 30000;
 
 export function useExecutionStream(executionId: number | null): ExecutionStreamState {
   const [status, setStatus] = useState<string | null>(null);
@@ -83,7 +88,6 @@ export function useExecutionStream(executionId: number | null): ExecutionStreamS
     if (executionId == null) return;
 
     let cancelled = false;
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
 
     const applyEvent = (evt: StreamEvent) => {
       if (cancelled) return;
@@ -118,41 +122,16 @@ export function useExecutionStream(executionId: number | null): ExecutionStreamS
       }
     };
 
-    const startPolling = () => {
-      if (pollTimer || cancelled) return;
-      const tick = async () => {
-        try {
-          const exec = await runtimeApi.get(executionId);
-          if (cancelled) return;
-          setExecution(exec);
-          setStatus(exec.status);
-          if (TERMINAL.has(exec.status) && pollTimer) {
-            clearInterval(pollTimer);
-            pollTimer = null;
-          }
-        } catch { /* keep polling; transient */ }
-      };
-      void tick();
-      pollTimer = setInterval(tick, 3000);
-    };
-
-    // Always run a reconciliation poll. The execution-stream WebSocket map is
-    // per-Worker-isolate, so a terminal event written in the POST/run isolate may
-    // never reach a WS connection served by a different isolate — leaving the UI
-    // stuck on "running" even though the row is `completed`. Polling the row picks
-    // up the true status + result regardless; the WS just makes live updates faster.
-    startPolling();
-
     const url = runtimeApi.streamUrl(executionId);
     if (!url || typeof WebSocket === 'undefined') {
-      return () => { cancelled = true; if (pollTimer) clearInterval(pollTimer); };
+      return () => { cancelled = true; };
     }
 
     let ws: WebSocket;
     try {
       ws = new WebSocket(url);
     } catch {
-      return () => { cancelled = true; if (pollTimer) clearInterval(pollTimer); };
+      return () => { cancelled = true; };
     }
     wsRef.current = ws;
 
@@ -160,21 +139,37 @@ export function useExecutionStream(executionId: number | null): ExecutionStreamS
     ws.onmessage = (e) => {
       try { applyEvent(JSON.parse(e.data as string) as StreamEvent); } catch { /* ignore malformed */ }
     };
-    ws.onerror = () => { if (!cancelled) { setConnected(false); startPolling(); } };
-    ws.onclose = () => {
-      if (cancelled) return;
-      setConnected(false);
-      // If the run hasn't terminated, fall back to polling to keep it live.
-      setStatus((s) => { if (!s || !TERMINAL.has(s)) startPolling(); return s; });
-    };
+    // A dropped socket flips `connected` off, which puts the reconcile poll below
+    // back on its fast cadence until the run terminates.
+    ws.onerror = () => { if (!cancelled) setConnected(false); };
+    ws.onclose = () => { if (!cancelled) setConnected(false); };
 
     return () => {
       cancelled = true;
-      if (pollTimer) clearInterval(pollTimer);
       wsRef.current = null;
       try { ws.close(); } catch { /* already closed */ }
     };
   }, [executionId]);
+
+  // Reconcile poll of the execution row. The socket is served by the run's Durable
+  // Object room, so it carries the terminal event from any isolate — while it is up
+  // this is only a slow backstop for a dropped frame. While it is DOWN (never
+  // opened, dropped, no WebSocket at all) it is the liveness path and runs fast.
+  // It stops once the run is terminal, pauses while the tab is hidden, and a
+  // connect/disconnect restarts it with an immediate load — the reconcile that
+  // closes the gap the socket was down for.
+  const terminal = status != null && TERMINAL.has(status);
+  usePolledResource(async (signal) => {
+    if (executionId == null) return;
+    const exec = await runtimeApi.get(executionId);
+    if (signal.aborted) return;
+    setExecution(exec);
+    setStatus(exec.status);
+  }, {
+    intervalMs: connected ? CONNECTED_RECONCILE_MS : DISCONNECTED_POLL_MS,
+    enabled: executionId != null && !terminal,
+    restartKey: executionId,
+  });
 
   return { status, execution, messages, fileChanges, toolEvents, connected };
 }

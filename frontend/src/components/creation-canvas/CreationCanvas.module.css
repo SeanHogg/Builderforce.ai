@@ -2999,17 +2999,18 @@
    the prompt. Colours are the Brain surface tokens the board declares for BOTH themes
    (see `canvasOwnsItsPalette`), so nothing here is theme-specific. */
 .chatSurface { position:absolute; z-index:7; inset:0; box-sizing:border-box; display:flex; flex-direction:column; padding-block:var(--canvas-top-chrome-space) var(--composer-space); background:var(--canvas-board-background); color:var(--canvas-ink); }
-.chatSurfaceHeader { display:flex; flex:none; align-items:center; gap:8px; width:min(100%,var(--chat-surface-width,760px)); margin:0 auto; padding:12px 16px 10px; }
+/* The shared <SurfaceHeader>, in the canvas's own palette: the canvas maps --bf-* onto
+   its tokens here rather than restyling the header. */
+.chatSurfaceHeader { --bf-surface:var(--canvas-brain-header); --bf-surface-2:color-mix(in srgb,var(--canvas-brain-accent) 14%,transparent); --bf-border:var(--canvas-brain-border); --bf-text:var(--canvas-ink); --bf-text-muted:var(--canvas-muted); --bf-accent:var(--canvas-brain-accent); --bf-accent-soft:var(--canvas-brain-icon-bg); --bf-surface:transparent; width:min(100%,var(--chat-surface-width,760px)); margin:0 auto; border-bottom:0; }
 /* Who this conversation is WITH, at the left. It is no longer `flex:1` — the session's
    name used to open this row and take the rest of it, and that name is the floating
    pill's job (see `CanvasChatSurface`); what is left is a mark and a word, so the roster
    and the controls are pushed right by their own margin rather than by a title. */
-.chatSurfaceHeader strong { min-width:0; overflow:hidden; color:var(--canvas-ink); font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
 /* Who is in this conversation — the SAME roster the command bar's cluster draws,
    sized down to sit in a header row rather than a floating pill. There is no `+` in it:
    inviting is Share's job, in one place, for the same reason the bar's roster lost its
    own (see `CanvasChatSurface`). */
-.chatSurfaceParticipants { display:flex; flex:none; align-items:center; margin-left:auto; }
+.chatSurfaceParticipants { display:flex; flex:none; align-items:center; }
 .chatSurfaceParticipants span {
   width:20px; height:20px; border-radius:50%; display:grid; place-items:center; margin-left:-5px;
   border:2px solid var(--canvas-panel); color:var(--text-on-accent); font-size:8px; font-weight:750;
@@ -3174,9 +3175,7 @@
   background:var(--canvas-veil);
   cursor:pointer;
 }
-.brainDockHeader { display:flex; flex:none; align-items:center; gap:8px; padding:10px 11px; border-bottom:1px solid var(--canvas-brain-border); background:var(--canvas-brain-header); }
-.brainDockHeader strong { flex:1; min-width:0; overflow:hidden; color:var(--canvas-ink); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
-.brainDockMark { display:grid; place-items:center; width:22px; height:22px; flex:none; border-radius:var(--radius-sm); background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); font-size:12px; }
+.brainDockHeader { --bf-surface:var(--canvas-brain-header); --bf-surface-2:color-mix(in srgb,var(--canvas-brain-accent) 14%,transparent); --bf-border:var(--canvas-brain-border); --bf-text:var(--canvas-ink); --bf-text-muted:var(--canvas-muted); --bf-accent:var(--canvas-brain-accent); --bf-accent-soft:var(--canvas-brain-icon-bg); }
 .brainDockActions { display:flex; flex:none; align-items:center; gap:2px; }
 @media (pointer:coarse) { .brainDockActions button { width:40px; height:40px; } }
 .brainDockActions button { width:30px; height:30px; display:grid; place-items:center; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font:600 13px var(--font-sans); line-height:1; cursor:pointer; }

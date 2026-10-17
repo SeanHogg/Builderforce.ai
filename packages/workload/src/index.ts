@@ -23,4 +23,4 @@ export {
   type WorkloadInput,
   type WorkloadProfile,
 } from './profile.js';
-export { CHARS_PER_TOKEN, estimateTokensFromChars } from './tokens.js';
+export { CHARS_PER_TOKEN, estimateTokensFromChars, estimateTokensFromText } from './tokens.js';

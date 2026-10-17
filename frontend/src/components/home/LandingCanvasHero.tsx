@@ -367,6 +367,12 @@ function Composer({ value, onChange, onSubmit, chatMode, onChatModeChange, onEng
         // workspace to install into), so it declares only `onPrompt`; an installable
         // entry goes to the templates gallery, where it can be set up properly.
         starters={starters}
+        // Fixed next steps, the same chips every prompt shows — a chip seeds the box.
+        suggestions={[
+          { id: 'campaign', label: t('heroSuggestCampaign'), onSelect: () => onChange(t('heroSuggestCampaignPrompt')) },
+          { id: 'interviews', label: t('heroSuggestInterviews'), onSelect: () => onChange(t('heroSuggestInterviewsPrompt')) },
+          { id: 'onepager', label: t('heroSuggestOnePager'), onSelect: () => onChange(t('heroSuggestOnePagerPrompt')) },
+        ]}
       />
     </div>
   );

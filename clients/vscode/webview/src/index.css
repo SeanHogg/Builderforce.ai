@@ -135,47 +135,6 @@ body {
   background: var(--canvas-board-background, var(--vscode-sideBar-background, var(--vscode-editor-background)));
 }
 
-.bf-header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--bf-border);
-}
-
-.bf-header__title {
-  font-weight: 600;
-  font-size: 13px;
-  max-width: 60%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* When a project names the header, keep a subtle brand tag beside it. */
-.bf-header__brand {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--bf-text-muted);
-  letter-spacing: 0.02em;
-}
-
-.bf-header__beta {
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--vscode-badge-background, #4b5563);
-  color: var(--vscode-badge-foreground, #fff);
-}
-
-.bf-header__spacer {
-  flex: 1 1 auto;
-}
-
 .bf-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -287,52 +246,6 @@ select option {
   gap: 4px;
 }
 
-.bf-confirm {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin: 0 10px 6px;
-  padding: 7px 9px;
-  font-size: 12px;
-  border-radius: 6px;
-  background: var(--bf-surface-2);
-  border: 1px solid var(--bf-border);
-}
-
-.bf-confirm code {
-  font-family: var(--bf-font-mono);
-}
-
-.bf-confirm__cmd {
-  flex: 1 1 100%;
-  margin: 0;
-  padding: 6px 8px;
-  font-family: var(--bf-font-mono);
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  border-radius: 5px;
-  background: var(--vscode-textCodeBlock-background, var(--bf-surface));
-  border: 1px solid var(--bf-border);
-  color: var(--bf-text);
-}
-
-.bf-confirm__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.bf-confirm__auto {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--bf-text-muted);
-}
-
 /* The composer is the shared PromptPanel: one filled box, lit by the accent ring while
    you type. Only the editor's fill, hairline (the theme's input border, which most dark
    themes leave transparent) and accent are set here. */
@@ -353,73 +266,6 @@ select option {
   --chat-input-send-bg: var(--vscode-button-background);
   --chat-input-send-icon: var(--vscode-button-foreground);
   --chat-input-text: var(--vscode-input-foreground);
-}
-
-.bf-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 6px;
-  font-size: 11px;
-  border-radius: 6px;
-  background: var(--bf-surface-2);
-  border: 1px solid var(--bf-border);
-  max-width: 180px;
-}
-
-.bf-chip__name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bf-chip__x {
-  border: none;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1;
-  padding: 0;
-}
-
-.bf-queued {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-
-.bf-queued__hint {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.7;
-}
-
-/* A queued follow-up: dashed outline + accent tint so it reads as "pending", not sent. */
-.bf-chip--queued {
-  max-width: 240px;
-  border-style: dashed;
-  border-color: var(--bf-accent, var(--vscode-focusBorder));
-  background: color-mix(in srgb, var(--bf-accent, var(--vscode-focusBorder)) 12%, transparent);
-}
-
-/* "Steer now" on a queued chip: send it into the running turn instead of after it. */
-.bf-chip__steer {
-  border: 1px solid var(--bf-accent);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--bf-accent);
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  padding: 1px 6px;
-}
-
-.bf-chip__steer:hover {
-  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
 }
 
 /* The chat's live sub-agents: one row each, owner and name named, levers on the right.

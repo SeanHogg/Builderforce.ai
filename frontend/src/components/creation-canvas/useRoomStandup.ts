@@ -69,8 +69,13 @@ const STATUS_POLL_MS = 30_000;
  * Matched to `CeremonyStage`'s own beat on purpose: two surfaces recording the
  * same person's attendance at two different rates is two answers to "how long
  * were they there", and the durations feed the ceremony rollup.
+ *
+ * Two minutes, and it keeps beating while the tab is hidden (a person in a live
+ * room is still present — gating it to visible would under-count anyone who
+ * switched to their notes). Attendance is a question minutes wide, so the slower
+ * beat costs nothing in accuracy and halves the writes per attendee.
  */
-const ATTENDANCE_BEAT_MS = 60_000;
+const ATTENDANCE_BEAT_MS = 120_000;
 
 export function useRoomStandup(
   projectId: number | null,

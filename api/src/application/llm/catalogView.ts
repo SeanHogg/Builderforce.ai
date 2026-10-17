@@ -2,7 +2,9 @@
  * The Worker's binding of the shared `CatalogView` port (`@builderforce/model-catalog`)
  * — how the pure router (`@builderforce/model-router`) reads THIS host's catalog.
  *
- *   • vendor + tier  — the vendor registry (`vendors/`), the routing source of truth.
+ *   • vendor + tier  — the vendor registry (`vendors/`), the routing source of truth;
+ *                      tier goes through the shared rule (`resolveModelTier`): each
+ *                      vendor declares one for every id it routes, so it always wins.
  *   • residency      — `local` for a vendor that can only be reached through the
  *                      tenant's own runtime ({@link vendorRequiresLocalEgress}), the ONE
  *                      declaration of "runs on the tenant's machine".
@@ -14,7 +16,7 @@
  * routing question but cost.
  */
 
-import type { CatalogView, ModelPrice } from '@builderforce/model-catalog';
+import { resolveModelTier, type CatalogView, type ModelPrice } from '@builderforce/model-catalog';
 import { poolOrderIsCostFirst } from '@builderforce/model-router';
 import { isModelRole } from '@builderforce/agent-tools';
 import { isArcStage } from '@builderforce/workload';
@@ -76,7 +78,7 @@ export async function pricesForCall(env: Env, role: unknown, arcStage: unknown):
 export function registryCatalogView(prices: PriceBook = EMPTY_PRICE_BOOK): CatalogView {
   return {
     vendorOf: vendorForModel,
-    tierOf: tierForModel,
+    tierOf: (model) => resolveModelTier({ catalogTier: tierForModel(model), price: prices.priceOf(model) }),
     priceOf: (model) => prices.priceOf(model),
     residencyOf: (model) => (vendorRequiresLocalEgress(vendorForModel(model)) ? 'local' : 'cloud'),
   };

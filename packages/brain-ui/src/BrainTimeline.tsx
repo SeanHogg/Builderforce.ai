@@ -26,6 +26,8 @@ import { buildSettledTimeline, formatDuration, strandedReplyKey, streamingNode, 
 import { CopyButton } from './CopyButton';
 import { ToolStep, type ToolStepLabels } from './ToolStep';
 import { LiveActivity, DEFAULT_LIVE_ACTIVITY_LABELS, type LiveActivityLabels } from './LiveActivity';
+import { ModelMoveStep } from './ModelMoveStep';
+import { DEFAULT_MODEL_MOVE_LABELS, type ModelMoveLabels } from './timelineModelMoves';
 
 /**
  * Every string the transcript renders. It EXTENDS {@link ToolStepLabels} rather than
@@ -33,7 +35,7 @@ import { LiveActivity, DEFAULT_LIVE_ACTIVITY_LABELS, type LiveActivityLabels } f
  * contract, and a host that passes this bundle satisfies that contract by
  * construction — which is what keeps the two from drifting apart.
  */
-export interface BrainTimelineLabels extends ToolStepLabels {
+export interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
   /** Shown on the live thinking node while a turn streams. */
   thinking: string;
   /**
@@ -177,6 +179,7 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   learnTargetSkipped: 'Skipped {name} (project #{projectId}) — {reason}',
   reconcileTitle: 'Reconciled {count} learned memories in Evermind v{version}',
   reconcileHint: 'The answer restated these recalled learnings, so it updates them (write-through cognition).',
+  ...DEFAULT_MODEL_MOVE_LABELS,
   activity: DEFAULT_CHAT_ACTIVITY_LABELS,
 };
 
@@ -813,6 +816,7 @@ function BrainTimelineInner({
               </li>
             );
           }
+          if (node.kind === 'modelMove') return <ModelMoveStep key={node.key} move={node.move} labels={labels} />;
           if (node.kind === 'reconcile') {
             const title = labels.reconcileTitle
               .replace('{count}', String(node.count))

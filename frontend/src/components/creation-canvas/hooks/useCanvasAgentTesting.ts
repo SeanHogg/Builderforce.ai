@@ -2,7 +2,8 @@
 import { type Dispatch, type RefObject, type SetStateAction, useCallback } from 'react';
 import { newNode, specBoardOf } from '../canvasNodeHelpers';
 import { creationObjectDefinition } from '../creationObjectRegistry';
-import { type CanvasAiCompletion, runCreationCanvasAi } from '@/lib/creationCanvasAi';
+import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
+import type { CanvasAiCompletion } from '@/lib/canvasAiRun';
 import { scoreAgentTestResponse } from '../canvasAgentTest';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { CreationFlowNode } from '../CreationNode';

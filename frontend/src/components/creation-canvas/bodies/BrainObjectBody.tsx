@@ -3,13 +3,13 @@ import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { CreationNodeData } from '../types';
 import styles from '../CreationCanvas.module.css';
-import { BrainMark } from '@/components/brain/BrainMark';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from '../BrainActivityView';
 import { BrainSurfaceBody } from '../BrainDock';
 import { BrainSurfaceActions } from '../BrainSurfaceActions';
 import { BrainSurfaceViewProvider } from '../brainSurfaceView';
 import { useBrainSurface } from '../brainSurfaceContext';
 import type { CreationBodyProps } from './types';
+import { BrainMark } from '@seanhogg/builderforce-brain-ui';
 
 type CanvasChatMessage = { role: string; content: string; createdAt?: string };
 
@@ -107,6 +107,7 @@ export function BrainObjectBody({ id: nodeId, data }: CreationBodyProps) {
         collaborators={surface.collaborators}
         joinedCollaborator={surface.joinedCollaborator}
         onReplayMessage={surface.onReplayMessage}
+        onAnswerQuestion={surface.onAnswerQuestion}
         onRateMessage={surface.onRateMessage}
         ratings={surface.ratings}
         guestSignup={surface.guestSignup}

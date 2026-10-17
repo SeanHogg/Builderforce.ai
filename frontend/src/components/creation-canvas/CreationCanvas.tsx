@@ -964,7 +964,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
     [canvasNodeTypes],
   );
   const { openOutcomeMetrics, openDiagnostics, buildDiagnostics, buildProofJourneyDiagnostics } = useCanvasDiagnostics({ allMembers, autoApplyRef, brainRunStartedAt, brainRuntimeRef, brainTrace, canvasActions, currentGraphRef, edges, effectiveSelectedIds, journalRef, lastSavedGraphRef, memoryEnabled, modelSelection, nodes, pendingInvitations, persistence, proposedChanges, realtimeState, resolvedScopeMode, revisionRef, saveInFlightRef, scopedNodeIds, scopedNodes, sessionId, sessionMode, sessionRole, setDiagnosticsOpen, setHistoryOpen, setOutcomeMetrics, setOutcomeMetricsError, setOutcomeMetricsLoading, setOutcomeMetricsOpen, t, thinking, timeline, title, toast, undoStackRef });
-  const { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies } = useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStartedAt, brainTrace, cardActBoard, cardsEditable, currentUserId, deleteObjects, edges, evermindProjectId, guestLimit, inRoom, joinedCollaborator, liveMembers, livePresence, members, nodes, openBrainDock, persistence, presenceSelfId, presentMode, sendPresence, sessionId, boardPath: lensState.boardPath, setSelectedId, setSelectedIds, sharedRoom, startCanvasTurnRef, surfaceDef, t, thinking, timeline, title, updateBrainDock, updateNodeData });
+  const { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies } = useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStartedAt, brainTrace, cardActBoard, cardsEditable, currentUserId, deleteObjects, edges, evermindProjectId, guestLimit, inRoom, joinedCollaborator, liveMembers, livePresence, members, nodes, openBrainDock, persistence, presenceSelfId, presentMode, sendPresence, sessionId, boardPath: lensState.boardPath, setSelectedId, setSelectedIds, sharedRoom, startCanvasTurnRef, surfaceDef, t, thinking, timeline, title, updateBrainDock, updateNodeData });
 
   /* The prompt sits bottom-centre, where every chat product people already use puts it,
      and is deliberately NOT part of the Brain surface: it stays reachable whether Brain
@@ -977,7 +977,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
     startTurn={startCanvasTurn} onCaptureIdea={captureIdeaFromComposer} hostRef={composerDockRef} actionsOpen={actionsOpen} onToggleActions={toggleActionsSheet}
     running={thinking} trace={brainTrace} runStartedAt={brainRunStartedAt} brainIsSurface={surfaceDef.brainIsSurface}
     promptPlacement={promptPlacement} setPromptPlacement={setPromptPlacement} brainDockDrawn={brainDockDrawn} updateBrainDock={updateBrainDock}
-    prompt={prompt} setPrompt={setPrompt} onStop={stopCanvasRun} queuedCount={queuedTurns.count}
+    prompt={prompt} setPrompt={setPrompt} onStop={stopCanvasRun} queued={queuedTurns}
     scopeMode={scopeMode} setScopeMode={setScopeMode} scopeLabel={scopeLabel} selectionCount={effectiveSelectedIds.length} frameSelected={selectedNode?.data.kind === 'frame'}
     onAttach={attachCanvasArtifact} onAddContext={openObjectPicker} autoMode={autoApply} onAutoModeChange={setAutoApplyMode}
     modelSelection={modelSelection} modelOptions={canvasModelOptions} onModelSelectionChange={setModelSelection} modelIdentity={modelIdentity}
@@ -993,7 +993,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   });
   const sessionFacts = useMemo<CanvasSessionFacts>(() => ({ sessionId, persistence, role: sessionRole, canEdit, notify: setNotice, requireAccount, lens, boardPath: lensState.boardPath }), [canEdit, lens, lensState.boardPath, persistence, requireAccount, sessionId, sessionRole, setNotice]);
   const brainConversation = useBrainConversation({
-    brain: { brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, brainSurface, guestSignupPrompt },
+    brain: { brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, brainSurface, guestSignupPrompt },
     showExecutionDetail: brainDock.showExecutionDetail, updateBrainDock, trace: brainTrace, nodes, edges, joinedCollaborator,
   });
   const closeAccountGate = useCallback(() => setAccountGate(null), []);

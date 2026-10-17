@@ -46,6 +46,11 @@ export interface UseBrainChatsOptions {
   activeChatId?: number | null;
   /** Controlled-mode setter, called whenever the hook would change the selection. */
   onActiveChatChange?: (id: number | null) => void;
+  /**
+   * Titles that also count as "untitled" for `autoTitle` — a host that seeded its chats
+   * with a LOCALIZED "New chat" (the VS Code panel did) still gets them auto-named.
+   */
+  placeholderTitles?: readonly string[];
 }
 
 export interface UseBrainChats {
@@ -85,7 +90,9 @@ export interface UseBrainChats {
 
 export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats {
   const { persistence } = useBrainConfig();
-  const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange } = options;
+  const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange, placeholderTitles } = options;
+  const placeholdersRef = useRef(placeholderTitles);
+  placeholdersRef.current = placeholderTitles;
   const [chats, setChats] = useState<BrainChat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -240,7 +247,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     if (autoTitledRef.current.has(id)) return;
     const chat = chatsRef.current.find((c) => c.id === id);
     // Only replace the untitled placeholder — never an intentional user/seed title.
-    if (chat && chat.title && chat.title !== DEFAULT_CHAT_TITLE) return;
+    if (chat && chat.title && chat.title !== DEFAULT_CHAT_TITLE && !placeholdersRef.current?.includes(chat.title)) return;
     const title = deriveChatTitle(firstUserText);
     if (!title) return;
     autoTitledRef.current.add(id);

@@ -11,12 +11,15 @@ import { useErrorText } from '@/i18n/useErrorMessage';
  * place a cloud agent shows as actively running (cloud agents are stateless
  * server-side, so "running" is derived from in-flight executions).
  *
- * Self-contained: polls on a 4s cadence (matching the rest of the observability
- * surfaces) and renders nothing when the fleet is idle, so callers can drop it in
- * without gating on entitlement or run state.
+ * Self-contained: polls on a 4s cadence while anything is running (matching the
+ * rest of the observability surfaces), 20s while the fleet is idle (only a new run
+ * starting needs noticing then), never while the tab is hidden, and renders
+ * nothing when the fleet is idle, so callers can drop it in without gating on
+ * entitlement or run state.
  */
 
 const POLL_MS = 4000;
+const IDLE_POLL_MS = 20_000;
 
 function fmtElapsed(ms: number | null): string {
   if (ms == null) return '—';
@@ -50,7 +53,7 @@ export function ActiveRunsPanel() {
     }
   }, []);
 
-  usePolledResource(load, { intervalMs: POLL_MS });
+  usePolledResource(load, { intervalMs: runs && runs.length > 0 ? POLL_MS : IDLE_POLL_MS });
 
   const cancel = useCallback(async (id: number) => {
     setCancelling((prev) => new Set(prev).add(id));

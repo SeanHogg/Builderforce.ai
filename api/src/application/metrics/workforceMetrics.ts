@@ -39,7 +39,7 @@ const MAX_METRIC_ROWS = 5_000;
 
 // ── cache (version-token keyed: the window keyspace is unbounded, so bump a
 //    per-tenant token on every status/deploy write rather than deleting each
-//    window — mirrors reportRoutes' completed-by-assignee cache convention) ────
+//    window — mirrors application/reports/reportCache's version-token convention) ────
 function versionKey(tenantId: number): string { return `workforce-metrics:ver:tenant:${tenantId}`; }
 /**
  * The project dimension of a metrics cache key. `0` is the workspace-wide read,
@@ -70,7 +70,7 @@ export async function bumpWorkforceMetricsVersion(env: Env, tenantId: number): P
   await getOrSetCached(env, key, async () => current + 1, { kvTtlSeconds: 86_400 });
 }
 
-// ── member identity (mirrors reportRoutes.groupCompletedByAssignee precedence) ─
+// ── member identity (mirrors application/reports/completedByAssignee precedence) ─
 export type MemberKind = 'human' | 'cloud_agent' | 'host_agent';
 
 /** The polymorphic assignee columns shared by every task-grain rollup. */

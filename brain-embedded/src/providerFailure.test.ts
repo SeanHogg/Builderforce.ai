@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { initialRunPolicy, reduceRunPolicy } from '@builderforce/run-policy';
+import { brainRequestError } from './chatError';
 import { providerFailureEvent } from './providerFailure';
 import { RepetitionLoopError, StreamInterruptedError, TransportError } from './streamChatCompletion';
 
@@ -26,4 +28,25 @@ describe('providerFailureEvent — the one classification every browser loop rep
     expect(providerFailureEvent(new Error('402: needs a validated card'))).toBeNull();
     expect(providerFailureEvent(Object.assign(new Error('aborted'), { name: 'AbortError' }))).toBeNull();
   });
+
+  it('reports an HTTP status the gateway answered with, so run-policy can act on it', () => {
+    for (const status of [413, 429, 503, 500, 502, 408]) {
+      expect(providerFailureEvent(brainRequestError(status, { error: 'upstream' }))).toEqual({ type: 'transport_failed', kind: 'transport', status });
+    }
+    // A declining backend's 400 is reported: the policy decides whether it is a decline.
+    expect(providerFailureEvent(brainRequestError(400, { error: 'declined' }))).toEqual({ type: 'transport_failed', kind: 'transport', status: 400 });
+  });
+
+  it('leaves a refused request (auth, entitlement, not found) to surface as it is', () => {
+    for (const status of [401, 402, 403, 404, 422]) {
+      expect(providerFailureEvent(brainRequestError(status, { error: 'refused', code: 'needs_card' }))).toBeNull();
+    }
+  });
+
+  it('a 429 on a releasable pin releases it and retries — the policy firing in the browser', () => {
+    const event = providerFailureEvent(brainRequestError(429, { error: 'rate limited' }))!;
+    const s = reduceRunPolicy(initialRunPolicy({ pinnedModel: 'opus', strictPin: true, pinReleasable: true }), event);
+    expect(s.outcome).toEqual({ kind: 'retry_turn', released: 'opus', status: 429 });
+  });
 });
+

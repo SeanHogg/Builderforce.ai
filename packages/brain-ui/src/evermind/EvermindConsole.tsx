@@ -35,7 +35,7 @@ import { EvermindTestBench } from './EvermindTestBench';
 import { EvermindMaintenance } from './EvermindMaintenance';
 import { EvermindAnalyzer } from './EvermindAnalyzer';
 import { EvermindDiagnostics, useDiagnosticsCopy } from './EvermindDiagnostics';
-import { ConsoleTabs, type ConsoleTab } from './ConsoleTabs';
+import { SurfaceTabs, type SurfaceTab } from '../surface/SurfaceTabs';
 import { CodingGateNote } from './CodingGateNote';
 import { buildEvermindDiagnostics } from './diagnosticsReport';
 import {
@@ -390,7 +390,7 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
      are tabs rather than a stack. Each self-gates on what the host implements and on
      the viewer's role, so a tab with nothing behind it is never offered — an empty
      tab is a worse affordance than a missing one. */
-  const tabs: ConsoleTab[] = [];
+  const tabs: SurfaceTab[] = [];
   if (data && seeded && !inherited) {
     const head = data;
 
@@ -618,7 +618,7 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
             onToggle={() => run(() => adapter.setMode(frozen ? 'connected' : 'offline-frozen'))}
           />
 
-          <ConsoleTabs
+          <SurfaceTabs
             tabs={tabs}
             activeId={tabs.some((x) => x.id === tab) ? tab : (tabs[0]?.id ?? 'teach')}
             onSelect={setTab}

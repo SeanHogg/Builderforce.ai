@@ -28,6 +28,8 @@ public protocol BuilderforceChatTransport: Sendable {
     func listChats() async throws -> [BrainChat]
     func createChat(title: String?) async throws -> BrainChat
     func messages(chatID: Int) async throws -> [BrainChatMessage]
+    /// Only the turns appended after `afterSeq` (`nil`: the whole tail) — what a poll reads.
+    func messages(chatID: Int, afterSeq: Int?) async throws -> [BrainChatMessage]
     func agents(chatID: Int) async throws -> [BrainChatAgent]
 
     /// Upload one attachment; the stored file and the URL a message links to it with.
@@ -43,6 +45,15 @@ public protocol BuilderforceChatTransport: Sendable {
         imageURLs: [String],
         approve: @escaping @Sendable (BrainToolApproval) async -> Bool,
         onEvent: @escaping @Sendable (BrainReplyEvent) async -> Void) async throws
+}
+
+extension BuilderforceChatTransport {
+    /// A transport without a server cursor reads the tail and keeps what is newer.
+    public func messages(chatID: Int, afterSeq: Int?) async throws -> [BrainChatMessage] {
+        let all = try await self.messages(chatID: chatID)
+        guard let afterSeq else { return all }
+        return all.filter { ($0.seq ?? Int.max) > afterSeq }
+    }
 }
 
 /// The live transport: the Builderforce cloud, through the app's shared `CloudAccount`.
@@ -79,6 +90,12 @@ public struct BuilderforceCloudChatTransport: BuilderforceChatTransport {
 
     public func messages(chatID: Int) async throws -> [BrainChatMessage] {
         try await self.account.withSession { try await BrainChatAPI(session: $0).messages(chatID: chatID) }
+    }
+
+    public func messages(chatID: Int, afterSeq: Int?) async throws -> [BrainChatMessage] {
+        try await self.account.withSession {
+            try await BrainChatAPI(session: $0).messages(chatID: chatID, afterSeq: afterSeq)
+        }
     }
 
     public func agents(chatID: Int) async throws -> [BrainChatAgent] {

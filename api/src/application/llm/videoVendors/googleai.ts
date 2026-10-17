@@ -21,7 +21,7 @@ import {
 } from './types';
 import { fetchWithVendorTimeout } from '../vendors/types';
 import { bytesToBase64 } from '../../../domain/shared/bytes';
-import type { MediaModelTier } from '../mediaVendorRegistry';
+import type { ModelTier } from '@builderforce/model-catalog';
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -87,7 +87,7 @@ async function readJson(model: string, resp: Response): Promise<VeoOperation> {
 export const googleVideoModule: VideoVendorModule = {
   id: 'googleai',
   catalog: CATALOG,
-  tierFor: (modelId: string): MediaModelTier => CATALOG_BY_ID.get(modelId)?.tier ?? 'PREMIUM',
+  tierFor: (modelId: string): ModelTier => CATALOG_BY_ID.get(modelId)?.tier ?? 'PREMIUM',
   apiKeyFrom(env) { return env.GOOGLE_API_KEY ?? null; },
   async start(params: VideoStartParams): Promise<VideoStepResult> {
     const body = buildVeoBody(params, await inlineImage(params));

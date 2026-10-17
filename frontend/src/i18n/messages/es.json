@@ -9570,6 +9570,12 @@
     "heroTitle": "Cualquier idea se hace <em>real.</em>",
     "heroSub": "Mientras tu idea espera en un documento, otra persona ya está lanzando la suya. Reúne a tu equipo y a los agentes de IA en un lienzo y llega primero a producción.",
     "heroPromptPlaceholder": "¿Qué quieres crear?",
+    "heroSuggestCampaign": "Campaña de lanzamiento",
+    "heroSuggestCampaignPrompt": "Planifica una campaña de lanzamiento para mi producto.",
+    "heroSuggestInterviews": "Entrevistas con clientes",
+    "heroSuggestInterviewsPrompt": "Resume mis entrevistas con clientes en requisitos de producto.",
+    "heroSuggestOnePager": "Resumen para el consejo",
+    "heroSuggestOnePagerPrompt": "Redacta una actualización de una página para el consejo con mis últimas cifras.",
     "heroPromptAria": "Describe lo que quieres crear",
     "heroGetStarted": "Empezar a crear",
     "canvas": {
@@ -11717,6 +11723,14 @@
       "learnSkipReasonFrozen": "el Evermind de este proyecto está congelado (solo lectura)",
       "reconcileTitle": "Se reconciliaron {count} memorias aprendidas en Evermind v{version}",
       "reconcileHint": "La respuesta reformuló estos aprendizajes recuperados, por lo que los actualiza (cognición de escritura directa).",
+      "modelMovePacked": "Conversación ajustada a {models}: {dropped} mensajes anteriores {how}, ~{tokens} tokens",
+      "modelMoveVerbatim": "Conversación entregada completa a {models}, ~{tokens} tokens",
+      "modelMoveOverWindow": "Sigue siendo más grande que la ventana de contexto del modelo.",
+      "modelMoveHowSummarized": "resumidos",
+      "modelMoveHowRecalled": "sustituidos por memoria recuperada",
+      "modelMoveHowElided": "omitidos",
+      "modelMoveLocalFallback": "{from} en este dispositivo no pudo atender este turno; respondió {to}",
+      "modelMoveHint": "La ejecución pasó a otro modelo, así que la conversación se ajustó a la ventana de contexto de ese modelo.",
       "activityStarted": "{agent} empezó a trabajar en {kind} #{ref}",
       "activityCompleted": "{agent} terminó {kind} #{ref}",
       "activityCompletedWithLane": "{agent} terminó {kind} #{ref} — movido a {lane}",
@@ -11941,6 +11955,8 @@
     "upgrade": "Mejorar plan",
     "upgradeToPlan": "Mejorar a {plan}",
     "addCard": "Añadir una tarjeta",
+    "signIn": "Iniciar sesión",
+    "noModel": "No hay ningún modelo disponible. Inicia sesión o inicia un modelo en este dispositivo.",
     "cardValidationFailed": "No se pudo validar la tarjeta.",
     "allowance": {
       "exhausted": "Has agotado tu asignación de tokens de IA de este periodo ({used} de {limit}). Los turnos fallarán o se detendrán a medias hasta que se reinicie el {resets}.",
@@ -11949,7 +11965,9 @@
       "connectAccount": "Conecta tu propia cuenta",
       "dismiss": "Descartar"
     },
-    "queuedCount": "{count, plural, one {# mensaje en cola} other {# mensajes en cola}}",
+    "queuedList": "Mensajes en cola",
+    "queuedHint": "En cola: se envía cuando termine la ejecución",
+    "queuedRemove": "Quitar",
     "onboardMe": "Ayúdame a empezar",
     "onboardMePrompt": "Soy nuevo aquí: ayúdame a empezar. Pregúntame qué quiero construir, explícame cómo funcionan el uso y los costes, recomiéndame si el plan Free o Pro se ajusta a mi plazo y ayúdame a conectar mi cuenta de IA existente si tengo una.",
     "onboardMeHint": "Alcance, costes y tu plan: te guío paso a paso.",
@@ -33616,6 +33634,12 @@
       "subtitle": "Describe una app. Studio la escribe, la ejecuta en tu navegador y la publica.",
       "promptLabel": "Describe qué crear",
       "placeholder": "Creemos un…",
+      "suggestLanding": "Página de aterrizaje",
+      "suggestLandingPrompt": "una página de aterrizaje para mi producto con un formulario de registro",
+      "suggestBooking": "App de reservas",
+      "suggestBookingPrompt": "una app de reservas donde los clientes eligen un horario",
+      "suggestDashboard": "Panel interno",
+      "suggestDashboardPrompt": "un panel interno que siga las ventas semanales",
       "submit": "Crear",
       "startFailed": "No se pudo iniciar tu sesión. Inténtalo de nuevo.",
       "recentTitle": "Tus proyectos de Studio",
@@ -35077,16 +35101,10 @@
       "blog": "Artículo relacionado",
       "licenseNote": "úsalo, haz un fork y publícalo, comercial o no"
     },
-    "cta": {
-      "title": "Míralos funcionar juntos",
-      "desc": "Abre el canvas: la vista previa en vivo de todo lo que construyes se ejecuta sobre BuilderForce WebContainers, en tu propio navegador.",
-      "primary": "Abrir el canvas",
-      "secondary": "Leer el blog"
-    },
     "packages": {
       "webcontainers": {
         "tagline": "Un reemplazo abierto y con licencia MIT de StackBlitz WebContainers: un entorno de desarrollo que se ejecuta por completo en el navegador.",
-        "summary": "Dale un proyecto como archivos y sirve una vista previa en vivo en un iframe, lo compila para el despliegue y comprueba sus tipos, sin cabeceras COOP/COEP y sin límite de sesiones.",
+        "summary": "Dale un proyecto como archivos y sirve una vista previa en vivo en un iframe, lo compila para el despliegue y comprueba sus tipos, sin exigir cabeceras COOP/COEP y sin límite de sesiones.",
         "problem": "Los entornos de desarrollo en el navegador pedían mucho antes de mostrar una sola vista previa: una licencia propietaria cuyo nivel gratuito no es comercial, un límite mensual de sesiones de API y cabeceras de aislamiento entre orígenes (COOP/COEP) que rompen las inserciones y los scripts de terceros de la página anfitriona. Para un producto que muestra en vista previa todo lo que construye, cada una de esas condiciones limita el ciclo principal.",
         "gets": [
           "Vistas previas en vivo de aplicaciones frontend (Vite con React, Vue o Svelte, Create React App y sitios estáticos), donde TypeScript, JSX, CSS, JSON y los paquetes npm funcionan como en Vite.",
@@ -35137,7 +35155,7 @@
             },
             {
               "aspect": "Programas y servidores Node.js, npm install, shell",
-              "ours": "Sí: un Web Worker por proceso, sin COOP/COEP",
+              "ours": "Sí: un Web Worker por proceso, sin exigir COOP/COEP",
               "theirs": "Sí"
             }
           ],

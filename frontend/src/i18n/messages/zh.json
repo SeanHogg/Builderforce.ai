@@ -9570,6 +9570,12 @@
     "heroTitle": "每个想法都变成<em>现实。</em>",
     "heroSub": "当你的想法还停在文档里时，别人已经在交付他们的了。让团队与 AI 智能体共用一块画布，抢先上线。",
     "heroPromptPlaceholder": "你想创造什么？",
+    "heroSuggestCampaign": "发布活动",
+    "heroSuggestCampaignPrompt": "为我的产品策划一次发布活动。",
+    "heroSuggestInterviews": "客户访谈",
+    "heroSuggestInterviewsPrompt": "把我的客户访谈整理成产品需求。",
+    "heroSuggestOnePager": "董事会一页纸",
+    "heroSuggestOnePagerPrompt": "根据我最新的数据起草一页董事会更新。",
     "heroPromptAria": "描述你想创造的内容",
     "heroGetStarted": "开始创作",
     "canvas": {
@@ -11717,6 +11723,14 @@
       "learnSkipReasonFrozen": "该项目的 Evermind 已冻结（只读）",
       "reconcileTitle": "已在 Evermind v{version} 中协调 {count} 条已学习记忆",
       "reconcileHint": "回答重述了这些召回的学习内容，因此会对其进行更新（写通式认知）。",
+      "modelMovePacked": "对话已适配 {models} — {dropped} 条较早消息已{how}，约 {tokens} 个 token",
+      "modelMoveVerbatim": "对话已完整交给 {models}，约 {tokens} 个 token",
+      "modelMoveOverWindow": "它仍然超出该模型的上下文窗口。",
+      "modelMoveHowSummarized": "摘要",
+      "modelMoveHowRecalled": "替换为召回的记忆",
+      "modelMoveHowElided": "省略",
+      "modelMoveLocalFallback": "本设备上的 {from} 无法处理此轮 — 已由 {to} 回答",
+      "modelMoveHint": "运行切换到了另一个模型，因此对话已适配该模型的上下文窗口。",
       "activityStarted": "{agent} 开始处理 {kind} #{ref}",
       "activityCompleted": "{agent} 已完成 {kind} #{ref}",
       "activityCompletedWithLane": "{agent} 已完成 {kind} #{ref} — 已移至 {lane}",
@@ -11941,6 +11955,8 @@
     "upgrade": "升级",
     "upgradeToPlan": "升级到 {plan}",
     "addCard": "添加银行卡",
+    "signIn": "登录",
+    "noModel": "没有可用的模型。请登录，或在此设备上启动一个模型。",
     "cardValidationFailed": "银行卡验证失败。",
     "allowance": {
       "exhausted": "本周期的 AI 令牌额度已用完（{used} / {limit}）。在 {resets} 重置前，对话会失败或中途停止。",
@@ -11949,7 +11965,9 @@
       "connectAccount": "连接你自己的账户",
       "dismiss": "关闭"
     },
-    "queuedCount": "已排队 {count} 条消息",
+    "queuedList": "排队的消息",
+    "queuedHint": "已排队——运行结束后发送",
+    "queuedRemove": "移除",
     "onboardMe": "帮我快速上手",
     "onboardMePrompt": "我是新用户——帮我快速上手。询问我想构建什么，说明用量和费用的运作方式，根据我的时间安排推荐免费版还是专业版，并在我有现成的 AI 账户时帮我连接。",
     "onboardMeHint": "范围、费用和套餐——我来一步步带你了解。",
@@ -33616,6 +33634,12 @@
       "subtitle": "描述一个应用。Studio 会编写代码、在你的浏览器中运行并发布。",
       "promptLabel": "描述要构建的内容",
       "placeholder": "我们来构建一个……",
+      "suggestLanding": "落地页",
+      "suggestLandingPrompt": "一个带注册表单的产品落地页",
+      "suggestBooking": "预约应用",
+      "suggestBookingPrompt": "一个让客户选择时间段的预约应用",
+      "suggestDashboard": "内部仪表板",
+      "suggestDashboardPrompt": "一个跟踪每周销售额的内部仪表板",
       "submit": "开始构建",
       "startFailed": "无法开始你的会话，请重试。",
       "recentTitle": "你的 Studio 项目",
@@ -35076,12 +35100,6 @@
       "fromSource": "从源码安装，未发布到软件包注册表",
       "blog": "相关文章",
       "licenseNote": "无论是否商用，都可以使用、Fork 和发布"
-    },
-    "cta": {
-      "title": "看看它们如何协同工作",
-      "desc": "打开画布：你构建的一切，其实时预览都运行在 BuilderForce WebContainers 上，就在你自己的浏览器里。",
-      "primary": "打开画布",
-      "secondary": "阅读博客"
     },
     "packages": {
       "webcontainers": {

@@ -59,6 +59,8 @@ import { resolveAppBaseUrl } from '../../env';
 import { resolveChatAccess } from '../../application/brain/chatAccess';
 import { BrainService } from '../../application/brain/BrainService';
 import { getLimits, type PlanLimits } from '../../domain/tenant/PlanLimits';
+import { resolveTenantEffectivePlan } from '../../application/tenant/tenantPlanSnapshot';
+import { PRESENCE_ACTIVE_WINDOW_MS, presenceWriteDue, resolvePresenceAccess } from '../../application/creation/sessionPresence';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
 import { notify } from '../../application/notifications/notify';
@@ -2641,48 +2643,59 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ userId: target.id, role, emailSent }, 201);
   });
 
+  // Polled every 8 s per open board — the cheap path lives in `sessionPresence.ts`:
+  // the same access check over fewer columns, a throttled member write, and the plan
+  // from the cached tenant snapshot.
   router.post('/:id/presence', async (c) => {
-    const access = await requireSession(c);
-    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const sessionId = c.req.param('id') ?? '';
+    const userId = c.get('userId') as string;
+    const access = UUID_RE.test(sessionId) ? await resolvePresenceAccess(db, sessionId, c.get('tenantId') as number, userId) : null;
+    if (!access || ROLE_RANK[access.role as SessionRole] < ROLE_RANK.viewer) return c.json({ error: 'Session not found' }, 404);
     const body = await parseOptionalBody(c, PresenceBody);
     const now = new Date();
     const revision = Number.isFinite(body.revision) ? Math.max(0, Math.floor(body.revision!)) : access.session.canvasRevision;
     const viewport = body.viewport && typeof body.viewport === 'object' ? body.viewport : access.session.viewport;
     const cursor = body.cursor && typeof body.cursor === 'object' ? body.cursor : null;
     const selection = Array.isArray(body.selection) ? body.selection.filter((id): id is string => typeof id === 'string' && UUID_RE.test(id)).slice(0, 100) : [];
-    const followingUserId = typeof body.followingUserId === 'string' && body.followingUserId !== c.get('userId') ? body.followingUserId : null;
+    const followingUserId = typeof body.followingUserId === 'string' && body.followingUserId !== userId ? body.followingUserId : null;
     if (followingUserId) {
       const [followTarget] = await db.select({ userId: creationSessionMembers.userId }).from(creationSessionMembers).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, followingUserId))).limit(1);
       if (!followTarget) return c.json({ error: 'Follow target is not a session member' }, 400);
     }
-    await db.update(creationSessionMembers).set({ lastSeenAt: now, lastSeenRevision: revision, viewport, cursor, selection, typing: body.typing === true, followingUserId }).where(and(
-      eq(creationSessionMembers.sessionId, access.session.id),
-      eq(creationSessionMembers.userId, c.get('userId') as string),
-    ));
-    const activeSince = new Date(now.getTime() - 60_000);
-    const members = await db.select({
-      userId: creationSessionMembers.userId,
-      role: creationSessionMembers.role,
-      displayName: users.displayName,
-      // The picture the room puts on this person's figure (`PeerAvatar`).
-      avatarUrl: users.avatarUrl,
-      lastSeenRevision: creationSessionMembers.lastSeenRevision,
-      lastSeenAt: creationSessionMembers.lastSeenAt,
-      viewport: creationSessionMembers.viewport,
-      cursor: creationSessionMembers.cursor,
-      selection: creationSessionMembers.selection,
-      typing: creationSessionMembers.typing,
-      followingUserId: creationSessionMembers.followingUserId,
-    }).from(creationSessionMembers)
-      .leftJoin(users, eq(users.id, creationSessionMembers.userId))
-      .where(and(eq(creationSessionMembers.sessionId, access.session.id), gte(creationSessionMembers.lastSeenAt, activeSince)));
-    const limits = await creationLimits(access.session.tenantId);
+    const typing = body.typing === true;
+    if (presenceWriteDue(access.self, { revision, viewport, cursor, selection, typing, followingUserId }, now)) {
+      await db.update(creationSessionMembers).set({ lastSeenAt: now, lastSeenRevision: revision, viewport, cursor, selection, typing, followingUserId }).where(and(
+        eq(creationSessionMembers.sessionId, access.session.id),
+        eq(creationSessionMembers.userId, userId),
+      ));
+    }
+    const activeSince = new Date(now.getTime() - PRESENCE_ACTIVE_WINDOW_MS);
+    const [members, plan] = await Promise.all([
+      db.select({
+        userId: creationSessionMembers.userId,
+        role: creationSessionMembers.role,
+        displayName: users.displayName,
+        // The picture the room puts on this person's figure (`PeerAvatar`).
+        avatarUrl: users.avatarUrl,
+        lastSeenRevision: creationSessionMembers.lastSeenRevision,
+        lastSeenAt: creationSessionMembers.lastSeenAt,
+        viewport: creationSessionMembers.viewport,
+        cursor: creationSessionMembers.cursor,
+        selection: creationSessionMembers.selection,
+        typing: creationSessionMembers.typing,
+        followingUserId: creationSessionMembers.followingUserId,
+      }).from(creationSessionMembers)
+        .leftJoin(users, eq(users.id, creationSessionMembers.userId))
+        .where(and(eq(creationSessionMembers.sessionId, access.session.id), gte(creationSessionMembers.lastSeenAt, activeSince))),
+      resolveTenantEffectivePlan(c.env, access.session.tenantId, db),
+    ]);
+    const limits = getLimits(plan);
     const activeEditors = members.filter((member) => ROLE_RANK[member.role as SessionRole] >= ROLE_RANK.editor).length;
     if (limits.maxCreationRealtimeEditors !== -1 && activeEditors > limits.maxCreationRealtimeEditors && ROLE_RANK[access.role as SessionRole] >= ROLE_RANK.editor) {
-      await db.update(creationSessionMembers).set({ typing: false, followingUserId: null }).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, c.get('userId') as string)));
+      await db.update(creationSessionMembers).set({ typing: false, followingUserId: null }).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, userId)));
       return c.json({ error: 'Realtime editor limit reached; reopen as view-only', code: 'CREATION_REALTIME_QUOTA', usage: activeEditors, limit: limits.maxCreationRealtimeEditors }, 429);
     }
-    return c.json({ revision: access.session.canvasRevision, currentUserId: c.get('userId'), members });
+    return c.json({ revision: access.session.canvasRevision, currentUserId: userId, members });
   });
 
   /**

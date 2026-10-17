@@ -24,12 +24,6 @@ type NarrationResult = import('@seanhogg/builderforce-voice').NarrationResult;
 
 export type { SpeakerEmbedding, NarrationResult };
 
-/** True when the browser can run the on-device engine on the GPU (it also works
- *  on CPU, but WebGPU is the "free + fast" story we badge). */
-export function hasWebGPU(): boolean {
-  return typeof navigator !== 'undefined' && 'gpu' in navigator;
-}
-
 interface OnDeviceEngine {
   enroll(pcm: PcmAudio): SpeakerEmbedding;
   /** The studio engine instance, passed to VoiceClient as the client backend. */

@@ -19,6 +19,7 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import {
   DEFAULT_PROMPT_OPTIONS_LABELS,
+  localModelLabelsFrom,
   timelineLabelsFrom,
   type BrainTimelineLabels,
   type TimelineCatalogLookup,
@@ -145,20 +146,10 @@ export function promptMenuLabels(
     modelLocked: t('app.modelLocked', 'Model choice needs a paid plan or a connected provider account.'),
     accountSettings: t('app.accountSettings', 'Account settings'),
     status: t('app.status', 'Status'),
-    // The on-device list — the page engines this webview runs on WebGPU (see
-    // `src/localModelLabels.ts`; placeholders are filled per row by the shared list).
-    localCatalogHeading: t('app.local.catalogHeading', 'Download to run in this editor window'),
-    localDownload: t('app.local.download', 'Download ({size})'),
-    localDownloading: t('app.local.downloading', 'Downloading… {percent}%'),
-    localCancel: t('app.local.cancel', 'Cancel download'),
-    localRemove: t('app.local.remove', 'Remove from this device'),
-    localMoreActions: t('app.local.moreActions', 'More actions'),
-    localTools: t('app.local.tools', 'Tools'),
-    localContext: t('app.local.context', '{tokens} context'),
-    localDownloadFailed: t('app.local.downloadFailed', 'Download failed — try again.'),
-    localReasonWebgpu: t('app.local.reasonWebgpu', 'Needs WebGPU, which this editor or GPU does not offer.'),
-    localReasonF16: t('app.local.reasonF16', 'Needs WebGPU 16-bit shaders, which this GPU does not offer.'),
-    localReasonBuffer: t('app.local.reasonBuffer', 'Needs larger GPU buffers than this device allows.'),
-    localReasonEngine: t('app.local.reasonEngine', 'This engine is not available here yet.'),
+    // The on-device list — the page engines this webview runs on WebGPU, from the host
+    // bundle's `app.<field>` keys (`src/localModelLabels.ts`) through brain-ui's ONE key
+    // table, which supplies the English for a key the bundle lacks (an empty fallback
+    // reads as "none"); placeholders are filled per row by the shared list.
+    ...localModelLabelsFrom((field) => t(`app.${field}`, '')),
   };
 }

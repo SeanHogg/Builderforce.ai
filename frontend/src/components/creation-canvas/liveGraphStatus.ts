@@ -14,6 +14,7 @@
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import { workflows, type WorkflowGraph } from '@/lib/builderforceApi';
 import { reportBackgroundFailure } from '@/lib/reportError';
+import { backoffDelay, isDocumentHidden } from '@/lib/polling/pollPolicy';
 import { isLiveWorkflowStatus, LIVE_WORKFLOW_POLL_MS } from '../workflowRunUi';
 
 export type LiveStepStatus = 'pending' | 'running' | 'completed' | 'failed';
@@ -198,6 +199,13 @@ export type LiveWorkflowSnapshot = {
  * Poll GET /api/workflows/:id + /graph until the run leaves pending/running.
  * Returns a stop function. First tick is immediate; later ticks use
  * LIVE_WORKFLOW_POLL_MS. Pending-approval callers must not start this.
+ *
+ * The snapshot carries the run's own status + completedAt, so a caller reads the
+ * terminal state from `onTick` — there is no second poll of the definition's run
+ * list. It is imperative (started from a click, one per run), so it applies the
+ * `usePolledResource` rules itself: no tick while the tab is hidden (one runs on
+ * return), a failed tick doubles the wait up to eight intervals, ticks never
+ * overlap, and `maxTicks` bounds it.
  */
 export function startCanvasWorkflowLivePoll(opts: {
   runId: string;
@@ -210,9 +218,32 @@ export function startCanvasWorkflowLivePoll(opts: {
   let ticks = 0;
   const interval = opts.intervalMs ?? LIVE_WORKFLOW_POLL_MS;
   const maxTicks = opts.maxTicks ?? 30;
+  let delay = interval;
+  let waitingForVisible = false;
 
-  const tick = () => {
+  const hidden = isDocumentHidden;
+  const onVisibility = () => {
+    if (!waitingForVisible || hidden()) return;
+    waitingForVisible = false;
+    document.removeEventListener('visibilitychange', onVisibility);
+    tick();
+  };
+  const scheduleNext = () => {
     if (stopped) return;
+    ticks += 1;
+    if (ticks >= maxTicks) return;
+    timer = setTimeout(tick, delay);
+  };
+
+  function tick() {
+    if (stopped) return;
+    if (hidden()) {
+      if (!waitingForVisible) {
+        waitingForVisible = true;
+        document.addEventListener('visibilitychange', onVisibility);
+      }
+      return;
+    }
     void Promise.all([
       workflows.get(opts.runId),
       workflows.getGraph(opts.runId).catch((error: unknown) => {
@@ -225,27 +256,25 @@ export function startCanvasWorkflowLivePoll(opts: {
       }),
     ]).then(([snapshot, graph]) => {
       if (stopped) return;
+      delay = interval;
       opts.onTick({ status: snapshot.status, completedAt: snapshot.completedAt, graph });
       if (!isLiveWorkflowStatus(snapshot.status)) return;
-      ticks += 1;
-      if (ticks >= maxTicks) return;
-      timer = setTimeout(tick, interval);
+      scheduleNext();
     }).catch((error: unknown) => {
       void reportBackgroundFailure({
         message: error instanceof Error ? error.message : String(error),
         level: 'warning',
         context: { operation: 'canvasWorkflow.livePoll', runId: opts.runId },
       });
-      if (stopped) return;
-      ticks += 1;
-      if (ticks >= maxTicks) return;
-      timer = setTimeout(tick, interval);
+      delay = backoffDelay(delay, interval);
+      scheduleNext();
     });
-  };
+  }
 
   tick();
   return () => {
     stopped = true;
     if (timer !== undefined) clearTimeout(timer);
+    if (waitingForVisible && typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
   };
 }

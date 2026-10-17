@@ -16,6 +16,11 @@ private func json(_ data: Data?) throws -> [String: Any] {
         #expect(BrainChatAPI.agentsRequest(chatID: 12).path == "/api/brain/chats/12/agents")
     }
 
+    @Test func aPollReadsOnlyTurnsAfterItsCursor() {
+        #expect(BrainChatAPI.messagesRequest(chatID: 12, afterSeq: 340).path
+            == "/api/brain/chats/12/messages?limit=100&afterSeq=340")
+    }
+
     @Test func createChatSendsATrimmedTitleOrNone() throws {
         let titled = try BrainChatAPI.createChatRequest(title: "  Launch  ")
         #expect(titled.method == "POST")

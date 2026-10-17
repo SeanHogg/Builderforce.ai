@@ -52,4 +52,22 @@ describe('useAttention workspace authentication', () => {
     // explicit refresh() skips it — see useAttention's `load`/`refresh` split.
     expect(mocks.attention).toHaveBeenCalledWith(42, false);
   });
+
+  it('every reader of one scope shares ONE poll', async () => {
+    mocks.getStoredTenantToken.mockReturnValue('tenant-token');
+    mocks.attention.mockResolvedValue({
+      tasks: {},
+      chats: {},
+      chatUnread: {},
+      counts: { running: 0, awaiting: 2, unread: 0 },
+      manager: { lastRunAt: null, recentlyActive: false },
+    });
+
+    const a = renderHook(() => useAttention());
+    const b = renderHook(() => useAttention());
+    await waitFor(() => expect(a.result.current.counts.awaiting).toBe(2));
+    await waitFor(() => expect(b.result.current.counts.awaiting).toBe(2));
+
+    expect(mocks.attention).toHaveBeenCalledTimes(1);
+  });
 });

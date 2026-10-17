@@ -118,7 +118,7 @@ const BASELINE = {
    * `--success-bg` / `--success-border` / `--success-text` and the info family instead
    * of mixing `rgba(34,197,94,*)` / `rgba(59,130,246,*)` by hand.
    */
-  themeLockedColours: 158,
+  themeLockedColours: 157,
   /**
    * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
    * literal, so there is no scale step to name. Came down from 6 when the résumé

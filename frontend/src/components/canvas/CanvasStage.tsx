@@ -3,6 +3,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { CreationCanvas } from '@/components/creation-canvas/CreationCanvas';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
+import { BoardOnScreenProvider } from '@/lib/canvas/BoardOnScreenContext';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { isStageRoute, panelOpen } from '@/lib/workbenchPolicy';
@@ -81,30 +82,35 @@ export function CanvasStage() {
             aria-hidden={selected ? undefined : 'true'}
             inert={selected ? undefined : true}
           >
-            <CreationCanvas
-              sessionId={board.sessionId}
-              persistence={board.persistence}
-              initialFocusId={board.focusId}
-              initialShareOpen={board.shareOpen}
-              // How this board is presented (`/create` vs `/studio`) and the surface the
-              // entry asked for. The lens is LIVE — the same instance switches lens when
-              // the route does, which is the Studio ↔ canvas back-and-forth.
-              lens={board.lens}
-              initialSurface={board.surface ?? undefined}
-              initialPrompt={board.prompt}
-              initialPresent={board.present}
-              initialModelComparisonIds={board.modelComparisonIds}
-              // Only the selected board answers a shell-level request — a
-              // teammate joined from the footer must land on the board being
-              // looked at, not on every cached instance behind it.
-              stageActive={selected}
-              // THE WAY OUT, on a phone. `/create/<id>` draws its own app bar at that
-              // width (the shell's header stands down on a stage route), and its back
-              // button goes to the canvas LIBRARY. It is a prop rather than a push
-              // inside the canvas because an embedding host may have no library behind
-              // it — the VS Code webview passes nothing and no button is drawn.
-              onExitToLibrary={() => router.push('/create')}
-            />
+            {/* Only the selected board, on a visible stage, runs its live loops
+                (presence, Evermind refresh, standup status) — a kept board, or the
+                last board held behind a full-screen route, is not being looked at. */}
+            <BoardOnScreenProvider onScreen={selected && shown}>
+              <CreationCanvas
+                sessionId={board.sessionId}
+                persistence={board.persistence}
+                initialFocusId={board.focusId}
+                initialShareOpen={board.shareOpen}
+                // How this board is presented (`/create` vs `/studio`) and the surface the
+                // entry asked for. The lens is LIVE — the same instance switches lens when
+                // the route does, which is the Studio ↔ canvas back-and-forth.
+                lens={board.lens}
+                initialSurface={board.surface ?? undefined}
+                initialPrompt={board.prompt}
+                initialPresent={board.present}
+                initialModelComparisonIds={board.modelComparisonIds}
+                // Only the selected board answers a shell-level request — a
+                // teammate joined from the footer must land on the board being
+                // looked at, not on every cached instance behind it.
+                stageActive={selected}
+                // THE WAY OUT, on a phone. `/create/<id>` draws its own app bar at that
+                // width (the shell's header stands down on a stage route), and its back
+                // button goes to the canvas LIBRARY. It is a prop rather than a push
+                // inside the canvas because an embedding host may have no library behind
+                // it — the VS Code webview passes nothing and no button is drawn.
+                onExitToLibrary={() => router.push('/create')}
+              />
+            </BoardOnScreenProvider>
           </div>
         );
       })}

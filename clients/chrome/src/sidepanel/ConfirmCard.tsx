@@ -6,7 +6,7 @@
  * `chrome.permissions.request` inside this click (Chrome requires a user gesture), and
  * only a granted permission lets the run continue.
  */
-import { useEffect, useRef } from 'react';
+import { ToolConfirmBar } from '@seanhogg/builderforce-brain-ui';
 import { t, type MessageKey } from '../i18n/t';
 import { BROWSER_TOOL } from '../tools/toolNames';
 import { isPlatformTool } from '../tools/platformTools';
@@ -37,9 +37,6 @@ export function ConfirmCard({ chatId, call }: { chatId: number; call: { name: st
   // A platform tool is named by what it is (`builtin_tasks_create`); a browser one by its element or URL.
   const target = platform ? call.name : ref ? (safety.factsFor(ref)?.name || ref) : typeof args.url === 'string' ? args.url : '';
   const typed = call.name === BROWSER_TOOL.type && typeof args.text === 'string' ? args.text : '';
-  const allowRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => allowRef.current?.focus(), []);
-
   const allow = () => {
     if (reasons.includes('site_not_allowed') && site) {
       // Called synchronously in the click — the gesture Chrome requires.
@@ -52,30 +49,32 @@ export function ConfirmCard({ chatId, call }: { chatId: number; call: { name: st
     services.host.confirm(chatId, true);
   };
 
+  // Rovr owns WHY it is asking (the safety classification) and the site grant; the bar
+  // itself is the shared one every surface shows.
   return (
-    <div className="rovr-confirm" role="alertdialog" aria-labelledby="rovr-confirm-title" aria-describedby="rovr-confirm-why">
-      <h2 id="rovr-confirm-title" className="rovr-confirm__title">
-        {t('confirmTitle', t(toolLabelKey(call.name)))}
-      </h2>
+    <ToolConfirmBar
+      className="rovr-confirm"
+      req={call}
+      onApprove={allow}
+      onDeny={() => services.host.confirm(chatId, false)}
+      title={t('confirmTitle', t(toolLabelKey(call.name)))}
+      labels={{
+        approve: reasons.includes('site_not_allowed') && site ? t('allowSite', site) : t('allowOnce'),
+        deny: t('deny'),
+        aria: t('confirmTitle', t(toolLabelKey(call.name))),
+      }}
+    >
       {target && <p className="rovr-confirm__target">{target}</p>}
       {typed && (
         <p className="rovr-confirm__target">
           {t('confirmTyping')} <code>{reasons.includes('sensitive_field') ? '••••••' : typed}</code>
         </p>
       )}
-      <ul id="rovr-confirm-why" className="rovr-confirm__why">
+      <ul className="rovr-confirm__why">
         {reasons.map((r) => (
           <li key={r}>{r === 'site_not_allowed' && site ? t('reasonSiteNotAllowedNamed', site) : t(REASON_KEY[r])}</li>
         ))}
       </ul>
-      <div className="rovr-row">
-        <button ref={allowRef} type="button" className="rovr-btn rovr-btn--primary" onClick={allow}>
-          {reasons.includes('site_not_allowed') && site ? t('allowSite', site) : t('allowOnce')}
-        </button>
-        <button type="button" className="rovr-btn" onClick={() => services.host.confirm(chatId, false)}>
-          {t('deny')}
-        </button>
-      </div>
-    </div>
+    </ToolConfirmBar>
   );
 }

@@ -26,6 +26,7 @@
 
 import {
   clearRunError,
+  gatewayModelWindows,
   getGlobalRunState,
   getRunSnapshot,
   isFailedToolResult,
@@ -43,6 +44,7 @@ import {
   type BrainStreamFn,
   type EvermindRunHooks,
 } from "@seanhogg/builderforce-brain-embedded";
+import type { LocalRuntimeProbe } from "@builderforce/local-inference";
 import type { ToolDef } from "./fileTools";
 import { approvalRequestFor, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs, type NativeRunLabels } from "./nativeBrainRun";
 import type { PolicyGate } from "./policy";
@@ -83,6 +85,9 @@ export interface BrainRunHostPorts {
   workspaceRoot(): string;
   /** The transport-bound streamer for the CURRENT route (gateway or on-device). */
   stream(): Promise<BrainStreamFn>;
+  /** The live on-device runtimes, asked only when a turn moves onto a local model so the
+   *  window gate packs for that runtime's real window. Omitted ⇒ the catalog row. */
+  localProbes?(): Promise<readonly LocalRuntimeProbe[]>;
   /** Where the loop persists its turns — the same Brain store the panel reads. */
   persistence: BrainRunPersistence;
   /** Project-Evermind hooks for a project (recall, memory-first answer, cache), tiered on
@@ -316,6 +321,12 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         ...(p.modelStrict != null ? { modelStrict: p.modelStrict } : {}),
         ...(p.routingMode ? { routingMode: p.routingMode } : {}),
         ...(p.modelStrict ? {} : { pickFallbackModel: (tried: readonly string[]) => nextFallbackModel(surface, tried) }),
+        // The surface's connected-account windows and the live on-device runtimes: a
+        // failover onto a smaller model (cloud or local) is packed for it.
+        windowSources: {
+          cloud: gatewayModelWindows(surface),
+          ...(ports.localProbes ? { probes: ports.localProbes } : {}),
+        },
         ...(p.maxTokens ? { maxTokens: p.maxTokens } : {}),
         ...(p.reasoning ? { reasoning: p.reasoning } : {}),
         runTool,

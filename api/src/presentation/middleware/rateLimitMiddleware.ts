@@ -7,9 +7,9 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * configured (e.g. in local dev).
  *
  * Default limits per plan (requests per minute):
- *   FREE   →   60  rpm
- *   PRO    →  300  rpm
- *   TEAMS  → 1000  rpm
+ *   FREE   →  300  rpm
+ *   PRO    → 1200  rpm
+ *   TEAMS  → 3000  rpm
  *
  * Returns HTTP 429 with Retry-After header when the limit is exceeded.
  *
@@ -25,11 +25,13 @@ import { resolveTenantEffectivePlan } from '../../application/tenant/tenantPlanS
 import { checkSlidingWindow } from '../../application/ratelimit/slidingWindow';
 import { resolveBearerTenantId } from '../routes/llmRoutes';
 
-/** Requests-per-minute limits by plan. */
+/** Requests-per-minute limits by plan, shared by every user and client in the tenant.
+ *  Sized above normal use (a signed-in tab is ~20–24 requests on load and ~15/min idle)
+ *  so the limiter stops abuse rather than throttling a busy team (operator, 2026-10-17). */
 const RPM_LIMITS: Record<TenantPlan, number> = {
-  [TenantPlan.FREE]:  60,
-  [TenantPlan.PRO]:   300,
-  [TenantPlan.TEAMS]: 1000,
+  [TenantPlan.FREE]:  300,
+  [TenantPlan.PRO]:   1200,
+  [TenantPlan.TEAMS]: 3000,
 };
 
 type RateLimitHonoEnv = HonoEnv & {
@@ -46,8 +48,9 @@ export const rateLimitMiddleware: MiddlewareHandler<RateLimitHonoEnv> = async (c
     return next();
   }
 
-  // tenantId may already be in context (if authMiddleware ran first), else resolve
-  // it from the request's Bearer credential. Resolution reuses the gateway's OWN
+  // tenantId is normally NOT in context yet: index.ts mounts this app-wide, ahead of
+  // the routers whose own authMiddleware sets it. So it is resolved here from the
+  // request's Bearer credential. Resolution reuses the gateway's OWN
   // key resolver (`resolveBearerTenantId` → `resolveKeyCached`), so machine keys
   // (`bfk_*`/`bfa_*`/`clk_*`) get a per-tenant limit too — previously any non-JWT
   // bearer skipped the limiter entirely, leaving the metered LLM gateway
@@ -63,10 +66,12 @@ export const rateLimitMiddleware: MiddlewareHandler<RateLimitHonoEnv> = async (c
   }
   if (!tenantId) return next();
 
-  // Effective plan from the cached tenant snapshot — no DB round-trip on a warm path.
+  // Effective plan from the cached tenant snapshot (KV, 1h) — no DB round-trip on a
+  // warm path. An unrecognised plan string falls back to FREE: an `undefined` limit
+  // would make the DO's `current < limit` false and deny every request.
   let rpm = RPM_LIMITS[TenantPlan.FREE];
   try {
-    rpm = RPM_LIMITS[await resolveTenantEffectivePlan(env, tenantId)];
+    rpm = RPM_LIMITS[await resolveTenantEffectivePlan(env, tenantId)] ?? RPM_LIMITS[TenantPlan.FREE];
   } catch {
     // Lookup error — allow request through rather than block
     return next();

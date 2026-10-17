@@ -22,7 +22,8 @@
  */
 
 import { bytesToBase64 } from '../../../domain/shared/bytes';
-import type { MediaModelEntry, MediaModelTier, MediaVendorModuleBase } from '../mediaVendorRegistry';
+import type { ModelTier } from '@builderforce/model-catalog';
+import type { MediaModelEntry, MediaVendorModuleBase } from '../mediaVendorRegistry';
 import {
   AUTH_STATUSES,
   CASCADE_STATUSES,
@@ -45,9 +46,9 @@ export {
 
 export type ImageVendorId = 'cloudflare' | 'together' | 'huggingface' | 'pollinations' | 'googleai' | 'fluxapi';
 
-/** Tier classification per image model — the shared media tier, so the same
+/** Tier classification per image model — the shared ladder (`@builderforce/model-catalog`), so the same
  *  FREE/PREMIUM cap pattern applies to image and video. */
-export type ImageModelTier = MediaModelTier;
+export type ImageModelTier = ModelTier;
 
 export interface ImageVendorEnv {
   TOGETHER_API_KEY?: string | null;

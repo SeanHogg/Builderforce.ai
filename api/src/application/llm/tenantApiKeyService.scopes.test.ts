@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   TENANT_API_SCOPES,
@@ -6,6 +6,7 @@ import {
   deserializeScopes,
   keyHasScope,
   revokeTenantApiKeyByRawKey,
+  touchTenantApiKey,
 } from './tenantApiKeyService';
 
 describe('tenant API key scopes', () => {
@@ -52,5 +53,41 @@ describe('revokeTenantApiKeyByRawKey — input guard', () => {
     expect(await revokeTenantApiKeyByRawKey(explodingDb, { rawKey: '' })).toBe(false);
     expect(await revokeTenantApiKeyByRawKey(explodingDb, { rawKey: '   ' })).toBe(false);
     expect(await revokeTenantApiKeyByRawKey(explodingDb, { rawKey: undefined as unknown as string })).toBe(false);
+  });
+});
+
+describe('touchTenantApiKey — last_used_at throttle', () => {
+  function recordingDb() {
+    const where = vi.fn(async () => undefined);
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
+    return { db: { update } as unknown as Db, update, where };
+  }
+
+  it('sends the conditional UPDATE once per key per window, not once per request', async () => {
+    const { db, update, where } = recordingDb();
+    await touchTenantApiKey(db, 'key-a');
+    await touchTenantApiKey(db, 'key-a');
+    await touchTenantApiKey(db, 'key-a');
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(where).toHaveBeenCalledTimes(1);
+  });
+
+  it('throttles per key — a different key is still stamped', async () => {
+    const { db, update } = recordingDb();
+    await touchTenantApiKey(db, 'key-b');
+    await touchTenantApiKey(db, 'key-c');
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
+  it('a failed stamp is not remembered, so the next request retries it', async () => {
+    const where = vi.fn()
+      .mockRejectedValueOnce(new Error('neon down'))
+      .mockResolvedValue(undefined);
+    const update = vi.fn(() => ({ set: () => ({ where }) }));
+    const db = { update } as unknown as Db;
+    await expect(touchTenantApiKey(db, 'key-d')).rejects.toThrow('neon down');
+    await touchTenantApiKey(db, 'key-d');
+    expect(update).toHaveBeenCalledTimes(2);
   });
 });

@@ -55,6 +55,12 @@ export function StudioHome() {
         rows={3}
         showVoice
         starters={starters}
+        // Fixed next steps, the same chips every prompt shows — a chip seeds the box.
+        suggestions={[
+          { id: 'landing', label: t('suggestLanding'), onSelect: () => setPrompt(t('suggestLandingPrompt')) },
+          { id: 'booking', label: t('suggestBooking'), onSelect: () => setPrompt(t('suggestBookingPrompt')) },
+          { id: 'dashboard', label: t('suggestDashboard'), onSelect: () => setPrompt(t('suggestDashboardPrompt')) },
+        ]}
       />
       {error && <p role="alert" style={{ margin: 0, color: 'var(--error-text)' }}>{error}</p>}
       <StudioApps />

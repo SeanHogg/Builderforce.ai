@@ -1,4 +1,4 @@
-import{h as P}from"./chunk-chunk-Q5Y27QLY.js";const v={dim:64,order:4,channels:16,maxHistory:50},M=`
+import{F as P}from"./index.js";const v={dim:64,order:4,channels:16,maxHistory:50},M=`
 struct MambaParams {
   dim: u32,
   order: u32,

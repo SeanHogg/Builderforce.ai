@@ -4,9 +4,10 @@
  * confirmation card the safety gate pauses on, and the shared composer.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { BrainTimeline, timelineCatalogLookup, timelineLabelsFrom, useQueuedTurns } from '@seanhogg/builderforce-brain-ui';
+import { BrainTimeline, ChatErrorBanner, QueuedTurnChips, timelineCatalogLookup, timelineLabelsFrom, useQueuedTurns } from '@seanhogg/builderforce-brain-ui';
 import catalogs from 'virtual:rovr-timeline-catalogs';
-import type { BrainMessage } from '@seanhogg/builderforce-brain-embedded';
+import { deriveChatTitle, type BrainMessage } from '@seanhogg/builderforce-brain-embedded';
+import { PRICING_URL } from '../config';
 import { t, uiCatalogLocale } from '../i18n/t';
 import type { LocalChat } from '../store/records';
 import { ChatInfoStrip } from './ChatInfoStrip';
@@ -14,8 +15,6 @@ import { ConfirmCard } from './ConfirmCard';
 import { useLoaded, useRun, useServices } from './hooks';
 import { RovrComposer } from './RovrComposer';
 import { useRovrChatOptions } from './useRovrChatOptions';
-
-const TITLE_MAX = 60;
 
 export interface ChatViewProps {
   chats: LocalChat[];
@@ -55,7 +54,9 @@ export function ChatView({ chats, chatId, onSelect, onNewChat, onChatsChanged, o
     }
     const current = await services.records.getChat(id);
     if (current && current.title === t('newChatTitle')) {
-      await services.records.updateChat(id, { title: text.replace(/\s+/g, ' ').slice(0, TITLE_MAX) });
+      // The ONE first-message title rule every surface uses (brain-embedded).
+      const title = deriveChatTitle(text);
+      if (title) await services.records.updateChat(id, { title });
       onChatsChanged();
     }
     try {
@@ -82,8 +83,6 @@ export function ChatView({ chats, chatId, onSelect, onNewChat, onChatsChanged, o
     queued.clear();
     if (chatId !== null) services.host.stop(chatId);
   };
-
-  const needsModel = /not_signed_in/.test(run.error);
 
   return (
     <section className="rovr-chat">
@@ -132,21 +131,25 @@ export function ChatView({ chats, chatId, onSelect, onNewChat, onChatsChanged, o
         />
       </div>
 
-      {run.error && (
-        <div className="rovr-banner" role="alert">
-          <p>{needsModel ? t('needModelOrSignIn') : t('runFailed', run.error)}</p>
-          <div className="rovr-row">
-            {needsModel && (
-              <button type="button" className="rovr-btn rovr-btn--primary" onClick={onOpenSettings}>
-                {t('signIn')}
-              </button>
-            )}
-            <button type="button" className="rovr-btn" onClick={() => chatId !== null && services.host.clearError(chatId)}>
-              {t('dismiss')}
-            </button>
-          </div>
-        </div>
-      )}
+      <ChatErrorBanner
+        className="rovr-chat__error"
+        error={run.error ? t('runFailed', run.error) : ''}
+        action={run.errorAction}
+        onDismiss={() => chatId !== null && services.host.clearError(chatId)}
+        onSignIn={onOpenSettings}
+        onReconnect={onOpenSettings}
+        onUpgrade={() => void chrome.tabs.create({ url: PRICING_URL })}
+        onValidateCard={() => void chrome.tabs.create({ url: PRICING_URL })}
+        labels={{
+          signIn: t('signIn'),
+          reconnect: t('signIn'),
+          noModel: t('needModelOrSignIn'),
+          upgrade: t('upgrade'),
+          upgradeToPlan: t('upgradeToPlan'),
+          addCard: t('addCard'),
+          dismiss: t('dismiss'),
+        }}
+      />
 
       {run.pendingConfirm && chatId !== null && <ConfirmCard chatId={chatId} call={run.pendingConfirm} />}
 
@@ -156,11 +159,14 @@ export function ChatView({ chats, chatId, onSelect, onNewChat, onChatsChanged, o
         onSubmit={send}
         running={run.running}
         onStop={stop}
-        below={queued.count > 0 ? (
-          <p className="rovr-muted" role="status">
-            {queued.count === 1 ? t('queuedOne') : t('queuedMany', String(queued.count))}
-          </p>
-        ) : null}
+        above={(
+          <QueuedTurnChips
+            items={queued.items}
+            textOf={(text) => text}
+            onRemove={queued.remove}
+            labels={{ list: t('queuedList'), hint: t('queuedHint'), remove: t('queuedRemove') }}
+          />
+        )}
         chatOptions={chatOptions}
         onOpenSettings={onOpenSettings}
       />

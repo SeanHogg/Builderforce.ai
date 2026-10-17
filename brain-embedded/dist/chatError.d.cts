@@ -22,7 +22,15 @@ type ChatErrorActionKind =
 /** Plan doesn't include the capability — send them to pricing. */
  | 'upgrade'
 /** Plan is fine, but billing needs a validated card — send them to billing. */
- | 'validate_card';
+ | 'validate_card'
+/** No model can serve the turn: signed out and nothing local fits — sign in or start one. */
+ | 'sign_in';
+/**
+ * The ONE sentinel a transport throws when no model can serve a turn: signed out and
+ * nothing runs on this device. Hosts never match it themselves — {@link chatErrorAction}
+ * turns it into the `sign_in` verdict the shared banner acts on.
+ */
+declare const NOT_SIGNED_IN = "not_signed_in";
 interface ChatErrorAction {
     kind: ChatErrorActionKind;
     /** Plan that WOULD satisfy the request ('pro'), when the server named one. */
@@ -62,4 +70,4 @@ declare function brainRequestError(status: number, body: unknown, statusText?: s
  */
 declare function chatErrorAction(err: unknown): ChatErrorAction | null;
 
-export { BrainRequestError, type ChatErrorAction, type ChatErrorActionKind, brainRequestError, chatErrorAction };
+export { BrainRequestError, type ChatErrorAction, type ChatErrorActionKind, NOT_SIGNED_IN, brainRequestError, chatErrorAction };

@@ -61,13 +61,13 @@ export function PromptPanel({
     boxSizing: 'border-box',
     padding: 'var(--prompt-panel-pad-y, var(--chat-ctl-pad-y, 10px)) var(--prompt-panel-pad-x, var(--chat-ctl-pad-x, 12px))',
     borderRadius: 'var(--prompt-panel-radius, 18px)',
-    border: `1px solid ${active ? 'var(--prompt-panel-active-border, var(--chat-input-active-border, #3b82f6))' : 'var(--prompt-panel-border, var(--chat-input-border, rgba(148,163,184,.35)))'}`,
-    background: 'var(--prompt-panel-bg, var(--chat-input-bg, rgba(15,23,42,.96)))',
+    border: `1px solid ${active ? 'var(--prompt-panel-active-border, var(--chat-input-active-border, var(--bf-accent, #3b82f6)))' : 'var(--prompt-panel-border, var(--chat-input-border, var(--bf-border, rgba(148,163,184,.35))))'}`,
+    background: 'var(--prompt-panel-bg, var(--chat-input-bg, var(--bf-surface, rgba(15,23,42,.96))))',
     boxShadow: active
-      ? 'var(--prompt-panel-active-ring, var(--chat-input-active-ring, 0 0 0 1px #3b82f6))'
+      ? 'var(--prompt-panel-active-ring, var(--chat-input-active-ring, 0 0 0 1px var(--bf-accent, #3b82f6)))'
       : 'var(--prompt-panel-shadow, none)',
     transition: 'border-color 120ms ease, box-shadow 120ms ease, background 120ms ease',
-    ...(dragging ? { borderStyle: 'dashed', background: 'var(--prompt-panel-drag-bg, var(--surface-interactive, rgba(59,130,246,.1)))' } : null),
+    ...(dragging ? { borderStyle: 'dashed', background: 'var(--prompt-panel-drag-bg, var(--surface-interactive, var(--bf-accent-soft, rgba(59,130,246,.1))))' } : null),
     ...style,
   };
 

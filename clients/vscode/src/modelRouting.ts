@@ -31,10 +31,9 @@ import type * as vscode from "vscode";
 import {
   completeLocal,
   completeLocalFirst,
-  createHandoffFit,
-  createLocalFirstStream,
-  createLocalStream,
+  createHostModelStream,
   localFirstApplies,
+  NOT_SIGNED_IN,
   pageRuntimePin,
   type BrainStreamFn,
 } from "@seanhogg/builderforce-brain-embedded";
@@ -58,9 +57,6 @@ import { probeLocalFirstRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "./nativeBrainRun";
 import { hostPageEngines } from "./pageEngineBridge";
-
-/** Packs a local call for its model's window — `@seanhogg/builderforce-memory/handoff`. */
-const handoffFit = createHandoffFit();
 
 /** Where one turn will run, and with which model. */
 export interface ModelRoute {
@@ -128,6 +124,15 @@ async function withLocalFirst(choice: ModelRoute, config: LocalModelsConfig): Pr
 }
 
 /**
+ * The live on-device runtimes as the run's window gate reads them — the SAME memoized
+ * probe the local-first route uses, so a move onto a local model is packed for the
+ * window that runtime actually reports.
+ */
+export function localWindowProbes(): Promise<LocalRuntimeProbe[]> {
+  return probeLocalFirstRuntimes(getLocalModelsConfig());
+}
+
+/**
  * Whether this route needs a BuilderForce account. A local turn does not: it is served by
  * hardware the user already owns, so gating it on sign-in would be gating them out of
  * their own machine. A local-first turn does not either — signed out, it simply has no
@@ -149,39 +154,36 @@ function logLocalFirstAttempt(record: LocalFirstAttemptRecord): void {
 }
 
 /**
- * The streaming completion fn for a route — the single branch between the two transports.
- * Both are the SAME shared streamer, so the agent loop, tool-call protocol and error
- * mapping are identical either way.
+ * The streaming completion fn for a route — run by brain-embedded's
+ * `createHostModelStream`, the ONE routing step the web app and Rovr run too. The route
+ * was resolved up front (`resolveModelRoute`: the pin's endpoint and credential, the
+ * local-first probes), so this only hands it over. Every transport is the SAME shared
+ * streamer, so the agent loop, tool-call protocol and error mapping are identical either
+ * way; a pin still reaches a DIFFERENT model a run-policy failover names, and every local
+ * call is packed for its window.
  *
  * `apiKey` may be undefined only when the route is local; a gateway route without a key
  * is a caller that skipped {@link routeRequiresSignIn}, and throwing here is better than
  * sending an unauthenticated turn that fails opaquely at the gateway.
  */
 export function routeStream(route: ModelRoute, apiKey: string | undefined): BrainStreamFn {
+  if (!apiKey && routeRequiresSignIn(route)) throw new Error(NOT_SIGNED_IN);
   const cloud = apiKey ? createNativeStream(getBaseUrl(), apiKey) : null;
-  // A pin still reaches a DIFFERENT model a run-policy failover names (the gateway, or
-  // the pin's runtime under another id), and every local call is packed for its window.
-  if (route.local) {
+  const local = route.local;
+  const pinnedRef = local ? formatLocalModelRef(local.provider, local.model) : null;
+  const probes = route.localFirst?.probes ?? [];
+  return createHostModelStream({
+    // The model POLICY (and its strictness) rides on the call from `modelState`; the only
+    // host pin is the resolved local one.
+    pinned: () => pinnedRef,
+    localPin: (ref) => (ref === pinnedRef ? local : null),
+    probes: async () => probes,
+    cloud: () => cloud,
     // The bridge's fetch answers a page runtime's root (`http://bfi.local`, …) from the
     // webview's engines and passes every other runtime's request to the global fetch.
-    return createLocalStream(route.local.endpoint, route.local.model, hostPageEngines.fetch(), {
-      ref: formatLocalModelRef(route.local.provider, route.local.model),
-      cloud,
-      fit: handoffFit,
-    });
-  }
-  if (route.localFirst) {
-    return createLocalFirstStream({
-      probes: route.localFirst.probes,
-      cloud,
-      fit: handoffFit,
-      // Page runtimes' chat routes over the bridge; everything else via the global fetch.
-      fetch: hostPageEngines.fetch(),
-      onAttempt: logLocalFirstAttempt,
-    });
-  }
-  if (!apiKey) throw new Error("not_signed_in");
-  return createNativeStream(getBaseUrl(), apiKey);
+    fetch: hostPageEngines.fetch(),
+    onAttempt: logLocalFirstAttempt,
+  });
 }
 
 /**

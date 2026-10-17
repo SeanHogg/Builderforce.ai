@@ -1,9 +1,7 @@
 import { useTranslations } from 'next-intl';
 import type { ChatMode } from '@/lib/brain';
-import type { ChatModeVocabulary } from '@/lib/brain/useChatModeCopy';
-import { BrainMark } from './BrainMark';
-import { ChatModeToggle } from './ChatModeToggle';
 import { StarterGroup, StarterTile } from './StarterTiles';
+import { BrainMark } from '@seanhogg/builderforce-brain-ui';
 
 export interface BrainEmptyStateProps {
   /**
@@ -13,11 +11,10 @@ export interface BrainEmptyStateProps {
    * started, so the first message does not make the input jump.
    */
   layout: 'page' | 'docked';
+  /** The armed mode — the hint and the starters follow it. Chosen in ONE place: the
+   *  composer's `/` menu (Mode), the same control on every surface. */
   mode: ChatMode;
-  /** Which words the surface uses for the modes. */
-  modeVocabulary?: ChatModeVocabulary;
-  onModeChange: (mode: ChatMode) => void;
-  /** Host-owned controls beside the mode switch (the new-chat project picker). */
+  /** Host-owned controls above the starters (the new-chat project picker). */
   controls?: React.ReactNode;
   /** Page layout only — docked hosts render the composer in their pinned footer. */
   composer?: React.ReactNode;
@@ -28,26 +25,25 @@ export interface BrainEmptyStateProps {
 }
 
 /**
- * A Brain conversation before its first message. The mode switch stays here at full
- * size — it decides what the first turn is allowed to do, so it is a visible choice,
- * not a toolbar control found afterwards — and the starters below it follow the mode.
+ * A Brain conversation before its first message: a greeting, the host's controls and
+ * the starting points, which follow the armed mode. The mode itself is chosen in the
+ * composer's `/` menu — one Chat|Work control on every surface, not a second toggle here.
  *
  * There is no "Start new chat" button: this IS a new chat, and sending (or picking a
  * starter) creates it. That button and "Help me get started" used to sit as two
  * primary buttons between the greeting and the composer; onboarding is now one more
  * starting point in the list, where people look for one.
  */
-export function BrainEmptyState({ layout, mode, modeVocabulary, onModeChange, controls, composer, starters, onOnboard }: BrainEmptyStateProps) {
+export function BrainEmptyState({ layout, mode, controls, composer, starters, onOnboard }: BrainEmptyStateProps) {
   const t = useTranslations('brain');
   const docked = layout === 'docked';
   const hint = t(mode === 'work' ? 'emptyHintWork' : 'emptyHint');
 
-  const switcher = (
+  const switcher = controls ? (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: docked ? 'flex-start' : 'center' }}>
-      <ChatModeToggle value={mode} onChange={onModeChange} vocabulary={modeVocabulary} />
       {controls}
     </div>
-  );
+  ) : null;
 
   const startingPoints = (
     <div style={{ width: '100%', maxWidth: docked ? undefined : 720, display: 'flex', flexDirection: 'column', gap: 14, textAlign: 'left' }}>

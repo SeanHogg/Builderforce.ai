@@ -17,6 +17,8 @@
  * per-codebase `model.bin` weights are pushed (see the Gap Register).
  */
 
+import { hasWebGPU } from '@seanhogg/builderforce-brain-embedded';
+
 const DB_NAME = 'bf-model-recall';
 const STORE = 'memories';
 const DB_VERSION = 1;
@@ -70,8 +72,7 @@ function cosine(a: number[], b: number[]): number {
 /** WebGPU present? The capability gate per §4.1 (compute moves to the client GPU when
  *  it can; this is also a proxy for "a real browser tab", so headless never runs it). */
 export function hasRecallCapability(): boolean {
-  if (typeof navigator === 'undefined' || typeof indexedDB === 'undefined') return false;
-  return 'gpu' in navigator && (navigator as { gpu?: unknown }).gpu != null;
+  return typeof indexedDB !== 'undefined' && hasWebGPU();
 }
 
 /** Kill switch — mirror the server's `LEARNED_ROUTING_ENABLED`. A tenant/user can set

@@ -1,4 +1,4 @@
-import { ANTHROPIC_FAMILIES, currentAnthropicModelId } from "../agents/anthropic-models.js";
+import { ANTHROPIC_FAMILIES, currentAnthropicModelId } from "@builderforce/model-catalog";
 import { DEFAULT_CONTEXT_TOKENS } from "../agents/defaults.js";
 import { parseModelRef } from "../agents/model-selection.js";
 import { DEFAULT_AGENT_MAX_CONCURRENT, DEFAULT_SUBAGENT_MAX_CONCURRENT } from "./agent-limits.js";
@@ -14,7 +14,7 @@ type AnthropicAuthDefaultsMode = "api_key" | "oauth";
 
 const DEFAULT_MODEL_ALIASES: Readonly<Record<string, string>> = {
   // Anthropic — each family word names that family's CURRENT model, derived from the
-  // one release list (`agents/anthropic-models.ts`), never spelled out here.
+  // one release list (`@builderforce/model-catalog`), never spelled out here.
   ...Object.fromEntries(
     ANTHROPIC_FAMILIES.map((family) => [family, `anthropic/${currentAnthropicModelId(family)}`]),
   ),

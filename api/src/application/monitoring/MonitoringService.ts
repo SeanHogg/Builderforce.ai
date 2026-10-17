@@ -29,6 +29,7 @@ import { evaluateMetric } from '../alerts/metricEvaluators';
 import { fireEventTriggers } from '../workflow/eventTriggers';
 import { BACKEND_HEALTH_MARKER } from '../backend/adapters/handlerEngineSource';
 import { httpCheck, type HttpCheckConfig } from './httpCheck';
+import { monitorCheckNeedsWrite } from './monitorCheckStamp';
 import type { EvaluateMetricArgs } from '../alerts/metricEvaluators';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -379,16 +380,21 @@ export class MonitoringService {
   async applyResult(tenantId: number, monitor: MonitorRow, result: EvalResult, env: Env, message?: string): Promise<void> {
     if (result === 'skip') return;
     const now = new Date();
-    await this.db.update(monitors).set({
-      lastCheckedAt: now,
-      consecutiveFailures: result === 'breach' ? monitor.consecutiveFailures + 1 : 0,
-    }).where(scopedToTenant(monitors, tenantId, eq(monitors.id, monitor.id)));
+    const consecutiveFailures = result === 'breach' ? monitor.consecutiveFailures + 1 : 0;
+    // Stamp only when something changed or the stamp is going stale — a healthy monitor
+    // no longer costs a row write per tick. See monitorCheckStamp.ts.
+    const stamp = monitorCheckNeedsWrite(monitor, consecutiveFailures, now.getTime());
+    if (stamp) {
+      await this.db.update(monitors).set({ lastCheckedAt: now, consecutiveFailures })
+        .where(scopedToTenant(monitors, tenantId, eq(monitors.id, monitor.id)));
+    }
 
     if (result === 'breach' && monitor.status !== 'breached') {
       await this.breach(tenantId, monitor, env, message ?? `Monitor "${monitor.label}" breached`);
     } else if (result === 'ok' && monitor.status === 'breached') {
       await this.recover(tenantId, monitor, message ?? `Monitor "${monitor.label}" recovered`);
-    } else if (result === 'unknown' && monitor.status === 'unknown') {
+    } else if (result === 'unknown' && monitor.status === 'unknown' && stamp) {
+      // "Still unknown" is recorded at the stamp's cadence, not appended every tick.
       await this.addEvent(tenantId, monitor.id, { kind: 'check', status: 'unknown', message: message ?? null });
     }
   }

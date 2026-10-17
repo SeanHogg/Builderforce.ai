@@ -35,7 +35,8 @@ import { ResearchTab } from '@/components/dashboard/ResearchTab';
 import { ProfileIdentityCard } from '@/components/profile/ProfileIdentityCard';
 import { WorkforcePresenceStripView } from '@/components/workforce/WorkforcePresenceStrip';
 import { useWorkforcePresence } from '@/lib/useWorkforcePresence';
-import { agentHosts, tasksApi, approvalsApi, creationSessionsApi, type AgentHost } from '@/lib/builderforceApi';
+import { agentHosts, creationSessionsApi, type AgentHost } from '@/lib/builderforceApi';
+import { fetchPendingApprovalCount, fetchTaskCounts } from '@/lib/dashboardCountsApi';
 import type { WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
 import { WorkspacePanelList } from '@/components/workspace-canvas/WorkspacePanelList';
 import { usePublishReferenceChrome, usePublishReferenceSelect, usePublishStageSelect, useReferenceRailActive } from '@/lib/referenceChrome';
@@ -123,13 +124,15 @@ export default function DashboardPage() {
     Promise.all([
       fetchProjects().catch(() => [] as Project[]),
       agentHosts.list().catch(() => [] as AgentHost[]),
-      approvalsApi.list({ status: 'pending' }).catch(() => []),
+      // The tile shows a count and a per-day inflow — the narrow cached tally, not
+      // the approval list.
+      fetchPendingApprovalCount().catch(() => null),
     ])
-      .then(([projs, agentHostsData, approvalsData]) => {
+      .then(([projs, agentHostsData, approvalsTally]) => {
         setProjects(Array.isArray(projs) ? projs : []);
         setAgentHostList(Array.isArray(agentHostsData) ? agentHostsData : []);
-        setPendingApprovalsCount(Array.isArray(approvalsData) ? approvalsData.length : 0);
-        setApprovalDates(Array.isArray(approvalsData) ? approvalsData.map((a) => a.createdAt) : []);
+        setPendingApprovalsCount(approvalsTally?.pending ?? 0);
+        setApprovalDates(approvalsTally?.recentCreatedAt ?? []);
       })
       .finally(() => setLoading(false));
   }, [isAuthenticated, hasTenant]);
@@ -140,19 +143,17 @@ export default function DashboardPage() {
   }, [hasTenant, isAuthenticated]);
 
   // Task stats follow the global project scope: when a project is selected the
-  // dashboard reflects just that project's tasks (re-fetched on scope change).
+  // dashboard reflects just that project's tasks (re-fetched on scope change). The
+  // tile needs three counts and a sparkline — the narrow cached tally, not the full
+  // enriched task list it used to count client-side.
   useEffect(() => {
     if (!isAuthenticated || !hasTenant) return;
     let alive = true;
-    tasksApi.list(currentProjectId ?? undefined)
-      .then((tasksData) => {
-        if (!alive || !Array.isArray(tasksData)) return;
-        setTaskStats({
-          total: tasksData.length,
-          inProgress: tasksData.filter((tk) => tk.status === 'in_progress').length,
-          done: tasksData.filter((tk) => tk.status === 'done').length,
-        });
-        setTaskDates(tasksData.map((tk) => tk.createdAt));
+    fetchTaskCounts(currentProjectId ?? undefined)
+      .then((tally) => {
+        if (!alive) return;
+        setTaskStats({ total: tally.total, inProgress: tally.inProgress, done: tally.done });
+        setTaskDates(tally.recentCreatedAt ?? []);
       })
       .catch(() => { if (alive) { setTaskStats(null); setTaskDates([]); } });
     return () => { alive = false; };
@@ -180,8 +181,10 @@ export default function DashboardPage() {
 
   const connectedAgentHosts = agentHostList.filter((c) => c.online);
   // Live "who's online / what's working" across humans AND agents — powers the
-  // renamed "Talent / Workforce online" tile and the presence strip below.
-  const presence = useWorkforcePresence();
+  // renamed "Talent / Workforce online" tile and the presence strip below. Only the
+  // Workforce tab shows the live roster, so only it keeps polling (4–5 reads every
+  // 30 s); every other tab reads the tile's headline count once.
+  const presence = useWorkforcePresence({ live: activeTab === 'workforce' });
   // Project stats follow the global scope: a selected project narrows the count
   // and the grid (the grid filter lives in ProjectsContent) to just that project.
   const scopedProjects = currentProjectId != null ? projects.filter((p) => p.id === currentProjectId) : projects;
@@ -194,7 +197,12 @@ export default function DashboardPage() {
     () => cumulativeDailySeries(scopedProjects.map((p) => p.createdAt ?? p.created_at)),
     [scopedProjects],
   );
-  const taskSeries = useMemo(() => cumulativeDailySeries(taskDates), [taskDates]);
+  // `taskDates` holds only the trailing window; tasks older than it seed the curve's
+  // starting level (the same base `cumulativeDailySeries` derives from a full list).
+  const taskSeries = useMemo(() => {
+    const olderThanWindow = Math.max(0, (taskStats?.total ?? taskDates.length) - taskDates.length);
+    return cumulativeDailySeries(taskDates).map((n) => n + olderThanWindow);
+  }, [taskDates, taskStats]);
   const approvalSeries = useMemo(() => dailyCounts(approvalDates), [approvalDates]);
 
   // The five tabs, once. `tabRows` is the list; the inline bar and the panel's

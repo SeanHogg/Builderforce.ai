@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import nodeFs from "node:fs";
 import nodeOs from "node:os";
 import nodePath from "node:path";
-import { gatewayCanChooseModel, gatewayModelIdentity, gatewayPlanModels, type ModelIdentityContext } from "@seanhogg/builderforce-brain-embedded";
+import { gatewayCanChooseModel, gatewayModelIdentity, gatewayPlanModels, type ModelIdentityContext, NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import {
   BFI_DISCOVERY_ENV,
   BFI_DISCOVERY_RELATIVE_PATH,
@@ -351,7 +351,7 @@ export async function getModels(
     return modelsCache.data;
   }
   const key = await getApiKey(secrets);
-  if (!key) throw new Error("not_signed_in");
+  if (!key) throw new Error(NOT_SIGNED_IN);
   const res = await fetch(`${getBaseUrl()}/llm/v1/models`, {
     headers: { authorization: `Bearer ${key}` },
   });
@@ -484,7 +484,7 @@ export async function getBuilderInsights(
   projectId?: number | null,
 ): Promise<BuilderInsightsSnapshot> {
   const key = await getApiKey(secrets);
-  if (!key) throw new Error("not_signed_in");
+  if (!key) throw new Error(NOT_SIGNED_IN);
   const res = await fetch(`${getBaseUrl()}/llm/v1/builder-insights${insightsProjectQuery(projectId)}`, {
     headers: { authorization: `Bearer ${key}` },
   });
@@ -506,7 +506,7 @@ export async function streamBuilderInsights(
   projectId?: number | null,
 ): Promise<void> {
   const key = await getApiKey(secrets);
-  if (!key) throw new Error("not_signed_in");
+  if (!key) throw new Error(NOT_SIGNED_IN);
   const res = await fetch(`${getBaseUrl()}/llm/v1/builder-insights/stream${insightsProjectQuery(projectId)}`, {
     headers: { authorization: `Bearer ${key}`, accept: "text/event-stream" },
     signal,
@@ -563,7 +563,7 @@ export async function complete(
   signal?: AbortSignal,
 ): Promise<string> {
   const key = await getApiKey(secrets);
-  if (!key) throw new Error("not_signed_in");
+  if (!key) throw new Error(NOT_SIGNED_IN);
   const body: Record<string, unknown> = { messages, stream: false };
   if (model) body.model = model;
   const res = await fetch(`${getBaseUrl()}/llm/v1/chat/completions`, {

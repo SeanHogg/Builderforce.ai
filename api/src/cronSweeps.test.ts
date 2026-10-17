@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CRON_SWEEPS } from './cronSweeps';
-import { CADENCE_BY_CRON, CRON_CADENCES, resolveCronTarget } from './application/runtime/cronSweepRunner';
+import { CADENCE_BY_CRON, CRON_CADENCES, resolveCronTarget, validateSweepOrdering } from './application/runtime/cronSweepRunner';
 
 /**
  * Registry integrity. These are the invariants the two callers (`scheduled()` and
@@ -72,22 +72,51 @@ describe('CRON_SWEEPS registry', () => {
   });
 
   /** PRD 33 §5.3.2: window-end proof verdicts are written by the daily runner, after the replay rollup. */
-  it('registers the daily proof-verdicts sweep after replay-rollup, as a non-dispatching sweep', () => {
-    const keys = CRON_SWEEPS.map((s) => s.key);
+  it('registers the daily proof-verdicts sweep chained after replay-rollup, as a non-dispatching sweep', () => {
     const sweep = CRON_SWEEPS.find((s) => s.key === 'proof-verdicts');
     expect(sweep?.cadence).toBe('daily');
     expect(sweep?.dispatches).toBeFalsy();
-    expect(keys.indexOf('proof-verdicts')).toBeGreaterThan(keys.indexOf('replay-rollup'));
+    expect(sweep?.after).toBe('replay-rollup');
   });
 
   /** PRD 33 §5.1: the prescription rules read what the rollup and the proof verdicts just wrote. */
-  it('registers the daily replay-prescriptions sweep after replay-rollup and proof-verdicts, non-dispatching', () => {
-    const keys = CRON_SWEEPS.map((s) => s.key);
+  it('registers the daily replay-prescriptions sweep chained after proof-verdicts (itself after replay-rollup), non-dispatching', () => {
     const sweep = CRON_SWEEPS.find((s) => s.key === 'replay-prescriptions');
     expect(sweep?.cadence).toBe('daily');
     expect(sweep?.dispatches).toBeFalsy();
-    expect(keys.indexOf('replay-prescriptions')).toBeGreaterThan(keys.indexOf('proof-verdicts'));
-    expect(keys.indexOf('proof-verdicts')).toBeGreaterThan(keys.indexOf('replay-rollup'));
+    expect(sweep?.after).toBe('proof-verdicts');
+  });
+
+  /**
+   * Every `after` must name a real, same-cadence sweep and the chains must be acyclic.
+   * The runner degrades an invalid declaration to "unordered" rather than wedging a
+   * tick, so this assertion is the only thing that makes a typo fail loudly.
+   */
+  it('declares a valid ordering graph', () => {
+    expect(validateSweepOrdering(CRON_SWEEPS)).toEqual([]);
+  });
+
+  /**
+   * The orderings the registry's comments call load-bearing. Position in the list used
+   * to be described as the ordering while every sweep actually ran concurrently, so
+   * each one is pinned here as a declaration rather than an index comparison.
+   */
+  it('chains every ordering the sweeps depend on', () => {
+    const afterOf = (key: string) => CRON_SWEEPS.find((s) => s.key === key)?.after;
+    expect(afterOf('metric-rollups')).toBe('object-registry');
+    expect(afterOf('canvas-triggers')).toBe('metric-rollups');
+    expect(afterOf('db-vacuum')).toBe('retention');
+    expect(afterOf('db-pressure')).toBe('db-vacuum');
+    expect(afterOf('replay-rollup')).toBe('retention');
+    expect(afterOf('proof-verdicts')).toBe('replay-rollup');
+    expect(afterOf('replay-prescriptions')).toBe('proof-verdicts');
+    expect(afterOf('phone-number-rent')).toBe('phone-allowance-grant');
+  });
+
+  /** Rent charged against an allowance the grant failed to top up suspends a paid-up number. */
+  it('skips phone rent when the allowance grant it waits on threw — and only that sweep opts in', () => {
+    const optedIn = CRON_SWEEPS.filter((s) => s.skipIfAfterFailed).map((s) => s.key);
+    expect(optedIn).toEqual(['phone-number-rent']);
   });
 
   it('resolves the frequent group to the KV-gated tick sweeps', () => {

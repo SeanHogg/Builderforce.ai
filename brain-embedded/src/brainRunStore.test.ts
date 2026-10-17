@@ -12,6 +12,9 @@ import {
 } from './brainRunStore';
 import type { BrainStreamFn } from './brainRunStore';
 import { StreamInterruptedError } from './streamChatCompletion';
+import { brainRequestError } from './chatError';
+import { gatewayModelWindows } from './gatewayModels';
+import { windowFitTranscript } from './test/windowFitTranscript';
 import { isCoderReask } from '@builderforce/run-policy';
 import { isStoppedTurn } from './stoppedTurn';
 import { parseMessageProvenance } from './provenance';
@@ -20,7 +23,7 @@ import { parseSubagentOrigin } from './runLineage';
 import { DEFAULT_TOOL_FAILURE_STREAK, parseAskUser, selectPendingAskUser, answerTextOf, thoughtTextOf, isMidTurnMetadata } from '@builderforce/agent-loop';
 
 // These tests pin the memory-eviction contract. They assume MAX_CELLS = 50
-// (see brainRunStore.ts); update the literals if that cap changes.
+// (see runStore/runCells.ts); update the literals if that cap changes.
 const CAP = 50;
 
 beforeEach(resetBrainRunStore);
@@ -132,13 +135,13 @@ describe('a run that ends badly leaves a durable record', () => {
     const stream: BrainStreamFn = () => Promise.reject(new Error('Could not save the turn — network unreachable'));
     await startRun(4270, { resolvedSystemPrompt: 'sys', stream, persistence, userTurn: 'go' });
 
-    const failure = stepsIn(sent).find((s) => s.label === 'agent.run');
-    expect(failure).toBeTruthy();
-    expect(failure.isError).toBe(true);
-    expect(failure.category).toBe('error');
-    expect(failure.result).toContain('network unreachable');
+    // ONE durable error row per failure — the step that threw records it; the run's
+    // unwind does not add a second copy of the same message under it.
+    const failures = stepsIn(sent).filter((s) => s.isError && String(s.result).includes('network unreachable'));
+    expect(failures).toHaveLength(1);
+    expect(failures[0].category).toBe('error');
     // Live trace AND the durable row — the point is that the two agree.
-    expect(getRunTrace(4270).some((e) => e.label === 'agent.run' && e.isError)).toBe(true);
+    expect(getRunTrace(4270).filter((e) => e.isError && String(e.result).includes('network unreachable'))).toHaveLength(1);
   });
 
   it('records nothing extra for a user Stop — that is a clean exit, not a failure', async () => {
@@ -1573,5 +1576,65 @@ describe('a run has ONE durable store for its steps', () => {
     expect(stepSigs.sort()).toEqual(traceSigs.sort());
     // Batched: the steps did not each cost a request.
     expect(requests.length).toBeLessThan(stepSigs.length);
+  });
+});
+
+describe('the window fit and HTTP-status failures, wired through the run', () => {
+  const persistence = { sendMessages: async () => [] };
+
+  it('packs the transcript for a cloud model the gateway catalog says is small', async () => {
+    const sentLengths: number[] = [];
+    const small = 'direct/cloudflare/@cf/meta/llama-3.3-70b';
+    await startRun(5401, {
+      resolvedSystemPrompt: 'sys',
+      model: small,
+      modelStrict: true,
+      maxTokens: 512,
+      windowSources: { cloud: gatewayModelWindows({ byo: { models: [{ id: small, contextWindow: 4_096 }] } }) },
+      seed: windowFitTranscript().slice(1, -1),
+      userTurn: 'Now wire the chip row.',
+      stream: async (opts) => {
+        sentLengths.push(opts.messages.length);
+        return { text: 'Wired.', toolCalls: [], finishReason: 'stop', resolvedModel: small };
+      },
+      persistence,
+    });
+    const fit = getRunTrace(5401).find((e) => e.label === 'llm.handoff');
+    expect(fit?.args).toMatchObject({ to: small });
+    expect((fit?.args as { dropped: number }).dropped).toBeGreaterThan(0);
+    // The request carried fewer messages than the transcript holds.
+    expect(sentLengths[0]).toBeLessThan(windowFitTranscript().length);
+  });
+
+  it('retries a turn the gateway answered 429 instead of ending the run', async () => {
+    let calls = 0;
+    await startRun(5402, {
+      resolvedSystemPrompt: 'sys',
+      stream: async () => {
+        calls += 1;
+        if (calls === 1) throw brainRequestError(429, { error: 'rate limited' });
+        return { text: 'Here is the answer.', toolCalls: [], finishReason: 'stop' };
+      },
+      persistence,
+      userTurn: 'explain a.ts',
+    });
+    expect(calls).toBe(2);
+    expect(getRunTrace(5402).some((e) => e.label === 'llm.transport_error')).toBe(true);
+    expect(getRunSnapshot(5402).error).toBe('');
+  });
+
+  it('still surfaces a refused request (402) as the run error, with its action', async () => {
+    let calls = 0;
+    await startRun(5403, {
+      resolvedSystemPrompt: 'sys',
+      stream: async () => {
+        calls += 1;
+        throw brainRequestError(402, { error: 'needs a validated card', code: 'card_required' });
+      },
+      persistence,
+      userTurn: 'explain a.ts',
+    });
+    expect(calls).toBe(1);
+    expect(getRunSnapshot(5403).error).toBe('needs a validated card');
   });
 });

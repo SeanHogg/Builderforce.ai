@@ -370,6 +370,11 @@ export async function runAutonomousExecutionSweep(
             // that gate, and drag the ticket backwards on every tick.
             status: c.status,
             submittedBy: 'system:auto-exec',
+            // This sweep IS the backstop the work-gate signal wakes. Re-raising it for a
+            // ticket the dispatcher then refuses kept the gate open on every tick — a
+            // full fan-out every 5 minutes instead of the 30-minute floor — and an
+            // unstarted ticket stays in this window for the next tick regardless.
+            signalCronGate: false,
             // The verdict this loop already gated on — reused so the evaluator's own
             // token gate costs no second lookup per ticket, and so the sweep and the
             // evaluator cannot disagree about the tenant's budget within one tick.

@@ -114,54 +114,17 @@ body {
   height: 100%;
 }
 
-.rovr-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 10px 12px 6px;
-}
-
-.rovr-brand {
-  margin: 0;
-  font-size: 1.1rem;
-  letter-spacing: 0.01em;
-}
-
 .rovr-status {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 }
 
-.rovr-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--rovr-border);
-}
-
-.rovr-tab {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 8px 4px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--rovr-muted);
-  font: inherit;
-  font-size: 0.8rem;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rovr-tab[aria-selected='true'] {
-  color: var(--rovr-text);
-  border-bottom-color: var(--rovr-accent);
-  font-weight: 600;
+/* The shared <SurfaceTabs>: strip + active view fill the panel's height. */
+.rovr-views {
+  flex: 1;
+  min-height: 0;
+  gap: 0;
 }
 
 .rovr-view {
@@ -305,31 +268,11 @@ body {
   color: var(--rovr-accent);
 }
 
-.rovr-banner,
-.rovr-confirm {
+.rovr-chat__error {
   padding: 10px;
   border-radius: var(--rovr-radius);
-  border: 1px solid var(--rovr-border);
-  background: var(--rovr-surface);
-}
-
-.rovr-banner {
-  border-color: var(--rovr-danger);
+  border: 1px solid var(--rovr-danger);
   background: var(--rovr-danger-bg);
-}
-
-.rovr-banner p {
-  margin: 0 0 8px;
-}
-
-.rovr-confirm {
-  border-color: var(--rovr-warn);
-  background: var(--rovr-warn-bg);
-}
-
-.rovr-confirm__title {
-  margin: 0 0 4px;
-  font-size: 0.95rem;
 }
 
 .rovr-confirm__target {

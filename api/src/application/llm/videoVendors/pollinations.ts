@@ -19,7 +19,7 @@ import {
   type VideoStepResult,
   type VideoVendorModule,
 } from './types';
-import type { MediaModelTier } from '../mediaVendorRegistry';
+import type { ModelTier } from '@builderforce/model-catalog';
 
 const ENDPOINT_BASE = 'https://gen.pollinations.ai/video/';
 
@@ -51,7 +51,7 @@ export function pollinationsVideoUrl(params: VideoStartParams): string {
 export const pollinationsVideoModule: VideoVendorModule = {
   id: 'pollinations',
   catalog: CATALOG,
-  tierFor: (modelId: string): MediaModelTier => CATALOG_BY_ID.get(modelId)?.tier ?? 'FREE',
+  tierFor: (modelId: string): ModelTier => CATALOG_BY_ID.get(modelId)?.tier ?? 'FREE',
   apiKeyFrom(env) { return env.POLLINATIONS_API_KEY ?? null; },
   async start(params: VideoStartParams): Promise<VideoStepResult> {
     const { bytes, mimeType } = await fetchVideoBytes({

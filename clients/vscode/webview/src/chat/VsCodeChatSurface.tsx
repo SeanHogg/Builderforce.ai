@@ -42,8 +42,6 @@ import {
   personaModel,
   personaOverlay,
   parseByoUnresolved,
-  deriveChatTitle,
-  DEFAULT_CHAT_TITLE,
   buildComposerDirectives,
   effortProfile,
   useToolConfirmationGate,
@@ -53,14 +51,10 @@ import {
   traceWithPersistedSteps,
   getMcpToolStatus,
   fetchApiVersionVia,
-  NEW_CHAT_MODE,
-  normalizeChatMode,
   projectMemoryHooks,
   lastServedModel,
   chatRosterFromParticipants,
-  type ChatMode,
   type ChatRosterAgent,
-  type BrainChat,
   type DirectedRecipient,
   type BrainPersonaAgent,
   type BrainPersonaChoice,
@@ -68,8 +62,8 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import { authedFetch } from '../authedFetch';
 import {
-  BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, useChatParticipants, useChatActivitySignal,
-  useRecipientChoice, ChatErrorBanner, useChatMemorySwitch,
+  BrainTimeline, ChatTicketsPanel, chatTicketsLabelsFromBundle, useChatParticipants, useChatActivitySignal,
+  useRecipientChoice, ChatErrorBanner, ToolConfirmBar, SurfaceHeader, HeaderIcon, useChatMemorySwitch,
   PendingQuestionBanner, selectPendingAskUser, askUserAnchorId,
   chatSwitcherLabel, chatDiagnosticsReads, useQueuedTurns,
 } from '@seanhogg/builderforce-brain-ui';
@@ -99,9 +93,8 @@ import { autoApprovePersistence } from '../autoApprove';
 import { decodeTokenClaims } from '@/lib/tokenClaims';
 import { makeT, promptMenuLabels, timelineLabels } from './chatLabels';
 import { spendLabelsFrom } from './composerLabels';
-import { IconRename } from './ChatMenu';
-import { useGlobalRunState } from './useGlobalRunState';
-import type { QueuedTurn } from './QueuedMessages';
+import { useVsCodeChats } from './useVsCodeChats';
+import type { QueuedTurn } from './VsCodeComposer';
 import { SubagentStrip } from './SubagentStrip';
 import { childParticipants, childTarget, isWaitingOnSubagents, steerRun, subagentDiagnosticsOf, useChatChildren, useChatSubagentRoster } from './chatChildren';
 import { useComposerModels } from './useComposerModels';
@@ -112,11 +105,14 @@ import { VsCodeComposer } from './VsCodeComposer';
 export function VsCodeChatSurface({ init }: { init: InitData }) {
   const t = makeT(init.labels);
   const { persistence } = useBrainConfig();
-  const [chatId, setChatId] = useState<number | null>(null);
-  const [chats, setChats] = useState<BrainChat[]>([]);
+  // The conversation list — the shared `useBrainChats` plus the editor's own bindings.
+  const {
+    chatId, setChatId, chats, chatOptions, activeChat, reloadChats, autoTitleChat, ensureChatId,
+    runGlyph, titleOf, chatMode, selectMode, setMemoryEnabled: persistMemoryEnabled, armMemory, rename,
+  } = useVsCodeChats(init, t('app.newChat', 'New chat'));
   // Inline rename of the selected chat: the header select swaps to a text field
   // (VS Code webviews block window.prompt, so editing is inline — the same pattern
-  // the web Brain's history list uses). Commits via persistence.updateChat.
+  // the web Brain's history list uses). Commits through the shared `rename`.
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   // Auto-approve skips the per-action confirm prompt. The gate is the SHARED hook, so
@@ -151,6 +147,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // whole transcript (and every message's markdown) re-parses on every character typed.
   const tlLabels = useMemo(() => timelineLabels(init.labels), [init.labels]);
   const spendLabels = useMemo(() => spendLabelsFrom(init.labels), [init.labels]);
+  // The ticket rail's copy — the host's `ct.*` l10n keys (`src/chatTicketsLabels.ts`).
+  const ticketLabels = useMemo(() => chatTicketsLabelsFromBundle(init.labels), [init.labels]);
   // idle → copied → idle, or → error. A copy that FAILS must look different from one
   // that never ran: the ⧉ used to be wired as `void copyTranscript()`, so any rejection
   // inside it vanished with no toast, no error and nothing on the clipboard — a click
@@ -174,81 +172,6 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // path persistence uses — a shared bearer fetch for the trace persist + rehydrate below.
   const apiReq = useMemo(() => authedFetch(init.baseUrl, getToken, () => void refreshToken()), [init.baseUrl]);
 
-  // Scope the conversation dropdown to the sidebar's active project so its list
-  // MATCHES the Sessions tree (which filters by project). With no project selected
-  // both show every chat. Server-side filter via ?projectId (same rows the sidebar
-  // filters client-side). Re-runs when the project switches (init.project?.id dep).
-  // `chats.changed` makes the host refetch the Sessions tree. Tell it only when the list
-  // actually moved: every ticket write in a run re-reads this list, and most re-reads
-  // come back identical.
-  const lastChatsSig = useRef<string | null>(null);
-  const reloadChats = useCallback(() => {
-    const projectId = init.project?.id != null ? String(init.project.id) : undefined;
-    persistence.listChats({ limit: 50, projectId })
-      .then((list) => {
-        setChats(list);
-        const sig = JSON.stringify(list);
-        if (sig === lastChatsSig.current) return;
-        lastChatsSig.current = sig;
-        post('chats.changed');
-      })
-      .catch(() => {});
-  }, [persistence, init.project?.id]);
-  useEffect(() => { reloadChats(); }, [reloadChats]);
-
-  // Auto-name a still-untitled chat from its first user message, so the dropdown +
-  // Sessions tree stop showing "New chat". The VSIX manages its own chat list (it does
-  // not use the shared useBrainChats), so it runs the SAME shared `deriveChatTitle`
-  // helper here. Single-flight per chat; only replaces the placeholder (English default
-  // OR the localized "New chat" ensureChatId seeds) — never an intentional/ticket title.
-  const chatsRef = useRef<BrainChat[]>(chats);
-  chatsRef.current = chats;
-  const autoTitledRef = useRef<Set<number>>(new Set());
-  const autoTitleChat = useCallback((id: number, firstUserText: string) => {
-    if (autoTitledRef.current.has(id)) return;
-    const chat = chatsRef.current.find((c) => c.id === id);
-    const localizedDefault = t('app.newChat', 'New chat');
-    if (chat && chat.title && chat.title !== DEFAULT_CHAT_TITLE && chat.title !== localizedDefault) return;
-    const title = deriveChatTitle(firstUserText);
-    if (!title) return;
-    autoTitledRef.current.add(id);
-    persistence.updateChat(id, { title })
-      .then(() => reloadChats())
-      .catch(() => { autoTitledRef.current.delete(id); });
-  }, [persistence, reloadChats, t]);
-
-  // The open chat may not be in the project-filtered list — e.g. it belongs to
-  // another project, or was just created for a task scoped elsewhere. Fetch it so
-  // the dropdown still shows + keeps it selected instead of going blank.
-  const [orphanChat, setOrphanChat] = useState<BrainChat | null>(null);
-  useEffect(() => {
-    if (chatId == null || chats.some((c) => c.id === chatId)) { setOrphanChat(null); return; }
-    let cancelled = false;
-    persistence.getChat(chatId).then((c) => { if (!cancelled) setOrphanChat(c); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [chatId, chats, persistence]);
-  // The dropdown's rows: the project-scoped list, plus the open cross-project chat.
-  const chatOptions = useMemo(
-    () => (orphanChat && orphanChat.id === chatId ? [orphanChat, ...chats] : chats),
-    [orphanChat, chatId, chats],
-  );
-
-  // Which chats are LIVE right now (across the whole run store, not just the open
-  // one). The agent loop is module-level, so switching to a new chat never stops
-  // the prior one — these indicators make that visible: a still-running chat and a
-  // chat paused on a confirm both light up in the dropdown here, and are reported
-  // to the host so the Sessions sidebar lights them up too.
-  const runState = useGlobalRunState();
-  const runningSet = useMemo(() => new Set(runState.running), [runState]);
-  const awaitingSet = useMemo(() => new Set(runState.awaiting), [runState]);
-  // A leading glyph for a chat option: ❓ when it needs an answer (a confirm the
-  // user must approve — actionable), ● while it's executing, else nothing. Symbols,
-  // not prose (native <option> can't hold an icon), so no localization needed.
-  const runGlyph = useCallback(
-    (id: number) => (awaitingSet.has(id) ? '❓ ' : runningSet.has(id) ? '● ' : ''),
-    [awaitingSet, runningSet],
-  );
-
   // LOCK state for the open chat (owner-only toggle in the People section).
   const [chatVisibility, setChatVisibility] = useState<'shared' | 'locked'>('shared');
   const [chatIsOwner, setChatIsOwner] = useState(false);
@@ -264,77 +187,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     return () => { cancelled = true; };
   }, [chatId, persistence]);
 
-  // The mode the composer is ARMED with before a conversation exists (see the Chat|Work
-  // block below). Held here because `ensureChatId` seeds the created chat with it, and
-  // mirrored into a ref so that callback does not have to re-create on every switch.
-  const [pendingMode, setPendingMode] = useState<ChatMode>(NEW_CHAT_MODE);
-  const pendingModeRef = useRef<ChatMode>(NEW_CHAT_MODE);
-  pendingModeRef.current = pendingMode;
-  // The Memory switch as armed before the chat exists — seeds the chat `ensureChatId`
-  // creates, the same way the mode does. Mirrored from the switch below.
-  const pendingMemoryRef = useRef(true);
-
-  // Scope new chats to the sidebar's active project (same as task-seeded chats),
-  // so a conversation is associated with the project it's about server-side.
-  const ensureChatId = useCallback(async () => {
-    if (chatId != null) return chatId;
-    const created = await persistence.createChat({
-      title: t('app.newChat', 'New chat'),
-      projectId: init.project?.id ?? null,
-      // The composer's armed mode, not a server default — otherwise choosing Chat and
-      // then typing creates a Work chat and the very first turn runs in the wrong mode.
-      mode: pendingModeRef.current,
-    });
-    const chat = pendingMemoryRef.current
-      ? created
-      : await persistence.updateChat(created.id, { memoryEnabled: false }).catch(() => created);
-    // In the list at once, so the switch reads the new row instead of the column default.
-    setChats((prev) => (prev.some((c) => c.id === chat.id) ? prev : [chat, ...prev]));
-    setChatId(chat.id);
-    reloadChats();
-    return chat.id;
-  }, [chatId, persistence, reloadChats, t, init.project?.id]);
-
-  // The project this chat is associated with — the SINGLE chat-first resolution reused
-  // by the system-prompt directive, header label, Evermind scope, and triage report.
-  // An existing chat uses its OWN project (brain_chats.projectId); a not-yet-created
-  // chat falls back to the sidebar's active project it will be scoped to on first send.
-  // Names resolve from the host's projectId→name map, falling back to the sidebar name.
-  const activeChat = useMemo(() => chatOptions.find((c) => c.id === chatId) ?? null, [chatOptions, chatId]);
-  // Tell the host which conversation this panel is showing. With
-  // `builderforce.sessionTabs: perSession` the host binds its TAB to that chat —
-  // naming the tab after the conversation and tracking its live status — and a
-  // brand-new chat (no server id until first send) re-keys its tab here once created.
-  // Title is left undefined rather than blanked while the chat is still loading.
-  const sessionTitle = activeChat?.title ?? (chatId == null ? t('app.newChat', 'New chat') : undefined);
-  useEffect(() => {
-    post('session.meta', { chatId: chatId ?? undefined, title: sessionTitle });
-  }, [chatId, sessionTitle]);
   const associatedProjectId = activeChat ? activeChat.projectId : (init.project?.id ?? null);
-  // ---- Chat | Work mode -----------------------------------------------------
-  // A property of the CONVERSATION (migration 0409), not of this editor: the same chat
-  // opened on the web must mean the same thing here. The IDE used to hard-wire Work —
-  // every turn carried the ticket-linking directive — so a VS Code user could not ask a
-  // question without the model also being told to open a ticket about the answer, and a
-  // chat switched to Chat on the web still ran as Work in the editor.
-  //
-  // `pendingMode` covers the pre-chat state (no server row yet, so nothing to read a
-  // mode off): it seeds the chat `ensureChatId` creates, so picking Chat and then typing
-  // cannot silently mint a Work chat. It defaults to NEW_CHAT_MODE — Work — which is the
-  // IDE's existing behaviour, kept deliberately: an edit in an editor really should
-  // become tracked work.
-  const chatMode: ChatMode = activeChat ? normalizeChatMode(activeChat.mode) : pendingMode;
-  const selectMode = useCallback((mode: ChatMode) => {
-    setPendingMode(mode);
-    if (chatId == null) return;
-    // Optimistic: the picker IS the switch, so the menu must not lag the click. The
-    // authoritative value comes back on the next `reloadChats`.
-    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, mode } : c)));
-    persistence.updateChat(chatId, { mode })
-      .then(() => reloadChats())
-      .catch(() => reloadChats());
-  }, [chatId, persistence, reloadChats]);
-
   const associatedProject = useMemo<{ id: number; name: string } | null>(() => {
     if (associatedProjectId == null) return null;
     const name = init.projectNames?.[String(associatedProjectId)]
@@ -480,16 +333,13 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // CONVERSATION (`brain_chats.memory_enabled`) — the same chat reads the same switch on
   // the web — and the host's run reads it too: the run spec's `evermind` flag also drops
   // the memory tools. Off makes the chat a scratch space (no recall, no learning).
-  const persistMemory = useCallback(
-    (id: number, on: boolean) => persistence.updateChat(id, { memoryEnabled: on }).then(reloadChats),
-    [persistence, reloadChats],
-  );
+  const persistMemory = persistMemoryEnabled;
   const { enabled: memoryEnabled, setEnabled: setMemoryEnabled } = useChatMemorySwitch({
     chatId,
     serverValue: activeChat?.memoryEnabled,
     persist: persistMemory,
   });
-  pendingMemoryRef.current = memoryEnabled;
+  armMemory(memoryEnabled);
   const gatedEvermind = memoryEnabled ? evermind : undefined;
 
   /**
@@ -1040,93 +890,95 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     const title = renameValue.trim();
     setRenaming(false);
     if (chatId == null || !title || title === activeChat?.title) return;
-    try {
-      await persistence.updateChat(chatId, { title });
-      reloadChats();
-    } catch (e) {
-      conv.setError(e instanceof Error ? e.message : 'Rename failed');
-    }
-  }, [chatId, renameValue, activeChat?.title, persistence, reloadChats, conv]);
+    await rename(chatId, title);
+  }, [chatId, renameValue, activeChat?.title, rename]);
 
   return (
     <div className="bf-app">
-      <header className="bf-header">
-        {/* The chat's associated project names the panel (falling back to the brand
-            when a chat has no project), so it's clear which project this chat is about. */}
-        <span className="bf-header__title" title={associatedProject ? associatedProject.name : 'BuilderForce'}>
-          {associatedProject ? associatedProject.name : 'BuilderForce'}
-        </span>
-        {associatedProject
-          ? <span className="bf-header__brand">BuilderForce</span>
-          : <span className="bf-header__beta">{t('app.beta', 'beta')}</span>}
-        <div className="bf-header__spacer" />
-        {renaming ? (
-          <input
-            className="bf-select bf-rename-input"
-            autoFocus
-            value={renameValue}
-            placeholder={t('app.renamePlaceholder', 'Chat name')}
-            aria-label={t('app.rename', 'Rename chat')}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onBlur={commitRename}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); void commitRename(); }
-              else if (e.key === 'Escape') { e.preventDefault(); setRenaming(false); }
-            }}
-          />
-        ) : (
-          <select
-            className="bf-select"
-            value={chatId ?? ''}
-            onChange={(e) => setChatId(e.target.value ? Number(e.target.value) : null)}
-            aria-label={t('app.conversation', 'Conversation')}
-          >
-            <option value="">{t('app.newChat', 'New chat')}</option>
-            {chatOptions.map((c) => (
-              <option key={c.id} value={c.id}>{chatSwitcherLabel({
-                title: c.title,
-                id: c.id,
-                ticketCount: c.ticketCount,
-                ticketProgressPct: c.ticketProgressPct,
-                runGlyph: runGlyph(c.id),
-              })}</option>
-            ))}
-          </select>
+      <SurfaceHeader
+        // The chat's associated project names the panel (falling back to the brand when a
+        // chat has no project), so it's clear which project this chat is about.
+        title={<span title={associatedProject ? associatedProject.name : 'BuilderForce'}>{associatedProject ? associatedProject.name : 'BuilderForce'}</span>}
+        running={conv.sending}
+        context={(
+          <>
+          {renaming ? (
+            <input
+              className="bf-select bf-rename-input"
+              autoFocus
+              value={renameValue}
+              placeholder={t('app.renamePlaceholder', 'Chat name')}
+              aria-label={t('app.rename', 'Rename chat')}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); void commitRename(); }
+                else if (e.key === 'Escape') { e.preventDefault(); setRenaming(false); }
+              }}
+            />
+          ) : (
+            <select
+              className="bf-select"
+              value={chatId ?? ''}
+              onChange={(e) => setChatId(e.target.value ? Number(e.target.value) : null)}
+              aria-label={t('app.conversation', 'Conversation')}
+            >
+              <option value="">{t('app.newChat', 'New chat')}</option>
+              {chatOptions.map((c) => (
+                <option key={c.id} value={c.id}>{chatSwitcherLabel({
+                  title: titleOf(c),
+                  id: c.id,
+                  ticketCount: c.ticketCount,
+                  ticketProgressPct: c.ticketProgressPct,
+                  runGlyph: runGlyph(c.id),
+                })}</option>
+              ))}
+            </select>
+          )}
+          </>
         )}
-        {/* Rename the selected chat — only enabled once a real chat is saved (a
-            not-yet-created "New chat" has no server row to PATCH). */}
-        <button
-          className="bf-btn bf-btn--icon"
-          title={t('app.rename', 'Rename chat')}
-          aria-label={t('app.rename', 'Rename chat')}
-          disabled={chatId == null || renaming}
-          onClick={startRename}
-        >
-          <IconRename />
-        </button>
-        <button className="bf-btn" title={t('app.newChat', 'New chat')} onClick={() => setChatId(null)}>＋</button>
-        <button
-          className="bf-btn bf-btn--icon"
-          title={copyState === 'error'
-            ? t('app.copyFailed', 'Could not build the chat diagnostics report.')
-            : t('app.copyChat', 'Copy chat diagnostics (identity + Evermind state + transcript)')}
-          aria-label={copyState === 'error'
-            ? t('app.copyFailed', 'Could not build the chat diagnostics report.')
-            : t('app.copyChat', 'Copy chat diagnostics (identity + Evermind state + transcript)')}
-          disabled={!canCopy}
-          onClick={() => void copyTranscript()}
-        >
-          {copyState === 'copied' ? '✓' : copyState === 'error' ? '⚠' : '⧉'}
-        </button>
-        <button
-          className="bf-btn bf-btn--icon"
-          title={t('app.diagnostics', 'Run connection diagnostics')}
-          aria-label={t('app.diagnostics', 'Run connection diagnostics')}
-          onClick={() => post('diagnose')}
-        >
-          🩺
-        </button>
-      </header>
+        actions={(
+          <>
+            {/* Rename the selected chat — only once a real chat is saved (a not-yet-created
+                "New chat" has no server row to PATCH). */}
+            <button
+              type="button"
+              className="bf-shead__btn"
+              title={t('app.rename', 'Rename chat')}
+              aria-label={t('app.rename', 'Rename chat')}
+              disabled={chatId == null || renaming}
+              onClick={startRename}
+            >
+              <HeaderIcon d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </button>
+            <button
+              type="button"
+              className="bf-shead__btn"
+              title={copyState === 'error'
+                ? t('app.copyFailed', 'Could not build the chat diagnostics report.')
+                : t('app.copyChat', 'Copy chat diagnostics (identity + Evermind state + transcript)')}
+              aria-label={copyState === 'error'
+                ? t('app.copyFailed', 'Could not build the chat diagnostics report.')
+                : t('app.copyChat', 'Copy chat diagnostics (identity + Evermind state + transcript)')}
+              disabled={!canCopy}
+              onClick={() => void copyTranscript()}
+            >
+              <HeaderIcon d={copyState === 'copied' ? 'M5 12l5 5 9-10' : copyState === 'error' ? 'M12 8v5M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z' : 'M9 9h11v11H9zM5 15H4V4h11v1'} />
+            </button>
+            <button
+              type="button"
+              className="bf-shead__btn"
+              title={t('app.diagnostics', 'Run connection diagnostics')}
+              aria-label={t('app.diagnostics', 'Run connection diagnostics')}
+              onClick={() => post('diagnose')}
+            >
+              <HeaderIcon d="M3 12h4l3-8 4 16 3-8h4" />
+            </button>
+          </>
+        )}
+        onNewChat={() => setChatId(null)}
+        labels={{ newChat: t('app.newChat', 'New chat') }}
+      />
 
       {chatId != null && (
         <div style={{ padding: '0 12px' }}>
@@ -1135,7 +987,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
             projectId={init.project?.id ?? null}
             chatList={ticketChatList}
             adapter={ticketAdapter}
-            labels={DEFAULT_CHAT_TICKETS_LABELS}
+            labels={ticketLabels}
             onChanged={onTicketsChanged}
             refreshSignal={railRefresh}
             visibility={chatVisibility}
@@ -1229,12 +1081,15 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
         onReconnect={reconnect}
         onUpgrade={() => { invalidatePlanSnapshot(); openUpgrade('pricing'); }}
         onValidateCard={() => { invalidatePlanSnapshot(); openUpgrade('billing'); }}
+        onSignIn={() => post('signin')}
         onDismiss={conv.clearError}
         labels={{
           reconnect: t('app.reconnect', 'Reconnect'),
           upgrade: t('app.upgrade', 'Upgrade'),
           upgradeToPlan: t('app.upgradeToPlan', 'Upgrade to {plan}'),
           addCard: t('app.addCard', 'Add a card'),
+          signIn: t('app.signIn', 'Sign in'),
+          noModel: t('app.noModel', 'No model is available. Sign in, or start a model on this device.'),
           dismiss: t('app.dismiss', 'Dismiss'),
         }}
       />
@@ -1243,27 +1098,20 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
       <SubagentStrip chatId={chatId} labels={init.labels} liveLabels={tlLabels.live} />
 
       {conv.pendingConfirm && (
-        <div className="bf-confirm">
-          <span>
-            {t('app.confirmRun', 'Run {name}?').split('{name}')[0]}
-            <code>{conv.pendingConfirm.name}</code>
-            {t('app.confirmRun', 'Run {name}?').split('{name}')[1] ?? ''}
-          </span>
-          {/* For run_command, show the exact command line so the user approves what
-              actually runs, not just the tool name. */}
-          {conv.pendingConfirm.name === 'run_command'
-            && typeof (conv.pendingConfirm.args as { command?: unknown })?.command === 'string' && (
-            <pre className="bf-confirm__cmd">{(conv.pendingConfirm.args as { command: string }).command}</pre>
-          )}
-          <div className="bf-confirm__actions">
-            <button className="bf-btn bf-btn--primary" onClick={() => conv.resolveConfirm(true)}>{t('app.approve', 'Approve')}</button>
-            <button className="bf-btn" onClick={() => conv.resolveConfirm(false)}>{t('app.cancel', 'Cancel')}</button>
-            <label className="bf-confirm__auto">
-              <input type="checkbox" checked={autoApprove} onChange={(e) => { setAutoApproveMode(e.target.checked); if (e.target.checked) conv.resolveConfirm(true); }} />
-              {t('app.always', 'Always')}
-            </label>
-          </div>
-        </div>
+        <ToolConfirmBar
+          req={conv.pendingConfirm}
+          onApprove={() => conv.resolveConfirm(true)}
+          onDeny={() => conv.resolveConfirm(false)}
+          // "Always" turns on auto-approve and lets this one through.
+          onApproveAll={() => { setAutoApproveMode(true); conv.resolveConfirm(true); }}
+          labels={{
+            prompt: t('app.confirmRun', 'Run {name}?'),
+            approve: t('app.approve', 'Approve'),
+            approveAll: t('app.always', 'Always'),
+            deny: t('app.cancel', 'Cancel'),
+            aria: t('app.confirmAria', 'Approve this action'),
+          }}
+        />
       )}
 
       {pendingQuestion && (

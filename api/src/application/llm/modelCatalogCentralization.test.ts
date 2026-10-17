@@ -21,7 +21,15 @@ import { BYO_FRONTIER_CODERS, CODING_PREMIUM_FALLBACK_MODELS, SUPERSEDED_MODEL_I
 const CLAUDE_VERSION_LITERAL = /['"`](?:anthropic\/)?claude-[a-z]+-\d/;
 
 describe('model catalog centralization', () => {
-  it.each(['modelPool.ts', 'poolRouting.ts'])('%s names no Claude version — it derives from the catalogs', (file) => {
+  // `modelPool.ts` is a barrel over its split modules — every one of them is held to it.
+  it.each([
+    'modelPool.ts',
+    'modelPoolComposition.ts',
+    'modelPoolSeeds.ts',
+    'modelPoolRequestFlags.ts',
+    'modelPoolFallbacks.ts',
+    'poolRouting.ts',
+  ])('%s names no Claude version — it derives from the catalogs', (file) => {
     const source = readFileSync(resolve(__dirname, file), 'utf8')
       // Comments may cite a model for context; only code is held to the rule.
       .replace(/\/\*[\s\S]*?\*\//g, '')

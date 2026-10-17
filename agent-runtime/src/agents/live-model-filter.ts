@@ -1,4 +1,4 @@
-import { anthropicModelIdsSince } from "./anthropic-models.js";
+import { anthropicModelIdsSince } from "@builderforce/model-catalog";
 
 export type ModelRef = {
   provider?: string | null;
@@ -6,7 +6,7 @@ export type ModelRef = {
 };
 
 /** The modern Claude line — every release from 4.5 on, derived from the one release
- *  list (`anthropic-models.ts`), so a new flagship is "modern" the day it is listed. */
+ *  list (`@builderforce/model-catalog`), so a new flagship is "modern" the day it is listed. */
 const ANTHROPIC_PREFIXES = anthropicModelIdsSince("4.5");
 const OPENAI_MODELS = ["gpt-5.2", "gpt-5.0"];
 const CODEX_MODELS = [

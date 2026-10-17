@@ -6,16 +6,16 @@
  * never janks during generation (the article's Web Worker best practice).
  *
  * Worker creation is feature-detected and wrapped in try/catch: if the runtime
- * can't spawn the worker, the provider reports not-ready and the inference
- * cascade transparently falls through to the next tier — nothing breaks.
+ * can't spawn the worker, the provider reports not-ready (with its failure reason)
+ * rather than throwing — nothing breaks.
  */
 
-import type {
-  MambaProviderConfig,
-  ModelContext,
-  ModelProvider,
+import {
+  MambaModelProvider,
+  type MambaProviderConfig,
+  type ModelContext,
+  type ModelProvider,
 } from './model-provider';
-import { createInferenceProvider, type InferenceCascadeConfig } from './model-provider';
 import type {
   InitResult,
   TrainRequestOptions,
@@ -196,20 +196,31 @@ export class MambaWorkerProvider implements ModelProvider {
   }
 }
 
+export type { MambaProviderConfig };
+
+/** Either Mamba engine — the off-main-thread worker or the in-page fallback. Both
+ *  expose the same init / train / export / failureReason / dispose surface. */
+export type MambaTrainingProvider = MambaWorkerProvider | MambaModelProvider;
+
 /**
- * Convenience builder for the FULL local-first cascade including the worker tier:
- * Prompt API → Mamba worker (when a trained local model is wanted) → cloud.
- *
- * Lives here (not in model-provider.ts) so the worker URL import never creates a
- * cycle with the module the worker itself imports. Pass `includeLocalMamba: true`
- * to slot the worker-backed on-device model in as Tier 2.
+ * The ONE place a caller gets an initialised Mamba engine. Prefers the worker so
+ * generation and training never jank the UI; falls back to the in-page provider when
+ * the runtime can't spawn a worker or the worker fails to come up. The returned
+ * provider may still be not-ready (e.g. no WebGPU) — callers check `isReady()` and
+ * surface `failureReason()`.
  */
-export function createLocalFirstProvider(
-  config: InferenceCascadeConfig & { includeLocalMamba?: boolean; mambaConfig?: MambaProviderConfig },
-) {
-  const local =
-    config.includeLocalMamba && hasWorker()
-      ? new MambaWorkerProvider(config.mambaConfig)
-      : config.local;
-  return createInferenceProvider({ ...config, local });
+export async function initMambaProvider(
+  config: MambaProviderConfig,
+  workerFactory: WorkerFactory = defaultWorkerFactory,
+): Promise<MambaTrainingProvider> {
+  if (hasWorker()) {
+    const worker = new MambaWorkerProvider(config, workerFactory);
+    await worker.init();
+    if (worker.isReady()) return worker;
+    console.warn('[mamba] worker unavailable, training in-page:', worker.failureReason());
+    worker.dispose();
+  }
+  const inPage = new MambaModelProvider(config);
+  await inPage.init();
+  return inPage;
 }

@@ -293,6 +293,9 @@ export const brainChatMessages = pgTable('brain_chat_messages', {
 }, (t) => [
   // Partial (migration 0341): NULL is every ordinary turn. Upserts must restate it.
   uniqueIndex('uq_brain_chat_messages_event').on(t.chatId, t.eventKey).where(sql`event_key IS NOT NULL`),
+  // Migration 1231: per-chat seq range scans (unread counts, max(seq) on mark-read).
+  // Replaces the chat_id-only index, which is a prefix of this one.
+  index('idx_brain_chat_messages_chat_seq').on(t.chatId, t.seq),
 ]);
 
 

@@ -26,7 +26,9 @@ export function formatPct(fraction: number): string {
   return String(Math.round(fraction * 100));
 }
 
-/** `{name}` placeholder substitution — the one the spend labels use. */
-export function fill(template: string, values: Record<string, string>): string {
-  return template.replace(/\{(\w+)\}/g, (m, key: string) => values[key] ?? m);
+/** `{name}` placeholder substitution — the ONE every brain-ui label bundle fills with
+ *  (spend, the on-device list, the Evermind console, the chat-tickets rail). A name the
+ *  values lack is left as written. */
+export function fill(template: string, values: Readonly<Record<string, string | number>>): string {
+  return template.replace(/\{(\w+)\}/g, (whole, key: string) => (key in values ? String(values[key]) : whole));
 }

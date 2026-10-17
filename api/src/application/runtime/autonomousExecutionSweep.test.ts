@@ -145,3 +145,17 @@ describe('the autonomous executor\'s candidate window', () => {
     expect(orderBy.indexOf('manager_rank')).toBeLessThan(orderBy.indexOf('priority'));
   });
 });
+
+describe('the autonomous executor and the cron work-gate', () => {
+  it('never re-raises the work-gate signal for the tickets it evaluates', () => {
+    // The sweep IS the backstop the signal wakes. Letting its own evaluation re-signal
+    // meant one ticket the dispatcher kept refusing pinned the KV gate open, so every
+    // 5-minute tick ran the full fan-out instead of the 30-minute floor.
+    const source = readFileSync(
+      fileURLToPath(new URL('./autonomousExecutionSweep.ts', import.meta.url).href),
+      'utf8',
+    );
+    expect(source).toContain('signalCronGate: false');
+    expect(source).not.toMatch(/signalPendingWork\(/);
+  });
+});

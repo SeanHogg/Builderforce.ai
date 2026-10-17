@@ -14,7 +14,7 @@ import { projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../i
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
-import { invalidateCompletedByAssignee } from './reportRoutes';
+import { invalidateCompletedByAssignee } from '../../application/reports/reportCache';
 import { invalidateProjectsList } from '../../application/project/projectsListCache';
 import { convertWorkItemType, ConvertError } from '../../application/workitem/convertWorkItemType';
 import type { Db } from '../../infrastructure/database/connection';
@@ -54,6 +54,7 @@ import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoo
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { taskAssigneesCacheKey } from '../../application/task/taskAssigneeCache';
+import { getTaskCounts } from '../../application/task/taskCounts';
 import { parseBody, parseOptionalBody } from './requestBody';
 import {
   AddDependencyBody,
@@ -251,6 +252,15 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         planVerdict: planVerdicts.get(Number(t.id)) ?? null,
       })),
     });
+  });
+
+  // GET /api/tasks/counts?project_id=1 — the dashboard tile's tally (total / in
+  // progress / done + recent createdAt for the sparkline) as one cached aggregate,
+  // instead of the full enriched task list it used to count client-side. Registered
+  // BEFORE '/:id' so 'counts' is not read as a task id.
+  router.get('/counts', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
+    const projectId = parseProjectId(c.req.query('project_id'));
+    return c.json(await getTaskCounts(db, c.env as Env, c.get('tenantId'), projectId));
   });
 
   // GET /api/tasks/assignees — the team members (humans) a task can be assigned to.

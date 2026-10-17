@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { createCanvasJournal } from '@/lib/canvasActionJournal';
 import { readStoredJournal, writeStoredJournal } from '@/lib/canvasJournalStore';
-import type { CanvasAiCompletion } from '@/lib/creationCanvasAi';
+import type { CanvasAiCompletion } from '@/lib/canvasAiRun';
 
 export interface UseCanvasBrainRuntimeDeps {
   sessionId: string;

@@ -53,6 +53,7 @@ import { generateTriggerToken } from '../../domain/workflowTriggers';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
 import { freshMailboxToken, toTriageMessages } from './mailboxService';
+import { watchDrainNeedsWrite } from './mailboxSweepWrites';
 import {
   applyClientSideFilters,
   type MailboxMessage,
@@ -313,16 +314,21 @@ export async function drainMailboxWatch(db: Db, env: Env, row: WatchRow): Promis
     ? await claimNewMessages(db, row.tenantId, row.connectionId, delta.messages)
     : [];
 
-  await db
-    .update(mailboxWatches)
-    .set({
-      cursor: delta.cursor,
-      lastDeltaAt: new Date(),
-      status: 'active',
-      lastError: null,
-      updatedAt: new Date(),
-    })
-    .where(scopedToTenant(mailboxWatches, row.tenantId, eq(mailboxWatches.id, row.id)));
+  // Written only when the drain learned something: a moved cursor, or an error/status to
+  // clear. A poll-mode watch drained on every tick with no new mail used to UPDATE its
+  // row 288 times a day for nothing. See mailboxSweepWrites.ts.
+  if (watchDrainNeedsWrite(row, delta.cursor)) {
+    await db
+      .update(mailboxWatches)
+      .set({
+        cursor: delta.cursor,
+        lastDeltaAt: new Date(),
+        status: 'active',
+        lastError: null,
+        updatedAt: new Date(),
+      })
+      .where(scopedToTenant(mailboxWatches, row.tenantId, eq(mailboxWatches.id, row.id)));
+  }
 
   if (fresh.length === 0) return { ...EMPTY_DRAIN, seen: delta.messages.length };
 

@@ -57,10 +57,13 @@ export function BrainErrorBanner({
         router.push('/pricing?upgrade=pro');
       }}
       onValidateCard={() => { void startCardValidation(); }}
+      onSignIn={() => router.push('/login')}
       labels={{
         upgrade: t('upgrade'),
         ...(plan ? { upgradeToPlan: t('upgradeToPlan', { plan }) } : {}),
         addCard: t('addCard'),
+        signIn: t('signIn'),
+        noModel: t('noModel'),
         dismiss: tCommon('dismiss'),
       }}
       style={{

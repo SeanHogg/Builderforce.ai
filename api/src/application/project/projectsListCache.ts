@@ -22,7 +22,7 @@ export function projectsListVersionKey(tenantId: number): string {
  * cheap KV write; every list key embedding the old token ages out on its TTL.
  * The KV TTL is the backstop for the rarer aggregates we don't bump explicitly
  * (workflow count, architecture PRD, agent-host assignment, initiative-level
- * goal links) — mirrors the completed-by-assignee convention in reportRoutes.
+ * goal links) — mirrors the version-token convention in application/reports/reportCache.
  */
 export async function invalidateProjectsList(env: Env, tenantId: number): Promise<void> {
   // Task/objective/project writes that reshape the list also change what the

@@ -14,6 +14,19 @@ export interface ModelPrice {
   output: number;
 }
 
+/** Tokens in the million every rate card and marketplace price is quoted per. */
+export const TOKENS_PER_MILLION = 1_000_000;
+
+/** USD per million tokens (a rate card) → USD per token (this port). Pure. */
+export function perMillionToPerToken(usdPerMillion: number): number {
+  return usdPerMillion / TOKENS_PER_MILLION;
+}
+
+/** USD per token (this port) → USD per million tokens (what a person reads). Pure. */
+export function perTokenToPerMillion(usdPerToken: number): number {
+  return usdPerToken * TOKENS_PER_MILLION;
+}
+
 /** A price of zero both ways — local inference and free-tier models. */
 export const ZERO_PRICE: ModelPrice = Object.freeze({ input: 0, output: 0 });
 

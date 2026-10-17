@@ -4,7 +4,8 @@
  *
  * The policy decides; this module only SAYS what it decided, in the labels and wording
  * the triage and diagnostics readers already key on (`llm.role_handoff`,
- * `loop.model_failover`, `llm.stream_interrupted`, `llm.transport_error`). Kept out of
+ * `loop.model_failover`, `llm.stream_interrupted`, `llm.transport_error`, and the
+ * `llm.complete` error a failed completion records). Kept out of
  * `brainRunStore.ts` so the loop reads as "report the event, act on the outcome" rather
  * than carrying the prose of every outcome inline. Pure: the caller stamps `ts`.
  */
@@ -74,5 +75,23 @@ export function transportRetryTrace(
     label: 'llm.transport_error',
     args: { step },
     result: `${message} — retrying this turn on another connected model.`,
+  };
+}
+
+/**
+ * A completion that FAILED — the `llm.complete` error step every browser loop records
+ * before it routes around the failure or surfaces it. `model` is the model that broke
+ * (what the stream named, else the one asked for); under auto-routing that is `default`.
+ * The result keeps the error's class, so triage can tell an interruption from a reset.
+ */
+export function providerFailureTrace(ts: string, step: number, model: string | undefined, error: unknown, durationMs?: number): BrainTraceEvent {
+  return {
+    ts,
+    category: 'error',
+    label: 'llm.complete',
+    ...(durationMs !== undefined ? { durationMs } : {}),
+    args: { model: model || 'default', step },
+    result: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    isError: true,
   };
 }

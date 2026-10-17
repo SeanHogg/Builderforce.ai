@@ -7,7 +7,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * watermark — even on failure, so a broken schedule can't retry-storm.
  *
  * Wired in the composition root (index.ts) on the frequent cron tick with
- * `buildScheduledReport` (reportRoutes) as the generator. deliveryHour is
+ * `buildScheduledReport` (`./scheduledReport`) as the generator. deliveryHour is
  * hour-granular; the ~5-minute tick fires a due digest within minutes of its hour.
  */
 

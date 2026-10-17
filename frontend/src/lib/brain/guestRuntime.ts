@@ -144,29 +144,18 @@ const guestPersistence: BrainPersistenceAdapter = {
  */
 export const GUEST_ROOM_CHAT_ID = 1;
 
-/** Author attribution rides in message metadata so bubbles can be named. */
-const AUTHOR_META_KEY = 'guestAuthor';
-
-/** Read the display name a room message was written under, if any. */
-export function guestMessageAuthor(metadata: string | null | undefined): string | null {
-  if (!metadata) return null;
-  try {
-    const parsed = JSON.parse(metadata) as Record<string, unknown>;
-    const name = parsed[AUTHOR_META_KEY];
-    return typeof name === 'string' && name ? name : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Stamp the sender's display name onto a message's metadata (preserving the rest). */
+/**
+ * Stamp the sender onto a room message's metadata (preserving the rest), in the ONE
+ * attribution shape every transcript reads — `authoredBy` — so the shared timeline
+ * names the person who wrote it, as it does for invited participants.
+ */
 function withAuthor(metadata: string | null | undefined, name: string): string | null {
   if (!name) return metadata ?? null;
   let base: Record<string, unknown> = {};
   if (metadata) {
     try { base = JSON.parse(metadata) as Record<string, unknown>; } catch { base = {}; }
   }
-  return JSON.stringify({ ...base, [AUTHOR_META_KEY]: name });
+  return JSON.stringify({ ...base, authoredBy: { kind: 'human', ref: `guest:${name}`, name } });
 }
 
 function toBrainMessage(m: GuestRoomMessage): BrainMessage {

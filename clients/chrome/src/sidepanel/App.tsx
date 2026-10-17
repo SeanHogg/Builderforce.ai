@@ -3,7 +3,8 @@
  * sync), five views and the services they share. Built for a panel from ~320px wide,
  * keyboard-first (the view switcher is a real tablist with arrow-key movement).
  */
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { SurfaceHeader, SurfaceTabs } from '@seanhogg/builderforce-brain-ui';
 import { createPanelServices, type PanelServices } from '../host/panelServices';
 import { t, type MessageKey } from '../i18n/t';
 import type { LocalChat } from '../store/records';
@@ -44,7 +45,6 @@ function Shell() {
   const [view, setView] = useState<View>('chat');
   const [chatId, setChatId] = useState<number | null>(null);
   const [chats, reloadChats] = useLoaded<LocalChat[]>(() => services.records.listChats(), [], []);
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   // Open on the most recent chat.
   useEffect(() => {
@@ -59,54 +59,37 @@ function Shell() {
     return chat.id;
   }, [services, reloadChats]);
 
-  const onTabKey = (e: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-    if (!step) return;
-    e.preventDefault();
-    const next = (index + step + VIEWS.length) % VIEWS.length;
-    setView(VIEWS[next]!.id);
-    tabRefs.current[next]?.focus();
-  };
-
   return (
     <div className="rovr-shell">
       <Header />
-      <div className="rovr-tabs" role="tablist" aria-label={t('viewsLabel')}>
-        {VIEWS.map((v, i) => (
-          <button
-            key={v.id}
-            ref={(el) => {
-              tabRefs.current[i] = el;
-            }}
-            role="tab"
-            id={`rovr-tab-${v.id}`}
-            aria-selected={view === v.id}
-            aria-controls={`rovr-view-${v.id}`}
-            tabIndex={view === v.id ? 0 : -1}
-            className="rovr-tab"
-            onClick={() => setView(v.id)}
-            onKeyDown={(e) => onTabKey(e, i)}
-          >
-            {t(v.label)}
-          </button>
-        ))}
-      </div>
-      <main className="rovr-view" role="tabpanel" id={`rovr-view-${view}`} aria-labelledby={`rovr-tab-${view}`}>
-        {view === 'chat' && (
-          <ChatView
-            chats={chats}
-            chatId={chatId}
-            onSelect={setChatId}
-            onNewChat={newChat}
-            onChatsChanged={reloadChats}
-            onOpenSettings={() => setView('settings')}
-          />
-        )}
-        {view === 'tasks' && <TasksView chatId={chatId} onNewChat={newChat} />}
-        {view === 'actions' && <ActionsView chatId={chatId} />}
-        {view === 'playbooks' && <PlaybooksView />}
-        {view === 'settings' && <SettingsView />}
-      </main>
+      {/* THE shared tab strip (roving focus, automatic activation) — one per product. */}
+      <SurfaceTabs
+        className="rovr-views"
+        panelClassName="rovr-view"
+        idPrefix="rovr"
+        label={t('viewsLabel')}
+        activeId={view}
+        onSelect={(id) => setView(id as View)}
+        tabs={VIEWS.map((v) => ({
+          id: v.id,
+          label: t(v.label),
+          content: v.id === 'chat'
+            ? (
+              <ChatView
+                chats={chats}
+                chatId={chatId}
+                onSelect={setChatId}
+                onNewChat={newChat}
+                onChatsChanged={reloadChats}
+                onOpenSettings={() => setView('settings')}
+              />
+            )
+            : v.id === 'tasks' ? <TasksView chatId={chatId} onNewChat={newChat} />
+              : v.id === 'actions' ? <ActionsView chatId={chatId} />
+                : v.id === 'playbooks' ? <PlaybooksView />
+                  : <SettingsView />,
+        }))}
+      />
     </div>
   );
 }
@@ -132,13 +115,17 @@ function Header() {
   }, [services]);
   const waiting = stats ? stats.queued + stats.inFlight : 0;
   const mode: MessageKey = !online ? 'statusOffline' : signedIn ? 'statusConnected' : 'statusDeviceOnly';
+  // THE shared surface header; Rovr's own facts (where the next turn runs, what is
+  // waiting to sync) ride in its context slot.
   return (
-    <header className="rovr-header">
-      <h1 className="rovr-brand">Rovr</h1>
-      <div className="rovr-status" aria-live="polite">
-        <span className={`rovr-chip rovr-chip--${online ? (signedIn ? 'ok' : 'local') : 'off'}`}>{t(mode)}</span>
-        {waiting > 0 && <span className="rovr-chip rovr-chip--pending">{t('statusWaiting', waiting)}</span>}
-      </div>
-    </header>
+    <SurfaceHeader
+      title="Rovr"
+      context={(
+        <div className="rovr-status" aria-live="polite">
+          <span className={`rovr-chip rovr-chip--${online ? (signedIn ? 'ok' : 'local') : 'off'}`}>{t(mode)}</span>
+          {waiting > 0 && <span className="rovr-chip rovr-chip--pending">{t('statusWaiting', waiting)}</span>}
+        </div>
+      )}
+    />
   );
 }

@@ -1,10 +1,10 @@
+import { anthropicFamilyAliases } from "@builderforce/model-catalog";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import type { CliBackendConfig } from "../config/types.js";
 import {
   CLI_FRESH_WATCHDOG_DEFAULTS,
   CLI_RESUME_WATCHDOG_DEFAULTS,
 } from "./cli-watchdog-defaults.js";
-import { anthropicFamilyAliases } from "./anthropic-models.js";
 import { normalizeProviderId } from "./model-selection.js";
 
 export type ResolvedCliBackend = {
@@ -15,7 +15,7 @@ export type ResolvedCliBackend = {
 /**
  * The Claude Code CLI takes a FAMILY word for `--model` (`opus` = that family's newest),
  * so every spelling of every release maps onto its family — derived from the one
- * release list (`anthropic-models.ts`), not spelled out here. Only the families the CLI
+ * release list (`@builderforce/model-catalog` `ANTHROPIC_RELEASES`), not spelled out here. Only the families the CLI
  * documents a word for; any other Claude id is passed through as the full id.
  */
 const CLI_MODEL_FAMILIES: ReadonlySet<string> = new Set(["opus", "sonnet", "haiku"]);

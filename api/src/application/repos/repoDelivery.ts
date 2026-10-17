@@ -351,11 +351,51 @@ export interface RepoDeliverySweepResult {
  *  read-time cap this replaced, a repo past the cap is not degraded: it is simply
  *  next in the rotation, because the ordering is oldest-probe-first. */
 const MAX_REPOS_PER_TICK = 25;
-/** Re-probe a repo at most this often. */
-const PROBE_INTERVAL_SEC = 5 * 60;
+/**
+ * Re-probe a repo at most this often.
+ *
+ * It was 5 minutes — exactly the cron cadence — so every connected repo was due on
+ * every tick: two provider calls plus an upsert per repo, 288 times a day, for a
+ * verdict (open-PR count, latest CI run) that a dashboard only needs to be roughly
+ * current. Attaching a repo still shows a verdict at once via {@link refreshRepoDelivery}.
+ */
+export const REPO_DELIVERY_PROBE_INTERVAL_MS = 30 * 60_000;
+
+/** The persisted verdict columns, as the due query reads them back for comparison. */
+interface StoredVerdictColumns {
+  health: string | null;
+  reason: string | null;
+  openPullRequests: number | null;
+  buildStatus: string | null;
+  buildUrl: string | null;
+  buildBranch: string | null;
+  buildAt: Date | string | null;
+}
+
+/**
+ * Does a fresh probe say anything the stored row does not? `null` previous = no row
+ * yet (the left join found nothing), which is always a change.
+ */
+export function repoDeliveryVerdictChanged(prev: StoredVerdictColumns | null, next: RepoDeliveryProbe): boolean {
+  if (!prev || prev.health === null) return true;
+  const prevBuildAt = prev.buildAt ? new Date(prev.buildAt).getTime() : null;
+  const nextBuildAt = next.buildAt ? new Date(next.buildAt).getTime() : null;
+  return prev.health !== next.health
+    || (prev.reason ?? null) !== next.reason
+    || (prev.openPullRequests ?? null) !== next.openPullRequests
+    || (prev.buildStatus ?? null) !== next.buildStatus
+    || (prev.buildUrl ?? null) !== next.buildUrl
+    || (prev.buildBranch ?? null) !== next.buildBranch
+    || prevBuildAt !== nextBuildAt;
+}
 
 /**
  * Probe every due connected repo and persist its verdict. Safe on every tick.
+ *
+ * Only a CHANGED verdict is upserted. An unchanged one still stamps `probed_at` (one
+ * narrow UPDATE) because `probed_at` is the rotation key — without it the repo would be
+ * due again next tick and re-probed — but `updated_at` is left alone, so it now reads as
+ * "when the verdict last changed".
  *
  * Ordering is `probed_at asc nulls first`, so a repo that has NEVER been probed
  * goes first and the rest rotate — a tenant with more repos than one tick can
@@ -365,7 +405,7 @@ const PROBE_INTERVAL_SEC = 5 * 60;
 export async function runRepoDeliverySweep(env: Env): Promise<RepoDeliverySweepResult> {
   const db = buildDatabase(env as unknown as Parameters<typeof buildDatabase>[0]);
   const secret = integrationCredentialSecret(env);
-  const cutoff = new Date(Date.now() - PROBE_INTERVAL_SEC * 1000);
+  const cutoff = new Date(Date.now() - REPO_DELIVERY_PROBE_INTERVAL_MS);
 
   const due = await db
     .select({
@@ -374,6 +414,14 @@ export async function runRepoDeliverySweep(env: Env): Promise<RepoDeliverySweepR
       owner: projectRepositories.owner,
       repo: projectRepositories.repo,
       probedAt: repoDeliveryStatus.probedAt,
+      // The stored verdict, so an unchanged probe can skip the full upsert.
+      health: repoDeliveryStatus.health,
+      reason: repoDeliveryStatus.reason,
+      openPullRequests: repoDeliveryStatus.openPullRequests,
+      buildStatus: repoDeliveryStatus.buildStatus,
+      buildUrl: repoDeliveryStatus.buildUrl,
+      buildBranch: repoDeliveryStatus.buildBranch,
+      buildAt: repoDeliveryStatus.buildAt,
     })
     .from(projectRepositories)
     .leftJoin(repoDeliveryStatus, eq(repoDeliveryStatus.repoId, projectRepositories.id))
@@ -392,7 +440,13 @@ export async function runRepoDeliverySweep(env: Env): Promise<RepoDeliverySweepR
   for (const repo of due) {
     try {
       const verdict = await probeRepoDelivery(env, db, secret, repo.tenantId, repo.id);
-      await storeRepoDelivery(db, repo.tenantId, repo.id, verdict);
+      if (repoDeliveryVerdictChanged(repo, verdict)) {
+        await storeRepoDelivery(db, repo.tenantId, repo.id, verdict);
+      } else {
+        await db.update(repoDeliveryStatus)
+          .set({ probedAt: new Date() })
+          .where(eq(repoDeliveryStatus.repoId, repo.id));
+      }
       probed++;
     } catch (e) {
       errors++;

@@ -21,10 +21,12 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var chatError_exports = {};
 __export(chatError_exports, {
   BrainRequestError: () => BrainRequestError,
+  NOT_SIGNED_IN: () => NOT_SIGNED_IN,
   brainRequestError: () => brainRequestError,
   chatErrorAction: () => chatErrorAction
 });
 module.exports = __toCommonJS(chatError_exports);
+var NOT_SIGNED_IN = "not_signed_in";
 var BrainRequestError = class extends Error {
   status;
   code;
@@ -77,6 +79,7 @@ function chatErrorAction(err) {
     }
   }
   if (!message) return null;
+  if (message === NOT_SIGNED_IN) return { kind: "sign_in" };
   if (AUTH_PROSE.test(message)) return { kind: "auth" };
   if (CARD_PROSE.test(message)) return { kind: "validate_card" };
   if (UPGRADE_PROSE.test(message)) return { kind: "upgrade" };
@@ -85,6 +88,7 @@ function chatErrorAction(err) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   BrainRequestError,
+  NOT_SIGNED_IN,
   brainRequestError,
   chatErrorAction
 });

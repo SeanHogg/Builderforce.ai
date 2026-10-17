@@ -1595,7 +1595,7 @@
   cursor: pointer;
 }
 
-.bf-pmenu__item:hover:not(:disabled) { background: var(--bf-accent-soft, rgba(128, 128, 128, 0.16)); }
+.bf-pmenu__item:hover:not(:disabled) { background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14)); }
 /* An option the host cannot offer right now (memory with no project behind it)
    states its reason in place rather than disappearing — a control that vanishes
    reads as a bug, a control that explains itself reads as an answer. */
@@ -1689,7 +1689,7 @@
   cursor: pointer;
 }
 
-.bf-pmenu__option:hover { background: var(--bf-accent-soft, rgba(128, 128, 128, 0.16)); }
+.bf-pmenu__option:hover { background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14)); }
 .bf-pmenu__option.is-active { border-color: var(--bf-accent, #6ea8fe); background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14)); }
 .bf-pmenu__optName { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .bf-pmenu__optTag { font-size: 10px; color: var(--bf-text-muted, #8a8a8a); }
@@ -1727,7 +1727,7 @@
   text-align: left;
   cursor: pointer;
 }
-.bf-lmodel__main:hover:not(:disabled) { background: var(--bf-accent-soft, rgba(128, 128, 128, 0.16)); }
+.bf-lmodel__main:hover:not(:disabled) { background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14)); }
 .bf-lmodel__main:disabled { cursor: default; }
 .bf-lmodel.is-unsupported .bf-lmodel__main { opacity: 0.6; }
 .bf-lmodel__name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
@@ -2090,3 +2090,184 @@
   color: var(--bf-text, inherit);
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.32);
 }
+
+/* ---------------------------------------------------------------------------
+ * <ToolConfirmBar> — the ONE human-in-the-loop approval every surface shows.
+ * ------------------------------------------------------------------------- */
+.bf-confirm {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 10px 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  border-radius: 10px;
+  background: var(--bf-surface-2);
+  border: 1px solid var(--bf-warning, var(--bf-accent));
+  color: var(--bf-text);
+}
+.bf-confirm__title { overflow-wrap: anywhere; }
+.bf-confirm code { font-family: var(--bf-font-mono); }
+.bf-confirm__cmd {
+  margin: 0;
+  padding: 6px 8px;
+  font-family: var(--bf-font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-radius: 6px;
+  background: var(--bf-surface);
+  border: 1px solid var(--bf-border);
+}
+.bf-confirm__args {
+  font-family: var(--bf-font-mono);
+  font-size: 11.5px;
+  color: var(--bf-text-muted);
+  word-break: break-all;
+}
+.bf-confirm__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.bf-confirm__btn {
+  min-height: 32px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--bf-border-strong, var(--bf-border));
+  background: var(--bf-surface);
+  color: var(--bf-text);
+  cursor: pointer;
+}
+.bf-confirm__btn--primary { background: var(--bf-accent); border-color: var(--bf-accent); color: var(--bf-on-accent, #fff); }
+.bf-confirm__btn:focus-visible { outline: 2px solid var(--bf-accent); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------------------
+ * <BrainMark> — the one Brain glyph and its working pulse.
+ * ------------------------------------------------------------------------- */
+.bf-mark { position: relative; display: inline-grid; place-items: center; line-height: 1; color: inherit; }
+.bf-mark__glyph { position: relative; z-index: 1; display: grid; place-items: center; line-height: 1; }
+.bf-mark[data-state='running'] .bf-mark__glyph { animation: bfMarkBreathe 1.5s ease-in-out infinite; }
+.bf-mark__pulse {
+  position: absolute; inset: -30%; z-index: 0;
+  border-radius: 50%; border: 0.08em solid currentColor;
+  opacity: 0; animation: bfMarkPulse 1.8s ease-out infinite;
+}
+.bf-mark__pulse--trail { animation-delay: .9s; }
+@keyframes bfMarkPulse { 0% { opacity: .65; transform: scale(.85); } 70%, 100% { opacity: 0; transform: scale(1.5); } }
+@keyframes bfMarkBreathe { 0%, 100% { opacity: .65; transform: scale(.94); } 50% { opacity: 1; transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) {
+  .bf-mark[data-state='running'] .bf-mark__glyph { animation: none; opacity: 1; }
+  .bf-mark__pulse { animation: none; opacity: .4; transform: scale(1.15); }
+  .bf-mark__pulse--trail { display: none; }
+}
+
+/* ---------------------------------------------------------------------------
+ * <SurfaceHeader> — one row, never wraps; only the context slot shrinks.
+ * ------------------------------------------------------------------------- */
+.bf-shead {
+  flex-shrink: 0;
+  display: flex; align-items: center; gap: 4px;
+  min-height: 48px; padding: 6px 8px 6px 14px;
+  border-bottom: 1px solid var(--bf-border);
+  background: var(--bf-surface);
+  color: var(--bf-text);
+}
+.bf-shead__brand { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; margin-right: 4px; font-weight: 600; }
+.bf-shead__mark {
+  display: inline-grid; place-items: center;
+  width: 26px; height: 26px; border-radius: 8px;
+  color: var(--bf-accent);
+  background: var(--bf-accent-soft);
+}
+.bf-shead__title { white-space: nowrap; }
+.bf-shead__context { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.bf-shead__presence { display: flex; align-items: center; flex-shrink: 0; padding-right: 4px; }
+.bf-shead__btn {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 32px; height: 32px; padding: 0;
+  border-radius: 8px; border: 1px solid transparent;
+  background: transparent; color: var(--bf-text-muted);
+  cursor: pointer; text-decoration: none;
+}
+.bf-shead__btn:hover { background: var(--bf-surface-2); color: var(--bf-text); }
+.bf-shead__btn[aria-pressed='true'] { border-color: var(--bf-border); background: var(--bf-surface-2); color: var(--bf-accent); }
+.bf-shead__btn:focus-visible { outline: 2px solid var(--bf-accent); outline-offset: 1px; }
+.bf-shead__badged { position: relative; display: inline-flex; }
+.bf-shead__badge {
+  position: absolute; top: -3px; right: -3px; pointer-events: none;
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: 700;
+  background: var(--bf-accent); color: var(--bf-on-accent, #fff);
+}
+
+/* ---------------------------------------------------------------------------
+ * Composer chips: <SuggestionRow>, <QueuedTurnChips>, <ContextChip>.
+ * ------------------------------------------------------------------------- */
+.bf-suggest { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.bf-suggest__chip {
+  flex: 0 0 auto; min-height: 32px; padding: 0 12px;
+  border: 1px solid var(--bf-border); border-radius: 999px;
+  background: transparent; color: var(--bf-text);
+  font: inherit; font-size: 12.5px; font-weight: 600; line-height: 1.2; white-space: nowrap; cursor: pointer;
+}
+.bf-suggest__chip:hover, .bf-suggest__chip:focus-visible { border-color: var(--bf-accent); color: var(--bf-accent); outline: none; }
+@media (max-width: 640px) {
+  .bf-suggest { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .bf-suggest::-webkit-scrollbar { display: none; }
+}
+@media (pointer: coarse) { .bf-suggest__chip { min-height: 44px; } }
+
+.bf-queued { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.bf-queued__hint { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--bf-text-muted); }
+/* A held follow-up: dashed outline + accent tint so it reads as pending, not sent. */
+.bf-queued__chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  max-width: 240px; padding: 2px 6px;
+  font-size: 11px; border-radius: 6px;
+  border: 1px dashed var(--bf-accent);
+  background: var(--bf-accent-soft);
+  color: var(--bf-text);
+}
+.bf-queued__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bf-queued__steer {
+  border: 1px solid var(--bf-accent); border-radius: 4px;
+  background: transparent; color: var(--bf-accent);
+  font: inherit; font-size: 11px; padding: 1px 6px; cursor: pointer;
+}
+.bf-queued__x { border: none; background: transparent; color: inherit; cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; }
+
+.bf-ctxchip {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-width: 0; max-width: 180px; height: 30px; padding: 0 10px; box-sizing: border-box;
+  border: 1px solid var(--bf-border); border-radius: 999px;
+  color: var(--bf-text-muted); background: transparent;
+  font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden;
+}
+.bf-ctxchip__icon { display: inline-grid; place-items: center; flex: none; }
+.bf-ctxchip select { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; text-overflow: ellipsis; }
+.bf-ctxchip select option { background: var(--bf-surface); color: var(--bf-text); }
+
+/* ---------------------------------------------------------------------------
+ * <SurfaceLauncher> — the way back into a closed surface; the host places it.
+ * ------------------------------------------------------------------------- */
+.bf-launcher { position: relative; cursor: pointer; }
+.bf-launcher__badge {
+  position: absolute; top: -2px; right: -2px;
+  min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 999px;
+  font-size: 11px; font-weight: 700; line-height: 20px; text-align: center;
+  color: var(--bf-on-accent, #fff);
+  box-shadow: 0 0 0 2px var(--bf-surface);
+}
+/* A person must answer — pulses so it is noticed with the drawer closed. */
+.bf-launcher__badge--awaiting { background: var(--bf-warning); animation: bfLauncherPulse 1.4s ease-in-out infinite; }
+/* New messages elsewhere — informational, no pulse, a distinct hue. */
+.bf-launcher__badge--unread { background: var(--bf-badge-unread, var(--bf-accent)); }
+@keyframes bfLauncherPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+@media (prefers-reduced-motion: reduce) { .bf-launcher__badge--awaiting { animation: none; } }
+
+/* <SurfaceTabs> — one accessible tab strip (Evermind console, Rovr's panel views). */
+.bf-tabs { display: flex; flex-direction: column; gap: 10px; }
+.bf-tabs__panel { display: flex; flex-direction: column; gap: 10px; outline: none; }

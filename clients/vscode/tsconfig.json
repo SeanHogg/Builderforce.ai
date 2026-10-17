@@ -15,6 +15,7 @@
       "@builderforce/creation-canvas-contract": ["../../packages/creation-canvas-contract/src/index.ts"],
       "@builderforce/creation-canvas-contract/objectKinds": ["../../packages/creation-canvas-contract/src/objectKinds.ts"],
       "@builderforce/creation-canvas-contract/creativeCapabilities": ["../../packages/creation-canvas-contract/src/creativeCapabilities.ts"],
+      "@builderforce/device-auth": ["../../packages/device-auth/src/index.ts"],
       "@builderforce/run-context": ["../../packages/run-context/src/index.ts"],
       "@builderforce/kimi-oauth": ["../../packages/kimi-oauth/src/index.ts"],
       "@builderforce/local-inference": ["../../packages/local-inference/src/index.ts"],

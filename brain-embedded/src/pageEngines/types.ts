@@ -10,6 +10,7 @@
  */
 
 import type { LocalRuntimeId, LocalRuntimeProbe } from '@builderforce/local-inference';
+import { reportPageEngineFailure } from './engineFailure';
 
 /** The request as the streamer sends it: OpenAI `chat.completions` JSON. Gateway-only
  *  fields ride along; an engine reads what it needs and ignores the rest. */
@@ -81,11 +82,15 @@ export const errorMessage = (e: unknown): string => (e instanceof Error ? e.mess
 export const hasTools = (body: ChatCompletionsRequest): boolean => Array.isArray(body.tools) && body.tools.length > 0;
 
 /**
- * A memoizing probe — the shape every engine's probe wants. Concurrent callers share one
- * in-flight answer; `fresh` forces a re-probe (a picker being opened); a throwing probe
- * reads as null, because "no engine here" is the normal case on most browsers.
+ * A memoizing probe — the shape every engine's probe wants, and the ONE place a probe
+ * failure is handled. Concurrent callers share one in-flight answer; `fresh` forces a
+ * re-probe (a picker being opened). A throwing probe reads as null — "no engine here" is
+ * the normal case on most browsers — but its reason is reported, never dropped, so a
+ * downloaded model that stops being offered can be explained. Every caller downstream
+ * (`probePageEngines`, the plan) relies on this: an engine's probe never rejects.
  */
 export function memoizedProbe(
+  runtime: LocalRuntimeId,
   run: () => Promise<LocalRuntimeProbe | null>,
   config: { ttlMs?: number; now?: () => number } = {},
 ): Pick<PageEngine, 'probe' | 'invalidate'> {
@@ -96,7 +101,10 @@ export function memoizedProbe(
     probe(options = {}) {
       const at = now();
       if (!options.fresh && memo && at - memo.at < ttlMs) return memo.value;
-      const value = run().catch(() => null);
+      const value = run().catch((e: unknown) => {
+        reportPageEngineFailure(runtime, 'probe', e);
+        return null;
+      });
       memo = { at, value };
       return value;
     },

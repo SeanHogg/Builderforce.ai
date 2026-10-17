@@ -17,7 +17,8 @@ import { llmUsageLog } from '../../infrastructure/database/schema';
 import { effectivePlanOf, loadTenantPlanRow } from '../../application/tenant/tenantPlanSnapshot';
 import { getLimits } from '../../domain/tenant/PlanLimits';
 import { TenantPlan } from '../../domain/shared/types';
-import { estimateTokensFromChars } from '../../application/llm/tokenUsage';
+import { perMillionToPerToken } from '@builderforce/model-catalog';
+import { estimateTokensFromText } from '../../application/llm/tokenUsage';
 import { usageDatabaseOf } from '../../application/llm/usageLedger';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -41,19 +42,11 @@ const TEAMS_BLENDED_COST_PER_1M = 0.40;     // same as Pro
 
 function estimateCostPerToken(plan: TenantPlan): number {
   switch (plan) {
-    case TenantPlan.FREE:  return FREE_MODEL_COST_PER_1M / 1_000_000;
-    case TenantPlan.PRO:   return PRO_BLENDED_COST_PER_1M / 1_000_000;
-    case TenantPlan.TEAMS: return TEAMS_BLENDED_COST_PER_1M / 1_000_000;
-    default:               return FREE_MODEL_COST_PER_1M / 1_000_000;
+    case TenantPlan.FREE:  return perMillionToPerToken(FREE_MODEL_COST_PER_1M);
+    case TenantPlan.PRO:   return perMillionToPerToken(PRO_BLENDED_COST_PER_1M);
+    case TenantPlan.TEAMS: return perMillionToPerToken(TEAMS_BLENDED_COST_PER_1M);
+    default:               return perMillionToPerToken(FREE_MODEL_COST_PER_1M);
   }
-}
-
-/**
- * Estimate token count from text using the "4 chars per token" rule of thumb.
- * Accurate to within ~15% for typical English/code content.
- */
-function estimateTokens(text: string): number {
-  return estimateTokensFromChars(text.length);
 }
 
 /**
@@ -90,7 +83,7 @@ export function createCostForecastRoutes(db: Db): Hono<HonoEnv> {
     const fullContext = body.context.join('\n\n');
 
     // Estimate tokens
-    const promptTokens = estimateTokens(fullContext);
+    const promptTokens = estimateTokensFromText(fullContext);
     const completionTokens = estimateCompletionTokens(promptTokens);
     const totalTokensPerStep = promptTokens + completionTokens;
     const totalTokens = totalTokensPerStep * steps;

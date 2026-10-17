@@ -165,7 +165,7 @@ function ModelDetail({ record }: { record: ModelRecord }) {
           style={{ textDecoration: 'none', padding: '10px 20px', alignSelf: 'flex-start' }}
         >
           {record.isBuilderforce
-            ? record.tier === 'PRO'
+            ? record.plan === 'PRO'
               ? t('detail.upgradeToPro')
               : t('detail.getStartedFree')
             : t('detail.useViaPro')}

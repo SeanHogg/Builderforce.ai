@@ -15,7 +15,7 @@ import { apiRequest, apiRequestStream, apiRequestText, type RequestOptions } fro
 import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import type { SessionApp } from './embeddedApps';
 import type { OutcomeMetric, OutcomeMetricFamilyRef } from './outcomeMetrics';
-import type { LlmProvider } from '@builderforce/model-catalog';
+import type { ListingTier, LlmProvider } from '@builderforce/model-catalog';
 
 /**
  * `request` / `webRequest` are the two credential flavours this module's ~250
@@ -3800,7 +3800,7 @@ export interface OpenRouterCatalogModel {
   description: string;
   contextLength: number;
   pricing: { prompt: number; completion: number };
-  tier: 'FREE' | 'STANDARD';
+  tier: ListingTier;
 }
 
 export const openRouterConnectionsApi = {

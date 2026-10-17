@@ -25,10 +25,25 @@ const MAX_REPOS_PER_DAILY_SWEEP = 10;
  */
 const CANDIDATE_REPOS_PER_SWEEP = MAX_REPOS_PER_DAILY_SWEEP * 3;
 
+/**
+ * Minimum gap between two scheduled apply runs on one repository, measured from the
+ * last run's `started_at` (the run row IS the schedule — there is no separate stamp).
+ *
+ * It was a 4-minute "overlap lease" under a 5-minute tick, which is not a lease but
+ * "every eligible repo, every active tick": each run inserts a `pr_reconciliation_runs`
+ * row plus one `pr_reconciliation_items` row per open PR, which is how the tables
+ * reached millions of writes. Nothing time-critical waits on this sweep — the merge
+ * sweep polls a PR's live CI before an on-green merge, and PRs our agents open are
+ * recorded when they are opened — so a 30-minute cadence costs only how quickly an
+ * externally opened PR is inventoried.
+ */
+export const PR_RECONCILIATION_INTERVAL_MS = 30 * 60 * 1_000;
+
 export async function runPrReconciliationSweep(env: Env, db: Db = buildDatabase(env)): Promise<PrReconciliationSweepResult> {
-  // The frequent cron is every five minutes. A four-minute lease prevents
-  // overlap while ensuring PRs opened just after a run wait at most one tick.
-  const cutoff = new Date(Date.now() - 4 * 60 * 1_000);
+  // Not due until PR_RECONCILIATION_INTERVAL_MS after the last current-policy run. Still
+  // far short of the old 23-hour suppression, and longer than a tick, so it also keeps
+  // two ticks from overlapping on one repo.
+  const cutoff = new Date(Date.now() - PR_RECONCILIATION_INTERVAL_MS);
   // Authentication/authorization failures do not heal five minutes later. Back
   // off long enough for credentials to be repaired instead of flooding both the
   // system error table and GitHub (project 11 produced 2,000+ identical 403s).

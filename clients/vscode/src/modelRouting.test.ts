@@ -58,10 +58,12 @@ describe("model routing is centralized", () => {
       createNativeStream: ["modelRouting.ts", "nativeBrainRun.ts"],
       // The local transports are brain-embedded's (shared with the Chrome extension);
       // in the editor only the seam reaches for them. `completeLocal` also matches
-      // `completeLocalFirst` — local-first is a transport choice too.
-      createLocalStream: ["modelRouting.ts"],
+      // `completeLocalFirst` — local-first is a transport choice too. The streaming side
+      // is ONE call, `createHostModelStream` (the routing step every host shares).
+      createHostModelStream: ["modelRouting.ts"],
+      createLocalStream: [],
       completeLocal: ["modelRouting.ts"],
-      createLocalFirstStream: ["modelRouting.ts"],
+      createLocalFirstStream: [],
       probeLocalFirstRuntimes: ["modelRouting.ts", "localModels.ts"],
     };
     for (const [symbol, allowed] of Object.entries(owners)) {
@@ -91,7 +93,7 @@ describe("model routing is centralized", () => {
     // Signed out, a local-first route needs no account (it just has no cloud fallback).
     expect(routing).toContain("route.localFirst === undefined");
     // Both completion surfaces honour it.
-    expect(routing).toContain("createLocalFirstStream(");
+    expect(routing).toContain("createHostModelStream(");
     expect(routing).toContain("completeLocalFirst(");
   });
 

@@ -24,6 +24,7 @@
  * Worker-safe: only the `/handoff` subpath is imported (pure, no `node:*`).
  */
 import { packHandoff, type HandoffMessage } from '@seanhogg/builderforce-memory/handoff';
+import { DEFAULT_HANDOFF_RESERVE_TOKENS } from '@builderforce/run-policy';
 import { estimateRequestTokens, ideProxy, readProxyChoice, type ProxyEnv } from './LlmProxyService';
 import { catalogEntry } from './vendors/registry';
 
@@ -53,7 +54,7 @@ export interface CompactOptions {
  *  leaving enough recent context to keep working. */
 export const CLOUD_COMPACT_DEFAULTS: CompactOptions = {
   maxTokens: 40_000,
-  reserveOutputTokens: 4_096,
+  reserveOutputTokens: DEFAULT_HANDOFF_RESERVE_TOKENS,
   timeoutMs: 30_000,
 };
 

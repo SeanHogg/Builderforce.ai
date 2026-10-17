@@ -20,6 +20,7 @@ import {
   type LocalModelUnfit,
   type LocalRuntimeId,
 } from '@builderforce/local-inference';
+import { reportPageEngineFailure } from './engineFailure';
 import type { HfModelStore } from './hfModelStore';
 import type { PageEngine } from './types';
 import type { WebLlmModelCache } from './webllmEngine';
@@ -49,7 +50,9 @@ export interface LocalModelStoreOptions {
   hf?: HfModelStore;
   /** The WebLLM backend (`createWebLlmEngine(...).models`). */
   webllm?: WebLlmModelCache;
-  /** Each engine's device support — a runtime absent here is `engine_unavailable`. */
+  /** Each engine's device support — a runtime absent here is `engine_unavailable`. Never
+   *  rejects: a failure reads as an unsupported record carrying its reason
+   *  (`webGpuSupport`, `BfiPageEngine.support`). */
   support: Partial<Record<LocalRuntimeId, () => Promise<LocalDeviceSupport>>>;
   /** Engines whose probes a download or removal invalidates. */
   engines?: readonly Pick<PageEngine, 'invalidate'>[];
@@ -111,7 +114,10 @@ export function createLocalModelStore(options: LocalModelStoreOptions): LocalMod
     // offered, even when its bytes are cached (`remove` still clears them).
     const fit = localModelFit(row, support);
     if (!fit.fits) return { ...row, state: 'unsupported' as const, reason: fit.reason };
-    const ready = await backend.ready(row).catch(() => false);
+    const ready = await backend.ready(row).catch((e: unknown) => {
+      reportPageEngineFailure(row.runtime, 'cache_lookup', e);
+      return false;
+    });
     return { ...row, state: ready ? ('ready' as const) : ('absent' as const) };
   }
 
@@ -121,7 +127,7 @@ export function createLocalModelStore(options: LocalModelStoreOptions): LocalMod
       const answers = await Promise.all(
         runtimes.map(async (runtime) => {
           const probe = options.support[runtime];
-          return [runtime, probe ? await probe().catch(() => null) : null] as const;
+          return [runtime, probe ? await probe() : null] as const;
         }),
       );
       const supports = new Map<LocalRuntimeId, LocalDeviceSupport | null>(answers);
@@ -163,6 +169,35 @@ export function createLocalModelStore(options: LocalModelStoreOptions): LocalMod
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+  };
+}
+
+/**
+ * A {@link LocalModelStore} that reaches the real one only when first used — the picker's
+ * port in a host whose engines must stay off first paint (the web composer imports them
+ * lazily; the editor's webview builds them on first use). `store` is asked per call and
+ * memoized by the host; `subscribe` attaches once it resolves, and an unsubscribe that
+ * lands first wins, so a listener is never left attached.
+ */
+export function deferredLocalModelStore(
+  store: () => LocalModelStore | Promise<LocalModelStore>,
+): LocalModelStore {
+  const resolved = async (): Promise<LocalModelStore> => store();
+  return {
+    listLocalModels: async () => (await resolved()).listLocalModels(),
+    download: async (ref, onProgress, signal) => (await resolved()).download(ref, onProgress, signal),
+    remove: async (ref) => (await resolved()).remove(ref),
+    subscribe(listener) {
+      let unsubscribe: (() => void) | undefined;
+      let gone = false;
+      void resolved().then((real) => {
+        if (!gone) unsubscribe = real.subscribe(listener);
+      });
+      return () => {
+        gone = true;
+        unsubscribe?.();
+      };
     },
   };
 }

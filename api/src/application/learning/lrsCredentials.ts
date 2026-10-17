@@ -19,33 +19,35 @@
  * docstring exists to stop a second sealing path being written for exactly this
  * case. One crypto path, one `credentials` row shape.
  *
- * ── WHY AUTHENTICATION IS A CROSS-TENANT READ, AND WHY IT IS NOT CACHED ─────
+ * ── WHY AUTHENTICATION IS A CROSS-TENANT READ, AND HOW IT IS CACHED ─────────
  * An inbound xAPI request carries `Authorization: Basic` and nothing else. The
  * authoring tool that sends it has never heard of a workspace, so resolving the
  * tenant IS the authentication — there is no tenant to scope the lookup by, which
  * is what `acrossTenants(…, 'share_token', …)` is for: a bearer credential
  * presented on its own, with the credential itself as the access predicate.
  *
- * And it is deliberately uncached. Every other read on this surface is cached;
- * this one must not be, because the interval between "revoke" and "the key stops
- * working" would become the cache TTL. A revoked credential has to be dead on the
- * next request, so the cost — one partial-index read (migration 1114) plus one
- * decrypt, on a path that is already writing to the database — is paid every time.
+ * It used to be uncached, so that "revoke" and "the key stops working" were the
+ * same moment — at the price of a Neon read plus a decrypt on every statement.
+ * It is now served by `lrsCredentialLookup` (keyed on the PUBLIC key's hash, the
+ * secret only ever as a digest), and that property is kept by invalidation
+ * instead: every writer below drops the key's entry, so a revoked credential is
+ * still dead on the next request. The short TTL there only bounds a writer that
+ * forgets.
  */
 
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { connections } from '../../infrastructure/database/schema';
-import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { generateApiKey } from '../../infrastructure/auth/HashService';
-import { timingSafeEqual } from '../../infrastructure/crypto/constantTime';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { generateApiKey, verifySecret } from '../../infrastructure/auth/HashService';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import {
   deleteConnectionApiKey, readConnectionApiKey, writeConnectionApiKey,
 } from '../integrations/connectionApiKey';
+import { LRS_VENDOR, invalidateLrsCredentialLookup, lookupLrsCredential } from './lrsCredentialLookup';
 
-export const LRS_VENDOR = 'lrs';
+export { LRS_VENDOR };
 export const LRS_CAPABILITY = 'lrs';
 
 /** 'inbound' — a key WE issued, that an authoring tool sends us.
@@ -103,7 +105,10 @@ export async function issueInboundCredential(
   await writeConnectionApiKey(db, env, {
     tenantId: input.tenantId, connectionId: row.id, apiKey: secret,
   });
-  await invalidateCached(env, credentialsCacheKey(input.tenantId));
+  await Promise.all([
+    invalidateCached(env, credentialsCacheKey(input.tenantId)),
+    invalidateLrsCredentialLookup(env, key),
+  ]);
   return { ok: true, credential: toCredential(row), secret };
 }
 
@@ -153,7 +158,12 @@ export async function registerOutboundTarget(
   await writeConnectionApiKey(db, env, {
     tenantId: input.tenantId, connectionId: row.id, apiKey: input.secret,
   });
-  await invalidateCached(env, credentialsCacheKey(input.tenantId));
+  // The upsert can flip a revoked row back to connected under the same key, so the
+  // key's cached auth verdict goes too.
+  await Promise.all([
+    invalidateCached(env, credentialsCacheKey(input.tenantId)),
+    invalidateLrsCredentialLookup(env, row.externalAccount),
+  ]);
   return { ok: true, credential: toCredential(row) };
 }
 
@@ -188,11 +198,15 @@ export async function revokeLrsCredential(
       eq(connections.id, id),
       eq(connections.vendor, LRS_VENDOR),
     ))!)
-    .returning({ id: connections.id });
+    .returning({ id: connections.id, externalAccount: connections.externalAccount });
   if (!row) return { ok: false, reason: 'not_found', detail: 'no such LRS credential in this workspace' };
 
   await deleteConnectionApiKey(db, tenantId, id);
-  await invalidateCached(env, credentialsCacheKey(tenantId));
+  // Dropping the key's cached auth verdict is what keeps revocation immediate.
+  await Promise.all([
+    invalidateCached(env, credentialsCacheKey(tenantId)),
+    invalidateLrsCredentialLookup(env, row.externalAccount),
+  ]);
   return { ok: true };
 }
 
@@ -212,31 +226,21 @@ export async function authenticateLrsRequest(
   const presented = parseBasic(authorization);
   if (!presented) return { ok: false, status: 401, detail: 'xAPI requires HTTP Basic authentication' };
 
-  const [row] = await db.select({
-    id: connections.id,
-    tenantId: connections.tenantId,
-    status: connections.status,
-    displayName: connections.displayName,
-    config: connections.config,
-  })
-    .from(connections)
-    .where(acrossTenants(connections, 'share_token',
-      eq(connections.vendor, LRS_VENDOR),
-      eq(connections.externalAccount, presented.key)))
-    .limit(1);
+  // Cached by the public key; zero round trips on a warm hit. See lrsCredentialLookup.
+  const row = await lookupLrsCredential(db, env, presented.key);
 
-  if (!row || row.status !== 'connected') {
+  if (!row.found || row.status !== 'connected') {
     return { ok: false, status: 401, detail: 'unknown or revoked credential' };
   }
   if (directionOf(row.config) !== 'inbound') {
     return { ok: false, status: 403, detail: 'that credential belongs to an external LRS, not to this one' };
   }
 
-  const secret = await readConnectionApiKey(db, env, row.tenantId, row.id);
-  if (!secret || !timingSafeEqual(secret, presented.secret)) {
+  // Constant-time digest compare — the cache holds only the secret's SHA-256.
+  if (!row.secretHash || !(await verifySecret(presented.secret, row.secretHash))) {
     return { ok: false, status: 401, detail: 'unknown or revoked credential' };
   }
-  return { ok: true, tenantId: row.tenantId, connectionId: row.id, label: row.displayName };
+  return { ok: true, tenantId: row.tenantId, connectionId: row.connectionId, label: row.label };
 }
 
 /** Stamp a credential as used. Best-effort, and the caller hands it to

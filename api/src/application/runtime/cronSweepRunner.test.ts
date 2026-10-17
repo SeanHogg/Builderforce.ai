@@ -8,6 +8,7 @@ import {
   resolveCronTarget,
   runCronSweeps,
   sweepsForCadence,
+  validateSweepOrdering,
   type CronSweepContext,
   type CronSweepDef,
 } from './cronSweepRunner';
@@ -203,7 +204,7 @@ describe('runCronSweeps', () => {
 });
 
 describe('dispatchCronSweeps', () => {
-  it('hands every sweep to waitUntil independently', async () => {
+  it('hands every unchained sweep to waitUntil independently', async () => {
     const kept: Array<Promise<unknown>> = [];
     const ran: string[] = [];
     dispatchCronSweeps([
@@ -215,5 +216,133 @@ describe('dispatchCronSweeps', () => {
     // would surface as an unhandled cron failure.
     await expect(Promise.all(kept)).resolves.toBeDefined();
     expect(ran.sort()).toEqual(['a', 'b']);
+  });
+});
+
+/** A promise the test settles by hand, to observe what has started meanwhile. */
+function gate<T = string | null>() {
+  let release: (v: T) => void = () => {};
+  const promise = new Promise<T>((res) => { release = res; });
+  return { promise, release };
+}
+
+describe('declared ordering (`after`)', () => {
+  it('groups a chain into ONE waitUntil and starts each step only after the previous settles', async () => {
+    const kept: Array<Promise<unknown>> = [];
+    const started: string[] = [];
+    const retention = gate();
+    dispatchCronSweeps([
+      sweep({ key: 'retention', cadence: 'daily', run: () => { started.push('retention'); return retention.promise; } }),
+      sweep({ key: 'db-vacuum', cadence: 'daily', after: 'retention', run: async () => { started.push('db-vacuum'); return null; } }),
+      sweep({ key: 'db-pressure', cadence: 'daily', after: 'db-vacuum', run: async () => { started.push('db-pressure'); return null; } }),
+      sweep({ key: 'llm-health', cadence: 'daily', run: async () => { started.push('llm-health'); return null; } }),
+    ], ctx(), (p) => { kept.push(p); });
+
+    // Two chains: retention → db-vacuum → db-pressure, and llm-health on its own.
+    expect(kept).toHaveLength(2);
+    await Promise.resolve();
+    expect([...started].sort()).toEqual(['llm-health', 'retention']);
+
+    retention.release(null);
+    await Promise.all(kept);
+    expect(started.slice(2)).toEqual(['db-vacuum', 'db-pressure']);
+  });
+
+  it('runs a later step after a FAILED predecessor by default', async () => {
+    const ran: string[] = [];
+    const results = await runCronSweeps([
+      sweep({ key: 'retention', cadence: 'daily', run: async () => { ran.push('retention'); throw new Error('neon down'); } }),
+      sweep({ key: 'db-vacuum', cadence: 'daily', after: 'retention', run: async () => { ran.push('db-vacuum'); return null; } }),
+    ], ctx());
+    expect(ran).toEqual(['retention', 'db-vacuum']);
+    expect(results.map((r) => [r.key, r.ok])).toEqual([['retention', false], ['db-vacuum', true]]);
+  });
+
+  it('skips a skipIfAfterFailed step when its predecessor threw, and names the predecessor', async () => {
+    const rent = vi.fn(async () => 'charged=3');
+    const results = await runCronSweeps([
+      sweep({ key: 'phone-allowance-grant', cadence: 'daily', run: async () => { throw new Error('ledger down'); } }),
+      sweep({ key: 'phone-number-rent', cadence: 'daily', after: 'phone-allowance-grant', skipIfAfterFailed: true, run: rent }),
+    ], ctx());
+    expect(rent).not.toHaveBeenCalled();
+    expect(results[1]).toMatchObject({ key: 'phone-number-rent', ok: true, skipped: true, blockedBy: 'phone-allowance-grant' });
+  });
+
+  it('still runs a skipIfAfterFailed step after a predecessor that was merely unavailable', async () => {
+    const rent = vi.fn(async () => 'charged=3');
+    await runCronSweeps([
+      sweep({ key: 'phone-allowance-grant', cadence: 'daily', available: () => false }),
+      sweep({ key: 'phone-number-rent', cadence: 'daily', after: 'phone-allowance-grant', skipIfAfterFailed: true, run: rent }),
+    ], ctx());
+    expect(rent).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets siblings under one predecessor run concurrently once it settles', async () => {
+    const kept: Array<Promise<unknown>> = [];
+    const started: string[] = [];
+    const vacuum = gate();
+    dispatchCronSweeps([
+      sweep({ key: 'retention', cadence: 'daily', run: async () => null }),
+      sweep({ key: 'db-vacuum', cadence: 'daily', after: 'retention', run: () => { started.push('db-vacuum'); return vacuum.promise; } }),
+      sweep({ key: 'replay-rollup', cadence: 'daily', after: 'retention', run: async () => { started.push('replay-rollup'); return null; } }),
+    ], ctx(), (p) => { kept.push(p); });
+    expect(kept).toHaveLength(1);
+    // replay-rollup starts while db-vacuum is still held open.
+    await vi.waitFor(() => expect([...started].sort()).toEqual(['db-vacuum', 'replay-rollup']));
+    vacuum.release(null);
+    await Promise.all(kept);
+  });
+
+  /** POST /api/admin/cron/<key> must still run exactly that sweep. */
+  it('runs a chained sweep on its own when its predecessor is not part of the run', async () => {
+    const results = await runCronSweeps([
+      sweep({ key: 'db-pressure', cadence: 'daily', after: 'db-vacuum', run: async () => 'ok=1' }),
+    ], ctx());
+    expect(results).toEqual([expect.objectContaining({ key: 'db-pressure', ok: true, summary: 'ok=1' })]);
+  });
+
+  it('degrades a cyclic declaration to unordered rather than deadlocking the tick', async () => {
+    const results = await runCronSweeps([
+      sweep({ key: 'a', after: 'b', run: async () => 'a' }),
+      sweep({ key: 'b', after: 'a', run: async () => 'b' }),
+    ], ctx());
+    expect(results.map((r) => r.summary)).toEqual(['a', 'b']);
+  });
+});
+
+describe('validateSweepOrdering', () => {
+  it('accepts unchained sweeps and a valid same-cadence chain', () => {
+    expect(validateSweepOrdering([
+      sweep({ key: 'retention', cadence: 'daily' }),
+      sweep({ key: 'db-vacuum', cadence: 'daily', after: 'retention' }),
+      sweep({ key: 'manager' }),
+    ])).toEqual([]);
+  });
+
+  it('rejects an unknown target, a self reference and a cross-cadence wait', () => {
+    const errors = validateSweepOrdering([
+      sweep({ key: 'retention', cadence: 'daily' }),
+      sweep({ key: 'ghost', cadence: 'daily', after: 'nope' }),
+      sweep({ key: 'self', cadence: 'daily', after: 'self' }),
+      sweep({ key: 'manager', cadence: 'frequent', after: 'retention' }),
+    ]);
+    expect(errors).toHaveLength(3);
+    const all = errors.join(' | ');
+    expect(all).toMatch(/ghost: .*unknown sweep 'nope'/);
+    expect(all).toMatch(/self: .*names itself/);
+    expect(all).toMatch(/manager: .*daily, not frequent/);
+  });
+
+  it('rejects a cycle', () => {
+    const errors = validateSweepOrdering([
+      sweep({ key: 'a', after: 'c' }),
+      sweep({ key: 'b', after: 'a' }),
+      sweep({ key: 'c', after: 'b' }),
+    ]);
+    expect(errors.some((e) => /cycle/.test(e))).toBe(true);
+  });
+
+  it('rejects skipIfAfterFailed without an `after`', () => {
+    expect(validateSweepOrdering([sweep({ key: 'rent', skipIfAfterFailed: true })])).toHaveLength(1);
   });
 });

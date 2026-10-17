@@ -44,7 +44,7 @@ export interface CanvasPromptComposerProps extends Pick<CanvasComposerInputProps
   prompt: string;
   setPrompt: (prompt: string) => void;
   onStop: () => void;
-  queuedCount: number;
+  queued: CanvasComposerInputProps['queued'];
   scopeMode: CanvasScopeMode;
   setScopeMode: (mode: CanvasScopeMode) => void;
   scopeLabel: string;
@@ -69,7 +69,7 @@ export interface CanvasPromptComposerProps extends Pick<CanvasComposerInputProps
 export function CanvasPromptComposer({
   docked, surface, editable, preferAsk, startTurn, onCaptureIdea, hostRef, actionsOpen, onToggleActions,
   running, trace, runStartedAt, brainIsSurface, promptPlacement, setPromptPlacement, brainDockDrawn, updateBrainDock,
-  prompt, setPrompt, onStop, queuedCount, scopeMode, setScopeMode, scopeLabel, selectionCount, frameSelected,
+  prompt, setPrompt, onStop, queued, scopeMode, setScopeMode, scopeLabel, selectionCount, frameSelected,
   memoryProjectId, runShaping, onTwilioJourney, applyTemplate, conversationStarted, onAttach, onAddContext, autoMode, onAutoModeChange,
   modelSelection, modelOptions, onModelSelectionChange, modelIdentity, chatMode, onChatModeChange, memoryEnabled, onMemoryChange,
 }: CanvasPromptComposerProps) {
@@ -123,7 +123,7 @@ export function CanvasPromptComposer({
       // next turn. A box greyed out for a research turn is how a canvas reads as hung.
       running,
       onStop,
-      queuedCount,
+      queued,
       // What the next request is about: an element picked in the app's preview, and the
       // board scope. Each draws nothing when there is nothing to say — and scope only on a
       // surface that SHOWS the board, since a selection you cannot see (the App surface,

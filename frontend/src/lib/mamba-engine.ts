@@ -15,7 +15,7 @@
  *   - Snapshots are synced to Cloudflare R2 via the existing artifact endpoint
  */
 
-import { hasWebGPUSupport } from '@seanhogg/builderforce-studio/capabilities';
+import { hasWebGPU } from '@seanhogg/builderforce-brain-embedded';
 import type { MambaConfig, MambaStateSnapshot, MambaAgentState } from './types';
 
 // ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ interface WebGPUMambaBackend {
 }
 
 async function createWebGPUBackend(config: MambaConfig): Promise<WebGPUMambaBackend | null> {
-  if (!hasWebGPUSupport()) return null;
+  if (!hasWebGPU()) return null;
   try {
     const gpu = (navigator as Navigator & { gpu: GPU }).gpu;
     const adapter = await gpu.requestAdapter({ powerPreference: 'high-performance' });

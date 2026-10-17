@@ -2,6 +2,7 @@
 import { type BrainDockMode, type BrainDockPreferences, brainDockReservedWidth } from '../brainDockPreferences';
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo, useState } from 'react';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
+import { stepRow } from '@seanhogg/builderforce-brain-embedded';
 import { boardAgentOccupants, boardAgents } from '@/lib/canvas/boardAgents';
 import { roomSpeech } from '@/lib/canvas/roomSpeech';
 import { useCanvasBoardBridgeFor } from '../canvasBoardBridge';
@@ -83,14 +84,21 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
   const brainPlacement: BrainDockMode = surfaceDef.showsBoard ? brainDock.mode : 'docked';
   // An inline Brain IS an Object on the board, so only a docked one is reserved.
   const brainDockReserved = brainDockReservedWidth({ ...brainDock, mode: brainPlacement });
-  const brainMessages = useMemo<BrainMessage[]>(() => timeline.map((message, index) => ({
-    id: index + 1,
-    seq: index + 1,
-    role: message.messageRole,
-    content: message.body,
-    metadata: message.metadata?.authoredBy ? JSON.stringify({ authoredBy: message.metadata.authoredBy }) : null,
-    createdAt: message.createdAt,
-  })), [timeline]);
+  // A failed turn is an error STEP (the shared step-row shape), so the timeline draws
+  // it as the error card every surface shows — never as a "Brain" reply bubble.
+  const brainMessages = useMemo<BrainMessage[]>(() => timeline.map((message, index) => {
+    const base = { id: index + 1, seq: index + 1, createdAt: message.createdAt };
+    if (message.metadata?.error) {
+      const row = stepRow({ category: 'error', label: 'canvas.turn', result: message.body, isError: true, ts: message.createdAt });
+      return { ...base, ...row };
+    }
+    return {
+      ...base,
+      role: message.messageRole,
+      content: message.body,
+      metadata: message.metadata?.authoredBy ? JSON.stringify({ authoredBy: message.metadata.authoredBy }) : null,
+    };
+  }), [timeline]);
 
   /**
    * WHO IS HERE — the one roster, read by the command bar's collapsed cluster AND
@@ -189,6 +197,11 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
   const replayBrainMessage = useCallback((message: BrainMessage) => {
     startCanvasTurnRef.current(message.content);
   }, [startCanvasTurnRef]);
+  /** Answering an ask_user card posts the choice as the next canvas turn — the same
+   *  path as a typed prompt, so a blocked run is never left waiting on the canvas. */
+  const answerBrainQuestion = useCallback((answer: string) => {
+    startCanvasTurnRef.current(answer);
+  }, [startCanvasTurnRef]);
   /**
    * Rate a Brain reply on this board.
    *
@@ -256,6 +269,7 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
     collaborators: brainCollaborators,
     joinedCollaborator,
     onReplayMessage: replayBrainMessage,
+    onAnswerQuestion: answerBrainQuestion,
     // A guest board has no tenant to file a rating against, so the thumbs hide
     // rather than pretend — the component decides its own visibility from this.
     ...(persistence === 'server' ? { onRateMessage: rateBrainMessage, ratings: brainRatings } : {}),
@@ -264,6 +278,6 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
     onModeChange: (mode) => updateBrainDock({ mode }),
     onExecutionDetailChange: (showExecutionDetail) => updateBrainDock({ showExecutionDetail }),
     onClose: () => updateBrainDock({ open: false }),
-  }), [brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt, brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence, presentMode, rateBrainMessage, replayBrainMessage, setSelectedId, setSelectedIds, updateBrainDock]);
-  return { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies };
+  }), [brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt, brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence, presentMode, rateBrainMessage, replayBrainMessage, answerBrainQuestion, setSelectedId, setSelectedIds, updateBrainDock]);
+  return { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies };
 }

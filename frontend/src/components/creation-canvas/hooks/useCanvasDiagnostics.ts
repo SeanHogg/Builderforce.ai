@@ -13,7 +13,7 @@ import type { CanvasTimelineMessage } from '../canvasBoardTypes';
 import type { ProposedCanvasChange } from '@/domains/canvas/domain/canvasChange';
 import type { BrainAction, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { ChatModelSelection } from '@/components/ChatInput';
-import type { CanvasAiCompletion } from '@/lib/creationCanvasAi';
+import type { CanvasAiCompletion } from '@/lib/canvasAiRun';
 import type { CanvasJournal } from '@/lib/canvasActionJournal';
 import type { ToastApi } from '@/components/ToastProvider';
 import type { useTranslations } from 'next-intl';

@@ -365,7 +365,7 @@ function transportFailed(s: RunPolicyState, e: Extract<RunPolicyEvent, { type: '
       outcome: { kind: 'retry_turn', released: s.model, status: e.status },
     };
   }
-  if (isRequestRefusal(e.status)) return { ...s, outcome: { kind: 'fail_turn' } };
+  if (isRequestRefusalStatus(e.status)) return { ...s, outcome: { kind: 'fail_turn' } };
   if (s.model && s.locked && e.kind === 'interrupted') {
     const brokenModel = e.model ?? s.model;
     return {
@@ -394,7 +394,8 @@ function releasesPin(s: RunPolicyState, model: string, status: number): boolean 
 }
 
 /** A status that says the REQUEST was refused rather than the model failing — every 4xx
- *  but a timeout (408) and the release statuses, which are the model's. */
-function isRequestRefusal(status: number | undefined): boolean {
+ *  but a timeout (408) and the release statuses, which are the model's. Exported so a
+ *  host classifying a failed request reads the same line the policy draws. */
+export function isRequestRefusalStatus(status: number | undefined): boolean {
   return status !== undefined && status >= 400 && status < 500 && status !== 408 && !PIN_RELEASE_STATUSES.includes(status);
 }

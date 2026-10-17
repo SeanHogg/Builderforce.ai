@@ -11,6 +11,8 @@ import ai.builderforce.android.cloud.ImageAttachment
 import ai.builderforce.android.cloud.Recipient
 import ai.builderforce.android.cloud.ReplyProgress
 import ai.builderforce.android.cloud.awaitingAgent
+import ai.builderforce.android.cloud.mergeMessages
+import ai.builderforce.android.cloud.pollCursor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -110,12 +112,19 @@ class ChatController(
       scope.launch {
         if (signedIn.value) loadChats()
         var sinceChats = 0L
+        var sinceMessages = 0L
+        // Ticks at the fast cadence but only reads when the current cadence is due, so a
+        // message to an agent switches to fast polling within one tick, not one idle wait.
         while (isActive) {
-          val wait = if (_awaitingAgent.value != null) FAST_POLL_MS else SLOW_POLL_MS
-          delay(wait)
+          delay(FAST_POLL_MS)
           if (!signedIn.value) continue
-          loadMessages()
-          sinceChats += wait
+          sinceMessages += FAST_POLL_MS
+          sinceChats += FAST_POLL_MS
+          val wait = if (_awaitingAgent.value != null) FAST_POLL_MS else SLOW_POLL_MS
+          if (sinceMessages >= wait) {
+            sinceMessages = 0
+            loadMessages()
+          }
           if (sinceChats >= CHATS_POLL_MS) {
             sinceChats = 0
             loadChats()
@@ -289,11 +298,19 @@ class ChatController(
     }
   }
 
+  /**
+   * Refresh the open chat. With turns already held, only what landed after them is read
+   * (`afterSeq`) and merged in — a poll tick no longer re-downloads the whole transcript.
+   * A freshly opened chat (nothing held) reads the tail.
+   */
   private suspend fun loadMessages() {
     val chatId = _activeChatId.value ?: return
     attempt {
-      val list = api.messages(chatId)
+      val held = _messages.value
+      val cursor = pollCursor(held)
+      val fresh = api.messages(chatId, afterSeq = cursor)
       if (_activeChatId.value != chatId) return@attempt
+      val list = if (cursor == null) fresh else mergeMessages(_messages.value, fresh)
       _messages.value = list
       _awaitingAgent.value = awaitingAgent(list, System.currentTimeMillis())
     }
@@ -332,8 +349,11 @@ class ChatController(
   }
 
   private companion object {
+    /** Waiting on an agent's reply: worth checking often (and each check is a small read). */
     const val FAST_POLL_MS = 2_000L
-    const val SLOW_POLL_MS = 6_000L
+    /** Nothing pending: other people's turns can wait a little. Every tick is a request
+     *  the platform serves (and one that keeps its database awake), so idle stays lazy. */
+    const val SLOW_POLL_MS = 15_000L
     const val CHATS_POLL_MS = 30_000L
 
     /** How long a tool that changes something waits for the person before it is declined. */

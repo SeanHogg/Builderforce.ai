@@ -3,12 +3,12 @@
  * is its root? Decided by the registry's `reach`, never by comparing runtime ids.
  *
  * A page runtime has no URL anyone configures: its root is the registry's non-routable
- * `http://<runtime>.local`, answered by the page engines' ONE fetch shim. So a host that
- * finds a page pin needs nothing from its settings — it hands this endpoint to the ONE
- * pinned-local path, `createLocalStream(endpoint, model, fetch, { ref, fit, cloud })`,
- * with the fetch that reaches the engines (the page's own `pageEnginesFetch` on the web
- * and in Rovr; the postMessage bridge's in the editor). That path packs each call for the
- * pinned model's window (the catalog's `contextTokens`) exactly as for any local pin.
+ * `http://<runtime>.local`, answered by the page engines' ONE fetch shim. So a page pin
+ * needs nothing from a host's settings: it is `createHostModelStream`'s default local-pin
+ * resolution, handed to the ONE pinned-local path (`createLocalStream`) with the fetch
+ * that reaches the engines (the page's own `pageEnginesFetch` on the web and in Rovr; the
+ * postMessage bridge's in the editor). That path packs each call for the pinned model's
+ * window (the catalog's `contextTokens`) exactly as for any local pin.
  */
 
 import { localRuntime, parseLocalModelRef, type LocalEndpoint, type LocalRuntimeId } from '@builderforce/local-inference';

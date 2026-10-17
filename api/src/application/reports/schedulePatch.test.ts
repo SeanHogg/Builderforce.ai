@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { boardPackSubjectToVerify, reportSchedulePatchSet } from './schedulePatch';
+import {
+  BOARD_PACK_SUBJECT_ERROR,
+  boardPackSubjectToVerify,
+  reportScheduleCreateValues,
+  reportSchedulePatchSet,
+} from './schedulePatch';
 
 const standup = {
   reportType: 'standup',
@@ -93,3 +98,79 @@ describe('reportSchedulePatchSet', () => {
     expect('error' in result || 'reportType' in result.set).toBe(false);
   });
 });
+
+describe('reportScheduleCreateValues', () => {
+  const base = { reportType: 'standup', schedule: 'daily', recipients: ['a@x.com'] };
+
+  it('requires reportType, schedule and recipients[]', () => {
+    expect(reportScheduleCreateValues({ schedule: 'daily', recipients: [] })).toEqual({
+      error: 'reportType, schedule, and recipients[] are required',
+    });
+    expect(reportScheduleCreateValues({ reportType: 'standup', recipients: [] })).toEqual({
+      error: 'reportType, schedule, and recipients[] are required',
+    });
+    expect(reportScheduleCreateValues({ reportType: 'standup', schedule: 'daily' })).toEqual({
+      error: 'reportType, schedule, and recipients[] are required',
+    });
+  });
+
+  it('refuses an unknown reportType with the same message as PATCH (400, not a 500 from the enum)', () => {
+    const created = reportScheduleCreateValues({ ...base, reportType: 'weekly_digest' });
+    const patched = reportSchedulePatchSet(standup, { reportType: 'weekly_digest' });
+    expect(created).toEqual(patched);
+    expect('error' in created).toBe(true);
+  });
+
+  it('refuses an unknown cadence', () => {
+    expect(reportScheduleCreateValues({ ...base, schedule: 'hourly' })).toEqual({
+      error: 'schedule must be one of daily, weekly, monthly',
+    });
+  });
+
+  it('defaults deliveryHour to 8 and serialises recipients', () => {
+    expect(reportScheduleCreateValues(base)).toEqual({
+      values: { reportType: 'standup', schedule: 'daily', deliveryHour: 8, recipients: '["a@x.com"]' },
+    });
+    expect(reportScheduleCreateValues({ ...base, deliveryHour: 17 })).toMatchObject({ values: { deliveryHour: 17 } });
+  });
+
+  it('ignores a null subject on a non-board_pack create, but refuses a real one', () => {
+    expect(reportScheduleCreateValues({ ...base, subjectKind: null, subjectRef: null })).toMatchObject({
+      values: { reportType: 'standup' },
+    });
+    expect(reportScheduleCreateValues({ ...base, subjectKind: 'canvas_frame', subjectRef: 's:f' })).toEqual({
+      error: 'subjectKind/subjectRef only apply to board_pack schedules',
+    });
+  });
+
+  it('a board_pack create needs a parseable frame — the same rule and message as PATCH', () => {
+    expect(reportScheduleCreateValues({ ...base, reportType: 'board_pack' })).toEqual({ error: BOARD_PACK_SUBJECT_ERROR });
+    expect(reportScheduleCreateValues({ ...base, reportType: 'board_pack', subjectKind: 'canvas_frame', subjectRef: 'nope' }))
+      .toEqual({ error: BOARD_PACK_SUBJECT_ERROR });
+  });
+
+  it('a board_pack create carries the subject and names the frame to verify', () => {
+    const result = reportScheduleCreateValues({
+      ...base,
+      reportType: 'board_pack',
+      schedule: 'monthly',
+      subjectKind: 'canvas_frame',
+      subjectRef: 'sess-3:frame-c',
+    });
+    expect(result).toEqual({
+      values: {
+        reportType: 'board_pack',
+        schedule: 'monthly',
+        deliveryHour: 8,
+        recipients: '["a@x.com"]',
+        subjectKind: 'canvas_frame',
+        subjectRef: 'sess-3:frame-c',
+      },
+    });
+    expect('error' in result ? null : boardPackSubjectToVerify(result.values)).toEqual({
+      sessionId: 'sess-3',
+      frameId: 'frame-c',
+    });
+  });
+});
+

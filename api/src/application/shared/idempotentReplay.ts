@@ -9,14 +9,19 @@
  * instead of executing the write again.
  *
  * This module is the policy (key grammar, TTL, what is stored, when a replay is a
- * conflict) plus the storage PORT. The HTTP middleware lives in presentation
- * (`presentation/middleware/idempotentReplay.ts`); the store adapter lives in
- * `./idempotencyReplayStore.ts` (over the canonical read-through cache).
+ * conflict), the storage PORT, and the factory callers use to get the platform store
+ * ({@link createCacheIdempotencyStore}). The HTTP middleware lives in presentation
+ * (`presentation/middleware/idempotentReplay.ts`); the cache adapter lives in
+ * infrastructure (`infrastructure/cache/idempotencyReplayStore.ts`), beside its
+ * sibling `reasoningReplayStore.ts`.
  *
  * Endpoints whose writes already carry their own natural key reuse it instead of this
  * layer: chat messages (`eventKey`, `uq_brain_chat_messages_event`) and client run
  * outcomes (`clientRunId`).
  */
+
+import { cacheIdempotencyStore } from '../../infrastructure/cache/idempotencyReplayStore';
+import type { CacheEnv } from '../../infrastructure/cache/readThroughCache';
 
 /** The request header a client sends its key in. */
 export const IDEMPOTENCY_KEY_HEADER = 'Idempotency-Key';
@@ -87,4 +92,10 @@ export function decideReplay(stored: StoredIdempotentResponse | null, fingerprin
   if (!stored) return { kind: 'execute' };
   if (stored.fingerprint !== fingerprint) return { kind: 'conflict' };
   return { kind: 'replay', response: stored };
+}
+
+/** The platform {@link IdempotencyStore}: the canonical read-through cache, expiring
+ *  each first response after {@link IDEMPOTENCY_TTL_SECONDS}. */
+export function createCacheIdempotencyStore(env: CacheEnv): IdempotencyStore {
+  return cacheIdempotencyStore(env, IDEMPOTENCY_TTL_SECONDS);
 }

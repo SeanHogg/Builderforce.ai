@@ -120,3 +120,12 @@ describe('GitHub PR reconciliation collector', () => {
     await expect(fetchOpenPullRequests('token', 'acme', 'app', 'github.com', fetchFn)).rejects.toThrow('Something failed');
   });
 });
+
+describe('reconciliation run write discipline', () => {
+  it('restates the approved allowlist only when the policy added a close candidate', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const source = readFileSync(fileURLToPath(new URL('./prReconciliationService.ts', import.meta.url).href), 'utf8');
+    expect(source).toContain("if (mode === 'apply' && resolvedApproved.length !== approved.length) {");
+  });
+});

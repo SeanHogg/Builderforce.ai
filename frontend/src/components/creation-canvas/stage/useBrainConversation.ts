@@ -12,7 +12,7 @@ type BrainSurface = ReturnType<typeof useCanvasBrainSurface>;
 export type BrainConversationProps = BrainSurfaceBodyProps & { onExecutionDetailChange: (show: boolean) => void };
 
 export interface BrainConversationInput {
-  brain: Pick<BrainSurface, 'brainMessages' | 'brainReveal' | 'brainRunning' | 'brainRunShownStartedAt' | 'brainNode' | 'brainCollaborators' | 'replayBrainMessage' | 'brainSurface' | 'guestSignupPrompt'>;
+  brain: Pick<BrainSurface, 'brainMessages' | 'brainReveal' | 'brainRunning' | 'brainRunShownStartedAt' | 'brainNode' | 'brainCollaborators' | 'replayBrainMessage' | 'answerBrainQuestion' | 'brainSurface' | 'guestSignupPrompt'>;
   showExecutionDetail: boolean;
   updateBrainDock: (patch: Partial<BrainDockPreferences>) => void;
   trace: BrainTraceEvent[];
@@ -28,7 +28,7 @@ export interface BrainConversationInput {
  * both, so they cannot drift into two subtly different chats.
  */
 export function useBrainConversation({ brain, showExecutionDetail, updateBrainDock, trace, nodes, edges, joinedCollaborator }: BrainConversationInput): BrainConversationProps {
-  const { brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, brainSurface, guestSignupPrompt } = brain;
+  const { brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, brainSurface, guestSignupPrompt } = brain;
   return useMemo(() => ({
     showExecutionDetail,
     onExecutionDetailChange: (show: boolean) => updateBrainDock({ showExecutionDetail: show }),
@@ -43,8 +43,9 @@ export function useBrainConversation({ brain, showExecutionDetail, updateBrainDo
     collaborators: brainCollaborators,
     joinedCollaborator,
     onReplayMessage: replayBrainMessage,
+    onAnswerQuestion: answerBrainQuestion,
     onRateMessage: brainSurface.onRateMessage,
     ratings: brainSurface.ratings,
     guestSignup: guestSignupPrompt,
-  }), [brainCollaborators, brainMessages, brainNode, brainReveal, brainRunShownStartedAt, brainRunning, brainSurface.onRateMessage, brainSurface.ratings, edges, guestSignupPrompt, joinedCollaborator, nodes, replayBrainMessage, showExecutionDetail, trace, updateBrainDock]);
+  }), [brainCollaborators, brainMessages, brainNode, brainReveal, brainRunShownStartedAt, brainRunning, brainSurface.onRateMessage, brainSurface.ratings, edges, guestSignupPrompt, joinedCollaborator, nodes, replayBrainMessage, answerBrainQuestion, showExecutionDetail, trace, updateBrainDock]);
 }

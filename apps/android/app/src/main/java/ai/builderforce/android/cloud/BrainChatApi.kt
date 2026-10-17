@@ -21,8 +21,10 @@ class BrainChatApi(private val session: CloudSession) {
     return parseChat(v) ?: throw CloudException.Unreachable("the new chat has no id")
   }
 
-  suspend fun messages(chatId: Long, limit: Int = MESSAGE_LIMIT): List<BrainMessage> {
-    val v = session.api("GET", "/api/brain/chats/$chatId/messages?limit=$limit")
+  /** The chat's newest [limit] turns, or — with [afterSeq] — only turns appended after it. */
+  suspend fun messages(chatId: Long, limit: Int = MESSAGE_LIMIT, afterSeq: Long? = null): List<BrainMessage> {
+    val cursor = afterSeq?.let { "&afterSeq=$it" }.orEmpty()
+    val v = session.api("GET", "/api/brain/chats/$chatId/messages?limit=$limit$cursor")
     return v.objOrNull()?.get("messages").arrOrEmpty().mapIndexedNotNull { i, el -> parseMessage(el, i) }
   }
 

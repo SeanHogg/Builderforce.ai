@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/device-auth",
+  "version": "2026.10.1",
+  "private": true,
+  "type": "module",
+  "description": "Device sign-in (RFC 8628) against the gateway's /api/auth/device/{code,token} endpoints, in one place: start a code pair, open the approval page, poll until the person decides (authorization_pending / slow_down / denied / expired), and yield the bfk_* editor key — plus the best-effort key revoke on sign-out. Shared by the Chrome extension (Rovr) and the VS Code extension, so the polling contract cannot drift between them. Host-neutral: fetch, the page opener and the clock are injected; no DOM, Node or editor globals.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

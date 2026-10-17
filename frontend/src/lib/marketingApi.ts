@@ -11,6 +11,7 @@ import { AUTH_API_URL, getStoredTenantToken, getStoredWebToken } from './auth';
 import { apiRequestStream } from './apiClient';
 import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import { getExistingVisitorId, getVisitorId, getFirstTouch } from './visitor';
+import { readLocal, writeLocal } from './storage';
 import type { ToolResult } from './tools';
 
 export interface MarketingRun {
@@ -75,6 +76,16 @@ export async function getMarketingSession(): Promise<MarketingSessionView | null
   }
 }
 
+/**
+ * The visitor id this browser has already converted. The id itself must stay —
+ * the session-replay recorder and the guest-room claim share `bf_visitor_id` — so
+ * conversion is remembered beside it instead; without this every hard load of a
+ * signed-in tab re-POSTed `/api/marketing/convert` for a lead closed long ago.
+ */
+const CONVERTED_KEY = 'bf_visitor_converted';
+/** In-memory twin for a browser whose storage refuses writes (private mode). */
+let convertedThisLoad: string | null = null;
+
 /** Link the anonymous session to the authenticated user (attribution close-out). */
 export function convertVisitor(): void {
   // Conversion must not mint an anonymous identity for someone who arrived
@@ -82,6 +93,9 @@ export function convertVisitor(): void {
   const visitorId = getExistingVisitorId();
   const token = getStoredTenantToken() ?? getStoredWebToken();
   if (!visitorId || !token) return;
+  if (convertedThisLoad === visitorId || readLocal(CONVERTED_KEY) === visitorId) return;
+  // Claimed before the request so a second caller in the same load does not race it.
+  convertedThisLoad = visitorId;
   void apiRequestStream('/api/marketing/convert', {
     method: 'POST',
     // Either credential closes the session; the tenant token is preferred when
@@ -92,5 +106,9 @@ export function convertVisitor(): void {
     keepalive: true,
     body: JSON.stringify({ visitorId }),
     expectedErrors: AMBIENT_REQUEST_ERRORS,
-  }).catch(() => { /* best-effort */ });
+  }).then((res) => {
+    if (res.ok) writeLocal(CONVERTED_KEY, visitorId);
+    // A refused close-out may be retried on the next load.
+    else convertedThisLoad = null;
+  }).catch(() => { convertedThisLoad = null; /* best-effort */ });
 }

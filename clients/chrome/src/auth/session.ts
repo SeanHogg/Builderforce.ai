@@ -16,7 +16,7 @@
  * while signed out wait (unscoped) for the next sign-in.
  */
 import type { KeyValueStore } from '../platform/keyValue';
-import { revokeKey } from './deviceAuth';
+import { revokeKey } from '@builderforce/device-auth';
 
 const KEY = 'session.key';
 const TENANT = 'session.tenantId';

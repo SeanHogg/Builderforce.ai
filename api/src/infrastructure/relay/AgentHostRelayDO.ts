@@ -68,18 +68,14 @@ interface PendingEgress {
  *  only stops a wedged host leaking pending entries forever. */
 const EGRESS_TIMEOUT_MS = 120_000;
 
-/**
- * How often an OPEN upstream socket refreshes `agent_hosts.last_seen_at`.
- *
- * Online-ness is `lastSeenAt` within 15 minutes (domain/agentHost/onlineStatus),
- * but the column was only written on connect and by the host's own periodic
- * heartbeat — so a connected host whose heartbeat poller stalled (or which points
- * at a route that no longer exists) went "offline" in the UI while its socket was
- * still live, and stage dispatch skipped it. The relay is the one component that
- * KNOWS the socket is open, so it is what says so. A third of the staleness
- * window gives two chances to land before the host is judged offline.
+/*
+ * Liveness (`agent_hosts.last_seen_at`) is NOT refreshed from here. The upstream
+ * connect route stamps it, and the host's own RelayHeartbeat (agent-runtime) PATCHes
+ * `/heartbeat` on a cadence bound to the online threshold
+ * (application/agentHost/heartbeatThrottle). The relay used to send the same PATCH
+ * back into the Worker every 5 minutes as well — a second request stream per
+ * connected host that doubled the writes for one fact. Only the WS ping stays.
  */
-const LIVENESS_BEAT_MS = 5 * 60_000;
 
 export class AgentHostRelayDO implements DurableObject {
   // Required brand for DurableObjectNamespace<T> generic constraint
@@ -105,8 +101,6 @@ export class AgentHostRelayDO implements DurableObject {
   private readonly LOG_BUFFER_MAX = 200;
   /** In-flight relayed HTTP calls, keyed by request id. See {@link PendingEgress}. */
   private pendingEgress = new Map<string, PendingEgress>();
-  /** Timer refreshing `last_seen_at` while the upstream socket is open. */
-  private livenessInterval: ReturnType<typeof setInterval> | null = null;
 
   /** Bound once here so no call site can forget the runtime override. */
   private readonly reportError: DurableErrorReporter;
@@ -527,7 +521,6 @@ export class AgentHostRelayDO implements DurableObject {
     suffix: string,
     body: unknown,
     operation: string,
-    method: "POST" | "PATCH" = "POST",
   ): Promise<void> {
     if (!this.agentHostId || !this.agentHostApiKey) return;
     // Prefer the SELF_URL binding, fall back to the production API.
@@ -535,7 +528,7 @@ export class AgentHostRelayDO implements DurableObject {
     const baseUrl = env.SELF_URL ?? "https://api.builderforce.ai";
     try {
       await fetch(`${baseUrl}/api/agent-hosts/${this.agentHostId}${suffix}`, {
-        method,
+        method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.agentHostApiKey}` },
         body: JSON.stringify(body),
       });
@@ -787,26 +780,12 @@ export class AgentHostRelayDO implements DurableObject {
         this.upstreamSocket.send(JSON.stringify({ type: "ping" }));
       }
     }, 30_000);
-    // Report liveness immediately as well, so a host that reconnects is online
-    // again at once rather than one beat later.
-    void this.beatLiveness();
-    this.livenessInterval = setInterval(() => { void this.beatLiveness(); }, LIVENESS_BEAT_MS);
-  }
-
-  /** Refresh `last_seen_at` iff the upstream socket is still open. */
-  private async beatLiveness(): Promise<void> {
-    if (this.upstreamSocket?.readyState !== WebSocket.OPEN) return;
-    await this.callApi("/heartbeat", {}, "beatLiveness", "PATCH");
   }
 
   private clearPings() {
     if (this.pingInterval !== null) {
       clearInterval(this.pingInterval);
       this.pingInterval = null;
-    }
-    if (this.livenessInterval !== null) {
-      clearInterval(this.livenessInterval);
-      this.livenessInterval = null;
     }
   }
 }

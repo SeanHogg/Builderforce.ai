@@ -6,27 +6,40 @@
  *   • vendor     — the provider a candidate was configured under (`normalizeProviderId`),
  *                  the unit auth-profile cooldowns already work in.
  *   • price      — the `cost` block every on-prem model definition carries. On-prem
- *                  costs are USD per MILLION tokens (`utils/usage-format.ts` divides
- *                  by 1e6); the port speaks USD per TOKEN, so the conversion happens
- *                  here and nowhere else.
- *   • tier       — banded from that same price ({@link tierForCost}); this host has
- *                  no curated tier column, and the price IS its catalog data.
+ *                  costs are USD per MILLION tokens; the port speaks USD per TOKEN, so
+ *                  this binding converts with the shared `perMillionToPerToken` (the
+ *                  same conversion `utils/usage-format.ts` prices usage with).
+ *   • tier       — the shared rule (`resolveModelTier`) with only a price: this host
+ *                  has no curated tier column, so the price band decides.
  *   • free       — an all-zero cost is how a provider module writes "we don't publish a
  *                  price" as often as "this is free", so on a CLOUD model it counts as
  *                  free only when the catalog SAYS free ({@link isExplicitlyFree}); any
  *                  other zero is an UNKNOWN price — never evidence of cheapness.
  *   • residency  — `local` for a model served by the user's own machine: a local
  *                  inference api (ollama / llama.cpp / transformers), a loopback
- *                  `baseUrl` (vLLM, LM Studio, FreeToken, Synapse on 127.0.0.1), or a
- *                  provider that only ever runs locally.
+ *                  `baseUrl` (`isLoopbackHost`, vLLM / LM Studio / FreeToken / Synapse on
+ *                  127.0.0.1), or a provider that only ever runs locally — the shared
+ *                  on-device registry (`@builderforce/local-inference`), the BYO table's
+ *                  `local_runtime` providers, and the engines only this host drives.
+ *                  A `local/<runtime>/<model>` ref is answered by the shared
+ *                  `localCatalogView`, layered in front.
  *
  * A model the catalog does not list answers `undefined` for tier and price — the
  * router treats that as "unknown", never as cheap.
  */
 
-import type { CatalogView, ModelPrice, ModelResidency, ModelTier } from "@builderforce/model-catalog";
+import { LOCAL_RUNTIMES, localCatalogView } from "@builderforce/local-inference";
+import {
+  LLM_PROVIDER_INFO,
+  perMillionToPerToken,
+  resolveModelTier,
+  type CatalogView,
+  type ModelPrice,
+  type ModelResidency,
+} from "@builderforce/model-catalog";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import type { ModelApi } from "../config/types.models.js";
+import { isLoopbackHost } from "../gateway/net.js";
 import { logDebug } from "../logger.js";
 import { resolveBuilderForceAgentsAgentDir } from "./agent-paths.js";
 import { discoverAuthStorage, discoverModels } from "./model-discovery.js";
@@ -47,35 +60,21 @@ export interface OnPremCatalogEntry {
   baseUrl?: string;
 }
 
-const TOKENS_PER_MILLION = 1_000_000;
-
 /** Inference apis that only ever execute on the user's own machine. */
 const LOCAL_APIS: ReadonlySet<string> = new Set(["ollama", "llama", "transformers"]);
 
+/** Engines only THIS host drives — the shared registry lists the runtimes a client calls
+ *  itself, and none of these is one. */
+const ON_PREM_ONLY_LOCAL_PROVIDERS = ["lmstudio", "vllm", "llama", "builderforcellm-local"] as const;
+
 /** Providers that only ever execute on the user's own machine, for a candidate the
- *  catalog has no row for (an operator pin on a provider whose discovery found nothing). */
+ *  catalog has no row for (an operator pin on a provider whose discovery found nothing).
+ *  Derived from the shared declarations, plus this host's own engines. */
 const LOCAL_PROVIDERS: ReadonlySet<string> = new Set([
-  "ollama",
-  "lmstudio",
-  "freetoken",
-  "synapse",
-  "vllm",
-  "llama",
-  "builderforcellm-local",
+  ...LOCAL_RUNTIMES.filter((r) => r.onDevice && r.reach === "http").map((r) => r.id),
+  ...LLM_PROVIDER_INFO.filter((p) => p.credential === "local_runtime").map((p) => p.id),
+  ...ON_PREM_ONLY_LOCAL_PROVIDERS,
 ]);
-
-const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "[::1]", "::1", "0.0.0.0"]);
-
-/**
- * Output-price bands (USD per million output tokens) the tier ladder is cut at. Output
- * dominates an agent turn, so it is the side that decides the band:
- *   FREE      0           — free pools, free upstream keys, local inference
- *   STANDARD  (0, 8)      — small / open-weight hosted models
- *   PREMIUM   [8, 20)     — the frontier workhorses (Sonnet-class)
- *   ULTRA     >= 20       — the flagships (Opus / Fable-class)
- */
-const STANDARD_MAX_OUTPUT_PER_MILLION = 8;
-const PREMIUM_MAX_OUTPUT_PER_MILLION = 20;
 
 const finiteNonNegative = (n: unknown): number | undefined =>
   typeof n === "number" && Number.isFinite(n) && n >= 0 ? n : undefined;
@@ -87,23 +86,7 @@ export function priceForCost(cost: PerMillionCost | undefined): ModelPrice | und
   if (input === undefined || output === undefined) {
     return undefined;
   }
-  return { input: input / TOKENS_PER_MILLION, output: output / TOKENS_PER_MILLION };
-}
-
-/** The tier band a per-million cost falls in. `undefined` for a malformed block. Pure. */
-export function tierForCost(cost: PerMillionCost | undefined): ModelTier | undefined {
-  const price = priceForCost(cost);
-  if (!price) {
-    return undefined;
-  }
-  const outputPerMillion = price.output * TOKENS_PER_MILLION;
-  if (price.input === 0 && price.output === 0) {
-    return "FREE";
-  }
-  if (outputPerMillion < STANDARD_MAX_OUTPUT_PER_MILLION) {
-    return "STANDARD";
-  }
-  return outputPerMillion < PREMIUM_MAX_OUTPUT_PER_MILLION ? "PREMIUM" : "ULTRA";
+  return { input: perMillionToPerToken(input), output: perMillionToPerToken(output) };
 }
 
 /** Providers whose whole catalog is a free pool — the first-party Builderforce free-model
@@ -127,7 +110,7 @@ function isLoopbackUrl(baseUrl: string | undefined): boolean {
     return false;
   }
   try {
-    return LOOPBACK_HOSTS.has(new URL(baseUrl).hostname.toLowerCase());
+    return isLoopbackHost(new URL(baseUrl).hostname);
   } catch {
     return false;
   }
@@ -186,12 +169,13 @@ export function catalogViewFromEntries(entries: readonly OnPremCatalogEntry[]): 
     }
     return row.cost;
   };
-  return {
+  const entriesView: CatalogView = {
     vendorOf: vendorOfCandidateKey,
-    tierOf: (model) => tierForCost(trustedCost(model)),
+    tierOf: (model) => resolveModelTier({ price: priceForCost(trustedCost(model)) }),
     priceOf: (model) => priceForCost(trustedCost(model)),
     residencyOf: residency,
   };
+  return localCatalogView(entriesView);
 }
 
 /** The rows explicitly configured under `models.providers` — the operator's own word. */

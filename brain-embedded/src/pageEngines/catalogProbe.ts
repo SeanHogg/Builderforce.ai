@@ -16,6 +16,7 @@ import {
   type LocalRuntimeId,
   type LocalRuntimeProbe,
 } from '@builderforce/local-inference';
+import { reportPageEngineFailure } from './engineFailure';
 
 export async function catalogProbe(
   runtime: LocalRuntimeId,
@@ -26,7 +27,16 @@ export async function catalogProbe(
 ): Promise<LocalRuntimeProbe | null> {
   if (!support.supported) return null;
   const fitting = localCatalogFor(runtime).filter((row) => localModelFit(row, support).fits);
-  const ready = await Promise.all(fitting.map((row) => isReady(row).catch(() => false)));
+  // One row whose cache lookup fails is not offered — and the reason is reported — while
+  // the rest still are.
+  const ready = await Promise.all(
+    fitting.map((row) =>
+      isReady(row).catch((e: unknown) => {
+        reportPageEngineFailure(runtime, 'cache_lookup', e);
+        return false;
+      }),
+    ),
+  );
   const rows = fitting.filter((_, i) => ready[i]);
   if (rows.length === 0) return null;
   return {

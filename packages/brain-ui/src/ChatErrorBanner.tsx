@@ -29,6 +29,10 @@ export interface ChatErrorBannerLabels {
   upgradeToPlan: string;
   /** Billing CTA when the plan is fine but no validated card is on file. */
   addCard: string;
+  /** Sign in — offered when no model can serve the turn (signed out, nothing local). */
+  signIn: string;
+  /** What the banner says for that case — replaces the raw `not_signed_in` code. */
+  noModel: string;
   dismiss: string;
 }
 
@@ -37,6 +41,8 @@ export const DEFAULT_CHAT_ERROR_LABELS: ChatErrorBannerLabels = {
   upgrade: 'Upgrade',
   upgradeToPlan: 'Upgrade to {plan}',
   addCard: 'Add a card',
+  signIn: 'Sign in',
+  noModel: 'No model is available. Sign in, or start a model on this device.',
   dismiss: 'Dismiss',
 };
 
@@ -58,6 +64,8 @@ export interface ChatErrorBannerProps {
   onUpgrade?: () => void;
   /** Send the user somewhere they can put a validated card on file. */
   onValidateCard?: () => void;
+  /** Sign in (or open where a local model is started) — for the `sign_in` verdict. */
+  onSignIn?: () => void;
   labels?: Partial<ChatErrorBannerLabels>;
   /** Extra styles merged into the banner container, for host-specific chrome. */
   style?: React.CSSProperties;
@@ -77,6 +85,7 @@ export function ChatErrorBanner({
   onReconnect,
   onUpgrade,
   onValidateCard,
+  onSignIn,
   labels: labelOverrides,
   style,
   className,
@@ -100,7 +109,11 @@ export function ChatErrorBanner({
           }
         : kind === 'validate_card' && onValidateCard
           ? { label: labels.addCard, onClick: onValidateCard }
-          : null;
+          : kind === 'sign_in' && onSignIn
+            ? { label: labels.signIn, onClick: onSignIn }
+            : null;
+  // The verdict names the case; the raw sentinel is never what a person reads.
+  const message = kind === 'sign_in' ? labels.noModel : error;
 
   return (
     <div
@@ -115,7 +128,7 @@ export function ChatErrorBanner({
         ...style,
       }}
     >
-      <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{error}</span>
+      <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{message}</span>
       {primary && (
         <button
           type="button"

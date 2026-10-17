@@ -10,7 +10,7 @@
 
 import { useState } from 'react';
 import { resolveRunConfirm, stopRun } from '@seanhogg/builderforce-brain-embedded';
-import { LiveActivity, type LiveActivityLabels } from '@seanhogg/builderforce-brain-ui';
+import { LiveActivity, ToolConfirmBar, type LiveActivityLabels } from '@seanhogg/builderforce-brain-ui';
 import type { LabelBundle } from '../vscodeBridge';
 import { makeT } from './chatLabels';
 import { steerRun, useChatChildren, useRunSnapshotOf, type ChildView } from './chatChildren';
@@ -85,15 +85,19 @@ function SubagentRow({ child, t, liveLabels }: { child: ChildView; t: ReturnType
       <div className="bf-subagents__label">{child.ticket ? `#${child.ticket} · ${child.label}` : child.label}</div>
       <LiveActivity activity={run.activity} isRunning={run.running} labels={liveLabels} />
       {run.pendingConfirm && (
-        <div className="bf-confirm bf-subagents__confirm">
-          <span>
-            {t('sub.asks', '{name} wants to run').replace('{name}', child.name)} <code>{run.pendingConfirm.name}</code>
-          </span>
-          <div className="bf-confirm__actions">
-            <button className="bf-btn bf-btn--primary" onClick={() => resolveRunConfirm(child.key, true)}>{t('app.approve', 'Approve')}</button>
-            <button className="bf-btn" onClick={() => resolveRunConfirm(child.key, false)}>{t('app.cancel', 'Cancel')}</button>
-          </div>
-        </div>
+        <ToolConfirmBar
+          className="bf-subagents__confirm"
+          req={run.pendingConfirm}
+          onApprove={() => resolveRunConfirm(child.key, true)}
+          onDeny={() => resolveRunConfirm(child.key, false)}
+          labels={{
+            // "{child} wants to run {tool}" — the child's name filled here, the tool by the bar.
+            prompt: `${t('sub.asks', '{name} wants to run').replace('{name}', child.name)} {name}`,
+            approve: t('app.approve', 'Approve'),
+            deny: t('app.cancel', 'Cancel'),
+            aria: t('app.confirmAria', 'Approve this action'),
+          }}
+        />
       )}
       {draft === null ? (
         <div className="bf-subagents__actions">

@@ -4,13 +4,14 @@
  * (`adminRoutes.ts`). Single source of truth for raw-key generation,
  * hashing, table layout, and origin-allowlist semantics.
  */
-import { and, desc, eq, gte, isNull, sql, sum } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lt, or, sql, sum } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { usageDatabaseOf, usageRequestCount } from './usageLedger';
 import type { Env } from '../../env';
 import { llmUsageLog, tenantApiKeys } from '../../infrastructure/database/schema';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 import { invalidateKeyCache } from '../../infrastructure/auth/keyResolutionCache';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { coerceJsonObject, coerceStringArrayOrNull } from '../../domain/shared/jsonColumn';
 import {
@@ -284,16 +285,51 @@ export async function resolveTenantApiKey(
 }
 
 /**
- * Stamp a key as used. Fire-and-forget from the caller's `waitUntil`.
+ * How stale a key's `last_used_at` may get before it is written again.
+ *
+ * The column only feeds the key list's "last used" cell; nothing compares it to a
+ * threshold. Writing it on every public-API request was 29k UPDATEs on 37 rows —
+ * the same shape as `auth_tokens.last_seen_at` before its throttle, and the same
+ * answer: fifteen minutes (see `LAST_SEEN_THROTTLE_MS` in
+ * `application/auth/sessionRevocation.ts`) is invisible in a recency column.
+ */
+export const KEY_LAST_USED_THROTTLE_MS = 15 * 60_000;
+
+/** The read-through cache key marking "this key was stamped within the window". */
+export const keyTouchCacheKey = (keyId: string): string => `tenant-api-key:touched:${keyId}`;
+
+/**
+ * Stamp a key as used — at most once per {@link KEY_LAST_USED_THROTTLE_MS}.
+ * Fire-and-forget from the caller's `waitUntil`.
+ *
+ * Two layers, so the common case costs nothing:
+ *   - the isolate's read-through L1 remembers a stamp for the window, so a key
+ *     polled from one isolate does not even send the statement;
+ *   - the UPDATE itself is conditional on the stored value being older than the
+ *     window, so a stamp from a cold isolate is a no-op row match, not a write.
  *
  * `keyId` only ever comes from a `resolveTenantApiKey` that just succeeded, so
  * the same possession-of-the-secret predicate governs it.
  */
 export async function touchTenantApiKey(db: Db, keyId: string): Promise<void> {
-  await db
-    .update(tenantApiKeys)
-    .set({ lastUsedAt: new Date() })
-    .where(acrossTenants(tenantApiKeys, 'share_token', eq(tenantApiKeys.id, keyId)));
+  await getOrSetCached(
+    undefined,
+    keyTouchCacheKey(keyId),
+    async () => {
+      const cutoff = new Date(Date.now() - KEY_LAST_USED_THROTTLE_MS);
+      await db
+        .update(tenantApiKeys)
+        .set({ lastUsedAt: new Date() })
+        .where(acrossTenants(
+          tenantApiKeys,
+          'share_token',
+          eq(tenantApiKeys.id, keyId),
+          or(isNull(tenantApiKeys.lastUsedAt), lt(tenantApiKeys.lastUsedAt, cutoff)),
+        ));
+      return true;
+    },
+    { l1TtlMs: KEY_LAST_USED_THROTTLE_MS },
+  );
 }
 
 /** List every key for a tenant, newest first. Raw key is never returned. */

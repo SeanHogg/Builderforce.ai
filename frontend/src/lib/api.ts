@@ -29,7 +29,6 @@ import type {
 } from './types';
 
 const IDE = '/api/ide';
-const AI = '/api/ai';
 
 /**
  * Project + IDE-file calls, which target the standalone worker when
@@ -507,44 +506,6 @@ function guessAssetType(path: string): string {
   if (ext === 'mp4' || ext === 'webm') return `video/${ext}`;
   if (ext === 'wasm') return 'application/wasm';
   return 'text/plain';
-}
-
-// ---------------------------------------------------------------------------
-// IDE: AI chat (streaming)
-// ---------------------------------------------------------------------------
-
-export async function sendAIMessage(
-  projectId: number | string,
-  messages: { role: string; content: string }[],
-  onChunk: (chunk: string) => void
-): Promise<void> {
-  const res = await apiRequestStream(`${AI}/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectId: String(projectId), messages }),
-  });
-  // 402 already threw a typed plan-limit error inside apiRequestStream.
-  if (!res.ok) throw new Error('Failed to send AI message');
-  for await (const data of readSseDataPayloads(res.body)) {
-    try {
-      const parsed = JSON.parse(data) as {
-        choices?: Array<{ delta?: { content?: string; reasoning?: string } }>;
-        response?: string;
-        text?: string;
-        delta?: string;
-      };
-      const delta = parsed.choices?.[0]?.delta;
-      const chunk =
-        (delta && typeof delta.content === 'string' ? delta.content : null) ||
-        parsed.response ||
-        parsed.text ||
-        parsed.delta ||
-        '';
-      if (chunk) onChunk(chunk);
-    } catch {
-      // Never append raw JSON to the message; skip malformed chunks
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------

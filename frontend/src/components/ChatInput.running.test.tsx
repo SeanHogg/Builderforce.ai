@@ -45,11 +45,15 @@ describe('ChatInput while a run is in flight', () => {
   });
 
   it('shows what it is holding, so a queued turn is never invisible', () => {
-    const { view } = renderComposer({ queuedCount: 2 });
-    expect(view.container.textContent).toContain('brain.queuedCount');
+    const queued = { items: [{ id: 1, value: 'first' }, { id: 2, value: 'second' }], remove: () => {} };
+    const { view } = renderComposer({ queued });
+    // The held turns are listed as the shared chips — each one readable, each removable.
+    expect(view.container.textContent).toContain('first');
+    expect(view.container.textContent).toContain('second');
+    expect(view.container.textContent).toContain('brain.queuedHint');
 
-    view.rerender(<ChatInput value="" onChange={() => {}} onSubmit={() => {}} running onStop={() => {}} queuedCount={0} />);
-    expect(view.container.textContent).not.toContain('brain.queuedCount');
+    view.rerender(<ChatInput value="" onChange={() => {}} onSubmit={() => {}} running onStop={() => {}} queued={{ items: [], remove: () => {} }} />);
+    expect(view.container.textContent).not.toContain('brain.queuedHint');
   });
 
   it('shows Send, never Stop, when the host supplies no interrupt', () => {

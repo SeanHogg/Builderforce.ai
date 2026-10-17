@@ -1,30 +1,32 @@
 import * as vscode from "vscode";
+import {
+  completeDeviceSignIn,
+  revokeKey,
+  startDeviceSignIn,
+  type DeviceAuthDeps,
+  type DeviceCodeStart,
+} from "@builderforce/device-auth";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 
 /**
- * Best-effort server-side revocation of an editor key (bfk_*) on sign-out, so the
- * key dies with the local session instead of being left valid on the gateway.
- * Possession of the key is the authorization, so no token is needed. Swallows all
- * errors — a failed revoke must never block local sign-out.
+ * The editor's side of the shared device sign-in (`@builderforce/device-auth`, the same
+ * flow Rovr runs): the gateway it talks to, the browser it opens, and the clock.
  */
-async function revokeKeyRemotely(key: string): Promise<void> {
-  try {
-    await fetch(`${getBaseUrl()}/api/auth/keys/revoke`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ apiKey: key }),
-    });
-  } catch {
-    // Offline / endpoint absent — local sign-out still proceeds.
-  }
+function deviceAuthDeps(): DeviceAuthDeps {
+  return {
+    baseUrl: getBaseUrl(),
+    fetch: (input, init) => fetch(input, init),
+    openTab: async (url) => {
+      await vscode.env.openExternal(vscode.Uri.parse(url));
+    },
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    now: () => Date.now(),
+    client: "vscode",
+  };
 }
 
 const PROVIDER_ID = "builderforce";
 const PROVIDER_LABEL = "BuilderForce";
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
 
 /** The web app URL, derived from the gateway base (api.builderforce.ai → builderforce.ai). */
 export function appUrl(): string {
@@ -82,7 +84,10 @@ export class BuilderForceAuthProvider implements vscode.AuthenticationProvider {
     const key = await this.ctx.secrets.get(SECRET_KEY);
     await this.ctx.secrets.delete(SECRET_KEY);
     if (key) {
-      await revokeKeyRemotely(key);
+      // Best-effort server-side revoke, so the key dies with the local session instead
+      // of being left valid on the gateway. It never throws — a failed revoke must not
+      // block local sign-out.
+      await revokeKey(deviceAuthDeps(), key);
       this._onDidChangeSessions.fire({ added: [], removed: [this.toSession(key)], changed: [] });
     }
   }
@@ -123,65 +128,28 @@ export class BuilderForceAuthProvider implements vscode.AuthenticationProvider {
    * cancellation / denial / timeout after the flow has genuinely started.
    */
   private async tryDeviceCode(): Promise<string | undefined> {
-    const base = getBaseUrl();
-
-    let start: {
-      device_code?: string;
-      user_code?: string;
-      verification_uri?: string;
-      verification_uri_complete?: string;
-      interval?: number;
-      expires_in?: number;
-    };
+    const deps = deviceAuthDeps();
+    let start: DeviceCodeStart;
     try {
-      const res = await fetch(`${base}/api/auth/device/code`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ client: "vscode" }),
-      });
-      if (!res.ok) return undefined; // endpoint absent/unhealthy → fall back
-      start = (await res.json()) as typeof start;
+      start = await startDeviceSignIn(deps);
     } catch {
-      return undefined;
+      return undefined; // endpoint absent/unhealthy → fall back
     }
-
-    const { device_code, user_code, verification_uri, verification_uri_complete } = start;
-    if (!device_code || !verification_uri) return undefined;
-
-    const openUrl = verification_uri_complete || verification_uri;
-    await vscode.env.openExternal(vscode.Uri.parse(openUrl));
 
     return vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
         cancellable: true,
-        title: `BuilderForce: approve in your browser${user_code ? ` (code ${user_code})` : ""}…`,
+        title: `BuilderForce: approve in your browser (code ${start.userCode})…`,
       },
       async (_progress, token) => {
-        const deadline = Date.now() + (start.expires_in ?? 600) * 1000;
-        let delay = Math.max(start.interval ?? 5, 1) * 1000;
-        while (Date.now() < deadline) {
-          if (token.isCancellationRequested) throw new Error("Sign-in cancelled");
-          await sleep(delay);
-          const r = await fetch(`${base}/api/auth/device/token`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ device_code }),
-          });
-          if (r.status === 200) {
-            const body = (await r.json()) as { access_key?: string };
-            if (body.access_key) return body.access_key;
-            throw new Error("Device token response missing access_key");
-          }
-          if (r.status === 428) continue; // authorization_pending
-          if (r.status === 429) {
-            delay += 2000; // slow_down
-            continue;
-          }
-          if (r.status === 403) throw new Error("Sign-in was denied");
-          throw new Error(`Device sign-in failed (${r.status})`);
+        const abort = new AbortController();
+        const cancelled = token.onCancellationRequested(() => abort.abort());
+        try {
+          return (await completeDeviceSignIn(deps, start, abort.signal)).accessKey;
+        } finally {
+          cancelled.dispose();
         }
-        throw new Error("Device sign-in timed out");
       },
     );
   }

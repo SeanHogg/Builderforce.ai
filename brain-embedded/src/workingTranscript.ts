@@ -153,7 +153,7 @@ export function stillInWorkingContext(state: WorkingTranscriptState, anchor: unk
 // summarizer is reachable, so correctness never depends on the extra LLM call.
 //
 // Why this fold is NOT `packHandoff` (`@seanhogg/builderforce-memory/handoff`, which a
-// hand-off to another model's window uses — see `handoff/packForModel.ts`): the packer
+// hand-off to another model's window uses — see `windowFit/packForModel.ts`): the packer
 // is stateless and gives the verbatim tail priority, handing the note whatever room the
 // tail leaves. The working transcript needs the opposite on both counts — an
 // INCREMENTAL memo reused across turns (one summarizer call per ~20k tokens of

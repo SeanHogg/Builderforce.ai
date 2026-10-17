@@ -29,7 +29,8 @@ export interface GatewayModelSurface {
   /** The curated tool-calling / coding subset of the pool. */
   codingModels?: string[];
   teacherModels?: string[];
-  byo?: { providers?: string[]; models?: Array<{ id?: string; vendor?: string }> };
+  /** A connected account's models; `contextWindow` is the vendor catalog's window. */
+  byo?: { providers?: string[]; models?: Array<{ id?: string; vendor?: string; contextWindow?: number }> };
   canUsePremiumModels?: boolean;
   canChooseModel?: boolean;
   canUseFrontierModels?: boolean;
@@ -67,6 +68,22 @@ export function gatewayModelIdentity(surface: GatewayModelSurface): ModelIdentit
 export function gatewayPlanModels(surface: GatewayModelSurface): string[] {
   if (surface.models) return surface.models.filter((id): id is string => typeof id === 'string' && !!id);
   return (surface.data ?? []).map((row) => row.model ?? row.id).filter((id): id is string => !!id);
+}
+
+/**
+ * The gateway catalog's context windows, as the window-fit gate's `cloud` source — the
+ * client twin of the server's `catalogEntry(model).contextWindow`. Only the models the
+ * surface carries a window for answer (a connected account's catalog rows); any other
+ * ref is unknown, which keeps the run's own budget rather than guessing.
+ */
+export function gatewayModelWindows(
+  surface: { byo?: { models?: ReadonlyArray<{ id?: string; contextWindow?: number }> } } | null | undefined,
+): (ref: string) => number | undefined {
+  const windows = new Map<string, number>();
+  for (const m of surface?.byo?.models ?? []) {
+    if (m.id && typeof m.contextWindow === 'number' && m.contextWindow > 0) windows.set(m.id, m.contextWindow);
+  }
+  return (ref) => windows.get(ref);
 }
 
 /** An authenticated JSON GET against the gateway (`<T>(path) => Promise<T>`). */

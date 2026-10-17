@@ -64,7 +64,6 @@ presentation/routes/integrationRoutes.ts
 presentation/routes/jobRoutes.ts
 presentation/routes/kanbanRoutes.ts
 presentation/routes/knowledgeRoutes.ts
-presentation/routes/llmRoutes.ts
 presentation/routes/managedAgentHostRoutes.ts
 presentation/routes/managerRoutes.ts
 presentation/routes/marketplaceRoutes.ts
@@ -91,7 +90,6 @@ presentation/routes/qualityIngestRoutes.ts
 presentation/routes/qualityRoutes.ts
 presentation/routes/repoAnalysisRoutes.ts
 presentation/routes/repoRoutes.ts
-presentation/routes/reportRoutes.ts
 presentation/routes/rfpRoutes.ts
 presentation/routes/roiRoutes.ts
 presentation/routes/runtimeRoutes.ts

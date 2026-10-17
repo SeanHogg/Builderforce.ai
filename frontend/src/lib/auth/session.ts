@@ -15,7 +15,8 @@
  */
 
 import { apiRequest } from '../apiClient';
-import { patchStoredUser } from '../auth';
+import { getStoredWebToken, patchStoredUser } from '../auth';
+import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import type { AuthUser, Tenant } from '../types';
 import type { PsychometricProfile } from '../psychometric';
 
@@ -60,25 +61,57 @@ export interface LinkedAccounts {
 
 const WEB = { auth: 'web' } as const;
 
+/**
+ * ONE `GET /api/auth/me` per page load. The onboarding gate, the TopBar's setup
+ * prompt, the progress pill, the dashboard and the personality block all read the
+ * profile as the shell mounts, and each used to fire its own request — three to
+ * four per load. They now share one in-flight request and its answer for a short
+ * window; every profile write below drops it, so a reader after a write is fresh.
+ * Keyed by the web token so a sign-out / account switch never serves the last
+ * person's profile, and a failed read (the fallback) is never kept.
+ */
+const PROFILE_TTL_MS = 15_000;
+const PROFILE_CACHE_PREFIX = 'auth:me:';
+
+function invalidateProfile(): void {
+  invalidateClientCache(PROFILE_CACHE_PREFIX);
+}
+
+/** Throws on failure so the shared cache never keeps a fallback answer. */
+async function readProfile(): Promise<MyProfile> {
+  const data = await apiRequest<{ user?: MeUser }>('/api/auth/me', WEB);
+  const user = data?.user ?? {};
+  return {
+    onboardingCompletedAt: user.onboardingCompletedAt ?? null,
+    onboardingProgress: user.onboardingProgress ?? null,
+    psychometric: user.psychometric ?? null,
+    accountType: user.accountType ?? 'standard',
+    accountTypeSelected: user.accountTypeSelected ?? true,
+    availableForHire: user.availableForHire ?? false,
+  };
+}
+
 export const profileApi = {
-  /** The current profile, including onboarding, role-selection, account type and personality. */
-  async me(): Promise<MyProfile> {
+  /**
+   * The current profile, including onboarding, role-selection, account type and
+   * personality. Coalesced: concurrent and near-simultaneous callers share one
+   * request (see {@link PROFILE_TTL_MS}); pass `{ fresh: true }` to force a read.
+   */
+  async me(opts: { fresh?: boolean } = {}): Promise<MyProfile> {
+    // The session's tail names the cache entry, so a sign-out or account switch
+    // reads a different key instead of the previous person's profile.
+    const key = `${PROFILE_CACHE_PREFIX}${(getStoredWebToken() ?? '').slice(-24)}`;
+    if (opts.fresh) invalidateClientCache(key);
     try {
-      const data = await apiRequest<{ user?: MeUser }>('/api/auth/me', WEB);
-      const user = data?.user ?? {};
-      return {
-        onboardingCompletedAt: user.onboardingCompletedAt ?? null,
-        onboardingProgress: user.onboardingProgress ?? null,
-        psychometric: user.psychometric ?? null,
-        accountType: user.accountType ?? 'standard',
-        accountTypeSelected: user.accountTypeSelected ?? true,
-        availableForHire: user.availableForHire ?? false,
-      };
+      return await getOrSetClientCached(key, () => readProfile(), { ttlMs: PROFILE_TTL_MS });
     } catch {
       // Reported by the transport; the gates keep working on the fallback.
       return PROFILE_FALLBACK;
     }
   },
+
+  /** Drop the shared profile read — the next `me()` asks the API again. */
+  invalidate: invalidateProfile,
 
   /**
    * Opt IN or OUT of being hired talent (independent of account type — a builder keeps
@@ -89,6 +122,7 @@ export const profileApi = {
     const data = await apiRequest<{ availableForHire?: boolean }>('/api/freelancers/me/availability', {
       ...WEB, method: 'POST', body: JSON.stringify({ available }),
     });
+    invalidateProfile();
     return data?.availableForHire ?? available;
   },
 
@@ -100,6 +134,7 @@ export const profileApi = {
     const data = await apiRequest<{ user: AuthUser }>('/api/auth/me/account-type', {
       ...WEB, method: 'POST', body: JSON.stringify({ accountType, ageAttested }),
     });
+    invalidateProfile();
     return data.user;
   },
 
@@ -111,6 +146,7 @@ export const profileApi = {
     const data = await apiRequest<{ user?: { displayName?: string | null } }>('/api/auth/me', {
       ...WEB, method: 'PATCH', body: JSON.stringify({ displayName }),
     });
+    invalidateProfile();
     const next = data?.user?.displayName ?? null;
     patchStoredUser({ name: next ?? undefined });
     return next;
@@ -121,6 +157,7 @@ export const profileApi = {
     const data = await apiRequest<{ user?: { psychometric?: PsychometricProfile | null } }>('/api/auth/me', {
       ...WEB, method: 'PATCH', body: JSON.stringify({ psychometric }),
     });
+    invalidateProfile();
     return data?.user?.psychometric ?? null;
   },
 
@@ -129,6 +166,7 @@ export const profileApi = {
     await apiRequest('/api/auth/me/onboarding/complete', {
       ...WEB, method: 'POST', body: JSON.stringify({ intent }), raw: true,
     });
+    invalidateProfile();
   },
 
   /**
@@ -140,6 +178,7 @@ export const profileApi = {
     await apiRequest('/api/auth/me/onboarding/progress', {
       ...WEB, method: 'PUT', body: JSON.stringify(progress), raw: true,
     }).catch(() => { /* resume position is best-effort */ });
+    invalidateProfile();
   },
 
   /** OAuth providers linked to the current account. */

@@ -54,6 +54,8 @@ export interface BrainSurfaceContextValue {
   joinedCollaborator: BrainSurfaceCollaborator | null;
   /** Re-send a transcript message as the next canvas turn ("send again"). */
   onReplayMessage: (message: BrainMessage, role: 'user' | 'assistant') => void;
+  /** Answer an ask_user card — the choice becomes the next canvas turn. */
+  onAnswerQuestion: (answer: string) => void;
   /** Rate a Brain reply on this board. Undefined on a board with nothing to file a
    *  rating against (a guest session, or a turn with no resolved model), which hides
    *  the thumbs rather than offering a control that would silently do nothing. */

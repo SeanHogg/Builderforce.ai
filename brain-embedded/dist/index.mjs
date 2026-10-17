@@ -1,8 +1,9 @@
 import {
   BrainRequestError,
+  NOT_SIGNED_IN,
   brainRequestError,
   chatErrorAction
-} from "./chunk-XMWB5HDP.mjs";
+} from "./chunk-67SSAVEK.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useMemo } from "react";
@@ -1417,17 +1418,6 @@ function useBrainConfig() {
   return ctx;
 }
 
-// src/providerFailure.ts
-function providerFailureEvent(error) {
-  if (error instanceof StreamInterruptedError) {
-    return { type: "transport_failed", kind: "interrupted", ...error.model ? { model: error.model } : {} };
-  }
-  if (error instanceof TransportError) {
-    return { type: "transport_failed", kind: error.unreachable ? "unreachable" : "transport" };
-  }
-  return null;
-}
-
 // ../packages/agent-stall/src/requestIntent.ts
 var CHANGE_VERB = /\b(add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge)\b/i;
 var QUESTION_SHAPE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will|explain|describe|summar|tell me|show me|list|compare|review|analyse|analyze)\b|\?\s*$/i;
@@ -1811,6 +1801,198 @@ function chooseStallFailover(input) {
   return next && !input.tried.includes(next) ? next : void 0;
 }
 
+// ../packages/run-policy/src/policy.ts
+var PIN_RELEASE_STATUSES = [429, 413, 503];
+var DECLINE_STATUS = 400;
+var NONE = { kind: "none" };
+function initialRunPolicy(opts = {}) {
+  const model = opts.pinnedModel || void 0;
+  return {
+    phase: opts.startPhase ?? "plan",
+    model,
+    locked: false,
+    pin: model,
+    // Strictness belongs to a pin. With nothing pinned it would otherwise make the
+    // run's first LOCK strict, which no host asks for.
+    strictPin: !!opts.strictPin && !!model,
+    broken: [...new Set((opts.excludeModels ?? []).filter(Boolean))],
+    proven: [],
+    tried: [],
+    failovers: 0,
+    turnRetries: 0,
+    outcome: NONE,
+    options: {
+      pinReleasable: !!opts.pinReleasable,
+      lockAfterFirstSuccess: !!opts.lockAfterFirstSuccess,
+      maxFailovers: opts.maxFailovers ?? MAX_MODEL_FAILOVERS,
+      decliningModelPrefixes: [...opts.decliningModelPrefixes ?? []],
+      strictFailover: !!opts.strictFailover,
+      preferProvenFailover: !!opts.preferProvenFailover,
+      pinStrict: !!opts.strictPin && !!model,
+      ...opts.fixedRole ? { fixedRole: opts.fixedRole } : {}
+    }
+  };
+}
+function nextTurn(state, turn) {
+  return {
+    role: turn.hasTools ? state.options.fixedRole ?? state.phase : "chat",
+    model: state.model,
+    strict: !!state.model && state.strictPin,
+    excludeModels: [...state.broken]
+  };
+}
+function offersHandOff(state) {
+  return state.phase === "plan";
+}
+function reduceRunPolicy(state, event) {
+  const s = { ...state, outcome: NONE };
+  switch (event.type) {
+    case "turn_succeeded":
+      return succeeded(s, event.model, event.acted === true);
+    case "code_change_attempted":
+      return s.phase === "plan" && !s.model ? { ...s, phase: "code", outcome: { kind: "reask_as_coder" } } : s;
+    case "hand_off":
+      return s.phase === "plan" ? { ...s, phase: "code", outcome: { kind: "handed_off" } } : { ...s, outcome: { kind: "hand_off_rejected" } };
+    case "verify_started":
+      return { ...s, phase: "verify" };
+    case "stalled":
+      return stalled(s, event);
+    case "transport_failed":
+      return transportFailed(s, event);
+  }
+}
+function succeeded(s, resolved, acted) {
+  const proven = acted && resolved && resolved !== "default" && !s.proven.includes(resolved) ? [...s.proven, resolved] : s.proven;
+  const next = { ...s, turnRetries: 0, proven };
+  if (s.options.lockAfterFirstSuccess && !(s.model && s.strictPin) && resolved && resolved !== "default") {
+    return { ...next, model: resolved, locked: true };
+  }
+  return next;
+}
+function stalled(s, e) {
+  const tried = [...s.tried];
+  const to = chooseStallFailover({
+    activeModel: s.model,
+    resolvedModel: e.resolvedModel,
+    tried,
+    failoversUsed: s.failovers,
+    maxFailovers: s.options.maxFailovers,
+    surface: e.surface,
+    pick: failoverPicker(s, e)
+  });
+  if (!to) {
+    const returned = s.model !== s.pin ? { model: s.pin, locked: false, strictPin: !!s.pin && s.options.pinStrict } : {};
+    return { ...s, ...returned, tried, outcome: { kind: "failover_exhausted", tried } };
+  }
+  const failovers = s.failovers + 1;
+  return {
+    ...s,
+    tried,
+    failovers,
+    model: to,
+    locked: false,
+    ...s.options.strictFailover ? { strictPin: true } : {},
+    outcome: { kind: "failed_over", from: e.resolvedModel ?? s.model, to, attempt: failovers, of: s.options.maxFailovers }
+  };
+}
+function failoverPicker(s, e) {
+  const proven = s.options.preferProvenFailover ? [...s.proven].reverse() : [];
+  if (proven.length === 0 && !e.pick && !e.surface) return void 0;
+  if (proven.length === 0 && s.broken.length === 0) return e.pick;
+  return (tried) => {
+    const skip = [...tried, ...s.broken];
+    return proven.find((m) => !skip.includes(m)) ?? (e.pick ? e.pick(skip) : nextFallbackModel(e.surface, skip));
+  };
+}
+function transportFailed(s, e) {
+  if (s.turnRetries >= 1 || e.kind === "unreachable") return { ...s, outcome: { kind: "fail_turn" } };
+  const releasable = s.locked || s.options.pinReleasable;
+  if (s.model && releasable && e.status !== void 0 && releasesPin(s, s.model, e.status)) {
+    return {
+      ...s,
+      model: void 0,
+      locked: false,
+      pin: void 0,
+      strictPin: false,
+      turnRetries: s.turnRetries + 1,
+      outcome: { kind: "retry_turn", released: s.model, status: e.status }
+    };
+  }
+  if (isRequestRefusalStatus(e.status)) return { ...s, outcome: { kind: "fail_turn" } };
+  if (s.model && s.locked && e.kind === "interrupted") {
+    const brokenModel = e.model ?? s.model;
+    return {
+      ...s,
+      model: void 0,
+      locked: false,
+      broken: s.broken.includes(brokenModel) ? s.broken : [...s.broken, brokenModel],
+      turnRetries: s.turnRetries + 1,
+      outcome: { kind: "retry_turn", broken: brokenModel, released: s.model }
+    };
+  }
+  if (s.model) return { ...s, outcome: { kind: "fail_turn" } };
+  const broken = e.kind === "interrupted" && e.model && !s.broken.includes(e.model) ? [...s.broken, e.model] : s.broken;
+  return {
+    ...s,
+    broken,
+    turnRetries: s.turnRetries + 1,
+    outcome: { kind: "retry_turn", ...e.kind === "interrupted" && e.model ? { broken: e.model } : {} }
+  };
+}
+function releasesPin(s, model, status2) {
+  return PIN_RELEASE_STATUSES.includes(status2) || status2 === DECLINE_STATUS && s.options.decliningModelPrefixes.some((prefix) => model.startsWith(prefix));
+}
+function isRequestRefusalStatus(status2) {
+  return status2 !== void 0 && status2 >= 400 && status2 < 500 && status2 !== 408 && !PIN_RELEASE_STATUSES.includes(status2);
+}
+
+// ../packages/run-policy/src/coderHandoff.ts
+function isCoderReask(role, previousRole) {
+  return role === "code" && previousRole === "plan";
+}
+var MAX_CALL_CHARS = 2e3;
+var MAX_BRIEF_CHARS = 6e3;
+function coderHandoffBrief(plannerText, calls) {
+  const findings = plannerText.trim();
+  const intended = calls.map((call2) => {
+    const args = call2.args.length > MAX_CALL_CHARS ? `${call2.args.slice(0, MAX_CALL_CHARS)}\u2026` : call2.args;
+    return `- ${call2.name} ${args}`;
+  });
+  const parts = [
+    "HAND-OFF: the analysis for this request is complete \u2014 you are the coding model taking it from here. Everything the planner read is in the conversation above; do not start the investigation over or re-read files already returned above.",
+    ...findings ? ["The planner concluded:", findings] : [],
+    "It was about to make this change:",
+    ...intended,
+    "Make that change now. Correct it if it is wrong \u2014 a file you have not seen, or text that does not match \u2014 but act on it rather than re-planning. Read only what the edit itself needs and is not already above."
+  ];
+  const brief = parts.join("\n");
+  return brief.length > MAX_BRIEF_CHARS ? `${brief.slice(0, MAX_BRIEF_CHARS)}\u2026` : brief;
+}
+
+// ../packages/run-policy/src/handoffBudget.ts
+var DEFAULT_HANDOFF_RESERVE_TOKENS = 4096;
+function toolSchemaTokens(schemas, estimate) {
+  return schemas && schemas.length > 0 ? estimate(JSON.stringify(schemas)) : 0;
+}
+function handoffReserveTokens(maxTokens) {
+  return maxTokens && maxTokens > 0 ? maxTokens : DEFAULT_HANDOFF_RESERVE_TOKENS;
+}
+
+// src/providerFailure.ts
+function providerFailureEvent(error) {
+  if (error instanceof StreamInterruptedError) {
+    return { type: "transport_failed", kind: "interrupted", ...error.model ? { model: error.model } : {} };
+  }
+  if (error instanceof TransportError) {
+    return { type: "transport_failed", kind: error.unreachable ? "unreachable" : "transport" };
+  }
+  if (error instanceof BrainRequestError) {
+    if (isRequestRefusalStatus(error.status) && error.status !== DECLINE_STATUS) return null;
+    return { type: "transport_failed", kind: "transport", status: error.status };
+  }
+  return null;
+}
+
 // src/runPolicyTraces.ts
 function coderReaskTrace(ts, step, plannerModel) {
   return {
@@ -1855,6 +2037,17 @@ function transportRetryTrace(ts, step, outcome, message) {
     label: "llm.transport_error",
     args: { step },
     result: `${message} \u2014 retrying this turn on another connected model.`
+  };
+}
+function providerFailureTrace(ts, step, model, error, durationMs) {
+  return {
+    ts,
+    category: "error",
+    label: "llm.complete",
+    ...durationMs !== void 0 ? { durationMs } : {},
+    args: { model: model || "default", step },
+    result: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    isError: true
   };
 }
 
@@ -4179,7 +4372,7 @@ function localFallbackTrace(ts, step, attempts) {
   };
 }
 
-// src/handoff/modelWindow.ts
+// src/windowFit/modelWindow.ts
 var positive = (n) => typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : void 0;
 function contextWindowOf(modelRef, sources = {}) {
   if (!modelRef) return void 0;
@@ -4188,6 +4381,18 @@ function contextWindowOf(modelRef, sources = {}) {
     return positive(live2) ?? positive(localCatalogModel(modelRef)?.contextTokens);
   }
   return positive(sources.cloud?.(modelRef));
+}
+async function resolveContextWindow(modelRef, sources = {}) {
+  if (!modelRef) return void 0;
+  let probes;
+  if (sources.probes && isLocalModelRef(modelRef)) {
+    try {
+      probes = await sources.probes();
+    } catch {
+      probes = void 0;
+    }
+  }
+  return contextWindowOf(modelRef, { ...sources.cloud ? { cloud: sources.cloud } : {}, ...probes ? { probes } : {} });
 }
 
 // src/localFirstTransport.ts
@@ -4289,9 +4494,9 @@ function committingHandlers(handlers, commit, servedAs) {
 var answered = (r) => r.text.trim().length > 0 || r.toolCalls.length > 0;
 function createLocalFirstStream(input) {
   return async (opts, handlers = {}) => {
-    if (!localFirstApplies(opts) && opts.model) {
-      if (!isLocalModelRef(opts.model)) {
-        if (!input.cloud) throw new Error("not_signed_in");
+    if (!localFirstApplies(opts)) {
+      if (!opts.model || !isLocalModelRef(opts.model)) {
+        if (!input.cloud) throw new Error(NOT_SIGNED_IN);
         return input.cloud(opts, handlers);
       }
       const local = probedTarget(opts.model, input.probes);
@@ -4307,7 +4512,7 @@ function createLocalFirstStream(input) {
       workload: localFirstWorkload(input.fit ? { ...routed, messages: coreMessages(routed.messages) } : routed),
       cloud: input.cloud ? {} : null
     });
-    if (plan.length === 0) throw new Error("not_signed_in");
+    if (plan.length === 0) throw new Error(NOT_SIGNED_IN);
     const { result, attempts } = await runLocalFirst(
       plan,
       async (attempt, commit) => {
@@ -4330,7 +4535,7 @@ async function completeLocal(endpoint, model, messages, signal, fetchImpl = glob
     ...signal ? { signal } : {}
   });
   if (!res.ok) {
-    const txt = await res.text().catch(() => "");
+    const txt = await res.text().catch((e) => `(body unreadable: ${e instanceof Error ? e.message : String(e)})`);
     throw new Error(`local_complete_failed_${res.status}: ${txt.slice(0, 200)}`);
   }
   const json = await res.json();
@@ -4342,7 +4547,7 @@ async function completeLocalFirst(input) {
     workload: localFirstWorkload({ messages: input.messages }),
     cloud: input.cloud ? {} : null
   });
-  if (plan.length === 0) throw new Error("not_signed_in");
+  if (plan.length === 0) throw new Error(NOT_SIGNED_IN);
   const { result } = await runLocalFirst(
     plan,
     (attempt) => attempt.kind === "cloud" ? input.cloud() : completeLocal(attempt.endpoint, attempt.model, input.messages, input.signal, input.fetch),
@@ -4355,7 +4560,7 @@ async function completeLocalFirst(input) {
   return result;
 }
 
-// src/handoff/packForModel.ts
+// src/windowFit/packForModel.ts
 import { defaultEstimateTokens as defaultEstimateTokens2, packHandoff } from "@seanhogg/builderforce-memory/handoff";
 import { formatEvermindMemoryBlock } from "@seanhogg/builderforce-memory/evermind";
 
@@ -4498,11 +4703,10 @@ ${summary}`;
   return assembleCompacted(systemPrompt, convo, note, to);
 }
 
-// src/handoff/packForModel.ts
-var DEFAULT_HANDOFF_RESERVE_TOKENS = 4096;
+// src/windowFit/packForModel.ts
 var DEFAULT_HANDOFF_TIMEOUT_MS = 2e4;
-function toolSchemaTokens(tools) {
-  return tools && tools.length > 0 ? defaultEstimateTokens2(JSON.stringify(tools)) : 0;
+function toolSchemaTokens2(tools) {
+  return toolSchemaTokens(tools, defaultEstimateTokens2);
 }
 function recallBlock(recall) {
   return async (query, budgetChars) => {
@@ -4516,8 +4720,8 @@ async function packForModel(input) {
   const pack = await packHandoff({
     messages: input.messages,
     targetContextTokens: input.contextTokens,
-    reserveOutputTokens: input.maxTokens && input.maxTokens > 0 ? input.maxTokens : DEFAULT_HANDOFF_RESERVE_TOKENS,
-    toolsTokens: toolSchemaTokens(input.tools),
+    reserveOutputTokens: handoffReserveTokens(input.maxTokens),
+    toolsTokens: toolSchemaTokens2(input.tools),
     ...input.from ? { from: input.from } : {},
     to: input.to,
     ...summarizer ? {
@@ -4552,6 +4756,51 @@ function createHandoffFit(options = {}) {
   };
 }
 
+// src/pageEngines/pageRuntimePin.ts
+function pageRuntimePin(ref) {
+  const pin = parseLocalModelRef(ref);
+  if (!pin) return null;
+  const runtime = localRuntime(pin.provider);
+  if (runtime.reach !== "page" || !runtime.defaultBaseUrl) return null;
+  return { ...pin, endpoint: { baseUrl: runtime.defaultBaseUrl } };
+}
+
+// src/hostModelStream.ts
+var handoffFit = createHandoffFit();
+function createHostModelStream(input) {
+  const resolveLocal = input.localPin ?? pageRuntimePin;
+  const fit = input.fit ?? handoffFit;
+  return async (opts, handlers = {}) => {
+    const hostPin = await input.pinned?.() ?? null;
+    const localRef = hostPin ?? opts.model;
+    const local = localRef ? resolveLocal(localRef) : null;
+    const cloud = await input.cloud();
+    if (local && localRef) {
+      return createLocalStream(local.endpoint, local.model, input.fetch, { ref: localRef, cloud, fit })(opts, handlers);
+    }
+    if (hostPin && !isLocalModelRef(hostPin) && cloud) {
+      return cloud({ ...opts, model: hostPin, modelStrict: true }, handlers);
+    }
+    const probes = input.probes ? await input.probes() : [];
+    if (probes.length === 0) {
+      if (!cloud) throw new Error(NOT_SIGNED_IN);
+      return cloud(opts, handlers);
+    }
+    return createLocalFirstStream({
+      probes,
+      cloud,
+      fit,
+      ...input.fetch ? { fetch: input.fetch } : {},
+      ...input.onAttempt ? { onAttempt: input.onAttempt } : {}
+    })(opts, handlers);
+  };
+}
+
+// src/pageEngines/engineFailure.ts
+function reportPageEngineFailure(runtime, stage, error) {
+  console.warn(`BuilderForce page engine: ${runtime} ${stage} failed (${errorMessage(error)})`);
+}
+
 // src/pageEngines/types.ts
 var PageEngineError = class extends Error {
   status;
@@ -4566,7 +4815,7 @@ var PageEngineError = class extends Error {
 var abortReason = (signal) => signal.reason ?? new DOMException("Aborted", "AbortError");
 var errorMessage = (e) => e instanceof Error ? e.message : String(e);
 var hasTools = (body) => Array.isArray(body.tools) && body.tools.length > 0;
-function memoizedProbe(run, config = {}) {
+function memoizedProbe(runtime, run, config = {}) {
   const ttlMs = config.ttlMs ?? PAGE_ENGINE_PROBE_TTL_MS;
   const now = config.now ?? (() => Date.now());
   let memo;
@@ -4574,7 +4823,10 @@ function memoizedProbe(run, config = {}) {
     probe(options = {}) {
       const at = now();
       if (!options.fresh && memo && at - memo.at < ttlMs) return memo.value;
-      const value = run().catch(() => null);
+      const value = run().catch((e) => {
+        reportPageEngineFailure(runtime, "probe", e);
+        return null;
+      });
       memo = { at, value };
       return value;
     },
@@ -4694,6 +4946,7 @@ async function probeOnce(knownQuota, learnQuota) {
 function createBrowserEngineProber(config = {}) {
   let quota;
   return memoizedProbe(
+    "browser",
     () => probeOnce(
       () => quota,
       (q) => {
@@ -4761,7 +5014,10 @@ async function promptApiCompletions(body, signal) {
     throw isQuotaError(e) ? new PageEngineError(413, "context_exceeded", errorMessage(e)) : new PageEngineError(503, "browser_engine_unavailable", errorMessage(e));
   }
   const quota = promptApiInputQuota(session);
-  const needed = await promptApiMeasure(session, turn.prompt, signal).catch(() => void 0);
+  const needed = await promptApiMeasure(session, turn.prompt, signal).catch((e) => {
+    if (!signal?.aborted) reportPageEngineFailure("browser", "measure", e);
+    return void 0;
+  });
   if (quota !== void 0 && needed !== void 0 && (session.inputUsage ?? 0) + needed > quota) {
     session.destroy();
     throw new PageEngineError(413, "context_exceeded");
@@ -4890,15 +5146,135 @@ function pageEnginesFetch(engines, base = globalFetch2) {
   };
 }
 async function probePageEngines(engines, options) {
-  const probes = await Promise.all(engines.map((engine) => engine.probe(options).catch(() => null)));
+  const probes = await Promise.all(engines.map((engine) => engine.probe(options)));
   return probes.filter((p) => p !== null);
+}
+
+// src/pageEngines/modelStore.ts
+function backendFor(row, options) {
+  const { hf, webllm: webllm2 } = options;
+  if (row.source.kind === "hf-file") {
+    return hf ? {
+      ready: async (r) => await hf.status(r.ref) === "ready",
+      download: (r, onProgress, signal) => hf.download(r.ref, onProgress, signal),
+      remove: (r) => hf.remove(r.ref)
+    } : void 0;
+  }
+  const { modelId } = row.source;
+  return webllm2 ? {
+    ready: () => webllm2.has(modelId),
+    download: (_r, onProgress, signal) => webllm2.download(modelId, onProgress, signal),
+    remove: () => webllm2.remove(modelId)
+  } : void 0;
+}
+function createLocalModelStore(options) {
+  const catalog = options.catalog ?? LOCAL_MODEL_CATALOG;
+  const listeners = /* @__PURE__ */ new Set();
+  const inFlight = /* @__PURE__ */ new Map();
+  const emit2 = () => {
+    for (const listener of listeners) listener();
+  };
+  const changed = () => {
+    for (const engine of options.engines ?? []) engine.invalidate();
+    emit2();
+  };
+  const rowOf = (ref) => {
+    const row = catalog.find((m) => m.ref === ref);
+    if (!row) throw new Error(`unknown_model: ${ref}`);
+    return row;
+  };
+  async function describe(row, supports) {
+    const pending = inFlight.get(row.ref);
+    if (pending) return { ...row, state: "downloading", progress: pending.progress };
+    const backend = backendFor(row, options);
+    const support = supports.get(row.runtime);
+    if (!backend || !support) return { ...row, state: "unsupported", reason: "engine_unavailable" };
+    const fit = localModelFit(row, support);
+    if (!fit.fits) return { ...row, state: "unsupported", reason: fit.reason };
+    const ready = await backend.ready(row).catch((e) => {
+      reportPageEngineFailure(row.runtime, "cache_lookup", e);
+      return false;
+    });
+    return { ...row, state: ready ? "ready" : "absent" };
+  }
+  return {
+    async listLocalModels() {
+      const runtimes = [...new Set(catalog.map((m) => m.runtime))];
+      const answers = await Promise.all(
+        runtimes.map(async (runtime) => {
+          const probe = options.support[runtime];
+          return [runtime, probe ? await probe() : null];
+        })
+      );
+      const supports = new Map(answers);
+      return Promise.all(catalog.map((row) => describe(row, supports)));
+    },
+    download(ref, onProgress, signal) {
+      const existing = inFlight.get(ref);
+      if (existing) return existing.done;
+      const row = rowOf(ref);
+      const backend = backendFor(row, options);
+      if (!backend) return Promise.reject(new Error(`engine_unavailable: ${row.runtime}`));
+      const entry = { progress: 0, done: Promise.resolve() };
+      entry.done = backend.download(
+        row,
+        (fraction) => {
+          entry.progress = fraction;
+          onProgress?.(fraction);
+          emit2();
+        },
+        signal
+      ).finally(() => {
+        inFlight.delete(ref);
+        changed();
+      });
+      inFlight.set(ref, entry);
+      emit2();
+      return entry.done;
+    },
+    async remove(ref) {
+      const row = rowOf(ref);
+      await backendFor(row, options)?.remove(row);
+      changed();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+  };
+}
+function deferredLocalModelStore(store) {
+  const resolved = async () => store();
+  return {
+    listLocalModels: async () => (await resolved()).listLocalModels(),
+    download: async (ref, onProgress, signal) => (await resolved()).download(ref, onProgress, signal),
+    remove: async (ref) => (await resolved()).remove(ref),
+    subscribe(listener) {
+      let unsubscribe;
+      let gone = false;
+      void resolved().then((real) => {
+        if (!gone) unsubscribe = real.subscribe(listener);
+      });
+      return () => {
+        gone = true;
+        unsubscribe?.();
+      };
+    }
+  };
 }
 
 // src/pageEngines/catalogProbe.ts
 async function catalogProbe(runtime, baseUrl, support, isReady, contextOf = (row) => row.contextTokens) {
   if (!support.supported) return null;
   const fitting = localCatalogFor(runtime).filter((row) => localModelFit(row, support).fits);
-  const ready = await Promise.all(fitting.map((row) => isReady(row).catch(() => false)));
+  const ready = await Promise.all(
+    fitting.map(
+      (row) => isReady(row).catch((e) => {
+        reportPageEngineFailure(runtime, "cache_lookup", e);
+        return false;
+      })
+    )
+  );
   const rows = fitting.filter((_, i) => ready[i]);
   if (rows.length === 0) return null;
   return {
@@ -4913,6 +5289,41 @@ async function catalogProbe(runtime, baseUrl, support, isReady, contextOf = (row
       tools: row.tools,
       contextTokens: contextOf(row)
     }))
+  };
+}
+
+// src/pageEngines/residentModel.ts
+var settled = () => void 0;
+function createResidentModel(create) {
+  let engine;
+  let resident;
+  let tail = Promise.resolve();
+  return {
+    acquire(id, load) {
+      const run = tail.then(async () => {
+        engine ??= await create();
+        if (resident !== id) {
+          const previous = resident;
+          resident = void 0;
+          await load(engine, previous);
+          resident = id;
+        }
+        return engine;
+      });
+      tail = run.then(settled, settled);
+      return run;
+    },
+    get engine() {
+      return engine;
+    },
+    get resident() {
+      return resident;
+    },
+    evict(id) {
+      if (resident !== id || !engine) return void 0;
+      resident = void 0;
+      return engine;
+    }
   };
 }
 
@@ -4942,31 +5353,22 @@ var UNSUPPORTED = { supported: false, reason: "bfi_unavailable", f16: false, max
 function createBfiEngine(options) {
   let module;
   const bfi = () => module ??= options.loadBfi();
-  const support = () => bfi().then((m) => m.BfiEngine.support()).catch(() => UNSUPPORTED);
-  let engine;
-  let resident;
+  const support = () => bfi().then((m) => m.BfiEngine.support()).catch((e) => {
+    reportPageEngineFailure("bfi", "support", e);
+    return UNSUPPORTED;
+  });
+  const resident = createResidentModel(async () => (await bfi()).BfiEngine.create());
   const served = /* @__PURE__ */ new Map();
-  let queue = Promise.resolve();
-  const residentEngine = (row) => {
-    const run = queue.then(async () => {
-      engine ??= await (await bfi()).BfiEngine.create();
-      if (resident !== row.ref) {
-        if (resident) engine.unload();
-        resident = void 0;
-        const { stream, bytes } = await options.store.open(row.ref);
-        const info = await engine.load(stream, bytes);
-        resident = row.ref;
-        if (info.contextTokens > 0 && served.get(row.ref) !== info.contextTokens) {
-          served.set(row.ref, info.contextTokens);
-          prober.invalidate();
-        }
-      }
-      return engine;
-    });
-    queue = run.catch(() => void 0);
-    return run;
-  };
-  const prober = memoizedProbe(async () => {
+  const residentEngine = (row) => resident.acquire(row.ref, async (engine, previous) => {
+    if (previous) engine.unload();
+    const { stream, bytes } = await options.store.open(row.ref);
+    const info = await engine.load(stream, bytes);
+    if (info.contextTokens > 0 && served.get(row.ref) !== info.contextTokens) {
+      served.set(row.ref, info.contextTokens);
+      prober.invalidate();
+    }
+  });
+  const prober = memoizedProbe("bfi", async () => {
     const rows = localCatalogFor("bfi");
     const states = await Promise.all(rows.map((row) => options.store.status(row.ref)));
     const ready = new Set(rows.filter((_, i) => states[i] === "ready").map((row) => row.ref));
@@ -5028,7 +5430,8 @@ async function* bfiChunks(engine, requestJson, signal) {
       try {
         queue.push(JSON.parse(json));
         notify();
-      } catch {
+      } catch (e) {
+        reportPageEngineFailure("bfi", "chunk", e);
       }
     },
     controller.signal
@@ -5052,9 +5455,9 @@ async function* bfiChunks(engine, requestJson, signal) {
       if (state.outcome) break;
       await new Promise((resolve) => wake = resolve);
     }
-    const settled = state.outcome;
-    if (!settled.ok) throw signal?.aborted ? abortReason(signal) : bfiError(settled.error);
-    const closing = closingChunk(settled.final);
+    const settled2 = state.outcome;
+    if (!settled2.ok) throw signal?.aborted ? abortReason(signal) : bfiError(settled2.error);
+    const closing = closingChunk(settled2.final);
     if (closing) yield closing;
   } finally {
     signal?.removeEventListener("abort", onAbort);
@@ -5093,14 +5496,15 @@ function createHfModelStore(options = {}) {
     async status(ref) {
       try {
         return await entry(ref) ? "ready" : "absent";
-      } catch {
+      } catch (e) {
+        reportPageEngineFailure("bfi", "cache_lookup", e);
         return "absent";
       }
     },
     async download(ref, onProgress, signal) {
       const row = hfRow(ref);
       const url = urlOf(ref);
-      await globalThis.navigator?.storage?.persist?.().catch(() => false);
+      await globalThis.navigator?.storage?.persist?.().catch((e) => reportPageEngineFailure("bfi", "persist", e));
       const res = await fetchImpl(url, { credentials: "omit", ...signal ? { signal } : {} });
       if (!res.ok || !res.body) throw new Error(`download_failed: HTTP ${res.status}`);
       const total = Number(res.headers.get("content-length")) || row.bytes;
@@ -5140,100 +5544,13 @@ function createHfModelStore(options = {}) {
   };
 }
 
-// src/pageEngines/modelStore.ts
-function backendFor(row, options) {
-  const { hf, webllm: webllm2 } = options;
-  if (row.source.kind === "hf-file") {
-    return hf ? {
-      ready: async (r) => await hf.status(r.ref) === "ready",
-      download: (r, onProgress, signal) => hf.download(r.ref, onProgress, signal),
-      remove: (r) => hf.remove(r.ref)
-    } : void 0;
-  }
-  const { modelId } = row.source;
-  return webllm2 ? {
-    ready: () => webllm2.has(modelId),
-    download: (_r, onProgress, signal) => webllm2.download(modelId, onProgress, signal),
-    remove: () => webllm2.remove(modelId)
-  } : void 0;
-}
-function createLocalModelStore(options) {
-  const catalog = options.catalog ?? LOCAL_MODEL_CATALOG;
-  const listeners = /* @__PURE__ */ new Set();
-  const inFlight = /* @__PURE__ */ new Map();
-  const emit2 = () => {
-    for (const listener of listeners) listener();
-  };
-  const changed = () => {
-    for (const engine of options.engines ?? []) engine.invalidate();
-    emit2();
-  };
-  const rowOf = (ref) => {
-    const row = catalog.find((m) => m.ref === ref);
-    if (!row) throw new Error(`unknown_model: ${ref}`);
-    return row;
-  };
-  async function describe(row, supports) {
-    const pending = inFlight.get(row.ref);
-    if (pending) return { ...row, state: "downloading", progress: pending.progress };
-    const backend = backendFor(row, options);
-    const support = supports.get(row.runtime);
-    if (!backend || !support) return { ...row, state: "unsupported", reason: "engine_unavailable" };
-    const fit = localModelFit(row, support);
-    if (!fit.fits) return { ...row, state: "unsupported", reason: fit.reason };
-    const ready = await backend.ready(row).catch(() => false);
-    return { ...row, state: ready ? "ready" : "absent" };
-  }
-  return {
-    async listLocalModels() {
-      const runtimes = [...new Set(catalog.map((m) => m.runtime))];
-      const answers = await Promise.all(
-        runtimes.map(async (runtime) => {
-          const probe = options.support[runtime];
-          return [runtime, probe ? await probe().catch(() => null) : null];
-        })
-      );
-      const supports = new Map(answers);
-      return Promise.all(catalog.map((row) => describe(row, supports)));
-    },
-    download(ref, onProgress, signal) {
-      const existing = inFlight.get(ref);
-      if (existing) return existing.done;
-      const row = rowOf(ref);
-      const backend = backendFor(row, options);
-      if (!backend) return Promise.reject(new Error(`engine_unavailable: ${row.runtime}`));
-      const entry = { progress: 0, done: Promise.resolve() };
-      entry.done = backend.download(
-        row,
-        (fraction) => {
-          entry.progress = fraction;
-          onProgress?.(fraction);
-          emit2();
-        },
-        signal
-      ).finally(() => {
-        inFlight.delete(ref);
-        changed();
-      });
-      inFlight.set(ref, entry);
-      emit2();
-      return entry.done;
-    },
-    async remove(ref) {
-      const row = rowOf(ref);
-      await backendFor(row, options)?.remove(row);
-      changed();
-    },
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    }
-  };
-}
-
 // src/pageEngines/webgpu.ts
 var UNSUPPORTED2 = (reason) => ({ supported: false, reason, f16: false, maxBufferBytes: 0 });
-async function webGpuSupport(gpu = globalThis.navigator?.gpu) {
+var pageGpu = () => globalThis.navigator?.gpu;
+function hasWebGPU() {
+  return pageGpu() != null;
+}
+async function webGpuSupport(gpu = pageGpu()) {
   if (!gpu) return UNSUPPORTED2("webgpu_missing");
   try {
     const adapter = await gpu.requestAdapter();
@@ -5282,32 +5599,21 @@ function createWebLlmEngine(options = {}) {
   const support = options.support ?? (() => webGpuSupport());
   let module;
   const webllm2 = () => module ??= load();
-  let engine;
-  let resident;
-  let queue = Promise.resolve();
-  const residentEngine = (modelId, onProgress) => {
-    const run = queue.then(async () => {
-      if (!engine) {
-        const lib = await webllm2();
-        engine = options.workerUrl ? new lib.WebWorkerMLCEngine(new Worker(options.workerUrl, { type: "module" })) : new lib.MLCEngine();
-      }
-      if (resident !== modelId) {
-        engine.setInitProgressCallback((r) => onProgress?.(r.progress));
-        resident = void 0;
-        await engine.reload(modelId);
-        resident = modelId;
-      }
-      return engine;
-    });
-    queue = run.catch(() => void 0);
-    return run;
-  };
+  const resident = createResidentModel(async () => {
+    const lib = await webllm2();
+    return options.workerUrl ? new lib.WebWorkerMLCEngine(new Worker(options.workerUrl, { type: "module" })) : new lib.MLCEngine();
+  });
+  const residentEngine = (modelId, onProgress) => resident.acquire(modelId, async (engine) => {
+    engine.setInitProgressCallback((r) => onProgress?.(r.progress));
+    await engine.reload(modelId);
+  });
   const cached2 = async (modelId) => {
     const storage = options.caches ?? globalThis.caches;
     if (storage && !await storage.has(WEBLLM_MODEL_CACHE)) return false;
     return (await webllm2()).hasModelInCache(modelId);
   };
   const prober = memoizedProbe(
+    "webllm",
     async () => catalogProbe("webllm", WEBLLM_ENGINE_BASE_URL, await support(), (row) => cached2(row.model)),
     options
   );
@@ -5317,7 +5623,10 @@ function createWebLlmEngine(options = {}) {
     if (!row) throw new PageEngineError(404, "model_not_found");
     if (hasTools(body) && !row.tools) throw new PageEngineError(400, "tools_unsupported");
     const messages = toWebLlmMessages(body.messages);
-    if (!await cached2(modelId).catch(() => false)) throw new PageEngineError(503, "model_not_downloaded");
+    const ready = await cached2(modelId).catch((e) => {
+      throw new PageEngineError(503, "webllm_cache_unreadable", errorMessage(e));
+    });
+    if (!ready) throw new PageEngineError(503, "model_not_downloaded");
     if (signal?.aborted) throw abortReason(signal);
     let live2;
     try {
@@ -5334,10 +5643,11 @@ function createWebLlmEngine(options = {}) {
     return interruptible(await live2.chat.completions.create(request), live2, signal);
   }
   const models = {
-    has: (modelId) => cached2(modelId).catch(() => false),
+    // A failed lookup rejects: the model store reads it (and reports why) per row.
+    has: (modelId) => cached2(modelId),
     async download(modelId, onProgress, signal) {
       if (signal?.aborted) throw abortReason(signal);
-      const onAbort = () => void engine?.unload().catch(() => void 0);
+      const onAbort = () => void resident.engine?.unload().catch((e) => reportPageEngineFailure("webllm", "unload", e));
       signal?.addEventListener("abort", onAbort, { once: true });
       try {
         await residentEngine(modelId, onProgress);
@@ -5349,10 +5659,7 @@ function createWebLlmEngine(options = {}) {
       prober.invalidate();
     },
     async remove(modelId) {
-      if (resident === modelId && engine) {
-        await engine.unload();
-        resident = void 0;
-      }
+      await resident.evict(modelId)?.unload();
       await (await webllm2()).deleteModelAllInfoInCache(modelId);
       prober.invalidate();
     }
@@ -5391,15 +5698,6 @@ function createPageEngineSet(options = {}) {
     probe: (probeOptions) => probePageEngines(engines, probeOptions),
     fetch: (base) => pageEnginesFetch(engines, base)
   };
-}
-
-// src/pageEngines/pageRuntimePin.ts
-function pageRuntimePin(ref) {
-  const pin = parseLocalModelRef(ref);
-  if (!pin) return null;
-  const runtime = localRuntime(pin.provider);
-  if (runtime.reach !== "page" || !runtime.defaultBaseUrl) return null;
-  return { ...pin, endpoint: { baseUrl: runtime.defaultBaseUrl } };
 }
 
 // src/readOnlyShell.ts
@@ -6438,7 +6736,9 @@ function deriveChatTitle(text) {
 }
 function useBrainChats(options = {}) {
   const { persistence } = useBrainConfig();
-  const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange } = options;
+  const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange, placeholderTitles } = options;
+  const placeholdersRef = useRef4(placeholderTitles);
+  placeholdersRef.current = placeholderTitles;
   const [chats, setChats] = useState5([]);
   const [loading, setLoading] = useState5(true);
   const [error, setError] = useState5("");
@@ -6556,7 +6856,7 @@ function useBrainChats(options = {}) {
   const autoTitle = useCallback4(async (id, firstUserText) => {
     if (autoTitledRef.current.has(id)) return;
     const chat = chatsRef.current.find((c) => c.id === id);
-    if (chat && chat.title && chat.title !== DEFAULT_CHAT_TITLE) return;
+    if (chat && chat.title && chat.title !== DEFAULT_CHAT_TITLE && !placeholdersRef.current?.includes(chat.title)) return;
     const title = deriveChatTitle(firstUserText);
     if (!title) return;
     autoTitledRef.current.add(id);
@@ -7073,6 +7373,7 @@ var STUDIO_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
   "canvas_write_build_file",
   "canvas_edit_build_file",
   "canvas_read_build_diagnostics",
+  "canvas_read_preview_console",
   "canvas_list_build_file_history",
   "canvas_restore_build_file",
   // Install / build / type-check / test in the browser runtime: "does it build?" shares
@@ -8460,7 +8761,426 @@ function ratedTurnContext(messages, messageId) {
   };
 }
 
-// ../packages/write-outbox/src/outbox.ts
+// src/runDriver.ts
+var installed = null;
+function installRunDriver(driver) {
+  installed = driver;
+}
+function getRunDriver() {
+  return installed;
+}
+
+// src/lastResolvedModel.ts
+var MAX_CHATS = 64;
+var byChat = /* @__PURE__ */ new Map();
+function setLastResolvedModel(chatId, model) {
+  const trimmed = typeof model === "string" ? model.trim() : "";
+  if (!trimmed) return;
+  byChat.delete(chatId);
+  byChat.set(chatId, trimmed);
+  if (byChat.size > MAX_CHATS) {
+    const oldest = byChat.keys().next();
+    if (!oldest.done) byChat.delete(oldest.value);
+  }
+}
+function getLastResolvedModel(chatId) {
+  return byChat.get(chatId);
+}
+function forgetResolvedModels() {
+  byChat.clear();
+}
+var CURRENT_MODEL_TOOLS = /* @__PURE__ */ new Set(["session.current_model", "builtin_session_current_model"]);
+function withObservedModel(chatId, tool, args) {
+  if (!CURRENT_MODEL_TOOLS.has(tool)) return args;
+  const observed = getLastResolvedModel(chatId);
+  if (!observed) return args;
+  const supplied = args ?? {};
+  if (typeof supplied.model === "string" && supplied.model.trim()) return args;
+  return { ...supplied, model: observed };
+}
+
+// src/memorySavings.ts
+function callMemoryEffect(trimmedTokens, recallTokens) {
+  const t = Math.max(0, Math.round(trimmedTokens));
+  const r = Math.max(0, Math.round(recallTokens));
+  return t > 0 || r > 0 ? { trimmedTokens: t, recallTokens: r } : void 0;
+}
+function emptyRunUsage() {
+  return { promptTokens: 0, completionTokens: 0, model: null };
+}
+
+// src/runStore/runCell.ts
+var EMPTY_SNAPSHOT = {
+  running: false,
+  streamingText: "",
+  error: "",
+  errorAction: null,
+  pendingConfirm: null,
+  messagesEpoch: 0,
+  appended: [],
+  hasTrace: false,
+  trace: [],
+  activity: null,
+  byoUnresolved: [],
+  providerCap: []
+};
+function makeCell() {
+  return {
+    transcript: [],
+    priorResearch: null,
+    trace: [],
+    running: false,
+    streamingText: "",
+    error: "",
+    errorAction: null,
+    pendingConfirm: null,
+    confirmResolver: null,
+    appended: [],
+    messagesEpoch: 0,
+    listeners: /* @__PURE__ */ new Set(),
+    emitTimer: null,
+    abort: null,
+    activity: null,
+    byoUnresolved: [],
+    providerCap: [],
+    codeChanged: false,
+    codeModel: null,
+    codePhaseReached: false,
+    runId: "",
+    ticketRecorded: false,
+    touchedFiles: [],
+    deltaTicketId: null,
+    deltaRecordedFiles: [],
+    runTraceFrom: 0,
+    persistStep: null,
+    compactMemo: null,
+    runUsage: emptyRunUsage(),
+    lastServedModel: null,
+    liveTurn: null,
+    stoppedTurn: null,
+    snapshot: EMPTY_SNAPSHOT
+  };
+}
+
+// src/runStore/runCells.ts
+var cells = /* @__PURE__ */ new Map();
+var storeListeners = /* @__PURE__ */ new Set();
+var MAX_CELLS = 50;
+var MAX_TRACE_EVENTS = 500;
+var MAX_APPENDED = 50;
+function getCell(chatId) {
+  const existing = cells.get(chatId);
+  if (existing) {
+    cells.delete(chatId);
+    cells.set(chatId, existing);
+    return existing;
+  }
+  const c = makeCell();
+  cells.set(chatId, c);
+  evictIdleCells(chatId);
+  return c;
+}
+function evictIdleCells(protectId) {
+  if (cells.size <= MAX_CELLS) return;
+  for (const [id, cell] of cells) {
+    if (cells.size <= MAX_CELLS) break;
+    if (id === protectId || cell.running || cell.listeners.size > 0) continue;
+    cells.delete(id);
+  }
+}
+var STREAM_EMIT_MS = 32;
+function emitStreaming(c) {
+  if (c.emitTimer) return;
+  c.emitTimer = setTimeout(() => {
+    c.emitTimer = null;
+    emit(c);
+  }, STREAM_EMIT_MS);
+}
+function emit(c) {
+  if (c.emitTimer) {
+    clearTimeout(c.emitTimer);
+    c.emitTimer = null;
+  }
+  c.snapshot = {
+    running: c.running,
+    streamingText: c.streamingText,
+    error: c.error,
+    errorAction: c.errorAction,
+    pendingConfirm: c.pendingConfirm,
+    messagesEpoch: c.messagesEpoch,
+    appended: c.appended,
+    hasTrace: c.trace.length > 0,
+    trace: c.trace,
+    activity: c.activity,
+    byoUnresolved: c.byoUnresolved,
+    providerCap: c.providerCap
+  };
+  for (const l of c.listeners) l();
+  for (const l of storeListeners) l();
+}
+function setActivity(c, activity) {
+  c.activity = activity;
+  emit(c);
+}
+function pushTrace(c, ev) {
+  c.trace.push(ev);
+  c.persistStep?.(ev);
+  if (c.trace.length > MAX_TRACE_EVENTS) {
+    const dropped = c.trace.length - MAX_TRACE_EVENTS;
+    c.trace.splice(0, dropped);
+    c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
+  }
+  emit(c);
+}
+function runTrace(c) {
+  return c.trace.slice(c.runTraceFrom);
+}
+function recordRunFailure(c, label, message) {
+  const last = runTrace(c).at(-1);
+  if (last?.isError && typeof last.result === "string" && last.result.endsWith(message)) return;
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "error",
+    label,
+    result: message,
+    isError: true
+  });
+}
+function recordAppended(c, msg) {
+  const next = [...c.appended, msg];
+  c.appended = next.length > MAX_APPENDED ? next.slice(next.length - MAX_APPENDED) : next;
+  c.messagesEpoch += 1;
+}
+function nowMs2() {
+  return typeof Date !== "undefined" ? Date.now() : 0;
+}
+function nowIso() {
+  return typeof Date !== "undefined" ? (/* @__PURE__ */ new Date()).toISOString() : "";
+}
+function accrueProviders(c, field, raw) {
+  if (!raw) return;
+  const before = c[field].length;
+  const next = new Set(c[field]);
+  for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
+  if (next.size !== before) c[field] = [...next];
+}
+function accrueByoUnresolved(c, raw) {
+  accrueProviders(c, "byoUnresolved", raw);
+}
+function accrueProviderCap(c, raw) {
+  accrueProviders(c, "providerCap", raw);
+}
+
+// src/runStore/turnPersistence.ts
+function provenanceMetadata(result, requested, base) {
+  const model = result.resolvedModel;
+  if (!model) return withProvenanceMetadata(null, base);
+  const account = asProvenanceAccount(result.account);
+  const asked = requested && requested !== "default" && requested !== model ? requested : void 0;
+  return withProvenanceMetadata({
+    model,
+    ...account ? { account } : {},
+    ...asked ? { requestedModel: asked } : {}
+  }, base);
+}
+async function persistMidTurnText(chatId, c, persistence, result, requested) {
+  const text = canonicalTurnText(result.text);
+  if (!text) return;
+  const metadata = provenanceMetadata(result, requested, { [MID_TURN_META_KEY]: true });
+  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...metadata ? { metadata } : {} }]);
+  recordAppended(c, msg);
+}
+function canonicalTurnText(text) {
+  const { content, reasoning } = splitVendorReasoning({ content: text });
+  return canonicalReasoningText(content, reasoning);
+}
+function persistStep(chatId, persistence, ev) {
+  void persistence.sendMessages(chatId, [stepRow(ev)]).catch(() => {
+  });
+}
+function stoppedTurnOf(c) {
+  const live2 = c.liveTurn;
+  const text = live2 ? c.streamingText : "";
+  const model = live2?.model;
+  const result = !live2 ? "Stopped by user." : model ? `Stopped by user while ${model} was streaming (${text.length} chars kept).` : `Stopped by user before the gateway named the model (${text.length} chars kept).`;
+  return {
+    text,
+    source: { ...live2 },
+    event: {
+      ts: nowIso(),
+      category: "message",
+      label: STOPPED_TURN_STEP,
+      ...model ? { args: { model } } : {},
+      ...live2 ? { textChars: text.length } : {},
+      result
+    }
+  };
+}
+async function keepStoppedTurn(chatId, c, persistence) {
+  const stopped = c.stoppedTurn;
+  c.stoppedTurn = null;
+  if (!stopped) return;
+  const text = canonicalTurnText(stopped.text);
+  if (!text) return;
+  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: stoppedTurnMetadata(stopped.source) }]);
+  if (msg) recordAppended(c, msg);
+}
+async function asLiveTurn(c, complete) {
+  c.liveTurn = {};
+  try {
+    return await complete();
+  } finally {
+    c.liveTurn = null;
+  }
+}
+function liveTurnModel(c) {
+  return (model, account) => {
+    if (c.liveTurn) c.liveTurn = { model, account };
+  };
+}
+function connectRetryStep(c, step) {
+  return (attempt, delayMs, reason) => {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "llm.connect_retry",
+      args: { step, attempt },
+      result: `Could not reach BuilderForce (${reason}). Trying again in ${Math.round(delayMs / 1e3)}s \u2014 nothing was sent, so nothing is repeated.`
+    });
+  };
+}
+
+// src/runStore/runControl.ts
+function resetBrainRunStore() {
+  cells.clear();
+  forgetResolvedModels();
+}
+function subscribeRunStore(listener) {
+  storeListeners.add(listener);
+  return () => {
+    storeListeners.delete(listener);
+  };
+}
+function getGlobalRunState() {
+  const running = [];
+  const awaiting = [];
+  for (const [id, cell] of cells) {
+    if (cell.pendingConfirm) awaiting.push(id);
+    else if (cell.running) running.push(id);
+  }
+  return { running, awaiting };
+}
+function subscribeRun(chatId, listener) {
+  const c = getCell(chatId);
+  c.listeners.add(listener);
+  return () => {
+    c.listeners.delete(listener);
+  };
+}
+function runAbortSignal(chatId) {
+  return cells.get(chatId)?.abort?.signal;
+}
+function appendRunMessage(chatId, msg) {
+  const c = cells.get(chatId);
+  if (!c) return;
+  recordAppended(c, msg);
+  emit(c);
+}
+function getRunSnapshot(chatId) {
+  if (chatId == null) return EMPTY_SNAPSHOT;
+  return cells.get(chatId)?.snapshot ?? EMPTY_SNAPSHOT;
+}
+function isRunning(chatId) {
+  return chatId != null && (cells.get(chatId)?.running ?? false);
+}
+function getRunTrace(chatId) {
+  if (chatId == null) return [];
+  return cells.get(chatId)?.trace ?? [];
+}
+function stopRun(chatId) {
+  const driver = getRunDriver();
+  if (driver) return driver.stop(chatId);
+  const c = cells.get(chatId);
+  if (!c || !c.running) return;
+  const stopped = stoppedTurnOf(c);
+  c.stoppedTurn = stopped;
+  c.abort?.abort();
+  if (c.confirmResolver) {
+    const resolve = c.confirmResolver;
+    c.confirmResolver = null;
+    c.pendingConfirm = null;
+    resolve(false);
+  }
+  c.streamingText = "";
+  c.activity = null;
+  pushTrace(c, stopped.event);
+}
+function clearRunError(chatId) {
+  if (chatId == null) return;
+  const driver = getRunDriver();
+  if (driver) return driver.clearError(chatId);
+  const c = cells.get(chatId);
+  if (!c || !c.error) return;
+  c.error = "";
+  c.errorAction = null;
+  emit(c);
+}
+function requestRunConfirm(chatId, req, opts) {
+  if (getRunDriver()) return Promise.resolve(false);
+  const c = getCell(chatId);
+  return new Promise((resolve) => {
+    c.pendingConfirm = { name: req.name, args: req.args };
+    c.confirmResolver = resolve;
+    c.activity = {
+      ...toolActivity(req.name, req.args, opts?.step ?? c.activity?.step ?? 0, Date.now()),
+      phase: "awaiting"
+    };
+    emit(c);
+  });
+}
+function resolveRunConfirm(chatId, ok) {
+  const driver = getRunDriver();
+  if (driver) return driver.confirm(chatId, ok);
+  const c = cells.get(chatId);
+  if (!c || !c.confirmResolver) return;
+  const resolve = c.confirmResolver;
+  c.confirmResolver = null;
+  c.pendingConfirm = null;
+  emit(c);
+  resolve(ok);
+}
+function applyRemoteRun(chatId, snapshot) {
+  const c = getCell(chatId);
+  if (c.abort) return;
+  c.running = snapshot.running;
+  c.streamingText = snapshot.streamingText;
+  c.error = snapshot.error;
+  c.errorAction = snapshot.errorAction;
+  c.pendingConfirm = snapshot.pendingConfirm;
+  c.messagesEpoch = snapshot.messagesEpoch;
+  c.appended = snapshot.appended;
+  c.trace = snapshot.trace;
+  c.runTraceFrom = 0;
+  c.activity = snapshot.activity;
+  c.byoUnresolved = snapshot.byoUnresolved;
+  c.providerCap = snapshot.providerCap;
+  emit(c);
+}
+
+// ../packages/write-outbox/src/idempotency.ts
+var fallbackCounter = 0;
+function defaultId() {
+  const c = globalThis.crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  fallbackCounter += 1;
+  return `ob-${Date.now().toString(36)}-${fallbackCounter.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+function batchIdempotencyKey(batch) {
+  const head = batch[0];
+  return head ? head.batch ?? head.id : void 0;
+}
+
+// ../packages/write-outbox/src/policy.ts
 var OUTBOX_MAX_ITEMS = 25;
 var OUTBOX_MAX_WAIT_MS = 5e3;
 var OUTBOX_MAX_ENTRIES = 1e3;
@@ -8471,14 +9191,51 @@ function isPermanentHttpFailure(error) {
   if (typeof status2 !== "number") return false;
   return status2 >= 400 && status2 < 500 && ![401, 408, 409, 425, 429].includes(status2);
 }
-var fallbackCounter = 0;
-function defaultId() {
-  const c = globalThis.crypto;
-  if (c?.randomUUID) return c.randomUUID();
-  fallbackCounter += 1;
-  return `ob-${Date.now().toString(36)}-${fallbackCounter.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
+
+// ../packages/write-outbox/src/sealedBatch.ts
 var bySeq = (a, b) => a.seq - b.seq;
+function sendable(e, scope) {
+  return scope === void 0 || e.scope === void 0 || e.scope === scope;
+}
+function takeBatch(l, scope, upTo, maxItems) {
+  const due = (e) => e.seq <= upTo && sendable(e, scope);
+  const start = l.entries.findIndex(due);
+  if (start < 0) return null;
+  const head = l.entries[start];
+  let n = 0;
+  const at = (i) => l.entries[start + i];
+  if (head.batch) {
+    while (at(n) && at(n).batch === head.batch) n += 1;
+  } else {
+    while (at(n) && n < maxItems && !at(n).batch && due(at(n))) n += 1;
+  }
+  const batch = l.entries.splice(start, n);
+  const sealed = !head.batch;
+  if (sealed) {
+    for (const e of batch) {
+      e.batch = head.id;
+      if (scope !== void 0) e.scope = scope;
+    }
+  }
+  return { batch, sealed };
+}
+function sendContext(batch) {
+  const head = batch[0];
+  return {
+    idempotencyKey: batchIdempotencyKey(batch),
+    ids: batch.map((e) => e.id),
+    ...head.scope !== void 0 ? { scope: head.scope } : {}
+  };
+}
+function drainContext(taken, scope, newId) {
+  return {
+    idempotencyKey: batchIdempotencyKey(taken) ?? newId(),
+    ids: taken.map((e) => e.id),
+    ...scope ? { scope } : {}
+  };
+}
+
+// ../packages/write-outbox/src/outbox.ts
 function createOutbox(opts) {
   const maxItems = Math.max(1, opts.maxItems ?? OUTBOX_MAX_ITEMS);
   const maxWaitMs = opts.maxWaitMs ?? OUTBOX_MAX_WAIT_MS;
@@ -8551,28 +9308,11 @@ function createOutbox(opts) {
     }
   };
   const currentScope = () => opts.scope ? opts.scope() : void 0;
-  const sendable = (e, scope) => scope === void 0 || e.scope === void 0 || e.scope === scope;
-  const takeBatch = (l, scope, upTo) => {
-    const due = (e) => e.seq <= upTo && sendable(e, scope);
-    const start = l.entries.findIndex(due);
-    if (start < 0) return null;
-    const head = l.entries[start];
-    let n = 0;
-    const at = (i) => l.entries[start + i];
-    if (head.batch) {
-      while (at(n) && at(n).batch === head.batch) n += 1;
-    } else {
-      while (at(n) && n < maxItems && !at(n).batch && due(at(n))) n += 1;
-    }
-    const taken = l.entries.splice(start, n);
-    if (!head.batch) {
-      for (const e of taken) {
-        e.batch = head.id;
-        if (scope !== void 0) e.scope = scope;
-      }
-      persist((s) => s.put(taken));
-    }
-    return taken;
+  const take = (l, scope, upTo) => {
+    const next = takeBatch(l, scope, upTo, maxItems);
+    if (!next) return null;
+    if (next.sealed) persist((s) => s.put(next.batch));
+    return next.batch;
   };
   const clearTimer = (l) => {
     if (l.timer !== null) clearTimeout(l.timer);
@@ -8605,15 +9345,11 @@ function createOutbox(opts) {
   };
   const sendBatch = async (key, l, batch, final) => {
     const items = batch.map((e) => e.item);
-    const ids2 = batch.map((e) => e.id);
+    const ctx = sendContext(batch);
+    const ids2 = ctx.ids;
     l.inFlight += batch.length;
     try {
-      await opts.send(key, opts.coalesce ? opts.coalesce(items) : items, {
-        final,
-        idempotencyKey: batch[0].batch ?? batch[0].id,
-        ids: ids2,
-        ...batch[0].scope !== void 0 ? { scope: batch[0].scope } : {}
-      });
+      await opts.send(key, opts.coalesce ? opts.coalesce(items) : items, { final, ...ctx });
       l.inFlight -= batch.length;
       l.attempt = 0;
       persist((s) => s.remove(ids2));
@@ -8639,7 +9375,7 @@ function createOutbox(opts) {
       if (!isOnline() || scope === null) return Promise.resolve();
       clearTimer(l);
       const batches = [];
-      for (let b = takeBatch(l, scope, upTo); b; b = takeBatch(l, scope, upTo)) batches.push(b);
+      for (let b = take(l, scope, upTo); b; b = take(l, scope, upTo)) batches.push(b);
       return Promise.all(batches.map((b) => sendBatch(key, l, b, true))).then(() => void 0);
     }
     const run = l.tail.then(async () => {
@@ -8658,7 +9394,7 @@ function createOutbox(opts) {
         return;
       }
       clearTimer(l);
-      for (let batch = takeBatch(l, scope, upTo); batch; batch = takeBatch(l, scope, upTo)) {
+      for (let batch = take(l, scope, upTo); batch; batch = take(l, scope, upTo)) {
         if (!await sendBatch(key, l, batch, false)) return;
       }
       if (l.entries.length > 0) armTimer(key, l);
@@ -8715,14 +9451,11 @@ function createOutbox(opts) {
           l.entries = parked;
         }
         const items = taken.map((e) => e.item);
-        const ids2 = taken.map((e) => e.id);
+        const ctx = drainContext(taken, scope, newId);
+        const ids2 = ctx.ids;
         l.inFlight += taken.length;
         try {
-          const result = await request(opts.coalesce && items.length ? opts.coalesce(items) : items, {
-            idempotencyKey: taken[0]?.batch ?? taken[0]?.id ?? newId(),
-            ids: ids2,
-            ...scope ? { scope } : {}
-          });
+          const result = await request(opts.coalesce && items.length ? opts.coalesce(items) : items, ctx);
           l.inFlight -= taken.length;
           if (taken.length) persist((s) => s.remove(ids2));
           return result;
@@ -8911,13 +9644,1241 @@ function batchStepPersistence(base, opts = {}) {
   };
 }
 
-// src/runDriver.ts
-var installed = null;
-function installRunDriver(driver) {
-  installed = driver;
+// src/runOutcomeReport.ts
+function runOutcomeId(chatId, startedAtMs) {
+  return `ide:${chatId}:${startedAtMs}`;
 }
-function getRunDriver() {
-  return installed;
+function codeRunOutcome(args) {
+  if (args.aborted || !args.codeChanged || !args.codeModel || !args.runId) return null;
+  return {
+    clientRunId: args.runId,
+    model: args.codeModel,
+    role: "code",
+    source: "ide",
+    terminalStatus: args.failed ? "failed" : "completed",
+    merged: args.shipped,
+    steps: args.trace.filter((e) => e.label === "llm.complete" && !e.isError).length,
+    ...args.projectId != null ? { projectId: args.projectId } : {}
+  };
+}
+
+// src/shipVerification.ts
+var BASE_BRANCHES = /* @__PURE__ */ new Set(["main", "master"]);
+function parseGitShortStatus(output) {
+  if (!output) return null;
+  const header = output.split("\n").map((l) => l.trim()).find((l) => l.startsWith("##"));
+  if (!header) return null;
+  const body = header.slice(2).trim();
+  if (!body || body.startsWith("HEAD (no branch)")) return { branch: null, upstream: null, ahead: 0, behind: 0 };
+  const ahead = /\bahead (\d+)/.exec(body);
+  const behind = /\bbehind (\d+)/.exec(body);
+  const names = body.replace(/\s*\[.*$/, "").trim();
+  const [branch, upstream] = names.split("...");
+  return {
+    branch: branch?.trim() || null,
+    upstream: upstream?.trim() || null,
+    ahead: ahead ? Number(ahead[1]) : 0,
+    behind: behind ? Number(behind[1]) : 0
+  };
+}
+function gitCommandPattern(verbs) {
+  return new RegExp(`\\bgit\\s+(?:-[Cc]\\s+\\S+\\s+|-\\S+\\s+|--\\S+(?:=\\S+)?\\s+)*(?:${verbs})\\b`, "i");
+}
+var GIT_PUSH = gitCommandPattern("push");
+var GIT_STATUS_CMD = gitCommandPattern("status");
+function commandOf(ev) {
+  const a = ev.args;
+  if (typeof a?.command === "string") return a.command;
+  if (typeof a?.cmd === "string") return a.cmd;
+  return "";
+}
+function outputOf(ev) {
+  const r = ev.result;
+  if (typeof r === "string") return r;
+  if (r && typeof r === "object") {
+    const o = r;
+    if (typeof o.output === "string") return o.output;
+    if (typeof o.stdout === "string") return o.stdout;
+  }
+  return "";
+}
+function succeeded2(ev) {
+  return !ev.isError && !isFailedToolResult(ev.result);
+}
+function isPush(ev) {
+  return ev.label === "git_push" || GIT_PUSH.test(commandOf(ev));
+}
+function dirtyPathsOf(output) {
+  const out = [];
+  for (const raw of output.split("\n")) {
+    const line = raw.replace(/\r$/, "");
+    if (line.length < 4 || line.startsWith("##")) continue;
+    let path = line.slice(3);
+    const arrow = path.indexOf(" -> ");
+    if (arrow >= 0) path = path.slice(arrow + 4);
+    path = path.trim().replace(/^"(.*)"$/, "$1");
+    if (path) out.push(path);
+  }
+  return out;
+}
+function touchedStillDirty(touched, dirty) {
+  const norm = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "");
+  const d = dirty.map(norm);
+  return touched.map(norm).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
+}
+function shippedToBaseBranch(events, opts) {
+  const steps = events.filter((e) => e.category === "tool");
+  let pushedAt = -1;
+  for (let i = 0; i < steps.length; i += 1) {
+    if (succeeded2(steps[i]) && isPush(steps[i])) pushedAt = i;
+  }
+  if (pushedAt < 0) return false;
+  const touched = opts?.touchedFiles ?? [];
+  for (let i = pushedAt; i < steps.length; i += 1) {
+    const ev = steps[i];
+    if (!succeeded2(ev)) continue;
+    const isStatus = i === pushedAt || ev.label === "git_status" || GIT_STATUS_CMD.test(commandOf(ev));
+    if (!isStatus) continue;
+    const output = outputOf(ev);
+    const status2 = parseGitShortStatus(output);
+    if (!status2) continue;
+    if (!(status2.branch && BASE_BRANCHES.has(status2.branch) && status2.upstream && status2.ahead === 0)) continue;
+    if (touched.length > 0 && touchedStillDirty(touched, dirtyPathsOf(output))) continue;
+    return true;
+  }
+  return false;
+}
+
+// src/previewReview.ts
+var REVIEW_RECORD_TOOL = "builtin_reviews_record";
+function previewReviewDirective(chatId) {
+  return `REVIEW YOUR OWN CHANGE \u2014 in this Studio session YOU are its reviewer. The app runs in a live preview in this browser that no other agent can reach, so a ticket you leave "in_review" sits at 75% on the board forever, and dispatching a QA or design agent to review it is not a substitute \u2014 even when agents are invited into this chat, the review of a change THIS session made is yours. When your turn changes the app, finish it in this order:
+1. VERIFY \u2014 \`canvas_read_build_diagnostics\` must show no current failures. Then call \`canvas_inspect_preview\` with the CSS selectors your change targets and the widths the request is about (a phone bug: include the widths it names, or [360, 390, 414]; a desktop layout: the desktop viewport). Read the numbers against what was ASKED, not only the pass/fail: a pill that must hug its label is a few dozen px tall, not the card's height; a mobile menu must not make the page wider than the screen; an image must not cover the headline (\`occludedBy\`). If a width fails, or the measurements show the change did not do what was asked, FIX it and inspect again.
+2. RECORD \u2014 when every width passes and the measurements match the request, record the review with builtin_reviews_record (taskId = the ticket tracking the change \u2014 builtin_chats_list_tickets with chatId=${chatId} lists it; verdict "complete"; a summary that QUOTES the measurements that prove it, e.g. ".character-tag 74\xD723px at 390px; page 390px wide at 390px"). One call per ticket the change delivers. If something the ticket asked for is genuinely not done, record verdict "gaps" with each gap instead of "complete".
+3. CLOSE \u2014 a ticket linked to this chat that has a "complete" review recorded after a passing inspection moves to done (100%) automatically when your turn ends. If the ticket you reviewed is not linked yet, link it with builtin_chats_link_ticket (chatId=${chatId}) first. Report each ticket's verdict with the key measurements.
+Never say a change works or a ticket is done without a passing \`canvas_inspect_preview\` AFTER your last edit. If the preview cannot be inspected (it is not running, or the probe times out), say so plainly and leave the ticket in review \u2014 do not record a "complete" review you could not verify.`;
+}
+function toolEvents(events) {
+  return events.filter((event) => event.category === "tool");
+}
+function lastChangeIndex(events) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (isCodeChangeTool(event.label) && !event.isError && !isFailedToolResult(event.result)) return index;
+  }
+  return -1;
+}
+function isPassingInspection(event) {
+  if (event.label !== PREVIEW_REVIEW_TOOL || event.isError || isFailedToolResult(event.result)) return false;
+  const result = event.result;
+  return result?.passed === true;
+}
+function completeReviewTaskId(event) {
+  if (event.label !== REVIEW_RECORD_TOOL || event.isError || isFailedToolResult(event.result)) return null;
+  const args = event.args ?? {};
+  const recorded = event.result?.verdict ?? args.verdict;
+  if (recorded !== "complete") return null;
+  const taskId = Number(args.taskId);
+  return Number.isInteger(taskId) && taskId > 0 ? taskId : null;
+}
+function ticketsReviewedInPreview(events) {
+  const tools = toolEvents(events);
+  const lastChange = lastChangeIndex(tools);
+  if (lastChange < 0) return [];
+  let inspected = false;
+  const reviewed = /* @__PURE__ */ new Set();
+  for (const event of tools.slice(lastChange + 1)) {
+    if (isPassingInspection(event)) inspected = true;
+    else if (inspected) {
+      const taskId = completeReviewTaskId(event);
+      if (taskId != null) reviewed.add(taskId);
+    }
+  }
+  return [...reviewed];
+}
+function inspectedAfterLastChange(events) {
+  const tools = toolEvents(events);
+  const lastChange = lastChangeIndex(tools);
+  return tools.slice(lastChange + 1).some((event) => event.label === PREVIEW_REVIEW_TOOL);
+}
+function recordedReviewAfterLastChange(events) {
+  const tools = toolEvents(events);
+  const lastChange = lastChangeIndex(tools);
+  return tools.slice(lastChange + 1).some((event) => event.label === REVIEW_RECORD_TOOL && !event.isError);
+}
+var DECLINES_REVIEW = /\b(?:don'?t|do not|never|without)\s+(?:review|verify|inspect|test|close|closing|mark)\w*|\b(?:leave|keep)\s+(?:it|them|the\s+tickets?)\s+(?:open|in\s+review)\b/i;
+function declinesReview(text) {
+  return DECLINES_REVIEW.test(text ?? "");
+}
+function leftChangeUnreviewed(input) {
+  return input.codeChanged && canReviewInPreview(input.toolNames) && !declinesReview(input.requestText) && !(inspectedAfterLastChange(input.events) && recordedReviewAfterLastChange(input.events));
+}
+function unreviewedChangeNudge() {
+  return 'You changed the app in this run and ended the turn without reviewing it. In the Studio you are the reviewer \u2014 nobody else can see this preview, so an unreviewed change parks its ticket in review forever. Finish it now: call `canvas_inspect_preview` with the selectors your change targets and the widths the request is about, check the measurements against what was asked (fix and re-inspect if they fail), then record builtin_reviews_record on each ticket the change delivers \u2014 verdict "complete" quoting the measurements, or "gaps" naming what is missing. A complete review after a passing inspection closes the ticket when your turn ends. If you genuinely cannot verify \u2014 the preview is not running, or the change is unfinished \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
+}
+
+// src/runLineage.ts
+var SUBAGENT_OF_META_KEY = "subagentOf";
+function lineageMetadata(lineage, metadata) {
+  let base = {};
+  if (metadata) {
+    try {
+      const parsed = JSON.parse(metadata);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) base = parsed;
+    } catch {
+    }
+  }
+  return JSON.stringify({
+    ...base,
+    [MID_TURN_META_KEY]: true,
+    [AUTHORED_BY_META_KEY]: { kind: "agent", ref: lineage.agent.ref, name: lineage.agent.name },
+    [SUBAGENT_OF_META_KEY]: { handle: lineage.handle, owner: lineage.ownerName, label: lineage.label }
+  });
+}
+function parseSubagentOrigin(msg) {
+  if (!msg.metadata) return null;
+  try {
+    const o = JSON.parse(msg.metadata)[SUBAGENT_OF_META_KEY];
+    if (o && typeof o.handle === "string" && typeof o.owner === "string") {
+      return { handle: o.handle, owner: o.owner, label: typeof o.label === "string" ? o.label : "" };
+    }
+  } catch {
+  }
+  return null;
+}
+function lineagePersistence(base, lineage, onPersisted) {
+  return {
+    ...base,
+    async sendMessages(chatId, messages) {
+      const saved = await base.sendMessages(
+        chatId,
+        messages.map((m) => ({ ...m, metadata: lineageMetadata(lineage, m.metadata) }))
+      );
+      for (const msg of saved) if (msg.role !== "tool") onPersisted(msg);
+      return saved;
+    }
+  };
+}
+
+// src/runStore/runBackstops.ts
+function attachDeltaToRunTicket(toolName, args, deltaTicketId) {
+  if (toolName !== "builtin_tickets_from_delta" || deltaTicketId == null) return;
+  if (!args || typeof args !== "object" || Array.isArray(args)) return;
+  const bag = args;
+  if (bag.taskId == null) bag.taskId = deltaTicketId;
+}
+async function recordCodeChangeTicket(chatId, c, req, phase) {
+  if (!req.runTool || req.projectId == null) return;
+  const known = new Set(c.deltaRecordedFiles);
+  const files = c.touchedFiles.filter((f) => !known.has(f)).slice(0, 50);
+  if (phase === "settle" && c.deltaTicketId != null && files.length === 0) return;
+  const attachTo = c.deltaTicketId;
+  const summary = files.length ? `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from Brain chat #${chatId}` : `Code change from Brain chat #${chatId}`;
+  const toolStart = nowMs2();
+  const args = {
+    projectId: req.projectId,
+    summary,
+    detail: attachTo != null ? "Auto-captured: further files changed by the same chat, attached to the ticket this run opened." : "Auto-captured: this chat changed code without recording a ticket, so the platform minted one to keep the work visible on the board and linked to the conversation.",
+    files,
+    kind: "improvement",
+    modality: "ide",
+    chatId,
+    ...attachTo != null ? { taskId: attachTo } : {}
+  };
+  let out;
+  try {
+    out = await req.runTool("builtin_tickets_from_delta", args);
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  if (!isFailedToolResult(out)) {
+    c.deltaRecordedFiles = [...c.deltaRecordedFiles, ...files];
+    const id = out?.id;
+    if (c.deltaTicketId == null && typeof id === "number") c.deltaTicketId = id;
+    c.ticketRecorded = true;
+  }
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "tool",
+    label: "builtin_tickets_from_delta",
+    durationMs: nowMs2() - toolStart,
+    args: { ...args, auto: true, phase },
+    result: out ?? null,
+    isError: isFailedToolResult(out)
+  });
+}
+async function updateLinkedTickets(chatId, c, req, select, status2, reason) {
+  if (!req.runTool) return;
+  let listed;
+  try {
+    listed = await req.runTool("builtin_chats_list_tickets", { chatId });
+  } catch {
+    return;
+  }
+  for (const t of select(listed)) {
+    const id = Number(t.ref);
+    if (!Number.isInteger(id)) continue;
+    const toolStart = nowMs2();
+    let out;
+    try {
+      out = await req.runTool("builtin_tasks_update", { id, status: status2 });
+    } catch (e) {
+      out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "tool",
+      label: "builtin_tasks_update",
+      durationMs: nowMs2() - toolStart,
+      args: { id, status: status2, auto: true, reason },
+      result: out ?? null,
+      isError: isFailedToolResult(out)
+    });
+  }
+}
+async function autoLinkCreatedItem(chatId, c, runTool, toolName, out) {
+  const link = workItemLinkFromCreate(toolName, out);
+  if (!link) return;
+  const toolStart = nowMs2();
+  let result;
+  try {
+    result = await runTool("builtin_chats_link_ticket", {
+      chatId,
+      kind: link.kind,
+      ref: link.ref,
+      linkType: link.linkType
+    });
+  } catch (e) {
+    result = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  if (!isFailedToolResult(result)) c.ticketRecorded = true;
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "tool",
+    label: "builtin_chats_link_ticket",
+    durationMs: nowMs2() - toolStart,
+    args: { chatId, kind: link.kind, ref: link.ref, linkType: link.linkType, auto: true },
+    result: result ?? null,
+    isError: isFailedToolResult(result)
+  });
+}
+
+// src/runStore/runMemory.ts
+import { formatEvermindMemoryBlock as formatEvermindMemoryBlock2, countReconciledMemories } from "@seanhogg/builderforce-memory/evermind";
+
+// src/runStore/convoText.ts
+function latestUserText(convo) {
+  for (let i = convo.length - 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m.role !== "user") continue;
+    if (typeof m.content === "string") return m.content.trim();
+    if (Array.isArray(m.content)) {
+      return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
+    }
+    return "";
+  }
+  return "";
+}
+function isFollowUpTurn(convo) {
+  let users = 0;
+  for (const m of convo) {
+    if (m.role === "assistant") return true;
+    if (m.role === "user") users += 1;
+  }
+  return users > 1;
+}
+function lastAssistantText(convo) {
+  for (let i = convo.length - 1; i >= 0; i -= 1) {
+    const m = convo[i];
+    if (m.role === "assistant") return typeof m.content === "string" ? m.content.trim() : "";
+  }
+  return "";
+}
+
+// src/runStore/runMemory.ts
+async function recallForRun(c, convo, evermind) {
+  let recalled = null;
+  if (!evermind?.recall) return { recalled, block: null, blockTokens: 0 };
+  const query = latestUserText(convo);
+  if (!query) return { recalled, block: null, blockTokens: 0 };
+  try {
+    recalled = await evermind.recall(query);
+  } catch {
+    recalled = null;
+  }
+  if (recalled?.seeded && recalled.items.length > 0) {
+    const block = formatEvermindMemoryBlock2(recalled.items);
+    if (block) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "recall",
+        label: "evermind.recall",
+        args: { query, version: recalled.version },
+        result: { count: recalled.items.length, version: recalled.version, mode: recalled.mode, items: recalled.items }
+      });
+      return { recalled, block, blockTokens: transcriptTokens([{ role: "system", content: block }]) };
+    }
+  }
+  return { recalled, block: null, blockTokens: 0 };
+}
+async function answerFromMemory(chatId, c, req, allTools, memoryReplay) {
+  const { evermind, persistence, onActivity, model } = req;
+  const convo = c.transcript;
+  if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return false;
+  const query = latestUserText(convo);
+  if (!query) return false;
+  let memAnswer = null;
+  try {
+    memAnswer = await evermind.answer(query, {
+      toolsAvailable: !!allTools && allTools.length > 0,
+      // What this turn would have run on — the saving a hit records is priced at it.
+      model: model || c.lastServedModel || void 0
+    });
+  } catch {
+    memAnswer = null;
+  }
+  const finalText = canonicalTurnText(memAnswer?.text ?? "");
+  if (!finalText) return false;
+  convo.push({ role: "assistant", content: replayTextOf(finalText) });
+  const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
+  c.streamingText = "";
+  recordAppended(c, assistantMsg);
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "recall",
+    label: memAnswer.source === "evermind" ? "evermind.answer" : "memory.answer",
+    args: { query },
+    result: {
+      source: memAnswer.source,
+      skippedLlm: true,
+      ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {},
+      // WHICH head served it — a project can target several, so without this a
+      // memory hit from a sibling IDE build's Evermind is indistinguishable from
+      // the chat project's own.
+      ...memAnswer.evermindProjectId != null ? { evermindProjectId: memAnswer.evermindProjectId } : {}
+    }
+  });
+  emit(c);
+  onActivity?.(chatId);
+  return true;
+}
+function emitEvermindLearnReconcile(run, assistantMsg, finalText) {
+  const { c, convo, recalled } = run;
+  const evermind = run.req.evermind;
+  const learn = assistantMsg?.evermindLearn;
+  if (learn?.learned) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "learn",
+      label: "evermind.learn",
+      // `targets` carries the per-Evermind breakdown (a project can fan out to many)
+      // so the timeline can name each by id; the renderer falls back to `version` alone.
+      result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
+    });
+    const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
+    if (reconciled > 0) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "reconcile",
+        label: "evermind.reconcile",
+        result: { count: reconciled, version: learn.version }
+      });
+    }
+  } else if (learn && learn.reason && learn.reason !== "too-short") {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "learn",
+      label: "evermind.learn",
+      result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
+    });
+  }
+  if (evermind?.cacheAnswer && run.memoryReplay) {
+    const q = latestUserText(convo);
+    const spent = c.runUsage;
+    const origin = spent.model && spent.promptTokens + spent.completionTokens > 0 ? { model: spent.model, promptTokens: spent.promptTokens, completionTokens: spent.completionTokens } : void 0;
+    if (q) {
+      const cached2 = origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
+      void Promise.resolve(cached2).catch(() => {
+      });
+    }
+  }
+}
+
+// src/planHandoff.ts
+var HAND_OFF_TOOL = "hand_off";
+var FAN_OUT_TOOL = "spawn_agents";
+var FAN_OUT_BATCH = 4;
+var MAX_HAND_OFF_TASKS = 12;
+var TASK_CREATE_TOOL = "builtin_tasks_create";
+var HAND_OFF_TOOL_SPEC = {
+  type: "function",
+  function: {
+    name: HAND_OFF_TOOL,
+    description: "END THE ANALYSIS and hand the work to the coding model(s). You are the planning model: read what you need, then call this ONCE with the tasks \u2014 do NOT edit files yourself. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone \u2014 the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
+    parameters: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "What the analysis concluded, in a few sentences \u2014 the coders read this first." },
+        tasks: {
+          type: "array",
+          minItems: 1,
+          maxItems: MAX_HAND_OFF_TASKS,
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: 'Ticket title, e.g. "Rebuild UserDetailDrawer on SlideOutPanel".' },
+              brief: { type: "string", description: "The complete, standalone instruction: files, the change, the primitives to use." },
+              paths: {
+                type: "array",
+                items: { type: "string" },
+                description: "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
+              },
+              acceptance: { type: "string", description: "How to know it is done (tests, behaviour)." }
+            },
+            required: ["title", "brief"]
+          }
+        }
+      },
+      required: ["summary", "tasks"]
+    }
+  }
+};
+var str = (v) => typeof v === "string" ? v.trim() : "";
+function parseHandOff(args) {
+  const a = args ?? {};
+  const summary = str(a.summary);
+  if (!Array.isArray(a.tasks) || a.tasks.length === 0) {
+    return "hand_off needs { summary, tasks:[{ title, brief, paths? }] } with at least one task";
+  }
+  if (a.tasks.length > MAX_HAND_OFF_TASKS) {
+    return `at most ${MAX_HAND_OFF_TASKS} tasks per hand-off \u2014 merge related slices`;
+  }
+  const tasks = [];
+  for (const [i, raw] of a.tasks.entries()) {
+    const t = raw ?? {};
+    const title = str(t.title);
+    const brief = str(t.brief);
+    if (!title || !brief) return `task ${i + 1} needs both a title and a brief`;
+    const paths = Array.isArray(t.paths) ? t.paths.map(str).filter(Boolean) : [];
+    const acceptance = str(t.acceptance);
+    tasks.push({ title, brief, paths, ...acceptance ? { acceptance } : {} });
+  }
+  return { summary, tasks };
+}
+function ticketDescription(task, summary) {
+  return [
+    task.brief,
+    task.paths.length ? `Paths: ${task.paths.join(", ")}` : "",
+    task.acceptance ? `Done when: ${task.acceptance}` : "",
+    summary ? `Context: ${summary}` : ""
+  ].filter(Boolean).join("\n\n");
+}
+function childTaskBrief(task, summary, ticketId) {
+  return [
+    ticketId != null ? `Ticket #${ticketId}: ${task.title}` : task.title,
+    task.brief,
+    task.paths.length ? `Your slice covers: ${task.paths.join(", ")}. Sibling slices are working beside you on other paths.` : "",
+    task.acceptance ? `Done when: ${task.acceptance}` : "",
+    summary ? `Background (the analysis is finished \u2014 do not redo it): ${summary}` : "",
+    "Make the change now. Read only what the change itself needs. Finish with what you changed and anything outside your slice that must still change."
+  ].filter(Boolean).join("\n\n");
+}
+function canRunInParallel(tasks) {
+  if (tasks.length < 2 || tasks.some((t) => t.paths.length === 0)) return false;
+  return overlappingScopes(tasks.map((t) => ({ label: t.title, paths: t.paths }))) === null;
+}
+function planMessage(plan, ticketIds, parallel) {
+  const lines = plan.tasks.map((t, i) => {
+    const id = ticketIds[i];
+    return `${i + 1}. ${id != null ? `#${id} ` : ""}${t.title}${t.paths.length ? ` \u2014 ${t.paths.join(", ")}` : ""}`;
+  });
+  return [
+    `**Plan \u2014 ${plan.tasks.length} task${plan.tasks.length === 1 ? "" : "s"}**${parallel ? " (running side by side; each reports back here)" : ""}`,
+    plan.summary,
+    lines.join("\n")
+  ].filter(Boolean).join("\n\n");
+}
+function isFailed(out) {
+  if (out == null) return true;
+  if (typeof out !== "object") return false;
+  const o = out;
+  return o.ok === false || typeof o.error === "string" && o.error.length > 0;
+}
+async function call(ports, name, args) {
+  const now = ports.now ?? (() => Date.now());
+  const start = now();
+  let out;
+  try {
+    out = await ports.runTool(name, args);
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  ports.step?.(name, { ...args, auto: true, reason: "hand_off" }, out, now() - start);
+  return out;
+}
+async function fileTickets(plan, ports) {
+  if (ports.projectId == null || !ports.toolNames.has(TASK_CREATE_TOOL)) return plan.tasks.map(() => void 0);
+  const ids2 = [];
+  for (const task of plan.tasks) {
+    const out = await call(ports, TASK_CREATE_TOOL, {
+      projectId: ports.projectId,
+      title: task.title,
+      description: ticketDescription(task, plan.summary),
+      taskType: "task"
+    });
+    const id = !isFailed(out) ? out.id : void 0;
+    ids2.push(typeof id === "number" ? id : void 0);
+    if (!isFailed(out)) await ports.afterCreate?.(TASK_CREATE_TOOL, out).catch(() => void 0);
+  }
+  return ids2;
+}
+function asRecord(out) {
+  if (typeof out === "string") {
+    try {
+      const parsed = JSON.parse(out);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return out && typeof out === "object" ? out : null;
+}
+var INLINE_NEXT = "HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order \u2014 do not re-plan or re-read what the planner already read. After each task, verify it, then move to the next. When all are done, build and test, commit and push, and report per ticket.";
+var PARALLEL_NEXT = "HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. The children had no shell and no git. You are the coding model: verify the combined change (build and test), fix what the slices broke between them and anything they said was outside their paths, implement any task that failed, then commit, push and report per ticket.";
+var BACKGROUND_NEXT = "HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name; the children have no shell and no git. You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives), verify the combined change (build and test), fix what the slices broke between them, implement any task that failed, then commit, push and report per ticket.";
+async function executeHandOff(plan, ports) {
+  const ids2 = await fileTickets(plan, ports);
+  const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...ids2[i] != null ? { id: ids2[i] } : {} }));
+  const parallel = ports.toolNames.has(FAN_OUT_TOOL) && canRunInParallel(plan.tasks);
+  await ports.postPlan?.(planMessage(plan, ids2, parallel)).catch(() => void 0);
+  if (parallel) {
+    const workstreams = [];
+    const changed = /* @__PURE__ */ new Set();
+    const placeholders = [];
+    let fanOutOk = true;
+    let background = false;
+    for (let start = 0; start < plan.tasks.length; start += FAN_OUT_BATCH) {
+      const batch = plan.tasks.slice(start, start + FAN_OUT_BATCH);
+      const out = asRecord(await call(ports, FAN_OUT_TOOL, {
+        workstreams: batch.map((t, k) => {
+          const id = ids2[start + k];
+          return {
+            label: id != null ? `#${id} ${t.title}` : t.title,
+            task: childTaskBrief(t, plan.summary, id),
+            role: "code",
+            ...id != null ? { ticket: String(id) } : {}
+          };
+        })
+      }));
+      const started = Array.isArray(out?.agents) ? out.agents : Array.isArray(out?.workstreams) ? out.workstreams : null;
+      if (!out || out.ok === false && !started) {
+        if (start === 0) {
+          fanOutOk = false;
+          break;
+        }
+        workstreams.push({ ok: false, error: typeof out?.error === "string" ? out.error : "fan-out failed", tasks: batch.map((t) => t.title) });
+        continue;
+      }
+      if (started) workstreams.push(...started);
+      if (out.running === true) background = true;
+      if (Array.isArray(out.changedFiles)) {
+        for (const f of out.changedFiles) if (typeof f === "string") changed.add(f);
+      }
+      if (Array.isArray(out.placeholders)) placeholders.push(...out.placeholders);
+    }
+    if (fanOutOk) {
+      return {
+        ok: true,
+        mode: "parallel",
+        tickets,
+        workstreams,
+        ...changed.size ? { changedFiles: [...changed] } : {},
+        ...placeholders.length ? { placeholders } : {},
+        next: background ? BACKGROUND_NEXT : PARALLEL_NEXT
+      };
+    }
+  }
+  return {
+    ok: true,
+    mode: "inline",
+    tickets,
+    next: `${INLINE_NEXT}
+
+${plan.tasks.map((t, i) => `${i + 1}. ${ids2[i] != null ? `#${ids2[i]} ` : ""}${t.title}
+${childTaskBrief(t, plan.summary, ids2[i])}`).join("\n\n")}`
+  };
+}
+
+// src/turnOptimization.ts
+var MAX_ROUTING_QUERY_CHARS = 4e3;
+var ROUTING_USER_TURNS = 4;
+function textContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.filter((part) => part.type === "text").map((part) => part.text).join("\n");
+}
+function routingQueryForTurn(messages) {
+  const turns = messages.filter((message) => message.role === "user").map((message) => textContent(message.content).trim()).filter(Boolean).slice(-ROUTING_USER_TURNS);
+  return turns.join("\n").slice(-MAX_ROUTING_QUERY_CHARS);
+}
+function turnOptimizationDirective() {
+  return [
+    "TURN OPERATING CONTRACT:",
+    "\u2022 Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.",
+    "\u2022 Treat corrections and \u201Cactually\u2026\u201D follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.",
+    "\u2022 Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.",
+    "\u2022 In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.",
+    "\u2022 For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.",
+    "\u2022 Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.",
+    "\u2022 Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.",
+    "\u2022 Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
+  ].join("\n");
+}
+
+// src/selfReviewShip.ts
+function selfReviewShipDirective(chatId) {
+  return 'SHIP YOUR OWN CHANGE \u2014 in this session YOU are its reviewer. This is a local editor session: no other agent or reviewer can ever reach a change you leave in the working tree, so a ticket you leave "in_review" sits at 75% on the board forever. When your turn changes code, finish it in this order:\n1. VERIFY \u2014 run the type-check / tests / build that cover what you touched (`run_command`) and fix whatever fails.\n2. SELF-REVIEW \u2014 read your own diff with `git_diff` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change \u2014 builtin_chats_list_tickets with chatId=' + chatId + ' lists it; verdict "complete"; a one-paragraph summary of what you checked).\n3. SHIP \u2014 `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval \u2014 that approval is their review of your review, so do not ask for it in prose as well.\n4. CLOSE \u2014 the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\nExceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error \u2014 never claim a change shipped when it did not.';
+}
+var PUBLISH_TOOLS = /* @__PURE__ */ new Set(["git_commit", "git_push", "open_pull_request"]);
+var RAW_PUBLISH = gitCommandPattern("commit|push");
+function attemptedPublish(events) {
+  return events.some(
+    (e) => e.category === "tool" && (PUBLISH_TOOLS.has(e.label) || RAW_PUBLISH.test(commandOf(e)))
+  );
+}
+var DECLINES_SHIPPING = /\b(?:don'?t|do not|never|without)\s+(?:commit|push|ship|merg)\w*|\b(?:no|skip)\s+(?:commit|push)\w*|\b(?:leave|keep)\s+(?:it|them|this|the\s+(?:change|changes|edits?))\s+(?:uncommitted|unstaged|local(?:ly)?)\b/i;
+function declinesShipping(text) {
+  return DECLINES_SHIPPING.test(text ?? "");
+}
+function leftChangeUnshipped(input) {
+  return input.codeChanged && canShipHere(input.toolNames) && asksForChange(input.requestText) && !declinesShipping(input.requestText) && !attemptedPublish(input.events);
+}
+function unshippedChangeNudge() {
+  return 'You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer \u2014 no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now: verify it (`run_command` for the type-check / tests that cover it), self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it, then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true). If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead. If you genuinely cannot ship \u2014 the change is unfinished, or verification fails and you cannot fix it \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
+}
+
+// src/restatedReply.ts
+var RESTATED_MIN_WORDS = 40;
+var RESTATED_CONTAINMENT = 0.6;
+function textOf(content) {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ");
+  }
+  return "";
+}
+function previousReplyText(convo) {
+  let i = convo.length - 1;
+  while (i >= 0 && convo[i].role !== "user") i--;
+  for (i -= 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m.role === "user") return "";
+    if (m.role === "assistant") {
+      const text = textOf(m.content).trim();
+      if (text) return text;
+    }
+  }
+  return "";
+}
+function shingles(text) {
+  const words2 = text.toLowerCase().replace(/[^a-z0-9#\s]+/g, " ").split(/\s+/).filter(Boolean);
+  const out = /* @__PURE__ */ new Set();
+  for (let i = 0; i + 2 < words2.length; i++) out.add(`${words2[i]} ${words2[i + 1]} ${words2[i + 2]}`);
+  return out;
+}
+function isRestatedReply(current, previous) {
+  const now = shingles(current);
+  if (now.size + 2 < RESTATED_MIN_WORDS || !previous.trim()) return false;
+  const before = shingles(previous);
+  let seen = 0;
+  for (const s of now) if (before.has(s)) seen += 1;
+  return seen / now.size >= RESTATED_CONTAINMENT;
+}
+function restatedReplyNudge() {
+  return [
+    "Your reply repeats the status you already gave the user last turn \u2014 they have it. Do not restate it.",
+    "Instead: take the FIRST unfinished item and do it now, with tools. If every remaining item is blocked, say which one and exactly what would unblock it, in one or two lines.",
+    "If the remaining items are not yet tickets, file one ticket per item (builtin_tasks_create, linked to this chat) so the status lives on the board instead of in a repeated summary.",
+    "End with only what CHANGED this turn."
+  ].join("\n");
+}
+
+// src/repeatedFailure.ts
+var FAILURE_NUDGE_AT = 2;
+var FAILURE_HARD_AT = 3;
+var FailureTally = class _FailureTally {
+  failures = /* @__PURE__ */ new Map();
+  static key(tool, args) {
+    return `${tool}:${stableStringify(args ?? {})}`;
+  }
+  /** Record a FAILED call. Returns how many times this exact call has now failed,
+   *  including this one. */
+  record(tool, args) {
+    const key = _FailureTally.key(tool, args);
+    const attempts = (this.failures.get(key) ?? 0) + 1;
+    this.failures.set(key, attempts);
+    return attempts;
+  }
+  /** This exact call SUCCEEDED. Its earlier failures were transient after all, so they
+   *  are no longer evidence of anything — a later failure starts counting from one. */
+  clear(tool, args) {
+    this.failures.delete(_FailureTally.key(tool, args));
+  }
+};
+function failureReason(result) {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return void 0;
+  const error = result.error;
+  return typeof error === "string" && error.trim() ? error.trim().slice(0, 400) : void 0;
+}
+function repeatedFailureAdvisory(tool, attempts, reason) {
+  if (attempts < FAILURE_NUDGE_AT) return null;
+  const got = reason ? ` Both times it answered: "${reason}".` : "";
+  if (attempts >= FAILURE_HARD_AT) {
+    const said = reason ? ` It has answered "${reason}" every time.` : "";
+    return `STOP CALLING \`${tool}\` WITH THESE ARGUMENTS. This is failure ${attempts} of the identical call in this run.${said} The arguments are the problem, not the timing \u2014 repeating them will fail again and will spend the rest of this run's tool budget. Do ONE of these now: (a) re-read the error above and change the argument it names (a failing tool usually says exactly what to pass instead \u2014 a scope, a path, an id \u2014 so pass it); (b) reach the same goal with a different tool; (c) stop and tell the user plainly what is blocking you and what you need from them. Do not issue this call again.`;
+  }
+  return `\`${tool}\` has now failed ${attempts} times in this run with these exact arguments.${got} Another identical attempt will not behave differently \u2014 this is not a flake. Read the error above and change what it names (most failures state the argument to pass instead), use a different tool to reach the same goal, or say plainly what is blocking you. Do not simply repeat the call.`;
+}
+
+// src/repeatedWrite.ts
+function contentWriteOf(tool, args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
+  const { path, content } = args;
+  if (typeof path !== "string" || !path.trim() || typeof content !== "string") return null;
+  return { path: path.trim(), fingerprint: `${tool}:${stableStringify(args)}` };
+}
+function pathOf(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
+  const path = args.path;
+  return typeof path === "string" && path.trim() ? path.trim() : null;
+}
+var WriteLedger = class {
+  written = /* @__PURE__ */ new Map();
+  /** Is this call a full-content write identical to the last one that landed on its
+   *  path, with nothing touching that path since? */
+  isRepeat(tool, args) {
+    const write = contentWriteOf(tool, args);
+    return !!write && this.written.get(write.path) === write.fingerprint;
+  }
+  /**
+   * A non-read call ran. A successful full-content write is remembered; anything else
+   * that names a path forgets that path; `unscoped` (a shell command, a checkout)
+   * forgets everything. A FAILED write forgets its path — the file's state is unknown.
+   */
+  record(tool, args, options) {
+    if (options.unscoped) {
+      this.written.clear();
+      return;
+    }
+    const write = options.ok ? contentWriteOf(tool, args) : null;
+    if (write) {
+      this.written.set(write.path, write.fingerprint);
+      return;
+    }
+    const path = pathOf(args);
+    if (path) this.written.delete(path);
+  }
+};
+function repeatedWriteNote(tool, path) {
+  return `Not re-run: this exact \`${tool}\` of "${path}" already succeeded earlier in this run and nothing has changed the file since, so it already holds this content \u2014 writing it again cannot change anything. If something still looks broken, the cause is not that the write failed: re-read the error (it may predate your write), look elsewhere for the cause, or tell the user what you see.`;
+}
+
+// src/codeChanges.ts
+var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents", "wait_agents", HAND_OFF_TOOL]);
+function isDelegationTool(name) {
+  return DELEGATION_TOOLS.has(name);
+}
+function codeChangesOf(name, args, out) {
+  if (isCodeChangeTool(name)) {
+    if (isFailedToolResult(out)) return null;
+    const file = codeChangeFile(args);
+    return file ? [file] : [];
+  }
+  if (isDelegationTool(name)) {
+    const files = out?.changedFiles;
+    if (!Array.isArray(files)) return null;
+    const named = files.filter((f) => typeof f === "string" && f.trim().length > 0);
+    return named.length ? named : null;
+  }
+  return null;
+}
+
+// src/placeholderGuard.ts
+var PLACEHOLDER_GUARD_LABEL = "tools.placeholder_guard";
+var SOURCE_FILE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|swift|cs|rb|php|sql|sh|ps1|vue|svelte)$/i;
+var COMMENT_MARKERS = [
+  /\bTODO\b/,
+  /\bFIXME\b/,
+  /\bXXX\b/,
+  /\bfor now\b/i,
+  /\b(?:a|the) (?:proper|real|full) implementation (?:would|should|will)\b/i,
+  /\bnot (?:yet )?(?:implemented|wired)\b/i,
+  // The model's own reasoning left in the source — it was talking to itself, not
+  // documenting the code.
+  /\blet me\b/i,
+  /\bI'll\b/
+];
+var STUB_THROW = /throw new Error\(\s*["'`]\s*(?:not (?:yet )?implemented|todo)/i;
+function commentOf(line) {
+  const t = line.trim();
+  if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*") || t.startsWith("/*")) return t;
+  const slash = line.indexOf("//");
+  if (slash > 0 && line[slash - 1] !== ":") return line.slice(slash);
+  return null;
+}
+function markedLines(text) {
+  const out = [];
+  for (const line of text.split(/\r?\n/)) {
+    const comment = commentOf(line);
+    if (comment && COMMENT_MARKERS.some((re) => re.test(comment)) || STUB_THROW.test(line)) {
+      out.push(line.trim().slice(0, 160));
+    }
+  }
+  return out;
+}
+function placeholdersWritten(tool, args) {
+  const a = args ?? {};
+  const path = typeof a.path === "string" ? a.path : "";
+  if (!path || !SOURCE_FILE.test(path)) return [];
+  const added = tool === "write_file" ? a.content : tool === "edit_file" ? a.new_string : void 0;
+  if (typeof added !== "string" || !added) return [];
+  const before = new Set(typeof a.old_string === "string" ? markedLines(a.old_string) : []);
+  return markedLines(added).filter((text) => !before.has(text)).map((text) => ({ path, text }));
+}
+function placeholderAdvisory(hits) {
+  if (!hits.length) return null;
+  const shown = hits.slice(0, 3).map((h) => `\`${h.text}\``).join(", ");
+  return `PLACEHOLDER WRITTEN in ${hits[0].path}: ${shown}${hits.length > 3 ? ` (+${hits.length - 3} more)` : ""}. This is unfinished work, and comments that narrate your own reasoning do not belong in the source. Finish it in this run \u2014 or, if it is genuinely blocked, say so plainly in your reply and name the blocker. Never report work that contains a placeholder as done or fixed.`;
+}
+function placeholderTraceEvent(tool, hits, ts) {
+  return {
+    ts,
+    category: "message",
+    label: PLACEHOLDER_GUARD_LABEL,
+    args: { tool, hits },
+    result: placeholderAdvisory(hits) ?? ""
+  };
+}
+function delegationPlaceholders(result) {
+  return asHits(resultField(result, "placeholders"));
+}
+function asHits(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((x) => {
+    const hit = x;
+    return typeof hit.path === "string" && typeof hit.text === "string" ? [{ path: hit.path, text: hit.text }] : [];
+  });
+}
+function resultField(result, key) {
+  let obj = result;
+  if (typeof obj === "string") {
+    try {
+      obj = JSON.parse(obj);
+    } catch {
+      return void 0;
+    }
+  }
+  return obj && typeof obj === "object" ? obj[key] : void 0;
+}
+
+// src/completionGuard.ts
+var TICKET_UPDATE = /tasks[._]update/i;
+var DONE_STATUSES = /* @__PURE__ */ new Set(["done", "completed", "complete"]);
+function isTicketCompletion(tool, args) {
+  if (!TICKET_UPDATE.test(tool)) return false;
+  const status2 = args?.status;
+  return typeof status2 === "string" && DONE_STATUSES.has(status2.toLowerCase());
+}
+function canCompleteTicket(isOnBaseBranch, userDeclinedShipping) {
+  if (isOnBaseBranch) return true;
+  if (userDeclinedShipping) return true;
+  return false;
+}
+function notOnBaseBranchAdvisory() {
+  return "CANNOT MARK DONE \u2014 code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.";
+}
+var PlaceholderLedger = class {
+  open = /* @__PURE__ */ new Map();
+  /** Account for ONE successful write, given the hits the guard found in it. */
+  record(tool, args, hits) {
+    const a = args ?? {};
+    const path = typeof a.path === "string" ? a.path : "";
+    if (!path) return;
+    if (tool === "write_file") {
+      this.set(path, hits.map((h) => h.text));
+      return;
+    }
+    if (tool === "edit_file") {
+      const current = new Set(this.open.get(path) ?? []);
+      const removed = typeof a.old_string === "string" ? markedLines(a.old_string) : [];
+      const kept = new Set(typeof a.new_string === "string" ? markedLines(a.new_string) : []);
+      for (const text of removed) if (!kept.has(text)) current.delete(text);
+      for (const h of hits) current.add(h.text);
+      this.set(path, [...current]);
+      return;
+    }
+    if (tool === "delete_file") this.open.delete(path);
+  }
+  /** Placeholders a delegated child reported writing. The parent never saw those edits,
+   *  so they stay outstanding until the parent rewrites or edits the lines itself. */
+  add(hits) {
+    for (const h of hits) {
+      const texts = this.open.get(h.path) ?? /* @__PURE__ */ new Set();
+      texts.add(h.text);
+      this.open.set(h.path, texts);
+    }
+  }
+  outstanding() {
+    return [...this.open.entries()].flatMap(([path, texts]) => [...texts].map((text) => ({ path, text })));
+  }
+  set(path, texts) {
+    if (texts.length) this.open.set(path, new Set(texts));
+    else this.open.delete(path);
+  }
+};
+function completionAdvisory(open) {
+  if (!open.length) return null;
+  const shown = open.slice(0, 3).map((h) => `${h.path}: \`${h.text}\``).join("; ");
+  return `MARKED DONE OVER A PLACEHOLDER. This run wrote ${open.length} placeholder(s) it has not removed \u2014 ${shown}${open.length > 3 ? ` (+${open.length - 3} more)` : ""}. A ticket is done when its code works in the product, not when a stub compiles. Finish the placeholder and keep the ticket done, or set it back to in_progress and name what blocks it.`;
+}
+
+// src/windowFit/runWindowFit.ts
+function windowFitTrace(ts, step, t) {
+  const how = t.summarized ? "summarized" : t.recalled ? "recalled from memory" : "elided";
+  return {
+    ts,
+    category: "message",
+    label: "llm.handoff",
+    args: { step, ...t },
+    result: t.dropped > 0 ? `Packed the transcript for ${t.to}${t.from ? ` (from ${t.from})` : ""}: ${t.dropped} earlier message(s) ${how}, ~${t.estimatedTokens} tokens${t.fits ? "" : " \u2014 still over its window"}.` : `Handed the transcript to ${t.to}${t.from ? ` (from ${t.from})` : ""} verbatim, ~${t.estimatedTokens} tokens.`
+  };
+}
+function windowFitRecallFailedTrace(ts, step, error) {
+  return {
+    ts,
+    category: "message",
+    label: "llm.handoff_recall_failed",
+    args: { step },
+    result: `The memory recall for the hand-off note failed (${error instanceof Error ? error.message : String(error)}) \u2014 the dropped messages were elided instead.`
+  };
+}
+function createRunWindowFit(deps) {
+  let lastServed;
+  const recalls = /* @__PURE__ */ new Map();
+  if (deps.priorRecall) recalls.set(deps.priorRecall.query, Promise.resolve(deps.priorRecall.result));
+  const recallFor = (step) => deps.recall ? (query) => {
+    let hit = recalls.get(query);
+    if (!hit) {
+      hit = deps.recall(query).catch((error) => {
+        deps.trace(windowFitRecallFailedTrace(deps.now(), step, error));
+        return null;
+      });
+      recalls.set(query, hit);
+    }
+    return hit;
+  } : void 0;
+  return {
+    async prepare(req) {
+      const to = req.model;
+      if (!to) return req.messages;
+      const window2 = await resolveContextWindow(to, deps.windowSources);
+      if (window2 === void 0) return req.messages;
+      const differs = lastServed !== void 0 && lastServed !== to;
+      if (!differs && window2 >= deps.workingBudgetTokens) return req.messages;
+      const recall = recallFor(req.step);
+      const { messages } = await packForModel({
+        messages: req.messages,
+        to,
+        ...lastServed ? { from: lastServed } : {},
+        contextTokens: window2,
+        ...req.tools ? { tools: req.tools } : {},
+        ...req.maxTokens ? { maxTokens: req.maxTokens } : {},
+        ...deps.summarizer ? { summarizer: deps.summarizer() } : {},
+        ...recall ? { recall } : {},
+        onTrace: (t) => {
+          if (differs || t.dropped > 0 || !t.fits) deps.trace(windowFitTrace(deps.now(), req.step, t));
+        }
+      });
+      return messages;
+    },
+    served(model) {
+      if (model) lastServed = model;
+    }
+  };
+}
+
+// src/runStore/runPreamble.ts
+async function prepareRunLoop(chatId, c, req, runKey) {
+  const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, runTool, stream, evermind } = req;
+  const convo = c.transcript;
+  const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
+  const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
+  const allTools = catalog && catalog.length > 0 ? catalog : void 0;
+  const runMode = normalizeChatMode(req.chatMode ?? "work");
+  const metadata = {
+    chatId,
+    guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    guestTurnInput: latestUserText(convo),
+    mode: runMode,
+    ...req.projectId != null ? { projectId: req.projectId } : {}
+  };
+  const { recalled, block: recallBlock2, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind);
+  let systemPrompt = recallBlock2 ? `${resolvedSystemPrompt}
+
+${recallBlock2}` : resolvedSystemPrompt;
+  const priorRecall = { query: latestUserText(convo), result: recalled };
+  const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
+  if (await answerFromMemory(chatId, c, req, allTools, memoryReplay)) return null;
+  if (req.augmentSystemPrompt) {
+    try {
+      const extra = await req.augmentSystemPrompt(latestUserText(convo));
+      if (typeof extra === "string" && extra.trim()) {
+        systemPrompt = `${systemPrompt}
+
+${extra}`;
+      }
+    } catch {
+    }
+  }
+  const catalogToolNames = (req.tools ?? []).map((t) => t.function.name);
+  const canEditHere = canChangeCodeHere(catalogToolNames);
+  systemPrompt = `${systemPrompt}
+
+${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent"), canFanOut: catalogToolNames.includes("spawn_agents"), roster: req.chatRoster })}
+
+${turnOptimizationDirective()}`;
+  const canShip = canShipHere(catalogToolNames);
+  if (canShip) systemPrompt = `${systemPrompt}
+
+${selfReviewShipDirective(chatId)}`;
+  if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}
+
+${previewReviewDirective(chatId)}`;
+  if (c.priorResearch) systemPrompt = `${systemPrompt}
+
+${c.priorResearch}`;
+  const userRequest = latestUserText(convo);
+  if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
+    systemPrompt = `${systemPrompt}
+
+${continuationDirective()}`;
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "turn.continuation_resolved",
+      result: "The user's bare directive was resolved against the previous turn's unfinished proposal, so the run carries that proposal out instead of asking what to fix."
+    });
+  }
+  const alwaysAdvertised = [
+    ...toolNamesMentionedIn(systemPrompt),
+    ...localToolsIn(catalogToolNames),
+    // The Studio's workspace vocabulary, including the preview review its contract
+    // requires — empty everywhere but the Studio (see `studioToolsIn`).
+    ...studioToolsIn(catalogToolNames),
+    // The project-memory pair (recall before re-reading; remember what was learned) is
+    // the cheapest tool in the catalog and the first one relevance would drop.
+    ...memoryToolsIn(catalogToolNames),
+    // Asking the user is never off-topic: it is how the run stops when it cannot
+    // proceed, so relevance against the request must not be what decides whether the
+    // agent is allowed to ask. Its one schema is also the cheapest in the catalog.
+    ...canAskUser ? [ASK_USER_TOOL] : []
+  ];
+  const windowFit = createRunWindowFit({
+    workingBudgetTokens: HISTORY_TOKEN_BUDGET,
+    summarizer: () => ({ stream, model: run.policy.model, signal: c.abort?.signal }),
+    ...evermind?.recall ? { recall: (q) => evermind.recall(q), priorRecall } : {},
+    ...req.windowSources ? { windowSources: req.windowSources } : {},
+    trace: (ev) => pushTrace(c, ev),
+    now: nowIso
+  });
+  const run = {
+    chatId,
+    runKey,
+    c,
+    req,
+    convo,
+    canAskUser,
+    allTools,
+    catalogToolNames,
+    alwaysAdvertised,
+    // Tools this run has actually called — pinned into every later turn's selection
+    // so a multi-step task never loses a tool it is mid-way through using.
+    usedTools: /* @__PURE__ */ new Set(),
+    systemPrompt,
+    metadata,
+    recalled,
+    recallBlockTokens,
+    memoryReplay,
+    userRequest,
+    // One re-prompt per run for a final reply that repeats the previous turn's answer
+    // (see `restatedReply.ts`). Captured before the loop: the transcript grows as it runs.
+    priorReply: previousReplyText(convo),
+    // The user's ACTUAL request for this run, resolved once. Every turn's tool
+    // selection scores against this and nothing else — see `completeTurn.ts`.
+    requestQuery: routingQueryForTurn(convo),
+    windowFit,
+    // What this run has already read. Two guards, one tally (see `readCoverage.ts`):
+    // an EXACT repeat of a successful read-only call — same tool, same arguments —
+    // returns an "already returned above" stub instead of re-fetching + re-injecting
+    // the payload; and a target re-read at SHIFTING offsets gets an advisory once it
+    // starts circling. Both are invalidated together, and only for what a later
+    // mutation actually touched — never wiped wholesale by an unrelated call.
+    readCoverage: new ReadCoverage(),
+    // What this run has already FAILED at (see `repeatedFailure.ts`). The read guards
+    // above deliberately record only SUCCESSES, so an identical failing call — the same
+    // `git_status` answered with the same remedy three times, the same platform read
+    // answered 502 twice — got no pushback at all and could repeat until the budget was
+    // gone. The first retry stays free; from the second the model reads the count and the
+    // error it already has, and the moves that remain.
+    failures: new FailureTally(),
+    // What this run has already WRITTEN (see `repeatedWrite.ts`): the third loop shape —
+    // a successful full-content write sent again byte for byte, because an error from
+    // before it was still on screen. Replaying it cannot change the file, so it is answered
+    // without running.
+    writeLedger: new WriteLedger(),
+    // Placeholders this run wrote and has not removed — read when a ticket is marked done
+    // (see `completionGuard.ts`).
+    placeholderLedger: new PlaceholderLedger(),
+    // THE model hand-off policy (`@builderforce/run-policy`), shared with every other agent
+    // loop. ANALYSIS first, then the CODE: under auto-routing each turn tells the gateway
+    // what kind of call it is. Until the run reaches its first code change the turns are
+    // analysis (`plan` — the tenant's own precedence decides who plans); from then on they
+    // are `code`, which the gateway leads with the strongest connected model. A run that
+    // already changed code (a resumed turn) starts as `code`. The policy also holds the
+    // model this run is CURRENTLY talking to, every model it has already tried, and the
+    // models that broke mid-turn: a model that burns its whole stall budget fails over to
+    // another one rather than handing the user a promise (see the final-answer hook),
+    // and one that breaks mid-stream is routed around for the rest of the run. A pinned
+    // model is the user's own choice and is never routed around.
+    policy: initialRunPolicy({
+      pinnedModel: model,
+      strictPin: modelStrict,
+      startPhase: c.codeChanged || c.codePhaseReached ? "code" : "plan"
+    }),
+    // Bounded counter for the announced-but-never-made tool call recovery, so a model
+    // that keeps narrating instead of acting cannot spin the loop. Not one-shot: a model
+    // that stalls once frequently stalls again on the very next turn, and spending the
+    // single retry on the first stall left the user holding the SECOND promise. The
+    // stall budget (`agent-stall`) bounds these recoveries on its own — a run has no
+    // iteration ceiling to fall back on.
+    forceToolChoice: void 0,
+    announcementRecoveries: 0,
+    // One re-prompt per run for a code change left unshipped (see `selfReviewShip.ts`).
+    // One, not a budget: the second time the model stops short it has read the contract
+    // twice, and its answer — including "I cannot ship this because…" — is the answer.
+    shipRecoveryUsed: false,
+    reviewRecoveryUsed: false,
+    // One redirect per run for an explicit sub-agent request the run neither started nor
+    // refused on a real result (see `delegationRequest.ts`).
+    delegationRecoveryUsed: false,
+    restateRecoveryUsed: false,
+    stopHookRounds: 0,
+    redirectAskToDelegation: false,
+    pendingReplay: null,
+    pendingRun: null,
+    lastTurnInterruption: null
+  };
+  return run;
 }
 
 // src/toolVocabulary.ts
@@ -9198,902 +11159,6 @@ function handleRouterCall(catalog, name, args) {
   return { dispatch: { name: target, args: asToolArgs(a.args) ?? {} } };
 }
 
-// src/lastResolvedModel.ts
-var MAX_CHATS = 64;
-var byChat = /* @__PURE__ */ new Map();
-function setLastResolvedModel(chatId, model) {
-  const trimmed = typeof model === "string" ? model.trim() : "";
-  if (!trimmed) return;
-  byChat.delete(chatId);
-  byChat.set(chatId, trimmed);
-  if (byChat.size > MAX_CHATS) {
-    const oldest = byChat.keys().next();
-    if (!oldest.done) byChat.delete(oldest.value);
-  }
-}
-function getLastResolvedModel(chatId) {
-  return byChat.get(chatId);
-}
-function forgetResolvedModels() {
-  byChat.clear();
-}
-var CURRENT_MODEL_TOOLS = /* @__PURE__ */ new Set(["session.current_model", "builtin_session_current_model"]);
-function withObservedModel(chatId, tool, args) {
-  if (!CURRENT_MODEL_TOOLS.has(tool)) return args;
-  const observed = getLastResolvedModel(chatId);
-  if (!observed) return args;
-  const supplied = args ?? {};
-  if (typeof supplied.model === "string" && supplied.model.trim()) return args;
-  return { ...supplied, model: observed };
-}
-
-// ../packages/run-policy/src/policy.ts
-var PIN_RELEASE_STATUSES = [429, 413, 503];
-var DECLINE_STATUS = 400;
-var NONE = { kind: "none" };
-function initialRunPolicy(opts = {}) {
-  const model = opts.pinnedModel || void 0;
-  return {
-    phase: opts.startPhase ?? "plan",
-    model,
-    locked: false,
-    pin: model,
-    // Strictness belongs to a pin. With nothing pinned it would otherwise make the
-    // run's first LOCK strict, which no host asks for.
-    strictPin: !!opts.strictPin && !!model,
-    broken: [...new Set((opts.excludeModels ?? []).filter(Boolean))],
-    proven: [],
-    tried: [],
-    failovers: 0,
-    turnRetries: 0,
-    outcome: NONE,
-    options: {
-      pinReleasable: !!opts.pinReleasable,
-      lockAfterFirstSuccess: !!opts.lockAfterFirstSuccess,
-      maxFailovers: opts.maxFailovers ?? MAX_MODEL_FAILOVERS,
-      decliningModelPrefixes: [...opts.decliningModelPrefixes ?? []],
-      strictFailover: !!opts.strictFailover,
-      preferProvenFailover: !!opts.preferProvenFailover,
-      pinStrict: !!opts.strictPin && !!model,
-      ...opts.fixedRole ? { fixedRole: opts.fixedRole } : {}
-    }
-  };
-}
-function nextTurn(state, turn) {
-  return {
-    role: turn.hasTools ? state.options.fixedRole ?? state.phase : "chat",
-    model: state.model,
-    strict: !!state.model && state.strictPin,
-    excludeModels: [...state.broken]
-  };
-}
-function offersHandOff(state) {
-  return state.phase === "plan";
-}
-function reduceRunPolicy(state, event) {
-  const s = { ...state, outcome: NONE };
-  switch (event.type) {
-    case "turn_succeeded":
-      return succeeded(s, event.model, event.acted === true);
-    case "code_change_attempted":
-      return s.phase === "plan" && !s.model ? { ...s, phase: "code", outcome: { kind: "reask_as_coder" } } : s;
-    case "hand_off":
-      return s.phase === "plan" ? { ...s, phase: "code", outcome: { kind: "handed_off" } } : { ...s, outcome: { kind: "hand_off_rejected" } };
-    case "verify_started":
-      return { ...s, phase: "verify" };
-    case "stalled":
-      return stalled(s, event);
-    case "transport_failed":
-      return transportFailed(s, event);
-  }
-}
-function succeeded(s, resolved, acted) {
-  const proven = acted && resolved && resolved !== "default" && !s.proven.includes(resolved) ? [...s.proven, resolved] : s.proven;
-  const next = { ...s, turnRetries: 0, proven };
-  if (s.options.lockAfterFirstSuccess && !(s.model && s.strictPin) && resolved && resolved !== "default") {
-    return { ...next, model: resolved, locked: true };
-  }
-  return next;
-}
-function stalled(s, e) {
-  const tried = [...s.tried];
-  const to = chooseStallFailover({
-    activeModel: s.model,
-    resolvedModel: e.resolvedModel,
-    tried,
-    failoversUsed: s.failovers,
-    maxFailovers: s.options.maxFailovers,
-    surface: e.surface,
-    pick: failoverPicker(s, e)
-  });
-  if (!to) {
-    const returned = s.model !== s.pin ? { model: s.pin, locked: false, strictPin: !!s.pin && s.options.pinStrict } : {};
-    return { ...s, ...returned, tried, outcome: { kind: "failover_exhausted", tried } };
-  }
-  const failovers = s.failovers + 1;
-  return {
-    ...s,
-    tried,
-    failovers,
-    model: to,
-    locked: false,
-    ...s.options.strictFailover ? { strictPin: true } : {},
-    outcome: { kind: "failed_over", from: e.resolvedModel ?? s.model, to, attempt: failovers, of: s.options.maxFailovers }
-  };
-}
-function failoverPicker(s, e) {
-  const proven = s.options.preferProvenFailover ? [...s.proven].reverse() : [];
-  if (proven.length === 0 && !e.pick && !e.surface) return void 0;
-  if (proven.length === 0 && s.broken.length === 0) return e.pick;
-  return (tried) => {
-    const skip = [...tried, ...s.broken];
-    return proven.find((m) => !skip.includes(m)) ?? (e.pick ? e.pick(skip) : nextFallbackModel(e.surface, skip));
-  };
-}
-function transportFailed(s, e) {
-  if (s.turnRetries >= 1 || e.kind === "unreachable") return { ...s, outcome: { kind: "fail_turn" } };
-  const releasable = s.locked || s.options.pinReleasable;
-  if (s.model && releasable && e.status !== void 0 && releasesPin(s, s.model, e.status)) {
-    return {
-      ...s,
-      model: void 0,
-      locked: false,
-      pin: void 0,
-      strictPin: false,
-      turnRetries: s.turnRetries + 1,
-      outcome: { kind: "retry_turn", released: s.model, status: e.status }
-    };
-  }
-  if (isRequestRefusal(e.status)) return { ...s, outcome: { kind: "fail_turn" } };
-  if (s.model && s.locked && e.kind === "interrupted") {
-    const brokenModel = e.model ?? s.model;
-    return {
-      ...s,
-      model: void 0,
-      locked: false,
-      broken: s.broken.includes(brokenModel) ? s.broken : [...s.broken, brokenModel],
-      turnRetries: s.turnRetries + 1,
-      outcome: { kind: "retry_turn", broken: brokenModel, released: s.model }
-    };
-  }
-  if (s.model) return { ...s, outcome: { kind: "fail_turn" } };
-  const broken = e.kind === "interrupted" && e.model && !s.broken.includes(e.model) ? [...s.broken, e.model] : s.broken;
-  return {
-    ...s,
-    broken,
-    turnRetries: s.turnRetries + 1,
-    outcome: { kind: "retry_turn", ...e.kind === "interrupted" && e.model ? { broken: e.model } : {} }
-  };
-}
-function releasesPin(s, model, status2) {
-  return PIN_RELEASE_STATUSES.includes(status2) || status2 === DECLINE_STATUS && s.options.decliningModelPrefixes.some((prefix) => model.startsWith(prefix));
-}
-function isRequestRefusal(status2) {
-  return status2 !== void 0 && status2 >= 400 && status2 < 500 && status2 !== 408 && !PIN_RELEASE_STATUSES.includes(status2);
-}
-
-// ../packages/run-policy/src/coderHandoff.ts
-function isCoderReask(role, previousRole) {
-  return role === "code" && previousRole === "plan";
-}
-var MAX_CALL_CHARS = 2e3;
-var MAX_BRIEF_CHARS = 6e3;
-function coderHandoffBrief(plannerText, calls) {
-  const findings = plannerText.trim();
-  const intended = calls.map((call2) => {
-    const args = call2.args.length > MAX_CALL_CHARS ? `${call2.args.slice(0, MAX_CALL_CHARS)}\u2026` : call2.args;
-    return `- ${call2.name} ${args}`;
-  });
-  const parts = [
-    "HAND-OFF: the analysis for this request is complete \u2014 you are the coding model taking it from here. Everything the planner read is in the conversation above; do not start the investigation over or re-read files already returned above.",
-    ...findings ? ["The planner concluded:", findings] : [],
-    "It was about to make this change:",
-    ...intended,
-    "Make that change now. Correct it if it is wrong \u2014 a file you have not seen, or text that does not match \u2014 but act on it rather than re-planning. Read only what the edit itself needs and is not already above."
-  ];
-  const brief = parts.join("\n");
-  return brief.length > MAX_BRIEF_CHARS ? `${brief.slice(0, MAX_BRIEF_CHARS)}\u2026` : brief;
-}
-
-// src/planHandoff.ts
-var HAND_OFF_TOOL = "hand_off";
-var FAN_OUT_TOOL = "spawn_agents";
-var FAN_OUT_BATCH = 4;
-var MAX_HAND_OFF_TASKS = 12;
-var TASK_CREATE_TOOL = "builtin_tasks_create";
-var HAND_OFF_TOOL_SPEC = {
-  type: "function",
-  function: {
-    name: HAND_OFF_TOOL,
-    description: "END THE ANALYSIS and hand the work to the coding model(s). You are the planning model: read what you need, then call this ONCE with the tasks \u2014 do NOT edit files yourself. Each task becomes a ticket linked to this chat. Tasks that own separate files run side by side, one coding agent each, and each reports back to this chat; otherwise the coding model implements them in order. Every task must stand alone \u2014 the agent that implements it sees none of this conversation: say what to change, where, and how to know it is done.",
-    parameters: {
-      type: "object",
-      properties: {
-        summary: { type: "string", description: "What the analysis concluded, in a few sentences \u2014 the coders read this first." },
-        tasks: {
-          type: "array",
-          minItems: 1,
-          maxItems: MAX_HAND_OFF_TASKS,
-          items: {
-            type: "object",
-            properties: {
-              title: { type: "string", description: 'Ticket title, e.g. "Rebuild UserDetailDrawer on SlideOutPanel".' },
-              brief: { type: "string", description: "The complete, standalone instruction: files, the change, the primitives to use." },
-              paths: {
-                type: "array",
-                items: { type: "string" },
-                description: "Workspace-relative files or directories this task OWNS. Tasks with disjoint paths run in parallel."
-              },
-              acceptance: { type: "string", description: "How to know it is done (tests, behaviour)." }
-            },
-            required: ["title", "brief"]
-          }
-        }
-      },
-      required: ["summary", "tasks"]
-    }
-  }
-};
-var str = (v) => typeof v === "string" ? v.trim() : "";
-function parseHandOff(args) {
-  const a = args ?? {};
-  const summary = str(a.summary);
-  if (!Array.isArray(a.tasks) || a.tasks.length === 0) {
-    return "hand_off needs { summary, tasks:[{ title, brief, paths? }] } with at least one task";
-  }
-  if (a.tasks.length > MAX_HAND_OFF_TASKS) {
-    return `at most ${MAX_HAND_OFF_TASKS} tasks per hand-off \u2014 merge related slices`;
-  }
-  const tasks = [];
-  for (const [i, raw] of a.tasks.entries()) {
-    const t = raw ?? {};
-    const title = str(t.title);
-    const brief = str(t.brief);
-    if (!title || !brief) return `task ${i + 1} needs both a title and a brief`;
-    const paths = Array.isArray(t.paths) ? t.paths.map(str).filter(Boolean) : [];
-    const acceptance = str(t.acceptance);
-    tasks.push({ title, brief, paths, ...acceptance ? { acceptance } : {} });
-  }
-  return { summary, tasks };
-}
-function ticketDescription(task, summary) {
-  return [
-    task.brief,
-    task.paths.length ? `Paths: ${task.paths.join(", ")}` : "",
-    task.acceptance ? `Done when: ${task.acceptance}` : "",
-    summary ? `Context: ${summary}` : ""
-  ].filter(Boolean).join("\n\n");
-}
-function childTaskBrief(task, summary, ticketId) {
-  return [
-    ticketId != null ? `Ticket #${ticketId}: ${task.title}` : task.title,
-    task.brief,
-    task.paths.length ? `Your slice covers: ${task.paths.join(", ")}. Sibling slices are working beside you on other paths.` : "",
-    task.acceptance ? `Done when: ${task.acceptance}` : "",
-    summary ? `Background (the analysis is finished \u2014 do not redo it): ${summary}` : "",
-    "Make the change now. Read only what the change itself needs. Finish with what you changed and anything outside your slice that must still change."
-  ].filter(Boolean).join("\n\n");
-}
-function canRunInParallel(tasks) {
-  if (tasks.length < 2 || tasks.some((t) => t.paths.length === 0)) return false;
-  return overlappingScopes(tasks.map((t) => ({ label: t.title, paths: t.paths }))) === null;
-}
-function planMessage(plan, ticketIds, parallel) {
-  const lines = plan.tasks.map((t, i) => {
-    const id = ticketIds[i];
-    return `${i + 1}. ${id != null ? `#${id} ` : ""}${t.title}${t.paths.length ? ` \u2014 ${t.paths.join(", ")}` : ""}`;
-  });
-  return [
-    `**Plan \u2014 ${plan.tasks.length} task${plan.tasks.length === 1 ? "" : "s"}**${parallel ? " (running side by side; each reports back here)" : ""}`,
-    plan.summary,
-    lines.join("\n")
-  ].filter(Boolean).join("\n\n");
-}
-function isFailed(out) {
-  if (out == null) return true;
-  if (typeof out !== "object") return false;
-  const o = out;
-  return o.ok === false || typeof o.error === "string" && o.error.length > 0;
-}
-async function call(ports, name, args) {
-  const now = ports.now ?? (() => Date.now());
-  const start = now();
-  let out;
-  try {
-    out = await ports.runTool(name, args);
-  } catch (e) {
-    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-  ports.step?.(name, { ...args, auto: true, reason: "hand_off" }, out, now() - start);
-  return out;
-}
-async function fileTickets(plan, ports) {
-  if (ports.projectId == null || !ports.toolNames.has(TASK_CREATE_TOOL)) return plan.tasks.map(() => void 0);
-  const ids2 = [];
-  for (const task of plan.tasks) {
-    const out = await call(ports, TASK_CREATE_TOOL, {
-      projectId: ports.projectId,
-      title: task.title,
-      description: ticketDescription(task, plan.summary),
-      taskType: "task"
-    });
-    const id = !isFailed(out) ? out.id : void 0;
-    ids2.push(typeof id === "number" ? id : void 0);
-    if (!isFailed(out)) await ports.afterCreate?.(TASK_CREATE_TOOL, out).catch(() => void 0);
-  }
-  return ids2;
-}
-function asRecord(out) {
-  if (typeof out === "string") {
-    try {
-      const parsed = JSON.parse(out);
-      return parsed && typeof parsed === "object" ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-  return out && typeof out === "object" ? out : null;
-}
-var INLINE_NEXT = "HAND-OFF: the analysis is complete and you are the coding model. Implement the tasks below in order \u2014 do not re-plan or re-read what the planner already read. After each task, verify it, then move to the next. When all are done, build and test, commit and push, and report per ticket.";
-var PARALLEL_NEXT = "HAND-OFF: the tasks ran side by side, one coding agent each, and each has reported into the chat. The children had no shell and no git. You are the coding model: verify the combined change (build and test), fix what the slices broke between them and anything they said was outside their paths, implement any task that failed, then commit, push and report per ticket.";
-var BACKGROUND_NEXT = "HAND-OFF: one coding agent per task is now running IN THE BACKGROUND, each posting into the chat under its own name; the children have no shell and no git. You are the coding model: do not redo their tasks. Work on anything not delegated, then call wait_agents for their reports (or act on each as it arrives), verify the combined change (build and test), fix what the slices broke between them, implement any task that failed, then commit, push and report per ticket.";
-async function executeHandOff(plan, ports) {
-  const ids2 = await fileTickets(plan, ports);
-  const tickets = plan.tasks.map((t, i) => ({ title: t.title, ...ids2[i] != null ? { id: ids2[i] } : {} }));
-  const parallel = ports.toolNames.has(FAN_OUT_TOOL) && canRunInParallel(plan.tasks);
-  await ports.postPlan?.(planMessage(plan, ids2, parallel)).catch(() => void 0);
-  if (parallel) {
-    const workstreams = [];
-    const changed = /* @__PURE__ */ new Set();
-    const placeholders = [];
-    let fanOutOk = true;
-    let background = false;
-    for (let start = 0; start < plan.tasks.length; start += FAN_OUT_BATCH) {
-      const batch = plan.tasks.slice(start, start + FAN_OUT_BATCH);
-      const out = asRecord(await call(ports, FAN_OUT_TOOL, {
-        workstreams: batch.map((t, k) => {
-          const id = ids2[start + k];
-          return {
-            label: id != null ? `#${id} ${t.title}` : t.title,
-            task: childTaskBrief(t, plan.summary, id),
-            role: "code",
-            ...id != null ? { ticket: String(id) } : {}
-          };
-        })
-      }));
-      const started = Array.isArray(out?.agents) ? out.agents : Array.isArray(out?.workstreams) ? out.workstreams : null;
-      if (!out || out.ok === false && !started) {
-        if (start === 0) {
-          fanOutOk = false;
-          break;
-        }
-        workstreams.push({ ok: false, error: typeof out?.error === "string" ? out.error : "fan-out failed", tasks: batch.map((t) => t.title) });
-        continue;
-      }
-      if (started) workstreams.push(...started);
-      if (out.running === true) background = true;
-      if (Array.isArray(out.changedFiles)) {
-        for (const f of out.changedFiles) if (typeof f === "string") changed.add(f);
-      }
-      if (Array.isArray(out.placeholders)) placeholders.push(...out.placeholders);
-    }
-    if (fanOutOk) {
-      return {
-        ok: true,
-        mode: "parallel",
-        tickets,
-        workstreams,
-        ...changed.size ? { changedFiles: [...changed] } : {},
-        ...placeholders.length ? { placeholders } : {},
-        next: background ? BACKGROUND_NEXT : PARALLEL_NEXT
-      };
-    }
-  }
-  return {
-    ok: true,
-    mode: "inline",
-    tickets,
-    next: `${INLINE_NEXT}
-
-${plan.tasks.map((t, i) => `${i + 1}. ${ids2[i] != null ? `#${ids2[i]} ` : ""}${t.title}
-${childTaskBrief(t, plan.summary, ids2[i])}`).join("\n\n")}`
-  };
-}
-
-// src/codeChanges.ts
-var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents", "wait_agents", HAND_OFF_TOOL]);
-function isDelegationTool(name) {
-  return DELEGATION_TOOLS.has(name);
-}
-function codeChangesOf(name, args, out) {
-  if (isCodeChangeTool(name)) {
-    if (isFailedToolResult(out)) return null;
-    const file = codeChangeFile(args);
-    return file ? [file] : [];
-  }
-  if (isDelegationTool(name)) {
-    const files = out?.changedFiles;
-    if (!Array.isArray(files)) return null;
-    const named = files.filter((f) => typeof f === "string" && f.trim().length > 0);
-    return named.length ? named : null;
-  }
-  return null;
-}
-
-// src/placeholderGuard.ts
-var PLACEHOLDER_GUARD_LABEL = "tools.placeholder_guard";
-var SOURCE_FILE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|swift|cs|rb|php|sql|sh|ps1|vue|svelte)$/i;
-var COMMENT_MARKERS = [
-  /\bTODO\b/,
-  /\bFIXME\b/,
-  /\bXXX\b/,
-  /\bfor now\b/i,
-  /\b(?:a|the) (?:proper|real|full) implementation (?:would|should|will)\b/i,
-  /\bnot (?:yet )?(?:implemented|wired)\b/i,
-  // The model's own reasoning left in the source — it was talking to itself, not
-  // documenting the code.
-  /\blet me\b/i,
-  /\bI'll\b/
-];
-var STUB_THROW = /throw new Error\(\s*["'`]\s*(?:not (?:yet )?implemented|todo)/i;
-function commentOf(line) {
-  const t = line.trim();
-  if (t.startsWith("//") || t.startsWith("#") || t.startsWith("*") || t.startsWith("/*")) return t;
-  const slash = line.indexOf("//");
-  if (slash > 0 && line[slash - 1] !== ":") return line.slice(slash);
-  return null;
-}
-function markedLines(text) {
-  const out = [];
-  for (const line of text.split(/\r?\n/)) {
-    const comment = commentOf(line);
-    if (comment && COMMENT_MARKERS.some((re) => re.test(comment)) || STUB_THROW.test(line)) {
-      out.push(line.trim().slice(0, 160));
-    }
-  }
-  return out;
-}
-function placeholdersWritten(tool, args) {
-  const a = args ?? {};
-  const path = typeof a.path === "string" ? a.path : "";
-  if (!path || !SOURCE_FILE.test(path)) return [];
-  const added = tool === "write_file" ? a.content : tool === "edit_file" ? a.new_string : void 0;
-  if (typeof added !== "string" || !added) return [];
-  const before = new Set(typeof a.old_string === "string" ? markedLines(a.old_string) : []);
-  return markedLines(added).filter((text) => !before.has(text)).map((text) => ({ path, text }));
-}
-function placeholderAdvisory(hits) {
-  if (!hits.length) return null;
-  const shown = hits.slice(0, 3).map((h) => `\`${h.text}\``).join(", ");
-  return `PLACEHOLDER WRITTEN in ${hits[0].path}: ${shown}${hits.length > 3 ? ` (+${hits.length - 3} more)` : ""}. This is unfinished work, and comments that narrate your own reasoning do not belong in the source. Finish it in this run \u2014 or, if it is genuinely blocked, say so plainly in your reply and name the blocker. Never report work that contains a placeholder as done or fixed.`;
-}
-function placeholderTraceEvent(tool, hits, ts) {
-  return {
-    ts,
-    category: "message",
-    label: PLACEHOLDER_GUARD_LABEL,
-    args: { tool, hits },
-    result: placeholderAdvisory(hits) ?? ""
-  };
-}
-function delegationPlaceholders(result) {
-  return asHits(resultField(result, "placeholders"));
-}
-function asHits(raw) {
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((x) => {
-    const hit = x;
-    return typeof hit.path === "string" && typeof hit.text === "string" ? [{ path: hit.path, text: hit.text }] : [];
-  });
-}
-function resultField(result, key) {
-  let obj = result;
-  if (typeof obj === "string") {
-    try {
-      obj = JSON.parse(obj);
-    } catch {
-      return void 0;
-    }
-  }
-  return obj && typeof obj === "object" ? obj[key] : void 0;
-}
-
-// src/completionGuard.ts
-var TICKET_UPDATE = /tasks[._]update/i;
-var DONE_STATUSES = /* @__PURE__ */ new Set(["done", "completed", "complete"]);
-function isTicketCompletion(tool, args) {
-  if (!TICKET_UPDATE.test(tool)) return false;
-  const status2 = args?.status;
-  return typeof status2 === "string" && DONE_STATUSES.has(status2.toLowerCase());
-}
-function canCompleteTicket(isOnBaseBranch, userDeclinedShipping) {
-  if (isOnBaseBranch) return true;
-  if (userDeclinedShipping) return true;
-  return false;
-}
-function notOnBaseBranchAdvisory() {
-  return "CANNOT MARK DONE \u2014 code is not on the base branch (main/master). Either ship to main/master first, or if you intentionally left the code uncommitted, say so explicitly in your reply so this guard knows to allow it.";
-}
-var PlaceholderLedger = class {
-  open = /* @__PURE__ */ new Map();
-  /** Account for ONE successful write, given the hits the guard found in it. */
-  record(tool, args, hits) {
-    const a = args ?? {};
-    const path = typeof a.path === "string" ? a.path : "";
-    if (!path) return;
-    if (tool === "write_file") {
-      this.set(path, hits.map((h) => h.text));
-      return;
-    }
-    if (tool === "edit_file") {
-      const current = new Set(this.open.get(path) ?? []);
-      const removed = typeof a.old_string === "string" ? markedLines(a.old_string) : [];
-      const kept = new Set(typeof a.new_string === "string" ? markedLines(a.new_string) : []);
-      for (const text of removed) if (!kept.has(text)) current.delete(text);
-      for (const h of hits) current.add(h.text);
-      this.set(path, [...current]);
-      return;
-    }
-    if (tool === "delete_file") this.open.delete(path);
-  }
-  /** Placeholders a delegated child reported writing. The parent never saw those edits,
-   *  so they stay outstanding until the parent rewrites or edits the lines itself. */
-  add(hits) {
-    for (const h of hits) {
-      const texts = this.open.get(h.path) ?? /* @__PURE__ */ new Set();
-      texts.add(h.text);
-      this.open.set(h.path, texts);
-    }
-  }
-  outstanding() {
-    return [...this.open.entries()].flatMap(([path, texts]) => [...texts].map((text) => ({ path, text })));
-  }
-  set(path, texts) {
-    if (texts.length) this.open.set(path, new Set(texts));
-    else this.open.delete(path);
-  }
-};
-function completionAdvisory(open) {
-  if (!open.length) return null;
-  const shown = open.slice(0, 3).map((h) => `${h.path}: \`${h.text}\``).join("; ");
-  return `MARKED DONE OVER A PLACEHOLDER. This run wrote ${open.length} placeholder(s) it has not removed \u2014 ${shown}${open.length > 3 ? ` (+${open.length - 3} more)` : ""}. A ticket is done when its code works in the product, not when a stub compiles. Finish the placeholder and keep the ticket done, or set it back to in_progress and name what blocks it.`;
-}
-
-// src/restatedReply.ts
-var RESTATED_MIN_WORDS = 40;
-var RESTATED_CONTAINMENT = 0.6;
-function textOf(content) {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ");
-  }
-  return "";
-}
-function previousReplyText(convo) {
-  let i = convo.length - 1;
-  while (i >= 0 && convo[i].role !== "user") i--;
-  for (i -= 1; i >= 0; i--) {
-    const m = convo[i];
-    if (m.role === "user") return "";
-    if (m.role === "assistant") {
-      const text = textOf(m.content).trim();
-      if (text) return text;
-    }
-  }
-  return "";
-}
-function shingles(text) {
-  const words2 = text.toLowerCase().replace(/[^a-z0-9#\s]+/g, " ").split(/\s+/).filter(Boolean);
-  const out = /* @__PURE__ */ new Set();
-  for (let i = 0; i + 2 < words2.length; i++) out.add(`${words2[i]} ${words2[i + 1]} ${words2[i + 2]}`);
-  return out;
-}
-function isRestatedReply(current, previous) {
-  const now = shingles(current);
-  if (now.size + 2 < RESTATED_MIN_WORDS || !previous.trim()) return false;
-  const before = shingles(previous);
-  let seen = 0;
-  for (const s of now) if (before.has(s)) seen += 1;
-  return seen / now.size >= RESTATED_CONTAINMENT;
-}
-function restatedReplyNudge() {
-  return [
-    "Your reply repeats the status you already gave the user last turn \u2014 they have it. Do not restate it.",
-    "Instead: take the FIRST unfinished item and do it now, with tools. If every remaining item is blocked, say which one and exactly what would unblock it, in one or two lines.",
-    "If the remaining items are not yet tickets, file one ticket per item (builtin_tasks_create, linked to this chat) so the status lives on the board instead of in a repeated summary.",
-    "End with only what CHANGED this turn."
-  ].join("\n");
-}
-
-// src/runOutcomeReport.ts
-function runOutcomeId(chatId, startedAtMs) {
-  return `ide:${chatId}:${startedAtMs}`;
-}
-function codeRunOutcome(args) {
-  if (args.aborted || !args.codeChanged || !args.codeModel || !args.runId) return null;
-  return {
-    clientRunId: args.runId,
-    model: args.codeModel,
-    role: "code",
-    source: "ide",
-    terminalStatus: args.failed ? "failed" : "completed",
-    merged: args.shipped,
-    steps: args.trace.filter((e) => e.label === "llm.complete" && !e.isError).length,
-    ...args.projectId != null ? { projectId: args.projectId } : {}
-  };
-}
-
-// src/shipVerification.ts
-var BASE_BRANCHES = /* @__PURE__ */ new Set(["main", "master"]);
-function parseGitShortStatus(output) {
-  if (!output) return null;
-  const header = output.split("\n").map((l) => l.trim()).find((l) => l.startsWith("##"));
-  if (!header) return null;
-  const body = header.slice(2).trim();
-  if (!body || body.startsWith("HEAD (no branch)")) return { branch: null, upstream: null, ahead: 0, behind: 0 };
-  const ahead = /\bahead (\d+)/.exec(body);
-  const behind = /\bbehind (\d+)/.exec(body);
-  const names = body.replace(/\s*\[.*$/, "").trim();
-  const [branch, upstream] = names.split("...");
-  return {
-    branch: branch?.trim() || null,
-    upstream: upstream?.trim() || null,
-    ahead: ahead ? Number(ahead[1]) : 0,
-    behind: behind ? Number(behind[1]) : 0
-  };
-}
-function gitCommandPattern(verbs) {
-  return new RegExp(`\\bgit\\s+(?:-[Cc]\\s+\\S+\\s+|-\\S+\\s+|--\\S+(?:=\\S+)?\\s+)*(?:${verbs})\\b`, "i");
-}
-var GIT_PUSH = gitCommandPattern("push");
-var GIT_STATUS_CMD = gitCommandPattern("status");
-function commandOf(ev) {
-  const a = ev.args;
-  if (typeof a?.command === "string") return a.command;
-  if (typeof a?.cmd === "string") return a.cmd;
-  return "";
-}
-function outputOf(ev) {
-  const r = ev.result;
-  if (typeof r === "string") return r;
-  if (r && typeof r === "object") {
-    const o = r;
-    if (typeof o.output === "string") return o.output;
-    if (typeof o.stdout === "string") return o.stdout;
-  }
-  return "";
-}
-function succeeded2(ev) {
-  return !ev.isError && !isFailedToolResult(ev.result);
-}
-function isPush(ev) {
-  return ev.label === "git_push" || GIT_PUSH.test(commandOf(ev));
-}
-function dirtyPathsOf(output) {
-  const out = [];
-  for (const raw of output.split("\n")) {
-    const line = raw.replace(/\r$/, "");
-    if (line.length < 4 || line.startsWith("##")) continue;
-    let path = line.slice(3);
-    const arrow = path.indexOf(" -> ");
-    if (arrow >= 0) path = path.slice(arrow + 4);
-    path = path.trim().replace(/^"(.*)"$/, "$1");
-    if (path) out.push(path);
-  }
-  return out;
-}
-function touchedStillDirty(touched, dirty) {
-  const norm = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "");
-  const d = dirty.map(norm);
-  return touched.map(norm).some((t) => d.some((p) => t === p || t.endsWith(`/${p}`)));
-}
-function shippedToBaseBranch(events, opts) {
-  const steps = events.filter((e) => e.category === "tool");
-  let pushedAt = -1;
-  for (let i = 0; i < steps.length; i += 1) {
-    if (succeeded2(steps[i]) && isPush(steps[i])) pushedAt = i;
-  }
-  if (pushedAt < 0) return false;
-  const touched = opts?.touchedFiles ?? [];
-  for (let i = pushedAt; i < steps.length; i += 1) {
-    const ev = steps[i];
-    if (!succeeded2(ev)) continue;
-    const isStatus = i === pushedAt || ev.label === "git_status" || GIT_STATUS_CMD.test(commandOf(ev));
-    if (!isStatus) continue;
-    const output = outputOf(ev);
-    const status2 = parseGitShortStatus(output);
-    if (!status2) continue;
-    if (!(status2.branch && BASE_BRANCHES.has(status2.branch) && status2.upstream && status2.ahead === 0)) continue;
-    if (touched.length > 0 && touchedStillDirty(touched, dirtyPathsOf(output))) continue;
-    return true;
-  }
-  return false;
-}
-
-// src/selfReviewShip.ts
-function selfReviewShipDirective(chatId) {
-  return 'SHIP YOUR OWN CHANGE \u2014 in this session YOU are its reviewer. This is a local editor session: no other agent or reviewer can ever reach a change you leave in the working tree, so a ticket you leave "in_review" sits at 75% on the board forever. When your turn changes code, finish it in this order:\n1. VERIFY \u2014 run the type-check / tests / build that cover what you touched (`run_command`) and fix whatever fails.\n2. SELF-REVIEW \u2014 read your own diff with `git_diff` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change \u2014 builtin_chats_list_tickets with chatId=' + chatId + ' lists it; verdict "complete"; a one-paragraph summary of what you checked).\n3. SHIP \u2014 `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval \u2014 that approval is their review of your review, so do not ask for it in prose as well.\n4. CLOSE \u2014 the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\nExceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error \u2014 never claim a change shipped when it did not.';
-}
-var PUBLISH_TOOLS = /* @__PURE__ */ new Set(["git_commit", "git_push", "open_pull_request"]);
-var RAW_PUBLISH = gitCommandPattern("commit|push");
-function attemptedPublish(events) {
-  return events.some(
-    (e) => e.category === "tool" && (PUBLISH_TOOLS.has(e.label) || RAW_PUBLISH.test(commandOf(e)))
-  );
-}
-var DECLINES_SHIPPING = /\b(?:don'?t|do not|never|without)\s+(?:commit|push|ship|merg)\w*|\b(?:no|skip)\s+(?:commit|push)\w*|\b(?:leave|keep)\s+(?:it|them|this|the\s+(?:change|changes|edits?))\s+(?:uncommitted|unstaged|local(?:ly)?)\b/i;
-function declinesShipping(text) {
-  return DECLINES_SHIPPING.test(text ?? "");
-}
-function leftChangeUnshipped(input) {
-  return input.codeChanged && canShipHere(input.toolNames) && asksForChange(input.requestText) && !declinesShipping(input.requestText) && !attemptedPublish(input.events);
-}
-function unshippedChangeNudge() {
-  return 'You changed code in this run and ended the turn without shipping it. In this local session you are the reviewer \u2014 no one else can pick the change up, so leaving it uncommitted parks its ticket in review forever. Finish it now: verify it (`run_command` for the type-check / tests that cover it), self-review your diff with `git_diff` and record builtin_reviews_record (verdict "complete") on the ticket tracking it, then `git_commit` (allowBaseBranch:true, exactly the paths you changed) and `git_push` (allowBaseBranch:true). If the user asked for a pull request, commit on a `branch` and `open_pull_request` instead. If you genuinely cannot ship \u2014 the change is unfinished, or verification fails and you cannot fix it \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
-}
-
-// src/stopHooks.ts
-var MAX_STOP_HOOK_ROUNDS = 4;
-async function askStopHook(hook, input) {
-  if (!hook || input.round >= MAX_STOP_HOOK_ROUNDS) return null;
-  try {
-    const nudge = (await hook(input))?.trim();
-    return nudge ? nudge : null;
-  } catch {
-    return null;
-  }
-}
-
-// src/previewReview.ts
-var REVIEW_RECORD_TOOL = "builtin_reviews_record";
-function previewReviewDirective(chatId) {
-  return `REVIEW YOUR OWN CHANGE \u2014 in this Studio session YOU are its reviewer. The app runs in a live preview in this browser that no other agent can reach, so a ticket you leave "in_review" sits at 75% on the board forever, and dispatching a QA or design agent to review it is not a substitute \u2014 even when agents are invited into this chat, the review of a change THIS session made is yours. When your turn changes the app, finish it in this order:
-1. VERIFY \u2014 \`canvas_read_build_diagnostics\` must show no current failures. Then call \`canvas_inspect_preview\` with the CSS selectors your change targets and the widths the request is about (a phone bug: include the widths it names, or [360, 390, 414]; a desktop layout: the desktop viewport). Read the numbers against what was ASKED, not only the pass/fail: a pill that must hug its label is a few dozen px tall, not the card's height; a mobile menu must not make the page wider than the screen; an image must not cover the headline (\`occludedBy\`). If a width fails, or the measurements show the change did not do what was asked, FIX it and inspect again.
-2. RECORD \u2014 when every width passes and the measurements match the request, record the review with builtin_reviews_record (taskId = the ticket tracking the change \u2014 builtin_chats_list_tickets with chatId=${chatId} lists it; verdict "complete"; a summary that QUOTES the measurements that prove it, e.g. ".character-tag 74\xD723px at 390px; page 390px wide at 390px"). One call per ticket the change delivers. If something the ticket asked for is genuinely not done, record verdict "gaps" with each gap instead of "complete".
-3. CLOSE \u2014 a ticket linked to this chat that has a "complete" review recorded after a passing inspection moves to done (100%) automatically when your turn ends. If the ticket you reviewed is not linked yet, link it with builtin_chats_link_ticket (chatId=${chatId}) first. Report each ticket's verdict with the key measurements.
-Never say a change works or a ticket is done without a passing \`canvas_inspect_preview\` AFTER your last edit. If the preview cannot be inspected (it is not running, or the probe times out), say so plainly and leave the ticket in review \u2014 do not record a "complete" review you could not verify.`;
-}
-function toolEvents(events) {
-  return events.filter((event) => event.category === "tool");
-}
-function lastChangeIndex(events) {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (isCodeChangeTool(event.label) && !event.isError && !isFailedToolResult(event.result)) return index;
-  }
-  return -1;
-}
-function isPassingInspection(event) {
-  if (event.label !== PREVIEW_REVIEW_TOOL || event.isError || isFailedToolResult(event.result)) return false;
-  const result = event.result;
-  return result?.passed === true;
-}
-function completeReviewTaskId(event) {
-  if (event.label !== REVIEW_RECORD_TOOL || event.isError || isFailedToolResult(event.result)) return null;
-  const args = event.args ?? {};
-  const recorded = event.result?.verdict ?? args.verdict;
-  if (recorded !== "complete") return null;
-  const taskId = Number(args.taskId);
-  return Number.isInteger(taskId) && taskId > 0 ? taskId : null;
-}
-function ticketsReviewedInPreview(events) {
-  const tools = toolEvents(events);
-  const lastChange = lastChangeIndex(tools);
-  if (lastChange < 0) return [];
-  let inspected = false;
-  const reviewed = /* @__PURE__ */ new Set();
-  for (const event of tools.slice(lastChange + 1)) {
-    if (isPassingInspection(event)) inspected = true;
-    else if (inspected) {
-      const taskId = completeReviewTaskId(event);
-      if (taskId != null) reviewed.add(taskId);
-    }
-  }
-  return [...reviewed];
-}
-function inspectedAfterLastChange(events) {
-  const tools = toolEvents(events);
-  const lastChange = lastChangeIndex(tools);
-  return tools.slice(lastChange + 1).some((event) => event.label === PREVIEW_REVIEW_TOOL);
-}
-function recordedReviewAfterLastChange(events) {
-  const tools = toolEvents(events);
-  const lastChange = lastChangeIndex(tools);
-  return tools.slice(lastChange + 1).some((event) => event.label === REVIEW_RECORD_TOOL && !event.isError);
-}
-var DECLINES_REVIEW = /\b(?:don'?t|do not|never|without)\s+(?:review|verify|inspect|test|close|closing|mark)\w*|\b(?:leave|keep)\s+(?:it|them|the\s+tickets?)\s+(?:open|in\s+review)\b/i;
-function declinesReview(text) {
-  return DECLINES_REVIEW.test(text ?? "");
-}
-function leftChangeUnreviewed(input) {
-  return input.codeChanged && canReviewInPreview(input.toolNames) && !declinesReview(input.requestText) && !(inspectedAfterLastChange(input.events) && recordedReviewAfterLastChange(input.events));
-}
-function unreviewedChangeNudge() {
-  return 'You changed the app in this run and ended the turn without reviewing it. In the Studio you are the reviewer \u2014 nobody else can see this preview, so an unreviewed change parks its ticket in review forever. Finish it now: call `canvas_inspect_preview` with the selectors your change targets and the widths the request is about, check the measurements against what was asked (fix and re-inspect if they fail), then record builtin_reviews_record on each ticket the change delivers \u2014 verdict "complete" quoting the measurements, or "gaps" naming what is missing. A complete review after a passing inspection closes the ticket when your turn ends. If you genuinely cannot verify \u2014 the preview is not running, or the change is unfinished \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
-}
-
-// src/delegationRequest.ts
-var SPAWN_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents"]);
-var ASKS_FOR_SUBAGENTS = /\bsub[- ]?agents?\b|\bspawn(?:_agents?|\s+(?:agents?|workers?|children))\b|\b(?:parallel|concurrent)\s+(?:agents?|workers?)\b|\bfan[- ]?out\b/i;
-var DECLINES_SUBAGENTS = /\b(?:no|without|don'?t\s+use|do\s+not\s+use|never\s+use|skip(?:\s+the)?)\s+(?:any\s+)?sub[- ]?agents?\b/i;
-function asksForSubagents(text) {
-  const t = text ?? "";
-  return ASKS_FOR_SUBAGENTS.test(t) && !DECLINES_SUBAGENTS.test(t);
-}
-function canSpawnHere(toolNames) {
-  return toolNames.some((n) => SPAWN_TOOLS.has(n));
-}
-function attemptedDelegation(events) {
-  return events.some((e) => e.category === "tool" && SPAWN_TOOLS.has(e.label));
-}
-function leftDelegationUndone(input) {
-  return canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
-}
-function undelegatedRequestNudge(toolNames) {
-  const fanOut = toolNames.includes("spawn_agents");
-  const call2 = fanOut ? 'Call spawn_agents NOW: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, a complete standalone task brief, role "code". Each child is a clone of you and makes its change itself. It takes up to 4 per call and returns at once \u2014 the children run in the background, so start the next batch right away if there are more. Use spawn_agent for a slice that must run alone.' : 'Call spawn_agent NOW, one slice at a time, with a complete standalone task brief and role "code". The child is a clone of you and makes its change itself.';
-  return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: with no fitting teammate, OMIT it \u2014 the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ${call2} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`;
-}
-
-// src/runLineage.ts
-var SUBAGENT_OF_META_KEY = "subagentOf";
-function lineageMetadata(lineage, metadata) {
-  let base = {};
-  if (metadata) {
-    try {
-      const parsed = JSON.parse(metadata);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) base = parsed;
-    } catch {
-    }
-  }
-  return JSON.stringify({
-    ...base,
-    [MID_TURN_META_KEY]: true,
-    [AUTHORED_BY_META_KEY]: { kind: "agent", ref: lineage.agent.ref, name: lineage.agent.name },
-    [SUBAGENT_OF_META_KEY]: { handle: lineage.handle, owner: lineage.ownerName, label: lineage.label }
-  });
-}
-function parseSubagentOrigin(msg) {
-  if (!msg.metadata) return null;
-  try {
-    const o = JSON.parse(msg.metadata)[SUBAGENT_OF_META_KEY];
-    if (o && typeof o.handle === "string" && typeof o.owner === "string") {
-      return { handle: o.handle, owner: o.owner, label: typeof o.label === "string" ? o.label : "" };
-    }
-  } catch {
-  }
-  return null;
-}
-function lineagePersistence(base, lineage, onPersisted) {
-  return {
-    ...base,
-    async sendMessages(chatId, messages) {
-      const saved = await base.sendMessages(
-        chatId,
-        messages.map((m) => ({ ...m, metadata: lineageMetadata(lineage, m.metadata) }))
-      );
-      for (const msg of saved) if (msg.role !== "tool") onPersisted(msg);
-      return saved;
-    }
-  };
-}
-
-// src/runSteering.ts
-var inboxes = /* @__PURE__ */ new Map();
-function queueRunSteering(runKey, text) {
-  const trimmed = text.trim();
-  if (!trimmed) return;
-  const queue = inboxes.get(runKey) ?? [];
-  queue.push(trimmed);
-  inboxes.set(runKey, queue);
-}
-function drainRunSteering(runKey) {
-  const queue = inboxes.get(runKey);
-  if (!queue?.length) return [];
-  inboxes.delete(runKey);
-  return queue;
-}
-
 // src/composingActivity.ts
 function utf8ByteLength2(text) {
   if (!text) return 0;
@@ -10152,558 +11217,940 @@ function createComposingActivity(sink, opts) {
   };
 }
 
-// src/repeatedFailure.ts
-var FAILURE_NUDGE_AT = 2;
-var FAILURE_HARD_AT = 3;
-var FailureTally = class _FailureTally {
-  failures = /* @__PURE__ */ new Map();
-  static key(tool, args) {
-    return `${tool}:${stableStringify(args ?? {})}`;
-  }
-  /** Record a FAILED call. Returns how many times this exact call has now failed,
-   *  including this one. */
-  record(tool, args) {
-    const key = _FailureTally.key(tool, args);
-    const attempts = (this.failures.get(key) ?? 0) + 1;
-    this.failures.set(key, attempts);
-    return attempts;
-  }
-  /** This exact call SUCCEEDED. Its earlier failures were transient after all, so they
-   *  are no longer evidence of anything — a later failure starts counting from one. */
-  clear(tool, args) {
-    this.failures.delete(_FailureTally.key(tool, args));
-  }
-};
-function failureReason(result) {
-  if (!result || typeof result !== "object" || Array.isArray(result)) return void 0;
-  const error = result.error;
-  return typeof error === "string" && error.trim() ? error.trim().slice(0, 400) : void 0;
+// src/runSteering.ts
+var inboxes = /* @__PURE__ */ new Map();
+function queueRunSteering(runKey, text) {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  const queue = inboxes.get(runKey) ?? [];
+  queue.push(trimmed);
+  inboxes.set(runKey, queue);
 }
-function repeatedFailureAdvisory(tool, attempts, reason) {
-  if (attempts < FAILURE_NUDGE_AT) return null;
-  const got = reason ? ` Both times it answered: "${reason}".` : "";
-  if (attempts >= FAILURE_HARD_AT) {
-    const said = reason ? ` It has answered "${reason}" every time.` : "";
-    return `STOP CALLING \`${tool}\` WITH THESE ARGUMENTS. This is failure ${attempts} of the identical call in this run.${said} The arguments are the problem, not the timing \u2014 repeating them will fail again and will spend the rest of this run's tool budget. Do ONE of these now: (a) re-read the error above and change the argument it names (a failing tool usually says exactly what to pass instead \u2014 a scope, a path, an id \u2014 so pass it); (b) reach the same goal with a different tool; (c) stop and tell the user plainly what is blocking you and what you need from them. Do not issue this call again.`;
-  }
-  return `\`${tool}\` has now failed ${attempts} times in this run with these exact arguments.${got} Another identical attempt will not behave differently \u2014 this is not a flake. Read the error above and change what it names (most failures state the argument to pass instead), use a different tool to reach the same goal, or say plainly what is blocking you. Do not simply repeat the call.`;
+function drainRunSteering(runKey) {
+  const queue = inboxes.get(runKey);
+  if (!queue?.length) return [];
+  inboxes.delete(runKey);
+  return queue;
 }
 
-// src/repeatedWrite.ts
-function contentWriteOf(tool, args) {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
-  const { path, content } = args;
-  if (typeof path !== "string" || !path.trim() || typeof content !== "string") return null;
-  return { path: path.trim(), fingerprint: `${tool}:${stableStringify(args)}` };
-}
-function pathOf(args) {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
-  const path = args.path;
-  return typeof path === "string" && path.trim() ? path.trim() : null;
-}
-var WriteLedger = class {
-  written = /* @__PURE__ */ new Map();
-  /** Is this call a full-content write identical to the last one that landed on its
-   *  path, with nothing touching that path since? */
-  isRepeat(tool, args) {
-    const write = contentWriteOf(tool, args);
-    return !!write && this.written.get(write.path) === write.fingerprint;
-  }
-  /**
-   * A non-read call ran. A successful full-content write is remembered; anything else
-   * that names a path forgets that path; `unscoped` (a shell command, a checkout)
-   * forgets everything. A FAILED write forgets its path — the file's state is unknown.
-   */
-  record(tool, args, options) {
-    if (options.unscoped) {
-      this.written.clear();
-      return;
-    }
-    const write = options.ok ? contentWriteOf(tool, args) : null;
-    if (write) {
-      this.written.set(write.path, write.fingerprint);
-      return;
-    }
-    const path = pathOf(args);
-    if (path) this.written.delete(path);
-  }
-};
-function repeatedWriteNote(tool, path) {
-  return `Not re-run: this exact \`${tool}\` of "${path}" already succeeded earlier in this run and nothing has changed the file since, so it already holds this content \u2014 writing it again cannot change anything. If something still looks broken, the cause is not that the write failed: re-read the error (it may predate your write), look elsewhere for the cause, or tell the user what you see.`;
-}
-
-// src/turnOptimization.ts
-var MAX_ROUTING_QUERY_CHARS = 4e3;
-var ROUTING_USER_TURNS = 4;
-function textContent(content) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content.filter((part) => part.type === "text").map((part) => part.text).join("\n");
-}
-function routingQueryForTurn(messages) {
-  const turns = messages.filter((message) => message.role === "user").map((message) => textContent(message.content).trim()).filter(Boolean).slice(-ROUTING_USER_TURNS);
-  return turns.join("\n").slice(-MAX_ROUTING_QUERY_CHARS);
-}
-function turnOptimizationDirective() {
-  return [
-    "TURN OPERATING CONTRACT:",
-    "\u2022 Infer a workable brief from the conversation, project memory, attachments and current request. Ask one grouped set of questions only when different answers would materially change the result; otherwise state a reasonable assumption briefly and proceed.",
-    "\u2022 Treat corrections and \u201Cactually\u2026\u201D follow-ups as patches to the active brief. Preserve approved work and change the smallest requested scope; never regenerate unrelated content.",
-    "\u2022 Complete all requested deliverables in this run. Batch independent reads/actions when the tool supports it, while preserving dependencies and confirmation boundaries.",
-    "\u2022 In Work mode, plan enough to act safely and then execute in the same run. Do not make the user move to another surface just to turn a plan into work.",
-    "\u2022 For attachments, inspect only the relevant pages/sections with builtin_attachments_read and its offset/limit controls. Accept the original file; never ask the user to convert, split, trim, or re-upload it merely to save context.",
-    "\u2022 Reuse established project conventions, examples and explicit user preferences. A topic change is a new internal context segment, not a reason to make the user restart the chat.",
-    "\u2022 Route work to the available model and tools transparently. Use a scheduling tool when the user expresses recurrence; do not ask them to repeat a routine manually.",
-    "\u2022 Keep the response no longer than the task requires. Do not expose token windows, usage-reset timing, context cleanup, model-size folklore, or other platform limitations as work the user must manage."
-  ].join("\n");
-}
-
-// src/brainRunStore.ts
-import { formatEvermindMemoryBlock as formatEvermindMemoryBlock2, countReconciledMemories } from "@seanhogg/builderforce-memory/evermind";
-
-// src/handoff/runHandoff.ts
-function handoffTrace(ts, step, t) {
-  const how = t.summarized ? "summarized" : t.recalled ? "recalled from memory" : "elided";
-  return {
-    ts,
-    category: "message",
-    label: "llm.handoff",
-    args: { step, ...t },
-    result: t.dropped > 0 ? `Packed the transcript for ${t.to}${t.from ? ` (from ${t.from})` : ""}: ${t.dropped} earlier message(s) ${how}, ~${t.estimatedTokens} tokens${t.fits ? "" : " \u2014 still over its window"}.` : `Handed the transcript to ${t.to}${t.from ? ` (from ${t.from})` : ""} verbatim, ~${t.estimatedTokens} tokens.`
-  };
-}
-function createRunHandoff(deps) {
-  let lastServed;
-  const recalls = /* @__PURE__ */ new Map();
-  if (deps.priorRecall) recalls.set(deps.priorRecall.query, Promise.resolve(deps.priorRecall.result));
-  const recall = deps.recall ? (query) => {
-    let hit = recalls.get(query);
-    if (!hit) {
-      hit = deps.recall(query).catch(() => null);
-      recalls.set(query, hit);
-    }
-    return hit;
-  } : void 0;
-  return {
-    async prepare(req) {
-      const to = req.model;
-      if (!to) return req.messages;
-      const window2 = contextWindowOf(to, deps.windowSources);
-      if (window2 === void 0) return req.messages;
-      const differs = lastServed !== void 0 && lastServed !== to;
-      if (!differs && window2 >= deps.workingBudgetTokens) return req.messages;
-      const { messages } = await packForModel({
-        messages: req.messages,
-        to,
-        ...lastServed ? { from: lastServed } : {},
-        contextTokens: window2,
-        ...req.tools ? { tools: req.tools } : {},
-        ...req.maxTokens ? { maxTokens: req.maxTokens } : {},
-        ...deps.summarizer ? { summarizer: deps.summarizer() } : {},
-        ...recall ? { recall } : {},
-        onTrace: (t) => {
-          if (differs || t.dropped > 0 || !t.fits) deps.trace(handoffTrace(deps.now(), req.step, t));
-        }
-      });
-      return messages;
-    },
-    served(model) {
-      if (model) lastServed = model;
-    }
-  };
-}
-
-// src/memorySavings.ts
-function callMemoryEffect(trimmedTokens, recallTokens) {
-  const t = Math.max(0, Math.round(trimmedTokens));
-  const r = Math.max(0, Math.round(recallTokens));
-  return t > 0 || r > 0 ? { trimmedTokens: t, recallTokens: r } : void 0;
-}
-function emptyRunUsage() {
-  return { promptTokens: 0, completionTokens: 0, model: null };
-}
-
-// src/brainRunStore.ts
-function provenanceMetadata(result, requested, base) {
-  const model = result.resolvedModel;
-  if (!model) return withProvenanceMetadata(null, base);
-  const account = asProvenanceAccount(result.account);
-  const asked = requested && requested !== "default" && requested !== model ? requested : void 0;
-  return withProvenanceMetadata({
-    model,
-    ...account ? { account } : {},
-    ...asked ? { requestedModel: asked } : {}
-  }, base);
-}
-async function persistMidTurnText(chatId, c, persistence, result, requested) {
-  const text = canonicalTurnText(result.text);
-  if (!text) return;
-  const metadata = provenanceMetadata(result, requested, { [MID_TURN_META_KEY]: true });
-  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...metadata ? { metadata } : {} }]);
-  recordAppended(c, msg);
-}
+// src/runStore/runLoopContext.ts
 var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files", "find_symbol", "file_outline", "semantic_search", "repo_map"]);
 var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isRepoStateReadTool(name) || isReadOnlyPlatformTool(name);
-function accrueByoUnresolved(c, raw) {
-  if (!raw) return;
-  const before = c.byoUnresolved.length;
-  const next = new Set(c.byoUnresolved);
-  for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
-  if (next.size !== before) c.byoUnresolved = [...next];
+var metaOf = (turn) => turn.meta;
+function reportToPolicy(run, event) {
+  return run.policy = reduceRunPolicy(run.policy, event);
 }
-function accrueProviderCap(c, raw) {
-  if (!raw) return;
-  const before = c.providerCap.length;
-  const next = new Set(c.providerCap);
-  for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
-  if (next.size !== before) c.providerCap = [...next];
-}
-var MAX_CELLS = 50;
-var MAX_TRACE_EVENTS = 500;
-var MAX_APPENDED = 50;
-var cells = /* @__PURE__ */ new Map();
-var storeListeners = /* @__PURE__ */ new Set();
-var EMPTY_SNAPSHOT = {
-  running: false,
-  streamingText: "",
-  error: "",
-  errorAction: null,
-  pendingConfirm: null,
-  messagesEpoch: 0,
-  appended: [],
-  hasTrace: false,
-  trace: [],
-  activity: null,
-  byoUnresolved: [],
-  providerCap: []
-};
-function makeCell() {
-  return {
-    transcript: [],
-    priorResearch: null,
-    trace: [],
-    running: false,
-    streamingText: "",
-    error: "",
-    errorAction: null,
-    pendingConfirm: null,
-    confirmResolver: null,
-    appended: [],
-    messagesEpoch: 0,
-    listeners: /* @__PURE__ */ new Set(),
-    emitTimer: null,
-    abort: null,
-    activity: null,
-    byoUnresolved: [],
-    providerCap: [],
-    codeChanged: false,
-    codeModel: null,
-    codePhaseReached: false,
-    runId: "",
-    ticketRecorded: false,
-    touchedFiles: [],
-    deltaTicketId: null,
-    deltaRecordedFiles: [],
-    runTraceFrom: 0,
-    persistStep: null,
-    compactMemo: null,
-    runUsage: emptyRunUsage(),
-    lastServedModel: null,
-    liveTurn: null,
-    stoppedTurn: null,
-    snapshot: EMPTY_SNAPSHOT
-  };
-}
-function getCell(chatId) {
-  const existing = cells.get(chatId);
-  if (existing) {
-    cells.delete(chatId);
-    cells.set(chatId, existing);
-    return existing;
-  }
-  const c = makeCell();
-  cells.set(chatId, c);
-  evictIdleCells(chatId);
-  return c;
-}
-function evictIdleCells(protectId) {
-  if (cells.size <= MAX_CELLS) return;
-  for (const [id, cell] of cells) {
-    if (cells.size <= MAX_CELLS) break;
-    if (id === protectId || cell.running || cell.listeners.size > 0) continue;
-    cells.delete(id);
-  }
-}
-var STREAM_EMIT_MS = 32;
-function emitStreaming(c) {
-  if (c.emitTimer) return;
-  c.emitTimer = setTimeout(() => {
-    c.emitTimer = null;
-    emit(c);
-  }, STREAM_EMIT_MS);
-}
-function emit(c) {
-  if (c.emitTimer) {
-    clearTimeout(c.emitTimer);
-    c.emitTimer = null;
-  }
-  c.snapshot = {
-    running: c.running,
-    streamingText: c.streamingText,
-    error: c.error,
-    errorAction: c.errorAction,
-    pendingConfirm: c.pendingConfirm,
-    messagesEpoch: c.messagesEpoch,
-    appended: c.appended,
-    hasTrace: c.trace.length > 0,
-    trace: c.trace,
-    activity: c.activity,
-    byoUnresolved: c.byoUnresolved,
-    providerCap: c.providerCap
-  };
-  for (const l of c.listeners) l();
-  for (const l of storeListeners) l();
-}
-function setActivity(c, activity) {
-  c.activity = activity;
-  emit(c);
-}
-function pushTrace(c, ev) {
-  c.trace.push(ev);
-  c.persistStep?.(ev);
-  if (c.trace.length > MAX_TRACE_EVENTS) {
-    const dropped = c.trace.length - MAX_TRACE_EVENTS;
-    c.trace.splice(0, dropped);
-    c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
-  }
-  emit(c);
-}
-function runTrace(c) {
-  return c.trace.slice(c.runTraceFrom);
-}
-function persistStep(chatId, persistence, ev) {
-  void persistence.sendMessages(chatId, [stepRow(ev)]).catch(() => {
-  });
-}
-function recordRunFailure(c, label, message) {
-  pushTrace(c, {
-    ts: nowIso(),
-    category: "error",
-    label,
-    result: message,
-    isError: true
-  });
-}
-function recordAppended(c, msg) {
-  const next = [...c.appended, msg];
-  c.appended = next.length > MAX_APPENDED ? next.slice(next.length - MAX_APPENDED) : next;
-  c.messagesEpoch += 1;
-}
-function nowMs2() {
-  return typeof Date !== "undefined" ? Date.now() : 0;
-}
-function nowIso() {
-  return typeof Date !== "undefined" ? (/* @__PURE__ */ new Date()).toISOString() : "";
-}
-function attachDeltaToRunTicket(toolName, args, deltaTicketId) {
-  if (toolName !== "builtin_tickets_from_delta" || deltaTicketId == null) return;
-  if (!args || typeof args !== "object" || Array.isArray(args)) return;
-  const bag = args;
-  if (bag.taskId == null) bag.taskId = deltaTicketId;
-}
-function latestUserText(convo) {
-  for (let i = convo.length - 1; i >= 0; i--) {
-    const m = convo[i];
-    if (m.role !== "user") continue;
-    if (typeof m.content === "string") return m.content.trim();
-    if (Array.isArray(m.content)) {
-      return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
-    }
-    return "";
-  }
-  return "";
-}
-function isFollowUpTurn(convo) {
-  let users = 0;
-  for (const m of convo) {
-    if (m.role === "assistant") return true;
-    if (m.role === "user") users += 1;
-  }
-  return users > 1;
-}
-function lastAssistantText(convo) {
-  for (let i = convo.length - 1; i >= 0; i -= 1) {
-    const m = convo[i];
-    if (m.role === "assistant") return typeof m.content === "string" ? m.content.trim() : "";
-  }
-  return "";
-}
-function resetBrainRunStore() {
-  cells.clear();
-  forgetResolvedModels();
-}
-function subscribeRunStore(listener) {
-  storeListeners.add(listener);
-  return () => {
-    storeListeners.delete(listener);
-  };
-}
-function getGlobalRunState() {
-  const running = [];
-  const awaiting = [];
-  for (const [id, cell] of cells) {
-    if (cell.pendingConfirm) awaiting.push(id);
-    else if (cell.running) running.push(id);
-  }
-  return { running, awaiting };
-}
-function subscribeRun(chatId, listener) {
-  const c = getCell(chatId);
-  c.listeners.add(listener);
-  return () => {
-    c.listeners.delete(listener);
-  };
-}
-function runAbortSignal(chatId) {
-  return cells.get(chatId)?.abort?.signal;
-}
-function appendRunMessage(chatId, msg) {
-  const c = cells.get(chatId);
-  if (!c) return;
-  recordAppended(c, msg);
-  emit(c);
-}
-function getRunSnapshot(chatId) {
-  if (chatId == null) return EMPTY_SNAPSHOT;
-  return cells.get(chatId)?.snapshot ?? EMPTY_SNAPSHOT;
-}
-function isRunning(chatId) {
-  return chatId != null && (cells.get(chatId)?.running ?? false);
-}
-function getRunTrace(chatId) {
-  if (chatId == null) return [];
-  return cells.get(chatId)?.trace ?? [];
-}
-function stopRun(chatId) {
-  const driver = getRunDriver();
-  if (driver) return driver.stop(chatId);
-  const c = cells.get(chatId);
-  if (!c || !c.running) return;
-  const stopped = stoppedTurnOf(c);
-  c.stoppedTurn = stopped;
-  c.abort?.abort();
-  if (c.confirmResolver) {
-    const resolve = c.confirmResolver;
-    c.confirmResolver = null;
-    c.pendingConfirm = null;
-    resolve(false);
-  }
-  c.streamingText = "";
-  c.activity = null;
-  pushTrace(c, stopped.event);
-}
-function stoppedTurnOf(c) {
-  const live2 = c.liveTurn;
-  const text = live2 ? c.streamingText : "";
-  const model = live2?.model;
-  const result = !live2 ? "Stopped by user." : model ? `Stopped by user while ${model} was streaming (${text.length} chars kept).` : `Stopped by user before the gateway named the model (${text.length} chars kept).`;
-  return {
-    text,
-    source: { ...live2 },
-    event: {
+function failureAdvisoryFor(run, name, args, out, step) {
+  const attempts = run.failures.record(name, args);
+  const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
+  if (advisory) {
+    pushTrace(run.c, {
       ts: nowIso(),
       category: "message",
-      label: STOPPED_TURN_STEP,
-      ...model ? { args: { model } } : {},
-      ...live2 ? { textChars: text.length } : {},
-      result
-    }
-  };
-}
-async function keepStoppedTurn(chatId, c, persistence) {
-  const stopped = c.stoppedTurn;
-  c.stoppedTurn = null;
-  if (!stopped) return;
-  const text = canonicalTurnText(stopped.text);
-  if (!text) return;
-  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: stoppedTurnMetadata(stopped.source) }]);
-  if (msg) recordAppended(c, msg);
-}
-async function asLiveTurn(c, complete) {
-  c.liveTurn = {};
-  try {
-    return await complete();
-  } finally {
-    c.liveTurn = null;
+      label: "tools.repeat_failure_guard",
+      args: { step, tool: name, attempts },
+      result: advisory
+    });
   }
+  return advisory;
 }
-function liveTurnModel(c) {
-  return (model, account) => {
-    if (c.liveTurn) c.liveTurn = { model, account };
-  };
+async function settleReply(run, rawText, result, requested) {
+  const { c, chatId, convo } = run;
+  const text = canonicalTurnText(rawText);
+  convo.push({ role: "assistant", content: replayTextOf(text) });
+  const meta = provenanceMetadata(result, requested);
+  const [assistantMsg] = await run.req.persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...meta ? { metadata: meta } : {} }]);
+  c.streamingText = "";
+  recordAppended(c, assistantMsg);
+  return assistantMsg;
 }
-function connectRetryStep(c, step) {
-  return (attempt, delayMs, reason) => {
+
+// src/runStore/completeTurn.ts
+function completeTurnPort(run) {
+  const { c, chatId, runKey, req, convo, systemPrompt, metadata, recallBlockTokens, allTools, requestQuery, usedTools, canAskUser, alwaysAdvertised } = run;
+  const { stream, routingMode, maxTokens, reasoning, runTool } = req;
+  return async (ctx) => {
+    const iter = ctx.step;
+    c.streamingText = "";
+    emit(c);
+    for (const text of drainRunSteering(runKey)) convo.push({ role: "user", content: text });
+    const working = await buildWorkingTranscript(
+      c,
+      systemPrompt,
+      (msgs) => summarizeMiddle(stream, run.policy.model, msgs, c.abort?.signal),
+      (dropped) => {
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "message",
+          label: "context.compacted",
+          args: { droppedMessages: dropped },
+          result: `Compressed ${dropped} earlier step(s) into a memory to stay within the context window.`
+        });
+        emit(c);
+      }
+    );
+    const trimmed = c.compactMemo ? transcriptTokens([{ role: "system", content: systemPrompt }, ...c.transcript]) - transcriptTokens(working) : 0;
+    const memoryEffect = callMemoryEffect(trimmed, recallBlockTokens);
+    const callMetadata = memoryEffect ? { ...metadata, memory: memoryEffect } : metadata;
+    if (c.abort?.signal.aborted) throw new Error("run stopped");
+    const llmStart = nowMs2();
+    let firstTokenAt;
+    let result;
+    const selection = selectToolsForTurn(allTools, {
+      // The REQUEST, captured once before the loop — never "the latest user message".
+      // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
+      // tool-budget close-out), so reading the newest one re-rolled the advertised
+      // set from text WE wrote: after one recovery the query became "…made zero tool
+      // calls… answer using its result…", which scores `key_results`/`dashboards`/
+      // `incidents` and drops the ticket tools the user actually asked for. The tool
+      // the model was told to call then genuinely did not exist, and it narrated.
+      // Holding the request steady also keeps the advertised set STABLE across turns
+      // — a tool must not vanish between one turn and the next.
+      query: requestQuery,
+      pinned: usedTools,
+      // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
+      // directive names `builtin_chats_list_tickets`) are never optional: telling a
+      // model to call a tool we then decline to advertise is the exact contradiction
+      // that produces a narrated call. Derived from the prompt text, so a directive
+      // edit can never silently desync from this list — plus the local workspace
+      // tools, which the prompt names in prose the pattern cannot see.
+      // While planning, the planner's deliverable is never off-topic either.
+      required: offersHandOff(run.policy) && canAskUser ? [...alwaysAdvertised, HAND_OFF_TOOL] : alwaysAdvertised
+    });
+    const selected = offersHandOff(run.policy) ? selection.tools : selection.tools.filter((t) => t.function.name !== HAND_OFF_TOOL);
+    const advertised = selection.trimmed ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)] : selected;
+    const tools = advertised.length > 0 ? advertised : void 0;
+    const advertisedNames = new Set(advertised.map((t) => t.function.name));
+    if (selection.trimmed) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "tools.selected",
+        args: { step: iter },
+        result: `${selected.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`
+      });
+    }
+    setActivity(c, { phase: "thinking", startedAt: Date.now(), step: iter });
+    const composing = createComposingActivity(
+      { set: (a) => {
+        c.activity = a;
+      }, repaint: () => emit(c), coalescedRepaint: () => emitStreaming(c) },
+      { step: iter }
+    );
+    const handlers = {
+      onModel: liveTurnModel(c),
+      onConnectRetry: connectRetryStep(c, iter),
+      onTextDelta: (d) => {
+        c.streamingText += d;
+        if (firstTokenAt === void 0) {
+          firstTokenAt = nowMs2();
+          c.activity = { phase: "writing", startedAt: Date.now(), step: iter };
+          emit(c);
+          return;
+        }
+        emitStreaming(c);
+      },
+      // The first argument fragment is this turn's first token too: a tool-only turn
+      // recorded no ttft at all, so "Thought for Xs" covered the whole turn.
+      onToolCallDelta: (index, partial) => {
+        if (firstTokenAt === void 0) firstTokenAt = nowMs2();
+        composing.onDelta(index, partial);
+      }
+    };
+    let turnRole = nextTurn(run.policy, { hasTools: !!tools }).role;
+    const turnToolChoice = run.forceToolChoice;
+    run.forceToolChoice = void 0;
+    const request = async (extra = []) => {
+      const ask = nextTurn(run.policy, { hasTools: !!tools });
+      const messages = await run.windowFit.prepare({ messages: extra.length > 0 ? [...working, ...extra] : working, model: ask.model, tools, maxTokens: turnMaxTokens(maxTokens, !!tools), step: iter });
+      return asLiveTurn(c, () => stream(
+        {
+          messages,
+          tools,
+          tool_choice: tools ? turnToolChoice ?? "auto" : void 0,
+          model: ask.model,
+          modelStrict: ask.strict,
+          // Raised to the tool-turn floor when tools are on offer: a file write is
+          // output, and the Effort ceiling cut every one of them off mid-JSON.
+          routingMode,
+          maxTokens: turnMaxTokens(maxTokens, !!tools),
+          reasoning,
+          metadata: callMetadata,
+          role: ask.role,
+          ...ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {},
+          signal: c.abort?.signal
+        },
+        handlers
+      ));
+    };
+    const turnError = (e) => {
+      pushTrace(c, providerFailureTrace(nowIso(), iter, e instanceof StreamInterruptedError && e.model || run.policy.model, e, nowMs2() - llmStart));
+      return e;
+    };
+    const restartTurn = () => {
+      c.streamingText = "";
+      firstTokenAt = void 0;
+      composing.reset();
+      emit(c);
+    };
+    try {
+      result = await request();
+    } catch (e) {
+      if (c.abort?.signal.aborted) throw e;
+      const failure = providerFailureEvent(e);
+      const outcome = failure ? reportToPolicy(run, failure).outcome : null;
+      if (!outcome || outcome.kind !== "retry_turn") throw turnError(e);
+      pushTrace(c, transportRetryTrace(nowIso(), iter, outcome, e.message));
+      restartTurn();
+      try {
+        result = await request();
+      } catch (retryError) {
+        if (c.abort?.signal.aborted) throw retryError;
+        throw turnError(retryError);
+      }
+    }
+    if (turnRole === "plan" && result.toolCalls.some((tc) => isCodeChangeTool(tc.name)) && reportToPolicy(run, { type: "code_change_attempted" }).outcome.kind === "reask_as_coder") {
+      turnRole = nextTurn(run.policy, { hasTools: !!tools }).role;
+      c.codePhaseReached = true;
+      const brief = coderHandoffBrief(replayTextOf(result.text), result.toolCalls);
+      pushTrace(c, coderReaskTrace(nowIso(), iter, result.resolvedModel));
+      restartTurn();
+      try {
+        result = await request([{ role: "user", content: brief }]);
+      } catch (e) {
+        if (c.abort?.signal.aborted) throw e;
+        throw turnError(e);
+      }
+    }
+    reportToPolicy(run, { type: "turn_succeeded", ...result.resolvedModel ? { model: result.resolvedModel } : {} });
+    run.windowFit.served(result.resolvedModel ?? run.policy.model);
+    if (result.toolCalls.length > 0) run.announcementRecoveries = 0;
+    if (result.resolvedModel && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))) c.codeModel = result.resolvedModel;
+    accrueByoUnresolved(c, result.byoUnresolved);
+    accrueProviderCap(c, result.providerCap);
+    const resolved = result.resolvedModel ?? run.policy.model ?? "default";
+    const requested = run.policy.model ?? "default";
+    c.runUsage.promptTokens += result.usage?.prompt ?? 0;
+    c.runUsage.completionTokens += result.usage?.completion ?? 0;
+    if (result.resolvedModel) {
+      c.runUsage.model = result.resolvedModel;
+      c.lastServedModel = result.resolvedModel;
+    }
+    setLastResolvedModel(chatId, result.resolvedModel);
+    if (requested !== "default" && resolved !== "default" && resolved !== requested) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "llm.model_downgrade",
+        args: { requestedModel: requested, model: resolved, step: iter },
+        result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
+      });
+    }
+    const localFallback = localFallbackTrace(nowIso(), iter, result.localFirst);
+    if (localFallback) pushTrace(c, localFallback);
+    const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n)) : [];
+    const argBytes = toolCallArgBytes(result.toolCalls);
     pushTrace(c, {
       ts: nowIso(),
-      category: "message",
-      label: "llm.connect_retry",
-      args: { step, attempt },
-      result: `Could not reach BuilderForce (${reason}). Trying again in ${Math.round(delayMs / 1e3)}s \u2014 nothing was sent, so nothing is repeated.`
+      category: "llm",
+      label: "llm.complete",
+      durationMs: nowMs2() - llmStart,
+      ttftMs: firstTokenAt !== void 0 ? firstTokenAt - llmStart : void 0,
+      // `model` is the model the gateway ACTUALLY used (resolved), falling back to
+      // what we requested when the gateway didn't report one. `requestedModel`
+      // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
+      // can tell "what I asked for" from "what answered".
+      args: {
+        model: resolved,
+        requestedModel: requested,
+        step: iter,
+        // What the turn asked the gateway for (analysis vs code vs chat), so a copied
+        // report shows which model planned and which one wrote the code.
+        role: turnRole,
+        toolCalls: result.toolCalls.length,
+        // How much the turn actually EMITTED. "1 tool call(s) · 202509ms" said
+        // nothing about a turn that spent three minutes streaming 21 KB of
+        // `write_file` arguments — which is what a long turn usually is.
+        ...argBytes > 0 ? { argBytes } : {},
+        // Which account served the turn + any connected-BYO provider the gateway
+        // could NOT resolve — so triage tells "ran on the shared pool despite a
+        // connected Claude account (expired?)" apart from "nothing connected".
+        account: result.account,
+        byoUnresolved: result.byoUnresolved,
+        // How many tools the turn was actually OFFERED, out of the whole catalog.
+        // A zero here is the difference between "the model refused to act" and "it had
+        // nothing to act with" — previously unanswerable from a copied report, which
+        // only ever carried the registry-wide total.
+        advertisedTools: advertised.length,
+        catalogTools: allTools?.length ?? 0,
+        ...narratedUnadvertised.length ? { narratedUnadvertised } : {},
+        // The stream filter strips every call it lifts, so call markup still IN the text
+        // is a dialect it does not know: the model tried to act and the call never ran.
+        // Recorded so a copied report says "parser gap" instead of "won't call tools".
+        ...result.toolCalls.length === 0 && hasCallMarkup(result.text) ? { unliftedCallMarkup: true } : {},
+        // What the vendor's RAW response carried, counted before the gateway translated
+        // it — so a text-only turn reads as "the model returned no call" or "a returned
+        // call was lost on the way", never as a guess. Absent when the vendor does not report it.
+        ...result.upstream ? { upstreamFunctionCalls: result.upstream.functionCalls, upstreamRecovered: result.upstream.recovered } : {}
+      },
+      // Structured diagnostics fields — the A-vs-B triage reads these directly.
+      usage: result.usage,
+      finishReason: result.finishReason,
+      textChars: result.text.length,
+      result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}${result.usage?.prompt != null ? ` \xB7 prompt ${result.usage.prompt} tok` : ""}`
     });
+    if (result.text.trim()) {
+      pushTrace(c, { ts: nowIso(), category: "message", label: "agent.message", args: { step: iter }, result: result.text });
+    }
+    run.lastTurnInterruption = turnInterruption(result.finishReason);
+    const meta = { result, resolved, requested, advertised: advertised.length, advertisedNames };
+    const toolCalls = runTool ? result.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.args })) : [];
+    return { content: replayTextOf(result.text), toolCalls, meta };
   };
 }
-function clearRunError(chatId) {
-  if (chatId == null) return;
-  const driver = getRunDriver();
-  if (driver) return driver.clearError(chatId);
-  const c = cells.get(chatId);
-  if (!c || !c.error) return;
-  c.error = "";
-  c.errorAction = null;
-  emit(c);
+
+// src/runStore/dispatchTool.ts
+function dispatchToolPort(run) {
+  const { c, chatId, req, readCoverage, failures, writeLedger, placeholderLedger } = run;
+  const { runTool } = req;
+  return async (call2, ctx) => {
+    const iter = ctx.step;
+    const args = call2.args;
+    const declined = malformedCallOutcome(call2, run.lastTurnInterruption === "truncated");
+    if (declined) {
+      const truncated = run.lastTurnInterruption === "truncated";
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "error",
+        isError: true,
+        durationMs: 0,
+        label: malformedCallLabel(call2.name, truncated),
+        args: { arguments: String(call2.raw?.arguments ?? "").slice(0, 200) },
+        result: declined
+      });
+      return { data: declined, isError: true };
+    }
+    const isReadTool = isDedupableRead(call2.name);
+    const toolStart = nowMs2();
+    setActivity(c, toolActivity(call2.name, args, iter, Date.now()));
+    if (!runTool) throw new Error("tool call without a tool runner");
+    let out;
+    try {
+      out = await runTool(call2.name, withObservedModel(chatId, call2.name, args));
+    } catch (e) {
+      const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+      out = { ok: false, error: message };
+      const repeat = failureAdvisoryFor(run, call2.name, args, out, iter);
+      if (!isReadTool) writeLedger.record(call2.name, args, { ok: false, unscoped: isUnscopedMutation(call2.name, args) });
+      run.pendingRun = { out, toolStart, isReadTool, threw: true };
+      return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
+    }
+    const changed = codeChangesOf(call2.name, args, out);
+    if (changed) {
+      const first = !c.codeChanged;
+      c.codeChanged = true;
+      for (const f of changed) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+      if (first && !c.ticketRecorded && req.projectId != null && req.runTool) {
+        await recordCodeChangeTicket(chatId, c, req, "open").catch(() => {
+        });
+      }
+    }
+    if (isTicketRecordingTool(call2.name)) c.ticketRecorded = true;
+    await autoLinkCreatedItem(chatId, c, runTool, call2.name, out);
+    let advisory = null;
+    if (!isReadTool) writeLedger.record(call2.name, args, { ok: !isFailedToolResult(out), unscoped: isUnscopedMutation(call2.name, args) });
+    if (isFailedToolResult(out)) {
+      advisory = failureAdvisoryFor(run, call2.name, args, out, iter);
+    } else {
+      failures.clear(call2.name, args);
+      const placeholders = placeholdersWritten(call2.name, args);
+      if (placeholders.length) {
+        pushTrace(c, placeholderTraceEvent(call2.name, placeholders, nowIso()));
+        advisory = placeholderAdvisory(placeholders);
+      }
+      if (isCodeChangeTool(call2.name)) placeholderLedger.record(call2.name, args, placeholders);
+      if (isDelegationTool(call2.name)) placeholderLedger.add(delegationPlaceholders(out));
+      if (isTicketCompletion(call2.name, args)) {
+        const placeholderWarning = completionAdvisory(placeholderLedger.outstanding());
+        const events = c.trace;
+        const isOnBaseBranch = shippedToBaseBranch(events);
+        const canComplete = canCompleteTicket(isOnBaseBranch, false);
+        if (!canComplete) {
+          const said = notOnBaseBranchAdvisory();
+          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, isOnBaseBranch }, result: said });
+          advisory = said;
+        } else if (placeholderWarning) {
+          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, open: placeholderLedger.outstanding() }, result: placeholderWarning });
+          advisory = placeholderWarning;
+        }
+      }
+      if (isReadTool) {
+        const visit = readCoverage.record(call2.name, args);
+        const target = visit ? visitTarget(args) : void 0;
+        advisory = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+        if (advisory) {
+          pushTrace(c, {
+            ts: nowIso(),
+            category: "message",
+            label: "tools.revisit_guard",
+            args: { step: iter, tool: call2.name, target, visits: visit.count },
+            result: advisory
+          });
+        }
+      }
+    }
+    const trimmedOut = trimToolResult(call2.name, out ?? null, { advisory });
+    run.pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated };
+    return { data: trimmedOut.content, isError: isFailedToolResult(out) };
+  };
 }
-function requestRunConfirm(chatId, req, opts) {
-  if (getRunDriver()) return Promise.resolve(false);
-  const c = getCell(chatId);
-  return new Promise((resolve) => {
-    c.pendingConfirm = { name: req.name, args: req.args };
-    c.confirmResolver = resolve;
-    c.activity = {
-      ...toolActivity(req.name, req.args, opts?.step ?? c.activity?.step ?? 0, Date.now()),
-      phase: "awaiting"
-    };
+
+// src/delegationRequest.ts
+var SPAWN_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents"]);
+var ASKS_FOR_SUBAGENTS = /\bsub[- ]?agents?\b|\bspawn(?:_agents?|\s+(?:agents?|workers?|children))\b|\b(?:parallel|concurrent)\s+(?:agents?|workers?)\b|\bfan[- ]?out\b/i;
+var DECLINES_SUBAGENTS = /\b(?:no|without|don'?t\s+use|do\s+not\s+use|never\s+use|skip(?:\s+the)?)\s+(?:any\s+)?sub[- ]?agents?\b/i;
+function asksForSubagents(text) {
+  const t = text ?? "";
+  return ASKS_FOR_SUBAGENTS.test(t) && !DECLINES_SUBAGENTS.test(t);
+}
+function canSpawnHere(toolNames) {
+  return toolNames.some((n) => SPAWN_TOOLS.has(n));
+}
+function attemptedDelegation(events) {
+  return events.some((e) => e.category === "tool" && SPAWN_TOOLS.has(e.label));
+}
+function leftDelegationUndone(input) {
+  return canSpawnHere(input.toolNames) && asksForSubagents(input.requestText) && !attemptedDelegation(input.events);
+}
+function undelegatedRequestNudge(toolNames) {
+  const fanOut = toolNames.includes("spawn_agents");
+  const call2 = fanOut ? 'Call spawn_agents NOW: one workstream per open ticket whose files do not overlap \u2014 ticket=<id>, a complete standalone task brief, role "code". Each child is a clone of you and makes its change itself. It takes up to 4 per call and returns at once \u2014 the children run in the background, so start the next batch right away if there are more. Use spawn_agent for a slice that must run alone.' : 'Call spawn_agent NOW, one slice at a time, with a complete standalone task brief and role "code". The child is a clone of you and makes its change itself.';
+  return `The user asked for this work to be done by SUB-AGENTS, and none has been started. Do not ask how to proceed \u2014 the user already said. A sub-agent here is a LOCAL child run on this machine: it needs no cloud dispatch, no ticket assignment and no Developer on the roster. The workspace execution kill-switch and every \`autoRun: execution_disabled\` verdict stop CLOUD runs only \u2014 they do not apply to it. as_agent is optional: with no fitting teammate, OMIT it \u2014 the spawn tools staff the role on this project themselves (a capable teammate, or a Developer hired into the workspace and project, with the ticket assigned) and the child runs AS that agent. ${call2} Keep working while they run; when their reports are in (they arrive on their own, or call wait_agents), verify their changes and report what each child delivered, per ticket.`;
+}
+
+// src/runStore/beforeDispatch.ts
+function beforeDispatchHook(run) {
+  const { c, chatId, runKey, req, allTools, catalogToolNames, usedTools, readCoverage, writeLedger, placeholderLedger } = run;
+  const { runTool, needsConfirm, persistence } = req;
+  return async (rawCall, ctx) => {
+    const iter = ctx.step;
+    run.pendingReplay = null;
+    run.pendingRun = null;
+    let call2 = rawCall;
+    {
+      const aliased = resolveToolAlias(call2.name);
+      if (aliased !== call2.name) call2 = { ...call2, name: aliased };
+    }
+    if (isRouterTool(call2.name)) {
+      const routed = handleRouterCall(allTools ?? [], call2.name, call2.args);
+      if ("result" in routed) {
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "tool",
+          label: call2.name,
+          args: call2.args,
+          result: routed.result
+        });
+        return { result: { data: routed.result } };
+      }
+      const routedArgs = routed.dispatch.args ?? {};
+      call2 = { ...call2, name: routed.dispatch.name, args: routedArgs, raw: { ...call2.raw, name: routed.dispatch.name, arguments: JSON.stringify(routedArgs) } };
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "tools.routed",
+        args: { step: iter, via: rawCall.name },
+        result: `Called ${call2.name} through the tool router (it was not advertised directly this turn).`
+      });
+    }
+    if (call2.name === ASK_USER_TOOL) {
+      if (run.redirectAskToDelegation) {
+        run.redirectAskToDelegation = false;
+        return { result: { data: { ok: false, error: undelegatedRequestNudge(catalogToolNames) } } };
+      }
+      return { result: { data: { error: "ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose." } } };
+    }
+    if (call2.name === HAND_OFF_TOOL) {
+      if (!offersHandOff(run.policy)) {
+        return { result: { data: { ok: false, error: "The plan was already handed off \u2014 you are the coding model now. Implement the tasks; do not re-plan." } } };
+      }
+      const plan = parseHandOff(call2.args);
+      if (typeof plan === "string") return { result: { data: { ok: false, error: plan } } };
+      reportToPolicy(run, { type: "hand_off" });
+      c.codePhaseReached = true;
+      pushTrace(c, handOffTrace(nowIso(), ctx.step, plan.tasks.length, HAND_OFF_TOOL));
+      const outcome = await executeHandOff(plan, {
+        runTool: (name, args2) => runTool(name, args2),
+        toolNames: new Set(catalogToolNames),
+        ...req.projectId != null ? { projectId: req.projectId } : {},
+        afterCreate: (toolName, out) => autoLinkCreatedItem(chatId, c, runTool, toolName, out),
+        step: (label, args2, out, durationMs) => pushTrace(c, {
+          ts: nowIso(),
+          category: "tool",
+          label,
+          durationMs,
+          args: args2,
+          result: out ?? null,
+          isError: isFailedToolResult(out)
+        }),
+        postPlan: async (text) => {
+          const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: JSON.stringify({ [MID_TURN_META_KEY]: true }) }]);
+          if (!msg) return;
+          recordAppended(c, msg);
+          emit(c);
+        },
+        now: nowMs2
+      });
+      const changed = codeChangesOf(HAND_OFF_TOOL, call2.args, outcome);
+      if (changed) {
+        c.codeChanged = true;
+        for (const f of changed) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+      }
+      usedTools.add(HAND_OFF_TOOL);
+      placeholderLedger.add(delegationPlaceholders(outcome));
+      return { result: { data: outcome } };
+    }
+    const args = call2.args;
+    attachDeltaToRunTicket(call2.name, args, c.deltaTicketId);
+    if (needsConfirm && needsConfirm({ name: call2.name, args })) {
+      const ok = await requestRunConfirm(runKey, { name: call2.name, args }, { step: iter });
+      if (!ok) {
+        const declined = { cancelled: true, reason: "User declined this action." };
+        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: declined });
+        return { result: { data: declined } };
+      }
+    }
+    if (isDedupableRead(call2.name)) {
+      if (readCoverage.isRepeat(call2.name, args)) {
+        const cached2 = readCoverage.cachedResult(call2.name, args);
+        if (cached2 && !stillInWorkingContext(c, cached2.anchor)) {
+          const replayNote = `Replayed from this run's read cache: this exact ${call2.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
+          const visit = readCoverage.record(call2.name, args);
+          const target = visit ? visitTarget(args) : void 0;
+          const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+          const replayed = trimToolResult(call2.name, cached2.result ?? null, { advisory: revisit ? `${replayNote}
+
+${revisit}` : replayNote });
+          run.pendingReplay = { name: call2.name, args, result: cached2.result };
+          pushTrace(c, {
+            ts: nowIso(),
+            category: "tool",
+            label: call2.name,
+            args,
+            result: { replayed: true, note: replayNote },
+            resultBytes: replayed.bytes,
+            truncated: replayed.truncated
+          });
+          return { result: { data: replayed.content } };
+        }
+        const stub = {
+          note: `Duplicate ${call2.name} call \u2014 identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`
+        };
+        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: stub });
+        return { result: { data: stub } };
+      }
+      const covered = readCoverage.coveredRead(call2.name, args);
+      if (covered) {
+        const visit = readCoverage.record(call2.name, args);
+        const target = visit ? visitTarget(args) : void 0;
+        const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+        const note = revisit ? `${covered.note}
+
+${revisit}` : covered.note;
+        if (covered.cached && !stillInWorkingContext(c, covered.cached.anchor)) {
+          const replayed = trimToolResult(call2.name, covered.cached.result ?? null, { advisory: note });
+          run.pendingReplay = { name: call2.name, args, result: covered.cached.result };
+          pushTrace(c, {
+            ts: nowIso(),
+            category: "tool",
+            label: call2.name,
+            args,
+            result: { covered: true, replayed: true, note },
+            resultBytes: replayed.bytes,
+            truncated: replayed.truncated
+          });
+          return { result: { data: replayed.content } };
+        }
+        const stub = { note };
+        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { covered: true, note } });
+        return { result: { data: stub } };
+      }
+      const derived = readCoverage.derivedSearch(call2.name, args);
+      if (derived) {
+        const visit = readCoverage.record(call2.name, args);
+        const target = visit ? visitTarget(args) : void 0;
+        const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
+        const served = trimToolResult(call2.name, derived, { advisory: revisit });
+        run.pendingReplay = { name: call2.name, args, result: derived };
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "tool",
+          label: call2.name,
+          args,
+          result: { derived: true, note: derived.note },
+          resultBytes: served.bytes,
+          truncated: served.truncated
+        });
+        return { result: { data: served.content } };
+      }
+    } else {
+      if (writeLedger.isRepeat(call2.name, args)) {
+        const note = repeatedWriteNote(call2.name, String(args.path ?? "").trim());
+        pushTrace(c, { ts: nowIso(), category: "message", label: "tools.repeat_write_guard", args: { step: iter, tool: call2.name }, result: note });
+        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { skipped: true, note } });
+        return { result: { data: { ok: true, applied: false, unchanged: true, note } } };
+      }
+      readCoverage.invalidate(call2.name, args);
+    }
+    return call2 === rawCall ? void 0 : { rewrite: call2 };
+  };
+}
+
+// src/runStore/toolCallHooks.ts
+function beforeToolCallsHook(run) {
+  const { c, chatId, catalogToolNames, userRequest } = run;
+  const { runTool, persistence, onActivity } = run.req;
+  return async (ctx, turn, calls) => {
+    const { result, requested } = metaOf(turn);
+    const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
+    if (askCall && runTool && !run.delegationRecoveryUsed && leftDelegationUndone({
+      toolNames: catalogToolNames,
+      requestText: userRequest,
+      events: runTrace(c)
+    })) {
+      run.delegationRecoveryUsed = true;
+      run.redirectAskToDelegation = true;
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "loop.recover_undelegated_request",
+        args: { step: ctx.step, via: "ask_user" },
+        result: "The user asked for sub-agents and the run asked how to proceed without starting one \u2014 answered with the local delegation contract instead of settling the question."
+      });
+    } else if (askCall) {
+      let block = null;
+      try {
+        block = askCall.malformed ? null : askUserBlock(askCall.args);
+      } catch {
+        block = null;
+      }
+      const lead = result.text.trim();
+      const reply = block ? lead ? `${lead}
+
+${block}` : block : lead;
+      if (reply) {
+        const assistantMsg = await settleReply(run, reply, result, requested);
+        emit(c);
+        emitEvermindLearnReconcile(run, assistantMsg, reply);
+        onActivity?.(chatId);
+        return { action: "stop", ok: true, output: reply };
+      }
+    }
+    await persistMidTurnText(chatId, c, persistence, result, requested);
+    c.streamingText = "";
     emit(c);
+    return void 0;
+  };
+}
+function afterDispatchHook(run) {
+  const { c, readCoverage, usedTools } = run;
+  return (call2, _result, row) => {
+    if (run.pendingReplay) {
+      readCoverage.cacheResult(run.pendingReplay.name, run.pendingReplay.args, { result: run.pendingReplay.result, anchor: row });
+      run.pendingReplay = null;
+      return void 0;
+    }
+    const ran = run.pendingRun;
+    run.pendingRun = null;
+    if (!ran) return void 0;
+    const args = call2.args;
+    if (ran.threw) {
+      pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, durationMs: nowMs2() - ran.toolStart, args, result: ran.out, isError: true });
+      return void 0;
+    }
+    if (ran.isReadTool && !isFailedToolResult(ran.out)) readCoverage.cacheResult(call2.name, args, { result: ran.out ?? null, anchor: row });
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "tool",
+      label: call2.name,
+      durationMs: nowMs2() - ran.toolStart,
+      args,
+      result: ran.out ?? null,
+      isError: isFailedToolResult(ran.out),
+      resultBytes: ran.bytes,
+      truncated: ran.truncated
+    });
+    usedTools.add(call2.name);
+    return void 0;
+  };
+}
+
+// src/stopHooks.ts
+var MAX_STOP_HOOK_ROUNDS = 4;
+async function askStopHook(hook, input) {
+  if (!hook || input.round >= MAX_STOP_HOOK_ROUNDS) return null;
+  try {
+    const nudge = (await hook(input))?.trim();
+    return nudge ? nudge : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/runStore/finalAnswerHook.ts
+function finalAnswerHook(run) {
+  const { c, chatId, runKey, req, convo, canAskUser, catalogToolNames, userRequest, priorReply } = run;
+  const { tools: toolSpecs, pickFallbackModel, runTool, persistence, onActivity } = req;
+  return async (ctx, turn) => {
+    const iter = ctx.step;
+    const { result, resolved, requested, advertised, advertisedNames } = metaOf(turn);
+    const stallInput = {
+      text: result.text,
+      toolCallCount: result.toolCalls.length,
+      availableToolCount: toolSpecs?.length ?? 0,
+      recoveriesUsed: run.announcementRecoveries,
+      availableToolNames: [...advertisedNames],
+      requestText: userRequest
+    };
+    const shape = stallShape(stallInput);
+    const requeueWithNudge = async (nudge) => {
+      await persistMidTurnText(chatId, c, persistence, result, requested);
+      convo.push({ role: "assistant", content: replayTextOf(result.text) });
+      convo.push({ role: "user", content: nudge });
+    };
+    const steering = drainRunSteering(runKey);
+    if (steering.length > 0) {
+      await requeueWithNudge(steering.join("\n\n"));
+      c.streamingText = "";
+      emit(c);
+      return { action: "continue" };
+    }
+    if (runTool && shouldRecoverStalledTurn(stallInput)) {
+      run.announcementRecoveries += 1;
+      const lastChance = run.announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
+      run.forceToolChoice = stallRecoveryToolChoice(stallInput);
+      await requeueWithNudge(stallRecoveryNudge(lastChance, shape, stallInput));
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: shape === "handed-off" ? "loop.recover_handed_off_work" : "loop.recover_announced_tool_call",
+        args: { step: iter, attempt: run.announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised, shape },
+        result: shape === "handed-off" ? `Model ended by telling the user to run the commands itself holds tools for \u2014 re-prompted to run them (${run.announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).` : `Model announced a tool call without making one \u2014 re-prompted (${run.announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
+      });
+      c.streamingText = "";
+      emit(c);
+      return { action: "continue" };
+    }
+    const stopNudge = runTool ? await askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: run.stopHookRounds }) : null;
+    if (stopNudge) {
+      run.stopHookRounds += 1;
+      await requeueWithNudge(stopNudge);
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "loop.stop_hook",
+        args: { step: iter, round: run.stopHookRounds },
+        result: `A workspace stop hook held the run for another turn: ${stopNudge.slice(0, 200)}`
+      });
+      c.streamingText = "";
+      emit(c);
+      return { action: "continue" };
+    }
+    if (runTool && !run.shipRecoveryUsed && leftChangeUnshipped({
+      codeChanged: c.codeChanged,
+      toolNames: catalogToolNames,
+      requestText: userRequest,
+      events: runTrace(c)
+    })) {
+      run.shipRecoveryUsed = true;
+      await requeueWithNudge(unshippedChangeNudge());
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "loop.recover_unshipped_change",
+        args: { step: iter, files: c.touchedFiles.slice(0, 20) },
+        result: "Run changed code and ended without committing or pushing it \u2014 re-prompted to verify, self-review and ship (this local session is the change's only reviewer)."
+      });
+      c.streamingText = "";
+      emit(c);
+      return { action: "continue" };
+    }
+    if (runTool && !run.reviewRecoveryUsed && leftChangeUnreviewed({
+      codeChanged: c.codeChanged,
+      toolNames: catalogToolNames,
+      requestText: userRequest,
+      events: runTrace(c)
+    })) {
+      run.reviewRecoveryUsed = true;
+      await requeueWithNudge(unreviewedChangeNudge());
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "loop.recover_unreviewed_change",
+        args: { step: iter, files: c.touchedFiles.slice(0, 20) },
+        result: "Run changed the app and ended without inspecting the preview and recording a review \u2014 re-prompted to verify and review (this Studio session is the change's only reviewer)."
+      });
+      c.streamingText = "";
+      emit(c);
+      return { action: "continue" };
+    }
+    if (runTool && !run.delegationRecoveryUsed && leftDelegationUndone({
+      toolNames: catalogToolNames,
+      requestText: userRequest,
+      events: runTrace(c)
+    })) {
+      run.delegationRecoveryUsed = true;
+      await requeueWithNudge(undelegatedRequestNudge(catalogToolNames));
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "loop.recover_undelegated_request",
+        args: { step: iter, via: "reply" },
+        result: "The user asked for sub-agents and the run ended without starting one \u2014 re-prompted to spawn them locally."
+      });
+      c.streamingText = "";
+      emit(c);
+      return { action: "continue" };
+    }
+    if (runTool && !run.restateRecoveryUsed && isRestatedReply(result.text, priorReply)) {
+      run.restateRecoveryUsed = true;
+      await requeueWithNudge(restatedReplyNudge());
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "loop.recover_restated_reply",
+        args: { step: iter },
+        result: "Final reply repeated the previous turn's answer \u2014 re-prompted to act on the next unfinished item instead of restating it."
+      });
+      c.streamingText = "";
+      emit(c);
+      return { action: "continue" };
+    }
+    const settledText = result.text.trim();
+    const finalText = (canAskUser ? liftProseAskUser(settledText) : settledText) || "No response.";
+    const assistantMsg = await settleReply(run, finalText, result, requested);
+    if (runTool && isExhaustedStall(stallInput)) {
+      const { outcome } = reportToPolicy(run, { type: "stalled", resolvedModel: resolved, pick: pickFallbackModel });
+      if (outcome.kind === "failed_over") {
+        pushTrace(c, modelFailoverTrace(nowIso(), iter, resolved, outcome, shape));
+        run.announcementRecoveries = 0;
+        run.forceToolChoice = stallRecoveryToolChoice(stallInput);
+        convo.push({ role: "user", content: stallRecoveryNudge(false, shape, stallInput) });
+        c.streamingText = "";
+        emit(c);
+        return { action: "continue" };
+      }
+      const notice = stallExhaustedNotice(resolved, run.policy.tried, shape);
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "error",
+        label: "loop.stall_unrecovered",
+        args: { step: iter, model: resolved, attempts: run.announcementRecoveries, tried: run.policy.tried, advertisedTools: advertised, shape },
+        result: notice,
+        isError: true
+      });
+      c.error = notice;
+    }
+    emit(c);
+    emitEvermindLearnReconcile(run, assistantMsg, finalText);
+    onActivity?.(chatId);
+    return { action: "stop", ok: true, output: finalText };
+  };
+}
+
+// src/runStore/runLoop.ts
+var runCodec = openAiChatCodec((r) => typeof r.data === "string" ? r.data : JSON.stringify(r.data));
+async function runLoop(chatId, c, req, runKey) {
+  const run = await prepareRunLoop(chatId, c, req, runKey);
+  if (!run) return;
+  const { convo, systemPrompt, metadata } = run;
+  const { routingMode, stream, persistence, onActivity, maxTokens, reasoning } = req;
+  const loop = await runAgentLoop({
+    messages: convo,
+    codec: runCodec,
+    ports: { complete: completeTurnPort(run), dispatch: dispatchToolPort(run) },
+    hooks: {
+      beforeToolCalls: beforeToolCallsHook(run),
+      beforeDispatch: beforeDispatchHook(run),
+      afterDispatch: afterDispatchHook(run),
+      onNoToolCalls: finalAnswerHook(run)
+    },
+    signal: c.abort?.signal,
+    // No step cap. The kernel's consecutive-tool-failure breaker is the run's only
+    // limit — see the "no tool-iteration ceiling" note at the top of this module.
+    budget: {}
   });
-}
-function resolveRunConfirm(chatId, ok) {
-  const driver = getRunDriver();
-  if (driver) return driver.confirm(chatId, ok);
-  const c = cells.get(chatId);
-  if (!c || !c.confirmResolver) return;
-  const resolve = c.confirmResolver;
-  c.confirmResolver = null;
-  c.pendingConfirm = null;
+  if (loop.finished || loop.cancelled) return;
+  const streak = loop.failureStreak;
+  c.streamingText = "";
+  if (!c.abort?.signal.aborted) {
+    const closeStart = nowMs2();
+    try {
+      const working = [
+        { role: "system", content: systemPrompt },
+        ...windowed(convo),
+        {
+          role: "user",
+          content: `This turn was stopped because your last ${streak} tool calls all failed. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered \u2014 say what you completed, quote what the failing calls answered, and state plainly what is blocking you and what you need (a different argument, a permission, a decision) so the next turn can succeed.`
+        }
+      ];
+      let closeFirstTokenAt;
+      const closeAsk = nextTurn(run.policy, { hasTools: false });
+      const closing = await asLiveTurn(c, () => stream(
+        // No `tools` → the model can't call another tool and must produce text.
+        { messages: working, model: closeAsk.model, modelStrict: closeAsk.strict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
+        {
+          onModel: liveTurnModel(c),
+          onConnectRetry: connectRetryStep(c, loop.step),
+          onTextDelta: (d) => {
+            if (closeFirstTokenAt === void 0) closeFirstTokenAt = nowMs2();
+            c.streamingText += d;
+            emit(c);
+          }
+        }
+      ));
+      accrueByoUnresolved(c, closing.byoUnresolved);
+      accrueProviderCap(c, closing.providerCap);
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "llm",
+        label: "llm.complete",
+        durationMs: nowMs2() - closeStart,
+        ttftMs: closeFirstTokenAt !== void 0 ? closeFirstTokenAt - closeStart : void 0,
+        args: { model: closing.resolvedModel ?? closeAsk.model ?? "default", requestedModel: closeAsk.model ?? "default", step: loop.step, toolCalls: 0, forcedFinish: true, failureStreak: streak, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        usage: closing.usage,
+        finishReason: closing.finishReason,
+        textChars: closing.text.length,
+        result: `forced final synthesis (${streak} consecutive tool failures stopped the run) \xB7 ${closing.text.length} chars \xB7 finish: ${closing.finishReason ?? "\u2014"}`
+      });
+      const closingText = canonicalTurnText(closing.text);
+      if (closingText) {
+        convo.push({ role: "assistant", content: replayTextOf(closingText) });
+        const meta = provenanceMetadata(closing, closeAsk.model);
+        const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: closingText, ...meta ? { metadata: meta } : {} }]);
+        c.streamingText = "";
+        recordAppended(c, assistantMsg);
+        emit(c);
+        emitEvermindLearnReconcile(run, assistantMsg, closingText);
+        onActivity?.(chatId);
+        return;
+      }
+    } catch (e) {
+      if (c.abort?.signal.aborted) return;
+    }
+  }
+  if (c.abort?.signal.aborted) return;
+  c.streamingText = "";
+  recordRunFailure(
+    c,
+    "agent.loop",
+    `Stopped after ${streak} consecutive failed tool calls over ${loop.step} steps (a forced final answer without tools also came back empty)`
+  );
+  c.error = `The assistant's last ${streak} tool calls all failed and it gave no answer. Read the failing steps above, then try again with what they ask for.`;
   emit(c);
-  resolve(ok);
 }
-function applyRemoteRun(chatId, snapshot) {
-  const c = getCell(chatId);
-  if (c.abort) return;
-  c.running = snapshot.running;
-  c.streamingText = snapshot.streamingText;
-  c.error = snapshot.error;
-  c.errorAction = snapshot.errorAction;
-  c.pendingConfirm = snapshot.pendingConfirm;
-  c.messagesEpoch = snapshot.messagesEpoch;
-  c.appended = snapshot.appended;
-  c.trace = snapshot.trace;
-  c.runTraceFrom = 0;
-  c.activity = snapshot.activity;
-  c.byoUnresolved = snapshot.byoUnresolved;
-  c.providerCap = snapshot.providerCap;
-  emit(c);
-}
+
+// src/runStore/startRun.ts
 async function startRun(runKey, request) {
   const driver = getRunDriver();
   if (driver) return driver.start(runKey, request);
@@ -10764,21 +12211,22 @@ async function startRun(runKey, request) {
       });
     }
     if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
-      await advanceLinkedTickets(chatId, c, req).catch(() => {
+      await updateLinkedTickets(chatId, c, req, linkedTicketsToAdvance, "in_progress", "worked-ticket-off-backlog").catch(() => {
       });
     }
     const shipped = !aborted && c.codeChanged && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles });
     if (shipped && req.projectId != null && req.runTool) {
-      await completeLinkedTickets(chatId, c, req, linkedTicketsToComplete, "shipped-to-base-branch").catch(() => {
+      await updateLinkedTickets(chatId, c, req, linkedTicketsToComplete, "done", "shipped-to-base-branch").catch(() => {
       });
     }
     const reviewedInPreview = !aborted && c.codeChanged ? ticketsReviewedInPreview(runTrace(c)) : [];
     if (reviewedInPreview.length && req.projectId != null && req.runTool) {
-      await completeLinkedTickets(
+      await updateLinkedTickets(
         chatId,
         c,
         req,
         (listed) => linkedTicketsReviewedComplete(listed, reviewedInPreview),
+        "done",
         "reviewed-in-preview"
       ).catch(() => {
       });
@@ -10800,1187 +12248,6 @@ async function startRun(runKey, request) {
     await steps.flush();
   }
 }
-async function recordCodeChangeTicket(chatId, c, req, phase) {
-  if (!req.runTool || req.projectId == null) return;
-  const known = new Set(c.deltaRecordedFiles);
-  const files = c.touchedFiles.filter((f) => !known.has(f)).slice(0, 50);
-  if (phase === "settle" && c.deltaTicketId != null && files.length === 0) return;
-  const attachTo = c.deltaTicketId;
-  const summary = files.length ? `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from Brain chat #${chatId}` : `Code change from Brain chat #${chatId}`;
-  const toolStart = nowMs2();
-  const args = {
-    projectId: req.projectId,
-    summary,
-    detail: attachTo != null ? "Auto-captured: further files changed by the same chat, attached to the ticket this run opened." : "Auto-captured: this chat changed code without recording a ticket, so the platform minted one to keep the work visible on the board and linked to the conversation.",
-    files,
-    kind: "improvement",
-    modality: "ide",
-    chatId,
-    ...attachTo != null ? { taskId: attachTo } : {}
-  };
-  let out;
-  try {
-    out = await req.runTool("builtin_tickets_from_delta", args);
-  } catch (e) {
-    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-  if (!isFailedToolResult(out)) {
-    c.deltaRecordedFiles = [...c.deltaRecordedFiles, ...files];
-    const id = out?.id;
-    if (c.deltaTicketId == null && typeof id === "number") c.deltaTicketId = id;
-    c.ticketRecorded = true;
-  }
-  pushTrace(c, {
-    ts: nowIso(),
-    category: "tool",
-    label: "builtin_tickets_from_delta",
-    durationMs: nowMs2() - toolStart,
-    args: { ...args, auto: true, phase },
-    result: out ?? null,
-    isError: isFailedToolResult(out)
-  });
-}
-async function advanceLinkedTickets(chatId, c, req) {
-  if (!req.runTool) return;
-  let listed;
-  try {
-    listed = await req.runTool("builtin_chats_list_tickets", { chatId });
-  } catch {
-    return;
-  }
-  const toAdvance = linkedTicketsToAdvance(listed);
-  for (const t of toAdvance) {
-    const id = Number(t.ref);
-    if (!Number.isInteger(id)) continue;
-    const toolStart = nowMs2();
-    let out;
-    try {
-      out = await req.runTool("builtin_tasks_update", { id, status: "in_progress" });
-    } catch (e) {
-      out = { ok: false, error: e instanceof Error ? e.message : String(e) };
-    }
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "tool",
-      label: "builtin_tasks_update",
-      durationMs: nowMs2() - toolStart,
-      args: { id, status: "in_progress", auto: true, reason: "worked-ticket-off-backlog" },
-      result: out ?? null,
-      isError: isFailedToolResult(out)
-    });
-  }
-}
-async function completeLinkedTickets(chatId, c, req, select, reason) {
-  if (!req.runTool) return;
-  let listed;
-  try {
-    listed = await req.runTool("builtin_chats_list_tickets", { chatId });
-  } catch {
-    return;
-  }
-  for (const t of select(listed)) {
-    const id = Number(t.ref);
-    if (!Number.isInteger(id)) continue;
-    const toolStart = nowMs2();
-    let out;
-    try {
-      out = await req.runTool("builtin_tasks_update", { id, status: "done" });
-    } catch (e) {
-      out = { ok: false, error: e instanceof Error ? e.message : String(e) };
-    }
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "tool",
-      label: "builtin_tasks_update",
-      durationMs: nowMs2() - toolStart,
-      // The REASON rides on the step: a ticket that closed itself must say what
-      // closed it, or the board's history reads as an unexplained status change.
-      args: { id, status: "done", auto: true, reason },
-      result: out ?? null,
-      isError: isFailedToolResult(out)
-    });
-  }
-}
-async function autoLinkCreatedItem(chatId, c, runTool, toolName, out) {
-  const link = workItemLinkFromCreate(toolName, out);
-  if (!link) return;
-  const toolStart = nowMs2();
-  let result;
-  try {
-    result = await runTool("builtin_chats_link_ticket", {
-      chatId,
-      kind: link.kind,
-      ref: link.ref,
-      linkType: link.linkType
-    });
-  } catch (e) {
-    result = { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
-  if (!isFailedToolResult(result)) c.ticketRecorded = true;
-  pushTrace(c, {
-    ts: nowIso(),
-    category: "tool",
-    label: "builtin_chats_link_ticket",
-    durationMs: nowMs2() - toolStart,
-    args: { chatId, kind: link.kind, ref: link.ref, linkType: link.linkType, auto: true },
-    result: result ?? null,
-    isError: isFailedToolResult(result)
-  });
-}
-function canonicalTurnText(text) {
-  const { content, reasoning } = splitVendorReasoning({ content: text });
-  return canonicalReasoningText(content, reasoning);
-}
-async function runLoop(chatId, c, req, runKey) {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, routingMode, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
-  const convo = c.transcript;
-  const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
-  const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
-  const allTools = catalog && catalog.length > 0 ? catalog : void 0;
-  const usedTools = /* @__PURE__ */ new Set();
-  const runMode = normalizeChatMode(req.chatMode ?? "work");
-  const metadata = {
-    chatId,
-    guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    guestTurnInput: latestUserText(convo),
-    mode: runMode,
-    ...req.projectId != null ? { projectId: req.projectId } : {}
-  };
-  let systemPrompt = resolvedSystemPrompt;
-  let recalled = null;
-  let recallBlockTokens = 0;
-  if (evermind?.recall) {
-    const query = latestUserText(convo);
-    if (query) {
-      try {
-        recalled = await evermind.recall(query);
-      } catch {
-        recalled = null;
-      }
-      if (recalled?.seeded && recalled.items.length > 0) {
-        const block = formatEvermindMemoryBlock2(recalled.items);
-        if (block) {
-          systemPrompt = `${systemPrompt}
-
-${block}`;
-          recallBlockTokens = transcriptTokens([{ role: "system", content: block }]);
-          pushTrace(c, {
-            ts: nowIso(),
-            category: "recall",
-            label: "evermind.recall",
-            args: { query, version: recalled.version },
-            result: { count: recalled.items.length, version: recalled.version, mode: recalled.mode, items: recalled.items }
-          });
-        }
-      }
-    }
-  }
-  const handoff = createRunHandoff({
-    workingBudgetTokens: HISTORY_TOKEN_BUDGET,
-    summarizer: () => ({ stream, model: policy.model, signal: c.abort?.signal }),
-    ...evermind?.recall ? { recall: (q) => evermind.recall(q), priorRecall: { query: latestUserText(convo), result: recalled } } : {},
-    trace: (ev) => pushTrace(c, ev),
-    now: nowIso
-  });
-  const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
-  if (evermind?.answer && memoryReplay && !c.abort?.signal.aborted) {
-    const query = latestUserText(convo);
-    if (query) {
-      let memAnswer = null;
-      try {
-        memAnswer = await evermind.answer(query, {
-          toolsAvailable: !!allTools && allTools.length > 0,
-          // What this turn would have run on — the saving a hit records is priced at it.
-          model: model || c.lastServedModel || void 0
-        });
-      } catch {
-        memAnswer = null;
-      }
-      const finalText = canonicalTurnText(memAnswer?.text ?? "");
-      if (finalText) {
-        convo.push({ role: "assistant", content: replayTextOf(finalText) });
-        const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
-        c.streamingText = "";
-        recordAppended(c, assistantMsg);
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "recall",
-          label: memAnswer.source === "evermind" ? "evermind.answer" : "memory.answer",
-          args: { query },
-          result: {
-            source: memAnswer.source,
-            skippedLlm: true,
-            ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {},
-            // WHICH head served it — a project can target several, so without this a
-            // memory hit from a sibling IDE build's Evermind is indistinguishable from
-            // the chat project's own.
-            ...memAnswer.evermindProjectId != null ? { evermindProjectId: memAnswer.evermindProjectId } : {}
-          }
-        });
-        emit(c);
-        onActivity?.(chatId);
-        return;
-      }
-    }
-  }
-  if (req.augmentSystemPrompt) {
-    try {
-      const extra = await req.augmentSystemPrompt(latestUserText(convo));
-      if (typeof extra === "string" && extra.trim()) {
-        systemPrompt = `${systemPrompt}
-
-${extra}`;
-      }
-    } catch {
-    }
-  }
-  const catalogToolNames = (req.tools ?? []).map((t) => t.function.name);
-  const canEditHere = canChangeCodeHere(catalogToolNames);
-  systemPrompt = `${systemPrompt}
-
-${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent"), canFanOut: catalogToolNames.includes("spawn_agents"), roster: req.chatRoster })}
-
-${turnOptimizationDirective()}`;
-  const canShip = canShipHere(catalogToolNames);
-  if (canShip) systemPrompt = `${systemPrompt}
-
-${selfReviewShipDirective(chatId)}`;
-  if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}
-
-${previewReviewDirective(chatId)}`;
-  if (c.priorResearch) systemPrompt = `${systemPrompt}
-
-${c.priorResearch}`;
-  const userRequest = latestUserText(convo);
-  if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
-    systemPrompt = `${systemPrompt}
-
-${continuationDirective()}`;
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "turn.continuation_resolved",
-      result: "The user's bare directive was resolved against the previous turn's unfinished proposal, so the run carries that proposal out instead of asking what to fix."
-    });
-  }
-  const readCoverage = new ReadCoverage();
-  const failures = new FailureTally();
-  const writeLedger = new WriteLedger();
-  const placeholderLedger = new PlaceholderLedger();
-  const failureAdvisoryFor = (name, args, out, step) => {
-    const attempts = failures.record(name, args);
-    const advisory = repeatedFailureAdvisory(name, attempts, failureReason(out));
-    if (advisory) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "message",
-        label: "tools.repeat_failure_guard",
-        args: { step, tool: name, attempts },
-        result: advisory
-      });
-    }
-    return advisory;
-  };
-  let forceToolChoice;
-  let announcementRecoveries = 0;
-  let policy = initialRunPolicy({
-    pinnedModel: model,
-    strictPin: modelStrict,
-    startPhase: c.codeChanged || c.codePhaseReached ? "code" : "plan"
-  });
-  const reportToPolicy = (event) => policy = reduceRunPolicy(policy, event);
-  let shipRecoveryUsed = false;
-  let reviewRecoveryUsed = false;
-  let stopHookRounds = 0;
-  let delegationRecoveryUsed = false;
-  let redirectAskToDelegation = false;
-  const priorReply = previousReplyText(convo);
-  let restateRecoveryUsed = false;
-  const requestQuery = routingQueryForTurn(convo);
-  const alwaysAdvertised = [
-    ...toolNamesMentionedIn(systemPrompt),
-    ...localToolsIn(catalogToolNames),
-    // The Studio's workspace vocabulary, including the preview review its contract
-    // requires — empty everywhere but the Studio (see `studioToolsIn`).
-    ...studioToolsIn(catalogToolNames),
-    // The project-memory pair (recall before re-reading; remember what was learned) is
-    // the cheapest tool in the catalog and the first one relevance would drop.
-    ...memoryToolsIn(catalogToolNames),
-    // Asking the user is never off-topic: it is how the run stops when it cannot
-    // proceed, so relevance against the request must not be what decides whether the
-    // agent is allowed to ask. Its one schema is also the cheapest in the catalog.
-    ...canAskUser ? [ASK_USER_TOOL] : []
-  ];
-  const emitEvermindLearnReconcile = (assistantMsg, finalText) => {
-    const learn = assistantMsg?.evermindLearn;
-    if (learn?.learned) {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "learn",
-        label: "evermind.learn",
-        // `targets` carries the per-Evermind breakdown (a project can fan out to many)
-        // so the timeline can name each by id; the renderer falls back to `version` alone.
-        result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
-      });
-      const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
-      if (reconciled > 0) {
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "reconcile",
-          label: "evermind.reconcile",
-          result: { count: reconciled, version: learn.version }
-        });
-      }
-    } else if (learn && learn.reason && learn.reason !== "too-short") {
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "learn",
-        label: "evermind.learn",
-        result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
-      });
-    }
-    if (evermind?.cacheAnswer && memoryReplay) {
-      const q = latestUserText(convo);
-      const spent = c.runUsage;
-      const origin = spent.model && spent.promptTokens + spent.completionTokens > 0 ? { model: spent.model, promptTokens: spent.promptTokens, completionTokens: spent.completionTokens } : void 0;
-      if (q) {
-        const cached2 = origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
-        void Promise.resolve(cached2).catch(() => {
-        });
-      }
-    }
-  };
-  const metaOf = (turn) => turn.meta;
-  const codec = openAiChatCodec((r) => typeof r.data === "string" ? r.data : JSON.stringify(r.data));
-  let pendingReplay = null;
-  let pendingRun = null;
-  let lastTurnInterruption = null;
-  const settleReply = async (rawText, result, requested) => {
-    const text = canonicalTurnText(rawText);
-    convo.push({ role: "assistant", content: replayTextOf(text) });
-    const meta = provenanceMetadata(result, requested);
-    const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...meta ? { metadata: meta } : {} }]);
-    c.streamingText = "";
-    recordAppended(c, assistantMsg);
-    return assistantMsg;
-  };
-  const hooks = {
-    beforeToolCalls: async (ctx, turn, calls) => {
-      const { result, requested } = metaOf(turn);
-      const askCall = calls.find((tc) => tc.name === ASK_USER_TOOL);
-      if (askCall && runTool && !delegationRecoveryUsed && leftDelegationUndone({
-        toolNames: catalogToolNames,
-        requestText: userRequest,
-        events: runTrace(c)
-      })) {
-        delegationRecoveryUsed = true;
-        redirectAskToDelegation = true;
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "message",
-          label: "loop.recover_undelegated_request",
-          args: { step: ctx.step, via: "ask_user" },
-          result: "The user asked for sub-agents and the run asked how to proceed without starting one \u2014 answered with the local delegation contract instead of settling the question."
-        });
-      } else if (askCall) {
-        let block = null;
-        try {
-          block = askCall.malformed ? null : askUserBlock(askCall.args);
-        } catch {
-          block = null;
-        }
-        const lead = result.text.trim();
-        const reply = block ? lead ? `${lead}
-
-${block}` : block : lead;
-        if (reply) {
-          const assistantMsg = await settleReply(reply, result, requested);
-          emit(c);
-          emitEvermindLearnReconcile(assistantMsg, reply);
-          onActivity?.(chatId);
-          return { action: "stop", ok: true, output: reply };
-        }
-      }
-      await persistMidTurnText(chatId, c, persistence, result, requested);
-      c.streamingText = "";
-      emit(c);
-      return void 0;
-    },
-    beforeDispatch: async (rawCall, ctx) => {
-      const iter = ctx.step;
-      pendingReplay = null;
-      pendingRun = null;
-      let call2 = rawCall;
-      {
-        const aliased = resolveToolAlias(call2.name);
-        if (aliased !== call2.name) call2 = { ...call2, name: aliased };
-      }
-      if (isRouterTool(call2.name)) {
-        const routed = handleRouterCall(allTools ?? [], call2.name, call2.args);
-        if ("result" in routed) {
-          pushTrace(c, {
-            ts: nowIso(),
-            category: "tool",
-            label: call2.name,
-            args: call2.args,
-            result: routed.result
-          });
-          return { result: { data: routed.result } };
-        }
-        const routedArgs = routed.dispatch.args ?? {};
-        call2 = { ...call2, name: routed.dispatch.name, args: routedArgs, raw: { ...call2.raw, name: routed.dispatch.name, arguments: JSON.stringify(routedArgs) } };
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "message",
-          label: "tools.routed",
-          args: { step: iter, via: rawCall.name },
-          result: `Called ${call2.name} through the tool router (it was not advertised directly this turn).`
-        });
-      }
-      if (call2.name === ASK_USER_TOOL) {
-        if (redirectAskToDelegation) {
-          redirectAskToDelegation = false;
-          return { result: { data: { ok: false, error: undelegatedRequestNudge(catalogToolNames) } } };
-        }
-        return { result: { data: { error: "ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose." } } };
-      }
-      if (call2.name === HAND_OFF_TOOL) {
-        if (!offersHandOff(policy)) {
-          return { result: { data: { ok: false, error: "The plan was already handed off \u2014 you are the coding model now. Implement the tasks; do not re-plan." } } };
-        }
-        const plan = parseHandOff(call2.args);
-        if (typeof plan === "string") return { result: { data: { ok: false, error: plan } } };
-        reportToPolicy({ type: "hand_off" });
-        c.codePhaseReached = true;
-        pushTrace(c, handOffTrace(nowIso(), ctx.step, plan.tasks.length, HAND_OFF_TOOL));
-        const outcome = await executeHandOff(plan, {
-          runTool: (name, args2) => runTool(name, args2),
-          toolNames: new Set(catalogToolNames),
-          ...req.projectId != null ? { projectId: req.projectId } : {},
-          afterCreate: (toolName, out) => autoLinkCreatedItem(chatId, c, runTool, toolName, out),
-          step: (label, args2, out, durationMs) => pushTrace(c, {
-            ts: nowIso(),
-            category: "tool",
-            label,
-            durationMs,
-            args: args2,
-            result: out ?? null,
-            isError: isFailedToolResult(out)
-          }),
-          postPlan: async (text) => {
-            const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: JSON.stringify({ [MID_TURN_META_KEY]: true }) }]);
-            if (!msg) return;
-            recordAppended(c, msg);
-            emit(c);
-          },
-          now: nowMs2
-        });
-        const changed = codeChangesOf(HAND_OFF_TOOL, call2.args, outcome);
-        if (changed) {
-          c.codeChanged = true;
-          for (const f of changed) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
-        }
-        usedTools.add(HAND_OFF_TOOL);
-        placeholderLedger.add(delegationPlaceholders(outcome));
-        return { result: { data: outcome } };
-      }
-      const args = call2.args;
-      attachDeltaToRunTicket(call2.name, args, c.deltaTicketId);
-      if (needsConfirm && needsConfirm({ name: call2.name, args })) {
-        const ok = await requestRunConfirm(runKey, { name: call2.name, args }, { step: iter });
-        if (!ok) {
-          const declined = { cancelled: true, reason: "User declined this action." };
-          pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: declined });
-          return { result: { data: declined } };
-        }
-      }
-      if (isDedupableRead(call2.name)) {
-        if (readCoverage.isRepeat(call2.name, args)) {
-          const cached2 = readCoverage.cachedResult(call2.name, args);
-          if (cached2 && !stillInWorkingContext(c, cached2.anchor)) {
-            const replayNote = `Replayed from this run's read cache: this exact ${call2.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
-            const visit = readCoverage.record(call2.name, args);
-            const target = visit ? visitTarget(args) : void 0;
-            const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
-            const replayed = trimToolResult(call2.name, cached2.result ?? null, { advisory: revisit ? `${replayNote}
-
-${revisit}` : replayNote });
-            pendingReplay = { name: call2.name, args, result: cached2.result };
-            pushTrace(c, {
-              ts: nowIso(),
-              category: "tool",
-              label: call2.name,
-              args,
-              result: { replayed: true, note: replayNote },
-              resultBytes: replayed.bytes,
-              truncated: replayed.truncated
-            });
-            return { result: { data: replayed.content } };
-          }
-          const stub = {
-            note: `Duplicate ${call2.name} call \u2014 identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`
-          };
-          pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: stub });
-          return { result: { data: stub } };
-        }
-        const covered = readCoverage.coveredRead(call2.name, args);
-        if (covered) {
-          const visit = readCoverage.record(call2.name, args);
-          const target = visit ? visitTarget(args) : void 0;
-          const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
-          const note = revisit ? `${covered.note}
-
-${revisit}` : covered.note;
-          if (covered.cached && !stillInWorkingContext(c, covered.cached.anchor)) {
-            const replayed = trimToolResult(call2.name, covered.cached.result ?? null, { advisory: note });
-            pendingReplay = { name: call2.name, args, result: covered.cached.result };
-            pushTrace(c, {
-              ts: nowIso(),
-              category: "tool",
-              label: call2.name,
-              args,
-              result: { covered: true, replayed: true, note },
-              resultBytes: replayed.bytes,
-              truncated: replayed.truncated
-            });
-            return { result: { data: replayed.content } };
-          }
-          const stub = { note };
-          pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { covered: true, note } });
-          return { result: { data: stub } };
-        }
-        const derived = readCoverage.derivedSearch(call2.name, args);
-        if (derived) {
-          const visit = readCoverage.record(call2.name, args);
-          const target = visit ? visitTarget(args) : void 0;
-          const revisit = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
-          const served = trimToolResult(call2.name, derived, { advisory: revisit });
-          pendingReplay = { name: call2.name, args, result: derived };
-          pushTrace(c, {
-            ts: nowIso(),
-            category: "tool",
-            label: call2.name,
-            args,
-            result: { derived: true, note: derived.note },
-            resultBytes: served.bytes,
-            truncated: served.truncated
-          });
-          return { result: { data: served.content } };
-        }
-      } else {
-        if (writeLedger.isRepeat(call2.name, args)) {
-          const note = repeatedWriteNote(call2.name, String(args.path ?? "").trim());
-          pushTrace(c, { ts: nowIso(), category: "message", label: "tools.repeat_write_guard", args: { step: iter, tool: call2.name }, result: note });
-          pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, args, result: { skipped: true, note } });
-          return { result: { data: { ok: true, applied: false, unchanged: true, note } } };
-        }
-        readCoverage.invalidate(call2.name, args);
-      }
-      return call2 === rawCall ? void 0 : { rewrite: call2 };
-    },
-    afterDispatch: (call2, _result, row) => {
-      if (pendingReplay) {
-        readCoverage.cacheResult(pendingReplay.name, pendingReplay.args, { result: pendingReplay.result, anchor: row });
-        pendingReplay = null;
-        return void 0;
-      }
-      const run = pendingRun;
-      pendingRun = null;
-      if (!run) return void 0;
-      const args = call2.args;
-      if (run.threw) {
-        pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, durationMs: nowMs2() - run.toolStart, args, result: run.out, isError: true });
-        return void 0;
-      }
-      if (run.isReadTool && !isFailedToolResult(run.out)) readCoverage.cacheResult(call2.name, args, { result: run.out ?? null, anchor: row });
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "tool",
-        label: call2.name,
-        durationMs: nowMs2() - run.toolStart,
-        args,
-        result: run.out ?? null,
-        isError: isFailedToolResult(run.out),
-        resultBytes: run.bytes,
-        truncated: run.truncated
-      });
-      usedTools.add(call2.name);
-      return void 0;
-    },
-    onNoToolCalls: async (ctx, turn) => {
-      const iter = ctx.step;
-      const { result, resolved, requested, advertised, advertisedNames } = metaOf(turn);
-      const stallInput = {
-        text: result.text,
-        toolCallCount: result.toolCalls.length,
-        availableToolCount: toolSpecs?.length ?? 0,
-        recoveriesUsed: announcementRecoveries,
-        availableToolNames: [...advertisedNames],
-        requestText: userRequest
-      };
-      const shape = stallShape(stallInput);
-      const requeueWithNudge = async (nudge) => {
-        await persistMidTurnText(chatId, c, persistence, result, requested);
-        convo.push({ role: "assistant", content: replayTextOf(result.text) });
-        convo.push({ role: "user", content: nudge });
-      };
-      const steering = drainRunSteering(runKey);
-      if (steering.length > 0) {
-        await requeueWithNudge(steering.join("\n\n"));
-        c.streamingText = "";
-        emit(c);
-        return { action: "continue" };
-      }
-      if (runTool && shouldRecoverStalledTurn(stallInput)) {
-        announcementRecoveries += 1;
-        const lastChance = announcementRecoveries >= MAX_ANNOUNCEMENT_RECOVERIES;
-        forceToolChoice = stallRecoveryToolChoice(stallInput);
-        await requeueWithNudge(stallRecoveryNudge(lastChance, shape, stallInput));
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "message",
-          label: shape === "handed-off" ? "loop.recover_handed_off_work" : "loop.recover_announced_tool_call",
-          args: { step: iter, attempt: announcementRecoveries, of: MAX_ANNOUNCEMENT_RECOVERIES, advertisedTools: advertised, shape },
-          result: shape === "handed-off" ? `Model ended by telling the user to run the commands itself holds tools for \u2014 re-prompted to run them (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).` : `Model announced a tool call without making one \u2014 re-prompted (${announcementRecoveries}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
-        });
-        c.streamingText = "";
-        emit(c);
-        return { action: "continue" };
-      }
-      const stopNudge = runTool ? await askStopHook(req.onStop, { codeChanged: c.codeChanged, touchedFiles: c.touchedFiles, requestText: userRequest, round: stopHookRounds }) : null;
-      if (stopNudge) {
-        stopHookRounds += 1;
-        await requeueWithNudge(stopNudge);
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "message",
-          label: "loop.stop_hook",
-          args: { step: iter, round: stopHookRounds },
-          result: `A workspace stop hook held the run for another turn: ${stopNudge.slice(0, 200)}`
-        });
-        c.streamingText = "";
-        emit(c);
-        return { action: "continue" };
-      }
-      if (runTool && !shipRecoveryUsed && leftChangeUnshipped({
-        codeChanged: c.codeChanged,
-        toolNames: catalogToolNames,
-        requestText: userRequest,
-        events: runTrace(c)
-      })) {
-        shipRecoveryUsed = true;
-        await requeueWithNudge(unshippedChangeNudge());
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "message",
-          label: "loop.recover_unshipped_change",
-          args: { step: iter, files: c.touchedFiles.slice(0, 20) },
-          result: "Run changed code and ended without committing or pushing it \u2014 re-prompted to verify, self-review and ship (this local session is the change's only reviewer)."
-        });
-        c.streamingText = "";
-        emit(c);
-        return { action: "continue" };
-      }
-      if (runTool && !reviewRecoveryUsed && leftChangeUnreviewed({
-        codeChanged: c.codeChanged,
-        toolNames: catalogToolNames,
-        requestText: userRequest,
-        events: runTrace(c)
-      })) {
-        reviewRecoveryUsed = true;
-        await requeueWithNudge(unreviewedChangeNudge());
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "message",
-          label: "loop.recover_unreviewed_change",
-          args: { step: iter, files: c.touchedFiles.slice(0, 20) },
-          result: "Run changed the app and ended without inspecting the preview and recording a review \u2014 re-prompted to verify and review (this Studio session is the change's only reviewer)."
-        });
-        c.streamingText = "";
-        emit(c);
-        return { action: "continue" };
-      }
-      if (runTool && !delegationRecoveryUsed && leftDelegationUndone({
-        toolNames: catalogToolNames,
-        requestText: userRequest,
-        events: runTrace(c)
-      })) {
-        delegationRecoveryUsed = true;
-        await requeueWithNudge(undelegatedRequestNudge(catalogToolNames));
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "message",
-          label: "loop.recover_undelegated_request",
-          args: { step: iter, via: "reply" },
-          result: "The user asked for sub-agents and the run ended without starting one \u2014 re-prompted to spawn them locally."
-        });
-        c.streamingText = "";
-        emit(c);
-        return { action: "continue" };
-      }
-      if (runTool && !restateRecoveryUsed && isRestatedReply(result.text, priorReply)) {
-        restateRecoveryUsed = true;
-        await requeueWithNudge(restatedReplyNudge());
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "message",
-          label: "loop.recover_restated_reply",
-          args: { step: iter },
-          result: "Final reply repeated the previous turn's answer \u2014 re-prompted to act on the next unfinished item instead of restating it."
-        });
-        c.streamingText = "";
-        emit(c);
-        return { action: "continue" };
-      }
-      const settledText = result.text.trim();
-      const finalText = (canAskUser ? liftProseAskUser(settledText) : settledText) || "No response.";
-      const assistantMsg = await settleReply(finalText, result, requested);
-      if (runTool && isExhaustedStall(stallInput)) {
-        const { outcome } = reportToPolicy({ type: "stalled", resolvedModel: resolved, pick: pickFallbackModel });
-        if (outcome.kind === "failed_over") {
-          pushTrace(c, modelFailoverTrace(nowIso(), iter, resolved, outcome, shape));
-          announcementRecoveries = 0;
-          forceToolChoice = stallRecoveryToolChoice(stallInput);
-          convo.push({ role: "user", content: stallRecoveryNudge(false, shape, stallInput) });
-          c.streamingText = "";
-          emit(c);
-          return { action: "continue" };
-        }
-        const notice = stallExhaustedNotice(resolved, policy.tried, shape);
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "error",
-          label: "loop.stall_unrecovered",
-          args: { step: iter, model: resolved, attempts: announcementRecoveries, tried: policy.tried, advertisedTools: advertised, shape },
-          result: notice,
-          isError: true
-        });
-        c.error = notice;
-      }
-      emit(c);
-      emitEvermindLearnReconcile(assistantMsg, finalText);
-      onActivity?.(chatId);
-      return { action: "stop", ok: true, output: finalText };
-    }
-  };
-  const ports = {
-    complete: async (ctx) => {
-      const iter = ctx.step;
-      c.streamingText = "";
-      emit(c);
-      for (const text of drainRunSteering(runKey)) convo.push({ role: "user", content: text });
-      const working = await buildWorkingTranscript(
-        c,
-        systemPrompt,
-        (msgs) => summarizeMiddle(stream, policy.model, msgs, c.abort?.signal),
-        (dropped) => {
-          pushTrace(c, {
-            ts: nowIso(),
-            category: "message",
-            label: "context.compacted",
-            args: { droppedMessages: dropped },
-            result: `Compressed ${dropped} earlier step(s) into a memory to stay within the context window.`
-          });
-          emit(c);
-        }
-      );
-      const trimmed = c.compactMemo ? transcriptTokens([{ role: "system", content: systemPrompt }, ...c.transcript]) - transcriptTokens(working) : 0;
-      const memoryEffect = callMemoryEffect(trimmed, recallBlockTokens);
-      const callMetadata = memoryEffect ? { ...metadata, memory: memoryEffect } : metadata;
-      if (c.abort?.signal.aborted) throw new Error("run stopped");
-      const llmStart = nowMs2();
-      let firstTokenAt;
-      let result;
-      const selection = selectToolsForTurn(allTools, {
-        // The REQUEST, captured once before the loop — never "the latest user message".
-        // The loop pushes its own `role:'user'` turns (the stall-recovery nudge, the
-        // tool-budget close-out), so reading the newest one re-rolled the advertised
-        // set from text WE wrote: after one recovery the query became "…made zero tool
-        // calls… answer using its result…", which scores `key_results`/`dashboards`/
-        // `incidents` and drops the ticket tools the user actually asked for. The tool
-        // the model was told to call then genuinely did not exist, and it narrated.
-        // Holding the request steady also keeps the advertised set STABLE across turns
-        // — a tool must not vanish between one turn and the next.
-        query: requestQuery,
-        pinned: usedTools,
-        // Tools the SYSTEM PROMPT instructs the model to call (e.g. the chat↔ticket
-        // directive names `builtin_chats_list_tickets`) are never optional: telling a
-        // model to call a tool we then decline to advertise is the exact contradiction
-        // that produces a narrated call. Derived from the prompt text, so a directive
-        // edit can never silently desync from this list — plus the local workspace
-        // tools, which the prompt names in prose the pattern cannot see.
-        // While planning, the planner's deliverable is never off-topic either.
-        required: offersHandOff(policy) && canAskUser ? [...alwaysAdvertised, HAND_OFF_TOOL] : alwaysAdvertised
-      });
-      const selected = offersHandOff(policy) ? selection.tools : selection.tools.filter((t) => t.function.name !== HAND_OFF_TOOL);
-      const advertised = selection.trimmed ? [...selected, ...routerToolSpecs(allTools?.length ?? 0)] : selected;
-      const tools = advertised.length > 0 ? advertised : void 0;
-      const advertisedNames = new Set(advertised.map((t) => t.function.name));
-      if (selection.trimmed) {
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "message",
-          label: "tools.selected",
-          args: { step: iter },
-          result: `${selected.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`
-        });
-      }
-      setActivity(c, { phase: "thinking", startedAt: Date.now(), step: iter });
-      const composing = createComposingActivity(
-        { set: (a) => {
-          c.activity = a;
-        }, repaint: () => emit(c), coalescedRepaint: () => emitStreaming(c) },
-        { step: iter }
-      );
-      const handlers = {
-        onModel: liveTurnModel(c),
-        onConnectRetry: connectRetryStep(c, iter),
-        onTextDelta: (d) => {
-          c.streamingText += d;
-          if (firstTokenAt === void 0) {
-            firstTokenAt = nowMs2();
-            c.activity = { phase: "writing", startedAt: Date.now(), step: iter };
-            emit(c);
-            return;
-          }
-          emitStreaming(c);
-        },
-        // The first argument fragment is this turn's first token too: a tool-only turn
-        // recorded no ttft at all, so "Thought for Xs" covered the whole turn.
-        onToolCallDelta: (index, partial) => {
-          if (firstTokenAt === void 0) firstTokenAt = nowMs2();
-          composing.onDelta(index, partial);
-        }
-      };
-      let turnRole = nextTurn(policy, { hasTools: !!tools }).role;
-      const turnToolChoice = forceToolChoice;
-      forceToolChoice = void 0;
-      const request = async (extra = []) => {
-        const ask = nextTurn(policy, { hasTools: !!tools });
-        const messages = await handoff.prepare({ messages: extra.length > 0 ? [...working, ...extra] : working, model: ask.model, tools, maxTokens: turnMaxTokens(maxTokens, !!tools), step: iter });
-        return asLiveTurn(c, () => stream(
-          {
-            messages,
-            tools,
-            tool_choice: tools ? turnToolChoice ?? "auto" : void 0,
-            model: ask.model,
-            modelStrict: ask.strict,
-            // Raised to the tool-turn floor when tools are on offer: a file write is
-            // output, and the Effort ceiling cut every one of them off mid-JSON.
-            routingMode,
-            maxTokens: turnMaxTokens(maxTokens, !!tools),
-            reasoning,
-            metadata: callMetadata,
-            role: ask.role,
-            ...ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {},
-            signal: c.abort?.signal
-          },
-          handlers
-        ));
-      };
-      const turnError = (e) => {
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "error",
-          label: "llm.complete",
-          durationMs: nowMs2() - llmStart,
-          // The model that broke, not the requested one: under auto-routing that is 'default'.
-          args: { model: e instanceof StreamInterruptedError && e.model || policy.model || "default", step: iter },
-          result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
-          isError: true
-        });
-        return e;
-      };
-      const restartTurn = () => {
-        c.streamingText = "";
-        firstTokenAt = void 0;
-        composing.reset();
-        emit(c);
-      };
-      try {
-        result = await request();
-      } catch (e) {
-        if (c.abort?.signal.aborted) throw e;
-        const failure = providerFailureEvent(e);
-        const outcome = failure ? reportToPolicy(failure).outcome : null;
-        if (!outcome || outcome.kind !== "retry_turn") throw turnError(e);
-        pushTrace(c, transportRetryTrace(nowIso(), iter, outcome, e.message));
-        restartTurn();
-        try {
-          result = await request();
-        } catch (retryError) {
-          if (c.abort?.signal.aborted) throw retryError;
-          throw turnError(retryError);
-        }
-      }
-      if (turnRole === "plan" && result.toolCalls.some((tc) => isCodeChangeTool(tc.name)) && reportToPolicy({ type: "code_change_attempted" }).outcome.kind === "reask_as_coder") {
-        turnRole = nextTurn(policy, { hasTools: !!tools }).role;
-        c.codePhaseReached = true;
-        const brief = coderHandoffBrief(replayTextOf(result.text), result.toolCalls);
-        pushTrace(c, coderReaskTrace(nowIso(), iter, result.resolvedModel));
-        restartTurn();
-        try {
-          result = await request([{ role: "user", content: brief }]);
-        } catch (e) {
-          if (c.abort?.signal.aborted) throw e;
-          throw turnError(e);
-        }
-      }
-      reportToPolicy({ type: "turn_succeeded", ...result.resolvedModel ? { model: result.resolvedModel } : {} });
-      handoff.served(result.resolvedModel ?? policy.model);
-      if (result.toolCalls.length > 0) announcementRecoveries = 0;
-      if (result.resolvedModel && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))) c.codeModel = result.resolvedModel;
-      accrueByoUnresolved(c, result.byoUnresolved);
-      accrueProviderCap(c, result.providerCap);
-      const resolved = result.resolvedModel ?? policy.model ?? "default";
-      const requested = policy.model ?? "default";
-      c.runUsage.promptTokens += result.usage?.prompt ?? 0;
-      c.runUsage.completionTokens += result.usage?.completion ?? 0;
-      if (result.resolvedModel) {
-        c.runUsage.model = result.resolvedModel;
-        c.lastServedModel = result.resolvedModel;
-      }
-      setLastResolvedModel(chatId, result.resolvedModel);
-      if (requested !== "default" && resolved !== "default" && resolved !== requested) {
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "message",
-          label: "llm.model_downgrade",
-          args: { requestedModel: requested, model: resolved, step: iter },
-          result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
-        });
-      }
-      const localFallback = localFallbackTrace(nowIso(), iter, result.localFirst);
-      if (localFallback) pushTrace(c, localFallback);
-      const narratedUnadvertised = result.toolCalls.length === 0 ? toolNamesMentionedIn(result.text).filter((n) => !advertisedNames.has(n)) : [];
-      const argBytes = toolCallArgBytes(result.toolCalls);
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "llm",
-        label: "llm.complete",
-        durationMs: nowMs2() - llmStart,
-        ttftMs: firstTokenAt !== void 0 ? firstTokenAt - llmStart : void 0,
-        // `model` is the model the gateway ACTUALLY used (resolved), falling back to
-        // what we requested when the gateway didn't report one. `requestedModel`
-        // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
-        // can tell "what I asked for" from "what answered".
-        args: {
-          model: resolved,
-          requestedModel: requested,
-          step: iter,
-          // What the turn asked the gateway for (analysis vs code vs chat), so a copied
-          // report shows which model planned and which one wrote the code.
-          role: turnRole,
-          toolCalls: result.toolCalls.length,
-          // How much the turn actually EMITTED. "1 tool call(s) · 202509ms" said
-          // nothing about a turn that spent three minutes streaming 21 KB of
-          // `write_file` arguments — which is what a long turn usually is.
-          ...argBytes > 0 ? { argBytes } : {},
-          // Which account served the turn + any connected-BYO provider the gateway
-          // could NOT resolve — so triage tells "ran on the shared pool despite a
-          // connected Claude account (expired?)" apart from "nothing connected".
-          account: result.account,
-          byoUnresolved: result.byoUnresolved,
-          // How many tools the turn was actually OFFERED, out of the whole catalog.
-          // A zero here is the difference between "the model refused to act" and "it had
-          // nothing to act with" — previously unanswerable from a copied report, which
-          // only ever carried the registry-wide total.
-          advertisedTools: advertised.length,
-          catalogTools: allTools?.length ?? 0,
-          ...narratedUnadvertised.length ? { narratedUnadvertised } : {},
-          // The stream filter strips every call it lifts, so call markup still IN the text
-          // is a dialect it does not know: the model tried to act and the call never ran.
-          // Recorded so a copied report says "parser gap" instead of "won't call tools".
-          ...result.toolCalls.length === 0 && hasCallMarkup(result.text) ? { unliftedCallMarkup: true } : {},
-          // What the vendor's RAW response carried, counted before the gateway translated
-          // it — so a text-only turn reads as "the model returned no call" or "a returned
-          // call was lost on the way", never as a guess. Absent when the vendor does not report it.
-          ...result.upstream ? { upstreamFunctionCalls: result.upstream.functionCalls, upstreamRecovered: result.upstream.recovered } : {}
-        },
-        // Structured diagnostics fields — the A-vs-B triage reads these directly.
-        usage: result.usage,
-        finishReason: result.finishReason,
-        textChars: result.text.length,
-        result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}${result.usage?.prompt != null ? ` \xB7 prompt ${result.usage.prompt} tok` : ""}`
-      });
-      if (result.text.trim()) {
-        pushTrace(c, { ts: nowIso(), category: "message", label: "agent.message", args: { step: iter }, result: result.text });
-      }
-      lastTurnInterruption = turnInterruption(result.finishReason);
-      const meta = { result, resolved, requested, advertised: advertised.length, advertisedNames };
-      const toolCalls = runTool ? result.toolCalls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.args })) : [];
-      return { content: replayTextOf(result.text), toolCalls, meta };
-    },
-    dispatch: async (call2, ctx) => {
-      const iter = ctx.step;
-      const args = call2.args;
-      const declined = malformedCallOutcome(call2, lastTurnInterruption === "truncated");
-      if (declined) {
-        const truncated = lastTurnInterruption === "truncated";
-        pushTrace(c, {
-          ts: nowIso(),
-          category: "error",
-          isError: true,
-          durationMs: 0,
-          label: malformedCallLabel(call2.name, truncated),
-          args: { arguments: String(call2.raw?.arguments ?? "").slice(0, 200) },
-          result: declined
-        });
-        return { data: declined, isError: true };
-      }
-      const isReadTool = isDedupableRead(call2.name);
-      const toolStart = nowMs2();
-      setActivity(c, toolActivity(call2.name, args, iter, Date.now()));
-      if (!runTool) throw new Error("tool call without a tool runner");
-      let out;
-      try {
-        out = await runTool(call2.name, withObservedModel(chatId, call2.name, args));
-      } catch (e) {
-        const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-        out = { ok: false, error: message };
-        const repeat = failureAdvisoryFor(call2.name, args, out, iter);
-        if (!isReadTool) writeLedger.record(call2.name, args, { ok: false, unscoped: isUnscopedMutation(call2.name, args) });
-        pendingRun = { out, toolStart, isReadTool, threw: true };
-        return { data: repeat ? withAdvisory(out, repeat) : out, isError: true };
-      }
-      const changed = codeChangesOf(call2.name, args, out);
-      if (changed) {
-        const first = !c.codeChanged;
-        c.codeChanged = true;
-        for (const f of changed) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
-        if (first && !c.ticketRecorded && req.projectId != null && req.runTool) {
-          await recordCodeChangeTicket(chatId, c, req, "open").catch(() => {
-          });
-        }
-      }
-      if (isTicketRecordingTool(call2.name)) c.ticketRecorded = true;
-      await autoLinkCreatedItem(chatId, c, runTool, call2.name, out);
-      let advisory = null;
-      if (!isReadTool) writeLedger.record(call2.name, args, { ok: !isFailedToolResult(out), unscoped: isUnscopedMutation(call2.name, args) });
-      if (isFailedToolResult(out)) {
-        advisory = failureAdvisoryFor(call2.name, args, out, iter);
-      } else {
-        failures.clear(call2.name, args);
-        const placeholders = placeholdersWritten(call2.name, args);
-        if (placeholders.length) {
-          pushTrace(c, placeholderTraceEvent(call2.name, placeholders, nowIso()));
-          advisory = placeholderAdvisory(placeholders);
-        }
-        if (isCodeChangeTool(call2.name)) placeholderLedger.record(call2.name, args, placeholders);
-        if (isDelegationTool(call2.name)) placeholderLedger.add(delegationPlaceholders(out));
-        if (isTicketCompletion(call2.name, args)) {
-          const placeholderWarning = completionAdvisory(placeholderLedger.outstanding());
-          const events = c.trace;
-          const isOnBaseBranch = shippedToBaseBranch(events);
-          const canComplete = canCompleteTicket(isOnBaseBranch, false);
-          if (!canComplete) {
-            const said = notOnBaseBranchAdvisory();
-            pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, isOnBaseBranch }, result: said });
-            advisory = said;
-          } else if (placeholderWarning) {
-            pushTrace(c, { ts: nowIso(), category: "message", label: "tools.completion_guard", args: { tool: call2.name, open: placeholderLedger.outstanding() }, result: placeholderWarning });
-            advisory = placeholderWarning;
-          }
-        }
-        if (isReadTool) {
-          const visit = readCoverage.record(call2.name, args);
-          const target = visit ? visitTarget(args) : void 0;
-          advisory = visit && target ? revisitAdvisory(call2.name, target, visit) : null;
-          if (advisory) {
-            pushTrace(c, {
-              ts: nowIso(),
-              category: "message",
-              label: "tools.revisit_guard",
-              args: { step: iter, tool: call2.name, target, visits: visit.count },
-              result: advisory
-            });
-          }
-        }
-      }
-      const trimmedOut = trimToolResult(call2.name, out ?? null, { advisory });
-      pendingRun = { out, toolStart, isReadTool, threw: false, bytes: trimmedOut.bytes, truncated: trimmedOut.truncated };
-      return { data: trimmedOut.content, isError: isFailedToolResult(out) };
-    }
-  };
-  const loop = await runAgentLoop({
-    messages: convo,
-    codec,
-    ports,
-    hooks,
-    signal: c.abort?.signal,
-    // No step cap. The kernel's consecutive-tool-failure breaker is the run's only
-    // limit — see the "no tool-iteration ceiling" note at the top of this module.
-    budget: {}
-  });
-  if (loop.finished || loop.cancelled) return;
-  const streak = loop.failureStreak;
-  c.streamingText = "";
-  if (!c.abort?.signal.aborted) {
-    const closeStart = nowMs2();
-    try {
-      const working = [
-        { role: "system", content: systemPrompt },
-        ...windowed(convo),
-        {
-          role: "user",
-          content: `This turn was stopped because your last ${streak} tool calls all failed. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered \u2014 say what you completed, quote what the failing calls answered, and state plainly what is blocking you and what you need (a different argument, a permission, a decision) so the next turn can succeed.`
-        }
-      ];
-      let closeFirstTokenAt;
-      const closeAsk = nextTurn(policy, { hasTools: false });
-      const closing = await asLiveTurn(c, () => stream(
-        // No `tools` → the model can't call another tool and must produce text.
-        { messages: working, model: closeAsk.model, modelStrict: closeAsk.strict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
-        {
-          onModel: liveTurnModel(c),
-          onConnectRetry: connectRetryStep(c, loop.step),
-          onTextDelta: (d) => {
-            if (closeFirstTokenAt === void 0) closeFirstTokenAt = nowMs2();
-            c.streamingText += d;
-            emit(c);
-          }
-        }
-      ));
-      accrueByoUnresolved(c, closing.byoUnresolved);
-      accrueProviderCap(c, closing.providerCap);
-      pushTrace(c, {
-        ts: nowIso(),
-        category: "llm",
-        label: "llm.complete",
-        durationMs: nowMs2() - closeStart,
-        ttftMs: closeFirstTokenAt !== void 0 ? closeFirstTokenAt - closeStart : void 0,
-        args: { model: closing.resolvedModel ?? closeAsk.model ?? "default", requestedModel: closeAsk.model ?? "default", step: loop.step, toolCalls: 0, forcedFinish: true, failureStreak: streak, account: closing.account, byoUnresolved: closing.byoUnresolved },
-        usage: closing.usage,
-        finishReason: closing.finishReason,
-        textChars: closing.text.length,
-        result: `forced final synthesis (${streak} consecutive tool failures stopped the run) \xB7 ${closing.text.length} chars \xB7 finish: ${closing.finishReason ?? "\u2014"}`
-      });
-      const closingText = canonicalTurnText(closing.text);
-      if (closingText) {
-        convo.push({ role: "assistant", content: replayTextOf(closingText) });
-        const meta = provenanceMetadata(closing, closeAsk.model);
-        const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: closingText, ...meta ? { metadata: meta } : {} }]);
-        c.streamingText = "";
-        recordAppended(c, assistantMsg);
-        emit(c);
-        emitEvermindLearnReconcile(assistantMsg, closingText);
-        onActivity?.(chatId);
-        return;
-      }
-    } catch (e) {
-      if (c.abort?.signal.aborted) return;
-    }
-  }
-  if (c.abort?.signal.aborted) return;
-  c.streamingText = "";
-  recordRunFailure(
-    c,
-    "agent.loop",
-    `Stopped after ${streak} consecutive failed tool calls over ${loop.step} steps (a forced final answer without tools also came back empty)`
-  );
-  c.error = `The assistant's last ${streak} tool calls all failed and it gave no answer. Read the failing steps above, then try again with what they ask for.`;
-  emit(c);
-}
 
 // src/useBrainConversation.ts
 function useBrainConversation(options) {
@@ -11995,6 +12262,7 @@ function useBrainConversation(options) {
     modelStrict,
     routingMode,
     pickFallbackModel,
+    windowSources,
     maxTokens,
     reasoning,
     toolSpecs,
@@ -12100,6 +12368,7 @@ ${extraSystem}` : resolvedSystemPrompt;
       modelStrict,
       routingMode,
       pickFallbackModel,
+      ...windowSources ? { windowSources } : {},
       maxTokens,
       reasoning,
       runTool,
@@ -12116,7 +12385,7 @@ ${extraSystem}` : resolvedSystemPrompt;
       chatMode,
       chatRoster
     }),
-    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
   const send = useCallback5(
     async (text, opts) => {
@@ -13572,6 +13841,13 @@ function gatewayPlanModels(surface) {
   if (surface.models) return surface.models.filter((id) => typeof id === "string" && !!id);
   return (surface.data ?? []).map((row) => row.model ?? row.id).filter((id) => !!id);
 }
+function gatewayModelWindows(surface) {
+  const windows = /* @__PURE__ */ new Map();
+  for (const m of surface?.byo?.models ?? []) {
+    if (m.id && typeof m.contextWindow === "number" && m.contextWindow > 0) windows.set(m.id, m.contextWindow);
+  }
+  return (ref) => windows.get(ref);
+}
 var EMPTY_GATEWAY_MODEL_OPTIONS = {
   surface: {},
   options: { byo: [], free: [], plan: [], paid: [] },
@@ -13824,6 +14100,7 @@ export {
   MODALITY_PERSONAS,
   MODEL_CATEGORIES,
   NEW_CHAT_MODE,
+  NOT_SIGNED_IN,
   NOT_STARTED_TASK_STATUSES,
   ON_DEVICE_ANSWER_THRESHOLD,
   PERSONA_MODALITY_IDS,
@@ -13923,12 +14200,14 @@ export {
   createBrowserEngineProber,
   createComposingActivity,
   createHandoffFit,
+  createHostModelStream,
   createLocalFirstStream,
   createLocalStream,
   createPageEngineSet,
   createPayloadBudget,
   declinesReview,
   declinesShipping,
+  deferredLocalModelStore,
   deriveChatTitle,
   describeLiveStep,
   describeNetworkError,
@@ -13967,6 +14246,7 @@ export {
   formatSubagentDiagnostics,
   gatewayCanChooseModel,
   gatewayModelIdentity,
+  gatewayModelWindows,
   gatewayPlanIsPaid,
   gatewayPlanModels,
   gatherChatDiagnostics,
@@ -13979,6 +14259,7 @@ export {
   handleRouterCall,
   hasEditIntent,
   hasPromptApi,
+  hasWebGPU,
   installIndexedDbStepDurability,
   installRunDriver,
   installStepDurability,
@@ -14080,6 +14361,7 @@ export {
   promptApiMeasure,
   promptStreamDeltas,
   providerFailureEvent,
+  providerFailureTrace,
   queueRunSteering,
   ratedTurnContext,
   ratedTurnTool,
@@ -14089,6 +14371,7 @@ export {
   resetApiVersionCache,
   resetBrainRunStore,
   resolveBrainStream,
+  resolveContextWindow,
   resolveRecipient,
   resolveRunConfirm,
   retryOnConnectFailure,
@@ -14114,6 +14397,7 @@ export {
   stallRecoveriesInTrace,
   stallUnrecoveredInTrace,
   startRun,
+  stepRow,
   stepSig,
   stopRun,
   stoppedTurnMetadata,
@@ -14131,7 +14415,7 @@ export {
   toolCallArgBytes,
   toolExposureInTrace,
   toolNamesMentionedIn,
-  toolSchemaTokens,
+  toolSchemaTokens2 as toolSchemaTokens,
   toolSpecsFor,
   traceWithPersistedSteps,
   transcriptSeedFrom,

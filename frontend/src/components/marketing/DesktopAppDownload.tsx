@@ -1,9 +1,12 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
+import { openSourceBySlug } from '@/lib/openSourcePackages';
 import { renderInlineCode } from './inlineCode';
 
-/** Synapse ships from its own repository (SeanHogg/builderforce-inference); this is its newest release. */
-const DESKTOP_RELEASES_URL = 'https://github.com/SeanHogg/builderforce-inference/releases/latest';
+/** Synapse ships from its own repository — the `builderforce-inference` row of the
+ *  open-source registry; this is its newest release. */
+const SYNAPSE_REPO_URL = openSourceBySlug('builderforce-inference')?.repoUrl;
+const DESKTOP_RELEASES_URL = SYNAPSE_REPO_URL ? `${SYNAPSE_REPO_URL}/releases/latest` : '/open-source';
 const DESKTOP_POST_PATH = '/blog/your-private-evermind-on-your-machine';
 
 type Point = { title: string; desc: string };

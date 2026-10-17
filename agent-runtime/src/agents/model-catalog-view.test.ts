@@ -5,7 +5,6 @@ import {
   isLocalModel,
   loadOnPremCatalogView,
   priceForCost,
-  tierForCost,
   vendorOfCandidateKey,
 } from "./model-catalog-view.js";
 
@@ -20,29 +19,14 @@ describe("priceForCost — on-prem per-MILLION cost → port per-TOKEN price", (
   });
 });
 
-describe("tierForCost — bands on output price", () => {
-  it("cuts the ladder at 0 / 8 / 20 per million output tokens", () => {
-    expect(tierForCost({ input: 0, output: 0 })).toBe("FREE");
-    expect(tierForCost({ input: 0.45, output: 2 })).toBe("STANDARD");
-    expect(tierForCost({ input: 0.1, output: 0.5 })).toBe("STANDARD"); // Haiku 5.5
-    expect(tierForCost({ input: 2, output: 10 })).toBe("PREMIUM"); // Sonnet 5.5
-    expect(tierForCost({ input: 3, output: 15 })).toBe("PREMIUM");
-    expect(tierForCost({ input: 4, output: 20 })).toBe("ULTRA"); // Opus 5.5
-    expect(tierForCost({ input: 10, output: 50 })).toBe("ULTRA"); // Fable 5.1
-    expect(tierForCost({ input: 15, output: 75 })).toBe("ULTRA");
-  });
-  it("knows no tier without a cost", () => {
-    expect(tierForCost(undefined)).toBeUndefined();
-  });
-});
-
 describe("isLocalModel", () => {
   it("is local for a local inference api, a loopback baseUrl, or a local-only provider", () => {
     expect(isLocalModel("custom", { api: "ollama" })).toBe(true);
     expect(isLocalModel("custom", { api: "llama" })).toBe(true);
     expect(isLocalModel("custom", { baseUrl: "http://127.0.0.1:8000/v1" })).toBe(true);
     expect(isLocalModel("custom", { baseUrl: "http://localhost:1234/v1" })).toBe(true);
-    for (const provider of ["ollama", "lmstudio", "freetoken", "synapse", "vllm", "llama"]) {
+    expect(isLocalModel("custom", { baseUrl: "http://[::1]:8080/v1" })).toBe(true);
+    for (const provider of ["ollama", "lmstudio", "freetoken", "synapse", "vllm", "llama", "ollama-local"]) {
       expect(isLocalModel(provider)).toBe(true);
     }
   });
@@ -81,6 +65,12 @@ describe("catalogViewFromEntries", () => {
     expect(view.residencyOf?.("ollama/qwen3:8b")).toBe("local");
     expect(view.tierOf("ollama/qwen3:8b")).toBe("FREE");
     expect(view.residencyOf?.("anthropic/claude-opus-5-5")).toBe("cloud");
+  });
+
+  it("answers a shared `local/<runtime>/<model>` ref as local and FREE", () => {
+    expect(view.residencyOf?.("local/ollama/qwen3:8b")).toBe("local");
+    expect(view.tierOf("local/synapse/qwen3-8b")).toBe("FREE");
+    expect(view.vendorOf("local/ollama/qwen3:8b")).toBe("local/ollama");
   });
 
   it("knows nothing about a model it has no row for — never cheap by default", () => {

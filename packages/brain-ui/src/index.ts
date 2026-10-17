@@ -49,6 +49,28 @@ export type { AskUserPayload, AskUserOption, AskUserLabels, PendingAskUser } fro
 // upgrade / add a card). Shared so the VS Code webview and the web app's BrainPanel
 // can't drift on what a given entitlement failure lets the user do about it.
 export { ChatErrorBanner, DEFAULT_CHAT_ERROR_LABELS } from './ChatErrorBanner';
+// The ONE human-in-the-loop approval bar (a run paused on `pendingConfirm`) — web panel,
+// VS Code chat + sub-agent strip and Rovr all render this, each with its own copy/slots.
+export { ToolConfirmBar, DEFAULT_TOOL_CONFIRM_LABELS, toolConfirmPreview } from './ToolConfirmBar';
+// THE surface chrome every AI host wears: the Brain mark (with its working pulse) and the
+// one-row header (mark · name · context · presence · actions · history · new · expand · close).
+export { BrainMark } from './surface/BrainMark';
+export type { BrainMarkProps } from './surface/BrainMark';
+export { SurfaceHeader, HeaderIcon, EXPAND_ICON_PATH, DEFAULT_SURFACE_HEADER_LABELS } from './surface/SurfaceHeader';
+export type { SurfaceHeaderProps, SurfaceHeaderLabels, SurfaceHeaderHistory } from './surface/SurfaceHeader';
+export { SurfaceLauncher } from './surface/SurfaceLauncher';
+export type { SurfaceLauncherProps, SurfaceLauncherBadge } from './surface/SurfaceLauncher';
+export { SurfaceTabs } from './surface/SurfaceTabs';
+export type { SurfaceTabsProps, SurfaceTab } from './surface/SurfaceTabs';
+// Composer chips, extracted from the hosts: fixed next-step suggestions (web), the held
+// turns with Steer now (VS Code), and the WHERE chip (the canvas scope).
+export { SuggestionRow } from './composer/SuggestionRow';
+export type { ComposerSuggestion } from './composer/SuggestionRow';
+export { QueuedTurnChips, DEFAULT_QUEUED_TURN_LABELS } from './composer/QueuedTurnChips';
+export type { QueuedTurnChipsProps, QueuedTurnChipsLabels } from './composer/QueuedTurnChips';
+export { ContextChip } from './composer/ContextChip';
+export type { ContextChipProps, ContextChipOption } from './composer/ContextChip';
+export type { ToolConfirmBarProps, ToolConfirmBarLabels } from './ToolConfirmBar';
 export type { ChatErrorBannerProps, ChatErrorBannerLabels } from './ChatErrorBanner';
 
 export { PromptPanel } from './PromptPanel';
@@ -80,8 +102,8 @@ export { LocalModelList } from './localModels/LocalModelList';
 export type { LocalModelListProps } from './localModels/LocalModelList';
 export { useLocalModels } from './localModels/useLocalModels';
 export type { LocalModelsState } from './localModels/useLocalModels';
-export { DEFAULT_LOCAL_MODEL_LABELS, LOCAL_UNSUPPORTED_LABEL } from './localModels/labels';
-export type { LocalModelLabels } from './localModels/labels';
+export { DEFAULT_LOCAL_MODEL_LABELS, LOCAL_MODEL_LABEL_FIELDS, LOCAL_UNSUPPORTED_LABEL, localModelLabelsFrom } from './localModels/labels';
+export type { LocalModelLabels, LocalModelLabelLookup } from './localModels/labels';
 export { formatDownloadSize, formatParams, formatContextTokens } from './localModels/localModelView';
 export type { PromptOptionsLabels } from './promptOptions/types';
 // The model-choice domain itself lives in brain-embedded (the extension host shares
@@ -162,6 +184,7 @@ export type { MentionAutocomplete, MentionLabels, UseMentionAutocompleteOptions 
 export { useTicketAutocomplete } from './mention/TicketAutocomplete';
 export type { TicketAutocomplete, TicketAutocompleteLabels, UseTicketAutocompleteOptions } from './mention/TicketAutocomplete';
 export { DEFAULT_CHAT_TICKETS_LABELS, TICKET_KINDS, RUNNABLE_KINDS } from './chatTickets/types';
+export { chatTicketsLabelsFromBundle } from './chatTickets/labelBundle';
 export { chatDiagnosticsReads } from './chatTickets/chatDiagnosticsReads';
 export type { ChatDiagnosticsChatReads, ChatDiagnosticsReadAdapter } from './chatTickets/chatDiagnosticsReads';
 export type {
@@ -190,6 +213,8 @@ export {
   formatDuration,
 } from './timelineModel';
 export type { TimelineNode, TimelineImage, BuildTimelineInput } from './timelineModel';
+export { modelMoveOf, modelMoveLine, DEFAULT_MODEL_MOVE_LABELS } from './timelineModelMoves';
+export type { ModelMove, ModelMoveLabels } from './timelineModelMoves';
 
 export { EvermindConsole } from './evermind/EvermindConsole';
 export type { EvermindConsoleProps } from './evermind/EvermindConsole';

@@ -47,6 +47,7 @@ import {
   type VendorModule,
   type VendorStreamResult,
 } from './types';
+import { currentAnthropicModelId, supersededAnthropicModelIds } from '@builderforce/model-catalog';
 import { ANTHROPIC_OAUTH_BETA, CLAUDE_CODE_SYSTEM_PROMPT } from '../anthropicOAuth';
 import { markAnthropicHistoryBreakpoint } from '../promptCaching';
 import { applySchemaDialect } from '../jsonSchemaSanitize';
@@ -127,7 +128,8 @@ export function anthropicOutputCap(requested: number | undefined, stream: boolea
  * it is catalog DATA the translator reads — never an id check inside it.
  *
  *   • `thinkingOff` — what "no extended thinking this turn" is spelled as:
- *       `disabled`      → `{type:'disabled'}` (Sonnet 5, Opus 5, Opus 4.8, Haiku 4.5).
+ *       `disabled`      → `{type:'disabled'}` (Haiku 5.5, Sonnet 5, Opus 5, Opus 4.8,
+ *                         Haiku 4.5).
  *       `between_tools` → `{type:'between_tools'}`; `disabled` 400s (Sonnet 5.5).
  *       `omit`          → no `thinking` field at all: thinking cannot be turned off and
  *                         `disabled` 400s (Opus 5.5, Fable 5.1). The OFF branch sends
@@ -157,19 +159,27 @@ interface AnthropicCatalogEntry extends VendorModelEntry {
 const CLAUDE_5_PROFILE: AnthropicRequestProfile = { thinkingOff: 'disabled', adaptiveThinking: true, forcedToolChoice: true, maxOutputTokens: 128_000 };
 const CLAUDE_5_5_ALWAYS_THINKING_PROFILE: AnthropicRequestProfile = { thinkingOff: 'omit', adaptiveThinking: true, forcedToolChoice: false, maxOutputTokens: 128_000 };
 const CODER_CAPABILITIES: VendorModelEntry['capabilities'] = ['tools', 'structured_output', 'vision'];
+const HAIKU_4_5_SNAPSHOT = 'claude-haiku-4-5-20251001';
 
+// Each current model's id and `supersedes` list derive from the ONE release table
+// (`@builderforce/model-catalog` `ANTHROPIC_RELEASES`) the on-prem runtime reads too, so
+// a release is one edit there and both hosts agree on the line.
 const CATALOG: ReadonlyArray<AnthropicCatalogEntry> = [
-  { id: 'claude-sonnet-5-5', tier: 'PREMIUM', label: 'Claude Sonnet 5.5 (Anthropic direct)', brand: 'Anthropic', capabilities: CODER_CAPABILITIES,
-    supersedes: ['claude-sonnet-5', 'claude-sonnet-4-6', 'claude-sonnet-4-5', 'claude-sonnet-4-0'],
+  { id: currentAnthropicModelId('sonnet'), tier: 'PREMIUM', label: 'Claude Sonnet 5.5 (Anthropic direct)', brand: 'Anthropic', capabilities: CODER_CAPABILITIES,
+    supersedes: supersededAnthropicModelIds('sonnet'),
     request: { thinkingOff: 'between_tools', adaptiveThinking: true, forcedToolChoice: false, maxOutputTokens: 128_000 } },
-  { id: 'claude-opus-5-5',   tier: 'ULTRA',   label: 'Claude Opus 5.5 (Anthropic direct)',   brand: 'Anthropic', capabilities: CODER_CAPABILITIES,
-    supersedes: ['claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-opus-4-5', 'claude-opus-4-1', 'claude-opus-4-0'],
+  { id: currentAnthropicModelId('opus'),   tier: 'ULTRA',   label: 'Claude Opus 5.5 (Anthropic direct)',   brand: 'Anthropic', capabilities: CODER_CAPABILITIES,
+    supersedes: supersededAnthropicModelIds('opus'),
     request: CLAUDE_5_5_ALWAYS_THINKING_PROFILE },
-  { id: 'claude-fable-5-1',  tier: 'ULTRA',   label: 'Claude Fable 5.1 (Anthropic direct)',  brand: 'Anthropic', capabilities: CODER_CAPABILITIES,
-    supersedes: ['claude-fable-5'],
+  { id: currentAnthropicModelId('fable'),  tier: 'ULTRA',   label: 'Claude Fable 5.1 (Anthropic direct)',  brand: 'Anthropic', capabilities: CODER_CAPABILITIES,
+    supersedes: supersededAnthropicModelIds('fable'),
     request: CLAUDE_5_5_ALWAYS_THINKING_PROFILE },
-  { id: 'claude-haiku-4-5-20251001', tier: 'STANDARD', label: 'Claude Haiku 4.5 (Anthropic direct)', brand: 'Anthropic', capabilities: CODER_CAPABILITIES,
-    supersedes: ['claude-haiku-4-5'],
+  { id: currentAnthropicModelId('haiku'),  tier: 'STANDARD', label: 'Claude Haiku 5.5 (Anthropic direct)', brand: 'Anthropic', capabilities: CODER_CAPABILITIES,
+    // The dated Haiku 4.5 snapshot is the spelling this catalog has served (and pins
+    // were stored) under; the release table lists its alias, `claude-haiku-4-5`.
+    supersedes: [...supersededAnthropicModelIds('haiku'), HAIKU_4_5_SNAPSHOT],
+    request: CLAUDE_5_PROFILE },
+  { id: HAIKU_4_5_SNAPSHOT, tier: 'STANDARD', label: 'Claude Haiku 4.5 (Anthropic direct)', brand: 'Anthropic', capabilities: CODER_CAPABILITIES,
     request: { thinkingOff: 'disabled', adaptiveThinking: false, forcedToolChoice: true, maxOutputTokens: 64_000 } },
   { id: 'claude-sonnet-5',   tier: 'PREMIUM', label: 'Claude Sonnet 5 (Anthropic direct)',   brand: 'Anthropic', capabilities: CODER_CAPABILITIES, request: CLAUDE_5_PROFILE },
   { id: 'claude-opus-5',     tier: 'ULTRA',   label: 'Claude Opus 5 (Anthropic direct)',     brand: 'Anthropic', capabilities: CODER_CAPABILITIES, request: CLAUDE_5_PROFILE },
@@ -719,7 +729,7 @@ export const anthropicModule: VendorModule = {
   attemptTimeoutMs: { default: 90_000 },
   // Sonnet leads plain turns and is the cheaper first rung of the coding floor; Opus
   // leads tool-driven agentic turns. Bare ids: the direct vendor has no route prefix.
-  flagships: { agentic: 'claude-opus-5-5', chat: 'claude-sonnet-5-5' },
+  flagships: { agentic: currentAnthropicModelId('opus'), chat: currentAnthropicModelId('sonnet') },
   tierFor: tierForAnthropicModel,
   autoRoute: false, // floor-only: never auto-selected; reached via the coding fallback chain, an explicit pin, or a tenant's connected-BYO seed.
   // Prefer a connected tenant SUBSCRIPTION (OAuth) over the operator's metered API

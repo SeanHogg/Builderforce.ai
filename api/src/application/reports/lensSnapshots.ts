@@ -15,13 +15,14 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * drift). Only tenant-wide lenses are cadence-captured (delivery/portfolio are
  * scope-specific and captured on demand elsewhere).
  *
- * Wired in the composition root (index.ts) on the frequent cron tick alongside
- * runDueReports. Pure period math is unit-testable without a DB.
+ * Registered as the `lens-snapshots` entry in `src/cronSweeps.ts` on the frequent
+ * cron tick, beside `reports`. Pure period math is unit-testable without a DB.
  */
 
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { lensSnapshots, segments, tenants } from '../../infrastructure/database/schema';
+import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
 import { computeEngineeringInsights } from '../insights/engineeringInsights';
 import { computeDora } from '../metrics/workforceMetrics';
@@ -207,43 +208,137 @@ const MAX_TENANTS_PER_TICK = 100;
 const REFRESH_MS = 6 * 60 * 60 * 1000;
 
 /**
+ * KV key: `{ [tenantId]: retryNotBeforeMs }` for tenants whose capture THREW.
+ *
+ * A failed capture writes no row, so to the freshness check it looks exactly like a
+ * tenant never captured — and was retried (and logged as an error) on every active
+ * tick, every five minutes, for as long as the failure lasted. A failure is therefore
+ * treated as fresh for one {@link REFRESH_MS}: the tenant is left out of the next
+ * selections until then, and retried at the cadence a success would be refreshed at.
+ *
+ * KV rather than a column: the only row a failure could mark is the snapshot itself,
+ * and stamping `generated_at` on a payload that was never recomputed would make the
+ * console present a stale snapshot as a fresh one. One small blob, read once and
+ * written at most once per tick.
+ */
+export const LENS_SNAPSHOT_BACKOFF_KEY = 'lens-snapshots:backoff:v1';
+const BACKOFF_KV_TTL_SECONDS = Math.ceil(REFRESH_MS / 1000);
+
+type BackoffMap = Record<string, number>;
+
+/** The backoff entries still in force at `nowMs` — expired ones are dropped. */
+export function activeBackoff(raw: BackoffMap | null, nowMs: number): BackoffMap {
+  const active: BackoffMap = {};
+  for (const [tenantId, until] of Object.entries(raw ?? {})) {
+    if (Number.isFinite(until) && until > nowMs) active[tenantId] = until;
+  }
+  return active;
+}
+
+/**
+ * Tenants owed at least one rolling snapshot, most-owed first.
+ *
+ * The read used to be `SELECT id FROM tenants LIMIT 100` — no ORDER BY, no filter —
+ * so it returned the same ~100 rows in heap order every tick, and every tenant past
+ * that position was never snapshotted at all. It now selects only tenants that still
+ * owe a (lens, period) snapshot fresher than REFRESH_MS, ordered by how few fresh ones
+ * they hold (never-captured first) and then by id. A tenant that is captured stops
+ * qualifying, so the window moves on and every tenant is reached within
+ * ceil(owing tenants / MAX_TENANTS_PER_TICK) active ticks. Backed-off tenants are
+ * excluded so a persistently failing tenant cannot occupy a slot either.
+ *
+ * Split out and synchronous so the rendered SQL can be asserted without a connection.
+ */
+export function owingTenantsQuery(
+  db: Db,
+  periods: readonly string[],
+  freshCutoff: Date,
+  excludeTenantIds: readonly number[],
+  limit: number = MAX_TENANTS_PER_TICK,
+) {
+  const expected = periods.length * SNAPSHOTABLE_LENSES.length;
+  // Served by the (tenant_id, lens, period) unique index.
+  const freshCount = sql<number>`(
+    SELECT COUNT(*) FROM ${lensSnapshots}
+    WHERE ${lensSnapshots.tenantId} = ${tenants.id}
+      AND ${inArray(lensSnapshots.period, [...periods])}
+      AND ${lensSnapshots.generatedAt} > ${freshCutoff}
+  )`;
+  return db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(and(
+      sql`${freshCount} < ${expected}`,
+      excludeTenantIds.length ? notInArray(tenants.id, [...excludeTenantIds]) : undefined,
+    ))
+    .orderBy(asc(freshCount), asc(tenants.id))
+    .limit(limit);
+}
+
+/**
  * Capture the current rolling month / quarter / year snapshot for each tenant's
  * snapshotable lenses, skipping any (tenant, lens, period) already refreshed within
  * REFRESH_MS. Bounded, idempotent, and safe to call every cron tick. Returns how
- * many (tenant, lens, period) snapshots were written this tick.
+ * many (tenant, lens, period) snapshots were written this tick, and how many tenants
+ * had a capture fail (each is backed off for REFRESH_MS).
  */
-export async function dueSnapshots(env: Env, now: Date = new Date(), db: Db = buildDatabase(env)): Promise<{ captured: number }> {
+export async function dueSnapshots(
+  env: Env,
+  now: Date = new Date(),
+  db: Db = buildDatabase(env),
+): Promise<{ captured: number; failedTenants: number }> {
   const periods = rollingPeriods(now).map((p) => p.period);
+  const nowMs = now.getTime();
+  const freshCutoff = new Date(nowMs - REFRESH_MS);
 
-  const tenantRows = await db.select({ id: tenants.id }).from(tenants).limit(MAX_TENANTS_PER_TICK);
-  if (tenantRows.length === 0) return { captured: 0 };
-  const tenantIds = tenantRows.map((t) => t.id);
+  const storedBackoff = await peekCached<BackoffMap>(env, LENS_SNAPSHOT_BACKOFF_KEY);
+  const backoff = activeBackoff(storedBackoff, nowMs);
+  let backoffChanged = Object.keys(backoff).length !== Object.keys(storedBackoff ?? {}).length;
 
-  // One query for freshness: which (tenant, lens, period) were refreshed recently.
-  const freshCutoff = new Date(now.getTime() - REFRESH_MS);
-  const existing = await db
-    .select({ tenantId: lensSnapshots.tenantId, lens: lensSnapshots.lens, period: lensSnapshots.period })
-    .from(lensSnapshots)
-    .where(and(
-      inArray(lensSnapshots.tenantId, tenantIds),
-      inArray(lensSnapshots.period, periods),
-      sql`${lensSnapshots.generatedAt} > ${freshCutoff}`,
-    ));
-  const fresh = new Set(existing.map((r) => `${r.tenantId}:${r.lens}:${r.period}`));
-
+  const tenantRows = await owingTenantsQuery(db, periods, freshCutoff, Object.keys(backoff).map(Number));
   let captured = 0;
-  for (const tenantId of tenantIds) {
-    for (const period of periods) {
-      for (const lens of SNAPSHOTABLE_LENSES) {
-        if (fresh.has(`${tenantId}:${lens}:${period}`)) continue;
-        try {
-          await captureLensSnapshot(db, tenantId, lens, period, now);
-          captured += 1;
-        } catch (err) {
-          reportCaughtError(err, { source: "application/reports/lensSnapshots.ts", operation: "dueSnapshots", context: { logMessage: '[cron:lens-snapshots] capture failed', details: tenantId } });
+  let failedTenants = 0;
+
+  if (tenantRows.length > 0) {
+    const tenantIds = tenantRows.map((t) => t.id);
+
+    // One query for freshness: which (tenant, lens, period) were refreshed recently.
+    const existing = await db
+      .select({ tenantId: lensSnapshots.tenantId, lens: lensSnapshots.lens, period: lensSnapshots.period })
+      .from(lensSnapshots)
+      .where(and(
+        inArray(lensSnapshots.tenantId, tenantIds),
+        inArray(lensSnapshots.period, periods),
+        sql`${lensSnapshots.generatedAt} > ${freshCutoff}`,
+      ));
+    const fresh = new Set(existing.map((r) => `${r.tenantId}:${r.lens}:${r.period}`));
+
+    for (const tenantId of tenantIds) {
+      let failed = false;
+      for (const period of periods) {
+        for (const lens of SNAPSHOTABLE_LENSES) {
+          if (fresh.has(`${tenantId}:${lens}:${period}`)) continue;
+          try {
+            await captureLensSnapshot(db, tenantId, lens, period, now);
+            captured += 1;
+          } catch (err) {
+            failed = true;
+            reportCaughtError(err, { source: "application/reports/lensSnapshots.ts", operation: "dueSnapshots", context: { logMessage: '[cron:lens-snapshots] capture failed; tenant backed off for one refresh interval', details: { tenantId, lens, period } } });
+          }
         }
+      }
+      // The lenses that DID capture are fresh on their own; the backoff only stops the
+      // failed ones being retried — and re-logged — on every tick until REFRESH_MS.
+      if (failed) {
+        failedTenants += 1;
+        backoff[String(tenantId)] = nowMs + REFRESH_MS;
+        backoffChanged = true;
       }
     }
   }
-  return { captured };
+
+  if (backoffChanged) {
+    await setCached(env, LENS_SNAPSHOT_BACKOFF_KEY, backoff, { kvTtlSeconds: BACKOFF_KV_TTL_SECONDS });
+  }
+  return { captured, failedTenants };
 }

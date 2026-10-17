@@ -1,7 +1,7 @@
+import { resolveAnthropicShortAlias } from "@builderforce/model-catalog";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { logDebug, logWarn } from "../logger.js";
 import { resolveAgentConfig, resolveAgentModelPrimary } from "./agent-scope.js";
-import { resolveAnthropicShortAlias } from "./anthropic-models.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
 import type { ModelCatalogEntry } from "./model-catalog.js";
 import { normalizeGoogleModelId } from "./models-config.providers.js";
@@ -89,7 +89,7 @@ function normalizeAnthropicModelId(model: string): string {
   if (!trimmed) {
     return trimmed;
   }
-  // `opus-5.5` → `claude-opus-5-5`, by rule (see `anthropic-models.ts`).
+  // `opus-5.5` → `claude-opus-5-5`, by rule (see `@builderforce/model-catalog`).
   return resolveAnthropicShortAlias(trimmed) ?? trimmed;
 }
 

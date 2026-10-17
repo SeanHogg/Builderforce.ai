@@ -5,6 +5,7 @@
  * same catalogs at build time — hands its bundle here, so the two cannot map the same
  * bundle onto different labels.
  */
+import { fill } from '../spend/format';
 import type { EvermindConsoleLabels } from './types';
 
 /** The static strings a bundle may carry. Parametric ones are mapped below. */
@@ -34,9 +35,6 @@ const STATIC_KEYS = [
   'diagnosticsShow', 'diagnosticsHide', 'diagnosticsManualHint',
 ] as const satisfies ReadonlyArray<keyof EvermindConsoleLabels>;
 
-/** Fill `{name}` placeholders. */
-const fill = (template: string, vars: Record<string, string | number>) =>
-  template.replace(/\{(\w+)\}/g, (whole, k: string) => (k in vars ? String(vars[k]) : whole));
 
 export function evermindLabelsFromBundle(bundle: Readonly<Record<string, string>>, prefix = 'ev.'): Partial<EvermindConsoleLabels> {
   const s = (key: string): string | undefined => bundle[`${prefix}${key}`];

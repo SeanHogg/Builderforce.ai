@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { usePolledResource } from '@/hooks/usePolledResource';
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useManagerOverviewLive } from './useManagerOverviewLive';
 import { useTranslations, useFormatter } from 'next-intl';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -221,41 +221,9 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     }
   }, [projectId, load, t]);
 
-  // The manager pass now runs in the background on the server (it is far too heavy to
-  // finish inside one request). We poll the overview while it runs so every decision
-  // it journals streams into the activity feed + stats live. The pass stamps
-  // `lastRunAt` when it finishes; we stop once that advances past the baseline, or
-  // after a hard cap (an evicted run leaves the partial actions we already streamed
-  // in place, and the next run resumes). Cancels on unmount.
-  const pollingRef = useRef(false);
-  useEffect(() => () => { pollingRef.current = false; }, []);
-
-  // Background refresh so a CRON manager pass (every ~5 min) shows up live on this
-  // tab — not only when the human clicked "Run manager now". Paused while a manual
-  // run is already streaming (streamUntilDone polls then) to avoid double-loading.
-  usePolledResource(
-    () => (pollingRef.current ? undefined : load()),
-    { intervalMs: 20000, enabled: projectId != null, immediate: false, restartKey: projectId },
-  );
-
-  const streamUntilDone = useCallback(async (baseline: string | null) => {
-    pollingRef.current = true;
-    const startedAt = Date.now();
-    const MAX_MS = 120_000;
-    const INTERVAL_MS = 3000;
-    while (pollingRef.current && projectId != null) {
-      await new Promise((r) => setTimeout(r, INTERVAL_MS));
-      if (!pollingRef.current) break;
-      try {
-        const overview = await managerApi.get(projectId);
-        setData(overview);
-        if (overview.stats.lastRunAt && overview.stats.lastRunAt !== baseline) break;
-      } catch { /* transient — keep polling */ }
-      if (Date.now() - startedAt > MAX_MS) break;
-    }
-    pollingRef.current = false;
-    setRunning(false);
-  }, [projectId]);
+  // The pass runs in the background on the server; the overview is kept live (a
+  // background read for CRON passes, a fast stream after "Run manager now").
+  const { streamUntilDone } = useManagerOverviewLive(projectId, setData, () => setRunning(false));
 
   const runNow = useCallback(async () => {
     if (projectId == null || running || data?.policy.enabled === false) return;
@@ -270,7 +238,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     } catch (e) {
       setError(faultMessage(e, t('error.body')));
     }
-    if (started) void streamUntilDone(baseline);
+    if (started) streamUntilDone(baseline);
     else setRunning(false);
   }, [projectId, running, data, streamUntilDone, t]);
 

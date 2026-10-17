@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { resolveStandupProject } from '@/lib/canvas/standupProject';
+import { useBoardOnScreen } from '@/lib/canvas/BoardOnScreenContext';
 import { MAX_ADDRESSED_AGENTS, mentionTokens } from '@/lib/canvas/agentMentions';
 import { uniqueBoardAgents, type BoardAgent } from '@/lib/canvas/boardAgents';
 import type { RoomOccupant } from '@/lib/canvas/roomSeating';
@@ -67,7 +68,10 @@ export function useCanvasStandupAction({
 }: CanvasStandupActionInput): CanvasSessionActionHandler {
   const t = useTranslations('creationCanvas');
   const scope = useOptionalProjectScope();
-  const projectId = ceremonyEnabled
+  // Standup status is read only for the board a person is looking at — a kept board
+  // behind the stage (or behind a full-screen route) must not poll it.
+  const onScreen = useBoardOnScreen();
+  const projectId = ceremonyEnabled && onScreen
     ? resolveStandupProject({ scopeProjectId: scope?.currentProjectId ?? null, boardProjectId }).projectId
     : null;
 

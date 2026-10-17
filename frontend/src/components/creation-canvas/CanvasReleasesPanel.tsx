@@ -68,6 +68,7 @@ import {
 import styles from './CreationCanvas.module.css';
 import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { usePolledResource } from '@/hooks/usePolledResource';
 export interface CanvasReleasesPanelProps {
   open: boolean;
   onClose: () => void;
@@ -196,22 +197,23 @@ export function CanvasReleasesPanel({
    */
   const sandboxPending = !!staged?.checks.some((entry) => entry.code === 'sandbox.pending');
 
-  useEffect(() => {
-    if (!open || !staged || !sandboxPending || sandboxPolls >= 24) return;
-    let live = true;
-    const delay = sandboxPolls < 10 ? 3_000 : sandboxPolls < 18 ? 6_000 : 12_000;
-    const timer = setTimeout(async () => {
-      try {
-        const next = await creationReleaseApi.staged(sessionId, objectId, staged.snapshotId);
-        if (live) setStaged(next);
-      } catch {
-        // Transient — the next tick retries.
-      } finally {
-        if (live) setSandboxPolls((count) => count + 1);
-      }
-    }, delay);
-    return () => { live = false; clearTimeout(timer); };
-  }, [open, staged, sandboxPending, sandboxPolls, sessionId, objectId]);
+  // Paused while the tab is hidden (a hidden tick is not counted against the budget).
+  usePolledResource(async (signal) => {
+    if (!staged) return;
+    try {
+      const next = await creationReleaseApi.staged(sessionId, objectId, staged.snapshotId);
+      if (!signal.aborted) setStaged(next);
+    } catch {
+      // Transient — the next tick retries.
+    } finally {
+      if (!signal.aborted) setSandboxPolls((count) => count + 1);
+    }
+  }, {
+    intervalMs: sandboxPolls < 10 ? 3_000 : sandboxPolls < 18 ? 6_000 : 12_000,
+    enabled: open && !!staged && sandboxPending && sandboxPolls < 24,
+    immediate: false,
+    restartKey: staged?.snapshotId ?? null,
+  });
 
   /** Promote the STAGED snapshot, so what was checked is what goes on sale. */
   const publish = useCallback(async () => {

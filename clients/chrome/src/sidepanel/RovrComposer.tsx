@@ -20,11 +20,11 @@ export interface RovrComposerProps {
   onStop(): void;
   chatOptions: RovrChatOptions;
   onOpenSettings(): void;
-  /** Under the box — the queued-turns receipt. */
-  below?: ReactNode;
+  /** Above the text — the held turns (the shared queued chips). */
+  above?: ReactNode;
 }
 
-export function RovrComposer({ value, onChange, onSubmit, running, onStop, chatOptions, onOpenSettings, below }: RovrComposerProps) {
+export function RovrComposer({ value, onChange, onSubmit, running, onStop, chatOptions, onOpenSettings, above }: RovrComposerProps) {
   const { options, memoryGap, request, projectId } = chatOptions;
   const labels = useMemo(() => rovrComposerLabels(memoryGap), [memoryGap]);
   const locale = useMemo(() => chrome.i18n.getUILanguage(), []);
@@ -54,7 +54,16 @@ export function RovrComposer({ value, onChange, onSubmit, running, onStop, chatO
       options={options}
       {...(account ? { account, onAccountSettings: onOpenSettings } : {})}
       labels={labels}
-      below={below}
+      above={above}
+      // Fixed next steps — a chip seeds the box; the person edits and sends it.
+      suggestions={{
+        label: t('suggestionsLabel'),
+        items: [
+          { id: 'summarize', label: t('suggestSummarize'), onSelect: () => onChange(t('suggestSummarizePrompt')) },
+          { id: 'fill', label: t('suggestFill'), onSelect: () => onChange(t('suggestFillPrompt')) },
+          { id: 'task', label: t('suggestTask'), onSelect: () => onChange(t('suggestTaskPrompt')) },
+        ],
+      }}
     />
   );
 }

@@ -417,12 +417,18 @@ function depIds(task: TaskRow): string[] {
   }
 }
 
+/** A cloud workflow's status as a function of its tasks' statuses. */
+export function rollupCloudWorkflowStatus(statuses: readonly string[]): 'running' | 'failed' | 'completed' {
+  if (statuses.some((s) => s === 'pending' || s === 'running')) return 'running';
+  return statuses.some((s) => s === 'failed') ? 'failed' : 'completed';
+}
+
 /** Drain ready tasks for one cloud workflow; returns how many tasks it executed. */
 async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget: number): Promise<number> {
   // The workflow's tenant — lets each `llm` node record its spend in the ledger
   // [1310], and (new) lets set-variable/get-variable/increment scope their state.
   const [wf] = await db
-    .select({ tenantId: workflows.tenantId, workflowDefinitionId: workflows.workflowDefinitionId })
+    .select({ tenantId: workflows.tenantId, workflowDefinitionId: workflows.workflowDefinitionId, status: workflows.status })
     .from(workflows)
     .where(eq(workflows.id, workflowId))
     .limit(1);
@@ -435,6 +441,9 @@ async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget
 
   let processed = 0;
   let madeProgress = true;
+  // Did ANY pass change a task's status? Not `processed > 0`: cascades and pruned arms
+  // change statuses without executing anything.
+  let changedAny = false;
   while (madeProgress && processed < budget) {
     madeProgress = false;
     for (const task of tasks) {
@@ -586,17 +595,24 @@ async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget
       processed++;
       madeProgress = true;
     }
+    if (madeProgress) changedAny = true;
   }
 
-  // Recompute the workflow status from its tasks.
-  const fresh = await db.select({ status: workflowTasks.status }).from(workflowTasks).where(eq(workflowTasks.workflowId, workflowId));
-  const anyPendingOrRunning = fresh.some((t) => t.status === 'pending' || t.status === 'running');
-  const anyFailed = fresh.some((t) => t.status === 'failed');
-  const next = anyPendingOrRunning ? 'running' : anyFailed ? 'failed' : 'completed';
-  await db
-    .update(workflows)
-    .set({ status: next, ...(next === 'completed' || next === 'failed' ? { completedAt: new Date() } : {}), updatedAt: new Date() })
-    .where(eq(workflows.id, workflowId));
+  // Recompute the workflow status from its tasks — and WRITE it only when it changed or
+  // a task moved. This used to re-SELECT every task and UPDATE `workflows` for each
+  // pending/running cloud workflow on every 5-minute tick, even one parked on a `sleep`
+  // or a not-yet-ready dependency with nothing to do. With no task change this tick, the
+  // statuses read at the top are still current, so neither statement is needed.
+  const statuses = changedAny
+    ? (await db.select({ status: workflowTasks.status }).from(workflowTasks).where(eq(workflowTasks.workflowId, workflowId))).map((t) => t.status)
+    : tasks.map((t) => t.status);
+  const next = rollupCloudWorkflowStatus(statuses);
+  if (changedAny || next !== wf?.status) {
+    await db
+      .update(workflows)
+      .set({ status: next, ...(next === 'completed' || next === 'failed' ? { completedAt: new Date() } : {}), updatedAt: new Date() })
+      .where(eq(workflows.id, workflowId));
+  }
 
   return processed;
 }

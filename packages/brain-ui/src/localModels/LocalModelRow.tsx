@@ -10,7 +10,8 @@
 import { useState } from 'react';
 import type { LocalModelRow as LocalModelRowData } from '@seanhogg/builderforce-brain-embedded';
 import type { LocalModelLabels } from './labels';
-import { fillTemplate, formatDownloadSize, localModelMeta, progressPercent, unsupportedReason } from './localModelView';
+import { fill } from '../spend/format';
+import { formatDownloadSize, localModelMeta, progressPercent, unsupportedReason } from './localModelView';
 
 export interface LocalModelRowProps {
   row: LocalModelRowData;
@@ -53,7 +54,7 @@ export function LocalModelRow({ row, labels, active, failed, locale, onSelect, o
 
       {row.state === 'absent' && (
         <button type="button" className="bf-lmodel__action" onClick={() => onDownload(row.ref)}>
-          {fillTemplate(labels.localDownload, { size: formatDownloadSize(row.bytes, locale) })}
+          {fill(labels.localDownload, { size: formatDownloadSize(row.bytes, locale) })}
         </button>
       )}
 
@@ -65,11 +66,11 @@ export function LocalModelRow({ row, labels, active, failed, locale, onSelect, o
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={percent}
-            aria-label={fillTemplate(labels.localDownloading, { percent })}
+            aria-label={fill(labels.localDownloading, { percent })}
           >
             <span className="bf-lmodel__fill" style={{ width: `${percent}%` }} />
           </div>
-          <span className="bf-lmodel__pct">{fillTemplate(labels.localDownloading, { percent })}</span>
+          <span className="bf-lmodel__pct">{fill(labels.localDownloading, { percent })}</span>
           <button type="button" className="bf-lmodel__action" onClick={() => onCancel(row.ref)}>
             {labels.localCancel}
           </button>

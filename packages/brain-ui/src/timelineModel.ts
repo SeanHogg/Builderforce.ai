@@ -11,6 +11,7 @@
 
 import { isStepMessage, parseChatActivity, parseStepMessage, stepSig, type BrainMessage, type ChatActivity, type BrainTraceEvent, type ChatInputAttachment, type EvermindRecallItem, type EvermindLearnTarget, type PersistedStep } from '@seanhogg/builderforce-brain-embedded';
 import { answerTextOf } from '@builderforce/agent-loop';
+import { modelMoveOf, type ModelMove } from './timelineModelMoves';
 
 export interface TimelineImage {
   url: string;
@@ -44,6 +45,9 @@ export type TimelineNode =
   | { key: string; kind: 'memoryAnswer'; ts: number; order: number; source: 'qa-cache' | 'evermind'; version: number | null }
   | { key: string; kind: 'learn'; ts: number; order: number; version: number; skipped?: BrainLearnSkipReason; targets?: EvermindLearnTarget[] }
   | { key: string; kind: 'reconcile'; ts: number; order: number; version: number; count: number }
+  // The run moved models — its transcript re-packed for the next model's window, or a
+  // local-first turn that fell over to another model (`timelineModelMoves.ts`).
+  | { key: string; kind: 'modelMove'; ts: number; order: number; move: ModelMove }
   | { key: string; kind: 'streaming'; ts: number; order: number; text: string };
 
 export interface BuildTimelineInput {
@@ -68,6 +72,7 @@ const ORDER: Record<TimelineNode['kind'], number> = {
   // with the tool steps rather than ahead of the narration.
   activity: 4,
   tool: 4,
+  modelMove: 4,
   learn: 5,
   reconcile: 6,
   error: 7,
@@ -173,6 +178,11 @@ function stepNode(step: PersistedStep, ts: number, key: string): TimelineNode | 
       const r = (step.result ?? {}) as { count?: number; version?: number };
       return { key, kind: 'reconcile', ts, order: ORDER.reconcile, version: typeof r.version === 'number' ? r.version : 0, count: typeof r.count === 'number' ? r.count : 0 };
     }
+    case 'message': {
+      // Narration is the durable assistant message's to render; only a MODEL MOVE is a step.
+      const move = modelMoveOf(step.label, step.args);
+      return move ? { key, kind: 'modelMove', ts, order: ORDER.modelMove, move } : null;
+    }
     default:
       return null;
   }
@@ -196,7 +206,7 @@ export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTrace
   // step (same category+label+ts) isn't rendered twice.
   const traceStepSigs = new Set<string>();
   for (const ev of trace) {
-    if (ev.category !== 'llm' && ev.category !== 'message') traceStepSigs.add(stepSig(ev.category, ev.label, ev.ts));
+    if ((ev.category !== 'llm' && ev.category !== 'message') || modelMoveOf(ev.label, ev.args)) traceStepSigs.add(stepSig(ev.category, ev.label, ev.ts));
   }
 
   messages.forEach((message, i) => {
@@ -266,10 +276,9 @@ export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTrace
       // latency before the model started answering), falling back to the full
       // turn duration for older traces that predate ttftMs.
       nodes.push({ key: `trace-${i}`, kind: 'thinking', ts, order: ORDER.thinking, durationMs: ev.ttftMs ?? ev.durationMs, step: step++ });
-    } else if (ev.category === 'message') {
-      // 'message' trace events are intentionally dropped — the durable assistant
-      // message already renders that text.
     } else {
+      // 'message' trace events are dropped (the durable assistant message already
+      // renders that text) — except a model move, which `stepNode` turns into its step.
       const node = stepNode(
         { category: ev.category, label: ev.label, args: ev.args, result: ev.result, isError: ev.isError, durationMs: ev.durationMs },
         ts,

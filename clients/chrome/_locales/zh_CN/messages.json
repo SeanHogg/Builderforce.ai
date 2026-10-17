@@ -74,6 +74,58 @@
   "dismiss": {
     "message": "关闭"
   },
+  "suggestionsLabel": {
+    "message": "建议的后续步骤",
+    "description": "Composer suggestion"
+  },
+  "suggestSummarize": {
+    "message": "总结此页面",
+    "description": "Composer suggestion"
+  },
+  "suggestSummarizePrompt": {
+    "message": "用五个简短要点总结此页面。",
+    "description": "Composer suggestion"
+  },
+  "suggestFill": {
+    "message": "填写此表单",
+    "description": "Composer suggestion"
+  },
+  "suggestFillPrompt": {
+    "message": "填写此页面上的表单，提交前先问我。",
+    "description": "Composer suggestion"
+  },
+  "suggestTask": {
+    "message": "保存为任务",
+    "description": "Composer suggestion"
+  },
+  "suggestTaskPrompt": {
+    "message": "把此页面要求我做的事保存为任务。",
+    "description": "Composer suggestion"
+  },
+  "queuedList": {
+    "message": "排队的消息",
+    "description": "Queued turns"
+  },
+  "queuedHint": {
+    "message": "已排队——运行结束后发送",
+    "description": "Queued turns"
+  },
+  "queuedRemove": {
+    "message": "移除",
+    "description": "Queued turns"
+  },
+  "upgrade": {
+    "message": "升级",
+    "description": "Error banner button"
+  },
+  "upgradeToPlan": {
+    "message": "升级到 {plan}",
+    "description": "Error banner button"
+  },
+  "addCard": {
+    "message": "添加银行卡",
+    "description": "Error banner button"
+  },
   "composerLabel": {
     "message": "发给 Rovr 的消息"
   },
@@ -1160,6 +1212,26 @@
     "message": "隐藏已关联工单",
     "description": "Collapse the ticket grid"
   },
+  "ctSortLabel": {
+    "message": "排序工单",
+    "description": "Ticket-grid sort control label"
+  },
+  "ctSortOpen": {
+    "message": "未完成优先",
+    "description": "Sort option: incomplete tickets first"
+  },
+  "ctSortDone": {
+    "message": "已完成优先",
+    "description": "Sort option: complete tickets first"
+  },
+  "ctSortTitle": {
+    "message": "标题",
+    "description": "Sort option: alphabetical by title"
+  },
+  "ctSortLinked": {
+    "message": "关联顺序",
+    "description": "Sort option: original link order"
+  },
   "ctKindTask": {
     "message": "任务",
     "description": "Ticket kind"
@@ -1231,13 +1303,5 @@
   "ctMergedN": {
     "message": "已合并 $1 个对话。",
     "description": "Merged N chats; $1 = count"
-  },
-  "queuedOne": {
-    "message": "1 条消息已排队——本次运行结束后发送",
-    "description": "Under the composer: one turn waits behind the running run"
-  },
-  "queuedMany": {
-    "message": "$1 条消息已排队——每次运行结束后依次发送",
-    "description": "Under the composer; $1 = how many turns wait behind the running run"
   }
 }

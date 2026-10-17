@@ -1,7 +1,7 @@
 import { useEffect, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePointerResize } from '@/lib/usePointerResize';
-import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
+import { Avatar, BrainTimeline, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import { useLiveActivityLabels } from '@/i18n/useLiveActivityLabels';
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -12,7 +12,6 @@ import { useModelIdentity } from '@/lib/useLlmModels';
 import { Icon } from '@/components/ui/Icon';
 import type { Edge } from '@xyflow/react';
 import styles from './CreationCanvas.module.css';
-import { BrainMark } from '@/components/brain/BrainMark';
 import { creationObjectDefinition, creationObjectName } from './creationObjectRegistry';
 import type { CreationFlowNode } from './CreationNode';
 import { brainActivityLine, useBrainActivity } from './BrainActivityView';
@@ -84,6 +83,8 @@ export interface BrainSurfaceBodyProps {
   /** Re-send a transcript message as the next canvas turn. Omitted on a board the
    *  viewer cannot drive, which hides the action rather than failing on click. */
   onReplayMessage?: (message: BrainMessage, role: 'user' | 'assistant') => void;
+  /** Answer an ask_user card; omitted on a board the viewer cannot drive. */
+  onAnswerQuestion?: (answer: string) => void;
   /** Rate a Brain reply. Omitted on a board that cannot file one (guest session, or
    *  a turn with no resolved model), which hides the thumbs. */
   onRateMessage?: (message: BrainMessage, rating: 1 | -1 | 0) => void;
@@ -131,7 +132,7 @@ export interface BrainDockProps extends BrainSurfaceBodyProps {
  */
 export function BrainSurfaceBody({
   showExecutionDetail, messages, trace, running, runStartedAt = null,
-  node, nodes, edges, collaborators = [], joinedCollaborator = null, onReplayMessage,
+  node, nodes, edges, collaborators = [], joinedCollaborator = null, onReplayMessage, onAnswerQuestion,
   onRateMessage, ratings,
   guestSignup = null,
   revealMessage = null,
@@ -220,6 +221,7 @@ export function BrainSurfaceBody({
             labels={timelineLabels}
             modelIdentity={modelIdentity}
             onReplayMessage={onReplayMessage}
+            onAnswerQuestion={onAnswerQuestion}
             onRateMessage={onRateMessage}
             ratings={ratings}
             revealMessage={revealMessage}
@@ -247,7 +249,7 @@ export function BrainDock({
   mode, side, size, width, showExecutionDetail, composer, onUndockPrompt,
   onModeChange, onSideChange, onSizeChange, onWidthChange, onExecutionDetailChange, onClose,
   messages, trace, running, runStartedAt = null, node, nodes, edges, collaborators = [], joinedCollaborator = null,
-  onReplayMessage, onRateMessage, ratings, guestSignup = null,
+  onReplayMessage, onAnswerQuestion, onRateMessage, ratings, guestSignup = null,
   revealMessage = null,
 }: BrainDockProps) {
   const t = useTranslations('creationCanvas');
@@ -305,10 +307,11 @@ export function BrainDock({
         title={t('brainSheet.grabber')}
         onClick={onClose}
       ><span aria-hidden /></button>
-      <header className={styles.brainDockHeader}>
-        <span className={styles.brainDockMark} aria-hidden><BrainMark running={running} /></span>
-        <strong>{t('brain')}</strong>
-        <BrainSurfaceActions
+      <SurfaceHeader
+        className={styles.brainDockHeader}
+        title={t('brain')}
+        running={running}
+        actions={<BrainSurfaceActions
           mode={mode}
           side={side}
           size={size}
@@ -319,8 +322,8 @@ export function BrainDock({
           onExecutionDetailChange={onExecutionDetailChange}
           onClose={onClose}
           {...(composer && onUndockPrompt ? { onUndockPrompt } : {})}
-        />
-      </header>
+        />}
+      />
       <div
         className={styles.brainDockResizer}
         data-side={side}
@@ -345,6 +348,7 @@ export function BrainDock({
         collaborators={collaborators}
         joinedCollaborator={joinedCollaborator}
         onReplayMessage={onReplayMessage}
+        onAnswerQuestion={onAnswerQuestion}
         onRateMessage={onRateMessage}
         ratings={ratings}
         guestSignup={guestSignup}

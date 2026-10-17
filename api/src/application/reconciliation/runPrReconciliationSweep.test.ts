@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { PR_RECONCILIATION_INTERVAL_MS } from './runPrReconciliationSweep';
 
 const source = readFileSync(fileURLToPath(new URL('./runPrReconciliationSweep.ts', import.meta.url).href), 'utf8');
 
@@ -19,8 +20,13 @@ describe('scheduled PR reconciliation policy wiring', () => {
     expect(source).toContain('PR_RECONCILIATION_POLICY_VERSION');
   });
 
-  it('uses a sub-tick overlap lease instead of suppressing a repository for a day', () => {
-    expect(source).toContain('4 * 60 * 1_000');
+  it('reconciles each repo on a real interval — longer than a tick, far short of a day', () => {
+    // A 4-minute "lease" under the 5-minute tick reconciled every repo on every active
+    // tick, writing a run row + one item row per open PR each time.
+    expect(PR_RECONCILIATION_INTERVAL_MS).toBeGreaterThanOrEqual(30 * 60 * 1_000);
+    expect(PR_RECONCILIATION_INTERVAL_MS).toBeLessThan(23 * 60 * 60 * 1_000);
+    expect(source).toContain('const cutoff = new Date(Date.now() - PR_RECONCILIATION_INTERVAL_MS);');
+    expect(source).not.toContain('4 * 60 * 1_000');
     expect(source).not.toContain('23 * 60 * 60');
   });
 

@@ -19,7 +19,6 @@ import { useLocale, useTranslations } from 'next-intl';
 import {
   ChatTicketsPanel as SharedChatTicketsPanel,
   createChatTicketsRestAdapter,
-  DEFAULT_CHAT_TICKETS_LABELS,
   useChatActivitySignal,
   type ChatTicketsAdapter, type ChatTicketsLabels, type ChatSubagentVM, type TicketLinkVM,
 } from '@seanhogg/builderforce-brain-ui';
@@ -30,10 +29,17 @@ import { onBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { usePermission } from '@/lib/rbac';
 import { asChatSubagents, runHistoryHasSubagents } from './cloudChatSubagents';
 import { useSpendLabels } from '@/components/chat-input/useSpendLabels';
+import { usePolledResource } from '@/hooks/usePolledResource';
 
 const NO_TRANSCRIPT: ReadonlyArray<{ metadata?: string | null }> = [];
 /** Live children appear and settle without a page reload — the web has no host registry. */
 const LIVE_SUBAGENT_POLL_MS = 4_000;
+/**
+ * With no live sub-agent the roster only needs to notice a spawn that emitted no
+ * activity line (a milestone line or a Brain data event already re-reads at once),
+ * so it idles slowly instead of polling every 4 s for the life of the chat.
+ */
+const IDLE_SUBAGENT_POLL_MS = 30_000;
 
 export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, transcript = NO_TRANSCRIPT, spend }: {
   chatId: number;
@@ -97,7 +103,6 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
   }, [chatId, refreshSignal]);
 
   const labels = useMemo<ChatTicketsLabels>(() => ({
-    ...DEFAULT_CHAT_TICKETS_LABELS,
     none: t('none'), spawned: t('spawned'), run: t('run'), open: t('open'), lineage: t('lineage'), unlink: t('unlink'),
     pickAgent: t('pickAgent'), lineageTitle: t('lineageTitle'), lineageEmpty: t('lineageEmpty'), merged: t('merged'),
     runNoAgent: t('runNoAgent'), runFailed: t('runFailed'), link: t('link'), agents: t('agents'), merge: t('merge'),
@@ -112,7 +117,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
     visibilityShared: t('visibilityShared'), visibilityLocked: t('visibilityLocked'), lockHint: t('lockHint'),
     mergeHint: t('mergeHint'), mergeNoOthers: t('mergeNoOthers'),
     showTickets: t('showTickets'), hideTickets: t('hideTickets'),
-
+    sortLabel: t('sortLabel'), sortOpen: t('sortOpen'), sortDone: t('sortDone'), sortTitle: t('sortTitle'), sortLinked: t('sortLinked'),
     kind: { task: t('kind.task'), epic: t('kind.epic'), gap: t('kind.gap'), objective: t('kind.objective'), initiative: t('kind.initiative'), portfolio: t('kind.portfolio'), roadmap: t('kind.roadmap'), spec: t('kind.spec'), retro: t('kind.retro'), poker: t('kind.poker') },
     ringAria: (label, pct) => t('ringAria', { label, pct }),
     inParent: (parent) => t('inParent', { parent }),
@@ -133,21 +138,17 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
   }), [canDispatchRun, tc]);
 
   const [subagents, setSubagents] = useState<ChatSubagentVM[]>([]);
-  useEffect(() => {
-    let live = true;
-    const load = () => {
-      adapter.listRuns(chatId).then((raw) => {
-        // A failed fetch degrades to a history without `subagents`. That is not
-        // "none running" — keep the last roster until a real answer arrives. A
-        // rejected poll means the same thing, so it resolves to no update; the
-        // next tick retries.
-        if (live && runHistoryHasSubagents(raw)) setSubagents(asChatSubagents(raw));
-      }).catch(() => undefined);
-    };
-    load();
-    const timer = window.setInterval(load, LIVE_SUBAGENT_POLL_MS);
-    return () => { live = false; window.clearInterval(timer); };
-  }, [chatId, adapter, refreshSignal, activitySignal]);
+  // A new chat, a Brain data event or a run-milestone line restarts the poll with an
+  // immediate read. Visibility-gated and non-overlapping (usePolledResource).
+  usePolledResource(async (signal) => {
+    const raw = await adapter.listRuns(chatId);
+    // A failed fetch degrades to a history without `subagents`. That is not
+    // "none running" — keep the last roster until a real answer arrives.
+    if (!signal.aborted && runHistoryHasSubagents(raw)) setSubagents(asChatSubagents(raw));
+  }, {
+    intervalMs: subagents.length > 0 ? LIVE_SUBAGENT_POLL_MS : IDLE_SUBAGENT_POLL_MS,
+    restartKey: `${chatId}:${refreshSignal}:${activitySignal}`,
+  });
 
   return (
     <div style={{ margin: '0 12px' }}>

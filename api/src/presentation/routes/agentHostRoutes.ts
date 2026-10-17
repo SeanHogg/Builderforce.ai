@@ -76,6 +76,12 @@ import { classifyContextFiles, normalizeMachineProfile } from './agentHostAssign
 import { TenantRole } from '../../domain/shared/types';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { resolveScheduledAgentBinding } from '../../application/agentHost/scheduledAgentBinding';
+import {
+  heartbeatPayloadFingerprint,
+  heartbeatWriteDue,
+  readHeartbeatFingerprint,
+  rememberHeartbeatFingerprint,
+} from '../../application/agentHost/heartbeatThrottle';
 import { limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
@@ -1241,8 +1247,10 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
   // -------------------------------------------------------------------------
   // PATCH /api/agent-hosts/:id/heartbeat – agentHost keepalive, updates lastSeenAt
-  // Called periodically by AgentHostLinkRelayService via HTTP alongside the WS.
+  // Called periodically by the runtime's RelayHeartbeat via HTTP alongside the WS.
   // Authentication: API key via ?key= query param (same as upstream WS).
+  // Throttled (application/agentHost/heartbeatThrottle): the row is written only when
+  // lastSeenAt is past the throttle or the reported payload changed.
   // -------------------------------------------------------------------------
   router.patch('/:id/heartbeat', async (c) => {
     const id  = Number(c.req.param('id'));
@@ -1269,6 +1277,12 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     }
     const machineProfile = normalizeMachineProfile(body.machineProfile);
 
+    const fingerprint = heartbeatPayloadFingerprint(capabilitiesJson, machineProfile);
+    const lastFingerprint = fingerprint === null ? null : await readHeartbeatFingerprint(c.env, id);
+    if (!heartbeatWriteDue({ lastSeenAt: agentHost.lastSeenAt, fingerprint, lastFingerprint })) {
+      return c.json({ ok: true });
+    }
+
     await db
       .update(agentHosts)
       .set({
@@ -1286,6 +1300,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
         updatedAt: new Date(),
       })
       .where(eq(agentHosts.id, id));
+    await rememberHeartbeatFingerprint(c.env, id, fingerprint, lastFingerprint);
 
     return c.json({ ok: true });
   });

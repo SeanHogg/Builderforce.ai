@@ -9,7 +9,7 @@
 import type { BrainComposerLabels, ComposerLabels, PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
 import type { ChatMode, Effort } from '@seanhogg/builderforce-brain-embedded';
 import { t, type MessageKey } from '../../i18n/t';
-import { rovrLocalModelLabels } from '../ModelPickerSection';
+import { rovrLocalModelLabels } from './localModelLabels';
 import { formatCount, rovrSpendLabels, rovrStatusLabels } from './statusLabels';
 
 /** Why project memory cannot stand behind the chat right now (null: it can). */

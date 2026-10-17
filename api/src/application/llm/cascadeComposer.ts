@@ -14,6 +14,8 @@
  * within the FREE slice, dedup, and the empty-chain return contract.
  */
 
+import type { ModelTier } from '@builderforce/model-catalog';
+
 export interface ComposeCascadeOptions {
   /** Caller-hint + pool, in the order the gateway intends to try. */
   seed: readonly string[];
@@ -38,7 +40,7 @@ export interface ComposeCascadeOptions {
    */
   isUnavailable: (model: string) => boolean;
   /** Tier classification for the FREE-vs-paid split. */
-  tierOf: (model: string) => 'FREE' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
+  tierOf: (model: string) => ModelTier;
   /**
    * Round-robin cursor reference. Caller owns the integer so this helper is
    * stateless. The cursor is incremented once per call regardless of FREE

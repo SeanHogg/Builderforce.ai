@@ -49,8 +49,30 @@ export async function resolveSessionAccess(
   tenantId: number,
   userId: string,
 ): Promise<SessionAccess | null> {
+  return resolveSessionMembership<SessionAccess>(db, sessionId, tenantId, userId, {
+    session: creationSessions,
+    role: creationSessionMembers.role,
+  });
+}
+
+/** What a caller may project from the board ⋈ its own member row. */
+export type SessionMembershipColumns = NonNullable<Parameters<Db['select']>[0]>;
+
+/**
+ * THE two membership reads, with the projection supplied by the caller — so a hot path
+ * (canvas presence polls every 8 s) can select four columns instead of the whole row,
+ * `preview` JSONB included, WITHOUT carrying its own copy of the predicates. Every
+ * access decision on a board goes through here; there is no second place to update.
+ */
+export async function resolveSessionMembership<T>(
+  db: Db,
+  sessionId: string,
+  tenantId: number,
+  userId: string,
+  columns: SessionMembershipColumns,
+): Promise<T | null> {
   const [row] = await db
-    .select({ session: creationSessions, role: creationSessionMembers.role })
+    .select(columns)
     .from(creationSessions)
     .innerJoin(creationSessionMembers, and(
       eq(creationSessionMembers.sessionId, creationSessions.id),
@@ -58,13 +80,13 @@ export async function resolveSessionAccess(
     ))
     .where(scopedToTenant(creationSessions, tenantId, eq(creationSessions.id, sessionId)))
     .limit(1);
-  if (row) return row;
+  if (row) return row as T;
 
   // Platform superadmins collaborate in associate-owned sales canvases across tenant
   // boundaries. They must still be explicit session members; this does not grant blanket
   // access to every canvas.
   const [adminMember] = await db
-    .select({ session: creationSessions, role: creationSessionMembers.role })
+    .select(columns)
     .from(creationSessions)
     .innerJoin(creationSessionMembers, and(
       eq(creationSessionMembers.sessionId, creationSessions.id),
@@ -83,7 +105,7 @@ export async function resolveSessionAccess(
       eq(users.isSuperadmin, true),
     ))
     .limit(1);
-  return adminMember ?? null;
+  return (adminMember as T | undefined) ?? null;
 }
 
 /**

@@ -30,7 +30,8 @@ import { MergeSection } from './MergeSection';
 import { PeopleSection } from './PeopleSection';
 import { QuestionsSection } from './QuestionsSection';
 import { S } from './panelStyles';
-import { parseChatTicketSort, sortChatTickets, type ChatTicketSort } from './sortChatTickets';
+import { parseChatTicketSort, sortChatTickets } from './sortChatTickets';
+import { useChatTicketSort } from './useChatTicketSort';
 import {
   RUNNABLE_KINDS,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind,
@@ -114,8 +115,9 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   // list on first load; a bool = the user chose, and we respect it from then on.
   const [collapsed, setCollapsed] = useState<boolean | null>(null);
   const userCollapsed = useRef(false);
-  // Presentational only — default incomplete-first so DONE chips don't bury open work.
-  const [sort, setSort] = useState<ChatTicketSort>('open');
+  // Presentational only — default incomplete-first so DONE chips don't bury open work;
+  // the viewer's choice survives chat switches (see useChatTicketSort).
+  const [sort, setSort] = useChatTicketSort();
 
   // The picker and Sessions tree show a chat-list snapshot; when the tickets read here
   // disagree with it, the host refetches so all three show one figure.

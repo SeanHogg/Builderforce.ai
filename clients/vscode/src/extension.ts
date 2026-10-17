@@ -29,7 +29,7 @@ import { registerWorkspace } from "./desktopContext";
 import { onModelChange, setSelectedModel, setSelectedModelPool } from "./modelState";
 import { modelChoiceLabels } from "./modelChoiceLabels";
 // The model list itself: one builder for the composer `/` menu AND this picker.
-import { buildModelItems, installStepDurability, modelCategoryLabel, type ChatModelSelection, type ModelCategory, type ModelChoiceLabels } from "@seanhogg/builderforce-brain-embedded";
+import { buildModelItems, installStepDurability, modelCategoryLabel, type ChatModelSelection, type ModelCategory, type ModelChoiceLabels, NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject, type SelectedProject } from "./projectState";
 import { getProjectNames, invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
@@ -988,7 +988,7 @@ async function runTask(
       else if (action === "View Usage") void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
       return;
     }
-    if (/not_signed_in/.test(message)) {
+    if (message.includes(NOT_SIGNED_IN)) {
       const action = await vscode.window.showWarningMessage("Sign in to BuilderForce first.", "Sign In");
       if (action) void vscode.commands.executeCommand("builderforce.signIn");
       return;
@@ -1409,7 +1409,7 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
     else setSelectedModel(pick.selection.mode === "model" ? pick.selection.model : undefined);
   } catch (e) {
     const message = (e as { message?: string }).message ?? String(e);
-    if (message.includes("not_signed_in")) {
+    if (message.includes(NOT_SIGNED_IN)) {
       // Signed out is not a dead end when this machine can serve the turn itself.
       if ((localRows.length > 0 || synapseRows.length > 0) && (await pickLocalOnly([...localRows, ...synapseRows]))) return;
       const action = await vscode.window.showWarningMessage(vscode.l10n.t("Sign in to BuilderForce first."), vscode.l10n.t("Sign In"));

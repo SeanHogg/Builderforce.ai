@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { BrainDockedHeader } from '../BrainDockedHeader';
+import Link from 'next/link';
+import { EXPAND_ICON_PATH, HeaderIcon, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
 import { useBrainPanel } from './BrainPanelContext';
 import { BrainPanelCaptureButton } from './BrainCaptureButton';
 import { BrainChatList } from './BrainChatList';
@@ -10,6 +11,7 @@ import { BrainConversation } from './BrainConversation';
 export function BrainDockedLayout() {
   const {
     chats,
+    conv,
     dockedTab,
     setDockedTab,
     historyUnread,
@@ -41,15 +43,31 @@ export function BrainDockedLayout() {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
       {/* No plan chip in the header: the composer below renders it, at the point where
           the allowance is actually spent. */}
-      <BrainDockedHeader
-        tab={dockedTab}
-        onTabChange={setDockedTab}
-        historyUnread={historyUnread}
-        onNewChat={onNewChat}
-        expandHref={expandHref}
-        onClose={onClose}
+      <SurfaceHeader
+        title={tBrain('brainTitle')}
+        running={conv.sending}
+        context={<>{headerContext}</>}
         actions={<><BrainPanelCaptureButton />{headerActions}</>}
-        context={headerContext}
+        history={{
+          open: dockedTab === 'history',
+          onToggle: () => setDockedTab(dockedTab === 'history' ? 'chat' : 'history'),
+          unread: historyUnread,
+          controls: 'brain-history',
+        }}
+        onNewChat={onNewChat}
+        // Expand → the full Brain page on the SAME conversation (the href carries the chat).
+        expand={(
+          <Link href={expandHref} className="bf-shead__btn" title={tBrain('openFullBrainStorm')} aria-label={tBrain('openFullBrainStorm')}>
+            <HeaderIcon d={EXPAND_ICON_PATH} />
+          </Link>
+        )}
+        {...(onClose ? { onClose } : {})}
+        labels={{
+          historyShow: tBrain('historyShow'),
+          historyHide: tBrain('historyHide'),
+          newChat: tBrain('newChatAria'),
+          close: tBrain('closeBrain'),
+        }}
       />
       {dockedTab === 'history' ? (
         <section id="brain-history" aria-label={tBrain('historyShow')} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>

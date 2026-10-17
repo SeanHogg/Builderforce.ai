@@ -26,6 +26,7 @@ import { ComposerAddMenu, type ComposerAddMenuItem } from './ComposerAddMenu';
 import { ComposerTrailingButton } from './ComposerTrailingButton';
 import { AttachmentChips, type ComposerAttachment } from './AttachmentChips';
 import { composerOptionGroups, type ComposerOptions } from './composerOptions';
+import { SuggestionRow, type ComposerSuggestion } from './SuggestionRow';
 import { composerLabels, type ComposerLabels } from './labels';
 
 export interface BrainComposerLabels {
@@ -82,8 +83,13 @@ export interface BrainComposerProps {
   voice?: boolean;
   /** Who answers / who is addressed — rides the tool row after `+` and `/`. */
   context?: ReactNode;
-  /** Shown above the text (queued turns, starters, suggestions). */
+  /** Shown above the text (queued turns, starters). */
   above?: ReactNode;
+  /**
+   * Fixed next steps as chips (never a model call). The composer decides WHEN: only over
+   * an empty box with no turn running — so every host shows them the same way.
+   */
+  suggestions?: { items: readonly ComposerSuggestion[]; label: string };
   /** Shown under the box (a queued-turns receipt, a secondary link). */
   below?: ReactNode;
   labels?: BrainComposerLabels;
@@ -99,7 +105,7 @@ export function BrainComposer(props: BrainComposerProps) {
     value, onChange, onSubmit, running = false, onStop, disabled = false, blockedNotice,
     placeholder, ariaLabel, rows = 2, submitOnEnter = true, focusToken, options, account,
     onAccountSettings, attachments, onAddContext, webBrowsing, addMenuItems, mentions, tickets,
-    pickersDisabled = false, voice = false, context, above, below, labels: labelBundle, className,
+    pickersDisabled = false, voice = false, context, above, suggestions, below, labels: labelBundle, className,
   } = props;
   const labels = composerLabels(labelBundle?.composer);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -159,7 +165,10 @@ export function BrainComposer(props: BrainComposerProps) {
     : undefined;
 
   const chips = attachments ? <AttachmentChips items={attachments.items} onRemove={attachments.onRemove} labels={labels} /> : null;
-  const aboveBox = above || (attachments && attachments.items.length > 0) ? <>{above}{chips}</> : undefined;
+  const showSuggestions = !!suggestions?.items.length && !value.trim() && !running;
+  const aboveBox = above || showSuggestions || (attachments && attachments.items.length > 0)
+    ? <>{above}{showSuggestions && <SuggestionRow items={suggestions!.items} ariaLabel={suggestions!.label} />}{chips}</>
+    : undefined;
 
   return (
     <div className={['bf-cmp', className].filter(Boolean).join(' ')}>

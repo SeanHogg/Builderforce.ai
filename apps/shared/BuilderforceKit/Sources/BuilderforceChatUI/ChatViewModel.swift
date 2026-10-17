@@ -59,6 +59,9 @@ public final class BuilderforceChatViewModel {
     @ObservationIgnored private var didLoad = false
     /// The reply in flight; a stopped reply's late progress is ignored.
     @ObservationIgnored private var runToken: UUID?
+    /// The newest stored `seq` of the open chat's transcript as last read — the cursor a
+    /// poll reads after, so waiting on an agent re-reads only what is new.
+    @ObservationIgnored private var lastSeq: Int?
 
     public init(transport: any BuilderforceChatTransport) {
         self.transport = transport
@@ -195,6 +198,7 @@ public final class BuilderforceChatViewModel {
     private func open(chatID: Int) async {
         self.activeChatID = chatID
         self.messages = []
+        self.lastSeq = nil
         self.agents = []
         self.recipient = nil
         self.streamingAssistantText = nil
@@ -215,12 +219,14 @@ public final class BuilderforceChatViewModel {
         let stored = try await self.transport.messages(chatID: chatID)
         guard self.activeChatID == chatID else { return }
         self.messages = Self.transcript(stored)
+        self.lastSeq = stored.compactMap(\.seq).max()
     }
 
     private func resetChats() {
         self.chats = []
         self.activeChatID = nil
         self.messages = []
+        self.lastSeq = nil
         self.agents = []
         self.recipient = nil
         self.queued = []
@@ -355,17 +361,21 @@ public final class BuilderforceChatViewModel {
     }
 
     /// An addressed agent answers on the platform; read the transcript until its reply lands.
+    /// With a cursor (the transcript's newest seq before the turn went out), each poll reads
+    /// only what was appended since — an empty page while the agent works, not the whole tail.
     private func awaitAgentReply(chatID: Int, agent: BrainChatAgent) async {
         let before = self.messages.count
+        let cursor = self.lastSeq
         let deadline = Date().addingTimeInterval(Self.agentReplyWait)
         while Date() < deadline, !Task.isCancelled {
             try? await Task.sleep(nanoseconds: Self.agentReplyPoll)
             guard !Task.isCancelled, self.activeChatID == chatID else { return }
             do {
-                let stored = try await self.transport.messages(chatID: chatID)
+                let stored = try await self.transport.messages(chatID: chatID, afterSeq: cursor)
                 guard self.activeChatID == chatID else { return }
                 let transcript = Self.transcript(stored)
-                if transcript.count > before, transcript.last?.role.lowercased() == "assistant" {
+                let arrived = cursor == nil ? transcript.count > before : !transcript.isEmpty
+                if arrived, transcript.last?.role.lowercased() == "assistant" {
                     return
                 }
             } catch {

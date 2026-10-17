@@ -39,7 +39,8 @@ import {
   type StreamHandlers,
 } from './streamChatCompletion';
 import { summarizeLocalFirstAttempt, type LocalFirstAttemptSummary } from './localFirstTraces';
-import { contextWindowOf } from './handoff/modelWindow';
+import { NOT_SIGNED_IN } from './chatError';
+import { contextWindowOf } from './windowFit/modelWindow';
 
 /** The `fetch` a host lends the local path (the global in every host by default). */
 export type LocalFetch = (input: string, init: RequestInit) => Promise<Response>;
@@ -300,13 +301,14 @@ const answered = (r: StreamChatResult): boolean => r.text.trim().length > 0 || r
  */
 export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
   return async (opts, handlers = {}) => {
-    // A call that NAMES a model (a run-policy failover, a coder re-ask) is no longer
-    // "let the gateway route" (`localFirstApplies`): it goes where that model runs — its
-    // local runtime when probed, else the gateway — never to whichever local model the
-    // plan would have tried first.
-    if (!localFirstApplies(opts) && opts.model) {
-      if (!isLocalModelRef(opts.model)) {
-        if (!input.cloud) throw new Error('not_signed_in');
+    // A call that is not "let the gateway route" (`localFirstApplies` — this is the ONE
+    // place that reads it for a stream) goes where it names: a call naming a model (a
+    // run-policy failover, a coder re-ask) to that model's local runtime when probed,
+    // else the gateway; an explicit `byo_pool` to the gateway. Never to whichever local
+    // model the plan would have tried first.
+    if (!localFirstApplies(opts)) {
+      if (!opts.model || !isLocalModelRef(opts.model)) {
+        if (!input.cloud) throw new Error(NOT_SIGNED_IN);
         return input.cloud(opts, handlers);
       }
       const local = probedTarget(opts.model, input.probes);
@@ -324,7 +326,7 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
       workload: localFirstWorkload(input.fit ? { ...routed, messages: coreMessages(routed.messages) } : routed),
       cloud: input.cloud ? {} : null,
     });
-    if (plan.length === 0) throw new Error('not_signed_in');
+    if (plan.length === 0) throw new Error(NOT_SIGNED_IN);
     const { result, attempts } = await runLocalFirst(
       plan,
       async (attempt, commit) => {
@@ -367,7 +369,7 @@ export async function completeLocal(
     ...(signal ? { signal } : {}),
   });
   if (!res.ok) {
-    const txt = await res.text().catch(() => '');
+    const txt = await res.text().catch((e: unknown) => `(body unreadable: ${e instanceof Error ? e.message : String(e)})`);
     throw new Error(`local_complete_failed_${res.status}: ${txt.slice(0, 200)}`);
   }
   const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
@@ -393,7 +395,7 @@ export async function completeLocalFirst(input: {
     workload: localFirstWorkload({ messages: input.messages }),
     cloud: input.cloud ? {} : null,
   });
-  if (plan.length === 0) throw new Error('not_signed_in');
+  if (plan.length === 0) throw new Error(NOT_SIGNED_IN);
   const { result } = await runLocalFirst(
     plan,
     (attempt) =>

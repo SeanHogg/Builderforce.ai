@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { useTranslations } from 'next-intl';
+import { ContextChip } from '@seanhogg/builderforce-brain-ui';
 import { Icon } from '@/components/ui/Icon';
 import styles from '../CreationCanvas.module.css';
 
@@ -18,7 +19,7 @@ export interface CanvasScopeChipProps {
 }
 
 /**
- * The composer's scope control — a chip in the one `ChatInput`'s tool row.
+ * The composer's scope control — the shared `ContextChip`, with the canvas's scopes.
  *
  * Drawn only when there is something to narrow TO: a selection, a frame, or a scope
  * the reader already narrowed (so they can widen it again). With nothing selected
@@ -29,5 +30,20 @@ export const CanvasScopeChip = memo(function CanvasScopeChip({ scopeMode, onScop
   const t = useTranslations('creationCanvas');
   const nothingToNarrow = selectionCount === 0 && !frameSelected && (scopeMode === 'auto' || scopeMode === 'canvas');
   if (nothingToNarrow) return null;
-  return <label className={styles.scopeChip}><Icon name="target" size={12} /><span className="sr-only">{t('brainScope')}</span><select aria-label={t('brainScope')} value={scopeMode} onChange={(event) => onScopeModeChange(event.target.value as CanvasScopeMode)}><option value="auto">{autoLabel}</option><option value="canvas">{t('entireCanvas')}</option><option value="selection" disabled={!selectionCount}>{selectionCount > 1 ? t('selectedObjects', { count: selectionCount }) : t('selectedObject')}</option><option value="connected" disabled={!selectionCount}>{t('connectedScope')}</option><option value="frame" disabled={!frameSelected}>{t('currentFrame')}</option></select></label>;
+  return (
+    <ContextChip
+      className={styles.scopeChip}
+      icon={<Icon name="target" size={12} />}
+      label={t('brainScope')}
+      value={scopeMode}
+      onChange={onScopeModeChange}
+      options={[
+        { value: 'auto', label: autoLabel },
+        { value: 'canvas', label: t('entireCanvas') },
+        { value: 'selection', label: selectionCount > 1 ? t('selectedObjects', { count: selectionCount }) : t('selectedObject'), disabled: !selectionCount },
+        { value: 'connected', label: t('connectedScope'), disabled: !selectionCount },
+        { value: 'frame', label: t('currentFrame'), disabled: !frameSelected },
+      ]}
+    />
+  );
 });

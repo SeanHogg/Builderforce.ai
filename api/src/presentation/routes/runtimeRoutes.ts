@@ -57,6 +57,7 @@ import { resolveActorFromContext } from '../../application/activity/activityLog'
 import { readAttention } from '../../application/runtime/attentionSnapshot';
 import { readActiveRuns } from '../../application/runtime/activeRuns';
 import { executionStateVersion } from '../../application/runtime/executionStateVersion';
+import { readRuntimeDashboard } from '../../application/runtime/runtimeDashboard';
 import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { parseBody, parseOptionalBody, z, zNonEmptyString, zNumberLike, zPositiveInt } from './requestBody';
@@ -66,7 +67,7 @@ import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requireFeature } from '../middleware/featureGate';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, tenants, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { executions, projectInsightEvents, projectRepositories, projects, specs, tasks, tenants, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../../application/shared/runTelemetryDatabase';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { approvals } from '../../infrastructure/database/schema';
@@ -635,124 +636,13 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     ));
   });
 
-  // Tenant-level runtime dashboard aggregates derived from recent execution history.
+  // Tenant-level runtime dashboard aggregates derived from recent execution history —
+  // cached behind the execution-state version; see `runtimeDashboard.ts`.
   router.get('/dashboard', async (c) => {
     const tenantId = c.get('tenantId');
     const limit = limitParam(c.req.query('limit'), 500, 2000);
-    const executionRows = await runtimeService.listByTenant(tenantId, limit);
-    const executionsPlain = executionRows.map((execution) => execution.toPlain());
-
-    const totals = {
-      totalExecutions: executionsPlain.length,
-      pending: 0,
-      submitted: 0,
-      running: 0,
-      completed: 0,
-      failed: 0,
-      cancelled: 0,
-      successRate: 0,
-      avgDurationMs: 0,
-    };
-
-    let durationSamples = 0;
-    let durationTotalMs = 0;
-
-    const agentHostStats = new Map<number, {
-      agentHostId: number;
-      totalExecutions: number;
-      completed: number;
-      failed: number;
-      running: number;
-      pending: number;
-      cancelled: number;
-      lastExecutionAt: string | null;
-    }>();
-
-    for (const execution of executionsPlain) {
-      switch (execution.status) {
-        case 'pending':
-          totals.pending += 1;
-          break;
-        case 'submitted':
-          totals.submitted += 1;
-          break;
-        case 'running':
-          totals.running += 1;
-          break;
-        case 'completed':
-          totals.completed += 1;
-          break;
-        case 'failed':
-          totals.failed += 1;
-          break;
-        case 'cancelled':
-          totals.cancelled += 1;
-          break;
-      }
-
-      if (execution.startedAt && execution.completedAt) {
-        durationSamples += 1;
-        durationTotalMs += new Date(execution.completedAt).getTime() - new Date(execution.startedAt).getTime();
-      }
-
-      if (execution.agentHostId != null) {
-        const current = agentHostStats.get(execution.agentHostId) ?? {
-          agentHostId: execution.agentHostId,
-          totalExecutions: 0,
-          completed: 0,
-          failed: 0,
-          running: 0,
-          pending: 0,
-          cancelled: 0,
-          lastExecutionAt: null,
-        };
-
-        current.totalExecutions += 1;
-        if (execution.status === 'completed') current.completed += 1;
-        if (execution.status === 'failed') current.failed += 1;
-        if (execution.status === 'running') current.running += 1;
-        if (execution.status === 'pending' || execution.status === 'submitted') current.pending += 1;
-        if (execution.status === 'cancelled') current.cancelled += 1;
-
-        const createdAtIso = new Date(execution.createdAt).toISOString();
-        if (!current.lastExecutionAt || createdAtIso > current.lastExecutionAt) {
-          current.lastExecutionAt = createdAtIso;
-        }
-
-        agentHostStats.set(execution.agentHostId, current);
-      }
-    }
-
-    const terminalCount = totals.completed + totals.failed + totals.cancelled;
-    totals.successRate = terminalCount > 0 ? totals.completed / terminalCount : 0;
-    totals.avgDurationMs = durationSamples > 0 ? Math.round(durationTotalMs / durationSamples) : 0;
-
-    const agentHostIds = Array.from(agentHostStats.keys());
-    const agentHostNames = new Map<number, string>();
-    if (agentHostIds.length > 0) {
-      const hostRows = await db
-        .select({ id: agentHosts.id, name: agentHosts.name })
-        .from(agentHosts)
-        .where(scopedToTenant(agentHosts, tenantId, inArray(agentHosts.id, agentHostIds)));
-      hostRows.forEach((agentHost) => agentHostNames.set(agentHost.id, agentHost.name));
-    }
-
-    const byAgentHost = Array.from(agentHostStats.values())
-      .map((entry) => ({
-        ...entry,
-        name: agentHostNames.get(entry.agentHostId) ?? `AgentHost ${entry.agentHostId}`,
-        successRate: entry.completed + entry.failed + entry.cancelled > 0
-          ? entry.completed / (entry.completed + entry.failed + entry.cancelled)
-          : 0,
-      }))
-      .sort((left, right) => right.totalExecutions - left.totalExecutions);
-
-    return c.json({
-      tenantId,
-      window: { sampledExecutions: executionsPlain.length, limit },
-      totals,
-      byAgentHost,
-    });
+    return c.json(await readRuntimeDashboard(c.env as Env, db, tenantId, limit,
+      async () => (await runtimeService.listByTenant(tenantId, limit)).map((execution) => execution.toPlain())));
   });
 
   // Fleet "what's running right now" — see `readActiveRuns` for what it returns and

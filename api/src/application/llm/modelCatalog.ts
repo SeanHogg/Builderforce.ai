@@ -9,6 +9,7 @@
  * these models at the same per-token price OpenRouter charges.
  */
 
+import type { ListingTier } from '@builderforce/model-catalog';
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { finiteNumber } from '@seanhogg/builderforce-memory/wire';
@@ -38,7 +39,7 @@ export interface CatalogModel {
   outputModalities?: string[];
   supportedParameters?: string[];
   created?: number;
-  tier: 'FREE' | 'STANDARD';
+  tier: ListingTier;
   /** True when this id is in our curated vendor catalog — i.e. the Free/Pro
    *  cascade will actually route it (vs an OpenRouter id we list but don't
    *  serve). Lets the /models page badge "routable on Builderforce" [1305]. */

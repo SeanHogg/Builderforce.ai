@@ -3,7 +3,7 @@
  *
  * This module owns ONE thing: given a parsed source file, which nodes swallow an
  * error. It knows nothing about packages, baselines, or the exit code — those are
- * `../check-silent-catches.mjs`'s question — so the same three rules can be
+ * `../check-silent-catches.mjs`'s question — so the same rules can be
  * pointed at any source tree in the repository rather than copied per package.
  */
 
@@ -11,6 +11,7 @@
 export const RULES = /** @type {const} */ ([
   'empty-catch',
   'empty-promise-catch',
+  'literal-promise-catch',
   'console-only',
   'durable-object-direct-report',
 ]);
@@ -19,6 +20,9 @@ export const RULES = /** @type {const} */ ([
 export const RULE_DESCRIPTIONS = {
   'empty-catch': 'catch clause with an empty body — the error reaches it and stops',
   'empty-promise-catch': 'empty `.catch(() => {})` callback — the rejection is discarded',
+  'literal-promise-catch':
+    '`.catch(() => null | false | undefined | "" | 0 | [] | {})` — the rejection is replaced by a '
+    + 'stand-in value and its reason discarded; record why (a reporter, a refusal, a returned reason)',
   'console-only': 'caught error is written to the console only, never to a durable store',
   'durable-object-direct-report':
     'a Durable Object must report through `createDurableErrorReporter`; a bare '
@@ -49,6 +53,27 @@ export function findSilentCatches(ts, sourceFile, relativePath, isExempt) {
     line: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
   });
 
+  /**
+   * A stand-in value with no information in it: a literal (`null`, `false`, `''`, `0`…),
+   * `undefined`, `void 0`, or an EMPTY array/object — seen through parentheses and
+   * `as`/`satisfies` casts (`() => [] as Row[]`).
+   */
+  const isStandInLiteral = (expression) => {
+    let e = expression;
+    while (ts.isParenthesizedExpression(e) || ts.isAsExpression(e) || (ts.isSatisfiesExpression?.(e) ?? false)) {
+      e = e.expression;
+    }
+    if (ts.isIdentifier(e)) return e.text === 'undefined';
+    if (ts.isVoidExpression(e)) return ts.isLiteralExpression(e.expression);
+    if (ts.isArrayLiteralExpression(e)) return e.elements.length === 0;
+    if (ts.isObjectLiteralExpression(e)) return e.properties.length === 0;
+    if (ts.isPrefixUnaryExpression(e)) return ts.isNumericLiteral(e.operand);
+    return ts.isLiteralExpression(e)
+      || e.kind === ts.SyntaxKind.NullKeyword
+      || e.kind === ts.SyntaxKind.TrueKeyword
+      || e.kind === ts.SyntaxKind.FalseKeyword;
+  };
+
   /** `.catch(<callback>)` — the promise form of a catch clause. */
   const promiseCatchCallback = (node) => {
     if (!ts.isCallExpression(node)) return null;
@@ -71,6 +96,13 @@ export function findSilentCatches(ts, sourceFile, relativePath, isExempt) {
         && callback.body.statements.length === 0
       ) {
         violations.push({ rule: 'empty-promise-catch', ...at(node) });
+      }
+    }
+
+    if (!exempt('literal-promise-catch')) {
+      const callback = promiseCatchCallback(node);
+      if (callback && ts.isArrowFunction(callback) && !ts.isBlock(callback.body) && isStandInLiteral(callback.body)) {
+        violations.push({ rule: 'literal-promise-catch', ...at(node) });
       }
     }
 

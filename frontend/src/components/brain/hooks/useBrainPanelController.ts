@@ -20,9 +20,11 @@ import { BRAIN_AUTO_APPROVE_DEFAULT, brainAutoApprovePersistence } from '@/lib/b
 import { trackActivity } from '@/lib/activity/tracker';
 import { useAttention } from '@/lib/useAttention';
 import { useChatModelOptions, useLlmModels } from '@/lib/useLlmModels';
+import { browserRunWindowSources } from '@/lib/brain/runWindowSources';
 import { apiRequest } from '@/lib/apiClient';
 import { useAssistantGate } from '@/lib/academic/useAssistantGate';
-import type { BrainDockedTab } from '../BrainDockedHeader';
+/** The docked panel shows the conversation or, toggled from the header, the chat list. */
+export type BrainDockedTab = 'chat' | 'history';
 import type { BrainPanelProps } from '../panel/brainPanelTypes';
 import { useBrainProjectFilter } from './useBrainProjectFilter';
 import { useBrainProjects } from './useBrainProjects';
@@ -189,6 +191,8 @@ export function useBrainPanelController({
     (tried: readonly string[]) => nextFallbackModel({ ...llmModels.fundingSurface, codingModels: llmModels.codingModels }, tried),
     [llmModels],
   );
+  // The window fit's sources: a failover onto a smaller model is packed for its window.
+  const windowSources = useMemo(() => browserRunWindowSources(llmModels.fundingSurface), [llmModels]);
 
   const activeChatId = chats.activeChat?.id ?? null;
 
@@ -224,6 +228,7 @@ export function useBrainPanelController({
     modelStrict: modelSelection.mode === 'model',
     routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
     pickFallbackModel: modelSelection.mode === 'model' ? undefined : pickFallbackModel,
+    windowSources,
     maxTokens: effortProfile(prefs.effort).maxTokens,
     reasoning: reasoningForRun({ effort: prefs.effort, thinking: prefs.thinking }),
     toolSpecs,
@@ -384,7 +389,7 @@ export function useBrainPanelController({
     setInput,
     handleSend,
     composerFocusToken,
-    queuedCount: queuedTurns.count,
+    queued: queuedTurns,
     prefs,
     modelOptions,
     modelIdentity,

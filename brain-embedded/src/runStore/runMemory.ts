@@ -1,0 +1,191 @@
+/**
+ * What project MEMORY does for one run — the Evermind recall before the first turn, the
+ * memory-first answer that can skip the model entirely, and the learn / reconcile
+ * provenance (plus the answer-cache write) after a reply settles.
+ */
+
+import { replayTextOf } from '@builderforce/agent-loop';
+import { formatEvermindMemoryBlock, countReconciledMemories, type EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
+import type { BrainMessage } from '../types';
+import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompletion';
+import type { EvermindRunHooks, MemoryFirstAnswer } from '../evermindMemory';
+import { transcriptTokens } from '../workingTranscript';
+import type { RunCell } from './runCell';
+import { emit, nowIso, pushTrace, recordAppended } from './runCells';
+import { canonicalTurnText } from './turnPersistence';
+import { latestUserText } from './convoText';
+import type { BrainRunRequest } from './runTypes';
+import type { RunLoopContext } from './runLoopContext';
+
+/** The pre-turn recall, the memory block it adds to the prompt, and that block's cost. */
+export interface RunRecall {
+  recalled: EvermindRecallResult | null;
+  /** The block to append to the system prompt, or null when nothing was recalled. */
+  block: string | null;
+  /** The prompt tokens the block adds to EVERY call of this run — the cost side of
+   *  recall, sent with each call beside what compaction saved it. */
+  blockTokens: number;
+}
+
+/**
+ * Evermind recall — before the FIRST turn, ask the project's self-learning model
+ * which learned memories are relevant to this request. When it returns some, we
+ * (a) record a visible `recall` step and (b) hand back the block the caller injects
+ * into the system prompt so the recall actually GROUNDS the answer (not just a UI
+ * badge). Best-effort: a non-project chat / unavailable recall / thrown fetch just
+ * skips it.
+ */
+export async function recallForRun(c: RunCell, convo: ChatCompletionMessage[], evermind: EvermindRunHooks | undefined): Promise<RunRecall> {
+  let recalled: EvermindRecallResult | null = null;
+  if (!evermind?.recall) return { recalled, block: null, blockTokens: 0 };
+  const query = latestUserText(convo);
+  if (!query) return { recalled, block: null, blockTokens: 0 };
+  try {
+    recalled = await evermind.recall(query);
+  } catch {
+    recalled = null;
+  }
+  if (recalled?.seeded && recalled.items.length > 0) {
+    const block = formatEvermindMemoryBlock(recalled.items);
+    if (block) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: 'recall',
+        label: 'evermind.recall',
+        args: { query, version: recalled.version },
+        result: { count: recalled.items.length, version: recalled.version, mode: recalled.mode, items: recalled.items },
+      });
+      return { recalled, block, blockTokens: transcriptTokens([{ role: 'system', content: block }]) };
+    }
+  }
+  return { recalled, block: null, blockTokens: 0 };
+}
+
+/**
+ * Memory-first short-circuit: if the project's OWN memory can answer this request —
+ * an exact-repeat Q&A cache hit, or its Evermind SSM (opt-in) — adopt that answer and
+ * SKIP the paid model entirely. This is the token-reduction core: for a repeated or
+ * learned question we spend zero model tokens. Opt-in + best-effort — a host that
+ * doesn't inject `answer`, a non-project chat, or a miss falls straight through to the
+ * normal loop. Only attempted on the run's FIRST turn (no tool results yet).
+ *
+ * `toolsAvailable` is passed through HONESTLY (it is what this run can actually
+ * call) because it decides how far memory is allowed to pre-empt the model: with
+ * tools in play the server may only replay a cached answer, never generate a fresh
+ * one from the Evermind SSM — the SSM cannot call a tool, so letting it answer
+ * stranded any request whose answer lives behind one.
+ *
+ * Returns true when memory answered — the run is over.
+ */
+export async function answerFromMemory(
+  chatId: number,
+  c: RunCell,
+  req: BrainRunRequest,
+  allTools: BrainToolSpec[] | undefined,
+  memoryReplay: boolean,
+): Promise<boolean> {
+  const { evermind, persistence, onActivity, model } = req;
+  const convo = c.transcript;
+  if (!(evermind?.answer && memoryReplay && !c.abort?.signal.aborted)) return false;
+  const query = latestUserText(convo);
+  if (!query) return false;
+  let memAnswer: MemoryFirstAnswer | null = null;
+  try {
+    memAnswer = await evermind.answer(query, {
+      toolsAvailable: !!allTools && allTools.length > 0,
+      // What this turn would have run on — the saving a hit records is priced at it.
+      model: model || c.lastServedModel || undefined,
+    });
+  } catch { memAnswer = null; }
+  const finalText = canonicalTurnText(memAnswer?.text ?? '');
+  if (!finalText) return false;
+  convo.push({ role: 'assistant', content: replayTextOf(finalText) });
+  const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText }]);
+  c.streamingText = '';
+  recordAppended(c, assistantMsg);
+  // Visible on the timeline: memory answered, the LLM was skipped.
+  pushTrace(c, {
+    ts: nowIso(),
+    category: 'recall',
+    label: memAnswer!.source === 'evermind' ? 'evermind.answer' : 'memory.answer',
+    args: { query },
+    result: {
+      source: memAnswer!.source,
+      skippedLlm: true,
+      ...(memAnswer!.evermindVersion != null ? { version: memAnswer!.evermindVersion } : {}),
+      // WHICH head served it — a project can target several, so without this a
+      // memory hit from a sibling IDE build's Evermind is indistinguishable from
+      // the chat project's own.
+      ...(memAnswer!.evermindProjectId != null ? { evermindProjectId: memAnswer!.evermindProjectId } : {}),
+    },
+  });
+  emit(c);
+  onActivity?.(chatId);
+  return true;
+}
+
+/**
+ * Evermind learning + reconciliation provenance for a completed turn. Shared so EVERY
+ * way a run settles — the normal final answer, a terminal `ask_user` question, and the
+ * breaker-stopped forced-final synthesis — emits identical memory provenance: a
+ * forced-final answer still persists server-side (its `assistantMsg` carries the
+ * truthful `evermindLearn`), so it must show the same `learn`/`reconcile` steps +
+ * answer-cache write as any other. The server reports the TRUTHFUL learn outcome on the
+ * persisted assistant message (`evermindLearn`) — the same `learnFromBrainTurn` gate it
+ * actually applies — so the `learn` step shows exactly when the server contributed. The
+ * `reconcile` step stays client-side: which of the RECALLED memories this answer
+ * restated (write-through).
+ */
+export function emitEvermindLearnReconcile(run: RunLoopContext, assistantMsg: BrainMessage | undefined, finalText: string): void {
+  const { c, convo, recalled } = run;
+  const evermind = run.req.evermind;
+  const learn = assistantMsg?.evermindLearn;
+  if (learn?.learned) {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: 'learn',
+      label: 'evermind.learn',
+      // `targets` carries the per-Evermind breakdown (a project can fan out to many)
+      // so the timeline can name each by id; the renderer falls back to `version` alone.
+      result: { version: learn.version, queued: true, ...(learn.targets ? { targets: learn.targets } : {}) },
+    });
+    const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
+    if (reconciled > 0) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: 'reconcile',
+        label: 'evermind.reconcile',
+        result: { count: reconciled, version: learn.version },
+      });
+    }
+  } else if (learn && learn.reason && learn.reason !== 'too-short') {
+    // The turn did NOT feed the Evermind, for a project-level reason the user can act
+    // on (chat not attached to a project / not seeded / frozen). Surface it as an
+    // EXPLAINED muted step so "Connected, yet nothing learned" is never a silent
+    // mystery again. `too-short` is mundane (a one-line turn) and intentionally not surfaced.
+    pushTrace(c, {
+      ts: nowIso(),
+      category: 'learn',
+      label: 'evermind.learn',
+      result: { version: learn.version, skipped: true, reason: learn.reason, ...(learn.targets ? { targets: learn.targets } : {}) },
+    });
+  }
+
+  // Remember this (question → answer) so an exact repeat short-circuits next time
+  // (see the memory-first answer at loop start) — the write half of the cache. Only
+  // caches genuine model answers; the server guards length + skips trivial ones.
+  // Best-effort, fire-and-forget — never delays or fails the reply.
+  if (evermind?.cacheAnswer && run.memoryReplay) {
+    const q = latestUserText(convo);
+    // With what producing it cost, so every later replay is priced from a recorded figure.
+    const spent = c.runUsage;
+    const origin = spent.model && spent.promptTokens + spent.completionTokens > 0
+      ? { model: spent.model, promptTokens: spent.promptTokens, completionTokens: spent.completionTokens }
+      : undefined;
+    if (q) {
+      // No origin ⇒ the two-argument call every pre-cost hook implements.
+      const cached = origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
+      void Promise.resolve(cached).catch(() => { /* best-effort */ });
+    }
+  }
+}

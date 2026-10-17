@@ -6,6 +6,7 @@ import { canvasSessionGateway } from '@/domains/canvas/infrastructure/canvasSess
 import { rejectedObjectKinds } from '../canvasBoardLoad';
 import { type LocalCreationSnapshot, readLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { usePolledResource } from '@/hooks/usePolledResource';
+import { useBoardOnScreen } from '@/lib/canvas/BoardOnScreenContext';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { adoptRemoteBoard, type AdoptRemoteBoardDecision, type LocalBoardState } from '@/domains/canvas/application/AdoptRemoteBoard';
 import { BRAIN_RUN_HEARTBEAT_MS } from '@/lib/canvas/livePresence';
@@ -181,6 +182,11 @@ export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activ
     return () => window.clearTimeout(handle);
   }, [edges, hydratedRef, nodes, persistence, sessionId, storageKey, timeline, viewportRef]);
 
+  // A kept board off stage (or the last board held behind a full-screen route) is
+  // not being looked at: it must not announce presence, nor keep the API awake.
+  // Coming back on screen restarts the poll with its immediate tick.
+  const onScreen = useBoardOnScreen();
+
   // The board-reconcile poll. Its load reads the CURRENT selection, composer state
   // and follow target at call time (the hook holds the latest closure), so a click
   // or a keystroke no longer tears the timer down and fires a round-trip.
@@ -217,7 +223,7 @@ export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activ
         if (signal.aborted) return;
         applyRemoteBoard(decision, t('noticeUpdatedByCollaborator'));
       } catch { /* Presence and polling are best-effort; local edits continue. */ }
-  }, { intervalMs: 8_000, enabled: persistence === 'server', restartKey: sessionId });
+  }, { intervalMs: 8_000, enabled: persistence === 'server' && onScreen, restartKey: sessionId });
 
   useEffect(() => {
     if (!joinedCollaborator) return;

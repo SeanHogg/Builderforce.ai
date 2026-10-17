@@ -7,6 +7,7 @@ import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { checkTermsAcceptance } from '../../application/legal/termsAcceptance';
 import { resolveActiveToken, sessionVersionOf } from '../../application/auth/sessionRevocation';
+import { effectiveTenantRole, resolveTenantMembership } from '../../application/auth/tenantMembership';
 import { background } from './background';
 import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import type { TransitionActorInput } from '../../application/task/taskLifecycle';
@@ -31,6 +32,10 @@ import { isDeviceClient } from '@builderforce/creation-canvas-contract';
  *     critical path.
  *   - Terms acceptance is served from the read-through cache and invalidated by
  *     the accept/publish paths.
+ *   - Tenant membership is RE-CHECKED on every request (the token's `tid`/`role`
+ *     used to be trusted for its whole lifetime), through the same cached resolver
+ *     the LLM gateway uses, in the same parallel wave — no added sequential latency,
+ *     zero round trips warm.
  *
  * Worst case is now two parallel reads plus an in-isolate segment lookup, against
  * the seven sequential round-trips — two of them writes — it replaced.
@@ -75,14 +80,19 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   const isMachineToken = machineActor !== null;
   const checksSessionVersion = typeof payload.sv === 'number';
   const checksRevocation = !!payload.jti && !isMachineToken;
+  // Machine tokens have no tenant_members row (same exemption the gateway makes); a
+  // token with no workspace is refused below before membership could mean anything.
+  const checksMembership = !isMachineToken && payload.tid != null;
 
-  // Both reads are independent — issue them together rather than one after the other.
-  // Both are served from the read-through cache (see `application/auth/sessionRevocation`),
-  // so a polling client no longer wakes Postgres on every request.
-  const [sessionVersion, activeToken] = await Promise.all([
+  // All three reads are independent — issue them together rather than one after the
+  // other. All are served from the read-through cache (see `application/auth/
+  // sessionRevocation` and `application/auth/tenantMembership`), so a polling client
+  // does not wake Postgres on every request.
+  const [sessionVersion, activeToken, membership] = await Promise.all([
     checksSessionVersion ? sessionVersionOf(c.env, db, payload.sub) : Promise.resolve(null),
     // Served from the cached live-token verdict — see `resolveActiveToken`.
     checksRevocation ? resolveActiveToken(c.env, db, payload.sub, payload.jti!) : Promise.resolve(null),
+    checksMembership ? resolveTenantMembership(c.env, () => db, payload.tid, payload.sub) : Promise.resolve(null),
   ]);
 
   // session_version check — if the JWT carries an `sv` claim, verify it matches
@@ -103,6 +113,15 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
     throw new UnauthorizedError('This endpoint requires a workspace token; please select a workspace first');
   }
 
+  // A member who was removed (or deactivated) loses the workspace on the next request
+  // the cache allows — the same 401 a revoked session gets, so every client already
+  // handles it by re-selecting a workspace.
+  if (checksMembership && !membership) {
+    throw new UnauthorizedError('Workspace access has been revoked — please select a workspace again');
+  }
+  // A demotion bites immediately; a promotion never silently elevates an issued token.
+  const role = membership ? effectiveTenantRole(payload.role, membership.role) : payload.role;
+
   if (!isMachineToken) {
     const terms = await checkTermsAcceptance(db, payload.sub, c.env);
     if (terms.needsAcceptance) {
@@ -117,7 +136,7 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
 
   c.set('userId',   payload.sub);
   c.set('tenantId', payload.tid);
-  c.set('role',     payload.role);
+  c.set('role',     role);
   // Machine callers keep `userId` (every tenant-scoped read still needs a subject) but
   // ALSO publish their machine identity, so a write that records WHO did something can
   // tell an on-prem agent host from a person instead of filing it under a fake user id.

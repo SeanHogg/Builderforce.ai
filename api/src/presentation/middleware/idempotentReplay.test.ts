@@ -7,8 +7,7 @@ import { Hono } from 'hono';
 
 import type { HonoEnv } from '../../env';
 import type { IdempotencyStore, StoredIdempotentResponse } from '../../application/shared/idempotentReplay';
-import { parseIdempotencyKey } from '../../application/shared/idempotentReplay';
-import { createCacheIdempotencyStore } from '../../application/shared/idempotencyReplayStore';
+import { createCacheIdempotencyStore, parseIdempotencyKey } from '../../application/shared/idempotentReplay';
 import { idempotentReplay } from './idempotentReplay';
 
 function memoryStore(): IdempotencyStore {

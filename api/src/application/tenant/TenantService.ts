@@ -257,8 +257,11 @@ export class TenantService {
   }
 
   async deleteTenant(id: number): Promise<void> {
-    await this.getTenant(id);
+    const tenant = await this.getTenant(id);
     await this.tenants.delete(asTenantId(id));
+    // Every member's cached membership goes with the workspace, so an outstanding
+    // workspace token stops on its next request rather than after the cache TTL.
+    await this.announceMembership(id, tenant.members.map((m) => m.userId));
   }
 
   async getSubscription(tenantId: number): Promise<{

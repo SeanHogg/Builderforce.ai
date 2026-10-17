@@ -1,10 +1,9 @@
 import { MiddlewareHandler } from 'hono';
-import { eq } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { UnauthorizedError, ForbiddenError } from '../../domain/shared/errors';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { users } from '../../infrastructure/database/schema';
+import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import { checkTermsAcceptance } from '../../application/legal/termsAcceptance';
 
 /**
@@ -42,18 +41,15 @@ export const superAdminMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) 
     throw new ForbiddenError('Superadmin access required');
   }
 
-  // Verify the DB flag — the JWT claim alone is not sufficient
-  const db = buildDatabase(c.env);
-  const [userRow] = await db
-    .select({ isSuperadmin: users.isSuperadmin })
-    .from(users)
-    .where(eq(users.id, payload.sub))
-    .limit(1);
-
-  if (!userRow?.isSuperadmin) {
+  // Verify the DB flag — the JWT claim alone is not sufficient. Served by the ONE
+  // cached superadmin resolver (0 Neon round trips warm); a demotion propagates
+  // within its short TTL, or immediately via `invalidateSuperadminFlag`.
+  const isSuperadmin = await resolveIsSuperadmin(c.env, payload.sub);
+  if (!isSuperadmin) {
     throw new ForbiddenError('Superadmin access is restricted to platform operator accounts');
   }
 
+  const db = buildDatabase(c.env);
   const terms = await checkTermsAcceptance(db, payload.sub, c.env);
   if (terms.needsAcceptance) {
     return c.json({

@@ -1,7 +1,10 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import { BLOG_POSTS } from '@/lib/blogData';
+import JsonLd from '@/components/JsonLd';
+import RelatedArticles from '@/components/blog/RelatedArticles';
+import { CreationCtaSection } from '@/components/marketing/CreationCtaSection';
 import { packageRegistryUrl, type OpenSourcePackage } from '@/lib/openSourcePackages';
+import { openSourcePackageSchema } from '@/lib/openSourceSchema';
 import CodeSnippet from './CodeSnippet';
 import PackageComparison from './PackageComparison';
 import styles from './openSource.module.css';
@@ -12,20 +15,23 @@ import styles from './openSource.module.css';
  * Builderforce runs it, and where to go next.
  *
  * Copy is `openSource.packages.<key>.*`; facts, code and URLs are the registry
- * row. The related article is linked only while it is actually in the blog
- * index, so a renamed or unpublished post can never leave a dead link here.
+ * row. The related article is THE `RelatedArticles` card, which resolves the
+ * slug against the blog index and renders nothing for a renamed or unpublished
+ * post, so it can never leave a dead link here. The closing ask is THE
+ * marketing `CreationCtaSection`.
  */
 export default async function PackageDetail({ entry }: { entry: OpenSourcePackage }) {
+  const root = await getTranslations();
   const t = await getTranslations('openSource');
   const copy = `packages.${entry.key}`;
   const gets = (t.raw(`${copy}.gets`) as string[] | undefined) ?? [];
-  const blog = entry.relatedBlogSlug ? BLOG_POSTS.find((post) => post.slug === entry.relatedBlogSlug) : undefined;
   const registryLinks = entry.packages
     .map((name) => ({ name, href: packageRegistryUrl(entry, name) }))
     .filter((link): link is { name: string; href: string } => Boolean(link.href));
 
   return (
     <main className={styles.page}>
+      <JsonLd data={openSourcePackageSchema(root, entry)} />
       <header className={styles.hero}>
         <p className={styles.eyebrow}>{t('detail.eyebrow')}</p>
         <h1 className={styles.title}>{entry.displayName}</h1>
@@ -87,27 +93,14 @@ export default async function PackageDetail({ entry }: { entry: OpenSourcePackag
               ))
               : `${entry.packages.join(', ')} · ${t('detail.fromSource')}`}
           </dd>
-          {blog ? (
-            <>
-              <dt>{t('detail.blog')}</dt>
-              <dd>
-                <Link className={styles.textLink} href={`/blog/${blog.slug}`}>{blog.title}</Link>
-              </dd>
-            </>
-          ) : null}
         </dl>
       </section>
 
-      <section className={styles.cta}>
-        <div className={styles.ctaBox}>
-          <h2 className={styles.sectionTitle}>{t('cta.title')}</h2>
-          <p className={styles.body}>{t('cta.desc')}</p>
-          <div className={styles.ctaActions}>
-            <Link className={styles.btnPrimary} href="/create/new">{t('cta.primary')}</Link>
-            <Link className={styles.btnSecondary} href="/open-source">{t('detail.back')}</Link>
-          </div>
-        </div>
-      </section>
+      {entry.relatedBlogSlug ? (
+        <RelatedArticles slugs={[entry.relatedBlogSlug]} heading={t('detail.blog')} limit={1} />
+      ) : null}
+
+      <CreationCtaSection />
     </main>
   );
 }

@@ -9570,6 +9570,12 @@
     "heroTitle": "Any idea into <em>real.</em>",
     "heroSub": "While your idea waits in a doc, someone else is shipping theirs. Put your team and AI agents on one canvas and get it live first.",
     "heroPromptPlaceholder": "What do you want to create?",
+    "heroSuggestCampaign": "Launch campaign",
+    "heroSuggestCampaignPrompt": "Plan a launch campaign for my product.",
+    "heroSuggestInterviews": "Customer interviews",
+    "heroSuggestInterviewsPrompt": "Synthesize my customer interviews into product requirements.",
+    "heroSuggestOnePager": "Board one-pager",
+    "heroSuggestOnePagerPrompt": "Draft a one-page board update from my latest numbers.",
     "heroPromptAria": "Describe what you want to create",
     "heroGetStarted": "Start creating",
     "canvas": {
@@ -11717,6 +11723,14 @@
       "learnSkipReasonFrozen": "this project’s Evermind is frozen (read-only)",
       "reconcileTitle": "Reconciled {count} learned memories in Evermind v{version}",
       "reconcileHint": "The answer restated these recalled learnings, so it updates them (write-through cognition).",
+      "modelMovePacked": "Conversation fitted to {models} — {dropped} earlier messages {how}, ~{tokens} tokens",
+      "modelMoveVerbatim": "Conversation handed to {models} in full, ~{tokens} tokens",
+      "modelMoveOverWindow": "It is still larger than the model’s context window.",
+      "modelMoveHowSummarized": "summarized",
+      "modelMoveHowRecalled": "replaced by recalled memory",
+      "modelMoveHowElided": "left out",
+      "modelMoveLocalFallback": "{from} on this device could not take this turn — {to} answered it",
+      "modelMoveHint": "The run moved to another model, so the conversation was fitted to that model’s context window.",
       "activityStarted": "{agent} started working on {kind} #{ref}",
       "activityCompleted": "{agent} finished {kind} #{ref}",
       "activityCompletedWithLane": "{agent} finished {kind} #{ref} — moved to {lane}",
@@ -11943,6 +11957,8 @@
     "upgrade": "Upgrade",
     "upgradeToPlan": "Upgrade to {plan}",
     "addCard": "Add a card",
+    "signIn": "Sign in",
+    "noModel": "No model is available. Sign in, or start a model on this device.",
     "cardValidationFailed": "Card validation failed.",
     "allowance": {
       "exhausted": "Your AI token allowance for this period is spent ({used} of {limit}). Turns will fail or stop mid-answer until it resets on {resets}.",
@@ -11951,7 +11967,9 @@
       "connectAccount": "Connect your own account",
       "dismiss": "Dismiss"
     },
-    "queuedCount": "{count, plural, one {# message queued} other {# messages queued}}",
+    "queuedList": "Queued messages",
+    "queuedHint": "Queued — sends when the run finishes",
+    "queuedRemove": "Remove",
     "onboardMe": "Help me get started",
     "onboardMePrompt": "I'm new here — help me get started. Ask me about what I want to build, explain how usage and costs work, recommend whether the Free or Pro plan fits my timeframe, and help me connect my existing AI account if I have one.",
     "onboardMeHint": "Scope, costs and your plan — I'll walk you through it.",
@@ -33616,6 +33634,12 @@
       "subtitle": "Describe an app. Studio writes it, runs it in your browser and publishes it.",
       "promptLabel": "Describe what to build",
       "placeholder": "Let's build a…",
+      "suggestLanding": "Landing page",
+      "suggestLandingPrompt": "a landing page for my product with a sign-up form",
+      "suggestBooking": "Booking app",
+      "suggestBookingPrompt": "a booking app where customers pick a time slot",
+      "suggestDashboard": "Internal dashboard",
+      "suggestDashboardPrompt": "an internal dashboard that tracks weekly sales",
       "submit": "Build it",
       "startFailed": "Couldn't start your session. Try again.",
       "recentTitle": "Your Studio projects",
@@ -35077,16 +35101,10 @@
       "blog": "Related article",
       "licenseNote": "use it, fork it and ship it, commercially or not"
     },
-    "cta": {
-      "title": "See them working together",
-      "desc": "Open the canvas: the live preview of everything you build runs on BuilderForce WebContainers, in your own browser.",
-      "primary": "Open the canvas",
-      "secondary": "Read the blog"
-    },
     "packages": {
       "webcontainers": {
         "tagline": "An open, MIT-licensed replacement for StackBlitz WebContainers: a dev runtime that runs entirely in the browser.",
-        "summary": "Hand it a project as files and it serves a live preview in an iframe, builds it for deployment and type-checks it, with no COOP/COEP headers and no session caps.",
+        "summary": "Hand it a project as files and it serves a live preview in an iframe, builds it for deployment and type-checks it, without requiring COOP/COEP headers and with no session caps.",
         "problem": "In-browser dev runtimes asked a lot before they showed a single preview: a proprietary licence whose free tier is non-commercial, a monthly cap on API sessions, and cross-origin isolation headers (COOP/COEP) that break embeds and third-party scripts on the host page. For a product that previews everything it builds, each of those is a constraint on the core loop.",
         "gets": [
           "Live previews of frontend apps (Vite with React, Vue or Svelte, Create React App and static sites), with TypeScript, JSX, CSS, JSON and npm packages working as they do under Vite.",
@@ -35137,7 +35155,7 @@
             },
             {
               "aspect": "Node.js programs and servers, npm install, shell",
-              "ours": "Yes: one Web Worker per process, still without COOP/COEP",
+              "ours": "Yes: one Web Worker per process, still without requiring COOP/COEP",
               "theirs": "Yes"
             }
           ],

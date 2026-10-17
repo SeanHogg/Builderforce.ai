@@ -13,7 +13,8 @@
  * transcript handling stay with it).
  */
 
-import type { RunPolicyEvent } from '@builderforce/run-policy';
+import { DECLINE_STATUS, isRequestRefusalStatus, type RunPolicyEvent } from '@builderforce/run-policy';
+import { BrainRequestError } from './chatError';
 import { StreamInterruptedError, TransportError } from './streamChatCompletion';
 
 /** The policy event a provider failure is reported as. */
@@ -28,6 +29,12 @@ export type ProviderFailureEvent = Extract<RunPolicyEvent, { type: 'transport_fa
  *    `interrupted`, naming the model to route around when the stream knew it.
  *  - The gateway was reached and the request reset or timed out — `transport`.
  *  - The gateway was never reached through every backoff retry — `unreachable`.
+ *  - The gateway ANSWERED with an HTTP status (`BrainRequestError`) — `transport` with
+ *    that status, exactly as the server loops report a failed response, so a 413 / 429 /
+ *    503 releases a pin and a 5xx retries on the cascade in the browser too. A refusal of
+ *    the REQUEST itself (auth, entitlement, a bad body — run-policy's own line,
+ *    `isRequestRefusalStatus`) is not the model's failure and surfaces as it is; a 400 is
+ *    still reported, because from a declining backend it is a decline the policy releases.
  */
 export function providerFailureEvent(error: unknown): ProviderFailureEvent | null {
   if (error instanceof StreamInterruptedError) {
@@ -35,6 +42,10 @@ export function providerFailureEvent(error: unknown): ProviderFailureEvent | nul
   }
   if (error instanceof TransportError) {
     return { type: 'transport_failed', kind: error.unreachable ? 'unreachable' : 'transport' };
+  }
+  if (error instanceof BrainRequestError) {
+    if (isRequestRefusalStatus(error.status) && error.status !== DECLINE_STATUS) return null;
+    return { type: 'transport_failed', kind: 'transport', status: error.status };
   }
   return null;
 }

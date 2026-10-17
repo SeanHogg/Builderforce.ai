@@ -2,25 +2,36 @@
   "api/src": {
     "empty-catch": 0,
     "empty-promise-catch": 0,
+    "literal-promise-catch": 530,
     "console-only": 0,
     "durable-object-direct-report": 0
   },
   "frontend/src": {
-    "empty-catch": 185,
-    "empty-promise-catch": 77,
+    "empty-catch": 178,
+    "empty-promise-catch": 76,
+    "literal-promise-catch": 274,
     "console-only": 17,
     "durable-object-direct-report": 0
   },
   "agent-runtime/src": {
     "empty-catch": 435,
     "empty-promise-catch": 100,
+    "literal-promise-catch": 224,
     "console-only": 44,
     "durable-object-direct-report": 0
   },
   "worker/src": {
     "empty-catch": 0,
     "empty-promise-catch": 0,
+    "literal-promise-catch": 1,
     "console-only": 15,
+    "durable-object-direct-report": 0
+  },
+  "brain-embedded/src": {
+    "empty-catch": 18,
+    "empty-promise-catch": 10,
+    "literal-promise-catch": 20,
+    "console-only": 0,
     "durable-object-direct-report": 0
   }
 }

@@ -9,7 +9,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { executeCloudNode } from './cloudExecutor';
+import { executeCloudNode, rollupCloudWorkflowStatus } from './cloudExecutor';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { Env } from '../../env';
 import { sandboxOutboundPort } from './sandboxOutboundPort';
 
@@ -85,5 +87,26 @@ describe('executeCloudNode — outbound port', () => {
     const withoutPort = await executeCloudNode(env, { kind: 'filter', config: { predicate: 'true' } }, '{}');
     const withPort = await executeCloudNode(env, { kind: 'filter', config: { predicate: 'true' } }, '{}', undefined, sandboxOutboundPort());
     expect(withoutPort).toEqual(withPort);
+  });
+});
+
+describe('cloud workflow status rollup + idle-tick writes', () => {
+  it('rolls task statuses up to the workflow status', () => {
+    expect(rollupCloudWorkflowStatus(['completed', 'pending'])).toBe('running');
+    expect(rollupCloudWorkflowStatus(['completed', 'running'])).toBe('running');
+    expect(rollupCloudWorkflowStatus(['completed', 'failed', 'cancelled'])).toBe('failed');
+    expect(rollupCloudWorkflowStatus(['completed', 'cancelled'])).toBe('completed');
+    expect(rollupCloudWorkflowStatus([])).toBe('completed');
+  });
+
+  /**
+   * Every pending/running cloud workflow used to cost a task re-SELECT plus an
+   * `UPDATE workflows` on every 5-minute tick, even when parked on a sleep. Pinned at
+   * the source because a fake db that records nothing cannot tell the two apart.
+   */
+  it('writes the workflow row only when a task moved or the status changed', () => {
+    const source = readFileSync(fileURLToPath(new URL('./cloudExecutor.ts', import.meta.url).href), 'utf8');
+    expect(source).toMatch(/if \(changedAny \|\| next !== wf\?\.status\) \{\s+await db\s+\.update\(workflows\)/);
+    expect(source).toMatch(/const statuses = changedAny\s/);
   });
 });

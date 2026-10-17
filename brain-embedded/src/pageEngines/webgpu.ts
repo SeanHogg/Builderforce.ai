@@ -18,10 +18,21 @@ interface GpuLike {
 
 const UNSUPPORTED = (reason: string): LocalDeviceSupport => ({ supported: false, reason, f16: false, maxBufferBytes: 0 });
 
+/** This page's WebGPU entry point, read at call time (SSR safe: none on a server). */
+const pageGpu = (): GpuLike | undefined => (globalThis as { navigator?: { gpu?: GpuLike } }).navigator?.gpu;
+
+/**
+ * Whether this browser exposes WebGPU at all — synchronous, requests no adapter, so it is
+ * safe during render. The ONE feature check for every on-device surface in a host (the
+ * semantic cache's embedder, voice, training badges); what the adapter can actually do is
+ * {@link webGpuSupport}'s question.
+ */
+export function hasWebGPU(): boolean {
+  return pageGpu() != null;
+}
+
 /** The adapter's support record. Never throws: no WebGPU reads as unsupported. */
-export async function webGpuSupport(
-  gpu: GpuLike | undefined = (globalThis as { navigator?: { gpu?: GpuLike } }).navigator?.gpu,
-): Promise<LocalDeviceSupport> {
+export async function webGpuSupport(gpu: GpuLike | undefined = pageGpu()): Promise<LocalDeviceSupport> {
   if (!gpu) return UNSUPPORTED('webgpu_missing');
   try {
     const adapter = await gpu.requestAdapter();

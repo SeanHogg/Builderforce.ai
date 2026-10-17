@@ -1,17 +1,22 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
+import JsonLd from '@/components/JsonLd';
+import RelatedArticles from '@/components/blog/RelatedArticles';
+import { CreationCtaSection } from '@/components/marketing/CreationCtaSection';
 import PackageCard from '@/components/openSource/PackageCard';
 import styles from '@/components/openSource/openSource.module.css';
 import { OPEN_SOURCE_PACKAGES } from '@/lib/openSourcePackages';
 import { pageMetadata } from '@/lib/seo';
+import { openSourceIndexSchema } from '@/lib/openSourceSchema';
 
 /**
  * `/open-source` — the repositories Builderforce publishes under MIT, and why.
  *
  * Every package card is a projection of `OPEN_SOURCE_PACKAGES`; every word is
- * the `openSource` catalog. A Server Component end to end — nothing here is
- * interactive. Edge runtime because `getTranslations()` reads the locale cookie.
+ * the `openSource` catalog. The page is a Server Component; the related-reading
+ * cards and the closing ask are the shared marketing primitives
+ * (`RelatedArticles`, `CreationCtaSection`). Edge runtime because
+ * `getTranslations()` reads the locale cookie.
  */
 export const runtime = 'edge';
 
@@ -31,11 +36,13 @@ interface WhyPoint {
 }
 
 export default async function OpenSourcePage() {
+  const root = await getTranslations();
   const t = await getTranslations('openSource');
   const why = (t.raw('why.points') as WhyPoint[] | undefined) ?? [];
 
   return (
     <main className={styles.page}>
+      <JsonLd data={openSourceIndexSchema(root)} />
       <header className={styles.hero}>
         <p className={styles.eyebrow}>{t('hero.eyebrow')}</p>
         <h1 className={styles.title}>{t('hero.title')}</h1>
@@ -62,16 +69,11 @@ export default async function OpenSourcePage() {
         </div>
       </section>
 
-      <section className={styles.cta}>
-        <div className={styles.ctaBox}>
-          <h2 className={styles.sectionTitle}>{t('cta.title')}</h2>
-          <p className={styles.body}>{t('cta.desc')}</p>
-          <div className={styles.ctaActions}>
-            <Link className={styles.btnPrimary} href="/create/new">{t('cta.primary')}</Link>
-            <Link className={styles.btnSecondary} href="/blog">{t('cta.secondary')}</Link>
-          </div>
-        </div>
-      </section>
+      {/* The article behind each package; RelatedArticles skips any slug that is
+          not in the blog index. */}
+      <RelatedArticles slugs={OPEN_SOURCE_PACKAGES.flatMap((entry) => (entry.relatedBlogSlug ? [entry.relatedBlogSlug] : []))} />
+
+      <CreationCtaSection />
     </main>
   );
 }

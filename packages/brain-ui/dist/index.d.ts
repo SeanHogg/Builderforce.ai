@@ -1,5 +1,5 @@
-import * as React from 'react';
-import React__default, { HTMLAttributes, ReactNode } from 'react';
+import * as react from 'react';
+import react__default, { ReactNode, HTMLAttributes } from 'react';
 import { BrainRunActivity, BrainMessage, BrainTraceEvent, ChatActivityLabels, ModelIdentityContext, AskUserPayload, ChatErrorAction, LocalModelRow as LocalModelRow$1, ModelChoiceLabels, ChatModelSelection, ChatModelOptions, LocalModelStore, Effort, DirectedRecipient, RecipientChoice, BrainPersonaChoice, BrainPersonaAgent, SavingsSourceKey, SpendSavingsSummary, ChatTicket, ChatDiagnosticsSources, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment, ChatDiagnosticsPlanSnapshot, ChatMode } from '@seanhogg/builderforce-brain-embedded';
 export { AskUserOption, AskUserPayload, BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, PendingAskUser, RoutedProduct, activeModelKey, askUserAnchorId, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, isManagerRole, modelCategoryLabel, modelInUse, parseAskUser, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId, selectPendingAskUser, serializeAskUser, stripAskUser } from '@seanhogg/builderforce-brain-embedded';
 
@@ -21,7 +21,7 @@ declare function CopyButton({ text, labels, icon }: {
     text: string;
     labels: CopyLabels;
     icon?: boolean;
-}): React.JSX.Element;
+}): react.JSX.Element;
 
 /**
  * ONE settled tool step in the transcript: what the agent ran, and what came back.
@@ -61,7 +61,7 @@ interface ToolStepNode {
 declare function ToolStep({ node, labels }: {
     node: ToolStepNode;
     labels: ToolStepLabels;
-}): React__default.JSX.Element;
+}): react__default.JSX.Element;
 
 /**
  * The in-flight step, animated.
@@ -123,13 +123,67 @@ interface LiveActivityProps {
     isRunning: boolean;
     labels?: Partial<LiveActivityLabels>;
 }
-declare function LiveActivityInner({ activity, isRunning, labels: partial }: LiveActivityProps): React__default.JSX.Element | null;
+declare function LiveActivityInner({ activity, isRunning, labels: partial }: LiveActivityProps): react__default.JSX.Element | null;
 /**
  * Memoized: this component re-renders once a second on its own timer, and it sits
  * inside a transcript that re-renders on every streamed token. Without the memo the
  * two multiply.
  */
-declare const LiveActivity: React__default.MemoExoticComponent<typeof LiveActivityInner>;
+declare const LiveActivity: react__default.MemoExoticComponent<typeof LiveActivityInner>;
+
+/**
+ * The MODEL MOVES a run records — the transcript re-packed for the window of the model
+ * about to serve it (`llm.handoff`, brain-embedded's window fit) and a local-first turn
+ * that fell over from an on-device model (`llm.local_fallback`) — read from the step's
+ * structured args into the line the transcript shows.
+ *
+ * The step's `result` is the diagnostics sentence (English, for triage and copied
+ * reports); the reader's line is composed HERE from the facts, through the
+ * `brain.timeline.modelMove*` catalog keys, so it reads in the viewer's language on
+ * every surface. Model refs are language-neutral and shown as they are.
+ *
+ * Pure: no React.
+ */
+/** One model move, as the transcript renders it. */
+type ModelMove = {
+    kind: 'packed';
+    from?: string;
+    to: string;
+    dropped: number;
+    how: 'summarized' | 'recalled' | 'elided';
+    tokens: number;
+    fits: boolean;
+} | {
+    kind: 'verbatim';
+    from?: string;
+    to: string;
+    tokens: number;
+} | {
+    kind: 'localFallback';
+    from: string;
+    to: string;
+};
+/** The catalog strings a model-move line is composed from (`brain.timeline.*`). */
+interface ModelMoveLabels {
+    /** Must contain `{models}`, `{dropped}`, `{how}` and `{tokens}`. */
+    modelMovePacked: string;
+    /** Must contain `{models}` and `{tokens}`. */
+    modelMoveVerbatim: string;
+    /** Appended when the packed transcript still exceeds the window. */
+    modelMoveOverWindow: string;
+    modelMoveHowSummarized: string;
+    modelMoveHowRecalled: string;
+    modelMoveHowElided: string;
+    /** Must contain `{from}` and `{to}`. */
+    modelMoveLocalFallback: string;
+    /** Tooltip on a model-move line. */
+    modelMoveHint: string;
+}
+declare const DEFAULT_MODEL_MOVE_LABELS: ModelMoveLabels;
+/** The move a step records, or null when the step is not one (or its args are unreadable). */
+declare function modelMoveOf(label: string, args: unknown): ModelMove | null;
+/** The reader's line for a move, in the catalog's words. */
+declare function modelMoveLine(move: ModelMove, labels: ModelMoveLabels): string;
 
 /**
  * Every string the transcript renders. It EXTENDS {@link ToolStepLabels} rather than
@@ -137,7 +191,7 @@ declare const LiveActivity: React__default.MemoExoticComponent<typeof LiveActivi
  * contract, and a host that passes this bundle satisfies that contract by
  * construction — which is what keeps the two from drifting apart.
  */
-interface BrainTimelineLabels extends ToolStepLabels {
+interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
     /** Shown on the live thinking node while a turn streams. */
     thinking: string;
     /**
@@ -257,19 +311,19 @@ interface BrainTimelineProps {
     /** Override the assistant display name (defaults to labels.assistant). */
     assistantName?: string;
     /** Replaces the built-in empty state entirely. */
-    emptyState?: React__default.ReactNode;
+    emptyState?: react__default.ReactNode;
     /** Render a message's text. Defaults to the shared <Markdown>. The web app
      *  passes its richer ChatMessageBubble here so no feature is lost. */
     renderMessage?: (msg: BrainMessage, ctx: {
         role: 'user' | 'assistant';
         text: string;
-    }) => React__default.ReactNode;
+    }) => react__default.ReactNode;
     /** Render the live streaming assistant bubble. Defaults to <Markdown>. */
-    renderStreaming?: (text: string) => React__default.ReactNode;
+    renderStreaming?: (text: string) => react__default.ReactNode;
     /** Host-specific EXTRAS on an assistant message (feedback, export, suggestions).
      *  Copy and "send again" are built in — see {@link MessageActions} — so a host never
      *  re-implements them. */
-    renderAssistantActions?: (msg: BrainMessage) => React__default.ReactNode;
+    renderAssistantActions?: (msg: BrainMessage) => react__default.ReactNode;
     /** Re-send a message's text as the next turn. When omitted the "send again" action
      *  hides itself, so a read-only transcript offers only copy. */
     onReplayMessage?: (msg: BrainMessage, role: 'user' | 'assistant') => void;
@@ -308,14 +362,14 @@ interface BrainTimelineProps {
  * Input/Output, or an error. Presentational and theme-driven (CSS variables), so
  * it renders identically in the web app and a VS Code webview.
  */
-declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, activity, loading, labels: labelOverrides, modelIdentity, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onReplayMessage, onRateMessage, ratings, onInternalLink, onApplyCode, onCreateFile, onAnswerQuestion, autoScroll, revealMessage, }: BrainTimelineProps): React__default.JSX.Element;
+declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, activity, loading, labels: labelOverrides, modelIdentity, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onReplayMessage, onRateMessage, ratings, onInternalLink, onApplyCode, onCreateFile, onAnswerQuestion, autoScroll, revealMessage, }: BrainTimelineProps): react__default.JSX.Element;
 /**
  * Memoized so an unrelated re-render of the host (e.g. every keystroke in the
  * composer, which lives in the same component tree) does not re-render the whole
  * transcript and re-parse every message's markdown. Callers must pass referentially
  * stable props (memoize `labels` and any `on*` callbacks) for this to take effect.
  */
-declare const BrainTimeline: React__default.MemoExoticComponent<typeof BrainTimelineInner>;
+declare const BrainTimeline: react__default.MemoExoticComponent<typeof BrainTimelineInner>;
 
 /**
  * The ONE reading of the transcript's copy catalog into `<BrainTimeline>`'s label shape.
@@ -459,13 +513,13 @@ interface MarkdownProps {
  * Self-contained so both the web app and the VS Code webview render assistant
  * replies identically.
  */
-declare function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, labels }: MarkdownProps): React__default.JSX.Element;
+declare function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, labels }: MarkdownProps): react__default.JSX.Element;
 /**
  * Memoized: parsing markdown through the remark pipeline is expensive, and the
  * transcript re-renders on every streaming token / composer keystroke. Skipping the
  * re-parse of settled messages (unchanged `content`/callbacks) keeps typing snappy.
  */
-declare const Markdown: React__default.MemoExoticComponent<typeof MarkdownInner>;
+declare const Markdown: react__default.MemoExoticComponent<typeof MarkdownInner>;
 
 /** Copy for <QuestionCard> — defaulted in English, overridable per host for i18n. */
 interface AskUserLabels {
@@ -493,7 +547,7 @@ declare function QuestionCard({ payload, labels, onAnswer, anchorId, }: {
     onAnswer: (answer: string) => void;
     /** DOM id for scroll-to (see {@link askUserAnchorId}); omit when not targetable. */
     anchorId?: string;
-}): React.JSX.Element;
+}): react.JSX.Element;
 /**
  * The open question, pinned at the composer. A long transcript buries the agent's
  * `ask_user` card, so a chat that is BLOCKED on an answer looks merely idle — this
@@ -515,7 +569,7 @@ declare function PendingQuestionBanner({ payload, labels, onAnswer, onReveal, }:
     labels?: Partial<AskUserLabels>;
     onAnswer: (answer: string) => void;
     onReveal?: () => void;
-}): React.JSX.Element | null;
+}): react.JSX.Element | null;
 
 /**
  * The chat's error banner — the message AND the fix.
@@ -544,6 +598,10 @@ interface ChatErrorBannerLabels {
     upgradeToPlan: string;
     /** Billing CTA when the plan is fine but no validated card is on file. */
     addCard: string;
+    /** Sign in — offered when no model can serve the turn (signed out, nothing local). */
+    signIn: string;
+    /** What the banner says for that case — replaces the raw `not_signed_in` code. */
+    noModel: string;
     dismiss: string;
 }
 declare const DEFAULT_CHAT_ERROR_LABELS: ChatErrorBannerLabels;
@@ -565,13 +623,318 @@ interface ChatErrorBannerProps {
     onUpgrade?: () => void;
     /** Send the user somewhere they can put a validated card on file. */
     onValidateCard?: () => void;
+    /** Sign in (or open where a local model is started) — for the `sign_in` verdict. */
+    onSignIn?: () => void;
     labels?: Partial<ChatErrorBannerLabels>;
     /** Extra styles merged into the banner container, for host-specific chrome. */
-    style?: React__default.CSSProperties;
+    style?: react__default.CSSProperties;
     /** Class on the banner container — the VS Code webview styles via its own CSS. */
     className?: string;
 }
-declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, labels: labelOverrides, style, className, }: ChatErrorBannerProps): React__default.JSX.Element | null;
+declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, onSignIn, labels: labelOverrides, style, className, }: ChatErrorBannerProps): react__default.JSX.Element | null;
+
+/**
+ * The human-in-the-loop approval — ONE bar for every surface that pauses a run on a
+ * mutating tool call (`BrainRunSnapshot.pendingConfirm`): the web Brain panel, the VS
+ * Code chat and its sub-agent strip, and Rovr's side panel. Extracted from the web's
+ * BrainToolConfirmBar; it carries what the other copies had and it lacked:
+ *
+ * - the exact command line for `run_command` (VS Code), so the person approves what
+ *   actually runs, not just the tool name;
+ * - an optional "always" lever (`onApproveAll`) — omitted ⇒ not offered;
+ * - a `children` slot for a host's own WHY and WHAT (Rovr's safety reasons, the element
+ *   it would act on, a masked sensitive value) — given ⇒ the raw-args preview stands down;
+ * - focus on Approve when it appears (keyboard-first, as Rovr had it).
+ *
+ * Presentational and theme-driven (`--bf-*`); a host passes handlers and copy, never a
+ * `canX` flag.
+ */
+interface ToolConfirmBarLabels {
+    /** The question — must contain `{name}`, replaced by the tool name in `<code>`. */
+    prompt: string;
+    approve: string;
+    /** The "always" lever's label (approve this and stop asking). */
+    approveAll: string;
+    /** Tooltip for the "always" lever. */
+    approveAllTitle?: string;
+    deny: string;
+    /** Accessible name of the bar. */
+    aria: string;
+}
+declare const DEFAULT_TOOL_CONFIRM_LABELS: ToolConfirmBarLabels;
+interface ToolConfirmBarProps {
+    req: {
+        name: string;
+        args: unknown;
+    };
+    onApprove: () => void;
+    onDeny: () => void;
+    /** Approve and stop asking. Omit and the lever is not offered. */
+    onApproveAll?: () => void;
+    /** Replaces the `prompt` sentence (a host whose question is richer than "Run X?"). */
+    title?: ReactNode;
+    /** A host's own detail rows. Given ⇒ the generic args preview is not shown. */
+    children?: ReactNode;
+    labels?: Partial<ToolConfirmBarLabels>;
+    className?: string;
+}
+/** What the person is approving, in one line: the command for a shell call, else the args. */
+declare function toolConfirmPreview(req: {
+    name: string;
+    args: unknown;
+}): {
+    command: string | null;
+    args: string;
+};
+declare const ToolConfirmBar: react.MemoExoticComponent<({ req, onApprove, onDeny, onApproveAll, title, children, labels: labelOverrides, className, }: ToolConfirmBarProps) => react.JSX.Element>;
+
+/**
+ * THE Brain mark — one glyph, one working animation, every surface (web canvas, Brain
+ * panel, Studio, the floating launcher, VS Code, Rovr). Moved here from the web app so
+ * the editor and the browser panel wear the same identity instead of their own.
+ *
+ * It owns the PROCESSING signal: a ring breathing out of the mark plus a gentle pulse
+ * of the glyph. That is a shape, not words — the live activity row narrates the phase.
+ * Colour is inherited (`currentColor`), so each host's accent applies in both themes.
+ * Styles: `.bf-mark*` in styles.css (reduced motion holds the ring steady).
+ */
+interface BrainMarkProps {
+    /** A turn is in flight: the mark breathes and a ring pulses out of it. */
+    running?: boolean;
+    /** Glyph size — any CSS length. Defaults to `1em` so it inherits its host's type. */
+    size?: number | string;
+}
+declare function BrainMark({ running, size }: BrainMarkProps): react.JSX.Element;
+
+/**
+ * The ONE header every AI surface wears — extracted from the web Brain panel's docked
+ * header and now also the canvas dock, the canvas Chat lens, the VS Code chat and Rovr.
+ *
+ * One row that never wraps: the mark (breathing while a turn runs) and the name, then
+ * the host's context (the only part that shrinks — its chips ellipsize), presence, the
+ * host's own actions, then the standard levers — History, New chat, Expand, Close —
+ * each offered only when the host supplies its handler or slot (no `canX` flags).
+ *
+ * Presentational and theme-driven (`--bf-*`, `.bf-shead*` in styles.css).
+ */
+interface SurfaceHeaderLabels {
+    historyShow: string;
+    historyHide: string;
+    newChat: string;
+    close: string;
+}
+declare const DEFAULT_SURFACE_HEADER_LABELS: SurfaceHeaderLabels;
+interface SurfaceHeaderHistory {
+    open: boolean;
+    onToggle: () => void;
+    /** Unread messages in OTHER chats — badged on the History lever. */
+    unread?: number;
+    /** id of the element the lever shows/hides. */
+    controls?: string;
+}
+interface SurfaceHeaderProps {
+    /** The agent's name as this surface calls it (Brain, BuilderForce, Rovr). */
+    title: ReactNode;
+    /** A turn is in flight — the mark breathes. */
+    running?: boolean;
+    /** What the agent is working with (chips, a chat picker) — the part that shrinks. */
+    context?: ReactNode;
+    /** Who else is here (avatars). */
+    presence?: ReactNode;
+    /** The host's own icon actions, before the standard levers. */
+    actions?: ReactNode;
+    history?: SurfaceHeaderHistory;
+    onNewChat?: () => void;
+    /** The expand lever — a host link to its full page (a router link stays the host's). */
+    expand?: ReactNode;
+    onClose?: () => void;
+    labels?: Partial<SurfaceHeaderLabels>;
+    className?: string;
+}
+declare function SurfaceHeader({ title, running, context, presence, actions, history, onNewChat, expand, onClose, labels: overrides, className, }: SurfaceHeaderProps): react.JSX.Element;
+/** A header lever's glyph — stroke icons sized off the button, colour inherited. */
+declare function HeaderIcon({ d }: {
+    d: string;
+}): react.JSX.Element;
+/** The expand glyph, for a host's `expand` link. */
+declare const EXPAND_ICON_PATH = "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7";
+
+/**
+ * The ONE way back into a closed AI surface — extracted from the app-wide floating
+ * launcher and now also the canvas's edge pill. It wears the header's mark (breathing
+ * while a turn runs), an optional visible label (the pill form), and one count badge:
+ * `awaiting` (a person must answer — pulses) outranks `unread` (informational).
+ *
+ * Placement is the host's (`className`): a fixed corner FAB, or an edge pill on the board.
+ */
+interface SurfaceLauncherBadge {
+    count: number;
+    tone: 'awaiting' | 'unread';
+    /** Accessible sentence for the count ("2 runs need you"). */
+    label: string;
+}
+interface SurfaceLauncherProps {
+    onOpen: () => void;
+    /** Accessible name / tooltip — what opening does, or what is happening. */
+    label: string;
+    running?: boolean;
+    /** Visible text beside the mark (the pill form); omitted ⇒ icon-only. */
+    text?: ReactNode;
+    badge?: SurfaceLauncherBadge | null;
+    /** Mark size (any CSS length). */
+    markSize?: number | string;
+    className?: string;
+    /** Extra attributes a host's tests and styles key on (data-side, data-testid…). */
+    dataAttrs?: Record<`data-${string}`, string>;
+}
+declare function SurfaceLauncher({ onOpen, label, running, text, badge, markSize, className, dataAttrs }: SurfaceLauncherProps): react.JSX.Element;
+
+interface SurfaceTab {
+    /** Stable id — also the state key the console persists selection under. */
+    id: string;
+    label: string;
+    /** Optional count/marker shown on the tab (e.g. "2" findings, "!" refused). */
+    badge?: string;
+    /** How the badge reads: a problem, or neutral information. */
+    badgeTone?: 'bad' | 'info';
+    content: ReactNode;
+}
+interface SurfaceTabsProps {
+    tabs: SurfaceTab[];
+    activeId: string;
+    onSelect: (id: string) => void;
+    /** Accessible name for the strip (localized by the host). */
+    label: string;
+    /** Namespace for the generated ids, so two consoles on one page never collide. */
+    idPrefix: string;
+    /** Host classes — a side panel makes the strip + panel fill its height. */
+    className?: string;
+    panelClassName?: string;
+}
+declare function SurfaceTabs({ tabs, activeId, onSelect, label, idPrefix, className, panelClassName }: SurfaceTabsProps): react.JSX.Element;
+
+/**
+ * Fixed next steps as chips above an empty box — "what now?" answered without a model
+ * call. A chip seeds the box; the person reads it, edits it and sends it. Extracted from
+ * the web's ComposerSuggestions; `BrainComposer` renders it from its `suggestions` prop
+ * and decides when (an empty box, no turn running), so no host re-derives that.
+ */
+interface ComposerSuggestion {
+    id: string;
+    label: string;
+    onSelect: () => void;
+}
+declare const SuggestionRow: react.MemoExoticComponent<({ items, ariaLabel }: {
+    items: readonly ComposerSuggestion[];
+    ariaLabel: string;
+}) => react.JSX.Element | null>;
+
+/**
+ * Turns the user typed while a run was still in flight.
+ *
+ * THE RULE THIS ENCODES: a composer never blocks typing because the agent is
+ * busy. Disabling the input while a turn streams is what made a long run feel
+ * like a hang — the user had a follow-up ready, a correction to make, or wanted
+ * to queue the next step, and the product's answer was a greyed-out box.
+ *
+ * Instead the turn is HELD and sent on the run's falling edge, one per completed
+ * run, so the transcript stays ordered and no two turns race the same chat.
+ *
+ * Lives beside `BrainComposer` because the composer's Send offers "Queue message"
+ * while a run streams: every host that mounts the composer over a single-flight run
+ * (the web Brain panel, the Creation Canvas, the VS Code chat, Rovr) needs the same
+ * queueing rule, flush edge and "queued turns belong to the conversation they were
+ * typed in" reset. This is the ONLY turn queue — a host whose turn carries more than
+ * text (VS Code's addressed recipient) queues a richer `T`, it does not fork the rule.
+ */
+interface QueuedItem<T> {
+    /** Stable per held turn, so a host can render it and let the user remove it. */
+    readonly id: number;
+    readonly value: T;
+}
+interface QueuedTurns<T = string> {
+    /** The held turns, oldest first. */
+    items: readonly QueuedItem<T>[];
+    /** How many turns are waiting. */
+    count: number;
+    /**
+     * Offer a turn to the queue. Returns true when it was HELD (a run is in
+     * flight and the caller must not send), false when the caller should send it
+     * now. Written this way so the host keeps ownership of how it sends.
+     */
+    submit: (value: T) => boolean;
+    /** Drop one held turn (the user removed it, or steered it into the run). */
+    remove: (id: number) => void;
+    /** Drop everything waiting — a stopped run, or a switched conversation. */
+    clear: () => void;
+}
+interface QueuedTurnsOptions<T> {
+    /** True while a turn is in flight on this conversation. */
+    running: boolean;
+    /** Send one held turn. Called on the running→idle edge, newest closure. */
+    send: (value: T) => void;
+    /** Queued turns are discarded when this changes (e.g. the active chat id). */
+    resetKey?: string | number | null;
+    /**
+     * The text a non-string turn carries, for the blank check. String turns are
+     * trimmed and checked directly; omit this for them.
+     */
+    textOf?: (value: T) => string;
+}
+declare function useQueuedTurns<T = string>({ running, send, resetKey, textOf }: QueuedTurnsOptions<T>): QueuedTurns<T>;
+
+/**
+ * Turns the person composed while a run was in flight — each waits for the run to
+ * finish, or (where the host can) is STEERED into it now. Extracted from the VS Code
+ * chat's QueuedMessages; it replaces the web's count-only receipt and Rovr's line, so
+ * every surface lists the same held turns the same way. Renders nothing when empty.
+ */
+interface QueuedTurnChipsLabels {
+    list: string;
+    hint: string;
+    steer: string;
+    steerHint: string;
+    remove: string;
+}
+declare const DEFAULT_QUEUED_TURN_LABELS: QueuedTurnChipsLabels;
+interface QueuedTurnChipsProps<T> {
+    items: readonly QueuedItem<T>[];
+    /** The text a held turn carries (identity for string queues). */
+    textOf: (value: T) => string;
+    onRemove: (id: number) => void;
+    /** Put a held turn into the running turn now. Omitted ⇒ turns can only wait. */
+    onSteer?: (item: QueuedItem<T>) => void;
+    /** Whether THIS turn can be steered (e.g. one addressed to a person cannot). */
+    canSteer?: (item: QueuedItem<T>) => boolean;
+    labels?: Partial<QueuedTurnChipsLabels>;
+}
+declare function QueuedTurnChips<T>({ items, textOf, onRemove, onSteer, canSteer, labels: overrides }: QueuedTurnChipsProps<T>): react.JSX.Element | null;
+
+/**
+ * WHERE a turn goes, as one chip in the composer's tool row — extracted from the canvas's
+ * scope chip (IN the whole board / the selection / a frame). A host supplies the options
+ * and decides whether there is anything to choose; the chip is a native select so it is
+ * keyboard- and screen-reader-complete everywhere. (Who a turn is addressed TO is the
+ * shared `RecipientPicker`.)
+ */
+interface ContextChipOption<V extends string> {
+    value: V;
+    label: string;
+    disabled?: boolean;
+}
+interface ContextChipProps<V extends string> {
+    /** Accessible name — what this chip chooses. */
+    label: string;
+    value: V;
+    options: readonly ContextChipOption<V>[];
+    onChange: (value: V) => void;
+    /** A small leading glyph. */
+    icon?: ReactNode;
+    /** A host's own class (the canvas paints the chip in its own palette). */
+    className?: string;
+}
+declare function ContextChipImpl<V extends string>({ label, value, options, onChange, icon, className }: ContextChipProps<V>): react.JSX.Element;
+declare const ContextChip: typeof ContextChipImpl;
 
 interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
     /** Text entry for the prompt. Always occupies the first, full-width row. */
@@ -610,7 +973,7 @@ interface PromptPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, 'childre
  * different composer again. The `/` trigger's quiet "Work ▾" face is this package's
  * stylesheet, scoped to `.bf-prompt-panel`.
  */
-declare function PromptPanel({ input, context, actions, primaryAction, status, overlay, active, dragging, className, style, ...rest }: PromptPanelProps): React.JSX.Element;
+declare function PromptPanel({ input, context, actions, primaryAction, status, overlay, active, dragging, className, style, ...rest }: PromptPanelProps): react.JSX.Element;
 
 /**
  * What a composer's ONE trailing button is right now: the mic, Send, or Stop.
@@ -693,6 +1056,17 @@ interface LocalModelLabels {
     localReasonEngine: string;
 }
 declare const DEFAULT_LOCAL_MODEL_LABELS: LocalModelLabels;
+/** Every field of {@link LocalModelLabels} — the ONE key table hosts read their catalog by. */
+declare const LOCAL_MODEL_LABEL_FIELDS: ReadonlyArray<keyof LocalModelLabels>;
+/** A host's string for one label field, or undefined when its catalog has none. */
+type LocalModelLabelLookup = (field: keyof LocalModelLabels) => string | undefined;
+/**
+ * The on-device list's copy from a host catalog. Each host used to hand-map the same
+ * thirteen fields onto its own keys (next-intl, `vscode.l10n`, `chrome.i18n`); a host now
+ * passes a lookup by field and every label it lacks falls back to the English default.
+ * Placeholders (`{size}`, `{percent}`, `{tokens}`) must come back literal.
+ */
+declare function localModelLabelsFrom(lookup: LocalModelLabelLookup): LocalModelLabels;
 /** Why a row is unsupported → the label that says so. A registry, so a new fit code
  *  is one entry here rather than a branch in the row. */
 declare const LOCAL_UNSUPPORTED_LABEL: Record<NonNullable<LocalModelRow$1['reason']>, keyof LocalModelLabels>;
@@ -894,7 +1268,7 @@ interface PromptOptionsMenuProps {
  *
  * Self-gating: renders nothing until a host wires at least one section.
  */
-declare function PromptOptionsMenu({ labels: labelOverrides, disabled, mode, memory, autoMode, session, effort, onEffortChange, describeEffort, thinking, onThinkingChange, describeThinking, model, status, onAccountSettings, className, }: PromptOptionsMenuProps): React.JSX.Element | null;
+declare function PromptOptionsMenu({ labels: labelOverrides, disabled, mode, memory, autoMode, session, effort, onEffortChange, describeEffort, thinking, onThinkingChange, describeThinking, model, status, onAccountSettings, className, }: PromptOptionsMenuProps): react.JSX.Element | null;
 
 interface LocalModelRowProps {
     row: LocalModelRow$1;
@@ -910,7 +1284,7 @@ interface LocalModelRowProps {
     onCancel(ref: string): void;
     onRemove(ref: string): void;
 }
-declare function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownload, onCancel, onRemove }: LocalModelRowProps): React.JSX.Element;
+declare function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownload, onCancel, onRemove }: LocalModelRowProps): react.JSX.Element;
 
 interface LocalModelsState {
     /** The catalog rows, or null until the store first answers. Empty without a store. */
@@ -933,7 +1307,7 @@ interface LocalModelListProps {
     hideHeading?: boolean;
     onSelect(ref: string): void;
 }
-declare function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelect }: LocalModelListProps): React.JSX.Element | null;
+declare function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelect }: LocalModelListProps): react.JSX.Element | null;
 
 /**
  * Pure formatting for an on-device model row — what the row SAYS, separated from how it
@@ -972,10 +1346,10 @@ interface AvatarProps {
     /** Diameter in px (default 18). */
     size?: number;
     title?: string;
-    style?: React__default.CSSProperties;
+    style?: react__default.CSSProperties;
 }
 /** A single participant avatar: initials on a deterministic coloured disc/tile. */
-declare function Avatar({ name, kind, size, title, style }: AvatarProps): React__default.JSX.Element;
+declare function Avatar({ name, kind, size, title, style }: AvatarProps): react__default.JSX.Element;
 /**
  * The "→ recipients" badge on a directed user turn: who it was put to. One recipient
  * reads "→ [avatar] Name"; a group turn stacks up to `max` avatars and names them,
@@ -986,7 +1360,7 @@ declare function RecipientsBadge({ recipients, max, size }: {
     recipients: readonly DirectedRecipient[];
     max?: number;
     size?: number;
-}): React__default.JSX.Element | null;
+}): react__default.JSX.Element | null;
 
 /**
  * Open/close state for a composer popover — the ONE implementation of "opens on the
@@ -999,7 +1373,7 @@ declare function usePopover<T extends HTMLElement = HTMLDivElement>(): {
     open: boolean;
     toggle: () => void;
     close: () => void;
-    rootRef: React.RefObject<T>;
+    rootRef: react.RefObject<T>;
 };
 
 interface RecipientPickerLabels {
@@ -1027,7 +1401,7 @@ interface RecipientPickerProps {
     labels?: Partial<RecipientPickerLabels>;
     disabled?: boolean;
     /** Wrap the chosen participant's avatar — the web adds its personality hovercard. */
-    renderAvatar?: (recipient: DirectedRecipient, avatar: React__default.ReactNode) => React__default.ReactNode;
+    renderAvatar?: (recipient: DirectedRecipient, avatar: react__default.ReactNode) => react__default.ReactNode;
 }
 /**
  * The composer's "To" control: who the next message goes to. The BRAIN (the default)
@@ -1037,7 +1411,7 @@ interface RecipientPickerProps {
  *
  * Self-gating: a chat with no participants has nothing to route, so nothing renders.
  */
-declare function RecipientPicker({ participants, recipient, onChoose, labels, disabled, renderAvatar }: RecipientPickerProps): React__default.JSX.Element | null;
+declare function RecipientPicker({ participants, recipient, onChoose, labels, disabled, renderAvatar }: RecipientPickerProps): react__default.JSX.Element | null;
 
 /**
  * Who the next message goes to, as composer state — shared by every composer so
@@ -1056,7 +1430,7 @@ declare function useRecipientChoice({ participants, input, resetKey }: {
 }): {
     recipient: DirectedRecipient | null;
     choice: RecipientChoice;
-    choose: React.Dispatch<React.SetStateAction<RecipientChoice>>;
+    choose: react.Dispatch<react.SetStateAction<RecipientChoice>>;
 };
 
 interface PersonaPickerLabels {
@@ -1099,7 +1473,7 @@ interface PersonaPickerProps {
  * composer and the VS Code webview; what a choice DOES to the run is the shared
  * persona domain's (`brainPersona.ts`), so this component only offers and names.
  */
-declare function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, quietAt }: PersonaPickerProps): React.JSX.Element | null;
+declare function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, quietAt }: PersonaPickerProps): react.JSX.Element | null;
 
 /**
  * HealthRing — a compact "% done" donut for a work item's health, rendered
@@ -1123,7 +1497,7 @@ interface HealthRingProps {
 }
 /** Map a completion percent to a tier colour (CSS var with hex fallback). */
 declare function healthRingColor(percent: number, muted?: boolean): string;
-declare function HealthRing({ percent, size, stroke, caption, muted, ariaLabel }: HealthRingProps): React.JSX.Element;
+declare function HealthRing({ percent, size, stroke, caption, muted, ariaLabel }: HealthRingProps): react.JSX.Element;
 
 /**
  * The chat's "this turn left code on disk" list.
@@ -1194,9 +1568,9 @@ interface PendingChangesListProps {
     onReview?: () => void;
     labels?: Partial<PendingChangesLabels>;
     className?: string;
-    style?: React__default.CSSProperties;
+    style?: react__default.CSSProperties;
 }
-declare function PendingChangesList({ changes, onOpenChange, onReview, labels: labelOverrides, className, style, }: PendingChangesListProps): React__default.JSX.Element | null;
+declare function PendingChangesList({ changes, onOpenChange, onReview, labels: labelOverrides, className, style, }: PendingChangesListProps): react__default.JSX.Element | null;
 
 /**
  * The copy of the spend & savings readouts — the chat's spend pill and the Status tab's
@@ -1600,7 +1974,7 @@ interface ChatTicketsLabels {
     mergeAction: (n: number) => string;
     mergedN: (n: number) => string;
 }
-/** English defaults — the VS Code webview uses these; the web app overrides via next-intl. */
+/** English defaults — the fallback for any key a host catalog lacks (see `chatTicketsLabelsFromBundle`). */
 declare const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels;
 /**
  * A host-registered pill in the ChatTicketsPanel's action row (beside Link ticket ·
@@ -1623,7 +1997,7 @@ interface ChatTicketsExtension {
     /** Tooltip / accessible name; defaults to the label. */
     title?: string;
     /** The drawer body, rendered inside the rail's standard drawer chrome when open. */
-    render: () => React.ReactNode;
+    render: () => react.ReactNode;
 }
 
 interface ChatTicketsPanelProps {
@@ -1666,14 +2040,14 @@ interface ChatTicketsPanelProps {
     /** BCP-47 locale for the pill's money and token formatting. */
     locale?: string;
 }
-declare function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents, spend, spendLabels, locale }: ChatTicketsPanelProps): React.JSX.Element;
+declare function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents, spend, spendLabels, locale }: ChatTicketsPanelProps): react.JSX.Element;
 /**
  * Memoized: this panel sits directly under the composer, so it would otherwise
  * reconcile its whole subtree (health-ring SVGs, selects, link/merge/agents forms)
  * on every keystroke and streaming token. Callers must pass referentially stable
  * props (memoize `chatList` and `onChanged`) for the memo to take effect.
  */
-declare const ChatTicketsPanel: React.MemoExoticComponent<typeof ChatTicketsPanelInner>;
+declare const ChatTicketsPanel: react.MemoExoticComponent<typeof ChatTicketsPanelInner>;
 
 /**
  * Label for a conversation in a picker (VSIX `<select>`, Sessions tree).
@@ -1765,7 +2139,7 @@ interface MentionLabels {
 }
 interface UseMentionAutocompleteOptions {
     /** Ref to the composer's <textarea> — read for the live caret position. */
-    textareaRef: React__default.RefObject<HTMLTextAreaElement | null>;
+    textareaRef: react__default.RefObject<HTMLTextAreaElement | null>;
     /** Current composer text (controlled). */
     value: string;
     /** Setter for the composer text (same one the textarea's onChange calls). */
@@ -1784,11 +2158,11 @@ interface MentionAutocomplete {
      * consumed the key (nav / select / escape) — when true you must NOT also submit
      * or insert a newline for that key.
      */
-    onKeyDown: (e: React__default.KeyboardEvent<HTMLTextAreaElement>) => boolean;
+    onKeyDown: (e: react__default.KeyboardEvent<HTMLTextAreaElement>) => boolean;
     /** Attach to the textarea's onSelect so a caret move re-detects the token. */
     onSelect: () => void;
     /** The popup element; render it inside a `position: relative` container. */
-    popup: React__default.ReactNode;
+    popup: react__default.ReactNode;
     /** True while the picker is open (its nav keys are being intercepted). */
     open: boolean;
 }
@@ -1814,7 +2188,7 @@ interface TicketAutocompleteLabels {
 }
 interface UseTicketAutocompleteOptions {
     /** Ref to the composer's <textarea> — read for the live caret position. */
-    textareaRef: React__default.RefObject<HTMLTextAreaElement | null>;
+    textareaRef: react__default.RefObject<HTMLTextAreaElement | null>;
     /** Current composer text (controlled). */
     value: string;
     /** Setter for the composer text (same one the textarea's onChange calls). */
@@ -1833,15 +2207,17 @@ interface TicketAutocomplete {
      * consumed the key (nav / select / escape) — when true you must NOT also submit
      * or insert a newline for that key.
      */
-    onKeyDown: (e: React__default.KeyboardEvent<HTMLTextAreaElement>) => boolean;
+    onKeyDown: (e: react__default.KeyboardEvent<HTMLTextAreaElement>) => boolean;
     /** Attach to the textarea's onSelect so a caret move re-detects the token. */
     onSelect: () => void;
     /** The popup element; render it inside a `position: relative` container. */
-    popup: React__default.ReactNode;
+    popup: react__default.ReactNode;
     /** True while the picker is open (its nav keys are being intercepted). */
     open: boolean;
 }
 declare function useTicketAutocomplete(opts: UseTicketAutocompleteOptions): TicketAutocomplete;
+
+declare function chatTicketsLabelsFromBundle(bundle: Readonly<Record<string, string>>, prefix?: string): ChatTicketsLabels;
 
 /**
  * chatDiagnosticsReads — the chat-scoped half of a diagnostics capture, wired ONCE.
@@ -1972,6 +2348,12 @@ type TimelineNode = {
     order: number;
     version: number;
     count: number;
+} | {
+    key: string;
+    kind: 'modelMove';
+    ts: number;
+    order: number;
+    move: ModelMove;
 } | {
     key: string;
     kind: 'streaming';
@@ -2677,7 +3059,7 @@ interface EvermindConsoleProps {
      *  pasted report. Default 'web'. */
     host?: EvermindHost;
 }
-declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projectName, showRecent, showHeaderRefresh, refreshSignal, onValidate, host }: EvermindConsoleProps): React__default.JSX.Element;
+declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projectName, showRecent, showHeaderRefresh, refreshSignal, onValidate, host }: EvermindConsoleProps): react__default.JSX.Element;
 
 /**
  * The Evermind console's REST adapter — ONE implementation of the gateway calls behind
@@ -2811,14 +3193,6 @@ declare function preferredEvermindBuild(builds: readonly EvermindBuild[], pick?:
     resolvedProjectId?: number | null;
     activeProjectId?: number | null;
 }): number | null;
-
-/**
- * Localized console labels from a host's flat string bundle (`ev.*` keys → text, with
- * `{name}` placeholders in the parametric ones). The console's own defaults are English;
- * a host that translates — the VS Code extension through `vscode.l10n`, Synapse from the
- * same catalogs at build time — hands its bundle here, so the two cannot map the same
- * bundle onto different labels.
- */
 
 declare function evermindLabelsFromBundle(bundle: Readonly<Record<string, string>>, prefix?: string): Partial<EvermindConsoleLabels>;
 
@@ -3044,7 +3418,7 @@ interface Project360ViewProps {
     onAction?: (action: Project360Action) => void;
     onRefresh?: () => void;
 }
-declare function Project360View({ data, loading, error, labels, onAction, onRefresh }: Project360ViewProps): React.JSX.Element;
+declare function Project360View({ data, loading, error, labels, onAction, onRefresh }: Project360ViewProps): react.JSX.Element;
 
 /**
  * The Project 360 wheel — a two-ring sunburst. Inner ring = the four pillars,
@@ -3064,7 +3438,7 @@ interface SunburstProps {
     onSelect?: (dimensionKey: string | null) => void;
     ariaLabel?: string;
 }
-declare function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel }: SunburstProps): React.JSX.Element;
+declare function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel }: SunburstProps): react.JSX.Element;
 
 /**
  * Generic project-list model — the shared contract for every list-shaped project
@@ -3152,7 +3526,7 @@ interface ProjectListViewProps {
     onAction?: (action: ProjectListAction) => void;
     onRefresh?: () => void;
 }
-declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
+declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): react.JSX.Element;
 
 /**
  * The workspace's plan + month-to-date meters + 30-day spend & savings
@@ -3377,14 +3751,22 @@ interface BrainComposerProps {
     voice?: boolean;
     /** Who answers / who is addressed — rides the tool row after `+` and `/`. */
     context?: ReactNode;
-    /** Shown above the text (queued turns, starters, suggestions). */
+    /** Shown above the text (queued turns, starters). */
     above?: ReactNode;
+    /**
+     * Fixed next steps as chips (never a model call). The composer decides WHEN: only over
+     * an empty box with no turn running — so every host shows them the same way.
+     */
+    suggestions?: {
+        items: readonly ComposerSuggestion[];
+        label: string;
+    };
     /** Shown under the box (a queued-turns receipt, a secondary link). */
     below?: ReactNode;
     labels?: BrainComposerLabels;
     className?: string;
 }
-declare function BrainComposer(props: BrainComposerProps): React.JSX.Element;
+declare function BrainComposer(props: BrainComposerProps): react.JSX.Element;
 
 /**
  * The per-chat Memory switch, as a property of the CONVERSATION (`brain_chats.
@@ -3408,60 +3790,6 @@ declare function useChatMemorySwitch(opts: {
     setEnabled: (on: boolean) => void;
 };
 
-/**
- * Turns the user typed while a run was still in flight.
- *
- * THE RULE THIS ENCODES: a composer never blocks typing because the agent is
- * busy. Disabling the input while a turn streams is what made a long run feel
- * like a hang — the user had a follow-up ready, a correction to make, or wanted
- * to queue the next step, and the product's answer was a greyed-out box.
- *
- * Instead the turn is HELD and sent on the run's falling edge, one per completed
- * run, so the transcript stays ordered and no two turns race the same chat.
- *
- * Lives beside `BrainComposer` because the composer's Send offers "Queue message"
- * while a run streams: every host that mounts the composer over a single-flight run
- * (the web Brain panel, the Creation Canvas, the VS Code chat, Rovr) needs the same
- * queueing rule, flush edge and "queued turns belong to the conversation they were
- * typed in" reset. This is the ONLY turn queue — a host whose turn carries more than
- * text (VS Code's addressed recipient) queues a richer `T`, it does not fork the rule.
- */
-interface QueuedItem<T> {
-    /** Stable per held turn, so a host can render it and let the user remove it. */
-    readonly id: number;
-    readonly value: T;
-}
-interface QueuedTurns<T = string> {
-    /** The held turns, oldest first. */
-    items: readonly QueuedItem<T>[];
-    /** How many turns are waiting. */
-    count: number;
-    /**
-     * Offer a turn to the queue. Returns true when it was HELD (a run is in
-     * flight and the caller must not send), false when the caller should send it
-     * now. Written this way so the host keeps ownership of how it sends.
-     */
-    submit: (value: T) => boolean;
-    /** Drop one held turn (the user removed it, or steered it into the run). */
-    remove: (id: number) => void;
-    /** Drop everything waiting — a stopped run, or a switched conversation. */
-    clear: () => void;
-}
-interface QueuedTurnsOptions<T> {
-    /** True while a turn is in flight on this conversation. */
-    running: boolean;
-    /** Send one held turn. Called on the running→idle edge, newest closure. */
-    send: (value: T) => void;
-    /** Queued turns are discarded when this changes (e.g. the active chat id). */
-    resetKey?: string | number | null;
-    /**
-     * The text a non-string turn carries, for the blank check. String turns are
-     * trimmed and checked directly; omit this for them.
-     */
-    textOf?: (value: T) => string;
-}
-declare function useQueuedTurns<T = string>({ running, send, resetKey, textOf }: QueuedTurnsOptions<T>): QueuedTurns<T>;
-
 interface WorkStatusPanelProps {
     request: JsonRequest;
     projectId: number | null;
@@ -3470,7 +3798,7 @@ interface WorkStatusPanelProps {
     locale?: string;
     onUpgrade?: (target: UpgradeTarget) => void;
 }
-declare function WorkStatusPanel({ request, projectId, labels: overrides, spendLabels: spendOverrides, locale, onUpgrade }: WorkStatusPanelProps): React.JSX.Element;
+declare function WorkStatusPanel({ request, projectId, labels: overrides, spendLabels: spendOverrides, locale, onUpgrade }: WorkStatusPanelProps): react.JSX.Element;
 
 /** Subscribe a component to the shared consumption snapshot (one fetch per page). */
 declare function useConsumptionSnapshot(request: JsonRequest | null): ConsumptionSnapshot | null;
@@ -3480,14 +3808,14 @@ interface SpendPillProps {
     labels?: Partial<SpendLabels>;
     locale?: string;
 }
-declare function SpendPill({ summary, labels: overrides, locale }: SpendPillProps): React.JSX.Element | null;
+declare function SpendPill({ summary, labels: overrides, locale }: SpendPillProps): react.JSX.Element | null;
 
 interface SpendBreakdownProps {
     summary: SpendSavingsSummary;
     labels: SpendLabels;
     locale?: string;
 }
-declare function SpendBreakdown({ summary, labels, locale }: SpendBreakdownProps): React.JSX.Element;
+declare function SpendBreakdown({ summary, labels, locale }: SpendBreakdownProps): react.JSX.Element;
 
 /**
  * Number formatting for the spend readouts — locale-aware (`Intl`), and honest at the
@@ -3497,4 +3825,4 @@ declare function SpendBreakdown({ summary, labels, locale }: SpendBreakdownProps
 declare function formatUsd(usd: number, locale?: string): string;
 declare function formatTokens(tokens: number, locale?: string): string;
 
-export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainComposer, type BrainComposerLabels, type BrainComposerProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatRunHistoryVM, type ChatRunVM, type ChatSubagentVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, type ComposerAddMenuItem, type ComposerAttachment, type ComposerLabels, type ComposerOptions, type ConsumptionSnapshot, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_COMPOSER_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_LOCAL_MODEL_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_SPEND_LABELS, DEFAULT_TIMELINE_LABELS, DEFAULT_WORK_STATUS_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type JsonRequest, LOCAL_UNSUPPORTED_LABEL, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, type LocalModelLabels, LocalModelList, type LocalModelListProps, LocalModelRow, type LocalModelRowProps, type LocalModelsState, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionAutocomplete, type MentionLabels, type MessageRating, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, type PromptTrailingAction, type PromptTrailingState, QuestionCard, type QueuedItem, type QueuedTurns, type QueuedTurnsOptions, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, SpendBreakdown, type SpendLabels, SpendPill, Sunburst, type SunburstProps, TICKET_KINDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineCatalogLookup, type TimelineImage, type TimelineNode, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UpgradeTarget, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, type WorkStatusLabels, WorkStatusPanel, type WorkStatusPanelProps, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, cachedConsumptionSnapshot, chatActivityLabelsFrom, chatDiagnosticsReads, chatSwitcherLabel, commandOf, composerLabels, createChatTicketsRestAdapter, createEvermindRestAdapter, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, fetchConsumptionSnapshot, formatContextTokens, formatDownloadSize, formatDuration, formatElapsed, formatParams, formatTokens, formatUsd, groupAbsorbed, healthRingColor, initialsOf, invalidateConsumptionSnapshot, liveActivityLabelsFrom, loadEvermindBuilds, pendingChangesSummary, planIsPaid, preferredEvermindBuild, promptOptionsLabels, promptTrailingAction, publishedEvermindModels, resolvePendingChangesLabels, resolveTeacherOptions, shellOutcomeOf, spendLabels, strandedReplyKey, streamingNode, subscribeConsumptionSnapshot, timelineCatalogLookup, timelineLabelsFrom, toolPreview, toolStepView, useChatActivitySignal, useChatMemorySwitch, useChatParticipants, useConsumptionSnapshot, useLocalModels, useMentionAutocomplete, usePopover, useQueuedTurns, useRecipientChoice, useTicketAutocomplete, useVoiceDictation, workStatusLabels };
+export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainComposer, type BrainComposerLabels, type BrainComposerProps, BrainMark, type BrainMarkProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatRunHistoryVM, type ChatRunVM, type ChatSubagentVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, type ComposerAddMenuItem, type ComposerAttachment, type ComposerLabels, type ComposerOptions, type ComposerSuggestion, type ConsumptionSnapshot, ContextChip, type ContextChipOption, type ContextChipProps, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_COMPOSER_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_LOCAL_MODEL_LABELS, DEFAULT_MODEL_MOVE_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_QUEUED_TURN_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_SPEND_LABELS, DEFAULT_SURFACE_HEADER_LABELS, DEFAULT_TIMELINE_LABELS, DEFAULT_TOOL_CONFIRM_LABELS, DEFAULT_WORK_STATUS_LABELS, EXPAND_ICON_PATH, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HeaderIcon, HealthRing, type HealthRingProps, type HealthTier, type JsonRequest, LOCAL_MODEL_LABEL_FIELDS, LOCAL_UNSUPPORTED_LABEL, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, type LocalModelLabelLookup, type LocalModelLabels, LocalModelList, type LocalModelListProps, LocalModelRow, type LocalModelRowProps, type LocalModelsState, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionAutocomplete, type MentionLabels, type MessageRating, type ModelMove, type ModelMoveLabels, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, type PromptTrailingAction, type PromptTrailingState, QuestionCard, type QueuedItem, QueuedTurnChips, type QueuedTurnChipsLabels, type QueuedTurnChipsProps, type QueuedTurns, type QueuedTurnsOptions, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, SpendBreakdown, type SpendLabels, SpendPill, SuggestionRow, Sunburst, type SunburstProps, SurfaceHeader, type SurfaceHeaderHistory, type SurfaceHeaderLabels, type SurfaceHeaderProps, SurfaceLauncher, type SurfaceLauncherBadge, type SurfaceLauncherProps, type SurfaceTab, SurfaceTabs, type SurfaceTabsProps, TICKET_KINDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineCatalogLookup, type TimelineImage, type TimelineNode, ToolConfirmBar, type ToolConfirmBarLabels, type ToolConfirmBarProps, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UpgradeTarget, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, type WorkStatusLabels, WorkStatusPanel, type WorkStatusPanelProps, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, cachedConsumptionSnapshot, chatActivityLabelsFrom, chatDiagnosticsReads, chatSwitcherLabel, chatTicketsLabelsFromBundle, commandOf, composerLabels, createChatTicketsRestAdapter, createEvermindRestAdapter, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, fetchConsumptionSnapshot, formatContextTokens, formatDownloadSize, formatDuration, formatElapsed, formatParams, formatTokens, formatUsd, groupAbsorbed, healthRingColor, initialsOf, invalidateConsumptionSnapshot, liveActivityLabelsFrom, loadEvermindBuilds, localModelLabelsFrom, modelMoveLine, modelMoveOf, pendingChangesSummary, planIsPaid, preferredEvermindBuild, promptOptionsLabels, promptTrailingAction, publishedEvermindModels, resolvePendingChangesLabels, resolveTeacherOptions, shellOutcomeOf, spendLabels, strandedReplyKey, streamingNode, subscribeConsumptionSnapshot, timelineCatalogLookup, timelineLabelsFrom, toolConfirmPreview, toolPreview, toolStepView, useChatActivitySignal, useChatMemorySwitch, useChatParticipants, useConsumptionSnapshot, useLocalModels, useMentionAutocomplete, usePopover, useQueuedTurns, useRecipientChoice, useTicketAutocomplete, useVoiceDictation, workStatusLabels };

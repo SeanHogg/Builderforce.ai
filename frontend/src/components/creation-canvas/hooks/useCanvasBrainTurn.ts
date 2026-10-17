@@ -7,7 +7,7 @@ import { canvasSurface } from '@/lib/canvasHost';
 import { creationSessionsApi, type CreationSessionSummary, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { newNode } from '../canvasNodeHelpers';
 import type { CreationFlowNode } from '../CreationNode';
-import type { CanvasAiCompletion } from '@/lib/creationCanvasAi';
+import type { CanvasAiCompletion } from '@/lib/canvasAiRun';
 import type { BrainAction, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { ProposedCanvasChange } from '@/domains/canvas/domain/canvasChange';
 import type { useTranslations } from 'next-intl';

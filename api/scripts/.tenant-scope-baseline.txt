@@ -9,7 +9,7 @@ application/auth/DeviceAuthService.ts:6
 application/backend/index.ts:2
 application/boardsync/drizzleStore.ts:9
 application/boardsync/runBoardSyncSweep.ts:1
-application/brain/BrainService.ts:1
+application/brain/brainMessageStore.ts:1
 application/ceremony/ceremonyMeeting.ts:4
 application/ceremony/ceremonyNotifier.ts:2
 application/ceremony/dispatchCeremonyCompletion.ts:1

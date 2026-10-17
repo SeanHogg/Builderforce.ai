@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { subscribeRunStore, getGlobalRunState, type GlobalRunState } from '@seanhogg/builderforce-brain-embedded';
-import { runtimeApi, type AttentionResponse, type AttentionState } from '@/lib/builderforceApi';
+import type { AttentionResponse, AttentionState } from '@/lib/builderforceApi';
 import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
-import { getStoredTenantToken } from '@/lib/auth';
-
-const EMPTY: AttentionResponse = { tasks: {}, chats: {}, chatUnread: {}, counts: { running: 0, awaiting: 0, unread: 0 }, manager: { lastRunAt: null, recentlyActive: false } };
+import { useSharedPoll } from '@/hooks/useSharedPoll';
+import { attentionPoll } from './attentionPoller';
 
 /** A stable key of the two live-chat lists, so a subscriber only re-renders when
  *  the SET of live chats changes — not on every streaming token (each of which
@@ -43,14 +42,6 @@ function strongestState(...states: Array<AttentionState | undefined>): Attention
 }
 
 /**
- * Reconcile cadence — a BACKSTOP behind the project room's WebSocket push (see
- * {@link useRealtimeRoom}). A little quicker while something is live, lazy when
- * idle, mirroring {@link useBoardLiveRuns} so every live surface polls alike.
- */
-const FAST_MS = 8000;
-const IDLE_MS = 30000;
-
-/**
  * The ONE web hook for cross-surface "what's live / what needs me" state. Reads
  * `GET /api/runtime/attention` (per-task + per-Brain-chat `running` /
  * `awaiting_input`) so the chat list, the FloatingBrain badge, and any ticket
@@ -59,53 +50,17 @@ const IDLE_MS = 30000;
  * executing server-side.
  *
  * Kept fresh by the project room WebSocket push (real-time) with an adaptive
- * poll as a dropped-frame backstop. Pass `projectId` to scope + enable the room
- * subscription; omit it for a tenant-wide (all projects) view.
+ * poll as a dropped-frame backstop — ONE poll per scope shared by every reader
+ * (see lib/attentionPoller.ts), paused while the tab is hidden. Pass
+ * `projectId` to scope + enable the room subscription; omit it for a tenant-wide (all projects) view.
  */
 export function useAttention(projectId?: number, enabled = true): AttentionResponse & { refresh: () => void } {
-  const [data, setData] = useState<AttentionResponse>(EMPTY);
-
-  // Freshest projectId in a ref so the poll loop reads it without re-subscribing.
-  const pidRef = useRef(projectId);
-  pidRef.current = projectId;
-
-  const load = useCallback(async (fresh = false): Promise<boolean> => {
-    // This endpoint is workspace-scoped. A person may be signed in with only a
-    // web token while onboarding / choosing a workspace; do not turn that valid
-    // intermediate state into an unauthenticated API request (and a global
-    // support-ticket error). Keeping this guard here protects every current and
-    // future attention consumer, even if its component-level gate is too broad.
-    if (!getStoredTenantToken()) {
-      setData(EMPTY);
-      return false;
-    }
-    try {
-      const res = await runtimeApi.attention(pidRef.current, fresh);
-      setData(res);
-      return res.counts.running + res.counts.awaiting > 0;
-    } catch {
-      // A transient blip keeps the last good data and retries next tick.
-      return false;
-    }
-  }, []);
-
-  // An explicit refresh (the room push below, a caller after a write) KNOWS state moved,
-  // so it skips the server cache; the timer ticks read the cached snapshot.
-  const refresh = useCallback(() => { void load(true); }, [load]);
-
-  useEffect(() => {
-    if (!enabled) { setData(EMPTY); return; }
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const tick = async () => {
-      if (cancelled) return;
-      const active = await load();
-      if (cancelled) return;
-      timer = setTimeout(tick, active ? FAST_MS : IDLE_MS);
-    };
-    void tick();
-    return () => { cancelled = true; if (timer) clearTimeout(timer); };
-  }, [enabled, projectId, load]);
+  // ONE shared, ref-counted, visibility-gated poll per scope (lib/attentionPoller):
+  // the badge, the TopBar indicator and the Brain panel all read the same loop, so
+  // N readers cost one request per tick and a hidden tab costs none. Its explicit
+  // refresh (the room push below, a caller after a write) KNOWS state moved, so it
+  // skips the server cache; the timer ticks read the cached snapshot.
+  const { value: data, refresh } = useSharedPoll(attentionPoll, projectId, enabled);
 
   // Real-time backstop: the project room pushes `changed` after any mutation —
   // an agent run advancing, or a human answering a question — so the indicator

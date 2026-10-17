@@ -22,7 +22,7 @@ export { streamChatCompletion, StreamInterruptedError, RepetitionLoopError, Tran
 // policy retry records — one of each for every browser agent loop.
 export { providerFailureEvent } from './providerFailure';
 export type { ProviderFailureEvent } from './providerFailure';
-export { transportRetryTrace } from './runPolicyTraces';
+export { providerFailureTrace, transportRetryTrace } from './runPolicyTraces';
 // The reason behind Node's opaque `fetch failed` / `terminated`, read off the `cause` chain.
 export { describeNetworkError, isConnectFailure, retryOnConnectFailure, CONNECT_RETRY_DELAYS_MS } from './networkErrorDetail';
 export type { ConnectRetryOptions } from './networkErrorDetail';
@@ -39,21 +39,24 @@ export {
   localTransport,
 } from './localFirstTransport';
 export type { LocalAttemptFit, LocalChatMessage, LocalFetch, LocalFirstStreamInput, LocalStreamRoute } from './localFirstTransport';
-// Model hand-off: fit a transcript into the NEXT model's window with the
+// The ONE host routing step over those two streams — pin, gateway pin, or local first —
+// that the web app, Rovr and the editor each supply only their pin, probes and cloud to.
+export { createHostModelStream } from './hostModelStream';
+export type { HostLocalPin, HostModelStreamInput } from './hostModelStream';
+// Window fit: fit a transcript into the NEXT model's window with the
 // `@seanhogg/builderforce-memory/handoff` packer — the run loop's gate, and the
 // per-attempt `fit` a local-first host lends `createLocalFirstStream`.
-export { contextWindowOf } from './handoff/modelWindow';
-export type { ModelWindowSources } from './handoff/modelWindow';
-export { createHandoffFit, packForModel, toolSchemaTokens } from './handoff/packForModel';
-export type { HandoffFitOptions, HandoffTrace, PackForModelInput, PackForModelResult } from './handoff/packForModel';
+export { contextWindowOf, resolveContextWindow } from './windowFit/modelWindow';
+export type { ModelWindowSources, RunWindowSources } from './windowFit/modelWindow';
+export { createHandoffFit, packForModel, toolSchemaTokens } from './windowFit/packForModel';
+export type { HandoffFitOptions, WindowFitTrace, PackForModelInput, PackForModelResult } from './windowFit/packForModel';
 export { localFallbackTrace, summarizeLocalFirstAttempt } from './localFirstTraces';
 export type { LocalFirstAttemptSummary } from './localFirstTraces';
 // The engines that run INSIDE the page (PRD 34): one `PageEngine` contract, one fetch shim
 // that answers each engine's OpenAI chat route, and one model store the picker drives.
 // Chrome's Prompt API model, WebLLM (lazy chunk) and our WebGPU `bfi` (host-vendored
 // wasm) each implement it; `createPageEngineSet` composes them for a host. `promptApi` is
-// the ONE detection of the Prompt API surface, shared with the web app's
-// PromptApiModelProvider.
+// the ONE detection of the Prompt API surface.
 export {
   BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
   BROWSER_ENGINE_MODEL,
@@ -65,8 +68,10 @@ export { PageEngineError } from './pageEngines/types';
 export type { ChatCompletionChunk, ChatCompletionsRequest, PageEngine } from './pageEngines/types';
 export { pageEnginesFetch, probePageEngines } from './pageEngines/fetchShim';
 export type { BfiEngineInstance, BfiEngineStatic, BfiModelInfo, BfiModule } from './pageEngines/bfiEngine';
+export { deferredLocalModelStore } from './pageEngines/modelStore';
 export type { LocalModelRow, LocalModelState, LocalModelStore } from './pageEngines/modelStore';
 export { createPageEngineSet } from './pageEngines/pageEngineSet';
+export { hasWebGPU } from './pageEngines/webgpu';
 export { pageRuntimePin } from './pageEngines/pageRuntimePin';
 export type { PageRuntimePin } from './pageEngines/pageRuntimePin';
 export type { PageEngineSet, PageEngineSetOptions } from './pageEngines/pageEngineSet';
@@ -110,7 +115,7 @@ export type { TurnInterruption } from './finishReason';
 // Actionable chat errors: the gateway's structured entitlement fields survive the
 // fetch boundary, and ONE classifier turns any failure into the fix a user can take
 // (reconnect / upgrade / add a card). Consumed by the run store AND the banner UI.
-export { BrainRequestError, brainRequestError, chatErrorAction } from './chatError';
+export { BrainRequestError, brainRequestError, chatErrorAction, NOT_SIGNED_IN } from './chatError';
 export type { ChatErrorAction, ChatErrorActionKind } from './chatError';
 
 // Composer Effort → real request params (max_tokens + vendor-neutral reasoning
@@ -402,6 +407,10 @@ export {
   selectPendingAskUser,
   serializeAskUser,
   stripAskUser,
+  // The ONE durable step-row shape — a surface that keeps its own transcript (the
+  // canvas) writes a failed turn as an error STEP, so the shared timeline draws it
+  // as an error card, never as an assistant reply.
+  stepRow,
 } from '@builderforce/agent-loop';
 export type { AskUserMessageLike, AskUserOption, AskUserPayload, AskUserToolSpec, PendingAskUser } from '@builderforce/agent-loop';
 
@@ -640,6 +649,7 @@ export {
   EMPTY_GATEWAY_MODEL_OPTIONS,
   gatewayCanChooseModel,
   gatewayModelIdentity,
+  gatewayModelWindows,
   gatewayPlanIsPaid,
   gatewayPlanModels,
   invalidateGatewayModelOptions,

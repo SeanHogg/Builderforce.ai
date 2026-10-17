@@ -243,7 +243,14 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
 
     const limit = limitParam(c.req.query('limit'), 100, 500);
-    const result = await brainService.getMessages(id, c.get('tenantId') as number, c.get('userId') as string, limit);
+    // Optional forward cursor (`?afterSeq=N`): pollers (the mobile apps) fetch only
+    // what landed after the last seq they hold instead of the whole tail each tick.
+    const afterSeqRaw = c.req.query('afterSeq');
+    const afterSeqNum = afterSeqRaw == null || afterSeqRaw === '' ? NaN : Number(afterSeqRaw);
+    const afterSeq = Number.isInteger(afterSeqNum) && afterSeqNum >= 0 ? afterSeqNum : undefined;
+    const result = await brainService.getMessages(
+      id, c.get('tenantId') as number, c.get('userId') as string, limit, afterSeq,
+    );
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json({ messages: result });
   });

@@ -1,22 +1,24 @@
+export { createOutbox } from "./outbox.js";
 export {
-  createOutbox,
   isPermanentHttpFailure,
   OUTBOX_MAX_ENTRIES,
   OUTBOX_MAX_ITEMS,
   OUTBOX_MAX_WAIT_MS,
   OUTBOX_RETRY_BASE_MS,
   OUTBOX_RETRY_MAX_MS,
-  type Outbox,
-  type OutboxDrainContext,
-  type OutboxDrop,
-  type OutboxEntry,
-  type OutboxOnlineSignal,
-  type OutboxOptions,
-  type OutboxRetryPolicy,
-  type OutboxSendContext,
-  type OutboxStats,
-  type OutboxStore,
-} from "./outbox.js";
+} from "./policy.js";
+export type {
+  Outbox,
+  OutboxDrainContext,
+  OutboxDrop,
+  OutboxEntry,
+  OutboxOnlineSignal,
+  OutboxOptions,
+  OutboxRetryPolicy,
+  OutboxSendContext,
+  OutboxStats,
+  OutboxStore,
+} from "./types.js";
 export {
   createIndexedDbOutboxStore,
   listIndexedDbOutboxPartitions,

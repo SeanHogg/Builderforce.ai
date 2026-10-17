@@ -7,12 +7,8 @@
  * entry per unit.
  */
 import type { LocalModelRow } from '@seanhogg/builderforce-brain-embedded';
+import { fill } from '../spend/format';
 import { LOCAL_UNSUPPORTED_LABEL, type LocalModelLabels } from './labels';
-
-/** Substitute `{name}` placeholders. */
-export function fillTemplate(template: string, values: Record<string, string | number>): string {
-  return template.replace(/\{(\w+)\}/g, (whole, key: string) => (key in values ? String(values[key]) : whole));
-}
 
 const GB = 1_000_000_000;
 const MB = 1_000_000;
@@ -39,7 +35,7 @@ export function formatContextTokens(tokens: number): string {
 
 /** The secondary line of a row: params · context window. */
 export function localModelMeta(row: LocalModelRow, labels: LocalModelLabels, locale?: string): string {
-  return [formatParams(row.params, locale), fillTemplate(labels.localContext, { tokens: formatContextTokens(row.contextTokens) })].join(' · ');
+  return [formatParams(row.params, locale), fill(labels.localContext, { tokens: formatContextTokens(row.contextTokens) })].join(' · ');
 }
 
 /** Why an unsupported row cannot run, in the host's words. */

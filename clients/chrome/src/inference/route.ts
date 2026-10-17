@@ -5,9 +5,10 @@
  * Nothing about the decision is Rovr's own: the plan (which local model may take this
  * call — a tool turn only goes to a model whose runtime says it can take tools), the
  * failover (a local attempt that fails before the person saw output falls over
- * invisibly; one that already streamed owns the turn; Stop is never failed over) and the
- * streamer are brain-embedded's `createLocalFirstStream`, the same one the VS Code host
- * uses. Rovr supplies the probes, the gateway stream and its log hook.
+ * invisibly; one that already streamed owns the turn; Stop is never failed over), the pin
+ * handling and the streamer are brain-embedded's `createHostModelStream`, the same routing
+ * step the web app and the VS Code host run. Rovr supplies its picker's pin, the probes,
+ * the gateway stream and its log hook.
  *
  * The engines that run inside the side panel itself (brain-embedded's page engines —
  * Chrome's built-in Gemini Nano, WebLLM models and the WebGPU `bfi` the person
@@ -19,16 +20,13 @@
  * answers it with "sign in, or start a local model".
  */
 import {
-  createHandoffFit,
-  createLocalFirstStream,
-  createLocalStream,
+  createHostModelStream,
   pageRuntimePin,
   streamChatCompletion,
   withUsageSurface,
   type BrainStreamFn,
   type BrainTransport,
 } from '@seanhogg/builderforce-brain-embedded';
-import { isLocalModelRef } from '@builderforce/local-inference';
 import type {
   LocalEndpoints,
   LocalFirstAttemptRecord,
@@ -36,9 +34,6 @@ import type {
   LocalRuntimeProber,
 } from '@builderforce/local-inference';
 import { resolveLoopbackProbes } from './localRuntimes';
-
-/** Packs a local attempt for its model's window — `@seanhogg/builderforce-memory/handoff`. */
-const handoffFit = createHandoffFit();
 
 export type RouteFetch = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -77,42 +72,25 @@ export function gatewayStream(baseUrl: string, key: string, fetchImpl: RouteFetc
  * Probing is memoized by the prober, so asking per call costs nothing while nothing moved.
  */
 export function createRovrStream(deps: RovrRouteDeps): BrainStreamFn {
-  return async (opts, handlers) => {
-    // A pinned page model (`local/bfi/…`, `local/webllm/…`) runs in this panel through
-    // the engines' fetch — a pin is a pin: no probe of anything else. It takes the ONE
-    // pinned-local path every host uses, packed for the pin's window. A pin this panel
-    // cannot serve (no page engines) falls through to automatic routing.
-    const pinnedRef = deps.pinned ? await deps.pinned() : null;
-    const pin = deps.page ? pageRuntimePin(pinnedRef ?? undefined) : null;
-    if (pin && pinnedRef && deps.page) {
+  return createHostModelStream({
+    // The picker's pick: a page model (`local/bfi/…`, `local/webllm/…`) runs in this panel
+    // through the engines' fetch — a pin is a pin, no probe of anything else; a gateway
+    // model goes to the gateway hard-pinned. A page pin this panel cannot serve (no page
+    // engines) routes automatically.
+    pinned: async () => (deps.pinned ? await deps.pinned() : null),
+    localPin: (ref) => (deps.page ? pageRuntimePin(ref) : null),
+    probes: async () => {
+      const [probes, page] = await Promise.all([
+        deps.endpoints().then((e) => deps.prober.probe(e)),
+        deps.page ? deps.page.probe() : Promise.resolve([]),
+      ]);
+      return [...resolveLoopbackProbes(probes), ...page];
+    },
+    cloud: async () => {
       const key = await deps.key();
-      return createLocalStream(pin.endpoint, pin.model, deps.page.fetch, {
-        ref: pinnedRef,
-        cloud: key ? gatewayStream(deps.baseUrl, key, deps.fetch) : null,
-        fit: handoffFit,
-      })(opts, handlers);
-    }
-    // A pinned GATEWAY model (anything that is not a `local/…` ref) is the person's
-    // explicit pick from the Model tab: signed in, the turn goes straight to the gateway,
-    // hard-pinned so validation cannot swap it. Signed out it has nowhere to run, so the
-    // turn routes automatically like any unpinned one.
-    if (pinnedRef && !isLocalModelRef(pinnedRef)) {
-      const key = await deps.key();
-      if (key) return gatewayStream(deps.baseUrl, key, deps.fetch)({ ...opts, model: pinnedRef, modelStrict: true }, handlers);
-    }
-    const [probes, page, key] = await Promise.all([
-      deps.endpoints().then((e) => deps.prober.probe(e)),
-      deps.page ? deps.page.probe() : Promise.resolve([]),
-      deps.key(),
-    ]);
-    const stream = createLocalFirstStream({
-      probes: [...resolveLoopbackProbes(probes), ...page],
-      cloud: key ? gatewayStream(deps.baseUrl, key, deps.fetch) : null,
-      fetch: deps.page?.fetch ?? deps.fetch,
-      // Each local attempt is packed for that model's window; the gateway keeps it all.
-      fit: handoffFit,
-      ...(deps.onAttempt ? { onAttempt: deps.onAttempt } : {}),
-    });
-    return stream(opts, handlers);
-  };
+      return key ? gatewayStream(deps.baseUrl, key, deps.fetch) : null;
+    },
+    fetch: deps.page?.fetch ?? deps.fetch,
+    ...(deps.onAttempt ? { onAttempt: deps.onAttempt } : {}),
+  });
 }

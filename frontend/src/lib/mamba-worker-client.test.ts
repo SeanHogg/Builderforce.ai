@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
-import { MambaWorkerProvider, hasWorker } from './mamba-worker-client';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { MambaWorkerProvider, hasWorker, initMambaProvider } from './mamba-worker-client';
+import { MambaModelProvider } from './model-provider';
 import type { WorkerRequest, WorkerResponse } from './mamba-worker-protocol';
 
 // ---------------------------------------------------------------------------
@@ -137,5 +138,37 @@ describe('MambaWorkerProvider', () => {
     await provider.init();
     expect(provider.isReady()).toBe(false);
     expect(provider.failureReason()).toMatch(/cannot spawn/i);
+  });
+});
+
+describe('initMambaProvider', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('prefers the worker when the runtime can spawn one and it comes up ready', async () => {
+    vi.stubGlobal('Worker', class {});
+    const worker = new FakeWorker();
+    const provider = await initMambaProvider({}, () => worker as unknown as Worker);
+    expect(provider).toBeInstanceOf(MambaWorkerProvider);
+    expect(provider.isReady()).toBe(true);
+  });
+
+  it('falls back to the in-page provider when the worker cannot start', async () => {
+    vi.stubGlobal('Worker', class {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const provider = await initMambaProvider({}, () => {
+      throw new Error('bundler cannot spawn worker');
+    });
+    expect(provider).toBeInstanceOf(MambaModelProvider);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('goes straight to the in-page provider when the runtime has no Worker', async () => {
+    vi.stubGlobal('Worker', undefined);
+    const factory = vi.fn();
+    const provider = await initMambaProvider({}, factory);
+    expect(provider).toBeInstanceOf(MambaModelProvider);
+    expect(factory).not.toHaveBeenCalled();
   });
 });

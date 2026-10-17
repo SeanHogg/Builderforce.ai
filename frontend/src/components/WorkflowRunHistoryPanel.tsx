@@ -12,7 +12,7 @@
  * builder can see a definition's run history without leaving the editor).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   workflows,
@@ -27,6 +27,7 @@ import { TrendChart } from './charts/TrendChart';
 import { StatusPill, WORKFLOW_STATUS_TONE, cardStyle, subtleBtn, isLiveWorkflowStatus, LIVE_WORKFLOW_POLL_MS } from './workflowRunUi';
 import { statusColor } from '@/lib/statusTone';
 import { reportBackgroundFailure } from '@/lib/reportError';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { useFormat } from "@/i18n/useFormat";
 
 interface Props {
@@ -156,43 +157,37 @@ export function WorkflowRunHistoryPanel({ definitionId, definitionName, initialR
   // The graph endpoint is a snapshot (GET /graph), not a stream. While this run
   // is still in flight, re-fetch the record (and the DAG, if that tab is open)
   // so node status moves without the operator having to leave and come back.
-  useEffect(() => {
-    if (!selectedDetail || !isLiveWorkflowStatus(selectedDetail.status)) return;
-    const workflowId = selectedDetail.id;
+  // Visibility-gated, non-overlapping, backs off on failure (usePolledResource).
+  const liveWorkflowId = selectedDetail && isLiveWorkflowStatus(selectedDetail.status) ? selectedDetail.id : null;
+  const livePollKey = liveWorkflowId ? `${liveWorkflowId}:${detailTab}` : null;
+  // A failed poll keeps the last snapshot on screen. Report the first failure of
+  // this live run only — every tick reporting would turn one outage into a storm.
+  const livePollReported = useRef<string | null>(null);
+  usePolledResource(async (signal) => {
+    if (!liveWorkflowId) return;
+    const workflowId = liveWorkflowId;
     const tab = detailTab;
-    let cancelled = false;
-    // A failed poll keeps the last snapshot on screen. Report the first failure of
-    // this live run only — every tick reporting would turn one outage into a storm.
-    let reported = false;
-
-    const tick = async () => {
-      try {
-        const next = await workflows.get(workflowId);
-        if (cancelled) return;
-        setSelectedDetail(next);
-        if (tab === 'graph') {
-          const g = await workflows.getGraph(workflowId);
-          if (cancelled) return;
-          setGraph(g);
-        }
-      } catch (error) {
-        if (reported) return;
-        reported = true;
+    try {
+      const next = await workflows.get(workflowId);
+      if (signal.aborted) return;
+      setSelectedDetail(next);
+      if (tab === 'graph') {
+        const g = await workflows.getGraph(workflowId);
+        if (signal.aborted) return;
+        setGraph(g);
+      }
+    } catch (error) {
+      if (livePollReported.current !== workflowId) {
+        livePollReported.current = workflowId;
         void reportBackgroundFailure({
           message: error instanceof Error ? error.message : String(error),
           level: 'warning',
           context: { operation: 'workflowRunHistory.livePoll', workflowId, tab },
         });
       }
-    };
-
-    void tick();
-    const timer = setInterval(() => { void tick(); }, LIVE_WORKFLOW_POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [selectedDetail?.id, selectedDetail?.status, detailTab]);
+      throw error; // let the poll back off
+    }
+  }, { intervalMs: LIVE_WORKFLOW_POLL_MS, enabled: liveWorkflowId != null, restartKey: livePollKey });
 
   const tabBtnStyle = (active: boolean): React.CSSProperties => ({
     padding: '5px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, borderRadius: 'var(--radius-sm)',

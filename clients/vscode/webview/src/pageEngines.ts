@@ -10,6 +10,8 @@
  */
 import {
   createPageEngineSet,
+  deferredLocalModelStore,
+  type LocalFetch,
   type LocalModelStore,
   type PageEngineSet,
 } from '@seanhogg/builderforce-brain-embedded';
@@ -31,14 +33,7 @@ export function webviewPageEngines(): PageEngineSet {
 }
 
 /** The picker's port onto this webview's model store, deferred like the engines. */
-export const webviewLocalModelStore: LocalModelStore = {
-  listLocalModels: () => webviewPageEngines().store.listLocalModels(),
-  download: (ref, onProgress, signal) => webviewPageEngines().store.download(ref, onProgress, signal),
-  remove: (ref) => webviewPageEngines().store.remove(ref),
-  subscribe: (listener) => webviewPageEngines().store.subscribe(listener),
-};
-
-type LocalFetch = (input: string, init: RequestInit) => Promise<Response>;
+export const webviewLocalModelStore: LocalModelStore = deferredLocalModelStore(() => webviewPageEngines().store);
 
 /** The webview's local fetch: a page runtime's root (`http://bfi.local`, …) is answered
  *  by this webview's engines, anything else goes to `base` (the host-performed fetch). */

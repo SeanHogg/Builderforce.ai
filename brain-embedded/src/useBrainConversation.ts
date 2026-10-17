@@ -31,6 +31,7 @@ import { mergeTranscript } from './mergeTranscript';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
 import type { EvermindRunHooks } from './evermindMemory';
 import type { ReasoningIntent } from './effort';
+import type { RunWindowSources } from './windowFit/modelWindow';
 import { prepareImageDataUrl } from './imagePrep';
 import { scopeToConsolidation } from './consolidation';
 import { priorResearchDigest } from './priorResearch';
@@ -78,6 +79,8 @@ export interface UseBrainConversationOptions {
    * and stop with an explanation instead of switching.
    */
   pickFallbackModel?: (tried: readonly string[]) => string | undefined;
+  /** Where the run's window fit learns a model's window — `BrainRunRequest.windowSources`. */
+  windowSources?: RunWindowSources;
   /**
    * `max_tokens` for this conversation's completions — the host's Effort control
    * (see `effort.ts`, the single effort→params map). Omit for the 4096 default.
@@ -255,6 +258,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     modelStrict,
     routingMode,
     pickFallbackModel,
+    windowSources,
     maxTokens,
     reasoning,
     toolSpecs,
@@ -409,6 +413,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       modelStrict,
       routingMode,
       pickFallbackModel,
+      ...(windowSources ? { windowSources } : {}),
       maxTokens,
       reasoning,
       runTool,
@@ -425,7 +430,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       chatMode,
       chatRoster,
     }),
-    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
   );
 
   const send = useCallback(

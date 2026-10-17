@@ -22,6 +22,7 @@
  * from a late response.
  */
 import { useCallback, useEffect, useRef } from 'react';
+import { backoffDelay, isDocumentHidden } from '@/lib/polling/pollPolicy';
 
 export interface PolledResourceOptions {
   intervalMs: number;
@@ -38,8 +39,6 @@ export interface PolledResourceOptions {
   /** A value whose change restarts the poll (with its immediate load). */
   restartKey?: string | number | null;
 }
-
-const MAX_BACKOFF_FACTOR = 8;
 
 export function usePolledResource(
   load: (signal: AbortSignal) => unknown,
@@ -65,7 +64,7 @@ export function usePolledResource(
     let ticks = 0;
     let inFlight = false;
 
-    const hidden = () => pauseWhenHidden && typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    const hidden = () => pauseWhenHidden && isDocumentHidden();
 
     const run = async () => {
       if (controller.signal.aborted || inFlight || hidden()) return;
@@ -74,7 +73,7 @@ export function usePolledResource(
         await loadRef.current(controller.signal);
         delay = intervalMs;
       } catch {
-        if (backoffOnError) delay = Math.min(delay * 2, intervalMs * MAX_BACKOFF_FACTOR);
+        if (backoffOnError) delay = backoffDelay(delay, intervalMs);
       } finally {
         inFlight = false;
       }

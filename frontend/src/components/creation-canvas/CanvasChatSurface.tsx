@@ -1,12 +1,12 @@
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';
-import { BrainMark } from '@/components/brain/BrainMark';
 import { BrainSurfaceBody, type BrainSurfaceBodyProps } from './BrainDock';
 import { BrainSurfaceViewProvider } from './brainSurfaceView';
 import { BrainSurfaceActions } from './BrainSurfaceActions';
 import { memberAvatarClass, memberInitials } from './rosterAvatar';
 import type { CanvasRosterMember } from './types';
+import { SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
 
 /**
  * The conversation as the whole canvas — the zero-object case of the board.
@@ -70,12 +70,13 @@ export function CanvasChatSurface({
   return (
     <BrainSurfaceViewProvider>
     <section className={styles.chatSurface} aria-label={t('surface.chat.label')} data-testid="canvas-chat-surface">
-      <header className={styles.chatSurfaceHeader}>
-        <span className={styles.brainDockMark} aria-hidden><BrainMark running={body.running} /></span>
-        <strong>{t('brain')}</strong>
-        {/* The same roster the command bar's collapsed cluster draws — participants
-            are part of the conversation, not a fact the bar alone reports. */}
-        <span className={styles.chatSurfaceParticipants} aria-label={t('surface.chat.participants')}>
+      <SurfaceHeader
+        className={styles.chatSurfaceHeader}
+        title={t('brain')}
+        running={body.running}
+        // The same roster the command bar's collapsed cluster draws — participants are
+        // part of the conversation, not a fact the bar alone reports.
+        presence={<span className={styles.chatSurfaceParticipants} aria-label={t('surface.chat.participants')}>
           {participants.slice(0, 4).map((member, index) => (
             <span
               key={member.userId}
@@ -83,20 +84,17 @@ export function CanvasChatSurface({
               title={member.displayName ?? undefined}
             >{memberInitials(member.displayName)}</span>
           ))}
-        </span>
-        {/* The shared controls decide for themselves which of them apply here, so this
-            placement gets the execution-detail toggle and nothing else: the placement
-            control reads the active surface and stands down (no board on screen to move
-            into), and no `onClose` is supplied because dismissing a conversation that IS
-            the page would leave nothing behind. The way out is the footer, and the
-            surface switcher on the rail. */}
-        <BrainSurfaceActions
+        </span>}
+        // The shared controls decide for themselves which apply here: the execution-detail
+        // toggle and nothing else — no `onModeChange` (no board to move into) and no
+        // `onClose` (dismissing a conversation that IS the page would leave nothing). The
+        // way out is the footer, and the surface switcher on the rail.
+        actions={<BrainSurfaceActions
           mode="docked"
           showExecutionDetail={body.showExecutionDetail}
-          onModeChange={() => { /* placement is not offered while chat is the surface */ }}
           onExecutionDetailChange={onExecutionDetailChange}
-        />
-      </header>
+        />}
+      />
       <div className={styles.chatSurfaceBody}>
         <BrainSurfaceBody {...body} />
       </div>

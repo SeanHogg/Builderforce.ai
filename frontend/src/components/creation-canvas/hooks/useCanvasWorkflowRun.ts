@@ -208,59 +208,50 @@ export function useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKin
         }
         setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: run.workflowId, workflowTaskCount: run.taskCount, deliverables: withCreationDeliverable(node.data, { ...started, resourceRef: `workflow-run:${run.workflowId}`, metadata: { taskCount: run.taskCount } }) } } : node));
         setNotice(t('noticeWorkflowStarted', { count: run.taskCount }));
-        // Frame terminal status still comes from definition-runs. Alongside that,
-        // poll GET /api/workflows/:id + /graph so sibling flowSteps paint live
-        // pending/running/completed/failed instead of the compile-time skeleton.
+        // ONE poll: GET /api/workflows/:id + /graph. The snapshot is the run row
+        // itself (the same `Workflow` the definition's run list holds), so it both
+        // paints sibling flowSteps live (pending/running/completed/failed instead
+        // of the compile-time skeleton) and carries the frame's status — the list
+        // of every run of the definition is no longer re-fetched to `.find()` one.
+        // The poll stops itself once the run leaves pending/running.
         // Pending-approval returns above and never starts this.
-        const stopLive = startCanvasWorkflowLivePoll({
+        startCanvasWorkflowLivePoll({
           runId: run.workflowId,
-          onTick: ({ graph }) => {
-            if (!graph?.nodes?.length) return;
+          onTick: ({ status, completedAt, graph }) => {
+            const normalized = status.toLowerCase();
+            const terminal = ['completed', 'complete', 'failed', 'cancelled', 'canceled'].includes(normalized);
+            const ok = normalized === 'completed' || normalized === 'complete';
+            const label = ok ? 'Complete' : normalized === 'failed' ? 'Run failed' : normalized === 'cancelled' || normalized === 'canceled' ? 'Cancelled' : status;
             setNodes((nodesNow) => {
-              const memberIds = new Set(framedBoardRef.current?.memberIdsOf(targetId) ?? []);
-              return applyLiveGraphToNodes(nodesNow, {
-                targetId,
-                memberIds,
-                graphNodes: graph.nodes,
+              const withGraph = graph?.nodes?.length
+                ? applyLiveGraphToNodes(nodesNow, {
+                    targetId,
+                    memberIds: new Set(framedBoardRef.current?.memberIdsOf(targetId) ?? []),
+                    graphNodes: graph.nodes,
+                  })
+                : nodesNow;
+              return withGraph.map((node) => {
+                if (node.id !== targetId) return node;
+                const terminalDeliverable: CreationDeliverable | null = terminal ? { ...started, status: ok ? 'delivered' : 'failed', completedAt: completedAt || new Date().toISOString(), resourceRef: `workflow-run:${run.workflowId}`, validation: { status: ok ? 'passed' : 'failed', detail: `Workflow ${status}` }, metadata: { taskCount: run.taskCount }, ...(!ok ? { error: `Workflow ${status}` } : {}) } : null;
+                return { ...node, data: { ...node.data, status: label, workflowRunStatus: status, workflowCompletedAt: completedAt, ...(terminalDeliverable ? { deliverables: withCreationDeliverable(node.data, terminalDeliverable) } : {}) } };
               });
             });
+            if (!terminal) return;
+            setNotice(t('noticeWorkflowStatus', { status: label.toLowerCase() }));
+            if (persistence === 'server') {
+              void creationSessionsApi.recordOutcome(sessionId, {
+                correlationId,
+                action: 'workflow.execute',
+                phase: ok ? 'succeeded' : 'failed',
+                actorType: 'system',
+                artifactId: targetId,
+                durationMs: performance.now() - startedAt,
+                ...(ok ? { metricKey: 'deliverables_completed' as const, metricValue: 1, unit: 'count' as const } : {}),
+                metadata: { taskCount: run.taskCount, status },
+              }).catch(() => undefined);
+            }
           },
         });
-        const pollRun = (remaining: number) => {
-          if (remaining <= 0) { stopLive(); return; }
-          window.setTimeout(() => {
-            void workflowDefinitions.runs(definitionId).then((runs) => {
-              const currentRun = runs.find((candidate) => candidate.id === run.workflowId);
-              if (!currentRun) { pollRun(remaining - 1); return; }
-              const normalized = currentRun.status.toLowerCase();
-              const terminal = ['completed', 'complete', 'failed', 'cancelled', 'canceled'].includes(normalized);
-              const label = normalized === 'completed' || normalized === 'complete' ? 'Complete' : normalized === 'failed' ? 'Run failed' : normalized === 'cancelled' || normalized === 'canceled' ? 'Cancelled' : currentRun.status;
-              setNodes((nodesNow) => nodesNow.map((node) => {
-                if (node.id !== targetId) return node;
-                const terminalDeliverable: CreationDeliverable | null = terminal ? { ...started, status: normalized === 'completed' || normalized === 'complete' ? 'delivered' : 'failed', completedAt: currentRun.completedAt || new Date().toISOString(), resourceRef: `workflow-run:${run.workflowId}`, validation: { status: normalized === 'completed' || normalized === 'complete' ? 'passed' : 'failed', detail: `Workflow ${currentRun.status}` }, metadata: { taskCount: run.taskCount }, ...(!(normalized === 'completed' || normalized === 'complete') ? { error: `Workflow ${currentRun.status}` } : {}) } : null;
-                return { ...node, data: { ...node.data, status: label, workflowRunStatus: currentRun.status, workflowCompletedAt: currentRun.completedAt, ...(terminalDeliverable ? { deliverables: withCreationDeliverable(node.data, terminalDeliverable) } : {}) } };
-              }));
-              if (terminal) {
-                stopLive();
-                setNotice(t('noticeWorkflowStatus', { status: label.toLowerCase() }));
-                if (persistence === 'server') {
-                  const ok = normalized === 'completed' || normalized === 'complete';
-                  void creationSessionsApi.recordOutcome(sessionId, {
-                    correlationId,
-                    action: 'workflow.execute',
-                    phase: ok ? 'succeeded' : 'failed',
-                    actorType: 'system',
-                    artifactId: targetId,
-                    durationMs: performance.now() - startedAt,
-                    ...(ok ? { metricKey: 'deliverables_completed' as const, metricValue: 1, unit: 'count' as const } : {}),
-                    metadata: { taskCount: run.taskCount, status: currentRun.status },
-                  }).catch(() => undefined);
-                }
-              } else pollRun(remaining - 1);
-            }).catch(() => pollRun(remaining - 1));
-          }, 2_000);
-        };
-        pollRun(30);
       }).catch((error) => {
         const message = errorText(error);
         const failed: CreationDeliverable = { ...started, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };

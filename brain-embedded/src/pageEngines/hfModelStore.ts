@@ -10,6 +10,7 @@
  */
 
 import { localCatalogModel, type LocalCatalogModel } from '@builderforce/local-inference';
+import { reportPageEngineFailure } from './engineFailure';
 
 /** The Cache Storage bucket the page engines' own downloads live in. */
 export const LOCAL_MODEL_CACHE = 'builderforce-local-models';
@@ -70,7 +71,8 @@ export function createHfModelStore(options: HfModelStoreOptions = {}): HfModelSt
     async status(ref) {
       try {
         return (await entry(ref)) ? 'ready' : 'absent';
-      } catch {
+      } catch (e) {
+        reportPageEngineFailure('bfi', 'cache_lookup', e);
         return 'absent';
       }
     },
@@ -78,10 +80,12 @@ export function createHfModelStore(options: HfModelStoreOptions = {}): HfModelSt
     async download(ref, onProgress, signal) {
       const row = hfRow(ref);
       const url = urlOf(ref);
-      // Ask once for durable storage so a gigabyte is not the first thing evicted.
+      // Ask once for durable storage so a gigabyte is not the first thing evicted. A
+      // refusal does not stop the download; it is reported, since an evicted model is the
+      // likeliest consequence.
       await (globalThis as { navigator?: { storage?: { persist?(): Promise<boolean> } } }).navigator?.storage
         ?.persist?.()
-        .catch(() => false);
+        .catch((e: unknown) => reportPageEngineFailure('bfi', 'persist', e));
       const res = await fetchImpl(url, { credentials: 'omit', ...(signal ? { signal } : {}) });
       if (!res.ok || !res.body) throw new Error(`download_failed: HTTP ${res.status}`);
       const total = Number(res.headers.get('content-length')) || row.bytes;

@@ -95,7 +95,11 @@ export function registerSidebarViews(src: SidebarSources): vscode.Disposable {
           empty: { label: t("No audits available") },
         },
       ],
-      { describe: () => getSelectedProject()?.name },
+      {
+        describe: () => getSelectedProject()?.name,
+        // The live insights stream runs only while this view is on screen.
+        onVisibility: (visible) => src.insights.setViewVisible(visible),
+      },
     ),
     vscode.commands.registerCommand("builderforce.refreshWork", () => {
       void vscode.commands.executeCommand("builderforce.refreshSessions");

@@ -210,6 +210,10 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ## 📣 Reach — sell, be found, grow
 
+### Content accuracy `[content]`
+
+- **Open-source blog posts overstate "no COOP/COEP".** `content/blog/builderforce-webcontainers-open-source.md` (description, line 4) and `open-source-at-builderforce.{md,de,es,fr}` (lines 20/33, localized 10/23) say the runtime runs "with no COOP/COEP headers"; the library doesn't *require* them, but builderforce.ai itself sends `COOP: same-origin` / `COEP: credentialless` for SharedArrayBuffer/WebGPU/WebLLM. Reword to "without requiring COOP/COEP" (zh already says 无需); the matching `en.json` blog-index `description` changes with the post. The UI strings were corrected 2026-10-17. *Blocker: those post files carry another session's uncommitted edits — apply once that work lands.*
+
 ### Marketplace and commerce `[commerce]`
 
 - **Buyer can't drive a listing before buying (Stage sandbox parked).** *Blocker: infrastructure decision on the throwaway tenant and who pays.*
@@ -299,6 +303,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Ask-the-Manager zero tool calls — suspect the vendor path.** Instrument `buildResponsesBody` with a real 102-tool payload. *Blocker: a live turn on a known vendor.*
 - **Verify 308→64 tool selection restores tool calling on chat #71.** *Blocker: a live turn.*
 - **Inherited Evermind endpoints still accept writes** (UI is read-only); a 409 would change the front-door contract.
+- **AI Surface — the remaining composition.** Shared parts are extracted and every host mounts them (see DONE 2026-10-17); still per-host: (a) the surface BODY — web `BrainConversation`, canvas `BrainSurfaceBody`, `VsCodeChatSurface` (1,163 lines, still over 400), Rovr `ChatView` — not yet one brain-ui `AiSurface`; (b) colour tokens — `--chat-input-*`, `--chat-ctl-*`, `--bf-ct-*`, `--canvas-brain-*` still exist beside `--bf-*` (now with `--bf-*` fallbacks); (c) VS Code has no empty state/starters; (d) Rovr has no context chip (no "this tab" scope exists in its runtime). Acceptance: one `AiSurface` body in brain-ui mounted by all four hosts; one token family. Not blocked — next pass of the consolidation (design: https://claude.ai/artifact/5XBEQExiB7rHHEJPWYfr2Y, checklist board).
 
 ### Evermind / SSM `[agents]`
 
@@ -385,21 +390,19 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 - **🔴 $0 platform: Cloudflare Free + Neon Free (plan 2026-10-03).** Sizes 10-10: core 444 MB, transactional 184 MB, apps 8.2 MB. Run-telemetry copy hasn't run — `npm run db:copy-run-telemetry`, then `--purge-source` (*blocker: operator with production credentials*). `VACUUM FULL` reclaims ~50 MB. Keep `builderforce-apps` (live sites); delete only `builderforce-primary`. Target: thin router Worker; agents on the user's host → GitHub Actions → shell-less DO; in-browser previews (BuilderForce WebContainers); Playwright on Actions; CPU-heavy routes client-side; Containers for paid via `planFeatures.containerRuntime`. Sequence: enable observability and measure → cut telemetry + gate cron → re-default cloud surface → move QA → move CPU routes + per-sweep DO alarms → cache L2 off KV → hosted Checkout → downgrade Cloudflare → downgrade Neon. *Blockers: WebContainer licence, consoles, CPU measurements, acceptance of 2–4 concurrent agents.* In-browser runtime live check needs a deploy; Next/Nuxt/SvelteKit dev servers unsupported; Studio Database has no file storage (*decision: quota/abuse policy*).
 - **🟠 Confirm core autosuspends ≥45% of the month** (Neon console chart); enable autosuspend + 0.25 CU (console toggle).
-- **🔴 Neon load review 2026-10-17: core + transactional never suspend.** Measured: both computes up 31.5 h straight; core ~46 txn/min, transactional ~39; core 502 MB of 512. Load sources, in the order they matter (current-state map: https://claude.ai/artifact/K3mA6TPM1rknr2zJq1qT3q):
-  - `unreadCountsForUser` (`application/brain/chatReadState.ts:64`, called from `attentionSnapshot.ts:128`) seq-scans all ~84k `brain_chat_messages` on every miss. That is 76% of the rows core reads.
-  - VS Code builder-insights SSE rebuilds an uncached snapshot every 30 s (`llmRoutes.ts:3513`).
-  - Agent hosts send a duplicate heartbeat every 5 min (host + `AgentHostRelayDO.ts:783`).
-  - Canvas presence writes every 8 s per kept board (`useCanvasSessionSync.ts:187`).
-  - About 17 web polling loops keep running in hidden tabs, including 2 duplicate attention pollers and a 2 s workflow poller that never stops (`useLiveOrchestration.ts:89`).
-  - Each active cron tick runs all 35 frequent sweeps, unconditionally. `manager` has no per-project interval; `repo-delivery`, `monitors`, `mailbox-push` and `wf-triggers` write on every tick.
-  - Unthrottled `tenant_api_keys.last_used_at` updates.
-  - The telemetry tables are still duplicated in core.
-  - Defects found:
-    - `TENANT_RATE_LIMITER` is unbound, so rate limiting is a no-op in prod.
-    - Cron sweeps run in parallel, despite the "load-bearing order" comments. Phone rent can bill before the allowance grant lands.
-    - `lens-snapshots` uses LIMIT 100 with no ORDER BY.
-  
-  *Blocker: user decision. The operator asked for a current-state map only (2026-10-17); the future-state and recommendations pass comes next and owns the fixes.*
+- **🟠 Neon load review 2026-10-17: fixes implemented and verified, NOT yet committed.** Measured: core + transactional up 31.5 h with no suspend, ~46 / ~39 txn/min, core 502 MB of 512 (map: https://claude.ai/artifact/K3mA6TPM1rknr2zJq1qT3q).
+  - Done in the working tree: API typecheck clean, 38/39 guards (silent-catches slack is another session's), targeted vitest 202/202 + 278/278, agent-runtime and VS Code typecheck/tests clean. Changes:
+    - migration 1231 `(chat_id, seq)` index + per-chat unread count;
+    - ordered cron chains, a cron-path ticket no longer re-signals the gate, lens snapshots cover every tenant with backoff;
+    - per-project manager interval; repo-delivery / monitors / mailbox / cloud-workflow / PR-reconciler write only on change;
+    - cached builder-insights stream; throttled `last_used_at` and agent-host heartbeat (DO duplicate removed);
+    - rate limiter bound at FREE 300 / PRO 1200 / TEAMS 3000 rpm (operator decision);
+    - cheaper canvas presence via ONE `resolveSessionMembership`; cached runtime dashboard;
+    - cached superadmin / xAPI lookups and a cached tenant-membership re-check in `authMiddleware` (operator-approved);
+    - web shell: one shared attention poller and only the on-screen board polls; ~20 page loops visibility-gated through ONE `pollPolicy`; dashboard count endpoints;
+    - VS Code insights focus-aware; mobile `afterSeq` cursor.
+  - *Blocker (commit): the shared git index. Auto-mode refuses index writes while 14 sessions share this tree, and four files hold another session's in-flight hunks: `llmRoutes.ts` and `BrainService.ts` (being split; this work's insights-stream hunk and the `afterSeq` cursor, now in their `brainMessages.ts`, ride along, together with `brainRoutes.ts` and the Android/iOS `afterSeq` client changes, which wait for it), `cronSweeps.ts` (their `scheduledReport` import) and `FloatingBrain.tsx` (their `SurfaceLauncher`). Needs: the operator commits, or approves partial staging.*
+  - Open after commit: VSIX packaging (the webview bundles other sessions' unfinished brain-ui); repo-activity watermark writes every 15 min per repo (needs a `checked_at` column); retention for ~4.27M old `pr_reconciliation_*` rows; the duplicated telemetry tables in core need `db:copy-run-telemetry --purge-source` (*operator, production credentials*); re-measure suspend after deploy.
 - **Cutover rows on the old primary** (12 telemetry rows would be lost). *Blocker: operator runs `reconcile.sh` + `merge.sql`.* Then delete `builderforce-primary` (console) and drop core's stale site tables (not blocked).
 - **No retention on canvas history** (`creation_session_events` 50 MB, `_snapshots` 41 MB, `brain_chat_messages` 37 MB). *Blocker: decision on history kept.*
 - **`inTransaction` (WebSocket Pool) unrun against docker or Neon;** 402 not mapped on the pool path. *Blocker: the docker stack + a live booking.*

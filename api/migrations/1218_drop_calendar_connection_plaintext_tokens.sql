@@ -1,4 +1,4 @@
--- 1216 · Drop calendar_connections plaintext token columns.
+-- 1218 · Drop calendar_connections plaintext token columns.
 --
 -- Migration 1107 added token_enc / token_iv and a fallback read of access_token /
 -- refresh_token so existing grants could be sealed on first touch. The backfill

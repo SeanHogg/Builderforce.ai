@@ -16,17 +16,16 @@
     "components/TaskMgmtContent.tsx": 2762,
     "components/agent/AgentExecutionPanel.tsx": 1091,
     "components/creation-canvas/CreationCanvas.tsx": 1159,
-    "components/manager/ManagerContent.tsx": 1182,
+    "components/manager/ManagerContent.tsx": 1150,
     "components/reliability/MonitoringSections.tsx": 954,
     "components/workforce/WorkforceAgents.tsx": 893,
     "lib/adminApi.ts": 1805,
-    "lib/api.ts": 1030,
+    "lib/api.ts": 991,
     "lib/builderforceApi.ts": 10288,
     "lib/founderObjects.ts": 1623,
     "lib/founderOpsApi.ts": 1077,
     "lib/managerDiagnostics.ts": 1879,
-    "lib/model-provider.ts": 851,
-    "lib/structured-data.ts": 995
+    "lib/structured-data.ts": 932
   },
   "importCycles": []
 }

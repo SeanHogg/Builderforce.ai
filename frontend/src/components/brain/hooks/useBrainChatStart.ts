@@ -9,7 +9,7 @@ import {
   type WorkOptionId,
   type BrainCapabilityId,
 } from '@/lib/brain';
-import type { BrainDockedTab } from '../BrainDockedHeader';
+import type { BrainDockedTab } from './useBrainPanelController';
 
 /**
  * How a conversation starts and what it is FOR: the composer draft and its focus

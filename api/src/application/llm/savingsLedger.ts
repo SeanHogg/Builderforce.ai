@@ -34,11 +34,6 @@ export function normalizeUsageSurface(raw: unknown): UsageSurface {
   return isUsageSurface(raw) ? raw : 'web';
 }
 
-/** ~4 characters per token — the rule the compaction budget and the handoff count by. */
-export function estimateTokens(text: string | null | undefined): number {
-  return text ? Math.ceil(text.length / 4) : 0;
-}
-
 export interface AvoidedCall {
   tenantId: number;
   userId?: string | null;

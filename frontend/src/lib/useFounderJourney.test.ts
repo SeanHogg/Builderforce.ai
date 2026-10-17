@@ -22,7 +22,7 @@ vi.mock('./realizationApi', () => ({
   realizationApi: { journeySignal: api.journeySignal, list: api.realizations },
 }));
 
-import { useFounderJourney } from './useFounderJourney';
+import { invalidateFounderJourney, useFounderJourney } from './useFounderJourney';
 
 async function settle() {
   const { result } = renderHook(() => useFounderJourney());
@@ -31,6 +31,8 @@ async function settle() {
 }
 
 beforeEach(() => {
+  // The journey is shared across mounts (module cache); each case reads afresh.
+  invalidateFounderJourney();
   api.companies.mockReset().mockResolvedValue([]);
   api.journeySignal.mockReset().mockResolvedValue({ stage: null, realizationId: null });
   api.sessions.mockReset().mockResolvedValue({ sessions: [] });
@@ -68,5 +70,16 @@ describe('useFounderJourney', () => {
 
   it('a brand-new tenant has no stage', async () => {
     expect(await settle()).toMatchObject({ stage: null });
+  });
+
+  it('mounts on one page share ONE read', async () => {
+    api.journeySignal.mockResolvedValue({ stage: 'make', realizationId: 'r2' });
+    const a = renderHook(() => useFounderJourney());
+    const b = renderHook(() => useFounderJourney());
+    await waitFor(() => expect(a.result.current.loading).toBe(false));
+    await waitFor(() => expect(b.result.current.loading).toBe(false));
+    expect(b.result.current).toMatchObject({ stage: 'make' });
+    expect(api.journeySignal).toHaveBeenCalledTimes(1);
+    expect(api.companies).toHaveBeenCalledTimes(1);
   });
 });

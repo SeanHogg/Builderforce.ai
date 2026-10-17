@@ -18,6 +18,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 
 import type { Env, HonoEnv } from '../../env';
 import {
+  createCacheIdempotencyStore,
   decideReplay,
   IDEMPOTENCY_KEY_HEADER,
   IDEMPOTENT_REPLAY_HEADER,
@@ -29,7 +30,6 @@ import {
 } from '../../application/shared/idempotentReplay';
 import { deferPastResponse } from '../../application/shared/requestScope';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
-import { createCacheIdempotencyStore } from '../../application/shared/idempotencyReplayStore';
 
 const SOURCE = 'presentation/middleware/idempotentReplay.ts';
 

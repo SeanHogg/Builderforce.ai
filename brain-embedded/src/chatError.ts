@@ -23,7 +23,16 @@ export type ChatErrorActionKind =
   /** Plan doesn't include the capability — send them to pricing. */
   | 'upgrade'
   /** Plan is fine, but billing needs a validated card — send them to billing. */
-  | 'validate_card';
+  | 'validate_card'
+  /** No model can serve the turn: signed out and nothing local fits — sign in or start one. */
+  | 'sign_in';
+
+/**
+ * The ONE sentinel a transport throws when no model can serve a turn: signed out and
+ * nothing runs on this device. Hosts never match it themselves — {@link chatErrorAction}
+ * turns it into the `sign_in` verdict the shared banner acts on.
+ */
+export const NOT_SIGNED_IN = 'not_signed_in';
 
 export interface ChatErrorAction {
   kind: ChatErrorActionKind;
@@ -123,6 +132,7 @@ export function chatErrorAction(err: unknown): ChatErrorAction | null {
   }
 
   if (!message) return null;
+  if (message === NOT_SIGNED_IN) return { kind: 'sign_in' };
   if (AUTH_PROSE.test(message)) return { kind: 'auth' };
   if (CARD_PROSE.test(message)) return { kind: 'validate_card' };
   if (UPGRADE_PROSE.test(message)) return { kind: 'upgrade' };

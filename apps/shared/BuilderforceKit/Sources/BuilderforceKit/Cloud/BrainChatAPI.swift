@@ -137,8 +137,14 @@ public struct BrainChatAPI: Sendable {
         try await CloudJSON.decode(BrainChat.self, from: self.session.perform(Self.createChatRequest(title: title)))
     }
 
-    public func messages(chatID: Int, limit: Int = BrainChatAPI.messageLimit) async throws -> [BrainChatMessage] {
-        try await Self.decodeMessages(self.session.perform(Self.messagesRequest(chatID: chatID, limit: limit)))
+    /// The chat's newest `limit` turns, or — with `afterSeq` — only the turns appended after it.
+    public func messages(
+        chatID: Int,
+        limit: Int = BrainChatAPI.messageLimit,
+        afterSeq: Int? = nil) async throws -> [BrainChatMessage]
+    {
+        try await Self.decodeMessages(self.session.perform(
+            Self.messagesRequest(chatID: chatID, limit: limit, afterSeq: afterSeq)))
     }
 
     public func agents(chatID: Int) async throws -> [BrainChatAgent] {
@@ -186,8 +192,13 @@ public struct BrainChatAPI: Sendable {
         return CloudAPIRequest(method: "POST", path: "/api/brain/chats", body: body)
     }
 
-    public static func messagesRequest(chatID: Int, limit: Int = BrainChatAPI.messageLimit) -> CloudAPIRequest {
-        CloudAPIRequest(method: "GET", path: "/api/brain/chats/\(chatID)/messages?limit=\(limit)")
+    public static func messagesRequest(
+        chatID: Int,
+        limit: Int = BrainChatAPI.messageLimit,
+        afterSeq: Int? = nil) -> CloudAPIRequest
+    {
+        let cursor = afterSeq.map { "&afterSeq=\($0)" } ?? ""
+        return CloudAPIRequest(method: "GET", path: "/api/brain/chats/\(chatID)/messages?limit=\(limit)\(cursor)")
     }
 
     public static func agentsRequest(chatID: Int) -> CloudAPIRequest {

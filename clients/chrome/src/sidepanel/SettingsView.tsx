@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { localRuntime, type LocalRuntimeProbe } from '@builderforce/local-inference';
-import { completeDeviceSignIn, DeviceAuthError, startDeviceSignIn, type DeviceAuthFailure } from '../auth/deviceAuth';
+import { completeDeviceSignIn, DeviceAuthError, startDeviceSignIn, type DeviceAuthFailure } from '@builderforce/device-auth';
 import { DEVICE_CLIENT } from '../config';
 import { SYNAPSE_DEFAULT_URL } from '../inference/localRuntimes';
 import { originOf } from '../tools/safety';

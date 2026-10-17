@@ -6,7 +6,7 @@
  * Node builtin or a DOM global.
  */
 
-import type { OutboxEntry, OutboxOnlineSignal, OutboxStore } from "./outbox.js";
+import type { OutboxEntry, OutboxOnlineSignal, OutboxStore } from "./types.js";
 
 // ── Snapshot store: the whole queue as ONE value ───────────────────────────────
 

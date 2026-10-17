@@ -1,3 +1,4 @@
+import { perMillionToPerToken } from "@builderforce/model-catalog";
 import type { NormalizedUsage } from "../agents/usage.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 
@@ -82,5 +83,5 @@ export function estimateUsageCost(params: {
   if (!Number.isFinite(total)) {
     return undefined;
   }
-  return total / 1_000_000;
+  return perMillionToPerToken(total);
 }

@@ -37,8 +37,13 @@ export function isLiveWorkflowStatus(status: string | undefined): boolean {
   return status === 'pending' || status === 'running';
 }
 
-/** How often the run-history graph/task snapshot re-fetches while a run is live. No workflow WS exists yet. */
-export const LIVE_WORKFLOW_POLL_MS = 2000;
+/**
+ * How often a workflow-run snapshot re-fetches while a run is live. No workflow WS
+ * exists yet. Every caller polls through `usePolledResource` (paused while the tab
+ * is hidden, backs off on failure) and stops once the run leaves the live set.
+ * 4 s, not 2 s: node status still visibly advances, at half the requests.
+ */
+export const LIVE_WORKFLOW_POLL_MS = 4000;
 
 /**
  * THE workflow run/task status → tone map — the run list, the task rows and the DAG

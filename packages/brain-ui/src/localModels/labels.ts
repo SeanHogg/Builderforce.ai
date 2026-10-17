@@ -48,6 +48,27 @@ export const DEFAULT_LOCAL_MODEL_LABELS: LocalModelLabels = {
   localReasonEngine: 'This engine is not available here yet.',
 };
 
+/** Every field of {@link LocalModelLabels} — the ONE key table hosts read their catalog by. */
+export const LOCAL_MODEL_LABEL_FIELDS = Object.keys(DEFAULT_LOCAL_MODEL_LABELS) as ReadonlyArray<keyof LocalModelLabels>;
+
+/** A host's string for one label field, or undefined when its catalog has none. */
+export type LocalModelLabelLookup = (field: keyof LocalModelLabels) => string | undefined;
+
+/**
+ * The on-device list's copy from a host catalog. Each host used to hand-map the same
+ * thirteen fields onto its own keys (next-intl, `vscode.l10n`, `chrome.i18n`); a host now
+ * passes a lookup by field and every label it lacks falls back to the English default.
+ * Placeholders (`{size}`, `{percent}`, `{tokens}`) must come back literal.
+ */
+export function localModelLabelsFrom(lookup: LocalModelLabelLookup): LocalModelLabels {
+  const out = { ...DEFAULT_LOCAL_MODEL_LABELS };
+  for (const field of LOCAL_MODEL_LABEL_FIELDS) {
+    const text = lookup(field);
+    if (text) out[field] = text;
+  }
+  return out;
+}
+
 /** Why a row is unsupported → the label that says so. A registry, so a new fit code
  *  is one entry here rather than a branch in the row. */
 export const LOCAL_UNSUPPORTED_LABEL: Record<NonNullable<LocalModelRow['reason']>, keyof LocalModelLabels> = {

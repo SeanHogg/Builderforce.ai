@@ -9570,6 +9570,12 @@
     "heroTitle": "Toute idée devient <em>réelle.</em>",
     "heroSub": "Pendant que votre idée attend dans un document, quelqu’un d’autre livre la sienne. Réunissez votre équipe et vos agents IA sur un canevas et soyez en production les premiers.",
     "heroPromptPlaceholder": "Que voulez-vous créer ?",
+    "heroSuggestCampaign": "Campagne de lancement",
+    "heroSuggestCampaignPrompt": "Planifie une campagne de lancement pour mon produit.",
+    "heroSuggestInterviews": "Entretiens clients",
+    "heroSuggestInterviewsPrompt": "Synthétise mes entretiens clients en exigences produit.",
+    "heroSuggestOnePager": "Synthèse pour le conseil",
+    "heroSuggestOnePagerPrompt": "Rédige une mise à jour d’une page pour le conseil à partir de mes derniers chiffres.",
     "heroPromptAria": "Décrivez ce que vous voulez créer",
     "heroGetStarted": "Commencer à créer",
     "canvas": {
@@ -11717,6 +11723,14 @@
       "learnSkipReasonFrozen": "l'Evermind de ce projet est gelé (lecture seule)",
       "reconcileTitle": "{count} souvenirs appris réconciliés dans Evermind v{version}",
       "reconcileHint": "La réponse a reformulé ces apprentissages rappelés, elle les met donc à jour (cognition en écriture directe).",
+      "modelMovePacked": "Conversation ajustée pour {models} — {dropped} messages antérieurs {how}, ~{tokens} jetons",
+      "modelMoveVerbatim": "Conversation transmise en entier à {models}, ~{tokens} jetons",
+      "modelMoveOverWindow": "Elle reste plus grande que la fenêtre de contexte du modèle.",
+      "modelMoveHowSummarized": "résumés",
+      "modelMoveHowRecalled": "remplacés par la mémoire rappelée",
+      "modelMoveHowElided": "omis",
+      "modelMoveLocalFallback": "{from} sur cet appareil n’a pas pu prendre ce tour — {to} y a répondu",
+      "modelMoveHint": "L’exécution est passée à un autre modèle ; la conversation a donc été ajustée à la fenêtre de contexte de ce modèle.",
       "activityStarted": "{agent} a commencé à travailler sur {kind} #{ref}",
       "activityCompleted": "{agent} a terminé {kind} #{ref}",
       "activityCompletedWithLane": "{agent} a terminé {kind} #{ref} — déplacé vers {lane}",
@@ -11941,6 +11955,8 @@
     "upgrade": "Mettre à niveau",
     "upgradeToPlan": "Passer à {plan}",
     "addCard": "Ajouter une carte",
+    "signIn": "Se connecter",
+    "noModel": "Aucun modèle n’est disponible. Connectez-vous ou lancez un modèle sur cet appareil.",
     "cardValidationFailed": "Échec de la validation de la carte.",
     "allowance": {
       "exhausted": "Votre quota de jetons IA pour cette période est épuisé ({used} sur {limit}). Les échanges échoueront ou s'arrêteront en cours jusqu'à la réinitialisation le {resets}.",
@@ -11949,7 +11965,9 @@
       "connectAccount": "Connectez votre propre compte",
       "dismiss": "Ignorer"
     },
-    "queuedCount": "{count, plural, one {# message en file} other {# messages en file}}",
+    "queuedList": "Messages en attente",
+    "queuedHint": "En attente — envoyé à la fin de l’exécution",
+    "queuedRemove": "Retirer",
     "onboardMe": "Aidez-moi à démarrer",
     "onboardMePrompt": "Je suis nouveau ici — aidez-moi à démarrer. Demandez-moi ce que je veux créer, expliquez comment fonctionnent l'usage et les coûts, recommandez si le plan Free ou Pro convient à mon échéance, et aidez-moi à connecter mon compte IA existant si j'en ai un.",
     "onboardMeHint": "Périmètre, coûts et formule : je vous guide pas à pas.",
@@ -33616,6 +33634,12 @@
       "subtitle": "Décrivez une application. Studio l’écrit, l’exécute dans votre navigateur et la publie.",
       "promptLabel": "Décrivez ce qu’il faut créer",
       "placeholder": "Créons un…",
+      "suggestLanding": "Page d’accueil",
+      "suggestLandingPrompt": "une page d’accueil pour mon produit avec un formulaire d’inscription",
+      "suggestBooking": "Application de réservation",
+      "suggestBookingPrompt": "une application de réservation où les clients choisissent un créneau",
+      "suggestDashboard": "Tableau de bord interne",
+      "suggestDashboardPrompt": "un tableau de bord interne qui suit les ventes hebdomadaires",
       "submit": "Créer",
       "startFailed": "Impossible de démarrer votre session. Réessayez.",
       "recentTitle": "Vos projets Studio",
@@ -35077,16 +35101,10 @@
       "blog": "Article associé",
       "licenseNote": "utilisez-le, forkez-le et livrez-le, commercial ou non"
     },
-    "cta": {
-      "title": "Voyez-les fonctionner ensemble",
-      "desc": "Ouvrez le canvas : l'aperçu en direct de tout ce que vous construisez tourne sur BuilderForce WebContainers, dans votre propre navigateur.",
-      "primary": "Ouvrir le canvas",
-      "secondary": "Lire le blog"
-    },
     "packages": {
       "webcontainers": {
         "tagline": "Une alternative ouverte, sous licence MIT, à StackBlitz WebContainers : un environnement de développement qui s'exécute entièrement dans le navigateur.",
-        "summary": "Donnez-lui un projet sous forme de fichiers : il sert un aperçu en direct dans une iframe, le compile pour le déploiement et vérifie ses types, sans en-têtes COOP/COEP ni plafond de sessions.",
+        "summary": "Donnez-lui un projet sous forme de fichiers : il sert un aperçu en direct dans une iframe, le compile pour le déploiement et vérifie ses types, sans exiger d'en-têtes COOP/COEP ni de plafond de sessions.",
         "problem": "Les environnements de développement dans le navigateur exigeaient beaucoup avant d'afficher le moindre aperçu : une licence propriétaire dont l'offre gratuite est non commerciale, un plafond mensuel de sessions d'API et des en-têtes d'isolation cross-origin (COOP/COEP) qui cassent les intégrations et les scripts tiers de la page hôte. Pour un produit qui prévisualise tout ce qu'il construit, chacune de ces contraintes pèse sur la boucle principale.",
         "gets": [
           "Des aperçus en direct d'applications frontend (Vite avec React, Vue ou Svelte, Create React App et sites statiques), où TypeScript, JSX, CSS, JSON et les paquets npm fonctionnent comme sous Vite.",
@@ -35137,7 +35155,7 @@
             },
             {
               "aspect": "Programmes et serveurs Node.js, npm install, shell",
-              "ours": "Oui : un Web Worker par processus, toujours sans COOP/COEP",
+              "ours": "Oui : un Web Worker par processus, toujours sans exiger COOP/COEP",
               "theirs": "Oui"
             }
           ],

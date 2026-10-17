@@ -73,6 +73,27 @@ export default {
       + 'behaviour that WOULD be duplication is not: recall, governance, retention and the embedding '
       + 'backfill each have one implementation that takes the store as a parameter.',
 
+  'calendar_connections = drive_connections = mailbox_connections':
+    'three per-user OAuth grants to the same two providers, so the GRANT columns match: (user_id, provider, '
+      + 'account_email, token_enc, token_iv, expires_at, scope). Each row is a different CONSENT, which is the '
+      + 'fact being stored: a calendar scope cannot read mail, a mail scope cannot list a drive, and a user who '
+      + 'granted one must not be treated as having granted another — separate rows are what keep the consent the '
+      + 'person actually gave auditable (the mailbox docstring, migration 0414). One table with a `kind` column '
+      + 'fails the test on foreign keys: `mailbox_automation_rules`, the three other mailbox children and '
+      + '`marketing_campaigns.mailbox_connection_id` all reference `mailbox_connections.id` and CASCADE / SET NULL with '
+      + 'it; pointed at a merged grants table, nothing stops a mailbox rule hanging off a drive grant, so an '
+      + 'enforced parent becomes a discriminator check. Each kind also carries invariant-bearing columns the '
+      + 'others must not have: `allow_sending` (NOT NULL DEFAULT false, the sending-authority gate) and '
+      + '`last_synced_at` on mailboxes, `cache_version` (the drive listing cache token) on drives, `calendar_id` '
+      + '(NOT NULL) on calendars — every one would become nullable. A shared Drizzle column helper was '
+      + 'considered and rejected: the calendar table is NOT the same physical shape (uuid PK, nullable '
+      + 'token_enc/token_iv/scope/account_email, timestamptz, provider width 16 vs 24), so one helper would '
+      + 'need a type-changing migration on live grants, and a `...spread` is invisible to the lexical '
+      + '`lib/drizzleSchema.mjs` parser that check-schema-drift and check-migrations share, which would make '
+      + 'those guards report the columns as missing. The behaviour that WOULD be duplication is not: '
+      + 'sealing, staleness, refresh-token merging and revocation live once in '
+      + '`application/integrations/oauthTokenVault.ts`, which all three connection services use.',
+
   'project_manager_configs = tenant_manager_defaults':
     'the column NAMES match and their MEANINGS are opposite, which is the one case where merging on a shared signature destroys information. At the project tier each column is a VALUE; at the workspace tier the same name is a BOUND on that value, and the fold in `managerPolicy.ts` reads them differently on purpose. `enabled` is NOT NULL DEFAULT true on a project (a master switch) and a nullable KILL-SWITCH on the workspace, whose own docstring records why: project rows default to true, so last-tier-wins would let every existing row silently defeat the workspace switch. `allow_auto_merge`, `allow_unattended_ceremonies`, `allow_agent_reassignment` and `allow_auto_staff_lanes` are CEILINGS at the workspace tier and plain overrides at the project tier. `agent_reassign_idle_hours` and `agent_reassign_max_per_session` are folded MOST-RESTRICTIVE-WINS from the workspace (largest idle, smallest cap) and taken at face value from the project. `require_signoff_to_complete` is a workspace FLOOR and a project DECISION -- NOT NULL there specifically so the project states it outright instead of deferring. One table cannot hold a value and a bound on that value in one column; disambiguating by whether `project_id` is null is exactly the ambiguity that makes a merged settings table go wrong. The two rows are also different nouns beyond the policy: the project row NAMES the manager (`manager_ref`, `manager_type`) and carries the sweep\'s own runtime state (`last_run_at`, `last_sweep_decision`, `last_sweep_reason`, `last_sweep_at`), six columns that can never be non-null on a workspace row.',
 

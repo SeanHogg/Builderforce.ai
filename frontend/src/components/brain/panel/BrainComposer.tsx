@@ -33,7 +33,7 @@ export function BrainComposer() {
     recipient,
     chooseRecipient,
     participants,
-    queuedCount,
+    queued,
     repoContext,
     prefs,
     modelOptions,
@@ -90,7 +90,7 @@ export function BrainComposer() {
       disabled={false}
       running={conv.sending}
       onStop={conv.stop}
-      queuedCount={queuedCount}
+      queued={queued}
       rows={2}
       onAttach={conv.attach}
       onAddContext={repoContext.onAddContext}

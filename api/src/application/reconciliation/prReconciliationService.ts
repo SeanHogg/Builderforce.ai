@@ -544,7 +544,10 @@ export async function runPrTicketReconciliation(
       ? policyApprovedCloseNumbers(decisions)
       : [];
     const resolvedApproved = [...new Set([...approved, ...policyApproved])].sort((a, b) => a - b);
-    if (mode === 'apply') {
+    // The run row was inserted with `approved`; `resolvedApproved` is a superset of it, so
+    // equal length means the stored allowlist is already exact. That is every run with no
+    // close candidate — skip an UPDATE that would only restate it.
+    if (mode === 'apply' && resolvedApproved.length !== approved.length) {
       await db.update(prReconciliationRuns)
         .set({ approvedPrNumbers: resolvedApproved })
         .where(scopedToTenant(prReconciliationRuns, args.tenantId, eq(prReconciliationRuns.id, runId)));

@@ -31,7 +31,7 @@ import {
   type BaseQuant,
   type EvermindLMConfig,
 } from '@seanhogg/builderforce-memory-engine';
-import { hasWebGPUSupport } from '@seanhogg/builderforce-studio/capabilities';
+import { hasWebGPU } from '@seanhogg/builderforce-brain-embedded';
 import { downloadDataset, uploadArtifact, updateTrainingJob, streamTrainingLogs } from './api';
 import type { TrainingLog } from './types';
 
@@ -234,7 +234,7 @@ export class WebGPUTrainer {
     this.gpuDevice?.destroy();
     this.gpuDevice = null;
     this.options.onLog('Initialising exact-gradient browser LoRA engine…');
-    if (hasWebGPUSupport()) {
+    if (hasWebGPU()) {
       try { this.gpuDevice = (await initWebGPU({ powerPreference: 'high-performance' })).device; }
       catch { this.gpuDevice = null; }
     }

@@ -8,10 +8,9 @@
  * without prop-drilling.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { BrainMark } from './BrainMark';
 import { BrainPanel } from './BrainPanel';
 import { GuestBrainPanel } from './GuestBrainPanel';
 import { MigrationPanelHost } from '@/components/integrations/MigrationPanelHost';
@@ -22,6 +21,7 @@ import { useAttention } from '@/lib/useAttention';
 import { useAuth } from '@/lib/AuthContext';
 import { useModalDismiss } from '@/hooks/useModalDismiss';
 import { lensForRoute } from '@/lib/canvasLens';
+import { SurfaceLauncher } from '@seanhogg/builderforce-brain-ui';
 
 export function FloatingBrain() {
   const pathname = usePathname();
@@ -70,13 +70,29 @@ export function FloatingBrain() {
   // MUST only run once the user is authenticated — otherwise the launcher (now
   // mounted on marketing pages too) would consume the saved prompt before the
   // visitor ever signs in, breaking the landing→auth→replay handoff.
+  //
+  // ONCE per signed-in mount: the handoff is a one-shot, so re-running the local
+  // take + the server `claim` POST on every client navigation was a request per
+  // page view for nothing. `pathname` stays a dependency only so a session that
+  // LANDS on /brainstorm (which skips the claim) still claims on the first page
+  // after it; signing out re-arms it for the next sign-in.
+  const handoffClaimedRef = useRef(false);
+  // The claim CONSUMES the server record, so its answer must land even if the
+  // person navigates while it is in flight — only an unmount drops it.
+  const mountedRef = useRef(true);
   useEffect(() => {
-    if (!hasTenant) return;
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+  useEffect(() => {
+    if (!hasTenant) { handoffClaimedRef.current = false; return; }
+    if (handoffClaimedRef.current) return;
     // On /brainstorm the docked Brain renders null (the page IS the Brain), so
     // it must NOT consume the one-shot pending prompt here — `takePendingPrompt`
     // clears storage, which would silently eat the prompt before the page can
     // replay it. The brainstorm page consumes it instead. [1509]
     if (pathname?.startsWith('/brainstorm')) return;
+    handoffClaimedRef.current = true;
     const p = takePendingPrompt();
     if (p) {
       setPendingPrompt(p);
@@ -85,16 +101,12 @@ export function FloatingBrain() {
     }
     // Same-browser miss → try the durable server record (cross-device handoff,
     // e.g. typed on phone, signed up on laptop). Best-effort. [1517]
-    let cancelled = false;
     void pendingPromptsApi.claim().then((serverPrompt) => {
-      if (!cancelled && serverPrompt) {
+      if (mountedRef.current && serverPrompt) {
         setPendingPrompt(serverPrompt);
         setOpen(true);
       }
     });
-    return () => {
-      cancelled = true;
-    };
   }, [hasTenant, setOpen, pathname]);
 
   // Brainstorm and Creation Sessions already provide a first-class Brain conversation;
@@ -115,40 +127,19 @@ export function FloatingBrain() {
       {/* Floating launcher */}
       {!open && !inlineBrainMounted && (
         <>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            // A turn in flight is the MARK's animation now, not a badge, so it survives
-            // the count chain below — a Brain that is both awaiting an answer and running
-            // used to show only the amber count and look idle.
-            aria-label={counts.running > 0 ? tAttn('runningCount', { count: counts.running }) : tLauncher('open')}
-            title={counts.running > 0 ? tAttn('runningCount', { count: counts.running }) : tLauncher('title')}
+          {/* A turn in flight is the MARK's animation, not a badge, so it survives the
+              count: a Brain both awaiting an answer and running reads as both. */}
+          <SurfaceLauncher
             className="brain-launcher"
-          >
-            <BrainMark running={counts.running > 0} />
-            {counts.awaiting > 0 ? (
-              <span
-                className="brain-launcher-badge"
-                role="status"
-                aria-label={tAttn('needsYou', { count: counts.awaiting })}
-                title={tAttn('needsYou', { count: counts.awaiting })}
-              >
-                {counts.awaiting}
-              </span>
-            ) : counts.unread > 0 ? (
-              // New messages (execution milestones / teammate turns) landed in a
-              // chat you're not viewing — indigo count, distinct from the amber
-              // "needs an answer" badge. Running is not a badge at all — see the mark.
-              <span
-                className="brain-launcher-badge brain-launcher-badge-unread"
-                role="status"
-                aria-label={tAttn('unread', { count: counts.unread })}
-                title={tAttn('unread', { count: counts.unread })}
-              >
-                {counts.unread > 99 ? '99+' : counts.unread}
-              </span>
-            ) : null}
-          </button>
+            onOpen={() => setOpen(true)}
+            running={counts.running > 0}
+            label={counts.running > 0 ? tAttn('runningCount', { count: counts.running }) : tLauncher('open')}
+            badge={counts.awaiting > 0
+              ? { count: counts.awaiting, tone: 'awaiting', label: tAttn('needsYou', { count: counts.awaiting }) }
+              : counts.unread > 0
+                ? { count: counts.unread, tone: 'unread', label: tAttn('unread', { count: counts.unread }) }
+                : null}
+          />
           <style>{`
             .brain-launcher {
               position: fixed;
@@ -167,34 +158,6 @@ export function FloatingBrain() {
               display: flex;
               align-items: center;
               justify-content: center;
-            }
-            /* "A person must answer" — amber count badge, pulsing so it's noticed
-               even when the drawer is closed and you're multitasking elsewhere. */
-            .brain-launcher-badge {
-              position: absolute;
-              top: -2px;
-              right: -2px;
-              min-width: 20px;
-              height: 20px;
-              padding: 0 5px;
-              border-radius: var(--radius-lg);
-              background: var(--warning);
-              color: var(--text-on-accent);
-              font-size: var(--font-size-eyebrow);
-              font-weight: 700;
-              line-height: 20px;
-              text-align: center;
-              box-shadow: 0 0 0 2px var(--bg-base);
-              animation: agentPulse 1.4s ease-in-out infinite;
-            }
-            /* "New unread messages" — indigo count, no pulse (informational, not a
-               blocking ask). Distinct hue from the amber answer badge. */
-            .brain-launcher-badge-unread {
-              background: var(--badge-unread);
-              animation: none;
-            }
-            @media (prefers-reduced-motion: reduce) {
-              .brain-launcher-badge { animation: none; }
             }
             /* The mobile bottom nav is a fixed 56px bar (shown <768px). Lift the
                launcher above it so it never covers the menu, and clear the iOS

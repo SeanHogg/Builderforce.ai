@@ -19,9 +19,9 @@ import type { BrainDockMode, BrainDockSide, BrainDockSize } from './brainDockPre
 export interface BrainSurfaceActionsProps {
   mode: BrainDockMode;
   showExecutionDetail: boolean;
-  /** Move the conversation between the edge and the Brain Object. Not offered — and
-   *  therefore never called — while a surface other than the board is drawn. */
-  onModeChange: (mode: BrainDockMode) => void;
+  /** Move the conversation between the edge and the Brain Object. Omitted by a
+   *  placement that has nowhere to move to (the Chat lens) — the row is then not offered. */
+  onModeChange?: (mode: BrainDockMode) => void;
   onExecutionDetailChange: (show: boolean) => void;
   /** Put the conversation away. Omitted by a placement that IS the conversation, where
    *  there is nothing left on screen once it goes — the way out of that one is the

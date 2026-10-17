@@ -13,11 +13,14 @@
  */
 
 import { BUILDERFORCE_PRODUCT_NAME } from '@seanhogg/builderforce-brain-ui';
+import { perTokenToPerMillion, type ListingTier, type ModelTier } from '@builderforce/model-catalog';
 import { BRAND } from './content/brand';
 import { apiRequest } from './apiClient';
 import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 
-export type ModelTier = 'FREE' | 'PRO' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
+/** Which Builderforce PLAN one of our own product records is — a plan badge, not a
+ *  model tier (the tier ladder is `@builderforce/model-catalog`'s). */
+export type PlanBadge = 'FREE' | 'PRO';
 
 export interface ModelPricing {
   /** USD per input token. */
@@ -51,8 +54,10 @@ export interface ModelRecord {
   created?: number;
   /** True for our own Builderforce.ai products. */
   isBuilderforce?: boolean;
-  /** Coarse plan/cost tier for badges + sorting. */
+  /** Coarse cost tier for badges + sorting. */
   tier?: ModelTier;
+  /** The plan one of OUR product records stands for (Builderforce records only). */
+  plan?: PlanBadge;
   /** Short badge label ("Free", "Pro"). */
   badge?: string;
   /** CTA destination for Builderforce records. */
@@ -77,7 +82,7 @@ interface CatalogModel {
   outputModalities?: string[];
   supportedParameters?: string[];
   created?: number;
-  tier: 'FREE' | 'STANDARD';
+  tier: ListingTier;
   routable?: boolean;
   pool?: 'free' | 'pro';
 }
@@ -105,6 +110,7 @@ export const BUILDERFORCE_MODELS: ModelRecord[] = [
     supportedParameters: ['tools', 'tool_choice', 'temperature', 'top_p', 'max_tokens'],
     isBuilderforce: true,
     tier: 'FREE',
+    plan: 'FREE',
     badge: 'Free',
     ctaHref: '/register',
   },
@@ -122,7 +128,7 @@ export const BUILDERFORCE_MODELS: ModelRecord[] = [
     outputModalities: ['text'],
     supportedParameters: ['tools', 'tool_choice', 'reasoning', 'temperature', 'top_p', 'max_tokens'],
     isBuilderforce: true,
-    tier: 'PRO',
+    plan: 'PRO',
     badge: 'Pro',
     ctaHref: '/pricing?upgrade=pro',
   },
@@ -200,7 +206,7 @@ export async function getPremiumModelCatalog(): Promise<ModelRecord[]> {
 /** Format a per-token USD price as a per-1M-tokens string. */
 export function formatPricePerMillion(perToken: number): string {
   if (perToken <= 0) return 'Free';
-  const perMillion = perToken * 1_000_000;
+  const perMillion = perTokenToPerMillion(perToken);
   if (perMillion < 0.01) return `$${perMillion.toFixed(4)}`;
   if (perMillion < 1) return `$${perMillion.toFixed(3)}`;
   return `$${perMillion.toFixed(2)}`;
@@ -217,8 +223,8 @@ export function modelMatchesPriceLimits(
   maxInputPerMillion?: number,
   maxOutputPerMillion?: number,
 ): boolean {
-  const inputPerMillion = record.pricing.prompt * 1_000_000;
-  const outputPerMillion = record.pricing.completion * 1_000_000;
+  const inputPerMillion = perTokenToPerMillion(record.pricing.prompt);
+  const outputPerMillion = perTokenToPerMillion(record.pricing.completion);
   return (
     (maxInputPerMillion === undefined || inputPerMillion <= maxInputPerMillion) &&
     (maxOutputPerMillion === undefined || outputPerMillion <= maxOutputPerMillion)
@@ -237,7 +243,7 @@ export function formatContext(record: ModelRecord): string {
 
 /** Free / Paid / our-product badge color. */
 export function tierColor(record: ModelRecord): string {
-  if (record.tier === 'PRO') return 'var(--coral-bright)';
+  if (record.plan === 'PRO') return 'var(--coral-bright)';
   if (record.tier === 'FREE') return 'var(--success)';
   return 'var(--accent)';
 }

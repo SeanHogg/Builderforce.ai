@@ -1,9 +1,9 @@
-import type { Api, Model } from "../builderforce/model/types.js";
 import {
   ANTHROPIC_RELEASES,
   anthropicModelId,
   olderAnthropicTemplateIds,
-} from "./anthropic-models.js";
+} from "@builderforce/model-catalog";
+import type { Api, Model } from "../builderforce/model/types.js";
 import { DEFAULT_CONTEXT_TOKENS } from "./defaults.js";
 import { normalizeModelCompat } from "./model-compat.js";
 import { normalizeProviderId } from "./model-selection.js";
@@ -82,7 +82,7 @@ function resolveOpenAICodexGpt53FallbackModel(
  * Providers that serve Claude under Anthropic's own ids. A Claude release this host has
  * no `models.json` row for yet borrows its metadata from the newest OLDER release of the
  * same family that it does have (`olderAnthropicTemplateIds` — derived from the one
- * release list in `anthropic-models.ts`), keeping the requested spelling and suffix
+ * release list in `@builderforce/model-catalog`), keeping the requested spelling and suffix
  * (`-thinking`, a date). So every new flagship works the day it ships, without a
  * per-release table here.
  */
@@ -123,7 +123,7 @@ const ANTIGRAVITY_SUFFIXES = ["-thinking", ""] as const;
 
 /**
  * The Opus ids `models list` synthesizes for Google Antigravity — every Opus release from
- * 4.6 on (the one release list, `anthropic-models.ts`), plain and `-thinking` — each with
+ * 4.6 on (the one release list, `@builderforce/model-catalog`), plain and `-thinking` — each with
  * the older same-suffix template keys {@link resolveClaudeForwardCompatModel} would clone.
  * Derived, so a new Opus is listed the day it is added there. Pure.
  */

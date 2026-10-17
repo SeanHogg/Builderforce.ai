@@ -1,8 +1,8 @@
 import { memo } from 'react';
 import { useTranslations } from 'next-intl';
-import { BrainMark } from '@/components/brain/BrainMark';
 import type { BrainDockPreferences, BrainDockSide } from '../brainDockPreferences';
 import styles from '../CreationCanvas.module.css';
+import { SurfaceLauncher } from '@seanhogg/builderforce-brain-ui';
 
 export interface CanvasBrainLauncherProps {
   /** Nothing else is drawn over the board, Brain is closed and has no other way back. */
@@ -29,14 +29,15 @@ export const CanvasBrainLauncher = memo(function CanvasBrainLauncher({ visible, 
   const label = unreadReplies > 0
     ? t('brainLauncher.unread', { count: unreadReplies })
     : thinking ? t('openBrainDockBusy') : t('openBrainDock');
-  return <button
-    type="button"
-    className={styles.brainDockLauncher}
-    data-testid="canvas-brain-launcher"
-    data-side={side}
-    data-state={thinking ? 'running' : unreadReplies > 0 ? 'unread' : 'idle'}
-    aria-label={label}
-    title={label}
-    onClick={() => updateBrainDock({ open: true })}
-  ><BrainMark running={thinking} size={14} />{unreadReplies > 0 ? t('brainLauncher.unread', { count: unreadReplies }) : t('brain')}</button>;
+  return (
+    <SurfaceLauncher
+      className={styles.brainDockLauncher}
+      dataAttrs={{ 'data-testid': 'canvas-brain-launcher', 'data-side': side, 'data-state': thinking ? 'running' : unreadReplies > 0 ? 'unread' : 'idle' }}
+      onOpen={() => updateBrainDock({ open: true })}
+      running={thinking}
+      label={label}
+      markSize={14}
+      text={unreadReplies > 0 ? t('brainLauncher.unread', { count: unreadReplies }) : t('brain')}
+    />
+  );
 });

@@ -99,6 +99,58 @@
     "message": "Dismiss",
     "description": "Button"
   },
+  "suggestionsLabel": {
+    "message": "Suggested next steps",
+    "description": "Composer suggestion"
+  },
+  "suggestSummarize": {
+    "message": "Summarize this page",
+    "description": "Composer suggestion"
+  },
+  "suggestSummarizePrompt": {
+    "message": "Summarize this page in five short points.",
+    "description": "Composer suggestion"
+  },
+  "suggestFill": {
+    "message": "Fill this form",
+    "description": "Composer suggestion"
+  },
+  "suggestFillPrompt": {
+    "message": "Fill in the form on this page, and ask me before you submit it.",
+    "description": "Composer suggestion"
+  },
+  "suggestTask": {
+    "message": "Save as a task",
+    "description": "Composer suggestion"
+  },
+  "suggestTaskPrompt": {
+    "message": "Save what this page asks of me as a task.",
+    "description": "Composer suggestion"
+  },
+  "queuedList": {
+    "message": "Queued messages",
+    "description": "Queued turns"
+  },
+  "queuedHint": {
+    "message": "Queued — sends when the run finishes",
+    "description": "Queued turns"
+  },
+  "queuedRemove": {
+    "message": "Remove",
+    "description": "Queued turns"
+  },
+  "upgrade": {
+    "message": "Upgrade",
+    "description": "Error banner button"
+  },
+  "upgradeToPlan": {
+    "message": "Upgrade to {plan}",
+    "description": "Error banner button"
+  },
+  "addCard": {
+    "message": "Add a card",
+    "description": "Error banner button"
+  },
   "composerLabel": {
     "message": "Message to Rovr",
     "description": "Accessible label of the message box"
@@ -1271,6 +1323,26 @@
     "message": "Hide linked tickets",
     "description": "Collapse the ticket grid"
   },
+  "ctSortLabel": {
+    "message": "Sort tickets",
+    "description": "Ticket-grid sort control label"
+  },
+  "ctSortOpen": {
+    "message": "Incomplete first",
+    "description": "Sort option: incomplete tickets first"
+  },
+  "ctSortDone": {
+    "message": "Complete first",
+    "description": "Sort option: complete tickets first"
+  },
+  "ctSortTitle": {
+    "message": "Title",
+    "description": "Sort option: alphabetical by title"
+  },
+  "ctSortLinked": {
+    "message": "Linked order",
+    "description": "Sort option: original link order"
+  },
   "ctKindTask": {
     "message": "Task",
     "description": "Ticket kind"
@@ -1342,13 +1414,5 @@
   "ctMergedN": {
     "message": "Merged $1 chat(s).",
     "description": "Merged N chats; $1 = count"
-  },
-  "queuedOne": {
-    "message": "1 message queued — it sends when this run finishes",
-    "description": "Under the composer: one turn waits behind the running run"
-  },
-  "queuedMany": {
-    "message": "$1 messages queued — they send one at a time as runs finish",
-    "description": "Under the composer; $1 = how many turns wait behind the running run"
   }
 }

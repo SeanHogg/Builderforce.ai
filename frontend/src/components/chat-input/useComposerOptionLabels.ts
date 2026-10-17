@@ -1,7 +1,11 @@
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import type { PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
+import { localModelLabelsFrom, type PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
 import { useChatModeCopy } from '@/lib/brain/useChatModeCopy';
+
+/** The on-device list's row placeholders, handed through LITERALLY so the shared list
+ *  fills them per row (formatting a template with no value throws FORMATTING_ERROR). */
+const LOCAL_LIST_PLACEHOLDERS = { size: '{size}', percent: '{percent}', tokens: '{tokens}' } as const;
 
 /**
  * The `/` menu's copy. Localized here (next-intl) and handed to the SHARED
@@ -55,22 +59,11 @@ export function useComposerOptionLabels(): Partial<PromptOptionsLabels> {
     // placeholder is handed through as its own value. Formatting it with none threw
     // FORMATTING_ERROR on every composer mount.
     localDetail: t('localDetail', { runtime: '{runtime}' }),
-    // The on-device list (models this browser runs on WebGPU). The size, percentage and
+    // The on-device list (models this browser runs on WebGPU), through brain-ui's ONE
+    // key table — the `chatInput` keys ARE its field names. The size, percentage and
     // window placeholders are TEMPLATES the shared list fills per row, handed through
     // literally for the same reason as `localDetail`.
-    localCatalogHeading: t('localCatalogHeading'),
-    localDownload: t('localDownload', { size: '{size}' }),
-    localDownloading: t('localDownloading', { percent: '{percent}' }),
-    localCancel: t('localCancel'),
-    localRemove: t('localRemove'),
-    localMoreActions: t('localMoreActions'),
-    localTools: t('localTools'),
-    localContext: t('localContext', { tokens: '{tokens}' }),
-    localDownloadFailed: t('localDownloadFailed'),
-    localReasonWebgpu: t('localReasonWebgpu'),
-    localReasonF16: t('localReasonF16'),
-    localReasonBuffer: t('localReasonBuffer'),
-    localReasonEngine: t('localReasonEngine'),
+    ...localModelLabelsFrom((field) => t(field, LOCAL_LIST_PLACEHOLDERS)),
     autoDetail: t('autoDetail'),
     poolLabel: t('poolLabel'),
     poolDetail: t('poolDetail'),

@@ -2,13 +2,12 @@
  * The chat's info strip copy — the shared `ChatTicketsPanel` (linked tickets and their
  * health, agents, people, merge, questions) — from Rovr's catalogs.
  */
-import { DEFAULT_CHAT_TICKETS_LABELS, type ChatTicketsLabels } from '@seanhogg/builderforce-brain-ui';
+import type { ChatTicketsLabels } from '@seanhogg/builderforce-brain-ui';
 import { t } from '../../i18n/t';
 import { formatCount } from './statusLabels';
 
 export function rovrChatTicketsLabels(): ChatTicketsLabels {
   return {
-    ...DEFAULT_CHAT_TICKETS_LABELS,
     none: t('ctNone'),
     spawned: t('ctSpawned'),
     run: t('ctRun'),
@@ -59,6 +58,11 @@ export function rovrChatTicketsLabels(): ChatTicketsLabels {
     mergeNoOthers: t('ctMergeNoOthers'),
     showTickets: t('ctShowTickets'),
     hideTickets: t('ctHideTickets'),
+    sortLabel: t('ctSortLabel'),
+    sortOpen: t('ctSortOpen'),
+    sortDone: t('ctSortDone'),
+    sortTitle: t('ctSortTitle'),
+    sortLinked: t('ctSortLinked'),
     kind: {
       task: t('ctKindTask'),
       epic: t('ctKindEpic'),

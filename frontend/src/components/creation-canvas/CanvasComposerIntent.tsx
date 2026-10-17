@@ -3,12 +3,12 @@
 // `CanvasBarGroup` and `CanvasSessionActions` each state at the top of themselves. A
 // second declaration would only add a file to the architecture ratchet's tally.
 import { useTranslations } from 'next-intl';
-import { BrainMark } from '@/components/brain/BrainMark';
 import {
   canvasComposerIntent,
   type CanvasComposerIntentId,
 } from '@/lib/canvasComposerIntents';
 import styles from './CreationCanvas.module.css';
+import { BrainMark } from '@seanhogg/builderforce-brain-ui';
 
 /**
  * WHAT ENTER MEANS, as the composer's leading segment.

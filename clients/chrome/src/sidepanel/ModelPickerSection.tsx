@@ -7,29 +7,10 @@
  * reads it per turn (`inference/route.ts`).
  */
 import { useEffect, useMemo } from 'react';
-import { LocalModelList, useLocalModels, type LocalModelLabels } from '@seanhogg/builderforce-brain-ui';
+import { LocalModelList, useLocalModels } from '@seanhogg/builderforce-brain-ui';
 import { t } from '../i18n/t';
+import { rovrLocalModelLabels } from './labels/localModelLabels';
 import { usePinnedModel, useServices } from './hooks';
-
-/** The shared list's copy, from Rovr's catalogs (`cancel` / `remove` are Rovr's own) —
- *  also the on-device half of the composer's `/` Model tab (`labels/composerLabels.ts`). */
-export function rovrLocalModelLabels(): LocalModelLabels {
-  return {
-    localCatalogHeading: t('lmCatalogHeading'),
-    localDownload: t('lmDownload'),
-    localDownloading: t('lmDownloading'),
-    localCancel: t('cancel'),
-    localRemove: t('remove'),
-    localMoreActions: t('lmMoreActions'),
-    localTools: t('lmTools'),
-    localContext: t('lmContext'),
-    localDownloadFailed: t('lmDownloadFailed'),
-    localReasonWebgpu: t('lmReasonWebgpu'),
-    localReasonF16: t('lmReasonF16'),
-    localReasonBuffer: t('lmReasonBuffer'),
-    localReasonEngine: t('lmReasonEngine'),
-  };
-}
 
 export function ModelPickerSection() {
   const services = useServices();

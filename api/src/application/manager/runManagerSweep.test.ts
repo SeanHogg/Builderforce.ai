@@ -5,6 +5,9 @@ import {
   MAX_PROJECTS_PER_TICK, MAX_CONCURRENT_PROJECT_PASSES, MANAGER_SWEEP_BUDGET_MS,
 } from './runManagerSweep';
 import { MANAGER_PASS_BUDGET_MS } from './ManagerService';
+import {
+  MIN_PROJECT_PASS_INTERVAL_MS, SWEEP_DECISION_HEARTBEAT_MS, sweepDecisionNeedsWrite,
+} from './managerSweepCadence';
 
 /**
  * THE MANAGER WAS A QUEUE WITH ONE SERVER.
@@ -136,5 +139,61 @@ describe('manager sweep fans out across projects', () => {
     // Bounded: neon-http opens a connection per query, so an unbounded fan-out over the
     // whole tick limit would trade a starved sweep for a throttled database.
     expect(MAX_CONCURRENT_PROJECT_PASSES).toBeLessThan(MAX_PROJECTS_PER_TICK);
+  });
+});
+
+/**
+ * A PASS PER PROJECT PER TICK WAS 288 PASSES A DAY.
+ *
+ * Every opted-in project with work got a full pass on every 5-minute tick, and every
+ * visit UPDATEd `project_manager_configs` even when it wrote back what was stored.
+ */
+describe('manager sweep cadence', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('./runManagerSweep.ts', import.meta.url).href),
+    'utf8',
+  );
+
+  it('selects only projects whose last pass is older than the minimum interval', () => {
+    expect(MIN_PROJECT_PASS_INTERVAL_MS).toBeGreaterThan(5 * 60_000);
+    expect(source).toMatch(/isNull\(projectManagerConfigs\.lastRunAt\)/);
+    expect(source).toMatch(/lt\(projectManagerConfigs\.lastRunAt, new Date\(now - MIN_PROJECT_PASS_INTERVAL_MS\)\)/);
+  });
+
+  it('gates the decision write on a change', () => {
+    expect(source).toMatch(/if \(!sweepDecisionNeedsWrite\(p, decision, reason\)\) return;/);
+  });
+
+  const now = Date.parse('2026-10-17T12:00:00Z');
+  const fresh = new Date(now - 5 * 60_000);
+
+  it('skips a write that only restates the stored decision', () => {
+    expect(sweepDecisionNeedsWrite(
+      { lastSweepDecision: 'skipped', lastSweepReason: 'tenant_token_limit', lastSweepAt: fresh },
+      'skipped', 'tenant_token_limit', now,
+    )).toBe(false);
+    expect(sweepDecisionNeedsWrite(
+      { lastSweepDecision: 'ran', lastSweepReason: null, lastSweepAt: fresh }, 'ran', null, now,
+    )).toBe(false);
+  });
+
+  it('writes when the decision or reason changes, or when never written', () => {
+    expect(sweepDecisionNeedsWrite(
+      { lastSweepDecision: 'ran', lastSweepReason: null, lastSweepAt: fresh }, 'skipped', 'pass_error', now,
+    )).toBe(true);
+    expect(sweepDecisionNeedsWrite(
+      { lastSweepDecision: 'skipped', lastSweepReason: 'tenant_token_limit', lastSweepAt: fresh },
+      'skipped', 'tick_budget_exhausted', now,
+    )).toBe(true);
+    expect(sweepDecisionNeedsWrite(
+      { lastSweepDecision: null, lastSweepReason: null, lastSweepAt: null }, 'ran', null, now,
+    )).toBe(true);
+  });
+
+  it('still refreshes last_sweep_at once per heartbeat so liveness stays visible', () => {
+    expect(sweepDecisionNeedsWrite(
+      { lastSweepDecision: 'ran', lastSweepReason: null, lastSweepAt: new Date(now - SWEEP_DECISION_HEARTBEAT_MS) },
+      'ran', null, now,
+    )).toBe(true);
   });
 });

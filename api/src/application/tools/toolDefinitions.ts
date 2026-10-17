@@ -13,6 +13,7 @@ import {
   scoreQuestionnaire,
   scoreQuiz,
 } from './toolTypes';
+import { perMillionToPerToken } from '@builderforce/model-catalog';
 import { CAREER_TOOLS } from './careerTools';
 import { money } from './toolFormat';
 import { STARTUP_FINANCE_TOOLS } from './startupFinanceTools';
@@ -223,8 +224,8 @@ const aiCostEstimator: CalculatorTool = {
     const grossTokens = tasksPerMonth * v.avgTokensPerTask!;
     const cacheHit = Math.max(0, Math.min(95, v.cacheHitPct!)) / 100;
     const effectiveTokens = grossTokens * (1 - cacheHit);
-    const grossCost = (grossTokens / 1_000_000) * price;
-    const netCost = (effectiveTokens / 1_000_000) * price;
+    const grossCost = grossTokens * perMillionToPerToken(price);
+    const netCost = effectiveTokens * perMillionToPerToken(price);
     const savings = grossCost - netCost;
     const costPerTask = tasksPerMonth > 0 ? netCost / tasksPerMonth : 0;
 

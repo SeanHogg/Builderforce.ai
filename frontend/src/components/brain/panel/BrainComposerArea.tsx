@@ -1,8 +1,7 @@
 import { useTranslations } from 'next-intl';
-import { PendingQuestionBanner } from '@seanhogg/builderforce-brain-ui';
+import { PendingQuestionBanner, ToolConfirmBar } from '@seanhogg/builderforce-brain-ui';
 import { AiDisclosure } from '../AiDisclosure';
 import { useBrainPanel } from './BrainPanelContext';
-import { BrainToolConfirmBar } from './BrainToolConfirmBar';
 import { BrainComposer } from './BrainComposer';
 import { REPLAY_MASK } from '@/lib/replaySensitive';
 
@@ -15,11 +14,29 @@ import { REPLAY_MASK } from '@/lib/replaySensitive';
 export function BrainComposerArea() {
   const { isPage, conv, approveAll, timeline } = useBrainPanel();
   const tBrain = useTranslations('brain');
+  const tCommon = useTranslations('common');
   const { pendingConfirm, resolveConfirm } = conv;
   const { pendingQuestion } = timeline;
   return (
     <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }} {...REPLAY_MASK}>
-      {pendingConfirm && <BrainToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
+      {pendingConfirm && (
+        <ToolConfirmBar
+          req={pendingConfirm}
+          onApprove={() => resolveConfirm(true)}
+          onDeny={() => resolveConfirm(false)}
+          onApproveAll={approveAll}
+          // A fragment, not the bare node: the shared bar's ReactNode comes from a second
+          // copy of React's types, and only an element is assignable across the two.
+          title={<>{tBrain.rich('wantsTo', { action: pendingConfirm.name.replace(/_/g, ' '), b: (chunks) => <strong>{chunks}</strong> })}</>}
+          labels={{
+            approve: tCommon('approve'),
+            approveAll: tBrain('approveAll'),
+            approveAllTitle: tBrain('approveAllTitle'),
+            deny: tCommon('cancel'),
+            aria: tBrain('confirmActionAria'),
+          }}
+        />
+      )}
       {pendingQuestion && (
         <PendingQuestionBanner
           key={pendingQuestion.messageId}

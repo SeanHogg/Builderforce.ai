@@ -8,13 +8,13 @@
  * with their own modules and add only what is genuinely theirs (dispatch).
  */
 
-export type MediaModelTier = 'FREE' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
+import type { ModelTier } from '@builderforce/model-catalog';
 
 export interface MediaModelEntry {
   id: string;
   label: string;
   brand: string;
-  tier: MediaModelTier;
+  tier: ModelTier;
 }
 
 /** The registry-facing half of a vendor module; each surface extends it with
@@ -23,7 +23,7 @@ export interface MediaVendorModuleBase<Id extends string, Env> {
   id: Id;
   catalog: ReadonlyArray<MediaModelEntry>;
   apiKeyFrom(env: Env): string | null;
-  tierFor(modelId: string): MediaModelTier;
+  tierFor(modelId: string): ModelTier;
 }
 
 export interface MediaVendorRegistry<Id extends string, Env, M extends MediaVendorModuleBase<Id, Env>> {
@@ -38,7 +38,7 @@ export interface MediaVendorRegistry<Id extends string, Env, M extends MediaVend
   resolve(modelId: string): { vendorId: Id; vendorModel: string };
   keyBound(env: Env, vendor: Id): boolean;
   anyBound(env: Env): boolean;
-  tierFor(modelId: string): MediaModelTier;
+  tierFor(modelId: string): ModelTier;
   /**
    * Catalog ids of the given tiers, VENDOR-PREFIXED and INTERLEAVED across
    * vendors: round 1 takes each vendor's first model in priority order, round 2
@@ -46,7 +46,7 @@ export interface MediaVendorRegistry<Id extends string, Env, M extends MediaVend
    * by an ambiguous bare id; interleaved so a small free-attempt budget reaches
    * several VENDORS instead of spending itself on one vendor's outage.
    */
-  modelsByTierPrefixed(...tiers: MediaModelTier[]): string[];
+  modelsByTierPrefixed(...tiers: ModelTier[]): string[];
 }
 
 export function createMediaVendorRegistry<Id extends string, Env, M extends MediaVendorModuleBase<Id, Env>>(

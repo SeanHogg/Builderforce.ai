@@ -2,11 +2,10 @@ import { useCallback, useMemo, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { BrainComposer, type BrainComposerLabels, type ComposerAddMenuItem as SharedAddMenuItem } from '@seanhogg/builderforce-brain-ui';
+import { BrainComposer, QueuedTurnChips, type BrainComposerLabels, type ComposerAddMenuItem as SharedAddMenuItem } from '@seanhogg/builderforce-brain-ui';
 import { Icon } from '@/components/ui/Icon';
 import { useAssistantGate } from '@/lib/academic/useAssistantGate';
-import { AssessmentGateNotice, QueuedTurnsReceipt } from './chat-input/ComposerNotices';
-import { ComposerSuggestions } from './chat-input/ComposerSuggestions';
+import { AssessmentGateNotice } from './chat-input/ComposerNotices';
 import { useComposerStarters } from './chat-input/useComposerStarters';
 import { useBrainComposerLabels } from './chat-input/useBrainComposerLabels';
 import { useComposerAccount } from './chat-input/useComposerAccount';
@@ -34,7 +33,7 @@ const noop = () => {};
 export function ChatInput(props: ChatInputProps) {
   const {
     value, onChange, onSubmit, placeholder, ariaLabel, disabled = false, submitLabel,
-    running = false, onStop, queuedCount = 0, rows = 2, submitOnEnter = true,
+    running = false, onStop, queued, rows = 2, submitOnEnter = true,
     onAttach, onAddContext, webBrowsing, onWebBrowsingChange, accountSettingsHref,
     modeVocabulary, memoryUnavailableReason, showBrainIcon = false, showVoice = false,
     pendingAttachments = NO_ATTACHMENTS, onRemoveAttachment, secondaryContent,
@@ -42,6 +41,7 @@ export function ChatInput(props: ChatInputProps) {
     starters, suggestions, account, className, focusToken,
   } = props;
   const t = useTranslations('chatInput');
+  const tBrain = useTranslations('brain');
   const router = useRouter();
   // THE exam gate (`lib/academic/assessment.ts`): a closed-book assessment live on the
   // board on stage refuses every turn from every composer — this one included.
@@ -74,9 +74,22 @@ export function ChatInput(props: ChatInputProps) {
     // copy of React's types, and only an element is assignable across the two.
     return rows?.map((row) => ({ ...row, icon: <>{row.icon}</> }));
   }, [starterControl.menuItem, addMenuItems]);
-  const showSuggestions = !!suggestions?.length && !value.trim() && !running && !starterControl.open;
-  const above = starterControl.catalog || showSuggestions
-    ? <>{starterControl.catalog}{showSuggestions && <ComposerSuggestions items={suggestions!} />}</>
+  // Held turns, as the shared chips every surface lists (removable before they send).
+  const queuedChips = queued && queued.items.length > 0
+    ? (
+      <QueuedTurnChips
+        items={queued.items}
+        textOf={(text) => text}
+        onRemove={queued.remove}
+        labels={{ list: tBrain('queuedList'), hint: tBrain('queuedHint'), remove: tBrain('queuedRemove') }}
+      />
+    )
+    : null;
+  const above = starterControl.catalog || queuedChips ? <>{starterControl.catalog}{queuedChips}</> : undefined;
+  // The chips stand down while the starting points are open; the composer itself hides
+  // them over a non-empty box and while a turn runs.
+  const suggestionRow = suggestions?.length && !starterControl.open
+    ? { items: suggestions, label: t('suggestionsLabel') }
     : undefined;
 
   const attachFiles = useCallback((files: File[]) => {
@@ -146,13 +159,9 @@ export function ChatInput(props: ChatInputProps) {
         voice={showVoice}
         context={context}
         above={above}
-        below={queuedCount > 0 || secondaryContent
-          ? (
-            <>
-              <QueuedTurnsReceipt count={queuedCount} />
-              {secondaryContent && <div style={{ display: 'flex', justifyContent: 'flex-end', minWidth: 0, flexWrap: 'wrap' }}>{secondaryContent}</div>}
-            </>
-          )
+        suggestions={suggestionRow}
+        below={secondaryContent
+          ? <div style={{ display: 'flex', justifyContent: 'flex-end', minWidth: 0, flexWrap: 'wrap' }}>{secondaryContent}</div>
           : undefined}
         labels={labels}
       />

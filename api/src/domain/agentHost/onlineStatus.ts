@@ -9,13 +9,14 @@
  * crashes, or is deleted from its machine never cleanly closes the socket, so
  * `connectedAt` can stay set forever and the host shows ONLINE indefinitely.
  *
- * `lastSeenAt` is refreshed by a periodic HTTP heartbeat (every 5 minutes; see
- * RelayHeartbeat in the agent-runtime). It is the liveness signal that catches
+ * `lastSeenAt` is refreshed by a periodic HTTP heartbeat (every 4 minutes; see
+ * RELAY_HEARTBEAT_INTERVAL_MS in the agent-runtime, and the server-side write throttle
+ * in application/agentHost/heartbeatThrottle.ts). It is the liveness signal that catches
  * dead hosts: if no heartbeat has landed within the staleness window we treat the
  * host as offline regardless of a stuck `connectedAt`.
  */
 
-/** Heartbeat cadence is 5 min; allow 3 missed beats before declaring a host dead. */
+/** Beats every 4 min with a 7-min write throttle → row ages ≤ 8 min, ≤ 12 min with one dropped beat. */
 export const AGENT_HOST_STALE_MS = 15 * 60 * 1000;
 
 type AgentHostLiveness = {

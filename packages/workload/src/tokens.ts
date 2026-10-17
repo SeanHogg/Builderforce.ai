@@ -12,3 +12,8 @@ export const CHARS_PER_TOKEN = 4;
 export function estimateTokensFromChars(charCount: number): number {
   return Math.ceil(charCount / CHARS_PER_TOKEN);
 }
+
+/** The same heuristic over a text; absent text is zero tokens. */
+export function estimateTokensFromText(text: string | null | undefined): number {
+  return text ? estimateTokensFromChars(text.length) : 0;
+}

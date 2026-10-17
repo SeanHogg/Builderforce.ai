@@ -6,7 +6,7 @@ import type {
   BrainMessage,
   ProjectMemoryRequest,
 } from "@seanhogg/builderforce-brain-embedded";
-import { isManagerRole, projectMemoryHooks } from "@seanhogg/builderforce-brain-embedded";
+import { isManagerRole, projectMemoryHooks, NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import { renderPlatformContextSection, type RunContextEnvelope } from "@builderforce/run-context";
 import { getApiKey, getBaseUrl } from "./gateway";
 import { ttlCache } from "./ttlCache";
@@ -1269,7 +1269,7 @@ export async function authedRaw<T>(
 ): Promise<{ status: number; body: T | undefined; text: string }> {
   const { asTenant, ...init } = authedInit ?? {};
   let token = await exchangeJwt(secrets);
-  if (!token) throw new Error("not_signed_in");
+  if (!token) throw new Error(NOT_SIGNED_IN);
   const call = (t: string) => {
     assertActsAs(t, asTenant);
     return trackReachability(fetch(`${getBaseUrl()}${path}`, {
@@ -1280,7 +1280,7 @@ export async function authedRaw<T>(
   let res = await call(token);
   if (res.status === 401) {
     token = await exchangeJwt(secrets, true);
-    if (!token) throw new Error("not_signed_in");
+    if (!token) throw new Error(NOT_SIGNED_IN);
     res = await call(token);
   }
   const text = await res.text().catch(() => "");

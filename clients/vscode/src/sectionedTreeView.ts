@@ -30,6 +30,9 @@ export interface SectionedViewChrome {
   readonly describe?: () => string | undefined;
   /** The view badge, re-read whenever a section loads. */
   readonly badge?: () => vscode.ViewBadge | undefined;
+  /** Told the view's visibility now and on every change — lets a section's owner
+   *  stop live work (streams, fast polls) while nobody can see it. */
+  readonly onVisibility?: (visible: boolean) => void;
 }
 
 class SectionHeader {
@@ -154,5 +157,11 @@ export function createSectionedTreeView(
   };
   paint();
   const sub = provider.onDidLoad(paint);
-  return vscode.Disposable.from(sub, view, provider);
+  const subs: vscode.Disposable[] = [sub];
+  if (chrome.onVisibility) {
+    const onVisibility = chrome.onVisibility;
+    onVisibility(view.visible);
+    subs.push(view.onDidChangeVisibility((e) => onVisibility(e.visible)));
+  }
+  return vscode.Disposable.from(...subs, view, provider);
 }

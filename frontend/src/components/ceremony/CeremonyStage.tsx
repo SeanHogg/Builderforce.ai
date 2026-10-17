@@ -212,7 +212,8 @@ function CeremonyStageInner({
   // first beat and `left_at` moves forward on each one, and the server resolves the
   // verdict once at conclude.
   //
-  // Every 60s while a session is live, and immediately on join. Deliberately coarse: this
+  // Every 2 min while a session is live, and immediately on join (matched to the room
+  // standup's ATTENDANCE_BEAT_MS in useRoomStandup). Deliberately coarse: this
   // answers "was this person at the standup", a question minutes wide, so a chattier beat
   // would buy nothing and cost a write per client per tick. Only ever records the CALLER
   // (the endpoint takes no identity from the body), so this cannot mark anyone else present.
@@ -223,7 +224,7 @@ function CeremonyStageInner({
   // beating while the tab is hidden: a person in a live room is still present.
   usePolledResource(
     () => (sessionId ? ceremonySessionsApi.heartbeat(sessionId) : undefined),
-    { intervalMs: 60_000, enabled: !!sessionId && connected, pauseWhenHidden: false, restartKey: sessionId },
+    { intervalMs: 120_000, enabled: !!sessionId && connected, pauseWhenHidden: false, restartKey: sessionId },
   );
 
   // Expire stale peer cursors (a peer that stopped moving / left).

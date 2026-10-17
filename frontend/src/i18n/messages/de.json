@@ -9570,6 +9570,12 @@
     "heroTitle": "Jede Idee wird <em>real.</em>",
     "heroSub": "Während Ihre Idee in einem Dokument wartet, liefert jemand anderes schon seine aus. Bringen Sie Ihr Team und KI-Agenten auf eine Leinwand und gehen Sie zuerst live.",
     "heroPromptPlaceholder": "Was möchten Sie erstellen?",
+    "heroSuggestCampaign": "Launch-Kampagne",
+    "heroSuggestCampaignPrompt": "Plane eine Launch-Kampagne für mein Produkt.",
+    "heroSuggestInterviews": "Kundeninterviews",
+    "heroSuggestInterviewsPrompt": "Fasse meine Kundeninterviews zu Produktanforderungen zusammen.",
+    "heroSuggestOnePager": "Board-One-Pager",
+    "heroSuggestOnePagerPrompt": "Erstelle aus meinen neuesten Zahlen ein einseitiges Board-Update.",
     "heroPromptAria": "Beschreiben Sie, was Sie erstellen möchten",
     "heroGetStarted": "Jetzt erstellen",
     "canvas": {
@@ -11717,6 +11723,14 @@
       "learnSkipReasonFrozen": "das Evermind dieses Projekts ist eingefroren (schreibgeschützt)",
       "reconcileTitle": "{count} gelernte Erinnerungen in Evermind v{version} abgeglichen",
       "reconcileHint": "Die Antwort hat diese abgerufenen Erkenntnisse neu formuliert und aktualisiert sie damit (Write-Through-Kognition).",
+      "modelMovePacked": "Unterhaltung an {models} angepasst — {dropped} frühere Nachrichten {how}, ~{tokens} Tokens",
+      "modelMoveVerbatim": "Unterhaltung vollständig an {models} übergeben, ~{tokens} Tokens",
+      "modelMoveOverWindow": "Sie ist weiterhin größer als das Kontextfenster des Modells.",
+      "modelMoveHowSummarized": "zusammengefasst",
+      "modelMoveHowRecalled": "durch abgerufene Erinnerungen ersetzt",
+      "modelMoveHowElided": "ausgelassen",
+      "modelMoveLocalFallback": "{from} auf diesem Gerät konnte diese Runde nicht übernehmen — {to} hat geantwortet",
+      "modelMoveHint": "Der Lauf ist zu einem anderen Modell gewechselt, daher wurde die Unterhaltung an dessen Kontextfenster angepasst.",
       "activityStarted": "{agent} hat mit der Arbeit an {kind} #{ref} begonnen",
       "activityCompleted": "{agent} hat {kind} #{ref} abgeschlossen",
       "activityCompletedWithLane": "{agent} hat {kind} #{ref} abgeschlossen — verschoben nach {lane}",
@@ -11941,6 +11955,8 @@
     "upgrade": "Upgrade",
     "upgradeToPlan": "Auf {plan} upgraden",
     "addCard": "Karte hinzufügen",
+    "signIn": "Anmelden",
+    "noModel": "Kein Modell verfügbar. Melde dich an oder starte ein Modell auf diesem Gerät.",
     "cardValidationFailed": "Kartenprüfung fehlgeschlagen.",
     "allowance": {
       "exhausted": "Dein KI-Token-Kontingent für diesen Zeitraum ist aufgebraucht ({used} von {limit}). Anfragen schlagen fehl oder brechen mitten in der Antwort ab, bis es am {resets} zurückgesetzt wird.",
@@ -11949,7 +11965,9 @@
       "connectAccount": "Eigenes Konto verbinden",
       "dismiss": "Ausblenden"
     },
-    "queuedCount": "{count, plural, one {# Nachricht in Warteschlange} other {# Nachrichten in Warteschlange}}",
+    "queuedList": "Wartende Nachrichten",
+    "queuedHint": "Wartet – wird gesendet, wenn der Lauf endet",
+    "queuedRemove": "Entfernen",
     "onboardMe": "Hilf mir beim Einstieg",
     "onboardMePrompt": "Ich bin neu hier – hilf mir beim Einstieg. Frag mich, was ich bauen möchte, erkläre, wie Nutzung und Kosten funktionieren, empfiehl, ob der Free- oder Pro-Plan zu meinem Zeitrahmen passt, und hilf mir, mein vorhandenes KI-Konto zu verbinden, falls ich eines habe.",
     "onboardMeHint": "Umfang, Kosten und Tarif – ich führe dich Schritt für Schritt durch.",
@@ -33616,6 +33634,12 @@
       "subtitle": "Beschreibe eine App. Studio schreibt sie, führt sie in deinem Browser aus und veröffentlicht sie.",
       "promptLabel": "Beschreibe, was gebaut werden soll",
       "placeholder": "Lass uns … bauen",
+      "suggestLanding": "Landingpage",
+      "suggestLandingPrompt": "eine Landingpage für mein Produkt mit Anmeldeformular",
+      "suggestBooking": "Buchungs-App",
+      "suggestBookingPrompt": "eine Buchungs-App, in der Kunden einen Termin wählen",
+      "suggestDashboard": "Internes Dashboard",
+      "suggestDashboardPrompt": "ein internes Dashboard, das den Wochenumsatz verfolgt",
       "submit": "Bauen",
       "startFailed": "Deine Sitzung konnte nicht gestartet werden. Versuche es erneut.",
       "recentTitle": "Deine Studio-Projekte",
@@ -35077,16 +35101,10 @@
       "blog": "Passender Artikel",
       "licenseNote": "nutzen, forken und ausliefern, kommerziell oder nicht"
     },
-    "cta": {
-      "title": "Sehen Sie sie im Zusammenspiel",
-      "desc": "Öffnen Sie die Canvas: Die Live-Vorschau von allem, was Sie bauen, läuft auf BuilderForce WebContainers, in Ihrem eigenen Browser.",
-      "primary": "Canvas öffnen",
-      "secondary": "Zum Blog"
-    },
     "packages": {
       "webcontainers": {
         "tagline": "Ein offener, MIT-lizenzierter Ersatz für StackBlitz WebContainers: eine Entwicklungsumgebung, die vollständig im Browser läuft.",
-        "summary": "Übergeben Sie ein Projekt als Dateien, und es liefert eine Live-Vorschau in einem iframe, baut das Projekt für das Deployment und prüft die Typen, ohne COOP/COEP-Header und ohne Sitzungslimits.",
+        "summary": "Übergeben Sie ein Projekt als Dateien, und es liefert eine Live-Vorschau in einem iframe, baut das Projekt für das Deployment und prüft die Typen, ohne COOP/COEP-Header vorauszusetzen und ohne Sitzungslimits.",
         "problem": "Entwicklungsumgebungen im Browser verlangten viel, bevor sie eine einzige Vorschau zeigten: eine proprietäre Lizenz mit nicht kommerzieller Gratisstufe, ein monatliches Limit für API-Sitzungen und Cross-Origin-Isolation-Header (COOP/COEP), die Einbettungen und Drittanbieter-Skripte auf der Host-Seite brechen. Für ein Produkt, das alles, was es baut, in der Vorschau zeigt, schränkt jedes davon den Kernablauf ein.",
         "gets": [
           "Live-Vorschauen von Frontend-Apps (Vite mit React, Vue oder Svelte, Create React App und statische Seiten), in denen TypeScript, JSX, CSS, JSON und npm-Pakete wie unter Vite funktionieren.",
@@ -35137,7 +35155,7 @@
             },
             {
               "aspect": "Node.js-Programme und -Server, npm install, Shell",
-              "ours": "Ja: ein Web Worker pro Prozess, weiterhin ohne COOP/COEP",
+              "ours": "Ja: ein Web Worker pro Prozess, weiterhin ohne COOP/COEP vorauszusetzen",
               "theirs": "Ja"
             }
           ],

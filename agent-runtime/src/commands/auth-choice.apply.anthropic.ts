@@ -1,4 +1,4 @@
-import { currentAnthropicModelId } from "../agents/anthropic-models.js";
+import { currentAnthropicModelId } from "@builderforce/model-catalog";
 import { upsertAuthProfile } from "../agents/auth-profiles.js";
 import {
   formatApiKeyPreview,

@@ -123,6 +123,14 @@ class_name = "MediaRenderContainerDO"
 name = "COLLABORATION_ROOM"
 class_name = "CollaborationRoomDO"
 
+# Per-tenant sliding-window rate limit (presentation/middleware/rateLimitMiddleware.ts)
+# and the public `/hooks/*` ingress throttle — both through the ONE counter in
+# application/ratelimit/slidingWindow.ts. One instance per bucket name. While this
+# binding was absent both limiters were silently inert in production (fail-open).
+[[durable_objects.bindings]]
+name = "TENANT_RATE_LIMITER"
+class_name = "TenantRateLimiterDO"
+
 # Long-lived Cloudflare Container for "Cloud Agent (Node/Container)" runs — a
 # persistent Node process with a real shell (build/test/lint). The image lives in
 # api/container; build context is that dir. Requires a Workers Paid plan with
@@ -307,6 +315,13 @@ tag = "v13"
 # (alarms require SQLite-backed DOs); MediaRenderContainerDO is the ffmpeg render
 # container's control DO. Container-control DOs are SQLite-backed.
 new_sqlite_classes = ["MediaJobDO", "MediaRenderContainerDO"]
+
+[[migrations]]
+tag = "v14"
+# TenantRateLimiterDO backs the per-tenant API rate limit and the ingress throttle.
+# It only uses the key-value storage API (storage.get/put of one `counts` blob),
+# which SQLite-backed Durable Objects support; free-plan DOs must be SQLite-backed.
+new_sqlite_classes = ["TenantRateLimiterDO"]
 
 # Cron triggers — see scheduled() in src/index.ts
 #   "0 9 * * *"   09:00 UTC daily: probe every LLM vendor; email superadmins on status change.

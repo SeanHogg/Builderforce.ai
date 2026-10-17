@@ -21,13 +21,12 @@
  * whenever `!hasTenant`, inside a BrainProvider configured with guestBrainConfig.
  */
 
-import { Icon } from '@/components/ui/Icon';
-import { BrainMark } from './BrainMark';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useBrainChats, useBrainConversation, isStepMessage, getBrainCapability, guestMessageAuthor, GUEST_ROOM_CHAT_ID, type BrainCapabilityId } from '@/lib/brain';
+import { useBrainChats, useBrainConversation, isStepMessage, getBrainCapability, GUEST_ROOM_CHAT_ID, type BrainCapabilityId } from '@/lib/brain';
+import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatInput } from '@/components/ChatInput';
 import { GuestSignupCta } from '@/components/GuestSignupCta';
@@ -42,6 +41,7 @@ import {
   createGuestRoom, leaveGuestRoom, appendGuestRoomMessages, refreshGuestCredentials,
   getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName, type GuestRoomState,
 } from '@/lib/guestRoomApi';
+import { BrainMark, BrainTimeline, ChatErrorBanner, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
 
 /** How often the short-lived guest token is renewed (it expires after an hour). */
 const CREDENTIAL_REFRESH_MS = 45 * 60 * 1000;
@@ -59,6 +59,8 @@ interface GuestBrainPanelProps {
 export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }: GuestBrainPanelProps) {
   const t = useTranslations('guestBrain');
   const tRoom = useTranslations('guestRoom');
+  const tCommon = useTranslations('common');
+  const timelineLabels = useBrainTimelineLabels();
   const tBrainCaps = useTranslations('brain.capabilities');
 
   const [ready, setReady] = useState(false);          // guest token minted
@@ -278,15 +280,13 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
   return (
     <div className={`gb-root ${isPage ? 'gb-page' : 'gb-docked'}`}>
       {/* Header */}
-      <div className="gb-header">
-        <span className="gb-brand"><BrainMark /> {t('brand')}</span>
-        <div className="gb-header-right">
-          <Link href="/register" className="gb-signup-link">{t('signUpFree')}</Link>
-          {onClose && (
-            <button type="button" onClick={onClose} aria-label={t('close')} className="gb-close">×</button>
-          )}
-        </div>
-      </div>
+      <SurfaceHeader
+        title={t('brand')}
+        running={conv.sending}
+        actions={<Link href="/register" className="gb-signup-link">{t('signUpFree')}</Link>}
+        {...(onClose ? { onClose } : {})}
+        labels={{ close: t('close') }}
+      />
 
       {/* Body */}
       {ready && !enabled ? (
@@ -321,7 +321,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
           <div className="gb-messages">
             {visibleMessages.length === 0 && !conv.streamingText && (
               <div className="gb-empty">
-                <div className="gb-empty-emoji"><Icon source="💡" size="1em" /></div>
+                <div className="gb-empty-emoji"><BrainMark /></div>
                 <div className="gb-empty-title">{inRoom ? tRoom('emptyTitle') : t('emptyTitle')}</div>
                 <div className="gb-empty-body">{inRoom ? tRoom('emptyBody') : t('emptyBody')}</div>
                 <BrainCapabilityPicker
@@ -336,37 +336,30 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
                 />
               </div>
             )}
-            {visibleMessages.map((m) => {
-              const author = m.role === 'user' ? guestMessageAuthor(m.metadata) : null;
-              return (
-                <div key={m.id} className={`gb-msg gb-msg-${m.role === 'user' ? 'user' : 'assistant'}`}>
-                  {m.role === 'user'
-                    ? (
-                      <div className="gb-bubble gb-bubble-user">
-                        {author && <span className="gb-author">{author}</span>}
-                        {m.content}
-                      </div>
-                    )
-                    : <div className="gb-bubble gb-bubble-assistant"><ChatMessageContent content={m.content} /></div>}
-                </div>
-              );
-            })}
-            {conv.streamingText ? (
-              <div className="gb-msg gb-msg-assistant">
-                <div className="gb-bubble gb-bubble-assistant"><ChatMessageContent content={conv.streamingText} /></div>
-              </div>
-            ) : room.streamingPeer ? (
-              // Somebody ELSE asked: their relayed deltas, rendered exactly like my
-              // own streaming bubble and captioned with whose turn produced it.
-              <div className="gb-msg gb-msg-assistant">
-                <div className="gb-bubble gb-bubble-assistant">
-                  <span className="gb-author gb-author-muted">{tRoom('replyingTo', { name: room.streamingPeer.name })}</span>
-                  <ChatMessageContent content={room.streamingPeer.text} />
-                </div>
-              </div>
-            ) : null}
-            {conv.error && !capReached && <div className="gb-error">{conv.error}</div>}
-            {roomError && <div className="gb-error">{roomError}</div>}
+            {(visibleMessages.length > 0 || conv.streamingText || room.streamingPeer) && (
+              // THE shared transcript — the same rows every surface draws; a room
+              // message carries its writer as `authoredBy`, so it is named like any
+              // participant. Somebody ELSE's turn streams as theirs, captioned.
+              <BrainTimeline
+                messages={conv.messages}
+                trace={[]}
+                streamingText={conv.streamingText || room.streamingPeer?.text || ''}
+                isRunning={conv.sending || !!room.streamingPeer}
+                labels={timelineLabels}
+                assistantName={t('brand')}
+                renderMessage={(_msg, ctx) => <ChatMessageContent content={ctx.text} />}
+                renderStreaming={(text) => (
+                  <>
+                    {!conv.streamingText && room.streamingPeer && (
+                      <span className="gb-author gb-author-muted">{tRoom('replyingTo', { name: room.streamingPeer.name })}</span>
+                    )}
+                    <ChatMessageContent content={text} />
+                  </>
+                )}
+              />
+            )}
+            {!capReached && <ChatErrorBanner className="gb-error" error={conv.error} action={conv.errorAction ?? null} onDismiss={conv.clearError} labels={{ dismiss: tCommon('dismiss') }} />}
+            {roomError && <ChatErrorBanner className="gb-error" error={roomError} action={null} onDismiss={() => setRoomError(null)} labels={{ dismiss: tCommon('dismiss') }} />}
           </div>
 
           {/* Composer OR the sign-up wall */}
@@ -412,11 +405,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
       <style>{`
         .gb-root { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--bg-base); color: var(--text-primary); }
         .gb-page { max-width: 820px; width: 100%; margin: 0 auto; height: calc(100vh - 120px); min-height: 480px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; }
-        .gb-header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-elevated); }
-        .gb-brand { font-weight: 600; font-size: var(--font-size-body); }
-        .gb-header-right { display: flex; align-items: center; gap: 12px; }
         .gb-signup-link { font-size: var(--font-size-small); font-weight: 600; color: var(--accent); text-decoration: none; }
-        .gb-close { background: transparent; border: none; color: var(--text-muted); font-size: var(--font-size-card-title); line-height: 1; cursor: pointer; padding: 0 4px; }
         .gb-messages { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
         /* Wide enough for the capability tiles to sit two-or-more across; the
            tile grid is auto-fit so it collapses to one column on a phone. */
@@ -424,19 +413,13 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
         .gb-empty-emoji { font-size: var(--font-size-page-title); }
         .gb-empty-title { font-size: var(--font-size-card-title); font-weight: 600; color: var(--text-primary); }
         .gb-empty-body { font-size: var(--font-size-small); line-height: 1.5; }
-        .gb-msg { display: flex; }
-        .gb-msg-user { justify-content: flex-end; }
-        .gb-msg-assistant { justify-content: flex-start; }
-        .gb-bubble { max-width: 88%; padding: 10px 13px; border-radius: var(--radius-lg); font-size: var(--font-size-small); line-height: 1.55; overflow-wrap: anywhere; }
-        .gb-bubble-user { background: var(--accent); color: var(--text-on-accent); border-bottom-right-radius: 4px; }
-        .gb-bubble-assistant { background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-bottom-left-radius: 4px; }
         /* Who said it — only meaningful in a shared room, where more than one
            person writes into the same transcript. */
         .gb-author { display: block; font-size: var(--font-size-eyebrow); font-weight: 700; opacity: 0.85; margin-bottom: 3px; }
         /* On an assistant bubble the caption names whose turn this reply answers,
            so it reads as context rather than as the speaker. */
         .gb-author-muted { color: var(--text-muted); font-weight: 600; }
-        .gb-error { font-size: var(--font-size-small); color: var(--danger); background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 12px; }
+        .gb-error { font-size: var(--font-size-small); color: var(--error-text, var(--danger)); background: var(--error-bg, var(--bg-elevated)); border-radius: var(--radius-md); padding: 8px 12px; }
         .gb-composer { flex-shrink: 0; border-top: 1px solid var(--border-subtle); padding: 10px 12px; }
         .gb-remaining { font-size: var(--font-size-small); color: var(--text-muted); }
         .gb-invite { padding: 0 12px; font-size: var(--font-size-small); font-weight: 600; border: none; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); cursor: pointer; min-height: 32px; white-space: nowrap; }
@@ -444,7 +427,6 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
         .gb-invite:disabled { opacity: 0.5; cursor: default; }
         @media (max-width: 640px) {
           .gb-page { height: calc(100vh - 80px); border-radius: 0; border-left: none; border-right: none; }
-          .gb-bubble { max-width: 92%; }
         }
       `}</style>
     </div>

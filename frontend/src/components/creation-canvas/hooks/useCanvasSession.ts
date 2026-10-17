@@ -11,6 +11,7 @@ import { faultText } from '@/lib/apiClient';
 import type { AdoptRemoteBoardDecision, LocalBoardState } from '@/domains/canvas/application/AdoptRemoteBoard';
 import { boardSignature } from '@/domains/canvas/application/PersistCanvas';
 import { usePolledResource } from '@/hooks/usePolledResource';
+import { useBoardOnScreen } from '@/lib/canvas/BoardOnScreenContext';
 import { getProjectEvermindContributions, getProjectEvermindHead, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { projectEvermindNodePatch } from '../canvasProjectSync';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
@@ -252,6 +253,9 @@ export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowR
   useEffect(() => {
     if (!evermindLiveEnabled) setEvermindLiveByNodeId({});
   }, [evermindLiveEnabled, setEvermindLiveByNodeId]);
+  // Live Evermind badges are for the board a person is looking at; a kept board
+  // keeps its last values and refreshes on return to the stage.
+  const onScreen = useBoardOnScreen();
   usePolledResource(async (signal) => {
       const bindings = JSON.parse(evermindBindingKey) as Array<{ nodeId: string; projectId: number }>;
       const byProject = new Map<number, Promise<[ProjectEvermindHead, ProjectEvermindContributions]>>();
@@ -273,6 +277,6 @@ export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowR
         }
         return JSON.stringify(current) === JSON.stringify(next) ? current : next;
       });
-  }, { intervalMs: 20_000, enabled: evermindLiveEnabled, restartKey: evermindBindingKey });
+  }, { intervalMs: 20_000, enabled: evermindLiveEnabled && onScreen, restartKey: evermindBindingKey });
   return { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard, boardLoaded };
 }

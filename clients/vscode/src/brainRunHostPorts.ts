@@ -12,7 +12,7 @@ import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, postBrainMessages, projectEvermindHooks } from "./bfApi";
 import { scopeTenantId } from "./outboxStorage";
 import { brainToolCatalog } from "./brainToolCatalog";
-import { resolveModelRoute, routeStream } from "./modelRouting";
+import { localWindowProbes, resolveModelRoute, routeStream } from "./modelRouting";
 import { refreshPendingChanges } from "./gitChanges";
 import { appendSessionNote } from "./sessionNotes";
 import { setLocalChatRuns } from "./attention";
@@ -50,6 +50,9 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     // Resolved per run, not once: an explicit pick, the project's Evermind pin or an
     // on-device route can all change between turns, and a local credential can expire.
     stream: streamForRoute,
+    // Memoized in `localModels`, so asking per window decision costs nothing while
+    // nothing changed — the routing seam's probe, the one the local-first route reads.
+    localProbes: localWindowProbes,
     persistence: {
       // `opts.scope` arrives on a queued step batch (the step outbox): it is sent AS the
       // tenant it was queued for, or not at all.

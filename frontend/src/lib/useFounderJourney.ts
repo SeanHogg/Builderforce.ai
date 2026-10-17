@@ -21,10 +21,11 @@
  * `reach` is never current here; nothing yet says a founder is distributing.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { creationSessionsApi } from './builderforceApi';
 import { investorApi } from './investorApi';
+import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
 import type { Stage } from './navGroups';
 import type { MethodStep } from './methodology';
 
@@ -42,53 +43,64 @@ export interface FounderJourney {
 
 const EMPTY: FounderJourney = { stage: null, act: null, activeSessionId: null, activeRealizationId: null, loading: false };
 
+/**
+ * Shared across mounts. The shell panel, the dashboard and its act rail all call
+ * this hook on the same page, and each used to fire the same three or four list
+ * reads; they now share ONE in-flight read and its answer for a minute (a founder
+ * does not change arc stage per render). Keyed by workspace so a switch never
+ * shows the previous workspace's position.
+ */
+const JOURNEY_TTL_MS = 60_000;
+const JOURNEY_CACHE_PREFIX = 'founder-journey:';
+
+/** Drop the shared journey so the next mount re-reads it (after a stage-moving act). */
+export function invalidateFounderJourney(): void {
+  invalidateClientCache(JOURNEY_CACHE_PREFIX);
+}
+
+async function readFounderJourney(): Promise<FounderJourney> {
+  // Loaded on demand: the journey read is effect work, so the realization client
+  // (and the method-event emitter behind it) stays out of the root layout's closure.
+  const { realizationApi } = await import('./realizationApi');
+  const [companies, signal, sessions] = await Promise.all([
+    investorApi.companies.list().catch(() => []),
+    realizationApi.journeySignal().catch(() => null),
+    creationSessionsApi.list('active').then((r) => r.sessions).catch(() => []),
+  ]);
+
+  const ownsACompany = companies.some((company) => !company.isPortfolio);
+  if (ownsACompany) return { ...EMPTY, stage: 'run' };
+  if (signal?.stage) return { ...EMPTY, stage: signal.stage, activeRealizationId: signal.realizationId };
+  if (sessions.length === 0) return EMPTY;
+
+  const activeSessionId = sessions[0].id;
+  const realizations = await realizationApi.list(activeSessionId).catch(() => []);
+  const latest = realizations[0];
+  const act: MethodStep = !latest ? 'read' : latest.verdict === 'met' ? 'build' : 'prove';
+  return { ...EMPTY, stage: 'idea', act, activeSessionId };
+}
+
 export function useFounderJourney(): FounderJourney {
-  const { isAuthenticated, hasTenant } = useAuth();
-  const [journey, setJourney] = useState<FounderJourney>({ ...EMPTY, loading: true });
-  const requestId = useRef(0);
+  const { isAuthenticated, hasTenant, tenant } = useAuth();
+  const key = `${JOURNEY_CACHE_PREFIX}${tenant?.id ?? ''}`;
+  const [journey, setJourney] = useState<FounderJourney>(
+    () => readClientCached<FounderJourney>(key, JOURNEY_TTL_MS) ?? { ...EMPTY, loading: true },
+  );
 
   useEffect(() => {
     if (!isAuthenticated || !hasTenant) {
       setJourney(EMPTY);
       return;
     }
-    const id = ++requestId.current;
-    setJourney((prev) => ({ ...prev, loading: true }));
-
-    (async () => {
-      // Loaded on demand: the journey read is effect work, so the realization client
-      // (and the method-event emitter behind it) stays out of the root layout's closure.
-      const { realizationApi } = await import('./realizationApi');
-      const [companies, signal, sessions] = await Promise.all([
-        investorApi.companies.list().catch(() => []),
-        realizationApi.journeySignal().catch(() => null),
-        creationSessionsApi.list('active').then((r) => r.sessions).catch(() => []),
-      ]);
-      if (requestId.current !== id) return;
-
-      const ownsACompany = companies.some((company) => !company.isPortfolio);
-      if (ownsACompany) {
-        setJourney({ ...EMPTY, stage: 'run' });
-        return;
-      }
-      if (signal?.stage) {
-        setJourney({ ...EMPTY, stage: signal.stage, activeRealizationId: signal.realizationId });
-        return;
-      }
-      if (sessions.length === 0) {
-        setJourney(EMPTY);
-        return;
-      }
-
-      const activeSessionId = sessions[0].id;
-      const realizations = await realizationApi.list(activeSessionId).catch(() => []);
-      if (requestId.current !== id) return;
-
-      const latest = realizations[0];
-      const act: MethodStep = !latest ? 'read' : latest.verdict === 'met' ? 'build' : 'prove';
-      setJourney({ ...EMPTY, stage: 'idea', act, activeSessionId });
-    })();
-  }, [isAuthenticated, hasTenant]);
+    let live = true;
+    const cached = readClientCached<FounderJourney>(key, JOURNEY_TTL_MS);
+    setJourney(cached ?? ((prev) => ({ ...prev, loading: true })));
+    if (cached) return;
+    getOrSetClientCached(key, () => readFounderJourney(), { ttlMs: JOURNEY_TTL_MS })
+      .then((next) => { if (live) setJourney(next); })
+      .catch(() => { if (live) setJourney(EMPTY); });
+    return () => { live = false; };
+  }, [isAuthenticated, hasTenant, key]);
 
   return journey;
 }

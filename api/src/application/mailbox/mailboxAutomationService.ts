@@ -17,6 +17,10 @@ import { signalPendingWork } from '../runtime/cronWorkSignal';
 import { createTickDispatchBudget, type TickDispatchBudget } from '../runtime/tickDispatchBudget';
 import { getMailboxConnection, readMailbox, sendFromMailbox, setMailboxMessageRead } from './mailboxService';
 import type { MailboxMessage } from './mailboxProviders';
+import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
+import {
+  MAILBOX_AUTOMATION_REAP_INTERVAL_MS, MAILBOX_AUTOMATION_REAP_MARKER_KEY, MAILBOX_AUTOMATION_STALE_PROCESSING_MS,
+} from './mailboxSweepWrites';
 
 export const MAILBOX_RESPONSE_MODES = ['draft', 'approval', 'automatic'] as const;
 export type MailboxResponseMode = typeof MAILBOX_RESPONSE_MODES[number];
@@ -161,6 +165,30 @@ async function updateExecution(
     .where(and(eq(mailboxAutomationReplies.tenantId, tenantId), eq(mailboxAutomationReplies.id, id)));
 }
 
+/**
+ * Release claims stuck in `processing` (their pass died mid-reply) so the message can be
+ * claimed again. Called only when an enabled rule exists — with none, nothing would
+ * re-claim the message anyway. The scheduled all-tenant sweep reaps at most once per
+ * {@link MAILBOX_AUTOMATION_REAP_INTERVAL_MS} (a KV marker) instead of a DELETE on every
+ * tick; a tenant's manual run (`onlyTenantId`) always reaps its own rows. Without KV the
+ * marker reads as absent, so the reap runs — the safe direction.
+ */
+async function reapStaleProcessingClaims(env: Env, db: Db, onlyTenantId?: number): Promise<void> {
+  const scheduled = onlyTenantId == null;
+  if (scheduled && await peekCached<number>(env, MAILBOX_AUTOMATION_REAP_MARKER_KEY)) return;
+  await db.delete(mailboxAutomationReplies).where(and(
+    eq(mailboxAutomationReplies.status, 'processing'),
+    lt(mailboxAutomationReplies.updatedAt, new Date(Date.now() - MAILBOX_AUTOMATION_STALE_PROCESSING_MS)),
+    ...(onlyTenantId == null ? [] : [eq(mailboxAutomationReplies.tenantId, onlyTenantId)]),
+  ));
+  if (scheduled) {
+    await setCached(env, MAILBOX_AUTOMATION_REAP_MARKER_KEY, Date.now(), {
+      kvTtlSeconds: MAILBOX_AUTOMATION_REAP_INTERVAL_MS / 1000,
+      l1TtlMs: MAILBOX_AUTOMATION_REAP_INTERVAL_MS,
+    }).catch(() => undefined);
+  }
+}
+
 export interface MailboxAutomationSweepResult {
   rules: number;
   matched: number;
@@ -174,15 +202,11 @@ export interface MailboxAutomationSweepResult {
 export async function runMailboxAutomationSweep(
   env: Env, db: Db, onlyTenantId?: number, dispatchBudget: TickDispatchBudget = createTickDispatchBudget(),
 ): Promise<MailboxAutomationSweepResult> {
-  await db.delete(mailboxAutomationReplies).where(and(
-    eq(mailboxAutomationReplies.status, 'processing'),
-    lt(mailboxAutomationReplies.updatedAt, new Date(Date.now() - 30 * 60 * 1000)),
-    ...(onlyTenantId == null ? [] : [eq(mailboxAutomationReplies.tenantId, onlyTenantId)]),
-  ));
   const rules = await db.select().from(mailboxAutomationRules).where(onlyTenantId == null
     ? eq(mailboxAutomationRules.enabled, true)
     : and(eq(mailboxAutomationRules.enabled, true), eq(mailboxAutomationRules.tenantId, onlyTenantId)))
     .orderBy(asc(mailboxAutomationRules.id)).limit(250);
+  if (rules.length > 0) await reapStaleProcessingClaims(env, db, onlyTenantId);
   const summary: MailboxAutomationSweepResult = { rules: rules.length, matched: 0, drafted: 0, approvals: 0, sent: 0, failed: 0 };
   const byConnection = new Map<string, typeof rules>();
   for (const rule of rules) {

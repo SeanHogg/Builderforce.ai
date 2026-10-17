@@ -3,9 +3,9 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * cronWorkSignal — the KV gate that lets Neon compute autosuspend.
  *
  * THE PROBLEM. The frequent every-5-minute cron (see scheduled() in src/index.ts)
- * fires ~14 cross-tenant sweeps every five minutes, UNCONDITIONALLY. Each sweep
- * queries Postgres, so the Neon endpoint is woken every five minutes forever and
- * never idles long enough to scale to zero — ~730 compute-hours/month, far past
+ * fired every `frequent` sweep in CRON_SWEEPS (dozens, cross-tenant) every five
+ * minutes, UNCONDITIONALLY. Each sweep queries Postgres, so the Neon endpoint
+ * was woken every five minutes forever and never idled long enough to scale to zero — ~730 compute-hours/month, far past
  * the Free-tier ceiling. On a platform that is quiet most of the day, almost all
  * of that compute is spent discovering there was nothing to do.
  *
@@ -15,8 +15,10 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * fan-out?" using KV alone — no Neon round-trip:
  *
  *   • A write that creates backstop-eligible work (a ticket entering a runnable
- *     lane — see maybeAutoRunOnLaneEntry) calls {@link signalPendingWork}. The
- *     next tick then runs the fan-out and dispatches within 5 minutes.
+ *     lane on a request path — see maybeAutoRunOnLaneEntry) calls
+ *     {@link signalPendingWork}. The next tick then runs the fan-out and
+ *     dispatches within 5 minutes. Work the fan-out itself re-discovers is NOT
+ *     new work and does not re-signal, or the gate would never close.
  *   • {@link evaluateCronGate} lets the tick RUN when the signal is set OR the
  *     floor interval has elapsed; otherwise it SKIPS and Neon stays asleep.
  *   • The FLOOR sweep is the safety net: even with zero signals, the fan-out runs
@@ -316,9 +318,14 @@ function parseNextDue(raw: string | null): number | null {
  * Open a tick that has decided to run: CONSUME the pending-work signal (so a
  * fully-drained platform goes cold and the next idle tick skips) and, when this
  * run satisfies the floor, stamp the floor timestamp. Called BEFORE firing the
- * sweeps so that any re-signal a sweep emits mid-tick (e.g. a paced backlog —
- * see {@link signalPendingWork} in autonomousExecutionSweep) survives the
- * consume and keeps the next tick hot. Best-effort.
+ * sweeps so that any re-signal a sweep emits mid-tick for a backlog it paces
+ * across ticks (a YouTube upload with chunks still to send, a social campaign
+ * with posts still queued — see their {@link signalPendingWork} calls) survives
+ * the consume and keeps the next tick hot. The ticket backstop deliberately does
+ * NOT re-signal: a lane-trigger evaluation inside the scheduled invocation (the
+ * auto-exec sweep, the manager pass) raises no signal, or one ticket that passes
+ * evaluation and is then refused by the dispatcher would pin the gate open on
+ * every tick (see maybeAutoRunOnLaneEntry). Best-effort.
  */
 export async function openCronTick(env: Env, nowMs: number, floorDue: boolean): Promise<void> {
   const store = kv(env);

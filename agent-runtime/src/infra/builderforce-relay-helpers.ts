@@ -20,6 +20,16 @@ export type HeartbeatOptions = {
 };
 
 /**
+ * Heartbeat cadence. Bound to the server's liveness rules, not picked freely: a
+ * host is online while `lastSeenAt` is within 15 min, and the server only writes
+ * the row once `lastSeenAt` is ≥ 7 min old (api heartbeatThrottle, which pins
+ * this same 4-min cadence). At 4 min the 8-min beat writes, so one dropped beat
+ * still lands inside the window (12 min). This is the ONLY liveness source while
+ * the socket is open — the relay DO no longer sends its own heartbeat.
+ */
+export const RELAY_HEARTBEAT_INTERVAL_MS = 4 * 60 * 1000;
+
+/**
  * Sends a periodic HTTP PATCH heartbeat to keep `lastSeenAt` fresh in the
  * Builderforce database between WebSocket reconnects.
  */
@@ -28,11 +38,11 @@ export class RelayHeartbeat {
 
   constructor(private readonly opts: HeartbeatOptions) {}
 
-  /** Send immediately and schedule a 5-minute repeat. */
+  /** Send immediately and schedule a {@link RELAY_HEARTBEAT_INTERVAL_MS} repeat. */
   schedule(): void {
     this.clear();
     void this.sendOnce();
-    this.timer = setInterval(() => void this.sendOnce(), 5 * 60 * 1000);
+    this.timer = setInterval(() => void this.sendOnce(), RELAY_HEARTBEAT_INTERVAL_MS);
   }
 
   clear(): void {

@@ -45,6 +45,15 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   +3 files (2026-10-17, Neon load review) — not new first-paint work: the shell's
+ *     attention signal (`lib/useAttention.ts`, already here via FloatingBrain and
+ *     ManagerStatusIndicator) ran TWO independent loops that never paused in a hidden tab.
+ *     Its loop moved into `lib/attentionPoller.ts` (~one shared poll per scope) on
+ *     `hooks/useSharedPoll.ts` (the ref-counted, visibility-gated shared loop), and the
+ *     hidden-tab + backoff rules that `usePolledResource`, the shared poll and the canvas
+ *     workflow poll each re-implemented now live once in `lib/polling/pollPolicy.ts`
+ *     (~25 lines, import-free). Lazy-loading them would delay the badge the header shows
+ *     on first paint and buy back nothing.
  *   +3 files (2026-10-16, Insights) — each tiny, import-free or near it, and each answers a
  *     question the shell itself asks on first paint:
  *     `lib/safeRedirect.ts` (~36 lines): `lib/auth.ts` (already here) sanitises every

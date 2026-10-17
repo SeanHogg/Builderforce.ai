@@ -5,7 +5,15 @@ import {
   streamBuilderInsights,
   type BuilderInsightsSnapshot,
 } from "./gateway";
+import {
+  INSIGHTS_CADENCE,
+  insightsMode,
+  insightsStartDelay,
+  nextErrorBackoff,
+  type InsightsMode,
+} from "./insightsCadence";
 import { getSelectedProject, onProjectChange } from "./projectState";
+import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 
 /** One row in the Insights tree. */
 interface InsightRow {
@@ -28,27 +36,40 @@ function fmtUsd(n: number): string {
 
 /**
  * Owns the live Insights surface: a status-bar item + the Health view's "Spend
- * today" rows (`treeProvider`), both fed by the gateway SSE stream. Auto-reconnects with backoff, degrades gracefully when
- * signed out, and exposes a manual refresh. Disposable (aborts the stream +
- * disposes its UI).
+ * today" rows (`treeProvider`). Audience-aware (see `insightsCadence.ts`): a live
+ * SSE stream only while the window is attended AND the Health view is visible,
+ * slow cached reads while only the status bar shows, and nothing at all while the
+ * window is unfocused or idle — refetching on return. Failures back off 15 s → 5 min.
+ * Degrades gracefully when signed out and exposes a manual refresh. Disposable.
  */
 export class InsightsController implements vscode.Disposable {
   private readonly statusBar: vscode.StatusBarItem;
   /** The "Spend today" rows; the Health view composes it as a section. */
   readonly treeProvider = new InsightsTreeProvider();
   private controller: AbortController | undefined;
+  private timer: ReturnType<typeof setTimeout> | undefined;
   private disposed = false;
   private snapshot: BuilderInsightsSnapshot | undefined;
-  private backoffMs = 2_000;
-  private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-  private readonly projectSub: vscode.Disposable;
+  private signedIn = false;
+  private viewVisible = false;
+  private mode: InsightsMode = "off";
+  /** Bumped by every stop; async work from an older generation drops its result. */
+  private generation = 0;
+  private lastFrameAt = 0;
+  private errorMs = 0;
+  private errorUntil = 0;
+  private readonly subs: vscode.Disposable[];
 
   constructor(private readonly ctx: vscode.ExtensionContext) {
     this.statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     this.statusBar.command = "builderforce.refreshInsights";
-    // Insights key off the active project: restart the stream against the new scope.
-    // (The Health view header names the project, so the scope stays visible.)
-    this.projectSub = onProjectChange(() => void this.start());
+    this.subs = [
+      // Insights key off the active project: restart against the new scope.
+      // (The Health view header names the project, so the scope stays visible.)
+      onProjectChange(() => void this.start()),
+      // Leaving the window closes the stream; coming back reopens it (or refetches).
+      vscode.window.onDidChangeWindowState(() => this.reconcile(false)),
+    ];
     void this.start();
   }
 
@@ -65,19 +86,44 @@ export class InsightsController implements vscode.Disposable {
     return `${fmtUsd(s.todayCostUsd)}${cap}`;
   }
 
-  /** Begin (or restart) the SSE subscription. Safe to call repeatedly. */
+  /** The Health view's visibility — the stream runs only while it is on screen. */
+  setViewVisible(visible: boolean): void {
+    if (this.viewVisible === visible) return;
+    this.viewVisible = visible;
+    this.reconcile(false);
+  }
+
+  /** Begin (or restart) against the current sign-in + project. Safe to call repeatedly. */
   async start(): Promise<void> {
     if (this.disposed) return;
-    this.stopStream();
-
-    const signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
-    if (!signedIn) {
-      this.statusBar.hide();
-      this.snapshot = undefined;
-      this.treeProvider.setSnapshot(undefined, false);
+    this.stop();
+    this.mode = "off";
+    this.signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
+    if (this.disposed) return;
+    if (!this.signedIn) {
+      this.showSignedOut();
       return;
     }
+    this.reconcile(true);
+  }
 
+  /** Bring the transport in line with who is looking. `fresh` skips the min-gap and
+   *  error waits (sign-in, project switch). */
+  private reconcile(fresh: boolean): void {
+    if (this.disposed) return;
+    const { focused, active } = vscode.window.state;
+    const next = insightsMode({ signedIn: this.signedIn, attended: focused && active, viewVisible: this.viewVisible });
+    const running = !!this.controller || !!this.timer;
+    if (!fresh && next === this.mode && (running || next === "off")) return;
+
+    this.stop();
+    this.mode = next;
+    if (next === "off") return;
+    const delay = insightsStartDelay(next, Date.now(), this.lastFrameAt, this.errorUntil, fresh);
+    this.schedule(delay, () => (next === "stream" ? this.openStream() : void this.pollOnce()));
+  }
+
+  private openStream(): void {
     const controller = new AbortController();
     this.controller = controller;
     void this.runStream(controller);
@@ -91,27 +137,53 @@ export class InsightsController implements vscode.Disposable {
         controller.signal,
         this.projectId,
       );
-      // Stream ended cleanly (server closed after ~5 min) — reconnect promptly.
-      this.backoffMs = 2_000;
-      this.scheduleReconnect(this.backoffMs);
+      if (this.disposed || controller.signal.aborted) return;
+      // The server closes a healthy stream after ~5 min — reopen if still wanted.
+      this.controller = undefined;
+      this.schedule(INSIGHTS_CADENCE.RECONNECT_MS, () => this.reconcile(false));
     } catch (err) {
       if (this.disposed || controller.signal.aborted) return;
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("not_signed_in")) {
-        this.statusBar.hide();
-        this.treeProvider.setSnapshot(undefined, false);
-        return;
-      }
-      // Transient error — back off and retry, capped.
-      this.scheduleReconnect(this.backoffMs);
-      this.backoffMs = Math.min(this.backoffMs * 2, 60_000);
+      this.controller = undefined;
+      this.onFailure(err, () => this.reconcile(false));
     }
   }
 
-  private scheduleReconnect(delayMs: number): void {
+  /** One read of the server-cached snapshot (status-bar-only cadence). */
+  private async pollOnce(): Promise<void> {
+    const gen = this.generation;
+    try {
+      const s = await getBuilderInsights(this.ctx.secrets, this.projectId);
+      if (this.disposed || gen !== this.generation) return;
+      this.applySnapshot(s);
+      this.schedule(INSIGHTS_CADENCE.POLL_MS, () => void this.pollOnce());
+    } catch (err) {
+      if (this.disposed || gen !== this.generation) return;
+      this.onFailure(err, () => void this.pollOnce());
+    }
+  }
+
+  /** Signed out → go quiet; anything else → widen the wait and retry. */
+  private onFailure(err: unknown, retry: () => void): void {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes(NOT_SIGNED_IN)) {
+      this.signedIn = false;
+      this.stop();
+      this.mode = "off";
+      this.showSignedOut();
+      return;
+    }
+    this.errorMs = nextErrorBackoff(this.errorMs);
+    this.errorUntil = Date.now() + this.errorMs;
+    this.schedule(this.errorMs, retry);
+  }
+
+  private schedule(delayMs: number, fn: () => void): void {
     if (this.disposed) return;
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = setTimeout(() => void this.start(), delayMs);
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      fn();
+    }, delayMs);
   }
 
   /** Manual refresh — fetch once and update the surfaces immediately. */
@@ -119,22 +191,38 @@ export class InsightsController implements vscode.Disposable {
     if (this.disposed) return;
     const signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
     if (!signedIn) {
-      this.statusBar.hide();
-      this.treeProvider.setSnapshot(undefined, false);
+      this.signedIn = false;
+      this.stop();
+      this.mode = "off";
+      this.showSignedOut();
+      return;
+    }
+    if (!this.signedIn) {
+      // Signed in since we last looked — bring the transport up too.
+      await this.start();
       return;
     }
     try {
       const s = await getBuilderInsights(this.ctx.secrets, this.projectId);
       this.applySnapshot(s);
     } catch {
-      /* keep last-known; the stream will recover */
+      /* keep last-known; the transport will recover */
     }
+  }
+
+  private showSignedOut(): void {
+    this.statusBar.hide();
+    this.snapshot = undefined;
+    this.treeProvider.setSnapshot(undefined, false);
   }
 
   private applySnapshot(s: BuilderInsightsSnapshot): void {
     if (this.disposed) return;
     this.snapshot = s;
-    this.backoffMs = 2_000; // a good frame resets backoff
+    this.lastFrameAt = Date.now();
+    // A good frame clears the failure ladder.
+    this.errorMs = 0;
+    this.errorUntil = 0;
 
     const pct = s.pctOfDailyCap == null ? "" : ` · ${Math.round(s.pctOfDailyCap)}%`;
     this.statusBar.text = `$(graph) ${fmtTokens(s.todayTokens)} tok · ${fmtUsd(s.todayCostUsd)}${pct}`;
@@ -163,10 +251,12 @@ export class InsightsController implements vscode.Disposable {
     return md;
   }
 
-  private stopStream(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = undefined;
+  /** Tear down the stream and any pending timer; in-flight reads go stale. */
+  private stop(): void {
+    this.generation++;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
     }
     if (this.controller) {
       this.controller.abort();
@@ -176,8 +266,8 @@ export class InsightsController implements vscode.Disposable {
 
   dispose(): void {
     this.disposed = true;
-    this.projectSub.dispose();
-    this.stopStream();
+    for (const sub of this.subs) sub.dispose();
+    this.stop();
     this.statusBar.dispose();
   }
 }

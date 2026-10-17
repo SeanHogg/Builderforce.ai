@@ -50,6 +50,30 @@ import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 import { roleDisplayName } from '../kanban/roleCatalog';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
 import { createExecutionReadMemo } from '../runtime/executionReadMemo';
+import { currentRequestScope } from '../shared/requestScope';
+
+/**
+ * Whether a ticket that CAN run now should raise the KV work-gate signal.
+ *
+ * The signal means "new work arrived since the fan-out last looked". It is raised so a
+ * request-path kickoff dropped by an evicted isolate is rescued on the next tick. It
+ * must NOT be raised by the fan-out's own re-evaluation: the auto-exec sweep, the
+ * manager pass and the PR-merge sweep all funnel through this trigger, and a ticket that
+ * passes evaluation but is then refused by the dispatcher (cap, breaker, cooldown) used
+ * to re-signal on every tick — holding the gate open forever, so every 5-minute tick ran
+ * the full fan-out (288/day) instead of the floor's 48. Inside the scheduled invocation
+ * the tick is already running and the next floor sweep re-discovers the ticket anyway.
+ *
+ * Two ways to say "don't": the caller passes `signalCronGate: false` (the auto-exec sweep
+ * does, so its forced run through the admin route stays quiet too), or the call runs in
+ * the scheduled() invocation, whose request scope `src/index.ts` opens with
+ * `method: 'CRON'` — that covers every cron-path caller without threading a flag through
+ * each of them.
+ */
+function shouldSignalCronGate(requested: boolean | undefined): boolean {
+  if (requested === false) return false;
+  return currentRequestScope()?.method !== 'CRON';
+}
 
 /**
  * Board "autonomous trigger" — the SERVER-SIDE source of truth. When a ticket
@@ -105,6 +129,12 @@ export async function maybeAutoRunOnLaneEntry(
      * below — that stays the evaluator's call.
      */
     force?: boolean;
+    /**
+     * False when the caller IS the backstop fan-out (the auto-exec sweep), so a
+     * ticket it re-evaluates never re-raises the cron work-gate signal. Defaults to
+     * signalling — except inside the scheduled invocation; see shouldSignalCronGate.
+     */
+    signalCronGate?: boolean;
   },
 ): Promise<boolean> {
   try {
@@ -264,12 +294,13 @@ export async function maybeAutoRunOnLaneEntry(
     // repeat of the state recorded before the run.
     await clearAutoRunSkip(env, args.tenantId, args.taskId);
 
-    // This ticket SHOULD run. Signal the KV work-gate so the next frequent cron
-    // tick runs the backstop fan-out (dispatch within 5 min) even if the live
-    // kickoff below is dropped by an evicted isolate — the exact stranded-run
-    // case autonomousExecutionSweep exists to rescue. Best-effort KV put; the
-    // 30-min floor sweep backstops a lost signal. See cronWorkSignal.ts.
-    await signalPendingWork(env);
+    // This ticket SHOULD run. On a request path, signal the KV work-gate so the next
+    // frequent cron tick runs the backstop fan-out (dispatch within 5 min) even if
+    // the live kickoff below is dropped by an evicted isolate — the exact
+    // stranded-run case autonomousExecutionSweep exists to rescue. Never from the
+    // fan-out itself (see shouldSignalCronGate). Best-effort KV put; the 30-min floor
+    // sweep backstops a lost signal. See cronWorkSignal.ts.
+    if (shouldSignalCronGate(args.signalCronGate)) await signalPendingWork(env);
 
     // Hand the lane's agent + model to the single surface-aware dispatcher (the
     // `cloudAgentRef` payload key is the existing dispatch contract — the V2 agent

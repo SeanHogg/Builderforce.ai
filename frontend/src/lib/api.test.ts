@@ -10,7 +10,6 @@ import {
   fetchFileContent,
   saveFile,
   deleteFile,
-  sendAIMessage,
   publishAgent,
   listAgents,
   hireAgent,
@@ -352,96 +351,6 @@ describe('deleteFile', () => {
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(500));
     await expect(deleteFile('proj-1', 'f.js')).rejects.toThrow('Request failed');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// sendAIMessage — streaming SSE response
-// ---------------------------------------------------------------------------
-
-describe('sendAIMessage', () => {
-  function sseStream(...chunks: string[]): Response {
-    const encoder = new TextEncoder();
-    const body = new ReadableStream({
-      start(controller) {
-        for (const chunk of chunks) {
-          controller.enqueue(encoder.encode(chunk));
-        }
-        controller.close();
-      },
-    });
-    return new Response(body, { status: 200 });
-  }
-
-  it('accumulates parsed SSE response chunks via onChunk', async () => {
-    const chunks: string[] = [];
-    fetchSpy.mockResolvedValueOnce(
-      sseStream(
-        'data: {"response":"Hello"}\n\n',
-        'data: {"response":" world"}\n\n',
-        'data: [DONE]\n\n',
-      )
-    );
-    await sendAIMessage('proj-1', [{ role: 'user', content: 'hi' }], (c) => chunks.push(c));
-    expect(chunks).toEqual(['Hello', ' world']);
-  });
-
-  it('stops at [DONE] sentinel', async () => {
-    const chunks: string[] = [];
-    fetchSpy.mockResolvedValueOnce(
-      sseStream('data: [DONE]\n\n', 'data: {"response":"after"}\n\n')
-    );
-    await sendAIMessage('proj-1', [], (c) => chunks.push(c));
-    expect(chunks).toHaveLength(0);
-  });
-
-  it('skips malformed or non-JSON data lines (never appends raw to message)', async () => {
-    const chunks: string[] = [];
-    fetchSpy.mockResolvedValueOnce(sseStream('data: plain text chunk\n\n'));
-    await sendAIMessage('proj-1', [], (c) => chunks.push(c));
-    expect(chunks).toEqual([]);
-  });
-
-  it('handles OpenRouter / OpenAI SSE format (choices[0].delta.content)', async () => {
-    const chunks: string[] = [];
-    fetchSpy.mockResolvedValueOnce(
-      sseStream(
-        'data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
-        'data: {"choices":[{"delta":{"content":" world"},"finish_reason":null}]}\n\n',
-        'data: [DONE]\n\n',
-      )
-    );
-    await sendAIMessage('proj-1', [{ role: 'user', content: 'hi' }], (c) => chunks.push(c));
-    expect(chunks).toEqual(['Hello', ' world']);
-  });
-
-  it('ignores OpenRouter chunks where delta.content is empty or absent', async () => {
-    const chunks: string[] = [];
-    fetchSpy.mockResolvedValueOnce(
-      sseStream(
-        'data: {"choices":[{"delta":{},"finish_reason":null}]}\n\n',
-        'data: {"choices":[{"delta":{"content":"done"},"finish_reason":"stop"}]}\n\n',
-        'data: [DONE]\n\n',
-      )
-    );
-    await sendAIMessage('proj-1', [], (c) => chunks.push(c));
-    expect(chunks).toEqual(['done']);
-  });
-
-  it('POSTs to /api/ai/chat with messages', async () => {
-    fetchSpy.mockResolvedValueOnce(sseStream('data: [DONE]\n\n'));
-    await sendAIMessage('proj-1', [{ role: 'user', content: 'test' }], () => {});
-    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toMatch(/\/api\/ai\/chat$/);
-    expect(init.method).toBe('POST');
-    const body = JSON.parse(init.body as string);
-    expect(body.messages).toBeDefined();
-    expect(body.messages[0].role).toBe('user');
-  });
-
-  it('throws when the server returns a non-ok response', async () => {
-    fetchSpy.mockResolvedValueOnce(mockError(500));
-    await expect(sendAIMessage('proj-1', [], () => {})).rejects.toThrow('Failed to send AI message');
   });
 });
 
