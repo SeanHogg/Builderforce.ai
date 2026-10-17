@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-10-17 — Let Neon sleep: idle DB load cut from polling, cron and hot paths (api 2026.10.47 → 2026.10.48 · frontend 2026.10.63 · agent-runtime 2026.10.7)
+
+A read-only review measured both the core and transactional computes awake for 31.5 h straight (~46 / ~39 txn/min, core 502 MB of 512). The current-state map is at https://claude.ai/artifact/K3mA6TPM1rknr2zJq1qT3q. The fixes shipped inside `34bc9d5` (another session's commit picked up the working tree):
+- **DB:** migration 1231 adds `(chat_id, seq)` on `brain_chat_messages`, and the unread count is per chat. It used to seq-scan ~84k rows, 76% of all rows core read.
+- **Cron:** sweeps declare `after` (four ordered chains). A cron-path ticket no longer re-signals the gate. Lens snapshots cover every tenant and back off failures. The manager has a 15 min per-project interval. Repo delivery, monitors, mailbox, cloud workflows and the PR reconciler write only on change. Repo-activity watermarks advance in ONE statement per tick, not one per repo (api 2026.10.48).
+- **API:** throttled API-key `last_used_at` and agent-host heartbeat; the relay DO's duplicate heartbeat is removed. Canvas presence goes through ONE `resolveSessionMembership`. The runtime dashboard is cached. `/api/tasks/counts` and `/api/approvals/count` replace whole-list downloads. The rate limiter is bound at FREE 300 / PRO 1200 / TEAMS 3000 rpm. Superadmin and xAPI lookups are cached, and a cached membership re-check in `authMiddleware` removes a member's access within 60 s.
+- **Clients:** one shared, visibility-gated attention poller; only the on-screen board polls; ~20 page loops are gated through ONE `pollPolicy`. `/api/auth/me` and the founder journey load once. Realtime reconnects back off. The VS Code insights stream follows focus and visibility (VSIX 2026.10.40). Mobile uses an `afterSeq` cursor. The builder-insights stream is cached.
+- **Closed without new work:** `pr_reconciliation_*` "4.27M rows" was a cumulative `pg_stat` write counter, not live rows. The 14-day `SWEPT_TABLES` retention already bounds it, and write-on-change stops the churn.
+- Also: the design-scale ratchet was lowered to 3355, which unblocked the frontend deploy.
+
 ## ✅ RESOLVED 2026-10-17 — Review of the last 20 commits: duplicates folded, unwired paths wired, god files split (api 2026.10.46 · frontend 2026.10.62 · brain-embedded 2026.10.29 · brain-ui 2026.10.13 · agent-runtime 2026.10.6 · VSIX 2026.10.40 · Rovr 2026.10.7)
 
 Consistency/DRY review of `e2107635e..b8ba7b106` (Rovr routing, in-browser engine, PRD 34 local models, provider-failure path, ticket rail, /open-source, report schedules). Every finding fixed in one pass.

@@ -16,12 +16,12 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Each repo is independent so one bad credential / unreachable host can't stall the
  * rest; bounded per tick so the sweep stays within the subrequest budget.
  */
-import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { projectRepositories } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
 import { makeRepoFetch } from '../repos/sources/RepoSource';
 import { createActivitySource, POLLABLE_PROVIDERS } from './activitySourceFactory';
@@ -43,10 +43,12 @@ const BACKFILL_DAYS = 90;
 
 /**
  * Pull + ingest activity for one connected repo. Returns the inserted count, or
- * null when the repo couldn't be synced (bad credential / non-github / API down) —
- * the watermark is left unchanged so the next tick retries.
+ * null when the repo couldn't be synced (bad credential / non-github / API down).
+ * It does NOT move the watermark: the sweep advances every synced repo's watermark
+ * in ONE statement (see {@link runRepoActivitySweep}), and a repo that returned null
+ * is left out of it so the next tick retries.
  */
-export async function syncRepoActivity(
+async function syncRepoActivity(
   db: Db, env: Env, secret: string, repo: typeof projectRepositories.$inferSelect, now: Date,
 ): Promise<number | null> {
   if (!repo.credentialId) return null;
@@ -68,11 +70,6 @@ export async function syncRepoActivity(
   const { inserted } = events.length
     ? await ingestActivityEvents(env, db, { tenantId: repo.tenantId, provider: repo.provider as ActivityProvider, events })
     : { inserted: 0 };
-
-  // Advance the watermark even when nothing new — so we don't re-scan the window.
-  await db.update(projectRepositories)
-    .set({ lastActivitySyncedAt: now })
-    .where(eq(projectRepositories.id, repo.id));
 
   return inserted;
 }
@@ -99,15 +96,15 @@ export async function runRepoActivitySweep(env: Env): Promise<RepoActivitySweepR
     .orderBy(sql`${projectRepositories.lastActivitySyncedAt} asc nulls first`)
     .limit(MAX_REPOS_PER_TICK);
 
-  let synced = 0;
   let inserted = 0;
   let errors = 0;
+  const syncedIds: string[] = [];
 
   for (const repo of due) {
     try {
       const n = await syncRepoActivity(db, env, secret, repo, now);
       if (n == null) { errors++; continue; }
-      synced++;
+      syncedIds.push(repo.id);
       inserted += n;
     } catch (e) {
       errors++;
@@ -115,8 +112,18 @@ export async function runRepoActivitySweep(env: Env): Promise<RepoActivitySweepR
     }
   }
 
+  // Advance the watermark of every repo that synced, even when nothing was new, so the
+  // window is not re-scanned. The watermark is also what makes a repo due again, so it
+  // is written every interval for every synced repo; ONE statement per tick keeps that
+  // at one round trip instead of one per repo (up to MAX_REPOS_PER_TICK).
+  if (syncedIds.length) {
+    await db.update(projectRepositories)
+      .set({ lastActivitySyncedAt: now })
+      .where(acrossTenants(projectRepositories, 'scheduled_sweep', inArray(projectRepositories.id, syncedIds)));
+  }
+
   // NOT logged here: the cron runner owns the `[cron:<key>]` line and only emits it
   // when there was something to say (see cronSweeps.ts). This used to print on every
   // tick, 288 times a day, whether or not a repo was due.
-  return { due: due.length, synced, inserted, errors };
+  return { due: due.length, synced: syncedIds.length, inserted, errors };
 }

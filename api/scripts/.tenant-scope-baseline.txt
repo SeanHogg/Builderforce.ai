@@ -15,7 +15,7 @@ application/ceremony/ceremonyNotifier.ts:2
 application/ceremony/dispatchCeremonyCompletion.ts:1
 application/ceremony/runDueCeremonies.ts:2
 application/challenge/materializeChallenge.ts:1
-application/contributors/runRepoActivitySweep.ts:2
+application/contributors/runRepoActivitySweep.ts:1
 application/deck/DeckService.ts:1
 application/feedback/feedbackEngine.ts:5
 application/ide/siteTicketBridge.ts:1
