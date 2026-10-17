@@ -11,7 +11,7 @@ export const PATCHES = {
   en: { blog: { posts: {
     [RUNTIME]: {
       title: 'BuilderForce WebContainers is open source — the in-browser dev runtime you can fork',
-      description: 'The runtime behind every Builderforce canvas preview, Publish and Check is now MIT on GitHub and npm. It previews, builds and type-checks Vite, React, Vue and Svelte apps and runs Node, npm and a shell in the tab, with no COOP/COEP headers and no session caps.',
+      description: 'The runtime behind every Builderforce canvas preview, Publish and Check is now MIT on GitHub and npm. It previews, builds and type-checks Vite, React, Vue and Svelte apps and runs Node, npm and a shell in the tab, without requiring COOP/COEP headers, and with no session caps.',
     },
     [OPEN_SOURCE]: {
       title: 'Open source at Builderforce — four projects you can run, read and fork',
@@ -31,7 +31,7 @@ export const PATCHES = {
   es: { blog: { posts: {
     [RUNTIME]: {
       title: 'BuilderForce WebContainers es código abierto: el runtime de desarrollo en el navegador con el que puedes hacer un fork',
-      description: 'El runtime que hay detrás de cada vista previa del lienzo, cada Publicar y cada Comprobar de Builderforce ya es MIT en GitHub y npm. Previsualiza, compila y comprueba los tipos de apps Vite, React, Vue y Svelte, y ejecuta Node, npm y una shell en la pestaña, sin cabeceras COOP/COEP y sin límite de sesiones.',
+      description: 'El runtime que hay detrás de cada vista previa del lienzo, cada Publicar y cada Comprobar de Builderforce ya es MIT en GitHub y npm. Previsualiza, compila y comprueba los tipos de apps Vite, React, Vue y Svelte, y ejecuta Node, npm y una shell en la pestaña, sin exigir cabeceras COOP/COEP y sin límite de sesiones.',
     },
     [OPEN_SOURCE]: {
       title: 'Código abierto en Builderforce: cuatro proyectos que puedes ejecutar, leer y modificar',
@@ -41,7 +41,7 @@ export const PATCHES = {
   fr: { blog: { posts: {
     [RUNTIME]: {
       title: 'BuilderForce WebContainers est open source — le runtime de développement dans le navigateur que vous pouvez forker',
-      description: 'Le runtime derrière chaque aperçu de canvas, chaque Publier et chaque Vérifier de Builderforce est désormais sous MIT sur GitHub et npm. Il prévisualise, construit et vérifie les types des apps Vite, React, Vue et Svelte, et exécute Node, npm et un shell dans l\'onglet, sans en-têtes COOP/COEP ni plafond de sessions.',
+      description: 'Le runtime derrière chaque aperçu de canvas, chaque Publier et chaque Vérifier de Builderforce est désormais sous MIT sur GitHub et npm. Il prévisualise, construit et vérifie les types des apps Vite, React, Vue et Svelte, et exécute Node, npm et un shell dans l\'onglet, sans exiger d\'en-têtes COOP/COEP ni de plafond de sessions.',
     },
     [OPEN_SOURCE]: {
       title: 'L\'open source chez Builderforce — quatre projets à exécuter, lire et forker',
@@ -51,7 +51,7 @@ export const PATCHES = {
   de: { blog: { posts: {
     [RUNTIME]: {
       title: 'BuilderForce WebContainers ist Open Source — die Entwicklungs-Runtime im Browser, die Sie forken können',
-      description: 'Die Runtime hinter jeder Canvas-Vorschau, jedem Veröffentlichen und jedem Prüfen auf Builderforce steht jetzt unter MIT auf GitHub und npm. Sie zeigt Vite-, React-, Vue- und Svelte-Apps in der Vorschau, baut sie und prüft ihre Typen, und sie führt Node, npm und eine Shell im Tab aus, ohne COOP/COEP-Header und ohne Session-Limits.',
+      description: 'Die Runtime hinter jeder Canvas-Vorschau, jedem Veröffentlichen und jedem Prüfen auf Builderforce steht jetzt unter MIT auf GitHub und npm. Sie zeigt Vite-, React-, Vue- und Svelte-Apps in der Vorschau, baut sie und prüft ihre Typen, und sie führt Node, npm und eine Shell im Tab aus, ohne COOP/COEP-Header vorauszusetzen und ohne Session-Limits.',
     },
     [OPEN_SOURCE]: {
       title: 'Open Source bei Builderforce — vier Projekte, die Sie ausführen, lesen und forken können',

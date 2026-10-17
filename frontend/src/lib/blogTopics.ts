@@ -181,7 +181,8 @@ export const BLOG_TOPICS: readonly BlogTopic[] = [
     labelKey: 'devtools',
     tags: [
       'developer-tools', 'developers', 'vscode', 'vs-code', 'ide', 'monaco',
-      'webcontainers', 'browser', 'extensions', 'plugins', 'api', 'debugging',
+      'webcontainers', 'browser', 'browser-assistant', 'extensions', 'chrome-extension',
+      'plugins', 'api', 'debugging',
       'ai-coding', 'ai-native-development', 'ai-planning', 'architecture',
       'deep-dive', 'workflows', 'data', 'marketplace',
     ],
