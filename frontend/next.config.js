@@ -156,13 +156,36 @@ const nextConfig = {
       // `onnxruntime-common`, causing missing-export failures at build time.
       // Keep every browser consumer on the frontend's pinned, self-contained
       // bundle, matching the Turbopack alias above.
-      'onnxruntime-web$': path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.bundle.min.mjs'),
+      // Client only: the server stubs every onnxruntime-web import below, and webpack
+      // takes the FIRST matching alias, so this exact-match key must not exist there.
+      ...(isServer ? {} : { 'onnxruntime-web$': path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.bundle.min.mjs') }),
       sharp$: false,
       // Server AND edge only: the browser build of this package touches the DOM
       // at module scope and cannot be evaluated in either. The client bundle is
       // deliberately left alone — the browser build exists to keep that bundle
       // small, and the browser is the one place it is correct.
       ...(isServer ? { 'hast-util-from-html-isomorphic$': nodeSafeFromHtmlIsomorphic } : {}),
+      // Server AND edge only: the in-browser inference runtimes become empty modules.
+      // Each names its binary with `new URL('<x>.wasm', import.meta.url)` — onnxruntime-web
+      // (~46 MB across its jsep + asyncify builds, reached through transformers.js, the
+      // studio voice/LoRA engines and `@webdit/runtime`) and the vendored WebGPU `bfi` engine (PRD 34,
+      // 3.7 MB, in its glue and in `wasm-url`). On the edge build that URL makes the wasm
+      // an ASSET of the function, and because these modules are reachable from the root
+      // layout, all ~165 edge functions carried every copy: `vercel build` ran out of
+      // heap collecting ~7.6 GB of them. None of these runs on the server (every caller
+      // touches them inside a function, and localFirst probes there as "no local
+      // runtime"), so stubbing them costs nothing; the browser bundle still emits each
+      // binary once, under `static/media`.
+      ...(isServer
+        // Prefix keys (no `$`), so subpaths are stubbed too: `@webdit/runtime` (under
+        // both studio packages) imports `onnxruntime-web/webgpu`, the build that carries
+        // the jsep/asyncify binaries, and `@seanhogg/bfi-web/wasm-url` is a subpath.
+        ? Object.fromEntries([
+            'onnxruntime-web',
+            '@huggingface/transformers',
+            '@seanhogg/bfi-web',
+          ].map((specifier) => [specifier, false]))
+        : {}),
     };
     // @webdit/runtime's bundle.ts exports loadBundleFromDir — a Node-side
     // loader used only by its own integration tests — alongside the
