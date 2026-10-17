@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-10-17 — Neon load audit, second pass: the 17 open findings closed (api 2026.10.50 · frontend 2026.10.66 · agent-runtime 2026.10.9 · write-outbox 2026.10.2)
+
+Shipped across `5d9ad73`, `1fe80f5`, `f292306`, `80cc3f0`, `0853640` and this commit. Status per finding is on https://claude.ai/artifact/K3mA6TPM1rknr2zJq1qT3q.
+- **Writes:** brain messages are one INSERT (migration 1233, a seq-from-id trigger). `llm_traces` gets one insert at stream end. The quality-ingest error forward is deduplicated per fingerprint for 10 min. Member snapshots are written at most daily. Lane auto-run runs only on outcome-changing mutations. CloudRunnerDO heartbeats are throttled to 2 min and the concluded flag is cached. Agent-host events are batched on both sides and each tool-audit event is sent once. The container heartbeat writes every 2 min and large bodies are gzipped.
+- **Request path:** the emulation session is cached and `pages_visited` is written once per path. Plan-limit counts sit behind a version token. `authMiddleware` is idempotent per request.
+- **Cron:** a single-probe exec-reaper with batched UPDATEs; an auto-exec blocked-verdict memo; retention as one `db.batch` per database with 25k-row bounds; sequence-cadence on an indexed `next_due_at` (migration 1234); and the GitHub PR webhook signals only on opened/reopened/ready/closed.
+- **Clients:** one reconnect primitive (`lib/polling/reconnectPolicy.ts`) now carries the realtime, media, broadcast, gateway, ceremony and guest sockets. Canvas frames are coalesced and the timeline is incremental. Trace, transcript and replay fetch only new rows.
+- **Bugs fixed along the way:** relayed agent-host chat was never saved; member snapshots inserted rows on every view; the emulation role switch issued a rejected token; canvas timelines past 200 rows stopped updating; the replay follow wrote a trace every 5 s; an outbox failure was reported twice; and the live steer button was labelled as a queue.
+- Partly fixed items stay in ROADMAP.md.
+
 ## ✅ RESOLVED 2026-10-17 — Let Neon sleep: idle DB load cut from polling, cron and hot paths (api 2026.10.47 → 2026.10.48 · frontend 2026.10.63 · agent-runtime 2026.10.7)
 
 A read-only review measured both the core and transactional computes awake for 31.5 h straight (~46 / ~39 txn/min, core 502 MB of 512). The current-state map is at https://claude.ai/artifact/K3mA6TPM1rknr2zJq1qT3q. The fixes shipped inside `34bc9d5` (another session's commit picked up the working tree):

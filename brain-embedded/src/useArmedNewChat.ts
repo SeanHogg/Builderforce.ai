@@ -47,7 +47,15 @@ export function useArmedNewChat(
 
   const createArmed = useCallback(async (opts?: Parameters<UseBrainChats['create']>[0]) => {
     const created = await create({ ...opts, mode: opts?.mode ?? pendingModeRef.current });
-    if (created && !pendingMemoryRef.current) await setMemoryEnabled(created.id, false).catch(() => undefined);
+    if (created && !pendingMemoryRef.current) {
+      try {
+        await setMemoryEnabled(created.id, false);
+      } catch {
+        // setMemoryEnabled already rolled the toggle back and surfaced the error
+        // (setError); the chat itself exists, so it is still handed back.
+        return created;
+      }
+    }
     return created;
   }, [create, setMemoryEnabled]);
 
