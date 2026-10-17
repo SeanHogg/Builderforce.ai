@@ -24,7 +24,7 @@ function fakeRuntime(profile: { supported: boolean; reason?: string }) {
       rm: vi.fn((path: string) => files.delete(path)),
       writeFile: vi.fn((path: string, contents: string) => files.set(path, contents)),
     },
-    mount: vi.fn((flat: Record<string, string>) => { for (const [p, c] of Object.entries(flat)) files.set(`/${p}`, c); }),
+    writeTree: vi.fn((flat: Record<string, string>) => { for (const [p, c] of Object.entries(flat)) files.set(`/${p}`, c); }),
     profile: () => profile,
   };
 }

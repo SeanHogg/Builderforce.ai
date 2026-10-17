@@ -62,7 +62,7 @@ Le panneau droit bascule entre trois vues grâce au sélecteur situé en haut :
 | Vue | Contenu |
 |---|---|
 | **Aperçu** | Iframe en direct servie par le serveur de développement du navigateur ; chaque aperçu ouvert se recharge quand un fichier change |
-| **Terminal** | Un shell `jsh` dans le runtime — `npm`, `npx`, `node`, les pipes et les commandes de fichiers habituelles |
+| **Terminal** | Un shell `bfsh` dans le runtime — `npm`, `npx`, `node`, les pipes et les commandes de fichiers habituelles |
 | **Chat IA** | Le binôme IA (voir ci-dessous) |
 
 ---

@@ -72,7 +72,7 @@ The right panel switches between three views using the toggle at the top:
 | View | Content |
 |---|---|
 | **Preview** | Live iframe served by the in-browser dev server; every open preview reloads when a file changes |
-| **Terminal** | A `jsh` shell in the runtime — `npm`, `npx`, `node`, pipes and the usual file commands |
+| **Terminal** | A `bfsh` shell in the runtime — `npm`, `npx`, `node`, pipes and the usual file commands |
 | **AI Chat** | The AI pair programmer (see below) |
 
 ---

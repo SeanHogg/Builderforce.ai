@@ -24,7 +24,7 @@ function memoryStore(initial: Record<string, string>) {
 
 type Behaviour = (fs: Map<string, string | Uint8Array>, emit: (text: string) => void) => number | 'hang';
 
-/** Just enough of the runtime: a flat fs keyed `/path`, `mount`, and a scripted `spawn`. */
+/** Just enough of the runtime: a flat fs keyed `/path`, `writeTree`, and a scripted `run`. */
 function fakeRuntime(behaviour: Behaviour, initialFs: Record<string, string> = {}) {
   const fs = new Map<string, string | Uint8Array>(Object.entries(initialFs));
   const spawned: Array<{ command: string; args: string[] }> = [];
@@ -35,10 +35,10 @@ function fakeRuntime(behaviour: Behaviour, initialFs: Record<string, string> = {
       readFile: (path: string) => fs.get(path),
       rm: (path: string) => { fs.delete(path); },
     },
-    mount: (files: Record<string, string>) => {
+    writeTree: (files: Record<string, string>) => {
       for (const [path, content] of Object.entries(files)) fs.set(`/${path}`, content);
     },
-    spawn: (command: string, args: string[]) => {
+    run: (command: string, args: string[]) => {
       spawned.push({ command, args });
       let push!: (text: string) => void;
       let close!: () => void;
@@ -53,7 +53,7 @@ function fakeRuntime(behaviour: Behaviour, initialFs: Record<string, string> = {
       kill.mockImplementation(() => finish(143));
       const outcome = behaviour(fs, (text) => push(text));
       if (outcome !== 'hang') queueMicrotask(() => finish(outcome));
-      return { output, input: new WritableStream<string>(), exit, kill, resize: () => {} };
+      return { pid: 1000, combinedOutput: output, stdin: new WritableStream<string>(), wait: () => exit, kill, resizeTerminal: () => {} };
     },
   };
   return { runtime: runtime as unknown as PreviewRuntime, fs, spawned, kill };
@@ -62,14 +62,14 @@ function fakeRuntime(behaviour: Behaviour, initialFs: Record<string, string> = {
 const run = (shell: ReturnType<typeof createWorkspaceShell>, command: string) => shell.run(command) as Promise<WorkspaceShellResult>;
 
 describe('createWorkspaceShell', () => {
-  it('mounts the workspace and runs the line through jsh -c, returning output and exit code', async () => {
+  it('writes the workspace and runs the line through bfsh -c, returning output and exit code', async () => {
     const { store } = memoryStore({ 'package.json': '{"name":"app"}', 'src/App.jsx': 'export default 1;' });
     const fake = fakeRuntime((fs, emit) => {
       emit(`files: ${[...fs.keys()].join(',')}\n`);
       return 0;
     });
     const result = await run(createWorkspaceShell(store, { boot: async () => fake.runtime }), 'npm test && echo done');
-    expect(fake.spawned).toEqual([{ command: 'jsh', args: ['-c', 'npm test && echo done'] }]);
+    expect(fake.spawned).toEqual([{ command: 'bfsh', args: ['-c', 'npm test && echo done'] }]);
     expect(result).toMatchObject({ ok: true, exitCode: 0 });
     expect(result.stdout).toContain('/package.json');
     expect(result.stdout).toContain('/src/App.jsx');

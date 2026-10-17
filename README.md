@@ -39,9 +39,9 @@ Builderforce.ai is a **human-in-the-loop, fully agentic cloud** where ideas beco
 ## Key Capabilities
 
 ### In-Browser IDE
-- **In-browser dev runtime** via [BuilderForce WebContainers](https://github.com/SeanHogg/builderforce-webcontainers) ([`@seanhogg/builderforce-webcontainers`](https://www.npmjs.com/package/@seanhogg/builderforce-webcontainers)) — our own open-source (MIT) runtime. Previews Vite (React, Vue, Svelte), Create React App and static projects by compiling each file on request with esbuild-wasm and loading packages from esm.sh; runs Node programs, `npm install` from the real registry and a `jsh` shell, one Web Worker per process. No COOP/COEP headers and no session caps. Previews and processes are served from `preview.builderforce.ai`, isolated from your Builderforce session. Next.js/Nuxt/SvelteKit/Remix/Astro dev servers, native addons and install scripts are not supported — they are detected and declined with a reason.
+- **In-browser dev runtime** via [BuilderForce WebContainers](https://github.com/SeanHogg/builderforce-webcontainers) ([`@seanhogg/builderforce-webcontainers`](https://www.npmjs.com/package/@seanhogg/builderforce-webcontainers)) — our own open-source (MIT) runtime. Previews Vite (React, Vue, Svelte), Create React App and static projects by compiling each file on request with esbuild-wasm and loading packages from esm.sh; runs Node programs, `npm install` from the real registry and a `bfsh` shell, one Web Worker per process. No COOP/COEP headers and no session caps. Previews and processes are served from `preview.builderforce.ai`, isolated from your Builderforce session. Next.js/Nuxt/SvelteKit/Remix/Astro dev servers, native addons and install scripts are not supported — they are detected and declined with a reason.
 - **Monaco Editor** with syntax highlighting, IntelliSense, multi-file tabs, and real-time collaborative editing via Yjs CRDT
-- **xterm.js terminal** connected to the runtime's `jsh` shell (line editing, history, pipes, `npm`, `npx`), shared across collaborators
+- **xterm.js terminal** connected to the runtime's `bfsh` shell (line editing, history, pipes, `npm`, `npx`), shared across collaborators
 - **AI Chat Panel** — streaming AI assistant with full project file context; can apply code changes and create files directly
 - **Live Preview** — iframe served by the in-browser dev server; every open preview reloads on save
 - **Check and Publish in the tab** — type-check (`createChecker()`) and production build (`runtime.build()`) run in the browser with no install, so Check and Publish work on the files themselves
@@ -539,7 +539,7 @@ The runtimes Builderforce.ai is built on are open source under MIT, and built to
 │  Next.js (App Router)           BuilderForce WebContainers        │
 │  ┌─────────────────────┐        ┌──────────────────────────────┐ │
 │  │  Monaco Editor      │◄──────►│  Dev server (esbuild-wasm)   │ │
-│  │  xterm.js Terminal  │        │  Node processes · npm · jsh  │ │
+│  │  xterm.js Terminal  │        │  Node processes · npm · bfsh │ │
 │  │  Preview <iframe>   │        │  Service worker on preview.* │ │
 │  │  AI Chat Panel      │        │  Virtual FS (synced to R2)   │ │
 │  │  Train Panel        │        └──────────────────────────────┘ │

@@ -24,7 +24,7 @@ let booting: Promise<PreviewRuntime> | null = null;
 
 export function bootSharedPreviewRuntime(): Promise<PreviewRuntime> {
   booting ??= import('@seanhogg/builderforce-webcontainers')
-    .then(({ bootPreviewRuntime }) => bootPreviewRuntime({ relayUrl: RELAY_URL, attribution: false }))
+    .then(({ startPreviewRuntime }) => startPreviewRuntime({ relayUrl: RELAY_URL, attribution: false }))
     .catch((error: unknown) => {
       booting = null; // a later Run may retry (the relay was unreachable, say)
       throw error;
@@ -44,5 +44,5 @@ export function replaceProjectFiles(runtime: PreviewRuntime, files: Record<strin
   for (const path of runtime.fs.list()) {
     if (!path.startsWith(INSTALLED)) runtime.fs.rm(path);
   }
-  runtime.mount(files);
+  runtime.writeTree(files);
 }

@@ -69,10 +69,10 @@ export const OPEN_SOURCE_PACKAGES: readonly OpenSourcePackage[] = [
     packages: ['@seanhogg/builderforce-webcontainers', '@seanhogg/builderforce-webcontainers-core'],
     install: 'npm install @seanhogg/builderforce-webcontainers',
     quickStartLanguage: 'ts',
-    quickStart: `import { bootPreviewRuntime } from '@seanhogg/builderforce-webcontainers';
+    quickStart: `import { startPreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 
-const runtime = await bootPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', id: 'my-project' });
-runtime.mount({
+const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', id: 'my-project' });
+runtime.writeTree({
   'package.json': JSON.stringify({ dependencies: { react: '^18.3.1', 'react-dom': '^18.3.1' } }),
   'index.html': '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',
   'src/main.tsx': \`import { createRoot } from 'react-dom/client';

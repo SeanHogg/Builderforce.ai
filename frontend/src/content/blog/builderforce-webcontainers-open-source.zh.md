@@ -16,7 +16,7 @@
 - **预览前端应用。** 使用 React、Vue 或 Svelte 的 Vite 项目、Create React App 以及静态网站。修改会让该项目所有打开的预览重新加载，没有任何东西需要重启。
 - **在页面中构建部署产物。** `runtime.build()` 就是不需要服务器的 `npm run build`。它返回一个打包、压缩、带内容哈希的静态网站，可以上传到任何地方。
 - **在页面中做类型检查。** `createChecker()` 在 Web Worker 中按项目自己的 tsconfig 运行 TypeScript，并以纯数据形式返回诊断结果。
-- **运行 Node 程序。** 从真实的 npm 仓库执行 `npm install`、运行 Node 脚本、在虚拟端口上运行 Express 风格的服务器，还有一个供终端使用的交互式 `jsh` shell。每个进程都有自己的 Web Worker，所以死循环永远不会卡住页面，`kill()` 也总是有效。
+- **运行 Node 程序。** 从真实的 npm 仓库执行 `npm install`、运行 Node 脚本、在虚拟端口上运行 Express 风格的服务器，还有一个供终端使用的交互式 `bfsh` shell。每个进程都有自己的 Web Worker，所以死循环永远不会卡住页面，`kill()` 也总是有效。
 - **隔离不可信代码。** 在中继模式下，预览和进程运行在独立的源上，AI 编写的代码和任意 npm 包永远不会共享你应用的 Cookie 或存储。
 - **复刻它。** 编译器、包 CDN 和传输层都是可替换的端口。把 esbuild 换成 SWC，或把 esm.sh 换成你自己的镜像，都不需要修改核心。
 
@@ -50,7 +50,7 @@
 }
 ```
 
-Node 程序走的是另一条路径。`runtime.spawn('node', …)` 会启动一个 Web Worker，带上文件快照，以及 `fs`、`http`、`child_process` 等 Node 核心模块的垫片；写入会同步回其他所有进程。调用 `listen(3000)` 的服务器通过同一个 Service Worker 响应，运行时会带着它的 URL 触发 `server-ready`。`spawn` API 与 `@webcontainer/api` 的形状相同，所以基于 StackBlitz 编写的代码只需很少改动就能迁移过来。
+Node 程序走的是另一条路径。`runtime.run('node', …)` 会启动一个 Web Worker，带上文件快照，以及 `fs`、`http`、`child_process` 等 Node 核心模块的垫片；写入会同步回其他所有进程。调用 `listen(3000)` 的服务器通过同一个 Service Worker 响应，`onServerListening` 会把它的 URL 交给宿主页面。每个进程都以 `RuntimeProcess` 返回：一个合并的输出流、`stdin`、用于获取退出码的 `wait()`、`kill()` 和 `resizeTerminal()`。
 
 ## 它在 Builderforce 上驱动着什么
 
@@ -61,7 +61,7 @@ Node 程序走的是另一条路径。`runtime.spawn('node', …)` 会启动一�
   "ratio": 1.62,
   "regions": [
     { "label": "预览", "note": "由 preview.builderforce.ai 提供，与你的会话隔离", "x": 4, "y": 8, "w": 58, "h": 62, "hue": "make" },
-    { "label": "终端", "note": "jsh：npm、npx、node、管道", "x": 4, "y": 74, "w": 58, "h": 20, "hue": "run" },
+    { "label": "终端", "note": "bfsh：npm、npx、node、管道", "x": 4, "y": 74, "w": 58, "h": 20, "hue": "run" },
     { "label": "检查", "note": "类型检查、构建、lint，失败结果发送给智能体", "x": 65, "y": 8, "w": 31, "h": 40, "hue": "prove" },
     { "label": "发布", "note": "runtime.build() 生成静态网站，发布到你的地址", "x": 65, "y": 52, "w": 31, "h": 42, "hue": "accent" }
   ],
@@ -90,10 +90,10 @@ Node 程序走的是另一条路径。`runtime.spawn('node', …)` 会启动一�
 从包中把 Service Worker 提供在 `/__bfwc/sw.js`，然后启动、挂载、预览：
 
 ```ts
-import { bootPreviewRuntime } from '@seanhogg/builderforce-webcontainers';
+import { startPreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 
-const runtime = await bootPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', id: 'my-project' });
-runtime.mount({
+const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', id: 'my-project' });
+runtime.writeTree({
   'package.json': JSON.stringify({ dependencies: { react: '^18.3.1', 'react-dom': '^18.3.1' } }),
   'index.html': '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',
   'src/main.tsx': `import { createRoot } from 'react-dom/client';
@@ -139,7 +139,7 @@ const { files } = await runtime.build({ base: './' });
 
 - **在画布上构建应用**，看着它在标签页里运行，无需配置响应头，也无需安装。
 - **把运行时嵌入你自己的产品。** 一个包，一个 Service Worker，MIT 许可。
-- **从 `@webcontainer/api` 迁移。** `spawn`、`server-ready` 和 shell 的形状都相同。
+- **在标签页里运行 Node。** `runtime.run('npm', ['install'])`，然后 `node server.js`；`onServerListening` 会给出可嵌入 iframe 的 URL。
 - **阅读路线图并提交 Pull Request。** 检查 Worker 中的 lint、热模块替换和样式预处理器是下一步。
 
 ---

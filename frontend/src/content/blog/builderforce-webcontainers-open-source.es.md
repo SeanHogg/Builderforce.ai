@@ -16,7 +16,7 @@ Entrégale un proyecto como archivos y sirve una vista previa en vivo en un ifra
 - **Previsualiza apps frontend.** Vite con React, Vue o Svelte, Create React App y sitios estáticos. Las ediciones recargan todas las vistas previas abiertas del proyecto; no hay nada que reiniciar.
 - **Compila para despliegue en la página.** `runtime.build()` es `npm run build` sin servidor. Devuelve un sitio estático empaquetado, minificado y con hash de contenido que puedes subir a cualquier parte.
 - **Comprueba tipos en la página.** `createChecker()` ejecuta TypeScript en un Web Worker sobre el propio tsconfig del proyecto y devuelve los diagnósticos como datos simples.
-- **Ejecuta programas Node.** `npm install` desde el registro real de npm, scripts de Node, servidores al estilo Express en puertos virtuales y una shell interactiva `jsh` para un terminal. Cada proceso tiene su propio Web Worker, así que un bucle ocupado nunca congela la página y `kill()` siempre funciona.
+- **Ejecuta programas Node.** `npm install` desde el registro real de npm, scripts de Node, servidores al estilo Express en puertos virtuales y una shell interactiva `bfsh` para un terminal. Cada proceso tiene su propio Web Worker, así que un bucle ocupado nunca congela la página y `kill()` siempre funciona.
 - **Aísla el código no fiable.** En modo relay, las vistas previas y los procesos se ejecutan en un origen separado, así que el código escrito por IA y los paquetes de npm arbitrarios nunca comparten las cookies ni el almacenamiento de tu app.
 - **Haz un fork.** El compilador, el CDN de paquetes y el transporte son puertos. Cambia esbuild por SWC, o esm.sh por tu propio espejo, sin parchear el núcleo.
 
@@ -50,7 +50,7 @@ No hay empaquetado durante el desarrollo. El runtime funciona como el servidor d
 }
 ```
 
-Los programas Node siguen otro camino. `runtime.spawn('node', …)` inicia un Web Worker con una instantánea de los archivos y adaptadores para `fs`, `http`, `child_process` y el resto de módulos centrales de Node; las escrituras se sincronizan con todos los demás procesos. Un servidor que llama a `listen(3000)` se responde a través del mismo service worker, y el runtime emite `server-ready` con su URL. La API `spawn` tiene la misma forma que la de `@webcontainer/api`, así que el código escrito para StackBlitz se porta con pocos cambios.
+Los programas Node siguen otro camino. `runtime.run('node', …)` inicia un Web Worker con una instantánea de los archivos y adaptadores para `fs`, `http`, `child_process` y el resto de módulos centrales de Node; las escrituras se sincronizan con todos los demás procesos. Un servidor que llama a `listen(3000)` se responde a través del mismo service worker, y `onServerListening` entrega su URL al host. Cada proceso se devuelve como un `RuntimeProcess`: un flujo de salida combinado, `stdin`, `wait()` para el código de salida, `kill()` y `resizeTerminal()`.
 
 ## Lo que impulsa en Builderforce
 
@@ -61,7 +61,7 @@ Los programas Node siguen otro camino. `runtime.spawn('node', …)` inicia un We
   "ratio": 1.62,
   "regions": [
     { "label": "Vista previa", "note": "Servida desde preview.builderforce.ai, aislada de tu sesión", "x": 4, "y": 8, "w": 58, "h": 62, "hue": "make" },
-    { "label": "Terminal", "note": "jsh: npm, npx, node, pipes", "x": 4, "y": 74, "w": 58, "h": 20, "hue": "run" },
+    { "label": "Terminal", "note": "bfsh: npm, npx, node, pipes", "x": 4, "y": 74, "w": 58, "h": 20, "hue": "run" },
     { "label": "Comprobar", "note": "Tipos, build y lint, con los fallos enviados al agente", "x": 65, "y": 8, "w": 31, "h": 40, "hue": "prove" },
     { "label": "Publicar", "note": "runtime.build() a un sitio estático en tu dirección", "x": 65, "y": 52, "w": 31, "h": 42, "hue": "accent" }
   ],
@@ -90,10 +90,10 @@ Cada uno de estos puntos está en la [hoja de ruta](https://github.com/SeanHogg/
 Sirve el service worker del paquete en `/__bfwc/sw.js` y después arranca, monta y previsualiza:
 
 ```ts
-import { bootPreviewRuntime } from '@seanhogg/builderforce-webcontainers';
+import { startPreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 
-const runtime = await bootPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', id: 'my-project' });
-runtime.mount({
+const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', id: 'my-project' });
+runtime.writeTree({
   'package.json': JSON.stringify({ dependencies: { react: '^18.3.1', 'react-dom': '^18.3.1' } }),
   'index.html': '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',
   'src/main.tsx': `import { createRoot } from 'react-dom/client';
@@ -139,7 +139,7 @@ Y como el runtime es MIT, nada de esto es una dependencia opaca. Si una vista pr
 
 - **Construye una app en el lienzo** y mírala ejecutarse en la pestaña, sin cabeceras que configurar y sin instalar nada.
 - **Incrusta el runtime en tu propio producto.** Un paquete, un service worker, MIT.
-- **Migra desde `@webcontainer/api`.** `spawn`, `server-ready` y la shell tienen la misma forma.
+- **Ejecuta Node en la pestaña.** `runtime.run('npm', ['install'])` y luego `node server.js`; `onServerListening` te da la URL para el iframe.
 - **Lee la hoja de ruta y envía un pull request.** Lo siguiente: lint en el worker de comprobación, recarga de módulos en caliente y preprocesadores de estilos.
 
 ---

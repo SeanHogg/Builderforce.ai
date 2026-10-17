@@ -14,7 +14,7 @@ function forward(output: ReadableStream<string>, onOutput?: (data: string) => vo
 
 /**
  * The project's Node environment in the browser — our own runtime, the same
- * instance the instant preview runs on: mount files, `npm install`, run the
+ * instance the instant preview runs on: write files, `npm install`, run the
  * project's dev server, and give the terminal a shell. Every process runs on
  * the isolated preview origin (see `previewRuntime.ts`).
  */
@@ -40,9 +40,9 @@ export function useProjectRuntime() {
 
   /** Run a command to completion; resolves with its exit code. */
   const runCommandAndWait = useCallback(async (command: string, args: string[], onOutput?: (data: string) => void): Promise<number> => {
-    const process = (await runtime()).spawn(command, args);
-    forward(process.output, onOutput);
-    return process.exit;
+    const process = (await runtime()).run(command, args);
+    forward(process.combinedOutput, onOutput);
+    return process.wait();
   }, [runtime]);
 
   /**
@@ -55,15 +55,15 @@ export function useProjectRuntime() {
     return new Promise<string>((resolve, reject) => {
       let output = '';
       let ready = false;
-      const stop = booted.on('server-ready', (_port, url) => {
+      const stop = booted.onServerListening(({ url }) => {
         ready = true;
         stop();
         setState((current) => ({ ...current, url }));
         resolve(url);
       });
-      const process = booted.spawn('npm', ['run', 'dev']);
-      forward(process.output, (data) => { output += data; onOutput?.(data); });
-      void process.exit.then((code) => {
+      const process = booted.run('npm', ['run', 'dev']);
+      forward(process.combinedOutput, (data) => { output += data; onOutput?.(data); });
+      void process.wait().then((code) => {
         if (ready) return;
         stop();
         reject(new Error(`Dev server exited with code ${code}. output:\n${output}`));
@@ -77,11 +77,11 @@ export function useProjectRuntime() {
     (await runtime()).fs.writeFile(path, contents);
   }, [runtime, state.status]);
 
-  /** A `jsh` shell for the terminal; resolves with the writer its keystrokes go to. */
+  /** A `bfsh` shell for the terminal; resolves with the writer its keystrokes go to. */
   const startShell = useCallback(async (onOutput?: (data: string) => void, size?: { cols: number; rows: number }) => {
-    const shell = (await runtime()).spawn('jsh', { terminal: size ?? { cols: 80, rows: 24 } });
-    forward(shell.output, onOutput);
-    return shell.input.getWriter();
+    const shell = (await runtime()).run('bfsh', { terminal: size ?? { cols: 80, rows: 24 } });
+    forward(shell.combinedOutput, onOutput);
+    return shell.stdin.getWriter();
   }, [runtime]);
 
   return { state, mountFiles, runCommandAndWait, startDevServer, writeFile, startShell };

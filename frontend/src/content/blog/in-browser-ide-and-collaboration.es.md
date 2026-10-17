@@ -62,7 +62,7 @@ El panel derecho alterna entre tres vistas mediante el selector de la parte supe
 | Vista | Contenido |
 |---|---|
 | **Vista previa** | Iframe en vivo servido por el servidor de desarrollo del navegador; cada vista previa abierta se recarga cuando cambia un archivo |
-| **Terminal** | Una shell `jsh` en el runtime: `npm`, `npx`, `node`, pipes y los comandos de archivos habituales |
+| **Terminal** | Una shell `bfsh` en el runtime: `npm`, `npx`, `node`, pipes y los comandos de archivos habituales |
 | **Chat de IA** | El compañero de programación con IA (ver más abajo) |
 
 ---

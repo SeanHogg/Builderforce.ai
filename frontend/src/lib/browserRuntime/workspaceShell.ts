@@ -12,7 +12,7 @@
  * ── ONE RUN ──────────────────────────────────────────────────────────────────────
  * 1. Mount the store's files (keeping `node_modules`, so an unchanged manifest does
  *    not reinstall) and snapshot exactly what was mounted.
- * 2. `jsh -c "<line>"` — the runtime's shell runs one line non-interactively
+ * 2. `bfsh -c "<line>"` — the runtime's shell runs one line non-interactively
  *    (`builderforce-webcontainers` packages/core/src/shell/program.ts:204, the same
  *    form its `child_process` `shell: true` uses, packages/core/src/node/childProcess.ts:71),
  *    so pipes, `&&` and quoting behave as they would in a terminal.
@@ -184,21 +184,21 @@ async function runInRuntime(
   command: string,
   timeoutMs: number,
 ): Promise<{ exitCode: number | undefined; timedOut: boolean; stdout: string }> {
-  const child = runtime.spawn('jsh', ['-c', command]);
-  const output = collectTail(child.output);
+  const child = runtime.run('bfsh', ['-c', command]);
+  const output = collectTail(child.combinedOutput);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), timeoutMs); });
-  const outcome = await Promise.race([child.exit, timeout]);
+  const outcome = await Promise.race([child.wait(), timeout]);
   clearTimeout(timer);
 
   let exitCode: number | undefined;
   const timedOut = outcome === 'timeout';
   if (timedOut) {
     child.kill();
-    exitCode = await settle(child.exit, SETTLE_MS);
+    exitCode = await settle(child.wait(), SETTLE_MS);
     if (exitCode === undefined) {
       child.kill('SIGKILL');
-      exitCode = await settle(child.exit, SETTLE_MS);
+      exitCode = await settle(child.wait(), SETTLE_MS);
     }
   } else {
     exitCode = outcome;

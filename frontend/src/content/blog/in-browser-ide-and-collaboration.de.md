@@ -62,7 +62,7 @@ Der rechte Bereich wechselt über den Umschalter oben zwischen drei Ansichten:
 | Ansicht | Inhalt |
 |---|---|
 | **Vorschau** | Live-iframe, ausgeliefert vom Dev-Server im Browser; jede offene Vorschau lädt neu, sobald sich eine Datei ändert |
-| **Terminal** | Eine `jsh`-Shell in der Runtime – `npm`, `npx`, `node`, Pipes und die üblichen Dateibefehle |
+| **Terminal** | Eine `bfsh`-Shell in der Runtime – `npm`, `npx`, `node`, Pipes und die üblichen Dateibefehle |
 | **KI-Chat** | Der KI-Pair-Programmer (siehe unten) |
 
 ---

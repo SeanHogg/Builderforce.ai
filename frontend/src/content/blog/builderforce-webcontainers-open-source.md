@@ -26,7 +26,7 @@ Hand it a project as files, and it serves a live preview in an iframe, with Type
 - **Preview frontend apps.** Vite with React, Vue or Svelte, Create React App, and static sites. Edits reload every open preview of the project; there is nothing to restart.
 - **Build for deployment in the page.** `runtime.build()` is `npm run build` without a server. It returns a bundled, minified, content-hashed static site you can upload anywhere.
 - **Type-check in the page.** `createChecker()` runs TypeScript in a Web Worker over the project's own tsconfig and returns diagnostics as plain data.
-- **Run Node programs.** `npm install` from the real npm registry, Node scripts, Express-style servers on virtual ports, and an interactive `jsh` shell for a terminal. Each process gets its own Web Worker, so a busy loop never freezes the page and `kill()` always works.
+- **Run Node programs.** `npm install` from the real npm registry, Node scripts, Express-style servers on virtual ports, and an interactive `bfsh` shell for a terminal. Each process gets its own Web Worker, so a busy loop never freezes the page and `kill()` always works.
 - **Isolate untrusted code.** In relay mode, previews and processes run on a separate origin, so AI-written code and arbitrary npm packages never share your app's cookies or storage.
 - **Fork it.** The compiler, the package CDN and the transport are ports. Swap esbuild for SWC, or esm.sh for your own mirror, without patching the core.
 
@@ -60,7 +60,7 @@ There is no bundling during development. The runtime works the way Vite's dev se
 }
 ```
 
-Node programs take a different path. `runtime.spawn('node', …)` starts a Web Worker with a snapshot of the files and shims for `fs`, `http`, `child_process` and the rest of Node's core modules; writes sync back to every other process. A server that calls `listen(3000)` is answered through the same service worker, and the runtime fires `server-ready` with its URL. The `spawn` API has the same shape as `@webcontainer/api`'s, so code written against StackBlitz ports over with little change.
+Node programs take a different path. `runtime.run('node', …)` starts a Web Worker with a snapshot of the files and shims for `fs`, `http`, `child_process` and the rest of Node's core modules; writes sync back to every other process. A server that calls `listen(3000)` is answered through the same service worker, and `onServerListening` hands the host its URL. Each process comes back as a `RuntimeProcess`: a combined output stream, `stdin`, `wait()` for the exit code, `kill()` and `resizeTerminal()`.
 
 ## What it powers on Builderforce
 
@@ -71,7 +71,7 @@ Node programs take a different path. `runtime.spawn('node', …)` starts a Web W
   "ratio": 1.62,
   "regions": [
     { "label": "Preview", "note": "Served from preview.builderforce.ai, isolated from your session", "x": 4, "y": 8, "w": 58, "h": 62, "hue": "make" },
-    { "label": "Terminal", "note": "jsh: npm, npx, node, pipes", "x": 4, "y": 74, "w": 58, "h": 20, "hue": "run" },
+    { "label": "Terminal", "note": "bfsh: npm, npx, node, pipes", "x": 4, "y": 74, "w": 58, "h": 20, "hue": "run" },
     { "label": "Check", "note": "Type-check, build, lint, with failures sent to the agent", "x": 65, "y": 8, "w": 31, "h": 40, "hue": "prove" },
     { "label": "Publish", "note": "runtime.build() to a static site at your address", "x": 65, "y": 52, "w": 31, "h": 42, "hue": "accent" }
   ],
@@ -100,10 +100,10 @@ Each of these is on the public [roadmap](https://github.com/SeanHogg/builderforc
 Serve the service worker from the package at `/__bfwc/sw.js`, then boot, mount and preview:
 
 ```ts
-import { bootPreviewRuntime } from '@seanhogg/builderforce-webcontainers';
+import { startPreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 
-const runtime = await bootPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', id: 'my-project' });
-runtime.mount({
+const runtime = await startPreviewRuntime({ serviceWorkerUrl: '/__bfwc/sw.js', id: 'my-project' });
+runtime.writeTree({
   'package.json': JSON.stringify({ dependencies: { react: '^18.3.1', 'react-dom': '^18.3.1' } }),
   'index.html': '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',
   'src/main.tsx': `import { createRoot } from 'react-dom/client';
@@ -149,7 +149,7 @@ And because the runtime is MIT, none of this is a dependency you cannot see into
 
 - **Build an app on the canvas** and watch it run in the tab, with no headers to configure and no install.
 - **Embed the runtime in your own product.** One package, one service worker, MIT.
-- **Port from `@webcontainer/api`.** `spawn`, `server-ready` and the shell have the same shape.
+- **Run Node in the tab.** `runtime.run('npm', ['install'])`, then `node server.js`; `onServerListening` gives you the URL to frame.
 - **Read the roadmap and send a pull request.** Lint in the check worker, hot module replacement and style preprocessors are next.
 
 ---

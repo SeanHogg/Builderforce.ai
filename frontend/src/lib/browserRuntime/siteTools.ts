@@ -66,7 +66,7 @@ export function hasTypeScript(files: FlatFiles): boolean {
 export async function projectSupport(files: FlatFiles): Promise<{ supported: boolean; reason?: string }> {
   const { VirtualFileSystem, detectProject } = await import('@seanhogg/builderforce-webcontainers');
   const fs = new VirtualFileSystem();
-  fs.mount(files);
+  fs.writeTree(files);
   const { supported, reason } = detectProject(fs);
   return { supported, reason };
 }
