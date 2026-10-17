@@ -35,6 +35,9 @@ export function bundleCsp({ cspSource, nonce, apiOrigin }: Pick<BundleShellInput
   // script imports. The bundle is code-split (the board's own dependencies, the
   // Evermind engines, the voice studio and mermaid load on demand), so its chunks
   // must be allowed by origin or every lazy feature dies at the import.
+  // `'wasm-unsafe-eval'` is also what lets the page engines (PRD 34) compile WebLLM's and
+  // `bfi`'s WebAssembly here; their model downloads (huggingface.co, *.hf.co,
+  // raw.githubusercontent.com) ride the `https:` grant in `connect-src` below.
   const scriptSrc = `'nonce-${nonce}' ${cspSource} 'wasm-unsafe-eval'`;
   return [
     `default-src 'none'`,

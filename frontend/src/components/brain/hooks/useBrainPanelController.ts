@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createChatTicketsRestAdapter, useChatParticipants, useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
+import { createChatTicketsRestAdapter, useChatParticipants, useQueuedTurns, useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
 import {
   nextFallbackModel,
   effortProfile,
@@ -12,7 +12,6 @@ import {
   useBrainActions,
   useOptionalBrainContext,
   chatRosterFromParticipants,
-  useQueuedTurns,
 } from '@/lib/brain';
 // By path, not via the `@/lib/brain` barrel: the barrel is in the root layout's static
 // closure and this module's only consumers load dynamically (check:root-closure).

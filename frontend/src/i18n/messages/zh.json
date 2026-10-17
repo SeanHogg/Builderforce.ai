@@ -312,13 +312,30 @@
     "sessionUnavailable": "需本对话已有若干条消息且当前没有正在进行的运行",
     "categoryLocal": "在此设备上",
     "localDetail": "通过 {runtime} 在本机运行 —— 不消耗套餐额度，可离线使用。",
+    "localCatalogHeading": "下载后在此浏览器中运行",
+    "localDownload": "下载（{size}）",
+    "localDownloading": "正在下载… {percent}%",
+    "localCancel": "取消",
+    "localRemove": "移除",
+    "localMoreActions": "更多操作",
+    "localTools": "工具",
+    "localContext": "{tokens} 上下文",
+    "localDownloadFailed": "下载失败，请重试。",
+    "localReasonWebgpu": "需要 WebGPU，但此浏览器或 GPU 不支持。",
+    "localReasonF16": "需要 WebGPU 16 位着色器，但此 GPU 不支持。",
+    "localReasonBuffer": "所需的 GPU 缓冲区超出此设备的上限。",
+    "localReasonEngine": "此处暂不支持该引擎。",
     "assessmentClosedBook": "闭卷考核进行中 — 结束前助手不可用。",
     "assessmentAssisted": "辅助考核 — 助手的每一轮回复都会记录在诚信记录中。",
     "ticketTagTitle": "标记工单",
     "ticketTagStatus": "状态",
     "ticketTagNoMatches": "没有匹配的工单",
     "startingPoints": "起点",
-    "suggestionsLabel": "建议的下一步"
+    "suggestionsLabel": "建议的下一步",
+    "placeholder": "输入消息…",
+    "send": "发送",
+    "queueSend": "排队发送 — 当前运行结束后发送",
+    "uploading": "正在上传…"
   },
   "repoContext": {
     "title": "添加仓库上下文",
@@ -5999,9 +6016,7 @@
   "evermindStatus": {
     "label": "Evermind",
     "learning": "学习中",
-    "frozen": "已冻结",
-    "off": "已关闭",
-    "tooltip": "此项目运行在其 Evermind（v{version}）上。智能体运行与本聊天都会召回其学习内容，并在连接状态下回馈贡献——请留意转录中的召回/学习步骤。打开 LLM 标签页查看它学到了什么。"
+    "frozen": "已冻结"
   },
   "evermindRun": {
     "title": "此次运行在项目自己的 Evermind 模型上执行",
@@ -11600,6 +11615,10 @@
         "title": "画布知道你身在何处，并为你指出通往下一阶段的路",
         "description": "“衡量”过去会在一块什么都没上线的看板上打开。现在，每个画布都会读取自己的看板，打开在你还没完成的下一个阶段，并把一个你尚未准备好的阶段变成通往它的最短路径。随之而来的还有两个新地方：“运营”用来查看正在运行的内容，“发布上线”用来把它带到用户面前。"
       },
+      "see-what-every-conversation-costs": {
+        "title": "看清每段对话的花费，以及记忆为你省下了多少",
+        "description": "现在每个聊天都会显示它的花费——按 Builderforce 套餐和你自己按标价计费的提供商密钥分开列出——以及记忆帮你省下的部分：从记忆重放的回答、提供商的提示缓存，以及保持精简的上下文。实测值和估算值始终分开显示。同一个面板现在出现在网页应用、编辑器和 Rovr 中。"
+      },
       "your-private-evermind-on-your-machine": {
         "title": "你的私有 Evermind，就在你的电脑上——本地模型、连接器，以及在手机上批准",
         "description": "Synapse 现在可以运行适合你电脑配置的本地模型，并提供给 Claude Code 和你的脚本使用；托管 Brain 可用的 MCP 连接器；让你在手机上批准智能体的步骤；还为你提供一个起步用的私有模型。它学到的一切都留在你的电脑上，除非你选择发布。"
@@ -11623,6 +11642,10 @@
       "agents-that-run-their-own-code": {
         "title": "Brain 现在会运行自己的代码——直接在你的浏览器里安装、测试和构建",
         "description": "会写代码却不能运行代码的智能体，交给你的是未经验证的工作。画布和 Studio 里的 Brain 现在会在你自己的浏览器中安装依赖、运行测试、构建并做类型检查，修复失败的地方，再把已经通过检查的修改交给你。"
+      },
+      "models-that-run-on-your-machine": {
+        "title": "在你自己的电脑上运行模型，交接时不丢失上下文",
+        "description": "在你现在使用的同一个选择器里挑一个能在此设备上运行的模型，下载一次，就能在浏览器的 GPU 上私密、离线地聊天或运行智能体回合。当一次运行在模型之间切换时，builderforce-memory 会把对话打包成适合下一个模型窗口的大小。"
       }
     }
   },
@@ -11755,6 +11778,11 @@
       "answering": "正在发送…",
       "showTickets": "显示关联工单",
       "hideTickets": "隐藏关联工单",
+      "sortLabel": "排序工单",
+      "sortOpen": "未完成优先",
+      "sortDone": "已完成优先",
+      "sortTitle": "标题",
+      "sortLinked": "关联顺序",
       "ticketCount": "{n, plural, other {# 个工单}}",
       "overallAria": "总体进度：完成 {pct}%",
       "mergeAction": "将 {n} 个合并到此处",
@@ -35138,6 +35166,79 @@
         "quickStartNote": "克隆仓库，并用 Cargo 构建整个工作区。",
         "usage": "Spawn 是 Builderforce 面向 13 岁及以上创作者的 Roblox 游戏构建工具，作为独立产品提供。开源仓库包含桌面应用和 Studio 桥接组件；登录和模型调用都通过 Builderforce 完成。"
       }
+    }
+  },
+  "workStatus": {
+    "loading": "正在加载账户…",
+    "account": "账户",
+    "plan": "套餐",
+    "resets": "重置时间",
+    "limitsLifted": "已解除限制",
+    "limitsLiftedHint": "你是超级管理员运营者，因此你的所有限制均已解除 — 套餐本身的限制仍适用于其成员。",
+    "usageEmpty": "此套餐没有用量计量项。",
+    "meterOf": "{used} / {limit} {unit}",
+    "upgrade": "升级",
+    "managePlan": "管理套餐",
+    "billing": {
+      "past_due": "已逾期",
+      "canceled": "已取消",
+      "trialing": "试用中",
+      "incomplete": "未完成"
+    },
+    "plans": {
+      "free": "免费版",
+      "pro": "专业版",
+      "teams": "团队版",
+      "enterprise": "企业版"
+    },
+    "units": {
+      "tokens": "令牌",
+      "bytes": "字节",
+      "runs": "次运行",
+      "events": "个事件",
+      "fetches": "次抓取",
+      "submissions": "次提交",
+      "sandbox_runs": "次运行",
+      "recordings": "个录制"
+    },
+    "evermindVersion": "v{version}",
+    "evermindAnswersOn": "回答已开启",
+    "evermindAnswersOff": "回答已关闭",
+    "evermindHint": "学习：此项目的对话会训练它的 Evermind。回答：Evermind 是否可以代替付费模型作答。两者都可在 Evermind 视图中更改。"
+  },
+  "spend": {
+    "spent": "已花费 {amount}",
+    "saved": "已节省 {amount}",
+    "savedApprox": "约节省 {amount}",
+    "tokens": "{tokens} 令牌",
+    "pillTitle": "此对话的花费，以及记忆节省了多少",
+    "spendHeading": "花费",
+    "platform": "Builderforce 套餐",
+    "yourKey": "你的密钥",
+    "yourKeyHint": "按服务商标价计算",
+    "unpriced": "未定价模型上的 {tokens} 令牌",
+    "savedHeading": "记忆节省",
+    "savedShare": "账单的 {pct}%",
+    "estimated": "估算",
+    "measured": "已记录",
+    "events": "{count}×",
+    "nothingSaved": "尚未节省",
+    "periodHeading": "AI 花费 · 最近 {days} 天",
+    "sources": {
+      "prompt_cache": "提示缓存",
+      "memory_answer": "由记忆回答",
+      "evermind_answer": "由 Evermind 回答",
+      "response_cache": "重复请求",
+      "context_trim": "精简上下文",
+      "recall_overhead": "回忆附加"
+    },
+    "sourceHints": {
+      "prompt_cache": "服务商以十分之一的价格从缓存中提供了部分提示",
+      "memory_answer": "之前问过的问题由记忆作答 — 无需调用模型",
+      "evermind_answer": "由项目的 Evermind 作答 — 无需调用付费模型",
+      "response_cache": "相同的请求由网关缓存作答 — 无需调用模型",
+      "context_trim": "压缩使较早的轮次不进入每次调用",
+      "recall_overhead": "回忆的记忆为每个提示增加的内容 — 回忆的成本"
     }
   }
 }

@@ -11,6 +11,8 @@
  * so a budget is verified where it is declared rather than through the runner.
  */
 
+import { effortProfile, type Effort } from '@seanhogg/builderforce-brain-embedded';
+
 /**
  * Model round-trips one composer submit may take before the loop gives up.
  *
@@ -54,6 +56,33 @@ export const CANVAS_RESPONSE_TOKENS = 3_200;
  * `canvas_add_object` five times, each cut off at the same place, and delivered nothing.
  */
 export const CANVAS_BUILD_RESPONSE_TOKENS = 8_192;
+
+/** The composer's Effort and Thinking, as one canvas turn reads them (the `/` Work panel). */
+export interface CanvasRunShaping {
+  effort: Effort;
+  thinking: boolean;
+}
+
+/**
+ * What one canvas round-trip asks for, given the composer's run shaping.
+ *
+ * The ceiling is the canvas's own (`base`: the prose or the build ceiling above), RAISED
+ * to the Effort level's when that is higher and never lowered by it — every canvas turn
+ * can call tools, and Quick's 2,048 would cut a tool call's JSON off mid-file (the same
+ * reason `TOOL_TURN_MIN_MAX_TOKENS` exists). Thinking sends the level's vendor-neutral
+ * `reasoning` intent, and nothing at all when off.
+ *
+ * No shaping ⇒ the canvas's long-standing request (`base`, `reasoning: low`), which is
+ * also what the composer's defaults (Quick + Thinking) produce.
+ */
+export function canvasTurnShape(base: number, shaping: CanvasRunShaping | undefined): { maxTokens: number; reasoning?: { level: 'low' | 'medium' | 'high' } } {
+  if (!shaping) return { maxTokens: base, reasoning: { level: 'low' } };
+  const profile = effortProfile(shaping.effort);
+  return {
+    maxTokens: Math.max(base, profile.maxTokens),
+    ...(shaping.thinking ? { reasoning: { level: profile.reasoningLevel } } : {}),
+  };
+}
 
 /**
  * The step budget once a turn is writing code. One file is one step, and the seeded

@@ -20,6 +20,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { deleteProjectFact, recallProjectFacts, upsertProjectFact } from '../../application/llm/projectFacts';
 import { resolveMemoryAnswer, cacheProjectAnswer } from '../../application/llm/projectMemory';
+import { recordMemoryAnswerSavings } from '../../application/llm/memoryAnswerSavings';
+import { normalizeUsageSurface } from '../../application/llm/savingsLedger';
 import { evermindGenerate, type ArtifactStore } from '../../application/llm/evermindRuntime';
 import { projectInTenantCached } from '../../application/project/projectOwnership';
 import { parseOptionalBody, z } from './requestBody';
@@ -35,6 +37,13 @@ const RememberFactBody = z.object({
 const CacheAnswerBody = z.object({
   question: z.unknown().optional(),
   answer: z.unknown().optional(),
+  /** What producing `answer` cost — the writing turn's served model and summed tokens.
+   *  Stored with the cached answer so its replays are priced from a recorded figure. */
+  origin: z.object({
+    model: z.string().max(200),
+    promptTokens: z.number().int().nonnegative(),
+    completionTokens: z.number().int().nonnegative(),
+  }).optional(),
 });
 
 const json = (body: unknown, status = 200): Response =>
@@ -85,7 +94,7 @@ async function forgetCore(env: Env, db: Db, tenantId: number, projectId: number,
  * leg may pre-empt the model (it cannot call a tool, so it must never short-circuit a run
  * that could fetch the real answer). Absent/anything else = tools available = cache only.
  */
-async function resolveAnswerCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
+async function resolveAnswerCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context, userId: string | null): Promise<Response> {
   if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const question = c.req.query('query') ?? '';
   if (!question.trim()) return json({ error: 'query is required' }, 400);
@@ -105,7 +114,24 @@ async function resolveAnswerCore(env: Env, db: Db, tenantId: number, projectId: 
     ...(runEvermind ? { runEvermind } : {}),
     toolsAvailable,
   });
-  return json({ answer });
+  if (!answer) return json({ answer: null });
+  // A hit is a model call that did not happen — record what it would have cost. Off the
+  // response path: the person is waiting for the answer, not for the bookkeeping.
+  const chatId = Number(c.req.query('chatId'));
+  const saving = recordMemoryAnswerSavings(env, db, {
+    tenantId,
+    userId,
+    projectId,
+    chatId: Number.isSafeInteger(chatId) && chatId > 0 ? chatId : null,
+    surface: normalizeUsageSurface(c.req.query('surface')),
+    model: c.req.query('model') ?? null,
+    question,
+    answer,
+  });
+  c.executionCtx.waitUntil(saving);
+  // `costBasis` is the ledger's input, not the client's business.
+  const { costBasis: _costBasis, ...publicAnswer } = answer;
+  return json({ answer: publicAnswer });
 }
 
 /** Write-through a (question → answer) pair to the Q&A cache so the next exact repeat
@@ -116,7 +142,7 @@ async function cacheAnswerCore(env: Env, db: Db, tenantId: number, projectId: nu
   const question = typeof body.question === 'string' ? body.question : '';
   const answer = typeof body.answer === 'string' ? body.answer : '';
   if (!question.trim() || !answer.trim()) return json({ error: 'question and answer are required' }, 400);
-  await cacheProjectAnswer(env, db, tenantId, projectId, question, answer);
+  await cacheProjectAnswer(env, db, tenantId, projectId, question, answer, body.origin ?? null);
   return json({ ok: true });
 }
 
@@ -130,7 +156,7 @@ export function createProjectFactsRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:projectId/facts', (c) => rememberCore(c.env as Env, db, t(c), pid(c), c));
   router.delete('/:projectId/facts/:key', (c) => forgetCore(c.env as Env, db, t(c), pid(c), c));
   // Memory-first: resolve an answer from memory (skip the LLM) / cache a Q&A pair.
-  router.get('/:projectId/answer', (c) => resolveAnswerCore(c.env as Env, db, t(c), pid(c), c));
+  router.get('/:projectId/answer', (c) => resolveAnswerCore(c.env as Env, db, t(c), pid(c), c, (c.get('userId') as string | undefined) ?? null));
   router.post('/:projectId/answer', (c) => cacheAnswerCore(c.env as Env, db, t(c), pid(c), c));
   return router;
 }
@@ -160,7 +186,8 @@ export function createProjectFactsAgentRoutes(db: Db): Hono<HonoEnv> {
   router.get('/:projectId/answer', async (c) => {
     const tenantId = await auth(c);
     if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    return resolveAnswerCore(c.env as Env, db, tenantId, pid(c), c);
+    // A host key acts for the agent host, not a person: no user to attribute to.
+    return resolveAnswerCore(c.env as Env, db, tenantId, pid(c), c, null);
   });
   router.post('/:projectId/answer', async (c) => {
     const tenantId = await auth(c);

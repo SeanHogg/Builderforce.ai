@@ -2,7 +2,6 @@ import { memo } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import type { AssessmentGate } from '@/lib/academic/assessment';
-import type { ChatInputAttachment } from './types';
 
 /**
  * Why the composer refuses, or that it is being recorded — said in words, never
@@ -35,21 +34,3 @@ export const QueuedTurnsReceipt = memo(function QueuedTurnsReceipt({ count }: { 
   );
 });
 
-/** The attachments waiting to go with the next turn, each removable. */
-export const PendingAttachmentChips = memo(function PendingAttachmentChips({ attachments, onRemove }: {
-  attachments: ChatInputAttachment[];
-  onRemove: (key: string) => void;
-}) {
-  const t = useTranslations('chatInput');
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-      {attachments.map((a) => (
-        <span key={a.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 'var(--radius-md)', background: 'var(--surface-coral-soft)', fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>
-
-          <Icon source="📎" size="1em" /> {a.name}
-          <button type="button" onClick={() => onRemove(a.key)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', padding: 0 }} aria-label={t('removeAttachment')}>×</button>
-        </span>
-      ))}
-    </div>
-  );
-});

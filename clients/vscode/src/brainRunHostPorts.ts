@@ -45,7 +45,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   return createBrainRunHost({
     // The run's sub-agent controls and Stop come from the RUN (only it knows its key, its
     // chat and its depth), so they are passed straight through rather than rebuilt here.
-    tools: (projectId, children, signal) => brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal),
+    tools: (projectId, children, signal, opts) => brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, opts),
     workspaceRoot,
     // Resolved per run, not once: an explicit pick, the project's Evermind pin or an
     // on-device route can all change between turns, and a local credential can expire.
@@ -77,7 +77,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     },
     // How a code-changing run's coder did — so the next run's coder is picked on evidence.
     reportOutcome: (outcome) => postRunOutcome(outcome),
-    evermind: (projectId) => withWorkspaceStaleness(projectEvermindHooks(secrets, projectId), workspaceRoot() || undefined),
+    evermind: (projectId, chatId) => withWorkspaceStaleness(projectEvermindHooks(secrets, projectId, chatId), workspaceRoot() || undefined),
     // The ONE api `ContextSource` the native participant and the cloud engine read.
     // Continuity-scoped to the chat (a real server chat only — an unlinked run has a
     // negative id and no history to measure a delta against).

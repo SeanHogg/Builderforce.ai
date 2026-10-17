@@ -10,12 +10,14 @@
  * on the sentence that told the user who was being billed.
  */
 
+import { localCatalogModel, localRuntime, parseLocalModelRef } from '@builderforce/local-inference';
 import {
   DEFAULT_MODEL_IDENTITY,
   productModelName,
   revealsModelId,
   type ModelIdentityContext,
 } from './modelIdentity';
+import type { LocalModelRow } from './pageEngines/modelStore';
 
 /** The gateway pin that expands to a project's CURRENT Evermind head at call time.
  *  Mirrors `PROJECT_EVERMIND_MODEL_PREFIX` on the gateway (api/.../projectEvermind.ts). */
@@ -223,6 +225,25 @@ export function buildModelItems(
   return items;
 }
 
+/**
+ * The options with every DOWNLOADED page-engine model (the picker's local model store
+ * rows in state `ready`) joined to the on-device group — so a model fetched into this
+ * browser is a row like any other: listed under All, searchable, and named as the model
+ * in use once pinned. Rows already present (an HTTP runtime serving the same ref) are
+ * left as they are; the builder never repeats an id.
+ */
+export function withReadyPageModels(options: ChatModelOptions, rows: readonly LocalModelRow[] | null | undefined): ChatModelOptions {
+  const ready = (rows ?? []).filter((row) => row.state === 'ready');
+  if (ready.length === 0) return options;
+  return {
+    ...options,
+    local: [
+      ...(options.local ?? []),
+      ...ready.map((row) => ({ id: row.ref, label: row.label, runtime: localRuntime(row.runtime).label })),
+    ],
+  };
+}
+
 /** The key identifying the active row (matches {@link ModelItem.key}). */
 export function activeModelKey(selection: ChatModelSelection): string {
   return selection.mode === 'model' ? `model:${selection.model}` : selection.mode;
@@ -266,6 +287,18 @@ export function modelInUse(
     // as one rather than shown as a raw pin.
     if (model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)) {
       return { name: labels.evermindLabel, detail: labels.evermindDetail };
+    }
+    // An on-device model is the user's own choice on their own hardware — never masked
+    // (see `modelIdentity.ts`), and named from the page catalog when no row lists it
+    // yet (the picker's store has not been read since the menu last opened).
+    const local = parseLocalModelRef(model);
+    if (local) {
+      return item
+        ? { name: item.label, detail: item.detail }
+        : {
+            name: localCatalogModel(model)?.label ?? local.model,
+            detail: labels.localDetail.replace('{runtime}', localRuntime(local.provider).label),
+          };
     }
     // A viewer who cannot pin has nothing to learn from an upstream id; they are on
     // the product, whatever the cascade resolved to underneath it.

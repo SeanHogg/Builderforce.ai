@@ -18,6 +18,7 @@
  */
 
 import type { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
+import type { UsageSurface } from '@builderforce/spend-contract';
 
 /**
  * A memory-first answer that lets the run loop SKIP the paid model entirely — either
@@ -49,6 +50,16 @@ export interface MemoryFirstAnswer {
  * so the next exact repeat is free. All return null / no-op when the chat isn't
  * project-scoped or memory is unavailable, so the loop simply falls through to the LLM.
  */
+/** Where a run is driven from — the usage ledger's `surface` vocabulary, declared once. */
+export type MemorySurface = UsageSurface;
+
+/** What producing a cached answer cost — recorded with it (`project_facts.origin_*`). */
+export interface AnswerOriginCost {
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+}
+
 export interface EvermindRunHooks {
   /** Recall the project's learned memories most relevant to `query`. */
   recall(query: string): Promise<EvermindRecallResult | null>;
@@ -62,9 +73,13 @@ export interface EvermindRunHooks {
    * call ("which tickets are in the backlog?") gets answered from stale weights while
    * the tools that could answer it are never called.
    */
-  answer?(query: string, opts: { toolsAvailable: boolean }): Promise<MemoryFirstAnswer | null>;
-  /** Remember a (question → answer) pair so an exact repeat short-circuits next time. */
-  cacheAnswer?(query: string, answer: string): void | Promise<void>;
+  answer?(query: string, opts: { toolsAvailable: boolean; model?: string }): Promise<MemoryFirstAnswer | null>;
+  /**
+   * Remember a (question → answer) pair so an exact repeat short-circuits next time.
+   * `origin` is what producing the answer cost (the run's served model + summed tokens):
+   * stored with it, so each replay's saving is a recorded figure, not an estimate.
+   */
+  cacheAnswer?(query: string, answer: string, origin?: AnswerOriginCost): void | Promise<void>;
 }
 
 /**
@@ -104,8 +119,13 @@ export function projectMemoryHooks(
    * project-wide exactly as before.
    */
   chatId?: number | null,
+  /** Which surface the run is driven from — recorded on the saving a memory answer
+   *  makes, so "saved" splits by editor / web / browser like "spent" does. */
+  surface: MemorySurface = 'web',
 ): EvermindRunHooks {
   const json = { 'Content-Type': 'application/json' };
+  // Server chat ids only: a local-first chat's negative id is not a server chat yet.
+  const chatParam = chatId != null && chatId > 0 ? `&chatId=${chatId}` : '';
   return {
     recall: (query: string) =>
       request<EvermindRecallResult>(`/api/projects/${projectId}/evermind/recall`, {
@@ -113,15 +133,16 @@ export function projectMemoryHooks(
         headers: json,
         body: JSON.stringify({ query, ...(chatId != null ? { chatId } : {}) }),
       }).catch(() => null),
-    answer: (query: string, opts: { toolsAvailable: boolean }) =>
+    answer: (query: string, opts: { toolsAvailable: boolean; model?: string }) =>
       request<{ answer: MemoryFirstAnswer | null }>(
-        `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? '1' : '0'}`,
+        `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? '1' : '0'}`
+          + `${chatParam}&surface=${surface}${opts.model ? `&model=${encodeURIComponent(opts.model)}` : ''}`,
       ).then((r) => r?.answer ?? null).catch(() => null),
-    cacheAnswer: (query: string, answer: string) => {
+    cacheAnswer: (query: string, answer: string, origin?: AnswerOriginCost) => {
       void request(`/api/projects/${projectId}/answer`, {
         method: 'POST',
         headers: json,
-        body: JSON.stringify({ question: query, answer }),
+        body: JSON.stringify({ question: query, answer, ...(origin ? { origin } : {}) }),
       }).catch(() => { /* best-effort: never fail a reply to remember it */ });
     },
   };

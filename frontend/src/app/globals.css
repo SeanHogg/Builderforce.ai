@@ -440,14 +440,22 @@
      where these map to --vscode-* instead) inherits light/dark automatically. */
   --bf-text: var(--text-primary);
   --bf-text-muted: var(--text-muted);
+  --bf-text-secondary: var(--text-secondary);
   --bf-surface: var(--bg-elevated);
   --bf-surface-2: var(--surface-interactive);
   --bf-border: var(--border-subtle);
   --bf-border-strong: var(--border-accent);
   --bf-accent: var(--coral-bright);
   --bf-accent-soft: var(--surface-coral-soft);
+  /* The shared composer / Work panel / spend pill read these too; unmapped, their
+     fallbacks were dark-theme literals that read wrong on paper. */
+  --bf-accent-bg: var(--surface-coral-soft);
+  --bf-accent-border: var(--border-accent);
+  --bf-accent-contrast: var(--text-inverse);
+  --bf-on-accent: var(--text-inverse);
   --bf-link: var(--cyan-bright);
   --bf-error: var(--error);
+  --bf-danger: var(--error);
   --bf-error-text: var(--error-text);
   --bf-error-bg: var(--error-bg);
   --bf-success: var(--success);

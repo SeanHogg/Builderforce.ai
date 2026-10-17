@@ -71,6 +71,18 @@ export type {
   PromptOptionsSession,
 } from './promptOptions/PromptOptionsMenu';
 export { DEFAULT_PROMPT_OPTIONS_LABELS, promptOptionsLabels } from './promptOptions/types';
+// The on-device model list (PRD 34): the page engines' catalog rows a person downloads,
+// runs and removes — presentational row + list, the hook over a host's local model store,
+// and their copy. The `/` menu's Model tab renders them; Rovr's side panel reuses them.
+export { LocalModelRow } from './localModels/LocalModelRow';
+export type { LocalModelRowProps } from './localModels/LocalModelRow';
+export { LocalModelList } from './localModels/LocalModelList';
+export type { LocalModelListProps } from './localModels/LocalModelList';
+export { useLocalModels } from './localModels/useLocalModels';
+export type { LocalModelsState } from './localModels/useLocalModels';
+export { DEFAULT_LOCAL_MODEL_LABELS, LOCAL_UNSUPPORTED_LABEL } from './localModels/labels';
+export type { LocalModelLabels } from './localModels/labels';
+export { formatDownloadSize, formatParams, formatContextTokens } from './localModels/localModelView';
 export type { PromptOptionsLabels } from './promptOptions/types';
 // The model-choice domain itself lives in brain-embedded (the extension host shares
 // it and cannot import React); re-exported here so a UI consumer has one import site.
@@ -257,3 +269,38 @@ export type {
   ProjectListLabels,
   ProjectListTone,
 } from './projectList/types';
+
+// THE prompt area — one composer for every surface (web Brain, canvas, VS Code, Rovr):
+// the shell, the text box, `+`, the `/` Work panel with the shared Status tab, and the
+// trailing button. Hosts pass state, ports and copy.
+export { BrainComposer } from './composer/BrainComposer';
+export type { BrainComposerLabels, BrainComposerProps } from './composer/BrainComposer';
+export type { ComposerAddMenuItem } from './composer/ComposerAddMenu';
+export type { ComposerAttachment } from './composer/AttachmentChips';
+export type { ComposerOptions } from './composer/composerOptions';
+export { DEFAULT_COMPOSER_LABELS, composerLabels } from './composer/labels';
+export type { ComposerLabels } from './composer/labels';
+export { useChatMemorySwitch } from './composer/useChatMemorySwitch';
+export { useQueuedTurns, type QueuedTurns, type QueuedItem, type QueuedTurnsOptions } from './composer/useQueuedTurns';
+
+// The `/` menu's Status tab — plan, meters, 30-day spend & savings, Evermind.
+export { WorkStatusPanel } from './workStatus/WorkStatusPanel';
+export type { WorkStatusPanelProps } from './workStatus/WorkStatusPanel';
+export type { UpgradeTarget } from './workStatus/AccountStatus';
+export { DEFAULT_WORK_STATUS_LABELS, workStatusLabels } from './workStatus/labels';
+export type { WorkStatusLabels } from './workStatus/labels';
+export {
+  cachedConsumptionSnapshot,
+  fetchConsumptionSnapshot,
+  invalidateConsumptionSnapshot,
+  subscribeConsumptionSnapshot,
+} from './workStatus/consumptionSnapshot';
+export type { ConsumptionSnapshot, JsonRequest } from './workStatus/consumptionSnapshot';
+export { useConsumptionSnapshot } from './workStatus/useConsumptionSnapshot';
+
+// Spent vs saved — the chat's spend pill and the breakdown behind it.
+export { SpendPill } from './spend/SpendPill';
+export { SpendBreakdown } from './spend/SpendBreakdown';
+export { DEFAULT_SPEND_LABELS, spendLabels } from './spend/labels';
+export type { SpendLabels } from './spend/labels';
+export { formatUsd, formatTokens } from './spend/format';

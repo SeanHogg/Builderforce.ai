@@ -1,15 +1,19 @@
 /**
- * The conversation: the shared `<BrainTimeline>` transcript over the device record and
- * the live run, the confirmation card the safety gate pauses on, and the composer.
+ * The conversation: the shared info strip (a synced chat's tickets and spend), the
+ * shared `<BrainTimeline>` transcript over the device record and the live run, the
+ * confirmation card the safety gate pauses on, and the shared composer.
  */
-import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { BrainTimeline, timelineCatalogLookup, timelineLabelsFrom } from '@seanhogg/builderforce-brain-ui';
+import { useEffect, useMemo, useState } from 'react';
+import { BrainTimeline, timelineCatalogLookup, timelineLabelsFrom, useQueuedTurns } from '@seanhogg/builderforce-brain-ui';
 import catalogs from 'virtual:rovr-timeline-catalogs';
 import type { BrainMessage } from '@seanhogg/builderforce-brain-embedded';
 import { t, uiCatalogLocale } from '../i18n/t';
 import type { LocalChat } from '../store/records';
+import { ChatInfoStrip } from './ChatInfoStrip';
 import { ConfirmCard } from './ConfirmCard';
 import { useLoaded, useRun, useServices } from './hooks';
+import { RovrComposer } from './RovrComposer';
+import { useRovrChatOptions } from './useRovrChatOptions';
 
 const TITLE_MAX = 60;
 
@@ -26,6 +30,8 @@ export function ChatView({ chats, chatId, onSelect, onNewChat, onChatsChanged, o
   const services = useServices();
   const run = useRun(chatId);
   const [draft, setDraft] = useState('');
+  const chat = chats.find((c) => c.id === chatId);
+  const chatOptions = useRovrChatOptions(chat, onChatsChanged);
   const labels = useMemo(
     () => timelineLabelsFrom(timelineCatalogLookup(catalogs[uiCatalogLocale()]), { assistant: 'Rovr', empty: t('chatEmpty') }),
     [],
@@ -38,14 +44,17 @@ export function ChatView({ chats, chatId, onSelect, onNewChat, onChatsChanged, o
   // The loop persisted a turn (or the run settled) — re-read the device record.
   useEffect(reload, [run.messagesEpoch, run.running, reload]);
 
-  const send = async (e?: FormEvent) => {
-    e?.preventDefault();
-    const text = draft.trim();
-    if (!text || run.running) return;
-    setDraft('');
-    const id = chatId ?? (await onNewChat());
-    const chat = await services.records.getChat(id);
-    if (chat && chat.title === t('newChatTitle')) {
+  // One turn, start to finish. A turn typed while a run streams is HELD by the queue
+  // and delivered on the run's falling edge — the composer's Send says "Queue message".
+  const deliver = async (text: string) => {
+    let id = chatId;
+    if (id === null) {
+      // The first message creates the chat — with the `/` choices made before it existed.
+      id = await onNewChat();
+      await services.records.updateChat(id, chatOptions.draft);
+    }
+    const current = await services.records.getChat(id);
+    if (current && current.title === t('newChatTitle')) {
       await services.records.updateChat(id, { title: text.replace(/\s+/g, ' ').slice(0, TITLE_MAX) });
       onChatsChanged();
     }
@@ -61,11 +70,17 @@ export function ChatView({ chats, chatId, onSelect, onNewChat, onChatsChanged, o
     }
   };
 
-  const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      void send();
-    }
+  const queued = useQueuedTurns({ running: run.running, send: (text) => void deliver(text), resetKey: chatId });
+  const send = () => {
+    const text = draft.trim();
+    if (!text) return;
+    setDraft('');
+    if (queued.submit(text)) return;
+    void deliver(text);
+  };
+  const stop = () => {
+    queued.clear();
+    if (chatId !== null) services.host.stop(chatId);
   };
 
   const needsModel = /not_signed_in/.test(run.error);
@@ -94,6 +109,16 @@ export function ChatView({ chats, chatId, onSelect, onNewChat, onChatsChanged, o
           {t('newChat')}
         </button>
       </div>
+
+      {chatOptions.signedIn && chat?.serverId ? (
+        <ChatInfoStrip
+          serverId={chat.serverId}
+          projectId={chatOptions.projectId}
+          chats={chats}
+          run={run}
+          onChanged={onChatsChanged}
+        />
+      ) : null}
 
       <div className="rovr-chat__transcript">
         <BrainTimeline
@@ -125,29 +150,20 @@ export function ChatView({ chats, chatId, onSelect, onNewChat, onChatsChanged, o
 
       {run.pendingConfirm && chatId !== null && <ConfirmCard chatId={chatId} call={run.pendingConfirm} />}
 
-      <form className="rovr-composer" onSubmit={(e) => void send(e)}>
-        <label className="rovr-sr" htmlFor="rovr-composer-input">
-          {t('composerLabel')}
-        </label>
-        <textarea
-          id="rovr-composer-input"
-          className="rovr-input"
-          rows={2}
-          value={draft}
-          placeholder={t('composerPlaceholder')}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKey}
-        />
-        {run.running ? (
-          <button type="button" className="rovr-btn" onClick={() => chatId !== null && services.host.stop(chatId)}>
-            {t('stop')}
-          </button>
-        ) : (
-          <button type="submit" className="rovr-btn rovr-btn--primary" disabled={!draft.trim()}>
-            {t('send')}
-          </button>
-        )}
-      </form>
+      <RovrComposer
+        value={draft}
+        onChange={setDraft}
+        onSubmit={send}
+        running={run.running}
+        onStop={stop}
+        below={queued.count > 0 ? (
+          <p className="rovr-muted" role="status">
+            {queued.count === 1 ? t('queuedOne') : t('queuedMany', String(queued.count))}
+          </p>
+        ) : null}
+        chatOptions={chatOptions}
+        onOpenSettings={onOpenSettings}
+      />
     </section>
   );
 }

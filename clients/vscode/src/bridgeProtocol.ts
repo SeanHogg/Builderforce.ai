@@ -64,6 +64,18 @@ export const BRAIN_HOST_MESSAGES = [
   'fetchLimbic',
 ] as const;
 
+/**
+ * The page-engine bridge's replies (`pageEngineBridgeProtocol.ts`): the webview answers
+ * the host's probe and chat requests against the engines it runs on WebGPU. Answered by
+ * the Brain panel, which hands them to `hostPageEngines.receive`.
+ */
+export const PAGE_ENGINE_HOST_MESSAGES = [
+  'pageEngine.probed',
+  'pageEngine.chunk',
+  'pageEngine.end',
+  'pageEngine.error',
+] as const;
+
 /** Project 360 and the project pages. */
 export const PROJECT_HOST_MESSAGES = ['p360.action', 'page.action'] as const;
 
@@ -93,6 +105,7 @@ export const CANVAS_HOST_MESSAGES = [
 export const HOST_MESSAGES = [
   ...SHARED_HOST_MESSAGES,
   ...BRAIN_HOST_MESSAGES,
+  ...PAGE_ENGINE_HOST_MESSAGES,
   ...PROJECT_HOST_MESSAGES,
   ...EVERMIND_HOST_MESSAGES,
   ...CANVAS_HOST_MESSAGES,
@@ -100,6 +113,7 @@ export const HOST_MESSAGES = [
 
 export type SharedHostMessage = (typeof SHARED_HOST_MESSAGES)[number];
 export type BrainHostMessage = (typeof BRAIN_HOST_MESSAGES)[number];
+export type PageEngineHostMessage = (typeof PAGE_ENGINE_HOST_MESSAGES)[number];
 export type ProjectHostMessage = (typeof PROJECT_HOST_MESSAGES)[number];
 export type EvermindHostMessage = (typeof EVERMIND_HOST_MESSAGES)[number];
 export type CanvasHostMessage = (typeof CANVAS_HOST_MESSAGES)[number];

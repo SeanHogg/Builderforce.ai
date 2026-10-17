@@ -54,10 +54,18 @@ async function ensureServerChat(deps: ChatSyncDeps, localId: number, scope: stri
   if (chat.serverId) return chat.serverId;
   const created = await deps.api.request<{ id: number }>('/api/brain/chats', {
     method: 'POST',
-    json: { title: chat.title, mode: 'chat' },
+    json: { title: chat.title, mode: chat.mode ?? 'chat' },
     idempotencyKey: `rovr-chat:${chat.syncKey}`,
     ...(scope !== undefined ? { asScope: scope } : {}),
   });
+  // Memory switched off before the chat reached the platform: the platform chat starts
+  // on (the column default), so carry the device's choice across. Best-effort — the
+  // device record stays the source of truth and the panel re-sends on the next toggle.
+  if (chat.memoryEnabled === false) {
+    await deps.api
+      .request(`/api/brain/chats/${created.id}`, { method: 'PATCH', json: { memoryEnabled: false }, ...(scope !== undefined ? { asScope: scope } : {}) })
+      .catch(() => undefined);
+  }
   await deps.records.updateChat(localId, { serverId: created.id });
   return created.id;
 }

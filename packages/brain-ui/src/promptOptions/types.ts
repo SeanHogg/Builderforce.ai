@@ -14,6 +14,7 @@
  * shares it too, and it cannot import React.
  */
 import { DEFAULT_MODEL_CHOICE_LABELS, type ModelChoiceLabels } from '@seanhogg/builderforce-brain-embedded';
+import { DEFAULT_LOCAL_MODEL_LABELS, type LocalModelLabels } from '../localModels/labels';
 
 export type {
   ChatModelOptions,
@@ -28,7 +29,7 @@ export type {
  * (the web app via next-intl, the VS Code webview via the host's `vscode.l10n`
  * bundle); the English defaults below keep the component usable unmapped.
  */
-export interface PromptOptionsLabels extends ModelChoiceLabels {
+export interface PromptOptionsLabels extends ModelChoiceLabels, LocalModelLabels {
   /** Trigger title/aria — the menu as a whole. */
   options: string;
   /** Section heading for the conversation-mode block (Chat | Work). */
@@ -75,6 +76,7 @@ export interface PromptOptionsLabels extends ModelChoiceLabels {
 
 export const DEFAULT_PROMPT_OPTIONS_LABELS: PromptOptionsLabels = {
   ...DEFAULT_MODEL_CHOICE_LABELS,
+  ...DEFAULT_LOCAL_MODEL_LABELS,
   options: 'Options',
   mode: 'Mode',
   memory: 'Memory',

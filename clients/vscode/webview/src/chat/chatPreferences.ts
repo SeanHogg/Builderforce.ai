@@ -1,19 +1,12 @@
 /**
  * Where the editor chat's own switches are remembered.
  *
- * The keys are policy, so they live together: the memory switch is a property of a
- * CONVERSATION (keyed by chat id), while effort and thinking are a property of the
- * PERSON (global, like a keyboard layout). Getting that split wrong is how a
- * preference either follows you into a chat where it makes no sense or is forgotten
- * every time you switch conversations.
+ * Effort and thinking are a property of the PERSON (global, like a keyboard layout).
+ * The Memory switch is NOT here: it is a property of the CONVERSATION and lives on the
+ * chat's server row (`brain_chats.memory_enabled`, see `useChatMemorySwitch`), so the
+ * same chat means the same thing on the web, in the editor and to the host's memory
+ * tools.
  */
-
-/**
- * Per-chat memory switch storage key (parity with the web Brain's `MEMORY_KEY`).
- * '0' = off; anything else (or absent) = on. Keyed by chat id so the choice sticks
- * per chat across reloads.
- */
-export const MEMORY_KEY = (chatId: number) => `bf_brain_memory:${chatId}`;
 
 /**
  * Composer run-shaping switches, persisted GLOBALLY (not per chat — they are a

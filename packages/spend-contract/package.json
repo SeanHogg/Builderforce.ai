@@ -1,0 +1,11 @@
+{
+  "name": "@builderforce/spend-contract",
+  "version": "2026.10.0",
+  "private": true,
+  "type": "module",
+  "description": "The SPENT vs SAVED wire contract — what a conversation or a workspace cost (Builderforce plan + own keys at list) and what memory saved it, by source, recorded vs estimated. Declared once: the api produces it, brain-embedded / brain-ui and every client surface read it.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts"
+}

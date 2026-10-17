@@ -2026,9 +2026,35 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    * `COUNT(*)`. `npm run check:usage-counts` enforces that.
    */
   calls:            integer('calls').notNull().default(1),
+  /**
+   * WHAT MEMORY DID to this row (migration 1227 / transactional 0016) — the savings
+   * ledger, kept ON the usage ledger rather than beside it, so it is written by the SAME
+   * single writer on the SAME call that is already being logged: no extra table and no
+   * extra request.
+   *
+   * Two shapes of row carry it:
+   *   • a REAL call (`calls` >= 1): `saved_prompt_tokens` = what compaction kept out of
+   *     its prompt, `recall_prompt_tokens` = what recall added to it — reported by the
+   *     run loop in the `metadata.memory` it already sends with the call.
+   *   • an AVOIDED call (`calls` = 0, every spend column 0): a memory / Evermind answer
+   *     or a gateway replay stood in for a model call. `savings_source` names which and
+   *     the saved tokens are that call's. Zero calls, zero tokens and zero cost, so no
+   *     spend rollup or request count moves because of it.
+   *
+   * `saved_cost_usd_millicents` is the NET list-price value — saved tokens minus the
+   * recall overhead, so it can be negative — stamped at write like `cost_usd_millicents`
+   * and priced at LIST even on a BYO row (the person's own key would have paid it).
+   * `savings_estimated` says whether the figure was recorded (a cached answer's recorded
+   * production cost, a replay's stored usage) or estimated from characters.
+   */
+  savingsSource:          varchar('savings_source', { length: 24 }),
+  savingsEstimated:       boolean('savings_estimated').notNull().default(false),
+  savedPromptTokens:      integer('saved_prompt_tokens').notNull().default(0),
+  savedCompletionTokens:  integer('saved_completion_tokens').notNull().default(0),
+  recallPromptTokens:     integer('recall_prompt_tokens').notNull().default(0),
+  savedCostUsdMillicents: integer('saved_cost_usd_millicents').notNull().default(0),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
-
 
 export const llmFailoverLog = pgTable('llm_failover_log', {
   id:        serial('id').primaryKey(),

@@ -29,6 +29,11 @@ export class CanvasBoundary extends Component<
     fallback: ReactNode;
     /** Localized one-liner explaining the degrade. */
     notice: string;
+    /** Localized label of the "try drawing it again" action. */
+    retryLabel: string;
+    /** Changes when the board behind the boundary changes (another session) — a new
+     *  board gets a fresh attempt instead of inheriting the last one's failure. */
+    resetKey?: string | number;
   },
   { failed: boolean }
 > {
@@ -49,11 +54,23 @@ export class CanvasBoundary extends Component<
     });
   }
 
+  // The boundary used to stay failed for the life of the panel: one transient error
+  // (a gateway blip while the board loaded) left the board gone until the panel was
+  // closed and reopened. It now resets for a different board, and offers a retry.
+  componentDidUpdate(prev: Readonly<{ resetKey?: string | number }>): void {
+    if (this.state.failed && prev.resetKey !== this.props.resetKey) this.setState({ failed: false });
+  }
+
+  private readonly retry = (): void => this.setState({ failed: false });
+
   render(): ReactNode {
     if (!this.state.failed) return this.props.children;
     return (
       <div className="bf-degraded-shell">
-        <div className="bf-canvas-degraded" role="status">{this.props.notice}</div>
+        <div className="bf-canvas-degraded" role="status">
+          {this.props.notice}{' '}
+          <button type="button" className="bf-canvas-degraded__retry" onClick={this.retry}>{this.props.retryLabel}</button>
+        </div>
         {this.props.fallback}
       </div>
     );

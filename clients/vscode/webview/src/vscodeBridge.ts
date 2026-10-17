@@ -131,6 +131,9 @@ export interface InitData {
   /** The host's local file tools, forwarded so the model can call them over the bridge. */
   /** Localized UI strings (see {@link LabelBundle}). */
   labels: LabelBundle;
+  /** The editor's display language (`vscode.env.language`, e.g. `de`, `zh-cn`) — how
+   *  numbers, money and relative times are formatted in the shared components. */
+  locale?: string;
   /** The MODEL ROWS' copy (categories, funding lines, Auto/Pool/Evermind naming),
    *  shared verbatim with the host's `Change model` QuickPick so the two pickers
    *  cannot word the same row differently. See `src/modelChoiceLabels.ts`. */

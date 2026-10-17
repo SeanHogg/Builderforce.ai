@@ -17,7 +17,7 @@ import { canonicalTurnAgents } from './turnParticipants';
 export interface CanvasGroupTurnContext extends Pick<UseCanvasBrainTurnDeps,
   | 'appendTimeline' | 'autoApplyRef' | 'brainRuntimeRef' | 'canvasActions' | 'canvasNotices' | 'confirm'
   | 'describeTurnError' | 'disableBrainModel' | 'evermindProjectId' | 'journalRef' | 'memoryEnabled'
-  | 'modelSelection' | 'nodes' | 'persistence' | 'recordBrainCompletion' | 'resolvedScopeMode'
+  | 'modelSelection' | 'runShaping' | 'nodes' | 'persistence' | 'recordBrainCompletion' | 'resolvedScopeMode'
   | 'scopedNodeIds' | 'sessionId' | 'sessionMode' | 'setActiveAgentIds' | 'setBrainTrace'
   | 'setModelSelection' | 'setNodes' | 'stage' | 't' | 'timeline' | 'title' | 'turnToolCallsRef' | 'turnUnansweredRef'> {
   /** The user's request, trimmed. */
@@ -45,7 +45,7 @@ function canvasActionConfirmer({ confirm, t }: Pick<CanvasGroupTurnContext, 'con
 
 /** Run the turn's model loops and resolve with the Brain's answer. */
 export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<string> {
-  const { appendTimeline, autoApplyRef, brainId, brainRuntimeRef, canvasActions, canvasNotices, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journalRef, memoryEnabled, modelSelection, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setBrainTrace, setModelSelection, setNodes, signal, stage, t, timeline, title, turnSnapshot, turnToolCallsRef, turnUnansweredRef } = ctx;
+  const { appendTimeline, autoApplyRef, brainId, brainRuntimeRef, canvasActions, canvasNotices, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journalRef, memoryEnabled, modelSelection, runShaping, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setBrainTrace, setModelSelection, setNodes, signal, stage, t, timeline, title, turnSnapshot, turnToolCallsRef, turnUnansweredRef } = ctx;
   // The phase someone CHOSE for this canvas is the arc stage the gateway nudges its
   // role/cost ordering by; undefined (never chosen) sends nothing rather than a default.
   const arcStage = readChosenCanvasPhase(sessionId);
@@ -115,6 +115,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
           guestTurnId: requestMessageId,
           guestTurnInput: request,
           persistence, canvasActions: persistence === 'server' ? [] : canvasActions, notices: canvasNotices, routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+          runShaping,
           ...(arcStage ? { arcStage } : {}),
           autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
           disabledModels: brainRuntimeRef.current.disabledModels,
@@ -162,6 +163,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
     projectId: evermindProjectId,
     ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
     routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+    runShaping,
     ...(arcStage ? { arcStage } : {}),
     autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
     disabledModels: brainRuntimeRef.current.disabledModels,

@@ -385,6 +385,8 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
                 disabled={!ready}
                 running={conv.sending}
                 onStop={conv.stop}
+                // A guest has no workspace behind the box: no plan, meters or Evermind to show.
+                account={null}
                 showVoice
                 rows={isPage ? 3 : 2}
                 // Inviting people is only offered when this deployment can host a

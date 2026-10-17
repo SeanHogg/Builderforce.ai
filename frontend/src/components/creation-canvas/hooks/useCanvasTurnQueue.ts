@@ -2,7 +2,7 @@
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useInsertionEffect, useRef } from 'react';
 import type { CanvasExportAction } from '@/lib/canvasExports';
 import { useLatestRef } from './useLatestRef';
-import { useQueuedTurns } from '@/lib/brain';
+import { useQueuedTurns } from '@seanhogg/builderforce-brain-ui';
 import { creationSessionsApi, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import type { useTranslations } from 'next-intl';
 import type { AssessmentGate } from '@/lib/academic/assessment';

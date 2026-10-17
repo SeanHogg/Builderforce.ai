@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import nodeFs from "node:fs";
 import nodeOs from "node:os";
 import nodePath from "node:path";
-import { productForPlan, type ModelIdentityContext } from "@seanhogg/builderforce-brain-embedded";
+import { gatewayCanChooseModel, gatewayModelIdentity, gatewayPlanModels, type ModelIdentityContext } from "@seanhogg/builderforce-brain-embedded";
 import {
   BFI_DISCOVERY_ENV,
   BFI_DISCOVERY_RELATIVE_PATH,
@@ -318,7 +318,7 @@ export interface PremiumInfo {
 
 /** The subset of `GET /llm/v1/models` this client consumes. */
 interface ModelsResponse {
-  data?: Array<{ id?: string }>;
+  data?: Array<{ id?: string; model?: string }>;
   models?: string[];
   freeModels?: string[];
   canUsePremiumModels?: boolean;
@@ -357,7 +357,7 @@ export async function getModels(
   });
   if (!res.ok) throw new Error(`models_failed_${res.status}`);
   const json = (await res.json()) as ModelsResponse;
-  const models = json.models ?? (json.data ?? []).map((m) => m.id).filter((id): id is string => !!id);
+  const models = gatewayPlanModels(json);
 
   // Premium is the whole paid OpenRouter catalog, so it is NOT inlined into
   // /v1/models — it comes from the cached public /v1/catalog. Only fetch it for an
@@ -376,7 +376,8 @@ export async function getModels(
     models: (json.byo?.models ?? []).filter((m): m is ByoModel => !!m && typeof m.id === 'string'),
   };
   const canUseFrontierModels = json.canUseFrontierModels === true;
-  const canChooseModel = json.canChooseModel ?? (canUseFrontierModels || canUsePremiumModels || byo.providers.length > 0);
+  // The ONE entitlement rule (brain-embedded `gatewayModels`), older-payload fallback included.
+  const canChooseModel = gatewayCanChooseModel(json);
 
   const data: ModelChoices = {
     models,
@@ -388,10 +389,7 @@ export async function getModels(
     canUseFrontierModels,
     byo,
     teacherModels: json.teacherModels ?? [],
-    identity: {
-      product: productForPlan(json.premium === true || (json.effectivePlan ?? 'free') !== 'free'),
-      canChoose: canChooseModel,
-    },
+    identity: gatewayModelIdentity(json),
     ...(json.premiumInfo ? { premiumInfo: json.premiumInfo } : {}),
   };
   modelsCache = { ts: Date.now(), data };

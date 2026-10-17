@@ -11,8 +11,8 @@ import { useCanvasPhaseReadiness } from './useCanvasPhaseReadiness';
 /**
  * The stored chrome preferences are READ, not mirrored into state by a mount effect: an
  * external-store read whose server snapshot is the default, so SSR and hydration render the
- * default and the client then shows the stored choice — the same two frames the effect gave
- * (and the pattern `useBrainChatMemory` uses). Nothing else writes these keys, so there is
+ * default and the client then shows the stored choice — the same two frames the effect gave.
+ * Nothing else writes these keys, so there is
  * nothing to subscribe to; a choice made this session is held in state and wins.
  */
 function subscribeNever() {

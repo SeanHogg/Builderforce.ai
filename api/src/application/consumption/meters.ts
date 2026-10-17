@@ -33,6 +33,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { utcMonthStart, utcNextMonthStart } from '../llm/tokenUsage';
 import { aiCreditBalance } from '../points/aiCredits';
 import { DAY_MS } from '../../domain/shared/time';
+import { periodSpendSavings, type SpendSavingsSummary } from '../llm/spendSavingsSummary';
 
 export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs' | 'stage_sandbox_runs' | 'feedback_submissions' | 'replay_recordings';
 export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs' | 'sandbox_runs' | 'submissions' | 'recordings';
@@ -94,7 +95,24 @@ export interface ConsumptionSnapshot {
    * already reads it for the plan, and the session carries no tenant settings.
    */
   replayExcluded: boolean;
+  /**
+   * True when every limit above is lifted because the CALLER is a superadmin operator —
+   * not because the plan grants it. Without it a superadmin on a Free workspace saw
+   * "Free" beside a column of "Unlimited" with nothing saying why.
+   */
+  limitsLiftedBySuperadmin: boolean;
+  /**
+   * Spent vs saved over the last 30 days (`spendSavingsSummary`): what AI cost the
+   * workspace (platform + own keys at list) and what memory kept off the bill. Rides
+   * this snapshot because the Status tab that shows it already reads the meters.
+   * Null when the usage database could not be read.
+   */
+  spendSavings: SpendSavingsSummary | null;
 }
+
+/** The cached meter half of the snapshot — everything but the per-caller fields
+ *  `getConsumptionSnapshot` adds on top. */
+export type MeterSnapshotSet = Omit<ConsumptionSnapshot, 'limitsLiftedBySuperadmin' | 'spendSavings'>;
 
 /** Assemble one meter from a raw used/limit pair (-1 limit = unlimited). */
 function makeMeter(key: MeterKey, unit: MeterUnit, used: number, limit: number, trend?: number[]): MeterSnapshot {
@@ -190,12 +208,18 @@ export async function getConsumptionSnapshot(
   const monthEnd = utcNextMonthStart();
   const monthKey = monthStart.toISOString().slice(0, 7); // YYYY-MM
   const isSuperadmin = await resolveSuperadminUnlimited(db, tenantId, { actingUserId }, env);
-  return getOrSetCached(
-    env,
-    consumptionSnapshotCacheKey(tenantId, monthKey, isSuperadmin),
-    () => buildConsumptionSnapshot(db, tenantId, monthStart, monthEnd, env, { actingIsSuperadmin: isSuperadmin }),
-    { kvTtlSeconds: 60, l1TtlMs: 30_000 },
-  );
+  // Two cached reads side by side: the meters (60s) and the 30-day spend & savings
+  // (hourly) — different freshness, one response.
+  const [snapshot, spendSavings] = await Promise.all([
+    getOrSetCached(
+      env,
+      consumptionSnapshotCacheKey(tenantId, monthKey, isSuperadmin),
+      () => buildConsumptionSnapshot(db, tenantId, monthStart, monthEnd, env, { actingIsSuperadmin: isSuperadmin }),
+      { kvTtlSeconds: 60, l1TtlMs: 30_000 },
+    ),
+    periodSpendSavings(env, db, tenantId).catch(() => null),
+  ]);
+  return { ...snapshot, limitsLiftedBySuperadmin: isSuperadmin, spendSavings };
 }
 
 /**
@@ -211,7 +235,7 @@ export async function buildConsumptionSnapshot(
   /** The signed-in principal, so a SUPERADMIN operating a tenant they are not a
    *  member of sees the unlimited allowance the gate actually grants them. */
   acting?: { actingUserId?: string | null; actingIsSuperadmin?: boolean },
-): Promise<ConsumptionSnapshot> {
+): Promise<MeterSnapshotSet> {
   const ingestionDb = siblingDatabase(env, db, 'operational');
   const [tokensDaily, ingestionDaily, ingestionByProvider, errorEventsDaily, outboundFetchesDaily, cloudRunsDaily, stageSandboxRunsDaily, feedbackSubmissionsDaily, tenantRows] = await Promise.all([
     dailyTenantTextTokens(db, tenantId, monthStart),

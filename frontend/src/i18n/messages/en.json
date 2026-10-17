@@ -312,13 +312,30 @@
     "sessionUnavailable": "Available once this chat has a few messages and no run in flight",
     "categoryLocal": "On this device",
     "localDetail": "Runs on this machine via {runtime} — no plan usage, works offline.",
+    "localCatalogHeading": "Download to run in this browser",
+    "localDownload": "Download ({size})",
+    "localDownloading": "Downloading… {percent}%",
+    "localCancel": "Cancel",
+    "localRemove": "Remove",
+    "localMoreActions": "More actions",
+    "localTools": "Tools",
+    "localContext": "{tokens} context",
+    "localDownloadFailed": "Download failed — try again.",
+    "localReasonWebgpu": "Needs WebGPU, which this browser or GPU does not offer.",
+    "localReasonF16": "Needs WebGPU 16-bit shaders, which this GPU does not offer.",
+    "localReasonBuffer": "Needs larger GPU buffers than this device allows.",
+    "localReasonEngine": "This engine is not available here yet.",
     "assessmentClosedBook": "A closed-book assessment is live — the assistant is unavailable until it closes.",
     "assessmentAssisted": "Assisted assessment — every assistant turn is recorded on the integrity ledger.",
     "ticketTagTitle": "Tag a ticket",
     "ticketTagStatus": "Status",
     "ticketTagNoMatches": "No matching tickets",
     "startingPoints": "Starting points",
-    "suggestionsLabel": "Suggested next steps"
+    "suggestionsLabel": "Suggested next steps",
+    "placeholder": "Message…",
+    "send": "Send",
+    "queueSend": "Queue message — sends when the current run finishes",
+    "uploading": "Uploading…"
   },
   "repoContext": {
     "title": "Add repository context",
@@ -5999,9 +6016,7 @@
   "evermindStatus": {
     "label": "Evermind",
     "learning": "Learning",
-    "frozen": "Frozen",
-    "off": "Off",
-    "tooltip": "This project runs on its Evermind (v{version}). Agent runs and this chat recall its learnings and, while connected, contribute back — watch the recall/learn steps in the transcript. Open the LLM tab to inspect what it's learned."
+    "frozen": "Frozen"
   },
   "evermindRun": {
     "title": "This run executed on the project's own Evermind model",
@@ -11600,6 +11615,10 @@
         "title": "The canvas knows where you are — and shows you the way to the next phase",
         "description": "Measure used to open on a board with nothing live. Now every canvas reads its own board, opens on the next phase you have not done, and turns a phase you are not ready for into the shortest path there. Two new places come with it, Operate for what is running and Launch for putting it in front of people."
       },
+      "see-what-every-conversation-costs": {
+        "title": "See what every conversation costs, and what memory saved you",
+        "description": "Every chat now shows what it cost, split between your Builderforce plan and your own provider keys at list price, and what memory kept off the bill: answers replayed from memory, the provider's prompt cache, and context kept lean. Recorded figures and estimates are always shown apart. The same panel now appears in the web app, the editor and Rovr."
+      },
       "your-private-evermind-on-your-machine": {
         "title": "Your private Evermind, on your machine — with local models, connectors and approvals from your phone",
         "description": "Synapse now runs local models sized to your computer and serves them to Claude Code and your scripts, hosts MCP connectors the Brain can use, lets you approve an agent's step from your phone, and gives you a private model to start from. Everything it learns stays on your machine unless you publish it."
@@ -11623,6 +11642,10 @@
       "agents-that-run-their-own-code": {
         "title": "The Brain now runs its own code — install, test and build, right in your browser",
         "description": "An agent that writes code but cannot run it hands you unverified work. The Brain on the canvas and in Studio now installs packages, runs tests, builds and type-checks in your own browser, fixes what fails, and shows you a change that has already passed."
+      },
+      "models-that-run-on-your-machine": {
+        "title": "Run a model on your own machine, and hand off without losing the thread",
+        "description": "Pick a model that runs on this device from the same picker you use today, download it once, and chat or run agent turns in your browser's GPU, privately and offline. When a run moves between models, builderforce-memory packs the conversation to fit the next model's window."
       }
     }
   },
@@ -11755,6 +11778,11 @@
       "answering": "Sending…",
       "showTickets": "Show linked tickets",
       "hideTickets": "Hide linked tickets",
+      "sortLabel": "Sort tickets",
+      "sortOpen": "Incomplete first",
+      "sortDone": "Complete first",
+      "sortTitle": "Title",
+      "sortLinked": "Linked order",
       "ticketCount": "{n, plural, one {# ticket} other {# tickets}}",
       "overallAria": "Overall progress: {pct}% done",
       "mergeAction": "Merge {n} here",
@@ -35138,6 +35166,79 @@
         "quickStartNote": "Clone the repository and build the workspace with Cargo.",
         "usage": "Spawn is Builderforce's Roblox builder for creators 13 and up, offered as its own product. The open repository is the desktop app and the Studio bridge; sign-in and model calls go through Builderforce."
       }
+    }
+  },
+  "workStatus": {
+    "loading": "Loading account…",
+    "account": "Account",
+    "plan": "Plan",
+    "resets": "Resets",
+    "limitsLifted": "limits lifted",
+    "limitsLiftedHint": "You are a superadmin operator, so every limit is lifted for you — the plan’s own limits still apply to its members.",
+    "usageEmpty": "No usage meters for this plan.",
+    "meterOf": "{used} / {limit} {unit}",
+    "upgrade": "Upgrade",
+    "managePlan": "Manage plan",
+    "billing": {
+      "past_due": "Past due",
+      "canceled": "Canceled",
+      "trialing": "Trial",
+      "incomplete": "Incomplete"
+    },
+    "plans": {
+      "free": "Free",
+      "pro": "Pro",
+      "teams": "Teams",
+      "enterprise": "Enterprise"
+    },
+    "units": {
+      "tokens": "tokens",
+      "bytes": "bytes",
+      "runs": "runs",
+      "events": "events",
+      "fetches": "fetches",
+      "submissions": "submissions",
+      "sandbox_runs": "runs",
+      "recordings": "recordings"
+    },
+    "evermindVersion": "v{version}",
+    "evermindAnswersOn": "Answers on",
+    "evermindAnswersOff": "Answers off",
+    "evermindHint": "Learning: this project’s chats teach its Evermind. Answers: whether the Evermind may answer for a paid model. Change both in the Evermind view."
+  },
+  "spend": {
+    "spent": "{amount} spent",
+    "saved": "{amount} saved",
+    "savedApprox": "≈{amount} saved",
+    "tokens": "{tokens} tok",
+    "pillTitle": "What this conversation cost, and what memory saved",
+    "spendHeading": "Spent",
+    "platform": "Builderforce plan",
+    "yourKey": "Your key",
+    "yourKeyHint": "At the provider’s list price",
+    "unpriced": "{tokens} tokens on unpriced models",
+    "savedHeading": "Saved by memory",
+    "savedShare": "{pct}% of the bill",
+    "estimated": "estimate",
+    "measured": "recorded",
+    "events": "{count}×",
+    "nothingSaved": "Nothing saved yet",
+    "periodHeading": "AI spend · last {days} days",
+    "sources": {
+      "prompt_cache": "Prompt cache",
+      "memory_answer": "Answered from memory",
+      "evermind_answer": "Answered by Evermind",
+      "response_cache": "Repeated request",
+      "context_trim": "Context kept lean",
+      "recall_overhead": "Recall added"
+    },
+    "sourceHints": {
+      "prompt_cache": "The provider served part of the prompt from its cache at a tenth of the price",
+      "memory_answer": "A question asked before was answered from memory — no model call",
+      "evermind_answer": "The project’s Evermind answered — no paid model call",
+      "response_cache": "An identical request was answered from the gateway cache — no model call",
+      "context_trim": "Compaction kept earlier turns out of each call",
+      "recall_overhead": "What recalled memories added to each prompt — the cost of recall"
     }
   }
 }

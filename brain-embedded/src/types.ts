@@ -4,6 +4,8 @@
  * payloads but are owned here so the package has no dependency on the app.
  */
 
+import type { SpendSavingsSummary } from './spendSavings';
+
 /** A brain chat (conversation) record. */
 export interface BrainChat {
   id: number;
@@ -36,6 +38,17 @@ export interface BrainChat {
    */
   ticketCount?: number;
   ticketProgressPct?: number | null;
+  /**
+   * The per-chat Memory switch (1228): whether this conversation recalls from and
+   * writes back to the project's memory. A property of the conversation, so every
+   * surface reads one value. Absent on an older server ⇒ on (the column default).
+   */
+  memoryEnabled?: boolean;
+  /**
+   * What this conversation cost and what memory saved it — attached by the api to
+   * every chat payload beside the ticket rollup. Null/absent until it has usage.
+   */
+  spend?: SpendSavingsSummary | null;
 }
 
 /**
@@ -68,9 +81,10 @@ export interface EvermindLearnOutcome {
    * `BrainLearnSkipReason` so the run loop can render an EXPLAINED (muted) skip step
    * instead of silently showing nothing. Absent/null when the turn was contributed.
    *   `not-attached` chat isn't bound to a project · `not-seeded` no base model yet ·
-   *   `frozen` Evermind is read-only · `too-short` no teachable assistant text.
+   *   `frozen` Evermind is read-only · `too-short` no teachable assistant text ·
+   *   `memory-off` the chat's Memory switch is off (silent, like `too-short`).
    */
-  reason?: 'not-attached' | 'not-seeded' | 'frozen' | 'too-short' | null;
+  reason?: 'not-attached' | 'not-seeded' | 'frozen' | 'too-short' | 'memory-off' | null;
   /**
    * Per-Evermind breakdown WITH IDs — present when the chat is project-attached. A
    * project can target 0, 1, or many Everminds; this names each so "which Evermind

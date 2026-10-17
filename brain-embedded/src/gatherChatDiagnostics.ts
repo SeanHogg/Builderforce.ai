@@ -22,6 +22,7 @@
  * a webview, a Next.js client component and a Node CLI.
  */
 
+import type { SpendSavingsSummary } from './spendSavings';
 import { classifyModelFunding, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, type ChatDiagnosticsRuns } from './chatDiagnostics';
 import { toolExposureInTrace, type BrainTraceEvent } from './brainTriage';
 
@@ -38,6 +39,11 @@ export interface ChatDiagnosticsPlanSnapshot {
    * an older API sends no features, and "not known" must not render as "not entitled".
    */
   features?: { entitled?: Record<string, boolean | undefined> };
+  /** Every limit is lifted because the CALLER is a superadmin — not because the plan
+   *  grants it. Optional: an older API does not send it. */
+  limitsLiftedBySuperadmin?: boolean;
+  /** Spent vs saved over the last 30 days. Optional: an older API does not send it. */
+  spendSavings?: SpendSavingsSummary | null;
 }
 
 /** The `/llm/v1/models` surface, structurally — enough to classify funding and to

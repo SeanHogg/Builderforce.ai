@@ -174,16 +174,6 @@ var ModelsApi = class {
     return this.http.getJson("/llm/v1/models");
   }
   /**
-   * The gateway's CURRENT flagship model id for `vendor` and turn shape — e.g.
-   * `flagship('anthropic', 'agentic')` → today's Claude Opus. Use this instead of a
-   * hard-coded version string: the gateway updates it on every model release. Returns
-   * `null` when the vendor declares no flagship.
-   */
-  async flagship(vendor, shape = "agentic") {
-    const res = await this.list();
-    return res.flagships?.[vendor]?.[shape] ?? null;
-  }
-  /**
    * Models in the tenant's plan pool, as structured entries. Empty when the
    * gateway is unconfigured for this tenant (no `data` branch — nothing servable).
    */

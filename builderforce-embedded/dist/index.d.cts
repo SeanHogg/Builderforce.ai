@@ -69,7 +69,7 @@ declare function isHostToFrameMessage(data: unknown): data is HostToFrameMessage
  * registered but renders a "coming soon" scaffold until its feature is built or
  * wired. Host nav should show available views as active.
  *
- * Keys match the `view="…"` values in docs/specs docs 05 §5.2 and 07 §7.
+ * Keys match the `view="…"` values in specs/builderforce docs 05 §5.2 and 07 §7.
  */
 type EmbedPillar = 'product' | 'agile' | 'governance';
 /** The three capability areas a host SuperAdmin enables (governance ⇒ security). */

@@ -28,6 +28,7 @@ import {
   type BrainStreamFn,
   type BrainToolSpec,
 } from '@seanhogg/builderforce-brain-embedded';
+import { ROVR_DEFAULT_CHAT_MODE, type RovrRunOptions } from './runOptions';
 
 /** One run's tool catalog: the schemas the model sees and the dispatcher behind them. */
 export interface RunCatalog {
@@ -48,6 +49,9 @@ export interface RovrRunHostPorts {
   catalog(chatId: number): Promise<RunCatalog>;
   /** Rovr's system prompt for this run (playbooks, working tab, allowed sites). */
   systemPrompt(): Promise<string>;
+  /** The chat's `/` Work panel choices for this run (`runOptions.ts`) — mode, effort,
+   *  thinking, memory. Absent: a Chat-mode run at the default effort, with no memory. */
+  runOptions?(chatId: number): Promise<RovrRunOptions>;
   /** The person declined a paused call — recorded on the action ledger. */
   onDeclined?(chatId: number, call: { name: string; args: unknown }): void;
 }
@@ -72,9 +76,13 @@ export function createRovrRunHost(ports: RovrRunHostPorts): RovrRunHost {
       try {
         const prior = await ports.history(chatId);
         await ports.persistence.sendMessages(chatId, [{ role: 'user', content: turn }]);
-        const [catalog, systemPrompt] = await Promise.all([ports.catalog(chatId), ports.systemPrompt()]);
+        const [catalog, systemPrompt, options] = await Promise.all([
+          ports.catalog(chatId),
+          ports.systemPrompt(),
+          ports.runOptions ? ports.runOptions(chatId) : Promise.resolve(null),
+        ]);
         await startRun(chatId, {
-          resolvedSystemPrompt: systemPrompt,
+          resolvedSystemPrompt: options?.directives ? `${systemPrompt}\n\n${options.directives}` : systemPrompt,
           tools: catalog.specs,
           runTool: catalog.run,
           needsConfirm: catalog.needsConfirm,
@@ -83,8 +91,12 @@ export function createRovrRunHost(ports: RovrRunHostPorts): RovrRunHost {
           seed: transcriptSeedFrom(prior),
           userTurn: turn,
           // A personal assistant answers and acts on the person's explicit request; it
-          // does not open and staff board work as a side effect (`chatMode.ts`).
-          chatMode: 'chat',
+          // opens and staffs board work only when the chat is switched to Work
+          // (`chatMode.ts`).
+          chatMode: options?.chatMode ?? ROVR_DEFAULT_CHAT_MODE,
+          ...(options ? { maxTokens: options.maxTokens } : {}),
+          ...(options?.reasoning ? { reasoning: options.reasoning } : {}),
+          ...(options?.evermind ? { evermind: options.evermind } : {}),
           projectId: null,
         });
       } finally {

@@ -9,6 +9,7 @@
 import { useEffect, useRef } from 'react';
 import { t, type MessageKey } from '../i18n/t';
 import { BROWSER_TOOL } from '../tools/toolNames';
+import { isPlatformTool } from '../tools/platformTools';
 import { classifyAction, originOf, type SafetyReason } from '../tools/safety';
 import { useServices } from './hooks';
 import { toolLabelKey } from './toolLabels';
@@ -21,16 +22,20 @@ const REASON_KEY: Record<SafetyReason, MessageKey> = {
   destructive: 'reasonDestructive',
   sensitive_field: 'reasonSensitiveField',
   unknown_element: 'reasonUnknownElement',
+  platform_write: 'reasonPlatformWrite',
 };
 
 export function ConfirmCard({ chatId, call }: { chatId: number; call: { name: string; args: unknown } }) {
   const services = useServices();
   const safety = services.safety();
-  const reasons = classifyAction(call.name, call.args, safety);
+  // A platform tool pauses only because it writes; the browser rules do not apply to it.
+  const platform = isPlatformTool(call.name);
+  const reasons: SafetyReason[] = platform ? ['platform_write'] : classifyAction(call.name, call.args, safety);
   const args = (call.args && typeof call.args === 'object' ? call.args : {}) as Record<string, unknown>;
   const site = call.name === BROWSER_TOOL.navigate ? originOf(typeof args.url === 'string' ? args.url : null) : originOf(safety.url);
   const ref = typeof args.ref === 'string' ? args.ref : '';
-  const target = ref ? (safety.factsFor(ref)?.name || ref) : typeof args.url === 'string' ? args.url : '';
+  // A platform tool is named by what it is (`builtin_tasks_create`); a browser one by its element or URL.
+  const target = platform ? call.name : ref ? (safety.factsFor(ref)?.name || ref) : typeof args.url === 'string' ? args.url : '';
   const typed = call.name === BROWSER_TOOL.type && typeof args.text === 'string' ? args.text : '';
   const allowRef = useRef<HTMLButtonElement>(null);
   useEffect(() => allowRef.current?.focus(), []);

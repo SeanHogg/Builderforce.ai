@@ -800,6 +800,12 @@ export const projectFacts = pgTable('project_facts', {
   /** PROVENANCE + TTL (0371) — the same contract `agentMemory` carries, so one service
    *  governs both stores. `source` is this table's origin marker. */
   originExecutionId: integer('origin_execution_id'),
+  /** What PRODUCING this fact cost (1228) — the model and tokens of the turn that
+   *  wrote it. A Q&A-cache replay is priced from these, so "memory saved $X" is a
+   *  recorded figure. Null when the writer did not know (the replay is then an estimate). */
+  originModel:            varchar('origin_model', { length: 200 }),
+  originPromptTokens:     integer('origin_prompt_tokens'),
+  originCompletionTokens: integer('origin_completion_tokens'),
   expiresAt:  timestamp('expires_at'),
   /** SEMANTIC RECALL (1134) — the same three columns `agent_memory` carries, because
    *  governed recall unions both stores and a half-embedded union ranks half by

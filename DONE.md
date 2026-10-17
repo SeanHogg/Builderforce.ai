@@ -1,9 +1,82 @@
+## ✅ RESOLVED 2026-10-17 — See what every conversation costs and what memory saved; ONE prompt area + Work panel on every surface (api 2026.10.43 · frontend 2026.10.57 · brain-embedded 2026.10.28 · brain-ui 2026.10.12 · VSIX 2026.10.38 · Rovr 2026.10.6)
+
+Operator decisions (2026-10-17): memory stays on by default (no holdout cohort); BYO turns are valued at list price; Rovr gets full parity through the SAME reusable prompt area; savings ride the existing usage ledger and payloads — no new table, no new endpoint, no extra request.
+
+- **Proof that memory saves money, on the existing ledger.** `llm_usage_log` gains `savings_source`, `savings_estimated`, `saved_prompt_tokens`, `saved_completion_tokens`, `recall_prompt_tokens`, `saved_cost_usd_millicents` (migrations 1227 + transactional 0016; the daily rollup folds and groups by them). The ONE writer `recordUsageRow` stamps per-call compaction trim / recall overhead from the completion's `metadata.memory`; a call memory stood in for is an AVOIDED row (`calls = 0`, zero spend) written by the request that served the answer — `GET /projects/:id/answer` (memory / Evermind answers, `memoryAnswerSavings.ts`) and the gateway response-cache replay (`tenantProxy.ts`, usage read from the stored body). Q&A answers now store what producing them cost (`project_facts.origin_*`, 1228), so a replay is a RECORDED saving, not an estimate.
+- **Read path, no new calls.** `foldSpendSavings` (`spendSavingsSummary.ts`, unit-tested): spend split Builderforce plan vs your key at list; savings by source × certainty (recorded never mixed with ≈ estimates — reviewer fix); prompt cache = (read × 0.9 − creation × 0.25) × input price; recall overhead subtracted so the figure is net. Per-chat `spend` rides `GET /api/brain/chats` and `/chats/:id` (`attachChatSummaries`, one grouped query, read-through cached); the 30-day figure rides `/api/consumption` (`spendSavings`, hourly-bucketed cache). Shared types: `packages/spend-contract` (also the ONE `USAGE_SURFACES` list, now with `rovr`).
+- **ONE prompt area.** `BrainComposer` (brain-ui `composer/`) — box, @/# pickers, `+` menu, the `/` Work panel (Mode · Effort · Model · Status) and the trailing Send/Queue/Stop/voice button — is mounted by the web Brain (`ChatInput` is now an adapter), the Creation Canvas (which gains Effort/Thinking and the Status tab), the VS Code webview (`VsCodeComposer`; `VsCodeChatSurface.tsx` 1686 → 1314 lines) and Rovr (`RovrComposer`). The Status tab (`workStatus/`) shows plan + meters, says plainly when superadmin lifts every limit, the 30-day spend & savings, and Evermind as two facts (learning · answers on/off). The chat strip shows a spend pill (`spend/SpendPill`) beside ticket health.
+- **ONE turn queue.** `useQueuedTurns<T>` moved from the web into brain-ui and replaced VS Code's copy; fixed a held turn being flushed into the chat switched to mid-run. Rovr's "Queue message" now really queues.
+- **Memory switch is the conversation's.** `brain_chats.memory_enabled` (1228), set through `PATCH /chats/:id`; off gates recall, answer caching, the VS Code `recall_facts`/`remember_fact` tools AND server-side learning (`brainEvermindLearning` gate `memory-off` — reviewer fix).
+- **Rovr parity.** Mode/Effort/Thinking/Memory per chat reach `startRun`; gateway models can be pinned (one shared catalogue parser `gatewayModels.ts`, which also fixed VS Code reading `data[].id` where the server sends `data[].model`); Work mode gets the shared platform tool catalog (`fetchMcpToolEntries`, writes confirm via `platform_write`); usage is attributed to surface `rovr`.
+- Also: the canvas Effort copy states the canvas's real 3,200-token floor; the VSIX "board could not be drawn" banner resets per board and offers Try again; dead composer files, CSS and label keys removed on every host.
+- Release note 1229 (`new`, 2026.10.57) + blog `see-what-every-conversation-costs` in five locales.
+
 ## ✅ RESOLVED 2026-10-17 — ONE provider-failure path for every browser agent loop (brain-embedded 2026.10.27 · frontend 2026.10.56 · VSIX 2026.10.37)
 
 - **Gap:** the Brain run store (VSIX) and the Creation Canvas share `runAgentLoop` and `@builderforce/run-policy`, but each host's `complete` port classified a failed completion itself. They drifted: the run store routed an in-band "Upstream error … overloaded" frame around the broken model, the canvas rethrew it (fixed in 2026.10.53 by adding a THIRD copy of the classification). The silence rule was duplicated too — `streamChatCompletion`'s idle watchdog (240 s, reads only) and the canvas's private `streamBoundedByActivity` (75 s, re-armed by TEXT only, so a long tool-call payload could be cut as "silent").
 - **Fix:** `brain-embedded/src/providerFailure.ts` — `providerFailureEvent(error)` is THE classification (`StreamInterruptedError` incl. repetition loops → `interrupted`; `TransportError` → `transport` / `unreachable`); the run store and the canvas both report it to the policy, and the canvas records the run store's `transportRetryTrace`. `streamChatCompletion`'s idle rule now also bounds the wait for response HEADERS (`the gateway sent nothing for Ns`), so the canvas just passes `idleTimeoutMs: CANVAS_STREAM_IDLE_MS` (75 s; every byte re-arms it, tool-call arguments included).
 - **Retired:** `frontend/src/lib/canvasStreamWatchdog.ts` (`CanvasStreamStalledError`, `streamBoundedByActivity`), `MAX_STALLED_STREAMS` and the canvas's same-model stall retry — a silent stream is an interruption like any other and takes the policy's ladder (proven model → gateway pool without the broken model → localized notice). A looping model still keeps what it said when no model can take over.
 - Tests: `providerFailure.test.ts`; `streamChatCompletion.test.ts` (header-wait silence; Stop before headers stays a cancellation); `creationCanvasAi.test.ts` provider-failure and silence blocks rewritten onto the shared error.
+
+## ✅ RESOLVED 2026-10-17 — Local models everywhere: 1-bit Bonsai on our own WebGPU engine plus WebLLM, one "On this device" picker, builderforce-memory hand-off at every model change (PRD 34 · frontend 2026.10.57 · api 2026.10.43 · brain-embedded 2026.10.28 · brain-ui 2026.10.12 · VSIX 2026.10.38 · Rovr 2026.10.6 (combined package with spend/savings; VSIX .36 and Rovr .5 predate the f16-KV engine) · agent-runtime 2026.10.5 · local-inference 2026.10.18 · builderforce-memory 2026.9.34 · builderforce-inference 2026.10.6)
+
+Operator decisions (2026-10-17):
+- Bonsai runs as a local LLM.
+- In-browser inference uses WebLLM plus our own transformer on WebGPU, so there is no llama-server or Ollama requirement.
+- Synapse's components run the models directly in the VSIX, Rovr and the web Brain.
+- There is a new model selection for them.
+- builderforce-memory performs the hand-off between model calls.
+
+### Engine (`builderforce-inference`)
+
+The Synapse engine `bfi` now runs in the browser as the new crate `crates/bfi-web` (wasm-bindgen, CubeCL on wgpu WebGPU).
+- **Loading:** `Q1_0` weights decode on the GPU, GGUF files stream in, and weights stay packed and resident.
+- **Tokenizer:** Qwen3 with the byte-level and special-token fixes, plus NEOX RoPE.
+- **Chat:** OpenAI-style chat with grammar-constrained `tool_calls`.
+- **KV cache:** f16 when the adapter has `shader-f16`, capped by a 2 GiB budget, halving on a WebGPU out-of-memory error. `BfiEngine.contextFor` is the pure served-context plan. Bonsai 8B serves 14,336 tokens in the browser; it would have been ~3,584 with an f32 cache and a 1 GiB budget.
+- **Proof:** the GPU kernels match the CPU reference on a real GPU.
+- **Vendoring:** the crate is vendored at `packages/bfi-web`. `scripts/vendor-bfi-web.mjs` copies it and records `SOURCE.json`, and the registered guard `check:bfi-web-vendored` checks it.
+
+### Catalog and page engines
+
+- **`@builderforce/local-inference`:**
+  - The `bfi` and `webllm` page runtimes (`reach:'page'`).
+  - `LOCAL_MODEL_CATALOG` as data: Bonsai 1.7B/4B/8B with their KV shape, and four WebLLM q4f16 builds.
+  - `localModelFit`.
+- **brain-embedded `pageEngines/`:**
+  - One `PageEngine` contract, one fetch shim and one `createPageEngineSet`.
+  - WebLLM and `bfi` engines; the Prompt API engine was refactored onto the same contract.
+  - The HF-file and WebLLM model stores (Cache Storage, with progress and delete).
+  - One `bfi-web` loader on its own `/bfi` entry.
+- **The `bfi` probe reports the context the device will SERVE:** `contextFor` before a load, and the allocated value after one.
+
+### Hand-off
+
+- **`@seanhogg/builderforce-memory/handoff` `packHandoff`** (published 2026.9.34) runs on every host:
+  - brain-embedded `handoff/`, applied at a model change and on each local-first attempt;
+  - the api's `compactMessages` (cloud agent engine and BrainService);
+  - agent-runtime `handoff-pack.ts`.
+- **Its guarantees:**
+  - The system message and the latest directive stay verbatim.
+  - A tool-call group is never split.
+  - The dropped middle becomes one note: a summary, else a memory recall, else an elision marker.
+  - The result fits the next model's window.
+
+### Picker
+
+- The `/` menu MODEL tab gains **On this device**: brain-ui `localModels/*`, with `PromptOptionsMenu` split into `ModePane` and `ModelPane`.
+- Downloads happen only from the picker, with progress and Remove. A model that doesn't fit stays listed and says why.
+- A pinned local model streams through the same packed `createLocalStream` path.
+- **Hosts:**
+  - VSIX: the engine runs in the chat webview over a postMessage bridge.
+  - Rovr: the engine runs in the side panel, code-split to 2.2 MB plus a lazy web-llm chunk.
+  - Web: the engine runs in the page.
+- Localized in all five catalogs and in the VSIX/Rovr bundles.
+
+### Release
+
+- Release note: migration `1230_release_note_local_models_everywhere.sql`.
+- Blog: `models-that-run-on-your-machine`, in five locales, with an OG card.
 
 ## ✅ RESOLVED 2026-10-17 — Canvas Brain recovers from a provider that fails mid-answer (frontend 2026.10.53)
 

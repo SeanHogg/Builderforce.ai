@@ -1,5 +1,5 @@
-/** Auto-apply, chat/work mode and the per-session memory switch. */
-import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo } from 'react';
+/** Auto-apply and chat/work mode. The Memory switch is `useCanvasMemorySwitch`'s. */
+import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect } from 'react';
 import { setBrainAutoApprove } from '@/lib/brain/autoApprove';
 import type { ChatMode } from '@/lib/brain';
 import { readLocalCreationSession, writeLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
@@ -7,18 +7,15 @@ import { type CreationSessionInvitation, creationSessionsApi, type CreationTempl
 import type { FramePreset } from '../canvasBoardTypes';
 import { faultText } from '@/lib/apiClient';
 import type { useTranslations } from 'next-intl';
-import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 
 export interface UseCanvasSessionModesDeps {
   autoApplyRef: RefObject<boolean>;
-  nodes: CanvasObject[];
   persistence: 'local' | 'server';
   sessionId: string;
   sessionRole: 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner';
   setAutoApply: Dispatch<SetStateAction<boolean>>;
   setDatasetRowLimit: Dispatch<SetStateAction<number>>;
   setFramePresets: Dispatch<SetStateAction<FramePreset[]>>;
-  setMemoryEnabled: Dispatch<SetStateAction<boolean>>;
   setNotice: (text: string) => void;
   setPendingInvitations: Dispatch<SetStateAction<CreationSessionInvitation[]>>;
   setServerTemplates: Dispatch<SetStateAction<ServerCreationTemplate[]>>;
@@ -28,7 +25,7 @@ export interface UseCanvasSessionModesDeps {
   templateOpen: boolean;
 }
 
-export function useCanvasSessionModes({ autoApplyRef, nodes, persistence, sessionId, sessionRole, setAutoApply, setDatasetRowLimit, setFramePresets, setMemoryEnabled, setNotice, setPendingInvitations, setServerTemplates, setSessionMode_, shareOpen, t, templateOpen }: UseCanvasSessionModesDeps) {
+export function useCanvasSessionModes({ autoApplyRef, persistence, sessionId, sessionRole, setAutoApply, setDatasetRowLimit, setFramePresets, setNotice, setPendingInvitations, setServerTemplates, setSessionMode_, shareOpen, t, templateOpen }: UseCanvasSessionModesDeps) {
   const setAutoApplyMode = useCallback((enabled: boolean) => {
     autoApplyRef.current = enabled;
     setAutoApply(enabled);
@@ -55,21 +52,6 @@ export function useCanvasSessionModes({ autoApplyRef, nodes, persistence, sessio
       .catch(() => setNotice(t('modeSaveFailed')));
   }, [persistence, sessionId, setNotice, setSessionMode_, t]);
 
-  const memoryStorageKey = useMemo(() => {
-    const chat = nodes.find((node) => node.data.kind === 'chat');
-    const canonicalId = chat?.data.resourceId?.match(/^chat:(\d+)$/)?.[1];
-    return `brain.memoryEnabled:${canonicalId || `canvas:${sessionId}`}`;
-  }, [nodes, sessionId]);
-
-  useEffect(() => {
-    try { setMemoryEnabled(localStorage.getItem(memoryStorageKey) !== '0'); } catch { setMemoryEnabled(true); }
-  }, [memoryStorageKey, setMemoryEnabled]);
-
-  const setMemoryMode = useCallback((enabled: boolean) => {
-    setMemoryEnabled(enabled);
-    try { localStorage.setItem(memoryStorageKey, enabled ? '1' : '0'); } catch { /* storage may be unavailable */ }
-  }, [memoryStorageKey, setMemoryEnabled]);
-
   useEffect(() => {
     try { setFramePresets(JSON.parse(localStorage.getItem('builderforce:create-frame-presets') || '[]') as FramePreset[]); } catch { setFramePresets([]); }
   }, [setFramePresets]);
@@ -93,5 +75,5 @@ export function useCanvasSessionModes({ autoApplyRef, nodes, persistence, sessio
       .then((result) => setPendingInvitations(result.invitations.filter((invitation) => !invitation.acceptedAt && !invitation.revokedAt)))
       .catch((error) => setNotice(faultText(error, t('noticeInvitationsFailed'))));
   }, [persistence, sessionId, sessionRole, setNotice, setPendingInvitations, shareOpen, t]);
-  return { setAutoApplyMode, setSessionMode, setMemoryMode };
+  return { setAutoApplyMode, setSessionMode };
 }

@@ -40,6 +40,7 @@ import {
   type TenantVendorKeys,
 } from './tenantProviderKeyService';
 import { recordProxyUsage } from './usageLedger';
+import { recordAvoidedCall } from './savingsLedger';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -268,6 +269,18 @@ export async function completeForTenant(
       userId: opts.userId ?? null,
       useCase: opts.meterUseCase,
       result,
+    });
+  }
+  // ...but it DID save the call it replayed, priced from the original call's own usage.
+  if (result.outcome === 'response_cache_hit' && result.cachedUsage) {
+    void recordAvoidedCall(buildDatabase(env), env, {
+      tenantId,
+      userId: opts?.userId ?? null,
+      source: 'response_cache',
+      model: result.resolvedModel,
+      promptTokens: result.cachedUsage.promptTokens,
+      completionTokens: result.cachedUsage.completionTokens,
+      estimated: false,
     });
   }
   return result;

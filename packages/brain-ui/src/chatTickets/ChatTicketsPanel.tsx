@@ -22,6 +22,9 @@ import { useChatProgressSync } from './useChatProgressSync';
 import { V } from './tokens';
 import { TicketParentLine } from './TicketParentLine';
 import { AgentsSection } from './AgentsSection';
+import { SpendPill, hasSpendToShow } from '../spend/SpendPill';
+import type { SpendLabels } from '../spend/labels';
+import type { SpendSavingsSummary } from '@seanhogg/builderforce-brain-embedded';
 import { LinkForm } from './LinkForm';
 import { MergeSection } from './MergeSection';
 import { PeopleSection } from './PeopleSection';
@@ -67,6 +70,12 @@ export interface ChatTicketsPanelProps {
    *  agents so the roster names everyone working in the chat. The host knows them (the
    *  editor's run registry); omit where there are none. */
   subagents?: readonly ChatSubagentVM[];
+  /** What this conversation cost and what memory saved it — the `spend` the api attaches
+   *  to every chat payload. Shown as a pill in the header row; absent/empty ⇒ no pill. */
+  spend?: SpendSavingsSummary | null;
+  spendLabels?: Partial<SpendLabels>;
+  /** BCP-47 locale for the pill's money and token formatting. */
+  locale?: string;
 }
 
 /** The action-row drawers the panel ships with; extension keys must not collide. */
@@ -81,7 +90,7 @@ const COLLAPSE_THRESHOLD = 8;
 
 const NO_SUBAGENTS: readonly ChatSubagentVM[] = [];
 
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS }: ChatTicketsPanelProps) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels, locale }: ChatTicketsPanelProps) {
   const [tickets, setTickets] = useState<TicketLinkVM[]>([]);
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
   const [members, setMembers] = useState<ChatMemberVM[]>([]);
@@ -184,8 +193,9 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     <div style={S.root}>
       {/* Collapsible header — one row summarising the linked tickets so a chat with
           hundreds of them stays compact. Click to expand/collapse the ring grid. */}
-      {tickets.length > 0 && (
+      {(tickets.length > 0 || hasSpendToShow(spend)) && (
         <div style={S.headerRow}>
+          {tickets.length > 0 && (
           <button
             type="button"
             onClick={toggleCollapsed}
@@ -198,6 +208,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
             <span style={S.ticketsCount}>{labels.ticketCount(tickets.length)}</span>
             <span style={S.ticketsAgg}>{agg.pct}%{agg.total > 0 ? ` · ${agg.done}/${agg.total}` : ''}</span>
           </button>
+          )}
           {tickets.length > 1 && (
             <select
               aria-label={labels.sortLabel}
@@ -211,6 +222,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
               <option value="linked" style={S.option}>{labels.sortLinked}</option>
             </select>
           )}
+          <SpendPill summary={spend} labels={spendLabels} locale={locale} />
         </div>
       )}
 

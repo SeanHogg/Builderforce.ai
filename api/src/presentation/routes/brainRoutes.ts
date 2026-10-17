@@ -20,6 +20,7 @@ import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/
 import { agentHosts, users, chatTicketLinks } from '../../infrastructure/database/schema';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
+import { attachChatSummaries } from '../../application/brain/chatSummaries';
 import { readChatRunHistoryForCaller } from '../../application/brain/chatRunHistory';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached, ticketSearchVersionKey } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
@@ -107,8 +108,9 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
         offset: offsetParam(c.req.query('offset')),
       },
     );
-    const chats = await new ChatTicketService(db, c.env as Env)
-      .attachChatTicketSummaries(c.get('tenantId') as number, rows);
+    // Ticket health AND spend & saved ride the list — one grouped query each, so no
+    // surface needs a request of its own to show either.
+    const chats = await attachChatSummaries(c.env as Env, db, c.get('tenantId') as number, rows);
     return c.json({ chats });
   });
 
@@ -168,9 +170,8 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     // cast (BrainService.ts), so it loses the `id` property TS can see even though the
     // row has it — this route already knows it (the validated route param), so restate
     // it rather than widen ChatTicketService's `T extends { id: number }` constraint.
-    const [withTickets] = await new ChatTicketService(db, c.env as Env)
-      .attachChatTicketSummaries(c.get('tenantId') as number, [{ ...chat, id }]);
-    return c.json(withTickets);
+    const [withSummaries] = await attachChatSummaries(c.env as Env, db, c.get('tenantId') as number, [{ ...chat, id }]);
+    return c.json(withSummaries);
   });
 
   // PATCH /chats/:id

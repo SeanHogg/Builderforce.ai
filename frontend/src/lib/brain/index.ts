@@ -113,7 +113,6 @@ export { parseSuggestedActions, type SuggestedAction, type ParsedSuggestedAction
 
 // Turns typed while a run is in flight — held and flushed on the run's falling
 // edge, so no composer has to disable itself while the agent is working.
-export { useQueuedTurns, type QueuedTurns } from './useQueuedTurns';
 
 // Brain → data-view refresh bus: mutating platform actions announce writes here
 // so the page rendering that data (e.g. the Tasks board) can refetch live.

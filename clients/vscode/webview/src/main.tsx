@@ -11,6 +11,11 @@ import './index.css';
 // viewport. It has the final word on `body` and `#root`.
 import './canvas/theme.css';
 import { WorkspaceApp } from './WorkspaceApp';
+import { installPageEngineHost } from './pageEngines';
+
+// The host's runs reach this webview's WebGPU engines over the bridge — listening from
+// boot, so a run started before the chat surface mounts can still use a page model.
+installPageEngineHost();
 
 const el = document.getElementById('root');
 if (el) createRoot(el).render(<WorkspaceApp />);

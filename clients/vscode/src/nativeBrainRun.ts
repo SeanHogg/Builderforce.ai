@@ -29,6 +29,9 @@ import {
   stopRun,
   toolSpecsFor,
   subscribeRun,
+  withUsageSurface,
+  USAGE_SURFACE_HEADER,
+  type UsageSurface,
   type BrainAction,
   type BrainRunPersistence,
   type BrainRunSnapshot,
@@ -142,8 +145,8 @@ export interface NativeBrainRunOptions {
  * SDK adapter through an environment variable; it now rides the transport, which is
  * the only place both chat surfaces can share it.
  */
-export const SURFACE_HEADER = "x-builderforce-surface";
-export const SURFACE_VALUE = "vsix";
+export const SURFACE_HEADER = USAGE_SURFACE_HEADER;
+export const SURFACE_VALUE = "vsix" satisfies UsageSurface;
 
 /**
  * The streaming completion fn for the native surface.
@@ -161,11 +164,7 @@ export function createNativeStream(
   const transport: BrainTransport = {
     baseUrl,
     getToken: () => apiKey,
-    fetch: (input, init) =>
-      fetchImpl(input, {
-        ...init,
-        headers: { ...((init.headers as Record<string, string>) ?? {}), [SURFACE_HEADER]: SURFACE_VALUE },
-      }),
+    fetch: withUsageSurface(fetchImpl, SURFACE_VALUE),
   };
   return (opts, handlers) => streamChatCompletion({ ...opts, transport }, handlers);
 }

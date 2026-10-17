@@ -5,6 +5,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { getRunSnapshot, subscribeRun, type BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
 import type { PanelServices } from '../host/panelServices';
+import type { RovrSettings } from '../platform/settings';
 
 export const ServicesContext = createContext<PanelServices | null>(null);
 
@@ -47,6 +48,42 @@ export function useSignedIn(): boolean {
     (listener) => session.subscribe(listener),
     () => session.isSignedIn(),
   );
+}
+
+/** One device setting, kept current as it changes in any context (Settings, another panel). */
+export function useSetting<T>(read: (settings: RovrSettings) => Promise<T>, initial: T): T {
+  const { settings } = useServices();
+  const [value, setValue] = useState<T>(initial);
+  useEffect(() => {
+    let live = true;
+    const load = () => void read(settings).then((v) => live && setValue(v));
+    load();
+    const off = settings.subscribe(load);
+    return () => {
+      live = false;
+      off();
+    };
+    // `read` is a selector over the one settings object — re-run only when that changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
+  return value;
+}
+
+/** The model pinned for every turn (`local/<runtime>/<model>` or a gateway id), or null for automatic
+ *  routing — and the one way to change it (Settings → Model and the `/` Model tab). */
+export function usePinnedModel(): [string | null, (ref: string | null) => void] {
+  const { settings } = useServices();
+  const stored = useSetting((s) => s.pinnedModel(), null);
+  const [optimistic, setOptimistic] = useState<{ ref: string | null } | null>(null);
+  useEffect(() => setOptimistic(null), [stored]);
+  const choose = useCallback(
+    (ref: string | null) => {
+      setOptimistic({ ref });
+      void settings.setPinnedModel(ref);
+    },
+    [settings],
+  );
+  return [optimistic ? optimistic.ref : stored, choose];
 }
 
 /** The browser's connectivity. */

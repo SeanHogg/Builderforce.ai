@@ -38,7 +38,9 @@ interface TurnMessage { role: string; content: string; metadata?: string | null 
  *      and replies don't contribute.
  *   - `too-short`    — no assistant turn long enough to be a teaching signal.
  */
-export type BrainLearnSkipReason = 'not-attached' | 'not-seeded' | 'frozen' | 'too-short';
+/** `memory-off`: the chat's Memory switch (`brain_chats.memory_enabled`) is off — the
+ *  person made it a scratch space, so it trains nothing (and the run shows no step). */
+export type BrainLearnSkipReason = 'not-attached' | 'not-seeded' | 'frozen' | 'too-short' | 'memory-off';
 
 /**
  * Per-Evermind result — one entry for EACH Evermind the surface's project targets (the
@@ -144,10 +146,13 @@ export async function evaluateBrainLearnGate(
   if (!assistant) return { outcome: { learned: false, version: 0, reason: 'too-short' }, projectId: null, contributedProjectIds: [], assistant: null };
 
   const [chat] = await db
-    .select({ projectId: brainChats.projectId })
+    .select({ projectId: brainChats.projectId, memoryEnabled: brainChats.memoryEnabled })
     .from(brainChats)
     .where(scopedToTenant(brainChats, tenantId, eq(brainChats.id, chatId)))
     .limit(1);
+  // The Memory switch is the conversation's, and the server honours it here: every
+  // surface's client-side gate only stops recall, while learning happens on persist.
+  if (chat?.memoryEnabled === false) return { outcome: { learned: false, version: 0, reason: 'memory-off' }, projectId: null, contributedProjectIds: [], assistant };
   const projectId = chat?.projectId ?? null;
   // Only a project chat feeds a project Evermind. This is the most common real reason a
   // turn "should learn" but doesn't: the "Learning — Connected" panel reflects the

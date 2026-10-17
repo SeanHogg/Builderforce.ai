@@ -6,15 +6,19 @@
  */
 
 import type { DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import type { QueuedItem } from '@seanhogg/builderforce-brain-ui';
 import type { LabelBundle } from '../vscodeBridge';
 import { makeT } from './chatLabels';
 import { steerRun } from './chatChildren';
 
-export interface QueuedMessage {
-  id: number;
+/** What a held VS Code turn carries — its text and who it is addressed to. */
+export interface QueuedTurn {
   text: string;
   recipient: DirectedRecipient | null;
 }
+
+/** One held turn, as the shared `useQueuedTurns` queue lists it. */
+export type QueuedMessage = QueuedItem<QueuedTurn>;
 
 interface Props {
   queue: readonly QueuedMessage[];
@@ -31,13 +35,13 @@ export function QueuedMessages({ queue, runningChatId, labels, onRemove }: Props
     <div className="bf-queued" role="list" aria-label={t('app.queuedLabel', 'Queued messages')}>
       <span className="bf-queued__hint">{t('app.queuedHint', 'Queued — sends when the run finishes')}</span>
       {queue.map((m) => (
-        <span key={m.id} className="bf-chip bf-chip--queued" role="listitem" title={m.text}>
-          <span className="bf-chip__name">{m.text}</span>
-          {runningChatId != null && !m.recipient && (
+        <span key={m.id} className="bf-chip bf-chip--queued" role="listitem" title={m.value.text}>
+          <span className="bf-chip__name">{m.value.text}</span>
+          {runningChatId != null && !m.value.recipient && (
             <button
               className="bf-chip__steer"
               onClick={() => {
-                steerRun(runningChatId, m.text);
+                steerRun(runningChatId, m.value.text);
                 onRemove(m.id);
               }}
               title={t('app.steerNowHint', 'Send it into the running turn now instead of after it')}

@@ -13,10 +13,8 @@
  */
 
 import {
-  effortProfile,
   MODALITY_PERSONAS,
   PERSONA_MODALITY_IDS,
-  type Effort,
   type PersonaModalityId,
 } from '@seanhogg/builderforce-brain-embedded';
 import {
@@ -59,32 +57,6 @@ export function timelineCatalogFromBundle(labels: LabelBundle): TimelineCatalogL
 export function timelineLabels(labels: LabelBundle): BrainTimelineLabels {
   return timelineLabelsFrom(timelineCatalogFromBundle(labels));
 }
-
-/**
- * One line describing what an Effort level ACTUALLY does, built from the shared
- * effort table so the copy can never claim a budget the request doesn't send.
- * The thinking budget is only mentioned when the Thinking toggle is on — that is
- * the only case in which it is spent.
- */
-export function effortDesc(
-  level: Effort,
-  thinking: boolean,
-  t: (key: string, fallback: string) => string,
-): string {
-  const { maxTokens, thinkingBudgetTokens } = effortProfile(level);
-  const base = t(`app.effortDesc.${level}`, EFFORT_DESC_FALLBACK[level])
-    .replace('{answer}', maxTokens.toLocaleString());
-  if (!thinking) return base;
-  return `${base} ${t('app.effortDescThinking', '+ {thinking} thinking tokens.')
-    .replace('{thinking}', thinkingBudgetTokens.toLocaleString())}`;
-}
-
-/** English fallbacks for the effort descriptions (localized via the host bundle). */
-export const EFFORT_DESC_FALLBACK: Record<Effort, string> = {
-  quick: 'Fastest and cheapest — short, direct answers. Up to {answer} answer tokens.',
-  balanced: 'The default — normal depth. Up to {answer} answer tokens.',
-  thorough: 'Deepest and slowest — exhaustive, verifies its work. Up to {answer} answer tokens.',
-};
 
 /** The composer's "To" control (shared `RecipientPicker`) copy. */
 export function recipientPickerLabels(labels: LabelBundle): RecipientPickerLabels {
@@ -173,5 +145,20 @@ export function promptMenuLabels(
     modelLocked: t('app.modelLocked', 'Model choice needs a paid plan or a connected provider account.'),
     accountSettings: t('app.accountSettings', 'Account settings'),
     status: t('app.status', 'Status'),
+    // The on-device list — the page engines this webview runs on WebGPU (see
+    // `src/localModelLabels.ts`; placeholders are filled per row by the shared list).
+    localCatalogHeading: t('app.local.catalogHeading', 'Download to run in this editor window'),
+    localDownload: t('app.local.download', 'Download ({size})'),
+    localDownloading: t('app.local.downloading', 'Downloading… {percent}%'),
+    localCancel: t('app.local.cancel', 'Cancel download'),
+    localRemove: t('app.local.remove', 'Remove from this device'),
+    localMoreActions: t('app.local.moreActions', 'More actions'),
+    localTools: t('app.local.tools', 'Tools'),
+    localContext: t('app.local.context', '{tokens} context'),
+    localDownloadFailed: t('app.local.downloadFailed', 'Download failed — try again.'),
+    localReasonWebgpu: t('app.local.reasonWebgpu', 'Needs WebGPU, which this editor or GPU does not offer.'),
+    localReasonF16: t('app.local.reasonF16', 'Needs WebGPU 16-bit shaders, which this GPU does not offer.'),
+    localReasonBuffer: t('app.local.reasonBuffer', 'Needs larger GPU buffers than this device allows.'),
+    localReasonEngine: t('app.local.reasonEngine', 'This engine is not available here yet.'),
   };
 }

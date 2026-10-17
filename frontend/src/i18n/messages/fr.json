@@ -312,13 +312,30 @@
     "sessionUnavailable": "Disponible dès que la conversation compte quelques messages et qu’aucune exécution n’est en cours",
     "categoryLocal": "Sur cet appareil",
     "localDetail": "S’exécute sur cette machine via {runtime} — sans consommer le forfait, et fonctionne hors ligne.",
+    "localCatalogHeading": "Télécharger pour exécuter dans ce navigateur",
+    "localDownload": "Télécharger ({size})",
+    "localDownloading": "Téléchargement… {percent} %",
+    "localCancel": "Annuler",
+    "localRemove": "Supprimer",
+    "localMoreActions": "Plus d’actions",
+    "localTools": "Outils",
+    "localContext": "Contexte de {tokens}",
+    "localDownloadFailed": "Échec du téléchargement — réessayez.",
+    "localReasonWebgpu": "Nécessite WebGPU, que ce navigateur ou ce GPU ne propose pas.",
+    "localReasonF16": "Nécessite les shaders WebGPU 16 bits, que ce GPU ne propose pas.",
+    "localReasonBuffer": "Nécessite des tampons GPU plus grands que ce que cet appareil autorise.",
+    "localReasonEngine": "Ce moteur n’est pas encore disponible ici.",
     "assessmentClosedBook": "Une évaluation sans documents est en cours — l'assistant est indisponible jusqu'à sa clôture.",
     "assessmentAssisted": "Évaluation assistée — chaque réponse de l'assistant est consignée dans le registre d'intégrité.",
     "ticketTagTitle": "Associer un ticket",
     "ticketTagStatus": "Statut",
     "ticketTagNoMatches": "Aucun ticket correspondant",
     "startingPoints": "Points de départ",
-    "suggestionsLabel": "Prochaines étapes suggérées"
+    "suggestionsLabel": "Prochaines étapes suggérées",
+    "placeholder": "Message…",
+    "send": "Envoyer",
+    "queueSend": "Mettre en file d’attente — envoyé à la fin de l’exécution en cours",
+    "uploading": "Envoi en cours…"
   },
   "repoContext": {
     "title": "Ajouter le contexte du dépôt",
@@ -5999,9 +6016,7 @@
   "evermindStatus": {
     "label": "Evermind",
     "learning": "Apprentissage",
-    "frozen": "Gelé",
-    "off": "Désactivé",
-    "tooltip": "Ce projet s'exécute sur son Evermind (v{version}). Les exécutions d'agents et ce chat rappellent ses apprentissages et, tant qu'il est connecté, y contribuent en retour — observez les étapes de rappel/apprentissage dans la transcription. Ouvrez l'onglet LLM pour voir ce qu'il a appris."
+    "frozen": "Gelé"
   },
   "evermindRun": {
     "title": "Cette exécution a eu lieu sur le propre modèle Evermind du projet",
@@ -11600,6 +11615,10 @@
         "title": "Le canevas sait où vous en êtes, et vous montre le chemin vers la phase suivante",
         "description": "Mesurer s’ouvrait sur un tableau où rien n’était en ligne. Désormais, chaque canevas lit son propre tableau, s’ouvre sur la prochaine phase que vous n’avez pas terminée et transforme une phase pour laquelle vous n’êtes pas prêt en chemin le plus court pour y arriver. Deux nouveaux lieux l’accompagnent : Exploiter pour ce qui tourne, et Lancer pour le présenter au public."
       },
+      "see-what-every-conversation-costs": {
+        "title": "Voyez ce que coûte chaque conversation, et ce que la mémoire vous a fait économiser",
+        "description": "Chaque chat affiche désormais ce qu'il a coûté, réparti entre votre forfait Builderforce et vos propres clés fournisseur au prix catalogue, et ce que la mémoire a tenu hors de la facture : réponses rejouées de mémoire, cache de prompts du fournisseur et contexte allégé. Les chiffres mesurés et les estimations sont toujours affichés séparément. Le même panneau apparaît maintenant dans l'application web, l'éditeur et Rovr."
+      },
       "your-private-evermind-on-your-machine": {
         "title": "Votre Evermind privé, sur votre machine — avec des modèles locaux, des connecteurs et des approbations depuis votre téléphone",
         "description": "Synapse fait désormais tourner des modèles locaux adaptés à votre ordinateur et les sert à Claude Code et à vos scripts, héberge des connecteurs MCP que le Brain peut utiliser, vous permet d’approuver l’étape d’un agent depuis votre téléphone et vous donne un modèle privé pour démarrer. Tout ce qu’il apprend reste sur votre machine, sauf si vous le publiez."
@@ -11623,6 +11642,10 @@
       "agents-that-run-their-own-code": {
         "title": "Le Brain exécute désormais son propre code : installer, tester et construire, directement dans votre navigateur",
         "description": "Un agent qui écrit du code sans pouvoir l’exécuter vous remet un travail non vérifié. Le Brain du canevas et de Studio installe désormais des paquets, lance les tests, construit et vérifie les types dans votre propre navigateur, corrige ce qui échoue et vous présente une modification qui a déjà passé les vérifications."
+      },
+      "models-that-run-on-your-machine": {
+        "title": "Faites tourner un modèle sur votre machine, et passez le relais sans perdre le fil",
+        "description": "Choisissez un modèle qui tourne sur cet appareil depuis le sélecteur que vous utilisez déjà, téléchargez-le une fois, puis discutez ou lancez des tours d’agent sur le GPU de votre navigateur, en privé et hors ligne. Quand une exécution passe d’un modèle à un autre, builderforce-memory compacte la conversation pour la fenêtre du modèle suivant."
       }
     }
   },
@@ -11755,6 +11778,11 @@
       "answering": "Envoi…",
       "showTickets": "Afficher les tickets liés",
       "hideTickets": "Masquer les tickets liés",
+      "sortLabel": "Trier les tickets",
+      "sortOpen": "Non terminés d'abord",
+      "sortDone": "Terminés d'abord",
+      "sortTitle": "Titre",
+      "sortLinked": "Ordre de liaison",
       "ticketCount": "{n, plural, one {# ticket} other {# tickets}}",
       "overallAria": "Progression globale : {pct}% terminé",
       "mergeAction": "Fusionner {n} ici",
@@ -35138,6 +35166,79 @@
         "quickStartNote": "Clonez le dépôt et compilez l'espace de travail avec Cargo.",
         "usage": "Spawn est le créateur de jeux Roblox de Builderforce pour les créateurs de 13 ans et plus, proposé comme un produit à part entière. Le dépôt ouvert contient l'application de bureau et le pont Studio ; la connexion et les appels aux modèles passent par Builderforce."
       }
+    }
+  },
+  "workStatus": {
+    "loading": "Chargement du compte…",
+    "account": "Compte",
+    "plan": "Forfait",
+    "resets": "Réinitialisation",
+    "limitsLifted": "limites levées",
+    "limitsLiftedHint": "Vous êtes opérateur superadministrateur : toutes les limites sont levées pour vous — les limites propres au forfait s’appliquent toujours à ses membres.",
+    "usageEmpty": "Aucun compteur d’utilisation pour ce forfait.",
+    "meterOf": "{used} / {limit} {unit}",
+    "upgrade": "Passer à un forfait supérieur",
+    "managePlan": "Gérer le forfait",
+    "billing": {
+      "past_due": "En retard",
+      "canceled": "Annulé",
+      "trialing": "Essai",
+      "incomplete": "Incomplet"
+    },
+    "plans": {
+      "free": "Gratuit",
+      "pro": "Pro",
+      "teams": "Équipes",
+      "enterprise": "Entreprise"
+    },
+    "units": {
+      "tokens": "jetons",
+      "bytes": "octets",
+      "runs": "exécutions",
+      "events": "événements",
+      "fetches": "requêtes",
+      "submissions": "envois",
+      "sandbox_runs": "exécutions",
+      "recordings": "enregistrements"
+    },
+    "evermindVersion": "v{version}",
+    "evermindAnswersOn": "Réponses activées",
+    "evermindAnswersOff": "Réponses désactivées",
+    "evermindHint": "Apprentissage : les conversations de ce projet entraînent son Evermind. Réponses : si l’Evermind peut répondre à la place d’un modèle payant. Modifiez les deux dans la vue Evermind."
+  },
+  "spend": {
+    "spent": "{amount} dépensés",
+    "saved": "{amount} économisés",
+    "savedApprox": "≈{amount} économisés",
+    "tokens": "{tokens} jetons",
+    "pillTitle": "Ce que cette conversation a coûté, et ce que la mémoire a économisé",
+    "spendHeading": "Dépensé",
+    "platform": "Forfait Builderforce",
+    "yourKey": "Votre clé",
+    "yourKeyHint": "Au prix catalogue du fournisseur",
+    "unpriced": "{tokens} jetons sur des modèles sans tarif",
+    "savedHeading": "Économisé par la mémoire",
+    "savedShare": "{pct} % de la facture",
+    "estimated": "estimation",
+    "measured": "enregistré",
+    "events": "{count}×",
+    "nothingSaved": "Rien d’économisé pour l’instant",
+    "periodHeading": "Dépenses IA · {days} derniers jours",
+    "sources": {
+      "prompt_cache": "Cache de prompt",
+      "memory_answer": "Répondu depuis la mémoire",
+      "evermind_answer": "Répondu par Evermind",
+      "response_cache": "Requête répétée",
+      "context_trim": "Contexte allégé",
+      "recall_overhead": "Rappel ajouté"
+    },
+    "sourceHints": {
+      "prompt_cache": "Le fournisseur a servi une partie du prompt depuis son cache, au dixième du prix",
+      "memory_answer": "Une question déjà posée a reçu sa réponse depuis la mémoire — sans appel au modèle",
+      "evermind_answer": "L’Evermind du projet a répondu — sans appel à un modèle payant",
+      "response_cache": "Une requête identique a reçu sa réponse depuis le cache de la passerelle — sans appel au modèle",
+      "context_trim": "La compaction a tenu les tours précédents hors de chaque appel",
+      "recall_overhead": "Ce que les souvenirs rappelés ont ajouté à chaque prompt — le coût du rappel"
     }
   }
 }

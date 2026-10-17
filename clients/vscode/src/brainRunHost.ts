@@ -78,15 +78,16 @@ export interface BrainRunHostPorts {
    * `children` is THIS run's handle on its sub-agents and `signal` its Stop — built here
    * (not by the port) because only the run knows who it is: its key, its chat, its depth.
    */
-  tools(projectId: number | undefined, children: ChildControls, signal: () => AbortSignal | undefined): Promise<readonly ToolDef[]>;
+  tools(projectId: number | undefined, children: ChildControls, signal: () => AbortSignal | undefined, opts: { memory: boolean }): Promise<readonly ToolDef[]>;
   /** Workspace root the local tools resolve against; '' when no folder is open. */
   workspaceRoot(): string;
   /** The transport-bound streamer for the CURRENT route (gateway or on-device). */
   stream(): Promise<BrainStreamFn>;
   /** Where the loop persists its turns — the same Brain store the panel reads. */
   persistence: BrainRunPersistence;
-  /** Project-Evermind hooks for a project (recall, memory-first answer, cache). */
-  evermind(projectId: number): EvermindRunHooks | undefined;
+  /** Project-Evermind hooks for a project (recall, memory-first answer, cache), tiered on
+   *  the chat when it is a server chat. */
+  evermind(projectId: number, chatId: number): EvermindRunHooks | undefined;
   /**
    * The api-assembled platform context for this turn — strategy / PRD / governance /
    * the project's durable memory (facts) / prior Evermind lessons — rendered as a
@@ -277,7 +278,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // call time: the run's abort controller is created by `startRun`, after this catalog.
     const children = childControls(childHost, ownerOf(p, OWNER_NAME));
     // A sub-agent is a clone of its owner: the same catalog, built the same way.
-    const defs = await ports.tools(projectId, children, () => runAbortSignal(key));
+    // The chat's Memory switch (`p.evermind`) gates the memory TOOLS as well as the
+    // loop's recall: "off" must mean the run neither reads nor writes project memory.
+    const defs = await ports.tools(projectId, children, () => runAbortSignal(key), { memory: p.evermind });
     broadcast({ type: "run.tools", chatId: key, count: defs.length });
     const native = createNativeRunTool({
       defs,
@@ -320,7 +323,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         stream,
         persistence: ports.persistence,
         onActivity: () => ports.onChatsChanged?.(),
-        ...(p.evermind && projectId != null ? { evermind: ports.evermind(projectId) } : {}),
+        ...(p.evermind && projectId != null ? { evermind: ports.evermind(projectId, chatId) } : {}),
         // Project memory + platform context, appended to the system prompt by the loop
         // (the same seam the limbic block uses) so the webview run starts from what the
         // project already knows instead of rediscovering it with tool calls.

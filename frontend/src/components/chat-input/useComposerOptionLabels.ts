@@ -48,15 +48,29 @@ export function useComposerOptionLabels(): Partial<PromptOptionsLabels> {
     categoryPlan: t('categoryPlan'),
     categoryPaid: t('categoryPaid'),
     categoryConfigured: t('categoryConfigured'),
-    // Present for type completeness and parity of wording: the browser cannot reach a
-    // runtime on the user’s own machine, so this group only ever populates in the
-    // editor. Keeping the strings here means the two hosts describe it identically if
-    // the web app ever gains a route to one.
+    // The on-device group: models this browser runs itself (WebGPU `bfi`, WebLLM),
+    // downloaded from the picker. The editor's group also lists runtimes on the machine.
     categoryLocal: t('categoryLocal'),
     // A TEMPLATE, not a sentence: `modelChoice` fills `{runtime}` per model, so the
     // placeholder is handed through as its own value. Formatting it with none threw
     // FORMATTING_ERROR on every composer mount.
     localDetail: t('localDetail', { runtime: '{runtime}' }),
+    // The on-device list (models this browser runs on WebGPU). The size, percentage and
+    // window placeholders are TEMPLATES the shared list fills per row, handed through
+    // literally for the same reason as `localDetail`.
+    localCatalogHeading: t('localCatalogHeading'),
+    localDownload: t('localDownload', { size: '{size}' }),
+    localDownloading: t('localDownloading', { percent: '{percent}' }),
+    localCancel: t('localCancel'),
+    localRemove: t('localRemove'),
+    localMoreActions: t('localMoreActions'),
+    localTools: t('localTools'),
+    localContext: t('localContext', { tokens: '{tokens}' }),
+    localDownloadFailed: t('localDownloadFailed'),
+    localReasonWebgpu: t('localReasonWebgpu'),
+    localReasonF16: t('localReasonF16'),
+    localReasonBuffer: t('localReasonBuffer'),
+    localReasonEngine: t('localReasonEngine'),
     autoDetail: t('autoDetail'),
     poolLabel: t('poolLabel'),
     poolDetail: t('poolDetail'),

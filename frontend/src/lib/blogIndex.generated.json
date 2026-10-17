@@ -1,5 +1,34 @@
 [
   {
+    "slug": "models-that-run-on-your-machine",
+    "title": "Run a model on your own machine, and hand off without losing the thread",
+    "date": "2026-10-17",
+    "description": "Pick a model that runs on this device from the same picker you use today, download it once, and chat or run agent turns in your browser's GPU, privately and offline. When a run moves between models, builderforce-memory packs the conversation to fit the next model's window.",
+    "tags": [
+      "local-models",
+      "on-device",
+      "webgpu",
+      "memory",
+      "llm",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
+    "slug": "see-what-every-conversation-costs",
+    "title": "See what every conversation costs, and what memory saved you",
+    "date": "2026-10-17",
+    "description": "Every chat now shows what it cost, split between your Builderforce plan and your own provider keys at list price, and what memory kept off the bill: answers replayed from memory, the provider's prompt cache, and context kept lean. Recorded figures and estimates are always shown apart. The same panel now appears in the web app, the editor and Rovr.",
+    "tags": [
+      "cost",
+      "evermind",
+      "memory",
+      "agents",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "agents-that-run-their-own-code",
     "title": "The Brain now runs its own code — install, test and build, right in your browser",
     "date": "2026-10-16",

@@ -53,6 +53,8 @@ import {
   RESERVED_AUTHORING_TURNS,
   TRUNCATED_ROUND_DIRECTIVE,
   TRUNCATED_TURN_DIRECTIVE,
+  canvasTurnShape,
+  type CanvasRunShaping,
 } from '@/lib/canvasAiTurnBudget';
 import { runAgentLoop, openAiChatCodec, malformedCallOutcome, malformedCallLabel } from '@builderforce/agent-loop';
 import { initialRunPolicy, nextTurn, reduceRunPolicy, type RunPolicyEvent, type RunPolicyState } from '@builderforce/run-policy';
@@ -83,6 +85,9 @@ type CanvasAiOptions = {
   /** The session's chosen phase (`canvasPhases`) — the arc stage the gateway nudges its
    *  role/cost ordering by. Absent when the session has not chosen one. */
   arcStage?: CanvasPhase;
+  /** The composer's Effort and Thinking (see `canvasTurnShape`). Absent ⇒ the canvas's
+   *  long-standing ceiling and `reasoning: low`. */
+  runShaping?: CanvasRunShaping;
   /** Uses the same persisted mode as the canonical Brain: mutating tenant tools run
    * without an additional browser confirmation and canvas proposals auto-apply. */
   autoApprove?: boolean;
@@ -436,8 +441,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             messages,
             tools: selection.tools,
             tool_choice: 'auto',
-            maxTokens: workspaceTurn || truncatedOnce ? CANVAS_BUILD_RESPONSE_TOKENS : CANVAS_RESPONSE_TOKENS,
-            reasoning: { level: 'low' },
+            ...canvasTurnShape(workspaceTurn || truncatedOnce ? CANVAS_BUILD_RESPONSE_TOKENS : CANVAS_RESPONSE_TOKENS, options.runShaping),
             model: ask.model,
             modelStrict: ask.model ? ask.strict : undefined,
             role: ask.role,

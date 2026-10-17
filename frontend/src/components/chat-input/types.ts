@@ -86,6 +86,9 @@ export interface ChatInputProps {
   /** When set, a `/` options menu exposes an Effort selector bound to this state. */
   effort?: BrainEffort;
   onEffortChange?: (effort: BrainEffort) => void;
+  /** The host's answer-token floor (the canvas never sends below its own ceiling) —
+   *  the Effort copy then states the budget the request really carries. */
+  effortMinAnswerTokens?: number;
   /** When set, the `/` options menu shows a "Thinking" toggle bound to this state. */
   thinking?: boolean;
   onThinkingChange?: (on: boolean) => void;
@@ -169,8 +172,13 @@ export interface ChatInputProps {
    * running. A fixed list on purpose — offering one costs no model call.
    */
   suggestions?: readonly ComposerSuggestion[];
-  /** Standing facts (e.g. the memory status) shown inside the `/` menu, the way the editor composer shows them — never as a row under the box. */
-  menuStatus?: ReactNode;
+  /**
+   * The `/` menu's Status tab (plan, meters, 30-day spend & savings, Evermind) — the
+   * shared tab, built from the signed-in session. `projectId` names the project whose
+   * Evermind it reads (omitted ⇒ none). `null` ⇒ no Status tab: a surface with no
+   * account behind it (a guest panel).
+   */
+  account?: { projectId: number | null } | null;
   className?: string;
   /**
    * Change this to any new value to focus the composer and put the caret at the
@@ -178,5 +186,5 @@ export interface ChatInputProps {
    * capability), so the seeded line reads as a sentence to finish rather than a
    * finished message to send.
    */
-  focusToken?: number | string;
+  focusToken?: number;
 }

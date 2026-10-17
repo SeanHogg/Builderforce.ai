@@ -12,7 +12,7 @@
  * One port, two adapters: IndexedDB (`idbRecords.ts`, shared by the side panel and the
  * service worker — same extension origin, same database) and memory (tests).
  */
-import type { BrainMessage } from '@seanhogg/builderforce-brain-embedded';
+import type { BrainMessage, ChatMode, Effort } from '@seanhogg/builderforce-brain-embedded';
 
 export interface LocalChat {
   /** Negative: local id. */
@@ -25,6 +25,14 @@ export interface LocalChat {
   /** Minted with the chat — the `Idempotency-Key` its platform create is sent with, so a
    *  create whose answer was lost replays instead of making a second chat. */
   syncKey: string;
+  /** The composer's `/` Work panel, kept per chat on the device (absent ⇒ the default):
+   *  Chat | Work (default chat — a personal assistant answers, it does not open board
+   *  work), the Effort level and Thinking toggle that shape the request, and the Memory
+   *  switch (default on; mirrored to the platform chat once it exists). */
+  mode?: ChatMode;
+  effort?: Effort;
+  thinking?: boolean;
+  memoryEnabled?: boolean;
 }
 
 export type TaskSyncState = 'queued' | 'synced' | 'local';

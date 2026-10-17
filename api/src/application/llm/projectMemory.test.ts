@@ -11,7 +11,7 @@ import type { Env } from '../../env';
 const env = {} as Env;
 
 /** db mock whose `.select().from().where()[.limit()]` returns queued result sets in
- *  order. Sequence for an Evermind-first resolve: 1) getProjectFactByKey (cache, limit),
+ *  order. Sequence for an Evermind-first resolve: 1) getProjectFactRecordByKey (cache, limit),
  *  2) resolveEffectiveEvermindProjectId → the dedicated Evermind builds grouped under the
  *  project (limit; each seeded-check reads that build's head), 3) the project's OWN head
  *  (limit), 4) the head of the effective owner (limit). A project whose own head is

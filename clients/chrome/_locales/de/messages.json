@@ -116,6 +116,9 @@
   "reasonUnknownElement": {
     "message": "Rovr hat sich dieses Element noch nicht angesehen."
   },
+  "reasonPlatformWrite": {
+    "message": "Dies ändert deinen Builderforce-Workspace (ein Ticket, eine Aufgabe oder eine Zuweisung)."
+  },
   "allowOnce": {
     "message": "Erlauben"
   },
@@ -328,5 +331,913 @@
   },
   "reportErrorsHint": {
     "message": "Nur der Fehler und wo er auftrat – niemals Seiteninhalte oder Ihre Nachrichten."
+  },
+  "modelHeading": {
+    "message": "Modell",
+    "description": "Settings: model picker heading"
+  },
+  "modelIntro": {
+    "message": "Wählen Sie das Modell, mit dem Rovr arbeitet. Modelle auf diesem Gerät brauchen kein Konto und funktionieren offline.",
+    "description": "Settings: model picker explanation"
+  },
+  "modelAuto": {
+    "message": "Automatisch",
+    "description": "Model picker: automatic routing option"
+  },
+  "modelAutoHint": {
+    "message": "Zuerst auf diesem Gerät, dann Builderforce",
+    "description": "Model picker: what automatic routing does"
+  },
+  "lmCatalogHeading": {
+    "message": "Herunterladen, um es in diesem Seitenbereich auszuführen",
+    "description": "Model picker: heading above downloadable on-device models"
+  },
+  "lmDownload": {
+    "message": "Herunterladen ({size})",
+    "description": "Download button; {size} is filled with a formatted size"
+  },
+  "lmDownloading": {
+    "message": "Wird heruntergeladen… {percent} %",
+    "description": "Download progress; {percent} is 0-100"
+  },
+  "lmMoreActions": {
+    "message": "Weitere Aktionen",
+    "description": "Accessible name of a model row overflow button"
+  },
+  "lmTools": {
+    "message": "Tools",
+    "description": "Badge: model can use tools"
+  },
+  "lmContext": {
+    "message": "{tokens} Kontext",
+    "description": "Context window; {tokens} is e.g. 32K"
+  },
+  "lmDownloadFailed": {
+    "message": "Download fehlgeschlagen — bitte erneut versuchen.",
+    "description": "A model download failed"
+  },
+  "lmReasonWebgpu": {
+    "message": "Erfordert WebGPU, das dieser Browser oder diese GPU nicht bietet.",
+    "description": "Why a model cannot run: no WebGPU"
+  },
+  "lmReasonF16": {
+    "message": "Erfordert WebGPU-16-Bit-Shader, die diese GPU nicht bietet.",
+    "description": "Why a model cannot run: no 16-bit shaders"
+  },
+  "lmReasonBuffer": {
+    "message": "Erfordert größere GPU-Puffer, als dieses Gerät zulässt.",
+    "description": "Why a model cannot run: GPU buffers too small"
+  },
+  "lmReasonEngine": {
+    "message": "Diese Engine ist hier noch nicht verfügbar.",
+    "description": "Why a model cannot run: engine missing"
+  },
+  "cmpAdd": {
+    "message": "Hinzufügen",
+    "description": "Composer + menu: trigger"
+  },
+  "cmpUpload": {
+    "message": "Vom Computer hochladen",
+    "description": "Composer + menu: upload a file"
+  },
+  "cmpUploading": {
+    "message": "Wird hochgeladen…",
+    "description": "Composer: upload in progress"
+  },
+  "cmpAddContext": {
+    "message": "Kontext hinzufügen",
+    "description": "Composer + menu: add context"
+  },
+  "cmpBrowseWeb": {
+    "message": "Im Web suchen",
+    "description": "Composer + menu: web browsing toggle"
+  },
+  "cmpOn": {
+    "message": "An",
+    "description": "Toggle state: on"
+  },
+  "cmpOff": {
+    "message": "Aus",
+    "description": "Toggle state: off"
+  },
+  "cmpQueueSend": {
+    "message": "Nachricht einreihen – wird gesendet, wenn der aktuelle Lauf endet",
+    "description": "Send while a run is streaming"
+  },
+  "cmpDictate": {
+    "message": "Diktieren",
+    "description": "Start dictation"
+  },
+  "cmpStopDictation": {
+    "message": "Diktat beenden",
+    "description": "Stop dictation"
+  },
+  "cmpModeChat": {
+    "message": "Chat",
+    "description": "Conversation mode: Chat"
+  },
+  "cmpModeWork": {
+    "message": "Arbeit",
+    "description": "Conversation mode: Work"
+  },
+  "cmpModeChatHint": {
+    "message": "Nur antworten – so viel lesen und abwägen wie nötig, aber keine Board-Arbeit anlegen oder vergeben",
+    "description": "What Chat mode does"
+  },
+  "cmpModeWorkHint": {
+    "message": "Vereinbartes in nachverfolgte Arbeit umsetzen – Ticket anlegen, besetzen und einen Agenten damit beauftragen",
+    "description": "What Work mode does"
+  },
+  "cmpMemoryOnHint": {
+    "message": "Gedächtnis an – dieser Chat ruft das Projektgedächtnis ab und lernt daraus",
+    "description": "Memory switch on"
+  },
+  "cmpMemoryOffHint": {
+    "message": "Gedächtnis aus – dieser Chat ist ein Notizbereich (kein Abruf, kein Lernen)",
+    "description": "Memory switch off"
+  },
+  "cmpMemoryNeedsSignIn": {
+    "message": "Melden Sie sich bei Builderforce an, um diesem Chat ein Projektgedächtnis zu geben",
+    "description": "Why memory is unavailable: signed out"
+  },
+  "cmpMemoryNeedsProject": {
+    "message": "Wählen Sie unter Einstellungen (Neue Aufgaben ablegen in) ein Projekt, um diesem Chat ein Projektgedächtnis zu geben",
+    "description": "Why memory is unavailable: no project chosen"
+  },
+  "cmpAutoModeHint": {
+    "message": "Werkzeugaktionen ohne Nachfrage automatisch freigeben",
+    "description": "Auto mode explanation"
+  },
+  "cmpEffortQuickDesc": {
+    "message": "Am schnellsten und günstigsten – kurze, direkte Antworten. Bis zu $1 Antwort-Token.",
+    "description": "Quick effort; $1 = answer token budget"
+  },
+  "cmpEffortBalancedDesc": {
+    "message": "Der Standard – normale Tiefe. Bis zu $1 Antwort-Token.",
+    "description": "Balanced effort; $1 = answer token budget"
+  },
+  "cmpEffortThoroughDesc": {
+    "message": "Am gründlichsten und langsamsten – umfassend, prüft die eigene Arbeit. Bis zu $1 Antwort-Token.",
+    "description": "Thorough effort; $1 = answer token budget"
+  },
+  "cmpEffortThinkingSuffix": {
+    "message": "Plus bis zu $1 Denk-Token.",
+    "description": "Appended while Thinking is on; $1 = thinking tokens"
+  },
+  "cmpThinkingOnDesc": {
+    "message": "Das Modell denkt vor der Antwort nach, mit einem Denkbudget von $1 Token bei diesem Aufwand. Langsamer, besser bei schwierigen Aufgaben.",
+    "description": "Thinking on; $1 = thinking budget"
+  },
+  "cmpThinkingOffDesc": {
+    "message": "Aus – das Modell antwortet direkt. Einschalten für einen Denkdurchgang vor der Antwort.",
+    "description": "Thinking off"
+  },
+  "optCategoryAuto": {
+    "message": "Auto",
+    "description": "Model group: automatic"
+  },
+  "optCategoryByo": {
+    "message": "Eigene",
+    "description": "Model group: your own provider accounts"
+  },
+  "optCategoryFree": {
+    "message": "Kostenlos",
+    "description": "Model group: free"
+  },
+  "optCategoryPlan": {
+    "message": "Tarif",
+    "description": "Model group: included in plan"
+  },
+  "optCategoryPaid": {
+    "message": "Kostenpflichtig",
+    "description": "Model group: premium"
+  },
+  "optCategoryConfigured": {
+    "message": "Konfiguriert",
+    "description": "Model group: saved workspace configs"
+  },
+  "optCategoryLocal": {
+    "message": "Auf diesem Gerät",
+    "description": "Model group: on this device"
+  },
+  "optPoolLabel": {
+    "message": "Eigene Konten",
+    "description": "Model row: your connected accounts in order"
+  },
+  "optPoolDetail": {
+    "message": "Probiert Ihre verbundenen Konten in der Reihenfolge aus den Kontoeinstellungen.",
+    "description": "Model row: pool explanation"
+  },
+  "optFreeDetail": {
+    "message": "Kostenlos · in Builderforce enthalten",
+    "description": "Funding line: free model"
+  },
+  "optPlanDetail": {
+    "message": "In Ihrem Builderforce-Tarif enthalten",
+    "description": "Funding line: plan model"
+  },
+  "optPaidDetail": {
+    "message": "Premium – Abrechnung zum Selbstkostenpreis + 1 ¢ pro Anfrage",
+    "description": "Funding line: premium model"
+  },
+  "optPaidCostDetail": {
+    "message": "{input} Eingabe / {output} Ausgabe pro 1 Mio. Token + $$0.01 pro Anfrage",
+    "description": "Premium price line; keep {input} and {output}"
+  },
+  "optByoDetail": {
+    "message": "Wird über Ihr eigenes {vendor}-Konto abgerechnet – kein Tarifguthaben verbraucht.",
+    "description": "Funding line: own account; keep {vendor}"
+  },
+  "optConfiguredDetail": {
+    "message": "Gespeicherte LLM-Konfiguration des Arbeitsbereichs",
+    "description": "Funding line: saved config"
+  },
+  "optLocalDetail": {
+    "message": "Läuft auf diesem Rechner über {runtime} – keine Tarifnutzung, funktioniert offline.",
+    "description": "Funding line: on-device; keep {runtime}"
+  },
+  "optEvermindLabel": {
+    "message": "Projekt-Evermind",
+    "description": "Model name for a project Evermind pin"
+  },
+  "optEvermindDetail": {
+    "message": "Das eigene, gelernte Evermind-Modell Ihres Projekts.",
+    "description": "Funding line for a project Evermind"
+  },
+  "optOptions": {
+    "message": "Optionen",
+    "description": "The / menu as a whole"
+  },
+  "optMode": {
+    "message": "Modus",
+    "description": "Section: conversation mode"
+  },
+  "optMemory": {
+    "message": "Gedächtnis",
+    "description": "Section: project memory"
+  },
+  "optAutoMode": {
+    "message": "Automodus",
+    "description": "Row: auto-approve actions"
+  },
+  "optConversation": {
+    "message": "Unterhaltung",
+    "description": "Section: actions on the chat itself"
+  },
+  "optConsolidate": {
+    "message": "Zusammenfassen",
+    "description": "Action: consolidate the chat"
+  },
+  "optConsolidating": {
+    "message": "Wird zusammengefasst…",
+    "description": "Consolidating in progress"
+  },
+  "optConsolidateHint": {
+    "message": "Diesen Chat zu einem kompakten Kontext zusammenfassen, auf dem der Rest der Unterhaltung aufbaut",
+    "description": "What consolidating does"
+  },
+  "optFork": {
+    "message": "Abzweigen",
+    "description": "Action: fork the chat"
+  },
+  "optForking": {
+    "message": "Wird abgezweigt…",
+    "description": "Forking in progress"
+  },
+  "optForkHint": {
+    "message": "Diesen Chat zusammenfassen und in einem neuen Chat ab dieser Zusammenfassung weitermachen",
+    "description": "What forking does"
+  },
+  "optSessionUnavailable": {
+    "message": "Verfügbar, sobald dieser Chat einige Nachrichten hat und kein Lauf aktiv ist",
+    "description": "Why conversation actions cannot run"
+  },
+  "optEffort": {
+    "message": "Aufwand",
+    "description": "Section: effort"
+  },
+  "optEffortQuick": {
+    "message": "Schnell",
+    "description": "Effort level"
+  },
+  "optEffortBalanced": {
+    "message": "Ausgewogen",
+    "description": "Effort level"
+  },
+  "optEffortThorough": {
+    "message": "Gründlich",
+    "description": "Effort level"
+  },
+  "optThinking": {
+    "message": "Denken",
+    "description": "Row: thinking"
+  },
+  "optModelInUse": {
+    "message": "Verwendetes Modell",
+    "description": "Heading: model running this turn"
+  },
+  "optSearchModels": {
+    "message": "Modelle suchen…",
+    "description": "Model search placeholder"
+  },
+  "optFilterModels": {
+    "message": "Modelle filtern",
+    "description": "Model filter group"
+  },
+  "optChooseModel": {
+    "message": "Modell wählen",
+    "description": "Model list name"
+  },
+  "optNoModels": {
+    "message": "Keine passenden Modelle",
+    "description": "No model matches"
+  },
+  "optAll": {
+    "message": "Alle",
+    "description": "Filter: all"
+  },
+  "optModelLocked": {
+    "message": "Für die Modellwahl ist ein kostenpflichtiger Tarif oder ein verbundenes Anbieterkonto nötig.",
+    "description": "Why models cannot be chosen"
+  },
+  "optAccountSettings": {
+    "message": "Kontoeinstellungen",
+    "description": "Link to account settings"
+  },
+  "optStatus": {
+    "message": "Status",
+    "description": "Tab: account / usage / Evermind"
+  },
+  "stLoading": {
+    "message": "Konto wird geladen…",
+    "description": "Status tab loading"
+  },
+  "stAccount": {
+    "message": "Konto",
+    "description": "Status: account heading"
+  },
+  "stPlan": {
+    "message": "Tarif",
+    "description": "Status: plan"
+  },
+  "stResets": {
+    "message": "Zurückgesetzt",
+    "description": "Status: when meters reset"
+  },
+  "stLimitsLifted": {
+    "message": "Limits aufgehoben",
+    "description": "Beside the plan for a superadmin"
+  },
+  "stLimitsLiftedHint": {
+    "message": "Sie sind Superadmin, daher sind alle Limits für Sie aufgehoben – für die Mitglieder gelten weiterhin die Limits des Tarifs.",
+    "description": "Why limits are lifted"
+  },
+  "stUsage": {
+    "message": "Nutzung",
+    "description": "Status: usage heading"
+  },
+  "stUsageEmpty": {
+    "message": "Für diesen Tarif gibt es keine Nutzungszähler.",
+    "description": "Status: no meters"
+  },
+  "stUnlimited": {
+    "message": "Unbegrenzt",
+    "description": "Status: unlimited meter"
+  },
+  "stMeterOf": {
+    "message": "{used} / {limit} {unit}",
+    "description": "Meter reading; keep {used} {limit} {unit}"
+  },
+  "stUpgrade": {
+    "message": "Upgrade",
+    "description": "Status: upgrade action"
+  },
+  "stManagePlan": {
+    "message": "Tarif verwalten",
+    "description": "Status: manage plan action"
+  },
+  "stBillingPastDue": {
+    "message": "Überfällig",
+    "description": "Billing state"
+  },
+  "stBillingCanceled": {
+    "message": "Gekündigt",
+    "description": "Billing state"
+  },
+  "stBillingTrialing": {
+    "message": "Testphase",
+    "description": "Billing state"
+  },
+  "stBillingIncomplete": {
+    "message": "Unvollständig",
+    "description": "Billing state"
+  },
+  "stPlanFree": {
+    "message": "Free",
+    "description": "Plan tier"
+  },
+  "stPlanPro": {
+    "message": "Pro",
+    "description": "Plan tier"
+  },
+  "stPlanTeams": {
+    "message": "Teams",
+    "description": "Plan tier"
+  },
+  "stPlanEnterprise": {
+    "message": "Enterprise",
+    "description": "Plan tier"
+  },
+  "stMeterAiTokens": {
+    "message": "KI-Token",
+    "description": "Meter name"
+  },
+  "stMeterCloudRuns": {
+    "message": "Cloud-Läufe",
+    "description": "Meter name"
+  },
+  "stMeterSandboxRuns": {
+    "message": "Sandbox-Läufe",
+    "description": "Meter name"
+  },
+  "stMeterIngestion": {
+    "message": "Datenaufnahme",
+    "description": "Meter name"
+  },
+  "stMeterErrorEvents": {
+    "message": "Fehlerereignisse",
+    "description": "Meter name"
+  },
+  "stMeterOutboundFetches": {
+    "message": "Ausgehende Abrufe",
+    "description": "Meter name"
+  },
+  "stMeterFeedback": {
+    "message": "Feedback",
+    "description": "Meter name"
+  },
+  "stMeterRecordings": {
+    "message": "Aufzeichnungen",
+    "description": "Meter name"
+  },
+  "stUnitTokens": {
+    "message": "Token",
+    "description": "Meter unit"
+  },
+  "stUnitBytes": {
+    "message": "Byte",
+    "description": "Meter unit"
+  },
+  "stUnitRuns": {
+    "message": "Läufe",
+    "description": "Meter unit"
+  },
+  "stUnitEvents": {
+    "message": "Ereignisse",
+    "description": "Meter unit"
+  },
+  "stUnitFetches": {
+    "message": "Abrufe",
+    "description": "Meter unit"
+  },
+  "stUnitSubmissions": {
+    "message": "Einreichungen",
+    "description": "Meter unit"
+  },
+  "stUnitRecordings": {
+    "message": "Aufzeichnungen",
+    "description": "Meter unit"
+  },
+  "stEvermindLearning": {
+    "message": "Lernt",
+    "description": "Evermind state"
+  },
+  "stEvermindFrozen": {
+    "message": "Lernt nicht",
+    "description": "Evermind state"
+  },
+  "stEvermindAnswersOn": {
+    "message": "Antworten an",
+    "description": "Evermind answers on"
+  },
+  "stEvermindAnswersOff": {
+    "message": "Antworten aus",
+    "description": "Evermind answers off"
+  },
+  "stEvermindHint": {
+    "message": "Lernen: Die Chats dieses Projekts trainieren sein Evermind. Antworten: ob das Evermind anstelle eines kostenpflichtigen Modells antworten darf. Beides ändern Sie in der Evermind-Ansicht.",
+    "description": "Evermind explanation"
+  },
+  "spSpent": {
+    "message": "{amount} ausgegeben",
+    "description": "Spend pill; keep {amount}"
+  },
+  "spSaved": {
+    "message": "{amount} gespart",
+    "description": "Spend pill; keep {amount}"
+  },
+  "spSavedApprox": {
+    "message": "≈{amount} gespart",
+    "description": "Spend pill, estimated; keep {amount}"
+  },
+  "spTokens": {
+    "message": "{tokens} Tok.",
+    "description": "Token count; keep {tokens}"
+  },
+  "spPillTitle": {
+    "message": "Was diese Unterhaltung gekostet und was das Gedächtnis gespart hat",
+    "description": "Spend pill tooltip"
+  },
+  "spSpendHeading": {
+    "message": "Ausgegeben",
+    "description": "Breakdown: spent"
+  },
+  "spPlatform": {
+    "message": "Builderforce-Tarif",
+    "description": "Breakdown: plan usage"
+  },
+  "spYourKey": {
+    "message": "Ihr Schlüssel",
+    "description": "Breakdown: own key"
+  },
+  "spYourKeyHint": {
+    "message": "Zum Listenpreis des Anbieters",
+    "description": "Under your key"
+  },
+  "spUnpriced": {
+    "message": "{tokens} Token bei Modellen ohne Preis",
+    "description": "Unpriced tokens; keep {tokens}"
+  },
+  "spSavedHeading": {
+    "message": "Durch Gedächtnis gespart",
+    "description": "Breakdown: saved"
+  },
+  "spSavedShare": {
+    "message": "{pct} % der Rechnung",
+    "description": "Share saved; keep {pct}"
+  },
+  "spEstimated": {
+    "message": "Schätzung",
+    "description": "Marks an estimate"
+  },
+  "spMeasured": {
+    "message": "erfasst",
+    "description": "Marks a recorded figure"
+  },
+  "spEvents": {
+    "message": "{count}×",
+    "description": "Row count; keep {count}"
+  },
+  "spNothingSaved": {
+    "message": "Noch nichts gespart",
+    "description": "Nothing saved yet"
+  },
+  "spPeriodHeading": {
+    "message": "KI-Ausgaben · letzte {days} Tage",
+    "description": "Status card heading; keep {days}"
+  },
+  "spSourcePromptCache": {
+    "message": "Prompt-Cache",
+    "description": "Saving source"
+  },
+  "spSourceMemoryAnswer": {
+    "message": "Aus dem Gedächtnis beantwortet",
+    "description": "Saving source"
+  },
+  "spSourceEvermindAnswer": {
+    "message": "Von Evermind beantwortet",
+    "description": "Saving source"
+  },
+  "spSourceResponseCache": {
+    "message": "Wiederholte Anfrage",
+    "description": "Saving source"
+  },
+  "spSourceContextTrim": {
+    "message": "Schlanker Kontext",
+    "description": "Saving source"
+  },
+  "spSourceRecallOverhead": {
+    "message": "Durch Abruf hinzugefügt",
+    "description": "Saving source (a cost)"
+  },
+  "spHintPromptCache": {
+    "message": "Der Anbieter hat einen Teil des Prompts zu einem Zehntel des Preises aus seinem Cache geliefert",
+    "description": "Saving source explanation"
+  },
+  "spHintMemoryAnswer": {
+    "message": "Eine bereits gestellte Frage wurde aus dem Gedächtnis beantwortet – kein Modellaufruf",
+    "description": "Saving source explanation"
+  },
+  "spHintEvermindAnswer": {
+    "message": "Das Evermind des Projekts hat geantwortet – kein kostenpflichtiger Modellaufruf",
+    "description": "Saving source explanation"
+  },
+  "spHintResponseCache": {
+    "message": "Eine identische Anfrage wurde aus dem Gateway-Cache beantwortet – kein Modellaufruf",
+    "description": "Saving source explanation"
+  },
+  "spHintContextTrim": {
+    "message": "Die Verdichtung hat frühere Beiträge aus jedem Aufruf herausgehalten",
+    "description": "Saving source explanation"
+  },
+  "spHintRecallOverhead": {
+    "message": "Was abgerufene Erinnerungen jedem Prompt hinzugefügt haben – die Kosten des Abrufs",
+    "description": "Saving source explanation"
+  },
+  "mnTitle": {
+    "message": "Richten an",
+    "description": "@-mention picker heading"
+  },
+  "mnAgent": {
+    "message": "Agent",
+    "description": "@-mention row: agent"
+  },
+  "mnHuman": {
+    "message": "Person",
+    "description": "@-mention row: person"
+  },
+  "mnTicketTitle": {
+    "message": "Ticket markieren",
+    "description": "#-ticket picker heading"
+  },
+  "mnTicketStatus": {
+    "message": "Status",
+    "description": "#-ticket row: status"
+  },
+  "mnTicketNoMatches": {
+    "message": "Keine passenden Tickets",
+    "description": "#-ticket picker: nothing matches"
+  },
+  "ctNone": {
+    "message": "Noch keine Tickets verknüpft.",
+    "description": "No linked tickets"
+  },
+  "ctSpawned": {
+    "message": "hier entstanden",
+    "description": "Ticket created from this chat"
+  },
+  "ctRun": {
+    "message": "Agent auf Ticket ansetzen",
+    "description": "Run an agent on the ticket"
+  },
+  "ctOpen": {
+    "message": "Öffnen",
+    "description": "Open the linked item"
+  },
+  "ctLineage": {
+    "message": "Chat-Herkunft",
+    "description": "Chat lineage"
+  },
+  "ctUnlink": {
+    "message": "Verknüpfung lösen",
+    "description": "Unlink a ticket"
+  },
+  "ctPickAgent": {
+    "message": "Als Agent ausführen…",
+    "description": "Choose an agent to run"
+  },
+  "ctLineageTitle": {
+    "message": "Chats zu diesem Ticket",
+    "description": "Lineage heading"
+  },
+  "ctLineageEmpty": {
+    "message": "Keine anderen Chats verweisen auf dieses Ticket.",
+    "description": "No lineage"
+  },
+  "ctMerged": {
+    "message": "zusammengeführt",
+    "description": "Merged chat marker"
+  },
+  "ctRunNoAgent": {
+    "message": "Kein Agent konnte dieses Ticket ausführen – weisen Sie zuerst einen zu.",
+    "description": "Run failed: no agent"
+  },
+  "ctRunFailed": {
+    "message": "Der Lauf konnte nicht gestartet werden.",
+    "description": "Run failed"
+  },
+  "ctLink": {
+    "message": "Ticket verknüpfen",
+    "description": "Pill: link a ticket"
+  },
+  "ctAgents": {
+    "message": "Agenten",
+    "description": "Pill: agents"
+  },
+  "ctMerge": {
+    "message": "Zusammenführen",
+    "description": "Pill: merge chats"
+  },
+  "ctQuestions": {
+    "message": "Fragen",
+    "description": "Pill: questions"
+  },
+  "ctNoQuestions": {
+    "message": "Keine offenen Fragen.",
+    "description": "No pending questions"
+  },
+  "ctAnswerPlaceholder": {
+    "message": "Antwort eingeben…",
+    "description": "Answer box placeholder"
+  },
+  "ctSubmitAnswer": {
+    "message": "Antworten",
+    "description": "Send an answer"
+  },
+  "ctAnswering": {
+    "message": "Wird gesendet…",
+    "description": "Answer being sent"
+  },
+  "ctLinkFailed": {
+    "message": "Verknüpfen fehlgeschlagen – prüfen Sie, ob das Ticket existiert.",
+    "description": "Link failed"
+  },
+  "ctKindLabel": {
+    "message": "Tickettyp",
+    "description": "Ticket type picker"
+  },
+  "ctPickTicket": {
+    "message": "Ticket wählen…",
+    "description": "Ticket picker"
+  },
+  "ctSearchTicket": {
+    "message": "Tickets suchen…",
+    "description": "Ticket search placeholder"
+  },
+  "ctSearching": {
+    "message": "Suche läuft…",
+    "description": "Search in progress"
+  },
+  "ctNoMatches": {
+    "message": "Keine passenden Tickets.",
+    "description": "Search found nothing"
+  },
+  "ctRefine": {
+    "message": "Die besten Treffer werden angezeigt – tippen Sie weiter, um einzugrenzen.",
+    "description": "Search hit the cap"
+  },
+  "ctLinkTypeLabel": {
+    "message": "Verknüpfungsart",
+    "description": "Link type picker"
+  },
+  "ctLinkTypeLinked": {
+    "message": "Verknüpft",
+    "description": "Link type: linked"
+  },
+  "ctLinkTypeCreated": {
+    "message": "Aus Chat erstellt",
+    "description": "Link type: created from chat"
+  },
+  "ctLinkAction": {
+    "message": "Verknüpfen",
+    "description": "Confirm link"
+  },
+  "ctNoAgents": {
+    "message": "Noch keine Agenten in diesem Chat.",
+    "description": "No agents in chat"
+  },
+  "ctInviteAgent": {
+    "message": "Agent einladen…",
+    "description": "Invite an agent"
+  },
+  "ctAgentsHint": {
+    "message": "Geben Sie @ im Nachrichtenfeld ein, um einen eingeladenen Agenten zu markieren – er antwortet im Chat und kann an der Arbeit des Teams mitwirken – oder setzen Sie ihn oben auf eine verknüpfte Aufgabe/ein Epic an.",
+    "description": "How agents work in a chat"
+  },
+  "ctSubagentOf": {
+    "message": "Sub-Agent von {owner}",
+    "description": "Sub-agent owner; keep {owner}"
+  },
+  "ctPeople": {
+    "message": "Personen",
+    "description": "Pill: people"
+  },
+  "ctNoPeople": {
+    "message": "Noch keine Personen eingeladen.",
+    "description": "No people invited"
+  },
+  "ctInvitePerson": {
+    "message": "Per E-Mail einladen…",
+    "description": "Invite by email"
+  },
+  "ctInvitePersonHint": {
+    "message": "Laden Sie ein Teammitglied ein, diesen Chat anzusehen und mitzuarbeiten.",
+    "description": "Invite explanation"
+  },
+  "ctInviteSent": {
+    "message": "Einladung gesendet.",
+    "description": "Invitation sent"
+  },
+  "ctInvitePending": {
+    "message": "Einladung gesendet – die Person tritt bei, sobald sie sich anmeldet.",
+    "description": "Invite pending sign-in"
+  },
+  "ctVisibilityShared": {
+    "message": "Geteilt",
+    "description": "Chat visibility: shared"
+  },
+  "ctVisibilityLocked": {
+    "message": "Gesperrt",
+    "description": "Chat visibility: locked"
+  },
+  "ctLockHint": {
+    "message": "Geteilte Chats sind für das ganze Team sichtbar; sperren Sie den Chat, um ihn auf seine Mitglieder zu beschränken.",
+    "description": "Lock explanation"
+  },
+  "ctMergeHint": {
+    "message": "Andere Chats in diesen zusammenführen. Ihre Nachrichten, Tickets und Agenten wandern hierher; die Quellen werden archiviert.",
+    "description": "Merge explanation"
+  },
+  "ctMergeNoOthers": {
+    "message": "Keine anderen Chats zum Zusammenführen.",
+    "description": "No other chats to merge"
+  },
+  "ctShowTickets": {
+    "message": "Verknüpfte Tickets anzeigen",
+    "description": "Expand the ticket grid"
+  },
+  "ctHideTickets": {
+    "message": "Verknüpfte Tickets ausblenden",
+    "description": "Collapse the ticket grid"
+  },
+  "ctKindTask": {
+    "message": "Aufgabe",
+    "description": "Ticket kind"
+  },
+  "ctKindEpic": {
+    "message": "Epic",
+    "description": "Ticket kind"
+  },
+  "ctKindGap": {
+    "message": "Lücke",
+    "description": "Ticket kind"
+  },
+  "ctKindObjective": {
+    "message": "Ziel",
+    "description": "Ticket kind"
+  },
+  "ctKindInitiative": {
+    "message": "Initiative",
+    "description": "Ticket kind"
+  },
+  "ctKindPortfolio": {
+    "message": "Portfolio",
+    "description": "Ticket kind"
+  },
+  "ctKindRoadmap": {
+    "message": "Roadmap",
+    "description": "Ticket kind"
+  },
+  "ctKindSpec": {
+    "message": "Spezifikation",
+    "description": "Ticket kind"
+  },
+  "ctKindRetro": {
+    "message": "Retrospektive",
+    "description": "Ticket kind"
+  },
+  "ctKindPoker": {
+    "message": "Planning Poker",
+    "description": "Ticket kind"
+  },
+  "ctRingAria": {
+    "message": "$1: $2 % erledigt",
+    "description": "Ticket health ring; $1 = ticket, $2 = percent"
+  },
+  "ctInParent": {
+    "message": "in $1",
+    "description": "Parent line; $1 = parent work item"
+  },
+  "ctTicketCountOne": {
+    "message": "1 Ticket",
+    "description": "Exactly one linked ticket"
+  },
+  "ctTicketCountMany": {
+    "message": "$1 Tickets",
+    "description": "Linked ticket count; $1 = count"
+  },
+  "ctOverallAria": {
+    "message": "Gesamtfortschritt: $1 % erledigt",
+    "description": "Overall progress ring; $1 = percent"
+  },
+  "ctRunStarted": {
+    "message": "$1 wurde auf das Ticket angesetzt.",
+    "description": "Run started; $1 = agent"
+  },
+  "ctMergeAction": {
+    "message": "$1 hier zusammenführen",
+    "description": "Merge N chats; $1 = count"
+  },
+  "ctMergedN": {
+    "message": "$1 Chat(s) zusammengeführt.",
+    "description": "Merged N chats; $1 = count"
+  },
+  "queuedOne": {
+    "message": "1 Nachricht in der Warteschlange – sie wird gesendet, sobald dieser Lauf endet",
+    "description": "Under the composer: one turn waits behind the running run"
+  },
+  "queuedMany": {
+    "message": "$1 Nachrichten in der Warteschlange – sie werden nacheinander gesendet, sobald Läufe enden",
+    "description": "Under the composer; $1 = how many turns wait behind the running run"
   }
 }

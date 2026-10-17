@@ -146,6 +146,12 @@ export interface CompletionMetadata {
    * cost us versus conversation" has no answer.
    */
   mode?: string;
+  /**
+   * What memory did to THIS call (`memorySavings.ts`): prompt tokens compaction kept out
+   * of it and tokens recall added to it. The gateway's usage writer stamps them on the
+   * call's own usage row, so the savings ledger costs no request of its own.
+   */
+  memory?: { trimmedTokens: number; recallTokens: number };
 }
 
 export interface StreamChatOptions {

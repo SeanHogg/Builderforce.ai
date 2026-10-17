@@ -252,6 +252,21 @@ export interface FailoverEvent {
   diagnostic?: UpstreamDiagnostic;
 }
 
+/** The usage block a stored chat-completion body carries, in ledger shape — or
+ *  undefined when the upstream reported none. */
+function cachedUsageOf(body: unknown): LlmUsage | undefined {
+  const u = (body as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown } } | null)?.usage;
+  if (!u) return undefined;
+  const prompt = typeof u.prompt_tokens === 'number' ? u.prompt_tokens : 0;
+  const completion = typeof u.completion_tokens === 'number' ? u.completion_tokens : 0;
+  if (prompt + completion <= 0) return undefined;
+  return {
+    promptTokens: prompt,
+    completionTokens: completion,
+    totalTokens: typeof u.total_tokens === 'number' ? u.total_tokens : prompt + completion,
+  };
+}
+
 export interface ProxyResult {
   /** Final upstream Response (may be streamed). */
   response: Response;
@@ -267,6 +282,10 @@ export interface ProxyResult {
   failovers: FailoverEvent[];
   /** Token usage from non-streaming responses; undefined for streams (route intercepts). */
   usage?: LlmUsage;
+  /** On a `response_cache_hit` only: the usage the ORIGINAL upstream call recorded,
+   *  read from the stored body. Deliberately NOT `usage` — nothing was dispatched, so no
+   *  spend may be metered from it; the savings ledger prices the avoided call from it. */
+  cachedUsage?: LlmUsage;
   /** True when the request resolved via the funded overflow path (premium
    *  fallback / backstop on Builderforce's own key) rather than a plan-pool
    *  model. The route stamps this onto the usage row so overflow spend can be
@@ -761,6 +780,7 @@ export class LlmProxyService {
         // `retries: 0` and `failovers: []` are the TRUTH for a cache hit — nothing was
         // dispatched. `outcome` names it so a trace never reads as a fresh call, and
         // no usage row should be written for it by the caller.
+        const cachedUsage = cachedUsageOf(hit.body);
         return this.finalize({
           response: new Response(JSON.stringify(hit.body), {
             status: 200,
@@ -774,6 +794,7 @@ export class LlmProxyService {
           attempts: [],
           byoFunded: false,
           platformSurcharge: false,
+          ...(cachedUsage ? { cachedUsage } : {}),
         }, tid, startedAt, [hit.resolvedModel], 'response_cache_hit');
       }
     }

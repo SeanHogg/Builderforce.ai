@@ -26,7 +26,9 @@ export type SafetyReason =
   | 'send'
   | 'destructive'
   | 'sensitive_field'
-  | 'unknown_element';
+  | 'unknown_element'
+  /** A platform (gateway MCP) tool that writes — a ticket, a task, a dispatch. */
+  | 'platform_write';
 
 /** The facts a call is classified against. */
 export interface SafetyContext {

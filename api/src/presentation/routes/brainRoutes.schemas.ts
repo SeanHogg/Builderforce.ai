@@ -30,6 +30,7 @@ export const UpdateChatBody = z.object({
   visibility: z.enum(['shared', 'locked']).optional(),
   capability: z.string().nullish(),
   mode: z.string().nullish(),
+  memoryEnabled: z.boolean().optional(),
 });
 
 /** POST /chats/:id/read — a non-number `seq` has always meant "mark everything read". */

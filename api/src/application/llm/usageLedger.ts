@@ -24,6 +24,7 @@ import { providerForVendor } from './llmProviderCatalog';
 import { and, eq, gte, sql, type SQL } from 'drizzle-orm';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { utcDayStart } from './tokenUsage';
+import type { UsageSurface } from '@builderforce/spend-contract';
 
 /** Cache-tier multipliers relative to the base input (prompt) price. cache_read
  *  is billed ~0.1x input, cache_creation ~1.25x — both are subsets of
@@ -194,16 +195,11 @@ export function computeRecordedCostMillicents(
 }
 
 /**
- * Which agent modality produced a usage row. Set on every row so metering can
- * apply the BYO exemption (own-machine on-prem/VSIX BYO usage is free; cloud BYO
- * is charged) — see tokenUsage.ts.
- *   • web      → the web app (Brain chat, dashboards) or an unattributed call.
- *   • vsix     → the VS Code extension (own machine).
- *   • on_prem  → a self-hosted agent host (own machine).
- *   • cloud    → a cloud agent run (Durable Object / container) on our infra.
- *   • sdk      → a direct SDK/API caller.
+ * Which agent modality produced a usage row — declared once in
+ * `@builderforce/spend-contract` (the BYO exemption that reads it: tokenUsage.ts).
+ * Re-exported here so the ledger's callers keep one import.
  */
-export type UsageSurface = 'web' | 'vsix' | 'on_prem' | 'cloud' | 'sdk';
+export { USAGE_SURFACES, isUsageSurface, type UsageSurface } from '@builderforce/spend-contract';
 
 /** Map internal gateway vendor ids to the stable provider ids shown in the BYO
  * integrations UI. */
@@ -264,6 +260,57 @@ function readChatAttribution(metadata: Record<string, unknown> | null | undefine
   };
 }
 
+/**
+ * What memory did to one usage row (1227). Either reported by the run loop in the
+ * `metadata.memory` it already sends with a call (`trimmedTokens`, `recallTokens` —
+ * read by {@link readMemoryEffect}), or set by a producer that records an AVOIDED call
+ * (`savingsLedger.recordAvoidedCall`). Absent ⇒ memory did nothing on this row.
+ */
+export interface UsageSavings {
+  /** Set only on an avoided call (`calls` = 0): what stood in for the model. */
+  source?: 'memory_answer' | 'evermind_answer' | 'response_cache' | null;
+  savedPromptTokens: number;
+  savedCompletionTokens?: number;
+  recallPromptTokens?: number;
+  estimated: boolean;
+}
+
+/**
+ * The run loop's per-call memory figures, lifted out of the caller-supplied metadata —
+ * the same forgiving promotion `readChatAttribution` does for the chat: anything absent,
+ * non-numeric or negative reads as nothing.
+ */
+export function readMemoryEffect(metadata: Record<string, unknown> | null | undefined): UsageSavings | null {
+  const m = metadata && typeof metadata === 'object' ? (metadata as { memory?: unknown }).memory : null;
+  if (!m || typeof m !== 'object') return null;
+  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
+  const trimmed = num((m as { trimmedTokens?: unknown }).trimmedTokens);
+  const recall = num((m as { recallTokens?: unknown }).recallTokens);
+  if (trimmed === 0 && recall === 0) return null;
+  // Both are character estimates — the loop never sees the provider's tokenizer.
+  return { savedPromptTokens: trimmed, recallPromptTokens: recall, estimated: true };
+}
+
+/** NET list-price value of a row's savings, in millicents: what the saved tokens would
+ *  have cost minus what recall added. Zero when the model has no catalog price. */
+export function computeSavedCostMillicents(
+  pricing: { prompt: number; completion: number } | undefined,
+  savings: UsageSavings | null,
+): number {
+  if (!pricing || !savings) return 0;
+  const saved = computeCostMillicents(pricing, {
+    promptTokens: savings.savedPromptTokens,
+    completionTokens: savings.savedCompletionTokens ?? 0,
+    totalTokens: savings.savedPromptTokens + (savings.savedCompletionTokens ?? 0),
+  });
+  const overhead = computeCostMillicents(pricing, {
+    promptTokens: savings.recallPromptTokens ?? 0,
+    completionTokens: 0,
+    totalTokens: savings.recallPromptTokens ?? 0,
+  });
+  return saved - overhead;
+}
+
 export interface UsageAttribution {
   agentHostId?: number | null;
   cloudAgentRef?: string | null;
@@ -320,6 +367,12 @@ export interface RecordUsageRow {
    *  cost so billing is "OpenRouter cost + 1¢". Ignored for BYO rows (cost forced 0).
    *  Recorded in metadata so an invoice line can show the surcharge explicitly. */
   premiumSurcharge?: boolean | null;
+  /** How many LLM calls this row stands for. 1 for an ordinary call; 0 for an AVOIDED
+   *  call (`savings.source` set) — so request counts never include a call that did not
+   *  happen. The rollup is the only other writer of a value above 1. */
+  calls?: number;
+  /** What memory did on this row. Defaults to the run loop's `metadata.memory`. */
+  savings?: UsageSavings | null;
 }
 
 /** Minimal shape of a ProxyResult this helper needs — avoids importing the full type.
@@ -498,8 +551,13 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     // zero. A registered OpenRouter connection still uses our routing/metering
     // product, however, and its flat platform surcharge is independent of who
     // paid OpenRouter for the tokens.
+    // What memory did on this row — an avoided call's figures, or the loop's per-call
+    // compaction / recall numbers carried in the metadata it already sends.
+    const savings = row.savings ?? readMemoryEffect(row.metadata);
     let pricing: { prompt: number; completion: number } | undefined;
-    if (!row.byo) {
+    // A BYO row is still priced when it carries savings: they are valued at LIST, since
+    // the person's own key would have paid for the tokens memory kept off the call.
+    if (!row.byo || savings) {
       try {
         // The SAME price book the router orders cost-first calls by (`catalogView.ts`),
         // so what a call was expected to cost and what it is recorded as costing come
@@ -516,6 +574,7 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       row.byo === true,
       row.premiumSurcharge === true,
     );
+    const savedCostUsdMillicents = computeSavedCostMillicents(pricing, savings);
     // Stamp the surcharge into metadata so an invoice/usage row can show it explicitly.
     const metadata = row.premiumSurcharge
       ? { ...(row.metadata ?? {}), premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS }
@@ -570,6 +629,13 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       byoProvider:         row.byo ? (row.byoProvider ?? null) : null,
       byoCredentialId,
       surface:             row.surface ?? 'web',
+      calls:               row.calls ?? 1,
+      savingsSource:          savings?.source ?? null,
+      savingsEstimated:       savings?.estimated ?? false,
+      savedPromptTokens:      clampTokenCount(savings?.savedPromptTokens ?? 0),
+      savedCompletionTokens:  clampTokenCount(savings?.savedCompletionTokens ?? 0),
+      recallPromptTokens:     clampTokenCount(savings?.recallPromptTokens ?? 0),
+      savedCostUsdMillicents,
     });
 
     // A successful own-account completion is stronger health evidence than yesterday's

@@ -21,6 +21,7 @@
       "@builderforce/model-router": ["../packages/model-router/src/index.ts"],
       "@builderforce/workload": ["../packages/workload/src/index.ts"],
       "@builderforce/run-context": ["../packages/run-context/src/index.ts"],
+      "@builderforce/spend-contract": ["../packages/spend-contract/src/index.ts"],
       "@builderforce/creation-canvas-contract": ["../packages/creation-canvas-contract/src/index.ts"],
       "@builderforce/creation-canvas-contract/objectKinds": ["../packages/creation-canvas-contract/src/objectKinds.ts"],
       "@builderforce/creation-canvas-contract/creativeCapabilities": ["../packages/creation-canvas-contract/src/creativeCapabilities.ts"],

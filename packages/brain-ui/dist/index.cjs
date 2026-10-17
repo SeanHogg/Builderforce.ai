@@ -31,7 +31,8 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var src_exports = {};
 __export(src_exports, {
   Avatar: () => Avatar,
-  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded13.BUILDERFORCE_PRODUCT_NAME,
+  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded15.BUILDERFORCE_PRODUCT_NAME,
+  BrainComposer: () => BrainComposer,
   BrainTimeline: () => BrainTimeline,
   ChatErrorBanner: () => ChatErrorBanner,
   ChatTicketsPanel: () => ChatTicketsPanel,
@@ -39,22 +40,29 @@ __export(src_exports, {
   DEFAULT_ASK_USER_LABELS: () => DEFAULT_ASK_USER_LABELS,
   DEFAULT_CHAT_ERROR_LABELS: () => DEFAULT_CHAT_ERROR_LABELS,
   DEFAULT_CHAT_TICKETS_LABELS: () => DEFAULT_CHAT_TICKETS_LABELS,
+  DEFAULT_COMPOSER_LABELS: () => DEFAULT_COMPOSER_LABELS,
   DEFAULT_EVERMIND_LABELS: () => DEFAULT_EVERMIND_LABELS,
   DEFAULT_LIVE_ACTIVITY_LABELS: () => DEFAULT_LIVE_ACTIVITY_LABELS,
-  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded13.DEFAULT_MODEL_IDENTITY,
+  DEFAULT_LOCAL_MODEL_LABELS: () => DEFAULT_LOCAL_MODEL_LABELS,
+  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded15.DEFAULT_MODEL_IDENTITY,
   DEFAULT_PENDING_CHANGES_LABELS: () => DEFAULT_PENDING_CHANGES_LABELS,
   DEFAULT_PERSONA_PICKER_LABELS: () => DEFAULT_PERSONA_PICKER_LABELS,
   DEFAULT_PROJECT360_LABELS: () => DEFAULT_PROJECT360_LABELS,
   DEFAULT_PROJECT_LIST_LABELS: () => DEFAULT_PROJECT_LIST_LABELS,
   DEFAULT_PROMPT_OPTIONS_LABELS: () => DEFAULT_PROMPT_OPTIONS_LABELS,
   DEFAULT_RECIPIENT_PICKER_LABELS: () => DEFAULT_RECIPIENT_PICKER_LABELS,
+  DEFAULT_SPEND_LABELS: () => DEFAULT_SPEND_LABELS,
   DEFAULT_TIMELINE_LABELS: () => DEFAULT_TIMELINE_LABELS,
+  DEFAULT_WORK_STATUS_LABELS: () => DEFAULT_WORK_STATUS_LABELS,
   EvermindConsole: () => EvermindConsole,
   HealthRing: () => HealthRing,
+  LOCAL_UNSUPPORTED_LABEL: () => LOCAL_UNSUPPORTED_LABEL,
   LiveActivity: () => LiveActivity,
-  MODEL_CATEGORIES: () => import_builderforce_brain_embedded13.MODEL_CATEGORIES,
+  LocalModelList: () => LocalModelList,
+  LocalModelRow: () => LocalModelRow,
+  MODEL_CATEGORIES: () => import_builderforce_brain_embedded15.MODEL_CATEGORIES,
   Markdown: () => Markdown,
-  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded13.PROJECT_EVERMIND_MODEL_PREFIX,
+  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded15.PROJECT_EVERMIND_MODEL_PREFIX,
   PendingChangesList: () => PendingChangesList,
   PendingQuestionBanner: () => PendingQuestionBanner,
   PersonaPicker: () => PersonaPicker,
@@ -67,69 +75,88 @@ __export(src_exports, {
   RecipientPicker: () => RecipientPicker,
   RecipientsBadge: () => RecipientsBadge,
   SLOW_AFTER_MS: () => SLOW_AFTER_MS,
+  SpendBreakdown: () => SpendBreakdown,
+  SpendPill: () => SpendPill,
   Sunburst: () => Sunburst,
   TICKET_KINDS: () => TICKET_KINDS,
   ToolStep: () => ToolStep,
-  activeModelKey: () => import_builderforce_brain_embedded13.activeModelKey,
+  WorkStatusPanel: () => WorkStatusPanel,
+  activeModelKey: () => import_builderforce_brain_embedded15.activeModelKey,
   askUserAnchorId: () => import_builderforce_brain_embedded.askUserAnchorId,
   attachmentsOf: () => attachmentsOf,
   avatarColor: () => avatarColor,
-  buildModelItems: () => import_builderforce_brain_embedded13.buildModelItems,
+  buildModelItems: () => import_builderforce_brain_embedded15.buildModelItems,
   buildSettledTimeline: () => buildSettledTimeline,
   buildTimeline: () => buildTimeline,
-  byoVendorLabel: () => import_builderforce_brain_embedded13.byoVendorLabel,
+  byoVendorLabel: () => import_builderforce_brain_embedded15.byoVendorLabel,
+  cachedConsumptionSnapshot: () => cachedConsumptionSnapshot,
   chatActivityLabelsFrom: () => chatActivityLabelsFrom,
   chatDiagnosticsReads: () => chatDiagnosticsReads,
   chatSwitcherLabel: () => chatSwitcherLabel,
   commandOf: () => commandOf,
+  composerLabels: () => composerLabels,
   createChatTicketsRestAdapter: () => createChatTicketsRestAdapter,
   createEvermindRestAdapter: () => createEvermindRestAdapter,
-  displayModelName: () => import_builderforce_brain_embedded13.displayModelName,
+  displayModelName: () => import_builderforce_brain_embedded15.displayModelName,
   evermindLabelsFromBundle: () => evermindLabelsFromBundle,
   evermindLearnedStatus: () => evermindLearnedStatus,
   evermindNextAction: () => evermindNextAction,
-  filterModelItems: () => import_builderforce_brain_embedded13.filterModelItems,
+  fetchConsumptionSnapshot: () => fetchConsumptionSnapshot,
+  filterModelItems: () => import_builderforce_brain_embedded15.filterModelItems,
+  formatContextTokens: () => formatContextTokens,
+  formatDownloadSize: () => formatDownloadSize,
   formatDuration: () => formatDuration,
   formatElapsed: () => formatElapsed,
+  formatParams: () => formatParams,
+  formatTokens: () => formatTokens,
+  formatUsd: () => formatUsd,
   groupAbsorbed: () => groupAbsorbed,
   healthRingColor: () => healthRingColor,
   initialsOf: () => initialsOf,
-  isManagerRole: () => import_builderforce_brain_embedded14.isManagerRole,
+  invalidateConsumptionSnapshot: () => invalidateConsumptionSnapshot,
+  isManagerRole: () => import_builderforce_brain_embedded16.isManagerRole,
   liveActivityLabelsFrom: () => liveActivityLabelsFrom,
   loadEvermindBuilds: () => loadEvermindBuilds,
-  modelCategoryLabel: () => import_builderforce_brain_embedded13.modelCategoryLabel,
-  modelInUse: () => import_builderforce_brain_embedded13.modelInUse,
+  modelCategoryLabel: () => import_builderforce_brain_embedded15.modelCategoryLabel,
+  modelInUse: () => import_builderforce_brain_embedded15.modelInUse,
   parseAskUser: () => import_builderforce_brain_embedded.parseAskUser,
   pendingChangesSummary: () => pendingChangesSummary,
-  perMillionUsd: () => import_builderforce_brain_embedded13.perMillionUsd,
+  perMillionUsd: () => import_builderforce_brain_embedded15.perMillionUsd,
   planIsPaid: () => planIsPaid,
   preferredEvermindBuild: () => preferredEvermindBuild,
-  premiumCostLabel: () => import_builderforce_brain_embedded13.premiumCostLabel,
-  productForPlan: () => import_builderforce_brain_embedded13.productForPlan,
-  productModelName: () => import_builderforce_brain_embedded13.productModelName,
+  premiumCostLabel: () => import_builderforce_brain_embedded15.premiumCostLabel,
+  productForPlan: () => import_builderforce_brain_embedded15.productForPlan,
+  productModelName: () => import_builderforce_brain_embedded15.productModelName,
   promptOptionsLabels: () => promptOptionsLabels,
   promptTrailingAction: () => promptTrailingAction,
   publishedEvermindModels: () => publishedEvermindModels,
   resolvePendingChangesLabels: () => resolvePendingChangesLabels,
   resolveTeacherOptions: () => resolveTeacherOptions,
-  revealsModelId: () => import_builderforce_brain_embedded13.revealsModelId,
+  revealsModelId: () => import_builderforce_brain_embedded15.revealsModelId,
   selectPendingAskUser: () => import_builderforce_brain_embedded.selectPendingAskUser,
   serializeAskUser: () => import_builderforce_brain_embedded.serializeAskUser,
   shellOutcomeOf: () => shellOutcomeOf,
+  spendLabels: () => spendLabels,
   strandedReplyKey: () => strandedReplyKey,
   streamingNode: () => streamingNode,
   stripAskUser: () => import_builderforce_brain_embedded.stripAskUser,
+  subscribeConsumptionSnapshot: () => subscribeConsumptionSnapshot,
   timelineCatalogLookup: () => timelineCatalogLookup,
   timelineLabelsFrom: () => timelineLabelsFrom,
   toolPreview: () => toolPreview,
   toolStepView: () => toolStepView,
   useChatActivitySignal: () => useChatActivitySignal,
+  useChatMemorySwitch: () => useChatMemorySwitch,
   useChatParticipants: () => useChatParticipants,
+  useConsumptionSnapshot: () => useConsumptionSnapshot,
+  useLocalModels: () => useLocalModels,
   useMentionAutocomplete: () => useMentionAutocomplete,
   usePopover: () => usePopover,
+  useQueuedTurns: () => useQueuedTurns,
   useRecipientChoice: () => useRecipientChoice,
   useTicketAutocomplete: () => useTicketAutocomplete,
-  useVoiceDictation: () => useVoiceDictation
+  useVoiceDictation: () => useVoiceDictation,
+  workStatusLabels: () => workStatusLabels
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -742,7 +769,7 @@ function buildSettledTimeline(messages, trace) {
     if (message.role === "user") {
       const atts = attachmentsOf(message);
       const images = atts.filter((a) => a.imageUrl).map((a) => ({ url: a.imageUrl, name: a.name }));
-      const imageNames = new Set(images.map((im) => im.name).filter((n) => !!n));
+      const imageNames = new Set(images.map((im) => im.name).filter((n2) => !!n2));
       nodes.push({
         key: `msg-${message.id}`,
         kind: "user",
@@ -800,7 +827,7 @@ function buildSettledTimeline(messages, trace) {
       if (node) nodes.push(node);
     }
   });
-  const rank = (n, i) => i < messageNodeCount ? n.order : TRACE_RANK;
+  const rank = (n2, i) => i < messageNodeCount ? n2.order : TRACE_RANK;
   return nodes.map((node, i) => ({ node, i, rank: rank(node, i) })).sort((a, b) => a.node.ts - b.node.ts || a.rank - b.rank || a.i - b.i).map((e) => e.node);
 }
 function strandedReplyKey(nodes, isRunning) {
@@ -1409,7 +1436,7 @@ function BrainTimelineInner({
   );
   const isEmpty = nodes.length === 0 && !loading;
   const hasSubagents = (0, import_react6.useMemo)(
-    () => nodes.some((n) => n.kind === "assistant" && (0, import_builderforce_brain_embedded5.parseSubagentOrigin)(n.message) !== null),
+    () => nodes.some((n2) => n2.kind === "assistant" && (0, import_builderforce_brain_embedded5.parseSubagentOrigin)(n2.message) !== null),
     [nodes]
   );
   const focusedId = revealMessage?.id ?? null;
@@ -1882,13 +1909,39 @@ function useVoiceDictation(getValue, onChange) {
 }
 
 // src/promptOptions/PromptOptionsMenu.tsx
-var import_react9 = require("react");
-var import_builderforce_brain_embedded7 = require("@seanhogg/builderforce-brain-embedded");
+var import_react12 = require("react");
+var import_builderforce_brain_embedded8 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/promptOptions/types.ts
 var import_builderforce_brain_embedded6 = require("@seanhogg/builderforce-brain-embedded");
+
+// src/localModels/labels.ts
+var DEFAULT_LOCAL_MODEL_LABELS = {
+  localCatalogHeading: "Download to run in this window",
+  localDownload: "Download ({size})",
+  localDownloading: "Downloading\u2026 {percent}%",
+  localCancel: "Cancel",
+  localRemove: "Remove",
+  localMoreActions: "More actions",
+  localTools: "Tools",
+  localContext: "{tokens} context",
+  localDownloadFailed: "Download failed \u2014 try again.",
+  localReasonWebgpu: "Needs WebGPU, which this browser or GPU does not offer.",
+  localReasonF16: "Needs WebGPU 16-bit shaders, which this GPU does not offer.",
+  localReasonBuffer: "Needs larger GPU buffers than this device allows.",
+  localReasonEngine: "This engine is not available here yet."
+};
+var LOCAL_UNSUPPORTED_LABEL = {
+  webgpu_unavailable: "localReasonWebgpu",
+  shader_f16_unavailable: "localReasonF16",
+  buffer_too_small: "localReasonBuffer",
+  engine_unavailable: "localReasonEngine"
+};
+
+// src/promptOptions/types.ts
 var DEFAULT_PROMPT_OPTIONS_LABELS = {
   ...import_builderforce_brain_embedded6.DEFAULT_MODEL_CHOICE_LABELS,
+  ...DEFAULT_LOCAL_MODEL_LABELS,
   options: "Options",
   mode: "Mode",
   memory: "Memory",
@@ -1949,7 +2002,7 @@ function usePopover() {
   return { open, toggle, close, rootRef };
 }
 
-// src/promptOptions/PromptOptionsMenu.tsx
+// src/promptOptions/ModePane.tsx
 var import_jsx_runtime10 = require("react/jsx-runtime");
 var IconConsolidate = () => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("path", { d: "M2 5.5 4.5 8 2 10.5M14 5.5 11.5 8 14 10.5M6.5 3v10M9.5 3v10", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" }) });
 var IconFork = () => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
@@ -1958,6 +2011,440 @@ var IconFork = () => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("svg", { wid
   /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("circle", { cx: "12", cy: "3.5", r: "1.5", fill: "currentColor" }),
   /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("path", { d: "M4 5v6M4 8h4.5A3.5 3.5 0 0 0 12 4.5V5", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round", strokeLinejoin: "round" })
 ] });
+function ModePane({ labels, mode, memory, autoMode, session, close }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+    mode && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(import_jsx_runtime10.Fragment, { children: mode.choices.map((choice) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+      "button",
+      {
+        type: "button",
+        role: "radio",
+        "aria-checked": choice.value === mode.value,
+        className: `bf-pmenu__item${choice.value === mode.value ? " is-active" : ""}`,
+        onClick: () => {
+          mode.onChange(choice.value);
+          close();
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: choice.icon ?? "" }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+            choice.label,
+            choice.hint && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: choice.hint })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: choice.value === mode.value ? "\u2713" : "" })
+        ]
+      },
+      choice.value
+    )) }),
+    memory && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+      mode && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+        "button",
+        {
+          type: "button",
+          role: "checkbox",
+          "aria-checked": memory.enabled,
+          disabled: !!memory.unavailableReason,
+          className: `bf-pmenu__item${memory.enabled && !memory.unavailableReason ? " is-active" : ""}`,
+          title: memory.unavailableReason,
+          onClick: () => {
+            if (!memory.unavailableReason) memory.onChange(!memory.enabled);
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F9E0}" }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+              labels.memory,
+              (memory.unavailableReason ?? memory.describe?.(memory.enabled)) && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: memory.unavailableReason ?? memory.describe?.(memory.enabled) })
+            ] }),
+            !memory.unavailableReason && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__hint", children: memory.enabled ? labels.on : labels.off }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: memory.enabled && !memory.unavailableReason ? "\u2713" : "" })
+          ]
+        }
+      )
+    ] }),
+    autoMode && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+      (mode || memory) && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+        "button",
+        {
+          type: "button",
+          role: "checkbox",
+          "aria-checked": autoMode.enabled,
+          className: `bf-pmenu__item${autoMode.enabled ? " is-active" : ""}`,
+          onClick: () => autoMode.onChange(!autoMode.enabled),
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u26A1" }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+              labels.autoMode,
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: autoMode.description ?? labels.autoModeHint })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__hint", children: autoMode.enabled ? labels.on : labels.off }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: autoMode.enabled ? "\u2713" : "" })
+          ]
+        }
+      )
+    ] }),
+    session && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
+      (mode || memory || autoMode) && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__group", children: labels.conversation }),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+        "button",
+        {
+          type: "button",
+          disabled: !session.canConsolidate || session.consolidating,
+          className: "bf-pmenu__item",
+          title: !session.canConsolidate ? labels.sessionUnavailable : void 0,
+          onClick: () => {
+            if (session.canConsolidate && !session.consolidating) {
+              session.onConsolidate();
+              close();
+            }
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(IconConsolidate, {}) }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+              session.consolidating ? labels.consolidating : labels.consolidate,
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: labels.consolidateHint })
+            ] })
+          ]
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+        "button",
+        {
+          type: "button",
+          disabled: !session.canConsolidate || session.forking,
+          className: "bf-pmenu__item",
+          title: !session.canConsolidate ? labels.sessionUnavailable : void 0,
+          onClick: () => {
+            if (session.canConsolidate && !session.forking) {
+              session.onFork();
+              close();
+            }
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(IconFork, {}) }),
+            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+              session.forking ? labels.forking : labels.fork,
+              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: labels.forkHint })
+            ] })
+          ]
+        }
+      )
+    ] })
+  ] });
+}
+
+// src/promptOptions/ModelPane.tsx
+var import_react11 = require("react");
+var import_builderforce_brain_embedded7 = require("@seanhogg/builderforce-brain-embedded");
+
+// src/localModels/LocalModelRow.tsx
+var import_react9 = require("react");
+
+// src/localModels/localModelView.ts
+function fillTemplate(template, values) {
+  return template.replace(/\{(\w+)\}/g, (whole, key) => key in values ? String(values[key]) : whole);
+}
+var GB = 1e9;
+var MB = 1e6;
+function formatDownloadSize(bytes, locale) {
+  const big = bytes >= GB;
+  return new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: big ? "gigabyte" : "megabyte",
+    maximumFractionDigits: big ? 1 : 0
+  }).format(big ? bytes / GB : Math.max(1, Math.round(bytes / MB)));
+}
+function formatParams(params, locale) {
+  return new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(params);
+}
+function formatContextTokens(tokens) {
+  return `${Math.round(tokens / 1024)}K`;
+}
+function localModelMeta(row, labels, locale) {
+  return [formatParams(row.params, locale), fillTemplate(labels.localContext, { tokens: formatContextTokens(row.contextTokens) })].join(" \xB7 ");
+}
+function unsupportedReason(row, labels) {
+  return labels[LOCAL_UNSUPPORTED_LABEL[row.reason ?? "engine_unavailable"]];
+}
+function progressPercent(row) {
+  return Math.max(0, Math.min(100, Math.round((row.progress ?? 0) * 100)));
+}
+
+// src/localModels/LocalModelRow.tsx
+var import_jsx_runtime11 = require("react/jsx-runtime");
+function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownload, onCancel, onRemove }) {
+  const [menuOpen, setMenuOpen] = (0, import_react9.useState)(false);
+  const ready = row.state === "ready";
+  const percent = progressPercent(row);
+  const meta = localModelMeta(row, labels, locale);
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("li", { className: `bf-lmodel${active ? " is-active" : ""}${row.state === "unsupported" ? " is-unsupported" : ""}`, "data-state": row.state, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+      "button",
+      {
+        type: "button",
+        className: "bf-lmodel__main",
+        disabled: !ready,
+        "aria-pressed": ready ? active : void 0,
+        onClick: () => onSelect(row.ref),
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("span", { className: "bf-lmodel__name", children: [
+            row.label,
+            row.tools && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-lmodel__badge", children: labels.localTools })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-lmodel__meta", children: meta }),
+          row.state === "unsupported" && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-lmodel__reason", children: unsupportedReason(row, labels) }),
+          failed && row.state === "absent" && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-lmodel__reason", role: "alert", children: labels.localDownloadFailed })
+        ]
+      }
+    ),
+    row.state === "absent" && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", className: "bf-lmodel__action", onClick: () => onDownload(row.ref), children: fillTemplate(labels.localDownload, { size: formatDownloadSize(row.bytes, locale) }) }),
+    row.state === "downloading" && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "bf-lmodel__progress", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+        "div",
+        {
+          className: "bf-lmodel__bar",
+          role: "progressbar",
+          "aria-valuemin": 0,
+          "aria-valuemax": 100,
+          "aria-valuenow": percent,
+          "aria-label": fillTemplate(labels.localDownloading, { percent }),
+          children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-lmodel__fill", style: { width: `${percent}%` } })
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-lmodel__pct", children: fillTemplate(labels.localDownloading, { percent }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("button", { type: "button", className: "bf-lmodel__action", onClick: () => onCancel(row.ref), children: labels.localCancel })
+    ] }),
+    ready && /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "bf-lmodel__more", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+        "button",
+        {
+          type: "button",
+          className: "bf-lmodel__kebab",
+          "aria-label": labels.localMoreActions,
+          "aria-expanded": menuOpen,
+          onClick: () => setMenuOpen((open) => !open),
+          children: "\u22EF"
+        }
+      ),
+      menuOpen && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
+        "button",
+        {
+          type: "button",
+          className: "bf-lmodel__action bf-lmodel__action--danger",
+          onClick: () => {
+            setMenuOpen(false);
+            onRemove(row.ref);
+          },
+          children: labels.localRemove
+        }
+      )
+    ] })
+  ] });
+}
+
+// src/localModels/LocalModelList.tsx
+var import_jsx_runtime12 = require("react/jsx-runtime");
+function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelect }) {
+  const { rows } = state;
+  if (!rows || rows.length === 0) return null;
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "bf-lmodels", children: [
+    !hideHeading && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-pmenu__group", children: labels.localCatalogHeading }),
+    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("ul", { className: "bf-lmodels__list", children: rows.map((row) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+      LocalModelRow,
+      {
+        row,
+        labels,
+        active: row.ref === activeRef,
+        failed: state.failed.has(row.ref),
+        ...locale ? { locale } : {},
+        onSelect,
+        onDownload: state.download,
+        onCancel: state.cancel,
+        onRemove: state.remove
+      },
+      row.ref
+    )) })
+  ] });
+}
+
+// src/localModels/useLocalModels.ts
+var import_react10 = require("react");
+var controllersByStore = /* @__PURE__ */ new WeakMap();
+function controllersOf(store) {
+  let map = controllersByStore.get(store);
+  if (!map) {
+    map = /* @__PURE__ */ new Map();
+    controllersByStore.set(store, map);
+  }
+  return map;
+}
+var NO_ROWS = [];
+function useLocalModels(store) {
+  const [rows, setRows] = (0, import_react10.useState)(store ? null : NO_ROWS);
+  const [failed, setFailed] = (0, import_react10.useState)(() => /* @__PURE__ */ new Set());
+  const live = (0, import_react10.useRef)(true);
+  (0, import_react10.useEffect)(() => {
+    live.current = true;
+    if (!store) {
+      setRows(NO_ROWS);
+      return () => {
+        live.current = false;
+      };
+    }
+    setRows(null);
+    let running = false;
+    let queued = false;
+    const refresh = () => {
+      if (running) {
+        queued = true;
+        return;
+      }
+      running = true;
+      void store.listLocalModels().then(
+        (next) => {
+          if (live.current) setRows(next);
+        },
+        () => {
+          if (live.current) setRows((prev) => prev ?? NO_ROWS);
+        }
+      ).finally(() => {
+        running = false;
+        if (queued && live.current) {
+          queued = false;
+          refresh();
+        }
+      });
+    };
+    refresh();
+    const unsubscribe = store.subscribe(refresh);
+    return () => {
+      live.current = false;
+      unsubscribe();
+    };
+  }, [store]);
+  const download = (0, import_react10.useCallback)(
+    (ref) => {
+      if (!store) return;
+      const controllers = controllersOf(store);
+      if (controllers.has(ref)) return;
+      const controller = new AbortController();
+      controllers.set(ref, controller);
+      setFailed((prev) => {
+        if (!prev.has(ref)) return prev;
+        const next = new Set(prev);
+        next.delete(ref);
+        return next;
+      });
+      void store.download(ref, void 0, controller.signal).catch(() => {
+        if (!controller.signal.aborted && live.current) setFailed((prev) => new Set(prev).add(ref));
+      }).finally(() => {
+        if (controllers.get(ref) === controller) controllers.delete(ref);
+      });
+    },
+    [store]
+  );
+  const cancel = (0, import_react10.useCallback)(
+    (ref) => {
+      if (store) controllersOf(store).get(ref)?.abort();
+    },
+    [store]
+  );
+  const remove = (0, import_react10.useCallback)(
+    (ref) => {
+      if (store) void store.remove(ref).catch(() => void 0);
+    },
+    [store]
+  );
+  return { rows, failed, download, cancel, remove };
+}
+
+// src/promptOptions/ModelPane.tsx
+var import_jsx_runtime13 = require("react/jsx-runtime");
+function ModelPane({ model, labels, identity, inUse, onPicked }) {
+  const [query, setQuery] = (0, import_react11.useState)("");
+  const [filter, setFilter] = (0, import_react11.useState)("all");
+  const local = useLocalModels(model.localStore);
+  const hasStore = !!model.localStore;
+  const items = (0, import_react11.useMemo)(
+    () => (0, import_builderforce_brain_embedded7.buildModelItems)((0, import_builderforce_brain_embedded7.withReadyPageModels)(model.options, local.rows), labels, identity),
+    [model.options, local.rows, labels, identity]
+  );
+  const storeKeys = (0, import_react11.useMemo)(() => new Set((local.rows ?? []).map((row) => `model:${row.ref}`)), [local.rows]);
+  const categories = (0, import_react11.useMemo)(
+    () => import_builderforce_brain_embedded7.MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category) || category === "local" && hasStore),
+    [items, hasStore]
+  );
+  const activeKey = (0, import_builderforce_brain_embedded7.activeModelKey)(model.selection);
+  const activeRef = model.selection.mode === "model" ? model.selection.model : void 0;
+  const pick = (selection) => {
+    model.onChange(selection);
+    setQuery("");
+    onPicked();
+  };
+  const pickLocal = (ref) => pick({ mode: "model", model: ref });
+  const renderItems = (rows) => rows.map((item) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
+    "button",
+    {
+      type: "button",
+      role: "option",
+      "aria-selected": item.key === activeKey,
+      className: `bf-pmenu__option${item.key === activeKey ? " is-active" : ""}`,
+      onClick: () => pick(item.selection),
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-pmenu__optName", children: item.label }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-pmenu__optTag", children: (0, import_builderforce_brain_embedded7.modelCategoryLabel)(item.category, labels) }),
+        item.detail ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-pmenu__optDetail", children: item.detail }) : null
+      ]
+    },
+    item.key
+  ));
+  const localSection = /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(LocalModelList, { state: local, labels, ...activeRef ? { activeRef } : {}, onSelect: pickLocal });
+  const visible = (0, import_builderforce_brain_embedded7.filterModelItems)(items, labels, query, filter);
+  const listed = filter === "local" ? visible.filter((item) => !storeKeys.has(item.key)) : visible;
+  const lockedLocal = items.filter((item) => item.category === "auto" ? model.selection.mode !== "auto" : item.category === "local" && !storeKeys.has(item.key));
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+    inUse && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-pmenu__info", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+      labels.modelInUse,
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-pmenu__desc", children: inUse.name })
+    ] }) }),
+    identity.canChoose ? /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+        "input",
+        {
+          className: "bf-pmenu__search",
+          value: query,
+          onChange: (e) => setQuery(e.target.value),
+          placeholder: labels.searchModels,
+          "aria-label": labels.searchModels
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-pmenu__filters", "aria-label": labels.filterModels, children: ["all", ...categories].map((category) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+        "button",
+        {
+          type: "button",
+          className: `bf-pmenu__filter${filter === category ? " is-active" : ""}`,
+          "aria-pressed": filter === category,
+          onClick: () => setFilter(category),
+          children: category === "all" ? labels.all : (0, import_builderforce_brain_embedded7.modelCategoryLabel)(category, labels)
+        },
+        category
+      )) }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "bf-pmenu__list", role: "listbox", "aria-label": labels.chooseModel, children: [
+        renderItems(listed),
+        !listed.length && filter !== "local" && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-pmenu__empty", children: labels.noModels })
+      ] }),
+      filter === "local" && localSection
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+      !model.identityPending && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-pmenu__info", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "bf-pmenu__desc", children: labels.modelLocked }) }),
+      lockedLocal.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-pmenu__list", role: "listbox", "aria-label": labels.chooseModel, children: renderItems(lockedLocal) }),
+      localSection
+    ] })
+  ] });
+}
+
+// src/promptOptions/PromptOptionsMenu.tsx
+var import_jsx_runtime14 = require("react/jsx-runtime");
 var EFFORT_LEVELS = ["quick", "balanced", "thorough"];
 var EFFORT_ICON = { quick: "\u{1F3C3}", balanced: "\u2696\uFE0F", thorough: "\u{1F3AF}" };
 var EFFORT_LABEL = {
@@ -1983,29 +2470,20 @@ function PromptOptionsMenu({
   onAccountSettings,
   className
 }) {
-  const labels = (0, import_react9.useMemo)(() => promptOptionsLabels(labelOverrides), [labelOverrides]);
+  const labels = (0, import_react12.useMemo)(() => promptOptionsLabels(labelOverrides), [labelOverrides]);
   const { open, toggle, close, rootRef } = usePopover();
-  const [query, setQuery] = (0, import_react9.useState)("");
-  const [filter, setFilter] = (0, import_react9.useState)("all");
-  const [tab, setTab] = (0, import_react9.useState)("mode");
-  const identity = model?.identity ?? import_builderforce_brain_embedded7.DEFAULT_MODEL_IDENTITY;
-  const items = (0, import_react9.useMemo)(() => model ? (0, import_builderforce_brain_embedded7.buildModelItems)(model.options, labels, identity) : [], [model, labels, identity]);
-  const inUse = (0, import_react9.useMemo)(
-    () => model ? (0, import_builderforce_brain_embedded7.modelInUse)(model.selection, items, labels, model.effective, identity) : null,
+  const [tab, setTab] = (0, import_react12.useState)("mode");
+  const identity = model?.identity ?? import_builderforce_brain_embedded8.DEFAULT_MODEL_IDENTITY;
+  const items = (0, import_react12.useMemo)(() => model ? (0, import_builderforce_brain_embedded8.buildModelItems)(model.options, labels, identity) : [], [model, labels, identity]);
+  const inUse = (0, import_react12.useMemo)(
+    () => model ? (0, import_builderforce_brain_embedded8.modelInUse)(model.selection, items, labels, model.effective, identity) : null,
     [model, items, labels, identity]
   );
-  const categories = (0, import_react9.useMemo)(
-    () => import_builderforce_brain_embedded7.MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category)),
-    [items]
-  );
-  const visible = (0, import_react9.useMemo)(() => (0, import_builderforce_brain_embedded7.filterModelItems)(items, labels, query, filter), [items, labels, query, filter]);
   const hasModeTab = !!(mode || memory || autoMode || session);
   const hasEffortTab = !!(onEffortChange || onThinkingChange);
   const hasModelTab = !!model;
   const hasStatusTab = !!(status || onAccountSettings);
   if (!hasModeTab && !hasEffortTab && !hasModelTab && !hasStatusTab) return null;
-  const canChoose = identity.canChoose;
-  const activeKey = model ? (0, import_builderforce_brain_embedded7.activeModelKey)(model.selection) : "";
   const activeMode = mode?.choices.find((choice) => choice.value === mode.value);
   const title = [
     labels.options,
@@ -2018,8 +2496,8 @@ function PromptOptionsMenu({
   if (hasModelTab) tabs.push({ id: "model", label: labels.model });
   if (hasStatusTab) tabs.push({ id: "status", label: labels.status ?? "Status" });
   const activeTab = tabs.some((entry) => entry.id === tab) ? tab : tabs[0].id;
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { ref: rootRef, className: ["bf-pmenu", className].filter(Boolean).join(" "), children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { ref: rootRef, className: ["bf-pmenu", className].filter(Boolean).join(" "), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
       "button",
       {
         type: "button",
@@ -2031,17 +2509,17 @@ function PromptOptionsMenu({
         "aria-expanded": open,
         onClick: toggle,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__slash", "aria-hidden": "true", children: "/" }),
-          activeMode && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__mode", children: [
-            activeMode.icon && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { "aria-hidden": "true", children: activeMode.icon }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "bf-pmenu__slash", "aria-hidden": "true", children: "/" }),
+          activeMode && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { className: "bf-pmenu__mode", children: [
+            activeMode.icon && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { "aria-hidden": "true", children: activeMode.icon }),
             activeMode.label
           ] }),
-          inUse && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__model", children: inUse.name })
+          inUse && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "bf-pmenu__model", children: inUse.name })
         ]
       }
     ),
-    open && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "bf-pmenu__pop bf-pmenu__pop--tabs", role: "dialog", "aria-label": labels.options, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__tabs", role: "tablist", "aria-label": labels.options, children: tabs.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+    open && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "bf-pmenu__pop bf-pmenu__pop--tabs", role: "dialog", "aria-label": labels.options, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "bf-pmenu__tabs", role: "tablist", "aria-label": labels.options, children: tabs.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
         "button",
         {
           type: "button",
@@ -2055,7 +2533,7 @@ function PromptOptionsMenu({
         },
         entry.id
       )) }),
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
         "div",
         {
           className: "bf-pmenu__pane",
@@ -2063,128 +2541,9 @@ function PromptOptionsMenu({
           id: `bf-pmenu-pane-${activeTab}`,
           "aria-labelledby": `bf-pmenu-tab-${activeTab}`,
           children: [
-            activeTab === "mode" && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
-              mode && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(import_jsx_runtime10.Fragment, { children: mode.choices.map((choice) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
-                "button",
-                {
-                  type: "button",
-                  role: "radio",
-                  "aria-checked": choice.value === mode.value,
-                  className: `bf-pmenu__item${choice.value === mode.value ? " is-active" : ""}`,
-                  onClick: () => {
-                    mode.onChange(choice.value);
-                    close();
-                  },
-                  children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: choice.icon ?? "" }),
-                    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
-                      choice.label,
-                      choice.hint && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: choice.hint })
-                    ] }),
-                    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: choice.value === mode.value ? "\u2713" : "" })
-                  ]
-                },
-                choice.value
-              )) }),
-              memory && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
-                mode && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
-                  "button",
-                  {
-                    type: "button",
-                    role: "checkbox",
-                    "aria-checked": memory.enabled,
-                    disabled: !!memory.unavailableReason,
-                    className: `bf-pmenu__item${memory.enabled && !memory.unavailableReason ? " is-active" : ""}`,
-                    title: memory.unavailableReason,
-                    onClick: () => {
-                      if (!memory.unavailableReason) memory.onChange(!memory.enabled);
-                    },
-                    children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F9E0}" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
-                        labels.memory,
-                        (memory.unavailableReason ?? memory.describe?.(memory.enabled)) && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: memory.unavailableReason ?? memory.describe?.(memory.enabled) })
-                      ] }),
-                      !memory.unavailableReason && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__hint", children: memory.enabled ? labels.on : labels.off }),
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: memory.enabled && !memory.unavailableReason ? "\u2713" : "" })
-                    ]
-                  }
-                )
-              ] }),
-              autoMode && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
-                (mode || memory) && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
-                  "button",
-                  {
-                    type: "button",
-                    role: "checkbox",
-                    "aria-checked": autoMode.enabled,
-                    className: `bf-pmenu__item${autoMode.enabled ? " is-active" : ""}`,
-                    onClick: () => autoMode.onChange(!autoMode.enabled),
-                    children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u26A1" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
-                        labels.autoMode,
-                        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: autoMode.description ?? labels.autoModeHint })
-                      ] }),
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__hint", children: autoMode.enabled ? labels.on : labels.off }),
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: autoMode.enabled ? "\u2713" : "" })
-                    ]
-                  }
-                )
-              ] }),
-              session && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
-                (mode || memory || autoMode) && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__group", children: labels.conversation }),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
-                  "button",
-                  {
-                    type: "button",
-                    disabled: !session.canConsolidate || session.consolidating,
-                    className: "bf-pmenu__item",
-                    title: !session.canConsolidate ? labels.sessionUnavailable : void 0,
-                    onClick: () => {
-                      if (session.canConsolidate && !session.consolidating) {
-                        session.onConsolidate();
-                        close();
-                      }
-                    },
-                    children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(IconConsolidate, {}) }),
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
-                        session.consolidating ? labels.consolidating : labels.consolidate,
-                        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: labels.consolidateHint })
-                      ] })
-                    ]
-                  }
-                ),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
-                  "button",
-                  {
-                    type: "button",
-                    disabled: !session.canConsolidate || session.forking,
-                    className: "bf-pmenu__item",
-                    title: !session.canConsolidate ? labels.sessionUnavailable : void 0,
-                    onClick: () => {
-                      if (session.canConsolidate && !session.forking) {
-                        session.onFork();
-                        close();
-                      }
-                    },
-                    children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(IconFork, {}) }),
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
-                        session.forking ? labels.forking : labels.fork,
-                        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: labels.forkHint })
-                      ] })
-                    ]
-                  }
-                )
-              ] })
-            ] }),
-            activeTab === "effort" && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
-              onEffortChange && EFFORT_LEVELS.map((level) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+            activeTab === "mode" && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(ModePane, { labels, mode, memory, autoMode, session, close }),
+            activeTab === "effort" && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+              onEffortChange && EFFORT_LEVELS.map((level) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
                 "button",
                 {
                   type: "button",
@@ -2193,19 +2552,19 @@ function PromptOptionsMenu({
                   className: `bf-pmenu__item${effort === level ? " is-active" : ""}`,
                   onClick: () => onEffortChange(level),
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: EFFORT_ICON[level] }),
-                    /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: EFFORT_ICON[level] }),
+                    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { className: "bf-pmenu__lbl", children: [
                       labels[EFFORT_LABEL[level]],
-                      describeEffort && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: describeEffort(level) })
+                      describeEffort && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "bf-pmenu__desc", children: describeEffort(level) })
                     ] }),
-                    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: effort === level ? "\u2713" : "" })
+                    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: effort === level ? "\u2713" : "" })
                   ]
                 },
                 level
               )),
-              onThinkingChange && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
-                onEffortChange && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__sep" }),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+              onThinkingChange && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+                onEffortChange && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "bf-pmenu__sep" }),
+                /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
                   "button",
                   {
                     type: "button",
@@ -2214,72 +2573,22 @@ function PromptOptionsMenu({
                     className: `bf-pmenu__item${thinking ? " is-active" : ""}`,
                     onClick: () => onThinkingChange(!thinking),
                     children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F4AD}" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F4AD}" }),
+                      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { className: "bf-pmenu__lbl", children: [
                         labels.thinking,
-                        describeThinking && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: describeThinking(!!thinking) })
+                        describeThinking && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "bf-pmenu__desc", children: describeThinking(!!thinking) })
                       ] }),
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__hint", children: thinking ? labels.on : labels.off }),
-                      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: thinking ? "\u2713" : "" })
+                      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "bf-pmenu__hint", children: thinking ? labels.on : labels.off }),
+                      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: thinking ? "\u2713" : "" })
                     ]
                   }
                 )
               ] })
             ] }),
-            activeTab === "model" && model && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
-              inUse && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__info", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { className: "bf-pmenu__lbl", children: [
-                labels.modelInUse,
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: inUse.name })
-              ] }) }),
-              canChoose ? /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
-                  "input",
-                  {
-                    className: "bf-pmenu__search",
-                    value: query,
-                    onChange: (e) => setQuery(e.target.value),
-                    placeholder: labels.searchModels,
-                    "aria-label": labels.searchModels
-                  }
-                ),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__filters", "aria-label": labels.filterModels, children: ["all", ...categories].map((category) => /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
-                  "button",
-                  {
-                    type: "button",
-                    className: `bf-pmenu__filter${filter === category ? " is-active" : ""}`,
-                    onClick: () => setFilter(category),
-                    children: category === "all" ? labels.all : (0, import_builderforce_brain_embedded7.modelCategoryLabel)(category, labels)
-                  },
-                  category
-                )) }),
-                /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "bf-pmenu__list", role: "listbox", "aria-label": labels.chooseModel, children: [
-                  visible.map((item) => /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
-                    "button",
-                    {
-                      type: "button",
-                      role: "option",
-                      "aria-selected": item.key === activeKey,
-                      className: `bf-pmenu__option${item.key === activeKey ? " is-active" : ""}`,
-                      onClick: () => {
-                        model.onChange(item.selection);
-                        setQuery("");
-                        close();
-                      },
-                      children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__optName", children: item.label }),
-                        /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__optTag", children: (0, import_builderforce_brain_embedded7.modelCategoryLabel)(item.category, labels) }),
-                        item.detail ? /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__optDetail", children: item.detail }) : null
-                      ]
-                    },
-                    item.key
-                  )),
-                  !visible.length && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__empty", children: labels.noModels })
-                ] })
-              ] }) : /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("div", { className: "bf-pmenu__info", children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__desc", children: labels.modelLocked }) })
-            ] }),
-            activeTab === "status" && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "bf-pmenu__status", children: [
+            activeTab === "model" && model && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(ModelPane, { model, labels, identity, inUse, onPicked: close }),
+            activeTab === "status" && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "bf-pmenu__status", children: [
               status,
-              onAccountSettings && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+              onAccountSettings && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
                 "button",
                 {
                   type: "button",
@@ -2289,8 +2598,8 @@ function PromptOptionsMenu({
                     onAccountSettings();
                   },
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u2699\uFE0F" }),
-                    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: "bf-pmenu__lbl", children: labels.accountSettings })
+                    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u2699\uFE0F" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "bf-pmenu__lbl", children: labels.accountSettings })
                   ]
                 }
               )
@@ -2303,10 +2612,10 @@ function PromptOptionsMenu({
 }
 
 // src/index.ts
-var import_builderforce_brain_embedded13 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded15 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/picker/PickerShell.tsx
-var import_jsx_runtime11 = require("react/jsx-runtime");
+var import_jsx_runtime15 = require("react/jsx-runtime");
 function PickerShell({
   eyebrow,
   leading,
@@ -2317,10 +2626,10 @@ function PickerShell({
   children
 }) {
   const { open, toggle, close, rootRef } = usePopover();
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { ref: rootRef, className: `bf-picker${active ? " is-active" : ""}${open ? " is-open" : ""}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-picker__eyebrow", "aria-hidden": "true", children: eyebrow }),
-    leading != null && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-picker__lead", children: leading }),
-    /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { ref: rootRef, className: `bf-picker${active ? " is-active" : ""}${open ? " is-open" : ""}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-picker__eyebrow", "aria-hidden": "true", children: eyebrow }),
+    leading != null && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-picker__lead", children: leading }),
+    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
       "button",
       {
         type: "button",
@@ -2332,16 +2641,16 @@ function PickerShell({
         "aria-expanded": open,
         onClick: toggle,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-picker__name", children: name }),
-          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-picker__caret", "aria-hidden": "true", children: "\u25BE" })
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-picker__name", children: name }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-picker__caret", "aria-hidden": "true", children: "\u25BE" })
         ]
       }
     ),
-    open && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: "bf-pmenu__pop", role: "menu", "aria-label": title, children: children(close) })
+    open && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "bf-pmenu__pop", role: "menu", "aria-label": title, children: children(close) })
   ] });
 }
 function PickerItem({ icon, label, hint, active = false, onClick }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
     "button",
     {
       type: "button",
@@ -2350,18 +2659,18 @@ function PickerItem({ icon, label, hint, active = false, onClick }) {
       className: `bf-pmenu__item${active ? " is-active" : ""}`,
       onClick,
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: icon }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-pmenu__lbl", children: label }),
-        hint != null && /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-pmenu__hint", children: hint }),
-        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: active ? "\u2713" : "" })
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: icon }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-pmenu__lbl", children: label }),
+        hint != null && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-pmenu__hint", children: hint }),
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: active ? "\u2713" : "" })
       ]
     }
   );
 }
-var IconBolt = () => /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("path", { d: "M9.2 1 3.4 8.6h3.4L6 15l6.2-8.1H8.6L9.2 1z" }) });
+var IconBolt = () => /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("svg", { width: "13", height: "13", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("path", { d: "M9.2 1 3.4 8.6h3.4L6 15l6.2-8.1H8.6L9.2 1z" }) });
 
 // src/recipient/RecipientPicker.tsx
-var import_jsx_runtime12 = require("react/jsx-runtime");
+var import_jsx_runtime16 = require("react/jsx-runtime");
 var DEFAULT_RECIPIENT_PICKER_LABELS = {
   to: "To",
   title: "Send to",
@@ -2373,8 +2682,8 @@ var DEFAULT_RECIPIENT_PICKER_LABELS = {
 function RecipientPicker({ participants, recipient, onChoose, labels, disabled, renderAvatar }) {
   if (participants.length === 0) return null;
   const l = { ...DEFAULT_RECIPIENT_PICKER_LABELS, ...labels };
-  const avatar = recipient ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(Avatar, { name: recipient.name, kind: recipient.kind, size: 16 }) : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(IconBolt, {});
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+  const avatar = recipient ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Avatar, { name: recipient.name, kind: recipient.kind, size: 16 }) : /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(IconBolt, {});
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
     PickerShell,
     {
       eyebrow: l.to,
@@ -2383,12 +2692,12 @@ function RecipientPicker({ participants, recipient, onChoose, labels, disabled, 
       title: l.title,
       active: recipient != null,
       disabled,
-      children: (close) => /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(import_jsx_runtime12.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "bf-pmenu__group", children: l.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+      children: (close) => /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(import_jsx_runtime16.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "bf-pmenu__group", children: l.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
           PickerItem,
           {
-            icon: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(IconBolt, {}),
+            icon: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(IconBolt, {}),
             label: l.brain,
             hint: l.brainHint,
             active: recipient == null,
@@ -2398,10 +2707,10 @@ function RecipientPicker({ participants, recipient, onChoose, labels, disabled, 
             }
           }
         ),
-        participants.map((p) => /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+        participants.map((p) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
           PickerItem,
           {
-            icon: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(Avatar, { name: p.name, kind: p.kind, size: 16 }),
+            icon: /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(Avatar, { name: p.name, kind: p.kind, size: 16 }),
             label: p.name,
             hint: p.kind === "agent" ? l.agentHint : l.humanHint,
             active: recipient?.kind === p.kind && recipient.ref === p.ref,
@@ -2418,23 +2727,23 @@ function RecipientPicker({ participants, recipient, onChoose, labels, disabled, 
 }
 
 // src/recipient/useRecipientChoice.ts
-var import_react10 = require("react");
-var import_builderforce_brain_embedded8 = require("@seanhogg/builderforce-brain-embedded");
+var import_react13 = require("react");
+var import_builderforce_brain_embedded9 = require("@seanhogg/builderforce-brain-embedded");
 function useRecipientChoice({ participants, input, resetKey }) {
-  const [choice, setChoice] = (0, import_react10.useState)(null);
-  (0, import_react10.useEffect)(() => {
+  const [choice, setChoice] = (0, import_react13.useState)(null);
+  (0, import_react13.useEffect)(() => {
     setChoice(null);
   }, [resetKey]);
-  (0, import_react10.useEffect)(() => {
+  (0, import_react13.useEffect)(() => {
     setChoice((c) => c && c !== "brain" && !participants.some((p) => p.kind === c.kind && p.ref === c.ref) ? null : c);
   }, [participants]);
-  const mentioned = (0, import_react10.useMemo)(() => (0, import_builderforce_brain_embedded8.mentionRecipient)(input, participants), [input, participants]);
-  return { recipient: (0, import_builderforce_brain_embedded8.resolveRecipient)(choice, mentioned), choice, choose: setChoice };
+  const mentioned = (0, import_react13.useMemo)(() => (0, import_builderforce_brain_embedded9.mentionRecipient)(input, participants), [input, participants]);
+  return { recipient: (0, import_builderforce_brain_embedded9.resolveRecipient)(choice, mentioned), choice, choose: setChoice };
 }
 
 // src/persona/PersonaPicker.tsx
-var import_builderforce_brain_embedded9 = require("@seanhogg/builderforce-brain-embedded");
-var import_jsx_runtime13 = require("react/jsx-runtime");
+var import_builderforce_brain_embedded10 = require("@seanhogg/builderforce-brain-embedded");
+var import_jsx_runtime17 = require("react/jsx-runtime");
 var DEFAULT_PERSONA_PICKER_LABELS = {
   actingAs: "Acting as",
   title: "Brain agent or persona",
@@ -2445,51 +2754,51 @@ var DEFAULT_PERSONA_PICKER_LABELS = {
 function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, quietAt }) {
   if (quietAt !== void 0 && agents.length === 0 && value === quietAt) return null;
   const l = { ...DEFAULT_PERSONA_PICKER_LABELS, ...labels };
-  const modality = modalities.find((m) => (0, import_builderforce_brain_embedded9.modalityPersonaChoice)(m.id) === value);
-  const agent = (0, import_builderforce_brain_embedded9.personaAgentOf)(value, agents);
-  const leading = agent ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Avatar, { name: agent.name, kind: "agent", size: 16 }) : modality?.icon ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { "aria-hidden": "true", children: modality.icon }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(IconBolt, {});
-  return /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+  const modality = modalities.find((m) => (0, import_builderforce_brain_embedded10.modalityPersonaChoice)(m.id) === value);
+  const agent = (0, import_builderforce_brain_embedded10.personaAgentOf)(value, agents);
+  const leading = agent ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Avatar, { name: agent.name, kind: "agent", size: 16 }) : modality?.icon ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { "aria-hidden": "true", children: modality.icon }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(IconBolt, {});
+  return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
     PickerShell,
     {
       eyebrow: l.actingAs,
       leading,
       name: modality?.label ?? agent?.name ?? l.defaultBrain,
       title: l.title,
-      active: value !== import_builderforce_brain_embedded9.DEFAULT_PERSONA && (modality != null || agent != null),
+      active: value !== import_builderforce_brain_embedded10.DEFAULT_PERSONA && (modality != null || agent != null),
       disabled,
       children: (close) => {
         const pick = (next) => {
           onChange(next);
           close();
         };
-        return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(PickerItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(IconBolt, {}), label: l.defaultBrain, active: !modality && !agent, onClick: () => pick(import_builderforce_brain_embedded9.DEFAULT_PERSONA) }),
-          modalities.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-pmenu__sep" }),
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-pmenu__group", children: l.personas }),
-            modalities.map((m) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(import_jsx_runtime17.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(PickerItem, { icon: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(IconBolt, {}), label: l.defaultBrain, active: !modality && !agent, onClick: () => pick(import_builderforce_brain_embedded10.DEFAULT_PERSONA) }),
+          modalities.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(import_jsx_runtime17.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "bf-pmenu__sep" }),
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "bf-pmenu__group", children: l.personas }),
+            modalities.map((m) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
               PickerItem,
               {
                 icon: m.icon ?? "",
                 label: m.label,
                 active: modality?.id === m.id,
-                onClick: () => pick((0, import_builderforce_brain_embedded9.modalityPersonaChoice)(m.id))
+                onClick: () => pick((0, import_builderforce_brain_embedded10.modalityPersonaChoice)(m.id))
               },
               m.id
             ))
           ] }),
-          agents.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-pmenu__sep" }),
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "bf-pmenu__group", children: l.assignedAgents }),
-            agents.map((a) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+          agents.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(import_jsx_runtime17.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "bf-pmenu__sep" }),
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "bf-pmenu__group", children: l.assignedAgents }),
+            agents.map((a) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
               PickerItem,
               {
-                icon: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Avatar, { name: a.name, kind: "agent", size: 16 }),
+                icon: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Avatar, { name: a.name, kind: "agent", size: 16 }),
                 label: a.name,
-                active: agent != null && (0, import_builderforce_brain_embedded9.agentPersonaChoice)(agent) === (0, import_builderforce_brain_embedded9.agentPersonaChoice)(a),
-                onClick: () => pick((0, import_builderforce_brain_embedded9.agentPersonaChoice)(a))
+                active: agent != null && (0, import_builderforce_brain_embedded10.agentPersonaChoice)(agent) === (0, import_builderforce_brain_embedded10.agentPersonaChoice)(a),
+                onClick: () => pick((0, import_builderforce_brain_embedded10.agentPersonaChoice)(a))
               },
-              (0, import_builderforce_brain_embedded9.agentPersonaChoice)(a)
+              (0, import_builderforce_brain_embedded10.agentPersonaChoice)(a)
             ))
           ] })
         ] });
@@ -2499,7 +2808,7 @@ function PersonaPicker({ value, onChange, modalities, agents, labels, disabled, 
 }
 
 // src/HealthRing.tsx
-var import_jsx_runtime14 = require("react/jsx-runtime");
+var import_jsx_runtime18 = require("react/jsx-runtime");
 function healthRingColor(percent, muted = false) {
   if (muted) return "var(--bf-health-muted, #9ca3af)";
   if (percent >= 100) return "var(--bf-health-done, #16a34a)";
@@ -2515,9 +2824,9 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
   const dash = pct / 100 * c;
   const color = healthRingColor(pct, muted);
   const label = ariaLabel ?? `${pct}% complete`;
-  return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { className: "bf-health-ring", style: { display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("svg", { width: size, height: size, viewBox: `0 0 ${size} ${size}`, role: "img", "aria-label": label, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { className: "bf-health-ring", style: { display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("svg", { width: size, height: size, viewBox: `0 0 ${size} ${size}`, role: "img", "aria-label": label, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
         "circle",
         {
           cx: size / 2,
@@ -2528,7 +2837,7 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
           strokeWidth: stroke
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
         "circle",
         {
           cx: size / 2,
@@ -2542,7 +2851,7 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
           transform: `rotate(-90 ${size / 2} ${size / 2})`
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
         "text",
         {
           x: "50%",
@@ -2555,12 +2864,12 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
         }
       )
     ] }),
-    caption ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { style: { fontSize: 10, color: "var(--bf-health-caption, var(--bf-text-muted, #6b7280))", lineHeight: 1 }, children: caption }) : null
+    caption ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { fontSize: 10, color: "var(--bf-health-caption, var(--bf-text-muted, #6b7280))", lineHeight: 1 }, children: caption }) : null
   ] });
 }
 
 // src/pendingChanges/PendingChangesList.tsx
-var import_jsx_runtime15 = require("react/jsx-runtime");
+var import_jsx_runtime19 = require("react/jsx-runtime");
 var DEFAULT_PENDING_CHANGES_LABELS = {
   pill: "Changes",
   summary: "{count} uncommitted changes",
@@ -2616,16 +2925,16 @@ function PendingChangesList({
   const labels = resolvePendingChangesLabels(labelOverrides);
   if (!changes.length) return null;
   const showRepo = new Set(changes.map((c) => c.repo ?? "")).size > 1;
-  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
     "section",
     {
       className,
       "aria-label": pendingChangesSummary(changes.length, labels),
       style: { fontSize: 12, color: "var(--bf-text, inherit)", ...style },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "2px 0 6px" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { flex: "1 1 auto", minWidth: 0, color: "var(--bf-text-muted, #8a8a8a)" }, children: labels.hint }),
-          onReview && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "2px 0 6px" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "1 1 auto", minWidth: 0, color: "var(--bf-text-muted, #8a8a8a)" }, children: labels.hint }),
+          onReview && /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
             "button",
             {
               type: "button",
@@ -2645,10 +2954,10 @@ function PendingChangesList({
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, maxHeight: "min(40vh, 280px)", overflowY: "auto" }, children: changes.map((change) => {
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, maxHeight: "min(40vh, 280px)", overflowY: "auto" }, children: changes.map((change) => {
           const { dir, file } = splitPath(change.path);
           const state = change.staged ? `${labels.status[change.status]} \xB7 ${labels.staged}` : labels.status[change.status];
-          return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+          return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
             "button",
             {
               type: "button",
@@ -2669,20 +2978,20 @@ function PendingChangesList({
                 cursor: "pointer"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
                   "span",
                   {
                     "aria-hidden": true,
                     style: { flex: "0 0 auto", width: 6, height: 6, borderRadius: "50%", background: statusColor(change.status) }
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { style: { minWidth: 0, overflowWrap: "anywhere", fontFamily: "var(--bf-font-mono, monospace)" }, children: [
-                  dir && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { opacity: 0.6 }, children: dir }),
-                  /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: file })
+                /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("span", { style: { minWidth: 0, overflowWrap: "anywhere", fontFamily: "var(--bf-font-mono, monospace)" }, children: [
+                  dir && /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { opacity: 0.6 }, children: dir }),
+                  /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { children: file })
                 ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { flex: "1 1 auto" } }),
-                showRepo && change.repo && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { flex: "0 0 auto", color: "var(--bf-text-muted, #8a8a8a)" }, children: change.repo }),
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { style: { flex: "0 0 auto", color: "var(--bf-text-muted, #8a8a8a)" }, children: state })
+                /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "1 1 auto" } }),
+                showRepo && change.repo && /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "0 0 auto", color: "var(--bf-text-muted, #8a8a8a)" }, children: change.repo }),
+                /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "0 0 auto", color: "var(--bf-text-muted, #8a8a8a)" }, children: state })
               ]
             }
           ) }, change.id ?? `${change.repo ?? ""}:${change.path}`);
@@ -2693,7 +3002,7 @@ function PendingChangesList({
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-var import_react16 = require("react");
+var import_react19 = require("react");
 
 // src/chatTickets/runGate.ts
 function resolveRunGate(adapter) {
@@ -2703,16 +3012,16 @@ function resolveRunGate(adapter) {
 }
 
 // src/chatTickets/useChatProgressSync.ts
-var import_react11 = require("react");
+var import_react14 = require("react");
 function useChatProgressSync(chatId, chatList, onStale) {
-  const rowRef = (0, import_react11.useRef)(void 0);
-  const onStaleRef = (0, import_react11.useRef)(onStale);
-  const reported = (0, import_react11.useRef)(null);
-  (0, import_react11.useEffect)(() => {
+  const rowRef = (0, import_react14.useRef)(void 0);
+  const onStaleRef = (0, import_react14.useRef)(onStale);
+  const reported = (0, import_react14.useRef)(null);
+  (0, import_react14.useEffect)(() => {
     rowRef.current = chatList.find((c) => c.id === chatId);
     onStaleRef.current = onStale;
   }, [chatList, chatId, onStale]);
-  return (0, import_react11.useCallback)((tickets) => {
+  return (0, import_react14.useCallback)((tickets) => {
     const row = rowRef.current;
     if (!onStaleRef.current || !chatProgressIsStale(row, tickets)) return;
     const signature = `${chatId}:${tickets.length}:${tickets.map((t) => `${t.progressPct}/${t.status ?? ""}`).join(",")}`;
@@ -2738,13 +3047,13 @@ var V = {
 };
 
 // src/chatTickets/TicketParentLine.tsx
-var import_jsx_runtime16 = require("react/jsx-runtime");
+var import_jsx_runtime20 = require("react/jsx-runtime");
 function TicketParentLine({ parent, inParent, onOpen, openTitle }) {
   if (!parent) return null;
   const text = inParent(parent.label);
-  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("span", { style: S.row, title: text, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { "aria-hidden": true, style: S.arrow, children: "\u21B3" }),
-    onOpen ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("button", { type: "button", onClick: onOpen, title: openTitle ? `${openTitle} \xB7 ${parent.label}` : text, style: S.link, children: text }) : /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { style: S.text, children: text })
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { style: S.row, title: text, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { "aria-hidden": true, style: S.arrow, children: "\u21B3" }),
+    onOpen ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", onClick: onOpen, title: openTitle ? `${openTitle} \xB7 ${parent.label}` : text, style: S.link, children: text }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: S.text, children: text })
   ] });
 }
 var S = {
@@ -2782,7 +3091,10 @@ var S2 = {
   muted: { fontSize: 12, color: V.muted },
   // Collapsible ticket-summary header — full-width, button-reset, subtle hover-less
   // affordance that carries a caret, an overall health ring and the linked count.
-  ticketsHeader: { display: "flex", alignItems: "center", gap: 8, padding: "2px 4px", width: "100%", background: "transparent", border: "none", cursor: "pointer", textAlign: "left", color: V.text },
+  // The header row: ticket health on the left, the sort control on the right. Wraps
+  // on a narrow panel rather than pushing the select off the edge.
+  headerRow: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, minWidth: 0 },
+  ticketsHeader: { display: "flex", alignItems: "center", gap: 8, padding: "2px 4px", flex: "1 1 auto", minWidth: 0, background: "transparent", border: "none", cursor: "pointer", textAlign: "left", color: V.text },
   caret: { display: "inline-block", fontSize: 11, color: V.muted, transition: "transform 120ms ease" },
   ticketsCount: { fontSize: 12, fontWeight: 600, color: V.text },
   ticketsAgg: { fontSize: 11, color: V.muted },
@@ -2802,6 +3114,9 @@ var S2 = {
   // `colorScheme` makes the browser draw the native <select> (and its OS/UA popup)
   // in the editor's active scheme even where the token background doesn't reach.
   select: { minWidth: 120, padding: "4px 8px", fontSize: 12, borderRadius: 8, border: `1px solid ${V.border}`, background: V.field, color: V.fieldText, colorScheme: "inherit" },
+  // Compact sort control in the rail header — sits outside the collapse button so
+  // changing the order never toggles the grid.
+  sortSelect: { minWidth: 132, maxWidth: 180, padding: "3px 6px", fontSize: 11, borderRadius: 8, border: `1px solid ${V.border}`, background: V.field, color: V.fieldText, colorScheme: "inherit", flex: "0 0 auto" },
   // The option popup is drawn by the OS and does NOT inherit `select`'s background,
   // so each option needs its own opaque pair — see nativeOptionStyle.
   option: nativeOptionStyle,
@@ -2819,44 +3134,195 @@ var S2 = {
 };
 
 // src/chatTickets/AgentsSection.tsx
-var import_jsx_runtime17 = require("react/jsx-runtime");
+var import_jsx_runtime21 = require("react/jsx-runtime");
 function AgentsSection({ agents, subagents, pool, labels, onInvite, onRemove, busy }) {
   const poolName = (ref) => pool.find((p) => p.ref === ref)?.name ?? ref;
   const uninvited = pool.filter((p) => !agents.some((a) => a.agentRef === p.ref));
-  return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { ...S2.section, flexDirection: "column", alignItems: "stretch" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
-      agents.length + subagents.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: S2.muted, children: labels.noAgents }) : agents.map((a) => /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: S2.agentChip, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { "aria-hidden": true, children: "\u{1F916}" }),
+  return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { style: { ...S2.section, flexDirection: "column", alignItems: "stretch" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
+      agents.length + subagents.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { style: S2.muted, children: labels.noAgents }) : agents.map((a) => /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("span", { style: S2.agentChip, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { "aria-hidden": true, children: "\u{1F916}" }),
         poolName(a.agentRef),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("button", { type: "button", title: labels.removeAgent, disabled: busy, onClick: () => void onRemove(a.id), style: { ...S2.icon, fontSize: 11 }, children: "\u2715" })
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("button", { type: "button", title: labels.removeAgent, disabled: busy, onClick: () => void onRemove(a.id), style: { ...S2.icon, fontSize: 11 }, children: "\u2715" })
       ] }, a.id)),
-      subagents.map((c) => /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: S2.agentChip, title: c.label, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { "aria-hidden": true, children: "\u{1F916}" }),
+      subagents.map((c) => /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("span", { style: S2.agentChip, title: c.label, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { "aria-hidden": true, children: "\u{1F916}" }),
         c.name,
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { fontSize: 11, color: V.muted }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("span", { style: { fontSize: 11, color: V.muted }, children: [
           c.handle,
           " \xB7 ",
           labels.subagentOf.replace("{owner}", c.owner)
         ] })
       ] }, c.key))
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("select", { "aria-label": labels.inviteAgent, value: "", onChange: (e) => {
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("select", { "aria-label": labels.inviteAgent, value: "", onChange: (e) => {
       const p = pool.find((x) => x.ref === e.target.value);
       if (p) void onInvite(p.ref, p.kind);
     }, style: { ...S2.select, maxWidth: 260 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("option", { style: S2.option, value: "", children: labels.inviteAgent }),
-      uninvited.map((p) => /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("option", { style: S2.option, value: p.ref, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("option", { style: S2.option, value: "", children: labels.inviteAgent }),
+      uninvited.map((p) => /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("option", { style: S2.option, value: p.ref, children: [
         p.name,
         " \u2014 ",
         p.meta
       ] }, p.ref))
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { fontSize: 11, ...S2.muted }, children: labels.agentsHint })
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { style: { fontSize: 11, ...S2.muted }, children: labels.agentsHint })
+  ] });
+}
+
+// src/spend/format.ts
+function formatUsd(usd, locale) {
+  const abs = Math.abs(usd);
+  if (abs > 0 && abs < 0.01) {
+    const tiny = new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(0.01);
+    return `${usd < 0 ? "\u2212" : ""}<${tiny}`;
+  }
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: abs >= 100 ? 0 : 2
+  }).format(usd);
+}
+function formatTokens(tokens, locale) {
+  return new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(tokens);
+}
+function formatPct(fraction) {
+  return String(Math.round(fraction * 100));
+}
+function fill(template, values) {
+  return template.replace(/\{(\w+)\}/g, (m, key) => values[key] ?? m);
+}
+
+// src/spend/SpendBreakdown.tsx
+var import_jsx_runtime22 = require("react/jsx-runtime");
+function SpendBreakdown({ summary, labels, locale }) {
+  const { spend, saved, savedPct } = summary;
+  const usd = (n2) => formatUsd(n2, locale);
+  return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-spend", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-spend__group", children: labels.spendHeading }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-spend__row", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-spend__k", children: labels.platform }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-spend__v", children: usd(spend.platformUsd) })
+    ] }),
+    spend.yourKeyUsd > 0 && /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-spend__row", title: labels.yourKeyHint, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-spend__k", children: labels.yourKey }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-spend__v", children: usd(spend.yourKeyUsd) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-spend__meta", children: [
+      fill(labels.tokens, { tokens: formatTokens(spend.totalTokens, locale) }),
+      spend.unpricedTokens > 0 && ` \xB7 ${fill(labels.unpriced, { tokens: formatTokens(spend.unpricedTokens, locale) })}`
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-spend__group", children: [
+      labels.savedHeading,
+      savedPct != null && savedPct > 0 && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-spend__share", children: fill(labels.savedShare, { pct: formatPct(savedPct) }) })
+    ] }),
+    saved.bySource.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { className: "bf-spend__meta", children: labels.nothingSaved }),
+    saved.bySource.map((row) => /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-spend__row", title: labels.sourceHints[row.source], children: [
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("span", { className: "bf-spend__k", children: [
+        labels.sources[row.source],
+        row.events > 0 && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { className: "bf-spend__count", children: fill(labels.events, { count: String(row.events) }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("span", { className: `bf-spend__v${row.usd < 0 ? " bf-spend__v--cost" : " bf-spend__v--saved"}`, children: [
+        row.estimated ? "\u2248" : "",
+        usd(row.usd)
+      ] })
+    ] }, `${row.source}:${row.estimated ? "e" : "m"}`)),
+    saved.bySource.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { className: "bf-spend__meta", children: [
+      saved.measuredUsd !== 0 && `${labels.measured} ${usd(saved.measuredUsd)}`,
+      saved.measuredUsd !== 0 && saved.estimatedUsd !== 0 && " \xB7 ",
+      saved.estimatedUsd !== 0 && `${labels.estimated} \u2248${usd(saved.estimatedUsd)}`
+    ] })
+  ] });
+}
+
+// src/spend/labels.ts
+var DEFAULT_SPEND_LABELS = {
+  spent: "{amount} spent",
+  saved: "{amount} saved",
+  savedApprox: "\u2248{amount} saved",
+  tokens: "{tokens} tok",
+  pillTitle: "What this conversation cost, and what memory saved",
+  spendHeading: "Spent",
+  platform: "Builderforce plan",
+  yourKey: "Your key",
+  yourKeyHint: "At the provider\u2019s list price",
+  unpriced: "{tokens} tokens on unpriced models",
+  savedHeading: "Saved by memory",
+  savedShare: "{pct}% of the bill",
+  estimated: "estimate",
+  measured: "recorded",
+  events: "{count}\xD7",
+  nothingSaved: "Nothing saved yet",
+  periodHeading: "AI spend \xB7 last {days} days",
+  sources: {
+    prompt_cache: "Prompt cache",
+    memory_answer: "Answered from memory",
+    evermind_answer: "Answered by Evermind",
+    response_cache: "Repeated request",
+    context_trim: "Context kept lean",
+    recall_overhead: "Recall added"
+  },
+  sourceHints: {
+    prompt_cache: "The provider served part of the prompt from its cache at a tenth of the price",
+    memory_answer: "A question asked before was answered from memory \u2014 no model call",
+    evermind_answer: "The project\u2019s Evermind answered \u2014 no paid model call",
+    response_cache: "An identical request was answered from the gateway cache \u2014 no model call",
+    context_trim: "Compaction kept earlier turns out of each call",
+    recall_overhead: "What recalled memories added to each prompt \u2014 the cost of recall"
+  }
+};
+function spendLabels(overrides) {
+  if (!overrides) return DEFAULT_SPEND_LABELS;
+  return {
+    ...DEFAULT_SPEND_LABELS,
+    ...overrides,
+    sources: { ...DEFAULT_SPEND_LABELS.sources, ...overrides.sources },
+    sourceHints: { ...DEFAULT_SPEND_LABELS.sourceHints, ...overrides.sourceHints }
+  };
+}
+
+// src/spend/SpendPill.tsx
+var import_jsx_runtime23 = require("react/jsx-runtime");
+function hasSpendToShow(summary) {
+  if (!summary) return false;
+  const { spend, saved } = summary;
+  return spend.totalTokens > 0 || spend.totalUsd > 0 || saved.bySource.length > 0;
+}
+function SpendPill({ summary, labels: overrides, locale }) {
+  const labels = spendLabels(overrides);
+  const { open, toggle, rootRef } = usePopover();
+  if (!hasSpendToShow(summary)) return null;
+  const { spend, saved } = summary;
+  const anyEstimate = saved.bySource.some((s) => s.estimated);
+  const savedText = saved.netUsd > 0 ? fill(anyEstimate ? labels.savedApprox : labels.saved, { amount: formatUsd(saved.netUsd, locale) }) : null;
+  return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("span", { ref: rootRef, className: "bf-spend-pill-wrap", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
+      "button",
+      {
+        type: "button",
+        className: `bf-spend-pill${open ? " is-open" : ""}`,
+        title: labels.pillTitle,
+        "aria-label": labels.pillTitle,
+        "aria-expanded": open,
+        onClick: toggle,
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "bf-spend-pill__spent", children: formatUsd(spend.totalUsd, locale) }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "bf-spend-pill__sep", "aria-hidden": true, children: "\xB7" }),
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "bf-spend-pill__tok", children: fill(labels.tokens, { tokens: formatTokens(spend.totalTokens, locale) }) }),
+          savedText && /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_jsx_runtime23.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "bf-spend-pill__sep", "aria-hidden": true, children: "\xB7" }),
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { className: "bf-spend-pill__saved", children: savedText })
+          ] })
+        ]
+      }
+    ),
+    open && /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { className: "bf-spend-pill__pop", role: "dialog", "aria-label": labels.pillTitle, children: /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(SpendBreakdown, { summary, labels, locale }) })
   ] });
 }
 
 // src/chatTickets/LinkForm.tsx
-var import_react12 = require("react");
+var import_react15 = require("react");
 
 // src/chatTickets/types.ts
 var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap", "spec", "retro", "poker"];
@@ -2912,28 +3378,33 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   mergeNoOthers: "No other chats to merge.",
   showTickets: "Show linked tickets",
   hideTickets: "Hide linked tickets",
+  sortLabel: "Sort tickets",
+  sortOpen: "Incomplete first",
+  sortDone: "Complete first",
+  sortTitle: "Title",
+  sortLinked: "Linked order",
   kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap", spec: "Spec", retro: "Retrospective", poker: "Planning poker" },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
   inParent: (parent) => `in ${parent}`,
-  ticketCount: (n) => `${n} ticket${n === 1 ? "" : "s"}`,
+  ticketCount: (n2) => `${n2} ticket${n2 === 1 ? "" : "s"}`,
   overallAria: (pct) => `Overall progress: ${pct}% done`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
-  mergeAction: (n) => `Merge ${n} here`,
-  mergedN: (n) => `Merged ${n} chat(s).`
+  mergeAction: (n2) => `Merge ${n2} here`,
+  mergedN: (n2) => `Merged ${n2} chat(s).`
 };
 
 // src/chatTickets/LinkForm.tsx
-var import_jsx_runtime18 = require("react/jsx-runtime");
+var import_jsx_runtime24 = require("react/jsx-runtime");
 var SEARCH_LIMIT = 40;
 function LinkForm({ search, projectId, existing, labels, onLink }) {
-  const [kind, setKind] = (0, import_react12.useState)("task");
-  const [ref, setRef] = (0, import_react12.useState)("");
-  const [query, setQuery] = (0, import_react12.useState)("");
-  const [linkType, setLinkType] = (0, import_react12.useState)("linked");
-  const [busy, setBusy] = (0, import_react12.useState)(false);
-  const [results, setResults] = (0, import_react12.useState)([]);
-  const [loading, setLoading] = (0, import_react12.useState)(false);
-  (0, import_react12.useEffect)(() => {
+  const [kind, setKind] = (0, import_react15.useState)("task");
+  const [ref, setRef] = (0, import_react15.useState)("");
+  const [query, setQuery] = (0, import_react15.useState)("");
+  const [linkType, setLinkType] = (0, import_react15.useState)("linked");
+  const [busy, setBusy] = (0, import_react15.useState)(false);
+  const [results, setResults] = (0, import_react15.useState)([]);
+  const [loading, setLoading] = (0, import_react15.useState)(false);
+  (0, import_react15.useEffect)(() => {
     let live = true;
     setLoading(true);
     const h = setTimeout(() => {
@@ -2950,12 +3421,12 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
       clearTimeout(h);
     };
   }, [search, kind, query, projectId]);
-  const shown = (0, import_react12.useMemo)(
+  const shown = (0, import_react15.useMemo)(
     () => results.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref)),
     [results, existing, kind]
   );
   const atCap = results.length >= SEARCH_LIMIT;
-  (0, import_react12.useEffect)(() => {
+  (0, import_react15.useEffect)(() => {
     if (ref && !shown.some((o) => o.ref === ref)) setRef("");
   }, [shown, ref]);
   const submit = async () => {
@@ -2969,13 +3440,13 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
       setBusy(false);
     }
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: S2.section, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("select", { "aria-label": labels.kindLabel, value: kind, onChange: (e) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: S2.section, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("select", { "aria-label": labels.kindLabel, value: kind, onChange: (e) => {
       setKind(e.target.value);
       setRef("");
       setQuery("");
-    }, style: S2.select, children: TICKET_KINDS.map((k) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("option", { style: S2.option, value: k, children: labels.kind[k] }, k)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+    }, style: S2.select, children: TICKET_KINDS.map((k) => /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("option", { style: S2.option, value: k, children: labels.kind[k] }, k)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
       "input",
       {
         type: "search",
@@ -2986,21 +3457,21 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
         style: { ...S2.select, minWidth: 150 }
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("select", { "aria-label": labels.pickTicket, value: ref, onChange: (e) => setRef(e.target.value), style: { ...S2.select, minWidth: 200 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("option", { style: S2.option, value: "", children: labels.pickTicket }),
-      shown.map((o) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("option", { style: S2.option, value: o.ref, children: o.label }, o.ref))
+    /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("select", { "aria-label": labels.pickTicket, value: ref, onChange: (e) => setRef(e.target.value), style: { ...S2.select, minWidth: 200 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("option", { style: S2.option, value: "", children: labels.pickTicket }),
+      shown.map((o) => /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("option", { style: S2.option, value: o.ref, children: o.label }, o.ref))
     ] }),
-    loading ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: S2.muted, children: labels.searching }) : shown.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: S2.muted, children: labels.noMatches }) : atCap ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: S2.muted, children: labels.refine }) : null,
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("select", { "aria-label": labels.linkTypeLabel, value: linkType, onChange: (e) => setLinkType(e.target.value), style: S2.select, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("option", { style: S2.option, value: "linked", children: labels.linkTypeLinked }),
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("option", { style: S2.option, value: "created", children: labels.linkTypeCreated })
+    loading ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: S2.muted, children: labels.searching }) : shown.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: S2.muted, children: labels.noMatches }) : atCap ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: S2.muted, children: labels.refine }) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("select", { "aria-label": labels.linkTypeLabel, value: linkType, onChange: (e) => setLinkType(e.target.value), style: S2.select, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("option", { style: S2.option, value: "linked", children: labels.linkTypeLinked }),
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("option", { style: S2.option, value: "created", children: labels.linkTypeCreated })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("button", { type: "button", onClick: () => void submit(), disabled: busy || !ref, style: S2.pill(true), children: busy ? "\u2026" : labels.linkAction })
+    /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", onClick: () => void submit(), disabled: busy || !ref, style: S2.pill(true), children: busy ? "\u2026" : labels.linkAction })
   ] });
 }
 
 // src/chatTickets/MergeSection.tsx
-var import_react13 = require("react");
+var import_react16 = require("react");
 
 // src/chatTickets/chatSwitcherLabel.ts
 function chatSwitcherLabel(input) {
@@ -3013,28 +3484,28 @@ function chatSwitcherLabel(input) {
 }
 
 // src/chatTickets/MergeSection.tsx
-var import_jsx_runtime19 = require("react/jsx-runtime");
+var import_jsx_runtime25 = require("react/jsx-runtime");
 function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
-  const [selected, setSelected] = (0, import_react13.useState)([]);
+  const [selected, setSelected] = (0, import_react16.useState)([]);
   const candidates = chatList.filter((c) => c.id !== chatId);
   const toggle = (id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
-  return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { ...S2.section, flexDirection: "column", alignItems: "stretch" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { fontSize: 12, color: V.text2 }, children: labels.mergeHint }),
-    /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { style: { maxHeight: 160, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }, children: candidates.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: S2.muted, children: labels.mergeNoOthers }) : candidates.map((c) => /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "3px 4px", cursor: "pointer" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("input", { type: "checkbox", checked: selected.includes(c.id), onChange: () => toggle(c.id) }),
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: chatSwitcherLabel({ title: c.title, id: c.id, ticketCount: c.ticketCount, ticketProgressPct: c.ticketProgressPct }) })
+  return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { ...S2.section, flexDirection: "column", alignItems: "stretch" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { fontSize: 12, color: V.text2 }, children: labels.mergeHint }),
+    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { maxHeight: 160, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }, children: candidates.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: S2.muted, children: labels.mergeNoOthers }) : candidates.map((c) => /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "3px 4px", cursor: "pointer" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("input", { type: "checkbox", checked: selected.includes(c.id), onChange: () => toggle(c.id) }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: chatSwitcherLabel({ title: c.title, id: c.id, ticketCount: c.ticketCount, ticketProgressPct: c.ticketProgressPct }) })
     ] }, c.id)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("button", { type: "button", onClick: () => {
+    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", onClick: () => {
       if (selected.length) void onMerge(selected).then(() => setSelected([]));
     }, disabled: busy || selected.length === 0, style: S2.pill(true), children: busy ? "\u2026" : labels.mergeAction(selected.length) })
   ] });
 }
 
 // src/chatTickets/PeopleSection.tsx
-var import_react14 = require("react");
-var import_jsx_runtime20 = require("react/jsx-runtime");
+var import_react17 = require("react");
+var import_jsx_runtime26 = require("react/jsx-runtime");
 function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite, onRemove, busy }) {
-  const [email, setEmail] = (0, import_react14.useState)("");
+  const [email, setEmail] = (0, import_react17.useState)("");
   const submit = async () => {
     const e = email.trim();
     if (!e) return;
@@ -3042,18 +3513,18 @@ function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite,
     setEmail("");
   };
   const locked = visibility === "locked";
-  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { ...S2.section, flexDirection: "column", alignItems: "stretch" }, children: [
-    visibility && onSetVisibility && /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", disabled: busy, onClick: () => void onSetVisibility(locked ? "shared" : "locked"), style: S2.pill(locked), children: locked ? `\u{1F512} ${labels.visibilityLocked}` : `\u{1F513} ${labels.visibilityShared}` }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { fontSize: 11, ...S2.muted }, children: labels.lockHint })
+  return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { ...S2.section, flexDirection: "column", alignItems: "stretch" }, children: [
+    visibility && onSetVisibility && /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", disabled: busy, onClick: () => void onSetVisibility(locked ? "shared" : "locked"), style: S2.pill(locked), children: locked ? `\u{1F512} ${labels.visibilityLocked}` : `\u{1F513} ${labels.visibilityShared}` }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { fontSize: 11, ...S2.muted }, children: labels.lockHint })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: members.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: S2.muted, children: labels.noPeople }) : members.map((m) => /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("span", { style: S2.agentChip, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { "aria-hidden": true, children: m.status === "pending" ? "\u2709\uFE0F" : "\u{1F464}" }),
+    /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: members.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: S2.muted, children: labels.noPeople }) : members.map((m) => /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("span", { style: S2.agentChip, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { "aria-hidden": true, children: m.status === "pending" ? "\u2709\uFE0F" : "\u{1F464}" }),
       m.name,
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", title: labels.removePerson, disabled: busy, onClick: () => void onRemove(m.id), style: { ...S2.icon, fontSize: 11 }, children: "\u2715" })
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", title: labels.removePerson, disabled: busy, onClick: () => void onRemove(m.id), style: { ...S2.icon, fontSize: 11 }, children: "\u2715" })
     ] }, m.id)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
         "input",
         {
           type: "email",
@@ -3068,24 +3539,24 @@ function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite,
           style: { ...S2.select, flex: 1, maxWidth: 260 }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", disabled: busy || !email.trim(), onClick: () => void submit(), style: S2.pill(false), children: "\uFF0B" })
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", disabled: busy || !email.trim(), onClick: () => void submit(), style: S2.pill(false), children: "\uFF0B" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { fontSize: 11, ...S2.muted }, children: labels.invitePersonHint })
+    /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { fontSize: 11, ...S2.muted }, children: labels.invitePersonHint })
   ] });
 }
 
 // src/chatTickets/QuestionsSection.tsx
-var import_react15 = require("react");
-var import_jsx_runtime21 = require("react/jsx-runtime");
+var import_react18 = require("react");
+var import_jsx_runtime27 = require("react/jsx-runtime");
 function QuestionsSection({ questions, labels, onAnswer }) {
-  const [answers, setAnswers] = (0, import_react15.useState)({});
-  const [sending, setSending] = (0, import_react15.useState)(null);
-  return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { style: S2.drawer, children: questions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { style: S2.muted, children: labels.noQuestions }) : questions.map((q, index) => {
+  const [answers, setAnswers] = (0, import_react18.useState)({});
+  const [sending, setSending] = (0, import_react18.useState)(null);
+  return /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: S2.drawer, children: questions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: S2.muted, children: labels.noQuestions }) : questions.map((q, index) => {
     const value = answers[q.id] ?? "";
-    return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { style: { color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", marginBottom: 8 }, children: q.description }),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", marginBottom: 8 }, children: q.description }),
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
           "textarea",
           {
             value,
@@ -3096,7 +3567,7 @@ function QuestionsSection({ questions, labels, onAnswer }) {
             style: { ...S2.select, flex: 1, resize: "vertical", minHeight: 54, fontFamily: "inherit" }
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("button", { type: "button", disabled: !value.trim() || sending === q.id, style: S2.pill(true), onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("button", { type: "button", disabled: !value.trim() || sending === q.id, style: S2.pill(true), onClick: () => {
           setSending(q.id);
           void onAnswer(q.id, value.trim()).finally(() => setSending(null));
         }, children: sending === q.id ? labels.answering : labels.submitAnswer })
@@ -3105,32 +3576,60 @@ function QuestionsSection({ questions, labels, onAnswer }) {
   }) });
 }
 
+// src/chatTickets/sortChatTickets.ts
+var CHAT_TICKET_SORTS = ["open", "done", "title", "linked"];
+function isChatTicketComplete(progressPct) {
+  return progressPct === 100;
+}
+function parseChatTicketSort(value) {
+  return CHAT_TICKET_SORTS.includes(value) ? value : "open";
+}
+function sortChatTickets(tickets, sort) {
+  if (sort === "linked" || tickets.length < 2) return tickets.slice();
+  const copy = tickets.slice();
+  copy.sort((a, b) => {
+    if (sort === "title") return a.label.localeCompare(b.label);
+    const aDone = isChatTicketComplete(a.progressPct) ? 1 : 0;
+    const bDone = isChatTicketComplete(b.progressPct) ? 1 : 0;
+    if (sort === "open") {
+      if (aDone !== bDone) return aDone - bDone;
+      if (a.progressPct !== b.progressPct) return a.progressPct - b.progressPct;
+      return a.label.localeCompare(b.label);
+    }
+    if (aDone !== bDone) return bDone - aDone;
+    if (a.progressPct !== b.progressPct) return b.progressPct - a.progressPct;
+    return a.label.localeCompare(b.label);
+  });
+  return copy;
+}
+
 // src/chatTickets/ChatTicketsPanel.tsx
-var import_jsx_runtime22 = require("react/jsx-runtime");
+var import_jsx_runtime28 = require("react/jsx-runtime");
 var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
 var NO_SUBAGENTS = [];
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS }) {
-  const [tickets, setTickets] = (0, import_react16.useState)([]);
-  const [agents, setAgents] = (0, import_react16.useState)([]);
-  const [members, setMembers] = (0, import_react16.useState)([]);
-  const [pool, setPool] = (0, import_react16.useState)([]);
-  const [questions, setQuestions] = (0, import_react16.useState)([]);
-  const [panel, setPanel] = (0, import_react16.useState)(null);
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels: spendLabels2, locale }) {
+  const [tickets, setTickets] = (0, import_react19.useState)([]);
+  const [agents, setAgents] = (0, import_react19.useState)([]);
+  const [members, setMembers] = (0, import_react19.useState)([]);
+  const [pool, setPool] = (0, import_react19.useState)([]);
+  const [questions, setQuestions] = (0, import_react19.useState)([]);
+  const [panel, setPanel] = (0, import_react19.useState)(null);
   const togglePanel = (key) => setPanel((open) => open === key ? null : key);
   const openExtension = extensions?.find((ext) => ext.key === panel) ?? null;
-  (0, import_react16.useEffect)(() => {
+  (0, import_react19.useEffect)(() => {
     if (panel && !isBuiltinPanel(panel) && !extensions?.some((ext) => ext.key === panel)) setPanel(null);
   }, [panel, extensions]);
-  const [lineageKey, setLineageKey] = (0, import_react16.useState)(null);
-  const [lineage, setLineage] = (0, import_react16.useState)([]);
-  const [runKey, setRunKey] = (0, import_react16.useState)(null);
-  const [msg, setMsg] = (0, import_react16.useState)(null);
-  const [busy, setBusy] = (0, import_react16.useState)(false);
-  const [collapsed, setCollapsed] = (0, import_react16.useState)(null);
-  const userCollapsed = (0, import_react16.useRef)(false);
+  const [lineageKey, setLineageKey] = (0, import_react19.useState)(null);
+  const [lineage, setLineage] = (0, import_react19.useState)([]);
+  const [runKey, setRunKey] = (0, import_react19.useState)(null);
+  const [msg, setMsg] = (0, import_react19.useState)(null);
+  const [busy, setBusy] = (0, import_react19.useState)(false);
+  const [collapsed, setCollapsed] = (0, import_react19.useState)(null);
+  const userCollapsed = (0, import_react19.useRef)(false);
+  const [sort, setSort] = (0, import_react19.useState)("open");
   const syncChatProgress = useChatProgressSync(chatId, chatList, onChanged);
-  const load = (0, import_react16.useCallback)(async () => {
+  const load = (0, import_react19.useCallback)(async () => {
     const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
       adapter.listAgents(chatId).catch(() => []),
@@ -3144,18 +3643,18 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setQuestions(qs);
     if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId, syncChatProgress]);
-  (0, import_react16.useEffect)(() => {
+  (0, import_react19.useEffect)(() => {
     void load();
   }, [load, refreshSignal]);
-  (0, import_react16.useEffect)(() => {
+  (0, import_react19.useEffect)(() => {
     adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
   }, [adapter]);
   const flash = (m) => {
     setMsg(m);
     if (typeof window !== "undefined") window.setTimeout(() => setMsg(null), 3500);
   };
-  const poolName = (0, import_react16.useCallback)((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
-  const parentLink = (0, import_react16.useCallback)((tk) => tk.parent ? tickets.find((t) => t.kind === tk.parent.kind && t.ref === tk.parent.ref) : void 0, [tickets]);
+  const poolName = (0, import_react19.useCallback)((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
+  const parentLink = (0, import_react19.useCallback)((tk) => tk.parent ? tickets.find((t) => t.kind === tk.parent.kind && t.ref === tk.parent.ref) : void 0, [tickets]);
   const unlink = async (tk) => {
     setBusy(true);
     try {
@@ -3188,47 +3687,66 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       setBusy(false);
     }
   };
-  const agg = (0, import_react16.useMemo)(() => rollupChatTicketHealth(tickets), [tickets]);
+  const agg = (0, import_react19.useMemo)(() => rollupChatTicketHealth(tickets), [tickets]);
+  const displayedTickets = (0, import_react19.useMemo)(() => sortChatTickets(tickets, sort), [tickets, sort]);
   const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
   const toggleCollapsed = () => {
     userCollapsed.current = true;
     setCollapsed(!isCollapsed);
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: S2.root, children: [
-    tickets.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
-      "button",
-      {
-        type: "button",
-        onClick: toggleCollapsed,
-        "aria-expanded": !isCollapsed,
-        title: isCollapsed ? labels.showTickets : labels.hideTickets,
-        style: S2.ticketsHeader,
-        children: [
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { "aria-hidden": true, style: { ...S2.caret, transform: isCollapsed ? "rotate(0deg)" : "rotate(90deg)" }, children: "\u25B8" }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(HealthRing, { percent: agg.pct, size: 22, muted: false, ariaLabel: labels.overallAria(agg.pct) }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: S2.ticketsCount, children: labels.ticketCount(tickets.length) }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("span", { style: S2.ticketsAgg, children: [
-            agg.pct,
-            "%",
-            agg.total > 0 ? ` \xB7 ${agg.done}/${agg.total}` : ""
-          ] })
-        ]
-      }
-    ),
-    !isCollapsed && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: S2.ticketGrid, children: tickets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: S2.muted, children: labels.none }) : tickets.map((tk) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: S2.root, children: [
+    (tickets.length > 0 || hasSpendToShow(spend)) && /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: S2.headerRow, children: [
+      tickets.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+        "button",
+        {
+          type: "button",
+          onClick: toggleCollapsed,
+          "aria-expanded": !isCollapsed,
+          title: isCollapsed ? labels.showTickets : labels.hideTickets,
+          style: S2.ticketsHeader,
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { "aria-hidden": true, style: { ...S2.caret, transform: isCollapsed ? "rotate(0deg)" : "rotate(90deg)" }, children: "\u25B8" }),
+            /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(HealthRing, { percent: agg.pct, size: 22, muted: false, ariaLabel: labels.overallAria(agg.pct) }),
+            /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: S2.ticketsCount, children: labels.ticketCount(tickets.length) }),
+            /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("span", { style: S2.ticketsAgg, children: [
+              agg.pct,
+              "%",
+              agg.total > 0 ? ` \xB7 ${agg.done}/${agg.total}` : ""
+            ] })
+          ]
+        }
+      ),
+      tickets.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+        "select",
+        {
+          "aria-label": labels.sortLabel,
+          value: sort,
+          onChange: (e) => setSort(parseChatTicketSort(e.target.value)),
+          style: S2.sortSelect,
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("option", { value: "open", style: S2.option, children: labels.sortOpen }),
+            /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("option", { value: "done", style: S2.option, children: labels.sortDone }),
+            /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("option", { value: "title", style: S2.option, children: labels.sortTitle }),
+            /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("option", { value: "linked", style: S2.option, children: labels.sortLinked })
+          ]
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(SpendPill, { summary: spend, labels: spendLabels2, locale })
+    ] }),
+    !isCollapsed && /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: S2.ticketGrid, children: tickets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: S2.muted, children: labels.none }) : displayedTickets.map((tk) => {
       const key = `${tk.kind}:${tk.ref}`;
       const parentTk = parentLink(tk);
-      return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: S2.chip, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(HealthRing, { percent: tk.progressPct, size: 36, caption: tk.total > 0 ? `${tk.done}/${tk.total}` : void 0, muted: !tk.exists, ariaLabel: labels.ringAria(tk.label, tk.progressPct) }),
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", flexDirection: "column", minWidth: 0, maxWidth: 160 }, children: [
-          onOpenTicket && tk.exists ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S2.ticketLink, children: tk.label }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: S2.ticketLabel, title: tk.label, children: tk.label }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("span", { style: S2.ticketMeta, children: [
+      return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: S2.chip, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(HealthRing, { percent: tk.progressPct, size: 36, caption: tk.total > 0 ? `${tk.done}/${tk.total}` : void 0, muted: !tk.exists, ariaLabel: labels.ringAria(tk.label, tk.progressPct) }),
+        /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: { display: "flex", flexDirection: "column", minWidth: 0, maxWidth: 160 }, children: [
+          onOpenTicket && tk.exists ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S2.ticketLink, children: tk.label }) : /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: S2.ticketLabel, title: tk.label, children: tk.label }),
+          /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("span", { style: S2.ticketMeta, children: [
             labels.kind[tk.kind],
             " \xB7 ",
             tk.status,
             tk.linkType === "created" ? ` \xB7 ${labels.spawned}` : ""
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
             TicketParentLine,
             {
               parent: tk.parent,
@@ -3238,9 +3756,9 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", gap: 2 }, children: [
-          onOpenTicket && tk.exists && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S2.icon, children: "\u2197" }),
-          RUNNABLE.has(tk.kind) && tk.exists && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: { display: "flex", gap: 2 }, children: [
+          onOpenTicket && tk.exists && /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S2.icon, children: "\u2197" }),
+          RUNNABLE.has(tk.kind) && tk.exists && /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
             "button",
             {
               type: "button",
@@ -3252,60 +3770,60 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
               children: "\u25B6"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { type: "button", title: labels.lineage, onClick: () => void openLineage(tk), style: S2.icon, children: "\u2443" }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("button", { type: "button", title: labels.unlink, disabled: busy, onClick: () => void unlink(tk), style: S2.icon, children: "\u2715" })
+          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("button", { type: "button", title: labels.lineage, onClick: () => void openLineage(tk), style: S2.icon, children: "\u2443" }),
+          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("button", { type: "button", title: labels.unlink, disabled: busy, onClick: () => void unlink(tk), style: S2.icon, children: "\u2715" })
         ] }),
-        runKey === key && /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("select", { "aria-label": labels.pickAgent, value: "", onChange: (e) => {
+        runKey === key && /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("select", { "aria-label": labels.pickAgent, value: "", onChange: (e) => {
           if (e.target.value) void runTicket(tk, e.target.value);
         }, style: S2.select, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("option", { style: S2.option, value: "", children: labels.pickAgent }),
-          agents.map((a) => /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("option", { style: S2.option, value: a.agentRef, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("option", { style: S2.option, value: "", children: labels.pickAgent }),
+          agents.map((a) => /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("option", { style: S2.option, value: a.agentRef, children: [
             "\u2605 ",
             poolName(a.agentRef)
           ] }, a.id)),
-          pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("option", { style: S2.option, value: p.ref, children: p.name }, p.ref))
+          pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("option", { style: S2.option, value: p.ref, children: p.name }, p.ref))
         ] })
       ] }, tk.linkId);
     }) }),
-    lineageKey && /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: S2.drawer, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("strong", { style: { color: V.text }, children: labels.lineageTitle }),
-      lineage.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { marginLeft: 8, ...S2.muted }, children: labels.lineageEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("ul", { style: { margin: "4px 0 0", paddingLeft: 18 }, children: lineage.map((c) => /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("li", { style: { marginBottom: 2 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { fontWeight: c.chatId === chatId ? 700 : 400 }, children: c.title }),
-        c.linkType === "created" ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("em", { style: { color: V.accent, marginLeft: 6 }, children: labels.spawned }) : null,
-        c.isArchived ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("span", { style: { marginLeft: 6, ...S2.muted }, children: [
+    lineageKey && /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: S2.drawer, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("strong", { style: { color: V.text }, children: labels.lineageTitle }),
+      lineage.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { marginLeft: 8, ...S2.muted }, children: labels.lineageEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("ul", { style: { margin: "4px 0 0", paddingLeft: 18 }, children: lineage.map((c) => /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("li", { style: { marginBottom: 2 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { fontWeight: c.chatId === chatId ? 700 : 400 }, children: c.title }),
+        c.linkType === "created" ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("em", { style: { color: V.accent, marginLeft: 6 }, children: labels.spawned }) : null,
+        c.isArchived ? /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("span", { style: { marginLeft: 6, ...S2.muted }, children: [
           "(",
           labels.merged,
           ")"
         ] }) : null
       ] }, c.chatId)) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("button", { type: "button", onClick: () => togglePanel("link"), style: S2.pill(panel === "link"), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("button", { type: "button", onClick: () => togglePanel("link"), style: S2.pill(panel === "link"), children: [
         "\uFF0B ",
         labels.link
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("button", { type: "button", onClick: () => togglePanel("agents"), style: S2.pill(panel === "agents"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("button", { type: "button", onClick: () => togglePanel("agents"), style: S2.pill(panel === "agents"), children: [
         "\u{1F465} ",
         labels.agents,
         agents.length + subagents.length ? ` (${agents.length + subagents.length})` : ""
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("button", { type: "button", onClick: () => togglePanel("people"), style: S2.pill(panel === "people"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("button", { type: "button", onClick: () => togglePanel("people"), style: S2.pill(panel === "people"), children: [
         "\u{1F464} ",
         labels.people,
         members.length ? ` (${members.length})` : ""
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("button", { type: "button", onClick: () => togglePanel("merge"), style: S2.pill(panel === "merge"), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("button", { type: "button", onClick: () => togglePanel("merge"), style: S2.pill(panel === "merge"), children: [
         "\u29C9 ",
         labels.merge
       ] }),
-      questions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("button", { type: "button", onClick: () => togglePanel("questions"), style: S2.pill(panel === "questions"), children: [
+      questions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("button", { type: "button", onClick: () => togglePanel("questions"), style: S2.pill(panel === "questions"), children: [
         "\u2753 ",
         labels.questions,
         " (",
         questions.length,
         ")"
       ] }),
-      extensions?.map((ext) => /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
+      extensions?.map((ext) => /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
         "button",
         {
           type: "button",
@@ -3322,10 +3840,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         },
         ext.key
       )),
-      msg && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
+      msg && /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
     ] }),
-    openExtension && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: S2.drawer, children: openExtension.render() }),
-    panel === "link" && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
+    openExtension && /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: S2.drawer, children: openExtension.render() }),
+    panel === "link" && /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
       try {
         await adapter.linkTicket(chatId, { kind, ref, linkType });
         await load();
@@ -3333,7 +3851,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         flash(e instanceof Error ? e.message : labels.linkFailed);
       }
     } }),
-    panel === "agents" && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+    panel === "agents" && /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
       AgentsSection,
       {
         agents,
@@ -3363,7 +3881,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         busy
       }
     ),
-    panel === "people" && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+    panel === "people" && /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
       PeopleSection,
       {
         members,
@@ -3396,7 +3914,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         busy
       }
     ),
-    panel === "merge" && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+    panel === "merge" && /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
       MergeSection,
       {
         chatId,
@@ -3416,7 +3934,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         busy
       }
     ),
-    panel === "questions" && /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+    panel === "questions" && /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
       QuestionsSection,
       {
         questions,
@@ -3434,7 +3952,7 @@ var BUILTIN_PANELS = /* @__PURE__ */ new Set(["link", "agents", "people", "merge
 function isBuiltinPanel(key) {
   return BUILTIN_PANELS.has(key);
 }
-var ChatTicketsPanel = (0, import_react16.memo)(ChatTicketsPanelInner);
+var ChatTicketsPanel = (0, import_react19.memo)(ChatTicketsPanelInner);
 
 // src/chatTickets/restAdapter.ts
 var RUNNABLE2 = new Set(RUNNABLE_KINDS);
@@ -3555,12 +4073,12 @@ function createChatTicketsRestAdapter(opts) {
 }
 
 // src/chatTickets/useChatParticipants.ts
-var import_react17 = require("react");
+var import_react20 = require("react");
 function useChatParticipants(adapter, chatId, refreshSignal = 0) {
-  const [pool, setPool] = (0, import_react17.useState)([]);
-  const [invited, setInvited] = (0, import_react17.useState)([]);
-  const [members, setMembers] = (0, import_react17.useState)([]);
-  (0, import_react17.useEffect)(() => {
+  const [pool, setPool] = (0, import_react20.useState)([]);
+  const [invited, setInvited] = (0, import_react20.useState)([]);
+  const [members, setMembers] = (0, import_react20.useState)([]);
+  (0, import_react20.useEffect)(() => {
     if (chatId == null) {
       setInvited([]);
       setMembers([]);
@@ -3582,7 +4100,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
     };
   }, [adapter, chatId, refreshSignal]);
   const needsPool = invited.some((a) => !a.name);
-  (0, import_react17.useEffect)(() => {
+  (0, import_react20.useEffect)(() => {
     if (!needsPool) return;
     let ok = true;
     adapter.loadAgentPool().then((p) => {
@@ -3594,7 +4112,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
       ok = false;
     };
   }, [adapter, needsPool]);
-  return (0, import_react17.useMemo)(
+  return (0, import_react20.useMemo)(
     () => [
       // The NAME comes off the invited row, which the server resolves in one batched
       // query. The pool lookup behind it is the legacy path, kept only for a client
@@ -3615,41 +4133,41 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
 }
 
 // src/chatTickets/useChatActivitySignal.ts
-var import_react18 = require("react");
-var import_builderforce_brain_embedded10 = require("@seanhogg/builderforce-brain-embedded");
+var import_react21 = require("react");
+var import_builderforce_brain_embedded11 = require("@seanhogg/builderforce-brain-embedded");
 function useChatActivitySignal(messages) {
-  return (0, import_react18.useMemo)(() => (0, import_builderforce_brain_embedded10.activityMessageCount)(messages), [messages]);
+  return (0, import_react21.useMemo)(() => (0, import_builderforce_brain_embedded11.activityMessageCount)(messages), [messages]);
 }
 
 // src/mention/MentionAutocomplete.tsx
-var import_react19 = require("react");
-var import_builderforce_brain_embedded11 = require("@seanhogg/builderforce-brain-embedded");
-var import_jsx_runtime23 = require("react/jsx-runtime");
+var import_react22 = require("react");
+var import_builderforce_brain_embedded12 = require("@seanhogg/builderforce-brain-embedded");
+var import_jsx_runtime29 = require("react/jsx-runtime");
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
-  const [token, setToken] = (0, import_react19.useState)(null);
-  const [index, setIndex] = (0, import_react19.useState)(0);
-  const matches = (0, import_react19.useMemo)(
-    () => token && !disabled ? (0, import_builderforce_brain_embedded11.filterMentionCandidates)(participants, token.query) : [],
+  const [token, setToken] = (0, import_react22.useState)(null);
+  const [index, setIndex] = (0, import_react22.useState)(0);
+  const matches = (0, import_react22.useMemo)(
+    () => token && !disabled ? (0, import_builderforce_brain_embedded12.filterMentionCandidates)(participants, token.query) : [],
     [token, participants, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = (0, import_react19.useCallback)(() => {
+  const recompute = (0, import_react22.useCallback)(() => {
     const el = textareaRef.current;
     if (!el || disabled || participants.length === 0) {
       setToken(null);
       return;
     }
-    const next = (0, import_builderforce_brain_embedded11.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
+    const next = (0, import_builderforce_brain_embedded12.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
-  (0, import_react19.useEffect)(() => {
+  (0, import_react22.useEffect)(() => {
     recompute();
   }, [value, recompute]);
-  const choose = (0, import_react19.useCallback)((r) => {
+  const choose = (0, import_react22.useCallback)((r) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? (0, import_builderforce_brain_embedded11.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? (0, import_builderforce_brain_embedded12.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       let after = value.slice(tk.end);
       if (after.startsWith(" ")) after = after.slice(1);
@@ -3669,7 +4187,7 @@ function useMentionAutocomplete(opts) {
     setToken(null);
     onPick(r);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = (0, import_react19.useCallback)((e) => {
+  const onKeyDown = (0, import_react22.useCallback)((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -3693,13 +4211,13 @@ function useMentionAutocomplete(opts) {
         return false;
     }
   }, [open, matches, index, choose]);
-  const popup = open ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(MentionPopup, { matches, index, labels, onHover: setIndex, onPick: choose }) : null;
+  const popup = open ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(MentionPopup, { matches, index, labels, onHover: setIndex, onPick: choose }) : null;
   return { onKeyDown, onSelect: recompute, popup, open };
 }
 function MentionPopup({ matches, index, labels, onHover, onPick }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: POP.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("ul", { role: "listbox", "aria-label": labels?.title ?? "Direct to", style: POP.list, children: [
-    labels?.title && /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("li", { "aria-hidden": true, style: POP.group, children: labels.title }),
-    matches.map((m, i) => /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: POP.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("ul", { role: "listbox", "aria-label": labels?.title ?? "Direct to", style: POP.list, children: [
+    labels?.title && /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("li", { "aria-hidden": true, style: POP.group, children: labels.title }),
+    matches.map((m, i) => /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
       "li",
       {
         role: "option",
@@ -3711,9 +4229,9 @@ function MentionPopup({ matches, index, labels, onHover, onPick }) {
         onMouseEnter: () => onHover(i),
         style: POP.item(i === index),
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Avatar, { name: m.name, kind: m.kind, size: 20 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: POP.name, children: m.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: POP.kind, children: m.kind === "agent" ? labels?.agent ?? "Agent" : labels?.human ?? "Person" })
+          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Avatar, { name: m.name, kind: m.kind, size: 20 }),
+          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: POP.name, children: m.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: POP.kind, children: m.kind === "agent" ? labels?.agent ?? "Agent" : labels?.human ?? "Person" })
         ]
       },
       `${m.kind}:${m.ref}`
@@ -3757,34 +4275,34 @@ var POP = {
 };
 
 // src/mention/TicketAutocomplete.tsx
-var import_react20 = require("react");
-var import_builderforce_brain_embedded12 = require("@seanhogg/builderforce-brain-embedded");
-var import_jsx_runtime24 = require("react/jsx-runtime");
+var import_react23 = require("react");
+var import_builderforce_brain_embedded13 = require("@seanhogg/builderforce-brain-embedded");
+var import_jsx_runtime30 = require("react/jsx-runtime");
 function useTicketAutocomplete(opts) {
   const { textareaRef, value, setValue, tickets, onPick, labels, disabled } = opts;
-  const [token, setToken] = (0, import_react20.useState)(null);
-  const [index, setIndex] = (0, import_react20.useState)(0);
-  const matches = (0, import_react20.useMemo)(
-    () => token && !disabled ? (0, import_builderforce_brain_embedded12.filterTicketCandidates)(tickets, token.query) : [],
+  const [token, setToken] = (0, import_react23.useState)(null);
+  const [index, setIndex] = (0, import_react23.useState)(0);
+  const matches = (0, import_react23.useMemo)(
+    () => token && !disabled ? (0, import_builderforce_brain_embedded13.filterTicketCandidates)(tickets, token.query) : [],
     [token, tickets, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = (0, import_react20.useCallback)(() => {
+  const recompute = (0, import_react23.useCallback)(() => {
     const el = textareaRef.current;
     if (!el || disabled || tickets.length === 0) {
       setToken(null);
       return;
     }
-    const next = (0, import_builderforce_brain_embedded12.activeTicketToken)(el.value, el.selectionStart ?? el.value.length);
+    const next = (0, import_builderforce_brain_embedded13.activeTicketToken)(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, tickets.length]);
-  (0, import_react20.useEffect)(() => {
+  (0, import_react23.useEffect)(() => {
     recompute();
   }, [value, recompute]);
-  const choose = (0, import_react20.useCallback)((t) => {
+  const choose = (0, import_react23.useCallback)((t) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? (0, import_builderforce_brain_embedded12.activeTicketToken)(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? (0, import_builderforce_brain_embedded13.activeTicketToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       const ref = t.key ?? String(t.id);
       let after = value.slice(tk.end);
@@ -3805,7 +4323,7 @@ function useTicketAutocomplete(opts) {
     setToken(null);
     onPick(t);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = (0, import_react20.useCallback)((e) => {
+  const onKeyDown = (0, import_react23.useCallback)((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -3829,18 +4347,18 @@ function useTicketAutocomplete(opts) {
         return false;
     }
   }, [open, matches, index, choose]);
-  const popup = open ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(TicketPopup, { matches, index, labels, onHover: setIndex, onPick: choose }) : null;
+  const popup = open ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(TicketPopup, { matches, index, labels, onHover: setIndex, onPick: choose }) : null;
   return { onKeyDown, onSelect: recompute, popup, open };
 }
 function TicketPopup({ matches, index, labels, onHover, onPick }) {
   if (matches.length === 0) {
-    return /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: POP2.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: POP2.empty, children: labels?.noMatches ?? "No tickets found" }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: POP2.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: POP2.empty, children: labels?.noMatches ?? "No tickets found" }) });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: POP2.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("ul", { role: "listbox", "aria-label": labels?.title ?? "Tag ticket", style: POP2.list, children: [
-    labels?.title && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("li", { "aria-hidden": true, style: POP2.group, children: labels.title }),
+  return /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: POP2.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("ul", { role: "listbox", "aria-label": labels?.title ?? "Tag ticket", style: POP2.list, children: [
+    labels?.title && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("li", { "aria-hidden": true, style: POP2.group, children: labels.title }),
     matches.map((t, i) => {
       const ref = t.key ?? String(t.id);
-      return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
+      return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
         "li",
         {
           role: "option",
@@ -3852,12 +4370,12 @@ function TicketPopup({ matches, index, labels, onHover, onPick }) {
           onMouseEnter: () => onHover(i),
           style: POP2.item(i === index),
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("span", { style: POP2.ref, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("span", { style: POP2.ref, children: [
               "#",
               ref
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: POP2.title, children: t.title }),
-            t.status && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: POP2.status, children: labels?.status ?? t.status })
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: POP2.title, children: t.title }),
+            t.status && /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: POP2.status, children: labels?.status ?? t.status })
           ]
         },
         ref
@@ -3925,7 +4443,7 @@ function chatDiagnosticsReads(adapter, chatId) {
 }
 
 // src/evermind/EvermindConsole.tsx
-var import_react26 = require("react");
+var import_react29 = require("react");
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -4150,7 +4668,7 @@ function evermindNextAction(input) {
 }
 
 // src/evermind/EvermindTestBench.tsx
-var import_react21 = require("react");
+var import_react24 = require("react");
 
 // src/evermind/consoleStyles.ts
 var C = {
@@ -4313,12 +4831,12 @@ var warnBox = {
 };
 
 // src/evermind/EvermindTestBench.tsx
-var import_jsx_runtime25 = require("react/jsx-runtime");
+var import_jsx_runtime31 = require("react/jsx-runtime");
 function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
-  const [prompt, setPrompt] = (0, import_react21.useState)("");
-  const [running, setRunning] = (0, import_react21.useState)(false);
-  const [error, setError] = (0, import_react21.useState)(null);
-  const run = (0, import_react21.useCallback)(async (withPrompt) => {
+  const [prompt, setPrompt] = (0, import_react24.useState)("");
+  const [running, setRunning] = (0, import_react24.useState)(false);
+  const [error, setError] = (0, import_react24.useState)(null);
+  const run = (0, import_react24.useCallback)(async (withPrompt) => {
     setRunning(true);
     setError(null);
     try {
@@ -4333,10 +4851,10 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
   const busy = disabled || running;
   const canRunPrompt = prompt.trim().length >= 3;
   const passed = result?.samples.filter((s) => s.coherent).length ?? 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: fieldTitle, children: t.testTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: fieldHint, children: t.testHint }),
-    /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: fieldTitle, children: t.testTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: fieldHint, children: t.testHint }),
+    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
       "textarea",
       {
         value: prompt,
@@ -4347,32 +4865,32 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
         style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" }
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", onClick: () => void run(true), disabled: busy || !canRunPrompt, style: primaryBtn(busy || !canRunPrompt), children: running ? t.testRunning : t.testRunCta }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", onClick: () => void run(false), disabled: busy, style: secondaryBtn(busy), children: t.testReadinessCta })
+    /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("button", { type: "button", onClick: () => void run(true), disabled: busy || !canRunPrompt, style: primaryBtn(busy || !canRunPrompt), children: running ? t.testRunning : t.testRunCta }),
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("button", { type: "button", onClick: () => void run(false), disabled: busy, style: secondaryBtn(busy), children: t.testReadinessCta })
     ] }),
-    error && /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
-    result && /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginTop: 2 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { ...fieldTitle, flex: "1 1 auto", minWidth: 0 }, children: result.mode === "readiness" ? t.testResultReadiness(passed, result.samples.length) : t.testResultPrompt }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: verdictTag(result.ready ? "ok" : "bad"), children: result.ready ? t.testServable : t.testRefused })
+    error && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
+    result && /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginTop: 2 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { ...fieldTitle, flex: "1 1 auto", minWidth: 0 }, children: result.mode === "readiness" ? t.testResultReadiness(passed, result.samples.length) : t.testResultPrompt }),
+        /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: verdictTag(result.ready ? "ok" : "bad"), children: result.ready ? t.testServable : t.testRefused })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: result.ready ? C.text2 : C.danger }, children: result.ready ? t.testVerdictReady : t.testVerdictNotReady }),
-      result.samples.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
-        result.samples.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: verdictTag(s.coherent ? "ok" : "bad"), children: s.coherent ? t.testServable : t.testRefused }),
-          /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { fontSize: "0.72rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: s.prompt })
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: result.ready ? C.text2 : C.danger }, children: result.ready ? t.testVerdictReady : t.testVerdictNotReady }),
+      result.samples.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
+        result.samples.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: verdictTag(s.coherent ? "ok" : "bad"), children: s.coherent ? t.testServable : t.testRefused }),
+          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { fontSize: "0.72rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: s.prompt })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: outputBox, children: s.text.trim() || t.testEmptyOutput }),
-        !s.coherent && s.detail && /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("p", { style: { ...italic, color: C.danger, fontStyle: "normal", fontSize: "0.72rem" }, children: t.testRefusedBecause(s.detail) })
+        /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: outputBox, children: s.text.trim() || t.testEmptyOutput }),
+        !s.coherent && s.detail && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: { ...italic, color: C.danger, fontStyle: "normal", fontSize: "0.72rem" }, children: t.testRefusedBecause(s.detail) })
       ] }, `${s.prompt}-${i}`))
     ] })
   ] });
 }
 
 // src/evermind/EvermindMaintenance.tsx
-var import_react22 = require("react");
-var import_jsx_runtime26 = require("react/jsx-runtime");
+var import_react25 = require("react");
+var import_jsx_runtime32 = require("react/jsx-runtime");
 function EvermindMaintenance({
   t,
   disabled,
@@ -4381,35 +4899,35 @@ function EvermindMaintenance({
   onReindex,
   onCleanup
 }) {
-  const [slug, setSlug] = (0, import_react22.useState)("");
-  const [pending, setPending] = (0, import_react22.useState)(null);
-  const doReseed = (0, import_react22.useCallback)(async () => {
+  const [slug, setSlug] = (0, import_react25.useState)("");
+  const [pending, setPending] = (0, import_react25.useState)(null);
+  const doReseed = (0, import_react25.useCallback)(async () => {
     setPending(null);
     await onReseed?.(slug || void 0);
   }, [onReseed, slug]);
-  const doCleanup = (0, import_react22.useCallback)(async () => {
+  const doCleanup = (0, import_react25.useCallback)(async () => {
     setPending(null);
     await onCleanup?.();
   }, [onCleanup]);
   if (!onReseed && !onReindex && !onCleanup) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: fieldTitle, children: t.maintenanceTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: fieldHint, children: t.maintenanceHint }),
-    onReindex && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: fieldTitle, children: t.maintenanceTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: fieldHint, children: t.maintenanceHint }),
+    onReindex && /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
       Row,
       {
         title: t.reindexLabel,
         hint: t.reindexHint,
-        action: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", onClick: () => void onReindex(), disabled, style: secondaryBtn(disabled), children: t.reindexCta })
+        action: /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("button", { type: "button", onClick: () => void onReindex(), disabled, style: secondaryBtn(disabled), children: t.reindexCta })
       }
     ),
-    onCleanup && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+    onCleanup && /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
       Row,
       {
         title: t.cleanupLabel,
         hint: t.cleanupHint,
-        action: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", onClick: () => setPending("cleanup"), disabled: disabled || pending === "cleanup", style: secondaryBtn(disabled || pending === "cleanup"), children: t.cleanupCta }),
-        confirm: pending === "cleanup" ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+        action: /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("button", { type: "button", onClick: () => setPending("cleanup"), disabled: disabled || pending === "cleanup", style: secondaryBtn(disabled || pending === "cleanup"), children: t.cleanupCta }),
+        confirm: pending === "cleanup" ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
           Confirm,
           {
             message: t.cleanupConfirm,
@@ -4422,13 +4940,13 @@ function EvermindMaintenance({
         ) : null
       }
     ),
-    onReseed && /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+    onReseed && /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
       Row,
       {
         title: t.reseedLabel,
         hint: t.reseedHint,
-        action: /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(
+        action: /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
             "select",
             {
               value: slug,
@@ -4437,14 +4955,14 @@ function EvermindMaintenance({
               "aria-label": t.reseedLabel,
               style: { ...select, maxWidth: 200 },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("option", { value: "", style: optionStyle, children: t.reseedStarterOption }),
-                seedModels.map((m) => /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug))
+                /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("option", { value: "", style: optionStyle, children: t.reseedStarterOption }),
+                seedModels.map((m) => /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug))
               ]
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", onClick: () => setPending("reseed"), disabled: disabled || pending === "reseed", style: dangerBtn(disabled || pending === "reseed"), children: t.reseedCta })
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("button", { type: "button", onClick: () => setPending("reseed"), disabled: disabled || pending === "reseed", style: dangerBtn(disabled || pending === "reseed"), children: t.reseedCta })
         ] }),
-        confirm: pending === "reseed" ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+        confirm: pending === "reseed" ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
           Confirm,
           {
             message: t.reseedConfirm,
@@ -4461,13 +4979,13 @@ function EvermindMaintenance({
   ] });
 }
 function Row({ title, hint, action, confirm }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { fontSize: "0.8rem", fontWeight: 600, color: C.text }, children: title }),
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: fieldHint, children: hint })
+  return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { fontSize: "0.8rem", fontWeight: 600, color: C.text }, children: title }),
+        /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: fieldHint, children: hint })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { flex: "0 1 auto" }, children: action })
+      /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { flex: "0 1 auto" }, children: action })
     ] }),
     confirm
   ] });
@@ -4481,18 +4999,18 @@ function Confirm({
   onConfirm,
   onCancel
 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { ...warnBox, display: "flex", flexDirection: "column", gap: 8 }, role: "alertdialog", "aria-label": message, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { children: message }),
-    /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", onClick: onConfirm, disabled, style: danger ? dangerBtn(disabled) : secondaryBtn(disabled), children: confirmLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("button", { type: "button", onClick: onCancel, disabled, style: secondaryBtn(disabled), children: cancelLabel })
+  return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { ...warnBox, display: "flex", flexDirection: "column", gap: 8 }, role: "alertdialog", "aria-label": message, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { children: message }),
+    /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("button", { type: "button", onClick: onConfirm, disabled, style: danger ? dangerBtn(disabled) : secondaryBtn(disabled), children: confirmLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("button", { type: "button", onClick: onCancel, disabled, style: secondaryBtn(disabled), children: cancelLabel })
     ] })
   ] });
 }
 
 // src/evermind/EvermindAnalyzer.tsx
-var import_react23 = require("react");
-var import_jsx_runtime27 = require("react/jsx-runtime");
+var import_react26 = require("react");
+var import_jsx_runtime33 = require("react/jsx-runtime");
 var TONE = {
   ok: "ok",
   incoherent: "bad",
@@ -4502,15 +5020,15 @@ var TONE = {
   redundant: "warn"
 };
 function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysis, onAnalysis }) {
-  const [selected, setSelected] = (0, import_react23.useState)(/* @__PURE__ */ new Set());
-  const [running, setRunning] = (0, import_react23.useState)(false);
-  const [applying, setApplying] = (0, import_react23.useState)(false);
-  const [repair, setRepair] = (0, import_react23.useState)(null);
-  const [error, setError] = (0, import_react23.useState)(null);
-  (0, import_react23.useEffect)(() => {
+  const [selected, setSelected] = (0, import_react26.useState)(/* @__PURE__ */ new Set());
+  const [running, setRunning] = (0, import_react26.useState)(false);
+  const [applying, setApplying] = (0, import_react26.useState)(false);
+  const [repair, setRepair] = (0, import_react26.useState)(null);
+  const [error, setError] = (0, import_react26.useState)(null);
+  (0, import_react26.useEffect)(() => {
     setSelected(new Set(analysis?.findings.map((f) => f.id) ?? []));
   }, [analysis]);
-  const run = (0, import_react23.useCallback)(async () => {
+  const run = (0, import_react26.useCallback)(async () => {
     setRunning(true);
     setError(null);
     setRepair(null);
@@ -4523,7 +5041,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setRunning(false);
     }
   }, [onAnalyze, onAnalysis, t.errorGeneric]);
-  const apply = (0, import_react23.useCallback)(async () => {
+  const apply = (0, import_react26.useCallback)(async () => {
     if (!onApply || !analysis) return;
     const picked = analysis.findings.filter((f) => selected.has(f.id));
     if (picked.length === 0) return;
@@ -4542,7 +5060,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setApplying(false);
     }
   }, [analysis, onAnalysis, onApply, onRepaired, selected, t.errorGeneric]);
-  const toggle = (0, import_react23.useCallback)((id) => {
+  const toggle = (0, import_react26.useCallback)((id) => {
     setSelected((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
@@ -4551,16 +5069,16 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     });
   }, []);
   const findings = analysis?.findings ?? [];
-  const allSelected = (0, import_react23.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
+  const allSelected = (0, import_react26.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
   const busy = disabled || running || applying;
-  return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: fieldTitle, children: t.analyzeTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: fieldHint, children: t.analyzeHint }),
-    /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("button", { type: "button", onClick: () => void run(), disabled: busy, style: secondaryBtn(busy), children: running ? t.analyzing : t.analyzeCta }),
-      findings.length > 0 && onApply && /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(import_jsx_runtime27.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("button", { type: "button", onClick: () => void apply(), disabled: busy || selected.size === 0, style: primaryBtn(busy || selected.size === 0), children: applying ? t.analyzeApplying : t.analyzeApplyCta(selected.size) }),
-        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: fieldTitle, children: t.analyzeTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: fieldHint, children: t.analyzeHint }),
+    /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { type: "button", onClick: () => void run(), disabled: busy, style: secondaryBtn(busy), children: running ? t.analyzing : t.analyzeCta }),
+      findings.length > 0 && onApply && /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(import_jsx_runtime33.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { type: "button", onClick: () => void apply(), disabled: busy || selected.size === 0, style: primaryBtn(busy || selected.size === 0), children: applying ? t.analyzeApplying : t.analyzeApplyCta(selected.size) }),
+        /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
           "button",
           {
             type: "button",
@@ -4572,14 +5090,14 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
         )
       ] })
     ] }),
-    error && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
-    repair && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(RepairOutcome, { t, repair }),
-    analysis?.warning && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("p", { style: warnBox, role: "note", children: analysis.warning }),
-    analysis && findings.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("p", { style: italic, children: t.analyzeClean(analysis.analyzed) }),
-    analysis?.truncated && typeof analysis.total === "number" && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("p", { style: italic, children: t.analyzeCoverage(analysis.analyzed, analysis.total) }),
-    analysis && findings.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(import_jsx_runtime27.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", color: C.text2 }, children: analysis.model ? t.analyzeSummary(findings.length, analysis.analyzed, analysis.model) : t.analyzeSummaryLocal(findings.length, analysis.analyzed) }),
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: findings.map((f) => /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
+    error && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
+    repair && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(RepairOutcome, { t, repair }),
+    analysis?.warning && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("p", { style: warnBox, role: "note", children: analysis.warning }),
+    analysis && findings.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("p", { style: italic, children: t.analyzeClean(analysis.analyzed) }),
+    analysis?.truncated && typeof analysis.total === "number" && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("p", { style: italic, children: t.analyzeCoverage(analysis.analyzed, analysis.total) }),
+    analysis && findings.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(import_jsx_runtime33.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", color: C.text2 }, children: analysis.model ? t.analyzeSummary(findings.length, analysis.analyzed, analysis.model) : t.analyzeSummaryLocal(findings.length, analysis.analyzed) }),
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: findings.map((f) => /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
         FindingRow,
         {
           t,
@@ -4598,7 +5116,7 @@ function RepairOutcome({ t, repair }) {
   const applied = repair.corrected + repair.forgotten > 0;
   const reasons = [...new Set(repair.skipped.map((s) => s.reason))].join("; ");
   if (!applied && !reasons) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
     "p",
     {
       style: applied ? { margin: 0, fontSize: "0.76rem", color: C.accent } : warnBox,
@@ -4620,7 +5138,7 @@ function FindingRow({
   onToggle
 }) {
   const tone = TONE[finding.verdict] ?? "warn";
-  return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("li", { style: {
+  return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("li", { style: {
     background: C.surface2,
     border: `1px solid ${selected ? C.accent : C.border}`,
     borderRadius: 8,
@@ -4629,8 +5147,8 @@ function FindingRow({
     flexDirection: "column",
     gap: 5
   }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-      selectable && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+      selectable && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
         "input",
         {
           type: "checkbox",
@@ -4641,26 +5159,26 @@ function FindingRow({
           style: { margin: 0, cursor: disabled ? "not-allowed" : "pointer" }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: verdictTag(tone), children: t.analyzeVerdict(finding.verdict) }),
-      finding.prompt && /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: finding.prompt })
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: verdictTag(tone), children: t.analyzeVerdict(finding.verdict) }),
+      finding.prompt && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: finding.prompt })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { fontSize: "0.74rem", lineHeight: 1.45, color: C.text }, children: finding.issue }),
-    /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { ...outputBox, maxHeight: 96, fontSize: "0.7rem", color: C.text2 }, children: finding.excerpt }),
-    finding.correction && /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.analyzeCorrectionLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { ...outputBox, maxHeight: 140, fontSize: "0.7rem" }, children: finding.correction })
+    /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: { fontSize: "0.74rem", lineHeight: 1.45, color: C.text }, children: finding.issue }),
+    /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: { ...outputBox, maxHeight: 96, fontSize: "0.7rem", color: C.text2 }, children: finding.excerpt }),
+    finding.correction && /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.analyzeCorrectionLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: { ...outputBox, maxHeight: 140, fontSize: "0.7rem" }, children: finding.correction })
     ] })
   ] });
 }
 
 // src/evermind/EvermindDiagnostics.tsx
-var import_react24 = require("react");
-var import_jsx_runtime28 = require("react/jsx-runtime");
+var import_react27 = require("react");
+var import_jsx_runtime34 = require("react/jsx-runtime");
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
-  const [report, setReport] = (0, import_react24.useState)(null);
-  const [copied, setCopied] = (0, import_react24.useState)(false);
-  const [revealed, setRevealed] = (0, import_react24.useState)(false);
-  const copy = (0, import_react24.useCallback)(async () => {
+  const [report, setReport] = (0, import_react27.useState)(null);
+  const [copied, setCopied] = (0, import_react27.useState)(false);
+  const [revealed, setRevealed] = (0, import_react27.useState)(false);
+  const copy = (0, import_react27.useCallback)(async () => {
     const text = buildReport();
     setReport(text);
     try {
@@ -4675,27 +5193,27 @@ function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
       onManualFallback?.();
     }
   }, [buildReport, onCopy, onManualFallback]);
-  const toggleReveal = (0, import_react24.useCallback)(() => setRevealed((v) => !v), []);
+  const toggleReveal = (0, import_react27.useCallback)(() => setRevealed((v) => !v), []);
   return { report, copied, revealed, copy, toggleReveal };
 }
 function EvermindDiagnostics({ t, disabled, copy }) {
   const { report, copied, revealed } = copy;
-  const areaRef = (0, import_react24.useRef)(null);
-  (0, import_react24.useEffect)(() => {
+  const areaRef = (0, import_react27.useRef)(null);
+  (0, import_react27.useEffect)(() => {
     if (!revealed) return;
     areaRef.current?.focus();
     areaRef.current?.select();
   }, [revealed]);
-  return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: fieldTitle, children: t.diagnosticsTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: fieldHint, children: t.diagnosticsHint }),
-    /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("button", { type: "button", onClick: () => void copy.copy(), disabled, style: secondaryBtn(disabled), children: t.diagnosticsCta }),
-      report !== null && /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("button", { type: "button", onClick: copy.toggleReveal, style: linkBtn, children: revealed ? t.diagnosticsHide : t.diagnosticsShow })
+  return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: fieldTitle, children: t.diagnosticsTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: fieldHint, children: t.diagnosticsHint }),
+    /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("button", { type: "button", onClick: () => void copy.copy(), disabled, style: secondaryBtn(disabled), children: t.diagnosticsCta }),
+      report !== null && /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("button", { type: "button", onClick: copy.toggleReveal, style: linkBtn, children: revealed ? t.diagnosticsHide : t.diagnosticsShow })
     ] }),
-    revealed && report !== null && /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(import_jsx_runtime28.Fragment, { children: [
-      !copied && /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, lineHeight: 1.4 }, children: t.diagnosticsManualHint }),
-      /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+    revealed && report !== null && /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(import_jsx_runtime34.Fragment, { children: [
+      !copied && /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, lineHeight: 1.4 }, children: t.diagnosticsManualHint }),
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
         "textarea",
         {
           ref: areaRef,
@@ -4712,11 +5230,11 @@ function EvermindDiagnostics({ t, disabled, copy }) {
 }
 
 // src/evermind/ConsoleTabs.tsx
-var import_react25 = require("react");
-var import_jsx_runtime29 = require("react/jsx-runtime");
+var import_react28 = require("react");
+var import_jsx_runtime35 = require("react/jsx-runtime");
 function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
-  const stripRef = (0, import_react25.useRef)(null);
-  const onKeyDown = (0, import_react25.useCallback)((e) => {
+  const stripRef = (0, import_react28.useRef)(null);
+  const onKeyDown = (0, import_react28.useCallback)((e) => {
     const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
     if (!keys.includes(e.key)) return;
     e.preventDefault();
@@ -4729,8 +5247,8 @@ function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
     stripRef.current?.querySelector(`[id="${idPrefix}-tab-${target.id}"]`)?.focus();
   }, [activeId, idPrefix, onSelect, tabs]);
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
-  return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 10 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 10 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
       "div",
       {
         ref: stripRef,
@@ -4747,7 +5265,7 @@ function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
         },
         children: tabs.map((tab) => {
           const selected = tab.id === active?.id;
-          return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+          return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(
             "button",
             {
               id: `${idPrefix}-tab-${tab.id}`,
@@ -4776,7 +5294,7 @@ function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
               },
               children: [
                 tab.label,
-                tab.badge && /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+                tab.badge && /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
                   "span",
                   {
                     "aria-hidden": true,
@@ -4801,7 +5319,7 @@ function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
         })
       }
     ),
-    active && /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+    active && /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
       "div",
       {
         id: `${idPrefix}-panel-${active.id}`,
@@ -4816,7 +5334,7 @@ function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
 }
 
 // src/evermind/CodingGateNote.tsx
-var import_jsx_runtime30 = require("react/jsx-runtime");
+var import_jsx_runtime36 = require("react/jsx-runtime");
 function wholePct(fraction) {
   return Math.floor(fraction * 100 + 1e-6);
 }
@@ -4839,7 +5357,7 @@ function codingGateMessage(gate, t) {
 function CodingGateNote({ gate, t }) {
   const message = codingGateMessage(gate, t);
   if (!message) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", lineHeight: 1.5 }, role: "note", "data-testid": "evermind-coding-gate", children: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: verdictTag(message.tone), children: message.text }) });
+  return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", lineHeight: 1.5 }, role: "note", "data-testid": "evermind-coding-gate", children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("span", { style: verdictTag(message.tone), children: message.text }) });
 }
 
 // src/evermind/diagnosticsReport.ts
@@ -5098,30 +5616,30 @@ function buildEvermindDiagnostics(input) {
 }
 
 // src/evermind/EvermindConsole.tsx
-var import_jsx_runtime31 = require("react/jsx-runtime");
+var import_jsx_runtime37 = require("react/jsx-runtime");
 var TEACH_POLL_INTERVAL_MS = 3e3;
 var TEACH_POLL_TIMEOUT_MS = 12e4;
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
-  const t = (0, import_react26.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
-  const [data, setData] = (0, import_react26.useState)(null);
-  const [targets, setTargets] = (0, import_react26.useState)(null);
-  const [seedModels, setSeedModels] = (0, import_react26.useState)([]);
-  const [teacherOpts, setTeacherOpts] = (0, import_react26.useState)(null);
-  const [selectedSlug, setSelectedSlug] = (0, import_react26.useState)("");
-  const [teachPrompt, setTeachPrompt] = (0, import_react26.useState)("");
-  const [teachText, setTeachText] = (0, import_react26.useState)("");
-  const [busy, setBusy] = (0, import_react26.useState)(false);
-  const [validating, setValidating] = (0, import_react26.useState)(false);
-  const [validateResult, setValidateResult] = (0, import_react26.useState)(null);
-  const [notice, setNotice] = (0, import_react26.useState)(null);
-  const [noticeTone, setNoticeTone] = (0, import_react26.useState)("good");
-  const [error, setError] = (0, import_react26.useState)(null);
-  const [loaded, setLoaded] = (0, import_react26.useState)(false);
-  const [tab, setTab] = (0, import_react26.useState)("teach");
-  const [probeResult, setProbeResult] = (0, import_react26.useState)(null);
-  const [analysis, setAnalysis] = (0, import_react26.useState)(null);
-  const [loadFailed, setLoadFailed] = (0, import_react26.useState)(false);
-  const reload = (0, import_react26.useCallback)(async () => {
+  const t = (0, import_react29.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
+  const [data, setData] = (0, import_react29.useState)(null);
+  const [targets, setTargets] = (0, import_react29.useState)(null);
+  const [seedModels, setSeedModels] = (0, import_react29.useState)([]);
+  const [teacherOpts, setTeacherOpts] = (0, import_react29.useState)(null);
+  const [selectedSlug, setSelectedSlug] = (0, import_react29.useState)("");
+  const [teachPrompt, setTeachPrompt] = (0, import_react29.useState)("");
+  const [teachText, setTeachText] = (0, import_react29.useState)("");
+  const [busy, setBusy] = (0, import_react29.useState)(false);
+  const [validating, setValidating] = (0, import_react29.useState)(false);
+  const [validateResult, setValidateResult] = (0, import_react29.useState)(null);
+  const [notice, setNotice] = (0, import_react29.useState)(null);
+  const [noticeTone, setNoticeTone] = (0, import_react29.useState)("good");
+  const [error, setError] = (0, import_react29.useState)(null);
+  const [loaded, setLoaded] = (0, import_react29.useState)(false);
+  const [tab, setTab] = (0, import_react29.useState)("teach");
+  const [probeResult, setProbeResult] = (0, import_react29.useState)(null);
+  const [analysis, setAnalysis] = (0, import_react29.useState)(null);
+  const [loadFailed, setLoadFailed] = (0, import_react29.useState)(false);
+  const reload = (0, import_react29.useCallback)(async () => {
     const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
       const d = await adapter.loadData();
@@ -5138,11 +5656,11 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (tg) setTargets(tg);
     }
   }, [adapter]);
-  (0, import_react26.useEffect)(() => {
+  (0, import_react29.useEffect)(() => {
     setLoaded(false);
     void reload();
   }, [reload]);
-  (0, import_react26.useEffect)(() => {
+  (0, import_react29.useEffect)(() => {
     if (!canManage) return;
     let cancelled = false;
     void adapter.loadSeedModels().then((m) => {
@@ -5160,7 +5678,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       cancelled = true;
     };
   }, [adapter, canManage]);
-  (0, import_react26.useEffect)(() => {
+  (0, import_react29.useEffect)(() => {
     if (!refreshMs) return;
     const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
     const id = setInterval(() => {
@@ -5175,13 +5693,13 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [refreshMs, busy, reload]);
-  const lastRefreshSignal = (0, import_react26.useRef)(refreshSignal);
-  (0, import_react26.useEffect)(() => {
+  const lastRefreshSignal = (0, import_react29.useRef)(refreshSignal);
+  (0, import_react29.useEffect)(() => {
     if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
     lastRefreshSignal.current = refreshSignal;
     void reload();
   }, [refreshSignal, reload]);
-  const runValidate = (0, import_react26.useCallback)(async (prompt) => {
+  const runValidate = (0, import_react29.useCallback)(async (prompt) => {
     const task = prompt.trim();
     if (task.length < 3) return;
     setValidating(true);
@@ -5197,20 +5715,20 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setValidating(false);
     }
   }, [adapter, onValidate, t.errorGeneric]);
-  const clearValidate = (0, import_react26.useCallback)(() => {
+  const clearValidate = (0, import_react29.useCallback)(() => {
     setValidateResult(null);
     onValidate?.(null);
   }, [onValidate]);
-  const pollTimer = (0, import_react26.useRef)(null);
-  const mounted = (0, import_react26.useRef)(true);
-  (0, import_react26.useEffect)(() => {
+  const pollTimer = (0, import_react29.useRef)(null);
+  const mounted = (0, import_react29.useRef)(true);
+  (0, import_react29.useEffect)(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
   }, []);
-  const describeTeachOutcome = (0, import_react26.useCallback)((status) => {
+  const describeTeachOutcome = (0, import_react29.useCallback)((status) => {
     if (status.state === "dropped") return { text: t.taughtDropped, tone: "warn" };
     if (status.state !== "merged") return { text: t.taughtStillPending, tone: "warn" };
     const verdict = evermindLearnedStatus({
@@ -5226,7 +5744,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     if (verdict.state === "fault") return { text: t.taughtTeacherFault(verdict.teacherModel ?? "", verdict.reason), tone: "warn" };
     return { text: t.taughtSelf(version), tone: "good" };
   }, [t]);
-  const trackTeach = (0, import_react26.useCallback)((contributionId) => {
+  const trackTeach = (0, import_react29.useCallback)((contributionId) => {
     const readStatus = adapter.teachStatus;
     if (!readStatus || !Number.isInteger(contributionId) || contributionId <= 0) return;
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -5260,7 +5778,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       void tick();
     }, TEACH_POLL_INTERVAL_MS);
   }, [adapter, describeTeachOutcome, reload, t.taughtStillPending]);
-  const run = (0, import_react26.useCallback)(async (op, successNotice) => {
+  const run = (0, import_react29.useCallback)(async (op, successNotice) => {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -5275,8 +5793,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setBusy(false);
     }
   }, [reload, t.errorGeneric]);
-  const panelId = (0, import_react26.useId)();
-  const buildReport = (0, import_react26.useCallback)(() => buildEvermindDiagnostics({
+  const panelId = (0, import_react29.useId)();
+  const buildReport = (0, import_react29.useCallback)(() => buildEvermindDiagnostics({
     data,
     projectName,
     host,
@@ -5291,7 +5809,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     onCopy: adapter.copyText,
     onManualFallback: () => setTab("maintain")
   });
-  if (!loaded) return /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Section, { "aria-busy": true, children: /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: { margin: 0, color: C.text2, fontSize: "0.82rem" }, children: t.loading }) });
+  if (!loaded) return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Section, { "aria-busy": true, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: { margin: 0, color: C.text2, fontSize: "0.82rem" }, children: t.loading }) });
   const seeded = !!data?.seeded;
   const frozen = data?.mode === "offline-frozen";
   const inherited = !!data?.inherited;
@@ -5309,22 +5827,22 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     probe: probeResult
   }) : null;
   const scopeName = projectName?.trim();
-  const Header = /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
-    scopeName && /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: { fontSize: "0.8rem", color: C.text2 }, title: scopeName, children: [
+  const Header = /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
+    scopeName && /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { style: { fontSize: "0.8rem", color: C.text2 }, title: scopeName, children: [
       "\xB7 ",
       scopeName
     ] }),
-    !loadFailed && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
-    !loadFailed && seeded && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(RegressionChip, { t, evalPoint: data?.eval ?? null }),
-    !loadFailed && quarantined && /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: quarantinePill, title: t.quarantinedHint(quarantineReason), children: [
+    !loadFailed && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
+    !loadFailed && seeded && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(RegressionChip, { t, evalPoint: data?.eval ?? null }),
+    !loadFailed && quarantined && /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { style: quarantinePill, title: t.quarantinedHint(quarantineReason), children: [
       "\u26A0 ",
       t.quarantinedBadge
     ] }),
-    diagnostics.copied && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { role: "status", style: { fontSize: "0.72rem", color: C.accent }, children: t.diagnosticsCopied }),
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+    diagnostics.copied && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { role: "status", style: { fontSize: "0.72rem", color: C.accent }, children: t.diagnosticsCopied }),
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(
         "button",
         {
           type: "button",
@@ -5333,19 +5851,19 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           title: t.diagnosticsCta,
           "aria-label": t.diagnosticsCta,
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { "aria-hidden": true, children: diagnostics.copied ? "\u2713" : "\u29C9" }),
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { "aria-hidden": true, children: diagnostics.copied ? "\u2713" : "\u29C9" }),
             t.diagnosticsTitle
           ]
         }
       ),
-      showHeaderRefresh && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: { ...ghostBtn, marginLeft: 0 }, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
+      showHeaderRefresh && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: { ...ghostBtn, marginLeft: 0 }, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
     ] })
   ] });
   if (loadFailed) {
-    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(Section, { "aria-label": t.title, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(Section, { "aria-label": t.title, children: [
       Header,
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.danger }, role: "alert", children: t.errorGeneric }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: primaryBtn(busy), children: t.refresh })
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.danger }, role: "alert", children: t.errorGeneric }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: primaryBtn(busy), children: t.refresh })
     ] });
   }
   const tabs = [];
@@ -5357,8 +5875,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       // The queue depth belongs here: "3 waiting" is a prompt to press Learn now, and
       // it is the one number that changes while you are on another tab.
       ...head.pending > 0 ? { badge: String(head.pending), badgeTone: "info" } : {},
-      content: /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(import_jsx_runtime31.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+      content: /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(import_jsx_runtime37.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
           TeacherPicker,
           {
             t,
@@ -5369,7 +5887,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
             onChange: (m) => run(() => adapter.setTeacher(m || null))
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
           TeachBox,
           {
             t,
@@ -5394,9 +5912,9 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
             onValidate: () => runValidate(head.teacherModel ? teachPrompt : teachPrompt.trim() || teachText)
           }
         ),
-        validateResult && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(ValidateResults, { t, result: validateResult, onClear: clearValidate }),
-        canManage && /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+        validateResult && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(ValidateResults, { t, result: validateResult, onClear: clearValidate }),
+        canManage && /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
             "button",
             {
               type: "button",
@@ -5409,13 +5927,13 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
               children: busy ? t.flushing : t.flushCta
             }
           ),
-          head.pending > 0 && /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: { fontSize: "0.74rem", color: C.text2 }, children: [
+          head.pending > 0 && /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { style: { fontSize: "0.74rem", color: C.text2 }, children: [
             t.pendingLabel,
             ": ",
             head.pending
           ] })
         ] }),
-        canManage && adapter.importMemory && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+        canManage && adapter.importMemory && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
           ImportBox,
           {
             t,
@@ -5440,7 +5958,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         // A failed readiness check follows you to the other tabs. A refusal you can only
         // see while standing on the tab that found it is a refusal you forget.
         ...refused ? { badge: "!", badgeTone: "bad" } : {},
-        content: /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+        content: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
           EvermindTestBench,
           {
             t,
@@ -5458,7 +5976,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         id: "check",
         label: t.tabCheck,
         ...issues > 0 ? { badge: String(issues), badgeTone: "bad" } : {},
-        content: /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+        content: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
           EvermindAnalyzer,
           {
             t,
@@ -5475,8 +5993,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     tabs.push({
       id: "maintain",
       label: t.tabMaintain,
-      content: /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(import_jsx_runtime31.Fragment, { children: [
-        canManage && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+      content: /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(import_jsx_runtime37.Fragment, { children: [
+        canManage && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
           EvermindMaintenance,
           {
             t,
@@ -5502,15 +6020,15 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
             } : {}
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(EvermindDiagnostics, { t, disabled: busy, copy: diagnostics })
+        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(EvermindDiagnostics, { t, disabled: busy, copy: diagnostics })
       ] })
     });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(Section, { "aria-label": t.title, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(Section, { "aria-label": t.title, children: [
     Header,
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.text2 }, children: t.description }),
-    !canManage && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, fontStyle: "italic" }, children: t.managerOnlyHint }),
-    inherited && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.text2 }, children: t.description }),
+    !canManage && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, fontStyle: "italic" }, children: t.managerOnlyHint }),
+    inherited && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
       "p",
       {
         style: { margin: 0, fontSize: "0.72rem", lineHeight: 1.5, color: C.text2, fontStyle: "italic" },
@@ -5518,15 +6036,15 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         children: t.inheritedHint
       }
     ),
-    quarantined && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: warnBox, role: "alert", children: t.quarantinedHint(quarantineReason) }),
-    !loadFailed && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(CodingGateNote, { gate: data?.codingGate, t }),
-    nextAction && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(NextActionCard, { action: nextAction, canAct: canManage && !busy && !inherited, onAction: () => {
+    quarantined && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: warnBox, role: "alert", children: t.quarantinedHint(quarantineReason) }),
+    !loadFailed && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(CodingGateNote, { gate: data?.codingGate, t }),
+    nextAction && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(NextActionCard, { action: nextAction, canAct: canManage && !busy && !inherited, onAction: () => {
       if (nextAction.id === "test") setTab("test");
       else if (nextAction.id === "teacher" || nextAction.id === "merge" || nextAction.id === "learn") setTab("teach");
       else if (nextAction.id === "check") setTab("check");
       else if (nextAction.id === "enable") void run(() => adapter.setInference(true));
     } }),
-    targets && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(TargetsList, { t, targets }),
+    targets && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(TargetsList, { t, targets }),
     inherited ? (
       // INHERITED — read-only. This build has no `project_evermind` row of its own;
       // it is displaying its container project's. Every write endpoint keeps exact-id
@@ -5535,8 +6053,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       // rendering the container's unchanged stats. Rendering the stats WITHOUT the
       // controls is the honest surface — the model is genuinely shared and genuinely
       // shown; it is just not managed from here.
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(StatRow, { t, data })
-    ) : !seeded ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(StatRow, { t, data })
+    ) : !seeded ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
       SeedControls,
       {
         t,
@@ -5547,9 +6065,9 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         onSelect: setSelectedSlug,
         onSeed: () => selectedSlug && run(() => adapter.seedFromModel(selectedSlug))
       }
-    ) : /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(import_jsx_runtime31.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(StatRow, { t, data }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+    ) : /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(import_jsx_runtime37.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(StatRow, { t, data }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
         ToggleRow,
         {
           label: t.inferenceLabel,
@@ -5561,7 +6079,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           onToggle: () => run(() => adapter.setInference(!data?.inferenceEnabled))
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
         ToggleRow,
         {
           label: t.learningLabel,
@@ -5573,7 +6091,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           onToggle: () => run(() => adapter.setMode(frozen ? "connected" : "offline-frozen"))
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
         ConsoleTabs,
         {
           tabs,
@@ -5583,26 +6101,26 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           idPrefix: `ev${panelId}`
         }
       ),
-      showRecent && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(RecentList, { t, entries: data?.recent ?? [] })
+      showRecent && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(RecentList, { t, entries: data?.recent ?? [] })
     ] }),
-    notice && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: noticeTone === "warn" ? C.warnText : C.accent }, role: "status", children: notice }),
-    error && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })
+    notice && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: noticeTone === "warn" ? C.warnText : C.accent }, role: "status", children: notice }),
+    error && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })
   ] });
 }
 function NextActionCard({ action, canAct, onAction }) {
   const color = action.tone === "danger" ? C.danger : action.tone === "attention" ? C.warnText : action.tone === "good" ? C.accent : C.text2;
   const actionable = !["seed", "none"].includes(action.id);
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("section", { "aria-label": "Recommended next action", style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "6px 12px", alignItems: "center", padding: "11px 12px", border: `1px solid ${color}`, borderRadius: 10, background: C.surface2 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { gridColumn: "1 / -1", color, fontSize: "0.62rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }, children: "Recommended next action" }),
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { minWidth: 0 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("strong", { style: { display: "block", color: C.text, fontSize: "0.82rem" }, children: action.title }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: { margin: "3px 0 0", color: C.text2, fontSize: "0.72rem", lineHeight: 1.45 }, children: action.detail }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("small", { style: { display: "block", marginTop: 5, color, fontSize: "0.66rem", fontWeight: 700 }, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("section", { "aria-label": "Recommended next action", style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "6px 12px", alignItems: "center", padding: "11px 12px", border: `1px solid ${color}`, borderRadius: 10, background: C.surface2 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { gridColumn: "1 / -1", color, fontSize: "0.62rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }, children: "Recommended next action" }),
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { minWidth: 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("strong", { style: { display: "block", color: C.text, fontSize: "0.82rem" }, children: action.title }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: { margin: "3px 0 0", color: C.text2, fontSize: "0.72rem", lineHeight: 1.45 }, children: action.detail }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("small", { style: { display: "block", marginTop: 5, color, fontSize: "0.66rem", fontWeight: 700 }, children: [
         "Go to: ",
         action.destination
       ] })
     ] }),
-    actionable && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("button", { type: "button", disabled: !canAct, onClick: onAction, style: { border: `1px solid ${color}`, borderRadius: 8, padding: "7px 10px", background: "transparent", color, fontSize: "0.7rem", fontWeight: 800, cursor: canAct ? "pointer" : "not-allowed", opacity: canAct ? 1 : 0.55 }, children: action.cta })
+    actionable && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("button", { type: "button", disabled: !canAct, onClick: onAction, style: { border: `1px solid ${color}`, borderRadius: 8, padding: "7px 10px", background: "transparent", color, fontSize: "0.7rem", fontWeight: 800, cursor: canAct ? "pointer" : "not-allowed", opacity: canAct ? 1 : 0.55 }, children: action.cta })
   ] });
 }
 function RegressionChip({ t, evalPoint }) {
@@ -5614,7 +6132,7 @@ function RegressionChip({ t, evalPoint }) {
   const color = tone === "up" ? "#22c55e" : tone === "down" ? "#f87171" : C.text2;
   const label = tone === "flat" ? t.evalFlat : t.evalDelta(pct.toFixed(1));
   const title = t.evalTooltip(evalPoint.version, evalPoint.baseLoss.toFixed(3), evalPoint.newLoss.toFixed(3), evalPoint.evalSize);
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(
     "span",
     {
       title,
@@ -5631,14 +6149,14 @@ function RegressionChip({ t, evalPoint }) {
         padding: "2px 8px"
       },
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { "aria-hidden": true, children: arrow }),
+        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { "aria-hidden": true, children: arrow }),
         label
       ]
     }
   );
 }
 function Section({ children, ...rest }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
     "section",
     {
       ...rest,
@@ -5664,13 +6182,13 @@ function SeedControls({
   onSelect,
   onSeed
 }) {
-  if (!canManage) return /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: italic, children: t.notSetUp });
-  if (models.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: italic, children: t.noModels });
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("label", { style: fieldLabel, children: t.pickModelLabel }),
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("select", { value: selectedSlug, onChange: (e) => onSelect(e.target.value), disabled: busy, style: { ...select, flex: "1 1 200px" }, children: models.map((m) => /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug)) }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("button", { type: "button", onClick: onSeed, disabled: busy || !selectedSlug, style: primaryBtn(busy || !selectedSlug), children: busy ? t.working : t.enableCta })
+  if (!canManage) return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: italic, children: t.notSetUp });
+  if (models.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: italic, children: t.noModels });
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("label", { style: fieldLabel, children: t.pickModelLabel }),
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("select", { value: selectedSlug, onChange: (e) => onSelect(e.target.value), disabled: busy, style: { ...select, flex: "1 1 200px" }, children: models.map((m) => /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("button", { type: "button", onClick: onSeed, disabled: busy || !selectedSlug, style: primaryBtn(busy || !selectedSlug), children: busy ? t.working : t.enableCta })
     ] })
   ] });
 }
@@ -5682,9 +6200,9 @@ function StatRow({ t, data }) {
     { label: t.pendingLabel, value: String(data.pending) },
     { label: t.lastLearnedLabel, value: last }
   ];
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 8 }, children: stats.map((s) => /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: s.label }),
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { fontSize: "0.9rem", fontWeight: 700, color: C.text, marginTop: 2, wordBreak: "break-word" }, children: s.value })
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 8 }, children: stats.map((s) => /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: s.label }),
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { fontSize: "0.9rem", fontWeight: 700, color: C.text, marginTop: 2, wordBreak: "break-word" }, children: s.value })
   ] }, s.label)) });
 }
 function ToggleRow({
@@ -5696,12 +6214,12 @@ function ToggleRow({
   onText,
   offText
 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: fieldTitle, children: label }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: fieldHint, children: hint })
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: fieldTitle, children: label }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: fieldHint, children: hint })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
       "button",
       {
         type: "button",
@@ -5735,16 +6253,16 @@ function TeacherPicker({
 }) {
   const models = opts?.models ?? [];
   const options = value && !models.includes(value) ? [value, ...models] : models;
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: fieldTitle, children: t.teacherLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: fieldHint, children: t.teacherHint })
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: fieldTitle, children: t.teacherLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: fieldHint, children: t.teacherHint })
     ] }),
-    !canManage ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { ...select, color: C.text2 }, children: value || t.teacherNone }) : opts && !opts.isPaid ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: italic, children: t.teacherPaidOnly }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("select", { value, onChange: (e) => onChange(e.target.value), disabled: busy, "aria-label": t.teacherLabel, style: { ...select, maxWidth: 340 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("option", { value: "", style: optionStyle, children: t.teacherNone }),
-      options.map((m) => /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("option", { value: m, style: optionStyle, children: m }, m))
+    !canManage ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { ...select, color: C.text2 }, children: value || t.teacherNone }) : opts && !opts.isPaid ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: italic, children: t.teacherPaidOnly }) : /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("select", { value, onChange: (e) => onChange(e.target.value), disabled: busy, "aria-label": t.teacherLabel, style: { ...select, maxWidth: 340 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("option", { value: "", style: optionStyle, children: t.teacherNone }),
+      options.map((m) => /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("option", { value: m, style: optionStyle, children: m }, m))
     ] }),
-    value && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { fontSize: "0.72rem", lineHeight: 1.4, color: C.accent, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px" }, children: t.teacherActiveHint(value) })
+    value && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { fontSize: "0.72rem", lineHeight: 1.4, color: C.accent, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px" }, children: t.teacherActiveHint(value) })
   ] });
 }
 function TeachBox({
@@ -5762,66 +6280,66 @@ function TeachBox({
   const teaching = !!teacherModel;
   const canTeach = teaching ? prompt.trim().length >= 20 : text.trim().length >= 20;
   const canValidate = (teaching ? prompt : prompt.trim() || text).trim().length >= 3;
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: fieldTitle, children: teaching ? t.teachTeacherTitle : t.teachTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: fieldHint, children: teaching ? t.teachTeacherHint(teacherModel) : t.teachHint }),
-    teaching ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("textarea", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachTaskPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(import_jsx_runtime31.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("textarea", { value: text, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } })
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: fieldTitle, children: teaching ? t.teachTeacherTitle : t.teachTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: fieldHint, children: teaching ? t.teachTeacherHint(teacherModel) : t.teachHint }),
+    teaching ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("textarea", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachTaskPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }) : /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(import_jsx_runtime37.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("textarea", { value: text, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("button", { type: "button", onClick: onValidate, disabled: busy || validating || !canValidate, style: secondaryBtn(busy || validating || !canValidate), title: t.validateHint, children: validating ? t.validating : t.validateCta })
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("button", { type: "button", onClick: onValidate, disabled: busy || validating || !canValidate, style: secondaryBtn(busy || validating || !canValidate), title: t.validateHint, children: validating ? t.validating : t.validateCta })
     ] })
   ] });
 }
 function ImportBox({ t, busy, frozen, onImport }) {
   const disabled = busy || frozen;
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: fieldTitle, children: t.importTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: fieldHint, children: t.importHint }),
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("button", { type: "button", onClick: onImport, disabled, style: { ...secondaryBtn(disabled), alignSelf: "flex-start" }, children: busy ? t.importing : t.importCta })
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: fieldTitle, children: t.importTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: fieldHint, children: t.importHint }),
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("button", { type: "button", onClick: onImport, disabled, style: { ...secondaryBtn(disabled), alignSelf: "flex-start" }, children: busy ? t.importing : t.importCta })
   ] });
 }
 function ValidateResults({ t, result, onClear }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { ...fieldTitle, flex: 1, minWidth: 0 }, children: t.validateResultTitle(result.prompt) }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { fontSize: "0.64rem", fontWeight: 600, color: C.text2, border: `1px solid ${C.border}`, borderRadius: 999, padding: "1px 8px" }, children: t.validateMethod(result.method) }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("button", { type: "button", onClick: onClear, style: { ...ghostBtn, marginLeft: 0 }, children: t.validateClear })
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { ...fieldTitle, flex: 1, minWidth: 0 }, children: t.validateResultTitle(result.prompt) }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { fontSize: "0.64rem", fontWeight: 600, color: C.text2, border: `1px solid ${C.border}`, borderRadius: 999, padding: "1px 8px" }, children: t.validateMethod(result.method) }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("button", { type: "button", onClick: onClear, style: { ...ghostBtn, marginLeft: 0 }, children: t.validateClear })
     ] }),
-    result.matches.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: italic, children: t.validateEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: result.matches.map((m) => {
+    result.matches.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: italic, children: t.validateEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: result.matches.map((m) => {
       const primary = m.id === result.primaryId;
       const pct = Math.round(m.score * 100);
-      return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("li", { style: { display: "flex", flexDirection: "column", gap: 4, border: `1px solid ${primary ? C.accent : C.border}`, borderRadius: 6, padding: "6px 8px", background: C.surface }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-          primary && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: tag(false), children: t.validatePrimaryBadge }),
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(m.version) }),
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", fontWeight: 700, color: C.accent }, children: t.validateScore(pct) })
+      return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("li", { style: { display: "flex", flexDirection: "column", gap: 4, border: `1px solid ${primary ? C.accent : C.border}`, borderRadius: 6, padding: "6px 8px", background: C.surface }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+          primary && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: tag(false), children: t.validatePrimaryBadge }),
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(m.version) }),
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", fontWeight: 700, color: C.accent }, children: t.validateScore(pct) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { height: 4, borderRadius: 999, background: C.border, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { width: `${pct}%`, height: "100%", background: C.accent } }) }),
-        m.prompt && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: m.prompt }),
-        m.text && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { fontSize: "0.72rem", color: C.text2, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 54, overflow: "hidden" }, children: m.text })
+        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { height: 4, borderRadius: 999, background: C.border, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { width: `${pct}%`, height: "100%", background: C.accent } }) }),
+        m.prompt && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: m.prompt }),
+        m.text && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { fontSize: "0.72rem", color: C.text2, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 54, overflow: "hidden" }, children: m.text })
       ] }, m.id);
     }) })
   ] });
 }
 function TargetsList({ t, targets }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: fieldTitle, children: t.targetsTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: fieldHint, children: t.targetsHint }),
-    targets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: italic, children: t.targetsEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: targets.map((tg, i) => /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: fieldTitle, children: t.targetsTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: fieldHint, children: t.targetsHint }),
+    targets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: italic, children: t.targetsEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: targets.map((tg, i) => /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(
       "li",
       {
         style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: tag(false), children: i === 0 ? t.targetSelfBadge : t.targetBuildBadge }),
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { fontSize: "0.78rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: tg.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.targetProjectId(tg.projectId) }),
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: targetChip, children: tg.seeded ? t.targetSeeded(tg.version) : t.targetUnseeded }),
-            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: targetChip, children: tg.mode === "connected" ? t.targetConnected : t.targetFrozen }),
-            tg.inferenceEnabled && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { ...targetChip, color: C.accent, borderColor: C.accent }, children: t.targetInferenceOn })
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: tag(false), children: i === 0 ? t.targetSelfBadge : t.targetBuildBadge }),
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { fontSize: "0.78rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: tg.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.targetProjectId(tg.projectId) }),
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: targetChip, children: tg.seeded ? t.targetSeeded(tg.version) : t.targetUnseeded }),
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: targetChip, children: tg.mode === "connected" ? t.targetConnected : t.targetFrozen }),
+            tg.inferenceEnabled && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { ...targetChip, color: C.accent, borderColor: C.accent }, children: t.targetInferenceOn })
           ] })
         ]
       },
@@ -5830,32 +6348,32 @@ function TargetsList({ t, targets }) {
   ] });
 }
 function RecentList({ t, entries }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: fieldTitle, children: t.inspectTitle }),
-    entries.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("p", { style: italic, children: t.inspectEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: entries.map((e) => /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(RecentRow, { t, entry: e }, e.id)) })
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: fieldTitle, children: t.inspectTitle }),
+    entries.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("p", { style: italic, children: t.inspectEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: entries.map((e) => /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(RecentRow, { t, entry: e }, e.id)) })
   ] });
 }
 function RecentRow({ t, entry }) {
-  const [open, setOpen] = (0, import_react26.useState)(false);
+  const [open, setOpen] = (0, import_react29.useState)(false);
   const status = evermindLearnedStatus(entry);
   const faulted = status.state === "fault";
   const body = entry.kind === "delta" ? t.deltaEntry : faulted ? "" : entry.text ?? "";
   const hasDetail = entry.kind !== "delta" && (!!entry.prompt || !!entry.text || faulted);
-  return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("li", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: tag(entry.kind === "delta"), children: entry.kind === "delta" ? t.kindDelta : t.kindText }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(entry.version) }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.weightTag(entry.weight) }),
-      faulted && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: faultTag, children: t.notDistilled }),
-      status.state === "distilled" && status.teacherModel && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.distilledBy(status.teacherModel) }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", color: C.text2 }, children: t.formatWhen(entry.at) })
+  return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("li", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: tag(entry.kind === "delta"), children: entry.kind === "delta" ? t.kindDelta : t.kindText }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(entry.version) }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.weightTag(entry.weight) }),
+      faulted && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: faultTag, children: t.notDistilled }),
+      status.state === "distilled" && status.teacherModel && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.distilledBy(status.teacherModel) }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", color: C.text2 }, children: t.formatWhen(entry.at) })
     ] }),
-    entry.prompt && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { fontSize: "0.76rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: entry.prompt }),
-    open ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }, children: faulted ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.5 }, children: t.teacherFault(status.teacherModel ?? "", status.reason) }) : entry.text && /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.detailTextLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { fontSize: "0.74rem", color: C.text, lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }, children: entry.text })
-    ] }) }) : body && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 72, overflow: "hidden" }, children: body }),
-    hasDetail && /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("button", { type: "button", onClick: () => setOpen((v) => !v), style: { ...linkBtn, alignSelf: "flex-start" }, children: open ? t.hideDetail : t.viewDetail })
+    entry.prompt && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { fontSize: "0.76rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: entry.prompt }),
+    open ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }, children: faulted ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.5 }, children: t.teacherFault(status.teacherModel ?? "", status.reason) }) : entry.text && /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.detailTextLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { fontSize: "0.74rem", color: C.text, lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }, children: entry.text })
+    ] }) }) : body && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 72, overflow: "hidden" }, children: body }),
+    hasDetail && /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("button", { type: "button", onClick: () => setOpen((v) => !v), style: { ...linkBtn, alignSelf: "flex-start" }, children: open ? t.hideDetail : t.viewDetail })
   ] });
 }
 var faultTag = {
@@ -5988,7 +6506,7 @@ function preferredEvermindBuild(builds, pick = {}) {
 }
 
 // src/index.ts
-var import_builderforce_brain_embedded14 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded16 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/evermind/labelBundle.ts
 var STATIC_KEYS = [
@@ -6100,7 +6618,7 @@ var STATIC_KEYS = [
   "diagnosticsHide",
   "diagnosticsManualHint"
 ];
-var fill = (template, vars) => template.replace(/\{(\w+)\}/g, (whole, k) => k in vars ? String(vars[k]) : whole);
+var fill2 = (template, vars) => template.replace(/\{(\w+)\}/g, (whole, k) => k in vars ? String(vars[k]) : whole);
 function evermindLabelsFromBundle(bundle, prefix = "ev.") {
   const s = (key) => bundle[`${prefix}${key}`];
   const out = {};
@@ -6109,28 +6627,28 @@ function evermindLabelsFromBundle(bundle, prefix = "ev.") {
     if (v != null) out[k] = v;
   }
   const seeded = s("statusSeeded");
-  if (seeded) out.statusSeeded = (version) => fill(seeded, { version });
+  if (seeded) out.statusSeeded = (version) => fill2(seeded, { version });
   const flushedN = s("flushedN");
-  if (flushedN) out.flushedN = (merged, version) => fill(flushedN, { merged, version });
+  if (flushedN) out.flushedN = (merged, version) => fill2(flushedN, { merged, version });
   const importDone = s("importDone");
-  if (importDone) out.importDone = (absorbed, version, compacted, savedKb) => fill(importDone, { absorbed, version, compacted, savedKb });
+  if (importDone) out.importDone = (absorbed, version, compacted, savedKb) => fill2(importDone, { absorbed, version, compacted, savedKb });
   const quarantinedHint = s("quarantinedHint");
-  if (quarantinedHint) out.quarantinedHint = (reason) => fill(quarantinedHint, { reason });
+  if (quarantinedHint) out.quarantinedHint = (reason) => fill2(quarantinedHint, { reason });
   const targetSeeded = s("targetSeeded");
-  if (targetSeeded) out.targetSeeded = (version) => fill(targetSeeded, { version });
+  if (targetSeeded) out.targetSeeded = (version) => fill2(targetSeeded, { version });
   const targetProjectId = s("targetProjectId");
-  if (targetProjectId) out.targetProjectId = (id) => fill(targetProjectId, { id });
+  if (targetProjectId) out.targetProjectId = (id) => fill2(targetProjectId, { id });
   const taughtDistilled = s("taughtDistilled");
-  if (taughtDistilled) out.taughtDistilled = (model, version) => fill(taughtDistilled, { model, version });
+  if (taughtDistilled) out.taughtDistilled = (model, version) => fill2(taughtDistilled, { model, version });
   const taughtSelf = s("taughtSelf");
-  if (taughtSelf) out.taughtSelf = (version) => fill(taughtSelf, { version });
+  if (taughtSelf) out.taughtSelf = (version) => fill2(taughtSelf, { version });
   const taughtTeacherFault = s("taughtTeacherFault");
-  if (taughtTeacherFault) out.taughtTeacherFault = (model, reason) => fill(taughtTeacherFault, { model, reason });
+  if (taughtTeacherFault) out.taughtTeacherFault = (model, reason) => fill2(taughtTeacherFault, { model, reason });
   return out;
 }
 
 // src/project360/Project360View.tsx
-var import_react27 = require("react");
+var import_react30 = require("react");
 
 // src/project360/sunburstGeometry.ts
 var VIEWBOX = 320;
@@ -6184,12 +6702,12 @@ function padSlice(startDeg, endDeg, padDeg) {
 var ARC_PAD_DEG = 0.6;
 
 // src/project360/Sunburst.tsx
-var import_jsx_runtime32 = require("react/jsx-runtime");
+var import_jsx_runtime38 = require("react/jsx-runtime");
 function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel }) {
   const nPillars = pillars.length || 1;
   const pillarSpan = 360 / nPillars;
   const dimsByPillar = pillars.map((p) => dimensions.filter((d) => d.pillar === p.key));
-  return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(
     "svg",
     {
       className: "bf-360-wheel",
@@ -6202,8 +6720,8 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
           const pMid = (pStart + pEnd) / 2;
           const dims = dimsByPillar[pi];
           const pLabel = labelAt((R_INNER_0 + R_INNER_1) / 2, pMid);
-          return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("g", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+          return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("g", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
               "path",
               {
                 d: sector(R_INNER_0, R_INNER_1, ...padSlice(pStart, pEnd, ARC_PAD_DEG)),
@@ -6212,7 +6730,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                 className: "bf-360-arc bf-360-arc--pillar"
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
               "text",
               {
                 x: pLabel.x,
@@ -6229,7 +6747,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
               const isSel = selected === dim.key;
               const lab = labelAt((R_OUTER_0 + R_OUTER_1) / 2, dMid);
               const lines = twoLines(dim.label);
-              return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
+              return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(
                 "g",
                 {
                   className: "bf-360-arc-group",
@@ -6238,7 +6756,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                   "aria-pressed": isSel,
                   "aria-label": `${dim.label}: ${dim.score} of 100`,
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
                       "path",
                       {
                         d: sector(R_OUTER_0, R_OUTER_1, ...padSlice(dStart, dEnd, ARC_PAD_DEG)),
@@ -6247,7 +6765,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                         className: `bf-360-arc bf-360-arc--dim${isSel ? " is-selected" : ""}`
                       }
                     ),
-                    /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
                       "text",
                       {
                         x: lab.x,
@@ -6255,7 +6773,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                         className: "bf-360-arc-label",
                         textAnchor: "middle",
                         dominantBaseline: "central",
-                        children: lines.map((ln, li) => /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("tspan", { x: lab.x, dy: li === 0 ? lines.length > 1 ? "-0.5em" : "0" : "1em", children: ln }, li))
+                        children: lines.map((ln, li) => /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("tspan", { x: lab.x, dy: li === 0 ? lines.length > 1 ? "-0.5em" : "0" : "1em", children: ln }, li))
                       }
                     )
                   ]
@@ -6265,10 +6783,10 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
             })
           ] }, pillar.key);
         }),
-        /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("circle", { cx: CX, cy: CY, r: R_CENTER, className: "bf-360-center", onClick: () => onSelect?.(null), role: "button", "aria-label": "Clear selection" }),
-        /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("circle", { cx: CX, cy: CY, r: R_CENTER, fill: "none", stroke: overall.color, strokeWidth: 3, className: "bf-360-center-ring" }),
-        /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("text", { x: CX, y: CY - 8, className: "bf-360-center-score", textAnchor: "middle", dominantBaseline: "central", fill: overall.color, children: overall.score }),
-        /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("text", { x: CX, y: CY + 14, className: "bf-360-center-label", textAnchor: "middle", dominantBaseline: "central", children: "HEALTH" })
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("circle", { cx: CX, cy: CY, r: R_CENTER, className: "bf-360-center", onClick: () => onSelect?.(null), role: "button", "aria-label": "Clear selection" }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("circle", { cx: CX, cy: CY, r: R_CENTER, fill: "none", stroke: overall.color, strokeWidth: 3, className: "bf-360-center-ring" }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("text", { x: CX, y: CY - 8, className: "bf-360-center-score", textAnchor: "middle", dominantBaseline: "central", fill: overall.color, children: overall.score }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("text", { x: CX, y: CY + 14, className: "bf-360-center-label", textAnchor: "middle", dominantBaseline: "central", children: "HEALTH" })
       ]
     }
   );
@@ -6307,25 +6825,25 @@ var DEFAULT_PROJECT360_LABELS = {
 };
 
 // src/project360/Project360View.tsx
-var import_jsx_runtime33 = require("react/jsx-runtime");
+var import_jsx_runtime39 = require("react/jsx-runtime");
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react27.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = (0, import_react27.useState)(null);
-  const sortedWorkforce = (0, import_react27.useMemo)(
+  const L = (0, import_react30.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const [selected, setSelected] = (0, import_react30.useState)(null);
+  const sortedWorkforce = (0, import_react30.useMemo)(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
   );
   if (error) {
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "bf-360-state__title", children: L.loadError }),
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "bf-360-state__hint", children: error }),
-      onRefresh && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
+    return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "bf-360-state__title", children: L.loadError }),
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "bf-360-state__hint", children: error }),
+      onRefresh && /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
     ] });
   }
   if (!data || loading) {
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "bf-360-spinner" }),
+    return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "bf-360-spinner" }),
       L.connecting
     ] });
   }
@@ -6345,24 +6863,24 @@ Gaps:
 ${lines}`
     });
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("header", { className: "bf-360-head", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-head__id", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "bf-360-head__title", children: project.name }),
-        project.key && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "bf-360-head__key", children: project.key })
+  return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("header", { className: "bf-360-head", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-head__id", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: "bf-360-head__title", children: project.name }),
+        project.key && /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: "bf-360-head__key", children: project.key })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "bf-360-head__spacer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard }),
-      gaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { className: "bf-btn bf-btn--primary", onClick: improveAll, children: L.improveAll }),
-      onRefresh && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "bf-360-head__spacer" }),
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard }),
+      gaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("button", { className: "bf-btn bf-btn--primary", onClick: improveAll, children: L.improveAll }),
+      onRefresh && /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
     ] }),
-    !hasData ? /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "bf-360-state__title", children: L.noData }),
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "bf-360-state__hint", children: L.noDataHint }),
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard })
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("section", { className: "bf-360-col bf-360-col--wheel", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+    !hasData ? /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "bf-360-state__title", children: L.noData }),
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "bf-360-state__hint", children: L.noDataHint }),
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("section", { className: "bf-360-col bf-360-col--wheel", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
           Sunburst,
           {
             pillars,
@@ -6373,83 +6891,83 @@ ${lines}`
             ariaLabel: `${project.name} health wheel`
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-overall", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "bf-360-progress", "aria-label": `${L.progress} ${overall.progressPct}%`, children: /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "bf-360-progress__fill", style: { width: `${overall.progressPct}%`, background: overall.color } }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-progress__label", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-overall", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "bf-360-progress", "aria-label": `${L.progress} ${overall.progressPct}%`, children: /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "bf-360-progress__fill", style: { width: `${overall.progressPct}%`, background: overall.color } }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-progress__label", children: [
             L.progress,
             ": ",
             overall.progressPct,
             "%"
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-counts", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Count, { n: counts.open, label: L.counts_open }),
-            /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Count, { n: counts.blocked, label: L.counts_blocked, tone: counts.blocked ? "warn" : void 0 }),
-            /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Count, { n: counts.overdue, label: L.counts_overdue, tone: counts.overdue ? "bad" : void 0 }),
-            /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Count, { n: counts.activeRuns, label: L.counts_running, tone: counts.activeRuns ? "good" : void 0 })
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-counts", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Count, { n: counts.open, label: L.counts_open }),
+            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Count, { n: counts.blocked, label: L.counts_blocked, tone: counts.blocked ? "warn" : void 0 }),
+            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Count, { n: counts.overdue, label: L.counts_overdue, tone: counts.overdue ? "bad" : void 0 }),
+            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Count, { n: counts.activeRuns, label: L.counts_running, tone: counts.activeRuns ? "good" : void 0 })
           ] })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("section", { className: "bf-360-col bf-360-col--detail", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-legend-head", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { children: selectedDim ? selectedDim.label : L.allDimensions }),
-          selectedDim && /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("button", { className: "bf-360-clear", onClick: () => setSelected(null), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("section", { className: "bf-360-col bf-360-col--detail", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-legend-head", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { children: selectedDim ? selectedDim.label : L.allDimensions }),
+          selectedDim && /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("button", { className: "bf-360-clear", onClick: () => setSelected(null), children: [
             L.allDimensions,
             " \u2715"
           ] })
         ] }),
-        selectedDim ? /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-dim-detail", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(ScoreDot, { score: selectedDim.score, color: selectedDim.color }),
-          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "bf-360-dim-detail__summary", children: selectedDim.summary })
-        ] }) : /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("ul", { className: "bf-360-dim-list", children: dimensions.map((d) => /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
+        selectedDim ? /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-dim-detail", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(ScoreDot, { score: selectedDim.score, color: selectedDim.color }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "bf-360-dim-detail__summary", children: selectedDim.summary })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("ul", { className: "bf-360-dim-list", children: dimensions.map((d) => /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(
           "button",
           {
             className: "bf-360-dim-row",
             onClick: () => setSelected(d.key),
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(ScoreDot, { score: d.score, color: d.color }),
-              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "bf-360-dim-row__label", children: d.label }),
-              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "bf-360-dim-row__summary", children: d.summary })
+              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(ScoreDot, { score: d.score, color: d.color }),
+              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: "bf-360-dim-row__label", children: d.label }),
+              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: "bf-360-dim-row__summary", children: d.summary })
             ]
           }
         ) }, d.key)) })
       ] })
     ] }),
-    hasData && /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(import_jsx_runtime33.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("section", { className: "bf-360-section", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("h3", { className: "bf-360-section__title", children: [
+    hasData && /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(import_jsx_runtime39.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("section", { className: "bf-360-section", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("h3", { className: "bf-360-section__title", children: [
           L.missingItems,
-          shownGaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "bf-360-section__count", children: shownGaps.length })
+          shownGaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: "bf-360-section__count", children: shownGaps.length })
         ] }),
-        shownGaps.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("p", { className: "bf-360-empty", children: L.noGaps }) : /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("ul", { className: "bf-360-gaps", children: shownGaps.map((g) => /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(GapRow, { gap: g, onAction }, g.id)) })
+        shownGaps.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("p", { className: "bf-360-empty", children: L.noGaps }) : /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("ul", { className: "bf-360-gaps", children: shownGaps.map((g) => /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(GapRow, { gap: g, onAction }, g.id)) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("section", { className: "bf-360-section", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("h3", { className: "bf-360-section__title", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("section", { className: "bf-360-section", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("h3", { className: "bf-360-section__title", children: [
           L.workforce,
-          workforce.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "bf-360-section__count", children: workforce.length })
+          workforce.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: "bf-360-section__count", children: workforce.length })
         ] }),
-        workforce.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("ul", { className: "bf-360-people", children: sortedWorkforce.map((m) => /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
+        workforce.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("ul", { className: "bf-360-people", children: sortedWorkforce.map((m) => /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
       ] })
     ] })
   ] });
 }
-function Count({ n, label, tone }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("span", { className: `bf-360-count${tone ? ` bf-360-count--${tone}` : ""}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("b", { children: n }),
+function Count({ n: n2, label, tone }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("span", { className: `bf-360-count${tone ? ` bf-360-count--${tone}` : ""}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("b", { children: n2 }),
     " ",
     label
   ] });
 }
 function ScoreDot({ score, color }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "bf-360-scoredot", style: { borderColor: color, color }, children: score });
+  return /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: "bf-360-scoredot", style: { borderColor: color, color }, children: score });
 }
 function GapRow({ gap, onAction }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("li", { className: `bf-360-gap bf-360-gap--${gap.severity}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: `bf-360-sev bf-360-sev--${gap.severity}`, "aria-hidden": true }),
-    /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-gap__body", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "bf-360-gap__title", children: gap.title }),
-      gap.detail && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "bf-360-gap__detail", children: gap.detail })
+  return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("li", { className: `bf-360-gap bf-360-gap--${gap.severity}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: `bf-360-sev bf-360-sev--${gap.severity}`, "aria-hidden": true }),
+    /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-gap__body", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "bf-360-gap__title", children: gap.title }),
+      gap.detail && /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "bf-360-gap__detail", children: gap.detail })
     ] }),
-    gap.action && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { className: "bf-btn bf-360-gap__cta", onClick: () => onAction?.(gap.action), children: gap.action.label })
+    gap.action && /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("button", { className: "bf-btn bf-360-gap__cta", onClick: () => onAction?.(gap.action), children: gap.action.label })
   ] });
 }
 function MemberRow({ member, labels, onAction }) {
@@ -6461,25 +6979,25 @@ function MemberRow({ member, labels, onAction }) {
     available: labels.status_available
   }[member.status];
   const task = member.taskId != null ? { id: member.taskId, key: member.taskKey, title: member.taskTitle ?? "", taskType: member.taskType } : void 0;
-  return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("li", { className: "bf-360-person", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
-    /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-person__body", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-person__top", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "bf-360-person__name", children: member.name }),
-        /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: `bf-360-kind bf-360-kind--${member.kind}`, children: member.kind }),
-        /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "bf-360-person__status", children: statusLabel })
+  return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("li", { className: "bf-360-person", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
+    /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-person__body", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-person__top", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: "bf-360-person__name", children: member.name }),
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: `bf-360-kind bf-360-kind--${member.kind}`, children: member.kind }),
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: "bf-360-person__status", children: statusLabel })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "bf-360-person__reason", children: member.reason })
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "bf-360-person__reason", children: member.reason })
     ] }),
-    task && /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "bf-360-person__actions", children: [
-      (member.status === "idle" || member.status === "available") && member.kind !== "human" && /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "run-task", label: labels.member_run, task }), children: labels.member_run }),
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "open-task", label: labels.member_open, task }), children: labels.member_open })
+    task && /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "bf-360-person__actions", children: [
+      (member.status === "idle" || member.status === "available") && member.kind !== "human" && /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "run-task", label: labels.member_run, task }), children: labels.member_run }),
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "open-task", label: labels.member_open, task }), children: labels.member_open })
     ] })
   ] });
 }
 
 // src/projectList/ProjectListView.tsx
-var import_react28 = require("react");
+var import_react31 = require("react");
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -6492,66 +7010,66 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 };
 
 // src/projectList/ProjectListView.tsx
-var import_jsx_runtime34 = require("react/jsx-runtime");
+var import_jsx_runtime40 = require("react/jsx-runtime");
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react28.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
-  const header = /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("header", { className: "bf-list-head", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { className: "bf-list-head__id", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: "bf-list-head__title", children: title }),
-      data && /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("span", { className: "bf-list-head__count", children: [
+  const L = (0, import_react31.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const header = /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("header", { className: "bf-list-head", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "bf-list-head__id", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { className: "bf-list-head__title", children: title }),
+      data && /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("span", { className: "bf-list-head__count", children: [
         data.total,
         " ",
         L.items
       ] })
     ] }),
-    subtitle && /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { className: "bf-list-head__sub", children: subtitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { className: "bf-list-head__spacer" }),
-    onRefresh && /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
+    subtitle && /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "bf-list-head__sub", children: subtitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "bf-list-head__spacer" }),
+    onRefresh && /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
   ] });
   if (error) {
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { className: "bf-360-state__title", children: L.loadError }),
-        /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { className: "bf-360-state__hint", children: error }),
-        onRefresh && /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "bf-360-state__title", children: L.loadError }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "bf-360-state__hint", children: error }),
+        onRefresh && /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
       ] })
     ] });
   }
   if (!data || loading) {
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { className: "bf-360-spinner" }),
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "bf-360-spinner" }),
         L.connecting
       ] })
     ] });
   }
   if (data.total === 0) {
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { className: "bf-360-state__title", children: L.empty }),
-        L.emptyHint && /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { className: "bf-360-state__hint", children: L.emptyHint })
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "bf-360-state__title", children: L.empty }),
+        L.emptyHint && /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "bf-360-state__hint", children: L.emptyHint })
       ] })
     ] });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { className: "bf-list", children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "bf-list", children: [
     header,
-    data.groups.filter((g) => g.items.length > 0).map((g) => /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("section", { className: "bf-list-group", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("h3", { className: "bf-list-group__title", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: `bf-list-group__dot bf-list-tone--${g.tone ?? "default"}`, "aria-hidden": true }),
+    data.groups.filter((g) => g.items.length > 0).map((g) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "bf-list-group", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("h3", { className: "bf-list-group__title", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { className: `bf-list-group__dot bf-list-tone--${g.tone ?? "default"}`, "aria-hidden": true }),
         g.label,
-        /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: "bf-360-section__count", children: g.items.length })
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { className: "bf-360-section__count", children: g.items.length })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("ul", { className: "bf-list-rows", children: g.items.map((it) => /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Row2, { item: it, onAction }, it.id)) })
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("ul", { className: "bf-list-rows", children: g.items.map((it) => /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Row2, { item: it, onAction }, it.id)) })
     ] }, g.key))
   ] });
 }
 function Row2({ item, onAction }) {
   const act = item.action;
   const clickable = !!act && !!onAction;
-  return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("li", { className: "bf-list-row", children: /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("li", { className: "bf-list-row", children: /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(
     "button",
     {
       className: "bf-list-row__main",
@@ -6559,20 +7077,678 @@ function Row2({ item, onAction }) {
       onClick: clickable ? () => onAction(act) : void 0,
       title: clickable ? act.label : void 0,
       children: [
-        item.key && /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: "bf-list-row__key", children: item.key }),
-        /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("span", { className: "bf-list-row__body", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: "bf-list-row__title", children: item.title }),
-          item.subtitle && /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: "bf-list-row__sub", children: item.subtitle })
+        item.key && /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { className: "bf-list-row__key", children: item.key }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("span", { className: "bf-list-row__body", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { className: "bf-list-row__title", children: item.title }),
+          item.subtitle && /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { className: "bf-list-row__sub", children: item.subtitle })
         ] }),
-        item.badges && item.badges.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: "bf-list-row__badges", children: item.badges.map((b, i) => /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: `bf-list-badge bf-list-tone--${b.tone ?? "default"}`, children: b.label }, i)) })
+        item.badges && item.badges.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { className: "bf-list-row__badges", children: item.badges.map((b, i) => /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { className: `bf-list-badge bf-list-tone--${b.tone ?? "default"}`, children: b.label }, i)) })
       ]
     }
   ) });
+}
+
+// src/composer/BrainComposer.tsx
+var import_react35 = require("react");
+
+// src/workStatus/consumptionSnapshot.ts
+var TTL_MS = 6e4;
+var cache = null;
+var inFlight = null;
+var listeners = /* @__PURE__ */ new Set();
+function fetchConsumptionSnapshot(request, forceRefresh = false) {
+  if (!forceRefresh && cache && Date.now() - cache.ts < TTL_MS) return Promise.resolve(cache.data);
+  if (!forceRefresh && inFlight) return inFlight;
+  inFlight = request("/api/consumption").then((data) => {
+    cache = { ts: Date.now(), data };
+    for (const l of listeners) l(data);
+    return data;
+  }).catch(() => null).finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+function invalidateConsumptionSnapshot() {
+  cache = null;
+}
+function cachedConsumptionSnapshot() {
+  return cache?.data ?? null;
+}
+function subscribeConsumptionSnapshot(listener) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+// src/workStatus/useConsumptionSnapshot.ts
+var import_react32 = require("react");
+function useConsumptionSnapshot(request) {
+  const [snapshot, setSnapshot] = (0, import_react32.useState)(cachedConsumptionSnapshot());
+  (0, import_react32.useEffect)(() => {
+    if (!request) return void 0;
+    let alive = true;
+    const off = subscribeConsumptionSnapshot((s) => {
+      if (alive && s) setSnapshot(s);
+    });
+    void fetchConsumptionSnapshot(request).then((s) => {
+      if (alive && s) setSnapshot(s);
+    });
+    return () => {
+      alive = false;
+      off();
+    };
+  }, [request]);
+  return snapshot;
+}
+
+// src/workStatus/labels.ts
+var DEFAULT_WORK_STATUS_LABELS = {
+  loading: "Loading account\u2026",
+  account: "Account",
+  plan: "Plan",
+  resets: "Resets",
+  limitsLifted: "limits lifted",
+  limitsLiftedHint: "You are a superadmin operator, so every limit is lifted for you \u2014 the plan\u2019s own limits still apply to its members.",
+  usage: "Usage",
+  usageEmpty: "No usage meters for this plan.",
+  unlimited: "Unlimited",
+  meterOf: "{used} / {limit} {unit}",
+  upgrade: "Upgrade",
+  managePlan: "Manage plan",
+  billing: { past_due: "Past due", canceled: "Canceled", trialing: "Trial", incomplete: "Incomplete" },
+  plans: { free: "Free", pro: "Pro", teams: "Teams", enterprise: "Enterprise" },
+  meters: {
+    ai_tokens: "AI tokens",
+    cloud_runs: "Cloud runs",
+    stage_sandbox_runs: "Sandbox runs",
+    ingestion: "Ingestion",
+    error_events: "Error events",
+    outbound_fetches: "Outbound fetches",
+    feedback_submissions: "Feedback",
+    replay_recordings: "Recordings"
+  },
+  units: { tokens: "tokens", bytes: "bytes", runs: "runs", events: "events", fetches: "fetches", submissions: "submissions", sandbox_runs: "runs", recordings: "recordings" },
+  evermind: "Evermind",
+  evermindVersion: "v{version}",
+  evermindLearning: "Learning",
+  evermindFrozen: "Not learning",
+  evermindAnswersOn: "Answers on",
+  evermindAnswersOff: "Answers off",
+  evermindHint: "Learning: this project\u2019s chats teach its Evermind. Answers: whether the Evermind may answer for a paid model. Change both in the Evermind view."
+};
+function workStatusLabels(overrides) {
+  if (!overrides) return DEFAULT_WORK_STATUS_LABELS;
+  const d = DEFAULT_WORK_STATUS_LABELS;
+  return {
+    ...d,
+    ...overrides,
+    billing: { ...d.billing, ...overrides.billing },
+    plans: { ...d.plans, ...overrides.plans },
+    meters: { ...d.meters, ...overrides.meters },
+    units: { ...d.units, ...overrides.units }
+  };
+}
+function labelForKey(map, key) {
+  return map[key] ?? key.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
+
+// src/workStatus/relativeTime.ts
+function relativeFuture(iso, locale, now = Date.now()) {
+  if (!iso) return null;
+  const ms = Date.parse(iso) - now;
+  if (!Number.isFinite(ms)) return null;
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  const minutes = Math.max(0, Math.round(ms / 6e4));
+  if (minutes < 60) return rtf.format(minutes, "minute");
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return rtf.format(hours, "hour");
+  return rtf.format(Math.round(hours / 24), "day");
+}
+
+// src/workStatus/AccountStatus.tsx
+var import_jsx_runtime41 = require("react/jsx-runtime");
+function AccountStatus({ snapshot, labels, locale, onUpgrade }) {
+  const free = !planIsPaid(snapshot);
+  const billing = snapshot.plan.billingStatus;
+  const reset = relativeFuture(snapshot.period?.resetsAt, locale);
+  const num = (n2) => n2.toLocaleString(locale);
+  return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "bf-acct", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "bf-pmenu__group", children: labels.account }),
+    /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "bf-acct__row", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { className: "bf-acct__k", children: labels.plan }),
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("span", { className: "bf-acct__v", children: [
+        labelForKey(labels.plans, snapshot.plan.effective),
+        billing && billing !== "active" && billing !== "none" ? ` \xB7 ${labelForKey(labels.billing, billing)}` : "",
+        snapshot.limitsLiftedBySuperadmin && /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("span", { className: "bf-acct__note", title: labels.limitsLiftedHint, children: [
+          " \xB7 ",
+          labels.limitsLifted
+        ] })
+      ] })
+    ] }),
+    reset && /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "bf-acct__row", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { className: "bf-acct__k", children: labels.resets }),
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { className: "bf-acct__v", children: reset })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "bf-pmenu__group", children: labels.usage }),
+    snapshot.meters.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "bf-pmenu__desc", children: labels.usageEmpty }),
+    snapshot.meters.map((m) => {
+      const pct = m.unlimited ? null : Math.max(0, Math.min(100, Math.round(m.percentUsed)));
+      return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "bf-acct__meter", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "bf-acct__row bf-acct__row--flush", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { className: "bf-acct__k", children: labelForKey(labels.meters, m.key) }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { className: "bf-acct__v", children: pct == null ? labels.unlimited : `${pct}%` })
+        ] }),
+        pct != null && /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)(import_jsx_runtime41.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "bf-acct__bar", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "bf-acct__bar-fill", style: { width: `${pct}%` } }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "bf-acct__meta", children: fill(labels.meterOf, { used: num(m.used), limit: num(m.limit), unit: labelForKey(labels.units, m.unit) }) })
+        ] })
+      ] }, m.key);
+    }),
+    onUpgrade && /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("button", { type: "button", className: "bf-pmenu__item", onClick: () => onUpgrade(free ? "pricing" : "billing"), children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { className: "bf-pmenu__lbl", children: free ? labels.upgrade : labels.managePlan }) })
+  ] });
+}
+
+// src/workStatus/EvermindStatus.tsx
+var import_react33 = require("react");
+var import_jsx_runtime42 = require("react/jsx-runtime");
+function EvermindStatus({ request, projectId, labels }) {
+  const [head, setHead] = (0, import_react33.useState)(null);
+  (0, import_react33.useEffect)(() => {
+    if (projectId == null) {
+      setHead(null);
+      return void 0;
+    }
+    let alive = true;
+    request(`/api/projects/${projectId}/evermind/head`).then((h) => {
+      if (alive) setHead(h);
+    }).catch(() => {
+      if (alive) setHead(null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [request, projectId]);
+  if (!head || head.version < 1) return null;
+  const learning = head.mode === "connected";
+  return /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { className: "bf-acct__row bf-evstatus", title: labels.evermindHint, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("span", { className: "bf-acct__k", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("span", { "aria-hidden": true, children: "\u{1F9E0} " }),
+      labels.evermind,
+      " ",
+      fill(labels.evermindVersion, { version: String(head.version) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("span", { className: "bf-acct__v", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("span", { className: `bf-evstatus__dot${learning ? " is-on" : ""}`, "aria-hidden": true }),
+      learning ? labels.evermindLearning : labels.evermindFrozen,
+      " \xB7 ",
+      head.inferenceEnabled ? labels.evermindAnswersOn : labels.evermindAnswersOff
+    ] })
+  ] });
+}
+
+// src/workStatus/WorkStatusPanel.tsx
+var import_jsx_runtime43 = require("react/jsx-runtime");
+var SPEND_PERIOD_DAYS = 30;
+function WorkStatusPanel({ request, projectId, labels: overrides, spendLabels: spendOverrides, locale, onUpgrade }) {
+  const labels = workStatusLabels(overrides);
+  const sLabels = spendLabels(spendOverrides);
+  const snapshot = useConsumptionSnapshot(request);
+  if (!snapshot) return /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { className: "bf-pmenu__desc", children: labels.loading });
+  const upgrade = onUpgrade ? (target) => {
+    invalidateConsumptionSnapshot();
+    onUpgrade(target);
+  } : void 0;
+  return /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)(import_jsx_runtime43.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(AccountStatus, { snapshot, labels, locale, onUpgrade: upgrade }),
+    snapshot.spendSavings && /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)(import_jsx_runtime43.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { className: "bf-pmenu__group", children: fill(sLabels.periodHeading, { days: String(SPEND_PERIOD_DAYS) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(SpendBreakdown, { summary: snapshot.spendSavings, labels: sLabels, locale })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(EvermindStatus, { request, projectId, labels })
+  ] });
+}
+
+// src/composer/ComposerAddMenu.tsx
+var import_react34 = require("react");
+
+// src/composer/ComposerIcons.tsx
+var import_jsx_runtime44 = require("react/jsx-runtime");
+var IconPlus = () => /* @__PURE__ */ (0, import_jsx_runtime44.jsx)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime44.jsx)("path", { d: "M8 3.25v9.5M3.25 8h9.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }) });
+var IconMic = () => /* @__PURE__ */ (0, import_jsx_runtime44.jsxs)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
+  /* @__PURE__ */ (0, import_jsx_runtime44.jsx)("rect", { x: "6", y: "2", width: "4", height: "7.5", rx: "2", fill: "currentColor" }),
+  /* @__PURE__ */ (0, import_jsx_runtime44.jsx)("path", { d: "M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round" })
+] });
+var IconSend = () => /* @__PURE__ */ (0, import_jsx_runtime44.jsx)("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime44.jsx)("path", { d: "M8 13V3.75M4.25 7.5 8 3.75l3.75 3.75", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" }) });
+var IconStop = () => /* @__PURE__ */ (0, import_jsx_runtime44.jsx)("svg", { width: "12", height: "12", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime44.jsx)("rect", { x: "3.5", y: "3.5", width: "9", height: "9", rx: "1.5" }) });
+
+// src/composer/ComposerAddMenu.tsx
+var import_jsx_runtime45 = require("react/jsx-runtime");
+function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = false, accept, onAddContext, webBrowsing, items }) {
+  const { open, toggle, close, rootRef } = usePopover();
+  const fileRef = (0, import_react34.useRef)(null);
+  if (!onAttachFiles && !onAddContext && !webBrowsing && !items?.length) return null;
+  const onFiles = (e) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length && onAttachFiles) onAttachFiles(files);
+    e.target.value = "";
+  };
+  const row = (key, icon, label, onClick, hint, active) => /* @__PURE__ */ (0, import_jsx_runtime45.jsxs)("button", { type: "button", role: "menuitem", className: `bf-pmenu__item${active ? " is-active" : ""}`, onClick, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime45.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: icon }),
+    /* @__PURE__ */ (0, import_jsx_runtime45.jsx)("span", { className: "bf-pmenu__lbl", children: label }),
+    hint != null && /* @__PURE__ */ (0, import_jsx_runtime45.jsx)("span", { className: "bf-pmenu__hint", children: hint })
+  ] }, key);
+  return /* @__PURE__ */ (0, import_jsx_runtime45.jsxs)("div", { className: "bf-pmenu", ref: rootRef, children: [
+    onAttachFiles && /* @__PURE__ */ (0, import_jsx_runtime45.jsx)("input", { ref: fileRef, type: "file", multiple: true, hidden: true, accept, onChange: onFiles }),
+    /* @__PURE__ */ (0, import_jsx_runtime45.jsx)(
+      "button",
+      {
+        type: "button",
+        className: `bf-cmp-iconbtn${open ? " is-active" : ""}`,
+        "aria-haspopup": "menu",
+        "aria-expanded": open,
+        title: labels.add,
+        "aria-label": labels.add,
+        disabled,
+        onClick: toggle,
+        children: /* @__PURE__ */ (0, import_jsx_runtime45.jsx)(IconPlus, {})
+      }
+    ),
+    open && /* @__PURE__ */ (0, import_jsx_runtime45.jsxs)("div", { className: "bf-pmenu__pop", role: "menu", children: [
+      onAttachFiles && row("upload", "\u{1F4BB}", uploading ? labels.uploading : labels.upload, () => {
+        close();
+        if (!uploading) fileRef.current?.click();
+      }),
+      onAddContext && row("context", "\u25E7", labels.addContext, () => {
+        close();
+        onAddContext();
+      }),
+      items?.map((item) => row(item.id, item.icon, item.label, () => {
+        close();
+        item.onSelect();
+      })),
+      webBrowsing && row("web", "\u{1F310}", labels.browseWeb, () => webBrowsing.onChange(!webBrowsing.on), webBrowsing.on ? labels.on : labels.off, webBrowsing.on)
+    ] })
+  ] });
+}
+
+// src/composer/ComposerTrailingButton.tsx
+var import_jsx_runtime46 = require("react/jsx-runtime");
+var noopGet = () => "";
+var noopSet = () => void 0;
+function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, onSend, onStop, voice }) {
+  const dictation = useVoiceDictation(voice?.getValue ?? noopGet, voice?.setValue ?? noopSet);
+  const action = promptTrailingAction({
+    canSubmit,
+    running,
+    canStop: !!onStop,
+    voice: !!voice && dictation.supported,
+    recording: dictation.recording
+  });
+  if (action === "voice") {
+    const label2 = dictation.recording ? labels.stopDictation : labels.dictate;
+    return /* @__PURE__ */ (0, import_jsx_runtime46.jsx)(
+      "button",
+      {
+        type: "button",
+        className: `bf-cmp-iconbtn bf-cmp-iconbtn--voice${dictation.recording ? " is-listening" : ""}`,
+        title: label2,
+        "aria-label": label2,
+        "aria-pressed": dictation.recording,
+        disabled,
+        onClick: dictation.recording ? dictation.stopVoice : dictation.startVoice,
+        children: /* @__PURE__ */ (0, import_jsx_runtime46.jsx)(IconMic, {})
+      }
+    );
+  }
+  if (action === "stop") {
+    return /* @__PURE__ */ (0, import_jsx_runtime46.jsx)("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: onStop, title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ (0, import_jsx_runtime46.jsx)(IconStop, {}) });
+  }
+  const label = running ? labels.queueSend : labels.send;
+  return /* @__PURE__ */ (0, import_jsx_runtime46.jsx)("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
+    e.preventDefault();
+    onSend();
+  }, disabled: !canSubmit || disabled, title: label, "aria-label": label, children: /* @__PURE__ */ (0, import_jsx_runtime46.jsx)(IconSend, {}) });
+}
+
+// src/composer/AttachmentChips.tsx
+var import_jsx_runtime47 = require("react/jsx-runtime");
+function AttachmentChips({ items, onRemove, labels }) {
+  if (items.length === 0) return null;
+  return /* @__PURE__ */ (0, import_jsx_runtime47.jsx)("div", { className: "bf-cmp-attachments", children: items.map((a) => /* @__PURE__ */ (0, import_jsx_runtime47.jsxs)("span", { className: "bf-cmp-chip", children: [
+    a.imageUrl && /* @__PURE__ */ (0, import_jsx_runtime47.jsx)("img", { src: a.imageUrl, alt: "", className: "bf-cmp-chip__thumb" }),
+    /* @__PURE__ */ (0, import_jsx_runtime47.jsx)("span", { className: "bf-cmp-chip__name", children: a.name }),
+    /* @__PURE__ */ (0, import_jsx_runtime47.jsx)("button", { type: "button", className: "bf-cmp-chip__x", onClick: () => onRemove(a.key), "aria-label": `${labels.remove} ${a.name}`, children: "\xD7" })
+  ] }, a.key)) });
+}
+
+// src/composer/composerOptions.ts
+var import_builderforce_brain_embedded14 = require("@seanhogg/builderforce-brain-embedded");
+function composerOptionGroups(options, labels) {
+  const { mode, memory, effort, thinking, model, autoMode, session } = options;
+  const thinkingOn = thinking?.value ?? false;
+  const modeGroup = mode ? {
+    value: mode.value,
+    onChange: (next) => mode.onChange(next),
+    choices: import_builderforce_brain_embedded14.CHAT_MODES.map((m) => ({ value: m, label: labels.modeLabel(m), hint: labels.modeHint(m), icon: import_builderforce_brain_embedded14.CHAT_MODE_ICON[m] }))
+  } : void 0;
+  const memoryGroup = memory ? {
+    enabled: memory.enabled,
+    onChange: memory.onChange,
+    describe: (on) => on ? labels.memoryOnHint : labels.memoryOffHint,
+    ...memory.available ? {} : { unavailableReason: labels.memoryUnavailable }
+  } : void 0;
+  const autoGroup = autoMode ? { enabled: autoMode.enabled, onChange: autoMode.onChange, description: labels.autoModeHint } : void 0;
+  return {
+    mode: modeGroup,
+    memory: memoryGroup,
+    autoMode: autoGroup,
+    session,
+    ...effort ? {
+      effort: effort.value,
+      onEffortChange: effort.onChange,
+      // What a level REALLY costs, read from the shared effort table, so the copy can
+      // never promise a budget the request does not send.
+      describeEffort: (level) => {
+        const { maxTokens, thinkingBudgetTokens } = (0, import_builderforce_brain_embedded14.effortProfile)(level);
+        const base = labels.effortDesc(level, Math.max(maxTokens, effort.minAnswerTokens ?? 0));
+        return thinkingOn ? `${base} ${labels.effortThinkingSuffix(thinkingBudgetTokens)}` : base;
+      }
+    } : {},
+    ...thinking ? {
+      thinking: thinking.value,
+      onThinkingChange: thinking.onChange,
+      describeThinking: (on) => on ? labels.thinkingOnDesc((0, import_builderforce_brain_embedded14.effortProfile)(effort?.value ?? "balanced").thinkingBudgetTokens) : labels.thinkingOffDesc
+    } : {},
+    model
+  };
+}
+
+// src/composer/labels.ts
+var n = (v) => v.toLocaleString();
+var DEFAULT_COMPOSER_LABELS = {
+  placeholder: "Message\u2026",
+  add: "Add",
+  upload: "Upload from computer",
+  uploading: "Uploading\u2026",
+  addContext: "Add context",
+  browseWeb: "Browse the web",
+  on: "On",
+  off: "Off",
+  remove: "Remove",
+  send: "Send",
+  queueSend: "Queue message \u2014 sends when the current run finishes",
+  stop: "Stop",
+  dictate: "Dictate",
+  stopDictation: "Stop dictation",
+  modeLabel: (mode) => mode === "work" ? "Work" : "Chat",
+  modeHint: (mode) => mode === "work" ? "Turn what we agree into tracked work \u2014 open the ticket, staff it, and dispatch an agent to run it" : "Just answer \u2014 read and reason as much as needed, but do not open or dispatch board work",
+  memoryOnHint: "Memory on \u2014 this chat recalls and learns from the project memory",
+  memoryOffHint: "Memory off \u2014 this chat is a scratch space (no recall, no learning)",
+  memoryUnavailable: "This chat has no project memory to recall from \u2014 link it to a project first",
+  autoModeHint: "Auto-approve tool actions without asking",
+  effortDesc: (level, answer) => ({
+    quick: `Fastest and cheapest \u2014 short, direct answers. Up to ${n(answer)} answer tokens.`,
+    balanced: `The default \u2014 normal depth. Up to ${n(answer)} answer tokens.`,
+    thorough: `Deepest and slowest \u2014 exhaustive, verifies its work. Up to ${n(answer)} answer tokens.`
+  })[level],
+  effortThinkingSuffix: (thinking) => `Plus up to ${n(thinking)} thinking tokens.`,
+  thinkingOnDesc: (budget) => `The model reasons before answering, with a ${n(budget)}-token thinking budget at this effort. Slower, better on hard problems.`,
+  thinkingOffDesc: "Off \u2014 the model answers directly. Turn on for a reasoning pass before the answer."
+};
+function composerLabels(overrides) {
+  return overrides ? { ...DEFAULT_COMPOSER_LABELS, ...overrides } : DEFAULT_COMPOSER_LABELS;
+}
+
+// src/composer/BrainComposer.tsx
+var import_jsx_runtime48 = require("react/jsx-runtime");
+var NO_PARTICIPANTS = [];
+var NO_TICKETS = [];
+var noop = () => void 0;
+function BrainComposer(props) {
+  const {
+    value,
+    onChange,
+    onSubmit,
+    running = false,
+    onStop,
+    disabled = false,
+    blockedNotice,
+    placeholder,
+    ariaLabel,
+    rows = 2,
+    submitOnEnter = true,
+    focusToken,
+    options,
+    account,
+    onAccountSettings,
+    attachments,
+    onAddContext,
+    webBrowsing,
+    addMenuItems,
+    mentions,
+    tickets,
+    pickersDisabled = false,
+    voice = false,
+    context,
+    above,
+    below,
+    labels: labelBundle,
+    className
+  } = props;
+  const labels = composerLabels(labelBundle?.composer);
+  const textareaRef = (0, import_react35.useRef)(null);
+  const valueRef = (0, import_react35.useRef)(value);
+  valueRef.current = value;
+  const getValue = (0, import_react35.useCallback)(() => valueRef.current, []);
+  const [focused, setFocused] = (0, import_react35.useState)(false);
+  const [dragging, setDragging] = (0, import_react35.useState)(false);
+  (0, import_react35.useEffect)(() => {
+    if (focusToken == null) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [focusToken]);
+  const mention = useMentionAutocomplete({
+    textareaRef,
+    value,
+    setValue: onChange,
+    participants: mentions?.participants ?? NO_PARTICIPANTS,
+    onPick: mentions?.onPick ?? noop,
+    disabled: disabled || pickersDisabled,
+    labels: labelBundle?.mention
+  });
+  const ticket = useTicketAutocomplete({
+    textareaRef,
+    value,
+    setValue: onChange,
+    tickets: tickets?.tickets ?? NO_TICKETS,
+    onPick: tickets?.onPick ?? noop,
+    disabled: disabled || pickersDisabled,
+    labels: labelBundle?.ticket
+  });
+  const canSubmit = value.trim().length > 0 && !disabled;
+  const submit = () => {
+    if (canSubmit) onSubmit();
+  };
+  const onPaste = (e) => {
+    if (!attachments) return;
+    const files = Array.from(e.clipboardData?.items ?? []).filter((i) => i.kind === "file" && i.type.startsWith("image/")).map((i) => i.getAsFile()).filter((f) => !!f);
+    if (files.length) {
+      e.preventDefault();
+      attachments.onAdd(files);
+    }
+  };
+  const onDrop = (e) => {
+    setDragging(false);
+    if (!attachments) return;
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length) {
+      e.preventDefault();
+      attachments.onAdd(files);
+    }
+  };
+  const groups = composerOptionGroups(options, labels);
+  const statusNode = account ? /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
+    WorkStatusPanel,
+    {
+      request: account.request,
+      projectId: account.projectId,
+      labels: labelBundle?.status,
+      spendLabels: labelBundle?.spend,
+      locale: account.locale,
+      onUpgrade: account.onUpgrade
+    }
+  ) : void 0;
+  const chips = attachments ? /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(AttachmentChips, { items: attachments.items, onRemove: attachments.onRemove, labels }) : null;
+  const aboveBox = above || attachments && attachments.items.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)(import_jsx_runtime48.Fragment, { children: [
+    above,
+    chips
+  ] }) : void 0;
+  return /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: ["bf-cmp", className].filter(Boolean).join(" "), children: [
+    blockedNotice,
+    /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
+      PromptPanel,
+      {
+        active: focused || value.trim().length > 0,
+        dragging,
+        onDragOver: attachments ? (e) => {
+          e.preventDefault();
+          setDragging(true);
+        } : void 0,
+        onDragLeave: attachments ? () => setDragging(false) : void 0,
+        onDrop: attachments ? onDrop : void 0,
+        overlay: ticket.open ? ticket.popup : mention.popup,
+        status: aboveBox,
+        input: /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
+          "textarea",
+          {
+            ref: textareaRef,
+            className: "bf-cmp-input",
+            rows,
+            value,
+            placeholder: placeholder ?? labels.placeholder,
+            "aria-label": ariaLabel ?? placeholder ?? labels.placeholder,
+            disabled,
+            onChange: (e) => onChange(e.target.value),
+            onFocus: () => setFocused(true),
+            onBlur: () => setFocused(false),
+            onPaste,
+            onSelect: () => {
+              mention.onSelect();
+              ticket.onSelect();
+            },
+            onKeyDown: (e) => {
+              if (mention.onKeyDown(e)) return;
+              if (ticket.onKeyDown(e)) return;
+              if (submitOnEnter && e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                submit();
+              }
+            }
+          }
+        ),
+        actions: /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)(import_jsx_runtime48.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
+            ComposerAddMenu,
+            {
+              labels,
+              disabled,
+              onAttachFiles: attachments?.onAdd,
+              uploading: attachments?.uploading,
+              accept: attachments?.accept,
+              onAddContext,
+              webBrowsing,
+              items: addMenuItems
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
+            PromptOptionsMenu,
+            {
+              labels: labelBundle?.options,
+              disabled,
+              ...groups,
+              status: statusNode,
+              onAccountSettings
+            }
+          )
+        ] }),
+        context: context ? /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(import_jsx_runtime48.Fragment, { children: context }) : void 0,
+        primaryAction: /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
+          ComposerTrailingButton,
+          {
+            labels,
+            canSubmit,
+            running,
+            disabled,
+            onSend: submit,
+            onStop,
+            voice: voice ? { getValue, setValue: onChange } : void 0
+          }
+        )
+      }
+    ),
+    below
+  ] });
+}
+
+// src/composer/useChatMemorySwitch.ts
+var import_react36 = require("react");
+function useChatMemorySwitch(opts) {
+  const { chatId, serverValue, persist } = opts;
+  const [enabled, setLocal] = (0, import_react36.useState)(serverValue ?? true);
+  (0, import_react36.useEffect)(() => {
+    setLocal(serverValue ?? true);
+  }, [chatId, serverValue]);
+  const setEnabled = (0, import_react36.useCallback)((on) => {
+    setLocal(on);
+    if (chatId == null) return;
+    persist(chatId, on).catch(() => setLocal(!on));
+  }, [chatId, persist]);
+  return { enabled, setEnabled };
+}
+
+// src/composer/useQueuedTurns.ts
+var import_react37 = require("react");
+function useQueuedTurns({ running, send, resetKey = null, textOf }) {
+  const [queued, setQueued] = (0, import_react37.useState)([]);
+  const nextId = (0, import_react37.useRef)(0);
+  const sendRef = (0, import_react37.useRef)(send);
+  sendRef.current = send;
+  const textOfRef = (0, import_react37.useRef)(textOf);
+  textOfRef.current = textOf;
+  const runningRef = (0, import_react37.useRef)(running);
+  const submit = (0, import_react37.useCallback)((value) => {
+    const text = typeof value === "string" ? value.trim() : (textOfRef.current?.(value) ?? "").trim();
+    if (!text) return false;
+    if (!runningRef.current) return false;
+    const held = typeof value === "string" ? text : value;
+    setQueued((current) => [...current, { id: nextId.current += 1, value: held }]);
+    return true;
+  }, []);
+  runningRef.current = running;
+  const remove = (0, import_react37.useCallback)((id) => setQueued((current) => current.filter((item) => item.id !== id)), []);
+  const clear = (0, import_react37.useCallback)(() => setQueued((current) => current.length ? [] : current), []);
+  const prev = (0, import_react37.useRef)({ key: resetKey, running });
+  (0, import_react37.useEffect)(() => {
+    const was = prev.current;
+    prev.current = { key: resetKey, running };
+    if (was.key !== resetKey || !was.running || running || queued.length === 0) return;
+    const [next, ...rest] = queued;
+    setQueued(rest);
+    if (next) sendRef.current(next.value);
+  }, [running, queued, resetKey]);
+  (0, import_react37.useEffect)(() => {
+    setQueued([]);
+  }, [resetKey]);
+  return { items: queued, count: queued.length, submit, remove, clear };
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   Avatar,
   BUILDERFORCE_PRODUCT_NAME,
+  BrainComposer,
   BrainTimeline,
   ChatErrorBanner,
   ChatTicketsPanel,
@@ -6580,8 +7756,10 @@ function Row2({ item, onAction }) {
   DEFAULT_ASK_USER_LABELS,
   DEFAULT_CHAT_ERROR_LABELS,
   DEFAULT_CHAT_TICKETS_LABELS,
+  DEFAULT_COMPOSER_LABELS,
   DEFAULT_EVERMIND_LABELS,
   DEFAULT_LIVE_ACTIVITY_LABELS,
+  DEFAULT_LOCAL_MODEL_LABELS,
   DEFAULT_MODEL_IDENTITY,
   DEFAULT_PENDING_CHANGES_LABELS,
   DEFAULT_PERSONA_PICKER_LABELS,
@@ -6589,10 +7767,15 @@ function Row2({ item, onAction }) {
   DEFAULT_PROJECT_LIST_LABELS,
   DEFAULT_PROMPT_OPTIONS_LABELS,
   DEFAULT_RECIPIENT_PICKER_LABELS,
+  DEFAULT_SPEND_LABELS,
   DEFAULT_TIMELINE_LABELS,
+  DEFAULT_WORK_STATUS_LABELS,
   EvermindConsole,
   HealthRing,
+  LOCAL_UNSUPPORTED_LABEL,
   LiveActivity,
+  LocalModelList,
+  LocalModelRow,
   MODEL_CATEGORIES,
   Markdown,
   PROJECT_EVERMIND_MODEL_PREFIX,
@@ -6608,9 +7791,12 @@ function Row2({ item, onAction }) {
   RecipientPicker,
   RecipientsBadge,
   SLOW_AFTER_MS,
+  SpendBreakdown,
+  SpendPill,
   Sunburst,
   TICKET_KINDS,
   ToolStep,
+  WorkStatusPanel,
   activeModelKey,
   askUserAnchorId,
   attachmentsOf,
@@ -6619,22 +7805,31 @@ function Row2({ item, onAction }) {
   buildSettledTimeline,
   buildTimeline,
   byoVendorLabel,
+  cachedConsumptionSnapshot,
   chatActivityLabelsFrom,
   chatDiagnosticsReads,
   chatSwitcherLabel,
   commandOf,
+  composerLabels,
   createChatTicketsRestAdapter,
   createEvermindRestAdapter,
   displayModelName,
   evermindLabelsFromBundle,
   evermindLearnedStatus,
   evermindNextAction,
+  fetchConsumptionSnapshot,
   filterModelItems,
+  formatContextTokens,
+  formatDownloadSize,
   formatDuration,
   formatElapsed,
+  formatParams,
+  formatTokens,
+  formatUsd,
   groupAbsorbed,
   healthRingColor,
   initialsOf,
+  invalidateConsumptionSnapshot,
   isManagerRole,
   liveActivityLabelsFrom,
   loadEvermindBuilds,
@@ -6657,19 +7852,26 @@ function Row2({ item, onAction }) {
   selectPendingAskUser,
   serializeAskUser,
   shellOutcomeOf,
+  spendLabels,
   strandedReplyKey,
   streamingNode,
   stripAskUser,
+  subscribeConsumptionSnapshot,
   timelineCatalogLookup,
   timelineLabelsFrom,
   toolPreview,
   toolStepView,
   useChatActivitySignal,
+  useChatMemorySwitch,
   useChatParticipants,
+  useConsumptionSnapshot,
+  useLocalModels,
   useMentionAutocomplete,
   usePopover,
+  useQueuedTurns,
   useRecipientChoice,
   useTicketAutocomplete,
-  useVoiceDictation
+  useVoiceDictation,
+  workStatusLabels
 });
 //# sourceMappingURL=index.cjs.map

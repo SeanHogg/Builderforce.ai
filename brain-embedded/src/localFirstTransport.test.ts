@@ -6,7 +6,9 @@ import {
   completeLocal,
   completeLocalFirst,
   createLocalFirstStream,
+  createLocalStream,
   localTransport,
+  type LocalAttemptFit,
 } from './localFirstTransport';
 
 /**
@@ -144,6 +146,49 @@ describe('createLocalFirstStream', () => {
     expect(cloud).toHaveBeenCalledTimes(1);
   });
 
+  it('packs each LOCAL attempt with `fit`, and hands the cloud attempt the original messages', async () => {
+    const sent: unknown[] = [];
+    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+      sent.push((JSON.parse(String(init.body)) as { messages: unknown }).messages);
+      return new Response('boom', { status: 500 });
+    });
+    const fit = vi.fn<LocalAttemptFit>(async (messages) => [messages[messages.length - 1]!]);
+    const cloud = cloudStream();
+    const long = { messages: [{ role: 'system' as const, content: 'sys' }, { role: 'assistant' as const, content: 'old' }, { role: 'user' as const, content: 'now' }] };
+    await createLocalFirstStream({ probes, cloud, fetch: fetchImpl, fit })(long);
+    expect(fit).toHaveBeenCalledOnce();
+    expect(fit.mock.calls[0]![1]).toMatchObject({ ref: 'local/synapse/qwen3-8b' });
+    expect(sent).toEqual([[{ role: 'user', content: 'now' }]]);
+    expect(cloud).toHaveBeenCalledOnce();
+    expect(cloud.mock.calls[0]![0].messages).toBe(long.messages);
+  });
+
+  it('honours an explicit cloud model (a policy failover) by going straight to the gateway', async () => {
+    const fetchImpl = vi.fn(async () => sse('never'));
+    const cloud = cloudStream();
+    const result = await createLocalFirstStream({ probes, cloud, fetch: fetchImpl })({ ...hello, model: 'openai/gpt-5' });
+    expect(result.text).toBe('from-cloud');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(cloud.mock.calls[0]![0].model).toBe('openai/gpt-5');
+  });
+
+  it('honours an explicit local model by sending it to that runtime', async () => {
+    const seen: Array<{ url: string; model: string }> = [];
+    const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
+      seen.push({ url, model: (JSON.parse(String(init.body)) as { model: string }).model });
+      return sse('hi');
+    });
+    const cloud = cloudStream();
+    const result = await createLocalFirstStream({ probes, cloud, fetch: fetchImpl })({ ...hello, model: 'local/ollama/gemma:2b' });
+    expect(result.resolvedModel).toBe('local/ollama/gemma:2b');
+    expect(seen).toEqual([{ url: 'http://127.0.0.1:11434/v1/chat/completions', model: 'gemma:2b' }]);
+    expect(cloud).not.toHaveBeenCalled();
+  });
+
+  it('signed out, an explicit cloud model asks for sign-in', async () => {
+    await expect(createLocalFirstStream({ probes, cloud: null, fetch: vi.fn() })({ ...hello, model: 'openai/gpt-5' })).rejects.toThrow('not_signed_in');
+  });
+
   it('signed out with nothing local that fits, asks for sign-in like a gateway route', async () => {
     await expect(createLocalFirstStream({ probes: probes.slice(1), cloud: null, fetch: vi.fn() })(toolTurn)).rejects.toThrow(
       'not_signed_in',
@@ -173,5 +218,54 @@ describe('completeLocalFirst', () => {
       }),
     ).resolves.toBe('summary-from-cloud');
     expect(cloud).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createLocalStream (a pin)', () => {
+  const endpoint = { baseUrl: 'http://127.0.0.1:11434' };
+  const sse = (text: string): Response =>
+    new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}
+
+data: [DONE]
+
+`, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    });
+  const hello = { messages: [{ role: 'user' as const, content: 'hello' }] };
+
+  it('serves the pin under its full ref, packed by `fit`', async () => {
+    const models: string[] = [];
+    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+      models.push((JSON.parse(String(init.body)) as { model: string }).model);
+      return sse('hi');
+    });
+    const fit = vi.fn<LocalAttemptFit>(async (m) => m);
+    const stream = createLocalStream(endpoint, 'gemma:2b', fetchImpl, { ref: 'local/ollama/gemma:2b', fit });
+    const result = await stream({ ...hello, model: 'local/ollama/gemma:2b' });
+    expect(result.resolvedModel).toBe('local/ollama/gemma:2b');
+    expect(models).toEqual(['gemma:2b']);
+    expect(fit.mock.calls[0]![1]).toMatchObject({ ref: 'local/ollama/gemma:2b' });
+  });
+
+  it('routes a failover to a cloud model to the gateway instead of the pin', async () => {
+    const fetchImpl = vi.fn(async () => sse('never'));
+    const cloud = vi.fn<BrainStreamFn>(async () => ({ text: 'from-cloud', toolCalls: [], finishReason: 'stop' }));
+    const stream = createLocalStream(endpoint, 'gemma:2b', fetchImpl, { ref: 'local/ollama/gemma:2b', cloud });
+    const result = await stream({ ...hello, model: 'openai/gpt-5' });
+    expect(result.text).toBe('from-cloud');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("routes a failover to another model on the pin's runtime by its own id", async () => {
+    const models: string[] = [];
+    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+      models.push((JSON.parse(String(init.body)) as { model: string }).model);
+      return sse('hi');
+    });
+    const stream = createLocalStream(endpoint, 'gemma:2b', fetchImpl, { ref: 'local/ollama/gemma:2b' });
+    const result = await stream({ ...hello, model: 'local/ollama/qwen3:8b' });
+    expect(models).toEqual(['qwen3:8b']);
+    expect(result.resolvedModel).toBe('local/ollama/qwen3:8b');
   });
 });

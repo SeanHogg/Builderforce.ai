@@ -37,6 +37,7 @@
   --bf-accent-bg: var(--rovr-accent-soft);
   --bf-accent-border: var(--rovr-accent);
   --bf-accent-contrast: var(--rovr-accent-contrast);
+  --bf-on-accent: var(--rovr-accent-contrast);
   --bf-link: var(--rovr-accent);
   --bf-success: var(--rovr-ok);
   --bf-success-bg: var(--rovr-ok-bg);
@@ -177,6 +178,22 @@ body {
   gap: 8px;
 }
 
+/* The shared info strip (tickets, spend): never more than a third of a short panel. */
+.rovr-chat__strip {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-height: 34vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* The shared composer: full width of the panel, its menus held inside it. */
+.rovr-chat__composer {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .rovr-chat__transcript {
   flex: 1;
   min-height: 120px;
@@ -205,18 +222,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.rovr-composer {
-  display: flex;
-  gap: 6px;
-  align-items: flex-end;
-}
-
-.rovr-composer .rovr-input {
-  flex: 1;
-  resize: vertical;
-  min-height: 2.6em;
 }
 
 .rovr-input,

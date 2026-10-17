@@ -33,8 +33,11 @@ export async function brainToolCatalog(
   children?: ChildControls,
   /** This run's Stop, read when a `wait_agents` call starts. */
   signal?: () => AbortSignal | undefined,
+  /** `memory: false` — the chat's Memory switch is off: no `recall_facts` /
+   *  `remember_fact`, so the run neither reads nor writes project memory. Default on. */
+  opts: { memory?: boolean } = {},
 ): Promise<ToolDef[]> {
-  const cognitionTools = projectId != null ? cognitionToolDefs(secrets, projectId) : [];
+  const cognitionTools = projectId != null && opts.memory !== false ? cognitionToolDefs(secrets, projectId) : [];
   const platformTools = await listPlatformTools(secrets);
   // The ticket branch review needs both halves: the project's tickets AND a checkout to
   // compare their branches in.

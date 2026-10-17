@@ -24,7 +24,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getProjectEvermindHead, resolveEffectiveEvermindProjectId, recordEvermindServeOutcome } from './projectEvermind';
-import { getProjectFactByKey, upsertProjectFact, QA_CACHE_SOURCE } from './projectFacts';
+import { getProjectFactRecordByKey, upsertProjectFact, QA_CACHE_SOURCE, type FactOriginCost } from './projectFacts';
 import { EVERMIND_ANSWER_MIN_CHARS, isServableText } from '@seanhogg/builderforce-memory/evermind';
 import { memoryReplayable, promisesUnfinishedWork } from '@builderforce/agent-stall';
 
@@ -39,6 +39,10 @@ export interface MemoryAnswer {
   /** Present when `source === 'evermind'` — WHICH Evermind (project id) answered, so a
    *  multi-Evermind project's memory hit is triageable. */
   evermindProjectId?: number;
+  /** What the replayed answer cost to PRODUCE, when that was recorded with it (a
+   *  `qa-cache` hit whose writer reported its turn's usage). Server-side only — the
+   *  savings ledger prices the replay from it; the route does not return it. */
+  costBasis?: FactOriginCost;
 }
 
 export interface ResolveMemoryDeps {
@@ -142,9 +146,9 @@ export async function resolveMemoryAnswer(
   if (!memoryReplayable(q)) return null;
 
   // 1) Exact-repeat Q&A cache.
-  const cached = await getProjectFactByKey(env, db, tenantId, projectId, qaCacheKey(q)).catch(() => null);
-  if (cached && cached.trim().length > 0) {
-    return { text: cached.trim(), source: 'qa-cache' };
+  const cached = await getProjectFactRecordByKey(env, db, tenantId, projectId, qaCacheKey(q)).catch(() => null);
+  if (cached && cached.content.trim().length > 0) {
+    return { text: cached.content.trim(), source: 'qa-cache', ...(cached.origin ? { costBasis: cached.origin } : {}) };
   }
 
   // 2) Evermind-first (opt-in), from the chat's OWN head only.
@@ -206,6 +210,9 @@ export async function cacheProjectAnswer(
   projectId: number,
   question: string,
   answer: string,
+  /** What producing `answer` cost (the writing turn's model + tokens), so a later replay
+   *  is priced from a recorded figure. Optional: an unknown cost replays as an estimate. */
+  origin?: FactOriginCost | null,
 ): Promise<void> {
   const q = (question ?? '').trim();
   const a = (answer ?? '').trim();
@@ -221,7 +228,7 @@ export async function cacheProjectAnswer(
   // Nothing resolveMemoryAnswer would refuse to serve (a work order, a status question,
   // a bare continuation) is worth writing — it would only ever be a row that is never read.
   if (!memoryReplayable(q)) return;
-  await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q), a, QA_CACHE_SOURCE).catch((error) => {
+  await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q), a, QA_CACHE_SOURCE, { origin: origin ?? null }).catch((error) => {
     /* best-effort — caching never breaks a reply */
   
     reportCaughtError(error, { source: "application/llm/projectMemory.ts", operation: "cacheProjectAnswer" });

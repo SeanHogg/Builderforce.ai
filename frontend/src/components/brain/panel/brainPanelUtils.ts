@@ -13,6 +13,3 @@ export function formatTime(fmt: Formatter, ts: string) {
   if (d.toDateString() === now.toDateString()) return fmt.time(d);
   return fmt.dateWith(d, { month: 'short', day: 'numeric' });
 }
-
-/** localStorage key for the per-chat "use project memory" toggle. */
-export const MEMORY_KEY = (chatId: number) => `bf_brain_memory:${chatId}`;

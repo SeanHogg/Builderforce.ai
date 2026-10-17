@@ -23,14 +23,15 @@
  * surface switcher, the session, the palette and every other surface, and hands ONE of
  * them to the host. It is one surface implemented differently, not a second canvas.
  *
- * ── WHY IT BRINGS ITS OWN COMPOSER ───────────────────────────────────────────────
- * For the same reason. The canvas composer is wired to the in-page runtime, so
+ * ── WHY IT MOUNTS ITS OWN COMPOSER ───────────────────────────────────────────────
+ * For the same reason. The canvas's composer is wired to the in-page runtime, so
  * `CreationCanvas` stands it down while a host surface is on screen (see
  * `hostOwnsSurface` there) — two inputs that started different kinds of run would be
- * the worst of both.
+ * the worst of both. This surface mounts the SAME shared `BrainComposer`
+ * (`VsCodeComposer`), wired to the host's runtime instead.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   useBrainConversation,
   useBrainConfig,
@@ -46,16 +47,12 @@ import {
   buildComposerDirectives,
   effortProfile,
   useToolConfirmationGate,
-  isEffort,
   reasoningForRun,
   gatherChatDiagnostics,
   buildChatDiagnosticsReport,
   traceWithPersistedSteps,
   getMcpToolStatus,
   fetchApiVersionVia,
-  nextFallbackModel,
-  CHAT_MODES,
-  CHAT_MODE_ICON,
   NEW_CHAT_MODE,
   normalizeChatMode,
   projectMemoryHooks,
@@ -63,7 +60,6 @@ import {
   chatRosterFromParticipants,
   type ChatMode,
   type ChatRosterAgent,
-  type Effort,
   type BrainChat,
   type DirectedRecipient,
   type BrainPersonaAgent,
@@ -73,21 +69,17 @@ import {
 import { authedFetch } from '../authedFetch';
 import {
   BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, useChatParticipants, useChatActivitySignal,
-  RecipientPicker, PersonaPicker, useRecipientChoice,
-  useMentionAutocomplete, useTicketAutocomplete, ChatErrorBanner,
-  PromptPanel, PromptOptionsMenu, promptTrailingAction, useVoiceDictation,
+  useRecipientChoice, ChatErrorBanner, useChatMemorySwitch,
   PendingQuestionBanner, selectPendingAskUser, askUserAnchorId,
-  chatSwitcherLabel, chatDiagnosticsReads,
-  type ChatModelSelection,
+  chatSwitcherLabel, chatDiagnosticsReads, useQueuedTurns,
 } from '@seanhogg/builderforce-brain-ui';
-import { loadComposerModels, type ComposerModelSurface } from '../modelOptions';
 import { createChatTicketsAdapter } from '../chatTicketsAdapter';
 import { adoptChatProject } from '../adoptChatProject';
-import { EvermindStatusBadge } from '../EvermindStatusBadge';
 import { usePendingChangesExtension } from '../usePendingChangesExtension';
 import { useChatChangedFiles } from '../useChatChangedFiles';
 import { WEBVIEW_BUILD_ID, WEBVIEW_BUILT_AT } from '../webviewBuildInfo';
-import { AccountStatusPanel, fetchPlanSnapshot, invalidatePlanSnapshot, openUpgrade } from '../accountPlan';
+import { openUpgrade } from '../accountPlan';
+import { fetchPlanSnapshot, invalidatePlanSnapshot } from '../planSnapshot';
 import {
   getToken,
   getEditorContext,
@@ -103,19 +95,18 @@ import {
 import { setHostRunContext } from '../hostRunDriver';
 import { activeProjectDirective, editorContextDirective } from '../../../src/idePersona';
 import { buildTranscript, hasTranscriptContent } from '../transcript';
-import { readStored, writeStored } from '../storage';
 import { autoApprovePersistence } from '../autoApprove';
-import { EFFORT_KEY, MEMORY_KEY, THINKING_KEY } from './chatPreferences';
 import { decodeTokenClaims } from '@/lib/tokenClaims';
-import {
-  effortDesc, makeT, personaModalityOptions, personaPickerLabels, promptMenuLabels, recipientPickerLabels, timelineLabels,
-} from './chatLabels';
-import { IconPlus, IconRename, MenuItem, PopoverMenu } from './ChatMenu';
-import { ComposerTrailingButton } from './ComposerTrailingButton';
+import { makeT, promptMenuLabels, timelineLabels } from './chatLabels';
+import { spendLabelsFrom } from './composerLabels';
+import { IconRename } from './ChatMenu';
 import { useGlobalRunState } from './useGlobalRunState';
-import { QueuedMessages, type QueuedMessage } from './QueuedMessages';
+import type { QueuedTurn } from './QueuedMessages';
 import { SubagentStrip } from './SubagentStrip';
 import { childParticipants, childTarget, isWaitingOnSubagents, steerRun, subagentDiagnosticsOf, useChatChildren, useChatSubagentRoster } from './chatChildren';
+import { useComposerModels } from './useComposerModels';
+import { useRunShaping } from './useRunShaping';
+import { VsCodeComposer } from './VsCodeComposer';
 
 
 export function VsCodeChatSurface({ init }: { init: InitData }) {
@@ -155,13 +146,11 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     defaultOn: autoApproveSetting,
   });
   const [input, setInput] = useState('');
-  const [inputFocused, setInputFocused] = useState(false);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   // Stable reference so a keystroke (which re-renders this component) does not hand
   // <BrainTimeline> a fresh `labels` object and defeat its React.memo — otherwise the
   // whole transcript (and every message's markdown) re-parses on every character typed.
   const tlLabels = useMemo(() => timelineLabels(init.labels), [init.labels]);
-  const [dragOver, setDragOver] = useState(false);
+  const spendLabels = useMemo(() => spendLabelsFrom(init.labels), [init.labels]);
   // idle → copied → idle, or → error. A copy that FAILS must look different from one
   // that never ran: the ⧉ used to be wired as `void copyTranscript()`, so any rejection
   // inside it vanished with no toast, no error and nothing on the clipboard — a click
@@ -171,40 +160,16 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // chat from that summary) are async, so guard against double-clicks while in flight.
   const [consolidating, setConsolidating] = useState(false);
   const [forking, setForking] = useState(false);
-  // Composer run-shaping toggles (the `/` menu + the `+` menu's web option).
-  // Effort and Thinking are REAL request params — effort sets `max_tokens` and, with
-  // Thinking on, the `reasoning.level` intensity; effort also still contributes its
-  // system-prompt nudge. Both persist globally across webview reloads (same guarded
-  // storage helpers the per-chat memory switch uses). 'balanced' + thinking-off is the
-  // neutral default and yields a request identical to having no controls at all.
-  const [effort, setEffortState] = useState<Effort>(() => {
-    const stored = readStored(EFFORT_KEY);
-    return isEffort(stored) ? stored : 'balanced';
-  });
-  const setEffort = useCallback((next: Effort) => {
-    setEffortState(next);
-    writeStored(EFFORT_KEY, next);
-  }, []);
-  const [thinking, setThinkingState] = useState(() => readStored(THINKING_KEY) === '1');
-  const setThinking = useCallback((next: boolean) => {
-    setThinkingState(next);
-    writeStored(THINKING_KEY, next ? '1' : '0');
-  }, []);
-  const [webBrowsing, setWebBrowsing] = useState(false);
+  // Composer run-shaping toggles (Effort / Thinking / Browse the web) — REAL request
+  // params, persisted per person; see `useRunShaping`.
+  const shaping = useRunShaping();
+  const { effort, thinking, webBrowsing } = shaping;
   // The per-turn LIMBIC/affective block for the CURRENT turn — fetched from the host
   // (which calls the gateway's affective endpoint with the user's personality) on each
   // submit and folded into extraSystem, so the next run executes under the SAME limbic
   // layer as the native participant + cloud/on-prem agents. Lingers as the last computed
   // block until the next submit refreshes it; '' when neutral / offline (a no-op).
   const [turnLimbic, setTurnLimbic] = useState('');
-  // Speech-to-text, through the SHARED hook the web composer uses. `supported` gates
-  // the mic so it is never a dead control where the webview cannot listen. Phrases
-  // append to the text as it stands when they land, read through a stable getter.
-  const inputValueRef = useRef(input);
-  inputValueRef.current = input;
-  const getInput = useCallback(() => inputValueRef.current, []);
-  const voice = useVoiceDictation(getInput, setInput);
-
   // The webview reaches /api/brain directly (CORS allows the webview origin), the same
   // path persistence uses — a shared bearer fetch for the trace persist + rehydrate below.
   const apiReq = useMemo(() => authedFetch(init.baseUrl, getToken, () => void refreshToken()), [init.baseUrl]);
@@ -305,18 +270,26 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   const [pendingMode, setPendingMode] = useState<ChatMode>(NEW_CHAT_MODE);
   const pendingModeRef = useRef<ChatMode>(NEW_CHAT_MODE);
   pendingModeRef.current = pendingMode;
+  // The Memory switch as armed before the chat exists — seeds the chat `ensureChatId`
+  // creates, the same way the mode does. Mirrored from the switch below.
+  const pendingMemoryRef = useRef(true);
 
   // Scope new chats to the sidebar's active project (same as task-seeded chats),
   // so a conversation is associated with the project it's about server-side.
   const ensureChatId = useCallback(async () => {
     if (chatId != null) return chatId;
-    const chat = await persistence.createChat({
+    const created = await persistence.createChat({
       title: t('app.newChat', 'New chat'),
       projectId: init.project?.id ?? null,
       // The composer's armed mode, not a server default — otherwise choosing Chat and
       // then typing creates a Work chat and the very first turn runs in the wrong mode.
       mode: pendingModeRef.current,
     });
+    const chat = pendingMemoryRef.current
+      ? created
+      : await persistence.updateChat(created.id, { memoryEnabled: false }).catch(() => created);
+    // In the list at once, so the switch reads the new row instead of the column default.
+    setChats((prev) => (prev.some((c) => c.id === chat.id) ? prev : [chat, ...prev]));
     setChatId(chat.id);
     reloadChats();
     return chat.id;
@@ -361,17 +334,6 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
       .then(() => reloadChats())
       .catch(() => reloadChats());
   }, [chatId, persistence, reloadChats]);
-  const modeChoices = useMemo(
-    () => CHAT_MODES.map((mode) => ({
-      value: mode,
-      label: mode === 'work' ? t('app.modeWork', 'Work') : t('app.modeChat', 'Chat'),
-      hint: mode === 'work'
-        ? t('app.modeWorkHint', 'Turn what we agree into tracked work — open the ticket, staff it, and dispatch an agent to run it')
-        : t('app.modeChatHint', 'Just answer — read and reason as much as needed, but do not open or dispatch board work'),
-      icon: CHAT_MODE_ICON[mode],
-    })),
-    [t],
-  );
 
   const associatedProject = useMemo<{ id: number; name: string } | null>(() => {
     if (associatedProjectId == null) return null;
@@ -418,8 +380,6 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   }, [apiReq]);
   const personaDirective = useMemo(() => personaOverlay(persona, personaAgents) ?? '', [persona, personaAgents]);
   const personaModelId = useMemo(() => personaModel(persona, personaAgents), [persona, personaAgents]);
-  const personaLabels = useMemo(() => personaPickerLabels(init.labels), [init.labels]);
-  const personaModalities = useMemo(() => personaModalityOptions(init.labels), [init.labels]);
 
   // Fold the composer toggles (effort / thinking / web), the live editor context,
   // and the user's affective/PERSONALITY block into the same system channel as the
@@ -443,71 +403,16 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   const effortMaxTokens = effortProfile(effort).maxTokens;
   const reasoning = useMemo(() => reasoningForRun({ effort, thinking }), [effort, thinking]);
 
-  // Which models this tenant may run, which one is in force, and WHO PAYS for it —
-  // everything the `/` menu needs to both SHOW and CHANGE the model without leaving
-  // the panel. A BYO tenant connects their own provider key precisely so their turns
-  // stop drawing on the plan, so the funding line rides every row. Cached per base
-  // URL (see modelOptions.ts); any failure degrades to "auto only". The labels are
-  // keyed on the host's bundle, not on `t` (rebuilt every render), so the fetch below
-  // re-runs on a new init frame rather than on every keystroke.
-  const promptLabels = useMemo(() => promptMenuLabels(makeT(init.labels), init.modelLabels), [init.labels, init.modelLabels]);
-  const [modelChoices, setModelChoices] = useState<ComposerModelSurface | null>(null);
-  const costLine = promptLabels.paidCostDetail;
-  useEffect(() => {
-    let cancelled = false;
-    loadComposerModels(apiReq, init.baseUrl, { paidCostDetail: costLine })
-      .then((r) => { if (!cancelled) setModelChoices(r); })
-      .catch(() => { /* best-effort — the menu falls back to Auto */ });
-    return () => { cancelled = true; };
-  }, [apiReq, init.baseUrl, costLine]);
-  const modelSurface = modelChoices?.surface ?? null;
-
-  /**
-   * The gateway catalogue plus this machine's own models.
-   *
-   * Two reasons this is a merge rather than another fetch. The menu is built from the
-   * gateway's model list, which by definition cannot know what a runtime on this laptop
-   * is serving — so the on-device group appeared in the command palette and nowhere in
-   * the chat the user was typing into. And the catalogue is unavailable precisely when
-   * on-device models matter most: signed out, or offline. So local models also stand the
-   * menu up on their own when the gateway list never arrives.
-   */
-  const composerModels = useMemo<ComposerModelSurface | null>(() => {
-    const local = init.localModels ?? [];
-    if (!modelChoices) {
-      return local.length === 0
-        ? null
-        : {
-            surface: {},
-            options: { byo: [], free: [], plan: [], paid: [], local },
-            identity: { product: 'free', canChoose: false },
-          };
-    }
-    return local.length === 0 ? modelChoices : { ...modelChoices, options: { ...modelChoices.options, local } };
-  }, [modelChoices, init.localModels]);
-
-  // The user's CHOICE, reconstructed from what the host resolved: a strict pin, the
-  // BYO pool, or auto (in which case `init.model` is whatever auto landed on — the
-  // configured default or the project's Evermind pin — and the menu names it).
-  const modelSelection = useMemo<ChatModelSelection>(
-    () => (init.modelStrict && init.model
-      ? { mode: 'model', model: init.model }
-      : init.routingMode === 'byo_pool' ? { mode: 'byo_pool' } : { mode: 'auto' }),
-    [init.model, init.modelStrict, init.routingMode],
+  // Which models this tenant may run, which one is in force and who pays for it — the
+  // `/` menu's model rows and the run loop's stall failover (see `useComposerModels`).
+  // Keyed on the host's bundle, not on `t` (rebuilt every render), so the catalogue
+  // fetch re-runs on a new init frame rather than on every keystroke.
+  const paidCostDetail = useMemo(
+    () => promptMenuLabels(makeT(init.labels), init.modelLabels).paidCostDetail,
+    [init.labels, init.modelLabels],
   );
-  // Changing the model is host state (it drives BOTH editor chat surfaces and
-  // survives this panel), so the pick crosses the bridge; the host re-posts `init`
-  // and the menu re-renders from it.
-  const chooseModel = useCallback((selection: ChatModelSelection) => {
-    post('model.set', selection.mode === 'model' ? { mode: 'model', model: selection.model } : { mode: selection.mode });
-  }, []);
-
-  // Tool-call failover: hand the run loop the SHARED selector over the surface above,
-  // so "which model next" is decided in one place for every host rather than here.
-  const pickFallbackModel = useCallback(
-    (tried: readonly string[]) => nextFallbackModel(modelSurface, tried),
-    [modelSurface],
-  );
+  const models = useComposerModels(init, apiReq, paidCostDetail);
+  const { modelSurface, composerModels, pickFallbackModel } = models;
   // The host runs the loop, so it needs the three things only this panel knows: WHICH
   // chat it is showing (runs for other chats carry on out there, and both the Auto
   // switch and the host's tool-count announcement are matched against this), the
@@ -567,26 +472,24 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     // `chatId` makes recall CHAT-TIERED: this conversation's own memories come first,
     // then the wider project's. Without it a reopened chat recalled anything the
     // project had ever learned, which reads as remembering things never said here.
-    return projectMemoryHooks(evermindProjectId, req, chatId);
+    return projectMemoryHooks(evermindProjectId, req, chatId, 'vsix');
   }, [evermindProjectId, init.baseUrl, chatId]);
 
-  // Per-chat memory switch: whether THIS chat passes the project-Evermind hooks
-  // (recall before answering + the learn contribution when the run finishes).
-  // Default ON; persisted per-chat in localStorage so it sticks across reloads.
-  // Turning it off makes the chat a scratch space that neither recalls from nor
-  // writes back to the project's learned memory. (Web BrainPanel parity.)
-  const [memoryEnabled, setMemoryEnabled] = useState(true);
-  useEffect(() => {
-    if (chatId == null) { setMemoryEnabled(true); return; }
-    const v = readStored(MEMORY_KEY(chatId));
-    setMemoryEnabled(v == null ? true : v !== '0');
-  }, [chatId]);
-  const toggleMemory = useCallback((on: boolean) => {
-    setMemoryEnabled(on);
-    if (chatId == null) return;
-    writeStored(MEMORY_KEY(chatId), on ? '1' : '0');
-  }, [chatId]);
-  // Gate the recall hook on the per-chat switch — off ⇒ no recall this chat.
+  // Per-chat memory switch: whether THIS chat passes the project-Evermind hooks (recall
+  // before answering + the learn contribution when the run finishes). A property of the
+  // CONVERSATION (`brain_chats.memory_enabled`) — the same chat reads the same switch on
+  // the web — and the host's run reads it too: the run spec's `evermind` flag also drops
+  // the memory tools. Off makes the chat a scratch space (no recall, no learning).
+  const persistMemory = useCallback(
+    (id: number, on: boolean) => persistence.updateChat(id, { memoryEnabled: on }).then(reloadChats),
+    [persistence, reloadChats],
+  );
+  const { enabled: memoryEnabled, setEnabled: setMemoryEnabled } = useChatMemorySwitch({
+    chatId,
+    serverValue: activeChat?.memoryEnabled,
+    persist: persistMemory,
+  });
+  pendingMemoryRef.current = memoryEnabled;
   const gatedEvermind = memoryEnabled ? evermind : undefined;
 
   /**
@@ -678,6 +581,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // Bumped when the Brain mutates work items via MCP tools, so the ticket panel
   // refreshes live (rings/links) rather than only on its own button actions.
   const [ticketRefresh, setTicketRefresh] = useState(0);
+  const bumpTicketRefresh = useCallback(() => setTicketRefresh((n) => n + 1), []);
   const chatFiles = useChatChangedFiles(apiReq, chatId, ticketRefresh);
   const pendingChangesExtension = usePendingChangesExtension(init.labels, chatFiles);
 
@@ -776,115 +680,10 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // else an explicit participant; else a leading @mention; else the BRAIN (null). The
   // pick resets on a chat switch and drops a participant who has since left.
   const { recipient, choose: chooseRecipient } = useRecipientChoice({ participants: mentionable, input, resetKey: chatId });
-  const recipientLabels = useMemo(() => recipientPickerLabels(init.labels), [init.labels]);
-
-  // @-mention typeahead: typing `@` in the composer opens a picker of the chat's
-  // participants (agents + humans); choosing one directs the next turn to them.
-  // The same interaction the web Brain uses (shared brain-ui hook) — modality-
-  // agnostic, since participants come from the chat, not the persona.
-  const mention = useMentionAutocomplete({
-    textareaRef: inputRef,
-    value: input,
-    setValue: setInput,
-    participants: mentionable,
-    onPick: chooseRecipient,
-    // Open while sub-agents work, even mid-run: they are who a message may be for.
-    disabled: conv.sending && liveChildren.length === 0,
-    labels: {
-      title: t('app.mentionTitle', 'Direct to'),
-      agent: t('app.mentionAgent', 'Agent'),
-      human: t('app.mentionHuman', 'Person'),
-    },
-  });
-
-  // #-ticket typeahead: typing `#` in the composer opens a picker of the chat's
-  // linked tickets; choosing one tags it in the message (e.g., "#123").
-  // Transform TicketLinkVM to ChatTicket format expected by useTicketAutocomplete.
-  const [chatTickets, setChatTickets] = useState<{ id: number; title: string; status?: string; key?: string }[]>([]);
-  useEffect(() => {
-    // A chat that does not exist yet has no tickets. This used to call
-    // `listTickets(null)`, which spelled `/api/brain/chats/null/tickets`, failed, and was
-    // swallowed by the catch below — a failing request on the open of every new chat,
-    // invisible because the empty result it produced was also the correct one. It
-    // type-checked only because the shared package was resolving as `any` (its published
-    // `.d.ts` was missing from `dist`), which is the same trap the brain-ui stale-dist
-    // gotcha describes.
-    if (chatId == null) { setChatTickets([]); return; }
-    let live = true;
-    ticketAdapter.listTickets(chatId).then((tickets) => {
-      if (!live) return;
-      // Transform TicketLinkVM to ChatTicket: use ref as key, parse id from ref or use linkId
-      setChatTickets(tickets.map((t) => ({
-        id: parseInt(t.ref) || t.linkId,
-        title: t.label || t.ref,  // Fallback to ref if label is empty
-        status: t.status,
-        key: t.ref,
-      })));
-    }).catch(() => { if (live) setChatTickets([]); });
-    return () => { live = false; };
-  }, [chatId, ticketAdapter, ticketRefresh]);
-
-  // Handle a ticket tagged in the composer — link it to the active chat.
-  const handleTicketTag = useCallback(
-    async (ticket: { id: number; title: string; status?: string; key?: string }) => {
-      try {
-        // CREATE the chat first if it has none. Tagging a ticket in a brand-new chat used
-        // to call `linkTicket(null, …)`, which 404'd into the catch below — so the pill
-        // appeared in the composer and the link was silently never made. `ensureChatId` is
-        // the same guard every other write on this surface goes through.
-        const id = await ensureChatId();
-        const ref = ticket.key ?? String(ticket.id);
-        await ticketAdapter.linkTicket(id, { kind: 'task', ref, linkType: 'linked' });
-        setTicketRefresh((n) => n + 1);
-      } catch { /* linking is best-effort — a failed link never blocks the chat */ }
-    },
-    [ensureChatId, ticketAdapter],
-  );
-
-  const ticket = useTicketAutocomplete({
-    textareaRef: inputRef,
-    value: input,
-    setValue: setInput,
-    tickets: chatTickets,
-    onPick: handleTicketTag,
-    disabled: conv.sending && liveChildren.length === 0,
-    labels: {
-      title: t('app.ticketTagTitle', 'Tag ticket'),
-      status: t('app.ticketTagStatus', 'Status'),
-      noMatches: t('app.ticketTagNoMatches', 'No tickets found'),
-    },
-  });
 
   // A run's steps are persisted as durable step rows by the run loop the HOST drives
   // (`brainRunHost.ts`), not here: runs execute in parallel and outlive this view, so a
   // panel could only ever see — and save — the one chat it happened to be showing.
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const attachFiles = useCallback((files: FileList | File[] | null) => {
-    if (!files) return;
-    for (const f of Array.from(files)) void conv.attach(f);
-  }, [conv]);
-
-  // "Add context" — ask the host to pick a workspace file (or the active editor
-  // selection); it returns the path + text, which we attach through the SAME
-  // upload pipeline as a dropped/uploaded file, so the model gets the content.
-  const addContext = useCallback(async () => {
-    try {
-      const ctx = await request<{ path: string; text: string } | null>('context.pick');
-      if (!ctx || !ctx.text) return;
-      await conv.attach(new File([ctx.text], ctx.path || 'context.txt', { type: 'text/plain' }));
-    } catch {
-      /* host cancelled / no workspace — nothing to attach */
-    }
-  }, [conv]);
-
-  const onPaste = useCallback((e: React.ClipboardEvent) => {
-    const imgs = Array.from(e.clipboardData.items)
-      .filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
-      .map((it) => it.getAsFile())
-      .filter((f): f is File => !!f);
-    if (imgs.length) { e.preventDefault(); attachFiles(imgs); }
-  }, [attachFiles]);
 
   // A send queued behind its per-turn limbic fetch. We can't call conv.send
   // synchronously in submit(): the fresh limbic block must land in extraSystem (→ the
@@ -920,33 +719,23 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     setSendNonce((n) => n + 1);
   }, [requestLimbic]);
 
-  // Messages the user composed WHILE a run was in flight. The VSIX chat used to drop
-  // these (submit early-returned when sending); now they queue and drain FIFO — one
-  // message per completed run — so follow-ups are never lost and each stays a distinct
-  // steerable turn. Cleared when switching chats (a queue belongs to its conversation).
-  const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
-  const queueIdRef = useRef(0);
-  useEffect(() => { setMessageQueue([]); }, [chatId]);
-  const removeQueued = useCallback((id: number) => {
-    setMessageQueue((q) => q.filter((m) => m.id !== id));
-  }, []);
+  // Messages the user composed WHILE a run was in flight — the ONE shared queue: FIFO,
+  // one per completed run (each stays a distinct steerable turn), never flushed across
+  // a chat switch, and cleared with it.
+  const queued = useQueuedTurns<QueuedTurn>({
+    running: conv.sending,
+    send: (m) => void dispatchSend(m.text, m.recipient),
+    resetKey: chatId,
+    textOf: (m) => m.text,
+  });
 
-  // Drain the queue: when a run finishes (sending true→false) and messages are queued,
-  // dispatch the next one. Draining one-per-run keeps each follow-up its own turn (and
-  // lets the user watch/steer between them) rather than concatenating them into one.
-  // Keyed by chat: `sending` is per conversation, so switching away from a running chat
-  // flips it true→false without any run settling — and must not fire that chat's queue
-  // into the one the user switched to.
-  const prevSendingForQueue = useRef<{ chatId: number | null; sending: boolean }>({ chatId: null, sending: false });
+  // A settled run moved what the chat row reports (its spend & savings, ticket counts),
+  // and the host drives the run, so the in-page loop's `onActivity` never sees the end.
+  const wasSending = useRef(false);
   useEffect(() => {
-    const prev = prevSendingForQueue.current;
-    if (prev.chatId === chatId && prev.sending && !conv.sending && messageQueue.length > 0) {
-      const [next, ...rest] = messageQueue;
-      setMessageQueue(rest);
-      void dispatchSend(next.text, next.recipient);
-    }
-    prevSendingForQueue.current = { chatId, sending: conv.sending };
-  }, [chatId, conv.sending, messageQueue, dispatchSend]);
+    if (wasSending.current && !conv.sending) reloadChats();
+    wasSending.current = conv.sending;
+  }, [conv.sending, reloadChats]);
 
   // The ONE way a turn leaves this panel — typed, an answered question, or "Send again".
   // A run is already in flight (or still settling in the host): queue it instead of
@@ -968,12 +757,9 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
       steerRun(chatId, text);
       return;
     }
-    if (conv.sending) {
-      setMessageQueue((q) => [...q, { id: (queueIdRef.current += 1), text, recipient: to }]);
-      return;
-    }
+    if (queued.submit({ text, recipient: to })) return;
     void dispatchSend(text, to);
-  }, [conv.sending, conv.activity, chatId, dispatchSend, liveChildren]);
+  }, [conv.sending, conv.activity, chatId, dispatchSend, liveChildren, queued.submit]);
 
   const submit = useCallback(() => {
     const text = input.trim();
@@ -1360,6 +1146,10 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
             // registers nothing, so the rail is exactly as it was.
             extensions={pendingChangesExtension ? [pendingChangesExtension] : undefined}
             subagents={subagentRoster}
+            // What this conversation cost and what memory saved — rides the chat row.
+            spend={activeChat?.spend}
+            spendLabels={spendLabels}
+            locale={init.locale}
           />
         </div>
       )}
@@ -1486,191 +1276,38 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
         />
       )}
 
-      <PromptPanel
-        className="bf-composer"
-        active={inputFocused || input.trim().length > 0}
-        dragging={dragOver}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); attachFiles(e.dataTransfer.files); }}
-        overlay={mention.popup || ticket.popup}
-        status={(conv.pendingAttachments.length > 0 || messageQueue.length > 0) ? <>
-        {conv.pendingAttachments.length > 0 && (
-          <div className="bf-attachments">
-            {conv.pendingAttachments.map((a) => (
-              <span key={a.key} className="bf-chip">
-                {a.imageUrl && <img src={a.imageUrl} alt="" className="bf-chip__thumb" />}
-                <span className="bf-chip__name">{a.name}</span>
-                <button className="bf-chip__x" onClick={() => conv.removeAttachment(a.key)} aria-label={t('app.remove', 'Remove')}>×</button>
-              </span>
-            ))}
-          </div>
-        )}
-        {/* Messages queued behind the in-flight run — each sends automatically, one per
-            completed run, or is steered into the running turn now. */}
-        <QueuedMessages queue={messageQueue} runningChatId={conv.sending ? chatId : null} labels={init.labels} onRemove={removeQueued} />
-        </> : undefined}
-        input={(
-          <textarea
-            ref={inputRef}
-            className="bf-input"
-            rows={2}
-            placeholder={recipient
-              ? t('app.messageParticipant', 'Message {name}…').replace('{name}', recipient.name)
-              : t('app.placeholder', 'Ask BuilderForce to build or change something…')}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            onPaste={onPaste}
-            onSelect={() => { mention.onSelect(); ticket.onSelect(); }}
-            onKeyDown={(e) => {
-              // The @-mention picker consumes nav/select/escape first.
-              if (mention.onKeyDown(e)) return;
-              // Then the #-ticket picker.
-              if (ticket.onKeyDown(e)) return;
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
-            }}
-          />
-        )}
-        // Who answers and who is addressed. The shell carries them in the tool row
-        // after `+` and `/`, so the box keeps one row of controls.
-        context={<>
-          {/* Acting as — WHO the Brain answers as. The shared brain-ui control the web
-              composer renders too; see `personaOverlay` for how it shapes the turn.
-              Hidden until there is someone else to act as (`quietAt`), as on the web. */}
-          <PersonaPicker
-            value={persona}
-            onChange={setPersona}
-            modalities={personaModalities}
-            agents={personaAgents}
-            labels={personaLabels}
-            quietAt={DEFAULT_PERSONA}
-          />
-
-          {/* To — routes the next message to the BRAIN (executes) or a participant
-              (talked to). Self-hides until the chat is multi-party. */}
-          <RecipientPicker
-            participants={participants}
-            recipient={recipient}
-            onChoose={chooseRecipient}
-            labels={recipientLabels}
-          />
-        </>}
-        actions={<>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            hidden
-            onChange={(e) => { attachFiles(e.target.files); e.target.value = ''; }}
-          />
-
-          {/* + : add content to the message (upload, workspace context, or web). */}
-          <PopoverMenu align="left" title={t('app.add', 'Add')} trigger={<IconPlus />}>
-            {(close) => (
-              <>
-                <MenuItem
-                  icon="💻"
-                  label={conv.uploading ? t('app.uploading', 'Uploading…') : t('app.uploadFile', 'Upload from computer')}
-                  onClick={() => { close(); if (!conv.uploading) fileInputRef.current?.click(); }}
-                />
-                <MenuItem
-                  icon="◧"
-                  label={t('app.addContext', 'Add context')}
-                  onClick={() => { close(); void addContext(); }}
-                />
-                <MenuItem
-                  icon="🌐"
-                  label={t('app.browseWeb', 'Browse the web')}
-                  hint={webBrowsing ? t('app.on', 'On') : t('app.off', 'Off')}
-                  active={webBrowsing}
-                  onClick={() => setWebBrowsing((v) => !v)}
-                />
-              </>
-            )}
-          </PopoverMenu>
-
-          {/* / : effort, thinking, WHICH MODEL IS RUNNING (and switching it), and
-              account settings. The SHARED control — the same component the web
-              composer renders — so the editor can't drift from it, and so model
-              choice lives in the panel instead of a chip that punted to a QuickPick.
-              Every row states its REAL effect (answer budget, thinking budget, who
-              pays) — the levels used to be bare adjectives that changed nothing but
-              prose, which is exactly why users couldn't tell what they did. */}
-          <PromptOptionsMenu
-            labels={promptLabels}
-            mode={{ value: chatMode, onChange: (next) => selectMode(next as ChatMode), choices: modeChoices }}
-            memory={{
-              enabled: memoryEnabled,
-              onChange: toggleMemory,
-              describe: (on) => (on
-                ? t('app.memoryOnHint', 'Memory on — this chat recalls and learns from the project Evermind')
-                : t('app.memoryOffHint', 'Memory off — this chat is a scratch space (no recall, no learning)')),
-              // No project Evermind behind this chat ⇒ the switch would gate nothing.
-              // It still shows, and says so, rather than vanishing from the menu.
-              unavailableReason: evermindProjectId == null
-                ? t('app.memoryUnavailable', 'This chat has no project memory to recall from — link it to a project first')
-                : undefined,
-            }}
-            session={chatId != null ? {
-              canConsolidate,
-              consolidating,
-              forking,
-              onConsolidate: consolidate,
-              onFork: fork,
-            } : undefined}
-            effort={effort}
-            onEffortChange={setEffort}
-            describeEffort={(level) => effortDesc(level, thinking, t)}
-            thinking={thinking}
-            onThinkingChange={setThinking}
-            describeThinking={(on) => (on
-              ? t('app.thinkingOnDesc', 'The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems.')
-                  .replace('{budget}', effortProfile(effort).thinkingBudgetTokens.toLocaleString())
-              : t('app.thinkingOffDesc', 'Off — the model answers directly. Turn on for a reasoning pass before the answer.'))}
-            model={composerModels ? {
-              selection: modelSelection,
-              options: composerModels.options,
-              onChange: chooseModel,
-              effective: servedModel ?? init.model,
-              identity: composerModels.identity,
-            } : undefined}
-            autoMode={{
-              enabled: autoApprove,
-              onChange: setAutoApproveMode,
-              description: t('app.autoModeHint', 'Auto-approve tool actions without asking'),
-            }}
-            status={<>
-              <AccountStatusPanel apiReq={apiReq} t={t} />
-              <EvermindStatusBadge baseUrl={init.baseUrl} projectId={associatedProjectId} t={t} />
-            </>}
-            onAccountSettings={() => post('settings')}
-          />
-          {/* Auto-approve lives in the `/` menu above (its `autoMode` row) — the
-              separate "Auto" chip that used to sit here was a second switch for the
-              same gate. */}
-        </>}
-        // ONE trailing button, decided by the shared rule the web composer uses: the
-        // mic on an empty idle box, Send once there is text (mid-run it queues the
-        // message behind the run), Stop on an empty box while a run streams. The shell
-        // pins it to the far right edge of the tool row.
-        primaryAction={<ComposerTrailingButton
-          action={promptTrailingAction({
-            canSubmit: input.trim().length > 0,
-            running: conv.sending,
-            canStop: true,
-            voice: voice.supported,
-            recording: voice.recording,
-          })}
-          canSubmit={input.trim().length > 0}
-          running={conv.sending}
-          recording={voice.recording}
-          onSend={submit}
-          onStop={conv.stop}
-          onVoice={voice.recording ? voice.stopVoice : voice.startVoice}
-          t={t}
-        />}
+      <VsCodeComposer
+        init={init}
+        apiReq={apiReq}
+        conv={conv}
+        value={input}
+        onChange={setInput}
+        onSubmit={submit}
+        chatId={chatId}
+        projectId={evermindProjectId}
+        ensureChatId={ensureChatId}
+        ticketAdapter={ticketAdapter}
+        ticketRefresh={ticketRefresh}
+        onTicketLinked={bumpTicketRefresh}
+        participants={participants}
+        mentionable={mentionable}
+        hasLiveChildren={liveChildren.length > 0}
+        recipient={recipient}
+        chooseRecipient={chooseRecipient}
+        persona={persona}
+        onPersona={setPersona}
+        personaAgents={personaAgents}
+        queue={queued.items}
+        onRemoveQueued={queued.remove}
+        mode={{ value: chatMode, onChange: selectMode }}
+        memory={{ enabled: memoryEnabled, onChange: setMemoryEnabled }}
+        shaping={shaping}
+        models={models}
+        servedModel={servedModel}
+        autoMode={{ enabled: autoApprove, onChange: setAutoApproveMode }}
+        session={chatId != null
+          ? { canConsolidate, consolidating, forking, onConsolidate: consolidate, onFork: fork }
+          : undefined}
       />
     </div>
   );

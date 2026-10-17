@@ -12,6 +12,11 @@
  * updates the caller's `compactMemo`.
  */
 
+import {
+  defaultEstimateTokens,
+  messageTokens as handoffMessageTokens,
+  tokensOf as handoffTokensOf,
+} from '@seanhogg/builderforce-memory/handoff';
 import type { ChatCompletionMessage, StreamChatOptions, StreamChatResult } from './streamChatCompletion';
 
 /** How much history we send to the model (message-count ceiling). */
@@ -43,16 +48,11 @@ export const HISTORY_TOKEN_BUDGET = 64_000;
  */
 const COMPACT_TAIL_TOKEN_BUDGET = 40_000;
 
-/** Cheap token estimate from a char count — chars/4, the gateway's heuristic. */
-function estimateTokens(chars: number): number {
-  return Math.ceil(chars / 4);
-}
-
-/** Estimated tokens for one chat message (content + any tool-call payloads). */
+/** Estimated tokens for one chat message (content + tool-call payload + framing) — THE
+ *  hand-off packer's estimate (`@seanhogg/builderforce-memory/handoff`), so the working
+ *  transcript and a hand-off to a smaller model count a message the same way. */
 function messageTokens(m: ChatCompletionMessage): number {
-  let chars = typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content ?? '').length;
-  if (m.tool_calls) chars += JSON.stringify(m.tool_calls).length;
-  return estimateTokens(chars) + 4; // +4 for role/framing overhead
+  return handoffMessageTokens(m, defaultEstimateTokens);
 }
 
 /**
@@ -109,7 +109,7 @@ export function windowed(convo: ChatCompletionMessage[]): ChatCompletionMessage[
  * into the transcript, so this is rare).
  */
 function tokenBounded(w: ChatCompletionMessage[]): ChatCompletionMessage[] {
-  let total = w.reduce((sum, m) => sum + messageTokens(m), 0);
+  let total = transcriptTokens(w);
   if (total <= HISTORY_TOKEN_BUDGET) return w;
   // The last user turn's index — never trim past it.
   const lastUser = w.map((m) => m.role).lastIndexOf('user');
@@ -151,6 +151,15 @@ export function stillInWorkingContext(state: WorkingTranscriptState, anchor: unk
 // coding loop uses server-side via compactMessages), so the model keeps working from
 // a distilled memory and converges. Falls back to `tokenBounded` (drop) when no
 // summarizer is reachable, so correctness never depends on the extra LLM call.
+//
+// Why this fold is NOT `packHandoff` (`@seanhogg/builderforce-memory/handoff`, which a
+// hand-off to another model's window uses — see `handoff/packForModel.ts`): the packer
+// is stateless and gives the verbatim tail priority, handing the note whatever room the
+// tail leaves. The working transcript needs the opposite on both counts — an
+// INCREMENTAL memo reused across turns (one summarizer call per ~20k tokens of
+// progress, not one per turn), a tail capped at COMPACT_TAIL_TOKEN_BUDGET so the note
+// and the next turns have headroom, and a message-count window (min/max tail turns).
+// What the two share — the token estimate — is the packer's (`messageTokens` below).
 // ---------------------------------------------------------------------------
 
 /** The fewest recent messages the verbatim tail keeps, however large they are. */
@@ -302,15 +311,16 @@ export async function summarizeMiddle(
   }
 }
 
-/** Estimated tokens for a run of messages. */
-function tokensOf(msgs: readonly ChatCompletionMessage[]): number {
-  return msgs.reduce((sum, m) => sum + messageTokens(m), 0);
+/** Estimated tokens of a message list — the ONE count compaction budgets by, exported so
+ *  the run loop measures what compaction kept out of a call with the same rule. */
+export function transcriptTokens(msgs: readonly ChatCompletionMessage[]): number {
+  return handoffTokensOf(msgs, defaultEstimateTokens);
 }
 
 /** Can these messages (plus `extraTokens` in front of them) go to the model verbatim —
  *  inside both the token budget and the message window? */
 function fitsVerbatim(msgs: readonly ChatCompletionMessage[], extraTokens = 0): boolean {
-  return msgs.length <= HISTORY_WINDOW && extraTokens + tokensOf(msgs) <= HISTORY_TOKEN_BUDGET;
+  return msgs.length <= HISTORY_WINDOW && extraTokens + transcriptTokens(msgs) <= HISTORY_TOKEN_BUDGET;
 }
 
 /**
@@ -344,7 +354,7 @@ export async function buildWorkingTranscript(
   }
   // A note written against a transcript that has since been replaced covers nothing here.
   const memo = state.compactMemo && state.compactMemo.coveredEnd <= convo.length ? state.compactMemo : null;
-  if (memo && fitsVerbatim(convo.slice(verbatimStart(convo, memo.coveredEnd)), estimateTokens(memo.note.length))) {
+  if (memo && fitsVerbatim(convo.slice(verbatimStart(convo, memo.coveredEnd)), defaultEstimateTokens(memo.note))) {
     return assembleCompacted(systemPrompt, convo, memo.note, memo.coveredEnd);
   }
   const from = memo?.coveredEnd ?? 0;

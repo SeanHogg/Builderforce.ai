@@ -38,22 +38,38 @@ export {
   localFirstWorkload,
   localTransport,
 } from './localFirstTransport';
-export type { LocalChatMessage, LocalFetch, LocalFirstStreamInput } from './localFirstTransport';
+export type { LocalAttemptFit, LocalChatMessage, LocalFetch, LocalFirstStreamInput, LocalStreamRoute } from './localFirstTransport';
+// Model hand-off: fit a transcript into the NEXT model's window with the
+// `@seanhogg/builderforce-memory/handoff` packer — the run loop's gate, and the
+// per-attempt `fit` a local-first host lends `createLocalFirstStream`.
+export { contextWindowOf } from './handoff/modelWindow';
+export type { ModelWindowSources } from './handoff/modelWindow';
+export { createHandoffFit, packForModel, toolSchemaTokens } from './handoff/packForModel';
+export type { HandoffFitOptions, HandoffTrace, PackForModelInput, PackForModelResult } from './handoff/packForModel';
 export { localFallbackTrace, summarizeLocalFirstAttempt } from './localFirstTraces';
 export type { LocalFirstAttemptSummary } from './localFirstTraces';
-// The browser's own model (Chrome's Prompt API) as a local-first runtime: its probe and
-// the in-page fetch that answers its OpenAI chat route. `promptApi` is the ONE detection
-// of the surface, shared with the web app's PromptApiModelProvider.
+// The engines that run INSIDE the page (PRD 34): one `PageEngine` contract, one fetch shim
+// that answers each engine's OpenAI chat route, and one model store the picker drives.
+// Chrome's Prompt API model, WebLLM (lazy chunk) and our WebGPU `bfi` (host-vendored
+// wasm) each implement it; `createPageEngineSet` composes them for a host. `promptApi` is
+// the ONE detection of the Prompt API surface, shared with the web app's
+// PromptApiModelProvider.
 export {
   BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
   BROWSER_ENGINE_MODEL,
-  BROWSER_ENGINE_PROBE_TTL_MS,
-  browserEngineFetch,
-  browserEngineProbe,
   createBrowserEngineProber,
   toPromptApiTurn,
 } from './browserEngine';
 export type { BrowserEngineProber } from './browserEngine';
+export { PageEngineError } from './pageEngines/types';
+export type { ChatCompletionChunk, ChatCompletionsRequest, PageEngine } from './pageEngines/types';
+export { pageEnginesFetch, probePageEngines } from './pageEngines/fetchShim';
+export type { BfiEngineInstance, BfiEngineStatic, BfiModelInfo, BfiModule } from './pageEngines/bfiEngine';
+export type { LocalModelRow, LocalModelState, LocalModelStore } from './pageEngines/modelStore';
+export { createPageEngineSet } from './pageEngines/pageEngineSet';
+export { pageRuntimePin } from './pageEngines/pageRuntimePin';
+export type { PageRuntimePin } from './pageEngines/pageRuntimePin';
+export type { PageEngineSet, PageEngineSetOptions } from './pageEngines/pageEngineSet';
 export {
   hasPromptApi,
   promptApiAvailability,
@@ -126,7 +142,7 @@ export type { PreparedImage } from './imagePrep';
 
 // Project-Evermind memory hooks for the run loop (recall → learn → reconcile).
 export { projectMemoryHooks } from './evermindMemory';
-export type { EvermindRunHooks, MemoryFirstAnswer, ProjectMemoryRequest } from './evermindMemory';
+export type { AnswerOriginCost, EvermindRunHooks, MemoryFirstAnswer, MemorySurface, ProjectMemoryRequest } from './evermindMemory';
 // The recall contract + memory block + reconcile rule are the Evermind module's; the
 // Brain re-exports them so every host reaches the chat's memory surface in one place.
 export { formatEvermindMemoryBlock, countReconciledMemories } from '@seanhogg/builderforce-memory/evermind';
@@ -606,6 +622,7 @@ export {
   perMillionUsd,
   premiumCostLabel,
   byoVendorLabel,
+  withReadyPageModels,
   MODEL_CATEGORIES,
   DEFAULT_MODEL_CHOICE_LABELS,
   PROJECT_EVERMIND_MODEL_PREFIX,
@@ -617,6 +634,18 @@ export type {
   ModelChoiceLabels,
   ModelItem,
 } from './modelChoice';
+// The gateway's model catalogue — the ONE parser + entitlement rule every client reads
+// it through (web lists, VS Code host + webview, Rovr).
+export {
+  EMPTY_GATEWAY_MODEL_OPTIONS,
+  gatewayCanChooseModel,
+  gatewayModelIdentity,
+  gatewayPlanIsPaid,
+  gatewayPlanModels,
+  invalidateGatewayModelOptions,
+  loadGatewayModelOptions,
+} from './gatewayModels';
+export type { GatewayJsonRequest, GatewayModelOptions, GatewayModelSurface } from './gatewayModels';
 export { getMcpToolStatus, setMcpToolStatus, type McpToolStatus } from './mcpToolStatus';
 export { selectToolsForTurn, DEFAULT_TOOL_LIMIT, type ToolSelection } from './selectTools';
 // The tool ROUTER — three fixed tools that keep the whole catalog reachable even when
@@ -649,3 +678,5 @@ export {
 export { isManagerRole } from './workspaceRoles';
 // UI (PRD 14 §136) — the embeddable one-line composer. Host-translated, router-free.
 export { PromptInput, type PromptInputProps } from './ui/PromptInput';
+export type { SavingsBreakdown, SavingsBySource, SavingsSourceKey, SpendBreakdown, SpendSavingsSummary } from './spendSavings';
+export { USAGE_SURFACE_HEADER, USAGE_SURFACES, isUsageSurface, withUsageSurface, type UsageSurface } from './usageSurface';

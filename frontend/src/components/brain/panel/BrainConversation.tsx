@@ -123,6 +123,7 @@ export function BrainConversation() {
               chatList={chats.chats}
               onChanged={timeline.onTicketsChanged}
               transcript={conv.messages}
+              spend={chats.activeChat.spend}
             />
           )}
           {newProject.showNewProject && (

@@ -2,7 +2,7 @@ import {
   BrainRequestError,
   brainRequestError,
   chatErrorAction
-} from "./chunk-P2QWNA6W.mjs";
+} from "./chunk-XMWB5HDP.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useMemo } from "react";
@@ -773,12 +773,12 @@ function splitVendorReasoning(message) {
   return { content, reasoning };
 }
 function canonicalReasoningText(content, reasoning) {
-  const answer = (content ?? "").trim();
+  const answer2 = (content ?? "").trim();
   const thought = (reasoning ?? "").trim();
-  if (!thought) return answer;
-  return answer ? `<think>${thought}</think>
+  if (!thought) return answer2;
+  return answer2 ? `<think>${thought}</think>
 
-${answer}` : `<think>${thought}</think>`;
+${answer2}` : `<think>${thought}</think>`;
 }
 
 // ../packages/agent-loop/src/openaiCodec.ts
@@ -1860,6 +1860,8 @@ function transportRetryTrace(ts, step, outcome, message) {
 
 // ../packages/local-inference/src/runtimes.ts
 var BROWSER_ENGINE_BASE_URL = "http://browser.local";
+var BFI_ENGINE_BASE_URL = "http://bfi.local";
+var WEBLLM_ENGINE_BASE_URL = "http://webllm.local";
 var LOCAL_RUNTIMES = [
   { id: "synapse", label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
   {
@@ -1880,6 +1882,29 @@ var LOCAL_RUNTIMES = [
     tools: "unknown",
     reach: "http"
   },
+  // Our transformer compiled to WebAssembly over WebGPU (`bfi-web`). Its models are the
+  // catalog's (`LOCAL_MODEL_CATALOG`) that the page has downloaded; like `bfi serve` it
+  // grammar-constrains `tools` for every model it loads.
+  {
+    id: "bfi",
+    label: "Builderforce engine",
+    onDevice: true,
+    defaultBaseUrl: BFI_ENGINE_BASE_URL,
+    catalog: "declared",
+    tools: "all",
+    reach: "page"
+  },
+  // MLC's WebLLM. Tool support is per MODEL (only its function-calling builds honour
+  // `tools`), so the runtime says `unknown` and each catalog row declares its own.
+  {
+    id: "webllm",
+    label: "WebLLM",
+    onDevice: true,
+    defaultBaseUrl: WEBLLM_ENGINE_BASE_URL,
+    catalog: "declared",
+    tools: "unknown",
+    reach: "page"
+  },
   // Chrome's built-in model (Prompt API). Its single model is declared by the page probe,
   // and it cannot take a tool turn: the Prompt API has no tool-call protocol.
   {
@@ -1895,6 +1920,9 @@ var LOCAL_RUNTIMES = [
 ];
 var HTTP_LOCAL_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.reach === "http");
 var LOCAL_RUNTIME_IDS = LOCAL_RUNTIMES.map((r) => r.id);
+function isLocalRuntimeId(value) {
+  return typeof value === "string" && LOCAL_RUNTIME_IDS.includes(value);
+}
 function localRuntime(id) {
   return LOCAL_RUNTIMES.find((r) => r.id === id);
 }
@@ -1903,6 +1931,19 @@ function localRuntime(id) {
 var LOCAL_MODEL_PREFIX = "local/";
 function formatLocalModelRef(runtime, model) {
   return `${LOCAL_MODEL_PREFIX}${runtime}/${model}`;
+}
+function parseLocalModelRef(ref) {
+  if (!ref || !ref.startsWith(LOCAL_MODEL_PREFIX)) return null;
+  const rest = ref.slice(LOCAL_MODEL_PREFIX.length);
+  const slash = rest.indexOf("/");
+  if (slash <= 0) return null;
+  const provider = rest.slice(0, slash);
+  const model = rest.slice(slash + 1);
+  if (!model || !isLocalRuntimeId(provider)) return null;
+  return { provider, model };
+}
+function isLocalModelRef(ref) {
+  return parseLocalModelRef(ref) !== null;
 }
 
 // ../packages/local-inference/src/endpoint.ts
@@ -1919,6 +1960,100 @@ function rewriteToLocalUrl(url) {
 }
 function localAuthHeaders(endpoint) {
   return endpoint.token ? { authorization: `Bearer ${endpoint.token}` } : {};
+}
+
+// ../packages/local-inference/src/catalog.ts
+var MIB = 1024 * 1024;
+var WEBGPU_DEFAULT_BINDING_BYTES = 128 * MIB;
+var WEBLLM_FULL_BINDING_BYTES = 1024 * MIB;
+function bonsai(size, params, bytes, contextTokens, layers) {
+  const model = `bonsai-${size.toLowerCase()}-q1_0`;
+  return {
+    ref: formatLocalModelRef("bfi", model),
+    runtime: "bfi",
+    model,
+    label: `Bonsai ${size} (1-bit)`,
+    family: "bonsai",
+    params,
+    bytes,
+    contextTokens,
+    kv: { layers, kvHeads: 8, headDim: 128 },
+    tools: true,
+    source: { kind: "hf-file", repo: `prism-ml/Bonsai-${size}-gguf`, file: `Bonsai-${size}-Q1_0.gguf` },
+    requires: { minBufferBytes: WEBGPU_DEFAULT_BINDING_BYTES }
+  };
+}
+function webllm(modelId, fields) {
+  return {
+    ref: formatLocalModelRef("webllm", modelId),
+    runtime: "webllm",
+    model: modelId,
+    label: fields.label,
+    family: fields.family,
+    params: fields.params,
+    bytes: fields.bytes,
+    contextTokens: fields.contextTokens,
+    tools: fields.tools,
+    source: { kind: "webllm", modelId },
+    requires: { f16: true, minBufferBytes: fields.lowResource ? WEBGPU_DEFAULT_BINDING_BYTES : WEBLLM_FULL_BINDING_BYTES }
+  };
+}
+var LOCAL_MODEL_CATALOG = [
+  bonsai("1.7B", 17e8, 248302272, 32768, 28),
+  bonsai("4B", 4e9, 572270624, 32768, 36),
+  bonsai("8B", 819e7, 1158654496, 65536, 36),
+  webllm("Qwen3-1.7B-q4f16_1-MLC", {
+    label: "Qwen3 1.7B",
+    family: "qwen3",
+    params: 17e8,
+    bytes: 984156278,
+    contextTokens: 4096,
+    tools: false,
+    lowResource: true
+  }),
+  webllm("Llama-3.2-3B-Instruct-q4f16_1-MLC", {
+    label: "Llama 3.2 3B Instruct",
+    family: "llama-3.2",
+    params: 321e7,
+    bytes: 1816811105,
+    contextTokens: 4096,
+    tools: false,
+    lowResource: true
+  }),
+  webllm("Qwen3-4B-q4f16_1-MLC", {
+    label: "Qwen3 4B",
+    family: "qwen3",
+    params: 4e9,
+    bytes: 2279167154,
+    contextTokens: 4096,
+    tools: false,
+    lowResource: true
+  }),
+  webllm("Hermes-3-Llama-3.1-8B-q4f16_1-MLC", {
+    label: "Hermes 3 Llama 3.1 8B",
+    family: "hermes-3",
+    params: 803e7,
+    bytes: 4526847881,
+    contextTokens: 4096,
+    tools: true,
+    lowResource: false
+  })
+];
+function localCatalogModel(ref) {
+  return LOCAL_MODEL_CATALOG.find((m) => m.ref === ref);
+}
+function localCatalogFor(runtime) {
+  return LOCAL_MODEL_CATALOG.filter((m) => m.runtime === runtime);
+}
+
+// ../packages/local-inference/src/fit.ts
+function localModelFit(model, support) {
+  if (!support.supported) {
+    return { fits: false, reason: "webgpu_unavailable", ...support.reason ? { detail: support.reason } : {} };
+  }
+  if (model.requires.f16 && !support.f16) return { fits: false, reason: "shader_f16_unavailable" };
+  if (support.maxBufferBytes < model.requires.minBufferBytes) return { fits: false, reason: "buffer_too_small" };
+  return { fits: true };
 }
 
 // ../packages/local-inference/src/plan.ts
@@ -4044,6 +4179,17 @@ function localFallbackTrace(ts, step, attempts) {
   };
 }
 
+// src/handoff/modelWindow.ts
+var positive = (n) => typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : void 0;
+function contextWindowOf(modelRef, sources = {}) {
+  if (!modelRef) return void 0;
+  if (isLocalModelRef(modelRef)) {
+    const live2 = [...sources.models ?? [], ...(sources.probes ?? []).flatMap((p) => p.models)].find((m) => m.ref === modelRef)?.contextTokens;
+    return positive(live2) ?? positive(localCatalogModel(modelRef)?.contextTokens);
+  }
+  return positive(sources.cloud?.(modelRef));
+}
+
 // src/localFirstTransport.ts
 var globalFetch = (input, init) => fetch(input, init);
 function localTransport(endpoint, fetchImpl = globalFetch, options = {}) {
@@ -4060,9 +4206,53 @@ function localTransport(endpoint, fetchImpl = globalFetch, options = {}) {
     }
   };
 }
-function createLocalStream(endpoint, model, fetchImpl) {
+function probedTarget(ref, probes) {
+  for (const p of probes) {
+    if (!p.reachable) continue;
+    const m = p.models.find((x) => x.ref === ref);
+    if (m) return { ref, provider: p.provider, model: m.model, endpoint: p.endpoint };
+  }
+  return null;
+}
+async function fittedFor(target, opts, fit, probes) {
+  if (!fit) return opts.messages;
+  const contextTokens = contextWindowOf(target.ref, { probes });
+  return fit(opts.messages, {
+    ref: target.ref,
+    ...contextTokens ? { contextTokens } : {},
+    ...opts.tools ? { tools: opts.tools } : {},
+    ...opts.maxTokens ? { maxTokens: opts.maxTokens } : {}
+  });
+}
+async function streamOnLocal(target, opts, handlers, transport, messages) {
+  const served = await streamChatCompletion({ ...opts, messages, model: target.model, transport }, handlers);
+  return { ...served, resolvedModel: target.ref, resolvedVendor: `local/${target.provider}` };
+}
+function createLocalStream(endpoint, model, fetchImpl, route = {}) {
   const transport = localTransport(endpoint, fetchImpl);
-  return (opts, handlers) => streamChatCompletion({ ...opts, model, transport }, handlers);
+  const probes = route.probes ?? [];
+  const pin = parseLocalModelRef(route.ref);
+  const pinned = route.ref && pin ? { ref: route.ref, provider: pin.provider, model, endpoint } : null;
+  return async (opts, handlers = {}) => {
+    const asked = opts.model;
+    if (asked && asked !== route.ref && asked !== model) {
+      if (isLocalModelRef(asked)) {
+        const parsed = parseLocalModelRef(asked);
+        const sameRuntime = pin && parsed && parsed.provider === pin.provider ? { ref: asked, provider: parsed.provider, model: parsed.model, endpoint } : null;
+        const target = probedTarget(asked, probes) ?? sameRuntime;
+        if (target) {
+          const t = target.endpoint === endpoint ? transport : localTransport(target.endpoint, fetchImpl);
+          const messages2 = await fittedFor(target, opts, route.fit, probes);
+          return streamOnLocal(target, opts, committingHandlers(handlers, () => void 0, target.ref), t, messages2);
+        }
+      } else if (route.cloud) {
+        return route.cloud(opts, handlers);
+      }
+    }
+    if (!pinned) return streamChatCompletion({ ...opts, model, transport }, handlers);
+    const messages = await fittedFor(pinned, opts, route.fit, probes);
+    return streamOnLocal(pinned, opts, committingHandlers(handlers, () => void 0, pinned.ref), transport, messages);
+  };
 }
 function localFirstWorkload(call2) {
   const chars = JSON.stringify(call2.messages).length + (call2.tools ? JSON.stringify(call2.tools).length : 0);
@@ -4075,6 +4265,11 @@ function localFirstWorkload(call2) {
 }
 function localFirstApplies(call2) {
   return !call2.model && (call2.routingMode ?? "auto") === "auto";
+}
+function coreMessages(messages) {
+  const system = messages.filter((m) => m.role === "system");
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  return lastUser ? [...system, lastUser] : system;
 }
 function committingHandlers(handlers, commit, servedAs) {
   if (servedAs) handlers.onModel?.(servedAs, void 0);
@@ -4094,22 +4289,32 @@ function committingHandlers(handlers, commit, servedAs) {
 var answered = (r) => r.text.trim().length > 0 || r.toolCalls.length > 0;
 function createLocalFirstStream(input) {
   return async (opts, handlers = {}) => {
+    if (!localFirstApplies(opts) && opts.model) {
+      if (!isLocalModelRef(opts.model)) {
+        if (!input.cloud) throw new Error("not_signed_in");
+        return input.cloud(opts, handlers);
+      }
+      const local = probedTarget(opts.model, input.probes);
+      if (local) {
+        const transport = localTransport(local.endpoint, input.fetch);
+        const messages = await fittedFor(local, opts, input.fit, input.probes);
+        return streamOnLocal(local, opts, committingHandlers(handlers, () => void 0, local.ref), transport, messages);
+      }
+    }
+    const routed = opts.model ? { ...opts, model: void 0 } : opts;
     const plan = localFirstPlan({
       probes: input.probes,
-      workload: localFirstWorkload(opts),
-      cloud: input.cloud ? opts.model ? { model: opts.model } : {} : null
+      workload: localFirstWorkload(input.fit ? { ...routed, messages: coreMessages(routed.messages) } : routed),
+      cloud: input.cloud ? {} : null
     });
     if (plan.length === 0) throw new Error("not_signed_in");
     const { result, attempts } = await runLocalFirst(
       plan,
       async (attempt, commit) => {
-        if (attempt.kind === "cloud") return input.cloud(opts, committingHandlers(handlers, commit));
+        if (attempt.kind === "cloud") return input.cloud(routed, committingHandlers(handlers, commit));
         const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true });
-        const served = await streamChatCompletion(
-          { ...opts, model: attempt.model, transport },
-          committingHandlers(handlers, commit, attempt.ref)
-        );
-        return { ...served, resolvedModel: attempt.ref, resolvedVendor: `local/${attempt.provider}` };
+        const messages = await fittedFor(attempt, routed, input.fit, input.probes);
+        return streamOnLocal(attempt, routed, committingHandlers(handlers, commit, attempt.ref), transport, messages);
       },
       { signal: opts.signal, accept: answered, ...input.onAttempt ? { onAttempt: input.onAttempt } : {} }
     );
@@ -4148,6 +4353,250 @@ async function completeLocalFirst(input) {
     }
   );
   return result;
+}
+
+// src/handoff/packForModel.ts
+import { defaultEstimateTokens as defaultEstimateTokens2, packHandoff } from "@seanhogg/builderforce-memory/handoff";
+import { formatEvermindMemoryBlock } from "@seanhogg/builderforce-memory/evermind";
+
+// src/workingTranscript.ts
+import {
+  defaultEstimateTokens,
+  messageTokens as handoffMessageTokens,
+  tokensOf as handoffTokensOf
+} from "@seanhogg/builderforce-memory/handoff";
+var HISTORY_WINDOW = 80;
+var HISTORY_TOKEN_BUDGET = 64e3;
+var COMPACT_TAIL_TOKEN_BUDGET = 4e4;
+function messageTokens(m) {
+  return handoffMessageTokens(m, defaultEstimateTokens);
+}
+function windowed(convo) {
+  let w = convo.slice(-HISTORY_WINDOW);
+  while (w.length > 0 && w[0].role !== "user") w = w.slice(1);
+  if (w.length === 0) {
+    const lastUser = convo.map((m) => m.role).lastIndexOf("user");
+    w = lastUser >= 0 ? convo.slice(lastUser) : convo.slice();
+  }
+  return tokenBounded(w);
+}
+function tokenBounded(w) {
+  let total = transcriptTokens(w);
+  if (total <= HISTORY_TOKEN_BUDGET) return w;
+  const lastUser = w.map((m) => m.role).lastIndexOf("user");
+  let start = 0;
+  while (total > HISTORY_TOKEN_BUDGET && start < lastUser) {
+    total -= messageTokens(w[start]);
+    start += 1;
+  }
+  let trimmed = w.slice(start);
+  while (trimmed.length > 1 && trimmed[0].role !== "user") trimmed = trimmed.slice(1);
+  return trimmed;
+}
+function stillInWorkingContext(state, anchor) {
+  const convo = state.transcript;
+  const idx = convo.indexOf(anchor);
+  if (idx < 0) return false;
+  if (state.compactMemo) return idx >= verbatimStart(convo, state.compactMemo.coveredEnd);
+  return windowed(convo).includes(convo[idx]);
+}
+var COMPACT_TAIL_TURNS = 8;
+var COMPACT_TAIL_MAX_MESSAGES = HISTORY_WINDOW / 2;
+function verbatimStart(convo, from) {
+  let start = Math.max(0, Math.min(from, convo.length));
+  while (start < convo.length && convo[start].role === "tool") start += 1;
+  return start;
+}
+function compactTailStartForBudget(convo, budgetTokens) {
+  let start = convo.length;
+  let tokens2 = 0;
+  while (start > 0) {
+    const kept = convo.length - start;
+    if (kept >= COMPACT_TAIL_MAX_MESSAGES) break;
+    const next = messageTokens(convo[start - 1]);
+    if (kept >= COMPACT_TAIL_TURNS && tokens2 + next > budgetTokens) break;
+    tokens2 += next;
+    start -= 1;
+  }
+  return verbatimStart(convo, start);
+}
+function pinnedDirectiveIndex(convo, tailStart) {
+  const lastUser = convo.map((m) => m.role).lastIndexOf("user");
+  return lastUser >= 0 && lastUser < tailStart ? lastUser : -1;
+}
+function assembleCompacted(systemPrompt, convo, note, coveredEnd) {
+  const tailStart = verbatimStart(convo, coveredEnd);
+  const out = [{ role: "system", content: systemPrompt }];
+  out.push({ role: "assistant", content: note });
+  const directiveIdx = pinnedDirectiveIndex(convo, tailStart);
+  if (directiveIdx >= 0) out.push(convo[directiveIdx]);
+  out.push(...convo.slice(tailStart));
+  return out;
+}
+function renderForSummary(msgs) {
+  return msgs.map((m) => {
+    const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
+    const calls = m.tool_calls?.length ? ` [called: ${m.tool_calls.map((t) => t.function?.name).filter(Boolean).join(", ")}]` : "";
+    return `${m.role}${calls}: ${content}`;
+  }).join("\n\n");
+}
+async function summarizeMiddle(stream, model, msgs, signal) {
+  if (msgs.length === 0) return null;
+  try {
+    const res = await stream({
+      messages: [
+        {
+          role: "system",
+          content: "You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the CURRENT outstanding instruction from the user (the most recent user message is authoritative \u2014 earlier requests it supersedes are history, not the active task), concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Keep every file path, symbol name and line number the remaining work depends on, with the specific facts learned from each file \u2014 the agent no longer sees those results, so what you leave out it must read again. Be information-dense; drop pleasantries. No preamble."
+        },
+        { role: "user", content: renderForSummary(msgs) }
+      ],
+      model,
+      // A compaction note is a UTILITY completion: a bounded answer with no thinking.
+      // Left unset, it inherited the run's full output ceiling and, on a thinking-
+      // capable model, the run's reasoning depth — the most expensive way to write a
+      // paragraph the user never sees. Bounded at ~2.5k tokens: the note is the agent's
+      // only record of every file it folds (paths, symbols, line numbers), and 1.2k was
+      // too little to carry them — the run re-read whatever the note had to leave out.
+      maxTokens: 2500,
+      reasoning: { level: "off" },
+      signal
+    });
+    const out = (res.text ?? "").trim();
+    return out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+function transcriptTokens(msgs) {
+  return handoffTokensOf(msgs, defaultEstimateTokens);
+}
+function fitsVerbatim(msgs, extraTokens = 0) {
+  return msgs.length <= HISTORY_WINDOW && extraTokens + transcriptTokens(msgs) <= HISTORY_TOKEN_BUDGET;
+}
+async function buildWorkingTranscript(state, systemPrompt, summarize, onFolded) {
+  const convo = state.transcript;
+  if (fitsVerbatim(convo)) {
+    state.compactMemo = null;
+    return [{ role: "system", content: systemPrompt }, ...windowed(convo)];
+  }
+  const memo = state.compactMemo && state.compactMemo.coveredEnd <= convo.length ? state.compactMemo : null;
+  if (memo && fitsVerbatim(convo.slice(verbatimStart(convo, memo.coveredEnd)), defaultEstimateTokens(memo.note))) {
+    return assembleCompacted(systemPrompt, convo, memo.note, memo.coveredEnd);
+  }
+  const from = memo?.coveredEnd ?? 0;
+  const to = Math.max(from, compactTailStartForBudget(convo, COMPACT_TAIL_TOKEN_BUDGET));
+  const fold = memo ? [{ role: "assistant", content: memo.note }, ...convo.slice(from, to)] : convo.slice(from, to);
+  const summary = to > from ? await summarize(fold) : null;
+  if (summary == null) {
+    return memo ? assembleCompacted(systemPrompt, convo, memo.note, memo.coveredEnd) : [{ role: "system", content: systemPrompt }, ...windowed(convo)];
+  }
+  const note = `Compressed memory of the first ${to} message(s) of this conversation:
+${summary}`;
+  state.compactMemo = { note, coveredEnd: to };
+  onFolded(to - from);
+  return assembleCompacted(systemPrompt, convo, note, to);
+}
+
+// src/handoff/packForModel.ts
+var DEFAULT_HANDOFF_RESERVE_TOKENS = 4096;
+var DEFAULT_HANDOFF_TIMEOUT_MS = 2e4;
+function toolSchemaTokens(tools) {
+  return tools && tools.length > 0 ? defaultEstimateTokens2(JSON.stringify(tools)) : 0;
+}
+function recallBlock(recall) {
+  return async (query, budgetChars) => {
+    const result = await recall(query);
+    if (!result?.seeded || result.items.length === 0) return "";
+    return formatEvermindMemoryBlock(result.items).slice(0, budgetChars);
+  };
+}
+async function packForModel(input) {
+  const summarizer = input.summarizer;
+  const pack = await packHandoff({
+    messages: input.messages,
+    targetContextTokens: input.contextTokens,
+    reserveOutputTokens: input.maxTokens && input.maxTokens > 0 ? input.maxTokens : DEFAULT_HANDOFF_RESERVE_TOKENS,
+    toolsTokens: toolSchemaTokens(input.tools),
+    ...input.from ? { from: input.from } : {},
+    to: input.to,
+    ...summarizer ? {
+      summarize: async (dropped) => await summarizeMiddle(summarizer.stream, summarizer.model, dropped, summarizer.signal) ?? ""
+    } : {},
+    ...input.recall ? { recall: recallBlock(input.recall) } : {},
+    timeoutMs: input.timeoutMs ?? DEFAULT_HANDOFF_TIMEOUT_MS
+  });
+  input.onTrace?.({
+    ...input.from ? { from: input.from } : {},
+    to: input.to,
+    dropped: pack.dropped,
+    summarized: pack.summarized,
+    recalled: pack.recalled,
+    estimatedTokens: pack.estimatedTokens,
+    fits: pack.fits
+  });
+  return { messages: pack.messages, pack };
+}
+function createHandoffFit(options = {}) {
+  return async (messages, target) => {
+    if (!target.contextTokens) return messages;
+    const { messages: packed } = await packForModel({
+      messages,
+      to: target.ref,
+      contextTokens: target.contextTokens,
+      ...target.tools ? { tools: target.tools } : {},
+      ...target.maxTokens ? { maxTokens: target.maxTokens } : {},
+      ...options
+    });
+    return packed;
+  };
+}
+
+// src/pageEngines/types.ts
+var PageEngineError = class extends Error {
+  status;
+  code;
+  constructor(status2, code, message = code) {
+    super(message);
+    this.name = "PageEngineError";
+    this.status = status2;
+    this.code = code;
+  }
+};
+var abortReason = (signal) => signal.reason ?? new DOMException("Aborted", "AbortError");
+var errorMessage = (e) => e instanceof Error ? e.message : String(e);
+var hasTools = (body) => Array.isArray(body.tools) && body.tools.length > 0;
+function memoizedProbe(run, config = {}) {
+  const ttlMs = config.ttlMs ?? PAGE_ENGINE_PROBE_TTL_MS;
+  const now = config.now ?? (() => Date.now());
+  let memo;
+  return {
+    probe(options = {}) {
+      const at = now();
+      if (!options.fresh && memo && at - memo.at < ttlMs) return memo.value;
+      const value = run().catch(() => null);
+      memo = { at, value };
+      return value;
+    },
+    invalidate() {
+      memo = void 0;
+    }
+  };
+}
+var PAGE_ENGINE_PROBE_TTL_MS = 3e4;
+
+// src/pageEngines/messages.ts
+function messageText(content) {
+  if (content === null || content === void 0) return "";
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return null;
+  const parts = [];
+  for (const part of content) {
+    const { type, text } = part ?? {};
+    if (type !== "text" || typeof text !== "string") return null;
+    parts.push(text);
+  }
+  return parts.join("\n");
 }
 
 // src/promptApi.ts
@@ -4204,8 +4653,6 @@ async function* promptStreamDeltas(stream) {
 // src/browserEngine.ts
 var BROWSER_ENGINE_MODEL = "gemini-nano";
 var BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS = 4096;
-var BROWSER_ENGINE_PROBE_TTL_MS = 3e4;
-var globalFetch2 = (input, init) => fetch(input, init);
 async function readInputQuota() {
   const factory = promptApiFactory();
   if (!factory) return void 0;
@@ -4245,31 +4692,16 @@ async function probeOnce(knownQuota, learnQuota) {
   return probe;
 }
 function createBrowserEngineProber(config = {}) {
-  const ttlMs = config.ttlMs ?? BROWSER_ENGINE_PROBE_TTL_MS;
-  const now = config.now ?? (() => Date.now());
-  let memo;
   let quota;
-  return {
-    probe(options = {}) {
-      const at = now();
-      if (!options.fresh && memo && at - memo.at < ttlMs) return memo.value;
-      const value = probeOnce(
-        () => quota,
-        (q) => {
-          quota = q;
-        }
-      ).catch(() => null);
-      memo = { at, value };
-      return value;
-    },
-    invalidate() {
-      memo = void 0;
-    }
-  };
-}
-var sharedProber = createBrowserEngineProber();
-function browserEngineProbe(options) {
-  return sharedProber.probe(options);
+  return memoizedProbe(
+    () => probeOnce(
+      () => quota,
+      (q) => {
+        quota = q;
+      }
+    ),
+    config
+  );
 }
 function toPromptApiTurn(messages) {
   if (!Array.isArray(messages) || messages.length === 0) return { error: "no_messages" };
@@ -4278,7 +4710,7 @@ function toPromptApiTurn(messages) {
   for (const raw of messages) {
     const { role, content, tool_calls } = raw ?? {};
     if (Array.isArray(tool_calls) && tool_calls.length > 0) return { error: "tool_messages_unsupported" };
-    const text = textOf(content);
+    const text = messageText(content);
     if (text === null) return { error: "non_text_content_unsupported" };
     if (role === "system") system.push(text);
     else if (role === "user" || role === "assistant") turns.push({ role, content: text });
@@ -4292,88 +4724,31 @@ function toPromptApiTurn(messages) {
     prompt: last.content
   };
 }
-function textOf(content) {
-  if (content === null || content === void 0) return "";
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return null;
-  const parts = [];
-  for (const part of content) {
-    const { type, text } = part ?? {};
-    if (type !== "text" || typeof text !== "string") return null;
-    parts.push(text);
-  }
-  return parts.join("\n");
-}
-function refusal(status2, code, message = code) {
-  return new Response(JSON.stringify({ error: { code, message } }), {
-    status: status2,
-    headers: { "content-type": "application/json" }
-  });
-}
 var isQuotaError = (e) => e?.name === "QuotaExceededError";
-var messageOf = (e) => e instanceof Error ? e.message : String(e);
-var abortReason = (signal) => signal.reason ?? new DOMException("Aborted", "AbortError");
-var encoder = new TextEncoder();
-var sseFrame = (data) => encoder.encode(`data: ${JSON.stringify(data)}
-
-`);
-var deltaFrame = (content) => ({
+var chunk = (delta, finish) => ({
   model: BROWSER_ENGINE_MODEL,
-  choices: [{ index: 0, delta: { content }, finish_reason: null }]
+  choices: [{ index: 0, delta, finish_reason: finish }]
 });
-function sseBody(first, deltas, session, signal) {
-  let pending = first;
-  let destroyed = false;
-  const release = () => {
-    if (destroyed) return;
-    destroyed = true;
-    session.destroy();
-  };
-  return new ReadableStream({
-    async pull(controller) {
-      try {
-        const next = pending ?? await deltas.next();
-        pending = null;
-        if (next.done) {
-          const stop = { index: 0, delta: {}, finish_reason: "stop" };
-          controller.enqueue(sseFrame({ model: BROWSER_ENGINE_MODEL, choices: [stop] }));
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-          release();
-          return;
-        }
-        controller.enqueue(sseFrame(deltaFrame(next.value)));
-      } catch (e) {
-        release();
-        if (signal?.aborted) {
-          controller.error(e);
-          return;
-        }
-        controller.enqueue(sseFrame({ error: { message: messageOf(e) } }));
-        controller.close();
-      }
-    },
-    cancel() {
-      release();
-      void deltas.return(void 0);
-    }
-  });
-}
-async function answerFromPromptApi(init) {
-  const signal = init.signal ?? void 0;
-  if (signal?.aborted) throw abortReason(signal);
-  let body;
+async function* sessionChunks(session, prompt, signal) {
   try {
-    body = JSON.parse(typeof init.body === "string" ? init.body : "");
-  } catch {
-    return refusal(400, "invalid_request");
+    for await (const delta of promptStreamDeltas(session.promptStreaming(prompt, signal ? { signal } : void 0))) {
+      yield chunk({ content: delta }, null);
+    }
+    yield chunk({}, "stop");
+  } catch (e) {
+    if (isQuotaError(e) && !signal?.aborted) throw new PageEngineError(413, "context_exceeded", errorMessage(e));
+    throw e;
+  } finally {
+    session.destroy();
   }
-  if (Array.isArray(body.tools) && body.tools.length > 0) return refusal(400, "tools_unsupported");
+}
+async function promptApiCompletions(body, signal) {
+  if (hasTools(body)) throw new PageEngineError(400, "tools_unsupported");
   const turn = toPromptApiTurn(body.messages);
-  if ("error" in turn) return refusal(400, turn.error);
+  if ("error" in turn) throw new PageEngineError(400, turn.error);
   const factory = promptApiFactory();
   if (!factory || await promptApiAvailability(factory) !== "available") {
-    return refusal(503, "browser_engine_unavailable");
+    throw new PageEngineError(503, "browser_engine_unavailable");
   }
   let session;
   try {
@@ -4383,40 +4758,648 @@ async function answerFromPromptApi(init) {
     });
   } catch (e) {
     if (signal?.aborted) throw e;
-    return isQuotaError(e) ? refusal(413, "context_exceeded", messageOf(e)) : refusal(503, "browser_engine_unavailable", messageOf(e));
+    throw isQuotaError(e) ? new PageEngineError(413, "context_exceeded", errorMessage(e)) : new PageEngineError(503, "browser_engine_unavailable", errorMessage(e));
   }
-  try {
-    const quota = promptApiInputQuota(session);
-    const needed = await promptApiMeasure(session, turn.prompt, signal).catch(() => void 0);
-    if (quota !== void 0 && needed !== void 0 && (session.inputUsage ?? 0) + needed > quota) {
-      session.destroy();
-      return refusal(413, "context_exceeded");
+  const quota = promptApiInputQuota(session);
+  const needed = await promptApiMeasure(session, turn.prompt, signal).catch(() => void 0);
+  if (quota !== void 0 && needed !== void 0 && (session.inputUsage ?? 0) + needed > quota) {
+    session.destroy();
+    throw new PageEngineError(413, "context_exceeded");
+  }
+  return sessionChunks(session, turn.prompt, signal);
+}
+var promptApiEngine = {
+  runtime: "browser",
+  baseUrl: BROWSER_ENGINE_BASE_URL,
+  ...createBrowserEngineProber(),
+  chatCompletions: promptApiCompletions
+};
+
+// src/pageEngines/fetchShim.ts
+var globalFetch2 = (input, init) => fetch(input, init);
+function refusal(status2, code, message = code) {
+  return new Response(JSON.stringify({ error: { code, message } }), {
+    status: status2,
+    headers: { "content-type": "application/json" }
+  });
+}
+function refusalFor(engine, e) {
+  if (e instanceof PageEngineError) return refusal(e.status, e.code, e.message);
+  return refusal(500, `${engine.runtime}_engine_failed`, errorMessage(e));
+}
+var encoder = new TextEncoder();
+var sseFrame = (data) => encoder.encode(`data: ${JSON.stringify(data)}
+
+`);
+var DONE_FRAME = encoder.encode("data: [DONE]\n\n");
+function sseBody(first, chunks, signal) {
+  let pending = first;
+  return new ReadableStream({
+    async pull(controller) {
+      try {
+        const next = pending ?? await chunks.next();
+        pending = null;
+        if (next.done) {
+          controller.enqueue(DONE_FRAME);
+          controller.close();
+          return;
+        }
+        controller.enqueue(sseFrame(next.value));
+      } catch (e) {
+        if (signal?.aborted) {
+          controller.error(e);
+          return;
+        }
+        controller.enqueue(sseFrame({ error: { message: errorMessage(e) } }));
+        controller.close();
+      }
+    },
+    cancel() {
+      void chunks.return?.(void 0);
     }
-    const deltas = promptStreamDeltas(session.promptStreaming(turn.prompt, signal ? { signal } : void 0));
+  });
+}
+async function foldChunks(chunks) {
+  let content = "";
+  let model;
+  let finish = null;
+  let usage;
+  const calls = /* @__PURE__ */ new Map();
+  for (; ; ) {
+    const next = await chunks.next();
+    if (next.done) break;
+    const chunk2 = next.value;
+    model = chunk2.model ?? model;
+    if (chunk2.usage) usage = chunk2.usage;
+    for (const choice of chunk2.choices ?? []) {
+      if (typeof choice.delta?.content === "string") content += choice.delta.content;
+      for (const call2 of choice.delta?.tool_calls ?? []) {
+        const slot = calls.get(call2.index) ?? { type: "function", function: { name: "", arguments: "" } };
+        if (call2.id) slot.id = call2.id;
+        if (call2.function?.name) slot.function.name += call2.function.name;
+        if (call2.function?.arguments) slot.function.arguments += call2.function.arguments;
+        calls.set(call2.index, slot);
+      }
+      if (choice.finish_reason) finish = choice.finish_reason;
+    }
+  }
+  const toolCalls = [...calls.entries()].sort(([a], [b]) => a - b).map(([, call2]) => call2);
+  const message = { role: "assistant", content, ...toolCalls.length > 0 ? { tool_calls: toolCalls } : {} };
+  return {
+    object: "chat.completion",
+    ...model ? { model } : {},
+    choices: [{ index: 0, message, finish_reason: finish ?? (toolCalls.length > 0 ? "tool_calls" : "stop") }],
+    ...usage ? { usage } : {}
+  };
+}
+async function answer(engine, init) {
+  const signal = init.signal ?? void 0;
+  if (signal?.aborted) throw abortReason(signal);
+  let body;
+  try {
+    body = JSON.parse(typeof init.body === "string" ? init.body : "");
+    if (!body || typeof body !== "object") throw new Error("not an object");
+  } catch {
+    return refusal(400, "invalid_request");
+  }
+  let chunks;
+  try {
+    chunks = (await engine.chatCompletions(body, signal))[Symbol.asyncIterator]();
     if (body.stream !== true) {
-      let text = "";
-      for await (const delta of deltas) text += delta;
-      session.destroy();
-      const choice = { index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" };
-      return new Response(JSON.stringify({ model: BROWSER_ENGINE_MODEL, choices: [choice] }), {
+      return new Response(JSON.stringify(await foldChunks(chunks)), {
         status: 200,
         headers: { "content-type": "application/json" }
       });
     }
-    const first = await deltas.next();
-    return new Response(sseBody(first, deltas, session, signal), {
+    const first = await chunks.next();
+    return new Response(sseBody(first, chunks, signal), {
       status: 200,
       headers: { "content-type": "text/event-stream" }
     });
   } catch (e) {
-    session.destroy();
+    void chunks?.return?.(void 0);
     if (signal?.aborted) throw e;
-    return isQuotaError(e) ? refusal(413, "context_exceeded", messageOf(e)) : refusal(500, "browser_engine_failed", messageOf(e));
+    return refusalFor(engine, e);
   }
 }
-function browserEngineFetch(base = globalFetch2) {
-  const route = localChatCompletionsUrl(BROWSER_ENGINE_BASE_URL);
-  return (input, init) => input === route && (init.method ?? "GET").toUpperCase() === "POST" ? answerFromPromptApi(init) : base(input, init);
+function pageEnginesFetch(engines, base = globalFetch2) {
+  const routes = new Map(engines.map((engine) => [localChatCompletionsUrl(engine.baseUrl), engine]));
+  return (input, init) => {
+    const engine = (init.method ?? "GET").toUpperCase() === "POST" ? routes.get(input) : void 0;
+    return engine ? answer(engine, init) : base(input, init);
+  };
+}
+async function probePageEngines(engines, options) {
+  const probes = await Promise.all(engines.map((engine) => engine.probe(options).catch(() => null)));
+  return probes.filter((p) => p !== null);
+}
+
+// src/pageEngines/catalogProbe.ts
+async function catalogProbe(runtime, baseUrl, support, isReady, contextOf = (row) => row.contextTokens) {
+  if (!support.supported) return null;
+  const fitting = localCatalogFor(runtime).filter((row) => localModelFit(row, support).fits);
+  const ready = await Promise.all(fitting.map((row) => isReady(row).catch(() => false)));
+  const rows = fitting.filter((_, i) => ready[i]);
+  if (rows.length === 0) return null;
+  return {
+    provider: runtime,
+    endpoint: { baseUrl },
+    reachable: true,
+    models: rows.map((row) => ({
+      ref: formatLocalModelRef(runtime, row.model),
+      provider: runtime,
+      model: row.model,
+      label: row.label,
+      tools: row.tools,
+      contextTokens: contextOf(row)
+    }))
+  };
+}
+
+// src/pageEngines/bfiEngine.ts
+var BFI_STATUS = {
+  webgpu_unavailable: 503,
+  context_exceeded: 413,
+  invalid_request: 400
+};
+function bfiError(e) {
+  if (e instanceof PageEngineError) return e;
+  const message = errorMessage(e);
+  const code = /^([a-z_]+):/.exec(message)?.[1];
+  return code && BFI_STATUS[code] ? new PageEngineError(BFI_STATUS[code], code, message) : e;
+}
+var BFI_CONTEXT_FLOOR = 2048;
+function predictedContext(engine, row, support) {
+  const planned = row.kv ? engine.contextFor({
+    ...row.kv,
+    trainedContext: row.contextTokens,
+    f16: support.f16,
+    maxBufferBytes: support.maxBufferBytes
+  }) : 0;
+  return planned > 0 ? planned : Math.min(BFI_CONTEXT_FLOOR, row.contextTokens);
+}
+var UNSUPPORTED = { supported: false, reason: "bfi_unavailable", f16: false, maxBufferBytes: 0 };
+function createBfiEngine(options) {
+  let module;
+  const bfi = () => module ??= options.loadBfi();
+  const support = () => bfi().then((m) => m.BfiEngine.support()).catch(() => UNSUPPORTED);
+  let engine;
+  let resident;
+  const served = /* @__PURE__ */ new Map();
+  let queue = Promise.resolve();
+  const residentEngine = (row) => {
+    const run = queue.then(async () => {
+      engine ??= await (await bfi()).BfiEngine.create();
+      if (resident !== row.ref) {
+        if (resident) engine.unload();
+        resident = void 0;
+        const { stream, bytes } = await options.store.open(row.ref);
+        const info = await engine.load(stream, bytes);
+        resident = row.ref;
+        if (info.contextTokens > 0 && served.get(row.ref) !== info.contextTokens) {
+          served.set(row.ref, info.contextTokens);
+          prober.invalidate();
+        }
+      }
+      return engine;
+    });
+    queue = run.catch(() => void 0);
+    return run;
+  };
+  const prober = memoizedProbe(async () => {
+    const rows = localCatalogFor("bfi");
+    const states = await Promise.all(rows.map((row) => options.store.status(row.ref)));
+    const ready = new Set(rows.filter((_, i) => states[i] === "ready").map((row) => row.ref));
+    if (ready.size === 0) return null;
+    const device = await support();
+    const { BfiEngine } = await bfi();
+    return catalogProbe(
+      "bfi",
+      BFI_ENGINE_BASE_URL,
+      device,
+      async (row) => ready.has(row.ref),
+      (row) => served.get(row.ref) ?? predictedContext(BfiEngine, row, device)
+    );
+  }, options);
+  async function chatCompletions(body, signal) {
+    const row = localCatalogModel(formatLocalModelRef("bfi", typeof body.model === "string" ? body.model : ""));
+    if (!row) throw new PageEngineError(404, "model_not_found");
+    if (await options.store.status(row.ref) !== "ready") throw new PageEngineError(503, "model_not_downloaded");
+    if (signal?.aborted) throw abortReason(signal);
+    let live2;
+    try {
+      live2 = await residentEngine(row);
+    } catch (e) {
+      const mapped = bfiError(e);
+      throw mapped instanceof PageEngineError ? mapped : new PageEngineError(503, "bfi_engine_unavailable", errorMessage(e));
+    }
+    return bfiChunks(live2, JSON.stringify({ ...body, stream: true }), signal);
+  }
+  return { runtime: "bfi", baseUrl: BFI_ENGINE_BASE_URL, ...prober, support, chatCompletions };
+}
+function closingChunk(finalJson) {
+  try {
+    const final = JSON.parse(finalJson);
+    const finish = final.choices?.[0]?.finish_reason ?? null;
+    if (!finish && !final.usage) return null;
+    return {
+      ...final.model ? { model: final.model } : {},
+      choices: [{ index: 0, delta: {}, finish_reason: finish }],
+      ...final.usage ? { usage: final.usage } : {}
+    };
+  } catch {
+    return null;
+  }
+}
+async function* bfiChunks(engine, requestJson, signal) {
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", onAbort, { once: true });
+  const queue = [];
+  let wake;
+  const state = {};
+  const notify = () => {
+    wake?.();
+    wake = void 0;
+  };
+  engine.chat(
+    requestJson,
+    (json) => {
+      try {
+        queue.push(JSON.parse(json));
+        notify();
+      } catch {
+      }
+    },
+    controller.signal
+  ).then(
+    (final) => {
+      state.outcome = { ok: true, final };
+      notify();
+    },
+    (error) => {
+      state.outcome = { ok: false, error };
+      notify();
+    }
+  );
+  try {
+    for (; ; ) {
+      const next = queue.shift();
+      if (next) {
+        yield next;
+        continue;
+      }
+      if (state.outcome) break;
+      await new Promise((resolve) => wake = resolve);
+    }
+    const settled = state.outcome;
+    if (!settled.ok) throw signal?.aborted ? abortReason(signal) : bfiError(settled.error);
+    const closing = closingChunk(settled.final);
+    if (closing) yield closing;
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+    if (!state.outcome) controller.abort();
+  }
+}
+
+// src/pageEngines/hfModelStore.ts
+var LOCAL_MODEL_CACHE = "builderforce-local-models";
+function hfResolveUrl(repo, file) {
+  return `https://huggingface.co/${repo}/resolve/main/${file}`;
+}
+var BYTES_HEADER = "x-builderforce-model-bytes";
+function hfRow(ref) {
+  const row = localCatalogModel(ref);
+  if (!row || row.source.kind !== "hf-file") throw new Error(`unknown_model: ${ref}`);
+  return row;
+}
+var urlOf = (ref) => {
+  const { source } = hfRow(ref);
+  return hfResolveUrl(source.repo, source.file);
+};
+function createHfModelStore(options = {}) {
+  const storage = () => {
+    const caches = options.caches ?? globalThis.caches;
+    if (!caches) throw new Error("cache_storage_unavailable");
+    return caches;
+  };
+  const fetchImpl = options.fetch ?? ((input, init) => fetch(input, init));
+  const entry = async (ref) => {
+    const caches = storage();
+    if (!await caches.has(LOCAL_MODEL_CACHE)) return void 0;
+    return (await caches.open(LOCAL_MODEL_CACHE)).match(urlOf(ref));
+  };
+  return {
+    async status(ref) {
+      try {
+        return await entry(ref) ? "ready" : "absent";
+      } catch {
+        return "absent";
+      }
+    },
+    async download(ref, onProgress, signal) {
+      const row = hfRow(ref);
+      const url = urlOf(ref);
+      await globalThis.navigator?.storage?.persist?.().catch(() => false);
+      const res = await fetchImpl(url, { credentials: "omit", ...signal ? { signal } : {} });
+      if (!res.ok || !res.body) throw new Error(`download_failed: HTTP ${res.status}`);
+      const total = Number(res.headers.get("content-length")) || row.bytes;
+      let loaded = 0;
+      const counted = res.body.pipeThrough(
+        new TransformStream({
+          transform(chunk2, controller) {
+            loaded += chunk2.byteLength;
+            onProgress?.(Math.min(1, loaded / total));
+            controller.enqueue(chunk2);
+          }
+        })
+      );
+      const cache2 = await storage().open(LOCAL_MODEL_CACHE);
+      await cache2.put(
+        url,
+        new Response(counted, {
+          headers: { "content-type": "application/octet-stream", [BYTES_HEADER]: String(total) }
+        })
+      );
+      if (loaded !== total) {
+        await cache2.delete(url);
+        throw new Error(`download_incomplete: ${loaded} of ${total} bytes`);
+      }
+    },
+    async remove(ref) {
+      const caches = storage();
+      if (!await caches.has(LOCAL_MODEL_CACHE)) return;
+      await (await caches.open(LOCAL_MODEL_CACHE)).delete(urlOf(ref));
+    },
+    async open(ref) {
+      const res = await entry(ref);
+      if (!res?.body) throw new Error(`model_not_downloaded: ${ref}`);
+      const bytes = Number(res.headers.get(BYTES_HEADER)) || hfRow(ref).bytes;
+      return { stream: res.body, bytes };
+    }
+  };
+}
+
+// src/pageEngines/modelStore.ts
+function backendFor(row, options) {
+  const { hf, webllm: webllm2 } = options;
+  if (row.source.kind === "hf-file") {
+    return hf ? {
+      ready: async (r) => await hf.status(r.ref) === "ready",
+      download: (r, onProgress, signal) => hf.download(r.ref, onProgress, signal),
+      remove: (r) => hf.remove(r.ref)
+    } : void 0;
+  }
+  const { modelId } = row.source;
+  return webllm2 ? {
+    ready: () => webllm2.has(modelId),
+    download: (_r, onProgress, signal) => webllm2.download(modelId, onProgress, signal),
+    remove: () => webllm2.remove(modelId)
+  } : void 0;
+}
+function createLocalModelStore(options) {
+  const catalog = options.catalog ?? LOCAL_MODEL_CATALOG;
+  const listeners = /* @__PURE__ */ new Set();
+  const inFlight = /* @__PURE__ */ new Map();
+  const emit2 = () => {
+    for (const listener of listeners) listener();
+  };
+  const changed = () => {
+    for (const engine of options.engines ?? []) engine.invalidate();
+    emit2();
+  };
+  const rowOf = (ref) => {
+    const row = catalog.find((m) => m.ref === ref);
+    if (!row) throw new Error(`unknown_model: ${ref}`);
+    return row;
+  };
+  async function describe(row, supports) {
+    const pending = inFlight.get(row.ref);
+    if (pending) return { ...row, state: "downloading", progress: pending.progress };
+    const backend = backendFor(row, options);
+    const support = supports.get(row.runtime);
+    if (!backend || !support) return { ...row, state: "unsupported", reason: "engine_unavailable" };
+    const fit = localModelFit(row, support);
+    if (!fit.fits) return { ...row, state: "unsupported", reason: fit.reason };
+    const ready = await backend.ready(row).catch(() => false);
+    return { ...row, state: ready ? "ready" : "absent" };
+  }
+  return {
+    async listLocalModels() {
+      const runtimes = [...new Set(catalog.map((m) => m.runtime))];
+      const answers = await Promise.all(
+        runtimes.map(async (runtime) => {
+          const probe = options.support[runtime];
+          return [runtime, probe ? await probe().catch(() => null) : null];
+        })
+      );
+      const supports = new Map(answers);
+      return Promise.all(catalog.map((row) => describe(row, supports)));
+    },
+    download(ref, onProgress, signal) {
+      const existing = inFlight.get(ref);
+      if (existing) return existing.done;
+      const row = rowOf(ref);
+      const backend = backendFor(row, options);
+      if (!backend) return Promise.reject(new Error(`engine_unavailable: ${row.runtime}`));
+      const entry = { progress: 0, done: Promise.resolve() };
+      entry.done = backend.download(
+        row,
+        (fraction) => {
+          entry.progress = fraction;
+          onProgress?.(fraction);
+          emit2();
+        },
+        signal
+      ).finally(() => {
+        inFlight.delete(ref);
+        changed();
+      });
+      inFlight.set(ref, entry);
+      emit2();
+      return entry.done;
+    },
+    async remove(ref) {
+      const row = rowOf(ref);
+      await backendFor(row, options)?.remove(row);
+      changed();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+  };
+}
+
+// src/pageEngines/webgpu.ts
+var UNSUPPORTED2 = (reason) => ({ supported: false, reason, f16: false, maxBufferBytes: 0 });
+async function webGpuSupport(gpu = globalThis.navigator?.gpu) {
+  if (!gpu) return UNSUPPORTED2("webgpu_missing");
+  try {
+    const adapter = await gpu.requestAdapter();
+    if (!adapter) return UNSUPPORTED2("no_adapter");
+    return {
+      supported: true,
+      f16: adapter.features.has("shader-f16"),
+      maxBufferBytes: adapter.limits.maxStorageBufferBindingSize ?? 0
+    };
+  } catch (e) {
+    return UNSUPPORTED2(e instanceof Error ? e.message : String(e));
+  }
+}
+
+// src/pageEngines/webllmEngine.ts
+var WEBLLM_MODEL_CACHE = "webllm/model";
+var FORWARDED_FIELDS = [
+  "tools",
+  "tool_choice",
+  "temperature",
+  "top_p",
+  "max_tokens",
+  "stop",
+  "seed",
+  "frequency_penalty",
+  "presence_penalty",
+  "response_format"
+];
+var defaultLoader = () => import("@mlc-ai/web-llm");
+function toWebLlmMessages(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) throw new PageEngineError(400, "no_messages");
+  const system = [];
+  const rest = [];
+  for (const raw of messages) {
+    const message = raw ?? {};
+    const text = messageText(message.content);
+    if (text === null) throw new PageEngineError(400, "non_text_content_unsupported");
+    if (message.role === "system") system.push(text);
+    else rest.push({ ...message, content: text });
+  }
+  const joined = system.filter((s) => s.trim().length > 0).join("\n\n");
+  return [...joined ? [{ role: "system", content: joined }] : [], ...rest];
+}
+function createWebLlmEngine(options = {}) {
+  const load = options.loadWebLlm ?? defaultLoader;
+  const support = options.support ?? (() => webGpuSupport());
+  let module;
+  const webllm2 = () => module ??= load();
+  let engine;
+  let resident;
+  let queue = Promise.resolve();
+  const residentEngine = (modelId, onProgress) => {
+    const run = queue.then(async () => {
+      if (!engine) {
+        const lib = await webllm2();
+        engine = options.workerUrl ? new lib.WebWorkerMLCEngine(new Worker(options.workerUrl, { type: "module" })) : new lib.MLCEngine();
+      }
+      if (resident !== modelId) {
+        engine.setInitProgressCallback((r) => onProgress?.(r.progress));
+        resident = void 0;
+        await engine.reload(modelId);
+        resident = modelId;
+      }
+      return engine;
+    });
+    queue = run.catch(() => void 0);
+    return run;
+  };
+  const cached2 = async (modelId) => {
+    const storage = options.caches ?? globalThis.caches;
+    if (storage && !await storage.has(WEBLLM_MODEL_CACHE)) return false;
+    return (await webllm2()).hasModelInCache(modelId);
+  };
+  const prober = memoizedProbe(
+    async () => catalogProbe("webllm", WEBLLM_ENGINE_BASE_URL, await support(), (row) => cached2(row.model)),
+    options
+  );
+  async function chatCompletions(body, signal) {
+    const modelId = typeof body.model === "string" ? body.model : "";
+    const row = localCatalogModel(formatLocalModelRef("webllm", modelId));
+    if (!row) throw new PageEngineError(404, "model_not_found");
+    if (hasTools(body) && !row.tools) throw new PageEngineError(400, "tools_unsupported");
+    const messages = toWebLlmMessages(body.messages);
+    if (!await cached2(modelId).catch(() => false)) throw new PageEngineError(503, "model_not_downloaded");
+    if (signal?.aborted) throw abortReason(signal);
+    let live2;
+    try {
+      live2 = await residentEngine(modelId);
+    } catch (e) {
+      throw new PageEngineError(503, "webllm_engine_unavailable", errorMessage(e));
+    }
+    const request = { messages, stream: true, stream_options: { include_usage: true } };
+    for (const field of FORWARDED_FIELDS) if (body[field] !== void 0) request[field] = body[field];
+    if (!hasTools(body)) {
+      delete request.tools;
+      delete request.tool_choice;
+    }
+    return interruptible(await live2.chat.completions.create(request), live2, signal);
+  }
+  const models = {
+    has: (modelId) => cached2(modelId).catch(() => false),
+    async download(modelId, onProgress, signal) {
+      if (signal?.aborted) throw abortReason(signal);
+      const onAbort = () => void engine?.unload().catch(() => void 0);
+      signal?.addEventListener("abort", onAbort, { once: true });
+      try {
+        await residentEngine(modelId, onProgress);
+      } finally {
+        signal?.removeEventListener("abort", onAbort);
+      }
+      if (signal?.aborted) throw abortReason(signal);
+      onProgress?.(1);
+      prober.invalidate();
+    },
+    async remove(modelId) {
+      if (resident === modelId && engine) {
+        await engine.unload();
+        resident = void 0;
+      }
+      await (await webllm2()).deleteModelAllInfoInCache(modelId);
+      prober.invalidate();
+    }
+  };
+  return { runtime: "webllm", baseUrl: WEBLLM_ENGINE_BASE_URL, ...prober, chatCompletions, models };
+}
+async function* interruptible(stream, engine, signal) {
+  const onAbort = () => void engine.interruptGenerate();
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    for await (const chunk2 of stream) {
+      if (signal?.aborted) throw abortReason(signal);
+      yield chunk2;
+    }
+    if (signal?.aborted) throw abortReason(signal);
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+// src/pageEngines/pageEngineSet.ts
+function createPageEngineSet(options = {}) {
+  const hf = createHfModelStore();
+  const bfi = options.loadBfi ? createBfiEngine({ loadBfi: options.loadBfi, store: hf }) : void 0;
+  const webllm2 = createWebLlmEngine(options.webllmWorkerUrl ? { workerUrl: options.webllmWorkerUrl } : {});
+  const engines = [...bfi ? [bfi] : [], webllm2, promptApiEngine];
+  const store = createLocalModelStore({
+    ...bfi ? { hf } : {},
+    webllm: webllm2.models,
+    support: { webllm: () => webGpuSupport(), ...bfi ? { bfi: bfi.support } : {} },
+    engines
+  });
+  return {
+    engines,
+    store,
+    probe: (probeOptions) => probePageEngines(engines, probeOptions),
+    fetch: (base) => pageEnginesFetch(engines, base)
+  };
+}
+
+// src/pageEngines/pageRuntimePin.ts
+function pageRuntimePin(ref) {
+  const pin = parseLocalModelRef(ref);
+  if (!pin) return null;
+  const runtime = localRuntime(pin.provider);
+  if (runtime.reach !== "page" || !runtime.defaultBaseUrl) return null;
+  return { ...pin, endpoint: { baseUrl: runtime.defaultBaseUrl } };
 }
 
 // src/readOnlyShell.ts
@@ -4836,8 +5819,9 @@ async function prepareImageDataUrl(file) {
 }
 
 // src/evermindMemory.ts
-function projectMemoryHooks(projectId, request, chatId) {
+function projectMemoryHooks(projectId, request, chatId, surface = "web") {
   const json = { "Content-Type": "application/json" };
+  const chatParam = chatId != null && chatId > 0 ? `&chatId=${chatId}` : "";
   return {
     recall: (query) => request(`/api/projects/${projectId}/evermind/recall`, {
       method: "POST",
@@ -4845,13 +5829,13 @@ function projectMemoryHooks(projectId, request, chatId) {
       body: JSON.stringify({ query, ...chatId != null ? { chatId } : {} })
     }).catch(() => null),
     answer: (query, opts) => request(
-      `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? "1" : "0"}`
+      `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? "1" : "0"}${chatParam}&surface=${surface}${opts.model ? `&model=${encodeURIComponent(opts.model)}` : ""}`
     ).then((r) => r?.answer ?? null).catch(() => null),
-    cacheAnswer: (query, answer) => {
+    cacheAnswer: (query, answer2, origin) => {
       void request(`/api/projects/${projectId}/answer`, {
         method: "POST",
         headers: json,
-        body: JSON.stringify({ question: query, answer })
+        body: JSON.stringify({ question: query, answer: answer2, ...origin ? { origin } : {} })
       }).catch(() => {
       });
     }
@@ -4859,7 +5843,7 @@ function projectMemoryHooks(projectId, request, chatId) {
 }
 
 // src/index.ts
-import { formatEvermindMemoryBlock as formatEvermindMemoryBlock2, countReconciledMemories as countReconciledMemories2 } from "@seanhogg/builderforce-memory/evermind";
+import { formatEvermindMemoryBlock as formatEvermindMemoryBlock3, countReconciledMemories as countReconciledMemories2 } from "@seanhogg/builderforce-memory/evermind";
 
 // src/onDeviceMemory.ts
 var ON_DEVICE_ANSWER_THRESHOLD = 0.985;
@@ -4873,21 +5857,21 @@ function onDeviceMemoryHooks(load) {
   };
   return {
     answer: async (query) => {
-      const cache = await store();
-      if (!cache) return null;
+      const cache2 = await store();
+      if (!cache2) return null;
       try {
-        const hit = await cache.lookup(query);
+        const hit = await cache2.lookup(query);
         if (!hit || hit.score < ON_DEVICE_ANSWER_THRESHOLD || !hit.response.trim()) return null;
         return { text: hit.response, source: "qa-cache" };
       } catch {
         return null;
       }
     },
-    cacheAnswer: async (query, answer) => {
-      const cache = await store();
-      if (!cache) return;
+    cacheAnswer: async (query, answer2) => {
+      const cache2 = await store();
+      if (!cache2) return;
       try {
-        await cache.store(query, answer);
+        await cache2.store(query, answer2);
       } catch {
       }
     }
@@ -4911,10 +5895,10 @@ function composeEvermindHooks(...layers) {
       }
     } : {},
     ...caching.length ? {
-      cacheAnswer: (query, answer) => {
+      cacheAnswer: (query, answer2, origin) => {
         for (const layer of caching) {
           try {
-            void Promise.resolve(layer.cacheAnswer?.(query, answer)).catch(() => {
+            void Promise.resolve(origin ? layer.cacheAnswer?.(query, answer2, origin) : layer.cacheAnswer?.(query, answer2)).catch(() => {
             });
           } catch {
           }
@@ -5547,6 +6531,18 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Failed to switch mode");
     }
   }, [persistence]);
+  const setMemoryEnabled = useCallback4(async (id, on) => {
+    const prevValue = chatsRef.current.find((c) => c.id === id)?.memoryEnabled ?? true;
+    setChats((prev) => prev.map((c) => c.id === id ? { ...c, memoryEnabled: on } : c));
+    try {
+      const updated = await persistence.updateChat(id, { memoryEnabled: on });
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, memoryEnabled: updated.memoryEnabled ?? on } : c));
+    } catch (e) {
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, memoryEnabled: prevValue } : c));
+      setError(e instanceof Error ? e.message : "Failed to switch memory");
+      throw e;
+    }
+  }, [persistence]);
   const rename = useCallback4(async (id, title) => {
     const trimmed = title.trim();
     if (!trimmed) return;
@@ -5629,6 +6625,7 @@ function useBrainChats(options = {}) {
     rename,
     setCapability,
     setMode,
+    setMemoryEnabled,
     autoTitle,
     summarize,
     remove,
@@ -6964,145 +7961,6 @@ function trimToolResult(tool, out, opts = {}) {
 ${marker}${opts.advisory ? `
 ${opts.advisory}` : ""}`;
   return { content, bytes, truncated: true };
-}
-
-// src/workingTranscript.ts
-var HISTORY_WINDOW = 80;
-var HISTORY_TOKEN_BUDGET = 64e3;
-var COMPACT_TAIL_TOKEN_BUDGET = 4e4;
-function estimateTokens(chars) {
-  return Math.ceil(chars / 4);
-}
-function messageTokens(m) {
-  let chars = typeof m.content === "string" ? m.content.length : JSON.stringify(m.content ?? "").length;
-  if (m.tool_calls) chars += JSON.stringify(m.tool_calls).length;
-  return estimateTokens(chars) + 4;
-}
-function windowed(convo) {
-  let w = convo.slice(-HISTORY_WINDOW);
-  while (w.length > 0 && w[0].role !== "user") w = w.slice(1);
-  if (w.length === 0) {
-    const lastUser = convo.map((m) => m.role).lastIndexOf("user");
-    w = lastUser >= 0 ? convo.slice(lastUser) : convo.slice();
-  }
-  return tokenBounded(w);
-}
-function tokenBounded(w) {
-  let total = w.reduce((sum, m) => sum + messageTokens(m), 0);
-  if (total <= HISTORY_TOKEN_BUDGET) return w;
-  const lastUser = w.map((m) => m.role).lastIndexOf("user");
-  let start = 0;
-  while (total > HISTORY_TOKEN_BUDGET && start < lastUser) {
-    total -= messageTokens(w[start]);
-    start += 1;
-  }
-  let trimmed = w.slice(start);
-  while (trimmed.length > 1 && trimmed[0].role !== "user") trimmed = trimmed.slice(1);
-  return trimmed;
-}
-function stillInWorkingContext(state, anchor) {
-  const convo = state.transcript;
-  const idx = convo.indexOf(anchor);
-  if (idx < 0) return false;
-  if (state.compactMemo) return idx >= verbatimStart(convo, state.compactMemo.coveredEnd);
-  return windowed(convo).includes(convo[idx]);
-}
-var COMPACT_TAIL_TURNS = 8;
-var COMPACT_TAIL_MAX_MESSAGES = HISTORY_WINDOW / 2;
-function verbatimStart(convo, from) {
-  let start = Math.max(0, Math.min(from, convo.length));
-  while (start < convo.length && convo[start].role === "tool") start += 1;
-  return start;
-}
-function compactTailStartForBudget(convo, budgetTokens) {
-  let start = convo.length;
-  let tokens2 = 0;
-  while (start > 0) {
-    const kept = convo.length - start;
-    if (kept >= COMPACT_TAIL_MAX_MESSAGES) break;
-    const next = messageTokens(convo[start - 1]);
-    if (kept >= COMPACT_TAIL_TURNS && tokens2 + next > budgetTokens) break;
-    tokens2 += next;
-    start -= 1;
-  }
-  return verbatimStart(convo, start);
-}
-function pinnedDirectiveIndex(convo, tailStart) {
-  const lastUser = convo.map((m) => m.role).lastIndexOf("user");
-  return lastUser >= 0 && lastUser < tailStart ? lastUser : -1;
-}
-function assembleCompacted(systemPrompt, convo, note, coveredEnd) {
-  const tailStart = verbatimStart(convo, coveredEnd);
-  const out = [{ role: "system", content: systemPrompt }];
-  out.push({ role: "assistant", content: note });
-  const directiveIdx = pinnedDirectiveIndex(convo, tailStart);
-  if (directiveIdx >= 0) out.push(convo[directiveIdx]);
-  out.push(...convo.slice(tailStart));
-  return out;
-}
-function renderForSummary(msgs) {
-  return msgs.map((m) => {
-    const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
-    const calls = m.tool_calls?.length ? ` [called: ${m.tool_calls.map((t) => t.function?.name).filter(Boolean).join(", ")}]` : "";
-    return `${m.role}${calls}: ${content}`;
-  }).join("\n\n");
-}
-async function summarizeMiddle(stream, model, msgs, signal) {
-  if (msgs.length === 0) return null;
-  try {
-    const res = await stream({
-      messages: [
-        {
-          role: "system",
-          content: "You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the CURRENT outstanding instruction from the user (the most recent user message is authoritative \u2014 earlier requests it supersedes are history, not the active task), concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Keep every file path, symbol name and line number the remaining work depends on, with the specific facts learned from each file \u2014 the agent no longer sees those results, so what you leave out it must read again. Be information-dense; drop pleasantries. No preamble."
-        },
-        { role: "user", content: renderForSummary(msgs) }
-      ],
-      model,
-      // A compaction note is a UTILITY completion: a bounded answer with no thinking.
-      // Left unset, it inherited the run's full output ceiling and, on a thinking-
-      // capable model, the run's reasoning depth — the most expensive way to write a
-      // paragraph the user never sees. Bounded at ~2.5k tokens: the note is the agent's
-      // only record of every file it folds (paths, symbols, line numbers), and 1.2k was
-      // too little to carry them — the run re-read whatever the note had to leave out.
-      maxTokens: 2500,
-      reasoning: { level: "off" },
-      signal
-    });
-    const out = (res.text ?? "").trim();
-    return out.length > 0 ? out : null;
-  } catch {
-    return null;
-  }
-}
-function tokensOf(msgs) {
-  return msgs.reduce((sum, m) => sum + messageTokens(m), 0);
-}
-function fitsVerbatim(msgs, extraTokens = 0) {
-  return msgs.length <= HISTORY_WINDOW && extraTokens + tokensOf(msgs) <= HISTORY_TOKEN_BUDGET;
-}
-async function buildWorkingTranscript(state, systemPrompt, summarize, onFolded) {
-  const convo = state.transcript;
-  if (fitsVerbatim(convo)) {
-    state.compactMemo = null;
-    return [{ role: "system", content: systemPrompt }, ...windowed(convo)];
-  }
-  const memo = state.compactMemo && state.compactMemo.coveredEnd <= convo.length ? state.compactMemo : null;
-  if (memo && fitsVerbatim(convo.slice(verbatimStart(convo, memo.coveredEnd)), estimateTokens(memo.note.length))) {
-    return assembleCompacted(systemPrompt, convo, memo.note, memo.coveredEnd);
-  }
-  const from = memo?.coveredEnd ?? 0;
-  const to = Math.max(from, compactTailStartForBudget(convo, COMPACT_TAIL_TOKEN_BUDGET));
-  const fold = memo ? [{ role: "assistant", content: memo.note }, ...convo.slice(from, to)] : convo.slice(from, to);
-  const summary = to > from ? await summarize(fold) : null;
-  if (summary == null) {
-    return memo ? assembleCompacted(systemPrompt, convo, memo.note, memo.coveredEnd) : [{ role: "system", content: systemPrompt }, ...windowed(convo)];
-  }
-  const note = `Compressed memory of the first ${to} message(s) of this conversation:
-${summary}`;
-  state.compactMemo = { note, coveredEnd: to };
-  onFolded(to - from);
-  return assembleCompacted(systemPrompt, convo, note, to);
 }
 
 // src/brainTriage.ts
@@ -8904,7 +9762,7 @@ function completionAdvisory(open) {
 // src/restatedReply.ts
 var RESTATED_MIN_WORDS = 40;
 var RESTATED_CONTAINMENT = 0.6;
-function textOf2(content) {
+function textOf(content) {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ");
@@ -8918,7 +9776,7 @@ function previousReplyText(convo) {
     const m = convo[i];
     if (m.role === "user") return "";
     if (m.role === "assistant") {
-      const text = textOf2(m.content).trim();
+      const text = textOf(m.content).trim();
       if (text) return text;
     }
   }
@@ -9401,7 +10259,71 @@ function turnOptimizationDirective() {
 }
 
 // src/brainRunStore.ts
-import { formatEvermindMemoryBlock, countReconciledMemories } from "@seanhogg/builderforce-memory/evermind";
+import { formatEvermindMemoryBlock as formatEvermindMemoryBlock2, countReconciledMemories } from "@seanhogg/builderforce-memory/evermind";
+
+// src/handoff/runHandoff.ts
+function handoffTrace(ts, step, t) {
+  const how = t.summarized ? "summarized" : t.recalled ? "recalled from memory" : "elided";
+  return {
+    ts,
+    category: "message",
+    label: "llm.handoff",
+    args: { step, ...t },
+    result: t.dropped > 0 ? `Packed the transcript for ${t.to}${t.from ? ` (from ${t.from})` : ""}: ${t.dropped} earlier message(s) ${how}, ~${t.estimatedTokens} tokens${t.fits ? "" : " \u2014 still over its window"}.` : `Handed the transcript to ${t.to}${t.from ? ` (from ${t.from})` : ""} verbatim, ~${t.estimatedTokens} tokens.`
+  };
+}
+function createRunHandoff(deps) {
+  let lastServed;
+  const recalls = /* @__PURE__ */ new Map();
+  if (deps.priorRecall) recalls.set(deps.priorRecall.query, Promise.resolve(deps.priorRecall.result));
+  const recall = deps.recall ? (query) => {
+    let hit = recalls.get(query);
+    if (!hit) {
+      hit = deps.recall(query).catch(() => null);
+      recalls.set(query, hit);
+    }
+    return hit;
+  } : void 0;
+  return {
+    async prepare(req) {
+      const to = req.model;
+      if (!to) return req.messages;
+      const window2 = contextWindowOf(to, deps.windowSources);
+      if (window2 === void 0) return req.messages;
+      const differs = lastServed !== void 0 && lastServed !== to;
+      if (!differs && window2 >= deps.workingBudgetTokens) return req.messages;
+      const { messages } = await packForModel({
+        messages: req.messages,
+        to,
+        ...lastServed ? { from: lastServed } : {},
+        contextTokens: window2,
+        ...req.tools ? { tools: req.tools } : {},
+        ...req.maxTokens ? { maxTokens: req.maxTokens } : {},
+        ...deps.summarizer ? { summarizer: deps.summarizer() } : {},
+        ...recall ? { recall } : {},
+        onTrace: (t) => {
+          if (differs || t.dropped > 0 || !t.fits) deps.trace(handoffTrace(deps.now(), req.step, t));
+        }
+      });
+      return messages;
+    },
+    served(model) {
+      if (model) lastServed = model;
+    }
+  };
+}
+
+// src/memorySavings.ts
+function callMemoryEffect(trimmedTokens, recallTokens) {
+  const t = Math.max(0, Math.round(trimmedTokens));
+  const r = Math.max(0, Math.round(recallTokens));
+  return t > 0 || r > 0 ? { trimmedTokens: t, recallTokens: r } : void 0;
+}
+function emptyRunUsage() {
+  return { promptTokens: 0, completionTokens: 0, model: null };
+}
+
+// src/brainRunStore.ts
 function provenanceMetadata(result, requested, base) {
   const model = result.resolvedModel;
   if (!model) return withProvenanceMetadata(null, base);
@@ -9485,6 +10407,8 @@ function makeCell() {
     runTraceFrom: 0,
     persistStep: null,
     compactMemo: null,
+    runUsage: emptyRunUsage(),
+    lastServedModel: null,
     liveTurn: null,
     stoppedTurn: null,
     snapshot: EMPTY_SNAPSHOT
@@ -9815,6 +10739,7 @@ async function startRun(runKey, request) {
   }
   if (req.userTurn !== void 0) c.transcript.push({ role: "user", content: req.userTurn });
   emit(c);
+  c.runUsage = emptyRunUsage();
   try {
     await runLoop(chatId, c, req, runKey);
   } catch (e) {
@@ -10023,6 +10948,7 @@ async function runLoop(chatId, c, req, runKey) {
   };
   let systemPrompt = resolvedSystemPrompt;
   let recalled = null;
+  let recallBlockTokens = 0;
   if (evermind?.recall) {
     const query = latestUserText(convo);
     if (query) {
@@ -10032,11 +10958,12 @@ async function runLoop(chatId, c, req, runKey) {
         recalled = null;
       }
       if (recalled?.seeded && recalled.items.length > 0) {
-        const block = formatEvermindMemoryBlock(recalled.items);
+        const block = formatEvermindMemoryBlock2(recalled.items);
         if (block) {
           systemPrompt = `${systemPrompt}
 
 ${block}`;
+          recallBlockTokens = transcriptTokens([{ role: "system", content: block }]);
           pushTrace(c, {
             ts: nowIso(),
             category: "recall",
@@ -10048,13 +10975,24 @@ ${block}`;
       }
     }
   }
+  const handoff = createRunHandoff({
+    workingBudgetTokens: HISTORY_TOKEN_BUDGET,
+    summarizer: () => ({ stream, model: policy.model, signal: c.abort?.signal }),
+    ...evermind?.recall ? { recall: (q) => evermind.recall(q), priorRecall: { query: latestUserText(convo), result: recalled } } : {},
+    trace: (ev) => pushTrace(c, ev),
+    now: nowIso
+  });
   const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
   if (evermind?.answer && memoryReplay && !c.abort?.signal.aborted) {
     const query = latestUserText(convo);
     if (query) {
       let memAnswer = null;
       try {
-        memAnswer = await evermind.answer(query, { toolsAvailable: !!allTools && allTools.length > 0 });
+        memAnswer = await evermind.answer(query, {
+          toolsAvailable: !!allTools && allTools.length > 0,
+          // What this turn would have run on — the saving a hit records is priced at it.
+          model: model || c.lastServedModel || void 0
+        });
       } catch {
         memAnswer = null;
       }
@@ -10203,8 +11141,11 @@ ${continuationDirective()}`;
     }
     if (evermind?.cacheAnswer && memoryReplay) {
       const q = latestUserText(convo);
+      const spent = c.runUsage;
+      const origin = spent.model && spent.promptTokens + spent.completionTokens > 0 ? { model: spent.model, promptTokens: spent.promptTokens, completionTokens: spent.completionTokens } : void 0;
       if (q) {
-        void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => {
+        const cached2 = origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
+        void Promise.resolve(cached2).catch(() => {
         });
       }
     }
@@ -10643,6 +11584,9 @@ ${revisit}` : covered.note;
           emit(c);
         }
       );
+      const trimmed = c.compactMemo ? transcriptTokens([{ role: "system", content: systemPrompt }, ...c.transcript]) - transcriptTokens(working) : 0;
+      const memoryEffect = callMemoryEffect(trimmed, recallBlockTokens);
+      const callMetadata = memoryEffect ? { ...metadata, memory: memoryEffect } : metadata;
       if (c.abort?.signal.aborted) throw new Error("run stopped");
       const llmStart = nowMs2();
       let firstTokenAt;
@@ -10711,11 +11655,12 @@ ${revisit}` : covered.note;
       let turnRole = nextTurn(policy, { hasTools: !!tools }).role;
       const turnToolChoice = forceToolChoice;
       forceToolChoice = void 0;
-      const request = (extra = []) => {
+      const request = async (extra = []) => {
         const ask = nextTurn(policy, { hasTools: !!tools });
+        const messages = await handoff.prepare({ messages: extra.length > 0 ? [...working, ...extra] : working, model: ask.model, tools, maxTokens: turnMaxTokens(maxTokens, !!tools), step: iter });
         return asLiveTurn(c, () => stream(
           {
-            messages: extra.length > 0 ? [...working, ...extra] : working,
+            messages,
             tools,
             tool_choice: tools ? turnToolChoice ?? "auto" : void 0,
             model: ask.model,
@@ -10725,7 +11670,7 @@ ${revisit}` : covered.note;
             routingMode,
             maxTokens: turnMaxTokens(maxTokens, !!tools),
             reasoning,
-            metadata,
+            metadata: callMetadata,
             role: ask.role,
             ...ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {},
             signal: c.abort?.signal
@@ -10782,12 +11727,19 @@ ${revisit}` : covered.note;
         }
       }
       reportToPolicy({ type: "turn_succeeded", ...result.resolvedModel ? { model: result.resolvedModel } : {} });
+      handoff.served(result.resolvedModel ?? policy.model);
       if (result.toolCalls.length > 0) announcementRecoveries = 0;
       if (result.resolvedModel && result.toolCalls.some((tc) => isCodeChangeTool(tc.name))) c.codeModel = result.resolvedModel;
       accrueByoUnresolved(c, result.byoUnresolved);
       accrueProviderCap(c, result.providerCap);
       const resolved = result.resolvedModel ?? policy.model ?? "default";
       const requested = policy.model ?? "default";
+      c.runUsage.promptTokens += result.usage?.prompt ?? 0;
+      c.runUsage.completionTokens += result.usage?.completion ?? 0;
+      if (result.resolvedModel) {
+        c.runUsage.model = result.resolvedModel;
+        c.lastServedModel = result.resolvedModel;
+      }
       setLastResolvedModel(chatId, result.resolvedModel);
       if (requested !== "default" && resolved !== "default" && resolved !== requested) {
         pushTrace(c, {
@@ -12038,6 +12990,17 @@ function buildModelItems(options, labels, identity = DEFAULT_MODEL_IDENTITY) {
   for (const model of options.configured ?? []) add(model.id, model.label, model.id, "configured");
   return items;
 }
+function withReadyPageModels(options, rows) {
+  const ready = (rows ?? []).filter((row) => row.state === "ready");
+  if (ready.length === 0) return options;
+  return {
+    ...options,
+    local: [
+      ...options.local ?? [],
+      ...ready.map((row) => ({ id: row.ref, label: row.label, runtime: localRuntime(row.runtime).label }))
+    ]
+  };
+}
 function activeModelKey(selection) {
   return selection.mode === "model" ? `model:${selection.model}` : selection.mode;
 }
@@ -12051,6 +13014,13 @@ function modelInUse(selection, items, labels, effective, identity = DEFAULT_MODE
     const item = items.find((entry) => entry.key === `model:${model}`);
     if (model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)) {
       return { name: labels.evermindLabel, detail: labels.evermindDetail };
+    }
+    const local = parseLocalModelRef(model);
+    if (local) {
+      return item ? { name: item.label, detail: item.detail } : {
+        name: localCatalogModel(model)?.label ?? local.model,
+        detail: labels.localDetail.replace("{runtime}", localRuntime(local.provider).label)
+      };
     }
     if (!revealsModelId(identity)) return routed;
     return item ? { name: item.label, detail: item.detail } : { name: model, detail: labels.autoDetail };
@@ -12587,6 +13557,61 @@ function formatChatDiagnosticsReportJson(report) {
   return ["## Diagnostics (JSON)", "```json", JSON.stringify(report, null, 2), "```"];
 }
 
+// src/gatewayModels.ts
+function gatewayPlanIsPaid(surface) {
+  return surface.premium === true || (surface.effectivePlan ?? "free") !== "free";
+}
+function gatewayCanChooseModel(surface) {
+  if (typeof surface.canChooseModel === "boolean") return surface.canChooseModel;
+  return gatewayPlanIsPaid(surface) || surface.canUseFrontierModels === true || surface.canUsePremiumModels === true || (surface.byo?.providers?.length ?? 0) > 0 || (surface.byo?.models?.length ?? 0) > 0;
+}
+function gatewayModelIdentity(surface) {
+  return { product: productForPlan(gatewayPlanIsPaid(surface)), canChoose: gatewayCanChooseModel(surface) };
+}
+function gatewayPlanModels(surface) {
+  if (surface.models) return surface.models.filter((id) => typeof id === "string" && !!id);
+  return (surface.data ?? []).map((row) => row.model ?? row.id).filter((id) => !!id);
+}
+var EMPTY_GATEWAY_MODEL_OPTIONS = {
+  surface: {},
+  options: { byo: [], free: [], plan: [], paid: [] },
+  identity: { product: "free", canChoose: false }
+};
+var cache;
+function invalidateGatewayModelOptions() {
+  cache = void 0;
+}
+function loadGatewayModelOptions(request, cacheKey, labels) {
+  if (cache?.key === cacheKey) return cache.value;
+  const value = fetchGatewayModelOptions(request, labels).catch(() => {
+    cache = void 0;
+    return EMPTY_GATEWAY_MODEL_OPTIONS;
+  });
+  cache = { key: cacheKey, value };
+  return value;
+}
+async function fetchGatewayModelOptions(request, labels) {
+  const raw = await request("/llm/v1/models");
+  const plan = gatewayPlanModels(raw);
+  const byo = (raw.byo?.models ?? []).filter((m) => typeof m?.id === "string").map((m) => ({ id: m.id, vendor: m.vendor ?? "" }));
+  const [configured, paid] = await Promise.all([
+    request("/api/llm/models").then((r) => (r.models ?? []).filter((m) => typeof m?.ref === "string" && !!m.ref).map((m) => ({ id: m.ref, label: m.name?.trim() || m.ref }))).catch(() => []),
+    raw.canUsePremiumModels === true ? premiumCatalog(request, labels.paidCostDetail).catch(() => []) : Promise.resolve([])
+  ]);
+  return {
+    surface: { ...raw, data: plan.map((id) => ({ id })) },
+    options: { configured, byo, free: raw.freeModels ?? [], plan, paid },
+    identity: gatewayModelIdentity(raw)
+  };
+}
+async function premiumCatalog(request, costTemplate) {
+  const json = await request("/llm/v1/catalog");
+  return (json.data ?? []).filter((m) => !!m.id && !m.pool && ((m.pricing?.prompt ?? 0) > 0 || (m.pricing?.completion ?? 0) > 0) && (m.supportedParameters?.includes("tools") ?? false)).sort((a, b) => (a.pricing?.prompt ?? 0) + (a.pricing?.completion ?? 0) - ((b.pricing?.prompt ?? 0) + (b.pricing?.completion ?? 0))).map((m) => ({
+    id: m.id,
+    cost: premiumCostLabel({ prompt: m.pricing?.prompt ?? 0, completion: m.pricing?.completion ?? 0 }, costTemplate)
+  }));
+}
+
 // src/artifactRoute.ts
 var PMO_FOCUS_PARAM = "focus";
 function pmoFocusValue(kind, ref) {
@@ -12737,6 +13762,21 @@ function PromptInput({
     secondaryContent && /* @__PURE__ */ jsx4("div", { style: { fontSize: "0.75rem", color: "var(--text-muted, #666)" }, children: secondaryContent })
   ] });
 }
+
+// ../packages/spend-contract/src/index.ts
+var USAGE_SURFACES = ["web", "vsix", "on_prem", "cloud", "sdk", "rovr"];
+function isUsageSurface(raw) {
+  return typeof raw === "string" && USAGE_SURFACES.includes(raw);
+}
+var USAGE_SURFACE_HEADER = "x-builderforce-surface";
+
+// src/usageSurface.ts
+function withUsageSurface(fetchImpl, surface) {
+  return (input, init) => fetchImpl(input, {
+    ...init,
+    headers: { ...init.headers ?? {}, [USAGE_SURFACE_HEADER]: surface }
+  });
+}
 export {
   ADDRESSED_TO_META_KEY,
   AGENT_POOL_PATHS,
@@ -12750,7 +13790,6 @@ export {
   BRAIN_AGENT_ASSIGNMENTS_PATH,
   BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
   BROWSER_ENGINE_MODEL,
-  BROWSER_ENGINE_PROBE_TTL_MS,
   BUILDERFORCE_PRODUCT_NAME,
   BrainActionsProvider,
   BrainContextProvider,
@@ -12771,6 +13810,7 @@ export {
   DEFAULT_PERSONA,
   DEFAULT_TOOL_FAILURE_STREAK,
   DEFAULT_TOOL_LIMIT,
+  EMPTY_GATEWAY_MODEL_OPTIONS,
   FAILURE_HARD_AT,
   FAILURE_NUDGE_AT,
   FILE_DELIVERY_RULE,
@@ -12791,6 +13831,7 @@ export {
   PREVIEW_REVIEW_TOOL,
   PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
+  PageEngineError,
   PromptInput,
   READ_FILE_RESULT_CHARS,
   RESTING_CHAT_MODE,
@@ -12814,6 +13855,8 @@ export {
   UNBACKED_TICKET_CLAIM_NOTICE,
   UNBACKED_WRITE_CLAIM_NOTICE,
   UNSCOPED_MUTATION_TOOLS,
+  USAGE_SURFACES,
+  USAGE_SURFACE_HEADER,
   WEB_FETCH_TOOL_NAME,
   XmlToolCallFilter,
   accountUsedInTrace,
@@ -12840,8 +13883,6 @@ export {
   attemptedPublish,
   brainPersonaAgents,
   brainRequestError,
-  browserEngineFetch,
-  browserEngineProbe,
   buildBrainTriageReport,
   buildChatDiagnosticsReport,
   buildComposerDirectives,
@@ -12876,12 +13917,15 @@ export {
   computeRunProgress,
   consolidationMarkerContent,
   consolidationMetadata,
+  contextWindowOf,
   countReconciledMemories2 as countReconciledMemories,
   createBrainRestPersistence,
   createBrowserEngineProber,
   createComposingActivity,
+  createHandoffFit,
   createLocalFirstStream,
   createLocalStream,
+  createPageEngineSet,
   createPayloadBudget,
   declinesReview,
   declinesShipping,
@@ -12915,12 +13959,16 @@ export {
   formatChatDiagnosticsReportJson,
   formatDispatchRefusals,
   formatEvermindLearnStep,
-  formatEvermindMemoryBlock2 as formatEvermindMemoryBlock,
+  formatEvermindMemoryBlock3 as formatEvermindMemoryBlock,
   formatModelScorecard,
   formatModelTurnLog,
   formatRunProgress,
   formatStaffingSummary,
   formatSubagentDiagnostics,
+  gatewayCanChooseModel,
+  gatewayModelIdentity,
+  gatewayPlanIsPaid,
+  gatewayPlanModels,
   gatherChatDiagnostics,
   getGlobalRunState,
   getLastResolvedModel,
@@ -12934,6 +13982,7 @@ export {
   installIndexedDbStepDurability,
   installRunDriver,
   installStepDurability,
+  invalidateGatewayModelOptions,
   isActivityMessage,
   isChatMode,
   isCodeChangeTool,
@@ -12960,6 +14009,7 @@ export {
   isTicketWriteTool,
   isTruncatedTurn,
   isUnscopedMutationTool,
+  isUsageSurface,
   isUserConfiguredModelRef,
   lastConsolidationIndex,
   lastServedModel,
@@ -12969,6 +14019,7 @@ export {
   linkedTicketsToComplete,
   loadAgentPoolVia,
   loadBrainPersonaAgentsVia,
+  loadGatewayModelOptions,
   localFallbackTrace,
   localFirstApplies,
   localFirstWorkload,
@@ -12989,6 +14040,9 @@ export {
   nextFallbackModel,
   normalizeChatMode,
   onDeviceMemoryHooks,
+  packForModel,
+  pageEnginesFetch,
+  pageRuntimePin,
   parseAskUser,
   parseByoUnresolved,
   parseChatActivity,
@@ -13015,6 +14069,7 @@ export {
   premiumCostLabel,
   prepareImageDataUrl,
   previewReviewDirective,
+  probePageEngines,
   productForPlan,
   productModelName,
   progressDuration,
@@ -13076,6 +14131,7 @@ export {
   toolCallArgBytes,
   toolExposureInTrace,
   toolNamesMentionedIn,
+  toolSchemaTokens,
   toolSpecsFor,
   traceWithPersistedSteps,
   transcriptSeedFrom,
@@ -13099,6 +14155,8 @@ export {
   withDirectedMetadata,
   withObservedModel,
   withProvenanceMetadata,
+  withReadyPageModels,
+  withUsageSurface,
   workFiledNotStaffedVerdict,
   workItemLinkFromCreate
 };

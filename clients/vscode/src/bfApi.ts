@@ -2,12 +2,11 @@ import * as vscode from "vscode";
 import type { PolicyGate } from "./policy";
 import type {
   EvermindLearnOutcome,
-  EvermindRecallResult,
   EvermindRunHooks,
-  MemoryFirstAnswer,
   BrainMessage,
+  ProjectMemoryRequest,
 } from "@seanhogg/builderforce-brain-embedded";
-import { isManagerRole } from "@seanhogg/builderforce-brain-embedded";
+import { isManagerRole, projectMemoryHooks } from "@seanhogg/builderforce-brain-embedded";
 import { renderPlatformContextSection, type RunContextEnvelope } from "@builderforce/run-context";
 import { getApiKey, getBaseUrl } from "./gateway";
 import { ttlCache } from "./ttlCache";
@@ -597,57 +596,28 @@ export async function forgetProjectFact(
 }
 
 /**
- * The project-Evermind memory hooks for a run loop, bound to one project — the host
- * half of "recall → memory-first answer → cache the answer".
- *
- * This is the SAME three endpoints the webview Brain calls (`chat/VsCodeChatSurface.tsx`'s `evermind`
- * memo); the native chat participant reaches them through the extension's own
- * JWT-exchanging `authed` helper instead of the webview's bearer fetch. Every hook is
- * best-effort: a failure resolves to null / no-op and the loop simply runs the model,
- * which is what makes memory an OPTIMISATION rather than a dependency.
+ * The extension's authenticated JSON transport as the shared `ProjectMemoryRequest` port
+ * — so the native participant and the host-owned run build their memory hooks with the
+ * SAME factory the webview and the web Brain use (`projectMemoryHooks`), instead of a
+ * hand-written copy of the routes that had already drifted (no chat tiering, no model or
+ * production cost for the savings ledger).
+ */
+export function bfApiRequest(secrets: vscode.SecretStorage): ProjectMemoryRequest {
+  return <T>(path: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) =>
+    authed<T>(secrets, path, init) as Promise<T>;
+}
+
+/**
+ * The project-Evermind memory hooks for a run loop, bound to one project — the host half
+ * of "recall → memory-first answer → cache the answer", built by the shared factory.
+ * `chatId` tiers recall on the conversation when it is a server chat.
  */
 export function projectEvermindHooks(
   secrets: vscode.SecretStorage,
   projectId: number,
+  chatId?: number | null,
 ): EvermindRunHooks {
-  return {
-    async recall(query: string): Promise<EvermindRecallResult | null> {
-      try {
-        return (
-          (await authed<EvermindRecallResult>(secrets, `/api/projects/${projectId}/evermind/recall`, {
-            method: "POST",
-            body: JSON.stringify({ query }),
-          })) ?? null
-        );
-      } catch {
-        return null;
-      }
-    },
-    // Memory-first: BEFORE spending a model call, ask the project's own memory. `tools=0`
-    // is what unlocks the Evermind SSM leg — it cannot call a tool, so on a run that CAN
-    // call one the server serves exact-repeat cache hits only, rather than answering a
-    // live question from stale weights while the tools that could answer it go uncalled.
-    async answer(query: string, opts: { toolsAvailable: boolean }): Promise<MemoryFirstAnswer | null> {
-      try {
-        const res = await authed<{ answer: MemoryFirstAnswer | null }>(
-          secrets,
-          `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? "1" : "0"}`,
-        );
-        return res?.answer ?? null;
-      } catch {
-        return null;
-      }
-    },
-    // Remember a fresh (question → answer) so the next exact repeat is free.
-    cacheAnswer(query: string, answer: string): void {
-      void authed(secrets, `/api/projects/${projectId}/answer`, {
-        method: "POST",
-        body: JSON.stringify({ question: query, answer }),
-      }).catch(() => {
-        /* best-effort — never delays or fails the reply */
-      });
-    },
-  };
+  return projectMemoryHooks(projectId, bfApiRequest(secrets), chatId ?? null, 'vsix');
 }
 
 /** A workspace (tenant) the signed-in user belongs to. */

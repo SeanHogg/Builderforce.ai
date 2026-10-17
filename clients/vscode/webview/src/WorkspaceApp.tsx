@@ -34,13 +34,14 @@ import { setEmbedAuth } from '@/lib/auth';
 import { sanitizeCanvasSurface } from '@/lib/canvasSurfaces';
 import { getToken, hostFetch, onInit, onTokenChange, post, refreshToken, type InitData } from './vscodeBridge';
 import { installCanvasHost } from './canvas/hostActions';
-import { invalidateModelSurface } from './modelOptions';
+import { invalidateGatewayModelOptions } from '@seanhogg/builderforce-brain-embedded';
 import { createPersistence } from './persistence';
 import { createInMemoryPersistence } from './localPersistence';
 import { installHostRunDriver } from './hostRunDriver';
 import { CanvasBoundary } from './CanvasBoundary';
 import { HostScopeProviders } from './canvas/HostScopeProviders';
 import { buildIdeSystemPrompt } from './systemPrompt';
+import { webviewLocalFetch } from './pageEngines';
 import { onHostMessage } from './vscodeBridge';
 import { makeT } from './chat/chatLabels';
 import { VsCodeChatSurface } from './chat/VsCodeChatSurface';
@@ -67,7 +68,7 @@ export function WorkspaceApp() {
     // A re-mint can be a different tenant (sign-out/in, workspace switch), and model
     // entitlements are per tenant — drop the cached surface so the `/` menu never
     // offers the previous tenant's models.
-    const offToken = onTokenChange(() => { invalidateModelSurface(); force((n) => n + 1); });
+    const offToken = onTokenChange(() => { invalidateGatewayModelOptions(); force((n) => n + 1); });
     return () => { offInit(); offToken(); };
   }, []);
 
@@ -210,6 +211,8 @@ function WorkspaceScreen({ init }: { init: InitData }) {
               <CanvasBoundary
                 fallback={chat}
                 notice={init.labels['canvas.degraded'] ?? 'The board could not be drawn. The conversation is still here.'}
+                retryLabel={init.labels['canvas.retry'] ?? 'Try again'}
+                resetKey={session!.id}
               >
                 {/* Inside the boundary and the token gate: the scope providers read the
                     workspace token on mount, and a failure in one still leaves the chat. */}
@@ -292,7 +295,7 @@ function ChatRuntimeProvider({ init, children }: { init: InitData; children: Rea
       // The SHARED local transport (brain-embedded `localTransport`): the same rewrite
       // and null-token rule the host's runs use, with the host's fetch lent to it.
       transport: init.localRoute
-        ? { ...localTransport({ baseUrl: init.localRoute.baseUrl }, hostFetch), defaultModel: init.localRoute.model }
+        ? { ...localTransport({ baseUrl: init.localRoute.baseUrl }, webviewLocalFetch(hostFetch)), defaultModel: init.localRoute.model }
         : gatewayTransport,
       persistence: signedOut
         ? memoryStore(makeT(init.labels))

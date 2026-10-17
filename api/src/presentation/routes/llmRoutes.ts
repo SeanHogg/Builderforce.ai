@@ -51,7 +51,7 @@ import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../
 import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage, backfillTraceResponseBody, imageTraceResult } from '../../application/llm/traceLogger';
 import { wrapStreamForTrace } from '../../application/llm/streamTrace';
-import { recordUsageRow, resolveUsageDatabase, usageRequestCountSql, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
+import { isUsageSurface, recordUsageRow, resolveUsageDatabase, usageRequestCountSql, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
 import { allVendorFlagships, pickUsage, vendorForModel, type VendorEgress } from '../../application/llm/vendors';
 import {
   dispatchEmbeddingVendor,
@@ -310,10 +310,9 @@ function logUsage(
  * regardless of surface, so this only tightens the BYO exemption.
  * (Cloud runs never come through this HTTP path — they record via
  * recordCloudUsage with surface 'cloud'.) */
-const KNOWN_SURFACES: readonly UsageSurface[] = ['web', 'vsix', 'on_prem', 'cloud', 'sdk'];
 function resolveUsageSurface(c: Context<HonoEnv>, access: TenantAccess): UsageSurface {
   const hinted = (c.req.header('x-builderforce-surface') ?? '').toLowerCase();
-  const isKnown = (KNOWN_SURFACES as readonly string[]).includes(hinted);
+  const isKnown = isUsageSurface(hinted);
   // An agentHost credential authenticated → the call genuinely originates on the
   // user's own machine, so honor the client hint (on_prem/vsix/…) or default to
   // on_prem.
@@ -322,7 +321,7 @@ function resolveUsageSurface(c: Context<HonoEnv>, access: TenantAccess): UsageSu
   }
   // Web JWT / bfk_* machine key: the auth path does NOT corroborate an own-machine
   // surface, so an own-machine hint is ignored (clamped to 'web'). Non-exempt
-  // hints (web/cloud/sdk) are still honored for accurate attribution.
+  // hints (web/cloud/sdk/rovr) are still honored for accurate attribution.
   if (isKnown && hinted !== 'on_prem' && hinted !== 'vsix') return hinted as UsageSurface;
   return 'web';
 }

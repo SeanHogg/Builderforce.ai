@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { byoVendorLabel, perMillionUsd, productForPlan, type ChatModelOptions, type ModelIdentityContext } from '@seanhogg/builderforce-brain-ui';
+import { gatewayCanChooseModel, gatewayPlanIsPaid, gatewayPlanModels } from '@seanhogg/builderforce-brain-embedded';
 import { llmApi, tenantModelApi, type ByoModel, type PremiumModelInfo, type TenantModel } from './builderforceApi';
 import { getPremiumModelCatalog, type ModelRecord } from './modelCatalog';
 import { getStoredTenantToken } from './auth';
@@ -90,17 +91,18 @@ function load(): Promise<LlmModelLists> {
       tenantModelApi.list().then((r) => r.models).catch(() => [] as TenantModel[]),
     ])
       .then(async ([res, tenantModels]) => {
-        const models = 'data' in res ? res.data.map((m) => m.model) : res.models;
-        const isPaid = res.premium === true || res.effectivePlan !== 'free';
+        // The ONE reading of the payload every client shares (brain-embedded `gatewayModels`).
+        const models = gatewayPlanModels(res);
+        const isPaid = gatewayPlanIsPaid(res);
         const byoModels = res.byo?.models.map((m) => m.id) ?? [];
         const byoProviders = res.byo?.providers ?? [];
         // Keep the vendor-tagged shape the funding classifier needs (see the field doc).
         const fundingSurface = {
-          data: (models ?? []).map((id) => ({ id })),
+          data: models.map((id) => ({ id })),
           byo: { models: res.byo?.models ?? [] },
         };
-        // Server sends canChooseModel; fall back to isPaid || has-BYO for older payloads.
-        const canChooseModel = res.canChooseModel ?? (isPaid || byoModels.length > 0);
+        // Server sends canChooseModel; the shared rule supplies the older-payload fallback.
+        const canChooseModel = gatewayCanChooseModel(res);
         // Frontier access = the server's unified rule (superadmin || override || BYO ||
         // paid). Falls back to canChooseModel for older payloads (which already folds
         // BYO + paid; only the direct-superadmin case is newly server-side).
@@ -118,7 +120,7 @@ function load(): Promise<LlmModelLists> {
           ? await getPremiumModelCatalog().catch(() => [] as ModelRecord[])
           : [];
         const value: LlmModelLists = {
-          models: models ?? [], freeModels: res.freeModels ?? (res.effectivePlan === 'free' ? models ?? [] : []), codingModels: res.codingModels ?? [], teacherModels, tenantModels,
+          models, freeModels: res.freeModels ?? (res.effectivePlan === 'free' ? models : []), codingModels: res.codingModels ?? [], teacherModels, tenantModels,
           isPaid, byoModels, byoProviders, fundingSurface, canChooseModel, canUseFrontierModels,
           canUsePremiumModels,
           ...(res.premiumInfo ? { premiumInfo: res.premiumInfo } : {}),

@@ -1,6 +1,7 @@
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { CanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
+import { CANVAS_RESPONSE_TOKENS } from '@/lib/canvasAiTurnBudget';
 import { canvasSurfaceDefinition, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import type { CreationTemplate } from '@/lib/templates/creationTemplates';
 import { PreviewPickChips } from '@/components/builder/PreviewPickChip';
@@ -11,6 +12,7 @@ import type { BrainDockPreferences } from '../brainDockPreferences';
 import { CanvasScopeChip, type CanvasScopeMode } from './CanvasScopeChip';
 import { useCanvasSessionFacts } from './canvasSessionContext';
 import { useCanvasNextSteps, useCanvasStarters } from './useCanvasComposerOffers';
+import type { useCanvasRunShaping } from '../hooks/useCanvasRunShaping';
 
 export interface CanvasPromptComposerProps extends Pick<CanvasComposerInputProps,
   | 'onAttach' | 'onAddContext' | 'autoMode' | 'onAutoModeChange' | 'modelSelection' | 'modelOptions'
@@ -48,8 +50,11 @@ export interface CanvasPromptComposerProps extends Pick<CanvasComposerInputProps
   scopeLabel: string;
   selectionCount: number;
   frameSelected: boolean;
-  /** An Evermind project is on (or behind) this board, so memory has somewhere to live. */
-  hasMemoryProject: boolean;
+  /** The Evermind project on (or behind) this board — where memory lives, and whose
+   *  Evermind the Status tab reads. Null ⇒ memory has nowhere to live. */
+  memoryProjectId: number | null;
+  /** Effort and Thinking for this session's turns — the `/` panel's run-shaping rows. */
+  runShaping: ReturnType<typeof useCanvasRunShaping>;
   onTwilioJourney: (selected: boolean) => void;
   applyTemplate: (template: CreationTemplate) => void;
   /** The Brain conversation has turns, so next-step chips are offered above an empty box. */
@@ -65,12 +70,13 @@ export function CanvasPromptComposer({
   docked, surface, editable, preferAsk, startTurn, onCaptureIdea, hostRef, actionsOpen, onToggleActions,
   running, trace, runStartedAt, brainIsSurface, promptPlacement, setPromptPlacement, brainDockDrawn, updateBrainDock,
   prompt, setPrompt, onStop, queuedCount, scopeMode, setScopeMode, scopeLabel, selectionCount, frameSelected,
-  hasMemoryProject, onTwilioJourney, applyTemplate, conversationStarted, onAttach, onAddContext, autoMode, onAutoModeChange,
+  memoryProjectId, runShaping, onTwilioJourney, applyTemplate, conversationStarted, onAttach, onAddContext, autoMode, onAutoModeChange,
   modelSelection, modelOptions, onModelSelectionChange, modelIdentity, chatMode, onChatModeChange, memoryEnabled, onMemoryChange,
 }: CanvasPromptComposerProps) {
   const t = useTranslations('creationCanvas');
   const { persistence } = useCanvasSessionFacts();
   const surfaceDef = canvasSurfaceDefinition(surface);
+  const signedIn = persistence === 'server';
   // The two affordances every prompt has — starting points from `+`, next-step chips
   // above an empty box — fed with what the canvas knows: its phase and its surface.
   const starters = useCanvasStarters({ onPrompt: setPrompt, onTwilioJourney, onPack: applyTemplate });
@@ -142,7 +148,18 @@ export function CanvasPromptComposer({
       onChatModeChange,
       memoryEnabled,
       onMemoryChange,
-      memoryUnavailableReason: !hasMemoryProject || persistence !== 'server' ? t('memoryNeedsProject') : undefined,
+      memoryUnavailableReason: memoryProjectId == null || !signedIn ? t('memoryNeedsProject') : undefined,
+      // The SAME `/` panel the Brain panel opens: run shaping, and the Status tab (plan,
+      // meters, spend & savings, this board's Evermind). A board that lives only on this
+      // device has no workspace behind it, so it gets neither the tab nor the settings link.
+      effort: runShaping.effort,
+      onEffortChange: runShaping.setEffort,
+      // `canvasTurnShape` raises a level's ceiling to the canvas's own, never lowers it.
+      effortMinAnswerTokens: CANVAS_RESPONSE_TOKENS,
+      thinking: runShaping.thinking,
+      onThinkingChange: runShaping.setThinking,
+      account: signedIn ? { projectId: memoryProjectId } : null,
+      ...(signedIn ? { accountSettingsHref: '/settings' } : {}),
     }}
   />;
 }

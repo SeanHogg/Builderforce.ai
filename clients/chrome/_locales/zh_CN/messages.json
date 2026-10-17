@@ -116,6 +116,9 @@
   "reasonUnknownElement": {
     "message": "Rovr 还没有查看过这个元素。"
   },
+  "reasonPlatformWrite": {
+    "message": "这会更改你的 Builderforce 工作区（工单、任务或派发）。"
+  },
   "allowOnce": {
     "message": "允许"
   },
@@ -328,5 +331,913 @@
   },
   "reportErrorsHint": {
     "message": "只包含错误本身及其发生位置——绝不包含页面内容或你的消息。"
+  },
+  "modelHeading": {
+    "message": "模型",
+    "description": "Settings: model picker heading"
+  },
+  "modelIntro": {
+    "message": "选择 Rovr 使用的模型。本设备上的模型无需账户，且可离线使用。",
+    "description": "Settings: model picker explanation"
+  },
+  "modelAuto": {
+    "message": "自动",
+    "description": "Model picker: automatic routing option"
+  },
+  "modelAutoHint": {
+    "message": "优先使用本设备，然后使用 Builderforce",
+    "description": "Model picker: what automatic routing does"
+  },
+  "lmCatalogHeading": {
+    "message": "下载后在此侧边栏中运行",
+    "description": "Model picker: heading above downloadable on-device models"
+  },
+  "lmDownload": {
+    "message": "下载（{size}）",
+    "description": "Download button; {size} is filled with a formatted size"
+  },
+  "lmDownloading": {
+    "message": "正在下载… {percent}%",
+    "description": "Download progress; {percent} is 0-100"
+  },
+  "lmMoreActions": {
+    "message": "更多操作",
+    "description": "Accessible name of a model row overflow button"
+  },
+  "lmTools": {
+    "message": "工具",
+    "description": "Badge: model can use tools"
+  },
+  "lmContext": {
+    "message": "{tokens} 上下文",
+    "description": "Context window; {tokens} is e.g. 32K"
+  },
+  "lmDownloadFailed": {
+    "message": "下载失败，请重试。",
+    "description": "A model download failed"
+  },
+  "lmReasonWebgpu": {
+    "message": "需要 WebGPU，但此浏览器或 GPU 不支持。",
+    "description": "Why a model cannot run: no WebGPU"
+  },
+  "lmReasonF16": {
+    "message": "需要 WebGPU 16 位着色器，但此 GPU 不支持。",
+    "description": "Why a model cannot run: no 16-bit shaders"
+  },
+  "lmReasonBuffer": {
+    "message": "所需的 GPU 缓冲区超出此设备的上限。",
+    "description": "Why a model cannot run: GPU buffers too small"
+  },
+  "lmReasonEngine": {
+    "message": "此处暂不支持该引擎。",
+    "description": "Why a model cannot run: engine missing"
+  },
+  "cmpAdd": {
+    "message": "添加",
+    "description": "Composer + menu: trigger"
+  },
+  "cmpUpload": {
+    "message": "从电脑上传",
+    "description": "Composer + menu: upload a file"
+  },
+  "cmpUploading": {
+    "message": "正在上传…",
+    "description": "Composer: upload in progress"
+  },
+  "cmpAddContext": {
+    "message": "添加上下文",
+    "description": "Composer + menu: add context"
+  },
+  "cmpBrowseWeb": {
+    "message": "浏览网页",
+    "description": "Composer + menu: web browsing toggle"
+  },
+  "cmpOn": {
+    "message": "开",
+    "description": "Toggle state: on"
+  },
+  "cmpOff": {
+    "message": "关",
+    "description": "Toggle state: off"
+  },
+  "cmpQueueSend": {
+    "message": "将消息排队——当前运行结束后发送",
+    "description": "Send while a run is streaming"
+  },
+  "cmpDictate": {
+    "message": "语音输入",
+    "description": "Start dictation"
+  },
+  "cmpStopDictation": {
+    "message": "停止语音输入",
+    "description": "Stop dictation"
+  },
+  "cmpModeChat": {
+    "message": "对话",
+    "description": "Conversation mode: Chat"
+  },
+  "cmpModeWork": {
+    "message": "工作",
+    "description": "Conversation mode: Work"
+  },
+  "cmpModeChatHint": {
+    "message": "只作答——按需阅读和推理，但不创建或派发看板工作",
+    "description": "What Chat mode does"
+  },
+  "cmpModeWorkHint": {
+    "message": "把商定的内容变成可跟踪的工作——创建工单、配置人员，并派代理执行",
+    "description": "What Work mode does"
+  },
+  "cmpMemoryOnHint": {
+    "message": "记忆已开启——此对话会调用并学习项目记忆",
+    "description": "Memory switch on"
+  },
+  "cmpMemoryOffHint": {
+    "message": "记忆已关闭——此对话是草稿区（不调用、不学习）",
+    "description": "Memory switch off"
+  },
+  "cmpMemoryNeedsSignIn": {
+    "message": "登录 Builderforce 后，此对话即可使用项目记忆",
+    "description": "Why memory is unavailable: signed out"
+  },
+  "cmpMemoryNeedsProject": {
+    "message": "在设置（新任务保存到）中选择一个项目，此对话即可使用项目记忆",
+    "description": "Why memory is unavailable: no project chosen"
+  },
+  "cmpAutoModeHint": {
+    "message": "无需询问，自动批准工具操作",
+    "description": "Auto mode explanation"
+  },
+  "cmpEffortQuickDesc": {
+    "message": "最快、最省——简短直接的回答。最多 $1 个回答 token。",
+    "description": "Quick effort; $1 = answer token budget"
+  },
+  "cmpEffortBalancedDesc": {
+    "message": "默认——常规深度。最多 $1 个回答 token。",
+    "description": "Balanced effort; $1 = answer token budget"
+  },
+  "cmpEffortThoroughDesc": {
+    "message": "最深入、最慢——全面详尽，并校验结果。最多 $1 个回答 token。",
+    "description": "Thorough effort; $1 = answer token budget"
+  },
+  "cmpEffortThinkingSuffix": {
+    "message": "另加最多 $1 个思考 token。",
+    "description": "Appended while Thinking is on; $1 = thinking tokens"
+  },
+  "cmpThinkingOnDesc": {
+    "message": "模型在回答前先推理，此强度下思考预算为 $1 个 token。更慢，但更擅长难题。",
+    "description": "Thinking on; $1 = thinking budget"
+  },
+  "cmpThinkingOffDesc": {
+    "message": "关——模型直接作答。开启后会在回答前先推理。",
+    "description": "Thinking off"
+  },
+  "optCategoryAuto": {
+    "message": "自动",
+    "description": "Model group: automatic"
+  },
+  "optCategoryByo": {
+    "message": "自带",
+    "description": "Model group: your own provider accounts"
+  },
+  "optCategoryFree": {
+    "message": "免费",
+    "description": "Model group: free"
+  },
+  "optCategoryPlan": {
+    "message": "套餐",
+    "description": "Model group: included in plan"
+  },
+  "optCategoryPaid": {
+    "message": "付费",
+    "description": "Model group: premium"
+  },
+  "optCategoryConfigured": {
+    "message": "已配置",
+    "description": "Model group: saved workspace configs"
+  },
+  "optCategoryLocal": {
+    "message": "本设备",
+    "description": "Model group: on this device"
+  },
+  "optPoolLabel": {
+    "message": "自带账户池",
+    "description": "Model row: your connected accounts in order"
+  },
+  "optPoolDetail": {
+    "message": "按账户设置中配置的顺序尝试你已连接的账户。",
+    "description": "Model row: pool explanation"
+  },
+  "optFreeDetail": {
+    "message": "免费 · Builderforce 内含",
+    "description": "Funding line: free model"
+  },
+  "optPlanDetail": {
+    "message": "包含在你的 Builderforce 套餐中",
+    "description": "Funding line: plan model"
+  },
+  "optPaidDetail": {
+    "message": "高级——按成本计费，每次请求另加 1 美分",
+    "description": "Funding line: premium model"
+  },
+  "optPaidCostDetail": {
+    "message": "每 100 万 token：输入 {input} / 输出 {output}，每次请求另加 $$0.01",
+    "description": "Premium price line; keep {input} and {output}"
+  },
+  "optByoDetail": {
+    "message": "计入你自己的 {vendor} 账户——不消耗套餐额度。",
+    "description": "Funding line: own account; keep {vendor}"
+  },
+  "optConfiguredDetail": {
+    "message": "已保存的工作区 LLM 配置",
+    "description": "Funding line: saved config"
+  },
+  "optLocalDetail": {
+    "message": "通过 {runtime} 在本机运行——不占用套餐，可离线使用。",
+    "description": "Funding line: on-device; keep {runtime}"
+  },
+  "optEvermindLabel": {
+    "message": "项目 Evermind",
+    "description": "Model name for a project Evermind pin"
+  },
+  "optEvermindDetail": {
+    "message": "你的项目自己学习得到的 Evermind 模型。",
+    "description": "Funding line for a project Evermind"
+  },
+  "optOptions": {
+    "message": "选项",
+    "description": "The / menu as a whole"
+  },
+  "optMode": {
+    "message": "模式",
+    "description": "Section: conversation mode"
+  },
+  "optMemory": {
+    "message": "记忆",
+    "description": "Section: project memory"
+  },
+  "optAutoMode": {
+    "message": "自动模式",
+    "description": "Row: auto-approve actions"
+  },
+  "optConversation": {
+    "message": "对话",
+    "description": "Section: actions on the chat itself"
+  },
+  "optConsolidate": {
+    "message": "整合",
+    "description": "Action: consolidate the chat"
+  },
+  "optConsolidating": {
+    "message": "正在整合…",
+    "description": "Consolidating in progress"
+  },
+  "optConsolidateHint": {
+    "message": "把此对话总结成精简的上下文，后续对话以此为基础",
+    "description": "What consolidating does"
+  },
+  "optFork": {
+    "message": "分叉",
+    "description": "Action: fork the chat"
+  },
+  "optForking": {
+    "message": "正在分叉…",
+    "description": "Forking in progress"
+  },
+  "optForkHint": {
+    "message": "总结此对话，并基于总结在新对话中继续",
+    "description": "What forking does"
+  },
+  "optSessionUnavailable": {
+    "message": "当此对话有几条消息且没有正在进行的运行时可用",
+    "description": "Why conversation actions cannot run"
+  },
+  "optEffort": {
+    "message": "强度",
+    "description": "Section: effort"
+  },
+  "optEffortQuick": {
+    "message": "快速",
+    "description": "Effort level"
+  },
+  "optEffortBalanced": {
+    "message": "均衡",
+    "description": "Effort level"
+  },
+  "optEffortThorough": {
+    "message": "深入",
+    "description": "Effort level"
+  },
+  "optThinking": {
+    "message": "思考",
+    "description": "Row: thinking"
+  },
+  "optModelInUse": {
+    "message": "当前模型",
+    "description": "Heading: model running this turn"
+  },
+  "optSearchModels": {
+    "message": "搜索模型…",
+    "description": "Model search placeholder"
+  },
+  "optFilterModels": {
+    "message": "筛选模型",
+    "description": "Model filter group"
+  },
+  "optChooseModel": {
+    "message": "选择模型",
+    "description": "Model list name"
+  },
+  "optNoModels": {
+    "message": "没有匹配的模型",
+    "description": "No model matches"
+  },
+  "optAll": {
+    "message": "全部",
+    "description": "Filter: all"
+  },
+  "optModelLocked": {
+    "message": "选择模型需要付费套餐或已连接的服务商账户。",
+    "description": "Why models cannot be chosen"
+  },
+  "optAccountSettings": {
+    "message": "账户设置",
+    "description": "Link to account settings"
+  },
+  "optStatus": {
+    "message": "状态",
+    "description": "Tab: account / usage / Evermind"
+  },
+  "stLoading": {
+    "message": "正在加载账户…",
+    "description": "Status tab loading"
+  },
+  "stAccount": {
+    "message": "账户",
+    "description": "Status: account heading"
+  },
+  "stPlan": {
+    "message": "套餐",
+    "description": "Status: plan"
+  },
+  "stResets": {
+    "message": "重置于",
+    "description": "Status: when meters reset"
+  },
+  "stLimitsLifted": {
+    "message": "已解除限制",
+    "description": "Beside the plan for a superadmin"
+  },
+  "stLimitsLiftedHint": {
+    "message": "你是超级管理员，所有限制对你都已解除——套餐本身的限制仍适用于其成员。",
+    "description": "Why limits are lifted"
+  },
+  "stUsage": {
+    "message": "用量",
+    "description": "Status: usage heading"
+  },
+  "stUsageEmpty": {
+    "message": "此套餐没有用量计量。",
+    "description": "Status: no meters"
+  },
+  "stUnlimited": {
+    "message": "无限制",
+    "description": "Status: unlimited meter"
+  },
+  "stMeterOf": {
+    "message": "{used} / {limit} {unit}",
+    "description": "Meter reading; keep {used} {limit} {unit}"
+  },
+  "stUpgrade": {
+    "message": "升级",
+    "description": "Status: upgrade action"
+  },
+  "stManagePlan": {
+    "message": "管理套餐",
+    "description": "Status: manage plan action"
+  },
+  "stBillingPastDue": {
+    "message": "已逾期",
+    "description": "Billing state"
+  },
+  "stBillingCanceled": {
+    "message": "已取消",
+    "description": "Billing state"
+  },
+  "stBillingTrialing": {
+    "message": "试用",
+    "description": "Billing state"
+  },
+  "stBillingIncomplete": {
+    "message": "未完成",
+    "description": "Billing state"
+  },
+  "stPlanFree": {
+    "message": "免费版",
+    "description": "Plan tier"
+  },
+  "stPlanPro": {
+    "message": "专业版",
+    "description": "Plan tier"
+  },
+  "stPlanTeams": {
+    "message": "团队版",
+    "description": "Plan tier"
+  },
+  "stPlanEnterprise": {
+    "message": "企业版",
+    "description": "Plan tier"
+  },
+  "stMeterAiTokens": {
+    "message": "AI token",
+    "description": "Meter name"
+  },
+  "stMeterCloudRuns": {
+    "message": "云端运行",
+    "description": "Meter name"
+  },
+  "stMeterSandboxRuns": {
+    "message": "沙箱运行",
+    "description": "Meter name"
+  },
+  "stMeterIngestion": {
+    "message": "数据摄取",
+    "description": "Meter name"
+  },
+  "stMeterErrorEvents": {
+    "message": "错误事件",
+    "description": "Meter name"
+  },
+  "stMeterOutboundFetches": {
+    "message": "出站请求",
+    "description": "Meter name"
+  },
+  "stMeterFeedback": {
+    "message": "反馈",
+    "description": "Meter name"
+  },
+  "stMeterRecordings": {
+    "message": "录制",
+    "description": "Meter name"
+  },
+  "stUnitTokens": {
+    "message": "token",
+    "description": "Meter unit"
+  },
+  "stUnitBytes": {
+    "message": "字节",
+    "description": "Meter unit"
+  },
+  "stUnitRuns": {
+    "message": "次运行",
+    "description": "Meter unit"
+  },
+  "stUnitEvents": {
+    "message": "个事件",
+    "description": "Meter unit"
+  },
+  "stUnitFetches": {
+    "message": "次请求",
+    "description": "Meter unit"
+  },
+  "stUnitSubmissions": {
+    "message": "次提交",
+    "description": "Meter unit"
+  },
+  "stUnitRecordings": {
+    "message": "个录制",
+    "description": "Meter unit"
+  },
+  "stEvermindLearning": {
+    "message": "学习中",
+    "description": "Evermind state"
+  },
+  "stEvermindFrozen": {
+    "message": "未学习",
+    "description": "Evermind state"
+  },
+  "stEvermindAnswersOn": {
+    "message": "回答已开启",
+    "description": "Evermind answers on"
+  },
+  "stEvermindAnswersOff": {
+    "message": "回答已关闭",
+    "description": "Evermind answers off"
+  },
+  "stEvermindHint": {
+    "message": "学习：本项目的对话会训练其 Evermind。回答：是否允许 Evermind 代替付费模型作答。两者都可在 Evermind 视图中更改。",
+    "description": "Evermind explanation"
+  },
+  "spSpent": {
+    "message": "已花费 {amount}",
+    "description": "Spend pill; keep {amount}"
+  },
+  "spSaved": {
+    "message": "已节省 {amount}",
+    "description": "Spend pill; keep {amount}"
+  },
+  "spSavedApprox": {
+    "message": "约节省 {amount}",
+    "description": "Spend pill, estimated; keep {amount}"
+  },
+  "spTokens": {
+    "message": "{tokens} token",
+    "description": "Token count; keep {tokens}"
+  },
+  "spPillTitle": {
+    "message": "此对话的花费，以及记忆节省的费用",
+    "description": "Spend pill tooltip"
+  },
+  "spSpendHeading": {
+    "message": "花费",
+    "description": "Breakdown: spent"
+  },
+  "spPlatform": {
+    "message": "Builderforce 套餐",
+    "description": "Breakdown: plan usage"
+  },
+  "spYourKey": {
+    "message": "你的密钥",
+    "description": "Breakdown: own key"
+  },
+  "spYourKeyHint": {
+    "message": "按服务商标价计算",
+    "description": "Under your key"
+  },
+  "spUnpriced": {
+    "message": "无定价模型上的 {tokens} 个 token",
+    "description": "Unpriced tokens; keep {tokens}"
+  },
+  "spSavedHeading": {
+    "message": "记忆节省",
+    "description": "Breakdown: saved"
+  },
+  "spSavedShare": {
+    "message": "账单的 {pct}%",
+    "description": "Share saved; keep {pct}"
+  },
+  "spEstimated": {
+    "message": "估算",
+    "description": "Marks an estimate"
+  },
+  "spMeasured": {
+    "message": "实测",
+    "description": "Marks a recorded figure"
+  },
+  "spEvents": {
+    "message": "{count} 次",
+    "description": "Row count; keep {count}"
+  },
+  "spNothingSaved": {
+    "message": "尚未节省",
+    "description": "Nothing saved yet"
+  },
+  "spPeriodHeading": {
+    "message": "AI 花费 · 最近 {days} 天",
+    "description": "Status card heading; keep {days}"
+  },
+  "spSourcePromptCache": {
+    "message": "提示缓存",
+    "description": "Saving source"
+  },
+  "spSourceMemoryAnswer": {
+    "message": "由记忆作答",
+    "description": "Saving source"
+  },
+  "spSourceEvermindAnswer": {
+    "message": "由 Evermind 作答",
+    "description": "Saving source"
+  },
+  "spSourceResponseCache": {
+    "message": "重复请求",
+    "description": "Saving source"
+  },
+  "spSourceContextTrim": {
+    "message": "精简上下文",
+    "description": "Saving source"
+  },
+  "spSourceRecallOverhead": {
+    "message": "调用记忆的开销",
+    "description": "Saving source (a cost)"
+  },
+  "spHintPromptCache": {
+    "message": "服务商从缓存中提供了部分提示，价格仅为十分之一",
+    "description": "Saving source explanation"
+  },
+  "spHintMemoryAnswer": {
+    "message": "此前问过的问题由记忆作答——未调用模型",
+    "description": "Saving source explanation"
+  },
+  "spHintEvermindAnswer": {
+    "message": "项目的 Evermind 作答——未调用付费模型",
+    "description": "Saving source explanation"
+  },
+  "spHintResponseCache": {
+    "message": "相同的请求由网关缓存作答——未调用模型",
+    "description": "Saving source explanation"
+  },
+  "spHintContextTrim": {
+    "message": "压缩使每次调用都不再携带早先的轮次",
+    "description": "Saving source explanation"
+  },
+  "spHintRecallOverhead": {
+    "message": "调用的记忆为每个提示增加的内容——即调用记忆的成本",
+    "description": "Saving source explanation"
+  },
+  "mnTitle": {
+    "message": "发送给",
+    "description": "@-mention picker heading"
+  },
+  "mnAgent": {
+    "message": "代理",
+    "description": "@-mention row: agent"
+  },
+  "mnHuman": {
+    "message": "成员",
+    "description": "@-mention row: person"
+  },
+  "mnTicketTitle": {
+    "message": "标记工单",
+    "description": "#-ticket picker heading"
+  },
+  "mnTicketStatus": {
+    "message": "状态",
+    "description": "#-ticket row: status"
+  },
+  "mnTicketNoMatches": {
+    "message": "没有匹配的工单",
+    "description": "#-ticket picker: nothing matches"
+  },
+  "ctNone": {
+    "message": "尚未关联工单。",
+    "description": "No linked tickets"
+  },
+  "ctSpawned": {
+    "message": "在此创建",
+    "description": "Ticket created from this chat"
+  },
+  "ctRun": {
+    "message": "让代理处理工单",
+    "description": "Run an agent on the ticket"
+  },
+  "ctOpen": {
+    "message": "打开",
+    "description": "Open the linked item"
+  },
+  "ctLineage": {
+    "message": "对话谱系",
+    "description": "Chat lineage"
+  },
+  "ctUnlink": {
+    "message": "取消关联",
+    "description": "Unlink a ticket"
+  },
+  "ctPickAgent": {
+    "message": "以代理身份运行…",
+    "description": "Choose an agent to run"
+  },
+  "ctLineageTitle": {
+    "message": "此工单的对话",
+    "description": "Lineage heading"
+  },
+  "ctLineageEmpty": {
+    "message": "没有其他对话引用此工单。",
+    "description": "No lineage"
+  },
+  "ctMerged": {
+    "message": "已合并",
+    "description": "Merged chat marker"
+  },
+  "ctRunNoAgent": {
+    "message": "没有代理能执行此工单——请先分配一个。",
+    "description": "Run failed: no agent"
+  },
+  "ctRunFailed": {
+    "message": "无法启动运行。",
+    "description": "Run failed"
+  },
+  "ctLink": {
+    "message": "关联工单",
+    "description": "Pill: link a ticket"
+  },
+  "ctAgents": {
+    "message": "代理",
+    "description": "Pill: agents"
+  },
+  "ctMerge": {
+    "message": "合并",
+    "description": "Pill: merge chats"
+  },
+  "ctQuestions": {
+    "message": "问题",
+    "description": "Pill: questions"
+  },
+  "ctNoQuestions": {
+    "message": "没有待回答的问题。",
+    "description": "No pending questions"
+  },
+  "ctAnswerPlaceholder": {
+    "message": "输入你的回答…",
+    "description": "Answer box placeholder"
+  },
+  "ctSubmitAnswer": {
+    "message": "回答",
+    "description": "Send an answer"
+  },
+  "ctAnswering": {
+    "message": "正在发送…",
+    "description": "Answer being sent"
+  },
+  "ctLinkFailed": {
+    "message": "无法关联——请确认工单存在。",
+    "description": "Link failed"
+  },
+  "ctKindLabel": {
+    "message": "工单类型",
+    "description": "Ticket type picker"
+  },
+  "ctPickTicket": {
+    "message": "选择工单…",
+    "description": "Ticket picker"
+  },
+  "ctSearchTicket": {
+    "message": "搜索工单…",
+    "description": "Ticket search placeholder"
+  },
+  "ctSearching": {
+    "message": "正在搜索…",
+    "description": "Search in progress"
+  },
+  "ctNoMatches": {
+    "message": "没有匹配的工单。",
+    "description": "Search found nothing"
+  },
+  "ctRefine": {
+    "message": "仅显示最佳匹配——继续输入以缩小范围。",
+    "description": "Search hit the cap"
+  },
+  "ctLinkTypeLabel": {
+    "message": "关联类型",
+    "description": "Link type picker"
+  },
+  "ctLinkTypeLinked": {
+    "message": "已关联",
+    "description": "Link type: linked"
+  },
+  "ctLinkTypeCreated": {
+    "message": "从对话创建",
+    "description": "Link type: created from chat"
+  },
+  "ctLinkAction": {
+    "message": "关联",
+    "description": "Confirm link"
+  },
+  "ctNoAgents": {
+    "message": "此对话中还没有代理。",
+    "description": "No agents in chat"
+  },
+  "ctInviteAgent": {
+    "message": "邀请代理…",
+    "description": "Invite an agent"
+  },
+  "ctAgentsHint": {
+    "message": "在消息框中输入 @ 标记已邀请的代理——它会在对话中回复，并可处理团队的工作——或在上方让它处理已关联的任务/史诗。",
+    "description": "How agents work in a chat"
+  },
+  "ctSubagentOf": {
+    "message": "{owner} 的子代理",
+    "description": "Sub-agent owner; keep {owner}"
+  },
+  "ctPeople": {
+    "message": "成员",
+    "description": "Pill: people"
+  },
+  "ctNoPeople": {
+    "message": "尚未邀请成员。",
+    "description": "No people invited"
+  },
+  "ctInvitePerson": {
+    "message": "通过邮件邀请…",
+    "description": "Invite by email"
+  },
+  "ctInvitePersonHint": {
+    "message": "邀请队友查看此对话并协作。",
+    "description": "Invite explanation"
+  },
+  "ctInviteSent": {
+    "message": "邀请已发送。",
+    "description": "Invitation sent"
+  },
+  "ctInvitePending": {
+    "message": "邀请已发送——对方登录后即会加入。",
+    "description": "Invite pending sign-in"
+  },
+  "ctVisibilityShared": {
+    "message": "共享",
+    "description": "Chat visibility: shared"
+  },
+  "ctVisibilityLocked": {
+    "message": "锁定",
+    "description": "Chat visibility: locked"
+  },
+  "ctLockHint": {
+    "message": "共享对话对整个团队可见；锁定后仅其成员可见。",
+    "description": "Lock explanation"
+  },
+  "ctMergeHint": {
+    "message": "将其他对话合并到此对话。它们的消息、工单和代理会移到这里，原对话将被归档。",
+    "description": "Merge explanation"
+  },
+  "ctMergeNoOthers": {
+    "message": "没有其他可合并的对话。",
+    "description": "No other chats to merge"
+  },
+  "ctShowTickets": {
+    "message": "显示已关联工单",
+    "description": "Expand the ticket grid"
+  },
+  "ctHideTickets": {
+    "message": "隐藏已关联工单",
+    "description": "Collapse the ticket grid"
+  },
+  "ctKindTask": {
+    "message": "任务",
+    "description": "Ticket kind"
+  },
+  "ctKindEpic": {
+    "message": "史诗",
+    "description": "Ticket kind"
+  },
+  "ctKindGap": {
+    "message": "差距",
+    "description": "Ticket kind"
+  },
+  "ctKindObjective": {
+    "message": "目标",
+    "description": "Ticket kind"
+  },
+  "ctKindInitiative": {
+    "message": "举措",
+    "description": "Ticket kind"
+  },
+  "ctKindPortfolio": {
+    "message": "项目组合",
+    "description": "Ticket kind"
+  },
+  "ctKindRoadmap": {
+    "message": "路线图",
+    "description": "Ticket kind"
+  },
+  "ctKindSpec": {
+    "message": "规格",
+    "description": "Ticket kind"
+  },
+  "ctKindRetro": {
+    "message": "回顾",
+    "description": "Ticket kind"
+  },
+  "ctKindPoker": {
+    "message": "计划扑克",
+    "description": "Ticket kind"
+  },
+  "ctRingAria": {
+    "message": "$1：已完成 $2%",
+    "description": "Ticket health ring; $1 = ticket, $2 = percent"
+  },
+  "ctInParent": {
+    "message": "属于 $1",
+    "description": "Parent line; $1 = parent work item"
+  },
+  "ctTicketCountOne": {
+    "message": "1 个工单",
+    "description": "Exactly one linked ticket"
+  },
+  "ctTicketCountMany": {
+    "message": "$1 个工单",
+    "description": "Linked ticket count; $1 = count"
+  },
+  "ctOverallAria": {
+    "message": "总体进度：已完成 $1%",
+    "description": "Overall progress ring; $1 = percent"
+  },
+  "ctRunStarted": {
+    "message": "已让 $1 开始处理该工单。",
+    "description": "Run started; $1 = agent"
+  },
+  "ctMergeAction": {
+    "message": "将 $1 个合并到此处",
+    "description": "Merge N chats; $1 = count"
+  },
+  "ctMergedN": {
+    "message": "已合并 $1 个对话。",
+    "description": "Merged N chats; $1 = count"
+  },
+  "queuedOne": {
+    "message": "1 条消息已排队——本次运行结束后发送",
+    "description": "Under the composer: one turn waits behind the running run"
+  },
+  "queuedMany": {
+    "message": "$1 条消息已排队——每次运行结束后依次发送",
+    "description": "Under the composer; $1 = how many turns wait behind the running run"
   }
 }

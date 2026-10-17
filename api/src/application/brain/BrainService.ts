@@ -66,6 +66,9 @@ export interface CreateChatDto {
 
 export interface UpdateChatDto {
   title?: string;
+  /** The per-chat Memory switch (1228): recall from and write back to the project's
+   *  memory. A property of the conversation, so every surface reads the same value. */
+  memoryEnabled?: boolean;
   projectId?: number | null;
   /** LOCK toggle (owner only): 'shared' = teammate-visible, 'locked' = private. */
   visibility?: 'shared' | 'locked';
@@ -200,6 +203,7 @@ const chatColumns = {
   visibility: brainChats.visibility,
   capability: brainChats.capability,
   mode: brainChats.mode,
+  memoryEnabled: brainChats.memoryEnabled,
   createdAt: brainChats.createdAt,
   updatedAt: brainChats.updatedAt,
 } as const;
@@ -822,6 +826,7 @@ export class BrainService {
       origin: brainChats.origin,
       title: brainChats.title,
       capability: brainChats.capability,
+      memoryEnabled: brainChats.memoryEnabled,
       createdAt: brainChats.createdAt,
       updatedAt: brainChats.updatedAt,
       isArchived: brainChats.isArchived,
@@ -857,6 +862,7 @@ export class BrainService {
     if (dto.projectId !== undefined) updates.projectId = dto.projectId;
     if (dto.visibility === 'shared' || dto.visibility === 'locked') updates.visibility = dto.visibility;
     if (dto.capability !== undefined) updates.capability = normalizeCapability(dto.capability);
+    if (typeof dto.memoryEnabled === 'boolean') updates.memoryEnabled = dto.memoryEnabled;
     // An unrecognised mode is IGNORED rather than coerced: coercing would quietly
     // demote a running execution back to a conversation (and strip its dispatch
     // authority) because a stale client sent a value this build does not know.
@@ -1373,7 +1379,8 @@ export class BrainService {
       budget: {},
       hooks: {
         beforeTurn: async () => {
-          const compaction = await compactMessages(convo, CLOUD_COMPACT_DEFAULTS, summarize);
+          // Sized to the model the policy asks for next when it names one (its catalog window).
+          const compaction = await compactMessages(convo, { ...CLOUD_COMPACT_DEFAULTS, ...(policy.model ? { targetModel: policy.model } : {}) }, summarize);
           if (compaction.compacted) convo.splice(0, convo.length, ...compaction.messages);
           return undefined;
         },

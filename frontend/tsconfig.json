@@ -38,6 +38,7 @@
       "@builderforce/model-catalog": ["../packages/model-catalog/src/index.ts"],
       "@builderforce/run-policy": ["../packages/run-policy/src/index.ts"],
       "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"],
+      "@builderforce/spend-contract": ["../packages/spend-contract/src/index.ts"],
       "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"]
     },
     "target": "ES2017"

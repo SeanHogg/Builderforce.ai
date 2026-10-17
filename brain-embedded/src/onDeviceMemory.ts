@@ -29,7 +29,7 @@
  * and this module is safe in every bundle including ones with no GPU story at all.
  */
 
-import type { EvermindRunHooks, MemoryFirstAnswer } from './evermindMemory';
+import type { AnswerOriginCost, EvermindRunHooks, MemoryFirstAnswer } from './evermindMemory';
 
 /**
  * The on-device answer store, as a port. Structurally satisfied by the
@@ -124,7 +124,7 @@ export function composeEvermindHooks(
     recall: recall ?? (async () => null),
     ...(answering.length
       ? {
-          answer: async (query: string, opts: { toolsAvailable: boolean }) => {
+          answer: async (query: string, opts: { toolsAvailable: boolean; model?: string }) => {
             for (const layer of answering) {
               const hit = await layer.answer?.(query, opts);
               if (hit) return hit;
@@ -135,13 +135,15 @@ export function composeEvermindHooks(
       : {}),
     ...(caching.length
       ? {
-          cacheAnswer: (query: string, answer: string) => {
+          cacheAnswer: (query: string, answer: string, origin?: AnswerOriginCost) => {
             for (const layer of caching) {
               // try/catch AND .catch: a tier can fail synchronously (a store that
               // throws on construction) or asynchronously, and either way the tiers
               // after it must still be written.
               try {
-                void Promise.resolve(layer.cacheAnswer?.(query, answer)).catch(() => { /* best-effort */ });
+                // Pass `origin` only when there is one, so a tier that takes two arguments
+                // sees exactly two.
+                void Promise.resolve(origin ? layer.cacheAnswer?.(query, answer, origin) : layer.cacheAnswer?.(query, answer)).catch(() => { /* best-effort */ });
               } catch {
                 /* best-effort per layer */
               }

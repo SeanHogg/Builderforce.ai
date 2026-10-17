@@ -92,7 +92,7 @@ export interface ComparisonRow {
 export const PLATFORM_PROVIDER_ID = 'builderforce';
 
 /** Token/cost consumption for one model, rolled up from `llm_usage_log` — so it
- *  covers EVERY surface (web, VSIX, on-prem, cloud, SDK), not just the scored
+ *  covers EVERY surface (web, VSIX, on-prem, cloud, SDK, Rovr), not just the scored
  *  cloud runs that {@link ComparisonRow} is limited to. */
 export interface ModelConsumption {
   model: string;

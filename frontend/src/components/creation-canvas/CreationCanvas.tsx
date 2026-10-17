@@ -115,6 +115,8 @@ import { useCanvasBrainRuntime } from './hooks/useCanvasBrainRuntime';
 import { useCanvasAccountGate } from './hooks/useCanvasAccountGate';
 import { useCanvasDockAndFullscreen } from './hooks/useCanvasDockAndFullscreen';
 import { useCanvasSessionModes } from './hooks/useCanvasSessionModes';
+import { useCanvasMemorySwitch } from './hooks/useCanvasMemorySwitch';
+import { useCanvasRunShaping } from './hooks/useCanvasRunShaping';
 import { useCanvasSession } from './hooks/useCanvasSession';
 import { useCanvasSessionSync } from './hooks/useCanvasSessionSync';
 import { useCanvasPresence } from './hooks/useCanvasPresence';
@@ -503,17 +505,11 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const [checkpointName, setCheckpointName] = useState('');
   const [timeline, setTimeline] = useState<CanvasTimelineMessage[]>([]);
   const [brainTrace, setBrainTrace] = useState<BrainTraceEvent[]>([]);
-  const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
-  /**
-   * The left dock holds ONE panel at a time.
-   *
-   * These were six independent booleans, and every panel they gate docks at the
-   * same coordinates — so opening a second one stacked it invisibly on the first
-   * rather than replacing it. A single value cannot express that state, which is
-   * the point: exclusivity is the data model, not a rule each toggle remembers.
-   */
+  /** The left dock holds ONE panel at a time. Six booleans used to stack panels invisibly at
+   *  the same coordinates; one value cannot express that, so exclusivity is the data model,
+   *  not a rule each toggle remembers. */
   const [dockPanel, setDockPanel] = useState<CanvasDockPanel | null>(null);
   // "A hit is listed but not SHOWN" — the outline panel's own search already ranks
   // and filters real board content (see its header comment); this is the board HALF
@@ -688,7 +684,9 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const autoApplyRef = useRef(true);
   const mobileViewportFittedRef = useRef(false);
   const { updateBrainDock, toggleFullscreen } = useCanvasDockAndFullscreen({ autoApplyRef, comparisonModelIds, fullscreen, initialSurface, nativeFullscreenRef, phoneViewport, sessionId, setAutoApply, setBrainDock, setFullscreen, setSurfaceState, shellRef });
-  const { setAutoApplyMode, setSessionMode, setMemoryMode } = useCanvasSessionModes({ autoApplyRef, nodes, persistence, sessionId, sessionRole, setAutoApply, setDatasetRowLimit, setFramePresets, setMemoryEnabled, setNotice, setPendingInvitations, setServerTemplates, setSessionMode_, shareOpen, t, templateOpen });
+  const { setAutoApplyMode, setSessionMode } = useCanvasSessionModes({ autoApplyRef, persistence, sessionId, sessionRole, setAutoApply, setDatasetRowLimit, setFramePresets, setNotice, setPendingInvitations, setServerTemplates, setSessionMode_, shareOpen, t, templateOpen });
+  const { memoryEnabled, setMemoryMode } = useCanvasMemorySwitch({ nodes, sessionId, persistence });
+  const runShapingControls = useCanvasRunShaping();
   const { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard, boardLoaded } = useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, onBoardLoaded: settleLoadedPhase, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef });
   // HOW THIS BOARD IS PRESENTED (`lib/canvasLens.ts`) — every lens decision reads this def, never the id.
   const lensState = useCanvasLens({ lens, sessionId, surface, showSurface: setSurfaceState, chooseSurface: setSurface, phase, setPhase, boardLoaded, updateBrainDock, phoneViewport }), lensDef = lensState.def;
@@ -814,7 +812,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
 
   const { canvasActions } = useCanvasBrainVocabulary({ buildsRef: sessionApp.buildsRef, createApp: sessionApp.createApp, appWritten: sessionApp.appWritten, buildSocialFeedNode, canEdit, canvasText, convertObjectToDiagram, effectiveSelectedIds, fmt, inFlightUseCaseIdRef, layoutViewportRef, localizedTourDefaults, nodes, nodesRef, openAccountGate, persistence, promptRef, recentJournalEvidence, requireAccount, resolvedScopeMode, scopedNodeIds, sessionId, setDockPanel, socialAccountGate, stage, t, tSocial, turnToolCallsRef });
   const { addAgentKnowledge, runAgentTest } = useCanvasAgentTesting({ brainRuntimeRef, canEdit, canvasNotices, describeTurnError, disableBrainModel, edges, modelSelection, nodes, persistence, placeAppendedRef, recordBrainCompletion, setEdges, setNodes, setNotice, t });
-  const { evaluateCanvas } = useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, canvasRunRef, confirm, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setBrainRunStartedAt, setBrainTrace, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setThinking, stage, t, thinking, timeline, title, turnToolCallsRef, turnUnansweredRef });
+  const { evaluateCanvas } = useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, canvasRunRef, confirm, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, runShaping: runShapingControls.runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setBrainRunStartedAt, setBrainTrace, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setThinking, stage, t, thinking, timeline, title, turnToolCallsRef, turnUnansweredRef });
   const { rejectProposedChanges, applyAndEnableAutoApply, applyProposedChanges } = useCanvasProposalReview({ acceptedProposalIds, autoApplyPending, comparisonModelIds, describeTurnError, entryAppPending: entryApp.pending, evaluateCanvas, flowRef, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, layoutViewportRef, modelComparisonStartedRef, nodes, persistence, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setAutoApplyMode, setAutoApplyPending, setEdges, setNodes, setNotice, setPendingBrainActions, setProposedChanges, setSelectedId, setSelectedIds, setSurface, stage, t, thinking, timeline });
   const { resolveWorkflowNode, buildFlowFromFrame, buildFlow, openEvermindBuild, loadEvermindTemplate, evermindBuild, setEvermindBuild } = useCanvasFlowBuild({ connectionKind, edgesRef, errorText, framedBoardRef, nodes, nodesRef, persistence, requireAccount, selectedNode, sessionId, setEdges, setNodes, setNotice, t, updateNodeData });
   const { compileWorkflow, runWorkflow, unpackWorkflow, saveAgent } = useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKind, errorText, framedBoardRef, persistence, requireAccount, resolveWorkflowNode, selectedNode, sessionId, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t });
@@ -984,7 +982,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
     onAttach={attachCanvasArtifact} onAddContext={openObjectPicker} autoMode={autoApply} onAutoModeChange={setAutoApplyMode}
     modelSelection={modelSelection} modelOptions={canvasModelOptions} onModelSelectionChange={setModelSelection} modelIdentity={modelIdentity}
     chatMode={sessionMode} onChatModeChange={setSessionMode} memoryEnabled={memoryEnabled} onMemoryChange={setMemoryMode}
-    hasMemoryProject={evermindProjectId != null} onTwilioJourney={setTwilioPromptSelected} applyTemplate={applyTemplate} conversationStarted={brainMessages.length > 0}
+    memoryProjectId={evermindProjectId} runShaping={runShapingControls} onTwilioJourney={setTwilioPromptSelected} applyTemplate={applyTemplate} conversationStarted={brainMessages.length > 0}
   />;
 
   const sessionActionHandlers = useCanvasSessionActionHandlers({

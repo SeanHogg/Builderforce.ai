@@ -1,11 +1,10 @@
 import { useMemo, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { PersonaPicker, RecipientPicker } from '@seanhogg/builderforce-brain-ui';
-import type { DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import { lastServedModel, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import { ChatInput } from '@/components/ChatInput';
 import { PreviewPickChips } from '@/components/builder/PreviewPickChip';
 import { useSpendPreviewPicksOnSettle } from '@/lib/workspace/previewPick';
-import { EvermindStatusBadge } from '@/components/builder/EvermindStatusBadge';
 import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
 import { useLocalizedModalities } from '@/lib/useModalityCopy';
 import AssigneeHovercard from '../../workforce/AssigneeHovercard';
@@ -59,6 +58,12 @@ export function BrainComposer() {
   // the turn that carried them spends them.
   useSpendPreviewPicksOnSettle(conv.sending);
   const localizedModalities = useLocalizedModalities();
+  // The model the next turn will really use while the selection is `auto`: the one
+  // that last ANSWERED here (the editor composer's `servedModel`), so the `/` menu
+  // names what is running instead of a bare "Auto".
+  const effectiveModel = useMemo(() => lastServedModel(conv.messages), [conv.messages]);
+  // The Status tab reads the Evermind of the project this chat is about.
+  const account = useMemo(() => ({ projectId: ctxProjectId ?? null }), [ctxProjectId]);
   const personaLabels = useMemo(() => ({
     actingAs: tBrain('actingAs'),
     title: tBrain('personaAria'),
@@ -99,6 +104,8 @@ export function BrainComposer() {
       modelSelection={prefs.modelSelection}
       modelOptions={modelOptions}
       modelIdentity={modelIdentity}
+      effectiveModel={effectiveModel}
+      account={account}
       onModelSelectionChange={prefs.setModelSelection}
       autoMode={autoApprove}
       onAutoModeChange={setAutoApproveMode}
@@ -157,9 +164,6 @@ export function BrainComposer() {
           renderAvatar={renderRecipientAvatar}
         />
       </>}
-      // Memory status is a standing fact, not a mode: it lives inside the `/` menu, as
-      // it does in the editor composer, never as a row under the box.
-      menuStatus={chats.activeChatId != null ? <EvermindStatusBadge projectId={ctxProjectId} /> : undefined}
     />
   );
 }

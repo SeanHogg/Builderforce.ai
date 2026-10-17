@@ -1,7 +1,7 @@
 import {
   hasWebGPUSupport,
   probeDevice
-} from "./chunk-J5TFPZVT.mjs";
+} from "./chunk-Q5Y27QLY.mjs";
 
 // src/engine/diffusion-engine.ts
 import * as ort3 from "onnxruntime-web";

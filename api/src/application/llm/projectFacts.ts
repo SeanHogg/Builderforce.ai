@@ -65,6 +65,32 @@ export function projectFactsVersion(env: Env, tenantId: number, projectId: numbe
   return getCacheVersion(env, versionKey(tenantId, projectId));
 }
 
+/** What producing a fact cost — the model and token counts of the turn that wrote it. */
+export interface FactOriginCost {
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+}
+
+/** A fact's content plus its production cost, when known. */
+export interface ProjectFactRecord {
+  content: string;
+  origin: FactOriginCost | null;
+}
+
+/** The origin-cost columns for a write — all three or none, so a half-known cost is
+ *  never recorded as if it were a figure. */
+function originCostColumns(origin: FactOriginCost | null | undefined): {
+  originModel: string | null; originPromptTokens: number | null; originCompletionTokens: number | null;
+} {
+  const ok = origin && origin.model.trim()
+    && Number.isFinite(origin.promptTokens) && origin.promptTokens >= 0
+    && Number.isFinite(origin.completionTokens) && origin.completionTokens >= 0;
+  return ok
+    ? { originModel: origin.model.trim().slice(0, 200), originPromptTokens: Math.round(origin.promptTokens), originCompletionTokens: Math.round(origin.completionTokens) }
+    : { originModel: null, originPromptTokens: null, originCompletionTokens: null };
+}
+
 /**
  * Write-through upsert a fact under a stable `key` (replace-on-write). Bumps the
  * recall cache so the next read reflects it. No-op on an invalid project / empty
@@ -81,13 +107,16 @@ export async function upsertProjectFact(
   /** Governance metadata (0371): which run formed the belief, and when it lapses.
    *  Optional so the six existing callers are unchanged; supplied by
    *  application/memory/memoryService, which is the governed write path. */
-  opts?: { expiresAt?: Date | null; originExecutionId?: number | null },
+  opts?: { expiresAt?: Date | null; originExecutionId?: number | null; origin?: FactOriginCost | null },
 ): Promise<boolean> {
   const k = (key ?? '').trim().slice(0, 255);
   const c = (content ?? '').trim();
   if (!k || !c || !Number.isInteger(projectId) || projectId <= 0) return false;
   const expiresAt = opts?.expiresAt ?? null;
   const originExecutionId = opts?.originExecutionId ?? null;
+  // What producing the fact cost (1228). Replaced with the content, like the rest of the
+  // provenance: a re-write by a different turn is a different production cost.
+  const originCost = originCostColumns(opts?.origin);
   // Embed on write so the fact is semantically reachable on the next recall (1134).
   // Best-effort: a failed embed leaves the columns null, the lexical arm still finds
   // the fact, and the backfill sweep vectorises it later.
@@ -98,7 +127,7 @@ export async function upsertProjectFact(
     : { embedding: null, embeddingModel: null, embeddedAt: null };
   await db
     .insert(projectFacts)
-    .values({ tenantId, projectId, key: k, content: c, source: source.slice(0, 64), expiresAt, originExecutionId, ...embeddingFields })
+    .values({ tenantId, projectId, key: k, content: c, source: source.slice(0, 64), expiresAt, originExecutionId, ...originCost, ...embeddingFields })
     .onConflictDoUpdate({
       target: [projectFacts.tenantId, projectFacts.projectId, projectFacts.key],
       // A re-write REPLACES the governance metadata too: re-remembering a fact without
@@ -106,7 +135,7 @@ export async function upsertProjectFact(
       // that does not leave a stale expiry silently attached to fresh content. The
       // vector goes with it — an embedding of superseded content ranks the fact by
       // what it used to say.
-      set: { content: c, source: source.slice(0, 64), expiresAt, originExecutionId, ...embeddingFields, updatedAt: now },
+      set: { content: c, source: source.slice(0, 64), expiresAt, originExecutionId, ...originCost, ...embeddingFields, updatedAt: now },
     });
   await bumpCacheVersion(env, versionKey(tenantId, projectId));
   return true;
@@ -224,23 +253,33 @@ export async function recallProjectFacts(
  * decides "have we answered this exact question before?" without an LLM call.
  * Returns null when absent / pre-migration / invalid project.
  */
-export async function getProjectFactByKey(
+/**
+ * One live fact by key WITH what producing it cost — the read the Q&A cache replay
+ * prices its saving from. One cached PK lookup per key, invalidated with the project's
+ * fact version on any write.
+ */
+export async function getProjectFactRecordByKey(
   env: Env,
   db: Db,
   tenantId: number,
   projectId: number,
   key: string,
-): Promise<string | null> {
+): Promise<ProjectFactRecord | null> {
   const k = (key ?? '').trim().slice(0, 255);
   if (!k || !Number.isInteger(projectId) || projectId <= 0) return null;
   try {
     const token = await getCacheVersion(env, versionKey(tenantId, projectId));
     return await getOrSetCached(
       env,
-      `project_facts:key:${tenantId}:${projectId}:v:${token}:${k}`,
+      `project_facts:keyrec:${tenantId}:${projectId}:v:${token}:${k}`,
       async () => {
         const [row] = await db
-          .select({ content: projectFacts.content })
+          .select({
+            content: projectFacts.content,
+            originModel: projectFacts.originModel,
+            originPromptTokens: projectFacts.originPromptTokens,
+            originCompletionTokens: projectFacts.originCompletionTokens,
+          })
           .from(projectFacts)
           .where(and(
             eq(projectFacts.tenantId, tenantId),
@@ -249,7 +288,11 @@ export async function getProjectFactByKey(
             or(isNull(projectFacts.expiresAt), gt(projectFacts.expiresAt, new Date())),
           ))
           .limit(1);
-        return row?.content ?? null;
+        if (!row) return null;
+        const origin = row.originModel != null && row.originPromptTokens != null && row.originCompletionTokens != null
+          ? { model: row.originModel, promptTokens: row.originPromptTokens, completionTokens: row.originCompletionTokens }
+          : null;
+        return { content: row.content, origin };
       },
       { kvTtlSeconds: 60 },
     );

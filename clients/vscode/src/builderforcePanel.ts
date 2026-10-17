@@ -14,6 +14,8 @@ import { detectPendingChanges, watchPendingChanges } from "./gitChanges";
 import { setSelectedModel, setSelectedModelPool } from "./modelState";
 import { resolveModelRoute } from "./modelRouting";
 import { resolveLocalChatEndpoint } from "./localModels";
+import { hostPageEngines } from "./pageEngineBridge";
+import { localModelLabels } from "./localModelLabels";
 import { modelChoiceLabels } from "./modelChoiceLabels";
 import { getSelectedProject } from "./projectState";
 import { getProjectNames } from "./projectNames";
@@ -21,6 +23,7 @@ import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";
 import { canvasLabels, captureFromEditor, isLightTheme, navigateFromCanvas, openCapturedFile } from "./canvasHostActions";
 import { authLabels } from "./authLabels";
 import { subagentLabels } from "./subagentLabels";
+import { workStatusLabels } from "./workStatusLabels";
 import { workspaceCanvasSession, type WorkspaceCanvasSession } from "./workspaceSession";
 
 /** Inbound messages unique to the Brain panel (the shared cases live in the base). */
@@ -206,14 +209,8 @@ function buildLabels(): Record<string, string> {
     "app.conversation": t("Conversation"),
     "app.rename": t("Rename chat"),
     "app.renamePlaceholder": t("Chat name"),
-    "app.noProject": t("No project"),
-    // Account tier chip + the actionable half of an entitlement error. The chip
-    // says which plan funds this chat (and what allowance is left on a metered
-    // one); the banner buttons take the user to the page that unblocks the turn.
-    "app.planFreeHint": t("You are on the Free plan — chats run on the included BuilderForce models. Click to see plans and upgrade."),
-    "app.planPaidHint": t("Your workspace is on the {plan} plan. Click to manage your plan."),
-    "app.planTokensLeft": t("{count} tokens left"),
-    "app.planNoTokens": t("no tokens left"),
+    // The actionable half of an entitlement error: the banner buttons take the user
+    // to the page that unblocks the turn.
     "app.upgrade": t("Upgrade"),
     "app.upgradeToPlan": t("Upgrade to {plan}"),
     "app.addCard": t("Add a card"),
@@ -241,7 +238,6 @@ function buildLabels(): Record<string, string> {
     "app.memoryOffHint": t("Memory off — this chat is a scratch space (no recall, no learning)"),
     "app.memoryUnavailable": t("This chat has no project memory to recall from — link it to a project first"),
     "app.diagnostics": t("Run connection diagnostics"),
-    "app.attachImage": t("Attach image"),
     "app.remove": t("Remove"),
     // Composer toolbar (Claude-style + / menus, auto mode, dictation)
     "app.add": t("Add"),
@@ -348,7 +344,6 @@ function buildLabels(): Record<string, string> {
     "app.pickModel": t("Change model"),
     "app.dictate": t("Dictate"),
     "app.stopDictation": t("Stop dictation"),
-    "app.working": t("Working…"),
     "app.send": t("Send"),
     "app.stop": t("Stop"),
     // Queue-while-running: messages composed during an in-flight run are queued and
@@ -502,6 +497,8 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
   private chatTitle = "";
   /** Stops relaying the host's runs to this panel (set while the webview is attached). */
   private detachRuns?: () => void;
+  /** Detaches this webview's page engines (WebGPU models) from the host's routes. */
+  private detachPageEngines?: () => void;
 
   private constructor(
     ctx: vscode.ExtensionContext,
@@ -535,6 +532,10 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
         // webview reload is a fresh mirror), never twice at once.
         this.detachRuns?.();
         this.detachRuns = BuilderForcePanel.hooks.runHost?.attach({ post: (m) => this.post(m) });
+        // This webview runs the page engines (WebGPU `bfi`, WebLLM); offer them to the
+        // host's pinned and local-first routes for as long as it is up.
+        this.detachPageEngines?.();
+        this.detachPageEngines = hostPageEngines.attach({ post: (m) => this.post(m) });
         await this.sendInit();
         if (this.pendingIntent) {
           this.sendIntent(this.pendingIntent);
@@ -724,6 +725,13 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
         controller?.abort();
         break;
       }
+      // The webview answering the host's page-engine requests (see pageEngineBridge.ts).
+      case "pageEngine.probed":
+      case "pageEngine.chunk":
+      case "pageEngine.end":
+      case "pageEngine.error":
+        hostPageEngines.receive(msg);
+        break;
     }
   }
 
@@ -1045,7 +1053,10 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
       personalityBlock,
       // BOTH label sets: one panel renders the chat surface AND the board, so both
       // have to be present whichever surface it opens at.
-      labels: { ...authLabels(), ...buildLabels(), ...canvasLabels(), ...subagentLabels() },
+      labels: { ...authLabels(), ...buildLabels(), ...canvasLabels(), ...subagentLabels(), ...localModelLabels(), ...workStatusLabels() },
+      // The editor's display language: how the shared components format numbers,
+      // money and relative times (the strings themselves are already translated above).
+      locale: vscode.env.language,
       // The model rows' copy, shared verbatim with the host's `Change model` QuickPick.
       modelLabels: modelChoiceLabels(),
       // The board this panel is working in, and which of its surfaces the entry asked
@@ -1060,6 +1071,8 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
     // The run itself lives in the host and carries on; only this VIEW of it goes.
     this.detachRuns?.();
     this.detachRuns = undefined;
+    this.detachPageEngines?.();
+    this.detachPageEngines = undefined;
     if (BuilderForcePanel.reused === this) BuilderForcePanel.reused = undefined;
     if (this.ownChatId != null && BuilderForcePanel.byChat.get(this.ownChatId) === this) {
       BuilderForcePanel.byChat.delete(this.ownChatId);

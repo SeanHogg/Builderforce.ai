@@ -66,6 +66,8 @@ export interface UseBrainChats {
    *  Persisted on the chat for the same reason `capability` is — the choice belongs
    *  to the conversation, not to the browser it was flipped in. */
   setMode(id: number, mode: ChatMode): Promise<void>;
+  /** Flip the chat's Memory switch (`memoryEnabled`) — optimistic, reverted on failure. */
+  setMemoryEnabled(id: number, on: boolean): Promise<void>;
   /**
    * Auto-name a still-untitled chat (title === {@link DEFAULT_CHAT_TITLE}) from its
    * first user message, so "New chat" becomes the topic once the conversation begins.
@@ -208,6 +210,21 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     }
   }, [persistence]);
 
+  // The Memory switch is the conversation's, like its mode: optimistic so the toggle
+  // does not lag, reconciled from the echo, reverted when the save is refused.
+  const setMemoryEnabled = useCallback(async (id: number, on: boolean) => {
+    const prevValue = chatsRef.current.find((c) => c.id === id)?.memoryEnabled ?? true;
+    setChats((prev) => prev.map((c) => (c.id === id ? { ...c, memoryEnabled: on } : c)));
+    try {
+      const updated = await persistence.updateChat(id, { memoryEnabled: on });
+      setChats((prev) => prev.map((c) => (c.id === id ? { ...c, memoryEnabled: updated.memoryEnabled ?? on } : c)));
+    } catch (e) {
+      setChats((prev) => prev.map((c) => (c.id === id ? { ...c, memoryEnabled: prevValue } : c)));
+      setError(e instanceof Error ? e.message : 'Failed to switch memory');
+      throw e;
+    }
+  }, [persistence]);
+
   const rename = useCallback(async (id: number, title: string) => {
     const trimmed = title.trim();
     if (!trimmed) return;
@@ -300,6 +317,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     rename,
     setCapability,
     setMode,
+    setMemoryEnabled,
     autoTitle,
     summarize,
     remove,

@@ -222,6 +222,7 @@ export function canvasLabels(): Record<string, string> {
     "canvas.addPreview": vscode.l10n.t("Add a local service preview"),
     "canvas.noSession": vscode.l10n.t("No Creation Session is open."),
     "canvas.degraded": vscode.l10n.t("The board could not be drawn. The conversation is still here."),
+    "canvas.retry": vscode.l10n.t("Try again"),
     "canvas.connecting": vscode.l10n.t("Connecting…"),
   };
 }

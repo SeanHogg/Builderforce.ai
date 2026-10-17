@@ -19,7 +19,11 @@ export default defineConfig(libraryConfig({
   // TypeScript with no React, so a non-React host (the VS Code extension process,
   // which renders chat errors in its own native surfaces) can share the ONE
   // error classifier without bundling React and the whole hook layer with it.
-  entry: { index: 'src/index.ts', chatError: 'src/chatError.ts' },
+  //
+  // `bfi` is a THIRD entry for the same kind of reason: it is the loader of the vendored
+  // `@seanhogg/bfi-web` (PRD 34), which is not published. Kept off the root so an embed
+  // that never links the wasm package never meets its specifier.
+  entry: { index: 'src/index.ts', chatError: 'src/chatError.ts', bfi: 'src/pageEngines/bfiLoader.ts' },
   // `resolve`, not a bare `true`. The JS bundles already inline
   // `@builderforce/agent-stall` (it is a devDependency, so tsup does not treat it
   // as external) — but `dts: true` left the DECLARATIONS re-exporting the bare
@@ -42,7 +46,11 @@ export default defineConfig(libraryConfig({
       paths: Object.fromEntries(Object.entries(sourceAliases).map(([specifier, entry]) => [specifier, [entry]])),
     },
   },
-  external: REACT_EXTERNALS,
+  // `@seanhogg/bfi-web` is a `link:` devDependency, which tsup would otherwise INLINE —
+  // 50 KB of glue whose `new URL('bfi_web_bg.wasm', import.meta.url)` would then point
+  // beside this dist. External, like `@mlc-ai/web-llm`, so each host's bundler resolves
+  // it from its own link and emits the binary itself.
+  external: [...REACT_EXTERNALS, '@seanhogg/bfi-web'],
   extra: {
     esbuildOptions(options: { alias?: Record<string, string> }) {
       options.alias = { ...(options.alias ?? {}), ...sourceAliases };

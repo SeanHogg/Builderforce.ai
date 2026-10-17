@@ -15,26 +15,31 @@
  */
 
 import {
+  isLocalModelRef,
   localAuthHeaders,
   localChatCompletionsUrl,
   localFirstPlan,
   normalizeLocalBaseUrl,
+  parseLocalModelRef,
   rewriteToLocalUrl,
   runLocalFirst,
   type LocalEndpoint,
   type LocalFirstAttemptRecord,
   type LocalFirstWorkload,
+  type LocalRuntimeId,
   type LocalRuntimeProbe,
 } from '@builderforce/local-inference';
 import { estimateTokensFromChars, profileWorkload } from '@builderforce/workload';
 import {
   streamChatCompletion,
   type BrainTransport,
+  type ChatCompletionMessage,
   type StreamChatOptions,
   type StreamChatResult,
   type StreamHandlers,
 } from './streamChatCompletion';
 import { summarizeLocalFirstAttempt, type LocalFirstAttemptSummary } from './localFirstTraces';
+import { contextWindowOf } from './handoff/modelWindow';
 
 /** The `fetch` a host lends the local path (the global in every host by default). */
 export type LocalFetch = (input: string, init: RequestInit) => Promise<Response>;
@@ -80,14 +85,119 @@ export function localTransport(
 }
 
 /**
+ * Packs a call for the LOCAL model about to take it — a host builds one with brain-
+ * embedded's `createHandoffFit` (the `@seanhogg/builderforce-memory/handoff` packer).
+ * `contextTokens` is the target's window when known (its runtime's report, else the
+ * shipped catalog row); a fit given no window returns the messages untouched.
+ */
+export type LocalAttemptFit = (
+  messages: ChatCompletionMessage[],
+  target: { ref: string; contextTokens?: number; tools?: readonly unknown[]; maxTokens?: number },
+) => Promise<ChatCompletionMessage[]>;
+
+/** A local model resolved to where it runs. */
+interface LocalTarget {
+  ref: string;
+  provider: LocalRuntimeId;
+  /** The bare id the runtime knows. */
+  model: string;
+  endpoint: LocalEndpoint;
+}
+
+/** The reachable runtime serving `ref`, from a probe. */
+function probedTarget(ref: string, probes: readonly LocalRuntimeProbe[]): LocalTarget | null {
+  for (const p of probes) {
+    if (!p.reachable) continue;
+    const m = p.models.find((x) => x.ref === ref);
+    if (m) return { ref, provider: p.provider, model: m.model, endpoint: p.endpoint };
+  }
+  return null;
+}
+
+/** The messages a local attempt sends: fitted to the target's window when a fit is lent. */
+async function fittedFor(
+  target: LocalTarget,
+  opts: Omit<StreamChatOptions, 'transport'>,
+  fit: LocalAttemptFit | undefined,
+  probes: readonly LocalRuntimeProbe[],
+): Promise<ChatCompletionMessage[]> {
+  if (!fit) return opts.messages;
+  const contextTokens = contextWindowOf(target.ref, { probes });
+  return fit(opts.messages, {
+    ref: target.ref,
+    ...(contextTokens ? { contextTokens } : {}),
+    ...(opts.tools ? { tools: opts.tools } : {}),
+    ...(opts.maxTokens ? { maxTokens: opts.maxTokens } : {}),
+  });
+}
+
+/** Stream one call on a local target, reported as its full ref. */
+async function streamOnLocal(
+  target: LocalTarget,
+  opts: Omit<StreamChatOptions, 'transport'>,
+  handlers: StreamHandlers,
+  transport: BrainTransport,
+  messages: ChatCompletionMessage[],
+): Promise<StreamChatResult> {
+  const served = await streamChatCompletion({ ...opts, messages, model: target.model, transport }, handlers);
+  return { ...served, resolvedModel: target.ref, resolvedVendor: `local/${target.provider}` };
+}
+
+/** Where a pinned local stream may send a call that names a DIFFERENT model. */
+export interface LocalStreamRoute {
+  /** The pin's full `local/<runtime>/<model>` ref — reported as the serving model. */
+  ref?: string;
+  /** The runtimes as probed, so a failover to another local model finds its endpoint. */
+  probes?: readonly LocalRuntimeProbe[];
+  /** The gateway stream, so a failover to a cloud model reaches it (null signed out). */
+  cloud?: StreamFn | null;
+  /** Packs each call for the local model taking it. */
+  fit?: LocalAttemptFit;
+}
+
+/**
  * The streaming fn for a PINNED local model — the local twin of a gateway stream. The
  * loop pins the full `local/<runtime>/<model>` ref, but the runtime knows only its bare
  * id, so `model` is overridden with it. Gateway-only fields (`strict`, `routingMode`,
  * `metadata`) ride through; the runtimes ignore them rather than reject them.
+ *
+ * A call that names a DIFFERENT model (a run-policy failover, a coder re-ask) goes where
+ * that model runs — another probed local runtime, the pin's own runtime under another
+ * id, or the gateway — instead of silently landing on the pin. Only a model with
+ * nowhere to go (a cloud ref signed out, an unknown local ref) stays on the pin.
  */
-export function createLocalStream(endpoint: LocalEndpoint, model: string, fetchImpl?: LocalFetch): StreamFn {
+export function createLocalStream(
+  endpoint: LocalEndpoint,
+  model: string,
+  fetchImpl?: LocalFetch,
+  route: LocalStreamRoute = {},
+): StreamFn {
   const transport = localTransport(endpoint, fetchImpl);
-  return (opts, handlers) => streamChatCompletion({ ...opts, model, transport }, handlers);
+  const probes = route.probes ?? [];
+  const pin = parseLocalModelRef(route.ref);
+  const pinned: LocalTarget | null = route.ref && pin ? { ref: route.ref, provider: pin.provider, model, endpoint } : null;
+  return async (opts, handlers = {}) => {
+    const asked = opts.model;
+    if (asked && asked !== route.ref && asked !== model) {
+      if (isLocalModelRef(asked)) {
+        const parsed = parseLocalModelRef(asked);
+        const sameRuntime: LocalTarget | null = pin && parsed && parsed.provider === pin.provider
+          ? { ref: asked, provider: parsed.provider, model: parsed.model, endpoint }
+          : null;
+        const target = probedTarget(asked, probes) ?? sameRuntime;
+        if (target) {
+          const t = target.endpoint === endpoint ? transport : localTransport(target.endpoint, fetchImpl);
+          const messages = await fittedFor(target, opts, route.fit, probes);
+          return streamOnLocal(target, opts, committingHandlers(handlers, () => undefined, target.ref), t, messages);
+        }
+      } else if (route.cloud) {
+        return route.cloud(opts, handlers);
+      }
+    }
+    if (!pinned) return streamChatCompletion({ ...opts, model, transport }, handlers);
+    const messages = await fittedFor(pinned, opts, route.fit, probes);
+    return streamOnLocal(pinned, opts, committingHandlers(handlers, () => undefined, pinned.ref), transport, messages);
+  };
 }
 
 /**
@@ -131,6 +241,20 @@ export interface LocalFirstStreamInput {
   /** Each settled attempt, as it settles — a host's log hook. The same attempts also
    *  ride on the result as `localFirst` for the run's trace. */
   onAttempt?: (record: LocalFirstAttemptRecord) => void;
+  /**
+   * Packs the call for each LOCAL attempt's window; the cloud attempt keeps the original
+   * messages. With a fit, a local model is planned on the call's irreducible core — the
+   * system message(s) + the latest user turn + tools — rather than its whole transcript,
+   * since the fit is what makes the rest fit.
+   */
+  fit?: LocalAttemptFit;
+}
+
+/** What no fit can drop: the system message(s) and the latest user turn. */
+function coreMessages(messages: readonly ChatCompletionMessage[]): ChatCompletionMessage[] {
+  const system = messages.filter((m) => m.role === 'system');
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  return lastUser ? [...system, lastUser] : system;
 }
 
 /**
@@ -176,22 +300,38 @@ const answered = (r: StreamChatResult): boolean => r.text.trim().length > 0 || r
  */
 export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
   return async (opts, handlers = {}) => {
+    // A call that NAMES a model (a run-policy failover, a coder re-ask) is no longer
+    // "let the gateway route" (`localFirstApplies`): it goes where that model runs — its
+    // local runtime when probed, else the gateway — never to whichever local model the
+    // plan would have tried first.
+    if (!localFirstApplies(opts) && opts.model) {
+      if (!isLocalModelRef(opts.model)) {
+        if (!input.cloud) throw new Error('not_signed_in');
+        return input.cloud(opts, handlers);
+      }
+      const local = probedTarget(opts.model, input.probes);
+      if (local) {
+        const transport = localTransport(local.endpoint, input.fetch);
+        const messages = await fittedFor(local, opts, input.fit, input.probes);
+        return streamOnLocal(local, opts, committingHandlers(handlers, () => undefined, local.ref), transport, messages);
+      }
+    }
+    // From here the call names no model (a local ref no probe serves cannot be sent
+    // anywhere by name, so it is dropped): the plan routes it.
+    const routed: Omit<StreamChatOptions, 'transport'> = opts.model ? { ...opts, model: undefined } : opts;
     const plan = localFirstPlan({
       probes: input.probes,
-      workload: localFirstWorkload(opts),
-      cloud: input.cloud ? (opts.model ? { model: opts.model } : {}) : null,
+      workload: localFirstWorkload(input.fit ? { ...routed, messages: coreMessages(routed.messages) } : routed),
+      cloud: input.cloud ? {} : null,
     });
     if (plan.length === 0) throw new Error('not_signed_in');
     const { result, attempts } = await runLocalFirst(
       plan,
       async (attempt, commit) => {
-        if (attempt.kind === 'cloud') return input.cloud!(opts, committingHandlers(handlers, commit));
+        if (attempt.kind === 'cloud') return input.cloud!(routed, committingHandlers(handlers, commit));
         const transport = localTransport(attempt.endpoint, input.fetch, { failFast: true });
-        const served = await streamChatCompletion(
-          { ...opts, model: attempt.model, transport },
-          committingHandlers(handlers, commit, attempt.ref),
-        );
-        return { ...served, resolvedModel: attempt.ref, resolvedVendor: `local/${attempt.provider}` };
+        const messages = await fittedFor(attempt, routed, input.fit, input.probes);
+        return streamOnLocal(attempt, routed, committingHandlers(handlers, commit, attempt.ref), transport, messages);
       },
       { signal: opts.signal, accept: answered, ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}) },
     );

@@ -7,14 +7,15 @@
  *      function, supplying the one thing the package cannot know — whether this
  *      viewer's tenant role permits dispatching a run,
  *   2. map the next-intl `brain.tickets` catalog into the shared labels bundle, and
- *   3. own the web-only chrome: routing a clicked ticket, and the owner's lock toggle.
+ *   3. own the web-only chrome: routing a clicked ticket, and the owner's lock toggle,
+ *   4. hand the chat's spend (attached to the chat payload) to the strip's spend pill.
  *
  * The adapter used to be built here by hand and again in the VS Code webview.
  * See `chatTickets/restAdapter.ts` for what the two copies had already lost.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   ChatTicketsPanel as SharedChatTicketsPanel,
   createChatTicketsRestAdapter,
@@ -22,25 +23,31 @@ import {
   useChatActivitySignal,
   type ChatTicketsAdapter, type ChatTicketsLabels, type ChatSubagentVM, type TicketLinkVM,
 } from '@seanhogg/builderforce-brain-ui';
-import { artifactRoutePath } from '@seanhogg/builderforce-brain-embedded';
+import { artifactRoutePath, type SpendSavingsSummary } from '@seanhogg/builderforce-brain-embedded';
 import { brain, type BrainChat } from '@/lib/builderforceApi';
 import { apiRequest } from '@/lib/apiClient';
 import { onBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { usePermission } from '@/lib/rbac';
 import { asChatSubagents, runHistoryHasSubagents } from './cloudChatSubagents';
+import { useSpendLabels } from '@/components/chat-input/useSpendLabels';
 
 const NO_TRANSCRIPT: ReadonlyArray<{ metadata?: string | null }> = [];
 /** Live children appear and settle without a page reload — the web has no host registry. */
 const LIVE_SUBAGENT_POLL_MS = 4_000;
 
-export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, transcript = NO_TRANSCRIPT }: {
+export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, transcript = NO_TRANSCRIPT, spend }: {
   chatId: number;
   projectId: number | null;
   chatList: Array<Pick<BrainChat, 'id' | 'title' | 'ticketCount' | 'ticketProgressPct'>>;
   onChanged?: () => void;
   /** The chat's live messages — a new run-milestone line re-reads the Agents list. */
   transcript?: ReadonlyArray<{ metadata?: string | null }>;
+  /** The chat's spend from the host's chat record. Omitted (the canvas Brain dock holds
+   *  no chat object) ⇒ the one `getChat` read this panel already makes supplies it. */
+  spend?: SpendSavingsSummary | null;
 }) {
+  const spendLabels = useSpendLabels();
+  const locale = useLocale();
   const t = useTranslations('brain.tickets');
   const tc = useTranslations('common');
   const router = useRouter();
@@ -76,13 +83,15 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
   // LOCK state — owner-only toggle. Read once per chat (also picks up ownership).
   const [visibility, setVisibility] = useState<'shared' | 'locked'>('shared');
   const [isOwner, setIsOwner] = useState(false);
+  const [fetchedSpend, setFetchedSpend] = useState<SpendSavingsSummary | null>(null);
   useEffect(() => {
     let live = true;
     brain.getChat(chatId).then((c) => {
       if (!live) return;
-      const meta = c as unknown as { visibility?: 'shared' | 'locked'; isOwner?: boolean };
+      const meta = c as unknown as { visibility?: 'shared' | 'locked'; isOwner?: boolean; spend?: SpendSavingsSummary | null };
       setVisibility(meta.visibility ?? 'shared');
       setIsOwner(!!meta.isOwner);
+      setFetchedSpend(meta.spend ?? null);
     }).catch(() => {});
     return () => { live = false; };
   }, [chatId, refreshSignal]);
@@ -159,6 +168,9 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
         onSetVisibility={isOwner ? async (v) => { await brain.updateChat(chatId, { visibility: v }); setVisibility(v); } : undefined}
         onOpenTicket={openTicket}
         subagents={subagents}
+        spend={spend !== undefined ? spend : fetchedSpend}
+        spendLabels={spendLabels}
+        locale={locale}
       />
     </div>
   );

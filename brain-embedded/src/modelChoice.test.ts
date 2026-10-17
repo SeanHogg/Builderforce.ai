@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { activeModelKey, buildModelItems, filterModelItems, modelInUse, DEFAULT_MODEL_CHOICE_LABELS as L, type ChatModelOptions } from './modelChoice';
+import { activeModelKey, buildModelItems, filterModelItems, modelInUse, withReadyPageModels, DEFAULT_MODEL_CHOICE_LABELS as L, type ChatModelOptions } from './modelChoice';
+import { LOCAL_MODEL_CATALOG } from '@builderforce/local-inference';
+import type { LocalModelRow } from './pageEngines/modelStore';
 import { BUILDERFORCE_PRODUCT_NAME, type ModelIdentityContext } from './modelIdentity';
 
 /** A viewer entitled to pick a model (paid plan or a connected provider). */
@@ -131,5 +133,26 @@ describe('buildModelItems · routed row', () => {
   it('names the routed row after the product that funds it', () => {
     expect(buildModelItems(options, L, CHOOSER)[0]).toMatchObject({ key: 'auto', label: BUILDERFORCE_PRODUCT_NAME.pro });
     expect(buildModelItems(options, L, FREE)[0]).toMatchObject({ key: 'auto', label: BUILDERFORCE_PRODUCT_NAME.free });
+  });
+});
+
+describe('on-device page models', () => {
+  const [bonsai, , , qwen] = LOCAL_MODEL_CATALOG;
+  const rows: LocalModelRow[] = [
+    { ...bonsai!, state: 'ready' },
+    { ...qwen!, state: 'absent' },
+  ];
+
+  it('joins only DOWNLOADED page models to the on-device group, named after their engine', () => {
+    const items = buildModelItems(withReadyPageModels(options, rows), L, FREE);
+    const local = items.filter((item) => item.category === 'local');
+    expect(local.map((item) => item.selection)).toEqual([{ mode: 'model', model: bonsai!.ref }]);
+    expect(local[0]!.detail).toContain('Builderforce engine');
+    expect(withReadyPageModels(options, [])).toBe(options);
+  });
+
+  it('names a pinned on-device model even for a viewer who may not pin catalog models', () => {
+    const pinned = { mode: 'model' as const, model: bonsai!.ref };
+    expect(modelInUse(pinned, buildModelItems(options, L, FREE), L, undefined, FREE).name).toBe(bonsai!.label);
   });
 });

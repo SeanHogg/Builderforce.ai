@@ -202,6 +202,11 @@ export const brainChats = pgTable('brain_chats', {
    *  reason `capability` is: the vocabulary lives in brain-embedded/src/chatMode.ts
    *  and an unknown value resolves to the default on read. */
   mode: varchar('mode', { length: 16 }).notNull().default('chat'),
+  /** The per-chat Memory switch (1228): whether this conversation recalls from and
+   *  writes back to the project's memory (recall, memory-first answers, the Q&A cache,
+   *  learning). A property of the CONVERSATION, so the same chat means the same thing
+   *  in the editor, on the web and in Rovr. Default on. */
+  memoryEnabled: boolean('memory_enabled').notNull().default(true),
   /** Consolidation pointer (0266): when this chat was merged into another, the
    *  surviving chat's id. Set with isArchived=true so the source drops out of the
    *  list but any ticket still resolves to the one surviving conversation. */

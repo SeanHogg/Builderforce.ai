@@ -284,6 +284,14 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 ### Workload-aware routing and model hand-off `[agents]`
 
 - **Rovr is not in the Chrome Web Store.** `clients/chrome` builds and packages `dist/builderforce-rovr-*.zip` (load-unpacked works); its icons are the web app's own logos by decision (2026-10-16). *Blocker: a Chrome Web Store developer account + listing.*
+- **On-device models (PRD 34) have not yet answered a turn in a real browser.** What is proven:
+  - `bfi`'s Q1_0 and f16-KV kernels match the CPU reference on a real GPU (native wgpu/Vulkan, `BFI_REQUIRE_GPU=1`);
+  - `bfi-web` builds for wasm32;
+  - every host's page-engine wiring is unit-tested against fakes.
+
+  What has not happened: in Chrome or Edge with WebGPU, no one has downloaded a Bonsai GGUF or a WebLLM model from the picker and chatted on it in the VSIX webview, Rovr or builderforce.ai. That run would confirm the served context (`contextTokens` after load), the WebGPU out-of-memory retry, and tokens per second. *Blocker: a person-driven browser session with a WebGPU adapter. Nothing here can drive WebGPU headless.*
+- **Rovr cannot pin the BYO pool.** Its pin (`settings.pinnedModel`) is one model id, so choosing the "your keys" pool row in the `/` Model tab falls back to Auto (`clients/chrome/src/sidepanel/useRovrChatOptions.ts`). Fix = a typed pin (`{ kind: 'model' | 'pool' }`) read by `inference/route.ts`. Not blocked. Unblocks full Model-tab parity with the web and the editor.
+- **`answer_cache` is a dead table.** The live Q&A cache is `project_facts` (`qa:v2:` keys, `projectMemory.ts`); `answer_cache` (`schema/agents.ts`) has no writer. *Blocker: operator go-ahead to DROP a table.* Unblocks one cache table fewer to reason about.
 
 ### Brain chat `[agents]`
 
@@ -377,6 +385,21 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 - **🔴 $0 platform: Cloudflare Free + Neon Free (plan 2026-10-03).** Sizes 10-10: core 444 MB, transactional 184 MB, apps 8.2 MB. Run-telemetry copy hasn't run — `npm run db:copy-run-telemetry`, then `--purge-source` (*blocker: operator with production credentials*). `VACUUM FULL` reclaims ~50 MB. Keep `builderforce-apps` (live sites); delete only `builderforce-primary`. Target: thin router Worker; agents on the user's host → GitHub Actions → shell-less DO; in-browser previews (BuilderForce WebContainers); Playwright on Actions; CPU-heavy routes client-side; Containers for paid via `planFeatures.containerRuntime`. Sequence: enable observability and measure → cut telemetry + gate cron → re-default cloud surface → move QA → move CPU routes + per-sweep DO alarms → cache L2 off KV → hosted Checkout → downgrade Cloudflare → downgrade Neon. *Blockers: WebContainer licence, consoles, CPU measurements, acceptance of 2–4 concurrent agents.* In-browser runtime live check needs a deploy; Next/Nuxt/SvelteKit dev servers unsupported; Studio Database has no file storage (*decision: quota/abuse policy*).
 - **🟠 Confirm core autosuspends ≥45% of the month** (Neon console chart); enable autosuspend + 0.25 CU (console toggle).
+- **🔴 Neon load review 2026-10-17: core + transactional never suspend.** Measured: both computes up 31.5 h straight; core ~46 txn/min, transactional ~39; core 502 MB of 512. Load sources, in the order they matter (current-state map: https://claude.ai/artifact/K3mA6TPM1rknr2zJq1qT3q):
+  - `unreadCountsForUser` (`application/brain/chatReadState.ts:64`, called from `attentionSnapshot.ts:128`) seq-scans all ~84k `brain_chat_messages` on every miss. That is 76% of the rows core reads.
+  - VS Code builder-insights SSE rebuilds an uncached snapshot every 30 s (`llmRoutes.ts:3513`).
+  - Agent hosts send a duplicate heartbeat every 5 min (host + `AgentHostRelayDO.ts:783`).
+  - Canvas presence writes every 8 s per kept board (`useCanvasSessionSync.ts:187`).
+  - About 17 web polling loops keep running in hidden tabs, including 2 duplicate attention pollers and a 2 s workflow poller that never stops (`useLiveOrchestration.ts:89`).
+  - Each active cron tick runs all 35 frequent sweeps, unconditionally. `manager` has no per-project interval; `repo-delivery`, `monitors`, `mailbox-push` and `wf-triggers` write on every tick.
+  - Unthrottled `tenant_api_keys.last_used_at` updates.
+  - The telemetry tables are still duplicated in core.
+  - Defects found:
+    - `TENANT_RATE_LIMITER` is unbound, so rate limiting is a no-op in prod.
+    - Cron sweeps run in parallel, despite the "load-bearing order" comments. Phone rent can bill before the allowance grant lands.
+    - `lens-snapshots` uses LIMIT 100 with no ORDER BY.
+  
+  *Blocker: user decision. The operator asked for a current-state map only (2026-10-17); the future-state and recommendations pass comes next and owns the fixes.*
 - **Cutover rows on the old primary** (12 telemetry rows would be lost). *Blocker: operator runs `reconcile.sh` + `merge.sql`.* Then delete `builderforce-primary` (console) and drop core's stale site tables (not blocked).
 - **No retention on canvas history** (`creation_session_events` 50 MB, `_snapshots` 41 MB, `brain_chat_messages` 37 MB). *Blocker: decision on history kept.*
 - **`inTransaction` (WebSocket Pool) unrun against docker or Neon;** 402 not mapped on the pool path. *Blocker: the docker stack + a live booking.*

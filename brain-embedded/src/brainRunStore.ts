@@ -94,7 +94,9 @@ import { turnInterruption } from './finishReason.js';
 import { runAgentLoop, openAiChatCodec, MID_TURN_META_KEY, stepRow, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, askUserBlock, liftProseAskUser, splitVendorReasoning, canonicalReasoningText, replayTextOf, malformedCallOutcome, malformedCallLabel, type LoopHooks, type LoopPorts, type LoopTurn } from '@builderforce/agent-loop';
 import { formatEvermindMemoryBlock, countReconciledMemories, type EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import type { EvermindRunHooks, MemoryFirstAnswer } from './evermindMemory';
-import { windowed, buildWorkingTranscript, stillInWorkingContext, summarizeMiddle, type CompactMemo } from './workingTranscript';
+import { windowed, buildWorkingTranscript, stillInWorkingContext, summarizeMiddle, transcriptTokens, HISTORY_TOKEN_BUDGET, type CompactMemo } from './workingTranscript';
+import { createRunHandoff } from './handoff/runHandoff';
+import { callMemoryEffect, emptyRunUsage, type RunUsageTally } from './memorySavings';
 
 /**
  * Build the provenance metadata for a persisted assistant turn from the stream
@@ -531,6 +533,11 @@ interface RunCell {
    * Null until the first overflow / reset.
    */
   compactMemo: CompactMemo | null;
+  /** This run's summed usage — what its answer is cached with (`memorySavings.ts`). */
+  runUsage: RunUsageTally;
+  /** The model that last served a call in this chat — what a memory answer is priced
+   *  against when this run has not called a model yet. Survives across runs. */
+  lastServedModel: string | null;
   /**
    * The completion in flight ({@link asLiveTurn}), null between completions. The only
    * record of which model a Stop cut off: an aborted stream never returns its result.
@@ -608,6 +615,8 @@ function makeCell(): RunCell {
     runTraceFrom: 0,
     persistStep: null,
     compactMemo: null,
+    runUsage: emptyRunUsage(),
+    lastServedModel: null,
     liveTurn: null,
     stoppedTurn: null,
     snapshot: EMPTY_SNAPSHOT,
@@ -1234,6 +1243,7 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
   if (req.userTurn !== undefined) c.transcript.push({ role: 'user', content: req.userTurn });
   emit(c);
 
+  c.runUsage = emptyRunUsage();
   try {
     await runLoop(chatId, c, req, runKey);
   } catch (e) {
@@ -1629,6 +1639,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
   // a non-project chat / unavailable recall / thrown fetch just skips it.
   let systemPrompt = resolvedSystemPrompt;
   let recalled: EvermindRecallResult | null = null;
+  // The prompt tokens the recalled-memory block adds to EVERY call of this run — the
+  // cost side of recall, sent with each call beside what compaction saved it.
+  let recallBlockTokens = 0;
   if (evermind?.recall) {
     const query = latestUserText(convo);
     if (query) {
@@ -1641,6 +1654,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         const block = formatEvermindMemoryBlock(recalled.items);
         if (block) {
           systemPrompt = `${systemPrompt}\n\n${block}`;
+          recallBlockTokens = transcriptTokens([{ role: 'system', content: block }]);
           pushTrace(c, {
             ts: nowIso(),
             category: 'recall',
@@ -1652,6 +1666,16 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       }
     }
   }
+
+  // A request served by a different model than the last turn's — or by one whose known
+  // window is under the working budget — is re-packed for that window (`handoff/`).
+  const handoff = createRunHandoff({
+    workingBudgetTokens: HISTORY_TOKEN_BUDGET,
+    summarizer: () => ({ stream, model: policy.model, signal: c.abort?.signal }),
+    ...(evermind?.recall ? { recall: (q: string) => evermind.recall(q), priorRecall: { query: latestUserText(convo), result: recalled } } : {}),
+    trace: (ev) => pushTrace(c, ev),
+    now: nowIso,
+  });
 
   // May memory stand in for this turn at all — and may this turn's answer be stored for
   // next time? Decided ONCE, here, before the transcript grows, because only this loop
@@ -1678,7 +1702,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
     if (query) {
       let memAnswer: MemoryFirstAnswer | null = null;
       try {
-        memAnswer = await evermind.answer(query, { toolsAvailable: !!allTools && allTools.length > 0 });
+        memAnswer = await evermind.answer(query, {
+          toolsAvailable: !!allTools && allTools.length > 0,
+          // What this turn would have run on — the saving a hit records is priced at it.
+          model: model || c.lastServedModel || undefined,
+        });
       } catch { memAnswer = null; }
       const finalText = canonicalTurnText(memAnswer?.text ?? '');
       if (finalText) {
@@ -1950,7 +1978,16 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
     // Best-effort, fire-and-forget — never delays or fails the reply.
     if (evermind?.cacheAnswer && memoryReplay) {
       const q = latestUserText(convo);
-      if (q) { void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => { /* best-effort */ }); }
+      // With what producing it cost, so every later replay is priced from a recorded figure.
+      const spent = c.runUsage;
+      const origin = spent.model && spent.promptTokens + spent.completionTokens > 0
+        ? { model: spent.model, promptTokens: spent.promptTokens, completionTokens: spent.completionTokens }
+        : undefined;
+      if (q) {
+        // No origin ⇒ the two-argument call every pre-cost hook implements.
+        const cached = origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
+        void Promise.resolve(cached).catch(() => { /* best-effort */ });
+      }
     }
   };
 
@@ -2575,6 +2612,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
           emit(c);
         },
       );
+      // What memory did to THIS call's prompt — compaction kept the folded part of the
+      // transcript out of it, recall added its block — carried in the metadata the call
+      // already sends, so the gateway stamps it on this call's own usage row.
+      const trimmed = c.compactMemo
+        ? transcriptTokens([{ role: 'system', content: systemPrompt }, ...c.transcript]) - transcriptTokens(working)
+        : 0;
+      const memoryEffect = callMemoryEffect(trimmed, recallBlockTokens);
+      const callMetadata: CompletionMetadata = memoryEffect ? { ...metadata, memory: memoryEffect } : metadata;
       // User hit Stop while compacting — the kernel reports it as `cancelled` (the
       // run's signal is the one it watches) and the run unwinds quietly.
       if (c.abort?.signal.aborted) throw new Error('run stopped');
@@ -2674,14 +2719,15 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       const turnToolChoice = forceToolChoice;
       forceToolChoice = undefined;
       // `extra` rides THIS request only (the hand-off brief); it never enters the transcript.
-      const request = (extra: ChatCompletionMessage[] = []): Promise<StreamChatResult> => {
+      const request = async (extra: ChatCompletionMessage[] = []): Promise<StreamChatResult> => {
         const ask = nextTurn(policy, { hasTools: !!tools });
+        const messages = await handoff.prepare({ messages: extra.length > 0 ? [...working, ...extra] : working, model: ask.model, tools, maxTokens: turnMaxTokens(maxTokens, !!tools), step: iter });
         return asLiveTurn(c, () => stream(
           {
-            messages: extra.length > 0 ? [...working, ...extra] : working, tools, tool_choice: tools ? (turnToolChoice ?? 'auto') : undefined, model: ask.model, modelStrict: ask.strict,
+            messages, tools, tool_choice: tools ? (turnToolChoice ?? 'auto') : undefined, model: ask.model, modelStrict: ask.strict,
             // Raised to the tool-turn floor when tools are on offer: a file write is
             // output, and the Effort ceiling cut every one of them off mid-JSON.
-            routingMode, maxTokens: turnMaxTokens(maxTokens, !!tools), reasoning, metadata, role: ask.role,
+            routingMode, maxTokens: turnMaxTokens(maxTokens, !!tools), reasoning, metadata: callMetadata, role: ask.role,
             ...(ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {}),
             signal: c.abort?.signal,
           },
@@ -2758,6 +2804,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       }
       // The turn answered: the policy's per-turn retry allowance starts over.
       reportToPolicy({ type: 'turn_succeeded', ...(result.resolvedModel ? { model: result.resolvedModel } : {}) });
+      handoff.served(result.resolvedModel ?? policy.model);
       // The stall-recovery budget covers a STREAK of narration-only turns, not the whole
       // run. As a run-wide count, a 134-turn run's fourth narrated step anywhere was
       // silently accepted as the final answer — the run just stopped mid-task. A turn
@@ -2777,6 +2824,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
       // of leaving it buried in the model field — the diagnostics block counts it.
       const resolved = result.resolvedModel ?? policy.model ?? 'default';
       const requested = policy.model ?? 'default';
+      // The run's production cost so far — what its answer is cached with, and the model
+      // a later memory answer in this chat is priced against.
+      c.runUsage.promptTokens += result.usage?.prompt ?? 0;
+      c.runUsage.completionTokens += result.usage?.completion ?? 0;
+      if (result.resolvedModel) {
+        c.runUsage.model = result.resolvedModel;
+        c.lastServedModel = result.resolvedModel;
+      }
       // Record what ACTUALLY served this turn so `builtin_session_current_model` can
       // report the exact model (an MCP call is a separate request and can't see it).
       // Keyed by CHAT: runs are concurrent on a host that owns them, so one slot would
