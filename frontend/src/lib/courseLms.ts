@@ -1,6 +1,7 @@
 import { createTranslator } from 'next-intl';
 import { defaultMessages } from '@/i18n/catalog';
 import { practiceProgress, type CanvasPracticeAttempt, type CanvasPracticeQuestion } from './canvasPractice';
+import { zipFiles } from './zipFiles';
 
 export const COURSE_SCHEMA = 'https://builderforce.ai/schemas/course/v1' as const;
 export const COURSE_EXPORT_STANDARDS = ['SCORM 2004 4th Edition', 'xAPI 1.0.3'] as const;
@@ -233,33 +234,7 @@ export function courseLaunchHtml(course: CanvasCourse, title: string): string {
   return `<!doctype html><html lang="${html(course.language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${html(title)}</title><style>body{font:16px/1.6 system-ui;max-width:850px;margin:auto;padding:2rem;color:#182039}nav a{margin-right:1rem}section{border-top:1px solid #ccd3e2;padding:2rem 0}article{background:#f5f7fb;padding:1rem;margin:1rem 0;border-radius:.5rem}</style></head><body><header><h1>${html(title)}</h1><p>${html(course.description)}</p><nav>${course.modules.map((module) => `<a href="#${html(module.id)}">${html(module.title)}</a>`).join(' ')}</nav></header>${modules}<script>var api=null;function findApi(w){for(var i=0;i<10&&w;i++,w=w.parent){if(w.API_1484_11)return w.API_1484_11}return null}api=findApi(window);if(api){api.Initialize('');api.SetValue('cmi.completion_status','incomplete');api.SetValue('cmi.score.scaled','0');api.Commit('')}addEventListener('beforeunload',function(){if(api){api.Commit('');api.Terminate('')}});</script></body></html>`;
 }
 
-function crc32(bytes: Uint8Array): number {
-  let crc = 0xffffffff;
-  for (const byte of bytes) { crc ^= byte; for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0); }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-const u16 = (view: DataView, offset: number, value: number) => view.setUint16(offset, value, true);
-const u32 = (view: DataView, offset: number, value: number) => view.setUint32(offset, value, true);
-
-/** Dependency-free ZIP writer using the standards-compliant STORE method. LMS
- * packages are small text assets, so compression would add complexity without
- * changing interoperability. */
-export function zipFiles(files: Readonly<Record<string, string>>): Uint8Array<ArrayBuffer> {
-  const encoder = new TextEncoder();
-  const entries = Object.entries(files).map(([name, content]) => ({ name: encoder.encode(name), body: encoder.encode(content) }));
-  const localSize = entries.reduce((sum, item) => sum + 30 + item.name.length + item.body.length, 0);
-  const centralSize = entries.reduce((sum, item) => sum + 46 + item.name.length, 0);
-  const output = new Uint8Array(new ArrayBuffer(localSize + centralSize + 22)); const view = new DataView(output.buffer); let offset = 0; let localOffset = 0;
-  for (const item of entries) {
-    const crc = crc32(item.body); u32(view, offset, 0x04034b50); u16(view, offset + 4, 20); u16(view, offset + 6, 0x0800); u16(view, offset + 8, 0); u32(view, offset + 14, crc); u32(view, offset + 18, item.body.length); u32(view, offset + 22, item.body.length); u16(view, offset + 26, item.name.length); output.set(item.name, offset + 30); output.set(item.body, offset + 30 + item.name.length); offset += 30 + item.name.length + item.body.length;
-  }
-  localOffset = 0;
-  for (const item of entries) {
-    const crc = crc32(item.body); u32(view, offset, 0x02014b50); u16(view, offset + 4, 20); u16(view, offset + 6, 20); u16(view, offset + 8, 0x0800); u16(view, offset + 10, 0); u32(view, offset + 16, crc); u32(view, offset + 20, item.body.length); u32(view, offset + 24, item.body.length); u16(view, offset + 28, item.name.length); u32(view, offset + 42, localOffset); output.set(item.name, offset + 46); offset += 46 + item.name.length; localOffset += 30 + item.name.length + item.body.length;
-  }
-  u32(view, offset, 0x06054b50); u16(view, offset + 8, entries.length); u16(view, offset + 10, entries.length); u32(view, offset + 12, centralSize); u32(view, offset + 16, localSize); return output;
-}
-
+/** STORED members (level 0): an LMS package is a few small text files, and every LMS reads STORE. */
 export function buildScormPackage(course: CanvasCourse, title: string): Uint8Array<ArrayBuffer> {
   return zipFiles({
     'imsmanifest.xml': scormManifest(course, title),
@@ -268,5 +243,5 @@ export function buildScormPackage(course: CanvasCourse, title: string): Uint8Arr
     // `schema` key silently overwrote the literal (TS2783).
     'course.json': JSON.stringify({ title, ...course }, null, 2),
     'xapi-profile.json': JSON.stringify({ version: '1.0.3', verbs: ['http://adlnet.gov/expapi/verbs/experienced', 'http://adlnet.gov/expapi/verbs/completed', 'http://adlnet.gov/expapi/verbs/passed'], activityType: 'http://adlnet.gov/expapi/activities/course' }, null, 2),
-  });
+  }, { level: 0 });
 }

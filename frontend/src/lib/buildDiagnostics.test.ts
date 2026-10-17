@@ -3,16 +3,13 @@ import { notifyWorkspaceFilesChanged } from './workspaceFileEvents';
 import {
   MAX_DETAIL_CHARS,
   MAX_FAILURES_PER_BUILD,
-  PREVIEW_ERROR_MESSAGE,
   clearBuildFailures,
   formatBuildFailures,
   markBuildSourceChanged,
-  previewErrorFrom,
   readBuildFailures,
   recordBuildFailure,
   subscribeBuildFailures,
   teeOutput,
-  withPreviewErrorReporter,
 } from './buildDiagnostics';
 
 const PROJECT = 900;
@@ -142,42 +139,5 @@ describe('teeOutput', () => {
     const log = teeOutput(() => {});
     for (let i = 0; i < 50; i += 1) log.write('x'.repeat(1_000));
     expect(log.text().length).toBeLessThanOrEqual(MAX_DETAIL_CHARS * 2);
-  });
-});
-
-describe('withPreviewErrorReporter', () => {
-  it('injects the reporter at the START of head, before the app evaluates', () => {
-    const files = { 'index.html': '<html><head><title>x</title></head><body></body></html>', 'src/main.jsx': 'x' };
-    const out = withPreviewErrorReporter(files);
-    const html = out['index.html'];
-    expect(html.indexOf('builderforce:preview-error')).toBeLessThan(html.indexOf('<title>'));
-    // Everything else is passed through untouched.
-    expect(out['src/main.jsx']).toBe('x');
-  });
-
-  it('leaves files alone when there is no head to inject into', () => {
-    const files = { 'index.html': 'not really html' };
-    expect(withPreviewErrorReporter(files)).toBe(files);
-    expect(withPreviewErrorReporter({})).toEqual({});
-  });
-});
-
-describe('previewErrorFrom', () => {
-  it('parses a reporter message', () => {
-    const parsed = previewErrorFrom({
-      type: PREVIEW_ERROR_MESSAGE,
-      payload: { message: 'x is not a function', at: 'src/App.jsx:1:1', detail: 'stack' },
-    });
-    expect(parsed).toEqual({ source: 'runtime', message: 'x is not a function', at: 'src/App.jsx:1:1', detail: 'stack' });
-  });
-
-  it('ignores anything that is not ours', () => {
-    expect(previewErrorFrom(null)).toBeNull();
-    expect(previewErrorFrom('a string')).toBeNull();
-    expect(previewErrorFrom({ type: 'webpack/hmr' })).toBeNull();
-    expect(previewErrorFrom({ type: PREVIEW_ERROR_MESSAGE, payload: { message: '  ' } })).toBeNull();
-    // A hostile sender cannot smuggle a non-string through.
-    expect(previewErrorFrom({ type: PREVIEW_ERROR_MESSAGE, payload: { message: 'ok', at: { toString: () => 'x' } } }))
-      .toEqual({ source: 'runtime', message: 'ok', at: undefined, detail: undefined });
   });
 });

@@ -15,7 +15,9 @@
  * listened to the preview document's `error` / `unhandledrejection` events.
  *
  * This module is the collection point for both, so there is one shape, one
- * bound, and one reader.
+ * bound, and one reader. Runtime errors arrive through the runtime's own channel
+ * (`runtime.onError`, routed by `lib/browserRuntime/previewSignals.ts`), which
+ * covers every page the preview serves.
  *
  * ── WHY A MODULE-LEVEL STORE AND NOT A CACHE ────────────────────────────────
  * This is deliberately NOT `getOrSetCached`: nothing here is a copy of server
@@ -36,7 +38,6 @@
 
 import { isWorkspaceId, type WorkspaceId } from '@/lib/workspace/workspaceId';
 import { subscribeWorkspaceFiles } from '@/lib/workspaceFileEvents';
-import { injectIntoHead } from '@/lib/previewInjection';
 
 /** Where a failure came from. The two have genuinely different fixes. */
 export type BuildFailureSource = 'build' | 'runtime';
@@ -180,85 +181,6 @@ subscribeWorkspaceFiles((workspaceId) => markBuildSourceChanged(workspaceId));
 export function subscribeBuildFailures(listener: Listener): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
-}
-
-/** postMessage type the preview shim uses. Namespaced so nothing else claims it. */
-export const PREVIEW_ERROR_MESSAGE = 'builderforce:preview-error';
-
-/**
- * The error reporter injected into the PREVIEW document.
- *
- * ── WHY THIS EXISTS ─────────────────────────────────────────────────────────
- * The build half of this module only sees failures that stop a process. An app
- * that COMPILES and then throws on first render produced a blank preview frame
- * and no signal anywhere at all — the single most common "it's broken and I
- * don't know why" state, and the one the agent had no way to see.
- *
- * ── WHY IT IS INJECTED AND NOT IN THE TEMPLATE ──────────────────────────────
- * It is added to the copy of `index.html` that is MOUNTED for the dev server,
- * never to the file on disk and never to the publish path. Three consequences,
- * all deliberate: the user's own source stays exactly what they wrote, a project
- * that predates this gets the reporter with no migration, and a published site
- * never ships a development shim that posts to a parent frame that is not there.
- */
-export const PREVIEW_ERROR_REPORTER = `<script>
-(function () {
-  var TYPE = ${JSON.stringify(PREVIEW_ERROR_MESSAGE)};
-  function post(payload) {
-    try { parent.postMessage({ type: TYPE, payload: payload }, '*'); } catch (e) {}
-  }
-  function where(source, line, column) {
-    if (!source) return undefined;
-    return source + (line ? ':' + line : '') + (line && column ? ':' + column : '');
-  }
-  window.addEventListener('error', function (event) {
-    if (event.target && event.target !== window && event.target.tagName) {
-      // A failed <script>/<img>/<link> fires an error event with no message.
-      post({ message: 'Failed to load ' + String(event.target.tagName).toLowerCase() + ': ' + (event.target.src || event.target.href || 'unknown') });
-      return;
-    }
-    post({
-      message: event.message || 'Uncaught error',
-      at: where(event.filename, event.lineno, event.colno),
-      detail: event.error && event.error.stack ? String(event.error.stack) : undefined
-    });
-  }, true);
-  window.addEventListener('unhandledrejection', function (event) {
-    var reason = event.reason;
-    post({
-      message: 'Unhandled promise rejection: ' + (reason && reason.message ? reason.message : String(reason)),
-      detail: reason && reason.stack ? String(reason.stack) : undefined
-    });
-  });
-})();
-</script>`;
-
-/**
- * Return a copy of the mounted files with the preview reporter injected into
- * `index.html`. Everything else is passed through untouched.
- *
- * Injected at the very start of `<head>` so it is listening before any of the
- * app's own modules evaluate — an error thrown by the first import is exactly the
- * one worth catching, and a reporter added at the end of `<body>` would miss it.
- */
-export function withPreviewErrorReporter(files: Record<string, string>): Record<string, string> {
-  return injectIntoHead(files, PREVIEW_ERROR_REPORTER);
-}
-
-/** Parse a `message` event from the preview frame, or null when it is not ours. */
-export function previewErrorFrom(data: unknown): BuildFailureInput | null {
-  if (!data || typeof data !== 'object') return null;
-  const envelope = data as { type?: unknown; payload?: unknown };
-  if (envelope.type !== PREVIEW_ERROR_MESSAGE) return null;
-  const payload = envelope.payload as { message?: unknown; at?: unknown; detail?: unknown } | undefined;
-  const message = typeof payload?.message === 'string' ? payload.message.trim() : '';
-  if (!message) return null;
-  return {
-    source: 'runtime',
-    message,
-    at: typeof payload?.at === 'string' ? payload.at : undefined,
-    detail: typeof payload?.detail === 'string' ? payload.detail : undefined,
-  };
 }
 
 /**

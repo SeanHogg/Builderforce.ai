@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { importCanvasFile, type ImportTranslator } from './ImportCanvasFile';
 import { PAGE_BREAK_MARKER } from '@/lib/officeFormats';
+import { zipFiles } from '@/lib/zipFiles';
 
 /** Every visible string comes from the catalog, so the tests assert on the key
  * rather than on English that a translator is free to change. */
@@ -17,49 +18,9 @@ const t: ImportTranslator = (key, values) => `${key}(${Object.entries(values ?? 
 const file = (name: string, body: string | Uint8Array, type = '') =>
   new File([typeof body === 'string' ? body : new Uint8Array(body)], name, { type });
 
-const encoder = new TextEncoder();
-
 /** A STORED-member ZIP, matching the helper in officeFormats.test.ts. */
 function makeZip(entries: Record<string, string>): Uint8Array {
-  const files = Object.entries(entries).map(([name, content]) => ({ name: encoder.encode(name), data: encoder.encode(content) }));
-  const locals: Uint8Array[] = [];
-  const centrals: Uint8Array[] = [];
-  let offset = 0;
-  for (const entry of files) {
-    const local = new Uint8Array(30 + entry.name.length + entry.data.length);
-    const header = new DataView(local.buffer);
-    header.setUint32(0, 0x04034b50, true);
-    header.setUint16(4, 20, true);
-    header.setUint32(18, entry.data.length, true);
-    header.setUint32(22, entry.data.length, true);
-    header.setUint16(26, entry.name.length, true);
-    local.set(entry.name, 30);
-    local.set(entry.data, 30 + entry.name.length);
-    locals.push(local);
-
-    const central = new Uint8Array(46 + entry.name.length);
-    const record = new DataView(central.buffer);
-    record.setUint32(0, 0x02014b50, true);
-    record.setUint32(20, entry.data.length, true);
-    record.setUint32(24, entry.data.length, true);
-    record.setUint16(28, entry.name.length, true);
-    record.setUint32(42, offset, true);
-    central.set(entry.name, 46);
-    centrals.push(central);
-    offset += local.length;
-  }
-  const end = new Uint8Array(22);
-  const trailer = new DataView(end.buffer);
-  trailer.setUint32(0, 0x06054b50, true);
-  trailer.setUint16(8, files.length, true);
-  trailer.setUint16(10, files.length, true);
-  trailer.setUint32(12, centrals.reduce((total, part) => total + part.length, 0), true);
-  trailer.setUint32(16, offset, true);
-  const parts = [...locals, ...centrals, end];
-  const archive = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
-  let cursor = 0;
-  for (const part of parts) { archive.set(part, cursor); cursor += part.length; }
-  return archive;
+  return zipFiles(entries, { level: 0 });
 }
 
 describe('importCanvasFile', () => {

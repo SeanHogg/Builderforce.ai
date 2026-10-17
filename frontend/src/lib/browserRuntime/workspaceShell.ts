@@ -20,11 +20,15 @@
  *    never dependencies or build output — so a codemod, a formatter or
  *    `npm install <pkg>` updating `package.json` reaches the workspace like an edit.
  *
+ * An install command shares the workspace run's install snapshots (`installSnapshots.ts`):
+ * after a reload it starts from the packages this browser kept rather than from nothing,
+ * and a successful install is kept for the next visit.
+ *
  * ── DECLINES ARE ANSWERS ─────────────────────────────────────────────────────────
  * A runtime that cannot boot (no service worker, the relay unreachable) is reported as
  * `{ ok: false, error }` the model can read and relay; nothing here throws.
  */
-import type { PreviewRuntime } from '@seanhogg/builderforce-webcontainers';
+import type { PreviewRuntime, SnapshotStore } from '@seanhogg/builderforce-webcontainers';
 import type { ShellCapability, ShellResult } from '@builderforce/agent-tools';
 import { validateFileContentForPath } from '@builderforce/ide-file-contract';
 import { isGeneratedPath } from '@/lib/workspace/generatedPaths';
@@ -33,6 +37,7 @@ import { readStoreFiles } from '@/lib/workspace/readStoreFiles';
 import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import { bootSharedPreviewRuntime, replaceProjectFiles } from './previewRuntime';
+import { hasInstalledPackages, installSnapshotKey, restoreInstalledPackages, saveInstalledPackages } from './installSnapshots';
 
 /** Default ceiling for one command: an install of a mid-sized app fits; a dev server never ends. */
 export const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60_000;
@@ -65,6 +70,25 @@ export interface WorkspaceShellDeps {
   timeoutMs?: number;
   /** Told which paths a run saved back, so an open editor re-reads them. */
   onFilesChanged?: (workspaceId: WorkspaceId, paths: string[]) => void;
+  /** Where install snapshots live. Default: the page's IndexedDB store; null turns them off. */
+  snapshots?: SnapshotStore | null;
+}
+
+/** `npm install`, `pnpm add zod`, `yarn ci`… — a line that STARTS with a package install. */
+const INSTALL_COMMAND = /^\s*(?:npm|pnpm|yarn)\s+(?:install|i|ci|add)(?:\s|$)/;
+
+export function isInstallCommand(command: string): boolean {
+  return INSTALL_COMMAND.test(command);
+}
+
+/** The runtime's manifest pair as the store now holds it: a lockfile `saveBack` refused is not there. */
+function manifestFiles(runtime: PreviewRuntime, unsaved: ReadonlyArray<{ path: string }> = []): Record<string, string | undefined> {
+  const text = (path: string) => {
+    if (unsaved.some((file) => file.path === path)) return undefined;
+    const content = runtime.fs.readFile(`/${path}`);
+    return typeof content === 'string' ? content : undefined;
+  };
+  return { 'package.json': text('package.json'), 'package-lock.json': text('package-lock.json') };
 }
 
 /**
@@ -232,6 +256,12 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
       return { ok: false, error: `The workspace files could not be loaded into the runtime: ${toolErrorMessage(error, 'the read failed')}` };
     }
 
+    const install = isInstallCommand(command);
+    if (install && !hasInstalledPackages(runtime)) {
+      const key = installSnapshotKey(store.id, mounted);
+      if (key) await restoreInstalledPackages(runtime, key, deps.snapshots);
+    }
+
     let ran: Awaited<ReturnType<typeof runInRuntime>>;
     try {
       ran = await runInRuntime(runtime, command, timeoutMs);
@@ -246,6 +276,12 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
     if (touched.length) deps.onFilesChanged?.(store.id, touched);
 
     const ok = !ran.timedOut && ran.exitCode === 0;
+    if (install && ok) {
+      // Keyed by the manifest the command LEFT (an `add` changed it), which is what the
+      // store now holds and the next run will look up. Never awaited.
+      const key = installSnapshotKey(store.id, manifestFiles(runtime, saved.unsavedFiles));
+      if (key) void saveInstalledPackages(runtime, key, deps.snapshots);
+    }
     const error = ran.timedOut
       ? `Timed out after ${Math.round(timeoutMs / 1000)}s and was stopped. A long-running process (a dev server, a watcher) never finishes here — the live preview already runs the app.`
       : ok ? undefined : `Exited with code ${ran.exitCode}.`;

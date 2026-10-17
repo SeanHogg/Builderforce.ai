@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PAGE_BREAK_MARKER, decodeXmlText, docxXmlToMarkdown, openZip, readDocx, readPdf, readPptx, readXlsx, rtfToText,
 } from './officeFormats';
+import { zipFiles } from './zipFiles';
 
 const encoder = new TextEncoder();
 
@@ -11,48 +12,7 @@ const encoder = new TextEncoder();
  * keeps the tests on the parsing, not on the platform's codec.
  */
 function makeZip(entries: Record<string, string>): Uint8Array {
-  const files = Object.entries(entries).map(([name, content]) => ({ name: encoder.encode(name), data: encoder.encode(content) }));
-  const locals: Uint8Array[] = [];
-  const centrals: Uint8Array[] = [];
-  let offset = 0;
-  for (const file of files) {
-    const local = new Uint8Array(30 + file.name.length + file.data.length);
-    const header = new DataView(local.buffer);
-    header.setUint32(0, 0x04034b50, true);
-    header.setUint16(4, 20, true);
-    header.setUint16(8, 0, true);
-    header.setUint32(18, file.data.length, true);
-    header.setUint32(22, file.data.length, true);
-    header.setUint16(26, file.name.length, true);
-    local.set(file.name, 30);
-    local.set(file.data, 30 + file.name.length);
-    locals.push(local);
-
-    const central = new Uint8Array(46 + file.name.length);
-    const record = new DataView(central.buffer);
-    record.setUint32(0, 0x02014b50, true);
-    record.setUint16(10, 0, true);
-    record.setUint32(20, file.data.length, true);
-    record.setUint32(24, file.data.length, true);
-    record.setUint16(28, file.name.length, true);
-    record.setUint32(42, offset, true);
-    central.set(file.name, 46);
-    centrals.push(central);
-    offset += local.length;
-  }
-  const centralSize = centrals.reduce((total, part) => total + part.length, 0);
-  const end = new Uint8Array(22);
-  const trailer = new DataView(end.buffer);
-  trailer.setUint32(0, 0x06054b50, true);
-  trailer.setUint16(8, files.length, true);
-  trailer.setUint16(10, files.length, true);
-  trailer.setUint32(12, centralSize, true);
-  trailer.setUint32(16, offset, true);
-  const parts = [...locals, ...centrals, end];
-  const archive = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
-  let cursor = 0;
-  for (const part of parts) { archive.set(part, cursor); cursor += part.length; }
-  return archive;
+  return zipFiles(entries, { level: 0 });
 }
 
 const DOCUMENT_XML = `<?xml version="1.0"?><w:document xmlns:w="x"><w:body>

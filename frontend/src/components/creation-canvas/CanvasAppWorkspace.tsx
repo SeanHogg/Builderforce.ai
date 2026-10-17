@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { CodeReadingIcon, ConsoleReadingIcon, PreviewReadingIcon } from '@/components/canvas/CanvasCommands';
 import { Icon } from '@/components/ui/Icon';
 import { VoiceGenerateButton } from '@/components/builder/VoiceGenerateButton';
+import { DownloadProjectButton } from '@/components/builder/DownloadProjectButton';
 import { WorkspaceCenter } from '@/components/builder/WorkspaceCenter';
 import { WorkspaceOverlays } from '@/components/builder/WorkspaceOverlays';
 import { WorkspaceSidePanels } from '@/components/builder/WorkspaceSidePanels';
@@ -128,6 +129,7 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
                 <ConsoleReadingIcon />
               </button>
             )}
+            <DownloadProjectButton store={store} name={app.title} variant="icon" />
           </div>
 
           {/* The same board in Studio, in this tab; Studio's "Open on canvas" comes back. */}
@@ -150,7 +152,7 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
         </div>
       </CanvasBarGroup>
     ),
-  }), [runner.phase, runLabel, ws.centerView, ws.centerViews, filesOpen, publishes, publishOpen, appChoices, app.nodeId, studioHref, store.id, ws.durable, livePreview, modalityDef.showRunButton, voiceState, runner.run, ws.selectView, ws.openRail, ws.setRailOpen, onSelectApp, t]);
+  }), [runner.phase, runLabel, ws.centerView, ws.centerViews, filesOpen, publishes, publishOpen, appChoices, app.nodeId, app.title, studioHref, store.id, ws.durable, livePreview, modalityDef.showRunButton, voiceState, runner.run, ws.selectView, ws.openRail, ws.setRailOpen, onSelectApp, t]);
 
   return (
     <div className={styles.appWorkspace} data-testid="canvas-app-workspace">

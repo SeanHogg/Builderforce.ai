@@ -1313,7 +1313,8 @@
       "checkStep": "{label}…",
       "allChecksPassed": "所有检查均已通过。",
       "checksFailed": "{count, plural, other {# 项检查未通过。}}",
-      "checkError": "检查出错：{message}"
+      "checkError": "检查出错：{message}",
+      "depsRestored": "已从此浏览器恢复已安装的依赖包 — 跳过 npm install。"
     },
     "explorer": {
       "title": "资源管理器",
@@ -1619,7 +1620,11 @@
       "changeUndoFailed": "无法撤销——请打开“版本”手动恢复",
       "undo": "撤销",
       "hideChat": "隐藏对话",
-      "showChat": "显示对话"
+      "showChat": "显示对话",
+      "downloadProject": "下载项目",
+      "downloadingProject": "正在准备下载…",
+      "downloadProjectHint": "将项目源文件下载为 .zip 文件",
+      "downloadProjectFailed": "无法准备下载，请重试。"
     },
     "media": {
       "rendering": "正在渲染…",
@@ -11646,6 +11651,10 @@
       "models-that-run-on-your-machine": {
         "title": "在你自己的电脑上运行模型，交接时不丢失上下文",
         "description": "在你现在使用的同一个选择器里挑一个能在此设备上运行的模型，下载一次，就能在浏览器的 GPU 上私密、离线地聊天或运行智能体回合。当一次运行在模型之间切换时，builderforce-memory 会把对话打包成适合下一个模型窗口的大小。"
+      },
+      "your-app-talks-back": {
+        "title": "你的应用现在会回应你了——它的控制台、实时连接，以及一份可以带走的副本",
+        "description": "你在 Builderforce 画布上构建的应用，现在会向你展示它输出的日志，在预览中保持实时连接和登录正常工作，下次访问时无需重新安装即可恢复，还能作为一个归你所有的项目下载。"
       }
     }
   },
@@ -33651,7 +33660,7 @@
     "countTruncated": "{files, plural, other {# 个文件}}中的前 {matches} 处匹配。请缩小搜索范围以查看其余结果。"
   },
   "builderPanels": {
-    "panelLabel": "终端、输出和问题",
+    "panelLabel": "终端、输出、问题和控制台",
     "terminal": "终端",
     "output": "输出",
     "problems": "问题",
@@ -33664,7 +33673,20 @@
     "sourceRuntime": "运行时",
     "noProblemsShort": "没有问题",
     "fixWithBrain": "让 Brain 修复此问题",
-    "resolve": "修复"
+    "resolve": "修复",
+    "console": "控制台",
+    "consoleCount": "控制台（{count}）",
+    "consoleFilter": "按级别显示消息",
+    "consoleLevel": {
+      "all": "全部",
+      "errors": "错误",
+      "warnings": "警告",
+      "info": "信息"
+    },
+    "consoleEntries": "{count, plural, other {# 条消息}}",
+    "consoleClear": "清除",
+    "consoleEmpty": "暂无控制台输出。预览运行时应用记录的内容会显示在这里。",
+    "consoleEmptyFiltered": "此级别下没有消息。"
   },
   "builderVersions": {
     "loading": "正在加载版本……",

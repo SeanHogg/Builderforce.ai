@@ -1313,7 +1313,8 @@
       "checkStep": "{label}…",
       "allChecksPassed": "Alle Prüfungen bestanden.",
       "checksFailed": "{count, plural, one {# Prüfung fehlgeschlagen.} other {# Prüfungen fehlgeschlagen.}}",
-      "checkError": "Prüffehler: {message}"
+      "checkError": "Prüffehler: {message}",
+      "depsRestored": "Installierte Pakete aus diesem Browser wiederhergestellt — npm install wird übersprungen."
     },
     "explorer": {
       "title": "Explorer",
@@ -1619,7 +1620,11 @@
       "changeUndoFailed": "Rückgängig fehlgeschlagen — über „Versionen“ manuell wiederherstellen",
       "undo": "Rückgängig",
       "hideChat": "Chat ausblenden",
-      "showChat": "Chat einblenden"
+      "showChat": "Chat einblenden",
+      "downloadProject": "Projekt herunterladen",
+      "downloadingProject": "Download wird vorbereitet…",
+      "downloadProjectHint": "Die Quelldateien des Projekts als .zip herunterladen",
+      "downloadProjectFailed": "Der Download konnte nicht vorbereitet werden. Versuche es erneut."
     },
     "media": {
       "rendering": "Wird gerendert…",
@@ -11646,6 +11651,10 @@
       "models-that-run-on-your-machine": {
         "title": "Ein Modell auf dem eigenen Rechner ausführen und übergeben, ohne den Faden zu verlieren",
         "description": "Wählen Sie in derselben Auswahl wie bisher ein Modell, das auf diesem Gerät läuft, laden Sie es einmal herunter und chatten oder arbeiten Sie mit Agenten auf der GPU Ihres Browsers, privat und offline. Wechselt ein Lauf zwischen Modellen, packt builderforce-memory das Gespräch passend für das Fenster des nächsten Modells."
+      },
+      "your-app-talks-back": {
+        "title": "Ihre App antwortet jetzt – ihre Konsole, Live-Verbindungen und eine Kopie zum Mitnehmen",
+        "description": "Die App, die Sie auf einem Builderforce-Canvas bauen, zeigt Ihnen jetzt, was sie protokolliert, hält ihre Live-Verbindungen und Logins in der Vorschau am Laufen, kommt bei Ihrem nächsten Besuch ohne Neuinstallation zurück und lässt sich als Projekt herunterladen, das Ihnen gehört."
       }
     }
   },
@@ -33651,7 +33660,7 @@
     "countTruncated": "Die ersten {matches} Treffer in {files, plural, one {# Datei} other {# Dateien}}. Grenze die Suche ein, um den Rest zu sehen."
   },
   "builderPanels": {
-    "panelLabel": "Terminal, Ausgabe und Probleme",
+    "panelLabel": "Terminal, Ausgabe, Probleme und Konsole",
     "terminal": "Terminal",
     "output": "Ausgabe",
     "problems": "Probleme",
@@ -33664,7 +33673,20 @@
     "sourceRuntime": "Laufzeit",
     "noProblemsShort": "Keine Probleme",
     "fixWithBrain": "Brain um Behebung bitten",
-    "resolve": "Beheben"
+    "resolve": "Beheben",
+    "console": "Konsole",
+    "consoleCount": "Konsole ({count})",
+    "consoleFilter": "Meldungen nach Stufe anzeigen",
+    "consoleLevel": {
+      "all": "Alle",
+      "errors": "Fehler",
+      "warnings": "Warnungen",
+      "info": "Info"
+    },
+    "consoleEntries": "{count, plural, one {# Meldung} other {# Meldungen}}",
+    "consoleClear": "Leeren",
+    "consoleEmpty": "Noch keine Konsolenausgabe. Was deine App während der Vorschau protokolliert, erscheint hier.",
+    "consoleEmptyFiltered": "Keine Meldungen auf dieser Stufe."
   },
   "builderVersions": {
     "loading": "Versionen werden geladen …",

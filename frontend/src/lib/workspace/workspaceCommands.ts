@@ -20,7 +20,7 @@ export type WorkspaceCommand =
   /** Open a file in the Code view (a chat's "files changed" card). */
   | { type: 'openFile'; path: string };
 
-export type BottomPanelTab = 'terminal' | 'output' | 'problems';
+export type BottomPanelTab = 'terminal' | 'output' | 'problems' | 'console';
 
 const EVENT = 'bf:workspace-command';
 const bus = typeof EventTarget === 'undefined' ? null : new EventTarget();

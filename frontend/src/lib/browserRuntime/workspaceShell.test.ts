@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { PreviewRuntime } from '@seanhogg/builderforce-webcontainers';
+import type { PreviewRuntime, SnapshotStore } from '@seanhogg/builderforce-webcontainers';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
-import { createWorkspaceShell, MAX_COMMAND_OUTPUT_CHARS, type WorkspaceShellResult } from './workspaceShell';
+import { createWorkspaceShell, isInstallCommand, MAX_COMMAND_OUTPUT_CHARS, type WorkspaceShellResult } from './workspaceShell';
+import { installSnapshotKey } from './installSnapshots';
 
 /** A store whose `list()` names files WITHOUT content, the way the durable one does. */
 function memoryStore(initial: Record<string, string>) {
@@ -38,6 +39,9 @@ function fakeRuntime(behaviour: Behaviour, initialFs: Record<string, string> = {
     writeTree: (files: Record<string, string>) => {
       for (const [path, content] of Object.entries(files)) fs.set(`/${path}`, content);
     },
+    // The snapshot pair: a restore lands a marker package, an export is a fixed byte string.
+    exportZip: vi.fn(() => new Uint8Array([7])),
+    importZip: vi.fn(() => { fs.set('/node_modules/restored/index.js', 'r'); }),
     run: (command: string, args: string[]) => {
       spawned.push({ command, args });
       let push!: (text: string) => void;
@@ -95,7 +99,7 @@ describe('createWorkspaceShell', () => {
       return 0;
     });
     const onFilesChanged = vi.fn();
-    const result = await run(createWorkspaceShell(store, { boot: async () => fake.runtime, onFilesChanged }), 'npm install zod');
+    const result = await run(createWorkspaceShell(store, { boot: async () => fake.runtime, onFilesChanged, snapshots: null }), 'npm install zod');
     expect(result.changedFiles?.sort()).toEqual(['package.json', 'src/new.js']);
     expect(result.removedFiles).toEqual(['src/old.js']);
     expect(files.get('package.json')).toContain('zod');
@@ -179,5 +183,71 @@ describe('createWorkspaceShell', () => {
     await Promise.all([run(shell, 'one'), run(shell, 'two')]);
     expect(fake.spawned.map((entry) => entry.args[1])).toEqual(['one', 'two']);
     expect(overlapped).toBe(false);
+  });
+});
+
+/** An in-memory snapshot store with the package's contract. */
+function snapshotStore(initial: Record<string, Uint8Array> = {}) {
+  const rows = new Map(Object.entries(initial));
+  const store: SnapshotStore = {
+    load: vi.fn(async (key: string) => rows.get(key)),
+    save: vi.fn(async (key: string, zip: Uint8Array) => { rows.set(key, zip); return true; }),
+    remove: async (key: string) => { rows.delete(key); },
+    keys: async () => [...rows.keys()],
+  };
+  return { store, rows };
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe('install snapshots in the shell', () => {
+  it('recognises install commands, and only those', () => {
+    for (const line of ['npm install', 'npm i zod', 'npm ci', '  pnpm add react', 'yarn install --frozen-lockfile', 'npm install && npm test']) {
+      expect(isInstallCommand(line)).toBe(true);
+    }
+    for (const line of ['npm test', 'npm run build', 'npx tsc --noEmit', 'npm installer', 'echo npm install']) {
+      expect(isInstallCommand(line)).toBe(false);
+    }
+  });
+
+  it('restores the packages this browser kept before an install, and saves the result under the manifest it left', async () => {
+    const manifest = '{"name":"app"}';
+    const { store } = memoryStore({ 'package.json': manifest });
+    const before = installSnapshotKey(7, { 'package.json': manifest })!;
+    const snapshots = snapshotStore({ [before]: new Uint8Array([1]) });
+    const fake = fakeRuntime((fs) => {
+      // Ran over the restored tree; `npm install zod` rewrites the manifest.
+      expect(fs.has('/node_modules/restored/index.js')).toBe(true);
+      fs.set('/package.json', '{"name":"app","dependencies":{"zod":"^3.0.0"}}');
+      return 0;
+    });
+
+    const result = await run(createWorkspaceShell(store, { boot: async () => fake.runtime, snapshots: snapshots.store }), 'npm install zod');
+    expect(result.ok).toBe(true);
+    expect(snapshots.store.load).toHaveBeenCalledWith(before);
+    await settle();
+    const after = installSnapshotKey(7, { 'package.json': '{"name":"app","dependencies":{"zod":"^3.0.0"}}' })!;
+    expect(snapshots.rows.get(after)).toEqual(new Uint8Array([7]));
+  });
+
+  it('does not restore over packages already installed, and saves nothing after a failed install', async () => {
+    const { store } = memoryStore({ 'package.json': '{"name":"app"}' });
+    const snapshots = snapshotStore();
+    const fake = fakeRuntime(() => 1, { '/node_modules/react/index.js': 'r' });
+    const result = await run(createWorkspaceShell(store, { boot: async () => fake.runtime, snapshots: snapshots.store }), 'npm install');
+    expect(result.ok).toBe(false);
+    await settle();
+    expect(snapshots.store.load).not.toHaveBeenCalled();
+    expect(snapshots.store.save).not.toHaveBeenCalled();
+  });
+
+  it('leaves snapshots alone for a command that is not an install', async () => {
+    const { store } = memoryStore({ 'package.json': '{"name":"app"}' });
+    const snapshots = snapshotStore();
+    const fake = fakeRuntime(() => 0);
+    await run(createWorkspaceShell(store, { boot: async () => fake.runtime, snapshots: snapshots.store }), 'npm test');
+    await settle();
+    expect(snapshots.store.load).not.toHaveBeenCalled();
+    expect(snapshots.store.save).not.toHaveBeenCalled();
   });
 });

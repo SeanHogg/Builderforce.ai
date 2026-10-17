@@ -140,6 +140,7 @@ export const STUDIO_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
   'canvas_write_build_file',
   'canvas_edit_build_file',
   'canvas_read_build_diagnostics',
+  'canvas_read_preview_console',
   'canvas_list_build_file_history',
   'canvas_restore_build_file',
   // Install / build / type-check / test in the browser runtime: "does it build?" shares

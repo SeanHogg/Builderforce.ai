@@ -1313,7 +1313,8 @@
       "checkStep": "{label}…",
       "allChecksPassed": "All checks passed.",
       "checksFailed": "{count, plural, one {# check failed.} other {# checks failed.}}",
-      "checkError": "Check error: {message}"
+      "checkError": "Check error: {message}",
+      "depsRestored": "Restored installed packages saved in this browser — skipping npm install."
     },
     "explorer": {
       "title": "Explorer",
@@ -1619,7 +1620,11 @@
       "changeUndoFailed": "Couldn't undo — open Versions to restore by hand",
       "undo": "Undo",
       "hideChat": "Hide the chat",
-      "showChat": "Show the chat"
+      "showChat": "Show the chat",
+      "downloadProject": "Download project",
+      "downloadingProject": "Preparing download…",
+      "downloadProjectHint": "Download the project's source files as a .zip",
+      "downloadProjectFailed": "The download could not be prepared. Try again."
     },
     "media": {
       "rendering": "Rendering…",
@@ -11646,6 +11651,10 @@
       "models-that-run-on-your-machine": {
         "title": "Run a model on your own machine, and hand off without losing the thread",
         "description": "Pick a model that runs on this device from the same picker you use today, download it once, and chat or run agent turns in your browser's GPU, privately and offline. When a run moves between models, builderforce-memory packs the conversation to fit the next model's window."
+      },
+      "your-app-talks-back": {
+        "title": "Your app now talks back — its console, live connections and a copy you can take with you",
+        "description": "The app you build on a Builderforce canvas now shows you what it logs, keeps its live connections and logins working in the preview, comes back without reinstalling on your next visit, and downloads as a project you own."
       }
     }
   },
@@ -33651,7 +33660,7 @@
     "countTruncated": "First {matches} matches in {files, plural, one {# file} other {# files}}. Narrow the search to see the rest."
   },
   "builderPanels": {
-    "panelLabel": "Terminal, output and problems",
+    "panelLabel": "Terminal, output, problems and console",
     "terminal": "Terminal",
     "output": "Output",
     "problems": "Problems",
@@ -33664,7 +33673,20 @@
     "sourceRuntime": "Runtime",
     "noProblemsShort": "No problems",
     "fixWithBrain": "Ask Brain to fix this",
-    "resolve": "Resolve"
+    "resolve": "Resolve",
+    "console": "Console",
+    "consoleCount": "Console ({count})",
+    "consoleFilter": "Show messages by level",
+    "consoleLevel": {
+      "all": "All",
+      "errors": "Errors",
+      "warnings": "Warnings",
+      "info": "Info"
+    },
+    "consoleEntries": "{count, plural, one {# message} other {# messages}}",
+    "consoleClear": "Clear",
+    "consoleEmpty": "No console output yet. What your app logs while the preview runs appears here.",
+    "consoleEmptyFiltered": "No messages at this level."
   },
   "builderVersions": {
     "loading": "Loading versions…",

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { strFromU8, unzipSync } from 'fflate';
 import { createTranslator } from 'next-intl';
 import en from '@/i18n/messages/en.json';
 import zh from '@/i18n/messages/zh.json';
@@ -61,5 +62,13 @@ describe('course LMS standard', () => {
     const archive = buildScormPackage(course, 'Build an LLM');
     expect(Array.from(archive.slice(0, 4))).toEqual([0x50, 0x4b, 0x03, 0x04]);
     expect(new TextDecoder().decode(archive)).toContain('imsmanifest.xml');
+  });
+
+  it('writes a valid archive whose members read back exactly', () => {
+    const course = buildLlmCourse();
+    const members = unzipSync(buildScormPackage(course, 'Build an LLM'));
+    expect(Object.keys(members).sort()).toEqual(['course.json', 'imsmanifest.xml', 'index.html', 'xapi-profile.json']);
+    expect(strFromU8(members['imsmanifest.xml']!)).toBe(scormManifest(course, 'Build an LLM'));
+    expect(JSON.parse(strFromU8(members['course.json']!))).toMatchObject({ title: 'Build an LLM' });
   });
 });

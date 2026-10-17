@@ -40,7 +40,8 @@ export interface UpgradeAction {
  * throw-carrying one instead of re-deriving it from error prose.
  */
 export function upgradeActionForVerdict(action: ChatErrorAction | null): UpgradeAction | null {
-  if (!action || action.kind === "auth") return null;
+  // `auth` and `sign_in` have no pricing page: the host signs in instead.
+  if (!action || action.kind === "auth" || action.kind === "sign_in") return null;
 
   const url = `${getWebBaseUrl()}${PATHS[action.kind]}`;
   if (action.kind === "validate_card") {

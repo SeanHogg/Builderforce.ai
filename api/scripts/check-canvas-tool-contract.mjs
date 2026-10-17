@@ -101,6 +101,9 @@ const CANVAS_FILES = [
   // The build vocabulary's shell (`canvas_run_build_command`), its own module beside
   // `canvasBuildTools.ts`. Listed the same day it was written, for the same reason.
   path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasBuildCommandAction.ts'),
+  // The preview console reader (`canvas_read_preview_console`), its own module for the
+  // same reason. Listed the same day it was written.
+  path.resolve(repoRoot, 'frontend', 'src', 'lib', 'canvasPreviewConsoleAction.ts'),
 ];
 const CONTRACT_FILE = path.resolve(repoRoot, 'packages', 'creation-canvas-contract', 'src', 'canvasTools.ts');
 

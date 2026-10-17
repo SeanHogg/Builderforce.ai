@@ -17,6 +17,7 @@
  * adds its own ("Made with Builderforce.ai", free tier) — `api/src/application/ide/siteAttribution.ts`.
  */
 import type { PreviewRuntime } from '@seanhogg/builderforce-webcontainers';
+import { attachPreviewSignals } from './previewSignals';
 
 const RELAY_URL = process.env.NEXT_PUBLIC_PREVIEW_RELAY_URL || 'https://preview.builderforce.ai/__bfwc/relay.html';
 
@@ -25,6 +26,12 @@ let booting: Promise<PreviewRuntime> | null = null;
 export function bootSharedPreviewRuntime(): Promise<PreviewRuntime> {
   booting ??= import('@seanhogg/builderforce-webcontainers')
     .then(({ startPreviewRuntime }) => startPreviewRuntime({ relayUrl: RELAY_URL, attribution: false }))
+    .then((runtime) => {
+      // The preview's errors and console reach the workspace through the runtime's own
+      // channel, attached once for the page (`previewSignals.ts`).
+      attachPreviewSignals(runtime);
+      return runtime;
+    })
     .catch((error: unknown) => {
       booting = null; // a later Run may retry (the relay was unreachable, say)
       throw error;

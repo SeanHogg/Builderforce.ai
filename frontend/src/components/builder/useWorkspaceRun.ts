@@ -11,7 +11,10 @@ import { useToast } from '@/components/ToastProvider';
 import { sendWorkspaceCommand } from '@/lib/workspace/workspaceCommands';
 import { buildCheckPort, buildSite, hasTypeScript, typecheckFiles } from '@/lib/browserRuntime/siteTools';
 import { runProjectChecks, type CheckResult } from '@/lib/browserRuntime/projectChecks';
-import { clearBuildFailures, markBuildSourceChanged, recordBuildFailure, teeOutput, withPreviewErrorReporter } from '@/lib/buildDiagnostics';
+import { markBuildSourceChanged, recordBuildFailure, teeOutput } from '@/lib/buildDiagnostics';
+import { setPreviewWorkspace } from '@/lib/browserRuntime/previewSignals';
+import { bootSharedPreviewRuntime } from '@/lib/browserRuntime/previewRuntime';
+import { installOrRestore, installSnapshotKey } from '@/lib/browserRuntime/installSnapshots';
 import { withVisualEditor } from '@/lib/visualEditor';
 import { withPreviewProbe } from '@/lib/previewProbe/probeScript';
 import type { FileEntry } from '@/lib/types';
@@ -167,8 +170,9 @@ export function useWorkspaceRun({ store, modality, files, setFiles, fileContents
 
   /**
    * Run `npm install` only when package.json changed since the last install in
-   * this runtime session (the shared runtime keeps node_modules across runs).
-   * Returns the install exit code (0 when skipped).
+   * this runtime session (the shared runtime keeps node_modules across runs), and
+   * not even then when this browser kept the install from an earlier visit
+   * (`installSnapshots.ts`). Returns the install exit code (0 when skipped).
    */
   const ensureInstalled = useCallback(async (
     mount: Record<string, string>,
@@ -181,10 +185,15 @@ export function useWorkspaceRun({ store, modality, files, setFiles, fileContents
       onLog?.ok('depsUnchanged');
       return 0;
     }
-    const code = await runCommandAndWait('npm', ['install'], onOutput);
+    const code = await installOrRestore({
+      runtime: bootSharedPreviewRuntime,
+      key: installSnapshotKey(store.id, mount),
+      install: () => runCommandAndWait('npm', ['install'], onOutput),
+      onRestored: () => onLog?.ok('depsRestored'),
+    });
     if (code === 0) lastInstallHashRef.current = hash;
     return code;
-  }, [runCommandAndWait]);
+  }, [runCommandAndWait, store.id]);
 
   /** Start (or restart) the preview. Resolves once the run has settled. */
   const run = useCallback(async (): Promise<void> => {
@@ -205,9 +214,10 @@ export function useWorkspaceRun({ store, modality, files, setFiles, fileContents
     runningRef.current = true;
     setPhase('starting');
     setStep('preparing');
-    // A new run is judged on its own output: clear the previous attempt's failures
-    // so a repair turn is never handed an error the user has already fixed.
-    clearBuildFailures(store.id);
+    // A new run is judged on its own output: the preview's errors and console now go to
+    // this workspace, and the previous attempt's are cleared, so a repair turn is never
+    // handed an error the user has already fixed.
+    setPreviewWorkspace(store.id);
     let live = false;
     try {
       log.banner('runStarted');
@@ -221,11 +231,10 @@ export function useWorkspaceRun({ store, modality, files, setFiles, fileContents
       log.blank();
 
       // The overlays go into the MOUNTED copy only — never the files on disk and
-      // never the publish path — so a runtime error inside the preview reaches the
-      // agent, any element in it can be pointed at, and the agent can measure it to
-      // review its own change, while the user's source and their published build stay
-      // exactly what they wrote.
-      const overlaid = withPreviewProbe(withVisualEditor(withPreviewErrorReporter(mountContents)));
+      // never the publish path — so any element in the preview can be pointed at and
+      // the agent can measure it to review its own change, while the user's source and
+      // their published build stay exactly what they wrote.
+      const overlaid = withPreviewProbe(withVisualEditor(mountContents));
 
       // Instant preview first: served from memory, no install and no dev server.
       // Projects it cannot serve (a Node server) run their own `npm run dev` below.

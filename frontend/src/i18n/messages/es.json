@@ -1313,7 +1313,8 @@
       "checkStep": "{label}…",
       "allChecksPassed": "Todas las comprobaciones pasaron.",
       "checksFailed": "{count, plural, one {Falló # comprobación.} other {Fallaron # comprobaciones.}}",
-      "checkError": "Error de comprobación: {message}"
+      "checkError": "Error de comprobación: {message}",
+      "depsRestored": "Paquetes instalados restaurados desde este navegador — se omite npm install."
     },
     "explorer": {
       "title": "Explorador",
@@ -1619,7 +1620,11 @@
       "changeUndoFailed": "No se pudo deshacer: abre Versiones para restaurar a mano",
       "undo": "Deshacer",
       "hideChat": "Ocultar el chat",
-      "showChat": "Mostrar el chat"
+      "showChat": "Mostrar el chat",
+      "downloadProject": "Descargar proyecto",
+      "downloadingProject": "Preparando la descarga…",
+      "downloadProjectHint": "Descarga los archivos fuente del proyecto como .zip",
+      "downloadProjectFailed": "No se pudo preparar la descarga. Inténtalo de nuevo."
     },
     "media": {
       "rendering": "Renderizando…",
@@ -11646,6 +11651,10 @@
       "models-that-run-on-your-machine": {
         "title": "Ejecuta un modelo en tu propio equipo y pasa el relevo sin perder el hilo",
         "description": "Elige un modelo que funcione en este dispositivo desde el mismo selector que ya usas, descárgalo una vez y conversa o ejecuta turnos de agente en la GPU de tu navegador, en privado y sin conexión. Cuando una ejecución pasa de un modelo a otro, builderforce-memory empaqueta la conversación para que quepa en la ventana del siguiente modelo."
+      },
+      "your-app-talks-back": {
+        "title": "Tu app ahora te responde: su consola, conexiones en vivo y una copia que puedes llevarte",
+        "description": "La app que construyes en un lienzo de Builderforce ahora te muestra lo que registra, mantiene funcionando en la vista previa sus conexiones en vivo y sus inicios de sesión, vuelve sin reinstalar en tu próxima visita y se descarga como un proyecto que es tuyo."
       }
     }
   },
@@ -33651,7 +33660,7 @@
     "countTruncated": "Primeras {matches} coincidencias en {files, plural, one {# archivo} other {# archivos}}. Acota la búsqueda para ver el resto."
   },
   "builderPanels": {
-    "panelLabel": "Terminal, salida y problemas",
+    "panelLabel": "Terminal, salida, problemas y consola",
     "terminal": "Terminal",
     "output": "Salida",
     "problems": "Problemas",
@@ -33664,7 +33673,20 @@
     "sourceRuntime": "Ejecución",
     "noProblemsShort": "Sin problemas",
     "fixWithBrain": "Pedir a Brain que lo corrija",
-    "resolve": "Resolver"
+    "resolve": "Resolver",
+    "console": "Consola",
+    "consoleCount": "Consola ({count})",
+    "consoleFilter": "Mostrar mensajes por nivel",
+    "consoleLevel": {
+      "all": "Todos",
+      "errors": "Errores",
+      "warnings": "Advertencias",
+      "info": "Información"
+    },
+    "consoleEntries": "{count, plural, one {# mensaje} other {# mensajes}}",
+    "consoleClear": "Borrar",
+    "consoleEmpty": "Aún no hay salida de consola. Lo que tu aplicación registre mientras se ejecuta la vista previa aparecerá aquí.",
+    "consoleEmptyFiltered": "No hay mensajes en este nivel."
   },
   "builderVersions": {
     "loading": "Cargando versiones…",

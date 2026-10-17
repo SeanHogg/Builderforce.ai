@@ -52,6 +52,7 @@ import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 import { readStoreFiles } from '@/lib/workspace/readStoreFiles';
 import { isGeneratedPath } from '@/lib/workspace/generatedPaths';
 import { canvasRunBuildCommandAction } from '@/lib/canvasBuildCommandAction';
+import { canvasReadPreviewConsoleAction } from '@/lib/canvasPreviewConsoleAction';
 import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import { undeclaredDependencies } from '@/lib/undeclaredDependencies';
@@ -626,6 +627,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
       },
     },
     canvasRunBuildCommandAction(ctx, (objectId) => resolveCanvasBuild(ctx.builds(), objectId)),
+    canvasReadPreviewConsoleAction((objectId) => resolveCanvasBuild(ctx.builds(), objectId)),
   ];
 }
 
@@ -672,6 +674,7 @@ export const CANVAS_BUILD_TOOL_NAMES = [
   'canvas_write_build_file',
   'canvas_edit_build_file',
   'canvas_read_build_diagnostics',
+  'canvas_read_preview_console',
   'canvas_list_build_file_history',
   'canvas_restore_build_file',
   'canvas_run_build_command',

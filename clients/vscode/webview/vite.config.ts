@@ -205,6 +205,10 @@ export default defineConfig({
     // exists to catch.
     postcss: path.join(HERE, 'postcss.config.js'),
   },
+  // Every worker the bundle spawns is a module worker (`{ type: 'module' }`), and some
+  // (the Mamba worker) code-split through dynamic imports, which Vite's default IIFE
+  // worker output cannot hold.
+  worker: { format: 'es' },
   build: {
     outDir: path.resolve(HERE, '../media/webview'),
     /**

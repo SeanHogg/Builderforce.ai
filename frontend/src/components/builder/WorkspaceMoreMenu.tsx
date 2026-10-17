@@ -6,15 +6,20 @@ import { AnchoredPopover } from '@/components/ui/AnchoredPopover';
 import { Icon } from '@/components/ui/Icon';
 import { useRightTabLabels } from '@/lib/useModalityCopy';
 import type { RightTab } from '@/lib/modality';
+import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
+import { DownloadProjectButton } from './DownloadProjectButton';
 import styles from './workspaceChrome.module.css';
 
 /**
  * The workspace's overflow: every side panel the project type offers, the
  * project's details, and its settings (source control, GitHub, deploy). These
  * used to be a cog, a Details button, a GitHub button in a second bar and a
- * permanent tab strip — four places for things opened now and then.
+ * permanent tab strip — four places for things opened now and then. "Download
+ * project" lives here too: the source as a zip, also on the canvas App surface.
  */
-export function WorkspaceMoreMenu({ tabs, onOpenTab, onOpenSettings, onOpenDetails }: {
+export function WorkspaceMoreMenu({ store, projectName, tabs, onOpenTab, onOpenSettings, onOpenDetails }: {
+  store: WorkspaceFileStore;
+  projectName: string;
   tabs: readonly RightTab[];
   onOpenTab: (tab: RightTab) => void;
   onOpenSettings: () => void;
@@ -49,6 +54,7 @@ export function WorkspaceMoreMenu({ tabs, onOpenTab, onOpenSettings, onOpenDetai
             </button>
           ))}
           <div className={styles.menuSep} />
+          <DownloadProjectButton store={store} name={projectName} variant="menuItem" onDone={() => setOpen(false)} />
           {onOpenDetails && (
             <button type="button" role="menuitem" className={styles.menuItem} onClick={choose(onOpenDetails)}>
               <Icon name="project" size={16} />

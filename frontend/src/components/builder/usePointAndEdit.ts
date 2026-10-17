@@ -1,7 +1,6 @@
 // No `'use client'`: this module exports a hook, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { previewErrorFrom, recordBuildFailure } from '@/lib/buildDiagnostics';
 import { VISUAL_ARM_MESSAGE, isVisualUnresolved, visualSelectionFrom } from '@/lib/visualEditor';
 import { clearPreviewPicks, setPreviewPick } from '@/lib/workspace/previewPick';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
@@ -9,11 +8,12 @@ import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 /**
  * The host half of the preview conversation.
  *
- * Two kinds of message come back from the overlay injected into the mounted
- * preview (`lib/visualEditor.ts`, `lib/buildDiagnostics.ts`): a runtime error
- * thrown inside the app — recorded so the agent can read it — and an element the
- * person pointed at, which becomes the ONE prompt's context (`lib/workspace/previewPick.ts`):
+ * One kind of message comes back from the overlay injected into the mounted
+ * preview (`lib/visualEditor.ts`): an element the person pointed at, which becomes
+ * the ONE prompt's context (`lib/workspace/previewPick.ts`):
  * a chip in the composer, and the exact file and line the next request is about.
+ * (Runtime errors and console output are not this hook's: the runtime reports them
+ * itself, through `lib/browserRuntime/previewSignals.ts`.)
  * There is no edit form of its own any more; the request goes to the same Brain as
  * every other one.
  *
@@ -24,7 +24,7 @@ import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
  * dev server is a cross-origin document whose `contentWindow` this frame cannot
  * compare, so the message TYPE plus the shape checks are the identification.
  * Both are namespaced, and the payload is only ever read as strings, so a
- * hostile sender's best case is a spurious diagnostic line or a wrong chip.
+ * hostile sender's best case is a wrong chip.
  */
 export function usePointAndEdit({ store, appName, previewUrl }: {
   store: WorkspaceFileStore;
@@ -48,8 +48,6 @@ export function usePointAndEdit({ store, appName, previewUrl }: {
   useEffect(() => {
     if (!previewUrl) return undefined;
     const onMessage = (event: MessageEvent) => {
-      const failure = previewErrorFrom(event.data);
-      if (failure) { recordBuildFailure(store.id, failure); return; }
       if (isVisualUnresolved(event.data)) { setUnresolved(true); arm(false); return; }
       const selected = visualSelectionFrom(event.data);
       if (!selected) return;

@@ -125,6 +125,8 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
             {/* A type with no live preview (Voice) keeps an explicit button for its one action. */}
             {modalityDef.showRunButton && !livePreview && <VoiceGenerateButton voice={voice} label={modalityCopy.runLabel} />}
             <WorkspaceMoreMenu
+              store={store}
+              projectName={project.name}
               tabs={ws.rightTabs}
               onOpenTab={ws.openRail}
               onOpenSettings={() => ws.setSettingsOpen(true)}

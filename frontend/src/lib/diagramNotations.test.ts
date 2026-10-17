@@ -10,6 +10,7 @@ import { readDot, writeDot } from './diagramDot';
 import { readPlantuml, writePlantuml } from './diagramPlantuml';
 import { readBpmn, writeBpmn } from './diagramBpmn';
 import { readExcalidraw, writeExcalidraw } from './diagramExcalidraw';
+import { zipFiles } from './zipFiles';
 import { readArchimate } from './diagramArchimate';
 import { readSvgShapes } from './diagramSvg';
 import { readVsdx } from './diagramVsdx';
@@ -311,33 +312,7 @@ describe('ArchiMate', () => {
 describe('Visio', () => {
   /** A stored-only ZIP, so the reader is exercised without a compressor. */
   function zip(entries: ReadonlyArray<readonly [string, string]>): Uint8Array {
-    const encoder = new TextEncoder();
-    const table = Array.from({ length: 256 }, (_, index) => {
-      let value = index;
-      for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-      return value >>> 0;
-    });
-    const crc32 = (bytes: Uint8Array): number => {
-      let value = 0xffffffff;
-      for (const byte of bytes) value = table[(value ^ byte) & 0xff]! ^ (value >>> 8);
-      return (value ^ 0xffffffff) >>> 0;
-    };
-    const locals: number[] = [];
-    const central: number[] = [];
-    let offset = 0;
-    const push = (target: number[], ...values: number[]) => target.push(...values);
-    const u16 = (value: number) => [value & 0xff, (value >> 8) & 0xff];
-    const u32 = (value: number) => [value & 0xff, (value >> 8) & 0xff, (value >> 16) & 0xff, (value >>> 24) & 0xff];
-    for (const [name, content] of entries) {
-      const nameBytes = encoder.encode(name);
-      const body = encoder.encode(content);
-      const crc = crc32(body);
-      push(locals, ...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(crc), ...u32(body.length), ...u32(body.length), ...u16(nameBytes.length), ...u16(0), ...nameBytes, ...body);
-      push(central, ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(crc), ...u32(body.length), ...u32(body.length), ...u16(nameBytes.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset), ...nameBytes);
-      offset = locals.length;
-    }
-    const eocd = [...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(entries.length), ...u16(entries.length), ...u32(central.length), ...u32(locals.length), ...u16(0)];
-    return Uint8Array.from([...locals, ...central, ...eocd]);
+    return zipFiles(Object.fromEntries(entries), { level: 0 });
   }
 
   const PAGES = `<Pages xmlns="http://schemas.microsoft.com/office/visio/2012/main"><Page ID="0" NameU="Page-1"><PageSheet><Cell N="PageWidth" V="8.5"/><Cell N="PageHeight" V="11"/></PageSheet></Page></Pages>`;

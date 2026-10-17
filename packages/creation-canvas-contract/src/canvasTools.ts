@@ -207,6 +207,9 @@ export const GUEST_SAFE_CANVAS_TOOLS = [
   'canvas_write_build_file',
   'canvas_edit_build_file',
   'canvas_read_build_diagnostics',
+  // What the visitor's own preview printed to its console — read from this browser's
+  // memory (`lib/previewConsole.ts`), so nothing reaches a tenant.
+  'canvas_read_preview_console',
   // Runs one command (install, build, type-check, test) in the visitor's OWN browser
   // runtime over the same browser-held files (`lib/browserRuntime/workspaceShell.ts`) —
   // the runtime the preview already runs on, so nothing reaches a tenant.

@@ -1313,7 +1313,8 @@
       "checkStep": "{label}…",
       "allChecksPassed": "Toutes les vérifications ont réussi.",
       "checksFailed": "{count, plural, one {# vérification a échoué.} other {# vérifications ont échoué.}}",
-      "checkError": "Erreur de vérification : {message}"
+      "checkError": "Erreur de vérification : {message}",
+      "depsRestored": "Paquets installés restaurés depuis ce navigateur — npm install ignoré."
     },
     "explorer": {
       "title": "Explorateur",
@@ -1619,7 +1620,11 @@
       "changeUndoFailed": "Annulation impossible — ouvrez Versions pour restaurer manuellement",
       "undo": "Annuler",
       "hideChat": "Masquer la conversation",
-      "showChat": "Afficher la conversation"
+      "showChat": "Afficher la conversation",
+      "downloadProject": "Télécharger le projet",
+      "downloadingProject": "Préparation du téléchargement…",
+      "downloadProjectHint": "Télécharger les fichiers source du projet au format .zip",
+      "downloadProjectFailed": "Le téléchargement n'a pas pu être préparé. Réessayez."
     },
     "media": {
       "rendering": "Rendu en cours…",
@@ -11646,6 +11651,10 @@
       "models-that-run-on-your-machine": {
         "title": "Faites tourner un modèle sur votre machine, et passez le relais sans perdre le fil",
         "description": "Choisissez un modèle qui tourne sur cet appareil depuis le sélecteur que vous utilisez déjà, téléchargez-le une fois, puis discutez ou lancez des tours d’agent sur le GPU de votre navigateur, en privé et hors ligne. Quand une exécution passe d’un modèle à un autre, builderforce-memory compacte la conversation pour la fenêtre du modèle suivant."
+      },
+      "your-app-talks-back": {
+        "title": "Votre app vous répond désormais — sa console, ses connexions en direct et une copie à emporter",
+        "description": "L'app que vous construisez sur un canvas Builderforce vous montre désormais ce qu'elle journalise, garde ses connexions en direct et ses sessions actives dans l'aperçu, revient sans réinstallation à votre visite suivante et se télécharge comme un projet qui vous appartient."
       }
     }
   },
@@ -33651,7 +33660,7 @@
     "countTruncated": "Les {matches} premiers résultats dans {files, plural, one {# fichier} other {# fichiers}}. Affinez la recherche pour voir le reste."
   },
   "builderPanels": {
-    "panelLabel": "Terminal, sortie et problèmes",
+    "panelLabel": "Terminal, sortie, problèmes et console",
     "terminal": "Terminal",
     "output": "Sortie",
     "problems": "Problèmes",
@@ -33664,7 +33673,20 @@
     "sourceRuntime": "Exécution",
     "noProblemsShort": "Aucun problème",
     "fixWithBrain": "Demander à Brain de corriger",
-    "resolve": "Résoudre"
+    "resolve": "Résoudre",
+    "console": "Console",
+    "consoleCount": "Console ({count})",
+    "consoleFilter": "Afficher les messages par niveau",
+    "consoleLevel": {
+      "all": "Tous",
+      "errors": "Erreurs",
+      "warnings": "Avertissements",
+      "info": "Infos"
+    },
+    "consoleEntries": "{count, plural, one {# message} other {# messages}}",
+    "consoleClear": "Effacer",
+    "consoleEmpty": "Aucune sortie console pour l'instant. Ce que votre application journalise pendant l'aperçu apparaît ici.",
+    "consoleEmptyFiltered": "Aucun message à ce niveau."
   },
   "builderVersions": {
     "loading": "Chargement des versions…",

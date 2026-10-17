@@ -6,7 +6,9 @@ import { Icon } from '@/components/ui/Icon';
 import { Terminal } from '@/components/Terminal';
 import { useWorkspaceCommands, type BottomPanelTab } from '@/lib/workspace/workspaceCommands';
 import { ProblemsPanel } from './ProblemsPanel';
+import { ConsolePanel } from './ConsolePanel';
 import { useBuildFailures } from './useBuildFailures';
+import { useConsoleEntries } from './useConsoleEntries';
 import styles from './workspaceChrome.module.css';
 import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 
@@ -20,8 +22,9 @@ const BAR_HEIGHT = 34;
  * look into a problem, not a third of the screen held back from the app.
  *
  * Open, it is tabs: the interactive Terminal (run output and the shell), Output
- * (what a publish build printed) and Problems (recorded build and runtime
- * failures), with the host's tools for them (`tools`: the checks) on the right.
+ * (what a publish build printed), Problems (recorded build and runtime
+ * failures) and Console (what the running preview logged), with the host's tools
+ * for them (`tools`: the checks) on the right.
  * Every pane stays mounted so a terminal keeps its scrollback across tab changes.
  */
 export function WorkspaceBottomPanel({ projectId, onTerminalReady, onTerminalInput, onOutputReady, summary, tools }: {
@@ -38,6 +41,7 @@ export function WorkspaceBottomPanel({ projectId, onTerminalReady, onTerminalInp
   const [tab, setTab] = useState<BottomPanelTab>('terminal');
   const [expanded, setExpanded] = useState(false);
   const failures = useBuildFailures(projectId);
+  const consoleEntries = useConsoleEntries(projectId);
 
   useWorkspaceCommands(projectId, (command) => {
     if (command.type !== 'showPanel') return;
@@ -51,6 +55,7 @@ export function WorkspaceBottomPanel({ projectId, onTerminalReady, onTerminalInp
     { id: 'terminal', label: t('terminal') },
     { id: 'output', label: t('output') },
     { id: 'problems', label: failures.length ? t('problemsCount', { count: failures.length }) : t('problems') },
+    { id: 'console', label: consoleEntries.length ? t('consoleCount', { count: consoleEntries.length }) : t('console') },
   ];
 
   const pane = (id: BottomPanelTab) => ({
@@ -123,6 +128,11 @@ export function WorkspaceBottomPanel({ projectId, onTerminalReady, onTerminalInp
       <div role="tabpanel" style={pane('problems')}>
         <div style={{ flex: 1, minHeight: 0 }}>
           <ProblemsPanel projectId={projectId} failures={failures} />
+        </div>
+      </div>
+      <div role="tabpanel" style={pane('console')}>
+        <div style={{ flex: 1, minHeight: 0, minWidth: 0 }}>
+          <ConsolePanel projectId={projectId} entries={consoleEntries} />
         </div>
       </div>
     </div>
