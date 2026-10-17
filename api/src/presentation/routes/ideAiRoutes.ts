@@ -11,8 +11,7 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import { optionalTenantId } from '../middleware/tenantContext';
 import { ideProxy, newTraceId } from '../../application/llm/LlmProxyService';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
-import { logTrace, backfillTraceUsage, backfillTraceResponseBody } from '../../application/llm/traceLogger';
-import { wrapStreamForTrace } from '../../application/llm/streamTrace';
+import { logStreamedTrace } from '../../application/llm/traceLogger';
 import { parseBody, z, zNumberLike } from './requestBody';
 
 const IDE_PREFIX = 'ide/';
@@ -127,7 +126,9 @@ export function createIdeAiRoutes(projectService: ProjectService): Hono<HonoEnv>
     // Full diagnostic trace (builder-side only). Surface is `ide-chat` so the
     // superadmin trace view can tell in-IDE assistant calls apart from gateway
     // API traffic. Tenant comes from the auth middleware; no end-user id here.
-    logTrace(c.env, c.executionCtx, {
+    // Written once at stream end with its tokens and completion body (or at once
+    // when there is no stream to tee).
+    const traced = logStreamedTrace(c.env, c.executionCtx, {
       traceId, surface: 'ide-chat',
       tenantId: optionalTenantId(c),
       userId: c.get('userId') ?? null,
@@ -137,25 +138,11 @@ export function createIdeAiRoutes(projectService: ProjectService): Hono<HonoEnv>
       userAgent: c.req.header('User-Agent') ?? null,
       requestBody: requestBody as unknown as Record<string, unknown>,
       responseBody: null, errorMessage: null,
-    });
+    }, result.response.body);
 
-    if (!result.response.body) {
+    if (!traced) {
       return c.json({ error: 'No stream body', traceId }, 502);
     }
-    // Back-fill the streamed trace as the answer is delivered. This stream was
-    // previously handed straight to the client, so its trace row kept the zeros and
-    // the null body it was inserted with — the IDE assistant was the one surface
-    // whose traces could never say what it cost or what it said.
-    const traced = wrapStreamForTrace(result.response.body, {
-      onUsage: (usage) => backfillTraceUsage(c.env, c.executionCtx, traceId, usage),
-      onComplete: (completion) => backfillTraceResponseBody(c.env, c.executionCtx, traceId, {
-        streamed: true,
-        content: completion.content,
-        finishReason: completion.finishReason,
-        model: completion.model,
-        ...(completion.toolCalls.length > 0 ? { toolCalls: completion.toolCalls } : {}),
-      }),
-    });
     return new Response(traced, {
       headers: {
         'Content-Type': 'text/event-stream',

@@ -45,8 +45,7 @@ import {
   newTraceId,
   type ChatCompletionRequest,
 } from '../../application/llm/LlmProxyService';
-import { logTrace, backfillTraceUsage, backfillTraceResponseBody } from '../../application/llm/traceLogger';
-import { wrapStreamForTrace } from '../../application/llm/streamTrace';
+import { logTrace, logStreamedTrace } from '../../application/llm/traceLogger';
 import { evaluateFinetuneOutputs } from '../../application/finetune/evaluateFinetune';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import {
@@ -1469,7 +1468,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       // runs are as observable in the superadmin trace view as gateway/IDE-chat traffic
       // — the `agent_inference_logs` row above is the product metric, this is the raw
       // model/vendor/attempt telemetry keyed to the same traceId.
-      logTrace(c.env, c.executionCtx, {
+      // A streamed turn is written ONCE at stream end with its tokens and completion
+      // body (the shared tee); a non-streamed one (null source) is written now.
+      const tracedStream = logStreamedTrace(c.env, c.executionCtx, {
         traceId, surface: 'agent',
         tenantId: optionalTenantId(c),
         userId: c.get('userId') ?? null,
@@ -1479,7 +1480,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         userAgent: c.req.header('User-Agent') ?? null,
         requestBody: { agentId, messages, stream: streamed } as unknown as Record<string, unknown>,
         responseBody: null, errorMessage: null,
-      });
+      }, streamed ? result.response.body : null);
       await db.insert(agentInferenceLogs).values({
         id: logId,
         agentId,
@@ -1494,21 +1495,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         eq(ideAgents.tenantId, Number(agent.tenant_id)),
       ));
       if (!result.response.body) return c.json({ error: 'No stream body' }, 502);
-      // Same stream tee the gateway and IDE-assistant streams use: a STREAMED
-      // workforce turn only learns its tokens and its completion body in passing,
-      // so both are back-filled onto the row logged above rather than left at 0/null.
-      const responseStream = streamed
-        ? wrapStreamForTrace(result.response.body, {
-            onUsage: (usage) => backfillTraceUsage(c.env, c.executionCtx, traceId, usage),
-            onComplete: (completion) => backfillTraceResponseBody(c.env, c.executionCtx, traceId, {
-              streamed: true,
-              content: completion.content,
-              finishReason: completion.finishReason,
-              model: completion.model,
-              ...(completion.toolCalls.length > 0 ? { toolCalls: completion.toolCalls } : {}),
-            }),
-          })
-        : result.response.body;
+      const responseStream = tracedStream ?? result.response.body;
       return new Response(responseStream, {
         headers: {
           'Content-Type': body.stream !== false ? 'text/event-stream' : 'application/json',

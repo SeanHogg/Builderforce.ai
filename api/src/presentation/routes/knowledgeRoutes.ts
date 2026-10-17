@@ -48,8 +48,7 @@ import { ideProxy, newTraceId, readProxyChoice } from '../../application/llm/Llm
 import { completeJson } from '../../application/llm/completeJson';
 import { asJsonObject, extractJsonPayload } from '../../domain/shared/json';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
-import { logTrace, backfillTraceUsage, backfillTraceResponseBody } from '../../application/llm/traceLogger';
-import { wrapStreamForTrace } from '../../application/llm/streamTrace';
+import { logTrace, logStreamedTrace } from '../../application/llm/traceLogger';
 import {
   notifyCollaboratorInvited,
   notifyTrainingAssigned,
@@ -934,8 +933,10 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: err instanceof Error ? err.message : 'AI generation failed' }, 502);
     }
 
-    // Meter the call (token usage + diagnostic trace), fire-and-forget.
-    logTrace(c.env, c.executionCtx, {
+    // Diagnostic trace, fire-and-forget: written ONCE when the gateway's SSE stream
+    // ends (the shared tee supplies its tokens and completion body). The client still
+    // accumulates `choices[].delta.content`, same shape as IDE chat.
+    const draftStream = logStreamedTrace(c.env, c.executionCtx, {
       traceId,
       surface: 'knowledge-ai',
       tenantId,
@@ -948,23 +949,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       requestBody: requestBody as unknown as Record<string, unknown>,
       responseBody: null,
       errorMessage: null,
-    });
-
-    // Pass the gateway's OpenAI-compatible SSE stream through the shared tee: the
-    // client still accumulates `choices[].delta.content` (same shape as IDE chat),
-    // and the trace row logged above gets its tokens and its completion body
-    // back-filled instead of staying at 0/null for the whole stream.
-    const draftStream = result.response.body
-      ? wrapStreamForTrace(result.response.body, {
-          onUsage: (usage) => backfillTraceUsage(c.env, c.executionCtx, traceId, usage),
-          onComplete: (completion) => backfillTraceResponseBody(c.env, c.executionCtx, traceId, {
-            streamed: true,
-            content: completion.content,
-            finishReason: completion.finishReason,
-            model: completion.model,
-          }),
-        })
-      : result.response.body;
+    }, result.response.body);
     return new Response(draftStream, {
       status: result.response.status,
       headers: {
