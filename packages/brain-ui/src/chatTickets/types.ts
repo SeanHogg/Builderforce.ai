@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 /**
  * Shared types for the ChatTicketsPanel — the chat↔ticket surface rendered
  * identically on the web app and inside the VS Code webview. The panel is
@@ -435,8 +437,8 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
 export interface ChatTicketsExtension {
   /** Stable key — the open-drawer identity. Must not collide with the built-in pills. */
   key: string;
-  /** Leading glyph/emoji, matching the built-in pills' visual grammar. */
-  icon?: string;
+  /** Leading icon — an inline SVG element (never an emoji), sized to the pill's text. */
+  icon?: ReactNode;
   /** The pill's word. */
   label: string;
   /** Appended as ` (N)` when > 0, like Agents/People. */

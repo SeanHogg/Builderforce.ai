@@ -1,10 +1,25 @@
 /**
- * The conversation: the shared info strip (a synced chat's tickets and spend), the
- * shared `<BrainTimeline>` transcript over the device record and the live run, the
- * confirmation card the safety gate pauses on, and the shared composer.
+ * The conversation, as THE shared `<AiSurface>`: the info strip (a synced chat's tickets
+ * and spend) as its rail, the shared `<BrainTimeline>` over the device record and the
+ * live run — or, before the first message, the shared empty state with Rovr's fixed
+ * starters — the error card as its notice, and a footer holding the confirmation card
+ * the safety gate pauses on and the shared composer. Which chat is open is chosen from
+ * the header's History lever (`RovrChatHistory`).
  */
 import { useEffect, useMemo, useState } from 'react';
-import { BrainTimeline, ChatErrorBanner, QueuedTurnChips, timelineCatalogLookup, timelineLabelsFrom, useQueuedTurns } from '@seanhogg/builderforce-brain-ui';
+import {
+  AiSurface,
+  BrainTimeline,
+  ChatErrorBanner,
+  QueuedTurnChips,
+  StarterGroup,
+  StarterTile,
+  SurfaceEmptyState,
+  SurfaceFooter,
+  timelineCatalogLookup,
+  timelineLabelsFrom,
+  useQueuedTurns,
+} from '@seanhogg/builderforce-brain-ui';
 import catalogs from 'virtual:rovr-timeline-catalogs';
 import { deriveChatTitle, type BrainMessage } from '@seanhogg/builderforce-brain-embedded';
 import { PRICING_URL } from '../config';
@@ -14,18 +29,18 @@ import { ChatInfoStrip } from './ChatInfoStrip';
 import { ConfirmCard } from './ConfirmCard';
 import { useLoaded, useRun, useServices } from './hooks';
 import { RovrComposer } from './RovrComposer';
+import { ROVR_STARTERS } from './rovrStarters';
 import { useRovrChatOptions } from './useRovrChatOptions';
 
 export interface ChatViewProps {
   chats: LocalChat[];
   chatId: number | null;
-  onSelect(chatId: number): void;
   onNewChat(): Promise<number>;
   onChatsChanged(): void;
   onOpenSettings(): void;
 }
 
-export function ChatView({ chats, chatId, onSelect, onNewChat, onChatsChanged, onOpenSettings }: ChatViewProps) {
+export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSettings }: ChatViewProps) {
   const services = useServices();
   const run = useRun(chatId);
   const [draft, setDraft] = useState('');
@@ -84,32 +99,14 @@ export function ChatView({ chats, chatId, onSelect, onNewChat, onChatsChanged, o
     if (chatId !== null) services.host.stop(chatId);
   };
 
-  return (
-    <section className="rovr-chat">
-      <div className="rovr-row rovr-chat__bar">
-        <label className="rovr-sr" htmlFor="rovr-chat-select">
-          {t('chatPickerLabel')}
-        </label>
-        <select
-          id="rovr-chat-select"
-          className="rovr-select"
-          value={chatId ?? ''}
-          onChange={(e) => onSelect(Number(e.target.value))}
-          disabled={chats.length === 0}
-        >
-          {chats.length === 0 && <option value="">{t('noChats')}</option>}
-          {chats.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.title}
-            </option>
-          ))}
-        </select>
-        <button type="button" className="rovr-btn" onClick={() => void onNewChat()}>
-          {t('newChat')}
-        </button>
-      </div>
+  const empty = messages.length === 0 && !run.running && !run.streamingText;
 
-      {chatOptions.signedIn && chat?.serverId ? (
+  // THE shared AI surface body: rail · thread (or the empty state) · notices · footer.
+  return (
+    <AiSurface
+      className="rovr-chat"
+      label={t('tabChat')}
+      rail={chatOptions.signedIn && chat?.serverId ? (
         <ChatInfoStrip
           serverId={chat.serverId}
           projectId={chatOptions.projectId}
@@ -118,8 +115,7 @@ export function ChatView({ chats, chatId, onSelect, onNewChat, onChatsChanged, o
           onChanged={onChatsChanged}
         />
       ) : null}
-
-      <div className="rovr-chat__transcript">
+      thread={(
         <BrainTimeline
           messages={messages}
           trace={run.trace}
@@ -129,47 +125,67 @@ export function ChatView({ chats, chatId, onSelect, onNewChat, onChatsChanged, o
           labels={labels}
           assistantName="Rovr"
         />
-      </div>
-
-      <ChatErrorBanner
-        className="rovr-chat__error"
-        error={run.error ? t('runFailed', run.error) : ''}
-        action={run.errorAction}
-        onDismiss={() => chatId !== null && services.host.clearError(chatId)}
-        onSignIn={onOpenSettings}
-        onReconnect={onOpenSettings}
-        onUpgrade={() => void chrome.tabs.create({ url: PRICING_URL })}
-        onValidateCard={() => void chrome.tabs.create({ url: PRICING_URL })}
-        labels={{
-          signIn: t('signIn'),
-          reconnect: t('signIn'),
-          noModel: t('needModelOrSignIn'),
-          upgrade: t('upgrade'),
-          upgradeToPlan: t('upgradeToPlan'),
-          addCard: t('addCard'),
-          dismiss: t('dismiss'),
-        }}
-      />
-
-      {run.pendingConfirm && chatId !== null && <ConfirmCard chatId={chatId} call={run.pendingConfirm} />}
-
-      <RovrComposer
-        value={draft}
-        onChange={setDraft}
-        onSubmit={send}
-        running={run.running}
-        onStop={stop}
-        above={(
-          <QueuedTurnChips
-            items={queued.items}
-            textOf={(text) => text}
-            onRemove={queued.remove}
-            labels={{ list: t('queuedList'), hint: t('queuedHint'), remove: t('queuedRemove') }}
-          />
-        )}
-        chatOptions={chatOptions}
-        onOpenSettings={onOpenSettings}
-      />
-    </section>
+      )}
+      empty={empty ? (
+        <SurfaceEmptyState
+          layout="docked"
+          title={t('chatEmptyTitle')}
+          hint={t('chatEmpty')}
+          starters={(
+            <StarterGroup heading={t('suggestionsLabel')}>
+              {ROVR_STARTERS.map((s) => (
+                <StarterTile key={s.id} icon={s.icon} label={t(s.label)} hint={t(s.prompt)} onClick={() => setDraft(t(s.prompt))} />
+              ))}
+            </StarterGroup>
+          )}
+        />
+      ) : undefined}
+      notices={run.error ? (
+        <ChatErrorBanner
+          className="rovr-chat__error"
+          error={t('runFailed', run.error)}
+          action={run.errorAction}
+          onDismiss={() => chatId !== null && services.host.clearError(chatId)}
+          onSignIn={onOpenSettings}
+          onReconnect={onOpenSettings}
+          onUpgrade={() => void chrome.tabs.create({ url: PRICING_URL })}
+          onValidateCard={() => void chrome.tabs.create({ url: PRICING_URL })}
+          labels={{
+            signIn: t('signIn'),
+            reconnect: t('signIn'),
+            noModel: t('needModelOrSignIn'),
+            upgrade: t('upgrade'),
+            upgradeToPlan: t('upgradeToPlan'),
+            addCard: t('addCard'),
+            dismiss: t('dismiss'),
+          }}
+        />
+      ) : null}
+      footer={(
+        <SurfaceFooter
+          confirm={run.pendingConfirm && chatId !== null ? <ConfirmCard chatId={chatId} call={run.pendingConfirm} /> : null}
+          composer={(
+            <RovrComposer
+              value={draft}
+              onChange={setDraft}
+              onSubmit={send}
+              running={run.running}
+              onStop={stop}
+              above={(
+                <QueuedTurnChips
+                  items={queued.items}
+                  textOf={(text) => text}
+                  onRemove={queued.remove}
+                  labels={{ list: t('queuedList'), hint: t('queuedHint'), remove: t('queuedRemove') }}
+                />
+              )}
+              showSuggestions={!empty}
+              chatOptions={chatOptions}
+              onOpenSettings={onOpenSettings}
+            />
+          )}
+        />
+      )}
+    />
   );
 }

@@ -8,7 +8,7 @@ import { creationSessionsApi, type CreationSessionSummary, type CreationTimeline
 import { newNode } from '../canvasNodeHelpers';
 import type { CreationFlowNode } from '../CreationNode';
 import type { CanvasAiCompletion } from '@/lib/canvasAiRun';
-import type { BrainAction, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
+import { isRunning, startEngineRun, type BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import type { ProposedCanvasChange } from '@/domains/canvas/domain/canvasChange';
 import type { useTranslations } from 'next-intl';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
@@ -16,7 +16,6 @@ import type { CanvasTimelineMessage } from '../canvasBoardTypes';
 import { adoptableInitialMessage } from '../brainTurn/adoptableInitialMessage';
 import type { CanvasProposalStage } from '@/domains/canvas/application/CanvasProposalStage';
 import type { Edge } from '@xyflow/react';
-import type { ConfirmFn } from '@/components/ConfirmProvider';
 import type { CanvasNotices } from '@/lib/canvasNotices';
 import type { ChatModelSelection } from '@/components/ChatInput';
 import type { CanvasJournal } from '@/lib/canvasActionJournal';
@@ -27,6 +26,7 @@ import { turnAgentNodes } from '../brainTurn/turnParticipants';
 import { runCanvasGroupTurn } from '../brainTurn/runCanvasGroupTurn';
 import { type CanvasTurnSettleContext, settleCanvasTurnFailure, settleCanvasTurnSuccess } from '../brainTurn/settleCanvasTurn';
 import { previewPicksContext, takePreviewPicks } from '@/lib/workspace/previewPick';
+import { canvasRunKey } from '../brainTurn/canvasRunKey';
 
 export interface UseCanvasBrainTurnDeps {
   appendTimeline: (role: 'user' | 'assistant' | 'system', body: string, metadata?: CreationTimelineMessage['metadata'], clientMessageId?: string) => string;
@@ -34,8 +34,9 @@ export interface UseCanvasBrainTurnDeps {
   brainRuntimeRef: RefObject<{ completions: CanvasAiCompletion[]; disabledModels: string[]; }>;
   canvasActions: BrainAction<unknown, unknown>[];
   canvasNotices: CanvasNotices;
-  canvasRunRef: RefObject<{ abort: AbortController; requestMessageId: string; startedAt: number; } | null>;
-  confirm: ConfirmFn;
+  /** The in-flight turn's correlation id and start — what Stop records. The run itself
+   *  (abort, trace, approvals) lives in the run store under `canvasRunKey(sessionId)`. */
+  canvasRunRef: RefObject<{ requestMessageId: string; startedAt: number; } | null>;
   currentUserId: string | null;
   describeTurnError: (error: unknown, fallbackKey: 'noticeBrainFailed' | 'noticeAgentTestFailed' | 'noticeAgentGroupFailed') => string;
   disableBrainModel: (model: string) => void;
@@ -65,7 +66,6 @@ export interface UseCanvasBrainTurnDeps {
   setActiveAgentIds: Dispatch<SetStateAction<Set<string>>>;
   setAutoApplyPending: Dispatch<SetStateAction<boolean>>;
   setBrainRunStartedAt: Dispatch<SetStateAction<number | null>>;
-  setBrainTrace: Dispatch<SetStateAction<BrainTraceEvent[]>>;
   setEdges: Dispatch<SetStateAction<Edge[]>>;
   setGuestLimit: Dispatch<SetStateAction<GuestLimitRefusal | null>>;
   setModelSelection: Dispatch<SetStateAction<ChatModelSelection>>;
@@ -75,20 +75,21 @@ export interface UseCanvasBrainTurnDeps {
   setProposedChanges: Dispatch<SetStateAction<ProposedCanvasChange[]>>;
   setSelectedId: Dispatch<SetStateAction<string | null>>;
   setSelectedIds: Dispatch<SetStateAction<string[]>>;
-  setThinking: Dispatch<SetStateAction<boolean>>;
   stage: CanvasProposalStage;
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
-  thinking: boolean;
   timeline: CanvasTimelineMessage[];
   title: string;
   turnToolCallsRef: RefObject<Set<string>>;
   turnUnansweredRef: RefObject<{ reason: string; detail?: string; } | null>;
 }
 
-export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, canvasRunRef, confirm, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setBrainRunStartedAt, setBrainTrace, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setThinking, stage, t, thinking, timeline, title, turnToolCallsRef, turnUnansweredRef }: UseCanvasBrainTurnDeps) {
+export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, canvasRunRef, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setBrainRunStartedAt, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, stage, t, timeline, title, turnToolCallsRef, turnUnansweredRef }: UseCanvasBrainTurnDeps) {
   const evaluateCanvas = useCallback((promptOverride?: string) => {
     const requestText = (promptOverride ?? prompt).trim();
-    if (!requestText || thinking) return;
+    // The run store is the truth about whether a turn is in flight (`thinking` trails it
+    // by a render): a second start would be refused by the store anyway, but only after
+    // this turn had already written its request into the transcript.
+    if (!requestText || isRunning(canvasRunKey(sessionId))) return;
     // A tenant board with no tenant token cannot run a turn: the request would leave
     // without an Authorization header and come back 401 "Missing or malformed
     // Authorization header" — which is exactly what one signed-in user's diagnostics
@@ -117,68 +118,76 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeR
     inFlightUseCaseIdRef.current = executiveUseCase?.id ?? null;
     const executiveWorkflow = executiveUseCase ? cSuiteCanvasWorkflow(executiveUseCase) : null;
     trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: canvasSurface(), scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))], ...(executiveUseCase ? { useCaseId: executiveUseCase.id } : {}) } });
-    setThinking(true);
-    setBrainRunStartedAt(Date.now());
-    setNotice(t('noticeBrainEvaluating'));
-    const initialMessage = initialPromptSubmittedRef.current ? adoptableInitialMessage(timeline, requestText) : undefined;
-    const promptAuthor = persistence === 'server' ? members.find((member) => member.userId === currentUserId) : null;
-    const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'human', ref: currentUserId || 'local', name: promptAuthor?.displayName || 'You' } }, initialMessage?.clientMessageId);
-    const promptStartedAt = performance.now();
-    // The handle Stop reaches this run through. Created before the first await so a
-    // Stop pressed while the request is still being assembled still lands.
-    const runAbort = new AbortController();
-    canvasRunRef.current = { abort: runAbort, requestMessageId, startedAt: promptStartedAt };
-    if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'started', metadata: { scope: resolvedScopeMode, ...(executiveUseCase ? { useCaseId: executiveUseCase.id } : {}) } }).catch(() => undefined);
-    // A composer submission is a chat interaction, so reveal its Brain object
-    // immediately. Waiting for the vendor request to succeed left a blank canvas
-    // (and hid useful streaming/failure state) whenever the provider cascade
-    // rejected the turn.
-    const existingChat = nodes.find((node) => node.data.kind === 'chat');
-    const brainId = existingChat?.id ?? crypto.randomUUID();
-    if (!existingChat) {
-      const brain = { ...newNode('chat', { x: 120, y: 120 }), id: brainId };
-      brain.data = { ...brain.data, title: 'Brain', subtitle: requestText };
-      setNodes((current) => current.some((node) => node.data.kind === 'chat') ? current : [...current, brain]);
-    }
-    setSelectedId(brainId);
-    setSelectedIds([brainId]);
-    stage.reset();
-    turnUnansweredRef.current = null;
-    turnToolCallsRef.current = new Set();
-    setBrainTrace([]);
-    setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, trace: [] } } : node));
-    setProposedChanges([]);
-    const request = requestText;
-    // The board as ONE loop of this turn sees it. A function rather than a value,
-    // because a turn can run more than one loop — the invited agents first, then the
-    // Brain synthesis — and the synthesis must see what the agents just put on the
-    // board. Built once from the turn-start `nodes`, it showed the synthesis the
-    // board the agents had already changed as if they had not, and the synthesis
-    // re-made their objects (session bf886fc1: the same app built twice). Anything
-    // added since the turn began is in scope for a later loop whatever the selection
-    // was — it is this turn's own work.
-    const startIds = new Set(nodes.map((node) => node.id));
-    // The elements picked for the composer — in the app's preview ("Select to edit") or by
-    // Insights' "Apply in composer" (selector-anchored) — are what a TYPED turn is about;
-    // every pick's note rides every loop's view of the board and is spent by this turn. A
-    // replay or a queued turn carries its own text and leaves standing picks for the next one.
-    const pickNotes = promptOverride === undefined ? previewPicksContext(takePreviewPicks()) : '';
-    const pickNote = pickNotes ? `\n\n${pickNotes}` : '';
-    const turnSnapshot = (board: readonly CreationFlowNode[]): string => canvasTurnSnapshot(board, stage.edges(), { sessionId, scope: resolvedScopeMode, selectedObjectIds: effectiveSelectedIds, scopedNodeIds, startIds }) + pickNote;
-    clearComposer();
-    const connectedAgentNodes = turnAgentNodes(requestText, nodes, edges, effectiveSelectedIds, brainId);
-    setActiveAgentIds(new Set(connectedAgentNodes.map((agent) => agent.id)));
-    // The turn, start to finish — including the SCOPE it ran against, which is
-    // the fact that explained the reported "I don't see that file" answer and
-    // which nothing was recording.
-    const turnDone = journalRef.current.begin(
-      'turn', 'brain.turn',
-      `scope=${resolvedScopeMode} (${scopedNodes.length}/${nodes.length} objects) · ${request.slice(0, 80)}`,
-    );
-    const settle: CanvasTurnSettleContext = { appendTimeline, autoApplyRef, brainId, canvasRunRef, describeTurnError, effectiveSelectedIds, executiveUseCase, executiveWorkflow, lastTurnProvenance, nodes, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, runAbort, scopedNodeIds, sessionId, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setNodes, setNotice, setProposedChanges, setThinking, stage, t, turnDone, turnUnansweredRef };
-    void runCanvasGroupTurn({ appendTimeline, autoApplyRef, brainId, brainRuntimeRef, canvasActions, canvasNotices, confirm, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journalRef, memoryEnabled, modelSelection, runShaping, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setBrainTrace, setModelSelection, setNodes, signal: runAbort.signal, stage, t, timeline, title, turnSnapshot, turnToolCallsRef, turnUnansweredRef })
-      .then((answer) => settleCanvasTurnSuccess(settle, answer))
-      .catch((error) => settleCanvasTurnFailure(settle, error));
-  }, [prompt, thinking, persistence, inFlightUseCaseIdRef, sessionId, resolvedScopeMode, scopedNodes, setThinking, setBrainRunStartedAt, setNotice, t, initialPromptSubmittedRef, timeline, members, appendTimeline, scopedNodeIds, currentUserId, canvasRunRef, nodes, setSelectedId, setSelectedIds, stage, turnUnansweredRef, turnToolCallsRef, setBrainTrace, setNodes, setProposedChanges, edges, effectiveSelectedIds, setActiveAgentIds, journalRef, autoApplyRef, describeTurnError, lastTurnProvenance, setAcceptedProposalIds, setAutoApplyPending, setEdges, setGuestLimit, brainRuntimeRef, canvasActions, canvasNotices, confirm, disableBrainModel, evermindProjectId, memoryEnabled, modelSelection, runShaping, recordBrainCompletion, sessionMode, setModelSelection, title, requireAccount, setPrompt]);
+    // THE run: one cell in the shared run store (`startEngineRun`), keyed by the session —
+    // single-flight, outliving whichever placement started it, stopped by `stopRun`, and
+    // asking for approvals through the gate the surface's ToolConfirmBar answers. The
+    // body below runs synchronously up to its first await, inside the store's claim.
+    void startEngineRun(canvasRunKey(sessionId), async (run) => {
+      setBrainRunStartedAt(Date.now());
+      setNotice(t('noticeBrainEvaluating'));
+      const initialMessage = initialPromptSubmittedRef.current ? adoptableInitialMessage(timeline, requestText) : undefined;
+      const promptAuthor = persistence === 'server' ? members.find((member) => member.userId === currentUserId) : null;
+      const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'human', ref: currentUserId || 'local', name: promptAuthor?.displayName || 'You' } }, initialMessage?.clientMessageId);
+      const promptStartedAt = performance.now();
+      // What Stop records against. The abort handle is the run cell's, created when the
+      // store claimed it, so a Stop pressed while the request is assembled still lands.
+      canvasRunRef.current = { requestMessageId, startedAt: promptStartedAt };
+      if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'started', metadata: { scope: resolvedScopeMode, ...(executiveUseCase ? { useCaseId: executiveUseCase.id } : {}) } }).catch(() => undefined);
+      // A composer submission is a chat interaction, so reveal its Brain object
+      // immediately. Waiting for the vendor request to succeed left a blank canvas
+      // (and hid useful streaming/failure state) whenever the provider cascade
+      // rejected the turn.
+      const existingChat = nodes.find((node) => node.data.kind === 'chat');
+      const brainId = existingChat?.id ?? crypto.randomUUID();
+      if (!existingChat) {
+        const brain = { ...newNode('chat', { x: 120, y: 120 }), id: brainId };
+        brain.data = { ...brain.data, title: 'Brain', subtitle: requestText };
+        setNodes((current) => current.some((node) => node.data.kind === 'chat') ? current : [...current, brain]);
+      }
+      setSelectedId(brainId);
+      setSelectedIds([brainId]);
+      stage.reset();
+      turnUnansweredRef.current = null;
+      turnToolCallsRef.current = new Set();
+      setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, trace: [] } } : node));
+      setProposedChanges([]);
+      const request = requestText;
+      // The board as ONE loop of this turn sees it. A function rather than a value,
+      // because a turn can run more than one loop — the invited agents first, then the
+      // Brain synthesis — and the synthesis must see what the agents just put on the
+      // board. Built once from the turn-start `nodes`, it showed the synthesis the
+      // board the agents had already changed as if they had not, and the synthesis
+      // re-made their objects (session bf886fc1: the same app built twice). Anything
+      // added since the turn began is in scope for a later loop whatever the selection
+      // was — it is this turn's own work.
+      const startIds = new Set(nodes.map((node) => node.id));
+      // The elements picked for the composer — in the app's preview ("Select to edit") or by
+      // Insights' "Apply in composer" (selector-anchored) — are what a TYPED turn is about;
+      // every pick's note rides every loop's view of the board and is spent by this turn. A
+      // replay or a queued turn carries its own text and leaves standing picks for the next one.
+      const pickNotes = promptOverride === undefined ? previewPicksContext(takePreviewPicks()) : '';
+      const pickNote = pickNotes ? `\n\n${pickNotes}` : '';
+      const turnSnapshot = (board: readonly CreationFlowNode[]): string => canvasTurnSnapshot(board, stage.edges(), { sessionId, scope: resolvedScopeMode, selectedObjectIds: effectiveSelectedIds, scopedNodeIds, startIds }) + pickNote;
+      clearComposer();
+      const connectedAgentNodes = turnAgentNodes(requestText, nodes, edges, effectiveSelectedIds, brainId);
+      setActiveAgentIds(new Set(connectedAgentNodes.map((agent) => agent.id)));
+      // The turn, start to finish — including the SCOPE it ran against, which is
+      // the fact that explained the reported "I don't see that file" answer and
+      // which nothing was recording.
+      const turnDone = journalRef.current.begin(
+        'turn', 'brain.turn',
+        `scope=${resolvedScopeMode} (${scopedNodes.length}/${nodes.length} objects) · ${request.slice(0, 80)}`,
+      );
+      const settle: CanvasTurnSettleContext = { appendTimeline, autoApplyRef, brainId, canvasRunRef, describeTurnError, effectiveSelectedIds, executiveUseCase, executiveWorkflow, lastTurnProvenance, nodes, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, signal: run.signal, scopedNodeIds, sessionId, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setNodes, setNotice, setProposedChanges, stage, t, turnDone, turnUnansweredRef };
+      try {
+        const answer = await runCanvasGroupTurn({ appendTimeline, autoApplyRef, brainId, brainRuntimeRef, canvasActions, canvasNotices, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journalRef, memoryEnabled, modelSelection, runShaping, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setModelSelection, setNodes, run, stage, t, timeline, title, turnSnapshot, turnToolCallsRef, turnUnansweredRef });
+        settleCanvasTurnSuccess(settle, answer);
+      } catch (error) {
+        // The canvas narrates its own failure (transcript row, notice, outcome record), so
+        // the run settles cleanly rather than repeating it as the cell's error.
+        settleCanvasTurnFailure(settle, error);
+      }
+    });
+  }, [prompt, persistence, inFlightUseCaseIdRef, sessionId, resolvedScopeMode, scopedNodes, setBrainRunStartedAt, setNotice, t, initialPromptSubmittedRef, timeline, members, appendTimeline, scopedNodeIds, currentUserId, canvasRunRef, nodes, setSelectedId, setSelectedIds, stage, turnUnansweredRef, turnToolCallsRef, setNodes, setProposedChanges, edges, effectiveSelectedIds, setActiveAgentIds, journalRef, autoApplyRef, describeTurnError, lastTurnProvenance, setAcceptedProposalIds, setAutoApplyPending, setEdges, setGuestLimit, brainRuntimeRef, canvasActions, canvasNotices, disableBrainModel, evermindProjectId, memoryEnabled, modelSelection, runShaping, recordBrainCompletion, sessionMode, setModelSelection, title, requireAccount, setPrompt]);
   return { evaluateCanvas };
 }

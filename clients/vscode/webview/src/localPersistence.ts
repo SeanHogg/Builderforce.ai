@@ -32,7 +32,13 @@ export function createInMemoryPersistence(labels: { summarizeUnavailable: string
   const blobs = new Map<string, string>();
   let nextId = 1;
 
-  const now = (): string => new Date().toISOString();
+  // Strictly increasing: two writes in the same millisecond (create, then send) must
+  // still order, or a touched chat ties with a newer one and never moves to the top.
+  let lastStamp = 0;
+  const now = (): string => {
+    lastStamp = Math.max(Date.now(), lastStamp + 1);
+    return new Date(lastStamp).toISOString();
+  };
   const require_ = (id: number): BrainChat => {
     const chat = chats.get(id);
     // The loop treats a missing chat as a bug, not a state to recover from — say which.

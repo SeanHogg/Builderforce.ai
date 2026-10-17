@@ -1,10 +1,10 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
-import { useTranslations } from 'next-intl';
-import { selectPendingAskUser, askUserAnchorId, type useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
+import type { useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import { parseSuggestedActions, type useBrainActions, type useBrainChats, type useBrainConversation } from '@/lib/brain';
 import type { BrainMessage } from '@/lib/builderforceApi';
+import { usePendingQuestion, useTranscriptReplies } from '@/lib/brain/useTranscriptReplies';
 
 /**
  * Everything the shared <BrainTimeline> and the pending-question banner are
@@ -30,9 +30,6 @@ export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, ru
    */
   submitQueued: (text: string) => boolean;
 }) {
-  const tTimeline = useTranslations('brain.timeline');
-  const tCommon = useTranslations('common');
-
   const hasTool = useCallback(
     (name: string) => toolSpecs.some((t) => t.function.name === name),
     [toolSpecs],
@@ -65,40 +62,17 @@ export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, ru
   useLayoutEffect(() => {
     timelineCtxRef.current = { conv, chats, recipient };
   });
-  const onAnswerTimelineQuestion = useCallback((answer: string) => {
-    if (submitQueued(answer)) return;
-    const { conv: c, recipient: r } = timelineCtxRef.current;
-    void c.send(answer, { addressedTo: r });
-  }, [submitQueued]);
-  /** "Send again" on any message: re-ask with the same text. Addressed to the same
-   *  recipient as a freshly typed turn, so replaying in a multi-party chat reaches
-   *  whoever the composer is currently pointed at rather than silently the Brain. */
-  const onReplayTimelineMessage = useCallback((msg: BrainMessage) => {
-    if (submitQueued(msg.content)) return;
-    const { conv: c, recipient: r } = timelineCtxRef.current;
-    void c.send(msg.content, { addressedTo: r });
-  }, [submitQueued]);
-  // The question this chat is BLOCKED on, if any. A long transcript buries the agent's
-  // ask_user card, so the chat reads as merely idle when it is actually waiting on the
-  // user — the VSIX has pinned it at the composer since the session-tabs pass, and this
-  // is the same shared predicate + banner, so the two surfaces can never disagree about
-  // whether a chat is blocked.
-  const pendingQuestion = useMemo(() => selectPendingAskUser(conv.messages), [conv.messages]);
-  // The banner renders the SAME <QuestionCard> the timeline does, so its card copy is
-  // taken from the timeline bundle rather than re-translated — only the two
-  // banner-specific strings are new.
-  const askLabels = useMemo(() => ({
-    askSubmit: timelineLabels.askSubmit,
-    askAnswered: timelineLabels.askAnswered,
-    askPending: tTimeline('askPending'),
-    askJumpTo: tTimeline('askJumpTo'),
-    askDismiss: tCommon('dismiss'),
-  }), [timelineLabels, tTimeline, tCommon]);
-  const revealPendingQuestion = useCallback(() => {
-    if (!pendingQuestion) return;
-    document.getElementById(askUserAnchorId(pendingQuestion.messageId))
-      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [pendingQuestion]);
+  // "Send again" and an ask_user answer are the next turn with that text — the ONE
+  // shared reply path. Through the composer's queue first, then addressed to the same
+  // recipient as a freshly typed turn, so a multi-party chat reaches whoever the composer
+  // is pointed at rather than silently the Brain.
+  const { onAnswerQuestion: onAnswerTimelineQuestion, onReplayMessage: onReplayTimelineMessage } = useTranscriptReplies((text) => {
+    if (submitQueued(text)) return;
+    void conv.send(text, { addressedTo: recipient });
+  });
+  // The question this chat is BLOCKED on — the same shared predicate + banner the VSIX
+  // pins at its composer, so the surfaces can never disagree about whether a chat is blocked.
+  const { pendingQuestion, askLabels, revealPendingQuestion } = usePendingQuestion(conv.messages, timelineLabels);
 
   const renderTimelineMessage = useCallback(
     (msg: BrainMessage, ctx: { role: 'user' | 'assistant'; text: string }) => (

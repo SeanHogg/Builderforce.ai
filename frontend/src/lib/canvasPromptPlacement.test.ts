@@ -8,8 +8,9 @@ describe('effectiveCanvasPromptPlacement', () => {
     expect(effectiveCanvasPromptPlacement({ ...base, hostOwnsSurface: true, lensPlacement: 'docked' })).toBe('closed');
   });
 
-  it('keeps it floating while Brain IS the surface', () => {
-    expect(effectiveCanvasPromptPlacement({ ...base, brainIsSurface: true, preference: 'docked' })).toBe('float');
+  it('docks it into the surface while Brain IS the surface, whatever the preference', () => {
+    expect(effectiveCanvasPromptPlacement({ ...base, brainIsSurface: true, preference: 'float' })).toBe('docked');
+    expect(effectiveCanvasPromptPlacement({ ...base, brainIsSurface: true, preference: 'closed', brainDockDrawn: false })).toBe('docked');
   });
 
   it('floats a docked preference while no dock is drawn, and honours it while one is', () => {

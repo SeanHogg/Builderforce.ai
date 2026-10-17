@@ -2,10 +2,11 @@
  * The panel's small React bindings over the services — the run store (the SAME store
  * every Brain surface reads), the device record and the subscriptions behind them.
  */
-import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { getRunSnapshot, subscribeRun, type BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
 import type { PanelServices } from '../host/panelServices';
 import type { RovrSettings } from '../platform/settings';
+import { originOf } from '../tools/safety';
 
 export const ServicesContext = createContext<PanelServices | null>(null);
 
@@ -99,4 +100,15 @@ export function useOnline(): boolean {
     },
     () => navigator.onLine,
   );
+}
+
+/** The site Rovr is acting on — the working tab's host (`example.com`), or null for a
+ *  page that is not a web page (a new tab, browser settings) or no tab at all. */
+export function useWorkingSite(): string | null {
+  const { working } = useServices();
+  const url = useSyncExternalStore(working.subscribe, () => working.current()?.url ?? null);
+  return useMemo(() => {
+    const origin = originOf(url);
+    return origin ? new URL(origin).host : null;
+  }, [url]);
 }

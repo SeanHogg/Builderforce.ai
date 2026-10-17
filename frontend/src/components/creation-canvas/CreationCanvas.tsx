@@ -46,7 +46,8 @@ import { useSharedCanvasRoom } from '@/domains/canvas/presentation/useSharedCanv
 export const CREATION_CANVAS_TOUR = { sectionId: 'creation-canvas', version: 2 } as const;
 import { useCanvasLiveRoom } from '@/lib/live/useCanvasLiveRoom';
 import { canvasNoticesFrom } from '@/lib/canvasNotices';
-import { type BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
+import { useRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
+import { canvasRunKey } from './brainTurn/canvasRunKey';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import { type LocalCheckpointSummary } from '@/lib/creationCheckpoints';
 import { creationObjectDefinition } from './creationObjectRegistry';
@@ -181,7 +182,7 @@ import { CanvasBrainDockHost } from './stage/CanvasBrainDockHost';
 import { CanvasBrainLauncher } from './stage/CanvasBrainLauncher';
 import { useCanvasSessionApp, useOpenCanvasApp } from './hooks/useCanvasSessionApp';
 import { sessionHasApp } from '@/lib/canvasSessionApp';
-import { useBrainConversation } from './stage/useBrainConversation';
+import { useCanvasConversationProps } from './stage/useCanvasConversationProps';
 
 /** The air between the command bar and the prompt floating above it. The bar's HEIGHT is
  *  measured (see `useChromeSpace`); this is the only part of that band a number can
@@ -386,14 +387,20 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
      it ever read the number, and seven hooks here were seven hooks this file did not
      need to own. */
   const [twilioPromptSelected, setTwilioPromptSelected] = useState(false);
-  const [thinking, setThinking] = useState(false);
   /**
-   * The in-flight turn's cancellation handle and the correlation id it was started
-   * under — everything Stop needs to interrupt the run AND record that the user is
-   * the one who ended it. Held in a ref rather than state because Stop must reach
-   * the CURRENT run from a callback the composer holds for the whole session.
+   * THE run — this session's Brain turn lives in the shared run store (brain-embedded,
+   * `startEngineRun` under `canvasRunKey`), the same store every chat surface runs in:
+   * whether a turn is in flight and its live trace are READ from it, never mirrored here.
    */
-  const canvasRunRef = useRef<{ abort: AbortController; requestMessageId: string; startedAt: number } | null>(null);
+  const canvasRun = useRunSnapshot(canvasRunKey(sessionId));
+  const thinking = canvasRun.running;
+  const brainTrace = canvasRun.trace;
+  /**
+   * The in-flight turn's correlation id — what Stop records against, so the transcript
+   * says the user ended it. Held in a ref because Stop must reach the CURRENT run from a
+   * callback the composer holds for the whole session.
+   */
+  const canvasRunRef = useRef<{ requestMessageId: string; startedAt: number } | null>(null);
   // When the in-flight turn began. Shared with every Brain surface (dock strip,
   // transcript, board anchor) so they narrate the same phase at the same instant.
   const [brainRunStartedAt, setBrainRunStartedAt] = useState<number | null>(null);
@@ -504,7 +511,6 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   /** The checkpoint name being typed, inline. See `createCheckpoint` for why it is not a prompt. */
   const [checkpointName, setCheckpointName] = useState('');
   const [timeline, setTimeline] = useState<CanvasTimelineMessage[]>([]);
-  const [brainTrace, setBrainTrace] = useState<BrainTraceEvent[]>([]);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   /** The left dock holds ONE panel at a time. Six booleans used to stack panels invisibly at
@@ -812,7 +818,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
 
   const { canvasActions } = useCanvasBrainVocabulary({ buildsRef: sessionApp.buildsRef, createApp: sessionApp.createApp, appWritten: sessionApp.appWritten, buildSocialFeedNode, canEdit, canvasText, convertObjectToDiagram, effectiveSelectedIds, fmt, inFlightUseCaseIdRef, layoutViewportRef, localizedTourDefaults, nodes, nodesRef, openAccountGate, persistence, promptRef, recentJournalEvidence, requireAccount, resolvedScopeMode, scopedNodeIds, sessionId, setDockPanel, socialAccountGate, stage, t, tSocial, turnToolCallsRef });
   const { addAgentKnowledge, runAgentTest } = useCanvasAgentTesting({ brainRuntimeRef, canEdit, canvasNotices, describeTurnError, disableBrainModel, edges, modelSelection, nodes, persistence, placeAppendedRef, recordBrainCompletion, setEdges, setNodes, setNotice, t });
-  const { evaluateCanvas } = useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, canvasRunRef, confirm, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, runShaping: runShapingControls.runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setBrainRunStartedAt, setBrainTrace, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, setThinking, stage, t, thinking, timeline, title, turnToolCallsRef, turnUnansweredRef });
+  const { evaluateCanvas } = useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, canvasRunRef, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, runShaping: runShapingControls.runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setBrainRunStartedAt, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, stage, t, timeline, title, turnToolCallsRef, turnUnansweredRef });
   const { rejectProposedChanges, applyAndEnableAutoApply, applyProposedChanges } = useCanvasProposalReview({ acceptedProposalIds, autoApplyPending, comparisonModelIds, describeTurnError, entryAppPending: entryApp.pending, evaluateCanvas, flowRef, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, layoutViewportRef, modelComparisonStartedRef, nodes, persistence, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setAutoApplyMode, setAutoApplyPending, setEdges, setNodes, setNotice, setPendingBrainActions, setProposedChanges, setSelectedId, setSelectedIds, setSurface, stage, t, thinking, timeline });
   const { resolveWorkflowNode, buildFlowFromFrame, buildFlow, openEvermindBuild, loadEvermindTemplate, evermindBuild, setEvermindBuild } = useCanvasFlowBuild({ connectionKind, edgesRef, errorText, framedBoardRef, nodes, nodesRef, persistence, requireAccount, selectedNode, sessionId, setEdges, setNodes, setNotice, t, updateNodeData });
   const { compileWorkflow, runWorkflow, unpackWorkflow, saveAgent } = useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKind, errorText, framedBoardRef, persistence, requireAccount, resolveWorkflowNode, selectedNode, sessionId, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t });
@@ -893,7 +899,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
 
   const cleanLayout = useCanvasCleanLayout({ boardRef: flowWrapRef, instanceRef: flowRef, setNodes, edges, padding: .16, maxZoom: .9 });
   const { zoomInAction, zoomOutAction, fitViewAction, framedBoard, roomSceneInput, threeDNodes, describeThreeD, selectThreeDObject, moveThreeDObjects, roomCreations, openRoomCreation } = useCanvasRenderedBoard({ activeAgentIds, canEdit, comparisonModelIds, dockPanel, edges, evermindLiveByNodeId, flowRef, frameFocus, framedBoardRef, minimapColor: canvasMinimapColor, nodes, outlineHighlightIds, setInspectorFocus, setNodes, setSelectedId, setSelectedIds, setSurface, showHidden, t, threeDControls, timeline });
-  const { startCanvasTurnRef, exportFromNode, startCanvasTurn, stopCanvasRun, queuedTurns } = useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef, evaluateCanvas, exportArtifact, persistence, prompt, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setBrainRunStartedAt, setNotice, setPrompt, setThinking, t, thinking });
+  const { startCanvasTurnRef, exportFromNode, startCanvasTurn, stopCanvasRun, queuedTurns } = useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef, evaluateCanvas, exportArtifact, persistence, prompt, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setBrainRunStartedAt, setNotice, setPrompt, t, thinking });
   const { tailorResumeFromNode, detachResumeFromNode, createResumeShare, listResumeShares, revokeResumeShare } = useCanvasResumeShares({ persistence, sessionId, setNodes, setNotice, setScopeMode, setSelectedId, setSelectedIds, startCanvasTurnRef, t });
   /**
    * The same treatment for `runWorkflow`, which needed it just as badly and was
@@ -992,7 +998,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
     standup: { members: rosterMembers, agents: seatedAgents, boardProjectId, ceremonyEnabled: hasAccount, onError: setNotice, onAgentRound: startCanvasTurn },
   });
   const sessionFacts = useMemo<CanvasSessionFacts>(() => ({ sessionId, persistence, role: sessionRole, canEdit, notify: setNotice, requireAccount, lens, boardPath: lensState.boardPath }), [canEdit, lens, lensState.boardPath, persistence, requireAccount, sessionId, sessionRole, setNotice]);
-  const brainConversation = useBrainConversation({
+  const brainConversation = useCanvasConversationProps({
     brain: { brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, brainSurface, guestSignupPrompt },
     showExecutionDetail: brainDock.showExecutionDetail, updateBrainDock, trace: brainTrace, nodes, edges, joinedCollaborator,
   });
@@ -1077,7 +1083,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
         <CanvasSurfaceStage
           surface={surface} hostSurfaces={hostSurfaces} surfaceNode={surfaceNode} exitSurface={exitSurface} setSurface={setSurface} sessionApp={sessionApp} sessionTitle={title} entryAppPending={entryApp.pending}
           nodes={nodes} editable={cardsEditable} updateNodeData={updateNodeData} appendAtCenter={appendAtCenter} revealObject={revealObject}
-          conversation={brainConversation} roster={rosterMembers} openGamePanel={openGamePanel} setShareOpen={setShareOpen} doors={{ prove: sessionActionHandlers.prove, publish: sessionActionHandlers.publish, openListing: openPublishPanel, openReleases: openReleasesPanel, openSocial: () => { if (connectedAccountGate(tSocial('title'))) setDockPanel('social'); } }}
+          conversation={brainConversation} chatComposer={surfaceDef.brainIsSurface && promptInBrainPanel ? composer : null} roster={rosterMembers} openGamePanel={openGamePanel} setShareOpen={setShareOpen} doors={{ prove: sessionActionHandlers.prove, publish: sessionActionHandlers.publish, openListing: openPublishPanel, openReleases: openReleasesPanel, openSocial: () => { if (connectedAccountGate(tSocial('title'))) setDockPanel('social'); } }}
           resume={{ tailorResumeFromNode, detachResumeFromNode, createResumeShare, listResumeShares, revokeResumeShare }}
           composeDraft={(text: string) => { setPrompt(text); if (effectivePromptPlacement === 'closed') setPromptPlacement('float'); }}
           room={<CanvasRoomStage

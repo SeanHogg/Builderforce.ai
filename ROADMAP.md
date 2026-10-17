@@ -210,10 +210,6 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ## 📣 Reach — sell, be found, grow
 
-### Content accuracy `[content]`
-
-- **Open-source blog posts overstate "no COOP/COEP".** `content/blog/builderforce-webcontainers-open-source.md` (description, line 4) and `open-source-at-builderforce.{md,de,es,fr}` (lines 20/33, localized 10/23) say the runtime runs "with no COOP/COEP headers"; the library doesn't *require* them, but builderforce.ai itself sends `COOP: same-origin` / `COEP: credentialless` for SharedArrayBuffer/WebGPU/WebLLM. Reword to "without requiring COOP/COEP" (zh already says 无需); the matching `en.json` blog-index `description` changes with the post. The UI strings were corrected 2026-10-17. *Blocker: those post files carry another session's uncommitted edits — apply once that work lands.*
-
 ### Marketplace and commerce `[commerce]`
 
 - **Buyer can't drive a listing before buying (Stage sandbox parked).** *Blocker: infrastructure decision on the throwaway tenant and who pays.*
@@ -303,7 +299,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Ask-the-Manager zero tool calls — suspect the vendor path.** Instrument `buildResponsesBody` with a real 102-tool payload. *Blocker: a live turn on a known vendor.*
 - **Verify 308→64 tool selection restores tool calling on chat #71.** *Blocker: a live turn.*
 - **Inherited Evermind endpoints still accept writes** (UI is read-only); a 409 would change the front-door contract.
-- **AI Surface — the remaining composition.** Shared parts are extracted and every host mounts them (see DONE 2026-10-17); still per-host: (a) the surface BODY — web `BrainConversation`, canvas `BrainSurfaceBody`, `VsCodeChatSurface` (1,163 lines, still over 400), Rovr `ChatView` — not yet one brain-ui `AiSurface`; (b) colour tokens — `--chat-input-*`, `--chat-ctl-*`, `--bf-ct-*`, `--canvas-brain-*` still exist beside `--bf-*` (now with `--bf-*` fallbacks); (c) VS Code has no empty state/starters; (d) Rovr has no context chip (no "this tab" scope exists in its runtime). Acceptance: one `AiSurface` body in brain-ui mounted by all four hosts; one token family. Not blocked — next pass of the consolidation (design: https://claude.ai/artifact/5XBEQExiB7rHHEJPWYfr2Y, checklist board).
+- **AI Surface — rendered checks.** Every host (Web Brain panel/canvas/guest, VS Code, Rovr) is on `AiSurface` with `--bf-*` tokens (DONE 2026-10-17), but 360px width and dark/light have only been typechecked, not seen. Also audit each host for a second catalog→labels table inside the same host. *Blocker: a rendered pass in a browser, the VS Code webview and the Chrome side panel — not available in this session.*
 
 ### Evermind / SSM `[agents]`
 

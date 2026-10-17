@@ -43,7 +43,7 @@ export {
   serializeAskUser,
   DEFAULT_ASK_USER_LABELS,
 } from './askUser';
-export type { AskUserPayload, AskUserOption, AskUserLabels, PendingAskUser } from './askUser';
+export type { AskUserPayload, AskUserOption, AskUserLabels, PendingAskUser, AskUserMessageLike } from './askUser';
 
 // The chat error banner: the message AND the remedy the server named (reconnect /
 // upgrade / add a card). Shared so the VS Code webview and the web app's BrainPanel
@@ -62,6 +62,20 @@ export { SurfaceLauncher } from './surface/SurfaceLauncher';
 export type { SurfaceLauncherProps, SurfaceLauncherBadge } from './surface/SurfaceLauncher';
 export { SurfaceTabs } from './surface/SurfaceTabs';
 export type { SurfaceTabsProps, SurfaceTab } from './surface/SurfaceTabs';
+// THE body (header · rail · thread/empty · notices · footer), its pinned footer, the
+// empty state with its starter tiles, and the chat-history rows — moved from the web panel.
+export { AiSurface } from './surface/AiSurface';
+export type { AiSurfaceProps } from './surface/AiSurface';
+export { SurfaceFooter } from './surface/SurfaceFooter';
+export type { SurfaceFooterProps } from './surface/SurfaceFooter';
+export { SurfaceEmptyState } from './surface/SurfaceEmptyState';
+export type { SurfaceEmptyStateProps } from './surface/SurfaceEmptyState';
+export { StarterGroup, StarterTile } from './surface/StarterTiles';
+export type { StarterTileProps } from './surface/StarterTiles';
+export { ChatHistoryList, ChatHistoryRow, DEFAULT_CHAT_HISTORY_LABELS } from './surface/ChatHistory';
+export type { ChatHistoryListProps, ChatHistoryRowProps, ChatHistoryLabels, ChatHistoryChat } from './surface/ChatHistory';
+// A run notice the person can dismiss until a NEW occurrence (keyed on the value set).
+export { useDismissibleNotice } from './surface/useDismissibleNotice';
 // Composer chips, extracted from the hosts: fixed next-step suggestions (web), the held
 // turns with Steer now (VS Code), and the WHERE chip (the canvas scope).
 export { SuggestionRow } from './composer/SuggestionRow';

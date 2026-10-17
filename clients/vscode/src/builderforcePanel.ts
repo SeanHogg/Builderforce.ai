@@ -17,6 +17,7 @@ import { resolveLocalChatEndpoint } from "./localModels";
 import { hostPageEngines } from "./pageEngineBridge";
 import { localModelLabels } from "./localModelLabels";
 import { chatTicketsLabels } from "./chatTicketsLabels";
+import { chatSurfaceLabels } from "./chatSurfaceLabels";
 import { modelChoiceLabels } from "./modelChoiceLabels";
 import { getSelectedProject } from "./projectState";
 import { getProjectNames } from "./projectNames";
@@ -655,6 +656,18 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
       // Open a linked work item (clicked in the ChatTicketsPanel) in its own view:
       // a task/epic/gap deep-links to its detail drawer (assignee/status/PRD) in the
       // web portal; strategy tiers + specs open the web page they live on.
+      // The history list's Delete: the ONE delete path (the Sessions tree's command), so
+      // the modal confirm and the "stop the run first" refusal apply here too. The
+      // webview re-reads its list afterwards.
+      case "chat.delete":
+        if (typeof msg.chatId === "number") {
+          await vscode.commands.executeCommand("builderforce.deleteSession", {
+            id: msg.chatId,
+            title: typeof msg.title === "string" ? msg.title : "",
+          });
+          this.post({ type: "refresh" });
+        }
+        break;
       case "open.artifact":
         this.openArtifact(
           typeof msg.kind === "string" ? msg.kind : "",
@@ -1074,7 +1087,7 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
       personalityBlock,
       // BOTH label sets: one panel renders the chat surface AND the board, so both
       // have to be present whichever surface it opens at.
-      labels: { ...authLabels(), ...buildLabels(), ...canvasLabels(), ...subagentLabels(), ...localModelLabels(), ...chatTicketsLabels(), ...workStatusLabels() },
+      labels: { ...authLabels(), ...buildLabels(), ...canvasLabels(), ...subagentLabels(), ...localModelLabels(), ...chatTicketsLabels(), ...chatSurfaceLabels(), ...workStatusLabels() },
       // The editor's display language: how the shared components format numbers,
       // money and relative times (the strings themselves are already translated above).
       locale: vscode.env.language,

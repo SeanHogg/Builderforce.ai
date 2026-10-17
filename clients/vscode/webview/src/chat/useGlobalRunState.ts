@@ -13,7 +13,7 @@ import { getGlobalRunState, subscribeRunStore, type GlobalRunState } from '@sean
 
 /** A stable key of the two run lists, so a view only reacts when the SET of live
  *  chats changes — not on every streaming token (which also emits a store change). */
-export function runStateKey(s: GlobalRunState): string {
+function runStateKey(s: GlobalRunState): string {
   return `${[...s.running].sort((a, b) => a - b).join(',')}|${[...s.awaiting].sort((a, b) => a - b).join(',')}`;
 }
 
@@ -21,7 +21,7 @@ export function runStateKey(s: GlobalRunState): string {
  * Subscribe to which chats are live across the WHOLE store (the agent loop lives
  * module-level, so a run keeps going after you switch chats). Returns a snapshot
  * whose identity only changes when the set of running/awaiting chats changes, so
- * consumers (the dropdown decoration + the host report) don't churn per token.
+ * consumers (the history list's markers + the host report) don't churn per token.
  */
 export function useGlobalRunState(): GlobalRunState {
   const [state, setState] = useState<GlobalRunState>(getGlobalRunState);

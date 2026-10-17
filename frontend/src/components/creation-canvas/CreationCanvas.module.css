@@ -62,11 +62,19 @@
   --canvas-widget-border: #E2E8F0;
   --canvas-widget-icon-bg: #F1F5F9;
   --canvas-widget-icon: #64748B;
-  --canvas-brain-surface: #f9f5fb;
-  --canvas-brain-header: #f2ebfa;
-  --canvas-brain-border: #d5c6ee;
-  --canvas-brain-icon-bg: #eae0fa;
-  --canvas-brain-accent: #6d4ee9;
+  /* The Brain palette is declared in the vocabulary the shared brain-ui parts read
+     (`--bf-*`), so the dock, the Chat lens, the Brain Object and the prompt take it by
+     inheritance and no component re-maps it — and the SHELL's --bf-* (coral, its own
+     surfaces) never reaches the board. A Brain header is the soft accent half-mixed into
+     the surface: `color-mix(in srgb, var(--bf-accent-soft) 50%, var(--bf-surface))`.
+     `--bf-surface-2` is the hover/pressed tint every shared control reads. */
+  --bf-surface: #f9f5fb;
+  --bf-border: #d5c6ee;
+  --bf-accent-soft: #eae0fa;
+  --bf-accent: #6d4ee9;
+  --bf-surface-2: color-mix(in srgb, var(--bf-accent) 14%, transparent);
+  --bf-text: var(--canvas-ink);
+  --bf-text-muted: var(--canvas-muted);
   --creation-dot: #d4dce8;
   --creation-minimap-mask: color-mix(in srgb, var(--canvas-board) 76%, transparent);
 
@@ -1142,7 +1150,7 @@
 .dashboardWidgetRow .resumeFieldGrid { grid-template-columns:repeat(auto-fit,minmax(148px,1fr)); padding:0; }
 .dashboardWidgetRow .resumeAddEntry { grid-column:1 / -1; margin:0; }
 .dashboardWidgetRow[data-dragging] { opacity:.5; }
-.dashboardWidgetRow[data-drop-target] { outline:2px solid var(--canvas-brain-accent); outline-offset:2px; }
+.dashboardWidgetRow[data-drop-target] { outline:2px solid var(--bf-accent); outline-offset:2px; }
 .dashboardEditor select { width:100%; min-height:34px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:inherit; padding:6px 8px; font:inherit; }
 /* A native <option> paints on the OS menu, not on this panel, so it needs its own
    opaque pair or it renders white-on-white in one of the two themes. */
@@ -1159,17 +1167,17 @@
 .dashboardAddWidget i { font-style:normal; }
 
 .evaluationBody { display:grid; grid-template-columns:1fr 1.35fr 1.35fr 1.35fr auto; align-items:center; gap:0; }.evaluationBody > div { min-height:62px; padding:5px 10px; border-right:1px solid #e7e2fa; box-sizing:border-box; }.evaluationBody b { font-size:9px; }.evaluationBody p { font-size:8px; }.evaluationBody button { margin-left:9px; border:0; border-radius:var(--radius-sm); padding:8px; background:#7357e7; color:var(--text-on-accent); font-family:inherit; font-size:8px; font-weight:650; }.verdict { color:#6941d7; font-size:17px; line-height:1.25; font-weight:700; }
-.node_evaluation { width:650px; }.node_agent { width:285px; }.node_staff { width:245px; }.node_chat { width:290px; height:auto; min-height:180px; border-color:var(--canvas-brain-border); background:var(--canvas-brain-surface); }
-.node_chat .nodeHeader { border-color:var(--canvas-brain-border); background:var(--canvas-brain-header); }
-.node_chat .nodeIcon { color:var(--canvas-brain-accent); background:var(--canvas-brain-icon-bg); }
+.node_evaluation { width:650px; }.node_agent { width:285px; }.node_staff { width:245px; }.node_chat { width:290px; height:auto; min-height:180px; border-color:var(--bf-border); background:var(--bf-surface); }
+.node_chat .nodeHeader { border-color:var(--bf-border); background:color-mix(in srgb,var(--bf-accent-soft) 50%,var(--bf-surface)); }
+.node_chat .nodeIcon { color:var(--bf-accent); background:var(--bf-accent-soft); }
 /* The anchor owns its own scrolling:the exchange scrolls to the newest turn while
    the activity bar and the "Open Brain chat" button stay pinned in view. Letting the
    node body scroll instead pushed the button off the card the moment a reply landed. */
 .node_chat .nodeBody { display:flex; flex-direction:column; overflow:hidden; }
 .brainAnchorBody { display:grid; grid-template-rows:minmax(0,1fr) auto auto; gap:8px; flex:1; min-height:0; }
 .brainAnchorExchange { display:grid; align-content:start; gap:6px; min-height:0; overflow:auto; overscroll-behavior:contain; }
-.brainAnchorExchange > span { display:grid; gap:2px; padding:7px 8px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-md); background:color-mix(in srgb,var(--canvas-brain-header) 55%,var(--canvas-panel)); }
-.brainAnchorExchange small { color:var(--canvas-brain-accent); font-size:8px; font-weight:750; letter-spacing:.07em; text-transform:uppercase; }
+.brainAnchorExchange > span { display:grid; gap:2px; padding:7px 8px; border:1px solid var(--bf-border); border-radius:var(--radius-md); background:color-mix(in srgb,color-mix(in srgb,var(--bf-accent-soft) 50%,var(--bf-surface)) 55%,var(--canvas-panel)); }
+.brainAnchorExchange small { color:var(--bf-accent); font-size:8px; font-weight:750; letter-spacing:.07em; text-transform:uppercase; }
 .brainAnchorExchange p { margin:0; color:var(--canvas-ink); font-size:10px; line-height:1.45; overflow-wrap:anywhere; }
 /* Inline placement:the Object IS the Brain surface. It needs the room a conversation
    actually takes, so the Object grows past its anchor size — unless the user has
@@ -1180,7 +1188,7 @@
 .node_chat .nodeBody:has(.brainObjectChat) { padding:0; }
 .brainObjectChat { display:flex; flex-direction:column; flex:1; min-height:0; }
 /* The surface's own controls sit on the Object's header line, not in a second bar. */
-.brainObjectChatBar { display:flex; flex:none; justify-content:flex-end; padding:5px 7px; border-bottom:1px solid var(--canvas-brain-border); background:var(--canvas-brain-header); }
+.brainObjectChatBar { display:flex; flex:none; justify-content:flex-end; padding:5px 7px; border-bottom:1px solid var(--bf-border); background:color-mix(in srgb,var(--bf-accent-soft) 50%,var(--bf-surface)); }
 
 /* Docked placement:the Object collapses to Brain's mark. A card repeating the latest
    exchange next to a full-height dock showing that same exchange is two frames of
@@ -1197,9 +1205,9 @@
 .node_chat:has(.brainMarker) .resizeHandle { display:none!important; }
 /* The Object's own disc is the mark's background — a second filled circle inside it
    reads as two rings rather than one Brain. */
-.brainMarker { position:relative; display:grid; flex:1; place-items:center; padding:0; border:0; border-radius:50%; background:transparent; color:var(--canvas-brain-accent); cursor:pointer; }
-.brainMarker:hover,.brainMarker:focus-visible { outline:none; background:var(--canvas-brain-icon-bg); }
-.brainMarker:focus-visible { box-shadow:0 0 0 2px var(--canvas-brain-accent); }
+.brainMarker { position:relative; display:grid; flex:1; place-items:center; padding:0; border:0; border-radius:50%; background:transparent; color:var(--bf-accent); cursor:pointer; }
+.brainMarker:hover,.brainMarker:focus-visible { outline:none; background:var(--bf-accent-soft); }
+.brainMarker:focus-visible { box-shadow:0 0 0 2px var(--bf-accent); }
 /* The working signal lives in `BrainMark`, which every Brain surface shares. */
 .node_diagnostics { width:720px; min-height:260px; }
 .canvasDiagnosticsBody { display:grid; min-height:0; gap:9px; }
@@ -2119,17 +2127,17 @@
 .brainDetails > section { display:grid; gap:7px; }
 .brainSectionHeading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .brainSectionHeading h3 { margin:0; color:var(--canvas-ink); font-size:10px; text-transform:uppercase; letter-spacing:.06em; }
-.brainSectionHeading span { min-width:20px; padding:2px 7px; border-radius:var(--radius-full); background:var(--canvas-brain-icon-bg); color:var(--canvas-ink-soft); font:700 10px var(--font-sans); text-align:center; }
+.brainSectionHeading span { min-width:20px; padding:2px 7px; border-radius:var(--radius-full); background:var(--bf-accent-soft); color:var(--canvas-ink-soft); font:700 10px var(--font-sans); text-align:center; }
 .brainInspectorTimeline { height:310px; min-height:0; overflow:hidden; --bf-surface:var(--canvas-panel); --bf-text:var(--canvas-ink); --bf-text-muted:var(--canvas-muted); --bf-border:var(--canvas-line); --bf-accent:var(--canvas-accent); }
 .brainInspectorTimeline:global(.bf-tl-scroll) { overscroll-behavior:contain; padding:8px 2px; scrollbar-gutter:stable; }
 .brainCanonicalAssociations { min-width:0; overflow:hidden; padding-top:4px; border-top:1px solid var(--canvas-line); }.brainCanonicalAssociations > :global(div) { margin:0!important; }
-/* The Brain dock paints its own surface (--canvas-brain-*), so the rows inside it
+/* The Brain dock paints its own surface (the canvas's --bf-* Brain palette), so the rows inside it
    are drawn from those variables rather than from fixed light-mode hexes:a card
    pinned to #fbfdff put near-white --canvas-ink text on a near-white background in
    dark mode, and the 8px secondary line missed contrast in light. Sizes are up a
    step for the same reason — this list is read, not decorative. */
-.brainAssociationList { display:grid; gap:6px; }.brainAssociationList > div { display:flex; align-items:center; gap:8px; padding:8px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-md); background:var(--canvas-brain-header); color:var(--canvas-ink); }.brainAssociationList > div > span { display:grid; place-items:center; width:25px; height:25px; flex:none; border-radius:var(--radius-sm); background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); }.brainAssociationList p { display:grid; gap:2px; margin:0; min-width:0; }.brainAssociationList b { overflow:hidden; color:var(--canvas-ink); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }.brainAssociationList small { overflow:hidden; color:var(--canvas-ink-soft); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
-.brainEmpty { margin:0; padding:9px; border:1px dashed var(--canvas-brain-border); border-radius:var(--radius-md); color:var(--canvas-ink-soft); font-size:11px; line-height:1.45; }
+.brainAssociationList { display:grid; gap:6px; }.brainAssociationList > div { display:flex; align-items:center; gap:8px; padding:8px; border:1px solid var(--bf-border); border-radius:var(--radius-md); background:color-mix(in srgb,var(--bf-accent-soft) 50%,var(--bf-surface)); color:var(--canvas-ink); }.brainAssociationList > div > span { display:grid; place-items:center; width:25px; height:25px; flex:none; border-radius:var(--radius-sm); background:var(--bf-accent-soft); color:var(--bf-accent); }.brainAssociationList p { display:grid; gap:2px; margin:0; min-width:0; }.brainAssociationList b { overflow:hidden; color:var(--canvas-ink); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }.brainAssociationList small { overflow:hidden; color:var(--canvas-ink-soft); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+.brainEmpty { margin:0; padding:9px; border:1px dashed var(--bf-border); border-radius:var(--radius-md); color:var(--canvas-ink-soft); font-size:11px; line-height:1.45; }
 .primaryButton:disabled,.fullButton:disabled { opacity:.45; cursor:not-allowed; }
 
 .evermindConsoleHost { margin:14px -8px 0; padding-top:12px; border-top:1px solid #eadce6; font-size:11px; }
@@ -2181,12 +2189,12 @@
   position:relative; box-sizing:border-box; width:100%; min-width:0;
   display:grid; grid-template-columns:minmax(0,1fr);
   grid-template-areas:"intent" "input";
-  border:1px solid var(--canvas-brain-border); border-radius:14px;
-  background:var(--composer-card-bg, var(--canvas-brain-surface));
+  border:1px solid var(--bf-border); border-radius:14px;
+  background:var(--composer-card-bg, var(--bf-surface));
   box-shadow:0 10px 30px var(--canvas-shadow);
   transition:border-color 120ms ease, box-shadow 120ms ease;
 }
-.composerCard:focus-within { border-color:var(--canvas-brain-accent); box-shadow:0 0 0 1px var(--canvas-brain-accent), 0 10px 30px var(--canvas-shadow); }
+.composerCard:focus-within { border-color:var(--bf-accent); box-shadow:0 0 0 1px var(--bf-accent), 0 10px 30px var(--canvas-shadow); }
 :global(html:not([data-theme='light'])) .composerCard { --composer-card-bg:var(--canvas-widget-surface); backdrop-filter:blur(14px); }
 .composerCard :global(.bf-prompt-panel) {
   --prompt-panel-bg:transparent; --prompt-panel-border:transparent; --prompt-panel-active-border:transparent;
@@ -2197,7 +2205,7 @@
 /* Scope is a chip in the card's tool row (the shell's `context`). The palette's
    generic surface rules paint `.scopeChip` as a panel tile; inside the card it is a pill
    on the card's own ground, in both themes. */
-.composerCard .scopeChip { border-color:var(--canvas-brain-border); background:transparent; color:var(--canvas-ink); }
+.composerCard .scopeChip { border-color:var(--bf-border); background:transparent; color:var(--canvas-ink); }
 :global(html:not([data-theme='light'])) .composerCard .scopeChip { background:transparent; }
 
 /* The prompt is a page fixture, not part of the Brain surface:centred on the board
@@ -2211,20 +2219,20 @@
    was painted through by it. It no longer OVERLAPS the command bar (that band is measured
    now), but "we calculated that they cannot touch" is not a reason to leave the more
    important of the two underneath. */
-.composerDock { position:absolute; z-index:21; right:calc(300px + var(--brain-dock-right, 0px)); bottom:var(--canvas-command-bar-space, 66px); left:calc(300px + var(--brain-dock-left, 0px)); box-sizing:border-box; width:auto; max-width:700px; margin-inline:auto; display:flex; flex-direction:column; align-items:center; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); }
+.composerDock { position:absolute; z-index:21; right:calc(300px + var(--brain-dock-right, 0px)); bottom:var(--canvas-command-bar-space, 66px); left:calc(300px + var(--brain-dock-left, 0px)); box-sizing:border-box; width:auto; max-width:700px; margin-inline:auto; display:flex; flex-direction:column; align-items:center; --prompt-panel-bg:var(--bf-surface); --prompt-panel-border:var(--bf-border); }
 /* The height grip: a full-width strip straddling the card's top edge, with a short
    bar that shows only on hover or focus. It used to be a knob sitting ON the border,
    over the first line of whatever was being typed. */
 .promptResizeHandle { position:absolute; z-index:2; top:-5px; right:16px; left:16px; height:10px; padding:0; touch-action:none; user-select:none; cursor:ns-resize; }
-.promptResizeHandle::after { content:''; position:absolute; top:3px; left:50%; width:36px; height:4px; border-radius:var(--radius-full); background:var(--canvas-brain-accent); opacity:0; transform:translateX(-50%); transition:opacity 120ms ease; }
+.promptResizeHandle::after { content:''; position:absolute; top:3px; left:50%; width:36px; height:4px; border-radius:var(--radius-full); background:var(--bf-accent); opacity:0; transform:translateX(-50%); transition:opacity 120ms ease; }
 .promptResizeHandle:hover::after,.promptResizeHandle:focus-visible::after { opacity:1; }
 .promptResizeHandle:focus-visible { outline:none; }
-.composer { width:100%; --chat-ctl-size:32px; --prompt-panel-gap:4px; --prompt-panel-action-gap:6px; --prompt-panel-pad-y:8px; --prompt-panel-pad-x:10px; --prompt-panel-radius:14px; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); --prompt-panel-shadow:none; --chat-input-text:var(--canvas-ink); --chat-input-icon:var(--canvas-muted); --chat-input-bg:var(--canvas-brain-header); --chat-input-border:var(--canvas-brain-border); }
+.composer { width:100%; --bf-ctl-size:32px; --prompt-panel-gap:4px; --prompt-panel-action-gap:6px; --prompt-panel-pad-y:8px; --prompt-panel-pad-x:10px; --prompt-panel-radius:14px; --prompt-panel-bg:var(--bf-surface); --prompt-panel-border:var(--bf-border); --prompt-panel-shadow:none; --bf-text-secondary:var(--canvas-muted); --bf-field:color-mix(in srgb,var(--bf-accent-soft) 50%,var(--bf-surface)); }
 .composer textarea { box-sizing:border-box; height:var(--canvas-prompt-height, 34px); min-height:34px; max-height:240px; padding:4px 2px; overflow-y:auto; font-size:14px; line-height:1.35; }
 .composer:global(.bf-prompt-panel__actions) { flex-wrap:nowrap!important; width:100%; overflow:visible; }
 .composer:global(.bf-chat-auto-mode) { width:32px; min-width:32px; padding:0!important; justify-content:center; }
 .composer:global(.bf-chat-auto-mode) > span { display:none; }
-.iconButton { width:29px; height:29px; display:grid; flex:none; place-items:center; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fff; color:var(--canvas-muted); cursor:pointer; }.scopeChip { display:inline-flex; min-width:0; max-width:180px; flex:0 1 auto; align-items:center; gap:4px; overflow:hidden; height:30px; box-sizing:border-box; padding:0 10px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); color:var(--canvas-muted); background:transparent; font-size:12px; font-weight:600; white-space:nowrap; }.scopeChip select { width:100%; min-width:0; max-width:none; border:0; outline:0; background:transparent; color:inherit; font:inherit; text-overflow:ellipsis; }
+.iconButton { width:29px; height:29px; display:grid; flex:none; place-items:center; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fff; color:var(--canvas-muted); cursor:pointer; }.scopeChip { display:inline-flex; min-width:0; max-width:180px; flex:0 1 auto; align-items:center; gap:4px; overflow:hidden; height:30px; box-sizing:border-box; padding:0 10px; border:1px solid var(--bf-border); border-radius:var(--radius-full); color:var(--canvas-muted); background:transparent; font-size:12px; font-weight:600; white-space:nowrap; }.scopeChip select { width:100%; min-width:0; max-width:none; border:0; outline:0; background:transparent; color:inherit; font:inherit; text-overflow:ellipsis; }
 /* The accessible outline is opened from the command rail and closes like any other
    panel, instead of living permanently on the board with no way to dismiss it. */
 .canvasOutline { position:absolute; z-index:16; left:calc(62px + var(--brain-dock-left, 0px)); bottom:calc(var(--composer-space) + 8px); box-sizing:border-box; width:270px; max-height:46%; overflow:auto; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); color:var(--canvas-muted); box-shadow:0 12px 34px var(--canvas-shadow); font-size:12px; }
@@ -2566,7 +2574,7 @@
    with the command bar painted straight across whatever sat at the bottom of it. */
 .objectSurface,.appSurface,.insightsSurface,.ideasSurface,.placeSurface { position:absolute; z-index:7; top:0; right:var(--brain-dock-right,0px); bottom:0; left:var(--brain-dock-left,0px); box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-block:var(--canvas-top-chrome-space) max(var(--composer-space, 0px), calc(var(--canvas-command-bar-space, 66px) + 14px)); background:var(--canvas-board-background); color:var(--canvas-ink); }
 .objectSurfaceHeader { display:flex; flex:none; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 16px 10px 62px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
-.objectSurfaceMark { display:grid; place-items:center; width:26px; height:26px; flex:none; border-radius:var(--radius-sm); background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); }
+.objectSurfaceMark { display:grid; place-items:center; width:26px; height:26px; flex:none; border-radius:var(--radius-sm); background:var(--bf-accent-soft); color:var(--bf-accent); }
 .objectSurfaceTitle { min-width:0; flex:1; display:flex; flex-direction:column; }
 .objectSurfaceTitle strong { overflow:hidden; color:var(--canvas-ink); font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
 .objectSurfaceTitle small { color:var(--canvas-muted); font-size:10px; }
@@ -2574,9 +2582,9 @@
    "open this at full size" is now a glyph in the inspector's icon row, and a pill rule
    with no element left to style is a rule the next reader has to disprove. */
 .objectSurfaceAction,.objectSurfaceExit { flex:none; min-height:32px; padding:6px 12px; border:1px solid var(--canvas-line); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-ink); font:650 11px var(--font-sans); cursor:pointer; }
-.objectSurfaceExit { border-color:var(--canvas-brain-border); color:var(--canvas-brain-accent); }
+.objectSurfaceExit { border-color:var(--bf-border); color:var(--bf-accent); }
 .objectSurfaceAction:hover,.objectSurfaceExit:hover,.objectSurfaceOpen:hover,
-.objectSurfaceAction:focus-visible,.objectSurfaceExit:focus-visible,.objectSurfaceOpen:focus-visible { border-color:var(--canvas-brain-accent); background:var(--canvas-hover); outline:none; }
+.objectSurfaceAction:focus-visible,.objectSurfaceExit:focus-visible,.objectSurfaceOpen:focus-visible { border-color:var(--bf-accent); background:var(--canvas-hover); outline:none; }
 .objectSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; overflow:auto; overscroll-behavior:contain; }
 
 /* ── The app surface ─────────────────────────────────────────────────────────────
@@ -2795,8 +2803,8 @@
 .playPlayers { display:flex; flex:none; flex-wrap:wrap; align-items:center; gap:6px; }
 .playPlayers span { display:flex; flex-wrap:wrap; gap:6px; }
 .playPlayers b { padding:4px 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-ink); font:600 10px var(--font-sans); }
-.playPlayers button { min-height:28px; padding:4px 12px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-brain-accent); font:650 10px var(--font-sans); cursor:pointer; }
-.playPlayers button:hover,.playPlayers button:focus-visible { border-color:var(--canvas-brain-accent); background:var(--canvas-hover); outline:none; }
+.playPlayers button { min-height:28px; padding:4px 12px; border:1px solid var(--bf-border); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--bf-accent); font:650 10px var(--font-sans); cursor:pointer; }
+.playPlayers button:hover,.playPlayers button:focus-visible { border-color:var(--bf-accent); background:var(--canvas-hover); outline:none; }
 
 /* The widths are the frame's, in real device pixels, and this
    is only the room they are centred in. The `edit` reading has no frame — it is markup in
@@ -2916,7 +2924,7 @@
   background:var(--canvas-panel); color:var(--canvas-ink); border:1px solid var(--canvas-line);
   border-radius:var(--radius-sm); padding:8px 10px; font:400 13px var(--font-sans); resize:vertical;
 }
-.sceneGeneratorPrompt:focus,.sceneGeneratorNumber:focus { border-color:var(--canvas-brain-accent); outline:none; }
+.sceneGeneratorPrompt:focus,.sceneGeneratorNumber:focus { border-color:var(--bf-accent); outline:none; }
 .sceneGeneratorRow { display:flex; gap:12px; }
 .sceneGeneratorRow .sceneGeneratorField { flex:1; }
 
@@ -2998,10 +3006,15 @@
    every other low-sitting panel clears, so the transcript can never scroll underneath
    the prompt. Colours are the Brain surface tokens the board declares for BOTH themes
    (see `canvasOwnsItsPalette`), so nothing here is theme-specific. */
-.chatSurface { position:absolute; z-index:7; inset:0; box-sizing:border-box; display:flex; flex-direction:column; padding-block:var(--canvas-top-chrome-space) var(--composer-space); background:var(--canvas-board-background); color:var(--canvas-ink); }
+.chatSurface { position:absolute; z-index:7; inset:0; box-sizing:border-box; padding-block:var(--canvas-top-chrome-space) max(var(--composer-space, 0px), calc(var(--canvas-command-bar-space, 66px) + 14px)); background:var(--canvas-board-background); color:var(--canvas-ink); }
+/* One measure for the reading column, so the header, the transcript and the footer (the
+   prompt included — it is docked in here, see `CanvasChatSurface`) are the same width and
+   the eye has one left edge to return to. */
+.chatSurface > * { box-sizing:border-box; width:min(100%,var(--chat-surface-width,760px)); margin-inline:auto; }
+.chatSurface > :global(.bf-surface__body) { padding:0 6px; }
 /* The shared <SurfaceHeader>, in the canvas's own palette: the canvas maps --bf-* onto
    its tokens here rather than restyling the header. */
-.chatSurfaceHeader { --bf-surface:var(--canvas-brain-header); --bf-surface-2:color-mix(in srgb,var(--canvas-brain-accent) 14%,transparent); --bf-border:var(--canvas-brain-border); --bf-text:var(--canvas-ink); --bf-text-muted:var(--canvas-muted); --bf-accent:var(--canvas-brain-accent); --bf-accent-soft:var(--canvas-brain-icon-bg); --bf-surface:transparent; width:min(100%,var(--chat-surface-width,760px)); margin:0 auto; border-bottom:0; }
+.chatSurface .chatSurfaceHeader { background:transparent; border-bottom:0; }
 /* Who this conversation is WITH, at the left. It is no longer `flex:1` — the session's
    name used to open this row and take the rest of it, and that name is the floating
    pill's job (see `CanvasChatSurface`); what is left is a mark and a word, so the roster
@@ -3015,12 +3028,9 @@
   width:20px; height:20px; border-radius:50%; display:grid; place-items:center; margin-left:-5px;
   border:2px solid var(--canvas-panel); color:var(--text-on-accent); font-size:8px; font-weight:750;
 }
-/* One measure for the reading column, so the transcript, the header and the footer are
-   the same width and the eye has one left edge to return to. */
-.chatSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; width:min(100%,var(--chat-surface-width,760px)); margin:0 auto; padding:0 6px; }
-.chatSurfaceFooter { flex:none; display:flex; justify-content:center; width:min(100%,var(--chat-surface-width,760px)); margin:0 auto; padding:6px 16px 10px; }
-.chatSurfaceFooter button { display:inline-flex; align-items:center; gap:7px; min-height:34px; padding:7px 14px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); background:var(--canvas-brain-surface); color:var(--canvas-brain-accent); font:650 11px var(--font-sans); cursor:pointer; }
-.chatSurfaceFooter button:hover,.chatSurfaceFooter button:focus-visible { border-color:var(--canvas-brain-accent); background:var(--canvas-hover); outline:none; }
+.chatSurface .chatSurfaceFooter { padding:4px 6px 10px; background:transparent; }
+.chatSurfaceOpenBoard { display:inline-flex; align-self:center; align-items:center; gap:7px; min-height:34px; margin-top:6px; padding:7px 14px; border:1px solid var(--bf-border); border-radius:var(--radius-full); background:var(--bf-surface); color:var(--bf-accent); font:650 11px var(--font-sans); cursor:pointer; }
+.chatSurfaceOpenBoard:hover,.chatSurfaceOpenBoard:focus-visible { border-color:var(--bf-accent); background:var(--canvas-hover); outline:none; }
 /* ── THE PHONE'S SURFACE STRIP ────────────────────────────────────────────────────
    The band under the canvas app bar that says which reading of the session is on
    screen. It replaced a floating icon COLUMN over the board's top-left corner: five
@@ -3129,7 +3139,7 @@
    so the two rows go compact together rather than one outlasting the other. */
 @media (max-width:1180px) { .phaseStep span:not(.phaseStepDot) { display:none; } .phaseStep { padding:4px 6px; } }
 
-.brainDock { position:absolute; z-index:17; top:0; bottom:0; box-sizing:border-box; display:flex; flex-direction:column; width:var(--brain-dock-size,330px); border:1px solid var(--canvas-brain-border); background:var(--canvas-brain-surface); color:var(--canvas-ink); box-shadow:0 0 44px var(--canvas-shadow); }
+.brainDock { position:absolute; z-index:17; top:0; bottom:0; box-sizing:border-box; display:flex; flex-direction:column; width:var(--brain-dock-size,330px); border:1px solid var(--bf-border); background:var(--bf-surface); color:var(--canvas-ink); box-shadow:0 0 44px var(--canvas-shadow); }
 .brainDock[data-side='left'] { left:0; border-left:0; border-radius:0 var(--radius-lg) var(--radius-lg) 0; }
 .brainDock[data-side='right'] { right:0; border-right:0; border-radius:var(--radius-lg) 0 0 var(--radius-lg); }
 /* There is no small floating PLACEMENT a reader chooses: a card hovering over a board
@@ -3147,9 +3157,9 @@
 .brainDockResizer { position:absolute; top:0; bottom:0; z-index:2; width:9px; padding:0; border:0; background:transparent; cursor:ew-resize; touch-action:none; }
 .brainDockResizer[data-side='left'] { right:-4px; }
 .brainDockResizer[data-side='right'] { left:-4px; }
-.brainDockResizer::after { content:''; position:absolute; top:50%; left:50%; width:3px; height:40px; transform:translate(-50%,-50%); border-radius:var(--radius-sm); background:var(--canvas-brain-accent); opacity:0; transition:opacity .15s ease; }
+.brainDockResizer::after { content:''; position:absolute; top:50%; left:50%; width:3px; height:40px; transform:translate(-50%,-50%); border-radius:var(--radius-sm); background:var(--bf-accent); opacity:0; transition:opacity .15s ease; }
 .brainDockResizer:hover::after,.brainDockResizer:focus-visible::after { opacity:.85; }
-.brainDockResizer:focus-visible { outline:2px solid var(--canvas-brain-accent); outline-offset:-2px; }
+.brainDockResizer:focus-visible { outline:2px solid var(--bf-accent); outline-offset:-2px; }
 /* ── THE PHONE SHEET'S TWO EXTRA PARTS ────────────────────────────────────────────
    Both are `display:none` on a desktop, where Brain is a docked RAIL beside the board
    rather than a sheet over it: there is nothing to drag and nothing to veil.
@@ -3166,21 +3176,33 @@
   width:100%; height:44px; margin-bottom:-14px; padding:0;
   border:0; background:transparent; cursor:pointer;
 }
-.brainDockGrabber > span { display:block; width:36px; height:4px; border-radius:var(--radius-full); background:var(--canvas-brain-border); }
-.brainDockGrabber:hover > span,.brainDockGrabber:focus-visible > span { background:var(--canvas-brain-accent); }
-.brainDockGrabber:focus-visible { outline:2px solid var(--canvas-brain-accent); outline-offset:-4px; }
+.brainDockGrabber > span { display:block; width:36px; height:4px; border-radius:var(--radius-full); background:var(--bf-border); }
+.brainDockGrabber:hover > span,.brainDockGrabber:focus-visible > span { background:var(--bf-accent); }
+.brainDockGrabber:focus-visible { outline:2px solid var(--bf-accent); outline-offset:-4px; }
 .canvasSheetVeil {
   display:none; position:absolute; z-index:16; left:0; right:0;
   border:0; padding:0;
   background:var(--canvas-veil);
   cursor:pointer;
 }
-.brainDockHeader { --bf-surface:var(--canvas-brain-header); --bf-surface-2:color-mix(in srgb,var(--canvas-brain-accent) 14%,transparent); --bf-border:var(--canvas-brain-border); --bf-text:var(--canvas-ink); --bf-text-muted:var(--canvas-muted); --bf-accent:var(--canvas-brain-accent); --bf-accent-soft:var(--canvas-brain-icon-bg); }
+/* The shared <SurfaceHeader> reads the canvas's --bf-* Brain palette by inheritance (see the
+   palette at the top of this file); only its plate is the Brain header tint. Two classes so
+   it wins over `.bf-shead` whatever order the two stylesheets load in. */
+.brainSurface .brainDockHeader { background:color-mix(in srgb,var(--bf-accent-soft) 50%,var(--bf-surface)); }
+/* <AiSurface> on the canvas — the ONE body of the dock, the Chat lens and the inline Brain
+   Object (`BrainSurface`). It fills whatever its host leaves: flex-basis 0, so a host with
+   no definite height still hands it the rest of the column. The presence strip draws its
+   own padding and rule, and the prompt in the footer is a ROW of the column rather than a
+   boxed form, so the footer adds no second rule and no second padding. */
+.brainSurface { flex:1 1 0; min-height:0; }
+.brainSurface > :global(.bf-surface__rail) { padding:0; }
+.brainSurface .brainSurfaceFooter { gap:0; padding:0; border-top:0; }
+.brainSurfaceFooter > :global(.bf-qpend) { margin:8px 10px 0; }
 .brainDockActions { display:flex; flex:none; align-items:center; gap:2px; }
 @media (pointer:coarse) { .brainDockActions button { width:40px; height:40px; } }
 .brainDockActions button { width:30px; height:30px; display:grid; place-items:center; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font:600 13px var(--font-sans); line-height:1; cursor:pointer; }
-.brainDockActions button:hover,.brainDockActions button:focus-visible { background:color-mix(in srgb,var(--canvas-brain-accent) 14%,transparent); color:var(--canvas-brain-accent); outline:none; }
-.brainDockActions button[aria-pressed='true'],.brainDockActions button[aria-expanded='true'] { background:color-mix(in srgb,var(--canvas-brain-accent) 20%,transparent); color:var(--canvas-brain-accent); }
+.brainDockActions button:hover,.brainDockActions button:focus-visible { background:color-mix(in srgb,var(--bf-accent) 14%,transparent); color:var(--bf-accent); outline:none; }
+.brainDockActions button[aria-pressed='true'],.brainDockActions button[aria-expanded='true'] { background:color-mix(in srgb,var(--bf-accent) 20%,transparent); color:var(--bf-accent); }
 /* The header's "More" menu. Portalled to <body> by `AnchoredPopover`, so it sits
    outside the canvas root and reads the app's global theme tokens (both themes),
    not the `--canvas-*` palette, which is scoped to the canvas. */
@@ -3190,39 +3212,39 @@
 .brainMenuItem:hover,.brainMenuItem:focus-visible { background:var(--surface-interactive, var(--bg-base)); outline:none; }
 .brainMenuSep { height:1px; margin:4px 0; background:var(--border-subtle); }
 @media (pointer:coarse) { .brainMenuItem { min-height:44px; } }
-.humanChatActivity { display:grid; flex:none; gap:5px; padding:7px 9px; border-bottom:1px solid var(--canvas-brain-border); background:color-mix(in srgb,var(--canvas-brain-accent) 6%,var(--canvas-panel)); }
+.humanChatActivity { display:grid; flex:none; gap:5px; padding:7px 9px; border-bottom:1px solid var(--bf-border); background:color-mix(in srgb,var(--bf-accent) 6%,var(--canvas-panel)); }
 .humanChatActivity > span { display:grid; grid-template-columns:22px minmax(0,1fr) auto; align-items:center; gap:7px; min-width:0; }
-.humanChatActivity b { overflow:hidden; color:var(--canvas-ink); font-size:9px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }.humanChatActivity i { color:var(--canvas-brain-accent); font-size:10px; font-style:normal; letter-spacing:2px; animation:collaboratorTyping 1.2s ease-in-out infinite; }
+.humanChatActivity b { overflow:hidden; color:var(--canvas-ink); font-size:9px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }.humanChatActivity i { color:var(--bf-accent); font-size:10px; font-style:normal; letter-spacing:2px; animation:collaboratorTyping 1.2s ease-in-out infinite; }
 .brainDockTimeline,.brainDockContext { min-height:0; flex:1; overflow:auto; overscroll-behavior:contain; padding:10px; scrollbar-gutter:stable; }
-.brainDockLauncher { position:absolute; z-index:16; bottom:calc(var(--composer-space) + 8px); display:flex; align-items:center; gap:6px; padding:9px 13px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); background:var(--canvas-brain-surface); color:var(--canvas-brain-accent); box-shadow:0 10px 28px var(--canvas-shadow); font:700 11px var(--font-sans); cursor:pointer; }
+.brainDockLauncher { position:absolute; z-index:16; bottom:calc(var(--composer-space) + 8px); display:flex; align-items:center; gap:6px; padding:9px 13px; border:1px solid var(--bf-border); border-radius:var(--radius-full); background:var(--bf-surface); color:var(--bf-accent); box-shadow:0 10px 28px var(--canvas-shadow); font:700 11px var(--font-sans); cursor:pointer; }
 .brainDockLauncher[data-side='left'] { left:16px; }
 .brainDockLauncher[data-side='right'] { right:16px; }
 .brainDockLauncher:hover,.brainDockLauncher:focus-visible { outline:none; filter:brightness(1.04); box-shadow:0 12px 32px var(--canvas-shadow); }
 /* A turn running behind a closed dock: the pill's own halo breathes with the mark
    inside it, so "Brain is working" reads from the corner of the eye. The words stay
    in `BrainActivityBar` — this is the shape, not a second copy of the narration. */
-.brainDockLauncher[data-state='running'] { border-color:var(--canvas-brain-accent); animation:brainLauncherWorking 1.8s ease-in-out infinite; }
+.brainDockLauncher[data-state='running'] { border-color:var(--bf-accent); animation:brainLauncherWorking 1.8s ease-in-out infinite; }
 @keyframes brainLauncherWorking {
-  0%,100% { box-shadow:0 10px 28px var(--canvas-shadow),0 0 0 0 var(--canvas-brain-icon-bg); }
-  50% { box-shadow:0 10px 28px var(--canvas-shadow),0 0 0 5px var(--canvas-brain-icon-bg); }
+  0%,100% { box-shadow:0 10px 28px var(--canvas-shadow),0 0 0 0 var(--bf-accent-soft); }
+  50% { box-shadow:0 10px 28px var(--canvas-shadow),0 0 0 5px var(--bf-accent-soft); }
 }
 @media (prefers-reduced-motion:reduce) {
-  .brainDockLauncher[data-state='running'] { animation:none; box-shadow:0 10px 28px var(--canvas-shadow),0 0 0 3px var(--canvas-brain-icon-bg); }
+  .brainDockLauncher[data-state='running'] { animation:none; box-shadow:0 10px 28px var(--canvas-shadow),0 0 0 3px var(--bf-accent-soft); }
 }
 
 /* The live "what is it doing" strip and, once settled, the run receipt. */
-.brainActivity { display:flex; flex:none; align-items:center; gap:7px; padding:7px 11px; border-top:1px solid var(--canvas-brain-border); background:color-mix(in srgb,var(--canvas-brain-header) 60%,var(--canvas-panel)); font-size:10px; }
+.brainActivity { display:flex; flex:none; align-items:center; gap:7px; padding:7px 11px; border-top:1px solid var(--bf-border); background:color-mix(in srgb,color-mix(in srgb,var(--bf-accent-soft) 50%,var(--bf-surface)) 60%,var(--canvas-panel)); font-size:10px; }
 .brainActivity b { color:var(--canvas-ink); font-weight:700; }
 .brainActivity small { min-width:0; overflow:hidden; color:var(--canvas-muted); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
 .brainActivity em { margin-left:auto; flex:none; color:var(--canvas-muted); font-size:9px; font-style:normal; }
-.brainActivitySpark { flex:none; color:var(--canvas-brain-accent); font-size:12px; line-height:1; }
+.brainActivitySpark { flex:none; color:var(--bf-accent); font-size:12px; line-height:1; }
 /* Same signal, board-sized:inside the Brain Object it is a card, not a footer. */
-.brainActivity[data-variant='inline'] { gap:6px; padding:6px 8px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-md); font-size:9px; }
+.brainActivity[data-variant='inline'] { gap:6px; padding:6px 8px; border:1px solid var(--bf-border); border-radius:var(--radius-md); font-size:9px; }
 .brainActivity[data-variant='inline'] small,.brainActivity[data-variant='inline'] em { font-size:8px; }
 .brainActivity[data-variant='inline'] .brainActivitySpark { font-size:10px; }
 /* Canvas-global working receipt. It sits at the person's point of attention — the
    composer — so Brain cannot appear idle merely because its Object is off-screen. */
-.brainActivity[data-variant='composer'] { box-sizing:border-box; width:max-content; max-width:100%; margin:0; padding:8px 14px; border:1px solid color-mix(in srgb,var(--canvas-brain-accent) 62%,var(--canvas-brain-border)); border-radius:var(--radius-full); background:color-mix(in srgb,var(--canvas-brain-accent) 16%,var(--canvas-brain-surface)); box-shadow:0 8px 24px var(--canvas-shadow); font-size:11px; }
+.brainActivity[data-variant='composer'] { box-sizing:border-box; width:max-content; max-width:100%; margin:0; padding:8px 14px; border:1px solid color-mix(in srgb,var(--bf-accent) 62%,var(--bf-border)); border-radius:var(--radius-full); background:color-mix(in srgb,var(--bf-accent) 16%,var(--bf-surface)); box-shadow:0 8px 24px var(--canvas-shadow); font-size:11px; }
 .brainActivity[data-variant='composer'] small { font-size:10px; }
 .brainActivity[data-variant='composer'] em { font-size:10px; font-variant-numeric:tabular-nums; }
 .brainActivity[data-variant='composer'] .brainActivitySpark { font-size:14px; }
@@ -3248,8 +3270,8 @@
 .composerIntent {
   display:inline-flex; align-self:flex-start; align-items:center; gap:2px;
   margin-bottom:6px; padding:2px;
-  border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full);
-  background:var(--canvas-brain-header);
+  border:1px solid var(--bf-border); border-radius:var(--radius-full);
+  background:color-mix(in srgb,var(--bf-accent-soft) 50%,var(--bf-surface));
 }
 .composerIntentSegment {
   display:inline-flex; align-items:center; gap:6px;
@@ -3271,7 +3293,7 @@
 .composerIntentSegment[data-stage='run'] { --intent-stage:var(--stage-run); }
 .composerIntentSegment[data-stage='measure'] { --intent-stage:var(--stage-measure); }
 .composerIntentSegment[data-stage='reach'] { --intent-stage:var(--stage-reach); }
-.composerIntentSpark { display:inline-grid; place-items:center; flex:none; color:var(--canvas-brain-accent); }
+.composerIntentSpark { display:inline-grid; place-items:center; flex:none; color:var(--bf-accent); }
 
 /* The row a finger uses: the phone's "+" then the field. On a desktop the trigger is
    `display:none` and this is a one-child flex row, which is what the field always was. */
@@ -3283,7 +3305,7 @@
 .composerActionsTrigger {
   display:none; place-items:center; flex:none;
   width:44px; height:44px; margin-bottom:2px; padding:0;
-  border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full);
+  border:1px solid var(--bf-border); border-radius:var(--radius-full);
   background:var(--canvas-panel); color:var(--canvas-ink); cursor:pointer;
 }
 .composerActionsTrigger > svg { display:block; width:18px; height:18px; }
@@ -3548,8 +3570,8 @@
   .composerDock {
     left:0; right:0; bottom:0; width:auto; min-width:0; max-width:none; margin-inline:0;
     padding:8px 10px 10px;
-    border-top:1px solid var(--canvas-brain-border);
-    background:var(--canvas-brain-surface);
+    border-top:1px solid var(--bf-border);
+    background:var(--bf-surface);
     box-shadow:0 -10px 34px var(--canvas-shadow);
   }
   /* The drag handle and the float/dock control are desktop affordances: there is
@@ -3634,8 +3656,8 @@
   .worldPaletteGroup { display:inline-block; vertical-align:top; padding-right:4px; }
   .worldPaletteTiles { grid-auto-flow:column; grid-template-columns:none; grid-auto-columns:56px; }
   .chatSurfaceHeader { padding:10px 12px 8px; }
-  .chatSurfaceBody { padding:0 2px 0 54px; }
-  .chatSurfaceFooter { padding:4px 12px 8px; }
+  .chatSurface > :global(.bf-surface__body) { padding:0 2px 0 54px; }
+  .chatSurface .chatSurfaceFooter { padding:4px 12px 8px; }
   /* NO FLOATING RAIL. The phone's surface switcher was a column of five unlabelled
      glyphs parked over the board's top-left corner — over the surface's own heading —
      with a `[data-brain-open='true']` rule that laid it DOWN in a row across that
@@ -3856,11 +3878,13 @@
   --canvas-widget-border:rgba(148,163,184,.26);
   --canvas-widget-icon-bg:#1b2c46;
   --canvas-widget-icon:#9dbbe4;
-  --canvas-brain-surface:#191634;
-  --canvas-brain-header:#221d45;
-  --canvas-brain-border:rgba(150,124,255,.38);
-  --canvas-brain-icon-bg:#2b2456;
-  --canvas-brain-accent:#a991ff;
+  /* The Brain palette (`--bf-*`), restated for dark. Text, muted text and the hover
+     tint derive from tokens that already move with the theme. */
+  --bf-surface:#191634;
+  --bf-border:rgba(150,124,255,.38);
+  --bf-accent-soft:#2b2456;
+  --bf-accent:#a991ff;
+  --bf-surface-2:color-mix(in srgb,var(--bf-accent) 14%,transparent);
   --creation-dot:rgba(116,145,184,.24);
   --creation-minimap-mask:rgba(7,14,25,.76);
   /* The three board hues that do NOT survive the move to slate: a frame's pale
@@ -3895,12 +3919,12 @@
 :global(html:not([data-theme='light'])) .composer {
   background:transparent!important;
   --prompt-panel-bg:var(--canvas-widget-surface);
-  --prompt-panel-border:var(--canvas-brain-border);
-  --chat-input-text:var(--canvas-ink);
-  --chat-input-icon:var(--canvas-muted);
-  --chat-input-bg:var(--canvas-panel-muted);
-  --chat-input-border:var(--canvas-line);
-  --chat-input-disabled-send-bg:var(--canvas-hover);
+  --prompt-panel-border:var(--bf-border);
+  /* The shared composer's field (`--bf-*`): text, border and send colours inherit the
+     canvas's Brain palette; only the field plate and the disabled send differ in dark. */
+  --bf-text-secondary:var(--canvas-muted);
+  --bf-field:var(--canvas-panel-muted);
+  --bf-surface-2:var(--canvas-hover);
   --text-primary:var(--canvas-ink);
   --text-secondary:var(--canvas-muted);
   --text-muted:var(--canvas-muted);
@@ -5515,11 +5539,11 @@
 .composerDock[data-placement='docked'] .composerCard {
   border-color: transparent;
   border-radius: 18px;
-  background: color-mix(in srgb, var(--canvas-ink) 7%, var(--canvas-brain-surface));
+  background: color-mix(in srgb, var(--canvas-ink) 7%, var(--bf-surface));
   box-shadow: none;
   backdrop-filter: none;
 }
-.composerDock[data-placement='docked'] .composerCard:focus-within { border-color: var(--canvas-brain-accent); box-shadow: 0 0 0 1px var(--canvas-brain-accent); }
+.composerDock[data-placement='docked'] .composerCard:focus-within { border-color: var(--bf-accent); box-shadow: 0 0 0 1px var(--bf-accent); }
 
 /* --- The clocks ----------------------------------------------------------
    `timer` counts a timebox down and `stopwatch` counts up; ONE body draws both

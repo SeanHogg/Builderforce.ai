@@ -34,14 +34,24 @@ export interface TabPort {
 export interface WorkingTab {
   current(): { id: number; url: string } | null;
   set(tab: { id: number; url: string } | null): void;
+  /** Told after every change — the panel's context chip follows the tab Rovr acts on. */
+  subscribe(listener: () => void): () => void;
 }
 
 export function createWorkingTab(): WorkingTab {
   let tab: { id: number; url: string } | null = null;
+  const listeners = new Set<() => void>();
   return {
     current: () => tab,
     set: (next) => {
       tab = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
   };
 }

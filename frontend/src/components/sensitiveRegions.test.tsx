@@ -21,8 +21,10 @@ const SENSITIVE_REGIONS: ReadonlyArray<{ file: string; component: string; privac
   { file: 'mcp/McpServerForm.tsx', component: 'McpServerForm', privacy: 'block' },
   { file: 'billing/BillingClient.tsx', component: 'BillingClient', privacy: 'block' },
   { file: 'ProjectBackendPanel.tsx', component: 'ProjectBackendPanel', privacy: 'block' },
-  { file: 'brain/panel/BrainComposerArea.tsx', component: 'BrainComposerArea', privacy: 'mask' },
+  // Every web AI surface's footer (Brain panel, guest drawer, canvas) — what a person types to the Brain.
+  { file: 'ai-surface/WebAiSurface.tsx', component: 'WebSurfaceFooter', privacy: 'mask' },
 ];
+// A shared part (`SurfaceFooter`) takes the attribute through its `dataAttrs` prop.
 
 /** The opening tag of the element a component's top-level `return (` renders. */
 function rootElementOf(source: string, component: string): string {
@@ -39,8 +41,8 @@ describe('sensitive regions are never recorded', () => {
     const source = readFileSync(resolve(__dirname, file), 'utf8');
     const root = rootElementOf(source, component);
     const marker = privacy === 'block'
-      ? /\{\.\.\.REPLAY_BLOCK\}|privacy="block"/
-      : /\{\.\.\.REPLAY_MASK\}|privacy="mask"/;
+      ? /\{\.\.\.REPLAY_BLOCK\}|privacy="block"|dataAttrs=\{REPLAY_BLOCK\}/
+      : /\{\.\.\.REPLAY_MASK\}|privacy="mask"|dataAttrs=\{REPLAY_MASK\}/;
     expect(root).toMatch(marker);
   });
 

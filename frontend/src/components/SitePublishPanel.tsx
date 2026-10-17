@@ -111,7 +111,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
             spellCheck={false}
             style={{
               flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--chat-input-border)', background: 'var(--chat-input-bg)',
+              border: '1px solid var(--bf-border)', background: 'var(--bf-field)',
               color: 'var(--text-primary)', fontSize: 14, fontFamily: 'var(--font-mono, monospace)',
             }}
           />
@@ -125,7 +125,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
         disabled={busy || !loaded}
         style={{
           padding: '10px 14px', borderRadius: 'var(--radius-md)', border: 'none', cursor: busy ? 'wait' : 'pointer',
-          background: busy ? 'var(--chat-input-disabled-send-bg)' : 'var(--coral-bright)',
+          background: busy ? 'var(--bf-surface-2)' : 'var(--coral-bright)',
           color: 'var(--text-on-accent)', fontWeight: 600, fontSize: 14,
         }}
       >
@@ -137,7 +137,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
       )}
 
       {site && phase !== 'building' && phase !== 'uploading' && (
-        <div style={{ borderTop: '1px solid var(--chat-input-border)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ borderTop: '1px solid var(--bf-border)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
             {phase === 'done' ? t('publish.published') : t('publish.liveSite')}
           </div>

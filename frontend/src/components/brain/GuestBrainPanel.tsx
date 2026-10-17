@@ -1,50 +1,37 @@
 /**
  * GuestBrainPanel — the Brain/Ideas chat for LOGGED-OUT visitors.
  *
- * A lean view over the SAME package conversation hooks the authed BrainPanel uses
- * (useBrainChats + useBrainConversation) — so the streaming/agent-loop logic is
- * shared, not duplicated — but wired to the GUEST runtime (guestBrainConfig):
- * a guest token on the transport and localStorage persistence. No tickets/agents/
- * uploads/MCP: a guest gets a clean "try the Brain" chat. When they exhaust the
- * tiny daily allowance we swap the composer for a "sign up free to keep going"
- * wall — the conversion moment. Signing up carries their lead over (same
- * visitorId, existing marketing convert flow).
+ * The session (conversation, allowance, guest token, shared room) is
+ * `useGuestBrainSession`; this file draws it through the ONE AI body every host
+ * mounts (`WebAiSurface` + `SurfaceEmptyState`). No tickets/agents/
+ * uploads/MCP: a guest gets a clean "try the Brain" chat. When they exhaust the tiny
+ * daily allowance the composer becomes a "sign up free to keep going" wall — the
+ * conversion moment. Signing up carries their lead over (same visitorId, existing
+ * marketing convert flow).
  *
  * A guest can also INVITE other people in. That turns the same panel into a shared
  * room: one transcript everybody reads and writes, one COMBINED turn allowance
- * (the same ten turns — inviting people is not a way to get more), and an optional
- * camera meeting between the participants, built on the very same mesh-video hook
- * Standup and Planning use. The conversation the host was already having comes
- * with them; "invite people to this chat" would be a strange promise otherwise.
+ * (inviting people is not a way to get more), and an optional camera meeting built on
+ * the same mesh-video hook Standup and Planning use. The conversation the host was
+ * already having comes with them.
  *
  * Rendered by ConditionalAppShell (the /brainstorm route + the floating drawer)
  * whenever `!hasTenant`, inside a BrainProvider configured with guestBrainConfig.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { usePolledResource } from '@/hooks/usePolledResource';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useBrainChats, useBrainConversation, isStepMessage, getBrainCapability, GUEST_ROOM_CHAT_ID, type BrainCapabilityId } from '@/lib/brain';
+import { BrainTimeline, ChatErrorBanner, SurfaceEmptyState, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
+import { WebAiSurface } from '@/components/ai-surface/WebAiSurface';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatInput } from '@/components/ChatInput';
-import { GuestSignupCta } from '@/components/GuestSignupCta';
 import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
 import { GuestRoomBar } from '@/components/brain/GuestRoomBar';
 import { GuestRoomJoinCard } from '@/components/guest/GuestRoomJoinCard';
 import { GuestRoomMeeting } from '@/components/brain/GuestRoomMeeting';
-import { mintGuestSession, getGuestUsage } from '@/lib/guestChatApi';
-import { onGuestLimit, type GuestLimitRefusal } from '@/lib/guestLimit';
-import { useGuestRoom } from '@/lib/useGuestRoom';
-import {
-  createGuestRoom, leaveGuestRoom, appendGuestRoomMessages, refreshGuestCredentials,
-  getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName, type GuestRoomState,
-} from '@/lib/guestRoomApi';
-import { BrainMark, BrainTimeline, ChatErrorBanner, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
-
-/** How often the short-lived guest token is renewed (it expires after an hour). */
-const CREDENTIAL_REFRESH_MS = 45 * 60 * 1000;
+import { GuestCapWall, GuestDisabledCTA } from './GuestBrainWalls';
+import { useGuestBrainSession } from './useGuestBrainSession';
 
 interface GuestBrainPanelProps {
   variant: 'page' | 'docked';
@@ -60,322 +47,123 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
   const t = useTranslations('guestBrain');
   const tRoom = useTranslations('guestRoom');
   const tCommon = useTranslations('common');
-  const timelineLabels = useBrainTimelineLabels();
   const tBrainCaps = useTranslations('brain.capabilities');
+  const timelineLabels = useBrainTimelineLabels();
+  const s = useGuestBrainSession({ initialPrompt, inviteCode });
+  const { conv, room } = s;
+  const isPage = variant === 'page';
+  const layout = isPage ? 'page' : 'docked';
 
-  const [ready, setReady] = useState(false);          // guest token minted
-  const [enabled, setEnabled] = useState(true);       // kill switch / mint ok
-  const [roomsEnabled, setRoomsEnabled] = useState(false);
-  const [remaining, setRemaining] = useState<number | null>(null);
-  const [limit, setLimit] = useState(0);
-  const [input, setInput] = useState('');
-
-  // ── Shared-room state ──────────────────────────────────────────────────────
-  // `roomCode` is the room this browser is IN; `inviteCode` is one it has been
-  // asked to join. They differ exactly while an invite is pending.
-  const [roomCode, setRoomCode] = useState<string | null>(null);
-  const [displayName, setDisplayName] = useState('');
-  const [joining, setJoining] = useState(false);
-  const [roomError, setRoomError] = useState<string | null>(null);
-  const [meetingOn, setMeetingOn] = useState(false);
-
-  useEffect(() => {
-    setRoomCode(getActiveGuestRoom());
-    setDisplayName(getGuestDisplayName());
-  }, []);
-
-  const inRoom = !!roomCode;
-  const pendingInvite = !!inviteCode && inviteCode !== roomCode;
-
-  /**
-   * A wall the counter did not see coming. "Messages left" is this visitor's own
-   * allowance, and it is not the only one that can run out: the per-device cap and
-   * a room's combined cap both refuse while this browser still believes it has
-   * turns left. Those refusals used to land as a bare English error line beside an
-   * enabled composer; now they raise the same wall, which is the only thing a
-   * blocked visitor can act on.
-   */
-  const [refusedWall, setRefusedWall] = useState<GuestLimitRefusal | null>(null);
-  useEffect(() => onGuestLimit(setRefusedWall), []);
-
-  const capReached = (remaining !== null && remaining <= 0) || refusedWall !== null;
-
-  // Same capability tiles as the signed-in Brain Storm empty state — the first
-  // surface a visitor lands on should show what this thing can make. Guest chats
-  // are localStorage-only, so the choice is session state here rather than a
-  // persisted chat field; the system-prompt injection is identical.
-  const [capability, setCapability] = useState<BrainCapabilityId | null>(null);
-  const capabilityPrompt = getBrainCapability(capability)?.systemPrompt;
-
-  const chats = useBrainChats({});
-  // In a room the conversation IS the room — one fixed chat id, so every
-  // participant's hook resolves to the same transcript instead of each browser
-  // picking whichever local chat it happened to have open.
-  const activeChatId = inRoom ? GUEST_ROOM_CHAT_ID : chats.activeChatId;
-  const conv = useBrainConversation({
-    chatId: activeChatId,
-    modality: 'llm',
-    extraSystem: capabilityPrompt,
-    ensureChatId: async () => {
-      if (inRoom) return GUEST_ROOM_CHAT_ID;
-      const chat = await chats.create({ title: t('newChatTitle') });
-      return chat?.id ?? null;
-    },
-    onActivity: (id) => { if (!inRoom) void chats.touch(id); },
-  });
-
-  const reloadMessages = conv.reloadMessages;
-  const room = useGuestRoom(roomCode, { name: displayName }, { onTranscriptChanged: reloadMessages });
-
-  // Re-broadcast my in-flight reply so the room watches the same answer arrive
-  // rather than staring at a pause and then a finished wall of text. Only the
-  // sender holds the gateway stream, so only the sender can relay it.
-  const { relayStream } = room;
-  const streamingText = conv.streamingText;
-  useEffect(() => {
-    if (!inRoom || !streamingText) return;
-    relayStream(streamingText);
-  }, [inRoom, streamingText, relayStream]);
-
-  // Mint the guest token on mount so the first send is authenticated. A null
-  // result means guest chat is disabled or unreachable → show the sign-in CTA.
-  // A visitor already in a room keeps their room-bound token; re-minting here
-  // would silently drop them out of the shared session.
-  useEffect(() => {
-    let cancelled = false;
-    if (getActiveGuestRoom()) {
-      void getGuestUsage().then((usage) => {
-        if (cancelled) return;
-        setEnabled(usage?.enabled ?? true);
-        setRoomsEnabled(usage?.roomsEnabled ?? true);
-        setReady(true);
-      });
-      return () => { cancelled = true; };
-    }
-    void mintGuestSession().then((usage) => {
-      if (cancelled) return;
-      if (!usage) { setEnabled(false); setReady(true); return; }
-      setRemaining(usage.remaining);
-      setLimit(usage.limit);
-      setRoomsEnabled(usage.roomsEnabled);
-      setReady(true);
-    });
-    return () => { cancelled = true; };
-  }, []);
-
-  // Keep the guest token alive. Without this a session that runs past the token's
-  // one-hour life goes quietly unauthenticated — and in a shared room that looks
-  // like being dropped from the conversation mid-meeting.
-  // Coming back to a backgrounded tab is the other moment a token is likely
-  // stale — the poll pauses while hidden and renews once on return.
-  usePolledResource(
-    (signal) => refreshGuestCredentials().then((state) => {
-      if (signal.aborted) return;
-      // A room that has ended drops us back to solo — reflect that in the UI
-      // instead of showing a room bar for a session that no longer exists.
-      setRoomCode(getActiveGuestRoom());
-      if (state) { setRemaining(state.remaining); setLimit(state.limit); }
-    }),
-    { intervalMs: CREDENTIAL_REFRESH_MS, enabled: ready && enabled, immediate: false },
+  const header = (
+    <SurfaceHeader
+      title={t('brand')}
+      running={conv.sending}
+      actions={<Link href="/register" className="gb-signup-link">{t('signUpFree')}</Link>}
+      {...(onClose ? { onClose } : {})}
+      labels={{ close: t('close') }}
+    />
   );
 
-  // In a room the COMBINED counter is the truth — it is what everyone is spending.
-  useEffect(() => {
-    if (!inRoom) return;
-    if (room.remaining !== null) setRemaining(room.remaining);
-    if (room.limit) setLimit(room.limit);
-  }, [inRoom, room.remaining, room.limit]);
+  // Before the conversation can start: the kill switch, or an invite to accept.
+  const gate = s.ready && !s.enabled
+    ? <GuestDisabledCTA layout={layout} />
+    : s.pendingInvite && inviteCode
+      ? <GuestRoomJoinCard code={inviteCode} onJoined={s.joinRoom} />
+      : null;
 
-  // Auto-send the one-shot initial prompt exactly once, after the token is ready.
-  const sentInitialRef = useRef(false);
-  useEffect(() => {
-    if (!ready || !enabled || capReached || pendingInvite) return;
-    if (sentInitialRef.current || !initialPrompt?.trim()) return;
-    sentInitialRef.current = true;
-    void doSend(initialPrompt.trim());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, enabled, capReached, pendingInvite, initialPrompt]);
-
-  const refreshUsage = useCallback(async () => {
-    if (getActiveGuestRoom()) { await room.refresh(); return; }
-    const usage = await getGuestUsage();
-    if (usage) { setRemaining(usage.remaining); setLimit(usage.limit); setEnabled(usage.enabled); setRoomsEnabled(usage.roomsEnabled); }
-    // Allowances reset daily. A refusal-raised wall has no counter to retire it, so
-    // it is retired HERE, the moment the server says there are turns again —
-    // otherwise a visitor who came back the next day would still be behind it.
-    if (usage && usage.remaining > 0) setRefusedWall(null);
-  }, [room]);
-
-  const doSend = useCallback(async (text: string) => {
-    // Tell the room somebody is waiting on the Brain, so the others see why the
-    // transcript has gone quiet instead of talking over the in-flight turn.
-    if (getActiveGuestRoom()) room.setBusy(true);
-    const ok = await conv.send(text);
-    if (getActiveGuestRoom()) room.setBusy(false);
-    // Whether or not the model answered, the server consumed one message — refresh
-    // the counter so the wall appears the instant the allowance is spent.
-    void refreshUsage();
-    return ok;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conv, refreshUsage, room]);
-
-  // A turn mid-run is not supported by the guest conversation: the box stays
-  // writable and the text stays put until the run ends (or is stopped).
-  const onSubmit = async () => {
-    const text = input.trim();
-    if (!text || conv.sending || capReached) return;
-    setInput('');
-    const ok = await doSend(text);
-    if (!ok) setInput(text); // restore on failure so nothing is lost
-  };
-
-  // ── Room actions ───────────────────────────────────────────────────────────
-
-  const adoptRoom = useCallback((state: GuestRoomState) => {
-    setRoomCode(state.code);
-    setRemaining(state.remaining);
-    setLimit(state.limit);
-    setRoomError(null);
-    reloadMessages();
-  }, [reloadMessages]);
-
-  /** Open a shared session and carry the conversation so far into it. */
-  const startRoom = useCallback(async () => {
-    setJoining(true);
-    setRoomError(null);
-    const name = displayName.trim() || tRoom('defaultHostName');
-    setGuestDisplayName(name);
-    // Capture the local transcript BEFORE the room becomes active — once it is,
-    // persistence reads and writes the room instead of this browser.
-    const carried = conv.messages
-      .filter((m) => !isStepMessage(m))
-      .map((m) => ({ role: m.role, content: m.content, metadata: m.metadata ?? null }));
-    const state = await createGuestRoom(name, carried.find((m) => m.role === 'user')?.content?.slice(0, 80));
-    if (typeof state === 'string') {
-      setRoomError(state === 'unavailable' ? tRoom('errorUnavailable') : tRoom('errorGone'));
-      setJoining(false);
-      return;
-    }
-    if (carried.length) await appendGuestRoomMessages(state.code, carried);
-    adoptRoom(state);
-    setDisplayName(name);
-    setJoining(false);
-  }, [conv.messages, displayName, adoptRoom, tRoom]);
-
-  const exitRoom = useCallback(async () => {
-    const code = getActiveGuestRoom();
-    setMeetingOn(false);
-    setRoomCode(null);
-    if (code) await leaveGuestRoom(code);
-    // Back to a solo guest: mint a fresh, room-less token and reload the local
-    // transcript this browser still owns.
-    const usage = await mintGuestSession();
-    if (usage) { setRemaining(usage.remaining); setLimit(usage.limit); setRoomsEnabled(usage.roomsEnabled); }
-    reloadMessages();
-  }, [reloadMessages]);
-
-  const isPage = variant === 'page';
-  const visibleMessages = useMemo(() => conv.messages.filter((m) => !isStepMessage(m)), [conv.messages]);
+  const hasThread = s.visibleMessages.length > 0 || !!conv.streamingText || !!room.streamingPeer;
 
   return (
     <div className={`gb-root ${isPage ? 'gb-page' : 'gb-docked'}`}>
-      {/* Header */}
-      <SurfaceHeader
-        title={t('brand')}
-        running={conv.sending}
-        actions={<Link href="/register" className="gb-signup-link">{t('signUpFree')}</Link>}
-        {...(onClose ? { onClose } : {})}
-        labels={{ close: t('close') }}
-      />
-
-      {/* Body */}
-      {ready && !enabled ? (
-        <GuestDisabledCTA t={t} />
-      ) : pendingInvite && inviteCode ? (
-        <GuestRoomJoinCard
-          code={inviteCode}
-          onJoined={(state) => { adoptRoom(state); setDisplayName(getGuestDisplayName()); }}
-        />
-      ) : (
-        <>
-          {inRoom && roomCode && (
+      <WebAiSurface
+        label={t('brand')}
+        header={header}
+        rail={!gate && s.inRoom && s.roomCode ? (
+          <>
             <GuestRoomBar
-              code={roomCode}
+              code={s.roomCode}
               title={room.state?.title || tRoom('defaultTitle')}
               surface={room.state?.surface ?? 'chat'}
               participants={room.participants}
               maxParticipants={room.state?.maxParticipants ?? 0}
               remaining={room.remaining}
-              limit={room.limit || limit}
+              limit={room.limit || s.limit}
               connected={room.connected}
               busyWith={room.busyWith}
-              meetingOn={meetingOn}
-              onToggleMeeting={() => setMeetingOn((on) => !on)}
-              onLeave={exitRoom}
+              meetingOn={s.meetingOn}
+              onToggleMeeting={() => s.setMeetingOn((on) => !on)}
+              onLeave={s.exitRoom}
             />
-          )}
-          {inRoom && roomCode && meetingOn && (
-            <GuestRoomMeeting code={roomCode} name={displayName} onLeave={() => setMeetingOn(false)} />
-          )}
-
-          <div className="gb-messages">
-            {visibleMessages.length === 0 && !conv.streamingText && (
-              <div className="gb-empty">
-                <div className="gb-empty-emoji"><BrainMark /></div>
-                <div className="gb-empty-title">{inRoom ? tRoom('emptyTitle') : t('emptyTitle')}</div>
-                <div className="gb-empty-body">{inRoom ? tRoom('emptyBody') : t('emptyBody')}</div>
-                <BrainCapabilityPicker
-                  surface="brainstorm"
-                  value={capability}
-                  onSelect={(id) => {
-                    setCapability(id);
-                    if (id) setInput((prev) => (prev.trim() ? prev : tBrainCaps(`${id}.starter`)));
-                  }}
-                  layout="tiles"
-                  disabled={capReached}
-                />
-              </div>
-            )}
-            {(visibleMessages.length > 0 || conv.streamingText || room.streamingPeer) && (
-              // THE shared transcript — the same rows every surface draws; a room
-              // message carries its writer as `authoredBy`, so it is named like any
-              // participant. Somebody ELSE's turn streams as theirs, captioned.
-              <BrainTimeline
-                messages={conv.messages}
-                trace={[]}
-                streamingText={conv.streamingText || room.streamingPeer?.text || ''}
-                isRunning={conv.sending || !!room.streamingPeer}
-                labels={timelineLabels}
-                assistantName={t('brand')}
-                renderMessage={(_msg, ctx) => <ChatMessageContent content={ctx.text} />}
-                renderStreaming={(text) => (
-                  <>
-                    {!conv.streamingText && room.streamingPeer && (
-                      <span className="gb-author gb-author-muted">{tRoom('replyingTo', { name: room.streamingPeer.name })}</span>
-                    )}
-                    <ChatMessageContent content={text} />
-                  </>
-                )}
+            {s.meetingOn && <GuestRoomMeeting code={s.roomCode} name={s.displayName} onLeave={() => s.setMeetingOn(false)} />}
+          </>
+        ) : undefined}
+        empty={gate ?? (hasThread ? undefined : (
+          <SurfaceEmptyState
+            layout={layout}
+            title={s.inRoom ? tRoom('emptyTitle') : t('emptyTitle')}
+            hint={s.inRoom ? tRoom('emptyBody') : t('emptyBody')}
+            starters={(
+              <BrainCapabilityPicker
+                surface="brainstorm"
+                value={s.capability}
+                onSelect={(id) => {
+                  s.setCapability(id);
+                  if (id) s.setInput((prev) => (prev.trim() ? prev : tBrainCaps(`${id}.starter`)));
+                }}
+                layout="tiles"
+                disabled={s.capReached}
               />
             )}
-            {!capReached && <ChatErrorBanner className="gb-error" error={conv.error} action={conv.errorAction ?? null} onDismiss={conv.clearError} labels={{ dismiss: tCommon('dismiss') }} />}
-            {roomError && <ChatErrorBanner className="gb-error" error={roomError} action={null} onDismiss={() => setRoomError(null)} labels={{ dismiss: tCommon('dismiss') }} />}
+          />
+        ))}
+        thread={(
+          // THE shared transcript — a room message carries its writer as `authoredBy`,
+          // so it is named like any participant. Somebody ELSE's turn streams as
+          // theirs, captioned.
+          <div className="gb-messages">
+            <BrainTimeline
+              messages={conv.messages}
+              trace={[]}
+              streamingText={conv.streamingText || room.streamingPeer?.text || ''}
+              isRunning={conv.sending || !!room.streamingPeer}
+              labels={timelineLabels}
+              assistantName={t('brand')}
+              renderMessage={(_msg, ctx) => <ChatMessageContent content={ctx.text} />}
+              renderStreaming={(text) => (
+                <>
+                  {!conv.streamingText && room.streamingPeer && (
+                    <span className="gb-author gb-author-muted">{tRoom('replyingTo', { name: room.streamingPeer.name })}</span>
+                  )}
+                  <ChatMessageContent content={text} />
+                </>
+              )}
+            />
           </div>
-
-          {/* Composer OR the sign-up wall */}
-          {capReached ? (
-            <GuestCapWall t={t} tRoom={tRoom} limit={limit} shared={inRoom} refusal={refusedWall} />
-          ) : (
-            <div className="gb-composer">
+        )}
+        notices={gate ? undefined : (
+          <>
+            {!s.capReached && <ChatErrorBanner className="gb-error" error={conv.error} action={conv.errorAction ?? null} onDismiss={conv.clearError} labels={{ dismiss: tCommon('dismiss') }} />}
+            {s.roomError && <ChatErrorBanner className="gb-error" error={s.roomError} action={null} onDismiss={() => s.setRoomError(null)} labels={{ dismiss: tCommon('dismiss') }} />}
+          </>
+        )}
+        // THE web footer: the run's approval (a guest run can pause on one too) and the
+        // composer — or the sign-up wall in its place.
+        footer={!gate}
+        runKey={s.activeChatId}
+        messages={conv.messages}
+        timelineLabels={timelineLabels}
+        composer={s.capReached ? (
+              <GuestCapWall limit={s.limit} shared={s.inRoom} refusal={s.refusedWall} />
+            ) : (
               <ChatInput
-                value={input}
-                onChange={setInput}
-                onSubmit={() => { void onSubmit(); }}
+                value={s.input}
+                onChange={s.setInput}
+                onSubmit={() => { void s.submit(); }}
                 submitOnEnter
-                placeholder={ready ? t('placeholder') : t('loading')}
+                placeholder={s.ready ? t('placeholder') : t('loading')}
                 ariaLabel={t('placeholder')}
                 submitLabel={t('send')}
-                disabled={!ready}
+                disabled={!s.ready}
                 running={conv.sending}
                 onStop={conv.stop}
                 // A guest has no workspace behind the box: no plan, meters or Evermind to show.
@@ -384,43 +172,33 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
                 rows={isPage ? 3 : 2}
                 // Inviting people is only offered when this deployment can host a
                 // shared room AND the visitor isn't already in one.
-                contextControls={!inRoom && roomsEnabled && ready ? (
-                  <button type="button" onClick={startRoom} disabled={joining} className="gb-invite">
-                    {joining ? tRoom('starting') : tRoom('invitePeople')}
+                contextControls={!s.inRoom && s.roomsEnabled && s.ready ? (
+                  <button type="button" onClick={() => { void s.startRoom(); }} disabled={s.joining} className="gb-invite">
+                    {s.joining ? tRoom('starting') : tRoom('invitePeople')}
                   </button>
                 ) : undefined}
                 secondaryContent={(
                   <span className="gb-remaining">
-                    {remaining !== null
-                      ? (inRoom ? tRoom('sharedRemaining', { count: remaining, limit }) : t('remaining', { count: remaining }))
+                    {s.remaining !== null
+                      ? (s.inRoom ? tRoom('sharedRemaining', { count: s.remaining, limit: s.limit }) : t('remaining', { count: s.remaining }))
                       : t('tagline')}
                   </span>
                 )}
               />
-            </div>
-          )}
-        </>
-      )}
+            )}
+      />
 
       <style>{`
-        .gb-root { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--bg-base); color: var(--text-primary); }
+        .gb-root { display: flex; flex-direction: column; height: 100%; min-height: 0; }
         .gb-page { max-width: 820px; width: 100%; margin: 0 auto; height: calc(100vh - 120px); min-height: 480px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; }
         .gb-signup-link { font-size: var(--font-size-small); font-weight: 600; color: var(--accent); text-decoration: none; }
         .gb-messages { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-        /* Wide enough for the capability tiles to sit two-or-more across; the
-           tile grid is auto-fit so it collapses to one column on a phone. */
-        .gb-empty { margin: auto; text-align: center; max-width: 560px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-muted); }
-        .gb-empty-emoji { font-size: var(--font-size-page-title); }
-        .gb-empty-title { font-size: var(--font-size-card-title); font-weight: 600; color: var(--text-primary); }
-        .gb-empty-body { font-size: var(--font-size-small); line-height: 1.5; }
         /* Who said it — only meaningful in a shared room, where more than one
-           person writes into the same transcript. */
+           person writes into the same transcript. On an assistant bubble the caption
+           names whose turn this reply answers, so it reads as context. */
         .gb-author { display: block; font-size: var(--font-size-eyebrow); font-weight: 700; opacity: 0.85; margin-bottom: 3px; }
-        /* On an assistant bubble the caption names whose turn this reply answers,
-           so it reads as context rather than as the speaker. */
         .gb-author-muted { color: var(--text-muted); font-weight: 600; }
         .gb-error { font-size: var(--font-size-small); color: var(--error-text, var(--danger)); background: var(--error-bg, var(--bg-elevated)); border-radius: var(--radius-md); padding: 8px 12px; }
-        .gb-composer { flex-shrink: 0; border-top: 1px solid var(--border-subtle); padding: 10px 12px; }
         .gb-remaining { font-size: var(--font-size-small); color: var(--text-muted); }
         .gb-invite { padding: 0 12px; font-size: var(--font-size-small); font-weight: 600; border: none; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); cursor: pointer; min-height: 32px; white-space: nowrap; }
         .gb-invite:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-interactive, var(--bg-elevated)); }
@@ -428,55 +206,6 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
         @media (max-width: 640px) {
           .gb-page { height: calc(100vh - 80px); border-radius: 0; border-left: none; border-right: none; }
         }
-      `}</style>
-    </div>
-  );
-}
-
-/**
- * The conversion wall shown once the daily allowance is spent.
- *
- * The buttons themselves are <GuestSignupCta>, shared with the kill-switch panel
- * below and with the Creation Canvas — one block, one pair of destinations, so a
- * guest who runs out mid-sentence is offered the same way forward everywhere.
- * Only the sentence differs here, because a room's allowance was spent by
- * everyone in it together.
- */
-function GuestCapWall({
-  t, tRoom, limit, shared, refusal,
-}: {
-  t: ReturnType<typeof useTranslations>;
-  tRoom: ReturnType<typeof useTranslations>;
-  limit: number;
-  /** In a room the allowance was spent by everyone together — say so. */
-  shared: boolean;
-  /** The gateway's own verdict, when a refusal (not the local counter) raised this
-   *  wall. A per-device cap is NOT "your ten messages", and saying so to someone
-   *  who has sent two is a lie they can check. */
-  refusal: GuestLimitRefusal | null;
-}) {
-  const body = refusal?.reason === 'ip'
-    ? t('wallBodyDevice')
-    : shared || refusal?.reason === 'room'
-      ? tRoom('wallBody', { count: refusal?.limit ?? limit })
-      : t('wallBody', { count: refusal?.limit ?? limit });
-  return (
-    <GuestSignupCta prompt={{ next: '/brainstorm' }} title={t('wallTitle')} body={body} />
-  );
-}
-
-/** Shown when guest chat is disabled (kill switch) or unreachable. */
-function GuestDisabledCTA({ t }: { t: ReturnType<typeof useTranslations> }) {
-  return (
-    <div className="gb-disabled">
-      <div className="gb-empty-emoji"><BrainMark /></div>
-      <div className="gb-empty-title">{t('meetTitle')}</div>
-      <div className="gb-empty-body">{t('meetBody')}</div>
-      <GuestSignupCta prompt={{ next: '/brainstorm' }} layout="actions" />
-      <style>{`
-        .gb-disabled { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; text-align: center; color: var(--text-muted); }
-        .gb-disabled .gb-empty-title { font-size: var(--font-size-card-title); font-weight: 600; color: var(--text-primary); }
-        .gb-disabled .gb-empty-body { font-size: var(--font-size-small); max-width: 300px; line-height: 1.5; }
       `}</style>
     </div>
   );

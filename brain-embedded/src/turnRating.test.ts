@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ratedTurnContext, ratedTurnTool } from './turnRating';
+import { ratedTurnContext, ratedTurnTool, withRating } from './turnRating';
 import { STEP_MESSAGE_ROLE } from './types';
 
 const step = (id: number, category: string, label: string) => ({
@@ -62,5 +62,15 @@ describe('ratedTurnContext', () => {
     // A rating with no attribution would invent evidence for whichever model we
     // guessed, so it must be recognisable as unattributed rather than defaulted.
     expect(ratedTurnContext([reply(1)], 1).model).toBe('');
+  });
+});
+
+describe('withRating', () => {
+  it('sets, flips and clears one message thumb without touching the others', () => {
+    const start = { 1: 1 as const };
+    expect(withRating(start, 2, -1)).toEqual({ 1: 1, 2: -1 });
+    expect(withRating(start, 1, -1)).toEqual({ 1: -1 });
+    expect(withRating(start, 1, 0)).toEqual({});
+    expect(start).toEqual({ 1: 1 });
   });
 });

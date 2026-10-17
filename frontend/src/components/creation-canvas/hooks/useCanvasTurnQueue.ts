@@ -3,6 +3,8 @@ import { type Dispatch, type RefObject, type SetStateAction, useCallback, useIns
 import type { CanvasExportAction } from '@/lib/canvasExports';
 import { useLatestRef } from './useLatestRef';
 import { useQueuedTurns } from '@seanhogg/builderforce-brain-ui';
+import { stopRun } from '@seanhogg/builderforce-brain-embedded';
+import { canvasRunKey } from '../brainTurn/canvasRunKey';
 import { creationSessionsApi, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import type { useTranslations } from 'next-intl';
 import type { AssessmentGate } from '@/lib/academic/assessment';
@@ -10,7 +12,7 @@ import type { AssessmentGate } from '@/lib/academic/assessment';
 export interface UseCanvasTurnQueueDeps {
   appendTimeline: (role: 'user' | 'assistant' | 'system', body: string, metadata?: CreationTimelineMessage['metadata'], clientMessageId?: string) => string;
   assistantGate: AssessmentGate;
-  canvasRunRef: RefObject<{ abort: AbortController; requestMessageId: string; startedAt: number; } | null>;
+  canvasRunRef: RefObject<{ requestMessageId: string; startedAt: number; } | null>;
   evaluateCanvas: (promptOverride?: string) => void;
   exportArtifact: (nodeId: string, action: CanvasExportAction) => Promise<string>;
   persistence: 'local' | 'server';
@@ -22,12 +24,11 @@ export interface UseCanvasTurnQueueDeps {
   setBrainRunStartedAt: Dispatch<SetStateAction<number | null>>;
   setNotice: (text: string) => void;
   setPrompt: Dispatch<SetStateAction<string>>;
-  setThinking: Dispatch<SetStateAction<boolean>>;
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
   thinking: boolean;
 }
 
-export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef, evaluateCanvas, exportArtifact, persistence, prompt, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setBrainRunStartedAt, setNotice, setPrompt, setThinking, t, thinking }: UseCanvasTurnQueueDeps) {
+export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef, evaluateCanvas, exportArtifact, persistence, prompt, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setBrainRunStartedAt, setNotice, setPrompt, t, thinking }: UseCanvasTurnQueueDeps) {
   /**
    * Export from a card, at the identity React Flow needs.
    *
@@ -77,9 +78,9 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef
     // nobody was waiting on is worse than an inert button.
     if (!run || !thinking) return;
     canvasRunRef.current = null;
-    run.abort.abort();
+    // The run store aborts the stream, declines a pending approval and settles the cell.
+    stopRun(canvasRunKey(sessionId));
     queuedTurns.clear();
-    setThinking(false);
     setActiveAgentIds(new Set());
     setBrainRunStartedAt(null);
     setNotice(t('noticeBrainStopped'));
@@ -88,7 +89,7 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef
       correlationId: run.requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'user',
       durationMs: performance.now() - run.startedAt, metadata: { stopped: true },
     }).catch(() => undefined);
-  }, [appendTimeline, canvasRunRef, persistence, queuedTurns, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setBrainRunStartedAt, setNotice, setThinking, t, thinking]);
+  }, [appendTimeline, canvasRunRef, persistence, queuedTurns, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setBrainRunStartedAt, setNotice, t, thinking]);
   /**
    * THE ONE DOOR every user-initiated turn goes through — the composer, "Send
    * again" on a transcript message, an object handing Brain a request.

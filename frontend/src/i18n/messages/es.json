@@ -11640,7 +11640,7 @@
       },
       "builderforce-webcontainers-open-source": {
         "title": "BuilderForce WebContainers es código abierto: el runtime de desarrollo en el navegador con el que puedes hacer un fork",
-        "description": "El runtime que hay detrás de cada vista previa del lienzo, cada Publicar y cada Comprobar de Builderforce ya es MIT en GitHub y npm. Previsualiza, compila y comprueba los tipos de apps Vite, React, Vue y Svelte, y ejecuta Node, npm y una shell en la pestaña, sin cabeceras COOP/COEP y sin límite de sesiones."
+        "description": "El runtime que hay detrás de cada vista previa del lienzo, cada Publicar y cada Comprobar de Builderforce ya es MIT en GitHub y npm. Previsualiza, compila y comprueba los tipos de apps Vite, React, Vue y Svelte, y ejecuta Node, npm y una shell en la pestaña, sin exigir cabeceras COOP/COEP y sin límite de sesiones."
       },
       "open-source-at-builderforce": {
         "title": "Código abierto en Builderforce: cuatro proyectos que puedes ejecutar, leer y modificar",
@@ -26592,9 +26592,6 @@
     "noticeStandupMinutesNeedsAccount": "Inicia sesión para leer el acta de una daily",
     "noticeStandupMinutesFailed": "No se pudo leer el acta de la daily",
     "exportUnmaskedColumns": "Exportación rechazada: {columns} contienen datos personales sin enmascarar. Enmascáralas primero en la tarjeta.",
-    "approveAgentActionTitle": "Aprobar la acción del agente",
-    "approveAgentActionBody": "Un agente de la sesión quiere ejecutar {action}.",
-    "approveAgentActionConfirm": "Aprobar",
     "inviteLinkHeading": "Invitar por enlace",
     "inviteLinkHint": "Cualquiera con el enlace puede abrir este lienzo. Puede unirse sin crear una cuenta.",
     "inviteLinkRole": "Acceso que concede este enlace",

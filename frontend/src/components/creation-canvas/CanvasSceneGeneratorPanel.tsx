@@ -48,8 +48,8 @@ const STUDIO_THEME_BRIDGE = {
   ['--bfs-bg-deep' as string]: 'var(--canvas-board-background)',
   ['--bfs-fg' as string]: 'var(--canvas-ink)',
   ['--bfs-fg-muted' as string]: 'var(--canvas-muted)',
-  ['--bfs-accent' as string]: 'var(--canvas-brain-accent)',
-  ['--bfs-accent-2' as string]: 'var(--canvas-brain-accent)',
+  ['--bfs-accent' as string]: 'var(--bf-accent)',
+  ['--bfs-accent-2' as string]: 'var(--bf-accent)',
   ['--bfs-border' as string]: 'var(--canvas-line)',
   ['--bfs-danger' as string]: 'var(--error-text)',
 };

@@ -56,11 +56,32 @@
   "noChats": {
     "message": "Aucune conversation pour l'instant"
   },
-  "chatPickerLabel": {
-    "message": "Conversation"
-  },
   "chatEmpty": {
     "message": "Dites à Rovr ce dont vous avez besoin : il peut lire cette page, remplir des formulaires et garder la trace de ce qu'il a fait."
+  },
+  "chatEmptyTitle": {
+    "message": "Que doit faire Rovr ici ?"
+  },
+  "historyShow": {
+    "message": "Historique des discussions"
+  },
+  "historyHide": {
+    "message": "Retour à la discussion"
+  },
+  "chatActions": {
+    "message": "Actions de la discussion"
+  },
+  "chatActionsFor": {
+    "message": "Actions pour $1"
+  },
+  "chatRename": {
+    "message": "Renommer"
+  },
+  "contextLabel": {
+    "message": "Rovr agit sur"
+  },
+  "contextNoPage": {
+    "message": "Aucune page web"
   },
   "needModelOrSignIn": {
     "message": "Aucun modèle n'est disponible. Connectez-vous à Builderforce ou lancez un modèle sur cet appareil (Synapse, Ollama ou FreeToken)."

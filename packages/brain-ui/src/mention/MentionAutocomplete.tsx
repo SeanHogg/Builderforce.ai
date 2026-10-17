@@ -163,12 +163,12 @@ function MentionPopup({ matches, index, labels, onHover, onPick }: {
 // web app semantic tokens first, then the VS Code webview's --vscode-* tokens,
 // then a literal — so the popup themes in BOTH hosts, light AND dark.
 const T = {
-  border: 'var(--bf-ct-border, var(--border-subtle, var(--bf-border, var(--vscode-panel-border, rgba(148,163,184,0.3)))))',
-  surface: 'var(--bf-ct-surface, var(--bg-elevated, var(--bf-surface, var(--vscode-editorWidget-background, #1e1e1e))))',
+  border: 'var(--border-subtle, var(--bf-border, var(--vscode-panel-border, rgba(148,163,184,0.3))))',
+  surface: 'var(--bg-elevated, var(--bf-surface, var(--vscode-editorWidget-background, #1e1e1e)))',
   hover: 'var(--surface-interactive, var(--bg-base, var(--vscode-list-hoverBackground, rgba(148,163,184,0.16))))',
   active: 'var(--surface-coral-soft, var(--vscode-list-activeSelectionBackground, rgba(59,130,246,0.18)))',
-  text: 'var(--bf-ct-text, var(--text-primary, var(--bf-text, var(--vscode-foreground, inherit))))',
-  muted: 'var(--bf-ct-text-muted, var(--text-muted, var(--bf-text-muted, var(--vscode-descriptionForeground, #6b7280))))',
+  text: 'var(--text-primary, var(--bf-text, var(--vscode-foreground, inherit)))',
+  muted: 'var(--text-muted, var(--bf-text-muted, var(--vscode-descriptionForeground, #6b7280)))',
 };
 
 const POP: {

@@ -62,7 +62,7 @@ export function GitHubDeployPanel({ projectId, subdomain }: GitHubDeployPanelPro
   return (
     <section
       style={{
-        borderTop: '1px solid var(--chat-input-border, var(--border-subtle))',
+        borderTop: '1px solid var(--bf-border, var(--border-subtle))',
         paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10,
       }}
     >

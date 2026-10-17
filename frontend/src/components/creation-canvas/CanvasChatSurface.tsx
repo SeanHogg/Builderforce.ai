@@ -1,7 +1,8 @@
+import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';
-import { BrainSurfaceBody, type BrainSurfaceBodyProps } from './BrainDock';
+import { BrainSurface, type BrainSurfaceBodyProps } from './BrainSurface';
 import { BrainSurfaceViewProvider } from './brainSurfaceView';
 import { BrainSurfaceActions } from './BrainSurfaceActions';
 import { memberAvatarClass, memberInitials } from './rosterAvatar';
@@ -41,11 +42,12 @@ import { SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
  * roster had its own `+` removed for. The roster reports who is here; Share is the door.
  *
  * ── WHAT IS DELIBERATELY NOT IN HERE ─────────────────────────────────────────────
- * The transcript is `BrainSurfaceBody`, verbatim — the SAME component the edge dock and
- * the inline Brain Object render. A third copy of the chat is the one thing this
- * placement must never become. The prompt is not in here either: it is the canvas
- * composer, centred and bottom-aligned at the board level, which is where it already
- * sits in every placement and where every chat product people know puts it.
+ * The body is `BrainSurface`, verbatim — the SAME component the edge dock and the inline
+ * Brain Object render. A third copy of the chat is the one thing this placement must
+ * never become. The prompt is not OWNED here either — it is THE canvas composer — but it
+ * is DOCKED here: when Brain is the surface there is no board for a floating prompt to sit
+ * over, so the canvas hands it in (`effectiveCanvasPromptPlacement`) and it is the
+ * footer's last row of this one reading column, like every chat product people know.
  */
 
 /** The roster shape is shared with the play surface — see `CanvasRosterMember`. */
@@ -60,17 +62,25 @@ export interface CanvasChatSurfaceProps extends BrainSurfaceBodyProps {
   objectCount: number;
   /** Who is in this session — the SAME roster the command bar's cluster shows. */
   participants: readonly CanvasChatSurfaceMember[];
+  /** THE canvas prompt, docked as this surface's footer. Absent while the host owns the
+   *  input or the canvas is presenting. */
+  composer?: ReactNode;
 }
 
 export function CanvasChatSurface({
-  onExecutionDetailChange, onOpenBoard, objectCount, participants, ...body
+  onExecutionDetailChange, onOpenBoard, objectCount, participants, composer, ...body
 }: CanvasChatSurfaceProps) {
   const t = useTranslations('creationCanvas');
 
   return (
     <BrainSurfaceViewProvider>
-    <section className={styles.chatSurface} aria-label={t('surface.chat.label')} data-testid="canvas-chat-surface">
-      <SurfaceHeader
+    <BrainSurface
+      {...body}
+      className={styles.chatSurface}
+      footerClassName={styles.chatSurfaceFooter}
+      label={t('surface.chat.label')}
+      dataAttrs={{ 'data-testid': 'canvas-chat-surface' }}
+      header={<SurfaceHeader
         className={styles.chatSurfaceHeader}
         title={t('brain')}
         running={body.running}
@@ -94,17 +104,13 @@ export function CanvasChatSurface({
           showExecutionDetail={body.showExecutionDetail}
           onExecutionDetailChange={onExecutionDetailChange}
         />}
-      />
-      <div className={styles.chatSurfaceBody}>
-        <BrainSurfaceBody {...body} />
-      </div>
-      <footer className={styles.chatSurfaceFooter}>
-        <button type="button" onClick={onOpenBoard}>
-          <span aria-hidden><Icon source="◰" size="1em" /></span>
-          {t('surface.chat.openBoard', { count: objectCount })}
-        </button>
-      </footer>
-    </section>
+      />}
+      composer={composer}
+      footnote={<button type="button" className={styles.chatSurfaceOpenBoard} onClick={onOpenBoard}>
+        <span aria-hidden><Icon source="◰" size="1em" /></span>
+        {t('surface.chat.openBoard', { count: objectCount })}
+      </button>}
+    />
     </BrainSurfaceViewProvider>
   );
 }

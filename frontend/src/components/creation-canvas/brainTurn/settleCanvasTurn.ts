@@ -15,15 +15,15 @@ export interface CanvasTurnSettleContext extends Pick<UseCanvasBrainTurnDeps,
   | 'appendTimeline' | 'autoApplyRef' | 'canvasRunRef' | 'describeTurnError' | 'effectiveSelectedIds'
   | 'lastTurnProvenance' | 'nodes' | 'persistence' | 'resolvedScopeMode' | 'scopedNodeIds' | 'sessionId'
   | 'setAcceptedProposalIds' | 'setActiveAgentIds' | 'setAutoApplyPending' | 'setEdges' | 'setGuestLimit'
-  | 'setNodes' | 'setNotice' | 'setProposedChanges' | 'setThinking' | 'stage' | 't' | 'turnUnansweredRef'> {
+  | 'setNodes' | 'setNotice' | 'setProposedChanges' | 'stage' | 't' | 'turnUnansweredRef'> {
   /** The user's request, trimmed. */
   request: string;
   /** The transcript id of the request — every line this turn writes is keyed off it. */
   requestMessageId: string;
   /** The Brain object this turn answered through. */
   brainId: string;
-  /** Stop's handle on this run. */
-  runAbort: AbortController;
+  /** The run cell's Stop signal (`stopRun(canvasRunKey(sessionId))`). */
+  signal: AbortSignal;
   /** `performance.now()` when the turn began. */
   promptStartedAt: number;
   /** Closes the turn's journal span. */
@@ -35,12 +35,12 @@ export interface CanvasTurnSettleContext extends Pick<UseCanvasBrainTurnDeps,
 
 /** The turn answered: write the answer, stage what it proposed, report the outcome. */
 export function settleCanvasTurnSuccess(ctx: CanvasTurnSettleContext, answer: string): void {
-  const { appendTimeline, autoApplyRef, brainId, canvasRunRef, effectiveSelectedIds, executiveUseCase, executiveWorkflow, lastTurnProvenance, nodes, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, runAbort, scopedNodeIds, sessionId, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setNodes, setNotice, setProposedChanges, setThinking, stage, t, turnDone, turnUnansweredRef } = ctx;
+  const { appendTimeline, autoApplyRef, brainId, canvasRunRef, effectiveSelectedIds, executiveUseCase, executiveWorkflow, lastTurnProvenance, nodes, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, signal, scopedNodeIds, sessionId, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setNodes, setNotice, setProposedChanges, stage, t, turnDone, turnUnansweredRef } = ctx;
   // A run the user stopped has no result to record. `stopCanvasRun` already
   // unwound the UI and wrote the "you stopped this" line; a late answer from a
   // request that was already in flight must not overwrite it.
-  if (runAbort.signal.aborted) return;
-  if (canvasRunRef.current?.abort === runAbort) canvasRunRef.current = null;
+  if (signal.aborted) return;
+  if (canvasRunRef.current?.requestMessageId === requestMessageId) canvasRunRef.current = null;
   // A runtime notice ("I couldn't prepare any canvas changes…") is NOT something
   // Brain said, and writing it into the transcript as an assistant reply is what
   // let one failed turn become the template for the next: the following request
@@ -85,7 +85,6 @@ export function settleCanvasTurnSuccess(ctx: CanvasTurnSettleContext, answer: st
     // prompt, and on mobile the review surface may not be visible yet.
     setAutoApplyPending(shouldAutoApply);
   }
-  setThinking(false);
   setActiveAgentIds(new Set());
   setNotice(!executiveContractSatisfied && executiveUseCase
     ? `${executiveUseCase.label} did not produce its required Canvas artifact.`
@@ -96,20 +95,19 @@ export function settleCanvasTurnSuccess(ctx: CanvasTurnSettleContext, answer: st
 
 /** The turn threw: close it as stopped, or record the failure where the user and diagnostics see it. */
 export function settleCanvasTurnFailure(ctx: CanvasTurnSettleContext, error: unknown): void {
-  const { appendTimeline, canvasRunRef, describeTurnError, executiveUseCase, persistence, promptStartedAt, requestMessageId, resolvedScopeMode, runAbort, scopedNodeIds, sessionId, setActiveAgentIds, setNotice, setThinking, turnDone } = ctx;
-  if (isCanvasRunAborted(error) || runAbort.signal.aborted) {
+  const { appendTimeline, canvasRunRef, describeTurnError, executiveUseCase, persistence, promptStartedAt, requestMessageId, resolvedScopeMode, signal, scopedNodeIds, sessionId, setActiveAgentIds, setNotice, turnDone } = ctx;
+  if (isCanvasRunAborted(error) || signal.aborted) {
     // Stop is not a failure. The journal still closes the turn (an open span
     // would make the next diagnostics report unreadable), and the transcript
     // entry was written by `stopCanvasRun` at the moment the user asked.
     turnDone({ ok: false, detail: 'stopped by user' });
-    if (canvasRunRef.current?.abort === runAbort) canvasRunRef.current = null;
+    if (canvasRunRef.current?.requestMessageId === requestMessageId) canvasRunRef.current = null;
     return;
   }
-  if (canvasRunRef.current?.abort === runAbort) canvasRunRef.current = null;
+  if (canvasRunRef.current?.requestMessageId === requestMessageId) canvasRunRef.current = null;
   const detail = describeTurnError(error, 'noticeBrainFailed');
   turnDone({ ok: false, detail });
   appendTimeline('system', detail, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
-  setThinking(false);
   setActiveAgentIds(new Set());
   setNotice(detail);
   if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metadata: executiveUseCase ? { useCaseId: executiveUseCase.id, contractSatisfied: false } : undefined }).catch(() => undefined);

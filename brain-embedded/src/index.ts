@@ -192,6 +192,9 @@ export type { BrainContextValue, BrainPageContext } from './BrainContext';
 // Conversation + chat-list hooks
 export { useBrainChats, deriveChatTitle, DEFAULT_CHAT_TITLE } from './useBrainChats';
 export type { UseBrainChats, UseBrainChatsOptions } from './useBrainChats';
+// The pre-chat choices (mode, memory) and the ONE creation path that carries them.
+export { useArmedNewChat } from './useArmedNewChat';
+export type { ArmedNewChat } from './useArmedNewChat';
 export { useBrainConversation } from './useBrainConversation';
 export { subscribeToChatMessages } from './chatMessageSubscription';
 
@@ -229,8 +232,12 @@ export {
   // Teardown only — a headless harness reuses one chat id across scenarios, and the
   // store is a module-level singleton keyed by it.
   resetBrainRunStore,
+  // ONE run store for every agent turn: a non-chat loop (a canvas turn) hosted in the
+  // same cell — single-flight, Stop, the confirm gate, the live snapshot.
+  startEngineRun,
 } from './brainRunStore';
-export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn } from './brainRunStore';
+export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn, BrainRunEngine, RunEngineControl, RunKey } from './brainRunStore';
+export { useRunSnapshot } from './useRunSnapshot';
 // A sub-agent is an ordinary run with an OWNER pointer (`runLineage.ts`), redirected
 // mid-run through the same inbox any run has (`runSteering.ts`).
 export { parseSubagentOrigin, SUBAGENT_OF_META_KEY } from './runLineage';
@@ -589,8 +596,8 @@ export {
 export type { ModelIdentityContext, RoutedProduct } from './modelIdentity';
 
 // What a thumbs press is ABOUT: the model that served the turn + the MCP tool it ran.
-export { ratedTurnContext, ratedTurnTool } from './turnRating';
-export type { RatableMessage, RatedTurnContext } from './turnRating';
+export { ratedTurnContext, ratedTurnTool, withRating } from './turnRating';
+export type { RatableMessage, RatedTurnContext, MessageRatings } from './turnRating';
 
 // The model a chat's last completion actually resolved to — what
 // `builtin_session_current_model` is answered with, and what a host can show as

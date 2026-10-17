@@ -59,7 +59,7 @@ const boxStyle = (active: boolean): CSSProperties => ({
   padding: '6px 6px 6px 12px',
   borderRadius: 18,
   border: 'none',
-  background: 'var(--chat-input-bg, var(--bg-elevated, #f3f4f6))',
+  background: 'var(--bf-field, var(--bg-elevated, #f3f4f6))',
   boxShadow: active ? '0 0 0 2px var(--accent, #2563eb)' : 'none',
   transition: 'box-shadow 120ms ease',
 });

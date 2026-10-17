@@ -818,5 +818,15 @@
   "Portfolio": "组合",
   "Spec": "规格",
   "Retrospective": "回顾会",
-  "Planning poker": "计划扑克"
+  "Planning poker": "计划扑克",
+  "Chat history": "聊天记录",
+  "Back to the chat": "返回聊天",
+  "No chats yet": "暂无聊天",
+  "Chat actions": "聊天操作",
+  "Actions for {title}": "{title} 的操作",
+  "Needs an answer": "需要回答",
+  "Summarize": "总结",
+  "What are we working on?": "我们要做什么？",
+  "Ask about this workspace, or start from one of these.": "询问有关此工作区的问题，或从以下内容开始。",
+  "Start with": "从这里开始"
 }

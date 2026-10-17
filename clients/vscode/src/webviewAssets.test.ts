@@ -42,11 +42,12 @@ describe.skipIf(!built)("the built webview bundle", () => {
   it("puts the chat surface's own styles in the sheet that is actually loaded", () => {
     const css = fs.readFileSync(path.join(mediaDir, "index.css"), "utf8");
 
-    // `.bf-app` is the chat surface's root and `.bf-header` its top row: if these are
+    // `.bf-app` is the chat surface's root and `.bf-shead` its top row (the shared
+    // SurfaceHeader every AI surface wears, from brain-ui's styles.css): if these are
     // missing, the conversation renders as unstyled markup even though every other
     // check passes.
     expect(css).toContain(".bf-app");
-    expect(css).toContain(".bf-header");
+    expect(css).toContain(".bf-shead");
     // The wrapper that positions the conversation when it is mounted as a surface OF
     // the canvas. Without it the transcript renders behind the board.
     expect(css).toContain(".bf-canvas-chat-surface");

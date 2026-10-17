@@ -1,4 +1,5 @@
 /** The model side of one Brain turn — invited agents first, then the Brain answer or synthesis. */
+import type { RunEngineControl } from '@seanhogg/builderforce-brain-embedded';
 import { CanvasRunAbortedError, isCanvasRunAborted } from '@/lib/canvasAiErrors';
 import { canvasTranscriptForModel } from '@/lib/canvasTranscript';
 import { canvasProjectId, canvasProjectNodes } from '@/lib/canvasProjectRef';
@@ -15,10 +16,10 @@ import { canonicalTurnAgents } from './turnParticipants';
 
 /** What one group turn reads: the board's live deps plus the facts this turn fixed when it began. */
 export interface CanvasGroupTurnContext extends Pick<UseCanvasBrainTurnDeps,
-  | 'appendTimeline' | 'autoApplyRef' | 'brainRuntimeRef' | 'canvasActions' | 'canvasNotices' | 'confirm'
+  | 'appendTimeline' | 'autoApplyRef' | 'brainRuntimeRef' | 'canvasActions' | 'canvasNotices'
   | 'describeTurnError' | 'disableBrainModel' | 'evermindProjectId' | 'journalRef' | 'memoryEnabled'
   | 'modelSelection' | 'runShaping' | 'nodes' | 'persistence' | 'recordBrainCompletion' | 'resolvedScopeMode'
-  | 'scopedNodeIds' | 'sessionId' | 'sessionMode' | 'setActiveAgentIds' | 'setBrainTrace'
+  | 'scopedNodeIds' | 'sessionId' | 'sessionMode' | 'setActiveAgentIds'
   | 'setModelSelection' | 'setNodes' | 'stage' | 't' | 'timeline' | 'title' | 'turnToolCallsRef' | 'turnUnansweredRef'> {
   /** The user's request, trimmed. */
   request: string;
@@ -28,28 +29,24 @@ export interface CanvasGroupTurnContext extends Pick<UseCanvasBrainTurnDeps,
   brainId: string;
   /** The agents this turn is for — see `turnAgentNodes`. */
   connectedAgentNodes: readonly CreationFlowNode[];
-  /** Stop's handle on this run. */
-  signal: AbortSignal;
+  /** The run cell this turn lives in (`startEngineRun`): its Stop signal, the live
+   *  trace, and the shared approval gate the surface's ToolConfirmBar answers. */
+  run: RunEngineControl;
   /** The board as one loop of this turn sees it — see `canvasTurnSnapshot`. */
   turnSnapshot: (board: readonly CreationFlowNode[]) => string;
 }
 
 /** Ask the user before a tool mutates tenant state, showing what it would send. */
-function canvasActionConfirmer({ confirm, t }: Pick<CanvasGroupTurnContext, 'confirm' | 't'>) {
-  return ({ name, args }: { name: string; args: unknown }) => {
-    let preview = '';
-    try { const serialized = JSON.stringify(args ?? {}); preview = serialized === '{}' ? '' : serialized.length > 320 ? `${serialized.slice(0, 320)}…` : serialized; } catch { preview = ''; }
-    return confirm({ title: t('approveAgentActionTitle'), message: `${t('approveAgentActionBody', { action: name.replaceAll('_', ' ') })}${preview ? `\n\n${preview}` : ''}`, confirmLabel: t('approveAgentActionConfirm') });
-  };
-}
-
 /** Run the turn's model loops and resolve with the Brain's answer. */
 export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<string> {
-  const { appendTimeline, autoApplyRef, brainId, brainRuntimeRef, canvasActions, canvasNotices, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journalRef, memoryEnabled, modelSelection, runShaping, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setBrainTrace, setModelSelection, setNodes, signal, stage, t, timeline, title, turnSnapshot, turnToolCallsRef, turnUnansweredRef } = ctx;
+  const { appendTimeline, autoApplyRef, brainId, brainRuntimeRef, canvasActions, canvasNotices, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journalRef, memoryEnabled, modelSelection, runShaping, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setModelSelection, setNodes, run, stage, t, timeline, title, turnSnapshot, turnToolCallsRef, turnUnansweredRef } = ctx;
   // The phase someone CHOSE for this canvas is the arc stage the gateway nudges its
   // role/cost ordering by; undefined (never chosen) sends nothing rather than a default.
   const arcStage = readChosenCanvasPhase(sessionId);
-  const confirmCanvasAction = canvasActionConfirmer(ctx);
+  const { signal } = run;
+  // A mutating tool asks through the run cell, so the question shows as the shared
+  // approval bar on whichever Brain placement is open — and a Stop declines it.
+  const confirmCanvasAction = run.confirm;
   // Stop is honoured between every phase of the turn, not only inside the model
   // stream: a run interrupted while the invited agents are replying must not go
   // on to spend a synthesis turn.
@@ -201,7 +198,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
           : event.category,
       });
       if (event.category === 'tool' && event.label) turnToolCallsRef.current.add(event.label);
-      setBrainTrace((current) => [...current, event]);
+      run.trace(event);
     },
     conversation: contributions > 0 ? groupConversation : historicalConversation,
     signal,

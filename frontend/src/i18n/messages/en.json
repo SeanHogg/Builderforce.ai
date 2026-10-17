@@ -11640,7 +11640,7 @@
       },
       "builderforce-webcontainers-open-source": {
         "title": "BuilderForce WebContainers is open source — the in-browser dev runtime you can fork",
-        "description": "The runtime behind every Builderforce canvas preview, Publish and Check is now MIT on GitHub and npm. It previews, builds and type-checks Vite, React, Vue and Svelte apps and runs Node, npm and a shell in the tab, with no COOP/COEP headers and no session caps."
+        "description": "The runtime behind every Builderforce canvas preview, Publish and Check is now MIT on GitHub and npm. It previews, builds and type-checks Vite, React, Vue and Svelte apps and runs Node, npm and a shell in the tab, without requiring COOP/COEP headers, and with no session caps."
       },
       "open-source-at-builderforce": {
         "title": "Open source at Builderforce — four projects you can run, read and fork",
@@ -26592,9 +26592,6 @@
     "noticeStandupMinutesNeedsAccount": "Sign in to read a stand-up’s minutes",
     "noticeStandupMinutesFailed": "Could not read the stand-up minutes",
     "exportUnmaskedColumns": "Export refused: {columns} hold personal data and are not masked. Mask them on the card first.",
-    "approveAgentActionTitle": "Approve agent action",
-    "approveAgentActionBody": "A session agent wants to run {action}.",
-    "approveAgentActionConfirm": "Approve",
     "inviteLinkHeading": "Invite by link",
     "inviteLinkHint": "Anyone with the link can open this canvas. They can join without creating an account.",
     "inviteLinkRole": "Access this link grants",

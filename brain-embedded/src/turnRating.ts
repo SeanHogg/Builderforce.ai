@@ -74,3 +74,19 @@ export function ratedTurnContext(messages: readonly RatableMessage[], messageId:
     toolName: ratedTurnTool(messages, messageId),
   };
 }
+
+/** One viewer's thumb per message id — the shape every transcript's `ratings` prop takes. */
+export type MessageRatings = Record<number, 1 | -1>;
+
+/**
+ * The optimistic update a thumb press makes to that map: `0` clears the message's
+ * verdict, `1`/`-1` sets it. Pure so every surface that rates a reply (the web Brain
+ * panel through `useBrainConversation`, the Canvas dock) moves its thumbs the same way
+ * before the best-effort write lands.
+ */
+export function withRating(ratings: MessageRatings, messageId: number, rating: 1 | -1 | 0): MessageRatings {
+  const next = { ...ratings };
+  if (rating === 0) delete next[messageId];
+  else next[messageId] = rating;
+  return next;
+}

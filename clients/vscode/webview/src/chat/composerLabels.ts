@@ -86,7 +86,7 @@ function keyed(labels: LabelBundle, prefix: string, keys: readonly string[]): Re
 }
 
 /** The `/` menu's Status tab copy. Absent keys fall back to brain-ui's English. */
-export function workStatusLabelsFrom(labels: LabelBundle): Partial<WorkStatusLabels> {
+function workStatusLabelsFrom(labels: LabelBundle): Partial<WorkStatusLabels> {
   const t = makeT(labels);
   return {
     loading: t('app.statusLoading', 'Loading account…'),

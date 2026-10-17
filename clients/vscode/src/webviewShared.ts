@@ -36,6 +36,7 @@ export function renderWebviewHtml(
     apiOrigin,
     assetUrl: (f) => webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "media", "webview", f)).toString(),
     title: opts.title,
+    bootLabel: vscode.l10n.t("Connecting…"),
   });
 }
 

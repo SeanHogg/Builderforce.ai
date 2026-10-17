@@ -93,7 +93,9 @@ export function WorkspaceApp() {
     void mintToken();
   }, [init, mintToken]);
 
-  if (!init) return <div className="bf-center">Connecting…</div>;
+  // No label bundle before the first init frame: the host stamps this one line on the
+  // root element (`renderBundleShell`'s `bootLabel`) so even the boot screen is localized.
+  if (!init) return <div className="bf-center">{document.getElementById('root')?.dataset.bootLabel || 'Connecting…'}</div>;
 
   const t = makeT(init.labels);
   // Token presence: prefer the init frame (React state) and fall back to the live

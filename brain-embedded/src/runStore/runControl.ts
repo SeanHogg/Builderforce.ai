@@ -13,7 +13,15 @@ import { toolActivity } from '../runActivity';
 import { EMPTY_SNAPSHOT } from './runCell';
 import { cells, emit, getCell, pushTrace, recordAppended, storeListeners } from './runCells';
 import { stoppedTurnOf } from './turnPersistence';
-import type { BrainRunSnapshot, GlobalRunState } from './runTypes';
+
+/**
+ * The run driver owns CHAT runs only (numeric keys): a run hosted through
+ * `startEngineRun` (a string key) always executes in this process.
+ */
+function driverFor(key: RunKey) {
+  return typeof key === 'number' ? getRunDriver() : null;
+}
+import type { BrainRunSnapshot, GlobalRunState, RunKey } from './runTypes';
 
 /**
  * Drop all run state. For tests/teardown only — there's no per-chat eviction in
@@ -51,6 +59,8 @@ export function getGlobalRunState(): GlobalRunState {
   const running: number[] = [];
   const awaiting: number[] = [];
   for (const [id, cell] of cells) {
+    // Chats only: an engine-hosted run (a canvas turn) is observed by its own key.
+    if (typeof id !== 'number') continue;
     if (cell.pendingConfirm) awaiting.push(id);
     else if (cell.running) running.push(id);
   }
@@ -58,7 +68,7 @@ export function getGlobalRunState(): GlobalRunState {
 }
 
 /** Subscribe to a chat's run state. Returns an unsubscribe fn. */
-export function subscribeRun(chatId: number, listener: () => void): () => void {
+export function subscribeRun(chatId: RunKey, listener: () => void): () => void {
   const c = getCell(chatId);
   c.listeners.add(listener);
   return () => {
@@ -75,7 +85,7 @@ export function subscribeRun(chatId: number, listener: () => void): () => void {
  * the controller is created by {@link startRun}, after the host has already assembled the
  * catalog that carries that tool. So the tool reads it at CALL time, by chat.
  */
-export function runAbortSignal(chatId: number): AbortSignal | undefined {
+export function runAbortSignal(chatId: RunKey): AbortSignal | undefined {
   return cells.get(chatId)?.abort?.signal;
 }
 
@@ -85,7 +95,7 @@ export function runAbortSignal(chatId: number): AbortSignal | undefined {
  * the chat store, but the panel showed it only after a reload: mounted views merge the
  * run's `appended` buffer, and nothing had told the buffer.
  */
-export function appendRunMessage(chatId: number, msg: BrainMessage): void {
+export function appendRunMessage(chatId: RunKey, msg: BrainMessage): void {
   const c = cells.get(chatId);
   if (!c) return;
   recordAppended(c, msg);
@@ -93,17 +103,17 @@ export function appendRunMessage(chatId: number, msg: BrainMessage): void {
 }
 
 /** Current snapshot (referentially stable until something changes). */
-export function getRunSnapshot(chatId: number | null): BrainRunSnapshot {
+export function getRunSnapshot(chatId: RunKey | null): BrainRunSnapshot {
   if (chatId == null) return EMPTY_SNAPSHOT;
   return (cells.get(chatId)?.snapshot) ?? EMPTY_SNAPSHOT;
 }
 
-export function isRunning(chatId: number | null): boolean {
+export function isRunning(chatId: RunKey | null): boolean {
   return chatId != null && (cells.get(chatId)?.running ?? false);
 }
 
 /** The accumulated execution trace for a chat (for the capture/triage report). */
-export function getRunTrace(chatId: number | null): BrainTraceEvent[] {
+export function getRunTrace(chatId: RunKey | null): BrainTraceEvent[] {
   if (chatId == null) return [];
   return cells.get(chatId)?.trace ?? [];
 }
@@ -123,9 +133,9 @@ export function getRunTrace(chatId: number | null): BrainTraceEvent[] {
  * `running` flips to false when `runLoop` unwinds and `startRun`'s `finally`
  * fires; we emit here too so the Stop is reflected immediately.
  */
-export function stopRun(chatId: number): void {
-  const driver = getRunDriver();
-  if (driver) return driver.stop(chatId);
+export function stopRun(chatId: RunKey): void {
+  const driver = driverFor(chatId);
+  if (driver) return driver.stop(chatId as number);
   const c = cells.get(chatId);
   if (!c || !c.running) return;
   const stopped = stoppedTurnOf(c);
@@ -153,10 +163,10 @@ export function stopRun(chatId: number): void {
  * so the hook's local `setError('')` can't reach it — this is the store-side
  * companion `clearError()` calls. No-op when there's no cell or no error.
  */
-export function clearRunError(chatId: number | null): void {
+export function clearRunError(chatId: RunKey | null): void {
   if (chatId == null) return;
-  const driver = getRunDriver();
-  if (driver) return driver.clearError(chatId);
+  const driver = driverFor(chatId);
+  if (driver) return driver.clearError(chatId as number);
   const c = cells.get(chatId);
   if (!c || !c.error) return;
   c.error = '';
@@ -184,11 +194,11 @@ export function clearRunError(chatId: number | null): void {
  * does not happen.
  */
 export function requestRunConfirm(
-  chatId: number,
+  chatId: RunKey,
   req: { name: string; args: unknown },
   opts?: { step?: number },
 ): Promise<boolean> {
-  if (getRunDriver()) return Promise.resolve(false);
+  if (driverFor(chatId)) return Promise.resolve(false);
   const c = getCell(chatId);
   return new Promise<boolean>((resolve) => {
     c.pendingConfirm = { name: req.name, args: req.args };
@@ -204,9 +214,9 @@ export function requestRunConfirm(
 }
 
 /** Resolve a pending human-in-the-loop confirmation. No-op if none is pending. */
-export function resolveRunConfirm(chatId: number, ok: boolean): void {
-  const driver = getRunDriver();
-  if (driver) return driver.confirm(chatId, ok);
+export function resolveRunConfirm(chatId: RunKey, ok: boolean): void {
+  const driver = driverFor(chatId);
+  if (driver) return driver.confirm(chatId as number, ok);
   const c = cells.get(chatId);
   if (!c || !c.confirmResolver) return;
   const resolve = c.confirmResolver;

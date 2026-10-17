@@ -56,11 +56,32 @@
   "noChats": {
     "message": "暂无对话"
   },
-  "chatPickerLabel": {
-    "message": "对话"
-  },
   "chatEmpty": {
     "message": "告诉 Rovr 你需要什么——它可以阅读当前页面、填写表单，并记录它做过的每一步。"
+  },
+  "chatEmptyTitle": {
+    "message": "要让 Rovr 在这里做什么？"
+  },
+  "historyShow": {
+    "message": "聊天记录"
+  },
+  "historyHide": {
+    "message": "返回聊天"
+  },
+  "chatActions": {
+    "message": "聊天操作"
+  },
+  "chatActionsFor": {
+    "message": "$1 的操作"
+  },
+  "chatRename": {
+    "message": "重命名"
+  },
+  "contextLabel": {
+    "message": "Rovr 正在操作"
+  },
+  "contextNoPage": {
+    "message": "没有网页"
   },
   "needModelOrSignIn": {
     "message": "当前没有可用的模型。请登录 Builderforce，或在本设备上启动一个模型（Synapse、Ollama 或 FreeToken）。"

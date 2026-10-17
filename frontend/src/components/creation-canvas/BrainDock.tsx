@@ -1,23 +1,11 @@
-import { useEffect, useMemo, type CSSProperties, type ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePointerResize } from '@/lib/usePointerResize';
-import { Avatar, BrainTimeline, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
-import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
-import { useLiveActivityLabels } from '@/i18n/useLiveActivityLabels';
-import '@seanhogg/builderforce-brain-ui/styles.css';
-import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
-import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
-import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
-import { useModelIdentity } from '@/lib/useLlmModels';
-import { Icon } from '@/components/ui/Icon';
-import type { Edge } from '@xyflow/react';
+import { SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
 import styles from './CreationCanvas.module.css';
-import { creationObjectDefinition, creationObjectName } from './creationObjectRegistry';
-import type { CreationFlowNode } from './CreationNode';
-import { brainActivityLine, useBrainActivity } from './BrainActivityView';
-import type { BrainSurfaceCollaborator } from './brainSurfaceContext';
+import { BrainSurface, type BrainSurfaceBodyProps } from './BrainSurface';
 import { BrainSurfaceActions } from './BrainSurfaceActions';
-import { BrainSurfaceViewProvider, useBrainSurfaceView } from './brainSurfaceView';
+import { BrainSurfaceViewProvider } from './brainSurfaceView';
 import {
   BRAIN_DOCK_MAX_WIDTH,
   BRAIN_DOCK_MIN_WIDTH,
@@ -28,16 +16,17 @@ import {
 } from './brainDockPreferences';
 
 /**
- * The ONE Brain surface on the Canvas — this file owns both of its placements.
+ * The EDGE placement of the ONE Brain surface on the Canvas (the body is `BrainSurface`).
  *
  * The Canvas used to show a transcript inside the Brain Object, a second transcript
  * in the details panel, and a floating prompt at the bottom; people could not tell
  * which one they were talking to. The conversation, what Brain is doing right now,
  * what the turn cost, and its connected work were consolidated into one surface.
  *
- * That surface has two placements, and both render the SAME body:
+ * That surface has three placements, and all render the SAME body (`BrainSurface`):
  *   - docked  (`BrainDock`)  — a full-height panel on the left or right edge
- *   - inline  (the Brain Object on the graph, via `BrainSurfaceBody` in CreationNode)
+ *   - inline  (the Brain Object on the graph, `BrainObjectBody`)
+ *   - the Chat lens (`CanvasChatSurface`) — the conversation as the whole canvas
  *
  * There is no small floating card any more. A card hovering over a board that
  * already carries a Brain Object put two live transcripts of one conversation on
@@ -65,42 +54,6 @@ import {
 /** How far one arrow-key press resizes the surface. */
 const RESIZE_STEP = 24;
 
-/** The live conversation, identical wherever the surface is placed. */
-export interface BrainSurfaceBodyProps {
-  /** When false the transcript narrates progress only and hides the step list. */
-  showExecutionDetail: boolean;
-  messages: BrainMessage[];
-  trace: BrainTraceEvent[];
-  running: boolean;
-  /** Epoch ms the in-flight turn began, so every surface narrates the same phase. */
-  runStartedAt?: number | null;
-  /** The Brain Object this surface is bound to, when the canvas has one yet. */
-  node: CreationFlowNode | null;
-  nodes: CreationFlowNode[];
-  edges: Edge[];
-  collaborators?: BrainSurfaceCollaborator[];
-  joinedCollaborator?: BrainSurfaceCollaborator | null;
-  /** Re-send a transcript message as the next canvas turn. Omitted on a board the
-   *  viewer cannot drive, which hides the action rather than failing on click. */
-  onReplayMessage?: (message: BrainMessage, role: 'user' | 'assistant') => void;
-  /** Answer an ask_user card; omitted on a board the viewer cannot drive. */
-  onAnswerQuestion?: (answer: string) => void;
-  /** Rate a Brain reply. Omitted on a board that cannot file one (guest session, or
-   *  a turn with no resolved model), which hides the thumbs. */
-  onRateMessage?: (message: BrainMessage, rating: 1 | -1 | 0) => void;
-  /** This viewer's thumb per message id. */
-  ratings?: Record<number, 1 | -1>;
-  /** The guest wall this conversation ran into, when a turn was refused for want of
-   *  an account. Null on every signed-in board, where the CTA renders nothing. */
-  guestSignup?: GuestSignupPrompt | null;
-  /**
-   * Scroll this transcript message into view and highlight it. Used by the room: a
-   * speech bubble quotes a reply whose full text lives here. The nonce lets the same
-   * bubble be clicked twice. Absent ⇒ the transcript does not jump.
-   */
-  revealMessage?: { id: number; nonce: number } | null;
-}
-
 export interface BrainDockProps extends BrainSurfaceBodyProps {
   /**
    * The canvas prompt, when the reader has docked it into this panel. Absent while it
@@ -125,132 +78,11 @@ export interface BrainDockProps extends BrainSurfaceBodyProps {
   onClose: () => void;
 }
 
-/**
- * Presence and the transcript (or its Context view) — everything below the title.
- * Shared verbatim by the edge dock and the Brain Object so the two placements can
- * never drift into two subtly different chats.
- */
-export function BrainSurfaceBody({
-  showExecutionDetail, messages, trace, running, runStartedAt = null,
-  node, nodes, edges, collaborators = [], joinedCollaborator = null, onReplayMessage, onAnswerQuestion,
-  onRateMessage, ratings,
-  guestSignup = null,
-  revealMessage = null,
-}: BrainSurfaceBodyProps) {
-  const t = useTranslations('creationCanvas');
-  // Shared with the header's Context toggle — see `brainSurfaceView`.
-  const { view: tab, setView: setTab } = useBrainSurfaceView();
-  // Read straight from the shared source rather than accepting it as a prop: the canvas
-  // surface renders in two placements and inside a guest session, and each of those
-  // would otherwise have to remember to thread the same fact through.
-  const modelIdentity = useModelIdentity();
-  // Derived ONCE and shared: the transcript's live node and the footer strip are two
-  // views of the same moment, so they must never narrate it in different words.
-  const activity = useBrainActivity(running, trace, runStartedAt);
-  const liveLine = brainActivityLine(activity.live);
-  // The dock derives its own phase line off the canvas run trace, so it OVERRIDES the
-  // two phases the shared indicator would otherwise word generically — and keeps
-  // everything else (the elapsed clock, the tool subject, the slow-step reassurance)
-  // from the one shared bundle. Without the override the dock would have lost the
-  // line it already showed; without the bundle it would have kept the line and lost
-  // the animation.
-  const liveOverrides = useMemo(
-    () => (liveLine ? { starting: liveLine, thinking: liveLine } : undefined),
-    [liveLine],
-  );
-  const liveLabels = useLiveActivityLabels(liveOverrides);
-  // Only the copy the BOARD words differently: who is speaking, what an empty board
-  // says, and the phase line the dock derives itself. Everything else — the tool
-  // steps' Command / Output panels, the change preview, the Evermind memory steps —
-  // comes from the ONE shared transcript bundle, which is how the dock stopped
-  // rendering half its transcript in English on a non-English board.
-  const timelineOverrides = useMemo(() => ({
-    you: t('you'),
-    assistant: t('brain'),
-    empty: t('brainEmpty'),
-    thinking: liveLine ?? t('brainPhase.thinking'),
-    live: liveLabels,
-    thoughtFor: t('thoughtFor', { duration: '{duration}' }),
-    thought: t('thought'),
-    // The per-message copy / send-again actions are part of the shared transcript, so
-    // the dock has to name them too — otherwise they fall back to the package's
-    // English defaults on a board the user is reading in another language.
-    copy: t('copyMessage'),
-    copied: t('copiedMessage'),
-    replay: t('replayMessage'),
-    rateUp: t('rateUp'),
-    rateDown: t('rateDown'),
-  }), [liveLine, t, liveLabels]);
-  const timelineLabels = useBrainTimelineLabels(timelineOverrides);
-  // A room bubble asked to show a reply: the transcript is on the chat tab, so leave
-  // Context if that is where the reader was.
-  useEffect(() => {
-    if (revealMessage != null) setTab('chat');
-  }, [revealMessage, setTab]);
-  const typingCollaborators = collaborators.filter((member) => member.typing);
-  // Who the running animation below is for, when it is not this viewer's own turn.
-  const askingCollaborators = collaborators.filter((member) => member.askingBrain);
-  const showPresence = joinedCollaborator != null || typingCollaborators.length > 0 || askingCollaborators.length > 0;
-
-  return <>
-    {showPresence && <div className={styles.humanChatActivity} aria-live="polite">
-      {joinedCollaborator && <span data-state="joined">
-        <Avatar name={joinedCollaborator.displayName || t('collaborator')} kind="human" size={22} />
-        <b>{t('collaboratorJoined', { name: joinedCollaborator.displayName || t('collaborator') })}</b>
-      </span>}
-      {typingCollaborators.map((member) => <span key={member.userId} data-state="typing">
-        <Avatar name={member.displayName || t('collaborator')} kind="human" size={22} />
-        <b>{t('collaboratorWriting', { name: member.displayName || t('collaborator') })}</b>
-        <i aria-hidden>•••</i>
-      </span>)}
-      {askingCollaborators.map((member) => <span key={`asking:${member.userId}`} data-state="asking">
-        <Avatar name={member.displayName || t('collaborator')} kind="human" size={22} />
-        <b>{t('collaboratorAskingBrain', { name: member.displayName || t('collaborator') })}</b>
-        <i aria-hidden>•••</i>
-      </span>)}
-    </div>}
-    {tab === 'chat'
-      ? <>
-        <div className={styles.brainDockTimeline} role="log" aria-label={t('brainChatHistory')} tabIndex={0}>
-          <BrainTimeline
-            messages={messages}
-            trace={showExecutionDetail ? trace : []}
-            streamingText=""
-            isRunning={running}
-            assistantName={t('brain')}
-            labels={timelineLabels}
-            modelIdentity={modelIdentity}
-            onReplayMessage={onReplayMessage}
-            onAnswerQuestion={onAnswerQuestion}
-            onRateMessage={onRateMessage}
-            ratings={ratings}
-            revealMessage={revealMessage}
-          />
-        </div>
-        {/* The refusal that ended the last turn is already the final message in the
-            transcript above; this is the button that sentence was asking for. It
-            sits OUTSIDE the scroller so a blocked guest cannot scroll away from the
-            only thing they can still do, and carries no body of its own — the
-            transcript is the statement. */}
-        <GuestSignupCta prompt={guestSignup} />
-      </>
-      : <div className={styles.brainDockContext}>
-        <BrainContextPanel node={node} nodes={nodes} edges={edges} transcript={messages} />
-      </div>}
-    {/* No activity strip under the transcript. The transcript's live node already says
-        what Brain is doing right now ("Executing… · list build files 14s") and, once the
-        turn settles, its own "Thought for…" line — a strip directly above the composer
-        reported the same moment a second time. */}
-  </>;
-}
-
 /** The edge placement: a full-height panel the board reserves width for. */
 export function BrainDock({
-  mode, side, size, width, showExecutionDetail, composer, onUndockPrompt,
+  mode, side, size, width, composer, onUndockPrompt,
   onModeChange, onSideChange, onSizeChange, onWidthChange, onExecutionDetailChange, onClose,
-  messages, trace, running, runStartedAt = null, node, nodes, edges, collaborators = [], joinedCollaborator = null,
-  onReplayMessage, onAnswerQuestion, onRateMessage, ratings, guestSignup = null,
-  revealMessage = null,
+  ...conversation
 }: BrainDockProps) {
   const t = useTranslations('creationCanvas');
 
@@ -307,23 +139,6 @@ export function BrainDock({
         title={t('brainSheet.grabber')}
         onClick={onClose}
       ><span aria-hidden /></button>
-      <SurfaceHeader
-        className={styles.brainDockHeader}
-        title={t('brain')}
-        running={running}
-        actions={<BrainSurfaceActions
-          mode={mode}
-          side={side}
-          size={size}
-          showExecutionDetail={showExecutionDetail}
-          onModeChange={onModeChange}
-          onSideChange={onSideChange}
-          onSizeChange={onSizeChange}
-          onExecutionDetailChange={onExecutionDetailChange}
-          onClose={onClose}
-          {...(composer && onUndockPrompt ? { onUndockPrompt } : {})}
-        />}
-      />
       <div
         className={styles.brainDockResizer}
         data-side={side}
@@ -336,63 +151,32 @@ export function BrainDock({
         tabIndex={0}
         {...resize}
       />
-      <BrainSurfaceBody
-        showExecutionDetail={showExecutionDetail}
-        messages={messages}
-        trace={trace}
-        running={running}
-        runStartedAt={runStartedAt}
-        node={node}
-        nodes={nodes}
-        edges={edges}
-        collaborators={collaborators}
-        joinedCollaborator={joinedCollaborator}
-        onReplayMessage={onReplayMessage}
-        onAnswerQuestion={onAnswerQuestion}
-        onRateMessage={onRateMessage}
-        ratings={ratings}
-        guestSignup={guestSignup}
-        revealMessage={revealMessage}
+      {/* The ONE body. The prompt, when docked, is the footer's last row — in normal flow,
+          so the transcript above it flexes to whatever is left and the panel can never
+          paint over the box you type in. */}
+      <BrainSurface
+        {...conversation}
+        header={<SurfaceHeader
+          className={styles.brainDockHeader}
+          title={t('brain')}
+          running={conversation.running}
+          actions={<BrainSurfaceActions
+            mode={mode}
+            side={side}
+            size={size}
+            showExecutionDetail={conversation.showExecutionDetail}
+            onModeChange={onModeChange}
+            onSideChange={onSideChange}
+            onSizeChange={onSizeChange}
+            onExecutionDetailChange={onExecutionDetailChange}
+            onClose={onClose}
+            {...(composer && onUndockPrompt ? { onUndockPrompt } : {})}
+          />}
+        />}
+        composer={composer}
       />
-      {/* Last row of the column, under the transcript — where a chat puts its prompt.
-          Nothing is positioned: it is in normal flow, so the transcript above it flexes
-          to whatever is left and the panel can never paint over the box you type in. */}
-      {composer}
       </aside>
     </BrainSurfaceViewProvider>
   );
 }
 
-/**
- * What this conversation is wired to — the agents contributing, the tickets it
- * created or opened, and every other connected Object. Previously duplicated in the
- * details panel; it belongs beside the conversation it describes.
- */
-export function BrainContextPanel({ node, nodes, edges, transcript }: { node: CreationFlowNode | null; nodes: CreationFlowNode[]; edges: Edge[]; transcript?: BrainMessage[] }) {
-  const t = useTranslations('creationCanvas');
-  if (!node) return <p className={styles.brainEmpty}>{t('brainContextEmpty')}</p>;
-  const connectedIds = new Set(edges.flatMap((edge) => edge.source === node.id ? [edge.target] : edge.target === node.id ? [edge.source] : []));
-  const connected = nodes.filter((candidate) => candidate.id !== node.id && connectedIds.has(candidate.id));
-  const agents = connected.filter((candidate) => candidate.data.kind === 'agent');
-  const tickets = connected.filter((candidate) => candidate.data.kind === 'task');
-  const related = connected.filter((candidate) => candidate.data.kind !== 'agent' && candidate.data.kind !== 'task');
-  const canonicalChatId = node.data.resourceId?.match(/^chat:(\d+)$/)?.[1];
-  const connectedProjectId = connected.find((candidate) => candidate.data.kind === 'project')?.data.resourceId?.match(/^project:(\d+)$/)?.[1];
-
-  if (canonicalChatId) return <section aria-label={t('brainContext')} className={styles.brainCanonicalAssociations}>
-    <ChatTicketsPanel chatId={Number(canonicalChatId)} projectId={connectedProjectId ? Number(connectedProjectId) : null} chatList={[{ id: Number(canonicalChatId), title: node.data.title }]} transcript={transcript} />
-  </section>;
-
-  const roster = (items: CreationFlowNode[], empty: string) => items.length
-    ? <div className={styles.brainAssociationList}>{items.map((item) => <div key={item.id}>
-      <span aria-hidden><Icon source={creationObjectDefinition(item.data.kind).icon} size={18} /></span>
-      <p><b>{creationObjectName(item.data)}</b><small>{item.data.status || creationObjectDefinition(item.data.kind).label}</small></p>
-    </div>)}</div>
-    : <p className={styles.brainEmpty}>{empty}</p>;
-
-  return <div className={styles.brainDetails}>
-    <section aria-labelledby="brain-agents-heading"><div className={styles.brainSectionHeading}><h3 id="brain-agents-heading">{t('agents')}</h3><span>{agents.length}</span></div>{roster(agents, t('noAgentsAssociated'))}</section>
-    <section aria-labelledby="brain-tickets-heading"><div className={styles.brainSectionHeading}><h3 id="brain-tickets-heading">{t('associatedTickets')}</h3><span>{tickets.length}</span></div>{roster(tickets, t('noTicketsAssociated'))}</section>
-    <section aria-labelledby="brain-objects-heading"><div className={styles.brainSectionHeading}><h3 id="brain-objects-heading">{t('connectedObjects')}</h3><span>{related.length}</span></div>{roster(related, t('noObjectsConnected'))}</section>
-  </div>;
-}

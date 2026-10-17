@@ -307,9 +307,9 @@ describe('the chat surface on the canvas', () => {
     const transcripts = screen.getAllByRole('log', { name: 'Brain chat history' });
     expect(transcripts).toHaveLength(1);
     expect(surface).toContainElement(transcripts[0]!);
-    // The prompt is a page fixture and stays put — the surface never grows its own.
-    expect(screen.getByTestId('canvas-composer')).toBeInTheDocument();
-    expect(within(surface).queryByTestId('canvas-composer')).not.toBeInTheDocument();
+    // ONE prompt, docked as the surface's footer — the same canvas composer, not a second one.
+    expect(screen.getAllByTestId('canvas-composer')).toHaveLength(1);
+    expect(within(surface).getByTestId('canvas-composer')).toBeInTheDocument();
   });
 
   /**

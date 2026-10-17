@@ -16,6 +16,16 @@ import type { ChatMode, ChatRosterAgent } from '../chatMode';
 import type { EvermindRunHooks } from '../evermindMemory';
 import type { RunWindowSources } from '../windowFit/modelWindow';
 
+/**
+ * What a run cell is keyed by. A CHAT's run is keyed by its chat id (a number — the
+ * key every chat surface, run driver and the cross-chat {@link GlobalRunState} speak).
+ * A run that is not a chat's — a canvas session's turn, hosted through
+ * `startEngineRun` — takes a string key (`canvas:<sessionId>`), so it shares the store's
+ * single-flight claim, Stop, confirmation gate and live snapshot without being mistaken
+ * for a chat.
+ */
+export type RunKey = number | string;
+
 /** Streaming fn shape (matches BrainRuntime.stream). */
 export type BrainStreamFn = (
   opts: Omit<StreamChatOptions, 'transport'>,
@@ -223,7 +233,7 @@ export interface BrainRunSnapshot {
 }
 
 /**
- * A snapshot of which chats are live right now, split by whether they are actively
+ * A snapshot of which CHATS (numeric run keys) are live right now, split by whether they are actively
  * executing (`running`) or paused on a human-in-the-loop confirm (`awaiting` — the
  * actionable one: the loop cannot proceed until the user answers). The two lists
  * are disjoint (an awaiting chat is omitted from `running`).

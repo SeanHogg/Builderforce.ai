@@ -1,7 +1,6 @@
 import { useTranslations } from 'next-intl';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { PlanBadge } from '@/components/PlanBadge';
-import { AiDisclosure } from '../AiDisclosure';
 import { useBrainPanel } from './BrainPanelContext';
 import { BrainPanelCaptureButton } from './BrainCaptureButton';
 import { BrainChatList } from './BrainChatList';
@@ -47,7 +46,7 @@ export function BrainPageLayout() {
         </div>
         <div className="bs-chat-list"><BrainChatList /></div>
       </div>
-      <div className="bs-main"><AiDisclosure variant="banner" /><BrainConversation /></div>
+      <div className="bs-main"><BrainConversation /></div>
     </div>
   );
 }

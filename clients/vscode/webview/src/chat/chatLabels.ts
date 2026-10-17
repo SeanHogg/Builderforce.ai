@@ -43,7 +43,7 @@ export function makeT(labels: LabelBundle) {
  * `tl.liveAria`; every other path is `tl.<path>`. A key the bundle lacks falls back to the
  * package's English default.
  */
-export function timelineCatalogFromBundle(labels: LabelBundle): TimelineCatalogLookup {
+function timelineCatalogFromBundle(labels: LabelBundle): TimelineCatalogLookup {
   const bundleKey = (path: string): string => {
     if (!path.startsWith('live.')) return `tl.${path}`;
     const field = path.slice('live.'.length);

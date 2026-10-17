@@ -1,16 +1,19 @@
 /**
  * The side panel shell: header (brand, where the next turn runs, what is waiting to
- * sync), five views and the services they share. Built for a panel from ~320px wide,
+ * sync, the History and New chat levers), five views and the services they share.
+ * Whether chat history is showing lives here — the header's lever and the Chat view
+ * both read it. Built for a panel from ~320px wide,
  * keyboard-first (the view switcher is a real tablist with arrow-key movement).
  */
-import { useCallback, useEffect, useState } from 'react';
-import { SurfaceHeader, SurfaceTabs } from '@seanhogg/builderforce-brain-ui';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { SurfaceHeader, SurfaceTabs, type SurfaceHeaderHistory } from '@seanhogg/builderforce-brain-ui';
 import { createPanelServices, type PanelServices } from '../host/panelServices';
 import { t, type MessageKey } from '../i18n/t';
 import type { LocalChat } from '../store/records';
 import type { SyncStats } from '../sync/runtimeMessages';
 import { ActionsView } from './ActionsView';
 import { ChatView } from './ChatView';
+import { RovrChatHistory } from './RovrChatHistory';
 import { ServicesContext, useLoaded, useOnline, useServices, useSignedIn } from './hooks';
 import { PlaybooksView } from './PlaybooksView';
 import { SettingsView } from './SettingsView';
@@ -24,6 +27,8 @@ const VIEWS: ReadonlyArray<{ id: View; label: MessageKey }> = [
   { id: 'playbooks', label: 'tabPlaybooks' },
   { id: 'settings', label: 'tabSettings' },
 ];
+
+const HISTORY_ID = 'rovr-history';
 
 export function App() {
   const [services, setServices] = useState<PanelServices | null>(null);
@@ -44,11 +49,17 @@ function Shell() {
   const services = useServices();
   const [view, setView] = useState<View>('chat');
   const [chatId, setChatId] = useState<number | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [chats, reloadChats] = useLoaded<LocalChat[]>(() => services.records.listChats(), [], []);
 
-  // Open on the most recent chat.
+  // Open on the most recent chat — once, when the panel first has its list. After that
+  // `null` is a deliberate state: the new, not-yet-created chat the header's New chat
+  // opens, exactly as on every other AI surface.
+  const opened = useRef(false);
   useEffect(() => {
-    if (chatId === null && chats.length > 0) setChatId(chats[0]!.id);
+    if (opened.current || chats.length === 0) return;
+    opened.current = true;
+    if (chatId === null) setChatId(chats[0]!.id);
   }, [chats, chatId]);
 
   const newChat = useCallback(async () => {
@@ -56,12 +67,34 @@ function Shell() {
     reloadChats();
     setChatId(chat.id);
     setView('chat');
+    setHistoryOpen(false);
     return chat.id;
   }, [services, reloadChats]);
 
+  // The header's New chat: the empty state, and the first message creates the chat
+  // (`ChatView.deliver` → `newChat`) — never a blank record nobody wrote in.
+  const startNewChat = useCallback(() => {
+    opened.current = true;
+    setChatId(null);
+    setView('chat');
+    setHistoryOpen(false);
+  }, []);
+
+  const openChat = useCallback((id: number) => {
+    setChatId(id);
+    setHistoryOpen(false);
+  }, []);
+
+  // History belongs to the Chat view: from another view the lever opens it there.
+  const showingHistory = historyOpen && view === 'chat';
+  const toggleHistory = useCallback(() => {
+    setHistoryOpen(view === 'chat' ? !historyOpen : true);
+    setView('chat');
+  }, [view, historyOpen]);
+
   return (
     <div className="rovr-shell">
-      <Header />
+      <Header history={{ open: showingHistory, onToggle: toggleHistory, controls: HISTORY_ID }} onNewChat={startNewChat} />
       {/* THE shared tab strip (roving focus, automatic activation) — one per product. */}
       <SurfaceTabs
         className="rovr-views"
@@ -75,14 +108,21 @@ function Shell() {
           label: t(v.label),
           content: v.id === 'chat'
             ? (
-              <ChatView
-                chats={chats}
-                chatId={chatId}
-                onSelect={setChatId}
-                onNewChat={newChat}
-                onChatsChanged={reloadChats}
-                onOpenSettings={() => setView('settings')}
-              />
+              <>
+                {showingHistory && (
+                  <RovrChatHistory id={HISTORY_ID} chats={chats} chatId={chatId} onOpen={openChat} onChanged={reloadChats} />
+                )}
+                {/* Kept mounted under the history, so the draft and held turns survive a look. */}
+                <div className="rovr-chat-host" hidden={showingHistory}>
+                  <ChatView
+                    chats={chats}
+                    chatId={chatId}
+                    onNewChat={newChat}
+                    onChatsChanged={reloadChats}
+                    onOpenSettings={() => setView('settings')}
+                  />
+                </div>
+              </>
             )
             : v.id === 'tasks' ? <TasksView chatId={chatId} onNewChat={newChat} />
               : v.id === 'actions' ? <ActionsView chatId={chatId} />
@@ -94,7 +134,7 @@ function Shell() {
   );
 }
 
-function Header() {
+function Header({ history, onNewChat }: { history: SurfaceHeaderHistory; onNewChat(): void }) {
   const services = useServices();
   const online = useOnline();
   const signedIn = useSignedIn();
@@ -120,6 +160,9 @@ function Header() {
   return (
     <SurfaceHeader
       title="Rovr"
+      history={history}
+      onNewChat={onNewChat}
+      labels={{ historyShow: t('historyShow'), historyHide: t('historyHide'), newChat: t('newChat') }}
       context={(
         <div className="rovr-status" aria-live="polite">
           <span className={`rovr-chip rovr-chip--${online ? (signedIn ? 'ok' : 'local') : 'off'}`}>{t(mode)}</span>

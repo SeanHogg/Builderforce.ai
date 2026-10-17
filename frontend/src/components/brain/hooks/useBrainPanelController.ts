@@ -248,12 +248,11 @@ export function useBrainPanelController({
     chatRoster: chatRosterFromParticipants(participants),
   });
 
-  const { resolveConfirm } = conv;
-  // "Approve all": run this action and auto-approve the rest of the run/session.
+  // "Approve all": auto-approve the rest of the run/session. The approval bar
+  // (`RunConfirmBar`) lets the pending call through itself.
   const approveAll = useCallback(() => {
     setAutoApproveMode(true);
-    resolveConfirm(true);
-  }, [setAutoApproveMode, resolveConfirm]);
+  }, [setAutoApproveMode]);
 
   const consolidation = useBrainConsolidateFork({ chats, conv, pinnedProjectId, viewingProjectId });
   // The timeline renders the chat's durable step rows from `conv.messages` and dedupes

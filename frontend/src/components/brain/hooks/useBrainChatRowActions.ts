@@ -4,6 +4,9 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import type { useBrainChats } from '@/lib/brain';
 import type { BrainChat } from '@/lib/builderforceApi';
 
+/** What a row action needs of a chat — the shared history row hands back this much. */
+type ChatRef = Pick<BrainChat, 'id' | 'title'>;
+
 /**
  * The chat-history row state and its per-row actions (open, reveal actions,
  * rename, summarize, delete, assign to a project).
@@ -13,8 +16,8 @@ import type { BrainChat } from '@/lib/builderforceApi';
  * rename must still be there when the user comes back.
  *
  * Every handler depends on the chat hook's individual (stable) methods rather than
- * on its per-render result object, so the memoized rows skip re-rendering while
- * the user types in the composer.
+ * on its per-render result object, so the handlers handed to the shared
+ * `ChatHistoryRow`s keep their identity across renders.
  */
 export function useBrainChatRowActions({ chats, isPage, showChatTab }: {
   chats: ReturnType<typeof useBrainChats>;
@@ -50,7 +53,7 @@ export function useBrainChatRowActions({ chats, isPage, showChatTab }: {
     setActionsChatId((cur) => (cur === id ? null : id));
   }, []);
 
-  const startRename = useCallback((chat: BrainChat) => {
+  const startRename = useCallback((chat: ChatRef) => {
     setRenamingId(chat.id);
     setRenameValue(chat.title);
   }, []);
@@ -72,7 +75,7 @@ export function useBrainChatRowActions({ chats, isPage, showChatTab }: {
     try { await summarize(id); } finally { setSummarizingId(null); }
   }, [summarize]);
 
-  const onDelete = useCallback(async (chat: BrainChat) => {
+  const onDelete = useCallback(async (chat: ChatRef) => {
     const title = chat.title?.trim() || tBrain('thisChat');
     if (!(await confirm(tBrain('deleteChatConfirm', { title })))) return;
     setDeletingId(chat.id);

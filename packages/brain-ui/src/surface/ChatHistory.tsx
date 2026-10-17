@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from 'react';
-import { chatSwitcherLabel } from '../picker/chatSwitcherLabel';
+import { chatSwitcherLabel } from '../chatTickets/chatSwitcherLabel';
 
 /**
  * The ONE chat-history list every AI surface opens from its header's History lever —

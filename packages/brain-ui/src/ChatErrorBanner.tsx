@@ -71,6 +71,12 @@ export interface ChatErrorBannerProps {
   style?: React.CSSProperties;
   /** Class on the banner container — the VS Code webview styles via its own CSS. */
   className?: string;
+  /**
+   * `alert` (default) for a failed turn. `status` for a passive notice the run still
+   * finished through — a connected account it could not use, a provider key at its cap —
+   * which a screen reader should announce politely rather than interrupt with.
+   */
+  role?: 'alert' | 'status';
 }
 
 /** Title-case a plan key for display ('pro' → 'Pro'). */
@@ -89,6 +95,7 @@ export function ChatErrorBanner({
   labels: labelOverrides,
   style,
   className,
+  role = 'alert',
 }: ChatErrorBannerProps) {
   const labels = { ...DEFAULT_CHAT_ERROR_LABELS, ...labelOverrides };
   if (!error) return null;
@@ -118,7 +125,7 @@ export function ChatErrorBanner({
   return (
     <div
       className={className}
-      role="alert"
+      role={role}
       style={{
         display: 'flex',
         alignItems: 'flex-start',
@@ -159,12 +166,13 @@ export function ChatErrorBanner({
           border: 'none',
           color: 'inherit',
           cursor: 'pointer',
-          fontSize: 16,
-          lineHeight: 1,
-          padding: 0,
+          lineHeight: 0,
+          padding: 2,
         }}
       >
-        ×
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
       </button>
     </div>
   );

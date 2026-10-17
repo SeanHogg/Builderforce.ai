@@ -372,6 +372,7 @@ __export(src_exports, {
   staffingSummaryInTrace: () => staffingSummaryInTrace,
   stallRecoveriesInTrace: () => stallRecoveriesInTrace,
   stallUnrecoveredInTrace: () => stallUnrecoveredInTrace,
+  startEngineRun: () => startEngineRun,
   startRun: () => startRun,
   stepRow: () => stepRow,
   stepSig: () => stepSig,
@@ -401,6 +402,7 @@ __export(src_exports, {
   turnOptimizationDirective: () => turnOptimizationDirective,
   unreviewedChangeNudge: () => unreviewedChangeNudge,
   unshippedChangeNudge: () => unshippedChangeNudge,
+  useArmedNewChat: () => useArmedNewChat,
   useBrainActions: () => useBrainActions,
   useBrainChats: () => useBrainChats,
   useBrainConfig: () => useBrainConfig,
@@ -409,12 +411,14 @@ __export(src_exports, {
   useMcpExtensions: () => useMcpExtensions,
   useOptionalBrainContext: () => useOptionalBrainContext,
   useRegisterBrainActions: () => useRegisterBrainActions,
+  useRunSnapshot: () => useRunSnapshot,
   useToolConfirmationGate: () => useToolConfirmationGate,
   utf8ByteLength: () => utf8ByteLength2,
   withAdvisory: () => withAdvisory,
   withDirectedMetadata: () => withDirectedMetadata,
   withObservedModel: () => withObservedModel,
   withProvenanceMetadata: () => withProvenanceMetadata,
+  withRating: () => withRating,
   withReadyPageModels: () => withReadyPageModels,
   withUsageSurface: () => withUsageSurface,
   workFiledNotStaffedVerdict: () => workFiledNotStaffedVerdict,
@@ -1584,6 +1588,46 @@ async function readWithIdleWatchdog(reader, opts = {}) {
   }
 }
 
+// src/effort.ts
+var DEFAULT_MAX_TOKENS = 4096;
+var EFFORT_PROFILES = {
+  quick: {
+    effort: "quick",
+    maxTokens: 2048,
+    reasoningLevel: "low",
+    thinkingBudgetTokens: 2048,
+    directive: "Effort: favour a fast, concise, direct answer. Keep exploration minimal unless the task truly requires more."
+  },
+  balanced: {
+    effort: "balanced",
+    maxTokens: DEFAULT_MAX_TOKENS,
+    reasoningLevel: "medium",
+    thinkingBudgetTokens: 8192,
+    directive: ""
+  },
+  thorough: {
+    effort: "thorough",
+    maxTokens: 16384,
+    reasoningLevel: "high",
+    thinkingBudgetTokens: 16384,
+    directive: "Effort: apply maximum rigor. Be exhaustive, consider edge cases, verify your work, and do not stop until the task is fully complete."
+  }
+};
+function effortProfile(effort) {
+  return EFFORT_PROFILES[effort] ?? EFFORT_PROFILES.balanced;
+}
+var TOOL_TURN_MIN_MAX_TOKENS = EFFORT_PROFILES.thorough.maxTokens;
+function turnMaxTokens(effortMaxTokens, canCallTools) {
+  if (!canCallTools) return effortMaxTokens;
+  return Math.max(effortMaxTokens ?? 0, TOOL_TURN_MIN_MAX_TOKENS);
+}
+function isEffort(value) {
+  return value === "quick" || value === "balanced" || value === "thorough";
+}
+function reasoningForRun(o) {
+  return o.thinking ? { level: effortProfile(o.effort).reasoningLevel } : void 0;
+}
+
 // src/streamChatCompletion.ts
 var UPSTREAM_EVIDENCE_FIELD = "x_builderforce_upstream";
 function readUpstreamEvidence(frame) {
@@ -1647,7 +1691,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   const body = {
     messages: opts.messages,
     temperature: opts.temperature ?? 0.3,
-    max_tokens: opts.maxTokens ?? 4096,
+    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
     stream: true,
     // Ask the gateway to emit a trailing `usage` chunk (OpenAI stream_options).
     // Providers that ignore it simply omit usage — the parse below is tolerant.
@@ -6445,45 +6489,6 @@ function isMalformedToolCall(finishReason) {
   return turnInterruption(finishReason) === "malformed-tool-call";
 }
 
-// src/effort.ts
-var EFFORT_PROFILES = {
-  quick: {
-    effort: "quick",
-    maxTokens: 2048,
-    reasoningLevel: "low",
-    thinkingBudgetTokens: 2048,
-    directive: "Effort: favour a fast, concise, direct answer. Keep exploration minimal unless the task truly requires more."
-  },
-  balanced: {
-    effort: "balanced",
-    maxTokens: 4096,
-    reasoningLevel: "medium",
-    thinkingBudgetTokens: 8192,
-    directive: ""
-  },
-  thorough: {
-    effort: "thorough",
-    maxTokens: 16384,
-    reasoningLevel: "high",
-    thinkingBudgetTokens: 16384,
-    directive: "Effort: apply maximum rigor. Be exhaustive, consider edge cases, verify your work, and do not stop until the task is fully complete."
-  }
-};
-function effortProfile(effort) {
-  return EFFORT_PROFILES[effort] ?? EFFORT_PROFILES.balanced;
-}
-var TOOL_TURN_MIN_MAX_TOKENS = EFFORT_PROFILES.thorough.maxTokens;
-function turnMaxTokens(effortMaxTokens, canCallTools) {
-  if (!canCallTools) return effortMaxTokens;
-  return Math.max(effortMaxTokens ?? 0, TOOL_TURN_MIN_MAX_TOKENS);
-}
-function isEffort(value) {
-  return value === "quick" || value === "balanced" || value === "thorough";
-}
-function reasoningForRun(o) {
-  return o.thinking ? { level: effortProfile(o.effort).reasoningLevel } : void 0;
-}
-
 // src/composerDirectives.ts
 var WEB_FETCH_TOOL_NAME = "builtin_web_fetch";
 function buildComposerDirectives(o) {
@@ -7409,8 +7414,32 @@ function useBrainChats(options = {}) {
   };
 }
 
-// src/useBrainConversation.ts
+// src/useArmedNewChat.ts
 var import_react7 = require("react");
+function useArmedNewChat(chats) {
+  const { activeChatId, activeChat, create, setMode, setMemoryEnabled } = chats;
+  const [pendingMode, setPendingMode] = (0, import_react7.useState)(NEW_CHAT_MODE);
+  const pendingModeRef = (0, import_react7.useRef)(NEW_CHAT_MODE);
+  const pendingMemoryRef = (0, import_react7.useRef)(true);
+  const selectMode = (0, import_react7.useCallback)(async (mode) => {
+    pendingModeRef.current = mode;
+    setPendingMode(mode);
+    if (activeChatId != null) await setMode(activeChatId, mode);
+  }, [activeChatId, setMode]);
+  const armMemory = (0, import_react7.useCallback)((on) => {
+    pendingMemoryRef.current = on;
+  }, []);
+  const createArmed = (0, import_react7.useCallback)(async (opts) => {
+    const created = await create({ ...opts, mode: opts?.mode ?? pendingModeRef.current });
+    if (created && !pendingMemoryRef.current) await setMemoryEnabled(created.id, false).catch(() => void 0);
+    return created;
+  }, [create, setMemoryEnabled]);
+  const chatMode = activeChat ? normalizeChatMode(activeChat.mode) : pendingMode;
+  return { chatMode, selectMode, armMemory, createArmed };
+}
+
+// src/useBrainConversation.ts
+var import_react8 = require("react");
 
 // src/consolidation.ts
 var CONSOLIDATION_META = { consolidation: true };
@@ -9234,6 +9263,12 @@ function ratedTurnContext(messages, messageId) {
     toolName: ratedTurnTool(messages, messageId)
   };
 }
+function withRating(ratings, messageId, rating) {
+  const next = { ...ratings };
+  if (rating === 0) delete next[messageId];
+  else next[messageId] = rating;
+  return next;
+}
 
 // src/runDriver.ts
 var installed = null;
@@ -9342,16 +9377,16 @@ var storeListeners = /* @__PURE__ */ new Set();
 var MAX_CELLS = 50;
 var MAX_TRACE_EVENTS = 500;
 var MAX_APPENDED = 50;
-function getCell(chatId) {
-  const existing = cells.get(chatId);
+function getCell(key) {
+  const existing = cells.get(key);
   if (existing) {
-    cells.delete(chatId);
-    cells.set(chatId, existing);
+    cells.delete(key);
+    cells.set(key, existing);
     return existing;
   }
   const c = makeCell();
-  cells.set(chatId, c);
-  evictIdleCells(chatId);
+  cells.set(key, c);
+  evictIdleCells(key);
   return c;
 }
 function evictIdleCells(protectId) {
@@ -9525,6 +9560,9 @@ function connectRetryStep(c, step) {
 }
 
 // src/runStore/runControl.ts
+function driverFor(key) {
+  return typeof key === "number" ? getRunDriver() : null;
+}
 function resetBrainRunStore() {
   cells.clear();
   forgetResolvedModels();
@@ -9539,6 +9577,7 @@ function getGlobalRunState() {
   const running = [];
   const awaiting = [];
   for (const [id, cell] of cells) {
+    if (typeof id !== "number") continue;
     if (cell.pendingConfirm) awaiting.push(id);
     else if (cell.running) running.push(id);
   }
@@ -9572,7 +9611,7 @@ function getRunTrace(chatId) {
   return cells.get(chatId)?.trace ?? [];
 }
 function stopRun(chatId) {
-  const driver = getRunDriver();
+  const driver = driverFor(chatId);
   if (driver) return driver.stop(chatId);
   const c = cells.get(chatId);
   if (!c || !c.running) return;
@@ -9591,7 +9630,7 @@ function stopRun(chatId) {
 }
 function clearRunError(chatId) {
   if (chatId == null) return;
-  const driver = getRunDriver();
+  const driver = driverFor(chatId);
   if (driver) return driver.clearError(chatId);
   const c = cells.get(chatId);
   if (!c || !c.error) return;
@@ -9600,7 +9639,7 @@ function clearRunError(chatId) {
   emit(c);
 }
 function requestRunConfirm(chatId, req, opts) {
-  if (getRunDriver()) return Promise.resolve(false);
+  if (driverFor(chatId)) return Promise.resolve(false);
   const c = getCell(chatId);
   return new Promise((resolve) => {
     c.pendingConfirm = { name: req.name, args: req.args };
@@ -9613,7 +9652,7 @@ function requestRunConfirm(chatId, req, opts) {
   });
 }
 function resolveRunConfirm(chatId, ok) {
-  const driver = getRunDriver();
+  const driver = driverFor(chatId);
   if (driver) return driver.confirm(chatId, ok);
   const c = cells.get(chatId);
   if (!c || !c.confirmResolver) return;
@@ -12624,18 +12663,8 @@ async function runLoop(chatId, c, req, runKey) {
   emit(c);
 }
 
-// src/runStore/startRun.ts
-async function startRun(runKey, request) {
-  const driver = getRunDriver();
-  if (driver) return driver.start(runKey, request);
-  const c = getCell(runKey);
-  if (c.running) return;
-  const lineage = request.lineage;
-  const chatId = lineage?.rootChatId ?? runKey;
-  const steps = batchStepPersistence(request.persistence, stepDurabilityFor(chatId, runKey));
-  const runPersistence = lineage ? lineagePersistence(steps.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) : steps.persistence;
-  const req = { ...request, persistence: runPersistence };
-  c.persistStep = (ev) => persistStep(chatId, runPersistence, ev);
+// src/runStore/beginRun.ts
+function beginRun(c, outcomeKey) {
   c.running = true;
   c.error = "";
   c.errorAction = null;
@@ -12651,9 +12680,24 @@ async function startRun(runKey, request) {
   c.codeModel = null;
   c.liveTurn = null;
   c.stoppedTurn = null;
-  c.runId = runOutcomeId(chatId, Date.now());
+  if (typeof outcomeKey === "number") c.runId = runOutcomeId(outcomeKey, Date.now());
   c.abort = new AbortController();
   c.activity = { phase: "starting", startedAt: Date.now(), step: 0 };
+}
+
+// src/runStore/startRun.ts
+async function startRun(runKey, request) {
+  const driver = getRunDriver();
+  if (driver) return driver.start(runKey, request);
+  const c = getCell(runKey);
+  if (c.running) return;
+  const lineage = request.lineage;
+  const chatId = lineage?.rootChatId ?? runKey;
+  const steps = batchStepPersistence(request.persistence, stepDurabilityFor(chatId, runKey));
+  const runPersistence = lineage ? lineagePersistence(steps.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) : steps.persistence;
+  const req = { ...request, persistence: runPersistence };
+  c.persistStep = (ev) => persistStep(chatId, runPersistence, ev);
+  beginRun(c, chatId);
   if (req.seed && c.transcript.length === 0) {
     c.transcript = req.seed.slice();
     c.priorResearch = req.priorResearch ?? null;
@@ -12723,6 +12767,48 @@ async function startRun(runKey, request) {
   }
 }
 
+// src/runStore/engineRun.ts
+async function startEngineRun(key, engine) {
+  const c = getCell(key);
+  if (c.running) return false;
+  c.trace = [];
+  beginRun(c);
+  emit(c);
+  const signal = c.abort.signal;
+  const control = {
+    signal,
+    trace: (event) => pushTrace(c, event),
+    stream: (text) => {
+      c.streamingText = text;
+      emitStreaming(c);
+    },
+    activity: (activity) => setActivity(c, activity),
+    confirm: (req) => requestRunConfirm(key, req),
+    append: (message) => {
+      recordAppended(c, message);
+      emit(c);
+    }
+  };
+  try {
+    await engine(control);
+  } catch (e) {
+    if (!signal.aborted) {
+      c.error = e instanceof Error ? e.message : "Reply failed";
+      c.errorAction = chatErrorAction(e);
+      recordRunFailure(c, "agent.run", c.error);
+    }
+  } finally {
+    c.running = false;
+    c.streamingText = "";
+    c.abort = null;
+    c.activity = null;
+    c.pendingConfirm = null;
+    c.confirmResolver = null;
+    emit(c);
+  }
+  return true;
+}
+
 // src/useBrainConversation.ts
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream } = useBrainConfig();
@@ -12750,13 +12836,13 @@ function useBrainConversation(options) {
     chatMode,
     chatRoster
   } = options;
-  const [messages, setMessages] = (0, import_react7.useState)([]);
-  const [loadingMessages, setLoadingMessages] = (0, import_react7.useState)(false);
-  const [reloadNonce, setReloadNonce] = (0, import_react7.useState)(0);
-  const reloadMessages = (0, import_react7.useCallback)(() => setReloadNonce((n) => n + 1), []);
-  const sendingRef = (0, import_react7.useRef)(/* @__PURE__ */ new Set());
-  const [sendingChats, setSendingChats] = (0, import_react7.useState)(sendingRef.current);
-  const markSending = (0, import_react7.useCallback)((key, on) => {
+  const [messages, setMessages] = (0, import_react8.useState)([]);
+  const [loadingMessages, setLoadingMessages] = (0, import_react8.useState)(false);
+  const [reloadNonce, setReloadNonce] = (0, import_react8.useState)(0);
+  const reloadMessages = (0, import_react8.useCallback)(() => setReloadNonce((n) => n + 1), []);
+  const sendingRef = (0, import_react8.useRef)(/* @__PURE__ */ new Set());
+  const [sendingChats, setSendingChats] = (0, import_react8.useState)(sendingRef.current);
+  const markSending = (0, import_react8.useCallback)((key, on) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
     else next.delete(key);
@@ -12764,20 +12850,20 @@ function useBrainConversation(options) {
     setSendingChats(next);
   }, []);
   const localSending = sendingChats.has(chatId);
-  const chatIdRef = (0, import_react7.useRef)(chatId);
+  const chatIdRef = (0, import_react8.useRef)(chatId);
   chatIdRef.current = chatId;
-  const [localError, setLocalError] = (0, import_react7.useState)("");
-  const [ratings, setRatings] = (0, import_react7.useState)({});
-  const [pendingAttachments, setPendingAttachments] = (0, import_react7.useState)([]);
-  const [uploading, setUploading] = (0, import_react7.useState)(false);
-  const autoRepliedChatIdRef = (0, import_react7.useRef)(null);
-  const [snapshot, setSnapshot] = (0, import_react7.useState)(() => getRunSnapshot(chatId));
-  (0, import_react7.useEffect)(() => {
+  const [localError, setLocalError] = (0, import_react8.useState)("");
+  const [ratings, setRatings] = (0, import_react8.useState)({});
+  const [pendingAttachments, setPendingAttachments] = (0, import_react8.useState)([]);
+  const [uploading, setUploading] = (0, import_react8.useState)(false);
+  const autoRepliedChatIdRef = (0, import_react8.useRef)(null);
+  const [snapshot, setSnapshot] = (0, import_react8.useState)(() => getRunSnapshot(chatId));
+  (0, import_react8.useEffect)(() => {
     setSnapshot(getRunSnapshot(chatId));
     if (chatId == null) return;
     return subscribeRun(chatId, () => setSnapshot(getRunSnapshot(chatId)));
   }, [chatId]);
-  (0, import_react7.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     let cancelled = false;
     if (chatId == null) {
       setMessages([]);
@@ -12796,12 +12882,12 @@ function useBrainConversation(options) {
       cancelled = true;
     };
   }, [persistence, chatId, reloadNonce]);
-  (0, import_react7.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     if (chatId == null || !persistence.subscribeMessages) return;
     return persistence.subscribeMessages(chatId, reloadMessages);
   }, [persistence, chatId, reloadMessages]);
-  const lastMarkedRef = (0, import_react7.useRef)(null);
-  (0, import_react7.useEffect)(() => {
+  const lastMarkedRef = (0, import_react8.useRef)(null);
+  (0, import_react8.useEffect)(() => {
     if (chatId == null || !persistence.markChatRead || messages.length === 0) return;
     let maxSeq = 0;
     for (const m of messages) if (m.seq > maxSeq) maxSeq = m.seq;
@@ -12813,12 +12899,12 @@ function useBrainConversation(options) {
       if (lastMarkedRef.current?.chatId === chatId) lastMarkedRef.current = prev;
     });
   }, [persistence, chatId, messages]);
-  (0, import_react7.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
     setMessages((prev) => mergeTranscript(prev, appended));
   }, [snapshot.messagesEpoch, snapshot.appended]);
-  (0, import_react7.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     const map = {};
     for (const msg of messages) {
       if (!msg.metadata) continue;
@@ -12834,7 +12920,7 @@ function useBrainConversation(options) {
   const resolvedSystemPrompt = systemPrompt ?? resolveSystemPrompt(modality);
   const fullSystemPrompt = extraSystem ? `${resolvedSystemPrompt}
 ${extraSystem}` : resolvedSystemPrompt;
-  const buildRequest = (0, import_react7.useCallback)(
+  const buildRequest = (0, import_react8.useCallback)(
     (seed, userTurn, priorResearch) => ({
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
@@ -12861,7 +12947,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     }),
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
-  const send = (0, import_react7.useCallback)(
+  const send = (0, import_react8.useCallback)(
     async (text, opts) => {
       const trimmed = text.trim();
       if (!trimmed || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
@@ -12948,7 +13034,7 @@ ${refs}`;
     },
     [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn]
   );
-  (0, import_react7.useEffect)(() => {
+  (0, import_react8.useEffect)(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
     if (isRunning(chatId)) return;
     const last = messages[messages.length - 1];
@@ -12959,13 +13045,8 @@ ${refs}`;
     setLocalError("");
     void startRun(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
-  const rateMessage = (0, import_react7.useCallback)(async (msg, rating) => {
-    setRatings((prev) => {
-      const copy = { ...prev };
-      if (rating === 0) delete copy[msg.id];
-      else copy[msg.id] = rating;
-      return copy;
-    });
+  const rateMessage = (0, import_react8.useCallback)(async (msg, rating) => {
+    setRatings((prev) => withRating(prev, msg.id, rating));
     const context = ratedTurnContext(messages, msg.id);
     try {
       await persistence.setMessageFeedback(
@@ -12976,7 +13057,7 @@ ${refs}`;
     } catch {
     }
   }, [persistence, messages]);
-  const attach = (0, import_react7.useCallback)(async (file) => {
+  const attach = (0, import_react8.useCallback)(async (file) => {
     setUploading(true);
     try {
       const result = await persistence.upload(file);
@@ -12997,20 +13078,20 @@ ${refs}`;
       setUploading(false);
     }
   }, [persistence]);
-  const removeAttachment = (0, import_react7.useCallback)((key) => {
+  const removeAttachment = (0, import_react8.useCallback)((key) => {
     setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
   }, []);
-  const resolveConfirm = (0, import_react7.useCallback)((ok) => {
+  const resolveConfirm = (0, import_react8.useCallback)((ok) => {
     if (chatId != null) resolveRunConfirm(chatId, ok);
   }, [chatId]);
-  const clearError = (0, import_react7.useCallback)(() => {
+  const clearError = (0, import_react8.useCallback)(() => {
     setLocalError("");
     clearRunError(chatId);
   }, [chatId]);
-  const stop = (0, import_react7.useCallback)(() => {
+  const stop = (0, import_react8.useCallback)(() => {
     if (chatId != null) stopRun(chatId);
   }, [chatId]);
-  const buildTriageReport = (0, import_react7.useCallback)(
+  const buildTriageReport = (0, import_react8.useCallback)(
     (agentLabel, surface) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
       events: getRunTrace(chatId),
@@ -13195,6 +13276,18 @@ function createBrainRestPersistence(opts) {
       return `${baseUrl}/api/brain-files/${key}?exp=${exp}&sig=${encodeURIComponent(sig2)}`;
     }
   };
+}
+
+// src/useRunSnapshot.ts
+var import_react9 = require("react");
+function useRunSnapshot(key) {
+  const [snapshot, setSnapshot] = (0, import_react9.useState)(() => getRunSnapshot(key));
+  (0, import_react9.useEffect)(() => {
+    setSnapshot(getRunSnapshot(key));
+    if (key == null) return void 0;
+    return subscribeRun(key, () => setSnapshot(getRunSnapshot(key)));
+  }, [key]);
+  return snapshot;
 }
 
 // src/indexedDbStepDurability.ts
@@ -14411,7 +14504,7 @@ function isManagerRole(role) {
 }
 
 // src/ui/PromptInput.tsx
-var import_react8 = require("react");
+var import_react10 = require("react");
 var import_jsx_runtime4 = require("react/jsx-runtime");
 var boxStyle = (active) => ({
   display: "flex",
@@ -14423,7 +14516,7 @@ var boxStyle = (active) => ({
   padding: "6px 6px 6px 12px",
   borderRadius: 18,
   border: "none",
-  background: "var(--chat-input-bg, var(--bg-elevated, #f3f4f6))",
+  background: "var(--bf-field, var(--bg-elevated, #f3f4f6))",
   boxShadow: active ? "0 0 0 2px var(--accent, #2563eb)" : "none",
   transition: "box-shadow 120ms ease"
 });
@@ -14476,7 +14569,7 @@ function PromptInput({
   className,
   submitOnEnter = true
 }) {
-  const [focused, setFocused] = (0, import_react8.useState)(false);
+  const [focused, setFocused] = (0, import_react10.useState)(false);
   const empty = value.trim().length === 0;
   const canSubmit = !empty && !disabled && !busy;
   const showStop = busy && empty && !!onStop && !!stopLabel;
@@ -14871,6 +14964,7 @@ function withUsageSurface(fetchImpl, surface) {
   staffingSummaryInTrace,
   stallRecoveriesInTrace,
   stallUnrecoveredInTrace,
+  startEngineRun,
   startRun,
   stepRow,
   stepSig,
@@ -14900,6 +14994,7 @@ function withUsageSurface(fetchImpl, surface) {
   turnOptimizationDirective,
   unreviewedChangeNudge,
   unshippedChangeNudge,
+  useArmedNewChat,
   useBrainActions,
   useBrainChats,
   useBrainConfig,
@@ -14908,12 +15003,14 @@ function withUsageSurface(fetchImpl, surface) {
   useMcpExtensions,
   useOptionalBrainContext,
   useRegisterBrainActions,
+  useRunSnapshot,
   useToolConfirmationGate,
   utf8ByteLength,
   withAdvisory,
   withDirectedMetadata,
   withObservedModel,
   withProvenanceMetadata,
+  withRating,
   withReadyPageModels,
   withUsageSurface,
   workFiledNotStaffedVerdict,

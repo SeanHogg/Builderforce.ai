@@ -8,7 +8,7 @@ import { batchStepPersistence, stepDurabilityFor } from '../stepOutbox';
 import { getRunDriver } from '../runDriver';
 import { chatErrorAction } from '../chatError';
 import { linkedTicketsToAdvance, linkedTicketsToComplete, linkedTicketsReviewedComplete } from '../chatWorkLinking';
-import { codeRunOutcome, runOutcomeId } from '../runOutcomeReport';
+import { codeRunOutcome } from '../runOutcomeReport';
 import { shippedToBaseBranch } from '../shipVerification';
 import { ticketsReviewedInPreview } from '../previewReview';
 import { lineagePersistence } from '../runLineage';
@@ -18,6 +18,7 @@ import { appendRunMessage } from './runControl';
 import { keepStoppedTurn, persistStep } from './turnPersistence';
 import { recordCodeChangeTicket, updateLinkedTickets } from './runBackstops';
 import { runLoop } from './runLoop';
+import { beginRun } from './beginRun';
 import type { BrainRunRequest } from './runTypes';
 
 /**
@@ -50,29 +51,7 @@ export async function startRun(runKey: number, request: BrainRunRequest): Promis
     : steps.persistence;
   const req: BrainRunRequest = { ...request, persistence: runPersistence };
   c.persistStep = (ev) => persistStep(chatId, runPersistence, ev);
-  c.running = true;
-  c.error = '';
-  c.errorAction = null;
-  c.streamingText = '';
-  c.byoUnresolved = []; // fresh per run — a reconnected account clears the banner
-  c.providerCap = [];   // fresh per run — a topped-up account clears the banner
-  // Fresh backstop bookkeeping per run (see the finally block below).
-  c.codeChanged = false;
-  c.ticketRecorded = false;
-  c.touchedFiles = [];
-  c.deltaTicketId = null;
-  c.deltaRecordedFiles = [];
-  c.runTraceFrom = c.trace.length;
-  c.codeModel = null;
-  c.liveTurn = null;
-  c.stoppedTurn = null;
-  c.runId = runOutcomeId(chatId, Date.now());
-  // Fresh abort handle for this run, so Stop can cancel the LLM stream and unwind
-  // the loop (a stale, already-aborted controller never bleeds into a new run).
-  c.abort = new AbortController();
-  // Show something the instant the run is accepted. Between here and the first
-  // token the surface would otherwise have nothing at all to render.
-  c.activity = { phase: 'starting', startedAt: Date.now(), step: 0 };
+  beginRun(c, chatId);
 
   // Seed the rich transcript from prior persisted history the FIRST time we
   // touch this chat this session, then append the triggering user turn — done

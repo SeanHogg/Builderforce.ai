@@ -27,6 +27,17 @@ export interface BundleShellInput {
   title: string;
   /** Inline script run before the bundle (nonce'd here). The integration suite uses it to report boot errors. */
   preludeScript?: string;
+  /**
+   * The localized line the app shows before its first `init` frame ("Connecting…").
+   * Rides the root element because the label bundle arrives WITH init, so the one
+   * screen drawn before it could not otherwise be translated.
+   */
+  bootLabel?: string;
+}
+
+/** Escape a value for a double-quoted HTML attribute. */
+function escapeAttr(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /** The bundle's Content-Security-Policy. */
@@ -63,8 +74,9 @@ export function bundleCsp({ cspSource, nonce, apiOrigin }: Pick<BundleShellInput
 }
 
 export function renderBundleShell(input: BundleShellInput): string {
-  const { nonce, assetUrl, title, preludeScript } = input;
+  const { nonce, assetUrl, title, preludeScript, bootLabel } = input;
   const prelude = preludeScript ? `\n<script nonce="${nonce}">${preludeScript}</script>` : "";
+  const bootAttr = bootLabel ? ` data-boot-label="${escapeAttr(bootLabel)}"` : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -75,7 +87,7 @@ export function renderBundleShell(input: BundleShellInput): string {
 <title>${title}</title>${prelude}
 </head>
 <body>
-<div id="root"></div>
+<div id="root"${bootAttr}></div>
 <script type="module" nonce="${nonce}" src="${assetUrl("index.js")}"></script>
 </body>
 </html>`;

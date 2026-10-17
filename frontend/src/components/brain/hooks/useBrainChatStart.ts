@@ -1,9 +1,8 @@
-import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   getBrainCapability,
-  normalizeChatMode,
-  NEW_CHAT_MODE,
+  useArmedNewChat,
   type useBrainChats,
   type ChatMode,
   type WorkOptionId,
@@ -23,21 +22,13 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
 }) {
   const tBrain = useTranslations('brain');
   // The chat hook's methods are individually stable; its result object is not.
-  const { create, setCapability, setMode, activeChatId, activeChat } = chats;
+  const { setCapability, activeChatId, activeChat } = chats;
   const [input, setInput] = useState('');
   /** Bumped to pull focus into the composer after something seeds it. */
   const [composerFocusToken, setComposerFocusToken] = useState(0);
-  /**
-   * The mode a NOT-YET-CREATED chat will be born in (migration 0409). Declared here,
-   * above `startNewChat`, because every creation path has to carry it: a user who
-   * picks Work in the empty state and then types must get a WORK conversation, not a
-   * chat one that silently declines to do the thing they asked for. Mirrored into a
-   * ref so `startNewChat` reads the current value without being re-created (it is a
-   * dependency of `ensureChatId`, which is captured into every run). The ref is
-   * written where the mode is chosen (`selectMode`), never during render.
-   */
-  const [pendingMode, setPendingMode] = useState<ChatMode>(NEW_CHAT_MODE);
-  const pendingModeRef = useRef<ChatMode>(NEW_CHAT_MODE);
+  // The mode a NOT-YET-CREATED chat will be born in, and the ONE creation path that
+  // carries it — the shared pre-chat arming every surface uses (brain-embedded).
+  const { chatMode, selectMode, createArmed } = useArmedNewChat(chats);
 
   /**
    * Start a chat and land the user in it. The ONE "new chat" path for every
@@ -49,10 +40,10 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
   const startNewChat = useCallback(async (opts?: { title?: string; projectId?: number | null; capability?: string | null; mode?: ChatMode }) => {
     // The mode chosen in the empty state rides EVERY creation path — including the one
     // that fires implicitly when the user just types and hits send (`ensureChatId`).
-    const created = await create({ ...opts, mode: opts?.mode ?? pendingModeRef.current });
+    const created = await createArmed(opts);
     if (!isPage) setDockedTab('chat');
     return created;
-  }, [create, isPage, setDockedTab]);
+  }, [createArmed, isPage, setDockedTab]);
 
   const ensureChatId = useCallback(async () => {
     const c = await startNewChat();
@@ -84,19 +75,8 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
   const capabilityPrompt = getBrainCapability(capabilityId)?.systemPrompt;
 
   // ---- Mode ("am I asking, or delegating?") --------------------------------
-  // A property of the CHAT (migration 0409), like `capability`, so the choice follows
-  // the conversation rather than the browser. `pendingMode` (declared above, beside the
-  // composer state, because `startNewChat` reads it) covers the pre-chat empty state:
-  // without it, picking Work and then typing would silently mint a `chat`-mode chat.
-  const chatMode: ChatMode = activeChat
-    ? normalizeChatMode(activeChat.mode)
-    : pendingMode;
-  const selectMode = useCallback(async (mode: ChatMode) => {
-    pendingModeRef.current = mode;
-    setPendingMode(mode);
-    const id = activeChatId;
-    if (id != null) await setMode(id, mode);
-  }, [activeChatId, setMode]);
+  // A property of the CHAT (migration 0409), like `capability`; before a chat exists,
+  // the armed mode (`useArmedNewChat`) — so picking Work then typing mints a Work chat.
   // A work option is a STARTING POINT, not a message: seed the composer and drop the
   // caret at the end so the user finishes the brief instead of sending the template.
   const pickWorkOption = useCallback((_id: WorkOptionId, brief: string) => {

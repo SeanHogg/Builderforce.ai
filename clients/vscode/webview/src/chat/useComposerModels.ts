@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { loadGatewayModelOptions, nextFallbackModel, type GatewayModelOptions } from '@seanhogg/builderforce-brain-embedded';
+import { EMPTY_GATEWAY_MODEL_OPTIONS, loadGatewayModelOptions, nextFallbackModel, type GatewayModelOptions } from '@seanhogg/builderforce-brain-embedded';
 import type { ChatModelSelection, PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
 import type { AuthedFetch } from '../authedFetch';
 import { post, type InitData } from '../vscodeBridge';
@@ -40,14 +40,9 @@ export function useComposerModels(
    */
   const composerModels = useMemo<GatewayModelOptions>(() => {
     const local = init.localModels ?? [];
-    if (!modelChoices) {
-      return {
-        surface: {},
-        options: { byo: [], free: [], plan: [], paid: [], local },
-        identity: { product: 'free', canChoose: false },
-      };
-    }
-    return local.length === 0 ? modelChoices : { ...modelChoices, options: { ...modelChoices.options, local } };
+    // No catalogue yet: brain-embedded's ONE empty shape (Rovr starts from it too).
+    const base = modelChoices ?? EMPTY_GATEWAY_MODEL_OPTIONS;
+    return local.length === 0 && modelChoices ? modelChoices : { ...base, options: { ...base.options, local } };
   }, [modelChoices, init.localModels]);
 
   // The user's CHOICE, reconstructed from what the host resolved: a strict pin, the
@@ -71,5 +66,10 @@ export function useComposerModels(
     [modelSurface],
   );
 
-  return { catalogLoaded: modelChoices != null, modelSurface, composerModels, modelSelection, chooseModel, pickFallbackModel };
+  // A failed read resolves to that same empty shape — entitlement is still UNKNOWN then,
+  // so it counts as not loaded (the menu must not claim the plan forbids choosing), the
+  // rule Rovr's options already apply.
+  const catalogLoaded = modelChoices != null && modelChoices !== EMPTY_GATEWAY_MODEL_OPTIONS;
+
+  return { catalogLoaded, modelSurface, composerModels, modelSelection, chooseModel, pickFallbackModel };
 }

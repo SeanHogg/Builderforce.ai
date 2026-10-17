@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
 import { BrainDock } from '../BrainDock';
 import { brainDockWidth, type BrainDockMode, type BrainDockPreferences } from '../brainDockPreferences';
-import type { BrainConversationProps } from './useBrainConversation';
+import type { CanvasConversationProps } from './useCanvasConversationProps';
 
 export interface CanvasBrainDockHostProps {
   /** The dock is the placement in force and the surface is not the conversation itself. */
   drawn: boolean;
-  conversation: BrainConversationProps;
+  conversation: CanvasConversationProps;
   /** The prompt, when the reader has docked it into this panel. */
   composer: ReactNode;
   promptInPanel: boolean;

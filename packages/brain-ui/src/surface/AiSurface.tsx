@@ -30,11 +30,13 @@ export interface AiSurfaceProps {
   className?: string;
   /** Accessible name for the region (localized by the host). */
   label?: string;
+  /** Extra attributes a host keys on (test ids, session-replay masking) — as `SurfaceFooter`. */
+  dataAttrs?: Record<`data-${string}`, string>;
 }
 
-export function AiSurface({ header, rail, thread, empty, notices, footer, className, label }: AiSurfaceProps) {
+export function AiSurface({ header, rail, thread, empty, notices, footer, className, label, dataAttrs }: AiSurfaceProps) {
   return (
-    <section className={['bf-surface', className].filter(Boolean).join(' ')} aria-label={label}>
+    <section className={['bf-surface', className].filter(Boolean).join(' ')} aria-label={label} {...dataAttrs}>
       {header}
       {rail != null && rail !== false && <div className="bf-surface__rail">{rail}</div>}
       <div className="bf-surface__body">{empty ?? thread}</div>

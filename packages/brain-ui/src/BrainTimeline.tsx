@@ -1,243 +1,27 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
 import {
-  DEFAULT_CHAT_ACTIVITY_LABELS,
-  activityIcon,
-  activityTone,
-  chatActivityText,
-  type ChatActivityLabels,
   DEFAULT_MODEL_IDENTITY,
-  displayModelName,
-  parseDirectedRecipients,
-  parseMessageAuthor,
   parseSubagentOrigin,
-  parseMessageProvenance,
-  isStoppedTurn,
   type BrainMessage,
   type BrainTraceEvent,
-  type MessageProvenance,
   type ModelIdentityContext,
   type BrainRunActivity,
 } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
-import { answerTextOf, brainMessageAnchorId, thoughtTextOf } from '@builderforce/agent-loop';
-import { Avatar, RecipientsBadge } from './ParticipantBadge';
-import { parseAskUser, stripAskUser, QuestionCard, askUserAnchorId, DEFAULT_ASK_USER_LABELS } from './askUser';
-import { buildSettledTimeline, formatDuration, strandedReplyKey, streamingNode, type TimelineNode } from './timelineModel';
-import { CopyButton } from './CopyButton';
-import { ToolStep, type ToolStepLabels } from './ToolStep';
-import { LiveActivity, DEFAULT_LIVE_ACTIVITY_LABELS, type LiveActivityLabels } from './LiveActivity';
+import { buildSettledTimeline, strandedReplyKey, streamingNode } from './timelineModel';
+import { LiveActivity } from './LiveActivity';
 import { ModelMoveStep } from './ModelMoveStep';
-import { DEFAULT_MODEL_MOVE_LABELS, type ModelMoveLabels } from './timelineModelMoves';
+import { DEFAULT_TIMELINE_LABELS, type BrainTimelineLabels } from './timeline/labels';
+import type { MessageRating } from './timeline/MessageActions';
+import { useTranscriptScroll } from './timeline/useTranscriptScroll';
+import { AssistantRow, UserRow } from './timeline/MessageRows';
+import { LearnRow, MemoryAnswerRow, RecallRow, ReconcileRow } from './timeline/MemoryRows';
+import { ActivityRow, ErrorRow, StreamingRow, ThinkingRow, ToolRow } from './timeline/StepRows';
 
-/**
- * Every string the transcript renders. It EXTENDS {@link ToolStepLabels} rather than
- * restating those five: the tool step is its own component with its own narrow
- * contract, and a host that passes this bundle satisfies that contract by
- * construction — which is what keeps the two from drifting apart.
- */
-export interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
-  /** Shown on the live thinking node while a turn streams. */
-  thinking: string;
-  /**
-   * Copy for the ANIMATED in-flight indicator (<LiveActivity>) — which tool is
-   * running, on what, and for how long. Carried in this bundle so a host passes
-   * ONE set of labels for the whole transcript rather than two.
-   */
-  live: LiveActivityLabels;
-  /** "Thought for {duration}" — must contain the literal `{duration}` token. */
-  thoughtFor: string;
-  /** Summary of a collapsed `<think>` block inside a reply. */
-  thought: string;
-  /** Muted note above a reply RESCUED from the model's reasoning — the run ended
-   *  inside its `<think>` block, so the transcript shows the reasoning as the reply
-   *  rather than a collapsed line and nothing else. See `strandedReplyKey`. */
-  replyFromThought: string;
-  /** Muted note above a reply the user STOPPED mid-stream — what the model had written
-   *  when Stop was pressed, kept so the reader can see what went wrong and (from the
-   *  provenance chip) which model did it. See `stoppedTurn.ts` in brain-embedded. */
-  stoppedReply: string;
-  you: string;
-  assistant: string;
-  /** Beside a SUB-AGENT's name: whose it is — must contain `{owner}`. */
-  subagentOf: string;
-  /** Beside the chat's own agent once sub-agents have spoken: it is their owner. */
-  ownerTag: string;
-  error: string;
-  loading: string;
-  empty: string;
-  /** Per-message "send this again" action — re-asks the model with the same text,
-   *  from a user turn or an assistant one. */
-  replay: string;
-  /** Thumbs up / down on an assistant reply. */
-  rateUp: string;
-  rateDown: string;
-  apply: string;
-  createFile: string;
-  /** <QuestionCard> copy (ask_user) — carried here so a host passes ONE label bundle. */
-  askSubmit: string;
-  askAnswered: string;
-  /** Provenance chip: the badge shown when the tenant's OWN connected frontier
-   *  account served the turn. */
-  accountOwn: string;
-  /** Provenance chip: the badge for a turn served by the shared model pool. */
-  accountShared: string;
-  /** Provenance chip: the badge for a shared-pool turn when the tenant HAS a
-   *  connected account that wasn't used — the case worth flagging. */
-  accountByoUnused: string;
-  /** Provenance chip tooltip: shown on the "🧠 Evermind vN" badge when the
-   *  project's own self-learning model generated this reply. */
-  ranOnEvermind: string;
-  /** Evermind recall step title — must contain `{count}` and `{version}`. */
-  recallTitle: string;
-  /** Tooltip on the recall step explaining what it means. */
-  recallHint: string;
-  /** Memory-first answer step: a saved reply was replayed and no model ran. */
-  memoryAnswerCache: string;
-  /** Memory-first answer step: the project's Evermind replied and no other model ran.
-   *  Must contain `{version}`. */
-  memoryAnswerEvermind: string;
-  /** Tooltip on the memory-first answer step. */
-  memoryAnswerHint: string;
-  /** Evermind learn step — the turn was contributed back. Must contain `{version}`. */
-  learnTitle: string;
-  /** Tooltip on the learn step. */
-  learnHint: string;
-  /** Evermind SKIPPED-learn step — the turn did NOT contribute, and why. Must contain
-   *  `{reason}` (filled from {@link learnSkipReason}). */
-  learnSkippedTitle: string;
-  /** Tooltip on the skipped-learn step. */
-  learnSkippedHint: string;
-  /** Human phrase per skip reason, substituted into {@link learnSkippedTitle}. */
-  learnSkipReason: { 'not-attached': string; 'not-seeded': string; frozen: string };
-  /** Per-Evermind CONTRIBUTED line for a multi-target fan-out. Must contain `{name}`,
-   *  `{projectId}`, `{version}`. */
-  learnTargetContributed: string;
-  /** Per-Evermind SKIPPED line for a multi-target fan-out. Must contain `{name}`,
-   *  `{projectId}`, `{reason}` (filled from {@link learnSkipReason}). */
-  learnTargetSkipped: string;
-  /** Evermind reconcile step — the turn updated learned memories. Must contain
-   *  `{count}` and `{version}`. */
-  reconcileTitle: string;
-  /** Tooltip on the reconcile step. */
-  reconcileHint: string;
-  /**
-   * RUN-ACTIVITY line templates (run milestones + agent dispatch). Templates, not
-   * sentences: the server records only the FACTS, and each surface composes the line in
-   * its own language — which is the only way these can be localized at all, since the
-   * server has no idea who will read the chat. See `chatActivity.ts` for the contract.
-   */
-  activity: ChatActivityLabels;
-}
-
-export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
-  thinking: 'Thinking…',
-  live: DEFAULT_LIVE_ACTIVITY_LABELS,
-  thoughtFor: 'Thought for {duration}',
-  thought: 'Thought',
-  replyFromThought: "Recovered from the model's reasoning — the turn ended without a separate reply.",
-  stoppedReply: 'Stopped by you — this is what the model had written when you pressed Stop.',
-  you: 'You',
-  assistant: 'BuilderForce',
-  subagentOf: 'sub-agent of {owner}',
-  ownerTag: 'owner',
-  input: 'Input',
-  output: 'Output',
-  error: 'Error',
-  loading: 'Loading…',
-  empty: 'Ask BuilderForce to build or change something.',
-  copy: 'Copy',
-  copied: 'Copied',
-  replay: 'Send again',
-  rateUp: 'Good response',
-  rateDown: 'Bad response',
-  apply: 'Apply',
-  createFile: 'Create file',
-  preview: 'Preview',
-  noOutput: 'No output',
-  exitCode: 'Exit {code}',
-  askSubmit: DEFAULT_ASK_USER_LABELS.askSubmit,
-  askAnswered: DEFAULT_ASK_USER_LABELS.askAnswered,
-  accountOwn: 'Your account',
-  accountShared: 'Shared pool',
-  accountByoUnused: "Your connected account wasn't used",
-  ranOnEvermind: "Generated by this project's Evermind model",
-  recallTitle: 'Recalled {count} memories from Evermind v{version}',
-  recallHint: "This project's self-learning Evermind recalled these prior learnings and grounded the answer on them.",
-  memoryAnswerCache: 'Answered from a saved reply — no model was called',
-  memoryAnswerEvermind: 'Answered by Evermind v{version} — no other model was called',
-  memoryAnswerHint: "This project's memory already held an answer to this exact question, so it was replayed instead of running a model.",
-  learnTitle: 'Contributed this turn to Evermind v{version}',
-  learnHint: 'This turn was contributed back to the project Evermind — it will be merged into the learned model.',
-  learnSkippedTitle: 'Not learned this turn — {reason}',
-  learnSkippedHint: "This turn wasn't contributed to the project Evermind. “Learning — Connected” reflects the selected project's model, not whether this chat feeds it.",
-  learnSkipReason: {
-    'not-attached': 'this chat isn’t attached to a project',
-    'not-seeded': 'this project has no Evermind model yet',
-    frozen: 'this project’s Evermind is frozen (read-only)',
-  },
-  learnTargetContributed: 'Contributed to {name} (project #{projectId} v{version})',
-  learnTargetSkipped: 'Skipped {name} (project #{projectId}) — {reason}',
-  reconcileTitle: 'Reconciled {count} learned memories in Evermind v{version}',
-  reconcileHint: 'The answer restated these recalled learnings, so it updates them (write-through cognition).',
-  ...DEFAULT_MODEL_MOVE_LABELS,
-  activity: DEFAULT_CHAT_ACTIVITY_LABELS,
-};
-
-/**
- * The per-reply provenance chip: what served this turn, and whose account paid for it.
- * A positive confirmation on EVERY assistant turn that the tenant is (or is not) on
- * their own connected frontier account — so "why didn't it use my paid Claude?" is
- * answered inline instead of only surfacing on an empty reply. The `shared_byo_unused`
- * state is styled as a warning because it's the one the user most wants to catch (a
- * connected account that silently wasn't used).
- *
- * WHAT it names depends on who is reading: a turn our routed pool served is named after
- * the PRODUCT ("Builderforce Free" / "Builderforce PRO") unless the viewer owns the
- * choice — see `modelIdentity.ts`. The upstream id stays on the message metadata either
- * way, so diagnostics and usage attribution are unaffected.
- *
- * The account is optional: when the gateway didn't report one the chip still names what
- * ran and simply omits the badge — attribution without a claim we can't back.
- */
-function ProvenanceChip({
-  prov,
-  labels,
-  identity,
-}: {
-  prov: MessageProvenance;
-  labels: BrainTimelineLabels;
-  identity: ModelIdentityContext;
-}) {
-  const unused = prov.account === 'shared_byo_unused';
-  const badge = prov.account === 'own'
-    ? labels.accountOwn
-    : unused
-      ? labels.accountByoUnused
-      : prov.account === 'shared'
-        ? labels.accountShared
-        : null;
-  const variant = prov.account === 'own'
-    ? 'bf-tl__prov--own'
-    : unused
-      ? 'bf-tl__prov--unused'
-      : 'bf-tl__prov--shared';
-  // Masked viewers get the product name in the tooltip too — a vendor suffix would
-  // give away exactly what the name is there to abstract.
-  const name = displayModelName(prov.model, identity, { account: prov.account });
-  const modelTitle = prov.vendor && name === prov.model ? `${name} · ${prov.vendor}` : name;
-  return (
-    <div className={`bf-tl__prov ${variant}`}>
-      <span className="bf-tl__prov-model" title={modelTitle}>{name}</span>
-      {badge && <span className="bf-tl__prov-badge">{badge}</span>}
-      {prov.evermind ? (
-        <span className="bf-tl__prov-evermind" title={labels.ranOnEvermind}>{`🧠 Evermind v${prov.evermind.version}`}</span>
-      ) : null}
-    </div>
-  );
-}
-
-/** +1 up, -1 down, 0 = cleared. Mirrors the `llm_action_ratings.rating` domain. */
-export type MessageRating = 1 | -1 | 0;
+// The public surface stays HERE: the labels and the rating type live beside the row
+// components that use them (`./timeline/*`), and are re-exported unchanged.
+export { DEFAULT_TIMELINE_LABELS };
+export type { BrainTimelineLabels, MessageRating };
 
 export interface BrainTimelineProps {
   messages: BrainMessage[];
@@ -298,118 +82,6 @@ export interface BrainTimelineProps {
   revealMessage?: { id: number; nonce: number } | null;
 }
 
-function dotIcon(kind: TimelineNode['kind'], isError?: boolean): string {
-  if (isError) return '✗';
-  switch (kind) {
-    case 'user':
-      return '›';
-    case 'assistant':
-      return '✦';
-    case 'thinking':
-      return '∴';
-    case 'tool':
-      return '⚙';
-    case 'error':
-      return '✗';
-    case 'recall':
-    case 'memoryAnswer':
-    case 'learn':
-    case 'reconcile':
-      return '🧠';
-    default:
-      return '•';
-  }
-}
-
-/**
- * The action row every message carries: copy it, send it again, and — on an
- * assistant reply — say whether it was any good.
- *
- * It lives HERE rather than in each host's own action bar because all three surfaces
- * (the web Brain panel, the Canvas dock, the VS Code webview) mount this same
- * timeline — a host-side implementation would have had to be written three times and
- * would have reached only whichever surface remembered to render it. Hosts still add
- * their OWN extras through `renderAssistantActions`; those compose after these.
- *
- * "Send again" is deliberately offered on BOTH roles: replaying a user turn re-asks
- * the question, and replaying an assistant turn feeds its answer back as the next
- * prompt — which is how you ask the model to build on what it just said.
- *
- * The THUMBS moved here for the same reason, and because of what they are now for:
- * every press is filed against the model that served the turn and the MCP tool it
- * ran, so it teaches the learned router which model is good at which kind of work
- * (`llm_action_ratings`, migration 0468). While they lived in the web app's own
- * action bar, the Canvas and the editor — a large share of all model calls — could
- * not contribute a single rating.
- */
-function MessageActions({
-  message,
-  role,
-  text,
-  labels,
-  onReplay,
-  onRate,
-  rating,
-}: {
-  message: BrainMessage;
-  role: 'user' | 'assistant';
-  text: string;
-  labels: BrainTimelineLabels;
-  onReplay?: (msg: BrainMessage, role: 'user' | 'assistant') => void;
-  onRate?: (msg: BrainMessage, rating: MessageRating) => void;
-  rating?: MessageRating;
-}) {
-  if (!text.trim()) return null;
-  // Pressing the thumb you already gave clears it — "no opinion" is the absence of
-  // a rating, so it deletes the row rather than storing a third state.
-  const rate = (next: 1 | -1) => (event: React.MouseEvent) => {
-    event.stopPropagation();
-    onRate?.(message, rating === next ? 0 : next);
-  };
-  return (
-    <>
-      <CopyButton text={text} labels={labels} icon />
-      {onReplay && (
-        <button
-          type="button"
-          className="bf-tl__act"
-          title={labels.replay}
-          aria-label={labels.replay}
-          onClick={(e) => { e.stopPropagation(); onReplay(message, role); }}
-        >
-          <span aria-hidden>↻</span>
-        </button>
-      )}
-      {onRate && role === 'assistant' && (
-        <>
-          <button
-            type="button"
-            className="bf-tl__act"
-            title={labels.rateUp}
-            aria-label={labels.rateUp}
-            aria-pressed={rating === 1}
-            data-state={rating === 1 ? 'done' : undefined}
-            onClick={rate(1)}
-          >
-            <span aria-hidden>👍</span>
-          </button>
-          <button
-            type="button"
-            className="bf-tl__act"
-            title={labels.rateDown}
-            aria-label={labels.rateDown}
-            aria-pressed={rating === -1}
-            data-state={rating === -1 ? 'done' : undefined}
-            onClick={rate(-1)}
-          >
-            <span aria-hidden>👎</span>
-          </button>
-        </>
-      )}
-    </>
-  );
-}
-
 /**
  * The unified Brain chat transcript: a vertical lineage of gutter dots (joined by
  * a connecting line) where each step is one node — a user turn (with image
@@ -459,62 +131,7 @@ function BrainTimelineInner({
   // that turn as a readable reply instead of a muted line the reader cannot see.
   const stranded = useMemo(() => strandedReplyKey(nodes, isRunning), [nodes, isRunning]);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLOListElement>(null);
-  const pinnedRef = useRef(true);
-  // Track whether the user is pinned to the bottom so streaming doesn't yank them.
-  const onScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-  };
-  // Stay pinned to the newest node through EVERY height change — not just when the
-  // node list changes, but as late-loading images, code blocks, and streaming markdown
-  // reflow after render (the reason a plain `nodes`-keyed effect lands short of bottom).
-  useEffect(() => {
-    if (!autoScroll) return;
-    const scroller = scrollRef.current;
-    const content = contentRef.current;
-    if (!scroller || !content) return;
-    const stick = () => {
-      if (pinnedRef.current) scroller.scrollTop = scroller.scrollHeight;
-    };
-    stick();
-    const ro = new ResizeObserver(stick);
-    ro.observe(content);
-    return () => ro.disconnect();
-  }, [autoScroll]);
-
-  // A speech bubble (or any other gist of a reply) asked to show THIS turn. Unpin so
-  // the stick-to-bottom observer does not yank the reader back to the newest node,
-  // then scroll the stamped `#bf-msg-{id}` row into view. The nonce is in the deps
-  // so a second click on the same bubble still jumps.
-  useEffect(() => {
-    if (revealMessage == null) return;
-    pinnedRef.current = false;
-    const reduce = typeof window !== 'undefined'
-      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const jump = () => {
-      // Do not early-return on a missing scroller: the dock may still be laying
-      // out when this effect first fires. The rAF + timeout retry until it is there.
-      const scroller = scrollRef.current;
-      if (!scroller) return;
-      const target = document.getElementById(brainMessageAnchorId(revealMessage.id));
-      if (!target || !scroller.contains(target)) return;
-      // Scroll ONLY the transcript, not every ancestor (the page, the dock).
-      const sRect = scroller.getBoundingClientRect();
-      const tRect = target.getBoundingClientRect();
-      const delta = tRect.top - sRect.top - (sRect.height - tRect.height) / 2;
-      scroller.scrollTo({ top: scroller.scrollTop + delta, behavior: reduce ? 'auto' : 'smooth' });
-    };
-    jump();
-    const raf = requestAnimationFrame(jump);
-    const later = window.setTimeout(jump, 80);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.clearTimeout(later);
-    };
-  }, [revealMessage]);
+  const { scrollRef, contentRef, onScroll } = useTranscriptScroll(autoScroll, revealMessage);
 
   const renderMsg = (msg: BrainMessage, role: 'user' | 'assistant', text: string) =>
     renderMessage ? (
@@ -546,306 +163,67 @@ function BrainTimelineInner({
         (emptyState ?? <div className="bf-tl-empty">{labels.empty}</div>)}
       <ol className="bf-tl" ref={contentRef}>
         {nodes.map((node) => {
-          if (node.kind === 'user') {
-            // A message addressed to participants (not the BRAIN) shows a "→ Name"
-            // badge — several for a group turn — so the transcript makes clear who it
-            // was spoken to.
-            const to = parseDirectedRecipients(node.message);
-            const author = parseMessageAuthor(node.message);
-            return (
-              <li key={node.key} id={brainMessageAnchorId(node.message.id)} className={`bf-tl__item bf-tl__item--user${focusClass(node.message.id)}`}>
-                <span className="bf-tl__gutter">
-                  <span className="bf-tl__dot">{author ? <Avatar name={author.name} kind={author.kind} size={16} /> : dotIcon('user')}</span>
-                </span>
-                <div className="bf-tl__body">
-                  <div className="bf-tl__role" style={to.length > 0 ? { display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' } : undefined}>
-                    <span>{author ? author.name : labels.you}</span>
-                    <RecipientsBadge recipients={to} />
-                  </div>
-                  {node.images.length > 0 && (
-                    <div className="bf-tl__images">
-                      {node.images.map((im, i) => (
-                        <img key={i} src={im.url} alt={im.name ?? ''} className="bf-tl__image" />
-                      ))}
-                    </div>
-                  )}
-                  {node.text && <div className="bf-tl__bubble bf-tl__bubble--user">{renderMsg(node.message, 'user', node.text)}</div>}
-                  <div className="bf-tl__actions bf-tl__actions--hover">
-                    <MessageActions message={node.message} role="user" text={node.text} labels={labels} onReplay={onReplayMessage} />
-                  </div>
-                </div>
-              </li>
-            );
-          }
-          if (node.kind === 'assistant') {
-            // An assistant turn produced by an invited agent (not the BRAIN) is
-            // attributed to it — show the agent's avatar + name in place of the
-            // default assistant label so multi-party replies read clearly.
-            const author = parseMessageAuthor(node.message);
-            // An `ask_user` question rides in the assistant text as a fenced ask-user
-            // block. Lift it out to a clickable <QuestionCard> (whichever body renderer
-            // the host uses) and render only the surrounding prose through renderMsg, so
-            // the model's options are answerable in one click instead of by free-typing.
-            const card = onAnswerQuestion ? parseAskUser(node.text) : null;
-            const bodyText = card ? stripAskUser(node.text) : node.text;
-            // Which model + account produced this turn (persisted on the message by
-            // both the streaming Brain path and an agent's addressed reply). Shown as
-            // a small chip so the user can always see whether their own connected
-            // account ran it — not only when a turn comes back empty.
-            const prov = parseMessageProvenance(node.message);
-            // The reply minus its `<think>` reasoning. A turn that only reasoned (the
-            // model thought, then called a tool without addressing the user) is not a
-            // response: it collapses to ONE line — the "Thought" disclosure with the
-            // attribution chip beside it — with no author header and no copy /
-            // send-again / rating row, because there is nothing to copy, replay or
-            // grade. Six such turns in a row used to cost the editor ~30 rows.
-            const answer = answerTextOf(bodyText);
-            // This turn ended the run from inside its reasoning: show the reasoning AS
-            // the reply, with a muted note explaining the first-person voice. Every
-            // other reasoning-only turn still collapses — see `strandedReplyKey`.
-            const rescued = node.key === stranded ? thoughtTextOf(bodyText) : '';
-            // A reply the user STOPPED is never folded into a "Thought" line: what the model
-            // was writing when Stop was pressed is exactly what the reader stopped it for.
-            const stopped = isStoppedTurn(node.message);
-            if (!answer && bodyText && !card && !rescued && !stopped) {
+          switch (node.kind) {
+            case 'user':
               return (
-                <li key={node.key} id={brainMessageAnchorId(node.message.id)} className={`bf-tl__item bf-tl__item--thought${focusClass(node.message.id)}`}>
-                  <span className="bf-tl__gutter">
-                    <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('thinking')}</span>
-                  </span>
-                  <div className="bf-tl__body bf-tl__thought-line">
-                    {renderMsg(node.message, 'assistant', bodyText)}
-                    {prov && <ProvenanceChip prov={prov} labels={labels} identity={modelIdentity} />}
-                  </div>
-                </li>
+                <UserRow
+                  key={node.key}
+                  node={node}
+                  labels={labels}
+                  focusClass={focusClass(node.message.id)}
+                  renderMsg={renderMsg}
+                  onReplay={onReplayMessage}
+                />
               );
-            }
-            return (
-              <li key={node.key} id={brainMessageAnchorId(node.message.id)} className={`bf-tl__item bf-tl__item--assistant${focusClass(node.message.id)}`}>
-                <span className="bf-tl__gutter">
-                  <span className="bf-tl__dot">{author ? <Avatar name={author.name} kind={author.kind} size={16} /> : dotIcon('assistant')}</span>
-                </span>
-                <div className="bf-tl__body">
-                  <div className="bf-tl__role">
-                    {author ? author.name : assistant}
-                    <OriginTag message={node.message} owner={!author && hasSubagents} labels={labels} />
-                  </div>
-                  {rescued && <div className="bf-tl__rescued">{labels.replyFromThought}</div>}
-                  {stopped && <div className="bf-tl__rescued">{labels.stoppedReply}</div>}
-                  {bodyText && <div className="bf-tl__bubble">{renderMsg(node.message, 'assistant', rescued || bodyText)}</div>}
-                  {card && onAnswerQuestion && (
-                    <QuestionCard
-                      payload={card}
-                      labels={{ askSubmit: labels.askSubmit, askAnswered: labels.askAnswered }}
-                      onAnswer={onAnswerQuestion}
-                      anchorId={askUserAnchorId(node.message.id)}
-                    />
-                  )}
-                  {/* ONE footer line: attribution on the left, the actions on the right.
-                      They used to stack as two blocks under every reply; the actions now
-                      reveal on hover / focus (always shown on touch) like a user turn's,
-                      so a settled reply reads as header + text + one quiet line. */}
-                  <div className="bf-tl__foot">
-                    {prov && <ProvenanceChip prov={prov} labels={labels} identity={modelIdentity} />}
-                    <div className="bf-tl__actions bf-tl__actions--hover">
-                      <MessageActions
-                        message={node.message}
-                        role="assistant"
-                        text={answer || rescued}
-                        labels={labels}
-                        onReplay={onReplayMessage}
-                        onRate={onRateMessage}
-                        rating={ratings?.[node.message.id]}
-                      />
-                      {renderAssistantActions?.(node.message)}
-                    </div>
-                  </div>
-                </div>
-              </li>
-            );
-          }
-          if (node.kind === 'thinking') {
-            const label = labels.thoughtFor.replace('{duration}', formatDuration(node.durationMs));
-            return (
-              <li key={node.key} className="bf-tl__item bf-tl__item--thinking">
-                <span className="bf-tl__gutter">
-                  <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('thinking')}</span>
-                </span>
-                <div className="bf-tl__body">
-                  <span className="bf-tl__thinking">{label}</span>
-                </div>
-              </li>
-            );
-          }
-          if (node.kind === 'tool') {
-            return (
-              <li key={node.key} className="bf-tl__item bf-tl__item--tool">
-                <span className="bf-tl__gutter">
-                  <span className={`bf-tl__dot${node.isError ? ' bf-tl__dot--error' : ''}`}>{dotIcon('tool', node.isError)}</span>
-                </span>
-                <div className="bf-tl__body">
-                  <ToolStep node={node} labels={labels} />
-                </div>
-              </li>
-            );
-          }
-          if (node.kind === 'error') {
-            return (
-              <li key={node.key} className="bf-tl__item bf-tl__item--error">
-                <span className="bf-tl__gutter">
-                  <span className="bf-tl__dot bf-tl__dot--error">{dotIcon('error')}</span>
-                </span>
-                <div className="bf-tl__body">
-                  <div className="bf-tl__role bf-tl__role--error">{labels.error}</div>
-                  <div className="bf-tl__bubble bf-tl__bubble--error">{node.message}</div>
-                </div>
-              </li>
-            );
-          }
-          if (node.kind === 'recall') {
-            const title = labels.recallTitle
-              .replace('{count}', String(node.count))
-              .replace('{version}', String(node.version));
-            return (
-              <li key={node.key} className="bf-tl__item bf-tl__item--memory">
-                <span className="bf-tl__gutter">
-                  <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('recall')}</span>
-                </span>
-                <div className="bf-tl__body">
-                  <details className="bf-tl__tool bf-tl__memory">
-                    <summary className="bf-tl__tool-head" title={labels.recallHint}>
-                      <span className="bf-tl__tool-name">{title}</span>
-                      <span className="bf-tl__tool-caret" aria-hidden>▸</span>
-                    </summary>
-                    <div className="bf-tl__tool-body">
-                      <ol className="bf-tl__memory-list">
-                        {node.items.map((it) => (
-                          <li key={it.id} className="bf-tl__memory-item">
-                            <span className="bf-tl__memory-score" aria-hidden>{Math.round(it.score * 100)}%</span>
-                            <span className="bf-tl__memory-text">{it.text}</span>
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  </details>
-                </div>
-              </li>
-            );
-          }
-          if (node.kind === 'memoryAnswer') {
-            const title = node.source === 'evermind' && node.version != null
-              ? labels.memoryAnswerEvermind.replace('{version}', String(node.version))
-              : labels.memoryAnswerCache;
-            return (
-              <li key={node.key} className="bf-tl__item bf-tl__item--memory">
-                <span className="bf-tl__gutter">
-                  <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('memoryAnswer')}</span>
-                </span>
-                <div className="bf-tl__body">
-                  <span className="bf-tl__memory-line" title={labels.memoryAnswerHint}>{title}</span>
-                </div>
-              </li>
-            );
-          }
-          if (node.kind === 'learn') {
-            // Multi-target: a project can fan out to MANY Everminds (its own head + its IDE
-            // builds). Name EACH by id + version so a fan-out is triageable — the same detail
-            // the native chat chip shows. Falls back to the single-line phrasing below when
-            // the server sent no per-target breakdown (older turns / summary only).
-            if (node.targets && node.targets.length > 0) {
-              const lines = node.targets
-                .map((tg) => {
-                  if (tg.learned) {
-                    return labels.learnTargetContributed
-                      .replace('{name}', tg.name).replace('{projectId}', String(tg.projectId)).replace('{version}', String(tg.version));
-                  }
-                  const reasonLabel = tg.reason && tg.reason !== 'too-short'
-                    ? labels.learnSkipReason[tg.reason as 'not-attached' | 'not-seeded' | 'frozen']
-                    : null;
-                  return reasonLabel
-                    ? labels.learnTargetSkipped.replace('{name}', tg.name).replace('{projectId}', String(tg.projectId)).replace('{reason}', reasonLabel)
-                    : null;
-                })
-                .filter((s): s is string => !!s);
-              if (lines.length === 0) return null;
+            case 'assistant':
               return (
-                <li key={node.key} className="bf-tl__item bf-tl__item--memory">
-                  <span className="bf-tl__gutter">
-                    <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('learn')}</span>
-                  </span>
-                  <div className="bf-tl__body">
-                    <span className="bf-tl__memory-line">{lines.join('; ')}</span>
-                  </div>
-                </li>
+                <AssistantRow
+                  key={node.key}
+                  node={node}
+                  labels={labels}
+                  focusClass={focusClass(node.message.id)}
+                  renderMsg={renderMsg}
+                  assistant={assistant}
+                  stranded={stranded}
+                  hasSubagents={hasSubagents}
+                  modelIdentity={modelIdentity}
+                  onAnswerQuestion={onAnswerQuestion}
+                  onReplay={onReplayMessage}
+                  onRate={onRateMessage}
+                  rating={ratings?.[node.message.id]}
+                  renderAssistantActions={renderAssistantActions}
+                />
               );
-            }
-            // Skipped: the turn did NOT feed the Evermind for a project-level reason —
-            // render an explained muted line so the absence is never a silent mystery.
-            const title = node.skipped
-              ? labels.learnSkippedTitle.replace('{reason}', labels.learnSkipReason[node.skipped])
-              : labels.learnTitle.replace('{version}', String(node.version));
-            const hint = node.skipped ? labels.learnSkippedHint : labels.learnHint;
-            return (
-              <li key={node.key} className="bf-tl__item bf-tl__item--memory">
-                <span className="bf-tl__gutter">
-                  <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('learn')}</span>
-                </span>
-                <div className="bf-tl__body">
-                  <span className="bf-tl__memory-line" title={hint}>{title}</span>
-                </div>
-              </li>
-            );
+            case 'thinking':
+              return <ThinkingRow key={node.key} node={node} labels={labels} />;
+            case 'tool':
+              return <ToolRow key={node.key} node={node} labels={labels} />;
+            case 'error':
+              return <ErrorRow key={node.key} node={node} labels={labels} />;
+            case 'recall':
+              return <RecallRow key={node.key} node={node} labels={labels} />;
+            case 'memoryAnswer':
+              return <MemoryAnswerRow key={node.key} node={node} labels={labels} />;
+            case 'learn':
+              return <LearnRow key={node.key} node={node} labels={labels} />;
+            case 'activity':
+              return <ActivityRow key={node.key} node={node} labels={labels} />;
+            case 'modelMove':
+              return <ModelMoveStep key={node.key} move={node.move} labels={labels} />;
+            case 'reconcile':
+              return <ReconcileRow key={node.key} node={node} labels={labels} />;
+            default:
+              return (
+                <StreamingRow
+                  key={node.key}
+                  node={node}
+                  labels={labels}
+                  assistant={assistant}
+                  renderStreaming={renderStreaming}
+                  onInternalLink={onInternalLink}
+                />
+              );
           }
-          if (node.kind === 'activity') {
-            // The RUNTIME narrating itself — deliberately NOT an assistant bubble. Composed
-            // here from the structured metadata so it reads in the viewer's language; a
-            // pre-structured row falls back to the sentence the server stored.
-            const text = chatActivityText(node.activity, labels.activity) || node.fallbackText;
-            const tone = activityTone(node.activity);
-            return (
-              <li key={node.key} className={`bf-tl__item bf-tl__item--activity bf-tl__item--activity-${tone}`}>
-                <span className="bf-tl__gutter">
-                  <span className="bf-tl__dot bf-tl__dot--activity" aria-hidden>{activityIcon(node.activity)}</span>
-                </span>
-                <div className="bf-tl__body">
-                  <span className="bf-tl__activity-line">{text}</span>
-                  {node.activity.kind === 'milestone' && node.activity.note && (
-                    <span className="bf-tl__activity-note">{node.activity.note}</span>
-                  )}
-                </div>
-              </li>
-            );
-          }
-          if (node.kind === 'modelMove') return <ModelMoveStep key={node.key} move={node.move} labels={labels} />;
-          if (node.kind === 'reconcile') {
-            const title = labels.reconcileTitle
-              .replace('{count}', String(node.count))
-              .replace('{version}', String(node.version));
-            return (
-              <li key={node.key} className="bf-tl__item bf-tl__item--memory">
-                <span className="bf-tl__gutter">
-                  <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('reconcile')}</span>
-                </span>
-                <div className="bf-tl__body">
-                  <span className="bf-tl__memory-line" title={labels.reconcileHint}>{title}</span>
-                </div>
-              </li>
-            );
-          }
-          // streaming
-          return (
-            <li key={node.key} className="bf-tl__item bf-tl__item--assistant bf-tl__item--streaming">
-              <span className="bf-tl__gutter">
-                <span className="bf-tl__dot bf-tl__dot--pulse">{dotIcon('assistant')}</span>
-              </span>
-              <div className="bf-tl__body">
-                <div className="bf-tl__role">{assistant}</div>
-                <div className="bf-tl__bubble">
-                  {renderStreaming ? renderStreaming(node.text) : <Markdown content={node.text} onInternalLink={onInternalLink} labels={labels} />}
-                </div>
-              </div>
-            </li>
-          );
         })}
         {/* The in-flight step. Shown whenever the run is live — INCLUDING while text
             is streaming, because a streaming turn still has a phase (and the next
@@ -867,13 +245,3 @@ function BrainTimelineInner({
  * stable props (memoize `labels` and any `on*` callbacks) for this to take effect.
  */
 export const BrainTimeline = React.memo(BrainTimelineInner);
-
-/** Whose sub-agent wrote a reply (`sub-agent of BuilderForce · a1`), or that the chat's own
- *  agent is the OWNER of the sub-agents in it. Nothing for an ordinary reply. */
-function OriginTag({ message, owner, labels }: { message: BrainMessage; owner: boolean; labels: BrainTimelineLabels }) {
-  const origin = parseSubagentOrigin(message);
-  if (origin) {
-    return <span className="bf-tl__origin">{`${labels.subagentOf.replace('{owner}', origin.owner)} · ${origin.handle}`}</span>;
-  }
-  return owner ? <span className="bf-tl__origin">{labels.ownerTag}</span> : null;
-}

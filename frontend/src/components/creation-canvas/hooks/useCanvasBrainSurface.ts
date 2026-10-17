@@ -1,8 +1,10 @@
 /** The Brain's surface on this board — placement, messages, roster, room speech and the surface context value. */
+import { canvasRunKey } from '../brainTurn/canvasRunKey';
 import { type BrainDockMode, type BrainDockPreferences, brainDockReservedWidth } from '../brainDockPreferences';
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo, useState } from 'react';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
-import { stepRow } from '@seanhogg/builderforce-brain-embedded';
+import { stepRow, withRating, type MessageRatings } from '@seanhogg/builderforce-brain-embedded';
+import { useTranscriptReplies } from '@/lib/brain/useTranscriptReplies';
 import { boardAgentOccupants, boardAgents } from '@/lib/canvas/boardAgents';
 import { roomSpeech } from '@/lib/canvas/roomSpeech';
 import { useCanvasBoardBridgeFor } from '../canvasBoardBridge';
@@ -189,19 +191,12 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
       .map((member) => (asking.has(member.userId) ? { ...member, askingBrain: true } : member));
   }, [liveMembers, peerRuns, presenceSelfId]);
   /**
-   * "Send again" on a transcript message — the same path a typed prompt takes, so a
-   * replay is scoped, queued and narrated identically to the original turn. Read
-   * through the ref so the callback identity never changes: <BrainTimeline> is
-   * memoized, and a fresh closure here would re-parse the whole transcript per token.
+   * "Send again" on a transcript message and the answer to an ask_user card — the ONE
+   * shared reply path (`useTranscriptReplies`), fed the same turn a typed prompt starts,
+   * so a replay is scoped, queued and narrated identically to the original and a blocked
+   * run is never left waiting on the canvas.
    */
-  const replayBrainMessage = useCallback((message: BrainMessage) => {
-    startCanvasTurnRef.current(message.content);
-  }, [startCanvasTurnRef]);
-  /** Answering an ask_user card posts the choice as the next canvas turn — the same
-   *  path as a typed prompt, so a blocked run is never left waiting on the canvas. */
-  const answerBrainQuestion = useCallback((answer: string) => {
-    startCanvasTurnRef.current(answer);
-  }, [startCanvasTurnRef]);
+  const { onReplayMessage: replayBrainMessage, onAnswerQuestion: answerBrainQuestion } = useTranscriptReplies((text) => startCanvasTurnRef.current(text));
   /**
    * Rate a Brain reply on this board.
    *
@@ -211,17 +206,12 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
    * append time (`lastTurnProvenance`), which is what makes a press on a reloaded
    * board still attributable rather than anonymous.
    */
-  const [brainRatings, setBrainRatings] = useState<Record<number, 1 | -1>>({});
+  const [brainRatings, setBrainRatings] = useState<MessageRatings>({});
   const rateBrainMessage = useCallback((message: BrainMessage, rating: 1 | -1 | 0) => {
     const entry = timeline[message.id - 1];
     const model = entry?.metadata?.model;
     if (!entry || !model) return;
-    setBrainRatings((prev) => {
-      const next = { ...prev };
-      if (rating === 0) delete next[message.id];
-      else next[message.id] = rating;
-      return next;
-    });
+    setBrainRatings((prev) => withRating(prev, message.id, rating));
     void llmApi.rateAction({
       surface: 'canvas',
       subjectKind: 'turn',
@@ -262,6 +252,7 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
     showExecutionDetail: brainDock.showExecutionDetail,
     running: brainRunning,
     runStartedAt: brainRunShownStartedAt,
+    runKey: canvasRunKey(sessionId),
     messages: brainMessages,
     trace: brainTrace,
     nodes,
@@ -278,6 +269,6 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
     onModeChange: (mode) => updateBrainDock({ mode }),
     onExecutionDetailChange: (showExecutionDetail) => updateBrainDock({ showExecutionDetail }),
     onClose: () => updateBrainDock({ open: false }),
-  }), [brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt, brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence, presentMode, rateBrainMessage, replayBrainMessage, answerBrainQuestion, setSelectedId, setSelectedIds, updateBrainDock]);
+  }), [brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt, brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence, presentMode, rateBrainMessage, replayBrainMessage, answerBrainQuestion, sessionId, setSelectedId, setSelectedIds, updateBrainDock]);
   return { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies };
 }

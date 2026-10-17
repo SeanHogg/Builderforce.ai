@@ -46,7 +46,7 @@ export function SubagentStrip({ chatId, labels, liveLabels }: Props) {
           title={collapsed ? t('sub.expand', 'Show sub-agents') : t('sub.collapse', 'Hide sub-agents')}
           onClick={toggle}
         >
-          <span className="bf-subagents__caret" aria-hidden>▸</span>
+          <svg className="bf-subagents__caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M9 6l6 6-6 6" /></svg>
           {t('sub.title', 'Sub-agents ({count})').replace('{count}', String(children.length))}
           {/* Folded, the names still say who is working. */}
           {collapsed && <span className="bf-subagents__names">{children.map((c) => `${c.handle} ${c.name}`).join(' · ')}</span>}

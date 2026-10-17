@@ -73,7 +73,7 @@
 /* Shape and length sit in the composer's tool row: sized to their content. */
 .select {
   width: auto;
-  min-height: var(--chat-ctl-size, 32px);
+  min-height: var(--bf-ctl-size, 32px);
 }
 
 .select option {

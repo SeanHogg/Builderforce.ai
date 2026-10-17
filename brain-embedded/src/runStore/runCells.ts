@@ -8,8 +8,9 @@ import type { BrainMessage } from '../types';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { BrainRunActivity } from '../runActivity';
 import { makeCell, type RunCell } from './runCell';
+import type { RunKey } from './runTypes';
 
-export const cells = new Map<number, RunCell>();
+export const cells = new Map<RunKey, RunCell>();
 
 /**
  * Global run-store listeners — notified on ANY cell change (not one chat's), so a
@@ -33,18 +34,18 @@ const MAX_CELLS = 50;
 const MAX_TRACE_EVENTS = 500;
 const MAX_APPENDED = 50;
 
-export function getCell(chatId: number): RunCell {
-  const existing = cells.get(chatId);
+export function getCell(key: RunKey): RunCell {
+  const existing = cells.get(key);
   if (existing) {
-    // Refresh LRU recency: re-insert so this chat moves to the most-recent end
+    // Refresh LRU recency: re-insert so this run moves to the most-recent end
     // (Map preserves insertion order, which we use as the eviction queue).
-    cells.delete(chatId);
-    cells.set(chatId, existing);
+    cells.delete(key);
+    cells.set(key, existing);
     return existing;
   }
   const c = makeCell();
-  cells.set(chatId, c);
-  evictIdleCells(chatId);
+  cells.set(key, c);
+  evictIdleCells(key);
   return c;
 }
 
@@ -56,7 +57,7 @@ export function getCell(chatId: number): RunCell {
  * via the Map's insertion order. When everything in range is protected the store
  * is allowed to exceed the cap rather than drop live state.
  */
-export function evictIdleCells(protectId: number): void {
+export function evictIdleCells(protectId: RunKey): void {
   if (cells.size <= MAX_CELLS) return;
   for (const [id, cell] of cells) {
     if (cells.size <= MAX_CELLS) break;

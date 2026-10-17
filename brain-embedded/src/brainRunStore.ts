@@ -30,6 +30,8 @@
  *   - `runCell.ts` / `runCells.ts` — a chat's cell, the registry, repaint and trace;
  *   - `runControl.ts`      — subscribe, read, Stop, confirm, clear, mirror a remote run;
  *   - `startRun.ts`        — the single-flight start and what a run does as it unwinds;
+ *   - `engineRun.ts`       — the same cell hosting a non-chat loop (a canvas turn);
+ *   - `beginRun.ts`        — the per-run reset both starts share;
  *   - `runLoop.ts`         — THE loop, composed from its hooks and ports;
  *   - `runBackstops.ts`    — the ticket guarantees; `turnPersistence.ts` — durable turns.
  */
@@ -51,7 +53,9 @@ export {
   applyRemoteRun,
 } from './runStore/runControl';
 export { startRun } from './runStore/startRun';
-export type { BrainStreamFn, BrainRunPersistence, BrainRunRequest, BrainRunSnapshot, GlobalRunState } from './runStore/runTypes';
+export { startEngineRun } from './runStore/engineRun';
+export type { BrainRunEngine, RunEngineControl } from './runStore/engineRun';
+export type { BrainStreamFn, BrainRunPersistence, BrainRunRequest, BrainRunSnapshot, GlobalRunState, RunKey } from './runStore/runTypes';
 
 /**
  * Framework-free entry point for the Brain agent loop — a documented alias of

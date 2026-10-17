@@ -57,6 +57,8 @@ export const BRAIN_HOST_MESSAGES = [
   'copy',
   'diagnose',
   'chats.changed',
+  /** Delete a chat from the history list — confirmed by the host's modal (`builderforce.deleteSession`). */
+  'chat.delete',
   'open.web',
   'open.artifact',
   'changes.open',

@@ -109,7 +109,7 @@
 @keyframes bf-tl-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 var(--bf-accent-soft, rgba(79, 128, 255, 0.45));
+    box-shadow: 0 0 0 0 var(--bf-accent-soft, rgba(110, 168, 254, 0.14));
   }
   50% {
     box-shadow: 0 0 0 4px transparent;
@@ -146,7 +146,7 @@
   position: absolute;
   inset: -2px;
   border-radius: inherit;
-  background: conic-gradient(from 0deg, transparent 0turn, var(--bf-accent-soft, rgba(79, 128, 255, 0.45)) 0.75turn, transparent 1turn);
+  background: conic-gradient(from 0deg, transparent 0turn, var(--bf-accent-soft, rgba(110, 168, 254, 0.14)) 0.75turn, transparent 1turn);
   animation: bf-tl-sweep 1.4s linear infinite;
 }
 /* The glyph rides above the sweep. */
@@ -270,7 +270,7 @@
 @media (prefers-reduced-motion: reduce) {
   .bf-tl__dot--working::before {
     animation: none;
-    background: var(--bf-accent-soft, rgba(79, 128, 255, 0.45));
+    background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14));
     inset: auto 0 0 0;
     height: 3px;
     border-radius: 0;
@@ -637,11 +637,11 @@
 .bf-qcard__opt--btn:hover:not(:disabled),
 .bf-qcard__opt--check:hover {
   border-color: var(--bf-accent, #4f80ff);
-  background: var(--bf-accent-soft, rgba(79, 128, 255, 0.12));
+  background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14));
 }
 .bf-qcard__opt.is-checked {
   border-color: var(--bf-accent, #4f80ff);
-  background: var(--bf-accent-soft, rgba(79, 128, 255, 0.12));
+  background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14));
 }
 .bf-qcard__opt:disabled {
   cursor: default;
@@ -1390,7 +1390,7 @@
   padding: 8px 10px; border: 1px solid var(--bf-border, #333); border-radius: 6px;
   background: var(--bf-surface-2, #1b1b1b); color: inherit; font: inherit; cursor: pointer;
 }
-.bf-list-row__main:hover:not(:disabled) { border-color: var(--bf-accent, #6ea8fe); background: var(--bf-accent-soft, rgba(110,168,254,0.12)); }
+.bf-list-row__main:hover:not(:disabled) { border-color: var(--bf-accent, #6ea8fe); background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14)); }
 .bf-list-row__main:disabled { cursor: default; }
 .bf-list-row__key {
   flex: none; font-family: var(--bf-font-mono, monospace); font-size: 11px;
@@ -1429,9 +1429,8 @@
    use + the model picker). One component on every prompt surface, so its look
    comes from here rather than from each host's composer stylesheet.
 
-   Colours are layered vars: a host's composer tokens first (the web app's
-   --chat-input-*), then the shared --bf-* theme mapping both hosts define, then
-   a literal. That keeps it native in the web app's light/dark themes AND in the
+   Colours and metrics are the shared --bf-* contract every host maps (the web
+   app's globals, the editor's webview, Rovr), then a literal. That keeps it native in the web app's light/dark themes AND in the
    editor's, with no host-side rules to keep in sync.
    ────────────────────────────────────────────────────────────────────────── */
 .bf-pmenu { position: relative; display: inline-flex; flex: 0 0 auto; min-width: 0; }
@@ -1442,10 +1441,10 @@
   gap: 5px;
   max-width: 220px;
   min-width: 0;
-  height: var(--chat-ctl-size, 30px);
+  height: var(--bf-ctl-size, 30px);
   padding: 0 9px;
   border-radius: 999px;
-  border: 1px solid var(--chat-input-border, var(--bf-border, rgba(128, 128, 128, 0.35)));
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
   background: transparent;
   color: var(--bf-text, inherit);
   font: inherit;
@@ -1473,7 +1472,7 @@
   flex: 0 0 auto;
   padding: 1px 7px;
   border-radius: 999px;
-  background: var(--bf-accent-soft, rgba(110, 168, 254, 0.16));
+  background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14));
   color: var(--bf-text, inherit);
   font-size: 11px;
   font-weight: 600;
@@ -1793,7 +1792,7 @@
    shared --bf-* theme mapping both hosts define, then a literal.
    ────────────────────────────────────────────────────────────────────────── */
 .bf-prompt-panel .bf-pmenu__trigger {
-  height: var(--chat-ctl-size, 32px);
+  height: var(--bf-ctl-size, 32px);
   gap: 6px;
   padding: 0 10px;
   border: 0;
@@ -1862,11 +1861,11 @@
   flex: 0 1 auto;
   min-width: 0;
   max-width: 240px;
-  height: var(--chat-ctl-size, 30px);
+  height: var(--bf-ctl-size, 30px);
   padding: 0 4px 0 9px;
   box-sizing: border-box;
   border-radius: 999px;
-  border: 1px solid var(--chat-input-border, var(--bf-border, rgba(128, 128, 128, 0.35)));
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
   color: var(--bf-text, inherit);
   font-size: 12px;
 }
@@ -1914,11 +1913,11 @@
 
 /* ──────────────────────────────────────────────────────────────────────────
    THE composer (`BrainComposer`) — the one prompt area every surface mounts.
-   Colours are layered vars: the host's composer tokens (`--chat-input-*` on the web),
-   then the shared `--bf-*` mapping every host defines, then a literal — so it reads in
+   Colours and metrics come from the shared `--bf-*` contract every host maps
+   (`--bf-field`, `--bf-ctl-*` included), then a literal — so it reads in
    light AND dark on the web, in the editor and in Rovr with no host-side rules.
    ────────────────────────────────────────────────────────────────────────── */
-.bf-cmp { display: flex; flex-direction: column; gap: var(--chat-ctl-gap, 6px); min-width: 0; }
+.bf-cmp { display: flex; flex-direction: column; gap: var(--bf-ctl-gap, 6px); min-width: 0; }
 
 .bf-cmp-input {
   flex: 1 1 100%;
@@ -1931,7 +1930,7 @@
   border: none;
   outline: none;
   background: transparent;
-  color: var(--chat-input-text, var(--bf-text, inherit));
+  color: var(--bf-text, inherit);
   font: inherit;
   font-size: var(--font-size-body, 13px);
   line-height: 1.4;
@@ -1944,13 +1943,13 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: var(--chat-ctl-size, 32px);
-  height: var(--chat-ctl-size, 32px);
+  width: var(--bf-ctl-size, 32px);
+  height: var(--bf-ctl-size, 32px);
   padding: 0;
   border-radius: 999px;
-  border: 1px solid var(--chat-input-border, var(--bf-border, rgba(128, 128, 128, 0.35)));
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
   background: transparent;
-  color: var(--chat-input-icon, var(--bf-text, inherit));
+  color: var(--bf-text-secondary, var(--bf-text, inherit));
   cursor: pointer;
 }
 .bf-cmp-iconbtn:hover:not(:disabled),
@@ -1958,12 +1957,12 @@
 .bf-cmp-iconbtn:disabled { opacity: 0.45; cursor: not-allowed; }
 .bf-cmp-iconbtn--send {
   border-color: transparent;
-  background: var(--chat-input-send-bg, var(--bf-accent, #3b82f6));
-  color: var(--chat-input-send-icon, var(--bf-on-accent, #fff));
+  background: var(--bf-accent, #3b82f6);
+  color: var(--bf-on-accent, #fff);
 }
-.bf-cmp-iconbtn--send:hover:not(:disabled) { background: var(--chat-input-send-bg, var(--bf-accent, #3b82f6)); filter: brightness(1.08); }
+.bf-cmp-iconbtn--send:hover:not(:disabled) { background: var(--bf-accent, #3b82f6); filter: brightness(1.08); }
 .bf-cmp-iconbtn--send:disabled {
-  background: var(--chat-input-disabled-send-bg, var(--bf-surface-2, rgba(128, 128, 128, 0.2)));
+  background: var(--bf-surface-2, rgba(128, 128, 128, 0.2));
   color: var(--bf-text-muted, #8a8a8a);
   opacity: 1;
 }
@@ -2178,7 +2177,7 @@
   display: inline-grid; place-items: center;
   width: 26px; height: 26px; border-radius: 8px;
   color: var(--bf-accent);
-  background: var(--bf-accent-soft);
+  background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14));
 }
 .bf-shead__title { white-space: nowrap; }
 .bf-shead__context { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; }
@@ -2227,7 +2226,7 @@
   max-width: 240px; padding: 2px 6px;
   font-size: 11px; border-radius: 6px;
   border: 1px dashed var(--bf-accent);
-  background: var(--bf-accent-soft);
+  background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14));
   color: var(--bf-text);
 }
 .bf-queued__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2248,6 +2247,7 @@
 .bf-ctxchip__icon { display: inline-grid; place-items: center; flex: none; }
 .bf-ctxchip select { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; text-overflow: ellipsis; }
 .bf-ctxchip select option { background: var(--bf-surface); color: var(--bf-text); }
+.bf-ctxchip__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------------------------------------------------------------------------
  * <SurfaceLauncher> — the way back into a closed surface; the host places it.
@@ -2271,3 +2271,86 @@
 /* <SurfaceTabs> — one accessible tab strip (Evermind console, Rovr's panel views). */
 .bf-tabs { display: flex; flex-direction: column; gap: 10px; }
 .bf-tabs__panel { display: flex; flex-direction: column; gap: 10px; outline: none; }
+
+/* ---------------------------------------------------------------------------
+ * <AiSurface> — the ONE body: header · rail · thread/empty · notices · footer.
+ * The column fills its host; only the body scrolls.
+ * ------------------------------------------------------------------------- */
+.bf-surface { display: flex; flex-direction: column; min-height: 0; height: 100%; min-width: 0; background: var(--bf-surface); color: var(--bf-text); }
+.bf-surface__rail { flex-shrink: 0; padding: 0 12px; }
+.bf-surface__body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.bf-surface__notices { flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; padding: 0 10px 6px; }
+/* Hosts pass self-gating parts (a banner that renders nothing until it has news); an
+   empty slot must not leave a band of padding behind. */
+.bf-surface__rail:empty, .bf-surface__notices:empty { display: none; }
+.bf-surface__footer {
+  flex-shrink: 0; display: flex; flex-direction: column; gap: 6px;
+  padding: 6px 8px 8px; border-top: 1px solid var(--bf-border); background: var(--bf-surface);
+}
+.bf-surface__footer > .bf-confirm { margin: 0; }
+.bf-surface__status { font-size: 12px; color: var(--bf-text-muted); }
+/* A footer with nothing pending and no composer (the page hero holds it) takes no room. */
+.bf-surface__footer:empty { display: none; }
+
+/* <SurfaceEmptyState> + <StarterGroup>/<StarterTile>. */
+.bf-empty { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.bf-empty--docked { flex: 1; overflow-y: auto; padding: 14px 12px; }
+.bf-empty--page { flex: 1; align-items: center; justify-content: center; text-align: center; padding: 32px 16px; overflow-y: auto; }
+.bf-empty__greet { display: flex; align-items: flex-start; gap: 10px; }
+.bf-empty__mark { display: inline-grid; place-items: center; font-size: 20px; line-height: 1; color: var(--bf-accent); }
+.bf-empty__mark--hero { font-size: 32px; }
+.bf-empty__copy { min-width: 0; }
+.bf-empty__title { font-size: 15px; font-weight: 600; color: var(--bf-text); }
+.bf-empty--page .bf-empty__title { font-size: 20px; }
+.bf-empty__hint { margin-top: 2px; font-size: 13px; color: var(--bf-text-muted); }
+.bf-empty__controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.bf-empty--page .bf-empty__controls { justify-content: center; }
+.bf-empty__composer { width: 100%; max-width: 720px; margin-top: 12px; }
+.bf-empty__starters { width: 100%; display: flex; flex-direction: column; gap: 14px; text-align: left; }
+.bf-empty--page .bf-empty__starters { max-width: 720px; }
+.bf-starters { width: 100%; }
+.bf-starters__heading { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--bf-text-muted); }
+.bf-starters__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 6px; }
+.bf-starter {
+  display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 44px;
+  padding: 7px 10px; border-radius: 10px; text-align: left; font: inherit;
+  border: 1px solid var(--bf-border); background: var(--bf-surface-2); color: var(--bf-text); cursor: pointer;
+}
+.bf-starter:hover, .bf-starter:focus-visible { border-color: var(--bf-accent); outline: none; }
+.bf-starter[aria-pressed='true'] { border-color: var(--bf-accent); background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14)); }
+.bf-starter:disabled { cursor: default; opacity: 0.6; }
+.bf-starter__icon { flex-shrink: 0; display: inline-flex; color: var(--bf-accent); }
+.bf-starter__text { min-width: 0; flex: 1; }
+.bf-starter__label { display: block; font-size: 13px; font-weight: 600; }
+.bf-starter__hint { display: block; font-size: 11.5px; color: var(--bf-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* <ChatHistoryList> / <ChatHistoryRow>. */
+.bf-history { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+.bf-history__status { padding: 12px; font-size: 12.5px; color: var(--bf-text-muted); text-align: center; }
+.bf-chatrow { padding: 8px 10px 8px 9px; border-bottom: 1px solid var(--bf-border); border-left: 3px solid transparent; }
+.bf-chatrow[data-active='true'] { background: var(--bf-surface-2); border-left-color: var(--bf-accent); }
+.bf-chatrow__head { display: flex; align-items: center; gap: 6px; }
+.bf-chatrow__open {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+  padding: 0; border: 0; background: transparent; color: var(--bf-text); font: inherit; text-align: left; cursor: pointer;
+}
+.bf-chatrow__open:focus-visible { outline: 2px solid var(--bf-accent); outline-offset: 2px; border-radius: 4px; }
+.bf-chatrow__marker { flex-shrink: 0; display: inline-flex; color: var(--bf-accent); }
+.bf-chatrow__title { min-width: 0; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bf-chatrow__rename {
+  flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 2px 4px;
+  border: 1px solid var(--bf-border); border-radius: 6px; background: var(--bf-surface); color: var(--bf-text);
+}
+.bf-chatrow__more {
+  flex-shrink: 0; width: 28px; height: 28px; display: inline-grid; place-items: center;
+  border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--bf-text-muted); cursor: pointer;
+}
+.bf-chatrow__more[aria-expanded='true'] { border-color: var(--bf-border); background: var(--bf-surface-2); }
+.bf-chatrow__meta { margin-top: 2px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 11px; color: var(--bf-text-muted); }
+.bf-chatrow__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; font-size: 11.5px; }
+.bf-chatrow__action {
+  min-height: 26px; padding: 0 8px; font: inherit; font-size: 11.5px;
+  border: 1px solid var(--bf-border); border-radius: 6px; background: var(--bf-surface); color: var(--bf-text); cursor: pointer;
+}
+.bf-chatrow__action--danger { color: var(--bf-error, #e5534b); }
+@media (pointer: coarse) { .bf-chatrow__more, .bf-chatrow__action { min-height: 40px; min-width: 40px; } }

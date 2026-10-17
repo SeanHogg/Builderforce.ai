@@ -3,12 +3,12 @@
 
 .engineSwitch { display:inline-flex; border:1px solid var(--canvas-line); border-radius:var(--radius-full); padding:2px; gap:2px; background:var(--canvas-panel); }
 .engineSwitch button { border:0; background:transparent; color:var(--canvas-muted); font:600 var(--font-size-small) var(--font-sans); padding:6px 12px; border-radius:var(--radius-full); min-height:32px; cursor:pointer; }
-.engineSwitch button[aria-pressed="true"] { background:var(--canvas-brain-accent); color:var(--text-on-accent); }
+.engineSwitch button[aria-pressed="true"] { background:var(--bf-accent); color:var(--text-on-accent); }
 .engineSwitch button:disabled { opacity:.5; cursor:not-allowed; }
 
 .actions { display:flex; flex-wrap:wrap; gap:8px; }
 .primary,.secondary { min-height:36px; padding:8px 14px; border-radius:var(--radius-md); font:600 var(--font-size-small) var(--font-sans); cursor:pointer; }
-.primary { border:1px solid var(--canvas-brain-accent); background:var(--canvas-brain-accent); color:var(--text-on-accent); }
+.primary { border:1px solid var(--bf-accent); background:var(--bf-accent); color:var(--text-on-accent); }
 .secondary { border:1px solid var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-ink); }
 .primary:disabled,.secondary:disabled { opacity:.5; cursor:not-allowed; }
 .linkButton { border:0; background:transparent; color:var(--canvas-muted); font:600 var(--font-size-small) var(--font-sans); text-decoration:underline; cursor:pointer; padding:6px 0; min-height:32px; }
@@ -35,7 +35,7 @@
 .shotRow { display:flex; align-items:flex-end; justify-content:space-between; gap:8px; flex-wrap:wrap; }
 .field { display:flex; flex-direction:column; gap:4px; color:var(--canvas-muted); font:650 var(--font-size-field-label) var(--font-sans); letter-spacing:.04em; text-transform:uppercase; min-width:0; }
 .field textarea,.field select { font:400 var(--font-size-small) var(--font-sans); text-transform:none; letter-spacing:0; color:var(--canvas-ink); background:var(--canvas-board-background); border:1px solid var(--canvas-line); border-radius:var(--radius-sm); padding:6px 8px; min-height:32px; width:100%; box-sizing:border-box; resize:vertical; }
-.field textarea:focus,.field select:focus { border-color:var(--canvas-brain-accent); outline:none; }
+.field textarea:focus,.field select:focus { border-color:var(--bf-accent); outline:none; }
 .shotError { margin:0; color:var(--error-text); font-size:var(--font-size-small); }
 
 @media (max-width: 640px) {

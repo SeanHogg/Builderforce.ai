@@ -36,6 +36,7 @@ import { webviewLocalModelStore } from '../pageEngines';
 import { post, request, type InitData } from '../vscodeBridge';
 import { makeT, personaModalityOptions, personaPickerLabels, recipientPickerLabels } from './chatLabels';
 import { brainComposerLabels } from './composerLabels';
+import { editorStarters } from './editorStarters';
 import { steerRun } from './chatChildren';
 import type { useComposerModels } from './useComposerModels';
 import type { useRunShaping } from './useRunShaping';
@@ -83,6 +84,8 @@ export interface VsCodeComposerProps {
   servedModel: string | null | undefined;
   autoMode: { enabled: boolean; onChange: (on: boolean) => void };
   session?: ComposerOptions['session'];
+  /** Offer the fixed next steps as chips — off while the empty state shows them as tiles. */
+  suggest?: boolean;
 }
 
 export function VsCodeComposer(props: VsCodeComposerProps) {
@@ -90,7 +93,7 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
     init, apiReq, conv, value, onChange, onSubmit, focusToken, chatId, projectId, ensureChatId,
     ticketAdapter, ticketRefresh, onTicketLinked, participants, mentionable, hasLiveChildren,
     recipient, chooseRecipient, persona, onPersona, personaAgents, queue, onRemoveQueued,
-    mode, memory, shaping, models, servedModel, autoMode, session,
+    mode, memory, shaping, models, servedModel, autoMode, session, suggest = true,
   } = props;
   const t = makeT(init.labels);
   const labels = useMemo(
@@ -170,15 +173,12 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
 
   return (
     <BrainComposer
-      // Fixed next steps — a chip seeds the box; the person edits and sends it.
-      suggestions={{
+      // Fixed next steps — a chip seeds the box; the person edits and sends it. The same
+      // list the empty state shows as tiles (`editorStarters`), so not both at once.
+      suggestions={suggest ? {
         label: t('app.suggestions', 'Suggested next steps'),
-        items: [
-          { id: 'review', label: t('app.suggestReview', 'Review my changes'), onSelect: () => onChange(t('app.suggestReviewPrompt', 'Review my uncommitted changes and point out anything risky.')) },
-          { id: 'tests', label: t('app.suggestTests', 'Write tests'), onSelect: () => onChange(t('app.suggestTestsPrompt', 'Write tests for the file I have open.')) },
-          { id: 'explain', label: t('app.suggestExplain', 'Explain this file'), onSelect: () => onChange(t('app.suggestExplainPrompt', 'Explain how the file I have open works.')) },
-        ],
-      }}
+        items: editorStarters(t).map((s) => ({ id: s.id, label: s.label, onSelect: () => onChange(s.prompt) })),
+      } : undefined}
       className="bf-composer"
       value={value}
       onChange={onChange}

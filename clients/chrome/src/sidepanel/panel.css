@@ -1,74 +1,61 @@
 /*
- * Rovr's side panel. Every colour is a token on :root, redefined for dark mode — the
- * panel follows the browser's colour scheme. The shared transcript (`brain-ui`) reads
- * `--bf-*`, mapped here onto the same tokens, so it matches the panel in both themes.
+ * Rovr's side panel. Every colour is a brain-ui `--bf-*` token on :root, redefined for
+ * dark mode — the panel follows the browser's colour scheme, and the shared parts
+ * (surface, timeline, composer, history) read the same tokens the panel's own rules do.
  * Works from ~320px wide: everything wraps, nothing scrolls sideways.
  */
 :root {
-  --rovr-bg: #ffffff;
-  --rovr-surface: #f5f7fb;
-  --rovr-surface-2: #eaeef6;
-  --rovr-text: #111827;
-  --rovr-muted: #5b6475;
-  --rovr-border: #d6dbe5;
-  --rovr-accent: #2457d6;
-  --rovr-accent-contrast: #ffffff;
-  --rovr-accent-soft: rgba(36, 87, 214, 0.12);
-  --rovr-ok: #137a3a;
-  --rovr-ok-bg: rgba(19, 122, 58, 0.12);
-  --rovr-warn: #8a5a00;
-  --rovr-warn-bg: rgba(200, 140, 0, 0.16);
-  --rovr-danger: #b42318;
-  --rovr-danger-bg: rgba(180, 35, 24, 0.1);
-  --rovr-focus: #2457d6;
-  --rovr-radius: 8px;
-  --rovr-font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --rovr-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --bf-bg: #ffffff;
+  --bf-surface: #f5f7fb;
+  --bf-surface-2: #eaeef6;
+  --bf-text: #111827;
+  --bf-text-muted: #5b6475;
+  --bf-border: #d6dbe5;
+  --bf-border-strong: #5b6475;
+  --bf-accent: #2457d6;
+  --bf-on-accent: #ffffff;
+  --bf-accent-soft: rgba(36, 87, 214, 0.12);
+  --bf-success: #137a3a;
+  --bf-success-bg: rgba(19, 122, 58, 0.12);
+  --bf-warning: #8a5a00;
+  --bf-warning-bg: rgba(200, 140, 0, 0.16);
+  --bf-error: #b42318;
+  --bf-error-bg: rgba(180, 35, 24, 0.1);
+  --bf-focus: #2457d6;
+  --bf-radius: 8px;
+  --bf-font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --bf-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --bf-text: var(--rovr-text);
-  --bf-text-muted: var(--rovr-muted);
-  --bf-text-secondary: var(--rovr-muted);
-  --bf-surface: var(--rovr-surface);
-  --bf-surface-2: var(--rovr-surface-2);
-  --bf-border: var(--rovr-border);
-  --bf-border-strong: var(--rovr-muted);
-  --bf-accent: var(--rovr-accent);
-  --bf-accent-soft: var(--rovr-accent-soft);
-  --bf-accent-bg: var(--rovr-accent-soft);
-  --bf-accent-border: var(--rovr-accent);
-  --bf-accent-contrast: var(--rovr-accent-contrast);
-  --bf-on-accent: var(--rovr-accent-contrast);
-  --bf-link: var(--rovr-accent);
-  --bf-success: var(--rovr-ok);
-  --bf-success-bg: var(--rovr-ok-bg);
-  --bf-warning: var(--rovr-warn);
-  --bf-warning-bg: var(--rovr-warn-bg);
-  --bf-error: var(--rovr-danger);
-  --bf-error-text: var(--rovr-danger);
-  --bf-error-bg: var(--rovr-danger-bg);
-  --bf-danger: var(--rovr-danger);
-  --bf-font-mono: var(--rovr-mono);
+  /* The contract's other names, for the shared parts that read them. */
+  --bf-text-secondary: var(--bf-text-muted);
+  --bf-accent-bg: var(--bf-accent-soft);
+  --bf-accent-border: var(--bf-accent);
+  --bf-accent-contrast: var(--bf-on-accent);
+  --bf-link: var(--bf-accent);
+  --bf-error-text: var(--bf-error);
+  --bf-danger: var(--bf-error);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --rovr-bg: #0f1420;
-    --rovr-surface: #161d2c;
-    --rovr-surface-2: #1e2738;
-    --rovr-text: #e6e9ef;
-    --rovr-muted: #9aa4b6;
-    --rovr-border: #2c3648;
-    --rovr-accent: #7aa2ff;
-    --rovr-accent-contrast: #0b1020;
-    --rovr-accent-soft: rgba(122, 162, 255, 0.16);
-    --rovr-ok: #5fd08a;
-    --rovr-ok-bg: rgba(95, 208, 138, 0.14);
-    --rovr-warn: #f0c060;
-    --rovr-warn-bg: rgba(240, 192, 96, 0.14);
-    --rovr-danger: #ff8a7a;
-    --rovr-danger-bg: rgba(255, 138, 122, 0.12);
-    --rovr-focus: #7aa2ff;
+    --bf-bg: #0f1420;
+    --bf-surface: #161d2c;
+    --bf-surface-2: #1e2738;
+    --bf-text: #e6e9ef;
+    --bf-text-muted: #9aa4b6;
+    --bf-border: #2c3648;
+    --bf-border-strong: #9aa4b6;
+    --bf-accent: #7aa2ff;
+    --bf-on-accent: #0b1020;
+    --bf-accent-soft: rgba(122, 162, 255, 0.16);
+    --bf-success: #5fd08a;
+    --bf-success-bg: rgba(95, 208, 138, 0.14);
+    --bf-warning: #f0c060;
+    --bf-warning-bg: rgba(240, 192, 96, 0.14);
+    --bf-error: #ff8a7a;
+    --bf-error-bg: rgba(255, 138, 122, 0.12);
+    --bf-focus: #7aa2ff;
     color-scheme: dark;
   }
 }
@@ -87,15 +74,15 @@ body,
 }
 
 body {
-  background: var(--rovr-bg);
-  color: var(--rovr-text);
-  font: 14px/1.45 var(--rovr-font);
+  background: var(--bf-bg);
+  color: var(--bf-text);
+  font: 14px/1.45 var(--bf-font);
   min-width: 300px;
   overflow-x: hidden;
 }
 
 :focus-visible {
-  outline: 2px solid var(--rovr-focus);
+  outline: 2px solid var(--bf-focus);
   outline-offset: 2px;
 }
 
@@ -134,11 +121,31 @@ body {
   padding: 10px 12px;
 }
 
-.rovr-chat {
-  display: flex;
-  flex-direction: column;
+/* THE shared AI surface, as a card inside the view. Kept mounted under the history. */
+.rovr-chat-host {
   height: 100%;
-  gap: 8px;
+}
+
+.rovr-chat-host[hidden] {
+  display: none;
+}
+
+.rovr-chat,
+.rovr-history {
+  height: 100%;
+  border: 1px solid var(--bf-border);
+  border-radius: var(--bf-radius);
+  background: var(--bf-surface);
+}
+
+/* The history scrolls inside its card; the chat card does not clip (the composer's menus). */
+.rovr-history {
+  overflow-y: auto;
+}
+
+/* The site chip in the composer's tool row: the host ellipsizes in a narrow panel. */
+.rovr-site {
+  max-width: min(180px, 45vw);
 }
 
 /* The shared info strip (tickets, spend): never more than a third of a short panel. */
@@ -157,15 +164,6 @@ body {
   max-width: 100%;
 }
 
-.rovr-chat__transcript {
-  flex: 1;
-  min-height: 120px;
-  overflow: hidden;
-  border: 1px solid var(--rovr-border);
-  border-radius: var(--rovr-radius);
-  background: var(--rovr-surface);
-}
-
 .rovr-row {
   display: flex;
   flex-wrap: wrap;
@@ -175,10 +173,6 @@ body {
 
 .rovr-row--spread {
   justify-content: space-between;
-}
-
-.rovr-chat__bar .rovr-select {
-  flex: 1 1 140px;
 }
 
 .rovr-stack {
@@ -192,16 +186,16 @@ body {
   width: 100%;
   min-width: 0;
   padding: 7px 9px;
-  border: 1px solid var(--rovr-border);
-  border-radius: var(--rovr-radius);
-  background: var(--rovr-bg);
-  color: var(--rovr-text);
+  border: 1px solid var(--bf-border);
+  border-radius: var(--bf-radius);
+  background: var(--bf-bg);
+  color: var(--bf-text);
   font: inherit;
 }
 
 .rovr-select option {
-  background: var(--rovr-bg);
-  color: var(--rovr-text);
+  background: var(--bf-bg);
+  color: var(--bf-text);
 }
 
 .rovr-row > .rovr-input {
@@ -211,10 +205,10 @@ body {
 
 .rovr-btn {
   padding: 6px 12px;
-  border: 1px solid var(--rovr-border);
-  border-radius: var(--rovr-radius);
-  background: var(--rovr-surface);
-  color: var(--rovr-text);
+  border: 1px solid var(--bf-border);
+  border-radius: var(--bf-radius);
+  background: var(--bf-surface);
+  color: var(--bf-text);
   font: inherit;
   cursor: pointer;
   white-space: nowrap;
@@ -226,9 +220,9 @@ body {
 }
 
 .rovr-btn--primary {
-  background: var(--rovr-accent);
-  border-color: var(--rovr-accent);
-  color: var(--rovr-accent-contrast);
+  background: var(--bf-accent);
+  border-color: var(--bf-accent);
+  color: var(--bf-on-accent);
 }
 
 .rovr-btn--link {
@@ -236,7 +230,7 @@ body {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--rovr-accent);
+  color: var(--bf-accent);
 }
 
 .rovr-chip {
@@ -244,35 +238,35 @@ body {
   padding: 1px 8px;
   border-radius: 999px;
   font-size: 0.75rem;
-  background: var(--rovr-surface-2);
-  color: var(--rovr-muted);
+  background: var(--bf-surface-2);
+  color: var(--bf-text-muted);
 }
 
 .rovr-chip--ok {
-  background: var(--rovr-ok-bg);
-  color: var(--rovr-ok);
+  background: var(--bf-success-bg);
+  color: var(--bf-success);
 }
 
 .rovr-chip--pending {
-  background: var(--rovr-warn-bg);
-  color: var(--rovr-warn);
+  background: var(--bf-warning-bg);
+  color: var(--bf-warning);
 }
 
 .rovr-chip--off {
-  background: var(--rovr-danger-bg);
-  color: var(--rovr-danger);
+  background: var(--bf-error-bg);
+  color: var(--bf-error);
 }
 
 .rovr-chip--local {
-  background: var(--rovr-accent-soft);
-  color: var(--rovr-accent);
+  background: var(--bf-accent-soft);
+  color: var(--bf-accent);
 }
 
 .rovr-chat__error {
   padding: 10px;
-  border-radius: var(--rovr-radius);
-  border: 1px solid var(--rovr-danger);
-  background: var(--rovr-danger-bg);
+  border-radius: var(--bf-radius);
+  border: 1px solid var(--bf-error);
+  background: var(--bf-error-bg);
 }
 
 .rovr-confirm__target {
@@ -296,13 +290,13 @@ body {
 
 .rovr-card {
   padding: 10px;
-  border: 1px solid var(--rovr-border);
-  border-radius: var(--rovr-radius);
-  background: var(--rovr-surface);
+  border: 1px solid var(--bf-border);
+  border-radius: var(--bf-radius);
+  background: var(--bf-surface);
 }
 
 .rovr-card--failed {
-  border-color: var(--rovr-danger);
+  border-color: var(--bf-error);
 }
 
 .rovr-card--declined {
@@ -322,7 +316,7 @@ body {
 
 .rovr-muted {
   margin: 2px 0 0;
-  color: var(--rovr-muted);
+  color: var(--bf-text-muted);
   font-size: 0.85rem;
   overflow-wrap: anywhere;
 }
@@ -335,13 +329,13 @@ body {
 
 .rovr-empty {
   margin: 12px 0;
-  color: var(--rovr-muted);
+  color: var(--bf-text-muted);
   text-align: center;
 }
 
 .rovr-error {
   margin: 0;
-  color: var(--rovr-danger);
+  color: var(--bf-error);
 }
 
 .rovr-h2 {
@@ -372,12 +366,12 @@ body {
   display: block;
   max-width: 100%;
   margin-top: 6px;
-  border: 1px solid var(--rovr-border);
-  border-radius: var(--rovr-radius);
+  border: 1px solid var(--bf-border);
+  border-radius: var(--bf-radius);
 }
 
 code {
-  font-family: var(--rovr-mono);
+  font-family: var(--bf-font-mono);
   overflow-wrap: anywhere;
 }
 

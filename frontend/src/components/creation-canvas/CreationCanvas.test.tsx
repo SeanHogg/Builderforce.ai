@@ -1136,12 +1136,13 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     expect(screen.queryByTestId('canvas-composer')).not.toBeInTheDocument();
 
     // Chat becomes the surface: there is no Brain dock left to join and no board behind
-    // it to hand the composer back to, so it must reappear centred and stay open even
-    // though the stored preference is still `closed`.
+    // it to hand the composer back to, so it must reappear and stay open even though the
+    // stored preference is still `closed` — docked in the Chat lens's own footer, the
+    // place every AI surface keeps its composer (nothing floats over a chat).
     fireEvent.click(chatSurfaceTab());
     const composer = screen.getByTestId('canvas-composer');
     expect(composer).toBeInTheDocument();
-    expect(composer).toHaveAttribute('data-placement', 'float');
+    expect(composer).toHaveAttribute('data-placement', 'docked');
     expect(screen.getByLabelText('Ask Brain about this canvas')).toBeInTheDocument();
     // Neither control makes sense once chat IS the surface: there is nothing to dock
     // into and no board to hand the composer's space back to.
@@ -1240,13 +1241,10 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     // Object stops being a second reading of it. It keeps Brain's place in the graph
     // and its state — nothing else. The regression is a board card repeating the same
     // exchange the dock is already showing a few hundred pixels away.
-    // The mark is the house icon language, not a literal glyph: `Icon` maps
-    // every legacy emoji onto an SVG so the same mark renders identically on
-    // every OS. This asserted `textContent === '✦'`, which that migration made
-    // permanently `''` — so the test was measuring the absence of a character
-    // rather than the presence of the mark.
+    // The mark is THE shared Brain mark (brain-ui `BrainMark`) every AI surface wears —
+    // an SVG glyph, so it renders identically on every OS and carries no text.
     const marker = screen.getByRole('button', { name: 'Open Brain chat' });
-    expect(marker.querySelector('svg.ui-icon')).not.toBeNull();
+    expect(marker.querySelector('.bf-mark svg')).not.toBeNull();
     expect(marker.textContent).toBe('');
     expect(marker).toHaveAttribute('data-state', 'idle');
 

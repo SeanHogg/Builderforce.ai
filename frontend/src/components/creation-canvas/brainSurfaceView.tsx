@@ -1,4 +1,4 @@
-// No 'use client' directive: imported only from `BrainDock`, `BrainSurfaceActions`,
+// No 'use client' directive: imported only from `BrainDock`, `BrainSurface`, `BrainSurfaceActions`,
 // `CanvasChatSurface` and `BrainObjectBody`, all inside the canvas's client boundary.
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 

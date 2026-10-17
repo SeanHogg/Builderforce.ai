@@ -818,5 +818,15 @@
   "Portfolio": "Portafolio",
   "Spec": "Especificación",
   "Retrospective": "Retrospectiva",
-  "Planning poker": "Planning poker"
+  "Planning poker": "Planning poker",
+  "Chat history": "Historial de chats",
+  "Back to the chat": "Volver al chat",
+  "No chats yet": "Aún no hay chats",
+  "Chat actions": "Acciones del chat",
+  "Actions for {title}": "Acciones para {title}",
+  "Needs an answer": "Necesita una respuesta",
+  "Summarize": "Resumir",
+  "What are we working on?": "¿En qué estamos trabajando?",
+  "Ask about this workspace, or start from one of these.": "Pregunta sobre este espacio de trabajo o empieza con una de estas opciones.",
+  "Start with": "Empieza con"
 }

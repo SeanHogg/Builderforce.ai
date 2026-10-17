@@ -88,7 +88,7 @@ export function SiteReleasePanel({ projectId, onBuild }: SiteReleasePanelProps) 
   if (!releases.length) return null;
 
   return (
-    <div style={{ borderTop: '1px solid var(--chat-input-border)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ borderTop: '1px solid var(--bf-border)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div>
         <div style={{ fontWeight: 600, fontSize: 'var(--font-size-body)' }}><Icon source="↩️" size="1em" /> {t('releases.title')}</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', marginTop: 2 }}>{t('releases.description')}</div>

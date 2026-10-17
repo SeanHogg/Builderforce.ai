@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { Edge } from '@xyflow/react';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
-import type { BrainSurfaceBodyProps } from '../BrainDock';
+import type { BrainSurfaceBodyProps } from '../BrainSurface';
 import type { CreationFlowNode } from '../CreationNode';
 import type { BrainDockPreferences } from '../brainDockPreferences';
 import type { useCanvasBrainSurface } from '../hooks/useCanvasBrainSurface';
@@ -9,9 +9,9 @@ import type { useCanvasBrainSurface } from '../hooks/useCanvasBrainSurface';
 type BrainSurface = ReturnType<typeof useCanvasBrainSurface>;
 
 /** The live conversation as BOTH of its full-size placements take it. */
-export type BrainConversationProps = BrainSurfaceBodyProps & { onExecutionDetailChange: (show: boolean) => void };
+export type CanvasConversationProps = BrainSurfaceBodyProps & { onExecutionDetailChange: (show: boolean) => void };
 
-export interface BrainConversationInput {
+export interface CanvasConversationInput {
   brain: Pick<BrainSurface, 'brainMessages' | 'brainReveal' | 'brainRunning' | 'brainRunShownStartedAt' | 'brainNode' | 'brainCollaborators' | 'replayBrainMessage' | 'answerBrainQuestion' | 'brainSurface' | 'guestSignupPrompt'>;
   showExecutionDetail: boolean;
   updateBrainDock: (patch: Partial<BrainDockPreferences>) => void;
@@ -27,7 +27,7 @@ export interface BrainConversationInput {
  * the transcript learns something new. They are one memoized bundle now, spread into
  * both, so they cannot drift into two subtly different chats.
  */
-export function useBrainConversation({ brain, showExecutionDetail, updateBrainDock, trace, nodes, edges, joinedCollaborator }: BrainConversationInput): BrainConversationProps {
+export function useCanvasConversationProps({ brain, showExecutionDetail, updateBrainDock, trace, nodes, edges, joinedCollaborator }: CanvasConversationInput): CanvasConversationProps {
   const { brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, brainSurface, guestSignupPrompt } = brain;
   return useMemo(() => ({
     showExecutionDetail,
@@ -37,6 +37,7 @@ export function useBrainConversation({ brain, showExecutionDetail, updateBrainDo
     trace,
     running: brainRunning,
     runStartedAt: brainRunShownStartedAt,
+    runKey: brainSurface.runKey,
     node: brainNode,
     nodes,
     edges,
@@ -47,5 +48,5 @@ export function useBrainConversation({ brain, showExecutionDetail, updateBrainDo
     onRateMessage: brainSurface.onRateMessage,
     ratings: brainSurface.ratings,
     guestSignup: guestSignupPrompt,
-  }), [brainCollaborators, brainMessages, brainNode, brainReveal, brainRunShownStartedAt, brainRunning, brainSurface.onRateMessage, brainSurface.ratings, edges, guestSignupPrompt, joinedCollaborator, nodes, replayBrainMessage, answerBrainQuestion, showExecutionDetail, trace, updateBrainDock]);
+  }), [brainCollaborators, brainMessages, brainNode, brainReveal, brainRunShownStartedAt, brainRunning, brainSurface.onRateMessage, brainSurface.ratings, brainSurface.runKey, edges, guestSignupPrompt, joinedCollaborator, nodes, replayBrainMessage, answerBrainQuestion, showExecutionDetail, trace, updateBrainDock]);
 }

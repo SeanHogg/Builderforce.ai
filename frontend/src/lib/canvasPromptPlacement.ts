@@ -71,8 +71,9 @@ export function toggledCanvasPromptPlacement(current: CanvasPromptPlacement): Ca
 /**
  * WHERE THE ONE COMPOSER GOES, after the host, the surface and the lens have had their say.
  *
- * When Brain IS the surface (chat) there is no dock to join and no board to hand the
- * space back to, so it stays floating and open whatever the stored preference says.
+ * When Brain IS the surface (chat) there is no board for it to float over: the surface
+ * is the Brain panel, so the prompt is DOCKED as its footer and open whatever the stored
+ * preference says (`CanvasChatSurface`).
  * `docked` renders it INSIDE the Brain panel's column, so it only holds while that panel
  * is on screen — otherwise the preference is untouched and the prompt floats until the
  * panel comes back.
@@ -100,7 +101,7 @@ export function effectiveCanvasPromptPlacement({ hostOwnsSurface, brainIsSurface
   lensPlacement?: CanvasPromptPlacement | null;
 }): CanvasPromptPlacement {
   if (hostOwnsSurface) return 'closed';
-  if (brainIsSurface) return 'float';
+  if (brainIsSurface) return 'docked';
   if (lensPlacement && brainDockDrawn) return lensPlacement;
   return preference === 'docked' && !brainDockDrawn ? 'float' : preference;
 }

@@ -32,6 +32,8 @@
   --bf-warning: var(--vscode-charts-yellow, #b7791f);
   --bf-warning-bg: color-mix(in srgb, var(--vscode-charts-yellow, #b7791f) 14%, transparent);
   --bf-font-mono: var(--vscode-editor-font-family, ui-monospace, monospace);
+  /* The shared composer's field (the box you type in). */
+  --bf-field: var(--vscode-input-background, var(--bf-surface));
 }
 
 html,
@@ -103,11 +105,42 @@ body {
   box-sizing: border-box;
 }
 
+/* The chat surface's root — the shared <AiSurface> (`.bf-surface`, which owns the column
+   layout) with the editor's ground: the side bar's own colour, not the widget fill the
+   shared sheet paints, so the panel reads as part of the editor. */
 .bf-app {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
+}
+.bf-app.bf-surface,
+.bf-app .bf-surface__footer {
+  background: transparent;
+}
+/* The banners and the strips above the composer sit in the shared slots, which own the
+   spacing — their standalone margins would double it. */
+.bf-app .bf-surface__notices > .bf-error,
+.bf-app .bf-surface__notices > .bf-notice,
+.bf-app .bf-surface__footer > .bf-subagents,
+.bf-app .bf-surface__footer > .bf-composer {
+  margin: 0;
+}
+/* The open chat's title in the header — the part that shrinks. */
+.bf-chat-context {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--bf-text-muted);
+}
+/* A history row's marker: a run in flight, or a question waiting on you. */
+.bf-run-marker--running {
+  color: var(--bf-accent);
+}
+.bf-run-marker--awaiting {
+  color: var(--bf-warning);
 }
 
 /**
@@ -135,43 +168,15 @@ body {
   background: var(--canvas-board-background, var(--vscode-sideBar-background, var(--vscode-editor-background)));
 }
 
-.bf-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.bf-select {
-  max-width: 45%;
-  font-size: 12px;
-  padding: 3px 6px;
-  border-radius: 5px;
-  border: 1px solid var(--bf-border);
-  background: var(--vscode-dropdown-background, var(--bf-surface));
-  color: var(--vscode-dropdown-foreground, var(--bf-text));
-}
-
 /* Native <option> rows are painted by the OS/webview and do NOT inherit the
    <select>'s background — they only pick up `color`, so a themed select ends up
    drawing light text on a default light popup (unreadable). Every option needs
    its OWN opaque bg/fg pair; the Canvas/CanvasText system colors are the
    guaranteed-legible fallback and follow the OS light/dark setting. Applies to
-   every native select in the webview, not just .bf-select. */
+   every native select in the webview. */
 select option {
   background: var(--vscode-dropdown-background, Canvas);
   color: var(--vscode-dropdown-foreground, CanvasText);
-}
-
-/* Inline chat-title editor — same footprint as the select it replaces, but the
-   editor's input tokens + a focus ring so it reads as an editable field. */
-.bf-rename-input {
-  background: var(--vscode-input-background, var(--bf-surface));
-  color: var(--vscode-input-foreground, var(--bf-text));
-  outline: none;
-}
-.bf-rename-input:focus {
-  border-color: var(--vscode-focusBorder, var(--bf-border));
 }
 
 .bf-btn {
@@ -192,11 +197,6 @@ select option {
 .bf-btn:disabled {
   opacity: 0.5;
   cursor: default;
-}
-
-.bf-btn--icon {
-  padding: 4px 7px;
-  line-height: 1;
 }
 
 .bf-btn--primary {
@@ -232,20 +232,6 @@ select option {
   border-color: var(--bf-warning);
 }
 
-.bf-error__msg {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  align-self: center;
-}
-
-.bf-error__actions {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
 /* The composer is the shared PromptPanel: one filled box, lit by the accent ring while
    you type. Only the editor's fill, hairline (the theme's input border, which most dark
    themes leave transparent) and accent are set here. */
@@ -258,14 +244,15 @@ select option {
   --prompt-panel-active-ring: 0 0 0 1px var(--bf-accent);
   --prompt-panel-radius: 16px;
   --prompt-panel-pad-x: 12px;
-  --chat-ctl-size: 30px;
+  --bf-ctl-size: 30px;
   /* The editor's chips carry their own padding, so they need a wider gap than the
      shell's 6px default. Set here because the shared PromptPanel owns the row. */
   --prompt-panel-action-gap: 6px;
-  /* Send is the editor's primary button; the typed text is the input's foreground. */
-  --chat-input-send-bg: var(--vscode-button-background);
-  --chat-input-send-icon: var(--vscode-button-foreground);
-  --chat-input-text: var(--vscode-input-foreground);
+  /* Send is the editor's primary button; the typed text is the input's foreground. The
+     shared composer reads the --bf-* layer, so the box re-points it for itself. */
+  --bf-accent: var(--vscode-button-background, #4f80ff);
+  --bf-on-accent: var(--vscode-button-foreground, #fff);
+  --bf-text: var(--vscode-input-foreground, var(--vscode-foreground));
 }
 
 /* The chat's live sub-agents: one row each, owner and name named, levers on the right.

@@ -18,6 +18,7 @@ export {
   useBrainContext,
   useOptionalBrainContext,
   useBrainChats,
+  useArmedNewChat,
   useBrainConversation,
   savePendingPrompt,
   takePendingPrompt,

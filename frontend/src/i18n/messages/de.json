@@ -11640,7 +11640,7 @@
       },
       "builderforce-webcontainers-open-source": {
         "title": "BuilderForce WebContainers ist Open Source — die Entwicklungs-Runtime im Browser, die Sie forken können",
-        "description": "Die Runtime hinter jeder Canvas-Vorschau, jedem Veröffentlichen und jedem Prüfen auf Builderforce steht jetzt unter MIT auf GitHub und npm. Sie zeigt Vite-, React-, Vue- und Svelte-Apps in der Vorschau, baut sie und prüft ihre Typen, und sie führt Node, npm und eine Shell im Tab aus, ohne COOP/COEP-Header und ohne Session-Limits."
+        "description": "Die Runtime hinter jeder Canvas-Vorschau, jedem Veröffentlichen und jedem Prüfen auf Builderforce steht jetzt unter MIT auf GitHub und npm. Sie zeigt Vite-, React-, Vue- und Svelte-Apps in der Vorschau, baut sie und prüft ihre Typen, und sie führt Node, npm und eine Shell im Tab aus, ohne COOP/COEP-Header vorauszusetzen und ohne Session-Limits."
       },
       "open-source-at-builderforce": {
         "title": "Open Source bei Builderforce — vier Projekte, die Sie ausführen, lesen und forken können",
@@ -26592,9 +26592,6 @@
     "noticeStandupMinutesNeedsAccount": "Melde dich an, um das Protokoll eines Stand-ups zu lesen",
     "noticeStandupMinutesFailed": "Das Stand-up-Protokoll konnte nicht gelesen werden",
     "exportUnmaskedColumns": "Export abgelehnt: {columns} enthalten unmaskierte personenbezogene Daten. Maskieren Sie sie zuerst auf der Karte.",
-    "approveAgentActionTitle": "Agentenaktion genehmigen",
-    "approveAgentActionBody": "Ein Sitzungsagent möchte {action} ausführen.",
-    "approveAgentActionConfirm": "Genehmigen",
     "inviteLinkHeading": "Per Link einladen",
     "inviteLinkHint": "Wer den Link hat, kann diese Canvas öffnen – auch ohne ein Konto anzulegen.",
     "inviteLinkRole": "Zugriff, den dieser Link gewährt",

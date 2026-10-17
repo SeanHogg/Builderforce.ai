@@ -325,7 +325,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
             onClick={() => togglePanel(ext.key)}
             style={S.pill(panel === ext.key)}
           >
-            {ext.icon ? `${ext.icon} ` : ''}{ext.label}{ext.count ? ` (${ext.count})` : ''}
+            {ext.icon ? <span aria-hidden style={{ display: 'inline-flex', verticalAlign: '-2px', marginRight: 4 }}>{ext.icon}</span> : null}
+            {ext.label}{ext.count ? ` (${ext.count})` : ''}
           </button>
         ))}
         {msg && <span style={{ fontSize: 12, color: V.accent, alignSelf: 'center' }}>{msg}</span>}

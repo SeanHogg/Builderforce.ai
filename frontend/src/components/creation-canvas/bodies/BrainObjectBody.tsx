@@ -4,7 +4,7 @@ import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { CreationNodeData } from '../types';
 import styles from '../CreationCanvas.module.css';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from '../BrainActivityView';
-import { BrainSurfaceBody } from '../BrainDock';
+import { BrainSurface } from '../BrainSurface';
 import { BrainSurfaceActions } from '../BrainSurfaceActions';
 import { BrainSurfaceViewProvider } from '../brainSurfaceView';
 import { useBrainSurface } from '../brainSurfaceContext';
@@ -86,21 +86,22 @@ export function BrainObjectBody({ id: nodeId, data }: CreationBodyProps) {
       aria-label={t('brainDock')}
       onClick={(event) => event.stopPropagation()}
     >
-      <div className={styles.brainObjectChatBar}>
-        <BrainSurfaceActions
-          mode={surface.mode}
-          showExecutionDetail={surface.showExecutionDetail}
-          onModeChange={surface.onModeChange}
-          onExecutionDetailChange={surface.onExecutionDetailChange}
-          onClose={surface.onClose}
-        />
-      </div>
-      <BrainSurfaceBody
+      <BrainSurface
+        header={<div className={styles.brainObjectChatBar}>
+          <BrainSurfaceActions
+            mode={surface.mode}
+            showExecutionDetail={surface.showExecutionDetail}
+            onModeChange={surface.onModeChange}
+            onExecutionDetailChange={surface.onExecutionDetailChange}
+            onClose={surface.onClose}
+          />
+        </div>}
         showExecutionDetail={surface.showExecutionDetail}
         messages={surface.messages}
         trace={surface.trace}
         running={surface.running}
         runStartedAt={surface.runStartedAt}
+        runKey={surface.runKey}
         node={surface.nodes.find((candidate) => candidate.id === nodeId) ?? null}
         nodes={surface.nodes}
         edges={surface.edges}

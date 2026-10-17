@@ -38,7 +38,7 @@ import { priorResearchDigest } from './priorResearch';
 import { withDirectedMetadata, isDirectedToParticipant, directedAgentRecipients, type DirectedRecipient, type DirectedGroup } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
 import type { BrainRunActivity } from './runActivity';
-import { ratedTurnContext } from './turnRating';
+import { ratedTurnContext, withRating } from './turnRating';
 import type { ChatErrorAction } from './chatError';
 import type { ChatMode, ChatRosterAgent } from './chatMode';
 import {
@@ -580,12 +580,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
   const rateMessage = useCallback(async (msg: BrainMessage, rating: 1 | -1 | 0) => {
     // Optimistic: the thumb reacts immediately; a failed write only loses telemetry.
-    setRatings((prev) => {
-      const copy = { ...prev };
-      if (rating === 0) delete copy[msg.id];
-      else copy[msg.id] = rating;
-      return copy;
-    });
+    setRatings((prev) => withRating(prev, msg.id, rating));
     // Derived from the transcript, not from the composer's current state: the model
     // is whatever the gateway actually resolved for THIS reply (after any failover),
     // and the tool is the one the turn executed.

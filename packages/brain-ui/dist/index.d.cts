@@ -1,7 +1,7 @@
 import * as react from 'react';
 import react__default, { ReactNode, HTMLAttributes } from 'react';
-import { BrainRunActivity, BrainMessage, BrainTraceEvent, ChatActivityLabels, ModelIdentityContext, AskUserPayload, ChatErrorAction, LocalModelRow as LocalModelRow$1, ModelChoiceLabels, ChatModelSelection, ChatModelOptions, LocalModelStore, Effort, DirectedRecipient, RecipientChoice, BrainPersonaChoice, BrainPersonaAgent, SavingsSourceKey, SpendSavingsSummary, ChatTicket, ChatDiagnosticsSources, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment, ChatDiagnosticsPlanSnapshot, ChatMode } from '@seanhogg/builderforce-brain-embedded';
-export { AskUserOption, AskUserPayload, BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, PendingAskUser, RoutedProduct, activeModelKey, askUserAnchorId, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, isManagerRole, modelCategoryLabel, modelInUse, parseAskUser, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId, selectPendingAskUser, serializeAskUser, stripAskUser } from '@seanhogg/builderforce-brain-embedded';
+import { BrainRunActivity, ChatActivityLabels, BrainMessage, BrainTraceEvent, ModelIdentityContext, AskUserPayload, ChatErrorAction, LocalModelRow as LocalModelRow$1, ModelChoiceLabels, ChatModelSelection, ChatModelOptions, LocalModelStore, Effort, DirectedRecipient, RecipientChoice, BrainPersonaChoice, BrainPersonaAgent, SavingsSourceKey, SpendSavingsSummary, ChatTicket, ChatDiagnosticsSources, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment, ChatDiagnosticsPlanSnapshot, ChatMode } from '@seanhogg/builderforce-brain-embedded';
+export { AskUserMessageLike, AskUserOption, AskUserPayload, BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, PendingAskUser, RoutedProduct, activeModelKey, askUserAnchorId, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, isManagerRole, modelCategoryLabel, modelInUse, parseAskUser, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId, selectPendingAskUser, serializeAskUser, stripAskUser } from '@seanhogg/builderforce-brain-embedded';
 
 /**
  * THE clipboard button of this package.
@@ -289,8 +289,10 @@ interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
     activity: ChatActivityLabels;
 }
 declare const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels;
+
 /** +1 up, -1 down, 0 = cleared. Mirrors the `llm_action_ratings.rating` domain. */
 type MessageRating = 1 | -1 | 0;
+
 interface BrainTimelineProps {
     messages: BrainMessage[];
     trace: BrainTraceEvent[];
@@ -630,8 +632,14 @@ interface ChatErrorBannerProps {
     style?: react__default.CSSProperties;
     /** Class on the banner container — the VS Code webview styles via its own CSS. */
     className?: string;
+    /**
+     * `alert` (default) for a failed turn. `status` for a passive notice the run still
+     * finished through — a connected account it could not use, a provider key at its cap —
+     * which a screen reader should announce politely rather than interrupt with.
+     */
+    role?: 'alert' | 'status';
 }
-declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, onSignIn, labels: labelOverrides, style, className, }: ChatErrorBannerProps): react__default.JSX.Element | null;
+declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, onSignIn, labels: labelOverrides, style, className, role, }: ChatErrorBannerProps): react__default.JSX.Element | null;
 
 /**
  * The human-in-the-loop approval — ONE bar for every surface that pauses a run on a
@@ -814,6 +822,209 @@ interface SurfaceTabsProps {
 declare function SurfaceTabs({ tabs, activeId, onSelect, label, idPrefix, className, panelClassName }: SurfaceTabsProps): react.JSX.Element;
 
 /**
+ * <AiSurface> — the ONE body every AI modality mounts (the web Brain panel and Studio
+ * column, the canvas Chat lens and board dock, the guest drawer, the VS Code panel, the
+ * Rovr side panel). Extracted from the web panel's conversation column
+ * (`BrainConversation`), whose order is the design's anatomy:
+ *
+ *   header · rail · thread (or the empty state) · notices · footer
+ *
+ * It owns ORDER and the column's flex contract, nothing else — each slot is the shared
+ * part (`SurfaceHeader`, `ChatTicketsPanel`, `BrainTimeline` / `SurfaceEmptyState`,
+ * `ChatErrorBanner`, `SurfaceFooter`) bound by its host. Notices sit between the thread
+ * and the footer, so what went wrong reads next to the box you answer it from, on every
+ * host instead of above the thread on some and below it on others.
+ */
+interface AiSurfaceProps {
+    header?: ReactNode;
+    /** The conversation's rail (linked tickets, spend) — hosts pass it once a chat exists. */
+    rail?: ReactNode;
+    /** The transcript (`BrainTimeline`). Ignored while `empty` is given. */
+    thread?: ReactNode;
+    /** Before the first message (`SurfaceEmptyState`); given ⇒ shown instead of the thread. */
+    empty?: ReactNode;
+    /** Banners about the run — the error card, allowance, provider fallbacks. */
+    notices?: ReactNode;
+    /** The pinned footer (`SurfaceFooter`): approval, open question, composer. */
+    footer?: ReactNode;
+    /** Host placement / palette mapping. */
+    className?: string;
+    /** Accessible name for the region (localized by the host). */
+    label?: string;
+    /** Extra attributes a host keys on (test ids, session-replay masking) — as `SurfaceFooter`. */
+    dataAttrs?: Record<`data-${string}`, string>;
+}
+declare function AiSurface({ header, rail, thread, empty, notices, footer, className, label, dataAttrs }: AiSurfaceProps): react.JSX.Element;
+
+/**
+ * <SurfaceFooter> — the pinned bottom of every AI surface, extracted from the web
+ * panel's `BrainComposerArea`: the tool approval, the open ask-user question, the
+ * composer, then a one-line status (uploading…) and a footnote (the AI disclosure).
+ *
+ * Pinned in BOTH states of a surface (empty and in-thread), so the input never jumps
+ * when the first message turns the empty state into a conversation.
+ */
+interface SurfaceFooterProps {
+    /** A pending tool approval (`ToolConfirmBar`). */
+    confirm?: ReactNode;
+    /** The open ask-user question (`PendingQuestionBanner`). */
+    question?: ReactNode;
+    /** Live sub-agents and similar strips that belong with the run, above the box. */
+    above?: ReactNode;
+    /** The composer (`BrainComposer` through the host's adapter). */
+    composer: ReactNode;
+    /** A transient one-liner under the box (uploading…). */
+    status?: ReactNode;
+    /** A quiet note under everything (the AI disclosure). */
+    footnote?: ReactNode;
+    className?: string;
+    /** Extra attributes a host keys on (session-replay masking, test ids). */
+    dataAttrs?: Record<`data-${string}`, string>;
+}
+declare function SurfaceFooter({ confirm, question, above, composer, status, footnote, className, dataAttrs }: SurfaceFooterProps): react.JSX.Element;
+
+/**
+ * <SurfaceEmptyState> — an AI conversation before its first message: a greeting, the
+ * host's controls and the starting points. Moved from the web Brain panel
+ * (`BrainEmptyState`) so the editor and Rovr open on the same screen.
+ *
+ * `page` — a centred hero with the composer in the middle (the full Brain page).
+ * `docked` — a side column: a compact greeting and the starters scroll ABOVE a composer
+ * the host pins in its `SurfaceFooter`, in the same place it stays once the chat has
+ * started, so the first message does not make the input jump.
+ *
+ * There is no "Start new chat" button: this IS a new chat, and sending (or picking a
+ * starter) creates it. Mode is chosen in the composer's `/` menu, not a second toggle here.
+ */
+interface SurfaceEmptyStateProps {
+    layout: 'page' | 'docked';
+    /** The greeting line (docked) / the surface's name (page). */
+    title: string;
+    /** One line under it — follows the armed mode. */
+    hint: string;
+    /** Host-owned controls above the starters (the new-chat project picker). */
+    controls?: ReactNode;
+    /** Page layout only — docked hosts render the composer in their pinned footer. */
+    composer?: ReactNode;
+    /** The starting points (`StarterGroup`s of `StarterTile`s). */
+    starters?: ReactNode;
+}
+declare function SurfaceEmptyState({ layout, title, hint, controls, composer, starters }: SurfaceEmptyStateProps): react.JSX.Element;
+
+/**
+ * The empty state's starting points — ONE tile and ONE group shape for every kind of
+ * starter (onboarding, Work-mode jobs, "what are we making?" capabilities, the editor's
+ * and Rovr's fixed starts), so the lists a person scans before the first message read
+ * as one list on every host. Moved from the web Brain panel.
+ *
+ * A tile is a row (icon · label · one-line hint), not a card: in a ~340px docked column
+ * cards showed two options above the fold; rows show the whole set. The grid is
+ * `auto-fill` / `minmax(min(100%, 220px), 1fr)` — one column docked, up to three on a
+ * full page, never overflowing a 360px viewport.
+ */
+declare function StarterGroup({ heading, ariaLabel, children }: {
+    heading: string;
+    ariaLabel?: string;
+    children: ReactNode;
+}): react.JSX.Element;
+interface StarterTileProps {
+    /** The host's icon element (web `Icon`, an inline SVG) — never an emoji. */
+    icon?: ReactNode;
+    label: string;
+    hint: string;
+    onClick: () => void;
+    /** Toggle tiles (a capability) show their armed state. */
+    pressed?: boolean;
+    disabled?: boolean;
+}
+declare function StarterTile({ icon, label, hint, onClick, pressed, disabled }: StarterTileProps): react.JSX.Element;
+
+/**
+ * The ONE chat-history list every AI surface opens from its header's History lever —
+ * moved from the web Brain panel (`BrainChatList` / `BrainChatRow`) so the editor's and
+ * Rovr's native `<select>` pickers become the same rows.
+ *
+ * A row is the title (or its rename input), a meta line the host fills (project tag,
+ * time, attention, unread — `meta`), and its revealed actions: Rename / Summarize /
+ * Delete, each offered only when the host supplies its handler, plus host extras
+ * (`extraActions`, e.g. "Add to project"). Rows reveal actions per-row, not "whatever
+ * is selected": opening a chat leaves the history view, so tying actions to the
+ * selection put them somewhere nobody can see.
+ */
+interface ChatHistoryLabels {
+    loading: string;
+    /** No chats at all. */
+    empty: string;
+    /** Chats exist, but none match the host's filter. */
+    noMatch: string;
+    actions: string;
+    /** "Actions for {title}". */
+    actionsAria: string;
+    rename: string;
+    summarize: string;
+    delete: string;
+}
+declare const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels;
+interface ChatHistoryChat {
+    id: number;
+    title: string;
+    ticketCount?: number | null;
+    ticketProgressPct?: number | null;
+}
+interface ChatHistoryListProps {
+    loading?: boolean;
+    /** How many chats exist before the host's filter (picks empty vs no-match). */
+    total: number;
+    /** The rows (`ChatHistoryRow`s) — the host maps its own chat model onto them. */
+    children?: ReactNode;
+    labels?: Partial<ChatHistoryLabels>;
+    id?: string;
+    className?: string;
+}
+declare function ChatHistoryList({ loading, total, children, labels: overrides, id, className }: ChatHistoryListProps): react.JSX.Element;
+interface ChatHistoryRowProps {
+    chat: ChatHistoryChat;
+    active: boolean;
+    onOpen: (id: number) => void;
+    /** The meta line under the title (project tag, time, attention, unread). */
+    meta?: ReactNode;
+    /** A glyph before the title (a live run, a question waiting). */
+    marker?: ReactNode;
+    actionsOpen?: boolean;
+    onToggleActions?: (id: number) => void;
+    renaming?: boolean;
+    renameValue?: string;
+    onStartRename?: (chat: ChatHistoryChat) => void;
+    onRenameChange?: (value: string) => void;
+    onSubmitRename?: (id: number, value: string) => void;
+    onCancelRename?: () => void;
+    onSummarize?: (id: number) => void;
+    summarizing?: boolean;
+    onDelete?: (chat: ChatHistoryChat) => void;
+    deleting?: boolean;
+    /** Host actions after the standard ones (the web's "Add to project"). */
+    extraActions?: ReactNode;
+    labels?: Partial<ChatHistoryLabels>;
+    className?: string;
+}
+/** One chat-history row: title (or its rename input), meta line, and its revealed actions. */
+declare const ChatHistoryRow: react.MemoExoticComponent<({ chat, active, onOpen, meta, marker, actionsOpen, onToggleActions, renaming, renameValue, onStartRename, onRenameChange, onSubmitRename, onCancelRename, onSummarize, summarizing, onDelete, deleting, extraActions, labels: overrides, className, }: ChatHistoryRowProps) => react.JSX.Element>;
+
+/**
+ * A notice about the run that the person can wave away — until something NEW happens.
+ *
+ * Moved from the web panel's banner hook (`useBrainPanelBanners`) so the editor's two
+ * run notices (a connected account the gateway could not use, a provider key that hit
+ * its usage cap) and the web's provider-cap banner share one rule instead of three
+ * copies of it: dismissal is keyed on the exact set of values, so a different
+ * provider (or reason) re-shows the notice rather than staying hidden.
+ */
+declare function useDismissibleNotice(values: readonly string[]): {
+    show: boolean;
+    dismiss: () => void;
+};
+
+/**
  * Fixed next steps as chips above an empty box — "what now?" answered without a model
  * call. A chip seeds the box; the person reads it, edits it and sends it. Extracted from
  * the web's ComposerSuggestions; `BrainComposer` renders it from its `suggestions` prop
@@ -914,7 +1125,8 @@ declare function QueuedTurnChips<T>({ items, textOf, onRemove, onSteer, canSteer
  * WHERE a turn goes, as one chip in the composer's tool row — extracted from the canvas's
  * scope chip (IN the whole board / the selection / a frame). A host supplies the options
  * and decides whether there is anything to choose; the chip is a native select so it is
- * keyboard- and screen-reader-complete everywhere. (Who a turn is addressed TO is the
+ * keyboard- and screen-reader-complete everywhere. With NO `onChange` there is nothing to
+ * choose (Rovr acts on the tab it is in) and the chip is a plain label of `value`. (Who a turn is addressed TO is the
  * shared `RecipientPicker`.)
  */
 interface ContextChipOption<V extends string> {
@@ -926,8 +1138,9 @@ interface ContextChipProps<V extends string> {
     /** Accessible name — what this chip chooses. */
     label: string;
     value: V;
-    options: readonly ContextChipOption<V>[];
-    onChange: (value: V) => void;
+    /** The choices; omitted with `onChange` ⇒ the read-only form (`value` is shown as text). */
+    options?: readonly ContextChipOption<V>[];
+    onChange?: (value: V) => void;
     /** A small leading glyph. */
     icon?: ReactNode;
     /** A host's own class (the canvas paints the chip in its own palette). */
@@ -1988,8 +2201,8 @@ declare const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels;
 interface ChatTicketsExtension {
     /** Stable key — the open-drawer identity. Must not collide with the built-in pills. */
     key: string;
-    /** Leading glyph/emoji, matching the built-in pills' visual grammar. */
-    icon?: string;
+    /** Leading icon — an inline SVG element (never an emoji), sized to the pill's text. */
+    icon?: ReactNode;
     /** The pill's word. */
     label: string;
     /** Appended as ` (N)` when > 0, like Agents/People. */
@@ -3825,4 +4038,4 @@ declare function SpendBreakdown({ summary, labels, locale }: SpendBreakdownProps
 declare function formatUsd(usd: number, locale?: string): string;
 declare function formatTokens(tokens: number, locale?: string): string;
 
-export { type AgentOptionVM, type AskUserLabels, Avatar, type AvatarProps, BrainComposer, type BrainComposerLabels, type BrainComposerProps, BrainMark, type BrainMarkProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatRunHistoryVM, type ChatRunVM, type ChatSubagentVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, type ComposerAddMenuItem, type ComposerAttachment, type ComposerLabels, type ComposerOptions, type ComposerSuggestion, type ConsumptionSnapshot, ContextChip, type ContextChipOption, type ContextChipProps, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_COMPOSER_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_LOCAL_MODEL_LABELS, DEFAULT_MODEL_MOVE_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_QUEUED_TURN_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_SPEND_LABELS, DEFAULT_SURFACE_HEADER_LABELS, DEFAULT_TIMELINE_LABELS, DEFAULT_TOOL_CONFIRM_LABELS, DEFAULT_WORK_STATUS_LABELS, EXPAND_ICON_PATH, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HeaderIcon, HealthRing, type HealthRingProps, type HealthTier, type JsonRequest, LOCAL_MODEL_LABEL_FIELDS, LOCAL_UNSUPPORTED_LABEL, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, type LocalModelLabelLookup, type LocalModelLabels, LocalModelList, type LocalModelListProps, LocalModelRow, type LocalModelRowProps, type LocalModelsState, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionAutocomplete, type MentionLabels, type MessageRating, type ModelMove, type ModelMoveLabels, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, type PromptTrailingAction, type PromptTrailingState, QuestionCard, type QueuedItem, QueuedTurnChips, type QueuedTurnChipsLabels, type QueuedTurnChipsProps, type QueuedTurns, type QueuedTurnsOptions, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, SpendBreakdown, type SpendLabels, SpendPill, SuggestionRow, Sunburst, type SunburstProps, SurfaceHeader, type SurfaceHeaderHistory, type SurfaceHeaderLabels, type SurfaceHeaderProps, SurfaceLauncher, type SurfaceLauncherBadge, type SurfaceLauncherProps, type SurfaceTab, SurfaceTabs, type SurfaceTabsProps, TICKET_KINDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineCatalogLookup, type TimelineImage, type TimelineNode, ToolConfirmBar, type ToolConfirmBarLabels, type ToolConfirmBarProps, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UpgradeTarget, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, type WorkStatusLabels, WorkStatusPanel, type WorkStatusPanelProps, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, cachedConsumptionSnapshot, chatActivityLabelsFrom, chatDiagnosticsReads, chatSwitcherLabel, chatTicketsLabelsFromBundle, commandOf, composerLabels, createChatTicketsRestAdapter, createEvermindRestAdapter, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, fetchConsumptionSnapshot, formatContextTokens, formatDownloadSize, formatDuration, formatElapsed, formatParams, formatTokens, formatUsd, groupAbsorbed, healthRingColor, initialsOf, invalidateConsumptionSnapshot, liveActivityLabelsFrom, loadEvermindBuilds, localModelLabelsFrom, modelMoveLine, modelMoveOf, pendingChangesSummary, planIsPaid, preferredEvermindBuild, promptOptionsLabels, promptTrailingAction, publishedEvermindModels, resolvePendingChangesLabels, resolveTeacherOptions, shellOutcomeOf, spendLabels, strandedReplyKey, streamingNode, subscribeConsumptionSnapshot, timelineCatalogLookup, timelineLabelsFrom, toolConfirmPreview, toolPreview, toolStepView, useChatActivitySignal, useChatMemorySwitch, useChatParticipants, useConsumptionSnapshot, useLocalModels, useMentionAutocomplete, usePopover, useQueuedTurns, useRecipientChoice, useTicketAutocomplete, useVoiceDictation, workStatusLabels };
+export { type AgentOptionVM, AiSurface, type AiSurfaceProps, type AskUserLabels, Avatar, type AvatarProps, BrainComposer, type BrainComposerLabels, type BrainComposerProps, BrainMark, type BrainMarkProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatHistoryChat, type ChatHistoryLabels, ChatHistoryList, type ChatHistoryListProps, ChatHistoryRow, type ChatHistoryRowProps, type ChatOptionVM, type ChatRunHistoryVM, type ChatRunVM, type ChatSubagentVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, type ComposerAddMenuItem, type ComposerAttachment, type ComposerLabels, type ComposerOptions, type ComposerSuggestion, type ConsumptionSnapshot, ContextChip, type ContextChipOption, type ContextChipProps, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_HISTORY_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_COMPOSER_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_LOCAL_MODEL_LABELS, DEFAULT_MODEL_MOVE_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_QUEUED_TURN_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_SPEND_LABELS, DEFAULT_SURFACE_HEADER_LABELS, DEFAULT_TIMELINE_LABELS, DEFAULT_TOOL_CONFIRM_LABELS, DEFAULT_WORK_STATUS_LABELS, EXPAND_ICON_PATH, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HeaderIcon, HealthRing, type HealthRingProps, type HealthTier, type JsonRequest, LOCAL_MODEL_LABEL_FIELDS, LOCAL_UNSUPPORTED_LABEL, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, type LocalModelLabelLookup, type LocalModelLabels, LocalModelList, type LocalModelListProps, LocalModelRow, type LocalModelRowProps, type LocalModelsState, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionAutocomplete, type MentionLabels, type MessageRating, type ModelMove, type ModelMoveLabels, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, type PromptTrailingAction, type PromptTrailingState, QuestionCard, type QueuedItem, QueuedTurnChips, type QueuedTurnChipsLabels, type QueuedTurnChipsProps, type QueuedTurns, type QueuedTurnsOptions, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, SpendBreakdown, type SpendLabels, SpendPill, StarterGroup, StarterTile, type StarterTileProps, SuggestionRow, Sunburst, type SunburstProps, SurfaceEmptyState, type SurfaceEmptyStateProps, SurfaceFooter, type SurfaceFooterProps, SurfaceHeader, type SurfaceHeaderHistory, type SurfaceHeaderLabels, type SurfaceHeaderProps, SurfaceLauncher, type SurfaceLauncherBadge, type SurfaceLauncherProps, type SurfaceTab, SurfaceTabs, type SurfaceTabsProps, TICKET_KINDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineCatalogLookup, type TimelineImage, type TimelineNode, ToolConfirmBar, type ToolConfirmBarLabels, type ToolConfirmBarProps, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UpgradeTarget, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, type WorkStatusLabels, WorkStatusPanel, type WorkStatusPanelProps, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, cachedConsumptionSnapshot, chatActivityLabelsFrom, chatDiagnosticsReads, chatSwitcherLabel, chatTicketsLabelsFromBundle, commandOf, composerLabels, createChatTicketsRestAdapter, createEvermindRestAdapter, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, fetchConsumptionSnapshot, formatContextTokens, formatDownloadSize, formatDuration, formatElapsed, formatParams, formatTokens, formatUsd, groupAbsorbed, healthRingColor, initialsOf, invalidateConsumptionSnapshot, liveActivityLabelsFrom, loadEvermindBuilds, localModelLabelsFrom, modelMoveLine, modelMoveOf, pendingChangesSummary, planIsPaid, preferredEvermindBuild, promptOptionsLabels, promptTrailingAction, publishedEvermindModels, resolvePendingChangesLabels, resolveTeacherOptions, shellOutcomeOf, spendLabels, strandedReplyKey, streamingNode, subscribeConsumptionSnapshot, timelineCatalogLookup, timelineLabelsFrom, toolConfirmPreview, toolPreview, toolStepView, useChatActivitySignal, useChatMemorySwitch, useChatParticipants, useConsumptionSnapshot, useDismissibleNotice, useLocalModels, useMentionAutocomplete, usePopover, useQueuedTurns, useRecipientChoice, useTicketAutocomplete, useVoiceDictation, workStatusLabels };

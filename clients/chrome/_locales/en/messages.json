@@ -75,13 +75,41 @@
     "message": "No chats yet",
     "description": "Chat picker when empty"
   },
-  "chatPickerLabel": {
-    "message": "Conversation",
-    "description": "Accessible label of the chat picker"
-  },
   "chatEmpty": {
     "message": "Tell Rovr what you need — it can read this page, fill in forms and keep track of what it did.",
     "description": "Empty transcript"
+  },
+  "chatEmptyTitle": {
+    "message": "What should Rovr do here?",
+    "description": "Empty chat: greeting line"
+  },
+  "historyShow": {
+    "message": "Chat history",
+    "description": "Header button that shows the chat history"
+  },
+  "historyHide": {
+    "message": "Back to the chat",
+    "description": "Header button that hides the chat history"
+  },
+  "chatActions": {
+    "message": "Chat actions",
+    "description": "Chat history row: actions menu"
+  },
+  "chatActionsFor": {
+    "message": "Actions for $1",
+    "description": "Chat history row: accessible name of the actions button; $1 = chat title"
+  },
+  "chatRename": {
+    "message": "Rename",
+    "description": "Chat history row: rename a chat"
+  },
+  "contextLabel": {
+    "message": "Rovr is acting on",
+    "description": "Accessible name of the composer chip naming the site Rovr acts on"
+  },
+  "contextNoPage": {
+    "message": "No web page",
+    "description": "Composer site chip when the tab is not a web page"
   },
   "needModelOrSignIn": {
     "message": "No model is available. Sign in to Builderforce, or start a model on this device (Synapse, Ollama or FreeToken).",

@@ -10,13 +10,14 @@
  * Self-gating on `mode`, per the shared-component rule: a host renders it
  * unconditionally and this decides whether it belongs on screen.
  *
- * Rendered through the shared `StarterTiles` shape (theme tokens, reflows from three
+ * Rendered through the shared brain-ui `StarterGroup` / `StarterTile` shape (theme tokens, reflows from three
  * columns to one without overflowing a 360px viewport).
  */
 
 import { useTranslations } from 'next-intl';
 import { workOptions, type ChatMode, type WorkOptionId } from '@/lib/brain';
-import { StarterGroup, StarterTile } from './StarterTiles';
+import { StarterGroup, StarterTile } from '@seanhogg/builderforce-brain-ui';
+import { Icon } from '@/components/ui/Icon';
 
 export interface WorkOptionsPickerProps {
   /** The conversation's mode. Anything but `work` renders nothing. */
@@ -35,7 +36,7 @@ export function WorkOptionsPicker({ mode, onPick, disabled }: WorkOptionsPickerP
       {workOptions().map((option) => (
         <StarterTile
           key={option.id}
-          icon={option.icon}
+          icon={<Icon source={option.icon} size={18} />}
           label={t(`${option.id}.label`)}
           hint={t(`${option.id}.hint`)}
           disabled={disabled}

@@ -2,7 +2,7 @@
  * Capability picker — "what are we making?" for a Brain chat.
  *
  * Two presentations of ONE option list (see lib/brain/capabilities.ts):
- *   - `layout="tiles"` — the empty state's starter list (shared `StarterTiles` shape).
+ *   - `layout="tiles"` — the empty state's starter list (shared brain-ui `StarterGroup` / `StarterTile` shape).
  *   - `layout="compact"` — a select in the composer toolbar, to change or clear
  *     the capability mid-chat.
  *
@@ -12,7 +12,8 @@
 
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
-import { StarterGroup, StarterTile } from './StarterTiles';
+import { StarterGroup, StarterTile } from '@seanhogg/builderforce-brain-ui';
+import { Icon } from '@/components/ui/Icon';
 import {
   capabilitiesForSurface,
   type BrainCapabilityId,
@@ -60,7 +61,7 @@ export function BrainCapabilityPicker({ surface, value, onSelect, layout, disabl
         return (
           <StarterTile
             key={c.id}
-            icon={c.icon}
+            icon={<Icon source={c.icon} size={18} />}
             label={t(`${c.id}.label`)}
             hint={t(`${c.id}.hint`)}
             pressed={active}

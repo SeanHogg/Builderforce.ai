@@ -73,7 +73,7 @@ const rowStyle: CSSProperties = { display: 'inline-flex', flexWrap: 'wrap', alig
 /** Accent-tinted from theme tokens, so it reads in light and dark; it shrinks rather than overflowing a phone row. */
 const chipStyle: CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%',
-  height: 'var(--chat-ctl-size, 32px)', padding: '0 4px 0 10px', borderRadius: 'var(--radius-md)',
+  height: 'var(--bf-ctl-size, 32px)', padding: '0 4px 0 10px', borderRadius: 'var(--radius-md)',
   background: 'var(--accent-subtle)',
   color: 'var(--text-primary)', fontSize: 'var(--font-size-small)', fontWeight: 600,
 };

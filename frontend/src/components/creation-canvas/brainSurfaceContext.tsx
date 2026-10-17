@@ -46,6 +46,8 @@ export interface BrainSurfaceContextValue {
   running: boolean;
   /** Epoch ms the in-flight turn began, so every surface narrates the same phase. */
   runStartedAt: number | null;
+  /** The session's run key (`canvasRunKey`) — Stop and tool approvals answer it. */
+  runKey: string;
   messages: BrainMessage[];
   trace: BrainTraceEvent[];
   nodes: CreationFlowNode[];

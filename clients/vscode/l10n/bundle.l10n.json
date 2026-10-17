@@ -818,5 +818,15 @@
   "Portfolio": "Portfolio",
   "Spec": "Spec",
   "Retrospective": "Retrospective",
-  "Planning poker": "Planning poker"
+  "Planning poker": "Planning poker",
+  "Chat history": "Chat history",
+  "Back to the chat": "Back to the chat",
+  "No chats yet": "No chats yet",
+  "Chat actions": "Chat actions",
+  "Actions for {title}": "Actions for {title}",
+  "Needs an answer": "Needs an answer",
+  "Summarize": "Summarize",
+  "What are we working on?": "What are we working on?",
+  "Ask about this workspace, or start from one of these.": "Ask about this workspace, or start from one of these.",
+  "Start with": "Start with"
 }

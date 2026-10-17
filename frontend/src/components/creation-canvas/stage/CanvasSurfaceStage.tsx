@@ -22,7 +22,7 @@ import type { useCanvasResumeShares } from '../hooks/useCanvasResumeShares';
 import type { CanvasSessionAppActions } from '../hooks/useCanvasSessionApp';
 import { canvasLensDefinition, canvasLensExit } from '@/lib/canvasLens';
 import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
-import type { BrainConversationProps } from './useBrainConversation';
+import type { CanvasConversationProps } from './useCanvasConversationProps';
 import type { SceneMovieDraft } from '@/hooks/useCloudScene';
 
 export interface CanvasSurfaceStageProps {
@@ -43,7 +43,10 @@ export interface CanvasSurfaceStageProps {
   updateNodeData: (nodeId: string, patch: Partial<CreationNodeData>) => void;
   appendAtCenter: (kind: CreationObjectKind, data?: Partial<CreationNodeData>) => unknown;
   revealObject: (nodeId: string) => void;
-  conversation: BrainConversationProps;
+  conversation: CanvasConversationProps;
+  /** THE ONE composer while it is docked into the Chat lens (Brain IS the surface); null
+   *  otherwise, when it floats over the board or sits in the edge dock. */
+  chatComposer: ReactNode;
   roster: readonly CanvasChatSurfaceMember[];
   /** The room surface, built by the host — it carries the 3D projection with it. */
   room: ReactNode;
@@ -64,7 +67,7 @@ export interface CanvasSurfaceStageProps {
  */
 export function CanvasSurfaceStage({
   surface, hostSurfaces, surfaceNode, exitSurface, setSurface, sessionApp, sessionTitle, entryAppPending, nodes, editable, updateNodeData, appendAtCenter,
-  revealObject, conversation, roster, room, resume, openGamePanel, setShareOpen, doors, composeDraft,
+  revealObject, conversation, chatComposer, roster, room, resume, openGamePanel, setShareOpen, doors, composeDraft,
 }: CanvasSurfaceStageProps) {
   const { persistence, lens } = useCanvasSessionFacts();
   // "Leave this surface" goes to the board — unless the lens keeps a HOME surface
@@ -96,10 +99,11 @@ export function CanvasSurfaceStage({
               {...(editable ? { onCreateMovie: (draft: SceneMovieDraft) => { appendAtCenter('video', { title: draft.title, status: 'Draft', videoTimeline: draft.videoTimeline, videoSources: draft.videoSources }); } } : {})}
             /> : null,
             // The zero-object case of this canvas: the same transcript, the same
-            // composer, no board. Objects Brain creates during the conversation land on
+            // composer (docked as the surface's footer), no board. Objects Brain creates during the conversation land on
             // the board behind it, which is what the footer's live count offers.
             chat: <CanvasChatSurface
               {...conversation}
+              composer={chatComposer}
               onOpenBoard={exitToBoard}
               objectCount={nodes.length}
               participants={roster}
