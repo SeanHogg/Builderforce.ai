@@ -74,12 +74,8 @@ describe('logStreamedTrace — one write per streamed call', () => {
     const enc = new TextEncoder();
     return new ReadableStream({
       start(controller) {
-        for (const f of frames) controller.enqueue(enc.encode(`data: ${JSON.stringify(f)}
-
-`));
-        controller.enqueue(enc.encode('data: [DONE]
-
-'));
+        for (const f of frames) controller.enqueue(enc.encode(`data: ${JSON.stringify(f)}\n\n`));
+        controller.enqueue(enc.encode('data: [DONE]\n\n'));
         controller.close();
       },
     });
@@ -108,7 +104,7 @@ describe('logStreamedTrace — one write per streamed call', () => {
     expect(JSON.parse(row.responseBody as string)).toMatchObject({ streamed: true, content: 'Hello', finishReason: 'stop', model: 'vendor-m' });
   });
 
-  it('hands the usage frame to the caller's meter as well', async () => {
+  it("hands the usage frame to the caller's meter as well", async () => {
     const onUsage = vi.fn();
     const out = logStreamedTrace(env, null, input(), sse({ choices: [], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }), onUsage);
     await new Response(out).text();
