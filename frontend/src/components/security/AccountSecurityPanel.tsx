@@ -14,7 +14,7 @@ import { useTranslations } from 'next-intl';
 import {
   mySessionsApi, myAdminAccessApi,
   type MySession, type MyAdminAccessSession,
-} from '@/lib/builderforceApi';
+} from '@/lib/accountSessionsApi';
 import { SessionList } from '@/components/security/SessionList';
 import PasskeysPanel from '@/components/security/PasskeysPanel';
 import { useFormat } from "@/i18n/useFormat";

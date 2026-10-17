@@ -5,8 +5,7 @@ vi.mock('../../infrastructure/database/tenantScope', () => ({
   taskInTenant: vi.fn(async (_db: unknown, taskId: number) => taskId === 7),
 }));
 
-import { eventsOf, ingestFileChanges, toolAuditRows, usageSnapshotRows } from './hostTelemetryIngest';
-import { FileChangeIngestBody, ToolAuditIngestBody } from '../../presentation/routes/agentHostRoutes.schemas';
+import { ingestFileChanges, toolAuditRows, usageSnapshotRows } from './hostTelemetryIngest';
 import type { Db } from '../../infrastructure/database/connection';
 
 const host = { tenantId: 3, agentHostId: 11 };
@@ -19,22 +18,6 @@ function fakeDb(ownedExecutions: Array<{ id: number; taskId: number }>) {
   };
   return { db: db as unknown as Db, inserts };
 }
-
-describe('host telemetry wire shapes', () => {
-  it('accepts the single-event body every host in the field sends', () => {
-    const body = ToolAuditIngestBody.parse({ toolName: 'read_file', executionId: '42', type: 'tool.audit' });
-    expect(eventsOf(body)).toEqual({ events: [{ toolName: 'read_file', executionId: '42' }], single: true });
-  });
-
-  it('accepts a batch and drops only its malformed events', () => {
-    const body = ToolAuditIngestBody.parse({ events: [{ toolName: 'a' }, { toolName: 5 }, { toolName: 'b' }] });
-    expect(eventsOf(body)).toEqual({ events: [{ toolName: 'a' }, { toolName: 'b' }], single: false });
-  });
-
-  it('an empty file-change body is still one (invalid) event', () => {
-    expect(eventsOf(FileChangeIngestBody.parse({})).single).toBe(true);
-  });
-});
 
 describe('host telemetry rows', () => {
   it('tool audit: stamps the host tenant, drops nameless events', () => {

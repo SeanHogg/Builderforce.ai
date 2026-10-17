@@ -11,7 +11,7 @@ import type { ChatErrorAction } from '../chatError';
 import type { BrainRunActivity } from '../runActivity';
 import type { CompactMemo } from '../workingTranscript';
 import { emptyRunUsage, type RunUsageTally } from '../memorySavings';
-import type { BrainRunSnapshot } from './runTypes';
+import type { BrainRunSnapshot, RunTurn } from './runTypes';
 
 /** The completion streaming right now — and, once the gateway names it, the model serving it. */
 export interface LiveTurn {

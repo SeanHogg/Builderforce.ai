@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCoalescedRefresh } from './coalescedRefresh';
+import { reportBackgroundFailure } from '../reportError';
+
+vi.mock('../reportError', () => ({ reportBackgroundFailure: vi.fn(async () => true) }));
 
 /** A burst of relay frames is one fetch; frames during a fetch earn exactly one follow-up. */
 describe('createCoalescedRefresh', () => {
@@ -49,5 +52,7 @@ describe('createCoalescedRefresh', () => {
     refresh.cancel();
     await vi.advanceTimersByTimeAsync(2_000);
     expect(run).toHaveBeenCalledTimes(1);
+    // The failure is recorded, not swallowed.
+    expect(vi.mocked(reportBackgroundFailure)).toHaveBeenCalledTimes(1);
   });
 });

@@ -8853,7 +8853,8 @@ var EMPTY_SNAPSHOT = {
   trace: [],
   activity: null,
   byoUnresolved: [],
-  providerCap: []
+  providerCap: [],
+  turn: null
 };
 function makeCell() {
   return {
@@ -8874,6 +8875,7 @@ function makeCell() {
     activity: null,
     byoUnresolved: [],
     providerCap: [],
+    turn: null,
     codeChanged: false,
     codeModel: null,
     codePhaseReached: false,
@@ -8944,7 +8946,8 @@ function emit(c) {
     trace: c.trace,
     activity: c.activity,
     byoUnresolved: c.byoUnresolved,
-    providerCap: c.providerCap
+    providerCap: c.providerCap,
+    turn: c.turn
   };
   for (const l of c.listeners) l();
   for (const l of storeListeners) l();
@@ -8954,13 +8957,10 @@ function setActivity(c, activity) {
   emit(c);
 }
 function pushTrace(c, ev) {
-  c.trace.push(ev);
+  const dropped = Math.max(0, c.trace.length + 1 - MAX_TRACE_EVENTS);
+  c.trace = [...dropped ? c.trace.slice(dropped) : c.trace, ev];
+  if (dropped) c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
   c.persistStep?.(ev);
-  if (c.trace.length > MAX_TRACE_EVENTS) {
-    const dropped = c.trace.length - MAX_TRACE_EVENTS;
-    c.trace.splice(0, dropped);
-    c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
-  }
   emit(c);
 }
 function runTrace(c) {
@@ -9136,7 +9136,7 @@ function stopRun(chatId) {
   const driver = driverFor(chatId);
   if (driver) return driver.stop(chatId);
   const c = cells.get(chatId);
-  if (!c || !c.running) return;
+  if (!c || !c.running || c.abort?.signal.aborted) return;
   const stopped = stoppedTurnOf(c);
   c.stoppedTurn = stopped;
   c.abort?.abort();
@@ -9148,6 +9148,7 @@ function stopRun(chatId) {
   }
   c.streamingText = "";
   c.activity = null;
+  c.turn = null;
   pushTrace(c, stopped.event);
 }
 function clearRunError(chatId) {
@@ -9199,6 +9200,7 @@ function applyRemoteRun(chatId, snapshot) {
   c.activity = snapshot.activity;
   c.byoUnresolved = snapshot.byoUnresolved;
   c.providerCap = snapshot.providerCap;
+  c.turn = snapshot.turn ?? null;
   emit(c);
 }
 
@@ -12202,6 +12204,7 @@ function beginRun(c, outcomeKey) {
   c.codeModel = null;
   c.liveTurn = null;
   c.stoppedTurn = null;
+  c.turn = null;
   if (typeof outcomeKey === "number") c.runId = runOutcomeId(outcomeKey, Date.now());
   c.abort = new AbortController();
   c.activity = { phase: "starting", startedAt: Date.now(), step: 0 };
@@ -12295,20 +12298,18 @@ async function startEngineRun(key, engine) {
   if (c.running) return false;
   c.trace = [];
   beginRun(c);
+  c.turn = { id: null, startedAt: Date.now() };
   emit(c);
   const signal = c.abort.signal;
   const control = {
     signal,
     trace: (event) => pushTrace(c, event),
-    stream: (text) => {
-      c.streamingText = text;
-      emitStreaming(c);
-    },
-    activity: (activity) => setActivity(c, activity),
     confirm: (req) => requestRunConfirm(key, req),
-    append: (message) => {
-      recordAppended(c, message);
-      emit(c);
+    correlate: (id) => {
+      if (c.turn && !signal.aborted) {
+        c.turn = { ...c.turn, id };
+        emit(c);
+      }
     }
   };
   try {
@@ -12324,6 +12325,7 @@ async function startEngineRun(key, engine) {
     c.streamingText = "";
     c.abort = null;
     c.activity = null;
+    c.turn = null;
     c.pendingConfirm = null;
     c.confirmResolver = null;
     emit(c);

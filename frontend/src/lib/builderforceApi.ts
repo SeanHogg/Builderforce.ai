@@ -6,6 +6,7 @@
 
 import { CHANNEL_PLATFORMS, type ChannelPlatform, type WorkflowNodeKind as ServerWorkflowNodeKind } from '@builderforce/creation-canvas-contract';
 import type { EMBEDDED_CAPABILITY_KEYS } from './embeddedCapabilities';
+import type { TaskFileChange, TaskFileContent, TaskRepoStatus } from './taskWorkspaceTypes';
 import { createBrainRestPersistence, type ChatDiagnosticsReport } from '@seanhogg/builderforce-brain-embedded';
 import { AUTH_API_URL, getStoredTenantToken } from './auth';
 import { apiSocketUrl } from './apiSocket';
@@ -2864,45 +2865,7 @@ export interface ExecutionTraceToolEvent {
   toolCallId?: string;
 }
 
-/** Whether a task's bound repo can actually receive the agent's commits. */
-export interface TaskRepoStatus {
-  bound: boolean;
-  hasCredential: boolean;
-  repo?: string;
-  base?: string;
-  reason?: string;
-}
-
-/** One file an agent created/modified/deleted in a task's shared workspace. */
-export interface TaskFileChange {
-  path: string;
-  change: 'created' | 'modified' | 'deleted';
-  agent: string;
-  executionId: number | null;
-  createdAt: string;
-  /** Models observed in llm.complete telemetry for the execution that made this change. */
-  models?: string[];
-  /** Authoritative usage provenance: whether the tenant's own provider key served it. */
-  modelUsage?: Array<{ model: string; byo: boolean; provider: string | null }>;
-}
-
-/**
- * A changed file's current (ticket branch) and base (fork point) contents, read
- * back from the repo so the Changes tab can render the diff in Monaco. `current`
- * is null for a deleted file, `base` is null for a newly created file; both are
- * null (with `bound: false`) when no repo/credential is wired for the task.
- */
-export interface TaskFileContent {
-  bound: boolean;
-  path: string;
-  reason?: string;
-  branch?: string;
-  baseBranch?: string;
-  current: string | null;
-  base: string | null;
-  currentTruncated?: boolean;
-  baseTruncated?: boolean;
-}
+export type { TaskFileChange, TaskFileContent, TaskRepoStatus };
 
 /**
  * Files on a task's AGENT WORKING BRANCH (the ticket branch a run commits to),
@@ -5169,56 +5132,6 @@ export const passkeysApi = {
 
   remove: (id: number): Promise<void> =>
     webRequest(`/api/auth/passkeys/${id}`, { method: 'DELETE' }).then(() => undefined),
-};
-
-// ---------------------------------------------------------------------------
-// Self-service session management (uses web JWT)
-// ---------------------------------------------------------------------------
-
-export interface MySession {
-  id: string;
-  sessionName: string | null;
-  userAgent: string | null;
-  ipAddress: string | null;
-  isActive: boolean;
-  isCurrent: boolean;
-  createdAt: string;
-  lastSeenAt: string | null;
-  revokedAt: string | null;
-}
-
-export const mySessionsApi = {
-  list: (): Promise<MySession[]> =>
-    webRequest<{ sessions: MySession[] }>('/api/auth/sessions').then((r) => r.sessions ?? []),
-
-  revoke: (sessionId: string): Promise<void> =>
-    webRequest(`/api/auth/sessions/${sessionId}/revoke`, { method: 'POST' }).then(() => undefined),
-
-  revokeOthers: (): Promise<void> =>
-    webRequest('/api/auth/sessions/revoke-others', { method: 'POST' }).then(() => undefined),
-};
-
-// ---------------------------------------------------------------------------
-// My admin access log (impersonation sessions targeting the current user)
-// ---------------------------------------------------------------------------
-
-export interface MyAdminAccessSession {
-  id: string;
-  adminUserId: string;
-  tenantId: number;
-  tenantName: string;
-  roleOverride: string;
-  reason: string;
-  startedAt: string;
-  endedAt: string | null;
-  endReason: string | null;
-  pagesVisited: string[];
-  writeBlockCount: number;
-}
-
-export const myAdminAccessApi = {
-  list: (): Promise<MyAdminAccessSession[]> =>
-    webRequest<{ sessions: MyAdminAccessSession[] }>('/api/auth/me/admin-access').then((r) => r.sessions ?? []),
 };
 
 // ---------------------------------------------------------------------------

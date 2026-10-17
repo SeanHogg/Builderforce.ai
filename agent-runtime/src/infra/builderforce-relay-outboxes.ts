@@ -11,14 +11,14 @@
  *
  * Both stay best-effort, as before: a failed send is logged and dropped, never thrown.
  */
-import { createOutbox, type Outbox } from "@builderforce/write-outbox";
+import { createOutbox, type Outbox } from "@builderforce/write-outbox/core";
 
 /** Events per POST, and the count that sends without waiting. */
-export const TOOL_AUDIT_MAX_ITEMS = 25;
+const TOOL_AUDIT_MAX_ITEMS = 25;
 /** Longest an event waits for a ride. */
-export const TOOL_AUDIT_MAX_WAIT_MS = 1_500;
+const TOOL_AUDIT_MAX_WAIT_MS = 1_500;
 /** Events held before the oldest are dropped — bounds memory if the API is unreachable. */
-export const TOOL_AUDIT_MAX_ENTRIES = 500;
+const TOOL_AUDIT_MAX_ENTRIES = 500;
 const TOOL_AUDIT_TIMEOUT_MS = 10_000;
 
 export interface ToolAuditEvent {
@@ -31,14 +31,24 @@ export interface ToolAuditEvent {
 }
 
 export interface ToolAuditPersister {
+  /**
+   * Live AND durable, exactly once: the event goes as a `tool.audit` frame over the
+   * relay socket when it is up — the relay DO fans it out live and persists it — and
+   * over HTTP only when the socket is down or the send failed. Sending both used to
+   * write every event twice.
+   */
+  emit(event: ToolAuditEvent): void;
+  /** Durable only (HTTP), for events that have no live frame. */
   persist(event: ToolAuditEvent): void;
   /** Send everything queued. `final` = the process is going away. Never rejects. */
   flush(opts?: { final?: boolean }): Promise<void>;
   close(): void;
 }
 
-/** The single-event wire shape every API version accepts. Stamped when queued, so a
- *  batch delay never shifts an event's place on the timeline. */
+/** The single-event wire shape every API version accepts — and the body of the live
+ *  frame, so the DO-persisted row and the HTTP row are identical (both go through the
+ *  same ingest). Stamped once, here, so a batch delay or a fallback never shifts an
+ *  event's place on the timeline. */
 function toWire(event: ToolAuditEvent): Record<string, unknown> {
   return {
     // Tie the event to its execution so it's queryable per-run as well as per-host.
@@ -60,6 +70,8 @@ export function createToolAuditPersister(opts: {
   url: string;
   apiKey: string;
   onError: (error: unknown) => void;
+  /** Put a frame on the relay socket; false when it is down or the send threw. */
+  sendLive?: (frame: Record<string, unknown>) => boolean;
   fetchImpl?: typeof fetch;
 }): ToolAuditPersister {
   const doFetch = opts.fetchImpl ?? fetch;
@@ -89,10 +101,20 @@ export function createToolAuditPersister(opts: {
       }
     },
     onError: (error) => opts.onError(error),
-    onDrop: (drop) => opts.onError(new Error(`tool-audit queue dropped ${drop.count} event(s) (${drop.reason})`)),
+    // A failed batch already reached onError; onDrop reports only what was never sent
+    // (overflow), so one failed batch is reported once.
+    onDrop: (drop) => {
+      if (drop.reason === "failed") return;
+      opts.onError(new Error(`tool-audit queue dropped ${drop.count} event(s) (${drop.reason})`));
+    },
   });
 
   return {
+    emit: (event) => {
+      const wire = toWire(event);
+      if (opts.sendLive?.({ type: "tool.audit", ...wire })) return;
+      outbox.enqueue("tool-audit", wire);
+    },
     persist: (event) => { outbox.enqueue("tool-audit", toWire(event)); },
     flush: (flushOpts) => outbox.flush(undefined, flushOpts),
     close: () => outbox.close(),
@@ -107,10 +129,10 @@ export interface RemoteChunk {
   piece: string;
 }
 
-export const REMOTE_CHUNK_COALESCE_MS = 250;
+const REMOTE_CHUNK_COALESCE_MS = 250;
 
 /** Join adjacent pieces of the same correlation into one chunk. */
-export function coalesceRemoteChunks(items: RemoteChunk[]): RemoteChunk[] {
+function coalesceRemoteChunks(items: RemoteChunk[]): RemoteChunk[] {
   const out: RemoteChunk[] = [];
   for (const item of items) {
     const last = out[out.length - 1];

@@ -70,6 +70,13 @@ import {
   dispatchResultToRemoteAgentNode,
   type RemoteDispatchOptions,
 } from "./remote-subagent.js";
+import {
+  createRemoteChunkQueue,
+  createToolAuditPersister,
+  type RemoteChunk,
+  type ToolAuditEvent,
+  type ToolAuditPersister,
+} from "./builderforce-relay-outboxes.js";
 import { createGitRepoSync } from "./repo-sync.js";
 import { ClaudeSdkAgentEngine } from "./sdk-agent-engine.js";
 import {
@@ -183,7 +190,7 @@ export class BuilderforceRelayService implements IRelayService {
   private remoteDispatchOpts: RemoteDispatchOptions | null = null;
   /** Live output for remote sessions, coalesced per session before it goes over HTTP. */
   private readonly remoteChunks = createRemoteChunkQueue(
-    (chunk) =>
+    (chunk: RemoteChunk) =>
       this.remoteDispatchOpts
         ? dispatchChunkToRemoteAgentNode(this.remoteDispatchOpts, chunk.callbackAgentNodeId, chunk.correlationId, chunk.piece)
         : Promise.resolve(),
@@ -281,15 +288,7 @@ export class BuilderforceRelayService implements IRelayService {
     if (!(skills.length || personas.length || content.length)) return;
 
     const summary = { skills, personas, content };
-    this.sendToRelay({
-      type: "tool.audit",
-      sessionKey: "main",
-      toolName: "capabilities.load",
-      category: "context",
-      args: summary,
-      ts: new Date().toISOString(),
-    });
-    void this.persistToolAudit({
+    this.toolAudit.emit({
       executionId,
       toolName: "capabilities.load",
       category: "context",
@@ -424,18 +423,9 @@ export class BuilderforceRelayService implements IRelayService {
         });
       },
       onToolUse: (toolName, toolCallId, args) => {
-        // Live view (fans out to subscribers)…
-        this.sendToRelay({
-          type: "tool.audit",
-          sessionKey: "main",
-          toolName,
-          toolCallId,
-          category: "v2",
-          args,
-          ts: new Date().toISOString(),
-        });
-        // …and durable persistence, so the run stays on the timeline after it ends.
-        void this.persistToolAudit({
+        // Live (fans out to subscribers) and durable (the relay DO persists the frame),
+        // so the run stays on the timeline after it ends; HTTP only if the socket is down.
+        this.toolAudit.emit({
           executionId: payload.executionId,
           toolName,
           toolCallId,
@@ -452,15 +442,7 @@ export class BuilderforceRelayService implements IRelayService {
         // relay DO already echoed the user's turn to browsers, so only the
         // acknowledgement is emitted here.
         const detail = { text };
-        this.sendToRelay({
-          type: "tool.audit",
-          sessionKey: "main",
-          toolName: "steer.applied",
-          category: "message",
-          args: detail,
-          ts: new Date().toISOString(),
-        });
-        void this.persistToolAudit({
+        this.toolAudit.emit({
           executionId: payload.executionId,
           toolName: "steer.applied",
           category: "message",
@@ -534,6 +516,9 @@ export class BuilderforceRelayService implements IRelayService {
           this.v2Aborts.delete(payload.executionId);
           this.v2Steering.delete(payload.executionId);
         }
+        // Run end: land the batched audit trail before the terminal state is reported,
+        // so a finished run's timeline is complete when the portal shows it finished.
+        await this.toolAudit.flush();
       }
 
       // If the run was cancelled, the API already flipped the row to CANCELLED (a
@@ -686,13 +671,13 @@ export class BuilderforceRelayService implements IRelayService {
    * Fire-and-forget — errors are logged but never surfaced to the caller.
    */
   /**
-   * Persist one tool-call audit event so the run is observable on the timeline
-   * AFTER it ends — not just live. The relay frame ({@link sendToRelay}
-   * `tool.audit`) only fans out to live subscribers; this writes it to the durable
-   * `tool_audit_events` store via the agent-host ingest, batched with its
-   * neighbours. Fire-and-forget; never surfaces errors.
+   * Persist a timeline event that has NO live `tool.audit` frame (`agent.message`,
+   * whose live form is `chat.message`; `steer.dropped`) over HTTP, batched. An event
+   * that is also shown live goes through `toolAudit.emit` instead, which writes it
+   * exactly once — via the relay DO, or over HTTP while the socket is down.
+   * Fire-and-forget; never surfaces errors.
    */
-  private async persistToolAudit(event: ToolAuditEvent): Promise<void> {
+  private persistToolAudit(event: ToolAuditEvent): void {
     this.toolAudit.persist(event);
   }
 
@@ -778,6 +763,8 @@ export class BuilderforceRelayService implements IRelayService {
       url: `${normalizeBaseUrl(opts.baseUrl)}/api/agent-hosts/${opts.agentNodeId}/tool-audit`,
       apiKey: opts.apiKey,
       onError: (err) => logDebug(`[builderforce-relay] tool-audit persist failed: ${String(err)}`),
+      // Live first: a frame the socket took is persisted by the relay DO.
+      sendLive: (frame) => this.trySendToRelay(frame),
     });
 
     this.heartbeat = new RelayHeartbeat({
@@ -919,12 +906,11 @@ export class BuilderforceRelayService implements IRelayService {
     this.ws = null;
     this.gatewayClient?.stop();
     this.gatewayClient = null;
-    for (const entry of this.remoteChunkFlush.values()) {
-      if (entry.timer) {
-        clearTimeout(entry.timer);
-      }
-    }
-    this.remoteChunkFlush.clear();
+    // Pending live chunks are dropped on stop, as before; the audit trail is not —
+    // send what is queued, then stop its timers.
+    this.remoteChunks.close();
+    void this.toolAudit.flush({ final: true });
+    this.toolAudit.close();
   }
 
   // ---------------------------------------------------------------------------
@@ -948,7 +934,8 @@ export class BuilderforceRelayService implements IRelayService {
       if (!correlation) {
         return;
       }
-      this.flushRemoteChunk(sessionKey);
+      // Send the session's last coalesced output first, so the result follows it.
+      const chunksSent = this.remoteChunks.flush(sessionKey);
       this.pendingRemoteCorrelations.delete(sessionKey);
       const errorVal = evt.data["error"];
       const errorStr = typeof errorVal === "string" ? errorVal : "unknown error";
@@ -959,14 +946,16 @@ export class BuilderforceRelayService implements IRelayService {
             ? `Remote task failed: ${errorStr}`
             : `Remote task completed on agentNode ${this.opts.agentNodeId}`;
       const resultText = correlation.accumulated.trim() || fallback;
-      if (this.remoteDispatchOpts) {
-        void dispatchResultToRemoteAgentNode(
-          this.remoteDispatchOpts,
-          correlation.callbackAgentNodeId,
-          correlation.correlationId,
-          resultText,
-        );
-      }
+      void chunksSent.then(() => {
+        if (this.remoteDispatchOpts) {
+          void dispatchResultToRemoteAgentNode(
+            this.remoteDispatchOpts,
+            correlation.callbackAgentNodeId,
+            correlation.correlationId,
+            resultText,
+          );
+        }
+      });
     });
   }
 
@@ -984,45 +973,11 @@ export class BuilderforceRelayService implements IRelayService {
     } else {
       corr.accumulated += piece;
     }
-    this.enqueueRemoteChunk(sessionKey, piece);
-  }
-
-  private enqueueRemoteChunk(sessionKey: string, piece: string): void {
-    if (!piece) {
-      return;
-    }
-    const existing = this.remoteChunkFlush.get(sessionKey);
-    if (existing) {
-      existing.buf += piece;
-      return;
-    }
-    const entry: { buf: string; timer: ReturnType<typeof setTimeout> | null } = {
-      buf: piece,
-      timer: setTimeout(() => this.flushRemoteChunk(sessionKey), 250),
-    };
-    this.remoteChunkFlush.set(sessionKey, entry);
-  }
-
-  private flushRemoteChunk(sessionKey: string): void {
-    const entry = this.remoteChunkFlush.get(sessionKey);
-    this.remoteChunkFlush.delete(sessionKey);
-    if (entry?.timer) {
-      clearTimeout(entry.timer);
-    }
-    const chunk = entry?.buf ?? "";
-    if (!chunk) {
-      return;
-    }
-    const corr = this.pendingRemoteCorrelations.get(sessionKey);
-    if (!corr || !this.remoteDispatchOpts) {
-      return;
-    }
-    void dispatchChunkToRemoteAgentNode(
-      this.remoteDispatchOpts,
-      corr.callbackAgentNodeId,
-      corr.correlationId,
-      chunk,
-    );
+    this.remoteChunks.enqueue(sessionKey, {
+      callbackAgentNodeId: corr.callbackAgentNodeId,
+      correlationId: corr.correlationId,
+      piece,
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -1470,8 +1425,18 @@ export class BuilderforceRelayService implements IRelayService {
 
   /** Send a raw message to all browser clients via the relay. */
   private sendToRelay(msg: unknown): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    this.trySendToRelay(msg);
+  }
+
+  /** {@link sendToRelay}, saying whether the socket took the frame. */
+  private trySendToRelay(msg: unknown): boolean {
+    if (this.ws?.readyState !== WebSocket.OPEN) return false;
+    try {
       this.ws.send(JSON.stringify(msg));
+      return true;
+    } catch (err) {
+      logDebug(`[builderforce-relay] relay send failed: ${String(err)}`);
+      return false;
     }
   }
 

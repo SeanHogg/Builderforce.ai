@@ -57,8 +57,10 @@ export async function runPurgeBatch(db: Db, purges: NamedPurge[], onError: (name
   try {
     await db.batch([first!, ...rest]);
     return;
-  } catch {
-    // Fall through to per-table: the batch error names no table, the retries will.
+  } catch (batchError) {
+    // Recorded once, then fall through to per-table: the batch error names no
+    // table, the retries will (and a table that succeeds alone stays quiet).
+    onError(`batch(${purges.length})`, batchError);
   }
   for (const p of purges) {
     try {

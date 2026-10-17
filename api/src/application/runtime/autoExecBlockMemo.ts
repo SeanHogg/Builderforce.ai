@@ -96,6 +96,7 @@ function parse(raw: string | null): Map<number, Entry> {
     }
   } catch {
     // A corrupt blob is an empty memo — re-evaluation is always safe.
+    return new Map();
   }
   return out;
 }

@@ -125,7 +125,7 @@ describe('persistCaughtError', () => {
     expect(captureException).toHaveBeenCalledTimes(2);
   });
 
-  it('never forwards the cache module's own faults (gating them on the cache would recurse)', async () => {
+  it("never forwards the cache module's own faults (gating them on the cache would recurse)", async () => {
     await persistCaughtError(recurring('kv down', 'infrastructure/cache/readThroughCache.ts'), runtime);
     expect(values).toHaveBeenCalledTimes(1);
     expect(captureException).not.toHaveBeenCalled();

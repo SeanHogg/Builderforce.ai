@@ -14,7 +14,7 @@
  * reported and dropped. Memory is bounded by {@link HOST_PERSIST_MAX_ENTRIES}; past it
  * the oldest frames are dropped and reported.
  */
-import { createOutbox } from '@builderforce/write-outbox';
+import { createOutbox } from '@builderforce/write-outbox/core';
 
 /** Frames per batch — also the size that sends without waiting. Under the API's
  *  per-request batch cap (`HOST_TELEMETRY_BATCH_MAX`). */
@@ -23,7 +23,7 @@ export const HOST_PERSIST_MAX_ITEMS = 50;
  *  trails the live one by about a second. */
 export const HOST_PERSIST_MAX_WAIT_MS = 1_000;
 /** Frames held across every lane before the oldest are dropped. */
-export const HOST_PERSIST_MAX_ENTRIES = 1_000;
+const HOST_PERSIST_MAX_ENTRIES = 1_000;
 
 /** The batched ingest endpoints (agentHostTelemetryRoutes): body `{ events: [...] }`. */
 export type HostTelemetryEndpoint = '/tool-audit' | '/usage-snapshot' | '/file-change';
@@ -58,7 +58,12 @@ export function createHostPersistQueue(opts: {
       ? opts.post('/messages', { sessionKey: lane.slice(MESSAGES_LANE.length), messages: items })
       : opts.post(lane, { events: items })),
     onError: (error) => opts.onError(error),
-    onDrop: (drop) => opts.onError(new Error(`host persist queue dropped ${drop.count} frame(s) on ${drop.key} (${drop.reason})`)),
+    // A failed batch already reached onError; onDrop reports only what was never sent
+    // (overflow), so one failed batch is reported once.
+    onDrop: (drop) => {
+      if (drop.reason === 'failed') return;
+      opts.onError(new Error(`host persist queue dropped ${drop.count} frame(s) on ${drop.key} (${drop.reason})`));
+    },
   });
   return {
     event: (endpoint, frame) => { outbox.enqueue(endpoint, frame); },

@@ -52,17 +52,20 @@ export function ChatInput(props: ChatInputProps) {
   const accountPort = useComposerAccount({ enabled: account !== null, projectId: account?.projectId ?? null });
   const bundle = useBrainComposerLabels(modeVocabulary);
   // The host's own words win where it has them: the verb on Send (the canvas names
-  // its intent), and why memory is unavailable on this surface.
+  // its intent), and why memory is unavailable on this surface. A host that holds no
+  // queue (no `queued`) does not queue a send made during a run — it acts on it now
+  // (steering a live agent) — so its verb names that button too, not "Queue message".
+  const holdsQueue = queued !== undefined;
   const labels = useMemo<BrainComposerLabels>(() => (submitLabel || memoryUnavailableReason
     ? {
         ...bundle,
         composer: {
           ...bundle.composer,
-          ...(submitLabel ? { send: submitLabel } : {}),
+          ...(submitLabel ? { send: submitLabel, ...(holdsQueue ? {} : { queueSend: submitLabel }) } : {}),
           ...(memoryUnavailableReason ? { memoryUnavailable: memoryUnavailableReason } : {}),
         },
       }
-    : bundle), [bundle, submitLabel, memoryUnavailableReason]);
+    : bundle), [bundle, submitLabel, memoryUnavailableReason, holdsQueue]);
 
   // Starting points and next steps: the same two affordances on every prompt. The
   // catalogue opens from `+`; the chips stand down while it is open, while a turn

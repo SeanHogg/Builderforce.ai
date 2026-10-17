@@ -48,7 +48,7 @@ describe('runPurgeBatch', () => {
     const failed: string[] = [];
     await runPurgeBatch(db, [stmt('a'), stmt('bad'), stmt('c')], (n) => failed.push(n));
     expect(executed).toEqual(['a', 'c']);
-    expect(failed).toEqual(['bad']);
+    expect(failed).toEqual(['batch(3)', 'bad']);
   });
 
   it('is a no-op with nothing to purge', async () => {

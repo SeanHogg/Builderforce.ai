@@ -46,8 +46,9 @@ export const SERVERLESS_WALL_MS = 45_000;
 /**
  * Silence ceiling for a cloud executor. BOTH of them — the durable CloudRunnerDO and
  * the Cloudflare Container — are long-lived, so this is the only ceiling. They
- * heartbeat `updated_at` exactly ONCE per alarm tick, and
- * a tick legitimately spans a single LLM step: a slow free coder (or a funded-backstop
+ * heartbeat `updated_at` at most once per `runContext.HEARTBEAT_MIN_INTERVAL_MS`
+ * (2 min, sized against this ceiling — runContext.heartbeat.test.ts), and only at a
+ * tick, which legitimately spans a single LLM step: a slow free coder (or a funded-backstop
  * failover chain) routinely runs 60-90s+ for ONE completion (observed 93s on
  * `@cf/moonshotai/kimi-k2.7-code`, execution #136). At the old 90s ceiling that live,
  * mid-completion tick was orphan-reaped ~2s before it returned. 5 min clears the

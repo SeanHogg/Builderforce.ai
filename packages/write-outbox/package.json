@@ -3,9 +3,10 @@
   "version": "2026.10.1",
   "private": true,
   "type": "module",
-  "description": "THE queued writer for client traffic that leaves in the background — run steps, activity signals, visitor journey, QA capture, client error reports. Items are queued per key (FIFO), coalesced, and sent in batches (size cap, max wait, explicit flush, unload) with at most one request in flight per key and a stable idempotency key per batch. Best-effort by default; durable on request: a pluggable store (memory, snapshot slot such as VS Code globalState / chrome.storage, IndexedDB), retry with backoff, an injected online signal, and a bounded queue with counted drops. Zero dependencies, no Node builtins and no DOM globals: imported by the browser, the VS Code extension host, MV3 service workers and brain-embedded.",
+  "description": "THE queued writer for client traffic that leaves in the background — run steps, activity signals, visitor journey, QA capture, client error reports. Items are queued per key (FIFO), coalesced, and sent in batches (size cap, max wait, explicit flush, unload) with at most one request in flight per key and a stable idempotency key per batch. Best-effort by default; durable on request: a pluggable store (memory, snapshot slot such as VS Code globalState / chrome.storage, IndexedDB), retry with backoff, an injected online signal, and a bounded queue with counted drops. Zero dependencies, no Node builtins and no DOM globals: imported by the browser, the VS Code extension host, MV3 service workers and brain-embedded; the store-free `./core` entry serves hosts with no DOM lib (the API Worker and its Durable Objects, the Node agent runtime).",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./core": "./src/core.ts"
   },
   "types": "./src/index.ts",
   "scripts": {

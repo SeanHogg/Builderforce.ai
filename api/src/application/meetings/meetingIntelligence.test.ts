@@ -57,7 +57,7 @@ describe('summarizeMeeting', () => {
 });
 
 describe('loadTranscriptSince', () => {
-  it('reads the tenant's meeting from a few seconds before the cursor (racing appends), oldest first', async () => {
+  it("reads the tenant's meeting from a few seconds before the cursor (racing appends), oldest first", async () => {
     const wheres: SQL[] = [];
     const chain = { from: () => chain, where: (cond: SQL) => { wheres.push(cond); return chain; }, orderBy: () => chain, limit: async () => [] };
     await loadTranscriptSince({ select: () => chain } as never, 7, 'm1', 60_000);

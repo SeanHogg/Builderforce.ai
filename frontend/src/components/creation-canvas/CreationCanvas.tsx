@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEffectEvent } from '@/hooks/useEffectEvent';
-import { ReactFlowProvider, useEdgesState, useNodesState, type Edge, type NodeTypes, type ReactFlowInstance } from '@xyflow/react';
+import { ReactFlowProvider, type Edge, type NodeTypes, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
 import { CanvasNodeFace } from '@/components/canvas/CanvasNodeFace';
@@ -179,7 +179,7 @@ import { CanvasOutcomeMetricsPanel } from './stage/CanvasOutcomeMetricsPanel';
 import { CanvasConversationPanel, CanvasDiagnosticsPanel } from './stage/CanvasSessionPanels';
 import { CanvasChangeSetPanel, CanvasMergePanel } from './stage/CanvasReviewPanels';
 import { CanvasBrainDockHost } from './stage/CanvasBrainDockHost';
-import { useSessionBoardState, useSessionBoardWriter } from './sessionBoardWriters';
+import { useSessionBoardState, useSessionEdgesState, useSessionNodesState } from './sessionBoardWriters';
 import { CanvasBrainLauncher } from './stage/CanvasBrainLauncher';
 import { useCanvasSessionApp, useOpenCanvasApp } from './hooks/useCanvasSessionApp';
 import { sessionHasApp } from '@/lib/canvasSessionApp';
@@ -255,12 +255,9 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const confirm = useConfirm();
   const toast = useToast();
   const storageKey = creationStorageKey(sessionId);
-  // Board setters route to the board ON SCREEN once this instance is gone (`sessionBoardWriters`); loaders keep `…OnScreen`.
-  const [nodes, setNodesOnScreen, onNodesChange] = useNodesState<CreationFlowNode>(persistence === 'local' ? initialNodes(canvasText) : []);
-  const setNodes = useSessionBoardWriter(sessionId, persistence, 'nodes', setNodesOnScreen);
+  const [nodes, setNodes, onNodesChange, setNodesOnScreen] = useSessionNodesState<CreationFlowNode>(sessionId, persistence, persistence === 'local' ? initialNodes(canvasText) : []);
   const [evermindLiveByNodeId, setEvermindLiveByNodeId] = useState<Record<string, Partial<CreationNodeData>>>({});
-  const [edges, setEdgesOnScreen, onEdgesChange] = useEdgesState<Edge>(persistence === 'local' ? initialEdges(canvasText) : []);
-  const setEdges = useSessionBoardWriter(sessionId, persistence, 'edges', setEdgesOnScreen);
+  const [edges, setEdges, onEdgesChange, setEdgesOnScreen] = useSessionEdgesState<Edge>(sessionId, persistence, persistence === 'local' ? initialEdges(canvasText) : []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   /**

@@ -176,6 +176,7 @@ __export(src_exports, {
   useChatActivitySignal: () => useChatActivitySignal,
   useChatMemorySwitch: () => useChatMemorySwitch,
   useChatParticipants: () => useChatParticipants,
+  useChatRowActions: () => useChatRowActions,
   useConsumptionSnapshot: () => useConsumptionSnapshot,
   useDismissibleNotice: () => useDismissibleNotice,
   useLocalModels: () => useLocalModels,
@@ -2092,7 +2093,7 @@ function SurfaceHeader({
           title: historyLabel,
           "aria-label": historyLabel,
           "aria-pressed": history.open,
-          "aria-controls": history.controls,
+          "aria-controls": history.open ? history.controls : void 0,
           children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(HeaderIcon, { d: "M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 8v4l3 2" })
         }
       ),
@@ -2515,10 +2516,10 @@ var DEFAULT_CHAT_HISTORY_LABELS = {
 function ChatHistoryList({ loading, total, children, labels: overrides, id, className }) {
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...overrides };
   const hasRows = Array.isArray(children) ? children.length > 0 : children != null && children !== false;
-  return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { id, className: ["bf-history", className].filter(Boolean).join(" "), role: "list", children: [
-    loading && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { className: "bf-history__status", children: labels.loading }),
-    !loading && !hasRows && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { className: "bf-history__status", children: total === 0 ? labels.empty : labels.noMatch }),
-    children
+  const status = loading ? labels.loading : !hasRows ? total === 0 ? labels.empty : labels.noMatch : null;
+  return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { id, className: ["bf-history", className].filter(Boolean).join(" "), children: [
+    status != null && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { className: "bf-history__status", role: "status", children: status }),
+    hasRows && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { role: "list", className: "bf-history__rows", children })
   ] });
 }
 var ChatHistoryRow = (0, import_react10.memo)(function ChatHistoryRow2({
@@ -2554,17 +2555,16 @@ var ChatHistoryRow = (0, import_react10.memo)(function ChatHistoryRow2({
       role: "listitem",
       children: [
         /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "bf-chatrow__head", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
+          renaming ? marker != null && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "bf-chatrow__marker", children: marker }) : /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
             "button",
             {
               type: "button",
               className: "bf-chatrow__open",
               "aria-current": active ? "true" : void 0,
               onClick: () => onOpen(chat.id),
-              disabled: renaming,
               children: [
                 marker != null && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "bf-chatrow__marker", children: marker }),
-                renaming ? null : /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "bf-chatrow__title", children: chatSwitcherLabel({ title: chat.title, id: chat.id, ticketCount: chat.ticketCount, ticketProgressPct: chat.ticketProgressPct }) })
+                /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { className: "bf-chatrow__title", children: chatSwitcherLabel({ title: chat.title, id: chat.id, ticketCount: chat.ticketCount, ticketProgressPct: chat.ticketProgressPct }) })
               ]
             }
           ),
@@ -2604,8 +2604,14 @@ var ChatHistoryRow = (0, import_react10.memo)(function ChatHistoryRow2({
         meta != null && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { className: "bf-chatrow__meta", children: meta }),
         actionsOpen && !renaming && hasActions && /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { className: "bf-chatrow__actions", children: [
           onStartRename && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "bf-chatrow__action", onClick: () => onStartRename(chat), children: labels.rename }),
-          onSummarize && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "bf-chatrow__action", onClick: () => onSummarize(chat.id), disabled: summarizing, children: summarizing ? "\u2026" : labels.summarize }),
-          onDelete && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("button", { type: "button", className: "bf-chatrow__action bf-chatrow__action--danger", onClick: () => onDelete(chat), disabled: deleting, children: deleting ? "\u2026" : labels.delete }),
+          onSummarize && /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("button", { type: "button", className: "bf-chatrow__action", onClick: () => onSummarize(chat.id), disabled: summarizing, "aria-busy": summarizing || void 0, children: [
+            labels.summarize,
+            summarizing && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { "aria-hidden": true, children: "\u2026" })
+          ] }),
+          onDelete && /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("button", { type: "button", className: "bf-chatrow__action bf-chatrow__action--danger", onClick: () => onDelete(chat), disabled: deleting, "aria-busy": deleting || void 0, children: [
+            labels.delete,
+            deleting && /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { "aria-hidden": true, children: "\u2026" })
+          ] }),
           extraActions
         ] })
       ]
@@ -2613,19 +2619,129 @@ var ChatHistoryRow = (0, import_react10.memo)(function ChatHistoryRow2({
   );
 });
 
-// src/surface/useDismissibleNotice.ts
+// src/surface/useChatRowActions.ts
 var import_react11 = require("react");
+function useChatRowActions(options) {
+  const opts = (0, import_react11.useRef)(options);
+  opts.current = options;
+  const [actionsChatId, setActionsChatId] = (0, import_react11.useState)(null);
+  const [renamingId, setRenamingId] = (0, import_react11.useState)(null);
+  const [renameValue, setRenameValue] = (0, import_react11.useState)("");
+  const [summarizingId, setSummarizingId] = (0, import_react11.useState)(null);
+  const [deletingId, setDeletingId] = (0, import_react11.useState)(null);
+  const [busyId, setBusyId] = (0, import_react11.useState)(null);
+  const renameFrom = (0, import_react11.useRef)("");
+  const settled = (0, import_react11.useRef)(null);
+  const openChat = (0, import_react11.useCallback)((id) => {
+    opts.current.onOpen(id);
+    if (opts.current.revealActionsOnOpen) setActionsChatId(id);
+  }, []);
+  const toggleActions = (0, import_react11.useCallback)((id) => {
+    setActionsChatId((cur) => cur === id ? null : id);
+  }, []);
+  const startRename = (0, import_react11.useCallback)((chat) => {
+    settled.current = null;
+    renameFrom.current = chat.title;
+    setRenamingId(chat.id);
+    setRenameValue(chat.title);
+    setActionsChatId(null);
+  }, []);
+  const endRename = (0, import_react11.useCallback)((id) => {
+    settled.current = id;
+    setRenamingId(null);
+    setRenameValue("");
+  }, []);
+  const renamingRef = (0, import_react11.useRef)(renamingId);
+  renamingRef.current = renamingId;
+  const cancelRename = (0, import_react11.useCallback)(() => endRename(renamingRef.current), [endRename]);
+  const submitRename = (0, import_react11.useCallback)(async (id, value) => {
+    if (settled.current === id) return;
+    endRename(id);
+    const title = value.trim();
+    if (!title || title === renameFrom.current.trim()) return;
+    await opts.current.rename(id, title);
+  }, [endRename]);
+  const onSummarize = (0, import_react11.useCallback)(async (id) => {
+    setSummarizingId(id);
+    try {
+      await opts.current.summarize?.(id);
+    } finally {
+      setSummarizingId((cur) => cur === id ? null : cur);
+    }
+  }, []);
+  const onDelete = (0, import_react11.useCallback)(async (chat) => {
+    const { confirmDelete, remove } = opts.current;
+    if (!remove) return;
+    if (confirmDelete && !await confirmDelete({ id: chat.id, title: chat.title })) return;
+    setDeletingId(chat.id);
+    try {
+      await remove({ id: chat.id, title: chat.title });
+      setActionsChatId((cur) => cur === chat.id ? null : cur);
+    } finally {
+      setDeletingId((cur) => cur === chat.id ? null : cur);
+    }
+  }, []);
+  const onAssign = (0, import_react11.useCallback)(async (chatId, projectId) => {
+    setBusyId(chatId);
+    try {
+      await opts.current.assign?.(chatId, projectId);
+    } finally {
+      setBusyId((cur) => cur === chatId ? null : cur);
+    }
+  }, []);
+  const hasSummarize = Boolean(options.summarize);
+  const hasRemove = Boolean(options.remove);
+  const rowProps = (id) => {
+    const renaming = renamingId === id;
+    return {
+      onOpen: openChat,
+      actionsOpen: actionsChatId === id,
+      onToggleActions: toggleActions,
+      renaming,
+      renameValue: renaming ? renameValue : "",
+      onStartRename: startRename,
+      onRenameChange: setRenameValue,
+      onSubmitRename: submitRename,
+      onCancelRename: cancelRename,
+      onSummarize: hasSummarize ? onSummarize : void 0,
+      summarizing: summarizingId === id,
+      onDelete: hasRemove ? onDelete : void 0,
+      deleting: deletingId === id
+    };
+  };
+  return {
+    actionsChatId,
+    renamingId,
+    renameValue,
+    setRenameValue,
+    summarizingId,
+    deletingId,
+    busyId,
+    openChat,
+    toggleActions,
+    startRename,
+    cancelRename,
+    submitRename,
+    onSummarize,
+    onDelete,
+    onAssign,
+    rowProps
+  };
+}
+
+// src/surface/useDismissibleNotice.ts
+var import_react12 = require("react");
 function useDismissibleNotice(values) {
-  const [dismissed, setDismissed] = (0, import_react11.useState)("");
+  const [dismissed, setDismissed] = (0, import_react12.useState)("");
   const key = values.join(",");
-  const dismiss = (0, import_react11.useCallback)(() => setDismissed(key), [key]);
+  const dismiss = (0, import_react12.useCallback)(() => setDismissed(key), [key]);
   return { show: values.length > 0 && dismissed !== key, dismiss };
 }
 
 // src/composer/SuggestionRow.tsx
-var import_react12 = require("react");
+var import_react13 = require("react");
 var import_jsx_runtime25 = require("react/jsx-runtime");
-var SuggestionRow = (0, import_react12.memo)(function SuggestionRow2({ items, ariaLabel }) {
+var SuggestionRow = (0, import_react13.memo)(function SuggestionRow2({ items, ariaLabel }) {
   if (items.length === 0) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { className: "bf-suggest", role: "group", "aria-label": ariaLabel, "data-testid": "composer-suggestions", children: items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("button", { type: "button", className: "bf-suggest__chip", onClick: item.onSelect, children: item.label }, item.id)) });
 });
@@ -2656,7 +2772,7 @@ function QueuedTurnChips({ items, textOf, onRemove, onSteer, canSteer, labels: o
 }
 
 // src/composer/ContextChip.tsx
-var import_react13 = require("react");
+var import_react14 = require("react");
 var import_jsx_runtime27 = require("react/jsx-runtime");
 function ContextChipImpl({ label, value, options = [], onChange, icon, className }) {
   const classes = ["bf-ctxchip", className].filter(Boolean).join(" ");
@@ -2671,7 +2787,7 @@ function ContextChipImpl({ label, value, options = [], onChange, icon, className
     /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("select", { "aria-label": label, value, onChange: (event) => onChange(event.target.value), children: options.map((option) => /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("option", { value: option.value, disabled: option.disabled, children: option.label }, option.value)) })
   ] });
 }
-var ContextChip = (0, import_react13.memo)(ContextChipImpl);
+var ContextChip = (0, import_react14.memo)(ContextChipImpl);
 
 // src/PromptPanel.tsx
 var import_jsx_runtime28 = require("react/jsx-runtime");
@@ -2758,22 +2874,22 @@ function promptTrailingAction({ canSubmit, running, canStop, voice, recording })
 }
 
 // src/useVoiceDictation.ts
-var import_react14 = require("react");
+var import_react15 = require("react");
 function recognitionCtor() {
   if (typeof window === "undefined") return null;
   const w = window;
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 function useVoiceDictation(getValue, onChange) {
-  const recognitionRef = (0, import_react14.useRef)(null);
-  const [recording, setRecording] = (0, import_react14.useState)(false);
-  const [supported] = (0, import_react14.useState)(() => recognitionCtor() != null);
-  const stopVoice = (0, import_react14.useCallback)(() => {
+  const recognitionRef = (0, import_react15.useRef)(null);
+  const [recording, setRecording] = (0, import_react15.useState)(false);
+  const [supported] = (0, import_react15.useState)(() => recognitionCtor() != null);
+  const stopVoice = (0, import_react15.useCallback)(() => {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     setRecording(false);
   }, []);
-  const startVoice = (0, import_react14.useCallback)(() => {
+  const startVoice = (0, import_react15.useCallback)(() => {
     const Recognition = recognitionCtor();
     if (!Recognition) return;
     if (recognitionRef.current) {
@@ -2807,14 +2923,14 @@ function useVoiceDictation(getValue, onChange) {
       done();
     }
   }, [getValue, onChange, stopVoice]);
-  (0, import_react14.useEffect)(() => () => {
+  (0, import_react15.useEffect)(() => () => {
     recognitionRef.current?.stop();
   }, []);
   return { supported, recording, startVoice, stopVoice };
 }
 
 // src/promptOptions/PromptOptionsMenu.tsx
-var import_react19 = require("react");
+var import_react20 = require("react");
 var import_builderforce_brain_embedded12 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/promptOptions/types.ts
@@ -2892,13 +3008,13 @@ function promptOptionsLabels(overrides) {
 }
 
 // src/popover/usePopover.ts
-var import_react15 = require("react");
+var import_react16 = require("react");
 function usePopover() {
-  const [open, setOpen] = (0, import_react15.useState)(false);
-  const rootRef = (0, import_react15.useRef)(null);
-  const close = (0, import_react15.useCallback)(() => setOpen(false), []);
-  const toggle = (0, import_react15.useCallback)(() => setOpen((value) => !value), []);
-  (0, import_react15.useEffect)(() => {
+  const [open, setOpen] = (0, import_react16.useState)(false);
+  const rootRef = (0, import_react16.useRef)(null);
+  const close = (0, import_react16.useCallback)(() => setOpen(false), []);
+  const toggle = (0, import_react16.useCallback)(() => setOpen((value) => !value), []);
+  (0, import_react16.useEffect)(() => {
     if (!open) return;
     const onDown = (event) => {
       if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
@@ -3049,11 +3165,11 @@ function ModePane({ labels, mode, memory, autoMode, session, close }) {
 }
 
 // src/promptOptions/ModelPane.tsx
-var import_react18 = require("react");
+var import_react19 = require("react");
 var import_builderforce_brain_embedded11 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/localModels/LocalModelRow.tsx
-var import_react16 = require("react");
+var import_react17 = require("react");
 
 // src/spend/format.ts
 function formatUsd(usd, locale) {
@@ -3109,7 +3225,7 @@ function progressPercent(row) {
 // src/localModels/LocalModelRow.tsx
 var import_jsx_runtime30 = require("react/jsx-runtime");
 function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownload, onCancel, onRemove }) {
-  const [menuOpen, setMenuOpen] = (0, import_react16.useState)(false);
+  const [menuOpen, setMenuOpen] = (0, import_react17.useState)(false);
   const ready = row.state === "ready";
   const percent = progressPercent(row);
   const meta = localModelMeta(row, labels, locale);
@@ -3204,7 +3320,7 @@ function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelec
 }
 
 // src/localModels/useLocalModels.ts
-var import_react17 = require("react");
+var import_react18 = require("react");
 var controllersByStore = /* @__PURE__ */ new WeakMap();
 function controllersOf(store) {
   let map = controllersByStore.get(store);
@@ -3216,10 +3332,10 @@ function controllersOf(store) {
 }
 var NO_ROWS = [];
 function useLocalModels(store) {
-  const [rows, setRows] = (0, import_react17.useState)(store ? null : NO_ROWS);
-  const [failed, setFailed] = (0, import_react17.useState)(() => /* @__PURE__ */ new Set());
-  const live = (0, import_react17.useRef)(true);
-  (0, import_react17.useEffect)(() => {
+  const [rows, setRows] = (0, import_react18.useState)(store ? null : NO_ROWS);
+  const [failed, setFailed] = (0, import_react18.useState)(() => /* @__PURE__ */ new Set());
+  const live = (0, import_react18.useRef)(true);
+  (0, import_react18.useEffect)(() => {
     live.current = true;
     if (!store) {
       setRows(NO_ROWS);
@@ -3258,7 +3374,7 @@ function useLocalModels(store) {
       unsubscribe();
     };
   }, [store]);
-  const download = (0, import_react17.useCallback)(
+  const download = (0, import_react18.useCallback)(
     (ref) => {
       if (!store) return;
       const controllers = controllersOf(store);
@@ -3279,13 +3395,13 @@ function useLocalModels(store) {
     },
     [store]
   );
-  const cancel = (0, import_react17.useCallback)(
+  const cancel = (0, import_react18.useCallback)(
     (ref) => {
       if (store) controllersOf(store).get(ref)?.abort();
     },
     [store]
   );
-  const remove = (0, import_react17.useCallback)(
+  const remove = (0, import_react18.useCallback)(
     (ref) => {
       if (store) void store.remove(ref).catch(() => void 0);
     },
@@ -3297,16 +3413,16 @@ function useLocalModels(store) {
 // src/promptOptions/ModelPane.tsx
 var import_jsx_runtime32 = require("react/jsx-runtime");
 function ModelPane({ model, labels, identity, inUse, onPicked }) {
-  const [query, setQuery] = (0, import_react18.useState)("");
-  const [filter, setFilter] = (0, import_react18.useState)("all");
+  const [query, setQuery] = (0, import_react19.useState)("");
+  const [filter, setFilter] = (0, import_react19.useState)("all");
   const local = useLocalModels(model.localStore);
   const hasStore = !!model.localStore;
-  const items = (0, import_react18.useMemo)(
+  const items = (0, import_react19.useMemo)(
     () => (0, import_builderforce_brain_embedded11.buildModelItems)((0, import_builderforce_brain_embedded11.withReadyPageModels)(model.options, local.rows), labels, identity),
     [model.options, local.rows, labels, identity]
   );
-  const storeKeys = (0, import_react18.useMemo)(() => new Set((local.rows ?? []).map((row) => `model:${row.ref}`)), [local.rows]);
-  const categories = (0, import_react18.useMemo)(
+  const storeKeys = (0, import_react19.useMemo)(() => new Set((local.rows ?? []).map((row) => `model:${row.ref}`)), [local.rows]);
+  const categories = (0, import_react19.useMemo)(
     () => import_builderforce_brain_embedded11.MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category) || category === "local" && hasStore),
     [items, hasStore]
   );
@@ -3405,12 +3521,12 @@ function PromptOptionsMenu({
   onAccountSettings,
   className
 }) {
-  const labels = (0, import_react19.useMemo)(() => promptOptionsLabels(labelOverrides), [labelOverrides]);
+  const labels = (0, import_react20.useMemo)(() => promptOptionsLabels(labelOverrides), [labelOverrides]);
   const { open, toggle, close, rootRef } = usePopover();
-  const [tab, setTab] = (0, import_react19.useState)("mode");
+  const [tab, setTab] = (0, import_react20.useState)("mode");
   const identity = model?.identity ?? import_builderforce_brain_embedded12.DEFAULT_MODEL_IDENTITY;
-  const items = (0, import_react19.useMemo)(() => model ? (0, import_builderforce_brain_embedded12.buildModelItems)(model.options, labels, identity) : [], [model, labels, identity]);
-  const inUse = (0, import_react19.useMemo)(
+  const items = (0, import_react20.useMemo)(() => model ? (0, import_builderforce_brain_embedded12.buildModelItems)(model.options, labels, identity) : [], [model, labels, identity]);
+  const inUse = (0, import_react20.useMemo)(
     () => model ? (0, import_builderforce_brain_embedded12.modelInUse)(model.selection, items, labels, model.effective, identity) : null,
     [model, items, labels, identity]
   );
@@ -3662,17 +3778,17 @@ function RecipientPicker({ participants, recipient, onChoose, labels, disabled, 
 }
 
 // src/recipient/useRecipientChoice.ts
-var import_react20 = require("react");
+var import_react21 = require("react");
 var import_builderforce_brain_embedded13 = require("@seanhogg/builderforce-brain-embedded");
 function useRecipientChoice({ participants, input, resetKey }) {
-  const [choice, setChoice] = (0, import_react20.useState)(null);
-  (0, import_react20.useEffect)(() => {
+  const [choice, setChoice] = (0, import_react21.useState)(null);
+  (0, import_react21.useEffect)(() => {
     setChoice(null);
   }, [resetKey]);
-  (0, import_react20.useEffect)(() => {
+  (0, import_react21.useEffect)(() => {
     setChoice((c) => c && c !== "brain" && !participants.some((p) => p.kind === c.kind && p.ref === c.ref) ? null : c);
   }, [participants]);
-  const mentioned = (0, import_react20.useMemo)(() => (0, import_builderforce_brain_embedded13.mentionRecipient)(input, participants), [input, participants]);
+  const mentioned = (0, import_react21.useMemo)(() => (0, import_builderforce_brain_embedded13.mentionRecipient)(input, participants), [input, participants]);
   return { recipient: (0, import_builderforce_brain_embedded13.resolveRecipient)(choice, mentioned), choice, choose: setChoice };
 }
 
@@ -3937,7 +4053,7 @@ function PendingChangesList({
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-var import_react27 = require("react");
+var import_react28 = require("react");
 
 // src/chatTickets/runGate.ts
 function resolveRunGate(adapter) {
@@ -3947,16 +4063,16 @@ function resolveRunGate(adapter) {
 }
 
 // src/chatTickets/useChatProgressSync.ts
-var import_react21 = require("react");
+var import_react22 = require("react");
 function useChatProgressSync(chatId, chatList, onStale) {
-  const rowRef = (0, import_react21.useRef)(void 0);
-  const onStaleRef = (0, import_react21.useRef)(onStale);
-  const reported = (0, import_react21.useRef)(null);
-  (0, import_react21.useEffect)(() => {
+  const rowRef = (0, import_react22.useRef)(void 0);
+  const onStaleRef = (0, import_react22.useRef)(onStale);
+  const reported = (0, import_react22.useRef)(null);
+  (0, import_react22.useEffect)(() => {
     rowRef.current = chatList.find((c) => c.id === chatId);
     onStaleRef.current = onStale;
   }, [chatList, chatId, onStale]);
-  return (0, import_react21.useCallback)((tickets) => {
+  return (0, import_react22.useCallback)((tickets) => {
     const row = rowRef.current;
     if (!onStaleRef.current || !chatProgressIsStale(row, tickets)) return;
     const signature = `${chatId}:${tickets.length}:${tickets.map((t) => `${t.progressPct}/${t.status ?? ""}`).join(",")}`;
@@ -4226,7 +4342,7 @@ function SpendPill({ summary, labels: overrides, locale }) {
 }
 
 // src/chatTickets/LinkForm.tsx
-var import_react22 = require("react");
+var import_react23 = require("react");
 
 // src/chatTickets/types.ts
 var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap", "spec", "retro", "poker"];
@@ -4301,14 +4417,14 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 var import_jsx_runtime43 = require("react/jsx-runtime");
 var SEARCH_LIMIT = 40;
 function LinkForm({ search, projectId, existing, labels, onLink }) {
-  const [kind, setKind] = (0, import_react22.useState)("task");
-  const [ref, setRef] = (0, import_react22.useState)("");
-  const [query, setQuery] = (0, import_react22.useState)("");
-  const [linkType, setLinkType] = (0, import_react22.useState)("linked");
-  const [busy, setBusy] = (0, import_react22.useState)(false);
-  const [results, setResults] = (0, import_react22.useState)([]);
-  const [loading, setLoading] = (0, import_react22.useState)(false);
-  (0, import_react22.useEffect)(() => {
+  const [kind, setKind] = (0, import_react23.useState)("task");
+  const [ref, setRef] = (0, import_react23.useState)("");
+  const [query, setQuery] = (0, import_react23.useState)("");
+  const [linkType, setLinkType] = (0, import_react23.useState)("linked");
+  const [busy, setBusy] = (0, import_react23.useState)(false);
+  const [results, setResults] = (0, import_react23.useState)([]);
+  const [loading, setLoading] = (0, import_react23.useState)(false);
+  (0, import_react23.useEffect)(() => {
     let live = true;
     setLoading(true);
     const h = setTimeout(() => {
@@ -4325,12 +4441,12 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
       clearTimeout(h);
     };
   }, [search, kind, query, projectId]);
-  const shown = (0, import_react22.useMemo)(
+  const shown = (0, import_react23.useMemo)(
     () => results.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref)),
     [results, existing, kind]
   );
   const atCap = results.length >= SEARCH_LIMIT;
-  (0, import_react22.useEffect)(() => {
+  (0, import_react23.useEffect)(() => {
     if (ref && !shown.some((o) => o.ref === ref)) setRef("");
   }, [shown, ref]);
   const submit = async () => {
@@ -4375,10 +4491,10 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
 }
 
 // src/chatTickets/MergeSection.tsx
-var import_react23 = require("react");
+var import_react24 = require("react");
 var import_jsx_runtime44 = require("react/jsx-runtime");
 function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
-  const [selected, setSelected] = (0, import_react23.useState)([]);
+  const [selected, setSelected] = (0, import_react24.useState)([]);
   const candidates = chatList.filter((c) => c.id !== chatId);
   const toggle = (id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
   return /* @__PURE__ */ (0, import_jsx_runtime44.jsxs)("div", { style: { ...S2.section, flexDirection: "column", alignItems: "stretch" }, children: [
@@ -4394,10 +4510,10 @@ function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
 }
 
 // src/chatTickets/PeopleSection.tsx
-var import_react24 = require("react");
+var import_react25 = require("react");
 var import_jsx_runtime45 = require("react/jsx-runtime");
 function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite, onRemove, busy }) {
-  const [email, setEmail] = (0, import_react24.useState)("");
+  const [email, setEmail] = (0, import_react25.useState)("");
   const submit = async () => {
     const e = email.trim();
     if (!e) return;
@@ -4438,11 +4554,11 @@ function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite,
 }
 
 // src/chatTickets/QuestionsSection.tsx
-var import_react25 = require("react");
+var import_react26 = require("react");
 var import_jsx_runtime46 = require("react/jsx-runtime");
 function QuestionsSection({ questions, labels, onAnswer }) {
-  const [answers, setAnswers] = (0, import_react25.useState)({});
-  const [sending, setSending] = (0, import_react25.useState)(null);
+  const [answers, setAnswers] = (0, import_react26.useState)({});
+  const [sending, setSending] = (0, import_react26.useState)(null);
   return /* @__PURE__ */ (0, import_jsx_runtime46.jsx)("div", { style: S2.drawer, children: questions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime46.jsx)("span", { style: S2.muted, children: labels.noQuestions }) : questions.map((q, index) => {
     const value = answers[q.id] ?? "";
     return /* @__PURE__ */ (0, import_jsx_runtime46.jsxs)("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
@@ -4496,7 +4612,7 @@ function sortChatTickets(tickets, sort) {
 }
 
 // src/chatTickets/useChatTicketSort.ts
-var import_react26 = require("react");
+var import_react27 = require("react");
 var SORT_KEY = "bf.chatTickets.sort";
 function readSort() {
   try {
@@ -4513,8 +4629,8 @@ function writeSort(sort) {
   }
 }
 function useChatTicketSort() {
-  const [sort, setSort] = (0, import_react26.useState)(readSort);
-  const choose = (0, import_react26.useCallback)((next) => {
+  const [sort, setSort] = (0, import_react27.useState)(readSort);
+  const choose = (0, import_react27.useCallback)((next) => {
     setSort(next);
     writeSort(next);
   }, []);
@@ -4527,27 +4643,27 @@ var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
 var NO_SUBAGENTS = [];
 function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels: spendLabels2, locale }) {
-  const [tickets, setTickets] = (0, import_react27.useState)([]);
-  const [agents, setAgents] = (0, import_react27.useState)([]);
-  const [members, setMembers] = (0, import_react27.useState)([]);
-  const [pool, setPool] = (0, import_react27.useState)([]);
-  const [questions, setQuestions] = (0, import_react27.useState)([]);
-  const [panel, setPanel] = (0, import_react27.useState)(null);
+  const [tickets, setTickets] = (0, import_react28.useState)([]);
+  const [agents, setAgents] = (0, import_react28.useState)([]);
+  const [members, setMembers] = (0, import_react28.useState)([]);
+  const [pool, setPool] = (0, import_react28.useState)([]);
+  const [questions, setQuestions] = (0, import_react28.useState)([]);
+  const [panel, setPanel] = (0, import_react28.useState)(null);
   const togglePanel = (key) => setPanel((open) => open === key ? null : key);
   const openExtension = extensions?.find((ext) => ext.key === panel) ?? null;
-  (0, import_react27.useEffect)(() => {
+  (0, import_react28.useEffect)(() => {
     if (panel && !isBuiltinPanel(panel) && !extensions?.some((ext) => ext.key === panel)) setPanel(null);
   }, [panel, extensions]);
-  const [lineageKey, setLineageKey] = (0, import_react27.useState)(null);
-  const [lineage, setLineage] = (0, import_react27.useState)([]);
-  const [runKey, setRunKey] = (0, import_react27.useState)(null);
-  const [msg, setMsg] = (0, import_react27.useState)(null);
-  const [busy, setBusy] = (0, import_react27.useState)(false);
-  const [collapsed, setCollapsed] = (0, import_react27.useState)(null);
-  const userCollapsed = (0, import_react27.useRef)(false);
+  const [lineageKey, setLineageKey] = (0, import_react28.useState)(null);
+  const [lineage, setLineage] = (0, import_react28.useState)([]);
+  const [runKey, setRunKey] = (0, import_react28.useState)(null);
+  const [msg, setMsg] = (0, import_react28.useState)(null);
+  const [busy, setBusy] = (0, import_react28.useState)(false);
+  const [collapsed, setCollapsed] = (0, import_react28.useState)(null);
+  const userCollapsed = (0, import_react28.useRef)(false);
   const [sort, setSort] = useChatTicketSort();
   const syncChatProgress = useChatProgressSync(chatId, chatList, onChanged);
-  const load = (0, import_react27.useCallback)(async () => {
+  const load = (0, import_react28.useCallback)(async () => {
     const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
       adapter.listAgents(chatId).catch(() => []),
@@ -4561,18 +4677,18 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setQuestions(qs);
     if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId, syncChatProgress]);
-  (0, import_react27.useEffect)(() => {
+  (0, import_react28.useEffect)(() => {
     void load();
   }, [load, refreshSignal]);
-  (0, import_react27.useEffect)(() => {
+  (0, import_react28.useEffect)(() => {
     adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
   }, [adapter]);
   const flash = (m) => {
     setMsg(m);
     if (typeof window !== "undefined") window.setTimeout(() => setMsg(null), 3500);
   };
-  const poolName = (0, import_react27.useCallback)((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
-  const parentLink = (0, import_react27.useCallback)((tk) => tk.parent ? tickets.find((t) => t.kind === tk.parent.kind && t.ref === tk.parent.ref) : void 0, [tickets]);
+  const poolName = (0, import_react28.useCallback)((ref) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
+  const parentLink = (0, import_react28.useCallback)((tk) => tk.parent ? tickets.find((t) => t.kind === tk.parent.kind && t.ref === tk.parent.ref) : void 0, [tickets]);
   const unlink = async (tk) => {
     setBusy(true);
     try {
@@ -4605,8 +4721,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       setBusy(false);
     }
   };
-  const agg = (0, import_react27.useMemo)(() => rollupChatTicketHealth(tickets), [tickets]);
-  const displayedTickets = (0, import_react27.useMemo)(() => sortChatTickets(tickets, sort), [tickets, sort]);
+  const agg = (0, import_react28.useMemo)(() => rollupChatTicketHealth(tickets), [tickets]);
+  const displayedTickets = (0, import_react28.useMemo)(() => sortChatTickets(tickets, sort), [tickets, sort]);
   const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
   const toggleCollapsed = () => {
     userCollapsed.current = true;
@@ -4870,7 +4986,7 @@ var BUILTIN_PANELS = /* @__PURE__ */ new Set(["link", "agents", "people", "merge
 function isBuiltinPanel(key) {
   return BUILTIN_PANELS.has(key);
 }
-var ChatTicketsPanel = (0, import_react27.memo)(ChatTicketsPanelInner);
+var ChatTicketsPanel = (0, import_react28.memo)(ChatTicketsPanelInner);
 
 // src/chatTickets/restAdapter.ts
 var RUNNABLE2 = new Set(RUNNABLE_KINDS);
@@ -4991,12 +5107,12 @@ function createChatTicketsRestAdapter(opts) {
 }
 
 // src/chatTickets/useChatParticipants.ts
-var import_react28 = require("react");
+var import_react29 = require("react");
 function useChatParticipants(adapter, chatId, refreshSignal = 0) {
-  const [pool, setPool] = (0, import_react28.useState)([]);
-  const [invited, setInvited] = (0, import_react28.useState)([]);
-  const [members, setMembers] = (0, import_react28.useState)([]);
-  (0, import_react28.useEffect)(() => {
+  const [pool, setPool] = (0, import_react29.useState)([]);
+  const [invited, setInvited] = (0, import_react29.useState)([]);
+  const [members, setMembers] = (0, import_react29.useState)([]);
+  (0, import_react29.useEffect)(() => {
     if (chatId == null) {
       setInvited([]);
       setMembers([]);
@@ -5018,7 +5134,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
     };
   }, [adapter, chatId, refreshSignal]);
   const needsPool = invited.some((a) => !a.name);
-  (0, import_react28.useEffect)(() => {
+  (0, import_react29.useEffect)(() => {
     if (!needsPool) return;
     let ok = true;
     adapter.loadAgentPool().then((p) => {
@@ -5030,7 +5146,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
       ok = false;
     };
   }, [adapter, needsPool]);
-  return (0, import_react28.useMemo)(
+  return (0, import_react29.useMemo)(
     () => [
       // The NAME comes off the invited row, which the server resolves in one batched
       // query. The pool lookup behind it is the legacy path, kept only for a client
@@ -5051,26 +5167,26 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
 }
 
 // src/chatTickets/useChatActivitySignal.ts
-var import_react29 = require("react");
+var import_react30 = require("react");
 var import_builderforce_brain_embedded15 = require("@seanhogg/builderforce-brain-embedded");
 function useChatActivitySignal(messages) {
-  return (0, import_react29.useMemo)(() => (0, import_builderforce_brain_embedded15.activityMessageCount)(messages), [messages]);
+  return (0, import_react30.useMemo)(() => (0, import_builderforce_brain_embedded15.activityMessageCount)(messages), [messages]);
 }
 
 // src/mention/MentionAutocomplete.tsx
-var import_react30 = require("react");
+var import_react31 = require("react");
 var import_builderforce_brain_embedded16 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime48 = require("react/jsx-runtime");
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
-  const [token, setToken] = (0, import_react30.useState)(null);
-  const [index, setIndex] = (0, import_react30.useState)(0);
-  const matches = (0, import_react30.useMemo)(
+  const [token, setToken] = (0, import_react31.useState)(null);
+  const [index, setIndex] = (0, import_react31.useState)(0);
+  const matches = (0, import_react31.useMemo)(
     () => token && !disabled ? (0, import_builderforce_brain_embedded16.filterMentionCandidates)(participants, token.query) : [],
     [token, participants, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = (0, import_react30.useCallback)(() => {
+  const recompute = (0, import_react31.useCallback)(() => {
     const el = textareaRef.current;
     if (!el || disabled || participants.length === 0) {
       setToken(null);
@@ -5080,10 +5196,10 @@ function useMentionAutocomplete(opts) {
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
-  (0, import_react30.useEffect)(() => {
+  (0, import_react31.useEffect)(() => {
     recompute();
   }, [value, recompute]);
-  const choose = (0, import_react30.useCallback)((r) => {
+  const choose = (0, import_react31.useCallback)((r) => {
     const el = textareaRef.current;
     const tk = token ?? (el ? (0, import_builderforce_brain_embedded16.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
@@ -5105,7 +5221,7 @@ function useMentionAutocomplete(opts) {
     setToken(null);
     onPick(r);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = (0, import_react30.useCallback)((e) => {
+  const onKeyDown = (0, import_react31.useCallback)((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -5193,19 +5309,19 @@ var POP = {
 };
 
 // src/mention/TicketAutocomplete.tsx
-var import_react31 = require("react");
+var import_react32 = require("react");
 var import_builderforce_brain_embedded17 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime49 = require("react/jsx-runtime");
 function useTicketAutocomplete(opts) {
   const { textareaRef, value, setValue, tickets, onPick, labels, disabled } = opts;
-  const [token, setToken] = (0, import_react31.useState)(null);
-  const [index, setIndex] = (0, import_react31.useState)(0);
-  const matches = (0, import_react31.useMemo)(
+  const [token, setToken] = (0, import_react32.useState)(null);
+  const [index, setIndex] = (0, import_react32.useState)(0);
+  const matches = (0, import_react32.useMemo)(
     () => token && !disabled ? (0, import_builderforce_brain_embedded17.filterTicketCandidates)(tickets, token.query) : [],
     [token, tickets, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
-  const recompute = (0, import_react31.useCallback)(() => {
+  const recompute = (0, import_react32.useCallback)(() => {
     const el = textareaRef.current;
     if (!el || disabled || tickets.length === 0) {
       setToken(null);
@@ -5215,10 +5331,10 @@ function useTicketAutocomplete(opts) {
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, tickets.length]);
-  (0, import_react31.useEffect)(() => {
+  (0, import_react32.useEffect)(() => {
     recompute();
   }, [value, recompute]);
-  const choose = (0, import_react31.useCallback)((t) => {
+  const choose = (0, import_react32.useCallback)((t) => {
     const el = textareaRef.current;
     const tk = token ?? (el ? (0, import_builderforce_brain_embedded17.activeTicketToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
@@ -5241,7 +5357,7 @@ function useTicketAutocomplete(opts) {
     setToken(null);
     onPick(t);
   }, [token, value, setValue, onPick, textareaRef]);
-  const onKeyDown = (0, import_react31.useCallback)((e) => {
+  const onKeyDown = (0, import_react32.useCallback)((e) => {
     if (!open) return false;
     switch (e.key) {
       case "ArrowDown":
@@ -5390,7 +5506,7 @@ function chatDiagnosticsReads(adapter, chatId) {
 }
 
 // src/evermind/EvermindConsole.tsx
-var import_react36 = require("react");
+var import_react37 = require("react");
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -5615,13 +5731,13 @@ function evermindNextAction(input) {
 }
 
 // src/evermind/EvermindTestBench.tsx
-var import_react32 = require("react");
+var import_react33 = require("react");
 var import_jsx_runtime50 = require("react/jsx-runtime");
 function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
-  const [prompt, setPrompt] = (0, import_react32.useState)("");
-  const [running, setRunning] = (0, import_react32.useState)(false);
-  const [error, setError] = (0, import_react32.useState)(null);
-  const run = (0, import_react32.useCallback)(async (withPrompt) => {
+  const [prompt, setPrompt] = (0, import_react33.useState)("");
+  const [running, setRunning] = (0, import_react33.useState)(false);
+  const [error, setError] = (0, import_react33.useState)(null);
+  const run = (0, import_react33.useCallback)(async (withPrompt) => {
     setRunning(true);
     setError(null);
     try {
@@ -5674,7 +5790,7 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
 }
 
 // src/evermind/EvermindMaintenance.tsx
-var import_react33 = require("react");
+var import_react34 = require("react");
 var import_jsx_runtime51 = require("react/jsx-runtime");
 function EvermindMaintenance({
   t,
@@ -5684,13 +5800,13 @@ function EvermindMaintenance({
   onReindex,
   onCleanup
 }) {
-  const [slug, setSlug] = (0, import_react33.useState)("");
-  const [pending, setPending] = (0, import_react33.useState)(null);
-  const doReseed = (0, import_react33.useCallback)(async () => {
+  const [slug, setSlug] = (0, import_react34.useState)("");
+  const [pending, setPending] = (0, import_react34.useState)(null);
+  const doReseed = (0, import_react34.useCallback)(async () => {
     setPending(null);
     await onReseed?.(slug || void 0);
   }, [onReseed, slug]);
-  const doCleanup = (0, import_react33.useCallback)(async () => {
+  const doCleanup = (0, import_react34.useCallback)(async () => {
     setPending(null);
     await onCleanup?.();
   }, [onCleanup]);
@@ -5794,7 +5910,7 @@ function Confirm({
 }
 
 // src/evermind/EvermindAnalyzer.tsx
-var import_react34 = require("react");
+var import_react35 = require("react");
 var import_jsx_runtime52 = require("react/jsx-runtime");
 var TONE = {
   ok: "ok",
@@ -5805,15 +5921,15 @@ var TONE = {
   redundant: "warn"
 };
 function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysis, onAnalysis }) {
-  const [selected, setSelected] = (0, import_react34.useState)(/* @__PURE__ */ new Set());
-  const [running, setRunning] = (0, import_react34.useState)(false);
-  const [applying, setApplying] = (0, import_react34.useState)(false);
-  const [repair, setRepair] = (0, import_react34.useState)(null);
-  const [error, setError] = (0, import_react34.useState)(null);
-  (0, import_react34.useEffect)(() => {
+  const [selected, setSelected] = (0, import_react35.useState)(/* @__PURE__ */ new Set());
+  const [running, setRunning] = (0, import_react35.useState)(false);
+  const [applying, setApplying] = (0, import_react35.useState)(false);
+  const [repair, setRepair] = (0, import_react35.useState)(null);
+  const [error, setError] = (0, import_react35.useState)(null);
+  (0, import_react35.useEffect)(() => {
     setSelected(new Set(analysis?.findings.map((f) => f.id) ?? []));
   }, [analysis]);
-  const run = (0, import_react34.useCallback)(async () => {
+  const run = (0, import_react35.useCallback)(async () => {
     setRunning(true);
     setError(null);
     setRepair(null);
@@ -5826,7 +5942,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setRunning(false);
     }
   }, [onAnalyze, onAnalysis, t.errorGeneric]);
-  const apply = (0, import_react34.useCallback)(async () => {
+  const apply = (0, import_react35.useCallback)(async () => {
     if (!onApply || !analysis) return;
     const picked = analysis.findings.filter((f) => selected.has(f.id));
     if (picked.length === 0) return;
@@ -5845,7 +5961,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
       setApplying(false);
     }
   }, [analysis, onAnalysis, onApply, onRepaired, selected, t.errorGeneric]);
-  const toggle = (0, import_react34.useCallback)((id) => {
+  const toggle = (0, import_react35.useCallback)((id) => {
     setSelected((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
@@ -5854,7 +5970,7 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     });
   }, []);
   const findings = analysis?.findings ?? [];
-  const allSelected = (0, import_react34.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
+  const allSelected = (0, import_react35.useMemo)(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
   const busy = disabled || running || applying;
   return /* @__PURE__ */ (0, import_jsx_runtime52.jsxs)("div", { style: sectionBlock, children: [
     /* @__PURE__ */ (0, import_jsx_runtime52.jsx)("div", { style: fieldTitle, children: t.analyzeTitle }),
@@ -5957,13 +6073,13 @@ function FindingRow({
 }
 
 // src/evermind/EvermindDiagnostics.tsx
-var import_react35 = require("react");
+var import_react36 = require("react");
 var import_jsx_runtime53 = require("react/jsx-runtime");
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
-  const [report, setReport] = (0, import_react35.useState)(null);
-  const [copied, setCopied] = (0, import_react35.useState)(false);
-  const [revealed, setRevealed] = (0, import_react35.useState)(false);
-  const copy = (0, import_react35.useCallback)(async () => {
+  const [report, setReport] = (0, import_react36.useState)(null);
+  const [copied, setCopied] = (0, import_react36.useState)(false);
+  const [revealed, setRevealed] = (0, import_react36.useState)(false);
+  const copy = (0, import_react36.useCallback)(async () => {
     const text = buildReport();
     setReport(text);
     try {
@@ -5978,13 +6094,13 @@ function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
       onManualFallback?.();
     }
   }, [buildReport, onCopy, onManualFallback]);
-  const toggleReveal = (0, import_react35.useCallback)(() => setRevealed((v) => !v), []);
+  const toggleReveal = (0, import_react36.useCallback)(() => setRevealed((v) => !v), []);
   return { report, copied, revealed, copy, toggleReveal };
 }
 function EvermindDiagnostics({ t, disabled, copy }) {
   const { report, copied, revealed } = copy;
-  const areaRef = (0, import_react35.useRef)(null);
-  (0, import_react35.useEffect)(() => {
+  const areaRef = (0, import_react36.useRef)(null);
+  (0, import_react36.useEffect)(() => {
     if (!revealed) return;
     areaRef.current?.focus();
     areaRef.current?.select();
@@ -6301,26 +6417,26 @@ var import_jsx_runtime55 = require("react/jsx-runtime");
 var TEACH_POLL_INTERVAL_MS = 3e3;
 var TEACH_POLL_TIMEOUT_MS = 12e4;
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
-  const t = (0, import_react36.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
-  const [data, setData] = (0, import_react36.useState)(null);
-  const [targets, setTargets] = (0, import_react36.useState)(null);
-  const [seedModels, setSeedModels] = (0, import_react36.useState)([]);
-  const [teacherOpts, setTeacherOpts] = (0, import_react36.useState)(null);
-  const [selectedSlug, setSelectedSlug] = (0, import_react36.useState)("");
-  const [teachPrompt, setTeachPrompt] = (0, import_react36.useState)("");
-  const [teachText, setTeachText] = (0, import_react36.useState)("");
-  const [busy, setBusy] = (0, import_react36.useState)(false);
-  const [validating, setValidating] = (0, import_react36.useState)(false);
-  const [validateResult, setValidateResult] = (0, import_react36.useState)(null);
-  const [notice, setNotice] = (0, import_react36.useState)(null);
-  const [noticeTone, setNoticeTone] = (0, import_react36.useState)("good");
-  const [error, setError] = (0, import_react36.useState)(null);
-  const [loaded, setLoaded] = (0, import_react36.useState)(false);
-  const [tab, setTab] = (0, import_react36.useState)("teach");
-  const [probeResult, setProbeResult] = (0, import_react36.useState)(null);
-  const [analysis, setAnalysis] = (0, import_react36.useState)(null);
-  const [loadFailed, setLoadFailed] = (0, import_react36.useState)(false);
-  const reload = (0, import_react36.useCallback)(async () => {
+  const t = (0, import_react37.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
+  const [data, setData] = (0, import_react37.useState)(null);
+  const [targets, setTargets] = (0, import_react37.useState)(null);
+  const [seedModels, setSeedModels] = (0, import_react37.useState)([]);
+  const [teacherOpts, setTeacherOpts] = (0, import_react37.useState)(null);
+  const [selectedSlug, setSelectedSlug] = (0, import_react37.useState)("");
+  const [teachPrompt, setTeachPrompt] = (0, import_react37.useState)("");
+  const [teachText, setTeachText] = (0, import_react37.useState)("");
+  const [busy, setBusy] = (0, import_react37.useState)(false);
+  const [validating, setValidating] = (0, import_react37.useState)(false);
+  const [validateResult, setValidateResult] = (0, import_react37.useState)(null);
+  const [notice, setNotice] = (0, import_react37.useState)(null);
+  const [noticeTone, setNoticeTone] = (0, import_react37.useState)("good");
+  const [error, setError] = (0, import_react37.useState)(null);
+  const [loaded, setLoaded] = (0, import_react37.useState)(false);
+  const [tab, setTab] = (0, import_react37.useState)("teach");
+  const [probeResult, setProbeResult] = (0, import_react37.useState)(null);
+  const [analysis, setAnalysis] = (0, import_react37.useState)(null);
+  const [loadFailed, setLoadFailed] = (0, import_react37.useState)(false);
+  const reload = (0, import_react37.useCallback)(async () => {
     const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
       const d = await adapter.loadData();
@@ -6337,11 +6453,11 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (tg) setTargets(tg);
     }
   }, [adapter]);
-  (0, import_react36.useEffect)(() => {
+  (0, import_react37.useEffect)(() => {
     setLoaded(false);
     void reload();
   }, [reload]);
-  (0, import_react36.useEffect)(() => {
+  (0, import_react37.useEffect)(() => {
     if (!canManage) return;
     let cancelled = false;
     void adapter.loadSeedModels().then((m) => {
@@ -6359,7 +6475,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       cancelled = true;
     };
   }, [adapter, canManage]);
-  (0, import_react36.useEffect)(() => {
+  (0, import_react37.useEffect)(() => {
     if (!refreshMs) return;
     const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
     const id = setInterval(() => {
@@ -6374,13 +6490,13 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [refreshMs, busy, reload]);
-  const lastRefreshSignal = (0, import_react36.useRef)(refreshSignal);
-  (0, import_react36.useEffect)(() => {
+  const lastRefreshSignal = (0, import_react37.useRef)(refreshSignal);
+  (0, import_react37.useEffect)(() => {
     if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
     lastRefreshSignal.current = refreshSignal;
     void reload();
   }, [refreshSignal, reload]);
-  const runValidate = (0, import_react36.useCallback)(async (prompt) => {
+  const runValidate = (0, import_react37.useCallback)(async (prompt) => {
     const task = prompt.trim();
     if (task.length < 3) return;
     setValidating(true);
@@ -6396,20 +6512,20 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setValidating(false);
     }
   }, [adapter, onValidate, t.errorGeneric]);
-  const clearValidate = (0, import_react36.useCallback)(() => {
+  const clearValidate = (0, import_react37.useCallback)(() => {
     setValidateResult(null);
     onValidate?.(null);
   }, [onValidate]);
-  const pollTimer = (0, import_react36.useRef)(null);
-  const mounted = (0, import_react36.useRef)(true);
-  (0, import_react36.useEffect)(() => {
+  const pollTimer = (0, import_react37.useRef)(null);
+  const mounted = (0, import_react37.useRef)(true);
+  (0, import_react37.useEffect)(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
   }, []);
-  const describeTeachOutcome = (0, import_react36.useCallback)((status) => {
+  const describeTeachOutcome = (0, import_react37.useCallback)((status) => {
     if (status.state === "dropped") return { text: t.taughtDropped, tone: "warn" };
     if (status.state !== "merged") return { text: t.taughtStillPending, tone: "warn" };
     const verdict = evermindLearnedStatus({
@@ -6425,7 +6541,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     if (verdict.state === "fault") return { text: t.taughtTeacherFault(verdict.teacherModel ?? "", verdict.reason), tone: "warn" };
     return { text: t.taughtSelf(version), tone: "good" };
   }, [t]);
-  const trackTeach = (0, import_react36.useCallback)((contributionId) => {
+  const trackTeach = (0, import_react37.useCallback)((contributionId) => {
     const readStatus = adapter.teachStatus;
     if (!readStatus || !Number.isInteger(contributionId) || contributionId <= 0) return;
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -6459,7 +6575,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       void tick();
     }, TEACH_POLL_INTERVAL_MS);
   }, [adapter, describeTeachOutcome, reload, t.taughtStillPending]);
-  const run = (0, import_react36.useCallback)(async (op, successNotice) => {
+  const run = (0, import_react37.useCallback)(async (op, successNotice) => {
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -6474,8 +6590,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       setBusy(false);
     }
   }, [reload, t.errorGeneric]);
-  const panelId = (0, import_react36.useId)();
-  const buildReport = (0, import_react36.useCallback)(() => buildEvermindDiagnostics({
+  const panelId = (0, import_react37.useId)();
+  const buildReport = (0, import_react37.useCallback)(() => buildEvermindDiagnostics({
     data,
     projectName,
     host,
@@ -7035,7 +7151,7 @@ function RecentList({ t, entries }) {
   ] });
 }
 function RecentRow({ t, entry }) {
-  const [open, setOpen] = (0, import_react36.useState)(false);
+  const [open, setOpen] = (0, import_react37.useState)(false);
   const status = evermindLearnedStatus(entry);
   const faulted = status.state === "fault";
   const body = entry.kind === "delta" ? t.deltaEntry : faulted ? "" : entry.text ?? "";
@@ -7328,7 +7444,7 @@ function evermindLabelsFromBundle(bundle, prefix = "ev.") {
 }
 
 // src/project360/Project360View.tsx
-var import_react37 = require("react");
+var import_react38 = require("react");
 
 // src/project360/sunburstGeometry.ts
 var VIEWBOX = 320;
@@ -7508,9 +7624,9 @@ var DEFAULT_PROJECT360_LABELS = {
 var import_jsx_runtime57 = require("react/jsx-runtime");
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react37.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = (0, import_react37.useState)(null);
-  const sortedWorkforce = (0, import_react37.useMemo)(
+  const L = (0, import_react38.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const [selected, setSelected] = (0, import_react38.useState)(null);
+  const sortedWorkforce = (0, import_react38.useMemo)(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
   );
@@ -7677,7 +7793,7 @@ function MemberRow({ member, labels, onAction }) {
 }
 
 // src/projectList/ProjectListView.tsx
-var import_react38 = require("react");
+var import_react39 = require("react");
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -7692,7 +7808,7 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 // src/projectList/ProjectListView.tsx
 var import_jsx_runtime58 = require("react/jsx-runtime");
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react38.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const L = (0, import_react39.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
   const header = /* @__PURE__ */ (0, import_jsx_runtime58.jsxs)("header", { className: "bf-list-head", children: [
     /* @__PURE__ */ (0, import_jsx_runtime58.jsxs)("div", { className: "bf-list-head__id", children: [
       /* @__PURE__ */ (0, import_jsx_runtime58.jsx)("span", { className: "bf-list-head__title", children: title }),
@@ -7769,7 +7885,7 @@ function Row2({ item, onAction }) {
 }
 
 // src/composer/BrainComposer.tsx
-var import_react42 = require("react");
+var import_react43 = require("react");
 
 // src/workStatus/consumptionSnapshot.ts
 var TTL_MS = 6e4;
@@ -7802,10 +7918,10 @@ function subscribeConsumptionSnapshot(listener) {
 }
 
 // src/workStatus/useConsumptionSnapshot.ts
-var import_react39 = require("react");
+var import_react40 = require("react");
 function useConsumptionSnapshot(request) {
-  const [snapshot, setSnapshot] = (0, import_react39.useState)(cachedConsumptionSnapshot());
-  (0, import_react39.useEffect)(() => {
+  const [snapshot, setSnapshot] = (0, import_react40.useState)(cachedConsumptionSnapshot());
+  (0, import_react40.useEffect)(() => {
     if (!request) return void 0;
     let alive = true;
     const off = subscribeConsumptionSnapshot((s) => {
@@ -7930,11 +8046,11 @@ function AccountStatus({ snapshot, labels, locale, onUpgrade }) {
 }
 
 // src/workStatus/EvermindStatus.tsx
-var import_react40 = require("react");
+var import_react41 = require("react");
 var import_jsx_runtime60 = require("react/jsx-runtime");
 function EvermindStatus({ request, projectId, labels }) {
-  const [head, setHead] = (0, import_react40.useState)(null);
-  (0, import_react40.useEffect)(() => {
+  const [head, setHead] = (0, import_react41.useState)(null);
+  (0, import_react41.useEffect)(() => {
     if (projectId == null) {
       setHead(null);
       return void 0;
@@ -7990,7 +8106,7 @@ function WorkStatusPanel({ request, projectId, labels: overrides, spendLabels: s
 }
 
 // src/composer/ComposerAddMenu.tsx
-var import_react41 = require("react");
+var import_react42 = require("react");
 
 // src/composer/ComposerIcons.tsx
 var import_jsx_runtime62 = require("react/jsx-runtime");
@@ -8006,7 +8122,7 @@ var IconStop = () => /* @__PURE__ */ (0, import_jsx_runtime62.jsx)("svg", { widt
 var import_jsx_runtime63 = require("react/jsx-runtime");
 function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = false, accept, onAddContext, webBrowsing, items }) {
   const { open, toggle, close, rootRef } = usePopover();
-  const fileRef = (0, import_react41.useRef)(null);
+  const fileRef = (0, import_react42.useRef)(null);
   if (!onAttachFiles && !onAddContext && !webBrowsing && !items?.length) return null;
   const onFiles = (e) => {
     const files = Array.from(e.target.files ?? []);
@@ -8218,13 +8334,13 @@ function BrainComposer(props) {
     className
   } = props;
   const labels = composerLabels(labelBundle?.composer);
-  const textareaRef = (0, import_react42.useRef)(null);
-  const valueRef = (0, import_react42.useRef)(value);
+  const textareaRef = (0, import_react43.useRef)(null);
+  const valueRef = (0, import_react43.useRef)(value);
   valueRef.current = value;
-  const getValue = (0, import_react42.useCallback)(() => valueRef.current, []);
-  const [focused, setFocused] = (0, import_react42.useState)(false);
-  const [dragging, setDragging] = (0, import_react42.useState)(false);
-  (0, import_react42.useEffect)(() => {
+  const getValue = (0, import_react43.useCallback)(() => valueRef.current, []);
+  const [focused, setFocused] = (0, import_react43.useState)(false);
+  const [dragging, setDragging] = (0, import_react43.useState)(false);
+  (0, import_react43.useEffect)(() => {
     if (focusToken == null) return;
     const el = textareaRef.current;
     if (!el) return;
@@ -8377,14 +8493,14 @@ function BrainComposer(props) {
 }
 
 // src/composer/useChatMemorySwitch.ts
-var import_react43 = require("react");
+var import_react44 = require("react");
 function useChatMemorySwitch(opts) {
   const { chatId, serverValue, persist } = opts;
-  const [enabled, setLocal] = (0, import_react43.useState)(serverValue ?? true);
-  (0, import_react43.useEffect)(() => {
+  const [enabled, setLocal] = (0, import_react44.useState)(serverValue ?? true);
+  (0, import_react44.useEffect)(() => {
     setLocal(serverValue ?? true);
   }, [chatId, serverValue]);
-  const setEnabled = (0, import_react43.useCallback)((on) => {
+  const setEnabled = (0, import_react44.useCallback)((on) => {
     setLocal(on);
     if (chatId == null) return;
     persist(chatId, on).catch(() => setLocal(!on));
@@ -8393,16 +8509,16 @@ function useChatMemorySwitch(opts) {
 }
 
 // src/composer/useQueuedTurns.ts
-var import_react44 = require("react");
+var import_react45 = require("react");
 function useQueuedTurns({ running, send, resetKey = null, textOf }) {
-  const [queued, setQueued] = (0, import_react44.useState)([]);
-  const nextId = (0, import_react44.useRef)(0);
-  const sendRef = (0, import_react44.useRef)(send);
+  const [queued, setQueued] = (0, import_react45.useState)([]);
+  const nextId = (0, import_react45.useRef)(0);
+  const sendRef = (0, import_react45.useRef)(send);
   sendRef.current = send;
-  const textOfRef = (0, import_react44.useRef)(textOf);
+  const textOfRef = (0, import_react45.useRef)(textOf);
   textOfRef.current = textOf;
-  const runningRef = (0, import_react44.useRef)(running);
-  const submit = (0, import_react44.useCallback)((value) => {
+  const runningRef = (0, import_react45.useRef)(running);
+  const submit = (0, import_react45.useCallback)((value) => {
     const text = typeof value === "string" ? value.trim() : (textOfRef.current?.(value) ?? "").trim();
     if (!text) return false;
     if (!runningRef.current) return false;
@@ -8411,10 +8527,10 @@ function useQueuedTurns({ running, send, resetKey = null, textOf }) {
     return true;
   }, []);
   runningRef.current = running;
-  const remove = (0, import_react44.useCallback)((id) => setQueued((current) => current.filter((item) => item.id !== id)), []);
-  const clear = (0, import_react44.useCallback)(() => setQueued((current) => current.length ? [] : current), []);
-  const prev = (0, import_react44.useRef)({ key: resetKey, running });
-  (0, import_react44.useEffect)(() => {
+  const remove = (0, import_react45.useCallback)((id) => setQueued((current) => current.filter((item) => item.id !== id)), []);
+  const clear = (0, import_react45.useCallback)(() => setQueued((current) => current.length ? [] : current), []);
+  const prev = (0, import_react45.useRef)({ key: resetKey, running });
+  (0, import_react45.useEffect)(() => {
     const was = prev.current;
     prev.current = { key: resetKey, running };
     if (was.key !== resetKey || !was.running || running || queued.length === 0) return;
@@ -8422,7 +8538,7 @@ function useQueuedTurns({ running, send, resetKey = null, textOf }) {
     setQueued(rest);
     if (next) sendRef.current(next.value);
   }, [running, queued, resetKey]);
-  (0, import_react44.useEffect)(() => {
+  (0, import_react45.useEffect)(() => {
     setQueued([]);
   }, [resetKey]);
   return { items: queued, count: queued.length, submit, remove, clear };
@@ -8575,6 +8691,7 @@ function useQueuedTurns({ running, send, resetKey = null, textOf }) {
   useChatActivitySignal,
   useChatMemorySwitch,
   useChatParticipants,
+  useChatRowActions,
   useConsumptionSnapshot,
   useDismissibleNotice,
   useLocalModels,

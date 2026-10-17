@@ -47,7 +47,8 @@ export function useExecutionTrace(executionId: number | null): { trace: Executio
   const commit = useCallback((next: ExecutionTrace | null) => { heldRef.current = next; setTrace(next); }, []);
 
   useEffect(() => {
-    if (executionId == null) { commit(null); return; }
+    // No run: nothing to read. The held trace is hidden below, not cleared here.
+    if (executionId == null) return;
     let cancelled = false;
     runtimeApi.trace(executionId).then((t) => { if (!cancelled) commit(t); }).catch(() => { if (!cancelled) commit(null); });
     return () => { cancelled = true; };
@@ -65,5 +66,7 @@ export function useExecutionTrace(executionId: number | null): { trace: Executio
     commit(held && held.execution.id === executionId ? mergeTraceTail(held, next) : next);
   }, [executionId, commit]);
 
-  return { trace, readTail };
+  // Only the selected run's trace is shown: a deselect, or a switch before the new
+  // read lands, never shows the previous run's rows.
+  return { trace: trace && trace.execution.id === executionId ? trace : null, readTail };
 }

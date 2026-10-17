@@ -16,8 +16,8 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
  *
  * Chat persistence:
  *   - Complete chat.message events are buffered in-memory (last 100 per session)
- *   - Each complete message is asynchronously persisted to Postgres via the
- *     main API endpoint (fire-and-forget, best-effort)
+ *   - Complete messages are persisted to Postgres via the main API endpoint,
+ *     batched per session (hostPersistQueue; best-effort)
  *   - New browser clients receive the in-memory history replay immediately
  *
  * Remote task result streaming (P0-1):
@@ -26,8 +26,8 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
  *     via /api/agent-hosts/:sourceAgentHostId/relay-result (fire-and-forget)
  *
  * Observability frames (P2-2, P2-4):
- *   - usage.snapshot frames are forwarded to the API for persistence
- *   - tool.audit frames are forwarded to the API for persistence
+ *   - usage.snapshot, tool.audit and file.change frames are forwarded to the API
+ *     for persistence in batches — one request and one INSERT per kind per flush
  */
 
 import { buildExecutionMessageFrame, buildExecutionCancelFrame } from './executionMessage';

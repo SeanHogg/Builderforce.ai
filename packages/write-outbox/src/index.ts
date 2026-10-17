@@ -1,24 +1,5 @@
-export { createOutbox } from "./outbox.js";
-export {
-  isPermanentHttpFailure,
-  OUTBOX_MAX_ENTRIES,
-  OUTBOX_MAX_ITEMS,
-  OUTBOX_MAX_WAIT_MS,
-  OUTBOX_RETRY_BASE_MS,
-  OUTBOX_RETRY_MAX_MS,
-} from "./policy.js";
-export type {
-  Outbox,
-  OutboxDrainContext,
-  OutboxDrop,
-  OutboxEntry,
-  OutboxOnlineSignal,
-  OutboxOptions,
-  OutboxRetryPolicy,
-  OutboxSendContext,
-  OutboxStats,
-  OutboxStore,
-} from "./types.js";
+// The store-free core (createOutbox, policy, types) lives in ./core.ts for no-DOM hosts.
+export * from "./core.js";
 export {
   createIndexedDbOutboxStore,
   listIndexedDbOutboxPartitions,

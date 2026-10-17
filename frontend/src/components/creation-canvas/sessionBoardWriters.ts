@@ -23,7 +23,7 @@ import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, use
 import { getRunSnapshot, subscribeRun } from '@seanhogg/builderforce-brain-embedded';
 import { readLocalCreationSession, writeLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
-import type { Edge } from '@xyflow/react';
+import { type Edge, type Node, useEdgesState, useNodesState } from '@xyflow/react';
 import { canvasRunKey } from './brainTurn/canvasRunKey';
 import type { CanvasTimelineMessage } from './canvasBoardTypes';
 import { timelineFromLocal, timelineToLocal } from './localTimeline';
@@ -61,10 +61,10 @@ function applyAction<T>(current: T, action: SetStateAction<unknown>): T {
   return typeof action === 'function' ? (action as (prev: T) => T)(current) : (action as T);
 }
 
-/** Apply a device-only board's held writes to its stored snapshot. */
-function persistHeldLocally(sessionId: string, writes: readonly HeldWrite[]): void {
+/** Apply a device-only board's held writes to its stored snapshot; false when it has none. */
+function persistHeldLocally(sessionId: string, writes: readonly HeldWrite[]): boolean {
   const stored = readLocalCreationSession(sessionId);
-  if (!stored) return;
+  if (!stored) return false;
   let nodes: CanvasObject[] = stored.nodes;
   let edges: Edge[] = stored.edges;
   let timeline: CanvasTimelineMessage[] = timelineFromLocal(stored.timeline);
@@ -75,6 +75,7 @@ function persistHeldLocally(sessionId: string, writes: readonly HeldWrite[]): vo
     // Proposals and the auto-apply flag are view state of a board on screen.
   }
   writeLocalCreationSession(sessionId, { ...stored, nodes, edges, timeline: timelineToLocal(timeline), updatedAt: new Date().toISOString() });
+  return true;
 }
 
 /** Once the session's turn has settled, keep what no board was there to receive. */
@@ -87,8 +88,8 @@ function watchForSettle(sessionId: string): void {
     settleWatchers.delete(sessionId);
     const held = heldBySession.get(sessionId);
     if (!held || held.persistence !== 'local' || receiverFor(sessionId, 'nodes')) return;
-    heldBySession.delete(sessionId);
-    persistHeldLocally(sessionId, held.writes);
+    // Kept for the next board to open when there is no stored snapshot to write into.
+    if (persistHeldLocally(sessionId, held.writes)) heldBySession.delete(sessionId);
   };
   settleWatchers.set(sessionId, subscribeRun(key, check));
   check();
@@ -158,6 +159,18 @@ export function useSessionBoardState<T>(
 ): [T, Dispatch<SetStateAction<T>>, Dispatch<SetStateAction<T>>] {
   const [value, setOnScreen] = useState<T>(initial);
   return [value, useSessionBoardWriter(sessionId, persistence, key, setOnScreen), setOnScreen];
+}
+
+/** React Flow's `useNodesState`, with `setNodes` routed; also returns the on-screen setter. */
+export function useSessionNodesState<N extends Node>(sessionId: string, persistence: 'local' | 'server', initial: N[]) {
+  const [nodes, setOnScreen, onNodesChange] = useNodesState<N>(initial);
+  return [nodes, useSessionBoardWriter(sessionId, persistence, 'nodes', setOnScreen), onNodesChange, setOnScreen] as const;
+}
+
+/** React Flow's `useEdgesState`, with `setEdges` routed; also returns the on-screen setter. */
+export function useSessionEdgesState<E extends Edge>(sessionId: string, persistence: 'local' | 'server', initial: E[]) {
+  const [edges, setOnScreen, onEdgesChange] = useEdgesState<E>(initial);
+  return [edges, useSessionBoardWriter(sessionId, persistence, 'edges', setOnScreen), onEdgesChange, setOnScreen] as const;
 }
 
 /** Test seam: forget every registration and held write. */

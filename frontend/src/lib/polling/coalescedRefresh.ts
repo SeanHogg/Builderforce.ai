@@ -11,8 +11,10 @@
  *   • at most one fetch is in flight; frames that land during it earn exactly ONE
  *     follow-up, and none at all if nothing arrived.
  *
- * `run` may be async; a rejection is swallowed (the caller's poll is the backstop).
+ * `run` may be async; a rejection is reported, never thrown (the caller's poll is the
+ * backstop that catches the view up).
  */
+import { reportBackgroundFailure } from '../reportError';
 
 /** Long enough to merge a burst, short enough to still read as live. */
 export const COALESCE_WINDOW_MS = 400;
@@ -39,7 +41,14 @@ export function createCoalescedRefresh(run: () => unknown, windowMs: number = CO
     if (cancelled) return;
     inFlight = true;
     dirty = false;
-    try { await run(); } catch { /* best-effort; the next frame or the poll catches up */ } finally { inFlight = false; }
+    try {
+      await run();
+    } catch (cause) {
+      // Best-effort: the next frame or the poll catches up — but the failure is recorded.
+      void reportBackgroundFailure({ message: `coalesced refresh failed: ${String(cause)}`, level: 'warning' });
+    } finally {
+      inFlight = false;
+    }
     if (dirty) arm();
   };
 

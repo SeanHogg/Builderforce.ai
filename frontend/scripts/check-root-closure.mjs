@@ -45,6 +45,12 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   +2 files (2026-10-17, Neon load review, second pass) — `lib/polling/reconnectPolicy.ts`
+ *     and `lib/polling/coalescedRefresh.ts`, both import-free beyond `pollPolicy`. They are
+ *     not new first-paint work: the shell's realtime and broadcast sockets (already here)
+ *     each carried their own reconnect loop with no backoff and no hidden-tab wait, and
+ *     re-fetched on every `changed` frame. Those loops moved INTO these two primitives, so
+ *     the shell's code is the same size, just written once.
  *   +3 files (2026-10-17, Neon load review) — not new first-paint work: the shell's
  *     attention signal (`lib/useAttention.ts`, already here via FloatingBrain and
  *     ManagerStatusIndicator) ran TWO independent loops that never paused in a hidden tab.
